@@ -70,6 +70,26 @@ export default async function NotesPage(props: { params: Promise<{ notebookId: s
           ← Notebooks
         </Link>
         <NotebookTitle id={notebook.id} title={notebook.title} />
+        <div className="ml-auto flex items-center gap-3 text-sm">
+          <Link
+            href={`/n/${notebook.id}`}
+            className="text-neutral-500 hover:text-neutral-900 dark:hover:text-white"
+          >
+            Reader
+          </Link>
+          <a
+            href={`/api/notebooks/${notebook.id}/export?format=md`}
+            className="text-neutral-500 hover:text-neutral-900 dark:hover:text-white"
+          >
+            Export Markdown
+          </a>
+          <a
+            href={`/api/notebooks/${notebook.id}/export?format=docx`}
+            className="text-neutral-500 hover:text-neutral-900 dark:hover:text-white"
+          >
+            Export Word
+          </a>
+        </div>
       </header>
       <Outline notebook={view} />
     </main>

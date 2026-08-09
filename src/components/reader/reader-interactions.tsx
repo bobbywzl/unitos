@@ -29,6 +29,7 @@ export function ReaderInteractions({
   anchorHighlights,
   salienceByBlock,
   hasSalience,
+  termsByBlock,
 }: {
   documentId: string;
   notebookId: string;
@@ -38,6 +39,7 @@ export function ReaderInteractions({
   anchorHighlights: Record<string, { sourceId: string; start: number; end: number }[]>;
   salienceByBlock: Record<string, { start: number; end: number }[]>;
   hasSalience: boolean;
+  termsByBlock: Record<string, { start: number; end: number; definition: string }[]>;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -309,6 +311,19 @@ export function ReaderInteractions({
         ...list.map((h) => ({ sourceId: null, start: h.start, end: h.end, kind: "salience" as const })),
       ];
     }
+  }
+  for (const [blockId, list] of Object.entries(termsByBlock)) {
+    const existing = highlightsByBlock[blockId] ?? [];
+    highlightsByBlock[blockId] = [
+      ...existing,
+      ...list.map((h) => ({
+        sourceId: null,
+        start: h.start,
+        end: h.end,
+        kind: "term" as const,
+        definition: h.definition,
+      })),
+    ];
   }
 
   return (

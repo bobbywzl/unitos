@@ -103,6 +103,32 @@ export default async function NotebookPage(props: {
     }
   }
 
+  // Glossary hover terms: first occurrence per term per listed block (SPEC.md §8 Phase 7).
+  const termsByBlock: Record<string, { start: number; end: number; definition: string }[]> = {};
+  if (activeDocument) {
+    const glossaryDoc = await db.document.findUnique({
+      where: { id: activeDocument.id },
+      select: { glossary: true },
+    });
+    const glossary = (glossaryDoc?.glossary ?? null) as
+      | { term: string; definition: string; blockIds: string[] }[]
+      | null;
+    if (glossary && Array.isArray(glossary)) {
+      const blockById = new Map(activeDocument.blocks.map((b) => [b.id, b]));
+      for (const entry of glossary) {
+        for (const blockId of entry.blockIds) {
+          const block = blockById.get(blockId);
+          if (!block) continue;
+          const idx = block.text.toLowerCase().indexOf(entry.term.toLowerCase());
+          if (idx === -1) continue;
+          const list = termsByBlock[blockId] ?? [];
+          list.push({ start: idx, end: idx + entry.term.length, definition: entry.definition });
+          termsByBlock[blockId] = list;
+        }
+      }
+    }
+  }
+
   const toView = (s: (typeof notebook.sections)[number]): SectionView => ({
     id: s.id,
     title: s.title,
@@ -227,6 +253,7 @@ export default async function NotebookPage(props: {
                 anchorHighlights={anchorHighlights}
                 salienceByBlock={salienceByBlock}
                 hasSalience={hasSalience}
+                termsByBlock={termsByBlock}
               />
             </>
           ) : (

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
+import { buildGlossary } from "@/lib/glossary";
 import { attachDocument, ingestPdf, ingestUrl } from "@/lib/parse/ingest";
 import { parseBody } from "@/lib/validate";
 
@@ -62,6 +63,8 @@ export async function POST(req: Request) {
     try {
       const { document, deduped } = await ingestPdf(bytes, fields.data.filename);
       await attachDocument(fields.data.notebookId, document.id);
+      // On-ingest glossary extraction (SPEC.md §8 Phase 7). Best-effort.
+      if (!deduped) void buildGlossary(document.id).catch(() => {});
       return NextResponse.json({ id: document.id, title: document.title, deduped }, { status: 201 });
     } catch (err) {
       console.error("PDF ingest failed:", err);
@@ -76,6 +79,7 @@ export async function POST(req: Request) {
   try {
     const { document, deduped } = await ingestUrl(data.url);
     await attachDocument(data.notebookId, document.id);
+    if (!deduped) void buildGlossary(document.id).catch(() => {});
     return NextResponse.json({ id: document.id, title: document.title, deduped }, { status: 201 });
   } catch (err) {
     console.error("URL ingest failed:", err);

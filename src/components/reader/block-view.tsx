@@ -11,7 +11,8 @@ export type Highlight = {
   sourceId: string | null;
   start: number;
   end: number;
-  kind: "anchor" | "salience";
+  kind: "anchor" | "salience" | "term";
+  definition?: string; // glossary hover text, kind "term" only
 };
 
 function headingLevel(html: string | null): 1 | 2 | 3 {
@@ -39,19 +40,34 @@ function markedText(text: string, highlights: Highlight[]) {
       continue;
     }
     const anchor = covering.find((h) => h.kind === "anchor");
-    parts.push(
-      <mark
-        key={from}
-        data-source-id={anchor?.sourceId ?? undefined}
-        className={
-          anchor
-            ? "anchor-mark rounded-sm bg-amber-200/70 dark:bg-amber-500/30"
-            : "rounded-sm bg-violet-200/60 dark:bg-violet-500/25"
-        }
-      >
-        {segment}
-      </mark>,
-    );
+    const salience = covering.find((h) => h.kind === "salience");
+    const term = covering.find((h) => h.kind === "term");
+    if (anchor || salience) {
+      parts.push(
+        <mark
+          key={from}
+          data-source-id={anchor?.sourceId ?? undefined}
+          className={
+            anchor
+              ? "anchor-mark rounded-sm bg-amber-200/70 dark:bg-amber-500/30"
+              : "rounded-sm bg-violet-200/60 dark:bg-violet-500/25"
+          }
+        >
+          {segment}
+        </mark>,
+      );
+    } else if (term) {
+      // Glossary term: hover for the definition (SPEC.md §8 Phase 7).
+      parts.push(
+        <span
+          key={from}
+          title={term.definition}
+          className="glossary-term cursor-help border-b border-dotted border-neutral-400 dark:border-neutral-500"
+        >
+          {segment}
+        </span>,
+      );
+    }
   }
   return parts;
 }
