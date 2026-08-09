@@ -1,0 +1,126 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  directUrl  = env("DIRECT_URL")
+  extensions = [vector]
+}
+
+model Notebook {
+  id        String             @id @default(cuid())
+  title     String
+  profile   Json? // ReaderProfile override for this notebook
+  sections  Section[]
+  documents NotebookDocument[]
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+}
+
+model Section {
+  id         String    @id @default(cuid())
+  notebookId String
+  notebook   Notebook  @relation(fields: [notebookId], references: [id], onDelete: Cascade)
+  title      String
+  order      Int
+  parentId   String? // nesting, one level deep is enough for v1
+  parent     Section?  @relation("SectionNesting", fields: [parentId], references: [id])
+  children   Section[] @relation("SectionNesting")
+  notes      Note[]
+}
+
+model Note {
+  id             String                       @id @default(cuid())
+  sectionId      String
+  section        Section                      @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  content        String // markdown
+  status         NoteStatus                   @default(ACCEPTED) // manual notes are ACCEPTED on create
+  derivationType DerivationType? // null = manually written
+  order          Int
+  sources        Source[]
+  embedding      Unsupported("vector(1024)")? // pgvector, Phase 6
+  createdAt      DateTime                     @default(now())
+  updatedAt      DateTime                     @updatedAt
+}
+
+enum NoteStatus {
+  PENDING // AI-proposed, awaiting user decision
+  ACCEPTED
+  REJECTED // keep for 7 days for undo, then hard-delete via cron
+}
+
+enum DerivationType {
+  EXPLAIN
+  SIMPLIFY
+  SALIENCE
+  EXTRACT
+  SYNTHESIS // notebook-scope assistant output
+}
+
+model Source {
+  id         String   @id @default(cuid())
+  noteId     String
+  note       Note     @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  documentId String
+  document   Document @relation(fields: [documentId], references: [id])
+  // Anchor: dual strategy (see SPEC.md §5)
+  blockId     String
+  startOffset Int
+  endOffset   Int
+  quotedText  String
+  prefix      String // 32 chars before selection
+  suffix      String // 32 chars after selection
+  orphaned    Boolean @default(false)
+}
+
+model Document {
+  id        String             @id @default(cuid())
+  title     String
+  sourceUrl String?
+  fileHash  String?            @unique // dedupe re-uploads
+  blocks    Block[]
+  notebooks NotebookDocument[]
+  sources   Source[]
+  glossary  Json? // Phase 7: [{term, definition, blockIds[]}]
+  createdAt DateTime           @default(now())
+}
+
+model NotebookDocument {
+  notebookId String
+  documentId String
+  notebook   Notebook @relation(fields: [notebookId], references: [id], onDelete: Cascade)
+  document   Document @relation(fields: [documentId], references: [id])
+
+  @@id([notebookId, documentId])
+}
+
+model Block {
+  id         String    @id @default(cuid())
+  documentId String
+  document   Document  @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  order      Int
+  type       BlockType
+  text       String // plain text content
+  html       String? // rendered content for figures/tables
+}
+
+enum BlockType {
+  PARAGRAPH
+  HEADING
+  FIGURE
+  TABLE
+  EQUATION
+  LIST
+  CODE
+}
+
+model ReaderProfile {
+  id          String @id @default(cuid())
+  userId      String @unique // constant in v1
+  background  String // "Stanford student, stochastic calc + stats + quantum"
+  purpose     String // "due diligence" | "exam prep" | "replicate results" | free text
+  application String // "investment decision for Bough Capital" etc.
+}
