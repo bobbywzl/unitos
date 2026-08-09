@@ -100,11 +100,22 @@ export function ReaderInteractions({
     if (!container) return;
     const onMouseUp = (event: MouseEvent) => {
       if (event.target instanceof Element && event.target.closest("[data-selection-popover]")) return;
-      requestAnimationFrame(() => setPopover(captureSelection()));
+      requestAnimationFrame(() => {
+        const captured = captureSelection();
+        setPopover(captured);
+        if (captured) {
+          // The assistant panel's Selection scope tracks the latest selection.
+          window.dispatchEvent(
+            new CustomEvent("dissect:selection", {
+              detail: { documentId, ...captured.anchor },
+            }),
+          );
+        }
+      });
     };
     container.addEventListener("mouseup", onMouseUp);
     return () => container.removeEventListener("mouseup", onMouseUp);
-  }, [captureSelection]);
+  }, [captureSelection, documentId]);
 
   // Source chip navigation: ?src=<sourceId> scrolls to the anchor and flashes it.
   const src = searchParams.get("src");

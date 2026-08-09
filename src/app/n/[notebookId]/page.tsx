@@ -5,6 +5,8 @@ import { resolveDocumentSources } from "@/lib/anchors/resolve";
 import { USER_ID } from "@/lib/constants";
 import { db } from "@/lib/db";
 import type { NotebookView, SectionView } from "@/lib/types";
+import { AssistantPanel } from "@/components/assistant/assistant-panel";
+import { DrawerTabs } from "@/components/drawer-tabs";
 import { NotebookTitle } from "@/components/notebook-title";
 import { Outline } from "@/components/outline/outline";
 import { ProfileDialog } from "@/components/profile-dialog";
@@ -237,7 +239,12 @@ export default async function NotebookPage(props: {
         </div>
 
         <aside className="min-h-0 overflow-y-auto border-l border-neutral-200 p-4 dark:border-neutral-800">
-          <Outline notebook={view} />
+          <DrawerTabs
+            notes={<Outline notebook={view} />}
+            assistant={
+              <AssistantPanel notebookId={notebook.id} documentId={activeDocument?.id ?? null} />
+            }
+          />
         </aside>
       </div>
     </div>

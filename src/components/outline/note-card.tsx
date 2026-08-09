@@ -83,6 +83,7 @@ export function NoteCard({
   return (
     <div
       ref={cardRef}
+      data-note-id={note.id}
       className={`group/note rounded-md border bg-white p-2 dark:bg-neutral-900 ${
         pending
           ? "border-l-4 border-neutral-200 border-l-amber-400 dark:border-neutral-800"
