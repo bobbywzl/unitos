@@ -1,0 +1,84 @@
+"use client";
+
+import {
+  DndContext,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+
+type SortableHook = ReturnType<typeof useSortable>;
+export type HandleProps = {
+  attributes: SortableHook["attributes"];
+  listeners: SortableHook["listeners"];
+};
+
+// One vertical drag-reorder list. Nested lists each get their own SortableList.
+export function SortableList({
+  ids,
+  onMove,
+  children,
+}: {
+  ids: string[];
+  onMove: (id: string, toIndex: number) => void;
+  children: React.ReactNode;
+}) {
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
+
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const to = ids.indexOf(String(over.id));
+    if (to === -1) return;
+    onMove(String(active.id), to);
+  }
+
+  return (
+    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+      <SortableContext items={ids} strategy={verticalListSortingStrategy}>
+        {children}
+      </SortableContext>
+    </DndContext>
+  );
+}
+
+export function SortableItem({
+  id,
+  children,
+}: {
+  id: string;
+  children: (handle: HandleProps) => React.ReactNode;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      className={isDragging ? "opacity-50" : undefined}
+    >
+      {children({ attributes, listeners })}
+    </div>
+  );
+}
+
+export function DragHandle({ handle, label }: { handle: HandleProps; label: string }) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      className="cursor-grab touch-none rounded px-1 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-600 dark:hover:bg-neutral-800 dark:hover:text-neutral-300"
+      {...handle.attributes}
+      {...(handle.listeners ?? {})}
+    >
+      ⋮⋮
+    </button>
+  );
+}
