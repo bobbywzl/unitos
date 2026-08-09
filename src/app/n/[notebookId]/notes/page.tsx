@@ -14,7 +14,14 @@ export default async function NotesPage(props: { params: Promise<{ notebookId: s
     include: {
       sections: {
         orderBy: { order: "asc" },
-        include: { notes: { orderBy: { order: "asc" } } },
+        include: {
+          notes: {
+            orderBy: { order: "asc" },
+            include: {
+              sources: { include: { document: { select: { id: true, title: true } } } },
+            },
+          },
+        },
       },
     },
   });
@@ -31,6 +38,13 @@ export default async function NotesPage(props: { params: Promise<{ notebookId: s
       status: n.status,
       derivationType: n.derivationType,
       order: n.order,
+      sources: n.sources.map((src) => ({
+        id: src.id,
+        documentId: src.documentId,
+        documentTitle: src.document.title,
+        quotedText: src.quotedText,
+        orphaned: src.orphaned,
+      })),
     })),
     children: [],
   });

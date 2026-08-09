@@ -9,6 +9,7 @@ import { SortableItem, SortableList } from "@/components/sortable";
 import { SectionItem } from "@/components/outline/section-item";
 
 export type OutlineActions = {
+  notebookId: string;
   addSection: (parentId: string | null, title: string) => Promise<void>;
   renameSection: (id: string, title: string) => Promise<void>;
   deleteSection: (id: string) => Promise<void>;
@@ -43,6 +44,7 @@ export function Outline({ notebook }: { notebook: NotebookView }) {
   const refresh = () => router.refresh();
 
   const actions: OutlineActions = {
+    notebookId: notebook.id,
     async addSection(parentId, title) {
       await api("/api/sections", "POST", { notebookId: notebook.id, title, parentId });
       refresh();
@@ -104,6 +106,7 @@ export function Outline({ notebook }: { notebook: NotebookView }) {
   return (
     <div className="space-y-4">
       <SortableList
+        id="sections-root"
         ids={tree.map((s) => s.id)}
         onMove={(id, to) => actions.reorderSection(null, id, to)}
       >

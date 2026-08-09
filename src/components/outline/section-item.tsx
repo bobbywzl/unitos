@@ -81,6 +81,7 @@ export function SectionItem({
 
       <div className="mt-2 space-y-2 border-l border-neutral-200 pl-4 dark:border-neutral-800">
         <SortableList
+          id={`notes-${section.id}`}
           ids={section.notes.map((n) => n.id)}
           onMove={(id, to) => actions.reorderNote(section.id, id, to)}
         >
@@ -128,6 +129,7 @@ export function SectionItem({
         {!nested && (
           <>
             <SortableList
+              id={`children-${section.id}`}
               ids={section.children.map((c) => c.id)}
               onMove={(id, to) => actions.reorderSection(section.id, id, to)}
             >

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import type { NoteView } from "@/lib/types";
 import { Markdown } from "@/components/markdown";
@@ -78,6 +79,30 @@ export function NoteCard({
         </div>
         <div className="min-w-0 flex-1">
           <Markdown>{note.content}</Markdown>
+          {note.sources.length > 0 && (
+            <div className="mt-1.5 flex flex-wrap gap-1">
+              {note.sources.map((source) =>
+                source.orphaned ? (
+                  <span
+                    key={source.id}
+                    title={`Anchor unresolved. Quoted text: ${source.quotedText}`}
+                    className="inline-flex max-w-52 items-center gap-1 truncate rounded-full border border-dashed border-red-300 px-2 py-0.5 text-xs text-red-500 dark:border-red-800"
+                  >
+                    ⚠ {source.documentTitle}
+                  </span>
+                ) : (
+                  <Link
+                    key={source.id}
+                    href={`/n/${actions.notebookId}?doc=${source.documentId}&src=${source.id}`}
+                    title={source.quotedText}
+                    className="inline-flex max-w-52 items-center gap-1 truncate rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-xs text-amber-800 hover:bg-amber-100 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-300"
+                  >
+                    ⚓ {source.documentTitle}
+                  </Link>
+                ),
+              )}
+            </div>
+          )}
         </div>
       </div>
       <div className="mt-1 flex items-center gap-2 pl-6 opacity-0 transition-opacity group-hover/note:opacity-100">

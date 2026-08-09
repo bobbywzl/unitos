@@ -22,11 +22,14 @@ export type HandleProps = {
 };
 
 // One vertical drag-reorder list. Nested lists each get their own SortableList.
+// `id` keeps DndContext aria ids stable across server and client renders.
 export function SortableList({
+  id,
   ids,
   onMove,
   children,
 }: {
+  id: string;
   ids: string[];
   onMove: (id: string, toIndex: number) => void;
   children: React.ReactNode;
@@ -42,7 +45,7 @@ export function SortableList({
   }
 
   return (
-    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+    <DndContext id={id} sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
       <SortableContext items={ids} strategy={verticalListSortingStrategy}>
         {children}
       </SortableContext>
