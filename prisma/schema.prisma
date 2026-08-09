@@ -81,6 +81,7 @@ model Document {
   title     String
   sourceUrl String?
   fileHash  String?            @unique // dedupe re-uploads
+  fileData  Bytes? // original PDF bytes, kept for forced re-parse (SPEC.md §8 Phase 3)
   blocks    Block[]
   notebooks NotebookDocument[]
   sources   Source[]

@@ -25,3 +25,29 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* Sanitized ingest html: tables and figures in the reader. */
+.reader-table table {
+  border-collapse: collapse;
+  width: 100%;
+}
+.reader-table td,
+.reader-table th {
+  border: 1px solid var(--color-neutral-300, #d4d4d4);
+  padding: 0.25rem 0.5rem;
+  vertical-align: top;
+  text-align: left;
+}
+.reader-table th {
+  font-weight: 600;
+  background: color-mix(in srgb, var(--foreground) 5%, transparent);
+}
+.reader-figure img {
+  max-width: 100%;
+  height: auto;
+}
+.reader-figure figcaption {
+  font-size: 0.8rem;
+  color: #737373;
+  margin-top: 0.25rem;
+}
