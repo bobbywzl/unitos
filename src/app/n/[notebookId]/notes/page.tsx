@@ -51,6 +51,7 @@ export default async function NotesPage(props: { params: Promise<{ notebookId: s
 
   const byParent = new Map<string | null, SectionView[]>();
   for (const s of notebook.sections) {
+    if (s.hidden) continue; // Annotations section stays out of the outline
     const view = toView(s);
     const list = byParent.get(s.parentId) ?? [];
     list.push(view);

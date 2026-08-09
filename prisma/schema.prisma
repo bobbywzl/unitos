@@ -26,6 +26,7 @@ model Section {
   notebook   Notebook  @relation(fields: [notebookId], references: [id], onDelete: Cascade)
   title      String
   order      Int
+  hidden     Boolean   @default(false) // Annotations section: searchable, not shown in the outline
   parentId   String? // nesting, one level deep is enough for v1
   parent     Section?  @relation("SectionNesting", fields: [parentId], references: [id])
   children   Section[] @relation("SectionNesting")

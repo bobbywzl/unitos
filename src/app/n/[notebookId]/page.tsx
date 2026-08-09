@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import type { NotebookView, SectionView } from "@/lib/types";
 import { NotebookTitle } from "@/components/notebook-title";
 import { Outline } from "@/components/outline/outline";
+import { AnnotationRail } from "@/components/reader/annotation-rail";
 import type { Highlight } from "@/components/reader/block-view";
 import { DocumentBar } from "@/components/reader/document-bar";
 import { Reader } from "@/components/reader/reader";
@@ -87,6 +88,7 @@ export default async function NotebookPage(props: {
   });
   const byParent = new Map<string | null, SectionView[]>();
   for (const s of notebook.sections) {
+    if (s.hidden) continue; // Annotations section: rail only, not the outline
     const list = byParent.get(s.parentId) ?? [];
     list.push(toView(s));
     byParent.set(s.parentId, list);
@@ -99,6 +101,25 @@ export default async function NotebookPage(props: {
     { id: s.id, label: s.title },
     ...s.children.map((c) => ({ id: c.id, label: `${s.title} / ${c.title}` })),
   ]);
+
+  // EXPLAIN annotations anchored in the open document, for the rail.
+  const annotations = activeDocument
+    ? notebook.sections
+        .filter((s) => s.hidden)
+        .flatMap((s) => s.notes)
+        .filter((n) => n.derivationType === "EXPLAIN")
+        .map((n) => {
+          const source = n.sources.find((src) => src.documentId === activeDocument.id);
+          if (!source) return null;
+          return {
+            id: n.id,
+            content: n.content,
+            sourceId: source.id,
+            orphaned: resolutionById.get(source.id)?.orphaned ?? source.orphaned,
+          };
+        })
+        .filter((a) => a !== null)
+    : [];
 
   return (
     <div className="grid h-screen grid-rows-[auto_1fr]">
@@ -123,13 +144,24 @@ export default async function NotebookPage(props: {
             activeId={activeDocument?.id ?? null}
           />
           {activeDocument ? (
-            <ReaderInteractions documentId={activeDocument.id} sectionChoices={sectionChoices}>
-              <Reader
-                title={activeDocument.title}
-                blocks={activeDocument.blocks}
-                highlightsByBlock={highlightsByBlock}
+            <>
+              <AnnotationRail
+                notebookId={notebook.id}
+                documentId={activeDocument.id}
+                annotations={annotations}
               />
-            </ReaderInteractions>
+              <ReaderInteractions
+                documentId={activeDocument.id}
+                notebookId={notebook.id}
+                sectionChoices={sectionChoices}
+              >
+                <Reader
+                  title={activeDocument.title}
+                  blocks={activeDocument.blocks}
+                  highlightsByBlock={highlightsByBlock}
+                />
+              </ReaderInteractions>
+            </>
           ) : (
             <div className="flex h-full items-center justify-center">
               <p className="text-sm text-neutral-500">
