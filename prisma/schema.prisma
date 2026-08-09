@@ -120,6 +120,18 @@ enum BlockType {
   CODE
 }
 
+model Feedback {
+  id        String   @id @default(cuid())
+  category  String // "bug" | "idea" | "other"
+  message   String
+  page      String? // pathname where it was filed
+  userAgent String?
+  status    String   @default("new") // "new" | "seen" | "resolved"
+  createdAt DateTime @default(now())
+
+  @@index([status, createdAt])
+}
+
 model ReaderProfile {
   id          String @id @default(cuid())
   userId      String @unique // constant in v1
