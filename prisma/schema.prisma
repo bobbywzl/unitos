@@ -95,6 +95,7 @@ model NotebookDocument {
   documentId String
   notebook   Notebook @relation(fields: [notebookId], references: [id], onDelete: Cascade)
   document   Document @relation(fields: [documentId], references: [id])
+  salience   Json? // SALIENCE layer: [{blockId, start, end}], per notebook per document (SPEC.md §4)
 
   @@id([notebookId, documentId])
 }

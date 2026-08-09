@@ -16,6 +16,7 @@ export default async function NotesPage(props: { params: Promise<{ notebookId: s
         orderBy: { order: "asc" },
         include: {
           notes: {
+            where: { status: { not: "REJECTED" } },
             orderBy: { order: "asc" },
             include: {
               sources: { include: { document: { select: { id: true, title: true } } } },

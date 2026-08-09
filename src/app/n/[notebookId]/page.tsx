@@ -1,25 +1,35 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { matchInText } from "@/lib/anchors/match";
 import { resolveDocumentSources } from "@/lib/anchors/resolve";
+import { USER_ID } from "@/lib/constants";
 import { db } from "@/lib/db";
 import type { NotebookView, SectionView } from "@/lib/types";
 import { NotebookTitle } from "@/components/notebook-title";
 import { Outline } from "@/components/outline/outline";
+import { ProfileDialog } from "@/components/profile-dialog";
 import { AnnotationRail } from "@/components/reader/annotation-rail";
-import type { Highlight } from "@/components/reader/block-view";
 import { DocumentBar } from "@/components/reader/document-bar";
-import { Reader } from "@/components/reader/reader";
 import { ReaderInteractions } from "@/components/reader/reader-interactions";
 
 export const dynamic = "force-dynamic";
 
+type SalienceSpan = {
+  blockId: string;
+  start: number;
+  end: number;
+  quotedText: string;
+  prefix: string;
+  suffix: string;
+};
+
 // Split view: reader left, notes drawer right (SPEC.md §6).
 export default async function NotebookPage(props: {
   params: Promise<{ notebookId: string }>;
-  searchParams: Promise<{ doc?: string; src?: string }>;
+  searchParams: Promise<{ doc?: string; src?: string; onboard?: string }>;
 }) {
   const { notebookId } = await props.params;
-  const { doc } = await props.searchParams;
+  const { doc, onboard } = await props.searchParams;
 
   const notebook = await db.notebook.findUnique({
     where: { id: notebookId },
@@ -29,6 +39,7 @@ export default async function NotebookPage(props: {
         orderBy: { order: "asc" },
         include: {
           notes: {
+            where: { status: { not: "REJECTED" } },
             orderBy: { order: "asc" },
             include: {
               sources: { include: { document: { select: { id: true, title: true } } } },
@@ -52,16 +63,41 @@ export default async function NotebookPage(props: {
   // Resolve anchors for the open document, then paint only this notebook's notes.
   // Chip orphan state comes from this resolution, not the (earlier) notebook query.
   const notebookNoteIds = new Set(notebook.sections.flatMap((s) => s.notes.map((n) => n.id)));
-  const highlightsByBlock = new Map<string, Highlight[]>();
+  const anchorHighlights: Record<string, { sourceId: string; start: number; end: number }[]> = {};
   const resolutionById = new Map<string, { orphaned: boolean }>();
   if (activeDocument) {
     const resolved = await resolveDocumentSources(activeDocument.id);
     for (const r of resolved) {
       resolutionById.set(r.id, { orphaned: r.orphaned });
       if (r.orphaned || !notebookNoteIds.has(r.noteId)) continue;
-      const list = highlightsByBlock.get(r.blockId) ?? [];
+      const list = anchorHighlights[r.blockId] ?? [];
       list.push({ sourceId: r.id, start: r.start, end: r.end });
-      highlightsByBlock.set(r.blockId, list);
+      anchorHighlights[r.blockId] = list;
+    }
+  }
+
+  // Salience overlay spans, healed against current block text at render time.
+  const salienceByBlock: Record<string, { start: number; end: number }[]> = {};
+  let hasSalience = false;
+  if (activeDocument) {
+    const nd = notebook.documents.find((d) => d.documentId === activeDocument.id);
+    const spans = (nd?.salience as SalienceSpan[] | null) ?? null;
+    if (spans && Array.isArray(spans)) {
+      hasSalience = true;
+      const blockById = new Map(activeDocument.blocks.map((b) => [b.id, b]));
+      for (const span of spans) {
+        const block = blockById.get(span.blockId);
+        let hit: { start: number; end: number } | null = null;
+        if (block && block.text.slice(span.start, span.end) === span.quotedText) {
+          hit = { start: span.start, end: span.end };
+        } else if (block) {
+          hit = matchInText(block.text, span);
+        }
+        if (!hit) continue;
+        const list = salienceByBlock[span.blockId] ?? [];
+        list.push(hit);
+        salienceByBlock[span.blockId] = list;
+      }
     }
   }
 
@@ -121,6 +157,23 @@ export default async function NotebookPage(props: {
         .filter((a) => a !== null)
     : [];
 
+  // Reader profile: notebook override wins over the global profile (SPEC.md §3).
+  const globalProfile = await db.readerProfile.findUnique({ where: { userId: USER_ID } });
+  const override = notebook.profile as {
+    background: string;
+    purpose: string;
+    application: string;
+  } | null;
+  const profileValues = override
+    ? override
+    : globalProfile
+      ? {
+          background: globalProfile.background,
+          purpose: globalProfile.purpose,
+          application: globalProfile.application,
+        }
+      : null;
+
   return (
     <div className="grid h-screen grid-rows-[auto_1fr]">
       <header className="flex items-center gap-3 border-b border-neutral-200 px-4 py-2 dark:border-neutral-800">
@@ -128,12 +181,20 @@ export default async function NotebookPage(props: {
           ← Notebooks
         </Link>
         <NotebookTitle id={notebook.id} title={notebook.title} />
-        <Link
-          href={`/n/${notebook.id}/notes`}
-          className="ml-auto text-sm text-neutral-500 hover:text-neutral-900 dark:hover:text-white"
-        >
-          Notes full page
-        </Link>
+        <div className="ml-auto flex items-center gap-3">
+          <ProfileDialog
+            notebookId={notebook.id}
+            initial={profileValues}
+            hasOverride={override !== null}
+            autoOpen={onboard === "1" && profileValues === null}
+          />
+          <Link
+            href={`/n/${notebook.id}/notes`}
+            className="text-sm text-neutral-500 hover:text-neutral-900 dark:hover:text-white"
+          >
+            Notes full page
+          </Link>
+        </div>
       </header>
 
       <div className="grid min-h-0 grid-cols-[1fr_380px]">
@@ -154,13 +215,17 @@ export default async function NotebookPage(props: {
                 documentId={activeDocument.id}
                 notebookId={notebook.id}
                 sectionChoices={sectionChoices}
-              >
-                <Reader
-                  title={activeDocument.title}
-                  blocks={activeDocument.blocks}
-                  highlightsByBlock={highlightsByBlock}
-                />
-              </ReaderInteractions>
+                title={activeDocument.title}
+                blocks={activeDocument.blocks.map((b) => ({
+                  id: b.id,
+                  type: b.type,
+                  text: b.text,
+                  html: b.html,
+                }))}
+                anchorHighlights={anchorHighlights}
+                salienceByBlock={salienceByBlock}
+                hasSalience={hasSalience}
+              />
             </>
           ) : (
             <div className="flex h-full items-center justify-center">

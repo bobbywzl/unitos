@@ -1,7 +1,7 @@
 // Client-side fetch helper for JSON API routes.
 export async function api<T = unknown>(
   path: string,
-  method: "POST" | "PATCH" | "DELETE",
+  method: "POST" | "PUT" | "PATCH" | "DELETE",
   body?: unknown,
 ): Promise<T> {
   const res = await fetch(path, {

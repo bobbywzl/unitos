@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { NoteView } from "@/lib/types";
 import { Markdown } from "@/components/markdown";
 import { DragHandle, type HandleProps } from "@/components/sortable";
@@ -18,7 +18,22 @@ export function NoteCard({
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(note.content);
+  const [handledEdit, setHandledEdit] = useState<{ id: string } | null>(null);
+  const cardRef = useRef<HTMLDivElement>(null);
   const pending = note.status === "PENDING";
+  const focused = pending && actions.focusedPendingId === note.id;
+
+  // Keyboard queue: `e` on the focused pending note opens the editor.
+  // Adjust-during-render; each keypress creates a new request object.
+  if (actions.editRequest && actions.editRequest.id === note.id && handledEdit !== actions.editRequest) {
+    setHandledEdit(actions.editRequest);
+    setDraft(note.content);
+    setEditing(true);
+  }
+
+  useEffect(() => {
+    if (focused) cardRef.current?.scrollIntoView({ block: "nearest" });
+  }, [focused]);
 
   async function save() {
     const trimmed = draft.trim();
@@ -67,11 +82,12 @@ export function NoteCard({
 
   return (
     <div
+      ref={cardRef}
       className={`group/note rounded-md border bg-white p-2 dark:bg-neutral-900 ${
         pending
           ? "border-l-4 border-neutral-200 border-l-amber-400 dark:border-neutral-800"
           : "border-neutral-200 dark:border-neutral-800"
-      }`}
+      } ${focused ? "ring-2 ring-amber-500" : ""}`}
     >
       <div className="flex items-start gap-1.5">
         <div className="opacity-0 transition-opacity group-hover/note:opacity-100">
@@ -105,42 +121,71 @@ export function NoteCard({
           )}
         </div>
       </div>
-      <div className="mt-1 flex items-center gap-2 pl-6 opacity-0 transition-opacity group-hover/note:opacity-100">
-        {pending && <span className="text-xs text-amber-600">pending</span>}
-        <button
-          onClick={() => {
-            setDraft(note.content);
-            setEditing(true);
-          }}
-          className="text-xs text-neutral-500 hover:text-neutral-900 dark:hover:text-white"
-        >
-          Edit
-        </button>
-        <select
-          value=""
-          onChange={(e) => {
-            if (e.target.value) void actions.moveNoteToSection(note.id, e.target.value);
-          }}
-          className="rounded border-none bg-transparent text-xs text-neutral-500 outline-none hover:text-neutral-900 dark:hover:text-white"
-        >
-          <option value="" disabled>
-            Move to…
-          </option>
-          {actions.sectionChoices.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.label}
+
+      {pending ? (
+        <div className="mt-1.5 flex items-center gap-2 pl-6">
+          <button
+            onClick={() => void actions.acceptNote(note.id)}
+            className="rounded bg-emerald-600 px-2 py-0.5 text-xs text-white hover:bg-emerald-700"
+            title="Accept (Enter)"
+          >
+            Accept
+          </button>
+          <button
+            onClick={() => void actions.rejectNote(note.id)}
+            className="rounded border border-neutral-300 px-2 py-0.5 text-xs text-neutral-600 hover:border-red-400 hover:text-red-600 dark:border-neutral-700 dark:text-neutral-300"
+            title="Reject (Backspace)"
+          >
+            Reject
+          </button>
+          <button
+            onClick={() => {
+              setDraft(note.content);
+              setEditing(true);
+            }}
+            className="text-xs text-neutral-500 hover:text-neutral-900 dark:hover:text-white"
+            title="Edit (e)"
+          >
+            Edit
+          </button>
+        </div>
+      ) : (
+        <div className="mt-1 flex items-center gap-2 pl-6 opacity-0 transition-opacity group-hover/note:opacity-100">
+          <button
+            onClick={() => {
+              setDraft(note.content);
+              setEditing(true);
+            }}
+            className="text-xs text-neutral-500 hover:text-neutral-900 dark:hover:text-white"
+          >
+            Edit
+          </button>
+          <select
+            value=""
+            onChange={(e) => {
+              if (e.target.value) void actions.moveNoteToSection(note.id, e.target.value);
+            }}
+            className="rounded border-none bg-transparent text-xs text-neutral-500 outline-none hover:text-neutral-900 dark:hover:text-white"
+          >
+            <option value="" disabled>
+              Move to…
             </option>
-          ))}
-        </select>
-        <button
-          onClick={() => {
-            if (confirm("Delete this note?")) void actions.deleteNote(note.id);
-          }}
-          className="text-xs text-red-500 hover:text-red-700"
-        >
-          Delete
-        </button>
-      </div>
+            {actions.sectionChoices.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.label}
+              </option>
+            ))}
+          </select>
+          <button
+            onClick={() => {
+              if (confirm("Delete this note?")) void actions.deleteNote(note.id);
+            }}
+            className="text-xs text-red-500 hover:text-red-700"
+          >
+            Delete
+          </button>
+        </div>
+      )}
     </div>
   );
 }

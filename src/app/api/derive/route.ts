@@ -1,5 +1,5 @@
 import { anthropic } from "@ai-sdk/anthropic";
-import { streamText } from "ai";
+import { streamText, type ModelMessage } from "ai";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
@@ -11,13 +11,16 @@ import {
   loadProfile,
   sectionSkeleton,
 } from "@/lib/derive/context";
+import { extractOutputSchema, resolveSpan, salienceOutputSchema } from "@/lib/derive/json";
+import { callForJson } from "@/lib/derive/json-call";
 import { promptTemplates } from "@/lib/prompts";
 import type { PromptCtx } from "@/lib/prompts/types";
 import { parseBody } from "@/lib/validate";
 
 export const maxDuration = 120;
 
-// The one derivation pipeline (SPEC.md §4). Never fork per feature.
+// The one derivation pipeline (SPEC.md §4). Never fork per feature: new derivation =
+// new prompt template + destination handler below.
 const deriveSchema = z.object({
   type: z.enum(["EXPLAIN", "SIMPLIFY", "SALIENCE", "EXTRACT"]),
   documentId: z.string().min(1),
@@ -68,6 +71,7 @@ export async function POST(req: Request) {
     include: { blocks: { orderBy: { order: "asc" }, select: { id: true, type: true, text: true } } },
   });
   if (!document) return NextResponse.json({ error: "Document not found" }, { status: 404 });
+  const blockById = new Map(document.blocks.map((b) => [b.id, { id: b.id, text: b.text }]));
 
   let anchored: ReturnType<typeof anchorContext> = null;
   if (data.anchor) {
@@ -87,72 +91,154 @@ export async function POST(req: Request) {
     sectionSkeleton(data.notebookId),
   ]);
 
-  const ctx: PromptCtx = {
+  if (data.targetSectionId && !skeleton.some((s) => s.id === data.targetSectionId)) {
+    return NextResponse.json({ error: "Target section not found" }, { status: 404 });
+  }
+
+  const ctx: PromptCtx & { targetSectionId?: string | null } = {
     profile,
     documentTitle: document.title,
     anchoredText: anchored?.anchoredText ?? "",
     contextBefore: anchored?.contextBefore ?? "",
     contextAfter: anchored?.contextAfter ?? "",
     sectionSkeleton: skeleton,
+    targetSectionId: data.targetSectionId,
   };
 
-  // 2. Template by type. 3. Stream.
-  const result = streamText({
-    model: anthropic(DERIVATION_MODEL[data.type]),
-    maxOutputTokens: MAX_OUTPUT_TOKENS[data.type],
-    // System message lives in `messages` so cache_control can ride on it.
-    allowSystemInMessages: true,
-    messages: [
-      {
-        role: "system",
-        content: documentPrefix(document.title, document.blocks),
-        // The document is the cached prefix, reused by every derivation on it (SPEC.md §2).
-        providerOptions: { anthropic: { cacheControl: { type: "ephemeral" } } },
-      },
-      { role: "user", content: template(ctx) },
-    ],
-    onEnd: async ({ text, usage }) => {
-      console.log(
-        `[derive] ${data.type} model=${DERIVATION_MODEL[data.type]} ` +
-          `cacheRead=${usage.inputTokenDetails.cacheReadTokens ?? 0} ` +
-          `cacheWrite=${usage.inputTokenDetails.cacheWriteTokens ?? 0} ` +
-          `input=${usage.inputTokens ?? 0} output=${usage.outputTokens ?? 0}`,
-      );
-      // 4. Destination by type.
-      if (data.type === "EXPLAIN" && data.anchor && text.trim()) {
-        const block = document.blocks.find((b) => b.id === data.anchor!.blockId);
-        if (!block) return;
-        const section = await annotationsSection(data.notebookId);
-        const count = await db.note.count({ where: { sectionId: section.id } });
-        await db.note.create({
-          data: {
-            sectionId: section.id,
-            content: text,
-            status: "ACCEPTED",
-            derivationType: "EXPLAIN",
-            order: count,
-            sources: {
-              create: {
-                documentId: data.documentId,
-                blockId: data.anchor.blockId,
-                startOffset: data.anchor.startOffset,
-                endOffset: data.anchor.endOffset,
-                quotedText: block.text.slice(data.anchor.startOffset, data.anchor.endOffset),
-                prefix: block.text.slice(
-                  Math.max(0, data.anchor.startOffset - 32),
-                  data.anchor.startOffset,
-                ),
-                suffix: block.text.slice(data.anchor.endOffset, data.anchor.endOffset + 32),
+  // 2. Template by type. The document is the cached prefix, byte-identical for every
+  // derivation on this document (SPEC.md §2).
+  const messages: ModelMessage[] = [
+    {
+      role: "system",
+      content: documentPrefix(document.title, document.blocks),
+      providerOptions: { anthropic: { cacheControl: { type: "ephemeral" } } },
+    },
+    { role: "user", content: template(ctx) },
+  ];
+  const model = anthropic(DERIVATION_MODEL[data.type]);
+  const maxOutputTokens = MAX_OUTPUT_TOKENS[data.type];
+
+  // 3 + 4. Stream or collect, then route by destination.
+  // EXPLAIN and SIMPLIFY stream text. SALIENCE and EXTRACT return validated JSON.
+  if (data.type === "EXPLAIN" || data.type === "SIMPLIFY") {
+    const result = streamText({
+      model,
+      maxOutputTokens,
+      allowSystemInMessages: true,
+      messages,
+      onEnd: async ({ text, usage }) => {
+        console.log(
+          `[derive] ${data.type} cacheRead=${usage.inputTokenDetails.cacheReadTokens ?? 0} ` +
+            `cacheWrite=${usage.inputTokenDetails.cacheWriteTokens ?? 0} ` +
+            `output=${usage.outputTokens ?? 0}`,
+        );
+        // EXPLAIN persists in the hidden Annotations section. SIMPLIFY is ephemeral.
+        if (data.type === "EXPLAIN" && data.anchor && text.trim()) {
+          const block = blockById.get(data.anchor.blockId);
+          if (!block) return;
+          const section = await annotationsSection(data.notebookId);
+          const count = await db.note.count({ where: { sectionId: section.id } });
+          await db.note.create({
+            data: {
+              sectionId: section.id,
+              content: text,
+              status: "ACCEPTED",
+              derivationType: "EXPLAIN",
+              order: count,
+              sources: {
+                create: {
+                  documentId: data.documentId,
+                  blockId: data.anchor.blockId,
+                  startOffset: data.anchor.startOffset,
+                  endOffset: data.anchor.endOffset,
+                  quotedText: block.text.slice(data.anchor.startOffset, data.anchor.endOffset),
+                  prefix: block.text.slice(
+                    Math.max(0, data.anchor.startOffset - 32),
+                    data.anchor.startOffset,
+                  ),
+                  suffix: block.text.slice(data.anchor.endOffset, data.anchor.endOffset + 32),
+                },
               },
             },
-          },
-        });
-      }
-    },
-    onError: (err) => {
-      console.error("[derive] stream error:", err);
+          });
+        }
+      },
+      onError: (err) => {
+        console.error("[derive] stream error:", err);
+      },
+    });
+    return result.toTextStreamResponse();
+  }
+
+  if (data.type === "SALIENCE") {
+    const result = await callForJson({
+      model,
+      messages,
+      maxOutputTokens,
+      schema: salienceOutputSchema,
+      label: "SALIENCE",
+    });
+    if (!result.ok) {
+      return NextResponse.json({ error: `Salience failed. ${result.error}` }, { status: 422 });
+    }
+    const spans = result.data.spans
+      .map((s) => resolveSpan(s, blockById))
+      .filter((s) => s !== null);
+    if (spans.length === 0) {
+      return NextResponse.json({ error: "Salience returned no resolvable spans" }, { status: 422 });
+    }
+    await db.notebookDocument.update({
+      where: {
+        notebookId_documentId: { notebookId: data.notebookId, documentId: data.documentId },
+      },
+      data: { salience: spans },
+    });
+    return NextResponse.json({ ok: true, spanCount: spans.length });
+  }
+
+  // EXTRACT
+  const result = await callForJson({
+    model,
+    messages,
+    maxOutputTokens,
+    schema: extractOutputSchema,
+    label: "EXTRACT",
+  });
+  if (!result.ok) {
+    return NextResponse.json({ error: `Extract failed. ${result.error}` }, { status: 422 });
+  }
+  const sectionId = data.targetSectionId ?? result.data.sectionId;
+  if (!skeleton.some((s) => s.id === sectionId)) {
+    return NextResponse.json({ error: "Extract proposed an unknown section" }, { status: 422 });
+  }
+  const spans = result.data.quotedSpans
+    .map((s) => resolveSpan(s, blockById))
+    .filter((s) => s !== null);
+  if (spans.length === 0) {
+    return NextResponse.json({ error: "Extract returned no resolvable spans" }, { status: 422 });
+  }
+  const count = await db.note.count({ where: { sectionId } });
+  const note = await db.note.create({
+    data: {
+      sectionId,
+      content: result.data.content,
+      status: "PENDING", // user approves everything (SPEC.md §1)
+      derivationType: "EXTRACT",
+      order: count,
+      sources: {
+        createMany: {
+          data: spans.map((s) => ({
+            documentId: data.documentId,
+            blockId: s.blockId,
+            startOffset: s.start,
+            endOffset: s.end,
+            quotedText: s.quotedText,
+            prefix: s.prefix,
+            suffix: s.suffix,
+          })),
+        },
+      },
     },
   });
-
-  return result.toTextStreamResponse();
+  return NextResponse.json({ ok: true, noteId: note.id, sectionId }, { status: 201 });
 }

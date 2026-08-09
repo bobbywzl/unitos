@@ -13,7 +13,13 @@ export type NotebookListItem = {
   updatedAt: string;
 };
 
-export function NotebookList({ notebooks }: { notebooks: NotebookListItem[] }) {
+export function NotebookList({
+  notebooks,
+  hasProfile,
+}: {
+  notebooks: NotebookListItem[];
+  hasProfile: boolean;
+}) {
   const router = useRouter();
   const [title, setTitle] = useState("");
   const [busy, setBusy] = useState(false);
@@ -25,7 +31,8 @@ export function NotebookList({ notebooks }: { notebooks: NotebookListItem[] }) {
     try {
       const notebook = await api<{ id: string }>("/api/notebooks", "POST", { title: trimmed });
       setTitle("");
-      router.push(`/n/${notebook.id}`);
+      // Profile onboarding on first notebook creation (SPEC.md §6).
+      router.push(`/n/${notebook.id}${hasProfile ? "" : "?onboard=1"}`);
     } finally {
       setBusy(false);
     }

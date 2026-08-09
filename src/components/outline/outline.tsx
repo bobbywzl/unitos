@@ -1,10 +1,10 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { arrayMove } from "@dnd-kit/sortable";
 import { api } from "@/lib/api";
-import type { NotebookView, SectionView } from "@/lib/types";
+import type { NotebookView, NoteView, SectionView } from "@/lib/types";
 import { SortableItem, SortableList } from "@/components/sortable";
 import { SectionItem } from "@/components/outline/section-item";
 
@@ -19,7 +19,11 @@ export type OutlineActions = {
   deleteNote: (id: string) => Promise<void>;
   reorderNote: (sectionId: string, id: string, toIndex: number) => void;
   moveNoteToSection: (id: string, sectionId: string) => Promise<void>;
+  acceptNote: (id: string) => Promise<void>;
+  rejectNote: (id: string) => Promise<void>;
   sectionChoices: { id: string; label: string }[];
+  focusedPendingId: string | null;
+  editRequest: { id: string } | null;
 };
 
 function updateSection(
@@ -32,16 +36,103 @@ function updateSection(
   );
 }
 
+function flattenNotes(sections: SectionView[]): NoteView[] {
+  return sections.flatMap((s) => [...s.notes, ...flattenNotes(s.children)]);
+}
+
 export function Outline({ notebook }: { notebook: NotebookView }) {
   const router = useRouter();
   const [tree, setTree] = useState(notebook.sections);
   const [prevSections, setPrevSections] = useState(notebook.sections);
+  const [focusIndex, setFocusIndex] = useState(0);
+  const [editRequest, setEditRequest] = useState<{ id: string } | null>(null);
   if (prevSections !== notebook.sections) {
     setPrevSections(notebook.sections);
     setTree(notebook.sections);
   }
 
   const refresh = () => router.refresh();
+
+  // Pending queue in outline order (SPEC.md §6 keyboard flow).
+  const pending = useMemo(() => flattenNotes(tree).filter((n) => n.status === "PENDING"), [tree]);
+  const focused = pending.length > 0 ? pending[Math.min(focusIndex, pending.length - 1)] : null;
+
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (pending.length === 0) return;
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.tagName === "SELECT" ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+      const current = pending[Math.min(focusIndex, pending.length - 1)];
+      switch (e.key) {
+        case "j":
+          setFocusIndex((i) => Math.min(i + 1, pending.length - 1));
+          break;
+        case "k":
+          setFocusIndex((i) => Math.max(i - 1, 0));
+          break;
+        case "Enter":
+          e.preventDefault();
+          if (current) void acceptNote(current.id);
+          break;
+        case "Backspace":
+          e.preventDefault();
+          if (current) void rejectNote(current.id);
+          break;
+        case "e":
+          e.preventDefault();
+          if (current) setEditRequest({ id: current.id });
+          break;
+        case "g": {
+          e.preventDefault();
+          const source = current?.sources[0];
+          if (source && !source.orphaned) {
+            router.push(`/n/${notebook.id}?doc=${source.documentId}&src=${source.id}`);
+          }
+          break;
+        }
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pending, focusIndex, notebook.id]);
+
+  async function acceptNote(id: string) {
+    // Optimistic: accepting must feel instant (SPEC.md §10).
+    setTree((prev) =>
+      prev.map(function walk(s): SectionView {
+        return {
+          ...s,
+          notes: s.notes.map((n) => (n.id === id ? { ...n, status: "ACCEPTED" as const } : n)),
+          children: s.children.map(walk),
+        };
+      }),
+    );
+    await api(`/api/notes/${id}`, "PATCH", { status: "ACCEPTED" });
+    refresh();
+  }
+
+  async function rejectNote(id: string) {
+    setTree((prev) =>
+      prev.map(function walk(s): SectionView {
+        return {
+          ...s,
+          notes: s.notes.filter((n) => n.id !== id),
+          children: s.children.map(walk),
+        };
+      }),
+    );
+    await api(`/api/notes/${id}`, "PATCH", { status: "REJECTED" });
+    refresh();
+  }
 
   const actions: OutlineActions = {
     notebookId: notebook.id,
@@ -97,14 +188,23 @@ export function Outline({ notebook }: { notebook: NotebookView }) {
       await api(`/api/notes/${id}`, "PATCH", { sectionId });
       refresh();
     },
+    acceptNote,
+    rejectNote,
     sectionChoices: tree.flatMap((s) => [
       { id: s.id, label: s.title },
       ...s.children.map((c) => ({ id: c.id, label: `${s.title} / ${c.title}` })),
     ]),
+    focusedPendingId: focused?.id ?? null,
+    editRequest,
   };
 
   return (
     <div className="space-y-4">
+      {pending.length > 0 && (
+        <p className="rounded-md bg-amber-50 px-2 py-1 text-xs text-amber-800 dark:bg-amber-950 dark:text-amber-300">
+          {pending.length} pending · j/k move · Enter accept · Backspace reject · e edit · g source
+        </p>
+      )}
       <SortableList
         id="sections-root"
         ids={tree.map((s) => s.id)}

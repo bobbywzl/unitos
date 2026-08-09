@@ -7,7 +7,12 @@ export type BlockData = {
   html: string | null;
 };
 
-export type Highlight = { sourceId: string; start: number; end: number };
+export type Highlight = {
+  sourceId: string | null;
+  start: number;
+  end: number;
+  kind: "anchor" | "salience";
+};
 
 function headingLevel(html: string | null): 1 | 2 | 3 {
   const m = html?.match(/^<h([1-3])/);
@@ -31,34 +36,59 @@ function markedText(text: string, highlights: Highlight[]) {
     const segment = text.slice(from, to);
     if (covering.length === 0) {
       parts.push(segment);
-    } else {
-      parts.push(
-        <mark
-          key={from}
-          data-source-id={covering[0].sourceId}
-          className="anchor-mark rounded-sm bg-amber-200/70 dark:bg-amber-500/30"
-        >
-          {segment}
-        </mark>,
-      );
+      continue;
     }
+    const anchor = covering.find((h) => h.kind === "anchor");
+    parts.push(
+      <mark
+        key={from}
+        data-source-id={anchor?.sourceId ?? undefined}
+        className={
+          anchor
+            ? "anchor-mark rounded-sm bg-amber-200/70 dark:bg-amber-500/30"
+            : "rounded-sm bg-violet-200/60 dark:bg-violet-500/25"
+        }
+      >
+        {segment}
+      </mark>,
+    );
   }
   return parts;
 }
 
 // Text blocks render block.text verbatim so DOM text content matches stored text
 // (anchor offsets depend on this, SPEC.md §5). Tables and figures render sanitized html.
+// A swap replaces the block content in place (SIMPLIFY, ephemeral); click to revert.
 export function BlockView({
   block,
   highlights = [],
+  swap,
+  onRevertSwap,
 }: {
   block: BlockData;
   highlights?: Highlight[];
+  swap?: string;
+  onRevertSwap?: (blockId: string) => void;
 }) {
   const shared = "reader-block";
+
+  if (swap !== undefined) {
+    return (
+      <div
+        data-block-id={block.id}
+        title="Simplified. Click to revert."
+        onClick={() => onRevertSwap?.(block.id)}
+        className={`${shared} my-2.5 cursor-pointer border-l-4 border-sky-400 pl-3 leading-7 whitespace-pre-wrap`}
+      >
+        {swap || "…"}
+      </div>
+    );
+  }
+
   const content = highlights.length > 0 ? markedText(block.text, highlights) : block.text;
-  const htmlHighlighted = highlights.length > 0 ? "ring-2 ring-amber-300 dark:ring-amber-600" : "";
-  const firstSourceId = highlights[0]?.sourceId;
+  const anchorIds = highlights.filter((h) => h.kind === "anchor" && h.sourceId);
+  const htmlHighlighted = anchorIds.length > 0 ? "ring-2 ring-amber-300 dark:ring-amber-600" : "";
+  const firstSourceId = anchorIds[0]?.sourceId ?? undefined;
 
   switch (block.type) {
     case "HEADING": {

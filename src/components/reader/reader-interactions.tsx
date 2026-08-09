@@ -5,6 +5,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import type { SourceInput } from "@/lib/anchors/input";
 import { Markdown } from "@/components/markdown";
+import type { BlockData, Highlight } from "@/components/reader/block-view";
+import { Reader } from "@/components/reader/reader";
 
 type Anchor = Omit<SourceInput, "documentId">;
 type Popover = { anchor: Anchor; x: number; y: number };
@@ -16,18 +18,26 @@ type ExplainBubble = {
   error: string | null;
 };
 
-// Client layer over the server-rendered reader: selection capture, popover,
-// EXPLAIN streaming bubble, jump-to-anchor.
+// Client layer over the reader: selection capture, popover, EXPLAIN bubble,
+// SIMPLIFY in-place swaps, SALIENCE overlay toggle, EXTRACT, jump-to-anchor.
 export function ReaderInteractions({
   documentId,
   notebookId,
   sectionChoices,
-  children,
+  title,
+  blocks,
+  anchorHighlights,
+  salienceByBlock,
+  hasSalience,
 }: {
   documentId: string;
   notebookId: string;
   sectionChoices: { id: string; label: string }[];
-  children: React.ReactNode;
+  title: string;
+  blocks: BlockData[];
+  anchorHighlights: Record<string, { sourceId: string; start: number; end: number }[]>;
+  salienceByBlock: Record<string, { start: number; end: number }[]>;
+  hasSalience: boolean;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -35,6 +45,10 @@ export function ReaderInteractions({
   const [popover, setPopover] = useState<Popover | null>(null);
   const [bubble, setBubble] = useState<ExplainBubble | null>(null);
   const [busy, setBusy] = useState(false);
+  const [swaps, setSwaps] = useState<Record<string, string>>({});
+  const [salienceOn, setSalienceOn] = useState(false);
+  const [salienceBusy, setSalienceBusy] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
 
   // Selection → block-relative offsets via data-block-id (SPEC.md §5). DOM ranges are never persisted.
   const captureSelection = useCallback((): Popover | null => {
@@ -53,13 +67,11 @@ export function ReaderInteractions({
     const blockId = startBlock.dataset.blockId;
     if (!blockId) return null;
 
-    // Offset of the range start within the block's text content.
     const preRange = document.createRange();
     preRange.selectNodeContents(startBlock);
     preRange.setEnd(range.startContainer, range.startOffset);
     const startOffset = preRange.toString().length;
 
-    // Clamp the selection to the start block (one anchor = one block).
     const inBlockRange = document.createRange();
     inBlockRange.selectNodeContents(startBlock);
     inBlockRange.setStart(range.startContainer, range.startOffset);
@@ -87,9 +99,7 @@ export function ReaderInteractions({
     const container = containerRef.current;
     if (!container) return;
     const onMouseUp = (event: MouseEvent) => {
-      // Clicks inside the popover or bubble must not re-capture (and must not close them).
       if (event.target instanceof Element && event.target.closest("[data-selection-popover]")) return;
-      // Let the browser finish adjusting the selection first.
       requestAnimationFrame(() => setPopover(captureSelection()));
     };
     container.addEventListener("mouseup", onMouseUp);
@@ -116,6 +126,11 @@ export function ReaderInteractions({
     tryScroll();
   }, [src]);
 
+  function showToast(message: string) {
+    setToast(message);
+    setTimeout(() => setToast(null), 5000);
+  }
+
   async function addToSection(sectionId: string) {
     if (!popover || busy) return;
     setBusy(true);
@@ -133,6 +148,19 @@ export function ReaderInteractions({
     }
   }
 
+  function deriveBody(type: string, anchor: Anchor) {
+    return JSON.stringify({
+      type,
+      documentId,
+      notebookId,
+      anchor: {
+        blockId: anchor.blockId,
+        startOffset: anchor.startOffset,
+        endOffset: anchor.endOffset,
+      },
+    });
+  }
+
   // EXPLAIN: stream into an annotation bubble at the selection (SPEC.md §4).
   async function explain() {
     if (!popover || busy) return;
@@ -144,16 +172,7 @@ export function ReaderInteractions({
       const res = await fetch("/api/derive", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          type: "EXPLAIN",
-          documentId,
-          notebookId,
-          anchor: {
-            blockId: anchor.blockId,
-            startOffset: anchor.startOffset,
-            endOffset: anchor.endOffset,
-          },
-        }),
+        body: deriveBody("EXPLAIN", anchor),
       });
       if (!res.ok || !res.body) {
         const detail = (await res.json().catch(() => null)) as { error?: string } | null;
@@ -175,9 +194,147 @@ export function ReaderInteractions({
     }
   }
 
+  // SIMPLIFY: swap the block in place, streaming. Ephemeral; click the block to revert (SPEC.md §6).
+  async function simplify() {
+    if (!popover || busy) return;
+    const { anchor } = popover;
+    setPopover(null);
+    window.getSelection()?.removeAllRanges();
+    setSwaps((s) => ({ ...s, [anchor.blockId]: "" }));
+    try {
+      const res = await fetch("/api/derive", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: deriveBody("SIMPLIFY", anchor),
+      });
+      if (!res.ok || !res.body) {
+        const detail = (await res.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(detail?.error ?? `Derive failed (${res.status})`);
+      }
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const chunk = decoder.decode(value, { stream: true });
+        setSwaps((s) => ({ ...s, [anchor.blockId]: (s[anchor.blockId] ?? "") + chunk }));
+      }
+    } catch (err) {
+      setSwaps((s) => {
+        const next = { ...s };
+        delete next[anchor.blockId];
+        return next;
+      });
+      showToast(err instanceof Error ? err.message : "Simplify failed");
+    }
+  }
+
+  // EXTRACT: pending note in a section; AI proposes the section (SPEC.md §4).
+  async function extract() {
+    if (!popover || busy) return;
+    if (sectionChoices.length === 0) {
+      showToast("Add a section first. Extract needs a section to propose.");
+      return;
+    }
+    const { anchor } = popover;
+    setPopover(null);
+    window.getSelection()?.removeAllRanges();
+    setBusy(true);
+    showToast("Extracting…");
+    try {
+      const res = await fetch("/api/derive", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: deriveBody("EXTRACT", anchor),
+      });
+      const json = (await res.json().catch(() => null)) as { error?: string } | null;
+      if (!res.ok) throw new Error(json?.error ?? `Extract failed (${res.status})`);
+      setToast(null);
+      router.refresh();
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Extract failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // SALIENCE: toggleable overlay, off by default; computed once per notebook+document (SPEC.md §6).
+  async function toggleSalience() {
+    if (salienceBusy) return;
+    if (hasSalience || Object.keys(salienceByBlock).length > 0) {
+      setSalienceOn(!salienceOn);
+      return;
+    }
+    setSalienceBusy(true);
+    showToast("Computing salience…");
+    try {
+      const res = await fetch("/api/derive", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "SALIENCE", documentId, notebookId }),
+      });
+      const json = (await res.json().catch(() => null)) as { error?: string } | null;
+      if (!res.ok) throw new Error(json?.error ?? `Salience failed (${res.status})`);
+      setToast(null);
+      setSalienceOn(true);
+      router.refresh();
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Salience failed");
+    } finally {
+      setSalienceBusy(false);
+    }
+  }
+
+  // Merge anchor and salience layers per block.
+  const highlightsByBlock: Record<string, Highlight[]> = {};
+  for (const [blockId, list] of Object.entries(anchorHighlights)) {
+    highlightsByBlock[blockId] = list.map((h) => ({ ...h, kind: "anchor" as const }));
+  }
+  if (salienceOn) {
+    for (const [blockId, list] of Object.entries(salienceByBlock)) {
+      const existing = highlightsByBlock[blockId] ?? [];
+      highlightsByBlock[blockId] = [
+        ...existing,
+        ...list.map((h) => ({ sourceId: null, start: h.start, end: h.end, kind: "salience" as const })),
+      ];
+    }
+  }
+
   return (
     <div ref={containerRef} className="relative min-h-0 flex-1 overflow-y-auto">
-      {children}
+      <div className="sticky top-2 z-10 float-right mr-3 flex items-center gap-2">
+        {toast && (
+          <span className="rounded-md bg-neutral-900/90 px-2 py-1 text-xs text-white dark:bg-white/90 dark:text-neutral-900">
+            {toast}
+          </span>
+        )}
+        <button
+          onClick={() => void toggleSalience()}
+          disabled={salienceBusy}
+          className={`rounded-full border px-2.5 py-1 text-xs shadow-sm disabled:opacity-40 ${
+            salienceOn
+              ? "border-violet-400 bg-violet-100 text-violet-800 dark:bg-violet-950 dark:text-violet-300"
+              : "border-neutral-300 bg-white text-neutral-600 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300"
+          }`}
+          title="Toggle the salience overlay"
+        >
+          {salienceBusy ? "Salience…" : "Salience"}
+        </button>
+      </div>
+
+      <Reader
+        title={title}
+        blocks={blocks}
+        highlightsByBlock={highlightsByBlock}
+        swaps={swaps}
+        onRevertSwap={(blockId) =>
+          setSwaps((s) => {
+            const next = { ...s };
+            delete next[blockId];
+            return next;
+          })
+        }
+      />
 
       {popover && (
         <div
@@ -193,39 +350,38 @@ export function ReaderInteractions({
             >
               Explain
             </button>
+            <button
+              onClick={() => void simplify()}
+              className="rounded bg-neutral-100 px-2 py-1 text-xs hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-700"
+            >
+              Simplify
+            </button>
+            <button
+              onClick={() => void extract()}
+              disabled={busy}
+              className="rounded bg-neutral-100 px-2 py-1 text-xs hover:bg-neutral-200 disabled:opacity-40 dark:bg-neutral-800 dark:hover:bg-neutral-700"
+            >
+              Extract
+            </button>
             {sectionChoices.length > 0 && (
-              <>
-                <span className="px-1 text-xs text-neutral-500">Add to</span>
-                {sectionChoices.slice(0, 3).map((s) => (
-                  <button
-                    key={s.id}
-                    disabled={busy}
-                    onClick={() => void addToSection(s.id)}
-                    className="rounded bg-neutral-100 px-2 py-1 text-xs hover:bg-neutral-200 disabled:opacity-40 dark:bg-neutral-800 dark:hover:bg-neutral-700"
-                  >
+              <select
+                disabled={busy}
+                value=""
+                onChange={(e) => {
+                  if (e.target.value) void addToSection(e.target.value);
+                }}
+                className="rounded bg-neutral-100 px-1 py-1 text-xs dark:bg-neutral-800"
+                title="Add the selection to a section as a manual note"
+              >
+                <option value="" disabled>
+                  Add to…
+                </option>
+                {sectionChoices.map((s) => (
+                  <option key={s.id} value={s.id}>
                     {s.label}
-                  </button>
+                  </option>
                 ))}
-                {sectionChoices.length > 3 && (
-                  <select
-                    disabled={busy}
-                    value=""
-                    onChange={(e) => {
-                      if (e.target.value) void addToSection(e.target.value);
-                    }}
-                    className="rounded bg-neutral-100 px-1 py-1 text-xs dark:bg-neutral-800"
-                  >
-                    <option value="" disabled>
-                      more…
-                    </option>
-                    {sectionChoices.slice(3).map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.label}
-                      </option>
-                    ))}
-                  </select>
-                )}
-              </>
+              </select>
             )}
             <button
               onClick={() => setPopover(null)}
