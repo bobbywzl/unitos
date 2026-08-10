@@ -72,6 +72,7 @@ export function NoteCard({
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(note.content);
+  const [copied, setCopied] = useState(false);
   const [handledEdit, setHandledEdit] = useState<{ id: string } | null>(null);
   const cardRef = useRef<HTMLDivElement>(null);
   const pending = note.status === "PENDING";
@@ -211,6 +212,17 @@ export function NoteCard({
             className="text-xs text-sand-600 hover:text-clay-700"
           >
             Edit
+          </button>
+          <button
+            onClick={() => {
+              void navigator.clipboard.writeText(note.content);
+              setCopied(true);
+              setTimeout(() => setCopied(false), 1500);
+            }}
+            className="text-xs text-sand-600 hover:text-clay-700"
+            title="Copy the note text"
+          >
+            {copied ? "Copied" : "Copy"}
           </button>
           <select
             value=""

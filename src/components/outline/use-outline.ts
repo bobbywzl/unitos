@@ -38,6 +38,19 @@ function flattenNotes(sections: SectionView[]): NoteView[] {
   return sections.flatMap((s) => [...s.notes, ...flattenNotes(s.children)]);
 }
 
+/** Notes whose content matches the query, with sections that end up empty dropped. */
+export function filterSections(sections: SectionView[], query: string): SectionView[] {
+  const needle = query.trim().toLowerCase();
+  if (!needle) return sections;
+  return sections
+    .map((s) => ({
+      ...s,
+      notes: s.notes.filter((n) => n.content.toLowerCase().includes(needle)),
+      children: filterSections(s.children, query),
+    }))
+    .filter((s) => s.notes.length > 0 || s.children.length > 0);
+}
+
 // The notes model shared by the tray (design 1a) and the notes full page (design 2b):
 // one optimistic tree, one pending queue, one set of keyboard bindings (SPEC.md §6).
 export function useOutline(notebook: NotebookView) {
@@ -75,6 +88,15 @@ export function useOutline(notebook: NotebookView) {
     [refresh],
   );
 
+  // Rejecting is one keystroke, so it gets one keystroke back: an Undo window
+  // that returns the note to the pending queue.
+  const [lastRejected, setLastRejected] = useState<string | null>(null);
+  useEffect(() => {
+    if (!lastRejected) return;
+    const timer = setTimeout(() => setLastRejected(null), 8000);
+    return () => clearTimeout(timer);
+  }, [lastRejected]);
+
   const rejectNote = useCallback(
     async (id: string) => {
       setTree((prev) =>
@@ -86,11 +108,20 @@ export function useOutline(notebook: NotebookView) {
           };
         }),
       );
+      setLastRejected(id);
       await api(`/api/notes/${id}`, "PATCH", { status: "REJECTED" });
       refresh();
     },
     [refresh],
   );
+
+  const undoReject = useCallback(async () => {
+    if (!lastRejected) return;
+    const id = lastRejected;
+    setLastRejected(null);
+    await api(`/api/notes/${id}`, "PATCH", { status: "PENDING" });
+    refresh();
+  }, [lastRejected, refresh]);
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -203,5 +234,5 @@ export function useOutline(notebook: NotebookView) {
     editRequest,
   };
 
-  return { tree, pending, focused, actions };
+  return { tree, pending, focused, actions, lastRejected, undoReject };
 }

@@ -25,3 +25,4 @@ Concretely:
 - Prompt templates live in `/lib/prompts/`, one file per DerivationType, each exporting a single function `(ctx) => string`.
 - Keep components small; server components by default, client components only where interaction requires it.
 - After each phase, run the app and verify the "Done when" criteria manually before moving on. State plainly which criteria pass and which do not.
+- Deploys: Vercel builds `main`. After the user accepts a change, push it to `main` — the user has standing instructions to auto-deploy accepted work.

@@ -42,7 +42,7 @@ export function Workspace({
   assistant: React.ReactNode;
   profile: { initial: ProfileValues | null; hasOverride: boolean; autoOpen: boolean };
 }) {
-  const { tree, pending, actions } = useOutline(notebook);
+  const { tree, pending, actions, lastRejected, undoReject } = useOutline(notebook);
   const [collapsed, setCollapsed] = useState(false);
   const [tab, setTab] = useState<Tab>("notes");
   const [menuOpen, setMenuOpen] = useState(false);
@@ -160,14 +160,16 @@ export function Workspace({
               )}
             </div>
 
-            {tab === "notes" && (
-              <button
-                onClick={() => setTab("assistant")}
-                className="flex shrink-0 items-center gap-2.5 rounded-full bg-card px-4 py-2.5 text-left shadow-soft hover:bg-clay-100"
-              >
-                <SparkleIcon size={17} className="text-clay" />
-                <span className="text-[13px] text-sand-500">Ask about this document…</span>
-              </button>
+            {lastRejected && (
+              <div className="flex shrink-0 items-center gap-3 rounded-full bg-card px-4 py-2.5 shadow-soft">
+                <span className="text-[13px] text-sand-600">Note rejected</span>
+                <button
+                  onClick={() => void undoReject()}
+                  className="ml-auto rounded-full bg-clay px-3.5 py-1 text-xs font-semibold text-clay-fg hover:bg-clay-600"
+                >
+                  Undo
+                </button>
+              </div>
             )}
           </aside>
         )}
