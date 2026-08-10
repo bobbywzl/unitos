@@ -1,5 +1,6 @@
 import { USER_ID } from "@/lib/constants";
 import { db } from "@/lib/db";
+import { Logo } from "@/components/logo";
 import { NotebookList } from "@/components/notebook-list";
 
 export const dynamic = "force-dynamic";
@@ -15,7 +16,10 @@ export default async function Home() {
 
   return (
     <main className="mx-auto max-w-5xl px-6 py-10">
-      <h1 className="mb-6 text-2xl font-semibold">Dissect</h1>
+      <div className="mb-6 flex items-center gap-3">
+        <Logo size={48} />
+        <h1 className="text-2xl font-semibold">Dissect</h1>
+      </div>
       <NotebookList
         hasProfile={profile !== null}
         notebooks={notebooks.map((n) => ({

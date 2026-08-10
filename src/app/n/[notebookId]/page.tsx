@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Logo } from "@/components/logo";
 import { notFound } from "next/navigation";
 import { matchInText } from "@/lib/anchors/match";
 import { resolveDocumentSources } from "@/lib/anchors/resolve";
@@ -205,8 +206,12 @@ export default async function NotebookPage(props: {
   return (
     <div className="grid h-screen grid-rows-[auto_1fr]">
       <header className="flex items-center gap-3 border-b border-neutral-200 px-4 py-2 dark:border-neutral-800">
-        <Link href="/" className="text-sm text-neutral-400 hover:text-neutral-900 dark:hover:text-white">
-          ← Notebooks
+        <Link
+          href="/"
+          className="flex items-center gap-2 text-sm text-neutral-400 hover:text-neutral-900 dark:hover:text-white"
+        >
+          <Logo size={24} />
+          <span>Notebooks</span>
         </Link>
         <NotebookTitle id={notebook.id} title={notebook.title} />
         <div className="ml-auto flex items-center gap-3">
@@ -257,7 +262,8 @@ export default async function NotebookPage(props: {
               />
             </>
           ) : (
-            <div className="flex h-full items-center justify-center">
+            <div className="flex h-full flex-col items-center justify-center gap-4">
+              <Logo size={140} />
               <p className="text-sm text-neutral-500">
                 No document open. Upload a PDF or add a URL to start reading.
               </p>
