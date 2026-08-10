@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { buildGlossary } from "@/lib/glossary";
@@ -78,8 +78,9 @@ export async function POST(req: Request) {
     try {
       const { document, deduped } = await parse.ingestPdf(bytes, fields.data.filename);
       await attachDocument(fields.data.notebookId, document.id);
-      // On-ingest glossary extraction (SPEC.md §8 Phase 7). Best-effort.
-      if (!deduped) void buildGlossary(document.id).catch(() => {});
+      // On-ingest glossary extraction (SPEC.md §8 Phase 7). Best-effort; after() keeps it
+      // alive past the response on serverless.
+      if (!deduped) after(() => buildGlossary(document.id).catch(() => {}));
       return NextResponse.json({ id: document.id, title: document.title, deduped }, { status: 201 });
     } catch (err) {
       console.error("PDF ingest failed:", err);
@@ -94,7 +95,7 @@ export async function POST(req: Request) {
   try {
     const { document, deduped } = await parse.ingestUrl(data.url);
     await attachDocument(data.notebookId, document.id);
-    if (!deduped) void buildGlossary(document.id).catch(() => {});
+    if (!deduped) after(() => buildGlossary(document.id).catch(() => {}));
     return NextResponse.json({ id: document.id, title: document.title, deduped }, { status: 201 });
   } catch (err) {
     console.error("URL ingest failed:", err);

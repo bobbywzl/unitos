@@ -106,6 +106,17 @@ export function DocumentBar({
     router.refresh();
   }
 
+  async function removeFromLibrary(documentId: string) {
+    if (!confirm("Delete this document from the library?")) return;
+    setError(null);
+    try {
+      await api(`/api/documents/${documentId}`, "DELETE");
+      setLibrary((prev) => (prev ? prev.filter((d) => d.id !== documentId) : prev));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Delete failed");
+    }
+  }
+
   const attachedIds = new Set(documents.map((d) => d.id));
 
   return (
@@ -199,12 +210,19 @@ export function DocumentBar({
           {library
             .filter((d) => !attachedIds.has(d.id))
             .map((d) => (
-              <li key={d.id}>
+              <li key={d.id} className="flex items-center gap-1">
                 <button
                   onClick={() => void attach(d.id)}
-                  className="w-full truncate rounded px-2 py-1 text-left hover:bg-neutral-100 dark:hover:bg-neutral-800"
+                  className="min-w-0 flex-1 truncate rounded px-2 py-1 text-left hover:bg-neutral-100 dark:hover:bg-neutral-800"
                 >
                   {d.title} <span className="text-xs text-neutral-400">({d._count.blocks} blocks)</span>
+                </button>
+                <button
+                  onClick={() => void removeFromLibrary(d.id)}
+                  className="rounded px-1.5 py-1 text-xs text-neutral-400 hover:text-red-500"
+                  title="Delete from the library"
+                >
+                  ✕
                 </button>
               </li>
             ))}
