@@ -19,7 +19,7 @@ const figtree = Figtree({
 });
 
 export const metadata: Metadata = {
-  title: "Dissect",
+  title: "Unitos",
   description: "Notes-centric app for deep reading",
 };
 

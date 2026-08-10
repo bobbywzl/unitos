@@ -24,7 +24,7 @@ function tableText(el: Element): string {
 
 export async function parseUrl(url: string): Promise<ParsedDocument> {
   const res = await outboundFetch(url, {
-    headers: { "User-Agent": "Mozilla/5.0 (compatible; Dissect/1.0)" },
+    headers: { "User-Agent": "Mozilla/5.0 (compatible; Unitos/1.0)" },
     signal: AbortSignal.timeout(30_000),
   });
   if (!res.ok) throw new Error(`Fetch failed (${res.status})`);

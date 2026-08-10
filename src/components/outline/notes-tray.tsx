@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import type { NoteView, SectionView } from "@/lib/types";
 import { NoteCard } from "@/components/outline/note-card";
@@ -38,7 +39,13 @@ export function NotesTray({
       ))}
 
       {tree.length === 0 && (
-        <p className="text-[13px] text-sand-600">No sections yet. Add one on the notes full page.</p>
+        <p className="text-[13px] text-sand-600">
+          No sections yet. Add one on the{" "}
+          <Link href={`/n/${actions.notebookId}/notes`} className="text-clay hover:text-clay-600">
+            notes full page
+          </Link>
+          .
+        </p>
       )}
     </div>
   );

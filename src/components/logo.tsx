@@ -1,4 +1,4 @@
-// The Dissect mark: transparent line art, colored by currentColor via a CSS mask.
+// The Unitos mark: transparent line art, colored by currentColor via a CSS mask.
 // Dark strokes in light mode, light strokes in dark mode; follows hover color.
 export function Logo({ size = 28, className = "" }: { size?: number; className?: string }) {
   const mask = {
