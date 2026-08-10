@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "build:deploy": "prisma generate && prisma migrate deploy && next build",
+    "build:deploy": "node scripts/deploy-build.mjs",
     "start": "next start",
     "lint": "eslint"
   },
