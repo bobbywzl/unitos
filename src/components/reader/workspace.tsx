@@ -133,20 +133,10 @@ export function Workspace({
                 {tab === "notes" ? "Notes" : "Assistant"}
               </span>
               {tab === "notes" && <span className="text-[13px] text-sand-600">{noteCount}</span>}
-              {tab === "notes" && (
-                <Link
-                  href={`/n/${notebook.id}/notes`}
-                  aria-label="Notes full page"
-                  title="Notes full page — reorganize and export"
-                  className="ml-auto flex size-8 items-center justify-center rounded-full text-sand-600 hover:bg-clay-100 hover:text-clay-800"
-                >
-                  <ExpandIcon size={15} />
-                </Link>
-              )}
               <button
                 onClick={() => setCollapsed(true)}
                 aria-label="Collapse the notes tray"
-                className={`flex size-8 items-center justify-center rounded-full text-sand-600 hover:bg-clay-100 hover:text-clay-800 ${tab === "notes" ? "" : "ml-auto"}`}
+                className="ml-auto flex size-8 items-center justify-center rounded-full text-sand-600 hover:bg-clay-100 hover:text-clay-800"
               >
                 <ChevronRightIcon size={16} />
               </button>
@@ -170,6 +160,17 @@ export function Workspace({
                   Undo
                 </button>
               </div>
+            )}
+
+            {tab === "notes" && (
+              <Link
+                href={`/n/${notebook.id}/notes`}
+                title="Reorganize, edit, and export your notes"
+                className="flex shrink-0 items-center justify-center gap-2 rounded-full bg-card px-4 py-2.5 text-[13px] font-semibold text-sand-700 shadow-soft hover:bg-clay-100 hover:text-clay-800"
+              >
+                <ExpandIcon size={15} />
+                Notes full page
+              </Link>
             )}
           </aside>
         )}
