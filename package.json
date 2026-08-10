@@ -22,7 +22,7 @@
     "@tailwindcss/typography": "^0.5.20",
     "ai": "^7.0.58",
     "docx": "^9.7.1",
-    "jsdom": "^30.0.1",
+    "jsdom": "^26.1.0",
     "next": "16.3.0",
     "prisma": "^6.19.3",
     "react": "19.2.8",
@@ -35,7 +35,7 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
-    "@types/jsdom": "^30.0.0",
+    "@types/jsdom": "^21.1.7",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
