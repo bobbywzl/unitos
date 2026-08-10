@@ -25,6 +25,28 @@ Notes-centric web app for deep reading. Documents attach to notebooks; every AI 
 - Voyage AI embeddings
 - Tailwind
 
+## Run it locally
+
+Needs Node 20+ and Docker.
+
+```sh
+git clone https://github.com/bobbywzl/unitos && cd unitos
+npm install
+docker compose up -d          # Postgres 16 + pgvector on :5432
+cp .env.local.example .env
+npx prisma migrate deploy
+npm run dev                   # → http://localhost:3000
+```
+
+Reading, notes, anchoring, and export work with no API keys. Add `ANTHROPIC_API_KEY` to `.env` for the AI features and `VOYAGE_API_KEY` for corpus search.
+
+## Deploy (Vercel + Supabase)
+
+1. Create a Supabase project. Database → Extensions → enable `vector`. Copy both connection strings from Project Settings → Database.
+2. On vercel.com: Import this repo. The build runs `prisma migrate deploy` (vercel.json), so migrations apply on deploy.
+3. Set env vars: `DATABASE_URL` (pooled, port 6543, `?pgbouncer=true&connection_limit=1`), `DIRECT_URL` (port 5432), `ANTHROPIC_API_KEY`, `VOYAGE_API_KEY`, `ADMIN_PASSWORD`, `CRON_SECRET`.
+4. Deploy.
+
 ## Setup
 
 1. `npm install`
