@@ -1,8 +1,9 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
+import { Logo } from "@/components/logo";
 
 export type AttachedDocument = { id: string; title: string };
 type LibraryDocument = { id: string; title: string; _count: { blocks: number } };
@@ -39,25 +40,79 @@ export function DocumentBar({
     router.push(`/n/${notebookId}?doc=${docId}`);
   }
 
-  async function uploadPdf(file: File) {
-    setBusy("Parsing PDF…");
+  async function uploadPdfs(files: File[]) {
     setError(null);
+    let lastId: string | null = null;
     try {
-      const form = new FormData();
-      form.set("file", file);
-      form.set("notebookId", notebookId);
-      const res = await fetch("/api/documents", { method: "POST", body: form });
-      const json = await readJson<{ id?: string; error?: string }>(res);
-      if (!res.ok || !json?.id) throw new Error(json?.error ?? statusMessage(res.status));
-      open(json.id);
-      router.refresh();
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        setBusy(files.length > 1 ? `Parsing ${file.name} (${i + 1}/${files.length})…` : `Parsing ${file.name}…`);
+        const form = new FormData();
+        form.set("file", file);
+        form.set("notebookId", notebookId);
+        const res = await fetch("/api/documents", { method: "POST", body: form });
+        const json = await readJson<{ id?: string; error?: string }>(res);
+        if (!res.ok || !json?.id) throw new Error(json?.error ?? statusMessage(res.status));
+        lastId = json.id;
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed");
     } finally {
       setBusy(null);
       if (fileRef.current) fileRef.current.value = "";
     }
+    if (lastId) {
+      open(lastId);
+      router.refresh();
+    }
   }
+
+  // Drag-and-drop PDF upload: dropping anywhere on the page adds to this notebook.
+  const [dragging, setDragging] = useState(false);
+  const dragDepth = useRef(0);
+  useEffect(() => {
+    const hasFiles = (e: DragEvent) => e.dataTransfer?.types.includes("Files") ?? false;
+    const onEnter = (e: DragEvent) => {
+      if (!hasFiles(e)) return;
+      e.preventDefault();
+      dragDepth.current += 1;
+      setDragging(true);
+    };
+    const onOver = (e: DragEvent) => {
+      if (hasFiles(e)) e.preventDefault();
+    };
+    const onLeave = (e: DragEvent) => {
+      if (!hasFiles(e)) return;
+      dragDepth.current = Math.max(0, dragDepth.current - 1);
+      if (dragDepth.current === 0) setDragging(false);
+    };
+    const onDrop = (e: DragEvent) => {
+      if (!hasFiles(e)) return;
+      e.preventDefault();
+      dragDepth.current = 0;
+      setDragging(false);
+      const files = [...(e.dataTransfer?.files ?? [])];
+      const pdfs = files.filter(
+        (f) => f.type === "application/pdf" || f.name.toLowerCase().endsWith(".pdf"),
+      );
+      if (pdfs.length === 0) {
+        setError("Drop PDF files.");
+        return;
+      }
+      void uploadPdfs(pdfs);
+    };
+    window.addEventListener("dragenter", onEnter);
+    window.addEventListener("dragover", onOver);
+    window.addEventListener("dragleave", onLeave);
+    window.addEventListener("drop", onDrop);
+    return () => {
+      window.removeEventListener("dragenter", onEnter);
+      window.removeEventListener("dragover", onOver);
+      window.removeEventListener("dragleave", onLeave);
+      window.removeEventListener("drop", onDrop);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [notebookId]);
 
   async function addUrl() {
     const trimmed = url.trim();
@@ -129,7 +184,7 @@ export function DocumentBar({
             className={`max-w-56 truncate rounded-md px-2.5 py-1 text-sm ${
               d.id === activeId
                 ? "bg-neutral-900 text-white dark:bg-white dark:text-neutral-900"
-                : "bg-white text-neutral-600 hover:text-neutral-900 dark:bg-neutral-900 dark:text-neutral-400 dark:hover:text-white"
+                : "bg-white text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900 dark:bg-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-white"
             }`}
             title={d.title}
           >
@@ -137,24 +192,24 @@ export function DocumentBar({
           </button>
         ))}
         <div className="ml-auto flex items-center gap-2">
-          {busy && <span className="text-xs text-neutral-500">{busy}</span>}
+          {busy && <span className="animate-pulse text-xs text-neutral-500">{busy}</span>}
           {error && <span className="text-xs text-red-500">{error}</span>}
           <button
             onClick={() => fileRef.current?.click()}
             disabled={busy !== null}
-            className="rounded-md border border-neutral-300 px-2 py-1 text-xs text-neutral-600 hover:border-neutral-500 disabled:opacity-40 dark:border-neutral-700 dark:text-neutral-300"
+            className="rounded-md border border-neutral-300 px-2 py-1 text-xs text-neutral-600 hover:border-neutral-500 hover:bg-neutral-100 hover:text-neutral-900 disabled:opacity-40 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800 dark:hover:text-white"
           >
             Upload PDF
           </button>
           <button
             onClick={() => setUrlOpen(!urlOpen)}
-            className="rounded-md border border-neutral-300 px-2 py-1 text-xs text-neutral-600 hover:border-neutral-500 dark:border-neutral-700 dark:text-neutral-300"
+            className="rounded-md border border-neutral-300 px-2 py-1 text-xs text-neutral-600 hover:border-neutral-500 hover:bg-neutral-100 hover:text-neutral-900 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800 dark:hover:text-white"
           >
             Add URL
           </button>
           <button
             onClick={() => void openLibrary()}
-            className="rounded-md border border-neutral-300 px-2 py-1 text-xs text-neutral-600 hover:border-neutral-500 dark:border-neutral-700 dark:text-neutral-300"
+            className="rounded-md border border-neutral-300 px-2 py-1 text-xs text-neutral-600 hover:border-neutral-500 hover:bg-neutral-100 hover:text-neutral-900 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800 dark:hover:text-white"
           >
             Library
           </button>
@@ -174,12 +229,24 @@ export function DocumentBar({
         ref={fileRef}
         type="file"
         accept="application/pdf"
+        multiple
         className="hidden"
         onChange={(e) => {
-          const file = e.target.files?.[0];
-          if (file) void uploadPdf(file);
+          const files = [...(e.target.files ?? [])];
+          if (files.length > 0) void uploadPdfs(files);
         }}
       />
+
+      {dragging && (
+        <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center bg-white/90 backdrop-blur-sm dark:bg-neutral-950/90">
+          <div className="flex flex-col items-center gap-3 rounded-xl border-2 border-dashed border-neutral-400 bg-white px-14 py-10 shadow-lg dark:border-neutral-500 dark:bg-neutral-900">
+            <Logo size={72} className="text-neutral-800 dark:text-neutral-200" />
+            <p className="text-sm font-medium text-neutral-700 dark:text-neutral-200">
+              Drop PDFs to add them to this notebook
+            </p>
+          </div>
+        </div>
+      )}
 
       {urlOpen && (
         <form

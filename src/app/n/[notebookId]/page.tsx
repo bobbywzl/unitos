@@ -269,9 +269,9 @@ export default async function NotebookPage(props: {
             </>
           ) : (
             <div className="flex h-full flex-col items-center justify-center gap-4">
-              <Logo size={140} />
+              <Logo size={140} className="text-neutral-800 dark:text-neutral-200" />
               <p className="text-sm text-neutral-500">
-                No document open. Upload a PDF or add a URL to start reading.
+                No document open. Upload a PDF, drop one here, or add a URL to start reading.
               </p>
             </div>
           )}

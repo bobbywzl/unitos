@@ -82,7 +82,7 @@ export function NotebookList({
           {notebooks.map((n) => (
             <li
               key={n.id}
-              className="group rounded-lg border border-neutral-200 bg-white p-4 hover:border-neutral-400 dark:border-neutral-800 dark:bg-neutral-900 dark:hover:border-neutral-600"
+              className="group rounded-lg border border-neutral-200 bg-white p-4 transition-shadow hover:border-neutral-400 hover:shadow-md dark:border-neutral-800 dark:bg-neutral-900 dark:hover:border-neutral-500"
             >
               <Link href={`/n/${n.id}`} className="block">
                 <h2 className="font-medium">{n.title}</h2>

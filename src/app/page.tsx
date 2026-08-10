@@ -18,7 +18,7 @@ export default async function Home() {
   return (
     <main className="mx-auto max-w-5xl px-6 py-10">
       <div className="mb-6 flex items-center gap-3">
-        <Logo size={48} />
+        <Logo size={48} className="text-neutral-900 dark:text-neutral-100" />
         <h1 className="text-2xl font-semibold">Dissect</h1>
         <Link
           href="/settings"

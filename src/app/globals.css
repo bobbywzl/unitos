@@ -28,6 +28,31 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+/* Smoothness: every interactive element gets a pointer, a color transition, and a
+   visible keyboard focus ring. Hover styles land softly instead of snapping. */
+button:not(:disabled) {
+  cursor: pointer;
+}
+a,
+button,
+input,
+textarea,
+select,
+[role="button"] {
+  transition:
+    color 0.15s ease,
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    opacity 0.15s ease;
+}
+:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--foreground) 45%, transparent);
+  outline-offset: 2px;
+  border-radius: 2px;
 }
 
 /* Source chip click: flash the anchor (SPEC.md §6). */
