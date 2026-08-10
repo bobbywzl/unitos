@@ -7,6 +7,7 @@ import {
   ArrowLeftIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
+  ExpandIcon,
   MoreIcon,
   NotesIcon,
   SparkleIcon,
@@ -132,10 +133,20 @@ export function Workspace({
                 {tab === "notes" ? "Notes" : "Assistant"}
               </span>
               {tab === "notes" && <span className="text-[13px] text-sand-600">{noteCount}</span>}
+              {tab === "notes" && (
+                <Link
+                  href={`/n/${notebook.id}/notes`}
+                  aria-label="Notes full page"
+                  title="Notes full page — reorganize and export"
+                  className="ml-auto flex size-8 items-center justify-center rounded-full text-sand-600 hover:bg-clay-100 hover:text-clay-800"
+                >
+                  <ExpandIcon size={15} />
+                </Link>
+              )}
               <button
                 onClick={() => setCollapsed(true)}
                 aria-label="Collapse the notes tray"
-                className="ml-auto flex size-8 items-center justify-center rounded-full text-sand-600 hover:bg-clay-100 hover:text-clay-800"
+                className={`flex size-8 items-center justify-center rounded-full text-sand-600 hover:bg-clay-100 hover:text-clay-800 ${tab === "notes" ? "" : "ml-auto"}`}
               >
                 <ChevronRightIcon size={16} />
               </button>

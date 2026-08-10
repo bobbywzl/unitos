@@ -25,7 +25,7 @@ export default async function Home() {
     <main className="mx-auto w-full max-w-[1080px] px-16 pb-16">
       <header className="flex items-center gap-3 pt-[26px]">
         <Logo size={38} className="text-clay" />
-        <span className="font-display text-[21px]">Dissect</span>
+        <span className="font-display text-[21px]">Unitos</span>
         <Link
           href="/settings"
           aria-label="Settings"

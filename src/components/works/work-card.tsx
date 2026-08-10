@@ -100,6 +100,12 @@ export function WorkCard({
         </button>
         {menuOpen && (
           <div className="absolute right-0 mt-1 flex w-36 flex-col overflow-hidden rounded-2xl bg-card py-1 shadow-float">
+            <Link
+              href={`/n/${work.id}/notes`}
+              className="px-4 py-2 text-left text-sm text-sand-700 hover:bg-clay-100 hover:text-clay-800"
+            >
+              Notes
+            </Link>
             <button
               onClick={() => {
                 setMenuOpen(false);
