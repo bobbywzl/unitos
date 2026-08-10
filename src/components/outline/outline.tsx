@@ -1,280 +1,48 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
-import { arrayMove } from "@dnd-kit/sortable";
-import { api } from "@/lib/api";
-import type { NotebookView, NoteView, SectionView } from "@/lib/types";
+import type { NotebookView } from "@/lib/types";
 import { SortableItem, SortableList } from "@/components/sortable";
+import { AddSection } from "@/components/outline/add-section";
 import { SectionItem } from "@/components/outline/section-item";
+import { useOutline } from "@/components/outline/use-outline";
 
-export type OutlineActions = {
-  notebookId: string;
-  addSection: (parentId: string | null, title: string) => Promise<void>;
-  renameSection: (id: string, title: string) => Promise<void>;
-  deleteSection: (id: string) => Promise<void>;
-  reorderSection: (parentId: string | null, id: string, toIndex: number) => void;
-  addNote: (sectionId: string, content: string) => Promise<void>;
-  saveNote: (id: string, content: string) => Promise<void>;
-  deleteNote: (id: string) => Promise<void>;
-  reorderNote: (sectionId: string, id: string, toIndex: number) => void;
-  moveNoteToSection: (id: string, sectionId: string) => Promise<void>;
-  acceptNote: (id: string) => Promise<void>;
-  rejectNote: (id: string) => Promise<void>;
-  sectionChoices: { id: string; label: string }[];
-  focusedPendingId: string | null;
-  editRequest: { id: string } | null;
-};
-
-function updateSection(
-  sections: SectionView[],
-  id: string,
-  fn: (s: SectionView) => SectionView,
-): SectionView[] {
-  return sections.map((s) =>
-    s.id === id ? fn(s) : { ...s, children: updateSection(s.children, id, fn) },
-  );
-}
-
-function flattenNotes(sections: SectionView[]): NoteView[] {
-  return sections.flatMap((s) => [...s.notes, ...flattenNotes(s.children)]);
-}
-
+// The notes full page (design 2b): the reorganizing view. Sections carry drag
+// grips, notes are flat cards, and pending ones stay in place with Accept/Reject
+// inline — unlike the tray, which hoists the whole pending queue to the top.
 export function Outline({ notebook }: { notebook: NotebookView }) {
-  const router = useRouter();
-  const [tree, setTree] = useState(notebook.sections);
-  const [prevSections, setPrevSections] = useState(notebook.sections);
-  const [focusIndex, setFocusIndex] = useState(0);
-  const [editRequest, setEditRequest] = useState<{ id: string } | null>(null);
-  if (prevSections !== notebook.sections) {
-    setPrevSections(notebook.sections);
-    setTree(notebook.sections);
-  }
-
-  const refresh = () => router.refresh();
-
-  // Pending queue in outline order (SPEC.md §6 keyboard flow).
-  const pending = useMemo(() => flattenNotes(tree).filter((n) => n.status === "PENDING"), [tree]);
-  const focused = pending.length > 0 ? pending[Math.min(focusIndex, pending.length - 1)] : null;
-
-  useEffect(() => {
-    function onKeyDown(e: KeyboardEvent) {
-      if (pending.length === 0) return;
-      const target = e.target as HTMLElement | null;
-      if (
-        target &&
-        (target.tagName === "INPUT" ||
-          target.tagName === "TEXTAREA" ||
-          target.tagName === "SELECT" ||
-          target.isContentEditable)
-      ) {
-        return;
-      }
-      const current = pending[Math.min(focusIndex, pending.length - 1)];
-      switch (e.key) {
-        case "j":
-          setFocusIndex((i) => Math.min(i + 1, pending.length - 1));
-          break;
-        case "k":
-          setFocusIndex((i) => Math.max(i - 1, 0));
-          break;
-        case "Enter":
-          e.preventDefault();
-          if (current) void acceptNote(current.id);
-          break;
-        case "Backspace":
-          e.preventDefault();
-          if (current) void rejectNote(current.id);
-          break;
-        case "e":
-          e.preventDefault();
-          if (current) setEditRequest({ id: current.id });
-          break;
-        case "g": {
-          e.preventDefault();
-          const source = current?.sources[0];
-          if (source && !source.orphaned) {
-            router.push(`/n/${notebook.id}?doc=${source.documentId}&src=${source.id}`);
-          }
-          break;
-        }
-      }
-    }
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pending, focusIndex, notebook.id]);
-
-  async function acceptNote(id: string) {
-    // Optimistic: accepting must feel instant (SPEC.md §10).
-    setTree((prev) =>
-      prev.map(function walk(s): SectionView {
-        return {
-          ...s,
-          notes: s.notes.map((n) => (n.id === id ? { ...n, status: "ACCEPTED" as const } : n)),
-          children: s.children.map(walk),
-        };
-      }),
-    );
-    await api(`/api/notes/${id}`, "PATCH", { status: "ACCEPTED" });
-    refresh();
-  }
-
-  async function rejectNote(id: string) {
-    setTree((prev) =>
-      prev.map(function walk(s): SectionView {
-        return {
-          ...s,
-          notes: s.notes.filter((n) => n.id !== id),
-          children: s.children.map(walk),
-        };
-      }),
-    );
-    await api(`/api/notes/${id}`, "PATCH", { status: "REJECTED" });
-    refresh();
-  }
-
-  const actions: OutlineActions = {
-    notebookId: notebook.id,
-    async addSection(parentId, title) {
-      await api("/api/sections", "POST", { notebookId: notebook.id, title, parentId });
-      refresh();
-    },
-    async renameSection(id, title) {
-      await api(`/api/sections/${id}`, "PATCH", { title });
-      refresh();
-    },
-    async deleteSection(id) {
-      await api(`/api/sections/${id}`, "DELETE");
-      refresh();
-    },
-    reorderSection(parentId, id, toIndex) {
-      setTree((prev) => {
-        if (parentId === null) {
-          const from = prev.findIndex((s) => s.id === id);
-          return from === -1 ? prev : arrayMove(prev, from, toIndex);
-        }
-        return updateSection(prev, parentId, (parent) => {
-          const from = parent.children.findIndex((s) => s.id === id);
-          return from === -1
-            ? parent
-            : { ...parent, children: arrayMove(parent.children, from, toIndex) };
-        });
-      });
-      void api(`/api/sections/${id}`, "PATCH", { order: toIndex }).then(refresh);
-    },
-    async addNote(sectionId, content) {
-      await api("/api/notes", "POST", { sectionId, content });
-      refresh();
-    },
-    async saveNote(id, content) {
-      await api(`/api/notes/${id}`, "PATCH", { content });
-      refresh();
-    },
-    async deleteNote(id) {
-      await api(`/api/notes/${id}`, "DELETE");
-      refresh();
-    },
-    reorderNote(sectionId, id, toIndex) {
-      setTree((prev) =>
-        updateSection(prev, sectionId, (s) => {
-          const from = s.notes.findIndex((n) => n.id === id);
-          return from === -1 ? s : { ...s, notes: arrayMove(s.notes, from, toIndex) };
-        }),
-      );
-      void api(`/api/notes/${id}`, "PATCH", { order: toIndex }).then(refresh);
-    },
-    async moveNoteToSection(id, sectionId) {
-      await api(`/api/notes/${id}`, "PATCH", { sectionId });
-      refresh();
-    },
-    acceptNote,
-    rejectNote,
-    sectionChoices: tree.flatMap((s) => [
-      { id: s.id, label: s.title },
-      ...s.children.map((c) => ({ id: c.id, label: `${s.title} / ${c.title}` })),
-    ]),
-    focusedPendingId: focused?.id ?? null,
-    editRequest,
-  };
+  const { tree, pending, actions } = useOutline(notebook);
 
   return (
-    <div className="space-y-4">
-      {pending.length > 0 && (
-        <p className="rounded-md bg-amber-50 px-2 py-1 text-xs text-amber-800 dark:bg-amber-950 dark:text-amber-300">
-          {pending.length} pending · j/k move · Enter accept · Backspace reject · e edit · g source
-        </p>
-      )}
-      <SortableList
-        id="sections-root"
-        ids={tree.map((s) => s.id)}
-        onMove={(id, to) => actions.reorderSection(null, id, to)}
-      >
-        {tree.map((section) => (
-          <SortableItem key={section.id} id={section.id}>
-            {(handle) => <SectionItem section={section} actions={actions} handle={handle} />}
-          </SortableItem>
-        ))}
-      </SortableList>
-      <AddSection onAdd={(title) => actions.addSection(null, title)} />
-      {tree.length === 0 && (
-        <p className="text-sm text-neutral-500">No sections yet. Add one to start taking notes.</p>
-      )}
+    <div className="flex flex-col">
+      <div className="mb-2 flex flex-wrap items-baseline gap-3.5">
+        <h1 className="text-[38px]">{notebook.title}</h1>
+        {pending.length > 0 && (
+          <span className="rounded-full bg-clay-200 px-3.5 py-1 text-xs font-semibold text-clay-800">
+            {pending.length} pending
+          </span>
+        )}
+        <span className="text-[11px] text-sand-500">⏎ accept · ⌫ reject · e edit · g source</span>
+      </div>
+
+      <div className="flex flex-col gap-[30px] pt-[22px]">
+        <SortableList
+          id="sections-root"
+          ids={tree.map((s) => s.id)}
+          onMove={(id, to) => actions.reorderSection(null, id, to)}
+        >
+          {tree.map((section) => (
+            <SortableItem key={section.id} id={section.id}>
+              {(handle) => <SectionItem section={section} actions={actions} handle={handle} />}
+            </SortableItem>
+          ))}
+        </SortableList>
+
+        <AddSection onAdd={(title) => actions.addSection(null, title)} />
+
+        {tree.length === 0 && (
+          <p className="text-sm text-sand-600">No sections yet. Add one to start taking notes.</p>
+        )}
+      </div>
     </div>
-  );
-}
-
-export function AddSection({
-  onAdd,
-  small,
-}: {
-  onAdd: (title: string) => Promise<void>;
-  small?: boolean;
-}) {
-  const [open, setOpen] = useState(false);
-  const [title, setTitle] = useState("");
-
-  if (!open) {
-    return (
-      <button
-        onClick={() => setOpen(true)}
-        className={
-          small
-            ? "text-xs text-neutral-500 hover:text-neutral-900 dark:hover:text-white"
-            : "rounded-md border border-dashed border-neutral-300 px-3 py-1.5 text-sm text-neutral-500 hover:border-neutral-500 hover:text-neutral-900 dark:border-neutral-700 dark:hover:text-white"
-        }
-      >
-        + Add section
-      </button>
-    );
-  }
-
-  return (
-    <form
-      className="flex gap-2"
-      onSubmit={async (e) => {
-        e.preventDefault();
-        const trimmed = title.trim();
-        if (!trimmed) return;
-        await onAdd(trimmed);
-        setTitle("");
-        setOpen(false);
-      }}
-    >
-      <input
-        autoFocus
-        value={title}
-        onChange={(e) => setTitle(e.target.value)}
-        onKeyDown={(e) => e.key === "Escape" && setOpen(false)}
-        placeholder="Section title"
-        className="w-64 rounded-md border border-neutral-300 bg-white px-2 py-1 text-sm outline-none focus:border-neutral-500 dark:border-neutral-700 dark:bg-neutral-900"
-      />
-      <button type="submit" className="text-sm text-neutral-700 hover:text-neutral-900 dark:text-neutral-300 dark:hover:text-white">
-        Add
-      </button>
-      <button type="button" onClick={() => setOpen(false)} className="text-sm text-neutral-400">
-        Cancel
-      </button>
-    </form>
   );
 }

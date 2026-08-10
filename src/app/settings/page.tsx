@@ -21,12 +21,12 @@ export default async function SettingsPage() {
       <header className="mb-8 flex items-center gap-3">
         <Link
           href="/"
-          className="flex items-center gap-2 text-sm text-neutral-400 hover:text-neutral-900 dark:hover:text-white"
+          className="flex items-center gap-2 rounded-full bg-sand-100 py-[7px] pr-4 pl-3 text-[13px] text-sand-700 shadow-soft hover:bg-clay-100 hover:text-clay-800"
         >
-          <Logo size={24} />
-          <span>Notebooks</span>
+          <Logo size={16} />
+          Works
         </Link>
-        <h1 className="text-lg font-semibold">Settings</h1>
+        <h1 className="text-[28px]">Settings</h1>
       </header>
       <SettingsForm
         profile={

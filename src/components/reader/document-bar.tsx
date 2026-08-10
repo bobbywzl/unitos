@@ -18,6 +18,8 @@ function statusMessage(status: number): string {
   return `Request failed (${status})`;
 }
 
+// Documents in the header (design 1a): a pill per attached document, everything
+// that adds or removes one folded behind the dashed +.
 export function DocumentBar({
   notebookId,
   documents,
@@ -29,12 +31,28 @@ export function DocumentBar({
 }) {
   const router = useRouter();
   const fileRef = useRef<HTMLInputElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const [busy, setBusy] = useState<string | null>(null);
-  const [urlOpen, setUrlOpen] = useState(false);
+  const [menu, setMenu] = useState<null | "root" | "url" | "library">(null);
   const [url, setUrl] = useState("");
-  const [libraryOpen, setLibraryOpen] = useState(false);
   const [library, setLibrary] = useState<LibraryDocument[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (menu === null) return;
+    const onPointerDown = (e: PointerEvent) => {
+      if (!menuRef.current?.contains(e.target as Node)) setMenu(null);
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMenu(null);
+    };
+    window.addEventListener("pointerdown", onPointerDown);
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("pointerdown", onPointerDown);
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [menu]);
 
   function open(docId: string) {
     router.push(`/n/${notebookId}?doc=${docId}`);
@@ -67,7 +85,7 @@ export function DocumentBar({
     }
   }
 
-  // Drag-and-drop PDF upload: dropping anywhere on the page adds to this notebook.
+  // Drag-and-drop PDF upload: dropping anywhere on the page adds to this work.
   const [dragging, setDragging] = useState(false);
   const dragDepth = useRef(0);
   useEffect(() => {
@@ -128,7 +146,7 @@ export function DocumentBar({
       const json = await readJson<{ id?: string; error?: string }>(res);
       if (!res.ok || !json?.id) throw new Error(json?.error ?? statusMessage(res.status));
       setUrl("");
-      setUrlOpen(false);
+      setMenu(null);
       open(json.id);
       router.refresh();
     } catch (err) {
@@ -139,7 +157,7 @@ export function DocumentBar({
   }
 
   async function openLibrary() {
-    setLibraryOpen(!libraryOpen);
+    setMenu("library");
     if (!library) {
       const res = await fetch("/api/documents");
       const json = await readJson<LibraryDocument[]>(res);
@@ -150,12 +168,13 @@ export function DocumentBar({
 
   async function attach(documentId: string) {
     await api(`/api/notebooks/${notebookId}/documents`, "POST", { documentId });
-    setLibraryOpen(false);
+    setMenu(null);
     open(documentId);
     router.refresh();
   }
 
   async function detach(documentId: string) {
+    setMenu(null);
     await api(`/api/notebooks/${notebookId}/documents/${documentId}`, "DELETE");
     router.push(`/n/${notebookId}`);
     router.refresh();
@@ -173,57 +192,151 @@ export function DocumentBar({
   }
 
   const attachedIds = new Set(documents.map((d) => d.id));
+  const menuItem =
+    "px-4 py-2 text-left text-sm text-sand-700 hover:bg-clay-100 hover:text-clay-800";
 
   return (
-    <div className="border-b border-neutral-200 bg-neutral-50 px-4 py-2 dark:border-neutral-800 dark:bg-neutral-950">
-      <div className="flex flex-wrap items-center gap-2">
-        {documents.map((d) => (
-          <button
-            key={d.id}
-            onClick={() => open(d.id)}
-            className={`max-w-56 truncate rounded-md px-2.5 py-1 text-sm ${
-              d.id === activeId
-                ? "bg-neutral-900 text-white dark:bg-white dark:text-neutral-900"
-                : "bg-white text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900 dark:bg-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-white"
-            }`}
-            title={d.title}
+    <div className="flex min-w-0 items-center gap-2">
+      {documents.map((d) => (
+        <button
+          key={d.id}
+          onClick={() => open(d.id)}
+          className={`max-w-56 truncate rounded-full text-[13px] ${
+            d.id === activeId
+              ? "bg-ink px-[15px] py-[7px] font-semibold text-paper"
+              : "border border-line px-3.5 py-1.5 text-sand-700 hover:bg-clay-100 hover:text-clay-800"
+          }`}
+          title={d.title}
+        >
+          {d.title}
+        </button>
+      ))}
+
+      <div ref={menuRef} className="relative shrink-0">
+        <button
+          onClick={() => setMenu(menu === null ? "root" : null)}
+          aria-label="Add a document"
+          aria-expanded={menu !== null}
+          className="flex size-8 items-center justify-center rounded-full border border-dashed border-sand-400 text-sand-600 hover:bg-clay-100 hover:text-clay-800"
+        >
+          <svg
+            width="15"
+            height="15"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.75"
+            strokeLinecap="round"
+            strokeLinejoin="round"
           >
-            {d.title}
-          </button>
-        ))}
-        <div className="ml-auto flex items-center gap-2">
-          {busy && <span className="animate-pulse text-xs text-neutral-500">{busy}</span>}
-          {error && <span className="text-xs text-red-500">{error}</span>}
-          <button
-            onClick={() => fileRef.current?.click()}
-            disabled={busy !== null}
-            className="rounded-md border border-neutral-300 px-2 py-1 text-xs text-neutral-600 hover:border-neutral-500 hover:bg-neutral-100 hover:text-neutral-900 disabled:opacity-40 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800 dark:hover:text-white"
-          >
-            Upload PDF
-          </button>
-          <button
-            onClick={() => setUrlOpen(!urlOpen)}
-            className="rounded-md border border-neutral-300 px-2 py-1 text-xs text-neutral-600 hover:border-neutral-500 hover:bg-neutral-100 hover:text-neutral-900 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800 dark:hover:text-white"
-          >
-            Add URL
-          </button>
-          <button
-            onClick={() => void openLibrary()}
-            className="rounded-md border border-neutral-300 px-2 py-1 text-xs text-neutral-600 hover:border-neutral-500 hover:bg-neutral-100 hover:text-neutral-900 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800 dark:hover:text-white"
-          >
-            Library
-          </button>
-          {activeId && (
-            <button
-              onClick={() => void detach(activeId)}
-              className="text-xs text-neutral-400 hover:text-red-500"
-              title="Detach the open document from this notebook"
-            >
-              Detach
-            </button>
-          )}
-        </div>
+            <path d="M5 12h14" />
+            <path d="M12 5v14" />
+          </svg>
+        </button>
+
+        {menu !== null && (
+          <div className="absolute left-0 z-30 mt-2 w-72 overflow-hidden rounded-2xl bg-card py-1 shadow-float">
+            {menu === "root" && (
+              <div className="flex flex-col">
+                <button
+                  onClick={() => {
+                    setMenu(null);
+                    fileRef.current?.click();
+                  }}
+                  disabled={busy !== null}
+                  className={`${menuItem} disabled:opacity-40`}
+                >
+                  Upload PDF
+                </button>
+                <button onClick={() => setMenu("url")} className={menuItem}>
+                  Add URL
+                </button>
+                <button onClick={() => void openLibrary()} className={menuItem}>
+                  Library
+                </button>
+                {activeId && (
+                  <button
+                    onClick={() => void detach(activeId)}
+                    className="px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-950"
+                    title="Detach the open document from this work"
+                  >
+                    Detach open document
+                  </button>
+                )}
+              </div>
+            )}
+
+            {menu === "url" && (
+              <form
+                className="flex flex-col gap-2 p-3"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  void addUrl();
+                }}
+              >
+                <input
+                  autoFocus
+                  value={url}
+                  onChange={(e) => setUrl(e.target.value)}
+                  placeholder="https://…"
+                  aria-label="Document URL"
+                  className="w-full rounded-full bg-sand-100 px-4 py-2 text-sm outline-none placeholder:text-sand-500"
+                />
+                <div className="flex items-center gap-2">
+                  <button
+                    type="submit"
+                    disabled={busy !== null}
+                    className="rounded-full bg-clay px-4 py-1.5 text-xs font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
+                  >
+                    Ingest
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMenu("root")}
+                    className="rounded-full border border-line px-3 py-1 text-xs text-sand-700 hover:bg-clay-100 hover:text-clay-800"
+                  >
+                    Back
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {menu === "library" && (
+              <ul className="max-h-64 overflow-y-auto py-1">
+                {library === null && <li className="px-4 py-2 text-sm text-sand-500">Loading…</li>}
+                {library !== null && library.filter((d) => !attachedIds.has(d.id)).length === 0 && (
+                  <li className="px-4 py-2 text-sm text-sand-500">
+                    No other documents in the library.
+                  </li>
+                )}
+                {library
+                  ?.filter((d) => !attachedIds.has(d.id))
+                  .map((d) => (
+                    <li key={d.id} className="flex items-center gap-1 px-1">
+                      <button
+                        onClick={() => void attach(d.id)}
+                        className="min-w-0 flex-1 truncate rounded-full px-3 py-2 text-left text-sm text-sand-700 hover:bg-clay-100 hover:text-clay-800"
+                      >
+                        {d.title}{" "}
+                        <span className="text-xs text-sand-500">({d._count.blocks} blocks)</span>
+                      </button>
+                      <button
+                        onClick={() => void removeFromLibrary(d.id)}
+                        className="rounded-full px-2 py-1 text-xs text-sand-400 hover:text-red-500"
+                        title="Delete from the library"
+                      >
+                        ✕
+                      </button>
+                    </li>
+                  ))}
+              </ul>
+            )}
+          </div>
+        )}
       </div>
+
+      {busy && <span className="animate-pulse text-xs text-sand-500">{busy}</span>}
+      {error && <span className="text-xs text-red-500">{error}</span>}
 
       <input
         ref={fileRef}
@@ -238,62 +351,14 @@ export function DocumentBar({
       />
 
       {dragging && (
-        <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center bg-white/90 backdrop-blur-sm dark:bg-neutral-950/90">
-          <div className="flex flex-col items-center gap-3 rounded-xl border-2 border-dashed border-neutral-400 bg-white px-14 py-10 shadow-lg dark:border-neutral-500 dark:bg-neutral-900">
-            <Logo size={72} className="text-neutral-800 dark:text-neutral-200" />
-            <p className="text-sm font-medium text-neutral-700 dark:text-neutral-200">
-              Drop PDFs to add them to this notebook
+        <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center bg-paper/90 backdrop-blur-sm">
+          <div className="flex flex-col items-center gap-3 rounded-[28px] border-2 border-dashed border-sand-400 bg-card px-14 py-10 shadow-float">
+            <Logo size={72} className="text-clay" />
+            <p className="text-sm font-semibold text-sand-800">
+              Drop PDFs to add them to this work
             </p>
           </div>
         </div>
-      )}
-
-      {urlOpen && (
-        <form
-          className="mt-2 flex gap-2"
-          onSubmit={(e) => {
-            e.preventDefault();
-            void addUrl();
-          }}
-        >
-          <input
-            autoFocus
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            placeholder="https://…"
-            className="w-96 rounded-md border border-neutral-300 bg-white px-2 py-1 text-sm outline-none focus:border-neutral-500 dark:border-neutral-700 dark:bg-neutral-900"
-          />
-          <button type="submit" disabled={busy !== null} className="text-sm text-neutral-600 disabled:opacity-40 dark:text-neutral-300">
-            Ingest
-          </button>
-        </form>
-      )}
-
-      {libraryOpen && library && (
-        <ul className="mt-2 max-h-48 overflow-y-auto rounded-md border border-neutral-200 bg-white p-1 text-sm dark:border-neutral-800 dark:bg-neutral-900">
-          {library.filter((d) => !attachedIds.has(d.id)).length === 0 && (
-            <li className="px-2 py-1 text-neutral-500">No other documents in the library.</li>
-          )}
-          {library
-            .filter((d) => !attachedIds.has(d.id))
-            .map((d) => (
-              <li key={d.id} className="flex items-center gap-1">
-                <button
-                  onClick={() => void attach(d.id)}
-                  className="min-w-0 flex-1 truncate rounded px-2 py-1 text-left hover:bg-neutral-100 dark:hover:bg-neutral-800"
-                >
-                  {d.title} <span className="text-xs text-neutral-400">({d._count.blocks} blocks)</span>
-                </button>
-                <button
-                  onClick={() => void removeFromLibrary(d.id)}
-                  className="rounded px-1.5 py-1 text-xs text-neutral-400 hover:text-red-500"
-                  title="Delete from the library"
-                >
-                  ✕
-                </button>
-              </li>
-            ))}
-        </ul>
       )}
     </div>
   );

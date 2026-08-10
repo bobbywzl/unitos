@@ -3,8 +3,9 @@
 import { useState } from "react";
 import type { SectionView } from "@/lib/types";
 import { DragHandle, SortableItem, SortableList, type HandleProps } from "@/components/sortable";
-import { AddSection, type OutlineActions } from "@/components/outline/outline";
+import { AddSection } from "@/components/outline/add-section";
 import { NoteCard } from "@/components/outline/note-card";
+import type { OutlineActions } from "@/components/outline/use-outline";
 
 export function SectionItem({
   section,
@@ -33,9 +34,11 @@ export function SectionItem({
   }
 
   return (
-    <section className={nested ? "mt-2" : "mb-6"}>
-      <div className="group flex items-center gap-1.5">
-        <DragHandle handle={handle} label={`Reorder section ${section.title}`} />
+    <section className={`group flex flex-col gap-2.5 ${nested ? "mt-4 pl-5" : ""}`}>
+      <div className="flex items-baseline gap-2.5">
+        <span className="self-center">
+          <DragHandle handle={handle} label={`Reorder section ${section.title}`} />
+        </span>
         {editing ? (
           <input
             autoFocus
@@ -49,37 +52,36 @@ export function SectionItem({
                 setEditing(false);
               }
             }}
-            className="rounded border border-neutral-300 bg-white px-1.5 py-0.5 text-sm font-medium outline-none dark:border-neutral-700 dark:bg-neutral-900"
+            aria-label="Section title"
+            className={`rounded-full bg-card px-4 py-1 font-display shadow-soft outline-none ${nested ? "text-lg" : "text-[22px]"}`}
           />
         ) : (
           <button
             onClick={() => setEditing(true)}
-            className={`text-left font-medium ${nested ? "text-sm" : "text-base"}`}
+            className={`text-left font-display ${nested ? "text-lg" : "text-[22px]"}`}
             title="Rename section"
           >
             {section.title}
           </button>
         )}
-        <span className="text-xs text-neutral-400">{section.notes.length || ""}</span>
-        <div className="ml-auto flex gap-2 opacity-0 transition-opacity group-hover:opacity-100">
-          <button
-            onClick={() => setComposing(true)}
-            className="text-xs text-neutral-500 hover:text-neutral-900 dark:hover:text-white"
-          >
-            + Note
-          </button>
-          <button
-            onClick={() => {
-              if (confirm("Delete this section and its notes?")) void actions.deleteSection(section.id);
-            }}
-            className="text-xs text-red-500 hover:text-red-700"
-          >
-            Delete
-          </button>
-        </div>
+        <span className="text-[13px] text-sand-600">{section.notes.length || ""}</span>
+        <button
+          onClick={() => setComposing(true)}
+          className="ml-auto text-xs text-sand-600 hover:text-clay-700"
+        >
+          + note
+        </button>
+        <button
+          onClick={() => {
+            if (confirm("Delete this section and its notes?")) void actions.deleteSection(section.id);
+          }}
+          className="text-xs text-red-500 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 hover:text-red-700"
+        >
+          Delete
+        </button>
       </div>
 
-      <div className="mt-2 space-y-2 border-l border-neutral-200 pl-4 dark:border-neutral-800">
+      <div className="flex flex-col gap-2.5">
         <SortableList
           id={`notes-${section.id}`}
           ids={section.notes.map((n) => n.id)}
@@ -87,7 +89,9 @@ export function SectionItem({
         >
           {section.notes.map((note) => (
             <SortableItem key={note.id} id={note.id}>
-              {(noteHandle) => <NoteCard note={note} actions={actions} handle={noteHandle} />}
+              {(noteHandle) => (
+                <NoteCard note={note} actions={actions} handle={noteHandle} variant="page" />
+              )}
             </SortableItem>
           ))}
         </SortableList>
@@ -113,13 +117,20 @@ export function SectionItem({
               }}
               placeholder="Write a note (markdown)"
               rows={3}
-              className="w-full rounded-md border border-neutral-300 bg-white p-2 text-sm outline-none focus:border-neutral-500 dark:border-neutral-700 dark:bg-neutral-900"
+              className="w-full rounded-2xl bg-card p-4 text-sm shadow-soft outline-none placeholder:text-sand-500"
             />
-            <div className="mt-1 flex gap-2">
-              <button type="submit" className="rounded bg-neutral-900 px-2 py-0.5 text-xs text-white dark:bg-white dark:text-neutral-900">
+            <div className="mt-2 flex gap-2">
+              <button
+                type="submit"
+                className="rounded-full bg-sage-600 px-3.5 py-1 text-xs font-semibold text-sage-fg hover:bg-sage-700"
+              >
                 Save
               </button>
-              <button type="button" onClick={() => setComposing(false)} className="text-xs text-neutral-400">
+              <button
+                type="button"
+                onClick={() => setComposing(false)}
+                className="rounded-full border border-line px-3 py-1 text-xs text-sand-700 hover:bg-clay-100 hover:text-clay-800"
+              >
                 Cancel
               </button>
             </div>

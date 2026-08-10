@@ -49,8 +49,8 @@ function markedText(text: string, highlights: Highlight[]) {
           data-source-id={anchor?.sourceId ?? undefined}
           className={
             anchor
-              ? "anchor-mark rounded-sm bg-amber-200/70 dark:bg-amber-500/30"
-              : "rounded-sm bg-violet-200/60 dark:bg-violet-500/25"
+              ? "anchor-mark rounded-[4px] bg-clay-200 px-0.5"
+              : "rounded-[4px] bg-sage-200 px-0.5"
           }
         >
           {segment}
@@ -62,7 +62,7 @@ function markedText(text: string, highlights: Highlight[]) {
         <span
           key={from}
           title={term.definition}
-          className="glossary-term cursor-help border-b border-dotted border-neutral-400 dark:border-neutral-500"
+          className="glossary-term cursor-help border-b-2 border-dotted border-clay-400"
         >
           {segment}
         </span>,
@@ -94,7 +94,7 @@ export function BlockView({
         data-block-id={block.id}
         title="Simplified. Click to revert."
         onClick={() => onRevertSwap?.(block.id)}
-        className={`${shared} my-2.5 cursor-pointer border-l-4 border-sky-400 pl-3 leading-7 whitespace-pre-wrap`}
+        className={`${shared} my-4 cursor-pointer border-l-4 border-sage-500 pl-4 whitespace-pre-wrap`}
       >
         {swap || "…"}
       </div>
@@ -103,7 +103,7 @@ export function BlockView({
 
   const content = highlights.length > 0 ? markedText(block.text, highlights) : block.text;
   const anchorIds = highlights.filter((h) => h.kind === "anchor" && h.sourceId);
-  const htmlHighlighted = anchorIds.length > 0 ? "ring-2 ring-amber-300 dark:ring-amber-600" : "";
+  const htmlHighlighted = anchorIds.length > 0 ? "rounded-lg ring-2 ring-clay-300" : "";
   const firstSourceId = anchorIds[0]?.sourceId ?? undefined;
 
   switch (block.type) {
@@ -111,23 +111,23 @@ export function BlockView({
       const level = headingLevel(block.html);
       const cls =
         level === 1
-          ? "mt-8 mb-3 text-2xl font-semibold"
+          ? "mt-10 mb-3 text-[26px]"
           : level === 2
-            ? "mt-6 mb-2 text-xl font-semibold"
-            : "mt-5 mb-2 text-base font-semibold";
+            ? "mt-8 mb-2.5 text-[22px]"
+            : "mt-6 mb-2.5 text-[20px]";
       if (level === 1) return <h1 data-block-id={block.id} className={`${shared} ${cls}`}>{content}</h1>;
       if (level === 2) return <h2 data-block-id={block.id} className={`${shared} ${cls}`}>{content}</h2>;
       return <h3 data-block-id={block.id} className={`${shared} ${cls}`}>{content}</h3>;
     }
     case "PARAGRAPH":
       return (
-        <p data-block-id={block.id} className={`${shared} my-2.5 leading-7 whitespace-pre-wrap`}>
+        <p data-block-id={block.id} className={`${shared} my-4 whitespace-pre-wrap`}>
           {content}
         </p>
       );
     case "LIST":
       return (
-        <div data-block-id={block.id} className={`${shared} my-2.5 leading-7 whitespace-pre-wrap pl-4`}>
+        <div data-block-id={block.id} className={`${shared} my-4 pl-5 whitespace-pre-wrap`}>
           {content}
         </div>
       );
@@ -136,7 +136,7 @@ export function BlockView({
       return (
         <pre
           data-block-id={block.id}
-          className={`${shared} my-3 overflow-x-auto rounded-md bg-neutral-100 p-3 text-sm dark:bg-neutral-800`}
+          className={`${shared} my-4 overflow-x-auto rounded-2xl bg-sand-200 p-4 text-sm`}
         >
           {content}
         </pre>
@@ -169,7 +169,7 @@ export function BlockView({
         );
       }
       return (
-        <p data-block-id={block.id} data-source-id={firstSourceId} className={`${shared} my-3 text-sm italic text-neutral-500 ${htmlHighlighted}`}>
+        <p data-block-id={block.id} data-source-id={firstSourceId} className={`${shared} my-4 text-sm text-sand-600 italic ${htmlHighlighted}`}>
           {content}
         </p>
       );

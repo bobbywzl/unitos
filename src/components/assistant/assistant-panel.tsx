@@ -133,10 +133,10 @@ export function AssistantPanel({
             key={s.id}
             onClick={() => setScope(s.id)}
             disabled={(s.id === "document" || s.id === "selection") && !documentId}
-            className={`rounded-full px-2.5 py-1 text-xs disabled:opacity-40 ${
+            className={`rounded-full px-3 py-1 text-xs font-semibold disabled:opacity-40 ${
               scope === s.id
-                ? "bg-neutral-900 text-white dark:bg-white dark:text-neutral-900"
-                : "bg-neutral-100 text-neutral-600 hover:text-neutral-900 dark:bg-neutral-800 dark:text-neutral-300"
+                ? "bg-ink text-paper"
+                : "bg-card text-sand-600 shadow-soft hover:text-clay-800"
             }`}
           >
             {s.label}
@@ -145,7 +145,7 @@ export function AssistantPanel({
       </div>
 
       {scope === "selection" && (
-        <p className="truncate text-xs text-neutral-500">
+        <p className="truncate text-xs text-sand-500">
           {selection ? `Selection: "${selection.quotedText.slice(0, 80)}"` : "Select text in the reader."}
         </p>
       )}
@@ -163,12 +163,12 @@ export function AssistantPanel({
           placeholder={
             scope === "corpus" ? "Have I read about…" : scope === "notebook" ? "Ask about your notes" : "Ask about this scope"
           }
-          className="min-w-0 flex-1 rounded-md border border-neutral-300 bg-white px-2 py-1.5 text-sm outline-none focus:border-neutral-500 dark:border-neutral-700 dark:bg-neutral-900"
+          className="min-w-0 flex-1 rounded-full bg-card px-4 py-2 text-sm shadow-soft outline-none placeholder:text-sand-500"
         />
         <button
           type="submit"
           disabled={busy || !question.trim()}
-          className="rounded-md bg-neutral-900 px-3 py-1.5 text-sm text-white disabled:opacity-40 dark:bg-white dark:text-neutral-900"
+          className="rounded-full bg-clay px-4 py-2 text-sm font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
         >
           Ask
         </button>
@@ -181,7 +181,7 @@ export function AssistantPanel({
               key={task}
               onClick={() => void runTask(task)}
               disabled={busy}
-              className="rounded-md border border-neutral-300 px-2 py-1 text-xs text-neutral-600 hover:border-neutral-500 disabled:opacity-40 dark:border-neutral-700 dark:text-neutral-300"
+              className="rounded-full border border-line px-3 py-1 text-xs text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40"
             >
               {task === "contradictions" ? "Contradictions" : task === "gaps" ? "Gaps" : "Unsourced"}
             </button>
@@ -189,11 +189,11 @@ export function AssistantPanel({
         </div>
       )}
 
-      {busy && !answer && <p className="text-xs text-neutral-500">Working…</p>}
+      {busy && !answer && <p className="text-xs text-sand-500">Working…</p>}
       {error && <p className="text-sm text-red-600">{error}</p>}
 
       {answer && (
-        <div className="rounded-md border border-neutral-200 bg-white p-3 dark:border-neutral-800 dark:bg-neutral-900">
+        <div className="rounded-2xl bg-card p-4 text-sm shadow-soft">
           <Markdown>{answer}</Markdown>
         </div>
       )}
@@ -201,22 +201,22 @@ export function AssistantPanel({
       {issues && (
         <div className="space-y-2">
           {issues.length === 0 && (
-            <p className="text-sm text-neutral-500">No {taskRun} found. Clean.</p>
+            <p className="text-sm text-sand-600">No {taskRun} found. Clean.</p>
           )}
           {issues.map((issue, i) => (
             <div
               key={i}
-              className="rounded-md border border-orange-200 bg-orange-50 p-2.5 dark:border-orange-900 dark:bg-neutral-900"
+              className="rounded-2xl bg-card p-3.5 shadow-soft outline-2 outline-clay-300"
             >
-              <p className="text-sm font-medium text-orange-900 dark:text-orange-300">{issue.issue}</p>
-              <p className="mt-1 text-xs text-neutral-600 dark:text-neutral-400">{issue.explanation}</p>
+              <p className="text-sm font-semibold text-clay-800">{issue.issue}</p>
+              <p className="mt-1 text-xs text-sand-600">{issue.explanation}</p>
               {issue.noteIds.length > 0 && (
                 <div className="mt-1.5 flex flex-wrap gap-1">
                   {issue.noteIds.map((id) => (
                     <button
                       key={id}
                       onClick={() => showNote(id)}
-                      className="rounded-full border border-orange-300 px-2 py-0.5 text-xs text-orange-800 hover:bg-orange-100 dark:border-orange-800 dark:text-orange-300"
+                      className="rounded-full bg-clay-100 px-2.5 py-0.5 text-xs font-semibold text-clay-800 hover:bg-clay-200"
                     >
                       note {id.slice(-6)}
                     </button>

@@ -34,13 +34,18 @@ export function NotebookTitle({ id, title }: { id: string; title: string }) {
             setEditing(false);
           }
         }}
-        className="rounded border border-neutral-300 bg-white px-2 py-0.5 text-xl font-semibold outline-none dark:border-neutral-700 dark:bg-neutral-900"
+        aria-label="Work title"
+        className="min-w-0 rounded-full bg-card px-4 py-1 font-display text-xl shadow-soft outline-none"
       />
     );
   }
 
   return (
-    <button onClick={() => setEditing(true)} className="text-xl font-semibold" title="Rename notebook">
+    <button
+      onClick={() => setEditing(true)}
+      className="max-w-64 shrink-0 truncate font-display text-xl"
+      title="Rename work"
+    >
       {title}
     </button>
   );
