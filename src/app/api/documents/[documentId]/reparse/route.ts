@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { reparseDocument } from "@/lib/parse/ingest";
 
 export const maxDuration = 120;
 
@@ -7,11 +6,14 @@ export const maxDuration = 120;
 export async function POST(_req: Request, ctx: { params: Promise<{ documentId: string }> }) {
   const { documentId } = await ctx.params;
   try {
+    // Parse chain (jsdom, unpdf) loads per request; see /api/documents.
+    const { reparseDocument } = await import("@/lib/parse/ingest");
     const document = await reparseDocument(documentId);
     if (!document) return NextResponse.json({ error: "Document not found" }, { status: 404 });
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error("Re-parse failed:", err);
-    return NextResponse.json({ error: "Re-parse failed" }, { status: 422 });
+    const message = err instanceof Error ? err.message : "Re-parse failed";
+    return NextResponse.json({ error: message }, { status: 422 });
   }
 }

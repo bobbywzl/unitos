@@ -47,6 +47,8 @@ Reading, notes, anchoring, and export work with no API keys. Add `ANTHROPIC_API_
 3. Settings → Environment Variables: `ANTHROPIC_API_KEY` (AI features), `VOYAGE_API_KEY` (corpus search), `ADMIN_PASSWORD` (`/admin`), `CRON_SECRET` (cleanup cron). All optional to boot; add and redeploy any time.
 4. Deployments → Redeploy the latest.
 
+Vercel caps request bodies at about 4.5 MB, so PDF uploads above that fail there. Self-hosted deployments take PDFs up to 50 MB.
+
 Supabase instead of Neon works too: enable the `vector` extension, then set `DATABASE_URL` (pooled, port 6543, `?pgbouncer=true&connection_limit=1`) and `DIRECT_URL` (port 5432) in Environment Variables.
 
 ## Setup

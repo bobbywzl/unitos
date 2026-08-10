@@ -1,12 +1,8 @@
 import { Readability } from "@mozilla/readability";
 import { JSDOM } from "jsdom";
-import { fetch as undiciFetch, EnvHttpProxyAgent } from "undici";
+import { outboundFetch } from "@/lib/outbound-fetch";
 import { sanitizeHtml } from "@/lib/parse/sanitize";
 import type { ParsedBlock, ParsedDocument } from "@/lib/parse/types";
-
-// Respect HTTPS_PROXY when set (some hosts route egress through a proxy). No-op otherwise.
-const dispatcher =
-  process.env.HTTPS_PROXY || process.env.HTTP_PROXY ? new EnvHttpProxyAgent() : undefined;
 
 function normalizeText(s: string): string {
   return s.replace(/\s+/g, " ").trim();
@@ -27,8 +23,7 @@ function tableText(el: Element): string {
 }
 
 export async function parseUrl(url: string): Promise<ParsedDocument> {
-  const res = await undiciFetch(url, {
-    dispatcher,
+  const res = await outboundFetch(url, {
     headers: { "User-Agent": "Mozilla/5.0 (compatible; Dissect/1.0)" },
     signal: AbortSignal.timeout(30_000),
   });

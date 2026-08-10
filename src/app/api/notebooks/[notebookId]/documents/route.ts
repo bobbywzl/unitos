@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { attachDocument } from "@/lib/parse/ingest";
+import { attachDocument } from "@/lib/parse/attach";
 import { parseBody } from "@/lib/validate";
 
 const attachSchema = z.object({

@@ -7,6 +7,16 @@ import { api } from "@/lib/api";
 export type AttachedDocument = { id: string; title: string };
 type LibraryDocument = { id: string; title: string; _count: { blocks: number } };
 
+// Platform errors (Vercel 413, crashed function) return empty or non-JSON bodies.
+async function readJson<T>(res: Response): Promise<T | null> {
+  return res.json().catch(() => null) as Promise<T | null>;
+}
+
+function statusMessage(status: number): string {
+  if (status === 413) return "File too large for the server. Vercel caps uploads at about 4.5 MB.";
+  return `Request failed (${status})`;
+}
+
 export function DocumentBar({
   notebookId,
   documents,
@@ -37,8 +47,8 @@ export function DocumentBar({
       form.set("file", file);
       form.set("notebookId", notebookId);
       const res = await fetch("/api/documents", { method: "POST", body: form });
-      const json = (await res.json()) as { id?: string; error?: string };
-      if (!res.ok || !json.id) throw new Error(json.error ?? "Upload failed");
+      const json = await readJson<{ id?: string; error?: string }>(res);
+      if (!res.ok || !json?.id) throw new Error(json?.error ?? statusMessage(res.status));
       open(json.id);
       router.refresh();
     } catch (err) {
@@ -60,8 +70,8 @@ export function DocumentBar({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url: trimmed, notebookId }),
       });
-      const json = (await res.json()) as { id?: string; error?: string };
-      if (!res.ok || !json.id) throw new Error(json.error ?? "Ingest failed");
+      const json = await readJson<{ id?: string; error?: string }>(res);
+      if (!res.ok || !json?.id) throw new Error(json?.error ?? statusMessage(res.status));
       setUrl("");
       setUrlOpen(false);
       open(json.id);
@@ -77,7 +87,9 @@ export function DocumentBar({
     setLibraryOpen(!libraryOpen);
     if (!library) {
       const res = await fetch("/api/documents");
-      setLibrary((await res.json()) as LibraryDocument[]);
+      const json = await readJson<LibraryDocument[]>(res);
+      if (res.ok && json) setLibrary(json);
+      else setError(statusMessage(res.status));
     }
   }
 

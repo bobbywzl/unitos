@@ -92,11 +92,3 @@ export async function reparseDocument(documentId: string) {
   });
   return db.document.findUnique({ where: { id: documentId } });
 }
-
-export async function attachDocument(notebookId: string, documentId: string) {
-  await db.notebookDocument.upsert({
-    where: { notebookId_documentId: { notebookId, documentId } },
-    update: {},
-    create: { notebookId, documentId },
-  });
-}

@@ -1,12 +1,9 @@
 import { Prisma } from "@prisma/client";
-import { fetch as undiciFetch, EnvHttpProxyAgent } from "undici";
 import { db } from "@/lib/db";
+import { outboundFetch } from "@/lib/outbound-fetch";
 
 // Voyage AI embeddings on notes, stored via pgvector (SPEC.md §2).
 export const EMBEDDING_MODEL = "voyage-3.5";
-
-const dispatcher =
-  process.env.HTTPS_PROXY || process.env.HTTP_PROXY ? new EnvHttpProxyAgent() : undefined;
 
 export function embeddingsConfigured(): boolean {
   return Boolean(process.env.VOYAGE_API_KEY);
@@ -14,9 +11,8 @@ export function embeddingsConfigured(): boolean {
 
 async function embed(texts: string[]): Promise<number[][]> {
   const baseUrl = process.env.VOYAGE_BASE_URL ?? "https://api.voyageai.com";
-  const res = await undiciFetch(`${baseUrl}/v1/embeddings`, {
+  const res = await outboundFetch(`${baseUrl}/v1/embeddings`, {
     method: "POST",
-    dispatcher,
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${process.env.VOYAGE_API_KEY}`,

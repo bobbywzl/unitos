@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { buildGlossary } from "@/lib/glossary";
-import { attachDocument, ingestPdf, ingestUrl } from "@/lib/parse/ingest";
+import { attachDocument } from "@/lib/parse/attach";
 import { parseBody } from "@/lib/validate";
 
 export const maxDuration = 120;
@@ -35,6 +35,21 @@ const fileFieldsSchema = z.object({
 
 // PDF upload (multipart) or URL ingestion (JSON). Both attach to the notebook.
 export async function POST(req: Request) {
+  // The parse chain (jsdom, unpdf) loads per request. Loading it with the route module
+  // broke every response on Vercel; loading it here keeps GET working and turns a load
+  // failure into a readable error.
+  let parse: typeof import("@/lib/parse/ingest");
+  try {
+    parse = await import("@/lib/parse/ingest");
+  } catch (err) {
+    console.error("Parse module load failed:", err);
+    const message = err instanceof Error ? err.message : String(err);
+    return NextResponse.json(
+      { error: `Document parsing is unavailable: ${message}` },
+      { status: 500 },
+    );
+  }
+
   const contentType = req.headers.get("content-type") ?? "";
 
   if (contentType.includes("multipart/form-data")) {
@@ -61,7 +76,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "File is not a PDF" }, { status: 400 });
     }
     try {
-      const { document, deduped } = await ingestPdf(bytes, fields.data.filename);
+      const { document, deduped } = await parse.ingestPdf(bytes, fields.data.filename);
       await attachDocument(fields.data.notebookId, document.id);
       // On-ingest glossary extraction (SPEC.md §8 Phase 7). Best-effort.
       if (!deduped) void buildGlossary(document.id).catch(() => {});
@@ -77,7 +92,7 @@ export async function POST(req: Request) {
   const notebook = await db.notebook.findUnique({ where: { id: data.notebookId } });
   if (!notebook) return NextResponse.json({ error: "Notebook not found" }, { status: 404 });
   try {
-    const { document, deduped } = await ingestUrl(data.url);
+    const { document, deduped } = await parse.ingestUrl(data.url);
     await attachDocument(data.notebookId, document.id);
     if (!deduped) void buildGlossary(document.id).catch(() => {});
     return NextResponse.json({ id: document.id, title: document.title, deduped }, { status: 201 });
