@@ -144,7 +144,7 @@ export function NoteCard({
     "group/note rounded-2xl bg-card shadow-soft",
     tray ? "p-3.5" : "px-[18px] py-4",
     focused ? "outline-2 outline-clay-400" : "",
-    pending && !focused ? "opacity-85" : "",
+    pending && !focused ? (tray ? "opacity-82" : "opacity-85") : "",
   ]
     .filter(Boolean)
     .join(" ");
@@ -159,7 +159,7 @@ export function NoteCard({
         )}
         <div className={`min-w-0 flex-1 ${tray ? "text-[13.5px] leading-[1.6]" : "text-sm leading-[1.65]"}`}>
           <Markdown>{note.content}</Markdown>
-          {note.sources.length > 0 && (
+          {note.sources.length > 0 && (tray || !pending) && (
             <div className="mt-2.5">
               <SourceChips sources={note.sources} notebookId={actions.notebookId} />
             </div>
@@ -168,10 +168,15 @@ export function NoteCard({
       </div>
 
       {pending ? (
-        <div className={`mt-3 flex items-center gap-2 ${handle ? "pl-6" : ""}`}>
+        // Tray: chips above, buttons on their own row (design 1a). Page: chips and
+        // buttons share one row, Accept pushed right (design 2b).
+        <div
+          className={`${tray ? "mt-3" : "mt-2.5"} flex flex-wrap items-center gap-2 ${handle ? "pl-6" : ""}`}
+        >
+          {!tray && <SourceChips sources={note.sources} notebookId={actions.notebookId} />}
           <button
             onClick={() => void actions.acceptNote(note.id)}
-            className="rounded-full bg-sage-600 px-3.5 py-1.5 text-xs font-semibold text-sage-fg hover:bg-sage-700"
+            className={`rounded-full bg-sage-600 px-3.5 py-1.5 text-xs font-semibold text-sage-fg hover:bg-sage-700 ${tray ? "" : "ml-auto"}`}
             title="Accept (Enter)"
           >
             Accept
@@ -188,7 +193,7 @@ export function NoteCard({
               setDraft(note.content);
               setEditing(true);
             }}
-            className="ml-auto text-xs text-sand-600 hover:text-clay-700"
+            className={`text-xs text-sand-600 hover:text-clay-700 ${tray ? "ml-auto" : ""}`}
             title="Edit (e)"
           >
             edit

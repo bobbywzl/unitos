@@ -98,12 +98,18 @@ export function ProfileDialog({
         </div>
         <div className="mt-4 flex items-center gap-4 text-xs text-sand-700">
           <label className="flex cursor-pointer items-center gap-1.5">
-            <input type="radio" checked={scope === "global"} onChange={() => setScope("global")} />
+            <input
+              type="radio"
+              className="accent-clay"
+              checked={scope === "global"}
+              onChange={() => setScope("global")}
+            />
             Everywhere
           </label>
           <label className="flex cursor-pointer items-center gap-1.5">
             <input
               type="radio"
+              className="accent-clay"
               checked={scope === "notebook"}
               onChange={() => setScope("notebook")}
             />

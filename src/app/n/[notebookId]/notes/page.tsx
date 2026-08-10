@@ -65,7 +65,7 @@ export default async function NotesPage(props: { params: Promise<{ notebookId: s
   const view: NotebookView = { id: notebook.id, title: notebook.title, sections: top };
 
   return (
-    <main className="mx-auto w-[760px] max-w-full px-6 pt-6 pb-24">
+    <main className="mx-auto w-[760px] max-w-full px-6 pt-[26px] pb-24">
       <header className="mb-[34px] flex items-center gap-2">
         <Link
           href="/"
