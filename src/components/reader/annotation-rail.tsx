@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { Markdown } from "@/components/markdown";
+import { ChevronDownIcon, ChevronRightIcon } from "@/components/icons";
 
 export type AnnotationView = {
   id: string;
@@ -11,7 +12,8 @@ export type AnnotationView = {
   orphaned: boolean;
 };
 
-// Annotations for the open document: EXPLAIN notes from the hidden Annotations section.
+// Annotations for the open document: EXPLAIN notes from the hidden Annotations
+// section. A quiet strip above the reading column, closed until asked for.
 export function AnnotationRail({
   notebookId,
   documentId,
@@ -25,30 +27,33 @@ export function AnnotationRail({
   if (annotations.length === 0) return null;
 
   return (
-    <div className="border-b border-neutral-200 bg-amber-50/50 px-4 py-1.5 dark:border-neutral-800 dark:bg-neutral-950">
+    <div className="shrink-0 border-b border-line px-5 py-2">
       <button
         onClick={() => setOpen(!open)}
-        className="text-xs font-medium text-amber-700 hover:text-amber-900 dark:text-amber-400"
+        aria-expanded={open}
+        className="flex items-center gap-1.5 rounded-full py-1 text-[11px] font-bold tracking-[0.08em] text-clay-800 uppercase hover:text-clay-600"
       >
-        {open ? "▾" : "▸"} Annotations ({annotations.length})
+        {open ? <ChevronDownIcon size={13} /> : <ChevronRightIcon size={13} />}
+        Annotations · {annotations.length}
       </button>
       {open && (
-        <ul className="mt-2 max-h-80 space-y-2 overflow-y-auto pb-2">
+        <ul className="mt-2 flex max-h-80 flex-col gap-2 overflow-y-auto pb-2">
           {annotations.map((a) => (
-            <li
-              key={a.id}
-              className="rounded-md border border-amber-200 bg-white p-2 dark:border-amber-900 dark:bg-neutral-900"
-            >
+            <li key={a.id} className="rounded-2xl bg-card p-3.5 text-sm shadow-soft">
               <Markdown>{a.content}</Markdown>
               {a.sourceId && !a.orphaned && (
                 <Link
                   href={`/n/${notebookId}?doc=${documentId}&src=${a.sourceId}`}
-                  className="mt-1 inline-block text-xs text-amber-700 hover:underline dark:text-amber-400"
+                  className="mt-2 inline-block rounded-full bg-clay-100 px-2.5 py-0.5 text-[11px] font-semibold text-clay-800 hover:bg-clay-200"
                 >
-                  ⚓ Jump to passage
+                  Jump to passage
                 </Link>
               )}
-              {a.orphaned && <span className="mt-1 inline-block text-xs text-red-500">⚠ anchor unresolved</span>}
+              {a.orphaned && (
+                <span className="mt-2 inline-block text-[11px] font-semibold text-red-500">
+                  Anchor unresolved
+                </span>
+              )}
             </li>
           ))}
         </ul>

@@ -1,31 +1,43 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 
-type ProfileValues = { background: string; purpose: string; application: string };
+export type ProfileValues = { background: string; purpose: string; application: string };
 
-// Reader profile onboarding: 3 questions, shown on first notebook creation,
-// editable per notebook (SPEC.md §6).
+// Reader profile onboarding: 3 questions, shown on first work creation, editable
+// per work (SPEC.md §6). Controlled — the workspace rail opens it from its ⋯ menu.
 export function ProfileDialog({
   notebookId,
   initial,
   hasOverride,
-  autoOpen,
+  open,
+  onClose,
 }: {
   notebookId: string;
   initial: ProfileValues | null;
   hasOverride: boolean;
-  autoOpen: boolean;
+  open: boolean;
+  onClose: () => void;
 }) {
   const router = useRouter();
-  const [open, setOpen] = useState(autoOpen);
   const [values, setValues] = useState<ProfileValues>(
     initial ?? { background: "", purpose: "", application: "" },
   );
   const [scope, setScope] = useState<"global" | "notebook">(hasOverride ? "notebook" : "global");
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [open, onClose]);
+
+  if (!open) return null;
 
   async function save() {
     const trimmed = {
@@ -42,86 +54,78 @@ export function ProfileDialog({
       } else {
         await api(`/api/notebooks/${notebookId}`, "PATCH", { profile: trimmed });
       }
-      setOpen(false);
+      onClose();
       router.refresh();
     } finally {
       setBusy(false);
     }
   }
 
-  const field = (
-    key: keyof ProfileValues,
-    label: string,
-    placeholder: string,
-  ) => (
+  const field = (key: keyof ProfileValues, label: string, placeholder: string) => (
     <label className="block">
-      <span className="text-xs font-medium text-neutral-600 dark:text-neutral-300">{label}</span>
+      <span className="text-xs text-sand-700">{label}</span>
       <textarea
         value={values[key]}
         onChange={(e) => setValues({ ...values, [key]: e.target.value })}
         placeholder={placeholder}
         rows={2}
-        className="mt-1 w-full rounded-md border border-neutral-300 bg-white p-2 text-sm outline-none focus:border-neutral-500 dark:border-neutral-700 dark:bg-neutral-900"
+        className="mt-1 w-full rounded-2xl bg-sand-100 p-3 text-sm outline-none placeholder:text-sand-500"
       />
     </label>
   );
 
   return (
-    <>
-      <button
-        onClick={() => setOpen(true)}
-        className={`text-sm ${initial ? "text-neutral-500 hover:text-neutral-900 dark:hover:text-white" : "font-medium text-amber-600 hover:text-amber-800"}`}
+    <div
+      className="fixed inset-0 z-40 flex items-center justify-center bg-sand-900/50 p-4"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div
+        role="dialog"
+        aria-modal
+        aria-label="Reader profile"
+        className="w-full max-w-lg rounded-[32px] bg-card p-6 shadow-float"
       >
-        {initial ? "Profile" : "Set reader profile"}
-      </button>
-      {open && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-lg rounded-xl border border-neutral-200 bg-white p-5 shadow-xl dark:border-neutral-700 dark:bg-neutral-900">
-            <h2 className="text-base font-semibold">Reader profile</h2>
-            <p className="mt-1 text-xs text-neutral-500">
-              Injected into every AI prompt. Three questions, be concrete.
-            </p>
-            <div className="mt-4 space-y-3">
-              {field("background", "Background", "e.g. Stanford student, stochastic calc + stats + quantum")}
-              {field("purpose", "Purpose", "e.g. due diligence, exam prep, replicate results")}
-              {field("application", "Application", "e.g. investment decision for Bough Capital")}
-            </div>
-            <div className="mt-4 flex items-center gap-3 text-xs text-neutral-600 dark:text-neutral-300">
-              <label className="flex items-center gap-1.5">
-                <input
-                  type="radio"
-                  checked={scope === "global"}
-                  onChange={() => setScope("global")}
-                />
-                Everywhere
-              </label>
-              <label className="flex items-center gap-1.5">
-                <input
-                  type="radio"
-                  checked={scope === "notebook"}
-                  onChange={() => setScope("notebook")}
-                />
-                This notebook only
-              </label>
-            </div>
-            <div className="mt-5 flex justify-end gap-2">
-              <button
-                onClick={() => setOpen(false)}
-                className="rounded-md px-3 py-1.5 text-sm text-neutral-500 hover:text-neutral-900 dark:hover:text-white"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => void save()}
-                disabled={busy}
-                className="rounded-md bg-neutral-900 px-3 py-1.5 text-sm text-white disabled:opacity-40 dark:bg-white dark:text-neutral-900"
-              >
-                Save
-              </button>
-            </div>
-          </div>
+        <h2 className="text-xl">Reader profile</h2>
+        <p className="mt-1 text-xs text-sand-600">
+          Injected into every AI prompt. Three questions, be concrete.
+        </p>
+        <div className="mt-4 space-y-3">
+          {field("background", "Background", "e.g. Stanford student, stochastic calc + stats + quantum")}
+          {field("purpose", "Purpose", "e.g. due diligence, exam prep, replicate results")}
+          {field("application", "Application", "e.g. investment decision for Bough Capital")}
         </div>
-      )}
-    </>
+        <div className="mt-4 flex items-center gap-4 text-xs text-sand-700">
+          <label className="flex cursor-pointer items-center gap-1.5">
+            <input type="radio" checked={scope === "global"} onChange={() => setScope("global")} />
+            Everywhere
+          </label>
+          <label className="flex cursor-pointer items-center gap-1.5">
+            <input
+              type="radio"
+              checked={scope === "notebook"}
+              onChange={() => setScope("notebook")}
+            />
+            This work only
+          </label>
+        </div>
+        <div className="mt-5 flex justify-end gap-2">
+          <button
+            onClick={onClose}
+            className="rounded-full border border-line px-4 py-2 text-sm text-sand-700 hover:bg-clay-100 hover:text-clay-800"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() => void save()}
+            disabled={busy}
+            className="rounded-full bg-clay px-5 py-2 text-sm font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
+          >
+            Save
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }

@@ -40,16 +40,16 @@ export function FeedbackInbox({ items }: { items: FeedbackItem[] }) {
   return (
     <div>
       <header className="mb-6 flex items-center gap-3">
-        <h1 className="text-xl font-semibold">Feedback</h1>
+        <h1 className="text-[28px]">Feedback</h1>
         <div className="flex gap-1">
           {FILTERS.map((f) => (
             <button
               key={f}
               onClick={() => setFilter(f)}
-              className={`rounded-full px-2.5 py-1 text-xs ${
+              className={`rounded-full px-3 py-1 text-xs font-semibold ${
                 filter === f
-                  ? "bg-neutral-900 text-white dark:bg-white dark:text-neutral-900"
-                  : "bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300"
+                  ? "bg-ink text-paper"
+                  : "bg-card text-sand-600 shadow-soft hover:text-clay-800"
               }`}
             >
               {f}
@@ -58,29 +58,29 @@ export function FeedbackInbox({ items }: { items: FeedbackItem[] }) {
           ))}
         </div>
         <div className="ml-auto flex items-center gap-3 text-sm">
-          <Link href="/" className="text-neutral-500 hover:text-neutral-900 dark:hover:text-white">
+          <Link href="/" className="text-sand-600 hover:text-clay-700">
             App
           </Link>
-          <button onClick={() => void signOut()} className="text-neutral-500 hover:text-neutral-900 dark:hover:text-white">
+          <button onClick={() => void signOut()} className="text-sand-600 hover:text-clay-700">
             Sign out
           </button>
         </div>
       </header>
 
       {visible.length === 0 ? (
-        <p className="text-sm text-neutral-500">No {filter === "all" ? "" : filter + " "}feedback.</p>
+        <p className="text-sm text-sand-600">No {filter === "all" ? "" : filter + " "}feedback.</p>
       ) : (
         <ul className="space-y-3">
           {visible.map((f) => (
-            <li key={f.id} className="rounded-lg border border-neutral-200 bg-white p-3 dark:border-neutral-800 dark:bg-neutral-900">
-              <div className="flex items-center gap-2 text-xs text-neutral-500">
+            <li key={f.id} className="rounded-2xl bg-card p-4 shadow-soft">
+              <div className="flex items-center gap-2 text-xs text-sand-600">
                 <span
-                  className={`rounded-full px-2 py-0.5 font-medium ${
+                  className={`rounded-full px-2.5 py-0.5 font-semibold ${
                     f.category === "bug"
-                      ? "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300"
+                      ? "bg-clay-200 text-clay-800"
                       : f.category === "idea"
-                        ? "bg-sky-100 text-sky-700 dark:bg-sky-950 dark:text-sky-300"
-                        : "bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300"
+                        ? "bg-sage-200 text-sage-800"
+                        : "bg-sand-200 text-sand-700"
                   }`}
                 >
                   {f.category}
@@ -89,12 +89,12 @@ export function FeedbackInbox({ items }: { items: FeedbackItem[] }) {
                 {f.page && <span className="truncate">· {f.page}</span>}
                 <span className="ml-auto">{f.status}</span>
               </div>
-              <p className="mt-2 whitespace-pre-wrap text-sm">{f.message}</p>
+              <p className="mt-2 text-sm whitespace-pre-wrap">{f.message}</p>
               <div className="mt-2 flex gap-2">
                 {f.status !== "seen" && (
                   <button
                     onClick={() => void setStatus(f.id, "seen")}
-                    className="text-xs text-neutral-500 hover:text-neutral-900 dark:hover:text-white"
+                    className="text-xs text-sand-600 hover:text-clay-700"
                   >
                     Mark seen
                   </button>
@@ -102,7 +102,7 @@ export function FeedbackInbox({ items }: { items: FeedbackItem[] }) {
                 {f.status !== "resolved" && (
                   <button
                     onClick={() => void setStatus(f.id, "resolved")}
-                    className="text-xs text-emerald-600 hover:text-emerald-800"
+                    className="text-xs font-semibold text-sage-700 hover:text-sage-800"
                   >
                     Resolve
                   </button>
@@ -110,7 +110,7 @@ export function FeedbackInbox({ items }: { items: FeedbackItem[] }) {
                 {f.status === "resolved" && (
                   <button
                     onClick={() => void setStatus(f.id, "new")}
-                    className="text-xs text-neutral-500 hover:text-neutral-900 dark:hover:text-white"
+                    className="text-xs text-sand-600 hover:text-clay-700"
                   >
                     Reopen
                   </button>

@@ -34,20 +34,20 @@ export default function AdminLoginPage() {
   return (
     <main className="flex min-h-screen items-center justify-center p-6">
       <form onSubmit={login} className="w-full max-w-xs space-y-3">
-        <h1 className="text-lg font-semibold">Admin</h1>
+        <h1 className="text-[28px]">Admin</h1>
         <input
           type="password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           placeholder="Admin password"
           autoFocus
-          className="w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm outline-none focus:border-neutral-500 dark:border-neutral-700 dark:bg-neutral-900"
+          className="w-full rounded-full bg-card px-4 py-2.5 text-sm shadow-soft outline-none placeholder:text-sand-500"
         />
         {error && <p className="text-sm text-red-600">{error}</p>}
         <button
           type="submit"
           disabled={busy || !password}
-          className="w-full rounded-md bg-neutral-900 px-3 py-2 text-sm text-white disabled:opacity-40 dark:bg-white dark:text-neutral-900"
+          className="w-full rounded-full bg-clay px-4 py-2.5 text-sm font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
         >
           Sign in
         </button>

@@ -2,6 +2,8 @@
 
 import { BlockView, type BlockData, type Highlight } from "@/components/reader/block-view";
 
+// The reading column: 720px of airy, book-like text (design 1a). The document
+// title sits above it as a quiet kicker, not a header bar.
 export function Reader({
   title,
   blocks,
@@ -16,10 +18,11 @@ export function Reader({
   onRevertSwap: (blockId: string) => void;
 }) {
   return (
-    <article className="mx-auto max-w-2xl px-8 py-6">
-      <h1 className="mb-4 border-b border-neutral-200 pb-3 text-lg font-semibold text-neutral-500 dark:border-neutral-800">
-        {title}
-      </h1>
+    <article className="reader-prose mx-auto w-[720px] max-w-full px-6 py-11">
+      <p className="mb-2.5 text-[11px] font-bold tracking-[0.09em] text-clay-700 uppercase">
+        Document · {blocks.length} blocks
+      </p>
+      <h2 className="mb-[26px] text-[33px]">{title}</h2>
       {blocks.map((block) => (
         <BlockView
           key={block.id}
@@ -30,7 +33,7 @@ export function Reader({
         />
       ))}
       {blocks.length === 0 && (
-        <p className="text-sm text-neutral-500">This document has no blocks. Re-parse it.</p>
+        <p className="text-sm text-sand-600">This document has no blocks. Re-parse it.</p>
       )}
     </article>
   );

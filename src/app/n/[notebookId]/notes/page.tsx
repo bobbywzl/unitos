@@ -1,10 +1,10 @@
 import Link from "next/link";
-import { Logo } from "@/components/logo";
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import type { NotebookView, SectionView } from "@/lib/types";
+import { ArrowLeftIcon } from "@/components/icons";
+import { ExportMenu } from "@/components/export-menu";
 import { Outline } from "@/components/outline/outline";
-import { NotebookTitle } from "@/components/notebook-title";
 
 export const dynamic = "force-dynamic";
 
@@ -65,35 +65,23 @@ export default async function NotesPage(props: { params: Promise<{ notebookId: s
   const view: NotebookView = { id: notebook.id, title: notebook.title, sections: top };
 
   return (
-    <main className="mx-auto max-w-3xl px-6 py-8">
-      <header className="mb-8 flex items-center gap-3">
+    <main className="mx-auto w-[760px] max-w-full px-6 pt-6 pb-24">
+      <header className="mb-[34px] flex items-center gap-2">
         <Link
           href="/"
-          className="flex items-center gap-2 text-sm text-neutral-400 hover:text-neutral-900 dark:hover:text-white"
+          className="flex items-center gap-2 rounded-full bg-sand-100 py-[7px] pr-4 pl-3 text-[13px] text-sand-700 shadow-soft hover:bg-clay-100 hover:text-clay-800"
         >
-          <Logo size={24} />
-          <span>Notebooks</span>
+          <ArrowLeftIcon size={15} />
+          Works
         </Link>
-        <NotebookTitle id={notebook.id} title={notebook.title} />
-        <div className="ml-auto flex items-center gap-3 text-sm">
+        <div className="ml-auto flex items-center gap-2">
           <Link
             href={`/n/${notebook.id}`}
-            className="text-neutral-500 hover:text-neutral-900 dark:hover:text-white"
+            className="rounded-full border border-line px-4 py-1.5 text-[13px] text-sand-700 hover:bg-clay-100 hover:text-clay-800"
           >
             Reader
           </Link>
-          <a
-            href={`/api/notebooks/${notebook.id}/export?format=md`}
-            className="text-neutral-500 hover:text-neutral-900 dark:hover:text-white"
-          >
-            Export Markdown
-          </a>
-          <a
-            href={`/api/notebooks/${notebook.id}/export?format=docx`}
-            className="text-neutral-500 hover:text-neutral-900 dark:hover:text-white"
-          >
-            Export Word
-          </a>
+          <ExportMenu notebookId={notebook.id} />
         </div>
       </header>
       <Outline notebook={view} />

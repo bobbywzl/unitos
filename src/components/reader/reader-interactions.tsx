@@ -328,23 +328,21 @@ export function ReaderInteractions({
 
   return (
     <div ref={containerRef} className="relative min-h-0 flex-1 overflow-y-auto">
-      <div className="sticky top-2 z-10 float-right mr-3 flex items-center gap-2">
+      <div className="sticky top-4 z-10 float-right mr-4 flex items-center gap-2">
         {toast && (
-          <span className="rounded-md bg-neutral-900/90 px-2 py-1 text-xs text-white dark:bg-white/90 dark:text-neutral-900">
-            {toast}
-          </span>
+          <span className="rounded-full bg-ink/90 px-3 py-1.5 text-xs text-paper">{toast}</span>
         )}
         <button
           onClick={() => void toggleSalience()}
           disabled={salienceBusy}
-          className={`rounded-full border px-2.5 py-1 text-xs shadow-sm disabled:opacity-40 ${
+          className={`rounded-full px-3.5 py-1.5 text-xs font-semibold shadow-soft disabled:opacity-40 ${
             salienceOn
-              ? "border-violet-400 bg-violet-100 text-violet-800 dark:bg-violet-950 dark:text-violet-300"
-              : "border-neutral-300 bg-white text-neutral-600 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300"
+              ? "bg-sage-200 text-sage-800"
+              : "bg-sand-100 text-sand-600 hover:text-clay-800"
           }`}
           title="Toggle the salience overlay"
         >
-          {salienceBusy ? "Salience…" : "Salience"}
+          {salienceBusy ? "Salience…" : salienceOn ? "Salience on" : "Salience"}
         </button>
       </div>
 
@@ -366,26 +364,26 @@ export function ReaderInteractions({
         <div
           data-selection-popover
           onMouseDown={(e) => e.preventDefault()}
-          className="absolute z-20 -translate-x-1/2 rounded-lg border border-neutral-200 bg-white p-1.5 shadow-lg dark:border-neutral-700 dark:bg-neutral-900"
+          className="absolute z-20 -translate-x-1/2 rounded-full bg-card p-1.5 shadow-float"
           style={{ left: popover.x, top: popover.y }}
         >
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-0.5">
             <button
               onClick={() => void explain()}
-              className="rounded bg-neutral-900 px-2 py-1 text-xs text-white hover:bg-neutral-700 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
+              className="rounded-full bg-clay px-4 py-[7px] text-[13px] font-semibold text-clay-fg hover:bg-clay-600"
             >
               Explain
             </button>
             <button
               onClick={() => void simplify()}
-              className="rounded bg-neutral-100 px-2 py-1 text-xs hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-700"
+              className="rounded-full px-[13px] py-[7px] text-[13px] text-sand-800 hover:bg-clay-100 hover:text-clay-800"
             >
               Simplify
             </button>
             <button
               onClick={() => void extract()}
               disabled={busy}
-              className="rounded bg-neutral-100 px-2 py-1 text-xs hover:bg-neutral-200 disabled:opacity-40 dark:bg-neutral-800 dark:hover:bg-neutral-700"
+              className="rounded-full px-[13px] py-[7px] text-[13px] text-sand-800 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40"
             >
               Extract
             </button>
@@ -396,8 +394,9 @@ export function ReaderInteractions({
                 onChange={(e) => {
                   if (e.target.value) void addToSection(e.target.value);
                 }}
-                className="rounded bg-neutral-100 px-1 py-1 text-xs dark:bg-neutral-800"
+                className="rounded-full px-2 py-[7px] text-[13px] text-sand-800 outline-none hover:bg-clay-100 hover:text-clay-800"
                 title="Add the selection to a section as a manual note"
+                aria-label="Add the selection to a section"
               >
                 <option value="" disabled>
                   Add to…
@@ -411,10 +410,22 @@ export function ReaderInteractions({
             )}
             <button
               onClick={() => setPopover(null)}
-              className="px-1.5 text-xs text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200"
+              className="flex size-[30px] items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-800"
               aria-label="Close"
             >
-              ✕
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.75"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M18 6 6 18" />
+                <path d="m6 6 12 12" />
+              </svg>
             </button>
           </div>
         </div>
@@ -423,16 +434,16 @@ export function ReaderInteractions({
       {bubble && (
         <div
           data-selection-popover
-          className="absolute z-20 w-96 max-w-[85%] -translate-x-1/2 rounded-lg border border-amber-200 bg-amber-50 p-3 shadow-lg dark:border-amber-800 dark:bg-neutral-900"
+          className="absolute z-20 w-96 max-w-[85%] -translate-x-1/2 rounded-[24px] bg-card p-4 shadow-float"
           style={{ left: bubble.x, top: bubble.y }}
         >
-          <div className="mb-1 flex items-center justify-between">
-            <span className="text-xs font-medium text-amber-700 dark:text-amber-400">
+          <div className="mb-2 flex items-center justify-between">
+            <span className="text-[11px] font-bold tracking-[0.08em] text-clay-800 uppercase">
               {bubble.streaming ? "Explaining…" : "Explanation"}
             </span>
             <button
               onClick={() => setBubble(null)}
-              className="text-xs text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200"
+              className="text-xs text-sand-500 hover:text-clay-700"
               aria-label="Close"
             >
               ✕
@@ -441,11 +452,11 @@ export function ReaderInteractions({
           {bubble.error ? (
             <p className="text-sm text-red-600">{bubble.error}</p>
           ) : bubble.text ? (
-            <div className="max-h-80 overflow-y-auto">
+            <div className="max-h-80 overflow-y-auto text-sm">
               <Markdown>{bubble.text}</Markdown>
             </div>
           ) : (
-            <p className="text-sm text-neutral-400">…</p>
+            <p className="text-sm text-sand-500">…</p>
           )}
         </div>
       )}
