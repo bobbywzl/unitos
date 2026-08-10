@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { USER_ID } from "@/lib/constants";
 import { db } from "@/lib/db";
 import { Logo } from "@/components/logo";
@@ -19,6 +20,12 @@ export default async function Home() {
       <div className="mb-6 flex items-center gap-3">
         <Logo size={48} />
         <h1 className="text-2xl font-semibold">Dissect</h1>
+        <Link
+          href="/settings"
+          className="ml-auto text-sm text-neutral-500 hover:text-neutral-900 dark:hover:text-white"
+        >
+          Settings
+        </Link>
       </div>
       <NotebookList
         hasProfile={profile !== null}

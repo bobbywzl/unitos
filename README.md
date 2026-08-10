@@ -16,6 +16,7 @@ Notes-centric web app for deep reading. Documents attach to notebooks; every AI 
 - Glossary extraction on ingest; hover definitions in the reader
 - Export notebook to Markdown or .docx with `documentTitle, blockId` footnotes
 - Feedback button + admin inbox (`/admin`) with new → seen → resolved triage
+- Settings (`/settings`): light/dark/system theme, reader profile, service status
 
 ## Stack
 

@@ -227,6 +227,12 @@ export default async function NotebookPage(props: {
           >
             Notes full page
           </Link>
+          <Link
+            href="/settings"
+            className="text-sm text-neutral-500 hover:text-neutral-900 dark:hover:text-white"
+          >
+            Settings
+          </Link>
         </div>
       </header>
 
