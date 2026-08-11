@@ -31,3 +31,34 @@ export type NotebookView = {
   title: string;
   sections: SectionView[];
 };
+
+// ── Reader side panel: annotations and edit history ────────────────────────
+
+/** One annotation on the open document, shown in the Annotations tab.
+    kind: "highlight" = manual color highlight, "comment" = margin comment,
+    "explain" = AI explanation. All live as notes in the hidden Annotations
+    section; highlights carry a color, comments carry the user's text. */
+export type AnnotationItem = {
+  id: string; // note id
+  kind: "explain" | "highlight" | "comment";
+  content: string;
+  color: string | null; // "clay" | "sage" | "gold" for highlights
+  sourceId: string | null;
+  quotedText: string | null;
+  orphaned: boolean;
+};
+
+export type LinkOut = { id: string; toDocumentId: string; toTitle: string; quotedText: string };
+export type LinkIn = { id: string; fromDocumentId: string; fromTitle: string; quotedText: string };
+
+/** One row of the Edits tab. TEXT_EDIT rows can revert (PATCH the block back
+    to `before`); link rows describe the link via meta. */
+export type EditItem = {
+  id: string;
+  kind: "TEXT_EDIT" | "LINK_ADD" | "LINK_REMOVE";
+  blockId: string | null;
+  before: string | null;
+  after: string | null;
+  meta: { linkId?: string; toDocumentId?: string; toTitle?: string; quotedText?: string } | null;
+  createdAt: string;
+};

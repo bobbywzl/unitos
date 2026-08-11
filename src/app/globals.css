@@ -206,6 +206,39 @@ select,
   background: color-mix(in srgb, var(--clay) 30%, transparent);
 }
 
+/* Highlights tint the paper behind the words; they never repaint the words.
+   Browsers default <mark> to black-on-yellow, which is unreadable on the dark
+   theme's highlight backgrounds — inherit keeps body text its own color, and
+   translucent backgrounds let the paper tone through instead of boxing the
+   line in a solid slab. */
+mark,
+.reader-block mark,
+.reader-block .glossary-term {
+  color: inherit;
+}
+.anchor-mark {
+  background: color-mix(in srgb, var(--clay-400) 32%, transparent);
+}
+.salience-mark {
+  background: color-mix(in srgb, var(--sage-500) 28%, transparent);
+}
+.hl-sage {
+  background: color-mix(in srgb, var(--sage-500) 32%, transparent);
+}
+.hl-gold {
+  background: color-mix(in srgb, #d9a54a 34%, transparent);
+}
+.link-mark {
+  background: color-mix(in srgb, var(--clay-400) 14%, transparent);
+  border-bottom: 2px solid var(--clay-500);
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+.link-mark:hover {
+  background: color-mix(in srgb, var(--clay-400) 30%, transparent);
+}
+
 /* Rendered markdown (notes, explanations, assistant answers). Pointing the
    typography plugin at the palette means one set of tokens covers both themes —
    no prose-invert, since the tokens already flip under .dark. */

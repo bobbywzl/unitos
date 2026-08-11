@@ -4,9 +4,17 @@ import { matchInText } from "@/lib/anchors/match";
 import { resolveDocumentSources } from "@/lib/anchors/resolve";
 import { USER_ID } from "@/lib/constants";
 import { db } from "@/lib/db";
-import type { NotebookView, SectionView } from "@/lib/types";
+import type {
+  AnnotationItem,
+  EditItem,
+  LinkIn,
+  LinkOut,
+  NotebookView,
+  SectionView,
+} from "@/lib/types";
 import { AssistantPanel } from "@/components/assistant/assistant-panel";
-import { AnnotationRail } from "@/components/reader/annotation-rail";
+import { AnnotationsPanel } from "@/components/panels/annotations-panel";
+import { EditsPanel } from "@/components/panels/edits-panel";
 import { ReaderInteractions } from "@/components/reader/reader-interactions";
 import { Workspace } from "@/components/reader/workspace";
 
@@ -60,16 +68,25 @@ export default async function NotebookPage(props: {
 
   // Resolve anchors for the open document, then paint only this notebook's notes.
   // Chip orphan state comes from this resolution, not the (earlier) notebook query.
-  const notebookNoteIds = new Set(notebook.sections.flatMap((s) => s.notes.map((n) => n.id)));
-  const anchorHighlights: Record<string, { sourceId: string; start: number; end: number }[]> = {};
+  // A note's color rides along so manual highlights paint in their chosen hue.
+  const noteById = new Map(notebook.sections.flatMap((s) => s.notes).map((n) => [n.id, n]));
+  const anchorHighlights: Record<
+    string,
+    { sourceId: string; start: number; end: number; color: string | null }[]
+  > = {};
   const resolutionById = new Map<string, { orphaned: boolean }>();
   if (activeDocument) {
     const resolved = await resolveDocumentSources(activeDocument.id);
     for (const r of resolved) {
       resolutionById.set(r.id, { orphaned: r.orphaned });
-      if (r.orphaned || !notebookNoteIds.has(r.noteId)) continue;
+      if (r.orphaned || !noteById.has(r.noteId)) continue;
       const list = anchorHighlights[r.blockId] ?? [];
-      list.push({ sourceId: r.id, start: r.start, end: r.end });
+      list.push({
+        sourceId: r.id,
+        start: r.start,
+        end: r.end,
+        color: noteById.get(r.noteId)?.color ?? null,
+      });
       anchorHighlights[r.blockId] = list;
     }
   }
@@ -162,23 +179,115 @@ export default async function NotebookPage(props: {
     ...s.children.map((c) => ({ id: c.id, label: `${s.title} / ${c.title}` })),
   ]);
 
-  // EXPLAIN annotations anchored in the open document, for the rail.
-  const annotations = activeDocument
+  // Annotations anchored in the open document, for the Annotations tab:
+  // manual highlights (color), comments, and EXPLAIN output — all notes in the
+  // hidden Annotations section with a source in this document.
+  const annotations: AnnotationItem[] = activeDocument
     ? notebook.sections
         .filter((s) => s.hidden)
         .flatMap((s) => s.notes)
-        .filter((n) => n.derivationType === "EXPLAIN")
-        .map((n) => {
+        .map((n): AnnotationItem | null => {
           const source = n.sources.find((src) => src.documentId === activeDocument.id);
           if (!source) return null;
+          const kind =
+            n.derivationType === "EXPLAIN"
+              ? ("explain" as const)
+              : n.color
+                ? ("highlight" as const)
+                : ("comment" as const);
           return {
             id: n.id,
+            kind,
             content: n.content,
+            color: n.color,
             sourceId: source.id,
+            quotedText: source.quotedText,
             orphaned: resolutionById.get(source.id)?.orphaned ?? source.orphaned,
           };
         })
-        .filter((a) => a !== null)
+        .filter((a): a is AnnotationItem => a !== null)
+    : [];
+
+  // Cross-document links for the open document: outgoing ranges paint as
+  // hyperlinks in the text (healed like anchors); both directions list in the
+  // Annotations tab.
+  const linksByBlock: Record<
+    string,
+    { linkId: string; start: number; end: number; toDocumentId: string; toTitle: string }[]
+  > = {};
+  const linksOut: LinkOut[] = [];
+  const linksIn: LinkIn[] = [];
+  if (activeDocument) {
+    const [outgoing, incoming] = await Promise.all([
+      db.docLink.findMany({
+        where: { fromDocumentId: activeDocument.id },
+        orderBy: { createdAt: "desc" },
+        include: { toDocument: { select: { title: true } } },
+      }),
+      db.docLink.findMany({
+        where: { toDocumentId: activeDocument.id },
+        orderBy: { createdAt: "desc" },
+        include: { fromDocument: { select: { title: true } } },
+      }),
+    ]);
+    const blockById = new Map(activeDocument.blocks.map((b) => [b.id, b]));
+    for (const link of outgoing) {
+      linksOut.push({
+        id: link.id,
+        toDocumentId: link.toDocumentId,
+        toTitle: link.toDocument.title,
+        quotedText: link.quotedText,
+      });
+      const block = blockById.get(link.fromBlockId);
+      if (!block) continue;
+      let hit: { start: number; end: number } | null = null;
+      if (block.text.slice(link.startOffset, link.endOffset) === link.quotedText) {
+        hit = { start: link.startOffset, end: link.endOffset };
+      } else {
+        hit = matchInText(block.text, {
+          quotedText: link.quotedText,
+          prefix: link.prefix,
+          suffix: link.suffix,
+        });
+      }
+      if (!hit) continue;
+      const list = linksByBlock[link.fromBlockId] ?? [];
+      list.push({
+        linkId: link.id,
+        start: hit.start,
+        end: hit.end,
+        toDocumentId: link.toDocumentId,
+        toTitle: link.toDocument.title,
+      });
+      linksByBlock[link.fromBlockId] = list;
+    }
+    for (const link of incoming) {
+      linksIn.push({
+        id: link.id,
+        fromDocumentId: link.fromDocumentId,
+        fromTitle: link.fromDocument.title,
+        quotedText: link.quotedText,
+      });
+    }
+  }
+
+  // Edit history for the open document, newest first.
+  const edits: EditItem[] = activeDocument
+    ? (
+        await db.blockEdit.findMany({
+          where: { documentId: activeDocument.id },
+          orderBy: { createdAt: "desc" },
+          take: 100,
+        })
+      ).map((e) => ({
+        id: e.id,
+        kind: e.kind as EditItem["kind"],
+        blockId: e.blockId,
+        before: e.before,
+        after: e.after,
+        meta: e.meta as EditItem["meta"],
+        createdAt: e.createdAt.toISOString(),
+      }))
     : [];
 
   // Reader profile: notebook override wins over the global profile (SPEC.md §3).
@@ -211,18 +320,25 @@ export default async function NotebookPage(props: {
       assistant={
         <AssistantPanel notebookId={notebook.id} documentId={activeDocument?.id ?? null} />
       }
+      annotationsPanel={
+        <AnnotationsPanel
+          notebookId={notebook.id}
+          documentId={activeDocument?.id ?? null}
+          annotations={annotations}
+          linksOut={linksOut}
+          linksIn={linksIn}
+        />
+      }
+      editsPanel={<EditsPanel edits={edits} />}
+      annotationCount={annotations.length + linksOut.length + linksIn.length}
       reader={
         activeDocument ? (
           <div className="flex h-full min-h-0 flex-col">
-            <AnnotationRail
-              notebookId={notebook.id}
-              documentId={activeDocument.id}
-              annotations={annotations}
-            />
             <ReaderInteractions
               documentId={activeDocument.id}
               notebookId={notebook.id}
               sectionChoices={sectionChoices}
+              attachedDocuments={attached}
               title={activeDocument.title}
               blocks={activeDocument.blocks.map((b) => ({
                 id: b.id,
@@ -234,6 +350,7 @@ export default async function NotebookPage(props: {
               salienceByBlock={salienceByBlock}
               hasSalience={hasSalience}
               termsByBlock={termsByBlock}
+              linksByBlock={linksByBlock}
             />
           </div>
         ) : (

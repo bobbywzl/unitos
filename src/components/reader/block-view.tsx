@@ -11,9 +11,18 @@ export type Highlight = {
   sourceId: string | null;
   start: number;
   end: number;
-  kind: "anchor" | "salience" | "term";
+  kind: "anchor" | "salience" | "term" | "link";
   definition?: string; // glossary hover text, kind "term" only
+  color?: string | null; // highlight hue ("clay" | "sage" | "gold"), kind "anchor" only
+  href?: string; // navigation target, kind "link" only
+  linkTitle?: string; // target document title, kind "link" only
 };
+
+function anchorClass(color: string | null | undefined): string {
+  if (color === "sage") return "hl-sage";
+  if (color === "gold") return "hl-gold";
+  return "anchor-mark";
+}
 
 function headingLevel(html: string | null): 1 | 2 | 3 {
   const m = html?.match(/^<h([1-3])/);
@@ -39,19 +48,28 @@ function markedText(text: string, highlights: Highlight[]) {
       parts.push(segment);
       continue;
     }
+    const link = covering.find((h) => h.kind === "link");
     const anchor = covering.find((h) => h.kind === "anchor");
     const salience = covering.find((h) => h.kind === "salience");
     const term = covering.find((h) => h.kind === "term");
-    if (anchor || salience) {
+    if (link) {
+      parts.push(
+        <a
+          key={from}
+          href={link.href}
+          data-source-id={anchor?.sourceId ?? undefined}
+          title={link.linkTitle ? `Linked: ${link.linkTitle}` : undefined}
+          className="link-mark rounded-[4px]"
+        >
+          {segment}
+        </a>,
+      );
+    } else if (anchor || salience) {
       parts.push(
         <mark
           key={from}
           data-source-id={anchor?.sourceId ?? undefined}
-          className={
-            anchor
-              ? "anchor-mark rounded-[4px] bg-clay-200 px-0.5"
-              : "rounded-[4px] bg-sage-200 px-0.5"
-          }
+          className={`${anchor ? anchorClass(anchor.color) : "salience-mark"} rounded-[4px]`}
         >
           {segment}
         </mark>,

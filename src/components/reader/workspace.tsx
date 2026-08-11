@@ -7,7 +7,9 @@ import {
   ArrowLeftIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
+  CommentIcon,
   ExpandIcon,
+  HistoryIcon,
   MoreIcon,
   NotesIcon,
   SparkleIcon,
@@ -18,7 +20,14 @@ import { useOutline } from "@/components/outline/use-outline";
 import { ProfileDialog, type ProfileValues } from "@/components/profile-dialog";
 import { DocumentBar, type AttachedDocument } from "@/components/reader/document-bar";
 
-type Tab = "notes" | "assistant";
+type Tab = "notes" | "assistant" | "annotations" | "edits";
+
+const TAB_TITLES: Record<Tab, string> = {
+  notes: "Notes",
+  assistant: "Assistant",
+  annotations: "Annotations",
+  edits: "Edits",
+};
 
 const RAIL_BUTTON =
   "relative flex size-[38px] items-center justify-center rounded-full text-sand-600 hover:bg-clay-100 hover:text-clay-800";
@@ -33,6 +42,9 @@ export function Workspace({
   activeDocumentId,
   reader,
   assistant,
+  annotationsPanel,
+  editsPanel,
+  annotationCount,
   profile,
 }: {
   notebook: NotebookView;
@@ -40,6 +52,9 @@ export function Workspace({
   activeDocumentId: string | null;
   reader: React.ReactNode;
   assistant: React.ReactNode;
+  annotationsPanel: React.ReactNode;
+  editsPanel: React.ReactNode;
+  annotationCount: number;
   profile: { initial: ProfileValues | null; hasOverride: boolean; autoOpen: boolean };
 }) {
   const { tree, pending, actions, lastRejected, undoReject } = useOutline(notebook);
@@ -129,10 +144,11 @@ export function Workspace({
         {!collapsed && (
           <aside className="flex min-h-0 w-[352px] shrink-0 flex-col gap-3.5 border-l border-line bg-sand-100 p-[18px] pb-4">
             <div className="flex items-center gap-2.5">
-              <span className="font-display text-[18px]">
-                {tab === "notes" ? "Notes" : "Assistant"}
-              </span>
+              <span className="font-display text-[18px]">{TAB_TITLES[tab]}</span>
               {tab === "notes" && <span className="text-[13px] text-sand-600">{noteCount}</span>}
+              {tab === "annotations" && annotationCount > 0 && (
+                <span className="text-[13px] text-sand-600">{annotationCount}</span>
+              )}
               <button
                 onClick={() => setCollapsed(true)}
                 aria-label="Collapse the notes tray"
@@ -143,11 +159,10 @@ export function Workspace({
             </div>
 
             <div className="min-h-0 flex-1 overflow-y-auto">
-              {tab === "notes" ? (
-                <NotesTray tree={tree} pending={pending} actions={actions} />
-              ) : (
-                assistant
-              )}
+              {tab === "notes" && <NotesTray tree={tree} pending={pending} actions={actions} />}
+              {tab === "assistant" && assistant}
+              {tab === "annotations" && annotationsPanel}
+              {tab === "edits" && editsPanel}
             </div>
 
             {lastRejected && (
@@ -208,6 +223,24 @@ export function Workspace({
             className={!collapsed && tab === "assistant" ? RAIL_BUTTON_ON : RAIL_BUTTON}
           >
             <SparkleIcon />
+          </button>
+
+          <button
+            onClick={() => show("annotations")}
+            aria-label="Annotations"
+            aria-current={!collapsed && tab === "annotations"}
+            className={!collapsed && tab === "annotations" ? RAIL_BUTTON_ON : RAIL_BUTTON}
+          >
+            <CommentIcon />
+          </button>
+
+          <button
+            onClick={() => show("edits")}
+            aria-label="Edit history"
+            aria-current={!collapsed && tab === "edits"}
+            className={!collapsed && tab === "edits" ? RAIL_BUTTON_ON : RAIL_BUTTON}
+          >
+            <HistoryIcon />
           </button>
 
           <div ref={menuRef} className="relative mt-auto">

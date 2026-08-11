@@ -40,6 +40,7 @@ model Note {
   content        String // markdown
   status         NoteStatus                   @default(ACCEPTED) // manual notes are ACCEPTED on create
   derivationType DerivationType? // null = manually written
+  color          String? // manual highlight hue: "clay" | "sage" | "gold"
   order          Int
   sources        Source[]
   embedding      Unsupported("vector(1024)")? // pgvector, Phase 6
@@ -86,8 +87,48 @@ model Document {
   blocks    Block[]
   notebooks NotebookDocument[]
   sources   Source[]
+  edits     BlockEdit[]
+  linksFrom DocLink[]          @relation("DocLinkFrom")
+  linksTo   DocLink[]          @relation("DocLinkTo")
   glossary  Json? // Phase 7: [{term, definition, blockIds[]}]
   createdAt DateTime           @default(now())
+}
+
+// One row per user change to a document: block text edits and link add/remove.
+// The Edits panel renders these newest-first; TEXT_EDIT rows can revert.
+model BlockEdit {
+  id         String   @id @default(cuid())
+  documentId String
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  blockId    String?
+  kind       String // "TEXT_EDIT" | "LINK_ADD" | "LINK_REMOVE"
+  before     String?
+  after      String?
+  meta       Json? // link events: { linkId, toDocumentId, toTitle, quotedText }
+  createdAt  DateTime @default(now())
+
+  @@index([documentId, createdAt])
+}
+
+// A hyperlink from a text range in one document to another document.
+// The anchor uses the same dual strategy as Source (SPEC.md §5), so links
+// heal across re-parses and text edits the same way note anchors do.
+model DocLink {
+  id             String   @id @default(cuid())
+  fromDocumentId String
+  fromDocument   Document @relation("DocLinkFrom", fields: [fromDocumentId], references: [id], onDelete: Cascade)
+  fromBlockId    String
+  startOffset    Int
+  endOffset      Int
+  quotedText     String
+  prefix         String
+  suffix         String
+  toDocumentId   String
+  toDocument     Document @relation("DocLinkTo", fields: [toDocumentId], references: [id], onDelete: Cascade)
+  createdAt      DateTime @default(now())
+
+  @@index([fromDocumentId])
+  @@index([toDocumentId])
 }
 
 model NotebookDocument {
