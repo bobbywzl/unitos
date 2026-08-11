@@ -12,20 +12,89 @@ const FONT_STACK: Record<string, string | undefined> = {
   mono: "ui-monospace, SFMono-Regular, Menlo, monospace",
 };
 
+type Kind = "paragraph" | "h1" | "h2" | "h3";
+type StyleSpan = { start: number; end: number; style: "bold" | "italic" };
+
 function headingLevel(html: string | null): 1 | 2 | 3 {
   const m = html?.match(/^<h([1-3])/);
   return m ? (Number(m[1]) as 1 | 2 | 3) : 2;
 }
 
-function blockKind(block: BlockData): "paragraph" | "h1" | "h2" | "h3" {
+function blockKind(block: BlockData): Kind {
   if (block.type !== "HEADING") return "paragraph";
-  return `h${headingLevel(block.html)}` as "h1" | "h2" | "h3";
+  return `h${headingLevel(block.html)}` as Kind;
+}
+
+function escapeHtml(s: string): string {
+  return s
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+}
+
+// Decorated text as one HTML string. React sets it once and never reconciles
+// inside, so the browser owns the region while the user types — the fight
+// between React and contentEditable never starts.
+function decoratedHtml(text: string, spans: StyleSpan[], edited: { start: number; end: number }[]): string {
+  const bounds = new Set<number>([0, text.length]);
+  for (const s of spans) {
+    bounds.add(Math.max(0, Math.min(s.start, text.length)));
+    bounds.add(Math.max(0, Math.min(s.end, text.length)));
+  }
+  for (const r of edited) {
+    bounds.add(Math.max(0, Math.min(r.start, text.length)));
+    bounds.add(Math.max(0, Math.min(r.end, text.length)));
+  }
+  const points = [...bounds].sort((a, b) => a - b);
+  let html = "";
+  for (let i = 0; i < points.length - 1; i++) {
+    const [from, to] = [points[i], points[i + 1]];
+    if (from === to) continue;
+    const segment = escapeHtml(text.slice(from, to));
+    const bold = spans.some((s) => s.style === "bold" && s.start <= from && s.end >= to);
+    const italic = spans.some((s) => s.style === "italic" && s.start <= from && s.end >= to);
+    const isEdited = edited.some((r) => r.start <= from && r.end >= to);
+    const cls = `${isEdited ? "edited-text " : ""}${bold ? "font-bold " : ""}${italic ? "italic" : ""}`.trim();
+    html += cls ? `<span class="${cls}">${segment}</span>` : segment;
+  }
+  return html;
+}
+
+/** Select [start, end) inside an element's text, walking its text nodes. */
+function selectRange(el: HTMLElement, start: number, end: number) {
+  const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+  let offset = 0;
+  let startNode: Node | null = null;
+  let startOffset = 0;
+  let endNode: Node | null = null;
+  let endOffset = 0;
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    const len = node.textContent?.length ?? 0;
+    if (!startNode && offset + len >= start) {
+      startNode = node;
+      startOffset = start - offset;
+    }
+    if (offset + len >= end) {
+      endNode = node;
+      endOffset = end - offset;
+      break;
+    }
+    offset += len;
+  }
+  if (!startNode || !endNode) return;
+  const range = document.createRange();
+  range.setStart(startNode, startOffset);
+  range.setEnd(endNode, endOffset);
+  const selection = window.getSelection();
+  selection?.removeAllRanges();
+  selection?.addRange(range);
 }
 
 // The reading column: 720px of airy, book-like text (design 1a). Reading mode
-// is exactly that — reading, with selection tools. Edit mode turns the whole
-// body into one seamlessly editable page: no boxes, a format bar on top, and
-// every change lands in the edit history.
+// is exactly that. Edit mode turns the whole body into one seamlessly editable
+// page — decorations render live, and format/style changes apply optimistically
+// the instant they are clicked, with the server syncing behind.
 export function Reader({
   title,
   blocks,
@@ -34,6 +103,8 @@ export function Reader({
   onRevertSwap,
   mode,
   font,
+  stylesByBlock,
+  editedByBlock,
   onSaveText,
   onFormatBlock,
   onToggleStyle,
@@ -47,22 +118,33 @@ export function Reader({
   onRevertSwap: (blockId: string) => void;
   mode: "read" | "edit";
   font: string | null;
+  stylesByBlock: Record<string, StyleSpan[]>;
+  editedByBlock: Record<string, { start: number; end: number }[]>;
   onSaveText: (blockId: string, text: string) => Promise<void>;
-  onFormatBlock: (blockId: string, kind: "paragraph" | "h1" | "h2" | "h3") => Promise<void>;
-  onToggleStyle: (
-    blockId: string,
-    start: number,
-    end: number,
-    style: "bold" | "italic",
-  ) => Promise<void>;
+  onFormatBlock: (blockId: string, kind: Kind) => Promise<void>;
+  onToggleStyle: (blockId: string, start: number, end: number, style: "bold" | "italic") => Promise<void>;
   onInsertBlock: (afterBlockId: string) => Promise<void>;
   onDeleteBlock: (blockId: string) => Promise<void>;
 }) {
   const [focusedBlockId, setFocusedBlockId] = useState<string | null>(null);
+  // Optimistic overrides: applied the instant a bar button is clicked, cleared
+  // when the server round-trip lands (the blocks prop identity changes then).
+  const [localKinds, setLocalKinds] = useState<Record<string, Kind>>({});
+  const [localStyles, setLocalStyles] = useState<Record<string, StyleSpan[]>>({});
+  const [prevBlocks, setPrevBlocks] = useState(blocks);
+  if (prevBlocks !== blocks) {
+    setPrevBlocks(blocks);
+    setLocalKinds({});
+    setLocalStyles({});
+  }
+  const restoreSelectionRef = useRef<{ blockId: string; start: number; end: number } | null>(null);
+
   const fontFamily = FONT_STACK[font ?? "default"];
   const focusedBlock = blocks.find((b) => b.id === focusedBlockId) ?? null;
+  const effectiveKind = (block: BlockData): Kind => localKinds[block.id] ?? blockKind(block);
+  const effectiveStyles = (block: BlockData): StyleSpan[] =>
+    localStyles[block.id] ?? stylesByBlock[block.id] ?? [];
 
-  // Bold/italic apply to the current selection inside the focused editable.
   function applyStyle(style: "bold" | "italic") {
     if (!focusedBlockId) return;
     const el = document.querySelector<HTMLElement>(`[data-edit-block="${focusedBlockId}"]`);
@@ -76,16 +158,36 @@ export function Reader({
     const start = pre.toString().length;
     const end = start + range.toString().length;
     if (end <= start) return;
-    void onToggleStyle(focusedBlockId, start, end, style);
+    // Instant: toggle locally (repaints this block), keep the selection, then sync.
+    const blockId = focusedBlockId;
+    const block = blocks.find((b) => b.id === blockId);
+    if (!block) return;
+    setLocalStyles((prev) => {
+      const current = prev[blockId] ?? stylesByBlock[blockId] ?? [];
+      const existing = current.findIndex(
+        (s) => s.style === style && s.start === start && s.end === end,
+      );
+      const next =
+        existing >= 0
+          ? current.filter((_, i) => i !== existing)
+          : [...current, { start, end, style }];
+      return { ...prev, [blockId]: next };
+    });
+    restoreSelectionRef.current = { blockId, start, end };
+    void onToggleStyle(blockId, start, end, style);
+  }
+
+  function applyFormat(kind: Kind) {
+    if (!focusedBlockId) return;
+    setLocalKinds((prev) => ({ ...prev, [focusedBlockId]: kind }));
+    void onFormatBlock(focusedBlockId, kind);
   }
 
   const barButton =
     "rounded-full px-2.5 py-1 text-[11.5px] font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40";
-  const keep = (e: React.MouseEvent) => e.preventDefault(); // keep focus/selection in the page
+  const keep = (e: React.MouseEvent) => e.preventDefault();
 
   return (
-    // Scrolling belongs to the interactions container above; sticky works
-    // against that ancestor.
     <div className="relative">
       {mode === "edit" && (
         <div className="sticky top-3 z-30 mx-auto flex w-fit items-center gap-0.5 rounded-full bg-card px-2 py-1.5 shadow-float">
@@ -94,9 +196,9 @@ export function Reader({
               key={kind}
               onMouseDown={keep}
               disabled={!focusedBlock}
-              onClick={() => focusedBlockId && void onFormatBlock(focusedBlockId, kind)}
+              onClick={() => applyFormat(kind)}
               className={
-                focusedBlock && blockKind(focusedBlock) === kind
+                focusedBlock && effectiveKind(focusedBlock) === kind
                   ? "rounded-full bg-clay-100 px-2.5 py-1 text-[11.5px] font-semibold text-clay-800"
                   : barButton
               }
@@ -142,6 +244,10 @@ export function Reader({
               {TEXT_TYPES.has(block.type) ? (
                 <EditableBlock
                   block={block}
+                  kind={effectiveKind(block)}
+                  spans={effectiveStyles(block)}
+                  edited={editedByBlock[block.id] ?? []}
+                  restoreSelectionRef={restoreSelectionRef}
                   onSave={onSaveText}
                   onFocusBlock={setFocusedBlockId}
                 />
@@ -179,23 +285,52 @@ export function Reader({
   );
 }
 
-// One seamlessly editable block: the text itself is editable in place, styled
-// exactly like reading mode. Blur saves; the DOM text is the source of truth
-// for the save, so offsets stay honest.
+const KIND_CLASS: Record<Kind, string> = {
+  paragraph: "my-4",
+  h1: "mt-10 mb-3 text-[26px] font-display",
+  h2: "mt-8 mb-2.5 text-[22px] font-display",
+  h3: "mt-6 mb-2.5 text-[20px] font-display",
+};
+
+// One seamlessly editable block. Decorations (bold, italic, edited color) are
+// visible WHILE editing: the initial content is decorated HTML the browser owns.
+// Blur reads textContent — the decoration spans flatten back to plain text, so
+// offsets stay honest.
 function EditableBlock({
   block,
+  kind,
+  spans,
+  edited,
+  restoreSelectionRef,
   onSave,
   onFocusBlock,
 }: {
   block: BlockData;
+  kind: Kind;
+  spans: StyleSpan[];
+  edited: { start: number; end: number }[];
+  restoreSelectionRef: React.MutableRefObject<{ blockId: string; start: number; end: number } | null>;
   onSave: (blockId: string, text: string) => Promise<void>;
   onFocusBlock: (blockId: string) => void;
 }) {
   const ref = useRef<HTMLElement | null>(null);
 
+  const html = decoratedHtml(block.text, spans, edited);
+  // Remount whenever content or decorations change server- or optimistic-side.
+  const key = `${block.id}:${block.text.length}:${html.length}:${kind}`;
+
   const shared = {
     ref: (el: HTMLElement | null) => {
       ref.current = el;
+      // A style toggle replaced the DOM; put the selection back where it was.
+      const pending = restoreSelectionRef.current;
+      if (el && pending && pending.blockId === block.id) {
+        restoreSelectionRef.current = null;
+        requestAnimationFrame(() => {
+          el.focus();
+          selectRange(el, pending.start, pending.end);
+        });
+      }
     },
     contentEditable: "plaintext-only" as const,
     suppressContentEditableWarning: true,
@@ -205,35 +340,22 @@ function EditableBlock({
       const next = ref.current?.textContent ?? "";
       if (next.trim() && next !== block.text) void onSave(block.id, next);
     },
-    className: "",
-    children: block.text,
+    dangerouslySetInnerHTML: { __html: html },
   };
   const editable = "rounded-lg outline-none focus:bg-card/60 whitespace-pre-wrap";
 
-  // The refresh after a save re-mounts with the stored text.
-  const key = `${block.id}:${block.text}`;
+  const base = block.type === "CODE" || block.type === "EQUATION"
+    ? "my-4 overflow-x-auto rounded-2xl bg-sand-200 p-4 text-sm"
+    : block.type === "LIST"
+      ? "my-4 pl-5"
+      : KIND_CLASS[kind];
 
-  switch (block.type) {
-    case "HEADING": {
-      const level = headingLevel(block.html);
-      if (level === 1)
-        return <h1 key={key} {...shared} className={`mt-10 mb-3 text-[26px] ${editable}`} />;
-      if (level === 2)
-        return <h2 key={key} {...shared} className={`mt-8 mb-2.5 text-[22px] ${editable}`} />;
-      return <h3 key={key} {...shared} className={`mt-6 mb-2.5 text-[20px] ${editable}`} />;
-    }
-    case "LIST":
-      return <div key={key} {...shared} className={`my-4 pl-5 ${editable}`} />;
-    case "CODE":
-    case "EQUATION":
-      return (
-        <pre
-          key={key}
-          {...shared}
-          className={`my-4 overflow-x-auto rounded-2xl bg-sand-200 p-4 text-sm ${editable}`}
-        />
-      );
-    default:
-      return <p key={key} {...shared} className={`my-4 ${editable}`} />;
+  if (block.type === "CODE" || block.type === "EQUATION") {
+    return <pre key={key} {...shared} className={`${base} ${editable}`} />;
   }
+  if (kind === "h1") return <h1 key={key} {...shared} className={`${base} ${editable}`} />;
+  if (kind === "h2") return <h2 key={key} {...shared} className={`${base} ${editable}`} />;
+  if (kind === "h3") return <h3 key={key} {...shared} className={`${base} ${editable}`} />;
+  if (block.type === "LIST") return <div key={key} {...shared} className={`${base} ${editable}`} />;
+  return <p key={key} {...shared} className={`${base} ${editable}`} />;
 }

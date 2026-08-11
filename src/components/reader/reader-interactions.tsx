@@ -931,6 +931,8 @@ export function ReaderInteractions({
         }
         mode={editMode ? "edit" : "read"}
         font={font}
+        stylesByBlock={stylesByBlock}
+        editedByBlock={editedByBlock}
         onSaveText={saveBlockEdit}
         onFormatBlock={formatBlock}
         onToggleStyle={toggleStyleSpan}
