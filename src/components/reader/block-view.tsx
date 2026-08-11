@@ -49,7 +49,11 @@ function markedText(text: string, highlights: Highlight[]) {
       continue;
     }
     const link = covering.find((h) => h.kind === "link");
-    const anchor = covering.find((h) => h.kind === "anchor");
+    const anchors = covering.filter((h) => h.kind === "anchor");
+    const anchor =
+      anchors.length > 1
+        ? anchors.reduce((n, h) => (h.end - h.start < n.end - n.start ? h : n))
+        : anchors[0];
     const salience = covering.find((h) => h.kind === "salience");
     const term = covering.find((h) => h.kind === "term");
     if (link) {

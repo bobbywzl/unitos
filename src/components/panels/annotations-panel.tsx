@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useState } from "react";
 import type { AnnotationItem, LinkIn, LinkOut } from "@/lib/types";
 import { api } from "@/lib/api";
 import { Markdown } from "@/components/markdown";
@@ -75,18 +76,32 @@ export function AnnotationsPanel({
   linksIn: LinkIn[];
 }) {
   const router = useRouter();
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [errorText, setErrorText] = useState<string | null>(null);
   const highlights = annotations.filter((a) => a.kind === "highlight");
   const comments = annotations.filter((a) => a.kind === "comment");
   const explanations = annotations.filter((a) => a.kind === "explain");
 
+  async function mutate(id: string, run: () => Promise<unknown>) {
+    if (busyId) return;
+    setBusyId(id);
+    setErrorText(null);
+    try {
+      await run();
+      router.refresh();
+    } catch (err) {
+      setErrorText(err instanceof Error ? err.message : "Request failed");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   async function deleteAnnotation(id: string) {
-    await api(`/api/notes/${id}`, "DELETE");
-    router.refresh();
+    await mutate(id, () => api(`/api/notes/${id}`, "DELETE"));
   }
 
   async function removeLink(id: string) {
-    await api(`/api/links/${id}`, "DELETE");
-    router.refresh();
+    await mutate(id, () => api(`/api/links/${id}`, "DELETE"));
   }
 
   if (annotations.length === 0 && linksOut.length === 0 && linksIn.length === 0) {
@@ -99,6 +114,7 @@ export function AnnotationsPanel({
 
   return (
     <div className="flex flex-col gap-3.5">
+      {errorText && <p className="text-[13px] text-red-600">{errorText}</p>}
       {highlights.length > 0 && (
         <div className="flex flex-col gap-2">
           <span className={label}>Highlights</span>

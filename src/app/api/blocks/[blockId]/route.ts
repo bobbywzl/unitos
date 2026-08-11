@@ -24,18 +24,17 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ blockId: stri
 
   if (data.text === block.text) return NextResponse.json(block);
 
-  const updated = await db.block.update({
-    where: { id: blockId },
-    data: { text: data.text },
-  });
-  await db.blockEdit.create({
-    data: {
-      documentId: block.documentId,
-      blockId: block.id,
-      kind: "TEXT_EDIT",
-      before: block.text,
-      after: data.text,
-    },
-  });
+  const [updated] = await db.$transaction([
+    db.block.update({ where: { id: blockId }, data: { text: data.text } }),
+    db.blockEdit.create({
+      data: {
+        documentId: block.documentId,
+        blockId: block.id,
+        kind: "TEXT_EDIT",
+        before: block.text,
+        after: data.text,
+      },
+    }),
+  ]);
   return NextResponse.json(updated);
 }

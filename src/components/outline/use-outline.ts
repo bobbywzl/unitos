@@ -132,7 +132,9 @@ export function useOutline(notebook: NotebookView) {
         (target.tagName === "INPUT" ||
           target.tagName === "TEXTAREA" ||
           target.tagName === "SELECT" ||
-          target.isContentEditable)
+          target.isContentEditable ||
+          // Enter on a focused button must activate the button, not the queue.
+          target.closest("button, a, [role='button']"))
       ) {
         return;
       }

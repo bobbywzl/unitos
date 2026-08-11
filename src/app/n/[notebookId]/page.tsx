@@ -238,28 +238,52 @@ export default async function NotebookPage(props: {
         toTitle: link.toDocument.title,
         quotedText: link.quotedText,
       });
-      const block = blockById.get(link.fromBlockId);
-      if (!block) continue;
-      let hit: { start: number; end: number } | null = null;
-      if (block.text.slice(link.startOffset, link.endOffset) === link.quotedText) {
-        hit = { start: link.startOffset, end: link.endOffset };
-      } else {
-        hit = matchInText(block.text, {
-          quotedText: link.quotedText,
-          prefix: link.prefix,
-          suffix: link.suffix,
+      // Same ladder as resolveDocumentSources: stored offsets, re-find in the
+      // stored block, re-find across all blocks (re-parse gives new block ids).
+      // Rebinds are written back so links self-heal like note anchors.
+      const selector = { quotedText: link.quotedText, prefix: link.prefix, suffix: link.suffix };
+      const stored = blockById.get(link.fromBlockId);
+      let resolved: { blockId: string; start: number; end: number } | null = null;
+      if (stored && stored.text.slice(link.startOffset, link.endOffset) === link.quotedText) {
+        resolved = { blockId: link.fromBlockId, start: link.startOffset, end: link.endOffset };
+      } else if (stored) {
+        const hit = matchInText(stored.text, selector);
+        if (hit) resolved = { blockId: stored.id, ...hit };
+      }
+      if (!resolved) {
+        for (const block of activeDocument.blocks) {
+          if (stored && block.id === stored.id) continue;
+          const hit = matchInText(block.text, selector);
+          if (hit) {
+            resolved = { blockId: block.id, ...hit };
+            break;
+          }
+        }
+      }
+      if (!resolved) continue;
+      if (
+        resolved.blockId !== link.fromBlockId ||
+        resolved.start !== link.startOffset ||
+        resolved.end !== link.endOffset
+      ) {
+        await db.docLink.update({
+          where: { id: link.id },
+          data: {
+            fromBlockId: resolved.blockId,
+            startOffset: resolved.start,
+            endOffset: resolved.end,
+          },
         });
       }
-      if (!hit) continue;
-      const list = linksByBlock[link.fromBlockId] ?? [];
+      const list = linksByBlock[resolved.blockId] ?? [];
       list.push({
         linkId: link.id,
-        start: hit.start,
-        end: hit.end,
+        start: resolved.start,
+        end: resolved.end,
         toDocumentId: link.toDocumentId,
         toTitle: link.toDocument.title,
       });
-      linksByBlock[link.fromBlockId] = list;
+      linksByBlock[resolved.blockId] = list;
     }
     for (const link of incoming) {
       linksIn.push({

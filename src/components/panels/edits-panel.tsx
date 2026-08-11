@@ -36,13 +36,17 @@ export function EditsPanel({ edits }: { edits: EditItem[] }) {
 function EditCard({ edit }: { edit: EditItem }) {
   const router = useRouter();
   const [reverting, setReverting] = useState(false);
+  const [errorText, setErrorText] = useState<string | null>(null);
 
   async function revert() {
-    if (!edit.blockId || edit.before === null) return;
+    if (!edit.blockId || edit.before === null || reverting) return;
     setReverting(true);
+    setErrorText(null);
     try {
       await api(`/api/blocks/${edit.blockId}`, "PATCH", { text: edit.before });
       router.refresh();
+    } catch (err) {
+      setErrorText(err instanceof Error ? err.message : "Revert failed");
     } finally {
       setReverting(false);
     }
@@ -52,7 +56,7 @@ function EditCard({ edit }: { edit: EditItem }) {
     <div className="rounded-2xl bg-card p-3.5 shadow-soft">
       <div className="flex items-center gap-2">
         <span className={kindChip}>{KIND_LABEL[edit.kind]}</span>
-        <span className="ml-auto text-[11px] text-sand-500">
+        <span suppressHydrationWarning className="ml-auto text-[11px] text-sand-500">
           {new Date(edit.createdAt).toLocaleString()}
         </span>
       </div>
@@ -80,8 +84,9 @@ function EditCard({ edit }: { edit: EditItem }) {
                 disabled={reverting}
                 className="text-xs text-sand-600 hover:text-clay-700 disabled:opacity-50"
               >
-                Revert
+                {reverting ? "Reverting…" : "Revert"}
               </button>
+              {errorText && <p className="mt-1 text-[11px] text-red-600">{errorText}</p>}
             </div>
           )}
         </div>

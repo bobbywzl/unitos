@@ -58,15 +58,32 @@ export function ReaderInteractions({
   // The popover's submenus (section list, link targets) are custom lists, not
   // native selects: the popover preventDefaults mousedown to keep the text
   // selection alive, which also keeps a native select from ever opening.
-  const [submenu, setSubmenu] = useState<null | "add" | "link" | "highlight" | "comment">(null);
+  const [submenu, setSubmenu] = useState<null | "add" | "link">(null);
   const [commentDraft, setCommentDraft] = useState("");
   const [editingBlockId, setEditingBlockId] = useState<string | null>(null);
   const [bubble, setBubble] = useState<ExplainBubble | null>(null);
   const [busy, setBusy] = useState(false);
   const [swaps, setSwaps] = useState<Record<string, string>>({});
+  const swapsRef = useRef<Record<string, string>>({});
+  swapsRef.current = swaps;
   const [salienceOn, setSalienceOn] = useState(false);
   const [salienceBusy, setSalienceBusy] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Switching documents client-side keeps this component mounted. Every piece
+  // of selection-scoped state references the old document's blocks — drop it,
+  // or a stale anchor writes an annotation into the wrong document.
+  // Adjust-during-render, same pattern as useOutline's tree reset.
+  const [prevDocumentId, setPrevDocumentId] = useState(documentId);
+  if (prevDocumentId !== documentId) {
+    setPrevDocumentId(documentId);
+    setPopover(null);
+    setSubmenu(null);
+    setBubble(null);
+    setEditingBlockId(null);
+    setCommentDraft("");
+  }
 
   // Selection → block-relative offsets via data-block-id (SPEC.md §5). DOM ranges are never persisted.
   const captureSelection = useCallback((): Popover | null => {
@@ -84,6 +101,9 @@ export function ReaderInteractions({
     if (!startBlock) return null;
     const blockId = startBlock.dataset.blockId;
     if (!blockId) return null;
+    // A simplified block displays swapped text; offsets against it would not
+    // match the stored block text. No selection tools there.
+    if (swapsRef.current[blockId] !== undefined) return null;
 
     const preRange = document.createRange();
     preRange.selectNodeContents(startBlock);
@@ -106,9 +126,12 @@ export function ReaderInteractions({
 
     const rect = range.getBoundingClientRect();
     const containerRect = container.getBoundingClientRect();
+    // Clamp so the pill and its submenus stay inside the pane.
+    const rawX = rect.left + rect.width / 2 - containerRect.left;
+    const margin = Math.min(350, containerRect.width / 2);
     return {
       anchor: { blockId, startOffset, endOffset, quotedText, prefix, suffix },
-      x: rect.left + rect.width / 2 - containerRect.left,
+      x: Math.max(margin, Math.min(rawX, containerRect.width - margin)),
       y: rect.bottom - containerRect.top + container.scrollTop + 6,
     };
   }, []);
@@ -118,10 +141,14 @@ export function ReaderInteractions({
     if (!container) return;
     const onMouseUp = (event: MouseEvent) => {
       if (event.target instanceof Element && event.target.closest("[data-selection-popover]")) return;
+      // A drag that started inside the comment box can end over the article —
+      // that is text editing, not a new selection.
+      if (document.activeElement?.closest("[data-selection-popover]")) return;
       requestAnimationFrame(() => {
         const captured = captureSelection();
         setPopover(captured);
         setSubmenu(null);
+        setCommentDraft("");
         if (captured) {
           // The assistant panel's Selection scope tracks the latest selection.
           window.dispatchEvent(
@@ -158,7 +185,8 @@ export function ReaderInteractions({
 
   function showToast(message: string) {
     setToast(message);
-    setTimeout(() => setToast(null), 5000);
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToast(null), 5000);
   }
 
   async function addToSection(sectionId: string) {
@@ -173,6 +201,8 @@ export function ReaderInteractions({
       setPopover(null);
       window.getSelection()?.removeAllRanges();
       router.refresh();
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Add failed");
     } finally {
       setBusy(false);
     }
@@ -292,6 +322,7 @@ export function ReaderInteractions({
   // Lands ACCEPTED in the hidden Annotations section; the anchor paints the text.
   async function annotate(input: { color?: string; comment?: string }) {
     if (!popover || busy) return;
+    if (input.comment !== undefined && !input.comment.trim()) return;
     const { anchor } = popover;
     setBusy(true);
     try {
@@ -488,10 +519,10 @@ export function ReaderInteractions({
             if (target.closest("textarea, input")) return;
             e.preventDefault();
           }}
-          className="absolute z-20 -translate-x-1/2 rounded-full bg-card p-1.5 shadow-float"
+          className="absolute z-20 flex -translate-x-1/2 flex-col items-center gap-1.5"
           style={{ left: popover.x, top: popover.y }}
         >
-          <div className="flex items-center gap-0.5">
+          <div className="flex items-center gap-0.5 rounded-full bg-card p-1.5 shadow-float">
             <button
               onClick={() => void explain()}
               className="rounded-full bg-clay px-4 py-[7px] text-[13px] font-semibold text-clay-fg hover:bg-clay-600"
@@ -510,32 +541,6 @@ export function ReaderInteractions({
               className="rounded-full px-[13px] py-[7px] text-[13px] text-sand-800 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40"
             >
               Extract
-            </button>
-            <button
-              disabled={busy}
-              onClick={() => setSubmenu(submenu === "highlight" ? null : "highlight")}
-              aria-expanded={submenu === "highlight"}
-              className={`rounded-full px-[13px] py-[7px] text-[13px] disabled:opacity-40 ${
-                submenu === "highlight"
-                  ? "bg-clay-100 text-clay-800"
-                  : "text-sand-800 hover:bg-clay-100 hover:text-clay-800"
-              }`}
-              title="Highlight this passage"
-            >
-              Highlight ▾
-            </button>
-            <button
-              disabled={busy}
-              onClick={() => setSubmenu(submenu === "comment" ? null : "comment")}
-              aria-expanded={submenu === "comment"}
-              className={`rounded-full px-[13px] py-[7px] text-[13px] disabled:opacity-40 ${
-                submenu === "comment"
-                  ? "bg-clay-100 text-clay-800"
-                  : "text-sand-800 hover:bg-clay-100 hover:text-clay-800"
-              }`}
-              title="Comment on this passage"
-            >
-              Comment
             </button>
             {sectionChoices.length > 0 && (
               <button
@@ -586,8 +591,8 @@ export function ReaderInteractions({
             </button>
           </div>
 
-          {submenu === "highlight" && (
-            <div className="absolute top-full left-1/2 mt-1.5 flex -translate-x-1/2 items-center gap-2 rounded-full bg-card p-2 shadow-float">
+          <div className="flex w-full items-center gap-1.5">
+            <div className="flex shrink-0 items-center gap-1.5 rounded-full bg-card p-2 shadow-float">
               {(["clay", "sage", "gold"] as const).map((color) => (
                 <button
                   key={color}
@@ -595,7 +600,7 @@ export function ReaderInteractions({
                   onClick={() => void annotate({ color })}
                   aria-label={`Highlight in ${color}`}
                   title={`Highlight in ${color}`}
-                  className="size-6 rounded-full hover:scale-110 disabled:opacity-40"
+                  className="size-[22px] rounded-full transition-transform hover:scale-110 disabled:opacity-40"
                   style={{
                     background:
                       color === "clay"
@@ -607,38 +612,32 @@ export function ReaderInteractions({
                 />
               ))}
             </div>
-          )}
-
-          {submenu === "comment" && (
-            <div className="absolute top-full left-1/2 mt-1.5 w-72 -translate-x-1/2 rounded-2xl bg-card p-3 shadow-float">
-              <textarea
-                autoFocus
+            <form
+              className="flex min-w-0 flex-1 items-center gap-1 rounded-full bg-card p-1.5 shadow-float"
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (commentDraft.trim()) void annotate({ comment: commentDraft });
+              }}
+            >
+              <input
                 value={commentDraft}
                 onChange={(e) => setCommentDraft(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-                    void annotate({ comment: commentDraft });
-                  }
-                  if (e.key === "Escape") setSubmenu(null);
-                }}
-                placeholder="Comment on this passage"
-                rows={3}
-                className="w-full resize-none rounded-2xl bg-sand-100 p-3 text-[13px] outline-none placeholder:text-sand-500"
+                placeholder="Comment…"
+                aria-label="Comment on this passage"
+                className="w-40 min-w-0 flex-1 bg-transparent px-2.5 text-[13px] outline-none placeholder:text-sand-500"
               />
-              <div className="mt-2 flex justify-end">
-                <button
-                  disabled={busy || !commentDraft.trim()}
-                  onClick={() => void annotate({ comment: commentDraft })}
-                  className="rounded-full bg-clay px-4 py-1.5 text-xs font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
-                >
-                  Save
-                </button>
-              </div>
-            </div>
-          )}
+              <button
+                type="submit"
+                disabled={busy || !commentDraft.trim()}
+                className="rounded-full bg-clay px-3.5 py-[5px] text-xs font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
+              >
+                Save
+              </button>
+            </form>
+          </div>
 
           {submenu === "add" && (
-            <div className="absolute top-full left-1/2 mt-1.5 flex max-h-60 w-64 -translate-x-1/2 flex-col overflow-y-auto rounded-2xl bg-card py-1 shadow-float">
+            <div className="flex max-h-60 w-64 flex-col overflow-y-auto rounded-2xl bg-card py-1 shadow-float">
               {sectionChoices.map((s) => (
                 <button
                   key={s.id}
@@ -653,7 +652,7 @@ export function ReaderInteractions({
           )}
 
           {submenu === "link" && (
-            <div className="absolute top-full left-1/2 mt-1.5 flex max-h-60 w-64 -translate-x-1/2 flex-col overflow-y-auto rounded-2xl bg-card py-1 shadow-float">
+            <div className="flex max-h-60 w-64 flex-col overflow-y-auto rounded-2xl bg-card py-1 shadow-float">
               {attachedDocuments.filter((d) => d.id !== documentId).length === 0 ? (
                 <p className="px-4 py-2 text-[13px] text-sand-600">
                   Attach another document to link to it.

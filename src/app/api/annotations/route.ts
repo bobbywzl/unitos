@@ -8,9 +8,9 @@ const anchorSchema = z.object({
   blockId: z.string().min(1),
   startOffset: z.number().int().min(0),
   endOffset: z.number().int().min(0),
-  quotedText: z.string().min(1),
-  prefix: z.string(),
-  suffix: z.string(),
+  quotedText: z.string().min(1).max(10_000),
+  prefix: z.string().max(64),
+  suffix: z.string().max(64),
 });
 
 const createSchema = z.object({
