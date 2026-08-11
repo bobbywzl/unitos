@@ -218,7 +218,7 @@ export default async function NotebookPage(props: {
   // Annotations tab.
   const linksByBlock: Record<
     string,
-    { linkId: string; start: number; end: number; toDocumentId: string; toTitle: string }[]
+    { linkId: string; start: number; end: number; href: string; title: string }[]
   > = {};
   const linksOut: LinkOut[] = [];
   const linksIn: LinkIn[] = [];
@@ -266,6 +266,7 @@ export default async function NotebookPage(props: {
         toDocumentId: link.toDocumentId,
         toTitle: link.toDocument.title,
         quotedText: link.quotedText,
+        targetQuotedText: link.toQuotedText,
         orphaned: resolved === null,
         detached,
       });
@@ -292,18 +293,82 @@ export default async function NotebookPage(props: {
         linkId: link.id,
         start: resolved.start,
         end: resolved.end,
-        toDocumentId: link.toDocumentId,
-        toTitle: link.toDocument.title,
+        href: link.toQuotedText
+          ? `/n/${notebookId}?doc=${link.toDocumentId}&link=${link.id}`
+          : `/n/${notebookId}?doc=${link.toDocumentId}`,
+        title: link.toDocument.title,
       });
       linksByBlock[resolved.blockId] = list;
     }
+    // Incoming two-ended links paint their end in THIS document too, and click
+    // through to the source end. Same ladder, write-back on rebind.
     for (const link of incoming) {
       linksIn.push({
         id: link.id,
         fromDocumentId: link.fromDocumentId,
         fromTitle: link.fromDocument.title,
         quotedText: link.quotedText,
+        hereQuotedText: link.toQuotedText,
       });
+      if (
+        link.fromDocumentId === activeDocument.id ||
+        !link.toQuotedText ||
+        link.toBlockId === null ||
+        link.toStartOffset === null ||
+        link.toEndOffset === null
+      ) {
+        continue;
+      }
+      const selector = {
+        quotedText: link.toQuotedText,
+        prefix: link.toPrefix ?? "",
+        suffix: link.toSuffix ?? "",
+      };
+      const stored = blockById.get(link.toBlockId);
+      let resolved: { blockId: string; start: number; end: number } | null = null;
+      if (
+        stored &&
+        stored.text.slice(link.toStartOffset, link.toEndOffset) === link.toQuotedText
+      ) {
+        resolved = { blockId: link.toBlockId, start: link.toStartOffset, end: link.toEndOffset };
+      } else if (stored) {
+        const hit = matchInText(stored.text, selector);
+        if (hit) resolved = { blockId: stored.id, ...hit };
+      }
+      if (!resolved) {
+        for (const block of activeDocument.blocks) {
+          if (stored && block.id === stored.id) continue;
+          const hit = matchInText(block.text, selector);
+          if (hit) {
+            resolved = { blockId: block.id, ...hit };
+            break;
+          }
+        }
+      }
+      if (!resolved) continue;
+      if (
+        resolved.blockId !== link.toBlockId ||
+        resolved.start !== link.toStartOffset ||
+        resolved.end !== link.toEndOffset
+      ) {
+        await db.docLink.update({
+          where: { id: link.id },
+          data: {
+            toBlockId: resolved.blockId,
+            toStartOffset: resolved.start,
+            toEndOffset: resolved.end,
+          },
+        });
+      }
+      const list = linksByBlock[resolved.blockId] ?? [];
+      list.push({
+        linkId: link.id,
+        start: resolved.start,
+        end: resolved.end,
+        href: `/n/${notebookId}?doc=${link.fromDocumentId}&link=${link.id}`,
+        title: link.fromDocument.title,
+      });
+      linksByBlock[resolved.blockId] = list;
     }
   }
 

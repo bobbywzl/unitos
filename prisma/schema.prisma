@@ -125,6 +125,14 @@ model DocLink {
   suffix         String
   toDocumentId   String
   toDocument     Document @relation("DocLinkTo", fields: [toDocumentId], references: [id], onDelete: Cascade)
+  // The other end: a text range in the target document, so a link connects a
+  // quote to a quote. Null = legacy document-level link.
+  toBlockId      String?
+  toStartOffset  Int?
+  toEndOffset    Int?
+  toQuotedText   String?
+  toPrefix       String?
+  toSuffix       String?
   createdAt      DateTime @default(now())
 
   @@index([fromDocumentId])

@@ -192,14 +192,22 @@ export function AnnotationsPanel({
           {linksOut.map((l) => (
             <div key={l.id} className={card}>
               <p className="line-clamp-2 text-[13px]">{l.quotedText}</p>
+              {l.targetQuotedText && (
+                <p className="mt-1.5 line-clamp-2 border-l-2 border-sand-300 pl-2 text-xs text-sand-500">
+                  {l.targetQuotedText}
+                </p>
+              )}
               <div className="mt-2 flex flex-wrap items-center gap-3">
                 {l.detached ? (
                   <span className="rounded-full bg-sand-200 px-2.5 py-0.5 text-[11px] font-semibold text-sand-600">
-                    → {l.toTitle} · not attached
+                    ⇄ {l.toTitle} · not attached
                   </span>
                 ) : (
-                  <Link href={`/n/${notebookId}?doc=${l.toDocumentId}`} className={chip}>
-                    → {l.toTitle}
+                  <Link
+                    href={`/n/${notebookId}?doc=${l.toDocumentId}${l.targetQuotedText ? `&link=${l.id}` : ""}`}
+                    className={chip}
+                  >
+                    ⇄ {l.toTitle}
                   </Link>
                 )}
                 {l.orphaned && (
@@ -216,11 +224,22 @@ export function AnnotationsPanel({
           ))}
           {linksIn.map((l) => (
             <div key={l.id} className={card}>
-              <p className="line-clamp-2 text-[13px]">{l.quotedText}</p>
-              <div className="mt-2 flex items-center">
-                <Link href={`/n/${notebookId}?doc=${l.fromDocumentId}`} className={chip}>
-                  ← {l.fromTitle}
+              <p className="line-clamp-2 text-[13px]">{l.hereQuotedText ?? l.quotedText}</p>
+              {l.hereQuotedText && (
+                <p className="mt-1.5 line-clamp-2 border-l-2 border-sand-300 pl-2 text-xs text-sand-500">
+                  {l.quotedText}
+                </p>
+              )}
+              <div className="mt-2 flex flex-wrap items-center gap-3">
+                <Link href={`/n/${notebookId}?doc=${l.fromDocumentId}&link=${l.id}`} className={chip}>
+                  ⇄ {l.fromTitle}
                 </Link>
+                <button
+                  onClick={() => void removeLink(l.id)}
+                  className="text-xs text-red-500 hover:text-red-700"
+                >
+                  Remove
+                </button>
               </div>
             </div>
           ))}

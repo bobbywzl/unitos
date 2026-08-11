@@ -16,7 +16,8 @@ export type Highlight = {
   color?: string | null; // highlight hue ("clay" | "sage" | "gold" | "plum"), kind "anchor" only
   annotation?: boolean; // anchor belongs to an annotation; click focuses its card
   href?: string; // navigation target, kind "link" only
-  linkTitle?: string; // target document title, kind "link" only
+  linkTitle?: string; // the other end's document title, kind "link" only
+  linkId?: string; // for arrival flashing via ?link=, kind "link" only
 };
 
 function anchorClass(color: string | null | undefined): string {
@@ -65,6 +66,7 @@ function markedText(text: string, highlights: Highlight[]) {
         <a
           key={from}
           href={link.href}
+          data-link-id={link.linkId}
           data-source-id={anchor?.sourceId ?? undefined}
           title={link.linkTitle ? `Linked: ${link.linkTitle}` : undefined}
           className={`link-mark rounded-[4px]${editedClass}`}

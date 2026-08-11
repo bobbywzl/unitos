@@ -52,11 +52,60 @@ export type LinkOut = {
   id: string;
   toDocumentId: string;
   toTitle: string;
-  quotedText: string;
+  quotedText: string; // this document's end
+  targetQuotedText: string | null; // the other end's quote; null = document-level
   orphaned: boolean; // anchor no longer resolves in the source text
   detached: boolean; // target document is not attached to this notebook
 };
-export type LinkIn = { id: string; fromDocumentId: string; fromTitle: string; quotedText: string };
+export type LinkIn = {
+  id: string;
+  fromDocumentId: string;
+  fromTitle: string;
+  quotedText: string; // the other end's quote
+  hereQuotedText: string | null; // this document's end; null = document-level
+};
+
+// ── The assistant as an actor ──────────────────────────────────────────────
+
+export type AssistantAnchor = {
+  blockId: string;
+  startOffset: number;
+  endOffset: number;
+  quotedText: string;
+  prefix: string;
+  suffix: string;
+};
+
+/** One approved-or-pending step of an assistant plan, enriched server-side so
+    the client can execute it through the normal API routes. */
+export type AssistantAction =
+  | { type: "edit_block"; blockId: string; newText: string; description: string }
+  | { type: "insert_paragraph"; afterBlockId: string; text: string; description: string }
+  | { type: "remove_block"; blockId: string; description: string }
+  | {
+      type: "highlight";
+      anchor: AssistantAnchor;
+      color: "clay" | "sage" | "gold" | "plum";
+      comment?: string;
+      description: string;
+    }
+  | { type: "comment"; anchor: AssistantAnchor; comment: string; description: string }
+  | {
+      type: "add_note";
+      content: string;
+      sectionId?: string;
+      sectionTitle?: string;
+      source?: AssistantAnchor & { documentId: string };
+      description: string;
+    }
+  | { type: "add_section"; title: string; description: string }
+  | { type: "link"; anchor: AssistantAnchor; toDocumentId: string; description: string };
+
+export type AssistantPlan = {
+  reply: string | null;
+  actions: AssistantAction[];
+  warnings: string[];
+};
 
 /** One row of the Edits tab. TEXT_EDIT rows can revert (PATCH the block back
     to `before`); link rows describe the link via meta. */

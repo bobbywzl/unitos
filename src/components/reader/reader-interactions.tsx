@@ -4,12 +4,36 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import type { SourceInput } from "@/lib/anchors/input";
+import type { AssistantAction, AssistantPlan } from "@/lib/types";
+import { LinkIcon, MicIcon, SparkleIcon } from "@/components/icons";
 import { Markdown } from "@/components/markdown";
 import type { BlockData, Highlight } from "@/components/reader/block-view";
 import { Reader } from "@/components/reader/reader";
 
 type Anchor = Omit<SourceInput, "documentId">;
-type Popover = { anchor: Anchor; x: number; y: number };
+type Popover = { anchor: Anchor; x: number; y: number; yTop: number; textLeft: number };
+
+type SpeechRec = {
+  lang: string;
+  interimResults: boolean;
+  continuous: boolean;
+  onresult: ((e: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null;
+  onend: (() => void) | null;
+  onerror: (() => void) | null;
+  start(): void;
+  stop(): void;
+};
+
+const ACTION_LABEL: Record<AssistantAction["type"], string> = {
+  edit_block: "Edit",
+  insert_paragraph: "Add paragraph",
+  remove_block: "Remove",
+  highlight: "Highlight",
+  comment: "Comment",
+  add_note: "Note",
+  add_section: "Section",
+  link: "Link",
+};
 type ExplainBubble = {
   x: number;
   y: number;
@@ -49,7 +73,7 @@ export function ReaderInteractions({
   termsByBlock: Record<string, { start: number; end: number; definition: string }[]>;
   linksByBlock: Record<
     string,
-    { linkId: string; start: number; end: number; toDocumentId: string; toTitle: string }[]
+    { linkId: string; start: number; end: number; href: string; title: string }[]
   >;
   editedByBlock: Record<string, { start: number; end: number }[]>;
 }) {
@@ -60,7 +84,7 @@ export function ReaderInteractions({
   // The popover's submenus (section list, link targets) are custom lists, not
   // native selects: the popover preventDefaults mousedown to keep the text
   // selection alive, which also keeps a native select from ever opening.
-  const [submenu, setSubmenu] = useState<null | "add" | "link">(null);
+  const [submenu, setSubmenu] = useState<null | "add" | "ai" | "comment">(null);
   const [commentDraft, setCommentDraft] = useState("");
   const [editingBlockId, setEditingBlockId] = useState<string | null>(null);
   const [bubble, setBubble] = useState<ExplainBubble | null>(null);
@@ -72,6 +96,37 @@ export function ReaderInteractions({
   const [salienceBusy, setSalienceBusy] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Two-ended linking: the first selection waits here while the reader finds
+  // the other end — in this or any other attached document. Survives document
+  // switches on purpose.
+  const [pendingLink, setPendingLink] = useState<{
+    fromDocumentId: string;
+    anchor: Anchor;
+  } | null>(null);
+
+  // The assistant as an actor: a command becomes a plan; the plan runs after
+  // approval, or immediately when the reader toggled auto.
+  const [aiCommand, setAiCommand] = useState("");
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiListening, setAiListening] = useState(false);
+  const [aiPlan, setAiPlan] = useState<AssistantPlan | null>(null);
+  const [planChecked, setPlanChecked] = useState<Set<number>>(new Set());
+  // Lazy init: the toggle only ever renders after user interaction, so the
+  // SSR pass never shows it and the localStorage read cannot mismatch.
+  const [autoRun, setAutoRun] = useState(
+    () => typeof window !== "undefined" && localStorage.getItem("unitos-assistant-auto") === "1",
+  );
+  const autoRunRef = useRef(false);
+  autoRunRef.current = autoRun;
+  const aiCommandRef = useRef("");
+  aiCommandRef.current = aiCommand;
+  const recognitionRef = useRef<SpeechRec | null>(null);
+  function setAssistantMode(auto: boolean) {
+    setAutoRun(auto);
+    autoRunRef.current = auto;
+    localStorage.setItem("unitos-assistant-auto", auto ? "1" : "0");
+  }
 
   // Switching documents client-side keeps this component mounted. Every piece
   // of selection-scoped state references the old document's blocks — drop it,
@@ -128,13 +183,17 @@ export function ReaderInteractions({
 
     const rect = range.getBoundingClientRect();
     const containerRect = container.getBoundingClientRect();
-    // Clamp so the pill and its submenus stay inside the pane.
     const rawX = rect.left + rect.width / 2 - containerRect.left;
-    const margin = Math.min(350, containerRect.width / 2);
+    const margin = Math.min(240, containerRect.width / 2);
+    // The tool rail docks in the left margin, level with the selection.
+    const articleRect = container.querySelector("article")?.getBoundingClientRect();
+    const textLeft = articleRect ? articleRect.left - containerRect.left + 24 : 24;
     return {
       anchor: { blockId, startOffset, endOffset, quotedText, prefix, suffix },
       x: Math.max(margin, Math.min(rawX, containerRect.width - margin)),
       y: rect.bottom - containerRect.top + container.scrollTop + 6,
+      yTop: Math.max(8, rect.top - containerRect.top + container.scrollTop),
+      textLeft,
     };
   }, []);
 
@@ -188,6 +247,26 @@ export function ReaderInteractions({
   useEffect(() => {
     if (src) flashSource(src);
   }, [src, flashSource]);
+
+  // Arriving through a link's other end: ?link=<id> flashes the mark here.
+  const linkParam = searchParams.get("link");
+  useEffect(() => {
+    if (!linkParam) return;
+    const container = containerRef.current;
+    if (!container) return;
+    let attempts = 0;
+    const tryScroll = () => {
+      const el = container.querySelector<HTMLElement>(`[data-link-id="${linkParam}"]`);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        el.classList.add("anchor-flash");
+        setTimeout(() => el.classList.remove("anchor-flash"), 2000);
+      } else if (attempts++ < 10) {
+        setTimeout(tryScroll, 200);
+      }
+    };
+    tryScroll();
+  }, [linkParam]);
 
   // Jump from the Annotations panel: works even when ?src is already this anchor.
   useEffect(() => {
@@ -369,31 +448,240 @@ export function ReaderInteractions({
     }
   }
 
-  // Cross-document link: the selection becomes a hyperlink to another attached
-  // document. Recorded in the edit history; heals like any other anchor.
-  async function createLink(toDocumentId: string) {
-    if (!popover || busy) return;
-    const { anchor } = popover;
+  // Two-ended link, phase 1: hold this selection as the first end.
+  function beginLink() {
+    if (!popover) return;
+    setPendingLink({ fromDocumentId: documentId, anchor: popover.anchor });
+    setPopover(null);
+    setSubmenu(null);
+    window.getSelection()?.removeAllRanges();
+  }
+
+  // Phase 2: the current selection is the other end. Both ends paint and
+  // navigate to each other; the pair lists in the Annotations tab.
+  async function completeLink() {
+    if (!popover || !pendingLink || busy) return;
+    const from = pendingLink.anchor;
+    const to = popover.anchor;
+    if (
+      pendingLink.fromDocumentId === documentId &&
+      from.blockId === to.blockId &&
+      from.startOffset === to.startOffset
+    ) {
+      showToast("Select a different passage for the other end.");
+      return;
+    }
     setBusy(true);
     try {
-      const res = await fetch("/api/links", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fromDocumentId: documentId, toDocumentId, anchor }),
+      await api("/api/links", "POST", {
+        fromDocumentId: pendingLink.fromDocumentId,
+        toDocumentId: documentId,
+        anchor: from,
+        toAnchor: to,
       });
-      if (!res.ok) {
-        const detail = (await res.json().catch(() => null)) as { error?: string } | null;
-        throw new Error(detail?.error ?? `Link failed (${res.status})`);
-      }
+      setPendingLink(null);
       setPopover(null);
       setSubmenu(null);
       window.getSelection()?.removeAllRanges();
       router.refresh();
+      showToast("Link created");
     } catch (err) {
       showToast(err instanceof Error ? err.message : "Link failed");
     } finally {
       setBusy(false);
     }
+  }
+
+  // The assistant engine: command → server-validated plan → approval → the
+  // normal API routes. Auto mode skips approval; the toggle persists.
+  async function runAssistant(commandText?: string) {
+    const command = (commandText ?? aiCommandRef.current).trim();
+    if (!command || aiBusy || !popover) return;
+    const { anchor, x, y } = popover;
+    setAiBusy(true);
+    try {
+      const res = await fetch("/api/assistant/act", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          notebookId,
+          documentId,
+          command,
+          anchor: {
+            blockId: anchor.blockId,
+            startOffset: anchor.startOffset,
+            endOffset: anchor.endOffset,
+          },
+        }),
+      });
+      const plan = (await res.json().catch(() => null)) as
+        | (AssistantPlan & { error?: string })
+        | null;
+      if (!res.ok || !plan) throw new Error(plan?.error ?? `Assistant failed (${res.status})`);
+      setPopover(null);
+      setSubmenu(null);
+      setAiCommand("");
+      window.getSelection()?.removeAllRanges();
+      if (plan.reply) {
+        setBubble({ x, y, text: plan.reply, streaming: false, error: null });
+      }
+      if (plan.actions.length === 0) {
+        if (!plan.reply) showToast(plan.warnings[0] ?? "The assistant proposed no actions.");
+      } else if (autoRunRef.current) {
+        await executePlan(plan.actions, plan.warnings);
+      } else {
+        setAiPlan(plan);
+        setPlanChecked(new Set(plan.actions.map((_, i) => i)));
+      }
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Assistant failed");
+    } finally {
+      setAiBusy(false);
+    }
+  }
+
+  async function executePlan(actions: AssistantAction[], warnings: string[] = []) {
+    const sectionIdByTitle = new Map(
+      sectionChoices.map((c) => [c.label.toLowerCase(), c.id] as const),
+    );
+    let applied = 0;
+    const failed: string[] = [];
+    for (const action of actions) {
+      try {
+        switch (action.type) {
+          case "add_section": {
+            const created = await api<{ id: string }>("/api/sections", "POST", {
+              notebookId,
+              title: action.title,
+              parentId: null,
+            });
+            sectionIdByTitle.set(action.title.toLowerCase(), created.id);
+            break;
+          }
+          case "edit_block":
+            await api(`/api/blocks/${action.blockId}`, "PATCH", { text: action.newText });
+            break;
+          case "insert_paragraph":
+            await api("/api/blocks", "POST", {
+              documentId,
+              afterBlockId: action.afterBlockId,
+              text: action.text,
+            });
+            break;
+          case "remove_block":
+            await api(`/api/blocks/${action.blockId}`, "DELETE");
+            break;
+          case "highlight":
+            await api("/api/annotations", "POST", {
+              notebookId,
+              documentId,
+              anchor: action.anchor,
+              color: action.color,
+              comment: action.comment,
+            });
+            break;
+          case "comment":
+            await api("/api/annotations", "POST", {
+              notebookId,
+              documentId,
+              anchor: action.anchor,
+              comment: action.comment,
+            });
+            break;
+          case "add_note": {
+            let sectionId =
+              action.sectionId ??
+              (action.sectionTitle
+                ? sectionIdByTitle.get(action.sectionTitle.toLowerCase())
+                : undefined);
+            if (!sectionId) {
+              const title = action.sectionTitle ?? "Notes";
+              const created = await api<{ id: string }>("/api/sections", "POST", {
+                notebookId,
+                title,
+                parentId: null,
+              });
+              sectionId = created.id;
+              sectionIdByTitle.set(title.toLowerCase(), created.id);
+            }
+            await api("/api/notes", "POST", {
+              sectionId,
+              content: action.content,
+              source: action.source,
+            });
+            break;
+          }
+          case "link":
+            await api("/api/links", "POST", {
+              fromDocumentId: documentId,
+              toDocumentId: action.toDocumentId,
+              anchor: action.anchor,
+            });
+            break;
+        }
+        applied += 1;
+      } catch {
+        failed.push(action.description);
+      }
+    }
+    router.refresh();
+    const summary = [
+      `${applied} action${applied === 1 ? "" : "s"} applied`,
+      ...(failed.length > 0 ? [`failed: ${failed[0]}`] : []),
+      ...(warnings.length > 0 ? [warnings[0]] : []),
+    ].join(" · ");
+    showToast(summary);
+  }
+
+  async function approvePlan() {
+    if (!aiPlan) return;
+    const actions = aiPlan.actions.filter((_, i) => planChecked.has(i));
+    setAiPlan(null);
+    await executePlan(actions, aiPlan.warnings);
+  }
+
+  // Voice command: browser speech recognition fills the box; in auto mode the
+  // command runs when speech ends.
+  function toggleVoice() {
+    if (aiListening) {
+      recognitionRef.current?.stop();
+      return;
+    }
+    const w = window as unknown as {
+      SpeechRecognition?: new () => SpeechRec;
+      webkitSpeechRecognition?: new () => SpeechRec;
+    };
+    const Ctor = w.SpeechRecognition ?? w.webkitSpeechRecognition;
+    if (!Ctor) {
+      showToast("Voice input is not available in this browser.");
+      return;
+    }
+    const rec = new Ctor();
+    rec.lang = navigator.language || "en-US";
+    rec.interimResults = true;
+    rec.continuous = false;
+    rec.onresult = (e) => {
+      const transcript = Array.from(
+        e.results as ArrayLike<ArrayLike<{ transcript: string }>>,
+        (r) => r[0].transcript,
+      ).join(" ");
+      setAiCommand(transcript);
+      aiCommandRef.current = transcript;
+    };
+    rec.onend = () => {
+      setAiListening(false);
+      recognitionRef.current = null;
+      if (autoRunRef.current && aiCommandRef.current.trim()) {
+        void runAssistant(aiCommandRef.current);
+      }
+    };
+    rec.onerror = () => {
+      setAiListening(false);
+      recognitionRef.current = null;
+    };
+    recognitionRef.current = rec;
+    setAiListening(true);
+    rec.start();
   }
 
   // Block editing: every save lands as a TEXT_EDIT in the edit history.
@@ -497,8 +785,9 @@ export function ReaderInteractions({
         start: l.start,
         end: l.end,
         kind: "link" as const,
-        href: `/n/${notebookId}?doc=${l.toDocumentId}`,
-        linkTitle: l.toTitle,
+        href: l.href,
+        linkTitle: l.title,
+        linkId: l.linkId,
       })),
     ];
   }
@@ -569,170 +858,226 @@ export function ReaderInteractions({
         <div
           data-selection-popover
           onMouseDown={(e) => {
-            // Keep the text selection alive under the popover — but let fields
-            // take focus, or the comment box could never place a caret.
+            // Keep the text selection alive under the rail — but let fields
+            // take focus, or the inputs could never place a caret.
             const target = e.target as HTMLElement;
             if (target.closest("textarea, input")) return;
             e.preventDefault();
           }}
-          className="absolute z-20 flex -translate-x-1/2 flex-col items-center gap-1.5"
-          style={{ left: popover.x, top: popover.y }}
+          className="absolute z-20 flex flex-col gap-0.5 rounded-2xl bg-card p-1.5 shadow-float"
+          style={{
+            top: popover.yTop,
+            left: Math.max(
+              6,
+              popover.textLeft - (submenu === "ai" || submenu === "comment" ? 248 : 116) - 10,
+            ),
+            width: submenu === "ai" || submenu === "comment" ? 248 : 116,
+          }}
         >
-          <div className="flex items-center gap-0.5 rounded-full bg-card p-1.5 shadow-float">
+          {pendingLink && (
             <button
-              onClick={() => void explain()}
-              className="rounded-full bg-clay px-4 py-[7px] text-[13px] font-semibold text-clay-fg hover:bg-clay-600"
-            >
-              Explain
-            </button>
-            <button
-              onClick={() => void simplify()}
-              className="rounded-full px-[13px] py-[7px] text-[13px] text-sand-800 hover:bg-clay-100 hover:text-clay-800"
-            >
-              Simplify
-            </button>
-            <button
-              onClick={() => void extract()}
               disabled={busy}
-              className="rounded-full px-[13px] py-[7px] text-[13px] text-sand-800 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40"
+              onClick={() => void completeLink()}
+              className="flex w-full items-center gap-1.5 rounded-full bg-sage-600 px-2.5 py-[5px] text-left text-[12px] font-semibold text-sage-fg hover:bg-sage-700 disabled:opacity-40"
             >
-              Extract
+              <LinkIcon size={12} />
+              Link here
             </button>
-            {sectionChoices.length > 0 && (
+          )}
+
+          <button
+            onClick={() => setSubmenu(submenu === "ai" ? null : "ai")}
+            aria-expanded={submenu === "ai"}
+            className={`flex w-full items-center gap-1.5 rounded-full px-2.5 py-[5px] text-left text-[12px] font-semibold ${
+              submenu === "ai"
+                ? "bg-clay-100 text-clay-800"
+                : "text-clay-700 hover:bg-clay-100 hover:text-clay-800"
+            }`}
+          >
+            <SparkleIcon size={12} />
+            Assistant
+          </button>
+          {submenu === "ai" && (
+            <div className="flex flex-col gap-1.5 p-1">
+              <textarea
+                autoFocus
+                value={aiCommand}
+                onChange={(e) => setAiCommand(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    void runAssistant();
+                  }
+                  if (e.key === "Escape") setSubmenu(null);
+                }}
+                placeholder="Tell the assistant what to do with this selection…"
+                rows={2}
+                className="w-full resize-none rounded-xl bg-sand-100 p-2 text-[12px] outline-none placeholder:text-sand-500"
+              />
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={toggleVoice}
+                  aria-label={aiListening ? "Stop listening" : "Speak the command"}
+                  title={aiListening ? "Stop listening" : "Speak the command"}
+                  className={`flex size-7 items-center justify-center rounded-full ${
+                    aiListening
+                      ? "animate-pulse bg-red-500 text-white"
+                      : "text-sand-600 hover:bg-clay-100 hover:text-clay-800"
+                  }`}
+                >
+                  <MicIcon size={13} />
+                </button>
+                <div
+                  className="flex overflow-hidden rounded-full border border-line text-[10px] font-semibold"
+                  title="Ask first shows every plan for approval. Auto applies it immediately."
+                >
+                  <button
+                    onClick={() => setAssistantMode(false)}
+                    className={autoRun ? "px-2 py-0.5 text-sand-600" : "bg-ink px-2 py-0.5 text-paper"}
+                  >
+                    Ask
+                  </button>
+                  <button
+                    onClick={() => setAssistantMode(true)}
+                    className={autoRun ? "bg-ink px-2 py-0.5 text-paper" : "px-2 py-0.5 text-sand-600"}
+                  >
+                    Auto
+                  </button>
+                </div>
+                <button
+                  disabled={aiBusy || !aiCommand.trim()}
+                  onClick={() => void runAssistant()}
+                  className="ml-auto rounded-full bg-clay px-3 py-1 text-[11px] font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
+                >
+                  {aiBusy ? "Working…" : "Run"}
+                </button>
+              </div>
+            </div>
+          )}
+
+          <button
+            onClick={() => void explain()}
+            className="flex w-full items-center rounded-full px-2.5 py-[5px] text-left text-[12px] text-sand-800 hover:bg-clay-100 hover:text-clay-800"
+          >
+            Explain
+          </button>
+          <button
+            onClick={() => void simplify()}
+            className="flex w-full items-center rounded-full px-2.5 py-[5px] text-left text-[12px] text-sand-800 hover:bg-clay-100 hover:text-clay-800"
+          >
+            Simplify
+          </button>
+          <button
+            onClick={() => void extract()}
+            disabled={busy}
+            className="flex w-full items-center rounded-full px-2.5 py-[5px] text-left text-[12px] text-sand-800 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40"
+          >
+            Extract
+          </button>
+
+          <div className="flex items-center gap-1.5 px-2.5 py-1">
+            {(["clay", "sage", "gold", "plum"] as const).map((color) => (
               <button
+                key={color}
                 disabled={busy}
-                onClick={() => setSubmenu(submenu === "add" ? null : "add")}
-                aria-expanded={submenu === "add"}
-                className={`rounded-full px-[13px] py-[7px] text-[13px] disabled:opacity-40 ${
-                  submenu === "add"
-                    ? "bg-clay-100 text-clay-800"
-                    : "text-sand-800 hover:bg-clay-100 hover:text-clay-800"
-                }`}
-                title="Add the selection to a section as a manual note"
-              >
-                Add to ▾
-              </button>
-            )}
-            <button
-              disabled={busy}
-              onClick={() => setSubmenu(submenu === "link" ? null : "link")}
-              aria-expanded={submenu === "link"}
-              className={`rounded-full px-[13px] py-[7px] text-[13px] disabled:opacity-40 ${
-                submenu === "link"
-                  ? "bg-clay-100 text-clay-800"
-                  : "text-sand-800 hover:bg-clay-100 hover:text-clay-800"
-              }`}
-              title="Link this passage to another document"
-            >
-              Link ▾
-            </button>
-            <button
-              onClick={() => setPopover(null)}
-              className="flex size-[30px] items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-800"
-              aria-label="Close"
-            >
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.75"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M18 6 6 18" />
-                <path d="m6 6 12 12" />
-              </svg>
-            </button>
+                onClick={() => void annotate({ color, comment: commentDraft.trim() || undefined })}
+                aria-label={`Highlight in ${color}`}
+                title={`Highlight in ${color}${commentDraft.trim() ? " with your note" : ""}`}
+                className="size-[18px] rounded-full transition-transform hover:scale-110 disabled:opacity-40"
+                style={{
+                  background:
+                    color === "clay"
+                      ? "var(--clay-400)"
+                      : color === "sage"
+                        ? "var(--sage-500)"
+                        : color === "gold"
+                          ? "#d9a54a"
+                          : "#a78bfa",
+                }}
+              />
+            ))}
           </div>
 
-          <div className="flex w-full items-center gap-1.5">
-            <div className="flex shrink-0 items-center gap-1.5 rounded-full bg-card p-2 shadow-float">
-              {(["clay", "sage", "gold", "plum"] as const).map((color) => (
-                <button
-                  key={color}
-                  disabled={busy}
-                  onClick={() =>
-                    void annotate({ color, comment: commentDraft.trim() || undefined })
-                  }
-                  aria-label={`Highlight in ${color}`}
-                  title={`Highlight in ${color}${commentDraft.trim() ? " with your note" : ""}`}
-                  className="size-[22px] rounded-full transition-transform hover:scale-110 disabled:opacity-40"
-                  style={{
-                    background:
-                      color === "clay"
-                        ? "var(--clay-400)"
-                        : color === "sage"
-                          ? "var(--sage-500)"
-                          : color === "gold"
-                            ? "#d9a54a"
-                            : "#a78bfa",
-                  }}
-                />
-              ))}
-            </div>
+          <button
+            onClick={() => setSubmenu(submenu === "comment" ? null : "comment")}
+            aria-expanded={submenu === "comment"}
+            className={`flex w-full items-center rounded-full px-2.5 py-[5px] text-left text-[12px] ${
+              submenu === "comment"
+                ? "bg-clay-100 text-clay-800"
+                : "text-sand-800 hover:bg-clay-100 hover:text-clay-800"
+            }`}
+          >
+            Comment
+          </button>
+          {submenu === "comment" && (
             <form
-              className="flex min-w-0 flex-1 items-center gap-1 rounded-full bg-card p-1.5 shadow-float"
+              className="flex flex-col gap-1.5 p-1"
               onSubmit={(e) => {
                 e.preventDefault();
                 if (commentDraft.trim()) void annotate({ comment: commentDraft });
               }}
             >
-              <input
+              <textarea
+                autoFocus
                 value={commentDraft}
                 onChange={(e) => setCommentDraft(e.target.value)}
-                placeholder="Comment…"
-                aria-label="Comment on this passage"
-                className="w-40 min-w-0 flex-1 bg-transparent px-2.5 text-[13px] outline-none placeholder:text-sand-500"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey && commentDraft.trim()) {
+                    e.preventDefault();
+                    void annotate({ comment: commentDraft });
+                  }
+                  if (e.key === "Escape") setSubmenu(null);
+                }}
+                placeholder="Comment on this passage — or pick a color to attach it to a highlight"
+                rows={2}
+                className="w-full resize-none rounded-xl bg-sand-100 p-2 text-[12px] outline-none placeholder:text-sand-500"
               />
               <button
                 type="submit"
                 disabled={busy || !commentDraft.trim()}
-                className="rounded-full bg-clay px-3.5 py-[5px] text-xs font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
+                className="self-end rounded-full bg-clay px-3 py-1 text-[11px] font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
               >
                 Save
               </button>
             </form>
-          </div>
+          )}
 
+          {sectionChoices.length > 0 && (
+            <button
+              onClick={() => setSubmenu(submenu === "add" ? null : "add")}
+              aria-expanded={submenu === "add"}
+              className={`flex w-full items-center rounded-full px-2.5 py-[5px] text-left text-[12px] ${
+                submenu === "add"
+                  ? "bg-clay-100 text-clay-800"
+                  : "text-sand-800 hover:bg-clay-100 hover:text-clay-800"
+              }`}
+            >
+              Add to ▾
+            </button>
+          )}
           {submenu === "add" && (
-            <div className="flex max-h-60 w-64 flex-col overflow-y-auto rounded-2xl bg-card py-1 shadow-float">
-              {sectionChoices.map((s) => (
+            <div className="flex max-h-44 flex-col overflow-y-auto">
+              {sectionChoices.map((choice) => (
                 <button
-                  key={s.id}
+                  key={choice.id}
                   disabled={busy}
-                  onClick={() => void addToSection(s.id)}
-                  className="truncate px-4 py-2 text-left text-[13px] text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40"
+                  onClick={() => void addToSection(choice.id)}
+                  className="truncate rounded-full px-2.5 py-[5px] text-left text-[12px] text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40"
                 >
-                  {s.label}
+                  {choice.label}
                 </button>
               ))}
             </div>
           )}
 
-          {submenu === "link" && (
-            <div className="flex max-h-60 w-64 flex-col overflow-y-auto rounded-2xl bg-card py-1 shadow-float">
-              {attachedDocuments.filter((d) => d.id !== documentId).length === 0 ? (
-                <p className="px-4 py-2 text-[13px] text-sand-600">
-                  Attach another document to link to it.
-                </p>
-              ) : (
-                attachedDocuments
-                  .filter((d) => d.id !== documentId)
-                  .map((d) => (
-                    <button
-                      key={d.id}
-                      disabled={busy}
-                      onClick={() => void createLink(d.id)}
-                      className="truncate px-4 py-2 text-left text-[13px] text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40"
-                    >
-                      {d.title}
-                    </button>
-                  ))
-              )}
-            </div>
-          )}
+          <button
+            onClick={beginLink}
+            title="Link this passage to a passage in this or another document"
+            className="flex w-full items-center gap-1.5 rounded-full px-2.5 py-[5px] text-left text-[12px] text-sand-800 hover:bg-clay-100 hover:text-clay-800"
+          >
+            <LinkIcon size={12} />
+            Link…
+          </button>
         </div>
       )}
 
@@ -763,6 +1108,91 @@ export function ReaderInteractions({
           ) : (
             <p className="text-sm text-sand-500">…</p>
           )}
+        </div>
+      )}
+
+      {pendingLink && (
+        <div className="fixed top-24 left-1/2 z-40 flex max-w-[80vw] -translate-x-1/2 items-center gap-3 rounded-full bg-card px-4 py-2 shadow-float">
+          <LinkIcon size={14} className="shrink-0 text-clay" />
+          <span className="truncate text-[12.5px] text-sand-700">
+            Linking “{pendingLink.anchor.quotedText.slice(0, 48)}
+            {pendingLink.anchor.quotedText.length > 48 ? "…" : ""}” from{" "}
+            {pendingLink.fromDocumentId === documentId
+              ? "this document"
+              : (attachedDocuments.find((d) => d.id === pendingLink.fromDocumentId)?.title ??
+                "another document")}{" "}
+            — select the other end, then press Link here
+          </span>
+          <button
+            onClick={() => setPendingLink(null)}
+            aria-label="Cancel the link"
+            className="shrink-0 text-xs text-sand-500 hover:text-clay-700"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
+      {aiPlan && (
+        <div className="fixed bottom-6 left-1/2 z-40 w-[440px] max-w-[92vw] -translate-x-1/2 rounded-[24px] bg-card p-4 shadow-float">
+          <div className="mb-2 flex items-center gap-2">
+            <SparkleIcon size={15} className="text-clay" />
+            <span className="font-display text-[15px]">Assistant plan</span>
+            <span className="ml-auto rounded-full bg-sand-200 px-2.5 py-0.5 text-[10px] font-semibold text-sand-600">
+              Ask first
+            </span>
+          </div>
+          {aiPlan.reply && (
+            <div className="mb-2 max-h-36 overflow-y-auto text-[13px]">
+              <Markdown>{aiPlan.reply}</Markdown>
+            </div>
+          )}
+          <div className="flex max-h-56 flex-col gap-1.5 overflow-y-auto">
+            {aiPlan.actions.map((action, i) => (
+              <label
+                key={i}
+                className="flex cursor-pointer items-start gap-2 rounded-xl bg-sand-100 px-3 py-2 text-[12.5px]"
+              >
+                <input
+                  type="checkbox"
+                  className="mt-0.5 accent-clay"
+                  checked={planChecked.has(i)}
+                  onChange={() =>
+                    setPlanChecked((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(i)) next.delete(i);
+                      else next.add(i);
+                      return next;
+                    })
+                  }
+                />
+                <span>
+                  <span className="mr-1.5 rounded-full bg-sand-200 px-2 py-0.5 text-[10px] font-semibold text-sand-700">
+                    {ACTION_LABEL[action.type]}
+                  </span>
+                  {action.description}
+                </span>
+              </label>
+            ))}
+          </div>
+          {aiPlan.warnings.length > 0 && (
+            <p className="mt-2 text-[11px] text-sand-500">{aiPlan.warnings.join(" ")}</p>
+          )}
+          <div className="mt-3 flex items-center gap-2">
+            <button
+              disabled={planChecked.size === 0}
+              onClick={() => void approvePlan()}
+              className="rounded-full bg-clay px-4 py-1.5 text-xs font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
+            >
+              Apply {planChecked.size} action{planChecked.size === 1 ? "" : "s"}
+            </button>
+            <button
+              onClick={() => setAiPlan(null)}
+              className="rounded-full border border-line px-3 py-1 text-xs text-sand-700 hover:bg-clay-100 hover:text-clay-800"
+            >
+              Cancel
+            </button>
+          </div>
         </div>
       )}
     </div>

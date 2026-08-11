@@ -16,6 +16,7 @@ const createSchema = z.object({
   fromDocumentId: z.string().min(1),
   toDocumentId: z.string().min(1),
   anchor: anchorSchema,
+  toAnchor: anchorSchema.optional(), // the other end; absent = document-level link
 });
 
 // Link a text range in one document to another document. Recorded as a LINK_ADD
@@ -24,8 +25,8 @@ export async function POST(req: Request) {
   const { data, error } = await parseBody(req, createSchema);
   if (error) return error;
 
-  if (data.fromDocumentId === data.toDocumentId) {
-    return NextResponse.json({ error: "A document cannot link to itself" }, { status: 400 });
+  if (data.fromDocumentId === data.toDocumentId && !data.toAnchor) {
+    return NextResponse.json({ error: "A document-level link cannot point at itself" }, { status: 400 });
   }
 
   if (data.anchor.endOffset <= data.anchor.startOffset) {
@@ -38,6 +39,16 @@ export async function POST(req: Request) {
   const block = await db.block.findUnique({ where: { id: data.anchor.blockId } });
   if (!block || block.documentId !== data.fromDocumentId) {
     return NextResponse.json({ error: "Block not found in this document" }, { status: 404 });
+  }
+
+  if (data.toAnchor) {
+    if (data.toAnchor.endOffset <= data.toAnchor.startOffset) {
+      return NextResponse.json({ error: "Anchor offsets are invalid" }, { status: 400 });
+    }
+    const toBlock = await db.block.findUnique({ where: { id: data.toAnchor.blockId } });
+    if (!toBlock || toBlock.documentId !== data.toDocumentId) {
+      return NextResponse.json({ error: "Block not found in the target document" }, { status: 404 });
+    }
   }
 
   const toDocument = await db.document.findUnique({ where: { id: data.toDocumentId } });
@@ -54,6 +65,16 @@ export async function POST(req: Request) {
         prefix: data.anchor.prefix,
         suffix: data.anchor.suffix,
         toDocumentId: data.toDocumentId,
+        ...(data.toAnchor
+          ? {
+              toBlockId: data.toAnchor.blockId,
+              toStartOffset: data.toAnchor.startOffset,
+              toEndOffset: data.toAnchor.endOffset,
+              toQuotedText: data.toAnchor.quotedText,
+              toPrefix: data.toAnchor.prefix,
+              toSuffix: data.toAnchor.suffix,
+            }
+          : {}),
       },
     });
     await tx.blockEdit.create({
