@@ -10,18 +10,20 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ linkId: str
   });
   if (!link) return NextResponse.json({ error: "Link not found" }, { status: 404 });
 
-  await db.docLink.delete({ where: { id: linkId } });
-  await db.blockEdit.create({
-    data: {
-      documentId: link.fromDocumentId,
-      blockId: link.fromBlockId,
-      kind: "LINK_REMOVE",
-      meta: {
-        toDocumentId: link.toDocumentId,
-        toTitle: link.toDocument.title,
-        quotedText: link.quotedText,
+  await db.$transaction([
+    db.docLink.delete({ where: { id: linkId } }),
+    db.blockEdit.create({
+      data: {
+        documentId: link.fromDocumentId,
+        blockId: link.fromBlockId,
+        kind: "LINK_REMOVE",
+        meta: {
+          toDocumentId: link.toDocumentId,
+          toTitle: link.toDocument.title,
+          quotedText: link.quotedText,
+        },
       },
-    },
-  });
+    }),
+  ]);
   return NextResponse.json({ ok: true });
 }

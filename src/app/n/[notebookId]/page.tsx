@@ -231,13 +231,8 @@ export default async function NotebookPage(props: {
       }),
     ]);
     const blockById = new Map(activeDocument.blocks.map((b) => [b.id, b]));
+    const attachedIds = new Set(attached.map((d) => d.id));
     for (const link of outgoing) {
-      linksOut.push({
-        id: link.id,
-        toDocumentId: link.toDocumentId,
-        toTitle: link.toDocument.title,
-        quotedText: link.quotedText,
-      });
       // Same ladder as resolveDocumentSources: stored offsets, re-find in the
       // stored block, re-find across all blocks (re-parse gives new block ids).
       // Rebinds are written back so links self-heal like note anchors.
@@ -260,6 +255,15 @@ export default async function NotebookPage(props: {
           }
         }
       }
+      const detached = !attachedIds.has(link.toDocumentId);
+      linksOut.push({
+        id: link.id,
+        toDocumentId: link.toDocumentId,
+        toTitle: link.toDocument.title,
+        quotedText: link.quotedText,
+        orphaned: resolved === null,
+        detached,
+      });
       if (!resolved) continue;
       if (
         resolved.blockId !== link.fromBlockId ||
@@ -275,6 +279,9 @@ export default async function NotebookPage(props: {
           },
         });
       }
+      // A link to a detached document would fall back to the first attached
+      // document on click — list it in the panel, do not paint it as a link.
+      if (detached) continue;
       const list = linksByBlock[resolved.blockId] ?? [];
       list.push({
         linkId: link.id,

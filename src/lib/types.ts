@@ -48,7 +48,14 @@ export type AnnotationItem = {
   orphaned: boolean;
 };
 
-export type LinkOut = { id: string; toDocumentId: string; toTitle: string; quotedText: string };
+export type LinkOut = {
+  id: string;
+  toDocumentId: string;
+  toTitle: string;
+  quotedText: string;
+  orphaned: boolean; // anchor no longer resolves in the source text
+  detached: boolean; // target document is not attached to this notebook
+};
 export type LinkIn = { id: string; fromDocumentId: string; fromTitle: string; quotedText: string };
 
 /** One row of the Edits tab. TEXT_EDIT rows can revert (PATCH the block back

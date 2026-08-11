@@ -28,8 +28,17 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "A document cannot link to itself" }, { status: 400 });
   }
 
+  if (data.anchor.endOffset <= data.anchor.startOffset) {
+    return NextResponse.json({ error: "Anchor offsets are invalid" }, { status: 400 });
+  }
+
   const fromDocument = await db.document.findUnique({ where: { id: data.fromDocumentId } });
   if (!fromDocument) return NextResponse.json({ error: "Document not found" }, { status: 404 });
+
+  const block = await db.block.findUnique({ where: { id: data.anchor.blockId } });
+  if (!block || block.documentId !== data.fromDocumentId) {
+    return NextResponse.json({ error: "Block not found in this document" }, { status: 404 });
+  }
 
   const toDocument = await db.document.findUnique({ where: { id: data.toDocumentId } });
   if (!toDocument) return NextResponse.json({ error: "Document not found" }, { status: 404 });

@@ -36,16 +36,24 @@ function AnnotationActions({
   documentId: string | null;
   onDelete: (id: string) => Promise<void>;
 }) {
+  const router = useRouter();
   const canJump = Boolean(annotation.sourceId) && !annotation.orphaned && documentId !== null;
+
+  function jump() {
+    router.push(`/n/${notebookId}?doc=${documentId}&src=${annotation.sourceId}`);
+    // The ?src effect only re-runs when the param changes; the event covers a
+    // second Jump to the same annotation.
+    window.dispatchEvent(
+      new CustomEvent("dissect:flash-source", { detail: { sourceId: annotation.sourceId } }),
+    );
+  }
+
   return (
     <div className="mt-2 flex items-center gap-3">
       {canJump && (
-        <Link
-          href={`/n/${notebookId}?doc=${documentId}&src=${annotation.sourceId}`}
-          className="text-xs text-sand-600 hover:text-clay-700"
-        >
+        <button onClick={jump} className="text-xs text-sand-600 hover:text-clay-700">
           Jump
-        </Link>
+        </button>
       )}
       {annotation.orphaned && (
         <span className="text-[11px] font-semibold text-red-500">Anchor unresolved</span>
@@ -184,10 +192,19 @@ export function AnnotationsPanel({
           {linksOut.map((l) => (
             <div key={l.id} className={card}>
               <p className="line-clamp-2 text-[13px]">{l.quotedText}</p>
-              <div className="mt-2 flex items-center gap-3">
-                <Link href={`/n/${notebookId}?doc=${l.toDocumentId}`} className={chip}>
-                  → {l.toTitle}
-                </Link>
+              <div className="mt-2 flex flex-wrap items-center gap-3">
+                {l.detached ? (
+                  <span className="rounded-full bg-sand-200 px-2.5 py-0.5 text-[11px] font-semibold text-sand-600">
+                    → {l.toTitle} · not attached
+                  </span>
+                ) : (
+                  <Link href={`/n/${notebookId}?doc=${l.toDocumentId}`} className={chip}>
+                    → {l.toTitle}
+                  </Link>
+                )}
+                {l.orphaned && (
+                  <span className="text-[11px] font-semibold text-red-500">Anchor unresolved</span>
+                )}
                 <button
                   onClick={() => void removeLink(l.id)}
                   className="text-xs text-red-500 hover:text-red-700"

@@ -28,11 +28,29 @@ export async function POST(req: Request) {
   const { data, error } = await parseBody(req, createSchema);
   if (error) return error;
 
+  if (data.comment !== undefined && !data.comment.trim()) {
+    return NextResponse.json({ error: "Comment is empty" }, { status: 400 });
+  }
+  if (data.anchor.endOffset <= data.anchor.startOffset) {
+    return NextResponse.json({ error: "Anchor offsets are invalid" }, { status: 400 });
+  }
+
   const notebook = await db.notebook.findUnique({ where: { id: data.notebookId } });
   if (!notebook) return NextResponse.json({ error: "Notebook not found" }, { status: 404 });
 
-  const document = await db.document.findUnique({ where: { id: data.documentId } });
-  if (!document) return NextResponse.json({ error: "Document not found" }, { status: 404 });
+  const attachment = await db.notebookDocument.findUnique({
+    where: {
+      notebookId_documentId: { notebookId: data.notebookId, documentId: data.documentId },
+    },
+  });
+  if (!attachment) {
+    return NextResponse.json({ error: "Document is not attached to this notebook" }, { status: 404 });
+  }
+
+  const block = await db.block.findUnique({ where: { id: data.anchor.blockId } });
+  if (!block || block.documentId !== data.documentId) {
+    return NextResponse.json({ error: "Block not found in this document" }, { status: 404 });
+  }
 
   const section = await annotationsSection(data.notebookId);
   const order = await db.note.count({ where: { sectionId: section.id } });

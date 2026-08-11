@@ -163,15 +163,13 @@ export function ReaderInteractions({
     return () => container.removeEventListener("mouseup", onMouseUp);
   }, [captureSelection, documentId]);
 
-  // Source chip navigation: ?src=<sourceId> scrolls to the anchor and flashes it.
-  const src = searchParams.get("src");
-  useEffect(() => {
-    if (!src) return;
+  // Scroll to an anchor and flash it. Retries while the refreshed tree paints.
+  const flashSource = useCallback((sourceId: string) => {
     const container = containerRef.current;
     if (!container) return;
     let attempts = 0;
     const tryScroll = () => {
-      const el = container.querySelector<HTMLElement>(`[data-source-id="${src}"]`);
+      const el = container.querySelector<HTMLElement>(`[data-source-id="${sourceId}"]`);
       if (el) {
         el.scrollIntoView({ behavior: "smooth", block: "center" });
         el.classList.add("anchor-flash");
@@ -181,7 +179,23 @@ export function ReaderInteractions({
       }
     };
     tryScroll();
-  }, [src]);
+  }, []);
+
+  // Source chip navigation: ?src=<sourceId> scrolls to the anchor and flashes it.
+  const src = searchParams.get("src");
+  useEffect(() => {
+    if (src) flashSource(src);
+  }, [src, flashSource]);
+
+  // Jump from the Annotations panel: works even when ?src is already this anchor.
+  useEffect(() => {
+    const onFlash = (e: Event) => {
+      const { sourceId } = (e as CustomEvent<{ sourceId: string | null }>).detail;
+      if (sourceId) flashSource(sourceId);
+    };
+    window.addEventListener("dissect:flash-source", onFlash);
+    return () => window.removeEventListener("dissect:flash-source", onFlash);
+  }, [flashSource]);
 
   function showToast(message: string) {
     setToast(message);
