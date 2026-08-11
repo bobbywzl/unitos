@@ -1,6 +1,7 @@
 import { Logo } from "@/components/logo";
 import { notFound } from "next/navigation";
 import { matchInText } from "@/lib/anchors/match";
+import { editedRanges } from "@/lib/diff";
 import { resolveDocumentSources } from "@/lib/anchors/resolve";
 import { USER_ID } from "@/lib/constants";
 import { db } from "@/lib/db";
@@ -306,6 +307,17 @@ export default async function NotebookPage(props: {
     }
   }
 
+  // Edited-vs-original coloring: spans of each block that differ from the text
+  // as first parsed render in the edited color.
+  const editedByBlock: Record<string, { start: number; end: number }[]> = {};
+  if (activeDocument) {
+    for (const b of activeDocument.blocks) {
+      if (b.originalText === null || b.originalText === b.text) continue;
+      const ranges = editedRanges(b.originalText, b.text);
+      if (ranges.length > 0) editedByBlock[b.id] = ranges;
+    }
+  }
+
   // Edit history for the open document, newest first.
   const edits: EditItem[] = activeDocument
     ? (
@@ -386,6 +398,7 @@ export default async function NotebookPage(props: {
               hasSalience={hasSalience}
               termsByBlock={termsByBlock}
               linksByBlock={linksByBlock}
+              editedByBlock={editedByBlock}
             />
           </div>
         ) : (

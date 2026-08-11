@@ -32,6 +32,7 @@ export function ReaderInteractions({
   hasSalience,
   termsByBlock,
   linksByBlock,
+  editedByBlock,
 }: {
   documentId: string;
   notebookId: string;
@@ -50,6 +51,7 @@ export function ReaderInteractions({
     string,
     { linkId: string; start: number; end: number; toDocumentId: string; toTitle: string }[]
   >;
+  editedByBlock: Record<string, { start: number; end: number }[]>;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -401,6 +403,37 @@ export function ReaderInteractions({
     setEditingBlockId(blockId);
   }
 
+  // Whole-document editing: insert a paragraph after a block, remove a block.
+  async function insertBlock(afterBlockId: string) {
+    try {
+      const res = await fetch("/api/blocks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ documentId, afterBlockId }),
+      });
+      const json = (await res.json().catch(() => null)) as { id?: string; error?: string } | null;
+      if (!res.ok || !json?.id) throw new Error(json?.error ?? `Insert failed (${res.status})`);
+      setEditingBlockId(json.id);
+      router.refresh();
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Insert failed");
+    }
+  }
+
+  async function deleteBlock(blockId: string) {
+    try {
+      const res = await fetch(`/api/blocks/${blockId}`, { method: "DELETE" });
+      if (!res.ok) {
+        const detail = (await res.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(detail?.error ?? `Remove failed (${res.status})`);
+      }
+      setEditingBlockId(null);
+      router.refresh();
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Remove failed");
+    }
+  }
+
   async function saveBlockEdit(blockId: string, text: string) {
     const res = await fetch(`/api/blocks/${blockId}`, {
       method: "PATCH",
@@ -447,6 +480,13 @@ export function ReaderInteractions({
   const highlightsByBlock: Record<string, Highlight[]> = {};
   for (const [blockId, list] of Object.entries(anchorHighlights)) {
     highlightsByBlock[blockId] = list.map((h) => ({ ...h, kind: "anchor" as const }));
+  }
+  for (const [blockId, list] of Object.entries(editedByBlock)) {
+    const existing = highlightsByBlock[blockId] ?? [];
+    highlightsByBlock[blockId] = [
+      ...existing,
+      ...list.map((r) => ({ sourceId: null, start: r.start, end: r.end, kind: "edited" as const })),
+    ];
   }
   for (const [blockId, list] of Object.entries(linksByBlock)) {
     const existing = highlightsByBlock[blockId] ?? [];
@@ -521,6 +561,8 @@ export function ReaderInteractions({
         onStartEdit={startEdit}
         onSaveEdit={saveBlockEdit}
         onCancelEdit={() => setEditingBlockId(null)}
+        onInsertBlock={insertBlock}
+        onDeleteBlock={deleteBlock}
       />
 
       {popover && (

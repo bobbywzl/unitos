@@ -142,13 +142,14 @@ model NotebookDocument {
 }
 
 model Block {
-  id         String    @id @default(cuid())
-  documentId String
-  document   Document  @relation(fields: [documentId], references: [id], onDelete: Cascade)
-  order      Int
-  type       BlockType
-  text       String // plain text content
-  html       String? // rendered content for figures/tables
+  id           String    @id @default(cuid())
+  documentId   String
+  document     Document  @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  order        Int
+  type         BlockType
+  text         String // plain text content
+  originalText String? // as first parsed; null = text is unedited. "" = user-authored block.
+  html         String? // rendered content for figures/tables
 }
 
 enum BlockType {

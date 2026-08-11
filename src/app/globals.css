@@ -238,6 +238,10 @@ mark,
 .annotation-mark {
   cursor: pointer;
 }
+/* Text the user changed — diffed against the document as first parsed. */
+.edited-text {
+  color: var(--clay-600);
+}
 .link-mark {
   background: color-mix(in srgb, var(--clay-400) 14%, transparent);
   border-bottom: 2px solid var(--clay-500);

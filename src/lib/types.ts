@@ -62,7 +62,7 @@ export type LinkIn = { id: string; fromDocumentId: string; fromTitle: string; qu
     to `before`); link rows describe the link via meta. */
 export type EditItem = {
   id: string;
-  kind: "TEXT_EDIT" | "LINK_ADD" | "LINK_REMOVE";
+  kind: "TEXT_EDIT" | "LINK_ADD" | "LINK_REMOVE" | "BLOCK_ADD" | "BLOCK_REMOVE";
   blockId: string | null;
   before: string | null;
   after: string | null;

@@ -11,7 +11,7 @@ export type Highlight = {
   sourceId: string | null;
   start: number;
   end: number;
-  kind: "anchor" | "salience" | "term" | "link";
+  kind: "anchor" | "salience" | "term" | "link" | "edited";
   definition?: string; // glossary hover text, kind "term" only
   color?: string | null; // highlight hue ("clay" | "sage" | "gold" | "plum"), kind "anchor" only
   annotation?: boolean; // anchor belongs to an annotation; click focuses its card
@@ -51,6 +51,8 @@ function markedText(text: string, highlights: Highlight[]) {
       continue;
     }
     const link = covering.find((h) => h.kind === "link");
+    const edited = covering.some((h) => h.kind === "edited");
+    const editedClass = edited ? " edited-text" : "";
     const anchors = covering.filter((h) => h.kind === "anchor");
     const anchor =
       anchors.length > 1
@@ -65,7 +67,7 @@ function markedText(text: string, highlights: Highlight[]) {
           href={link.href}
           data-source-id={anchor?.sourceId ?? undefined}
           title={link.linkTitle ? `Linked: ${link.linkTitle}` : undefined}
-          className="link-mark rounded-[4px]"
+          className={`link-mark rounded-[4px]${editedClass}`}
         >
           {segment}
         </a>,
@@ -89,7 +91,7 @@ function markedText(text: string, highlights: Highlight[]) {
                 }
               : undefined
           }
-          className={`${anchor ? anchorClass(anchor.color) : "salience-mark"} rounded-[4px] ${focusable ? "annotation-mark" : ""}`}
+          className={`${anchor ? anchorClass(anchor.color) : "salience-mark"} rounded-[4px] ${focusable ? "annotation-mark" : ""}${editedClass}`}
         >
           {segment}
         </mark>,
@@ -100,10 +102,21 @@ function markedText(text: string, highlights: Highlight[]) {
         <span
           key={from}
           title={term.definition}
-          className="glossary-term cursor-help border-b-2 border-dotted border-clay-400"
+          className={`glossary-term cursor-help border-b-2 border-dotted border-clay-400${editedClass}`}
         >
           {segment}
         </span>,
+      );
+    } else {
+      // Only the edited layer covers this segment.
+      parts.push(
+        edited ? (
+          <span key={from} className="edited-text">
+            {segment}
+          </span>
+        ) : (
+          segment
+        ),
       );
     }
   }

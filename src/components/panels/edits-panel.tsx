@@ -9,6 +9,8 @@ const KIND_LABEL: Record<EditItem["kind"], string> = {
   TEXT_EDIT: "Edit",
   LINK_ADD: "Link added",
   LINK_REMOVE: "Link removed",
+  BLOCK_ADD: "Paragraph added",
+  BLOCK_REMOVE: "Paragraph removed",
 };
 
 const kindChip = "rounded-full bg-sand-200 px-2.5 py-0.5 text-[11px] font-semibold text-sand-700";
@@ -26,6 +28,10 @@ export function EditsPanel({ edits }: { edits: EditItem[] }) {
 
   return (
     <div className="flex flex-col gap-2.5">
+      <p className="text-[11px] text-sand-500">
+        Text you changed shows in <span className="edited-text font-semibold">this color</span> in
+        the reader.
+      </p>
       {edits.map((edit) => (
         <EditCard key={edit.id} edit={edit} />
       ))}
@@ -90,6 +96,14 @@ function EditCard({ edit }: { edit: EditItem }) {
             </div>
           )}
         </div>
+      ) : edit.kind === "BLOCK_ADD" || edit.kind === "BLOCK_REMOVE" ? (
+        <p
+          className={`mt-2 line-clamp-3 text-[13px] ${
+            edit.kind === "BLOCK_REMOVE" ? "text-sand-600 line-through decoration-sand-400" : ""
+          }`}
+        >
+          {edit.after ?? edit.before}
+        </p>
       ) : (
         <div className="mt-2 flex flex-col gap-1.5">
           {edit.meta?.quotedText && (
