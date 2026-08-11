@@ -13,11 +13,11 @@ const chip =
   "rounded-full bg-clay-100 px-2.5 py-0.5 text-[11px] font-semibold text-clay-800 hover:bg-clay-200";
 
 function ColorDot({ color }: { color: string | null }) {
-  if (color === "gold") {
+  if (color === "gold" || color === "plum") {
     return (
       <span
         className="mt-1.5 size-2 shrink-0 rounded-full"
-        style={{ backgroundColor: "#d9a54a" }}
+        style={{ backgroundColor: color === "gold" ? "#d9a54a" : "#a78bfa" }}
       />
     );
   }
@@ -127,7 +127,7 @@ export function AnnotationsPanel({
         <div className="flex flex-col gap-2">
           <span className={label}>Highlights</span>
           {highlights.map((a) => (
-            <div key={a.id} className={card}>
+            <div key={a.id} data-annotation-source-id={a.sourceId ?? undefined} className={card}>
               <div className="flex items-start gap-2">
                 <ColorDot color={a.color} />
                 <p className="line-clamp-3 text-[13px]">{a.content}</p>
@@ -147,7 +147,7 @@ export function AnnotationsPanel({
         <div className="flex flex-col gap-2">
           <span className={label}>Comments</span>
           {comments.map((a) => (
-            <div key={a.id} className={card}>
+            <div key={a.id} data-annotation-source-id={a.sourceId ?? undefined} className={card}>
               <div className="text-[13px]">
                 <Markdown>{a.content}</Markdown>
               </div>
@@ -171,7 +171,7 @@ export function AnnotationsPanel({
         <div className="flex flex-col gap-2">
           <span className={label}>Explanations</span>
           {explanations.map((a) => (
-            <div key={a.id} className={card}>
+            <div key={a.id} data-annotation-source-id={a.sourceId ?? undefined} className={card}>
               <div className="text-[13px]">
                 <Markdown>{a.content}</Markdown>
               </div>

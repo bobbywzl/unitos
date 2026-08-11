@@ -41,7 +41,7 @@ export function ReaderInteractions({
   blocks: BlockData[];
   anchorHighlights: Record<
     string,
-    { sourceId: string; start: number; end: number; color: string | null }[]
+    { sourceId: string; start: number; end: number; color: string | null; annotation: boolean }[]
   >;
   salienceByBlock: Record<string, { start: number; end: number }[]>;
   hasSalience: boolean;
@@ -607,13 +607,15 @@ export function ReaderInteractions({
 
           <div className="flex w-full items-center gap-1.5">
             <div className="flex shrink-0 items-center gap-1.5 rounded-full bg-card p-2 shadow-float">
-              {(["clay", "sage", "gold"] as const).map((color) => (
+              {(["clay", "sage", "gold", "plum"] as const).map((color) => (
                 <button
                   key={color}
                   disabled={busy}
-                  onClick={() => void annotate({ color })}
+                  onClick={() =>
+                    void annotate({ color, comment: commentDraft.trim() || undefined })
+                  }
                   aria-label={`Highlight in ${color}`}
-                  title={`Highlight in ${color}`}
+                  title={`Highlight in ${color}${commentDraft.trim() ? " with your note" : ""}`}
                   className="size-[22px] rounded-full transition-transform hover:scale-110 disabled:opacity-40"
                   style={{
                     background:
@@ -621,7 +623,9 @@ export function ReaderInteractions({
                         ? "var(--clay-400)"
                         : color === "sage"
                           ? "var(--sage-500)"
-                          : "#d9a54a",
+                          : color === "gold"
+                            ? "#d9a54a"
+                            : "#a78bfa",
                   }}
                 />
               ))}

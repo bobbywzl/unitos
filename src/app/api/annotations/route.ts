@@ -17,7 +17,7 @@ const createSchema = z.object({
   notebookId: z.string().min(1),
   documentId: z.string().min(1),
   anchor: anchorSchema,
-  color: z.enum(["clay", "sage", "gold"]).optional(),
+  color: z.enum(["clay", "sage", "gold", "plum"]).optional(),
   comment: z.string().max(10_000).optional(),
 });
 
@@ -55,9 +55,11 @@ export async function POST(req: Request) {
   const section = await annotationsSection(data.notebookId);
   const order = await db.note.count({ where: { sectionId: section.id } });
 
+  // A highlight has a color; its content is the note when one was typed, else
+  // the quote. A comment without a color stays a plain comment.
   const comment = data.comment?.trim();
   const content = comment ? comment : data.anchor.quotedText.slice(0, 5000);
-  const color = comment ? null : data.color ?? "clay";
+  const color = data.color ?? (comment ? null : "clay");
 
   const note = await db.note.create({
     data: {

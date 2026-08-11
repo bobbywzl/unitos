@@ -81,8 +81,28 @@ export function Workspace({
         }
       }, 100);
     };
+    // Clicking a highlight in the text focuses its card in the Annotations tab.
+    const onFocusAnnotation = (e: Event) => {
+      const { sourceId } = (e as CustomEvent<{ sourceId: string }>).detail;
+      setCollapsed(false);
+      setTab("annotations");
+      setTimeout(() => {
+        const el = document.querySelector<HTMLElement>(
+          `[data-annotation-source-id="${sourceId}"]`,
+        );
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+          el.classList.add("anchor-flash");
+          setTimeout(() => el.classList.remove("anchor-flash"), 2000);
+        }
+      }, 150);
+    };
     window.addEventListener("dissect:show-note", onShowNote);
-    return () => window.removeEventListener("dissect:show-note", onShowNote);
+    window.addEventListener("dissect:focus-annotation", onFocusAnnotation);
+    return () => {
+      window.removeEventListener("dissect:show-note", onShowNote);
+      window.removeEventListener("dissect:focus-annotation", onFocusAnnotation);
+    };
   }, []);
 
   useEffect(() => {

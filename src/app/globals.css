@@ -218,15 +218,25 @@ mark,
 }
 .anchor-mark {
   background: color-mix(in srgb, var(--clay-400) 32%, transparent);
+  border-bottom: 2px solid color-mix(in srgb, var(--clay-500) 70%, transparent);
 }
 .salience-mark {
   background: color-mix(in srgb, var(--sage-500) 28%, transparent);
 }
 .hl-sage {
   background: color-mix(in srgb, var(--sage-500) 32%, transparent);
+  border-bottom: 2px solid color-mix(in srgb, var(--sage-600) 70%, transparent);
 }
 .hl-gold {
   background: color-mix(in srgb, #d9a54a 34%, transparent);
+  border-bottom: 2px solid color-mix(in srgb, #d9a54a 70%, transparent);
+}
+.hl-plum {
+  background: color-mix(in srgb, #a78bfa 28%, transparent);
+  border-bottom: 2px solid color-mix(in srgb, #a78bfa 65%, transparent);
+}
+.annotation-mark {
+  cursor: pointer;
 }
 .link-mark {
   background: color-mix(in srgb, var(--clay-400) 14%, transparent);

@@ -70,9 +70,12 @@ export default async function NotebookPage(props: {
   // Chip orphan state comes from this resolution, not the (earlier) notebook query.
   // A note's color rides along so manual highlights paint in their chosen hue.
   const noteById = new Map(notebook.sections.flatMap((s) => s.notes).map((n) => [n.id, n]));
+  const annotationNoteIds = new Set(
+    notebook.sections.filter((s) => s.hidden).flatMap((s) => s.notes.map((n) => n.id)),
+  );
   const anchorHighlights: Record<
     string,
-    { sourceId: string; start: number; end: number; color: string | null }[]
+    { sourceId: string; start: number; end: number; color: string | null; annotation: boolean }[]
   > = {};
   const resolutionById = new Map<string, { orphaned: boolean }>();
   if (activeDocument) {
@@ -86,6 +89,7 @@ export default async function NotebookPage(props: {
         start: r.start,
         end: r.end,
         color: noteById.get(r.noteId)?.color ?? null,
+        annotation: annotationNoteIds.has(r.noteId),
       });
       anchorHighlights[r.blockId] = list;
     }

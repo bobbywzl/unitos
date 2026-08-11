@@ -13,7 +13,8 @@ export type Highlight = {
   end: number;
   kind: "anchor" | "salience" | "term" | "link";
   definition?: string; // glossary hover text, kind "term" only
-  color?: string | null; // highlight hue ("clay" | "sage" | "gold"), kind "anchor" only
+  color?: string | null; // highlight hue ("clay" | "sage" | "gold" | "plum"), kind "anchor" only
+  annotation?: boolean; // anchor belongs to an annotation; click focuses its card
   href?: string; // navigation target, kind "link" only
   linkTitle?: string; // target document title, kind "link" only
 };
@@ -21,6 +22,7 @@ export type Highlight = {
 function anchorClass(color: string | null | undefined): string {
   if (color === "sage") return "hl-sage";
   if (color === "gold") return "hl-gold";
+  if (color === "plum") return "hl-plum";
   return "anchor-mark";
 }
 
@@ -69,11 +71,25 @@ function markedText(text: string, highlights: Highlight[]) {
         </a>,
       );
     } else if (anchor || salience) {
+      const focusable = anchor?.annotation && anchor.sourceId;
       parts.push(
         <mark
           key={from}
           data-source-id={anchor?.sourceId ?? undefined}
-          className={`${anchor ? anchorClass(anchor.color) : "salience-mark"} rounded-[4px]`}
+          title={focusable ? "Click to view the annotation" : undefined}
+          onClick={
+            focusable
+              ? (e) => {
+                  e.stopPropagation();
+                  window.dispatchEvent(
+                    new CustomEvent("dissect:focus-annotation", {
+                      detail: { sourceId: anchor.sourceId },
+                    }),
+                  );
+                }
+              : undefined
+          }
+          className={`${anchor ? anchorClass(anchor.color) : "salience-mark"} rounded-[4px] ${focusable ? "annotation-mark" : ""}`}
         >
           {segment}
         </mark>,
