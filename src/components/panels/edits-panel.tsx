@@ -11,6 +11,7 @@ const KIND_LABEL: Record<EditItem["kind"], string> = {
   LINK_REMOVE: "Link removed",
   BLOCK_ADD: "Paragraph added",
   BLOCK_REMOVE: "Paragraph removed",
+  FORMAT: "Format",
 };
 
 const kindChip = "rounded-full bg-sand-200 px-2.5 py-0.5 text-[11px] font-semibold text-sand-700";
@@ -96,6 +97,10 @@ function EditCard({ edit }: { edit: EditItem }) {
             </div>
           )}
         </div>
+      ) : edit.kind === "FORMAT" ? (
+        <p className="mt-2 text-[13px] text-sand-600">
+          {edit.meta?.from ?? "?"} → {edit.meta?.to ?? "?"}
+        </p>
       ) : edit.kind === "BLOCK_ADD" || edit.kind === "BLOCK_REMOVE" ? (
         <p
           className={`mt-2 line-clamp-3 text-[13px] ${

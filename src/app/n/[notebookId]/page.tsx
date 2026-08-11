@@ -383,6 +383,31 @@ export default async function NotebookPage(props: {
     }
   }
 
+  // Inline styles (bold/italic): decoration spans healed like salience.
+  type StyleSpan = { start: number; end: number; style: string; quotedText: string };
+  const stylesByBlock: Record<
+    string,
+    { start: number; end: number; style: "bold" | "italic" }[]
+  > = {};
+  if (activeDocument) {
+    for (const b of activeDocument.blocks) {
+      const spans = (Array.isArray(b.styles) ? b.styles : []) as unknown as StyleSpan[];
+      for (const span of spans) {
+        if (span.style !== "bold" && span.style !== "italic") continue;
+        let hit: { start: number; end: number } | null = null;
+        if (b.text.slice(span.start, span.end) === span.quotedText) {
+          hit = { start: span.start, end: span.end };
+        } else {
+          hit = matchInText(b.text, { quotedText: span.quotedText, prefix: "", suffix: "" });
+        }
+        if (!hit) continue;
+        const list = stylesByBlock[b.id] ?? [];
+        list.push({ start: hit.start, end: hit.end, style: span.style });
+        stylesByBlock[b.id] = list;
+      }
+    }
+  }
+
   // Edit history for the open document, newest first.
   const edits: EditItem[] = activeDocument
     ? (
@@ -464,6 +489,8 @@ export default async function NotebookPage(props: {
               termsByBlock={termsByBlock}
               linksByBlock={linksByBlock}
               editedByBlock={editedByBlock}
+              stylesByBlock={stylesByBlock}
+              font={activeDocument.font}
             />
           </div>
         ) : (

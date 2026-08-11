@@ -81,6 +81,7 @@ model Source {
 model Document {
   id        String             @id @default(cuid())
   title     String
+  font      String? // reader body font: null = default, "serif", "mono"
   sourceUrl String?
   fileHash  String?            @unique // dedupe re-uploads
   fileData  Bytes? // original PDF bytes, kept for forced re-parse (SPEC.md §8 Phase 3)
@@ -158,6 +159,7 @@ model Block {
   text         String // plain text content
   originalText String? // as first parsed; null = text is unedited. "" = user-authored block.
   html         String? // rendered content for figures/tables
+  styles       Json? // inline decoration spans: [{start, end, style: "bold"|"italic", quotedText}]
 }
 
 enum BlockType {

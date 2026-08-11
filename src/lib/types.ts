@@ -99,7 +99,14 @@ export type AssistantAction =
       description: string;
     }
   | { type: "add_section"; title: string; description: string }
-  | { type: "link"; anchor: AssistantAnchor; toDocumentId: string; description: string };
+  | { type: "link"; anchor: AssistantAnchor; toDocumentId: string; description: string }
+  | {
+      type: "format_block";
+      blockId: string;
+      kind: "paragraph" | "h1" | "h2" | "h3";
+      description: string;
+    }
+  | { type: "style"; anchor: AssistantAnchor; style: "bold" | "italic"; description: string };
 
 export type AssistantPlan = {
   reply: string | null;
@@ -111,10 +118,17 @@ export type AssistantPlan = {
     to `before`); link rows describe the link via meta. */
 export type EditItem = {
   id: string;
-  kind: "TEXT_EDIT" | "LINK_ADD" | "LINK_REMOVE" | "BLOCK_ADD" | "BLOCK_REMOVE";
+  kind: "TEXT_EDIT" | "LINK_ADD" | "LINK_REMOVE" | "BLOCK_ADD" | "BLOCK_REMOVE" | "FORMAT";
   blockId: string | null;
   before: string | null;
   after: string | null;
-  meta: { linkId?: string; toDocumentId?: string; toTitle?: string; quotedText?: string } | null;
+  meta: {
+    linkId?: string;
+    toDocumentId?: string;
+    toTitle?: string;
+    quotedText?: string;
+    from?: string;
+    to?: string;
+  } | null;
   createdAt: string;
 };

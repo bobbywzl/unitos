@@ -77,6 +77,19 @@ const actionSchema = z.discriminatedUnion("type", [
     toDocumentId: z.string().min(1),
     description,
   }),
+  z.object({
+    type: z.literal("format_block"),
+    blockId: z.string().min(1),
+    kind: z.enum(["paragraph", "h1", "h2", "h3"]),
+    description,
+  }),
+  z.object({
+    type: z.literal("style"),
+    blockId: z.string().min(1),
+    quote,
+    style: z.enum(["bold", "italic"]),
+    description,
+  }),
 ]);
 
 const planSchema = z.object({
@@ -128,12 +141,20 @@ export async function POST(req: Request) {
   });
   if (!document) return NextResponse.json({ error: "Document not found" }, { status: 404 });
 
-  const [profile, sections, attachedDocs] = await Promise.all([
+  const [profile, sections, attachedDocs, notes] = await Promise.all([
     loadProfile(data.notebookId),
     sectionSkeleton(data.notebookId),
     db.notebookDocument.findMany({
       where: { notebookId: data.notebookId },
       include: { document: { select: { id: true, title: true } } },
+    }),
+    // Full notebook context: the accepted notes, so commands can reference the
+    // reader's own thinking, not just this document.
+    db.note.findMany({
+      where: { section: { notebookId: data.notebookId }, status: "ACCEPTED" },
+      orderBy: { createdAt: "asc" },
+      take: 80,
+      include: { section: { select: { title: true, hidden: true } } },
     }),
   ]);
 
@@ -168,6 +189,15 @@ export async function POST(req: Request) {
     "",
     `Other attached documents (id — title):\n${otherDocs.length > 0 ? otherDocs.map((d) => `${d.id} — ${d.title}`).join("\n") : "none"}`,
     "",
+    `The reader's notes across the notebook (section: note):\n${
+      notes.filter((n) => !n.section.hidden).length > 0
+        ? notes
+            .filter((n) => !n.section.hidden)
+            .map((n) => `${n.section.title}: ${n.content.slice(0, 200)}`)
+            .join("\n")
+        : "none yet"
+    }`,
+    "",
     "Action types:",
     '- edit_block {blockId, newText, description} — replace a block\'s text.',
     '- insert_paragraph {afterBlockId, text, description} — add a paragraph after a block.',
@@ -177,6 +207,8 @@ export async function POST(req: Request) {
     '- add_note {content, sectionId? or sectionTitle?, blockId?, quote?, description} — a note in the notebook. Cite the passage via blockId + quote when the note comes from the text. A new sectionTitle creates the section.',
     '- add_section {title, description} — an empty section.',
     '- link {blockId, quote, toDocumentId, description} — hyperlink exact text to another attached document.',
+    '- format_block {blockId, kind: "paragraph"|"h1"|"h2"|"h3", description} — change a block\'s heading level.',
+    '- style {blockId, quote, style: "bold"|"italic", description} — bold or italicize exact text.',
     "",
     "Rules:",
     "1. Use block ids exactly as given. Every quote must be an exact substring of the named block's text.",
@@ -240,6 +272,25 @@ export async function POST(req: Request) {
         source,
         description: action.description,
       });
+      continue;
+    }
+    if (action.type === "format_block") {
+      const target = blockById.get(action.blockId);
+      if (!target || !TEXT_TYPES.has(target.type)) {
+        warnings.push(`Skipped: block not found or not text. (${action.description})`);
+        continue;
+      }
+      actions.push(action);
+      continue;
+    }
+    if (action.type === "style") {
+      const target = blockById.get(action.blockId);
+      const anchor = target ? buildAnchor(target.text, action.quote, target.id) : null;
+      if (!anchor) {
+        warnings.push(`Skipped: the quote was not found in its block. (${action.description})`);
+        continue;
+      }
+      actions.push({ type: "style", anchor, style: action.style, description: action.description });
       continue;
     }
     const block = blockById.get(

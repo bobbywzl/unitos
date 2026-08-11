@@ -11,7 +11,8 @@ export type Highlight = {
   sourceId: string | null;
   start: number;
   end: number;
-  kind: "anchor" | "salience" | "term" | "link" | "edited";
+  kind: "anchor" | "salience" | "term" | "link" | "edited" | "style";
+  styleKind?: "bold" | "italic"; // kind "style" only
   definition?: string; // glossary hover text, kind "term" only
   color?: string | null; // highlight hue ("clay" | "sage" | "gold" | "plum"), kind "anchor" only
   annotation?: boolean; // anchor belongs to an annotation; click focuses its card
@@ -53,7 +54,9 @@ function markedText(text: string, highlights: Highlight[]) {
     }
     const link = covering.find((h) => h.kind === "link");
     const edited = covering.some((h) => h.kind === "edited");
-    const editedClass = edited ? " edited-text" : "";
+    const bold = covering.some((h) => h.kind === "style" && h.styleKind === "bold");
+    const italic = covering.some((h) => h.kind === "style" && h.styleKind === "italic");
+    const editedClass = `${edited ? " edited-text" : ""}${bold ? " font-bold" : ""}${italic ? " italic" : ""}`;
     const anchors = covering.filter((h) => h.kind === "anchor");
     const anchor =
       anchors.length > 1
@@ -110,10 +113,10 @@ function markedText(text: string, highlights: Highlight[]) {
         </span>,
       );
     } else {
-      // Only the edited layer covers this segment.
+      // Only decoration layers (edited, bold, italic) cover this segment.
       parts.push(
-        edited ? (
-          <span key={from} className="edited-text">
+        editedClass ? (
+          <span key={from} className={editedClass.trim()}>
             {segment}
           </span>
         ) : (

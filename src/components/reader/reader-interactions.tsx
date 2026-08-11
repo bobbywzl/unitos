@@ -5,7 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import type { SourceInput } from "@/lib/anchors/input";
 import type { AssistantAction, AssistantPlan } from "@/lib/types";
-import { LinkIcon, MicIcon, SparkleIcon } from "@/components/icons";
+import { MicIcon, SparkleIcon } from "@/components/icons";
 import { Markdown } from "@/components/markdown";
 import type { BlockData, Highlight } from "@/components/reader/block-view";
 import { Reader } from "@/components/reader/reader";
@@ -33,6 +33,8 @@ const ACTION_LABEL: Record<AssistantAction["type"], string> = {
   add_note: "Note",
   add_section: "Section",
   link: "Link",
+  format_block: "Format",
+  style: "Style",
 };
 type ExplainBubble = {
   x: number;
@@ -57,6 +59,8 @@ export function ReaderInteractions({
   termsByBlock,
   linksByBlock,
   editedByBlock,
+  stylesByBlock,
+  font,
 }: {
   documentId: string;
   notebookId: string;
@@ -76,6 +80,8 @@ export function ReaderInteractions({
     { linkId: string; start: number; end: number; href: string; title: string }[]
   >;
   editedByBlock: Record<string, { start: number; end: number }[]>;
+  stylesByBlock: Record<string, { start: number; end: number; style: "bold" | "italic" }[]>;
+  font: string | null;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -86,7 +92,8 @@ export function ReaderInteractions({
   // selection alive, which also keeps a native select from ever opening.
   const [submenu, setSubmenu] = useState<null | "add" | "ai" | "comment">(null);
   const [commentDraft, setCommentDraft] = useState("");
-  const [editingBlockId, setEditingBlockId] = useState<string | null>(null);
+  // The page is only editable in edit mode; reading mode never opens editors.
+  const [editMode, setEditMode] = useState(false);
   const [bubble, setBubble] = useState<ExplainBubble | null>(null);
   const [busy, setBusy] = useState(false);
   const [swaps, setSwaps] = useState<Record<string, string>>({});
@@ -122,6 +129,8 @@ export function ReaderInteractions({
   const aiCommandRef = useRef("");
   aiCommandRef.current = aiCommand;
   const recognitionRef = useRef<SpeechRec | null>(null);
+  const editModeRef = useRef(false);
+  editModeRef.current = editMode;
   function setAssistantMode(auto: boolean) {
     setAutoRun(auto);
     autoRunRef.current = auto;
@@ -138,7 +147,7 @@ export function ReaderInteractions({
     setPopover(null);
     setSubmenu(null);
     setBubble(null);
-    setEditingBlockId(null);
+    setEditMode(false);
     setCommentDraft("");
   }
 
@@ -201,6 +210,7 @@ export function ReaderInteractions({
     const container = containerRef.current;
     if (!container) return;
     const onMouseUp = (event: MouseEvent) => {
+      if (editModeRef.current) return; // selections in edit mode are for editing
       if (event.target instanceof Element && event.target.closest("[data-selection-popover]")) return;
       // A drag that started inside the comment box can end over the article —
       // that is text editing, not a new selection.
@@ -618,6 +628,16 @@ export function ReaderInteractions({
               anchor: action.anchor,
             });
             break;
+          case "format_block":
+            await api(`/api/blocks/${action.blockId}`, "PATCH", { kind: action.kind });
+            break;
+          case "style":
+            await api(`/api/blocks/${action.anchor.blockId}/style`, "POST", {
+              startOffset: action.anchor.startOffset,
+              endOffset: action.anchor.endOffset,
+              style: action.style,
+            });
+            break;
         }
         applied += 1;
       } catch {
@@ -684,14 +704,51 @@ export function ReaderInteractions({
     rec.start();
   }
 
-  // Block editing: every save lands as a TEXT_EDIT in the edit history.
-  function startEdit(blockId: string) {
+  // Edit mode: the whole body is editable in place. Every change goes through
+  // the same routes as the assistant's, so history and healing stay uniform.
+  function toggleEditMode() {
     setPopover(null);
     setSubmenu(null);
-    setEditingBlockId(blockId);
+    setBubble(null);
+    setEditMode(!editMode);
   }
 
-  // Whole-document editing: insert a paragraph after a block, remove a block.
+  async function formatBlock(blockId: string, kind: "paragraph" | "h1" | "h2" | "h3") {
+    try {
+      await api(`/api/blocks/${blockId}`, "PATCH", { kind });
+      router.refresh();
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Format failed");
+    }
+  }
+
+  async function toggleStyleSpan(
+    blockId: string,
+    start: number,
+    end: number,
+    style: "bold" | "italic",
+  ) {
+    try {
+      await api(`/api/blocks/${blockId}/style`, "POST", {
+        startOffset: start,
+        endOffset: end,
+        style,
+      });
+      router.refresh();
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Style failed");
+    }
+  }
+
+  async function setFont(next: string) {
+    try {
+      await api(`/api/documents/${documentId}`, "PATCH", { font: next });
+      router.refresh();
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Font change failed");
+    }
+  }
+
   async function insertBlock(afterBlockId: string) {
     try {
       const res = await fetch("/api/blocks", {
@@ -701,7 +758,6 @@ export function ReaderInteractions({
       });
       const json = (await res.json().catch(() => null)) as { id?: string; error?: string } | null;
       if (!res.ok || !json?.id) throw new Error(json?.error ?? `Insert failed (${res.status})`);
-      setEditingBlockId(json.id);
       router.refresh();
     } catch (err) {
       showToast(err instanceof Error ? err.message : "Insert failed");
@@ -715,7 +771,6 @@ export function ReaderInteractions({
         const detail = (await res.json().catch(() => null)) as { error?: string } | null;
         throw new Error(detail?.error ?? `Remove failed (${res.status})`);
       }
-      setEditingBlockId(null);
       router.refresh();
     } catch (err) {
       showToast(err instanceof Error ? err.message : "Remove failed");
@@ -723,18 +778,12 @@ export function ReaderInteractions({
   }
 
   async function saveBlockEdit(blockId: string, text: string) {
-    const res = await fetch(`/api/blocks/${blockId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text }),
-    });
-    if (!res.ok) {
-      const detail = (await res.json().catch(() => null)) as { error?: string } | null;
-      showToast(detail?.error ?? `Edit failed (${res.status})`);
-      return;
+    try {
+      await api(`/api/blocks/${blockId}`, "PATCH", { text });
+      router.refresh();
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Edit failed");
     }
-    setEditingBlockId(null);
-    router.refresh();
   }
 
   // SALIENCE: toggleable overlay, off by default; computed once per notebook+document (SPEC.md §6).
@@ -768,6 +817,19 @@ export function ReaderInteractions({
   const highlightsByBlock: Record<string, Highlight[]> = {};
   for (const [blockId, list] of Object.entries(anchorHighlights)) {
     highlightsByBlock[blockId] = list.map((h) => ({ ...h, kind: "anchor" as const }));
+  }
+  for (const [blockId, list] of Object.entries(stylesByBlock)) {
+    const existing = highlightsByBlock[blockId] ?? [];
+    highlightsByBlock[blockId] = [
+      ...existing,
+      ...list.map((r) => ({
+        sourceId: null,
+        start: r.start,
+        end: r.end,
+        kind: "style" as const,
+        styleKind: r.style,
+      })),
+    ];
   }
   for (const [blockId, list] of Object.entries(editedByBlock)) {
     const existing = highlightsByBlock[blockId] ?? [];
@@ -820,6 +882,27 @@ export function ReaderInteractions({
         {toast && (
           <span className="rounded-full bg-ink/90 px-3 py-1.5 text-xs text-paper">{toast}</span>
         )}
+        {editMode && (
+          <select
+            value={font ?? "default"}
+            onChange={(e) => void setFont(e.target.value)}
+            aria-label="Reader font"
+            className="rounded-full bg-sand-100 px-3 py-1.5 text-xs font-semibold text-sand-700 shadow-soft outline-none"
+          >
+            <option value="default">Figtree</option>
+            <option value="serif">Serif</option>
+            <option value="mono">Mono</option>
+          </select>
+        )}
+        <button
+          onClick={toggleEditMode}
+          className={`rounded-full px-3.5 py-1.5 text-xs font-semibold shadow-soft ${
+            editMode ? "bg-clay text-clay-fg hover:bg-clay-600" : "bg-sand-100 text-sand-600 hover:text-clay-800"
+          }`}
+          title={editMode ? "Back to reading" : "Edit the whole page in place"}
+        >
+          {editMode ? "Done" : "Edit"}
+        </button>
         <button
           onClick={() => void toggleSalience()}
           disabled={salienceBusy}
@@ -846,10 +929,11 @@ export function ReaderInteractions({
             return next;
           })
         }
-        editingBlockId={editingBlockId}
-        onStartEdit={startEdit}
-        onSaveEdit={saveBlockEdit}
-        onCancelEdit={() => setEditingBlockId(null)}
+        mode={editMode ? "edit" : "read"}
+        font={font}
+        onSaveText={saveBlockEdit}
+        onFormatBlock={formatBlock}
+        onToggleStyle={toggleStyleSpan}
         onInsertBlock={insertBlock}
         onDeleteBlock={deleteBlock}
       />
@@ -878,9 +962,8 @@ export function ReaderInteractions({
             <button
               disabled={busy}
               onClick={() => void completeLink()}
-              className="flex w-full items-center gap-1.5 rounded-full bg-sage-600 px-2.5 py-[5px] text-left text-[12px] font-semibold text-sage-fg hover:bg-sage-700 disabled:opacity-40"
+              className="flex w-full items-center rounded-full bg-sage-600 px-2.5 py-[5px] text-left text-[12px] font-semibold text-sage-fg hover:bg-sage-700 disabled:opacity-40"
             >
-              <LinkIcon size={12} />
               Link here
             </button>
           )}
@@ -1072,11 +1155,10 @@ export function ReaderInteractions({
 
           <button
             onClick={beginLink}
-            title="Link this passage to a passage in this or another document"
-            className="flex w-full items-center gap-1.5 rounded-full px-2.5 py-[5px] text-left text-[12px] text-sand-800 hover:bg-clay-100 hover:text-clay-800"
+            title="Connect this passage to a passage in this or another document"
+            className="flex w-full items-center rounded-full px-2.5 py-[5px] text-left text-[12px] text-sand-800 hover:bg-clay-100 hover:text-clay-800"
           >
-            <LinkIcon size={12} />
-            Link…
+            Link across texts
           </button>
         </div>
       )}
@@ -1113,7 +1195,6 @@ export function ReaderInteractions({
 
       {pendingLink && (
         <div className="fixed top-24 left-1/2 z-40 flex max-w-[80vw] -translate-x-1/2 items-center gap-3 rounded-full bg-card px-4 py-2 shadow-float">
-          <LinkIcon size={14} className="shrink-0 text-clay" />
           <span className="truncate text-[12.5px] text-sand-700">
             Linking “{pendingLink.anchor.quotedText.slice(0, 48)}
             {pendingLink.anchor.quotedText.length > 48 ? "…" : ""}” from{" "}
