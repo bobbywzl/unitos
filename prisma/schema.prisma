@@ -134,6 +134,9 @@ model DocLink {
   toQuotedText   String?
   toPrefix       String?
   toSuffix       String?
+  // Link ends orphan visibly, like Source anchors (SPEC.md §5).
+  fromOrphaned   Boolean  @default(false)
+  toOrphaned     Boolean  @default(false)
   createdAt      DateTime @default(now())
 
   @@index([fromDocumentId])

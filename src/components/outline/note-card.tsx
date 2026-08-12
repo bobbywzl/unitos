@@ -38,10 +38,11 @@ function SourceChips({ sources, notebookId }: { sources: SourceChip[]; notebookI
           <span
             key={source.id}
             title={`Anchor unresolved. Quoted text: ${source.quotedText}`}
-            className="inline-flex max-w-52 items-center gap-1.5 truncate rounded-full border border-dashed border-red-400 px-2.5 py-0.5 text-[11px] font-semibold text-red-500"
+            className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-dashed border-red-400 px-2.5 py-0.5 text-[11px] font-semibold text-red-500"
           >
             <AnchorIcon />
-            {source.documentTitle}
+            <span className="shrink-0">{source.documentTitle} · unresolved:</span>
+            <span className="truncate font-normal text-sand-500">“{source.quotedText}”</span>
           </span>
         ) : (
           <Link

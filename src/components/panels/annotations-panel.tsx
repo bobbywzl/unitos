@@ -132,6 +132,11 @@ export function AnnotationsPanel({
                 <ColorDot color={a.color} />
                 <p className="line-clamp-3 text-[13px]">{a.content}</p>
               </div>
+              {a.orphaned && a.quotedText && a.quotedText !== a.content && (
+                <p className="mt-2 line-clamp-2 border-l-2 border-red-300 pl-2 text-xs text-sand-500">
+                  was anchored to: {a.quotedText}
+                </p>
+              )}
               <AnnotationActions
                 annotation={a}
                 notebookId={notebookId}
@@ -175,6 +180,11 @@ export function AnnotationsPanel({
               <div className="text-[13px]">
                 <Markdown>{a.content}</Markdown>
               </div>
+              {a.orphaned && a.quotedText && (
+                <p className="mt-2 line-clamp-2 border-l-2 border-red-300 pl-2 text-xs text-sand-500">
+                  was anchored to: {a.quotedText}
+                </p>
+              )}
               <AnnotationActions
                 annotation={a}
                 notebookId={notebookId}
@@ -213,6 +223,11 @@ export function AnnotationsPanel({
                 {l.orphaned && (
                   <span className="text-[11px] font-semibold text-red-500">Anchor unresolved</span>
                 )}
+                {l.targetOrphaned && (
+                  <span className="text-[11px] font-semibold text-red-500">
+                    Other end unresolved
+                  </span>
+                )}
                 <button
                   onClick={() => void removeLink(l.id)}
                   className="text-xs text-red-500 hover:text-red-700"
@@ -234,6 +249,14 @@ export function AnnotationsPanel({
                 <Link href={`/n/${notebookId}?doc=${l.fromDocumentId}&link=${l.id}`} className={chip}>
                   ⇄ {l.fromTitle}
                 </Link>
+                {l.orphaned && (
+                  <span className="text-[11px] font-semibold text-red-500">Anchor unresolved</span>
+                )}
+                {l.fromOrphaned && (
+                  <span className="text-[11px] font-semibold text-red-500">
+                    Other end unresolved
+                  </span>
+                )}
                 <button
                   onClick={() => void removeLink(l.id)}
                   className="text-xs text-red-500 hover:text-red-700"

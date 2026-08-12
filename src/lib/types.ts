@@ -55,6 +55,7 @@ export type LinkOut = {
   quotedText: string; // this document's end
   targetQuotedText: string | null; // the other end's quote; null = document-level
   orphaned: boolean; // anchor no longer resolves in the source text
+  targetOrphaned: boolean; // the other end no longer resolves in the target text
   detached: boolean; // target document is not attached to this notebook
 };
 export type LinkIn = {
@@ -63,6 +64,8 @@ export type LinkIn = {
   fromTitle: string;
   quotedText: string; // the other end's quote
   hereQuotedText: string | null; // this document's end; null = document-level
+  orphaned: boolean; // this document's end no longer resolves
+  fromOrphaned: boolean; // the other end no longer resolves in its text
 };
 
 // ── The assistant as an actor ──────────────────────────────────────────────
@@ -118,7 +121,7 @@ export type AssistantPlan = {
     to `before`); link rows describe the link via meta. */
 export type EditItem = {
   id: string;
-  kind: "TEXT_EDIT" | "LINK_ADD" | "LINK_REMOVE" | "BLOCK_ADD" | "BLOCK_REMOVE" | "FORMAT";
+  kind: "TEXT_EDIT" | "LINK_ADD" | "LINK_REMOVE" | "BLOCK_ADD" | "BLOCK_REMOVE" | "FORMAT" | "STYLE";
   blockId: string | null;
   before: string | null;
   after: string | null;
@@ -129,6 +132,9 @@ export type EditItem = {
     quotedText?: string;
     from?: string;
     to?: string;
+    style?: string; // STYLE rows: "bold" | "italic"
+    on?: boolean; // STYLE rows: applied or removed
+    restoredFrom?: string; // BLOCK_ADD rows that restore a removed paragraph
   } | null;
   createdAt: string;
 };

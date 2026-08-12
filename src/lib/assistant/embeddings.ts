@@ -59,8 +59,32 @@ export type CorpusMatch = {
   similarity: number;
 };
 
+// Corpus scope without an embeddings key: Postgres full-text search over
+// accepted notes. Weaker recall than embeddings, but corpus questions work
+// out of the box; set VOYAGE_API_KEY for semantic search.
+async function corpusSearchLexical(query: string, k: number): Promise<CorpusMatch[]> {
+  if (!query.trim()) return [];
+  return db.$queryRaw<CorpusMatch[]>(
+    Prisma.sql`
+      SELECT n.id,
+             n.content,
+             s."notebookId" AS "notebookId",
+             nb.title AS "notebookTitle",
+             s.title AS "sectionTitle",
+             ts_rank(to_tsvector('english', n.content), websearch_to_tsquery('english', ${query}))::float8 AS similarity
+      FROM "Note" n
+      JOIN "Section" s ON n."sectionId" = s.id
+      JOIN "Notebook" nb ON s."notebookId" = nb.id
+      WHERE n.status = 'ACCEPTED'
+        AND to_tsvector('english', n.content) @@ websearch_to_tsquery('english', ${query})
+      ORDER BY similarity DESC
+      LIMIT ${k}`,
+  );
+}
+
 // Corpus scope: nearest accepted notes across all notebooks (SPEC.md §7).
 export async function corpusSearch(query: string, k = 12): Promise<CorpusMatch[]> {
+  if (!embeddingsConfigured()) return corpusSearchLexical(query, k);
   const [vector] = await embed([query]);
   const literal = toVectorLiteral(vector);
   return db.$queryRaw<CorpusMatch[]>(

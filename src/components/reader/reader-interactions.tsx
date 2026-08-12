@@ -11,7 +11,14 @@ import type { BlockData, Highlight } from "@/components/reader/block-view";
 import { Reader } from "@/components/reader/reader";
 
 type Anchor = Omit<SourceInput, "documentId">;
-type Popover = { anchor: Anchor; x: number; y: number; yTop: number; textLeft: number };
+type Popover = {
+  anchor: Anchor;
+  x: number;
+  y: number;
+  yTop: number;
+  textLeft: number;
+  truncated: boolean; // selection crossed into another paragraph; anchor covers the first
+};
 
 type SpeechRec = {
   lang: string;
@@ -23,6 +30,45 @@ type SpeechRec = {
   start(): void;
   stop(): void;
 };
+
+const clip = (s: string, n = 90) => (s.length > n ? `${s.slice(0, n)}…` : s);
+
+/** The concrete target of a plan action, shown before Apply so approval is
+    informed: the quote, the section, the color — not just a label. */
+function actionDetail(
+  action: AssistantAction,
+  blocks: BlockData[],
+  documents: { id: string; title: string }[],
+): string | null {
+  const blockText = (id: string) => blocks.find((b) => b.id === id)?.text ?? "";
+  switch (action.type) {
+    case "highlight":
+      return `${action.color} · “${clip(action.anchor.quotedText)}”`;
+    case "comment":
+    case "style":
+      return `“${clip(action.anchor.quotedText)}”`;
+    case "add_note": {
+      const where = action.sectionTitle ?? "the section";
+      return `into ${where} · “${clip(action.content)}”`;
+    }
+    case "add_section":
+      return `“${action.title}”`;
+    case "edit_block":
+      return `to “${clip(action.newText)}”`;
+    case "insert_paragraph":
+      return `“${clip(action.text)}”`;
+    case "remove_block":
+      return `“${clip(blockText(action.blockId))}”`;
+    case "link": {
+      const target = documents.find((d) => d.id === action.toDocumentId)?.title ?? "a document";
+      return `“${clip(action.anchor.quotedText, 60)}” → ${target}`;
+    }
+    case "format_block":
+      return `“${clip(blockText(action.blockId), 60)}” → ${action.kind}`;
+    default:
+      return null;
+  }
+}
 
 const ACTION_LABEL: Record<AssistantAction["type"], string> = {
   edit_block: "Edit",
@@ -37,6 +83,7 @@ const ACTION_LABEL: Record<AssistantAction["type"], string> = {
   style: "Style",
 };
 type ExplainBubble = {
+  kind: "explain" | "assistant";
   x: number;
   y: number;
   text: string;
@@ -101,6 +148,16 @@ export function ReaderInteractions({
   swapsRef.current = swaps;
   const [salienceOn, setSalienceOn] = useState(false);
   const [salienceBusy, setSalienceBusy] = useState(false);
+  // Optimistic highlight marks: painted the instant a color dot is clicked,
+  // cleared when the server's anchors arrive with the refresh.
+  const [localAnchors, setLocalAnchors] = useState<
+    Record<string, { start: number; end: number; color: string | null }[]>
+  >({});
+  const [prevAnchorsProp, setPrevAnchorsProp] = useState(anchorHighlights);
+  if (prevAnchorsProp !== anchorHighlights) {
+    setPrevAnchorsProp(anchorHighlights);
+    setLocalAnchors({});
+  }
   const [toast, setToast] = useState<string | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -149,6 +206,7 @@ export function ReaderInteractions({
     setBubble(null);
     setEditMode(false);
     setCommentDraft("");
+    setLocalAnchors({});
   }
 
   // Selection → block-relative offsets via data-block-id (SPEC.md §5). DOM ranges are never persisted.
@@ -179,7 +237,8 @@ export function ReaderInteractions({
     const inBlockRange = document.createRange();
     inBlockRange.selectNodeContents(startBlock);
     inBlockRange.setStart(range.startContainer, range.startOffset);
-    if (startBlock.contains(range.endContainer)) {
+    const truncated = !startBlock.contains(range.endContainer);
+    if (!truncated) {
       inBlockRange.setEnd(range.endContainer, range.endOffset);
     }
     const quotedText = inBlockRange.toString();
@@ -203,7 +262,21 @@ export function ReaderInteractions({
       y: rect.bottom - containerRect.top + container.scrollTop + 6,
       yTop: Math.max(8, rect.top - containerRect.top + container.scrollTop),
       textLeft,
+      truncated,
     };
+  }, []);
+
+  // Escape dismisses the selection popover and the bubble, wherever focus is.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      setPopover(null);
+      setSubmenu(null);
+      setBubble(null);
+      window.getSelection()?.removeAllRanges();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
   }, []);
 
   useEffect(() => {
@@ -220,6 +293,8 @@ export function ReaderInteractions({
         setPopover(captured);
         setSubmenu(null);
         setCommentDraft("");
+        // A stale assistant reply must not sit over the new popover's controls.
+        if (captured) setBubble((b) => (b?.kind === "assistant" ? null : b));
         if (captured) {
           // The assistant panel's Selection scope tracks the latest selection.
           window.dispatchEvent(
@@ -332,7 +407,7 @@ export function ReaderInteractions({
     const { anchor, x, y } = popover;
     setPopover(null);
     window.getSelection()?.removeAllRanges();
-    setBubble({ x, y, text: "", streaming: true, error: null });
+    setBubble({ kind: "explain", x, y, text: "", streaming: true, error: null });
     try {
       const res = await fetch("/api/derive", {
         method: "POST",
@@ -424,11 +499,21 @@ export function ReaderInteractions({
   }
 
   // Manual annotation: highlight (color, content = quote) or comment (user text).
-  // Lands ACCEPTED in the hidden Annotations section; the anchor paints the text.
+  // Lands ACCEPTED in the hidden Annotations section. The mark paints instantly
+  // from the captured anchor; the server's copy replaces it on refresh.
   async function annotate(input: { color?: string; comment?: string }) {
     if (!popover || busy) return;
     if (input.comment !== undefined && !input.comment.trim()) return;
     const { anchor } = popover;
+    const optimistic = { start: anchor.startOffset, end: anchor.endOffset, color: input.color ?? null };
+    setLocalAnchors((prev) => ({
+      ...prev,
+      [anchor.blockId]: [...(prev[anchor.blockId] ?? []), optimistic],
+    }));
+    setPopover(null);
+    setSubmenu(null);
+    setCommentDraft("");
+    window.getSelection()?.removeAllRanges();
     setBusy(true);
     try {
       const res = await fetch("/api/annotations", {
@@ -446,12 +531,12 @@ export function ReaderInteractions({
         const detail = (await res.json().catch(() => null)) as { error?: string } | null;
         throw new Error(detail?.error ?? `Annotation failed (${res.status})`);
       }
-      setPopover(null);
-      setSubmenu(null);
-      setCommentDraft("");
-      window.getSelection()?.removeAllRanges();
       router.refresh();
     } catch (err) {
+      setLocalAnchors((prev) => ({
+        ...prev,
+        [anchor.blockId]: (prev[anchor.blockId] ?? []).filter((h) => h !== optimistic),
+      }));
       showToast(err instanceof Error ? err.message : "Annotation failed");
     } finally {
       setBusy(false);
@@ -532,8 +617,10 @@ export function ReaderInteractions({
       setSubmenu(null);
       setAiCommand("");
       window.getSelection()?.removeAllRanges();
-      if (plan.reply) {
-        setBubble({ x, y, text: plan.reply, streaming: false, error: null });
+      // The reply shows in the plan card when there are actions; the bubble is
+      // only for a plain answer, so it never doubles or blocks the card.
+      if (plan.reply && plan.actions.length === 0) {
+        setBubble({ kind: "assistant", x, y, text: plan.reply, streaming: false, error: null });
       }
       if (plan.actions.length === 0) {
         if (!plan.reply) showToast(plan.warnings[0] ?? "The assistant proposed no actions.");
@@ -614,10 +701,14 @@ export function ReaderInteractions({
               sectionId = created.id;
               sectionIdByTitle.set(title.toLowerCase(), created.id);
             }
+            // Assistant notes carry their authorship. In Auto mode nobody
+            // approved this note, so it lands pending for triage (SPEC.md §1).
             await api("/api/notes", "POST", {
               sectionId,
               content: action.content,
               source: action.source,
+              origin: "assistant",
+              pending: autoRunRef.current,
             });
             break;
           }
@@ -749,7 +840,7 @@ export function ReaderInteractions({
     }
   }
 
-  async function insertBlock(afterBlockId: string) {
+  async function insertBlock(afterBlockId: string): Promise<string | null> {
     try {
       const res = await fetch("/api/blocks", {
         method: "POST",
@@ -759,8 +850,10 @@ export function ReaderInteractions({
       const json = (await res.json().catch(() => null)) as { id?: string; error?: string } | null;
       if (!res.ok || !json?.id) throw new Error(json?.error ?? `Insert failed (${res.status})`);
       router.refresh();
+      return json.id;
     } catch (err) {
       showToast(err instanceof Error ? err.message : "Insert failed");
+      return null;
     }
   }
 
@@ -817,6 +910,20 @@ export function ReaderInteractions({
   const highlightsByBlock: Record<string, Highlight[]> = {};
   for (const [blockId, list] of Object.entries(anchorHighlights)) {
     highlightsByBlock[blockId] = list.map((h) => ({ ...h, kind: "anchor" as const }));
+  }
+  for (const [blockId, list] of Object.entries(localAnchors)) {
+    const existing = highlightsByBlock[blockId] ?? [];
+    highlightsByBlock[blockId] = [
+      ...existing,
+      ...list.map((h) => ({
+        sourceId: null,
+        start: h.start,
+        end: h.end,
+        color: h.color,
+        annotation: false,
+        kind: "anchor" as const,
+      })),
+    ];
   }
   for (const [blockId, list] of Object.entries(stylesByBlock)) {
     const existing = highlightsByBlock[blockId] ?? [];
@@ -960,6 +1067,11 @@ export function ReaderInteractions({
             width: submenu === "ai" || submenu === "comment" ? 248 : 116,
           }}
         >
+          {popover.truncated && (
+            <p className="px-2.5 py-1 text-[10.5px] leading-snug text-sand-500">
+              Anchors to the first paragraph of the selection
+            </p>
+          )}
           {pendingLink && (
             <button
               disabled={busy}
@@ -993,7 +1105,10 @@ export function ReaderInteractions({
                     e.preventDefault();
                     void runAssistant();
                   }
-                  if (e.key === "Escape") setSubmenu(null);
+                  if (e.key === "Escape") {
+                    e.stopPropagation();
+                    setSubmenu(null);
+                  }
                 }}
                 placeholder="Tell the assistant what to do with this selection…"
                 rows={2}
@@ -1111,7 +1226,10 @@ export function ReaderInteractions({
                     e.preventDefault();
                     void annotate({ comment: commentDraft });
                   }
-                  if (e.key === "Escape") setSubmenu(null);
+                  if (e.key === "Escape") {
+                    e.stopPropagation();
+                    setSubmenu(null);
+                  }
                 }}
                 placeholder="Comment on this passage — or pick a color to attach it to a highlight"
                 rows={2}
@@ -1173,7 +1291,11 @@ export function ReaderInteractions({
         >
           <div className="mb-2 flex items-center justify-between">
             <span className="text-[11px] font-bold tracking-[0.08em] text-clay-800 uppercase">
-              {bubble.streaming ? "Explaining…" : "Explanation"}
+              {bubble.streaming
+                ? "Explaining…"
+                : bubble.kind === "assistant"
+                  ? "Assistant"
+                  : "Explanation"}
             </span>
             <button
               onClick={() => setBubble(null)}
@@ -1249,17 +1371,28 @@ export function ReaderInteractions({
                     })
                   }
                 />
-                <span>
+                <span className="min-w-0">
                   <span className="mr-1.5 rounded-full bg-sand-200 px-2 py-0.5 text-[10px] font-semibold text-sand-700">
                     {ACTION_LABEL[action.type]}
                   </span>
                   {action.description}
+                  {actionDetail(action, blocks, attachedDocuments) && (
+                    <span className="mt-0.5 block text-[11px] text-sand-500">
+                      {actionDetail(action, blocks, attachedDocuments)}
+                    </span>
+                  )}
                 </span>
               </label>
             ))}
           </div>
           {aiPlan.warnings.length > 0 && (
-            <p className="mt-2 text-[11px] text-sand-500">{aiPlan.warnings.join(" ")}</p>
+            <ul className="mt-2 flex flex-col gap-1 rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-2">
+              {aiPlan.warnings.map((w, i) => (
+                <li key={i} className="text-[11.5px] font-medium text-amber-700 dark:text-amber-400">
+                  ⚠ {w}
+                </li>
+              ))}
+            </ul>
           )}
           <div className="mt-3 flex items-center gap-2">
             <button

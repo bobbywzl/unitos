@@ -123,7 +123,7 @@ export function Reader({
   onSaveText: (blockId: string, text: string) => Promise<void>;
   onFormatBlock: (blockId: string, kind: Kind) => Promise<void>;
   onToggleStyle: (blockId: string, start: number, end: number, style: "bold" | "italic") => Promise<void>;
-  onInsertBlock: (afterBlockId: string) => Promise<void>;
+  onInsertBlock: (afterBlockId: string) => Promise<string | null>;
   onDeleteBlock: (blockId: string) => Promise<void>;
 }) {
   const [focusedBlockId, setFocusedBlockId] = useState<string | null>(null);
@@ -131,19 +131,38 @@ export function Reader({
   // when the server round-trip lands (the blocks prop identity changes then).
   const [localKinds, setLocalKinds] = useState<Record<string, Kind>>({});
   const [localStyles, setLocalStyles] = useState<Record<string, StyleSpan[]>>({});
+  const [localTexts, setLocalTexts] = useState<Record<string, string>>({});
   const [prevBlocks, setPrevBlocks] = useState(blocks);
   if (prevBlocks !== blocks) {
     setPrevBlocks(blocks);
     setLocalKinds({});
     setLocalStyles({});
+    setLocalTexts({});
   }
   const restoreSelectionRef = useRef<{ blockId: string; start: number; end: number } | null>(null);
+  // Focus a just-inserted paragraph the moment it renders.
+  const pendingFocusRef = useRef<string | null>(null);
 
   const fontFamily = FONT_STACK[font ?? "default"];
   const focusedBlock = blocks.find((b) => b.id === focusedBlockId) ?? null;
   const effectiveKind = (block: BlockData): Kind => localKinds[block.id] ?? blockKind(block);
   const effectiveStyles = (block: BlockData): StyleSpan[] =>
     localStyles[block.id] ?? stylesByBlock[block.id] ?? [];
+  const effectiveText = (block: BlockData): string => localTexts[block.id] ?? block.text;
+
+  // Bar buttons prevent blur, so unsaved typing must be saved by hand before a
+  // format or style rebuilds the block — otherwise the typed words are lost.
+  function flushFocused(): Promise<void> | null {
+    if (!focusedBlockId) return null;
+    const block = blocks.find((b) => b.id === focusedBlockId);
+    const el = document.querySelector<HTMLElement>(`[data-edit-block="${focusedBlockId}"]`);
+    if (!block || !el) return null;
+    const live = el.textContent ?? "";
+    if (live === effectiveText(block)) return null;
+    const blockId = focusedBlockId;
+    setLocalTexts((prev) => ({ ...prev, [blockId]: live }));
+    return onSaveText(blockId, live);
+  }
 
   function applyStyle(style: "bold" | "italic") {
     if (!focusedBlockId) return;
@@ -162,6 +181,7 @@ export function Reader({
     const blockId = focusedBlockId;
     const block = blocks.find((b) => b.id === blockId);
     if (!block) return;
+    const flush = flushFocused();
     setLocalStyles((prev) => {
       const current = prev[blockId] ?? stylesByBlock[blockId] ?? [];
       const existing = current.findIndex(
@@ -174,13 +194,31 @@ export function Reader({
       return { ...prev, [blockId]: next };
     });
     restoreSelectionRef.current = { blockId, start, end };
-    void onToggleStyle(blockId, start, end, style);
+    // Unsaved typing saves first — the style offsets refer to the saved text.
+    if (flush) void flush.then(() => onToggleStyle(blockId, start, end, style));
+    else void onToggleStyle(blockId, start, end, style);
   }
 
   function applyFormat(kind: Kind) {
     if (!focusedBlockId) return;
-    setLocalKinds((prev) => ({ ...prev, [focusedBlockId]: kind }));
-    void onFormatBlock(focusedBlockId, kind);
+    const blockId = focusedBlockId;
+    // Keep the caret where it was through the remount.
+    const el = document.querySelector<HTMLElement>(`[data-edit-block="${blockId}"]`);
+    const selection = window.getSelection();
+    if (el && selection && selection.rangeCount > 0) {
+      const range = selection.getRangeAt(0);
+      if (el.contains(range.commonAncestorContainer)) {
+        const pre = document.createRange();
+        pre.selectNodeContents(el);
+        pre.setEnd(range.startContainer, range.startOffset);
+        const start = pre.toString().length;
+        restoreSelectionRef.current = { blockId, start, end: start + range.toString().length };
+      }
+    }
+    const flush = flushFocused();
+    setLocalKinds((prev) => ({ ...prev, [blockId]: kind }));
+    if (flush) void flush.then(() => onFormatBlock(blockId, kind));
+    else void onFormatBlock(blockId, kind);
   }
 
   const barButton =
@@ -244,10 +282,12 @@ export function Reader({
               {TEXT_TYPES.has(block.type) ? (
                 <EditableBlock
                   block={block}
+                  text={effectiveText(block)}
                   kind={effectiveKind(block)}
                   spans={effectiveStyles(block)}
                   edited={editedByBlock[block.id] ?? []}
                   restoreSelectionRef={restoreSelectionRef}
+                  pendingFocusRef={pendingFocusRef}
                   onSave={onSaveText}
                   onFocusBlock={setFocusedBlockId}
                 />
@@ -257,7 +297,11 @@ export function Reader({
               <div className="relative -my-1.5 h-3">
                 <button
                   onMouseDown={keep}
-                  onClick={() => void onInsertBlock(block.id)}
+                  onClick={() =>
+                    void onInsertBlock(block.id).then((id) => {
+                      if (id) pendingFocusRef.current = id;
+                    })
+                  }
                   aria-label="Insert a paragraph here"
                   title="Insert a paragraph here"
                   className="absolute top-1/2 left-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center gap-1 rounded-full bg-card px-2.5 py-0.5 text-[11px] font-semibold text-sand-600 opacity-0 shadow-soft transition-opacity hover:bg-clay-100 hover:text-clay-800 hover:opacity-100 focus-visible:opacity-100 group-hover/block:opacity-60"
@@ -298,26 +342,30 @@ const KIND_CLASS: Record<Kind, string> = {
 // offsets stay honest.
 function EditableBlock({
   block,
+  text,
   kind,
   spans,
   edited,
   restoreSelectionRef,
+  pendingFocusRef,
   onSave,
   onFocusBlock,
 }: {
   block: BlockData;
+  text: string;
   kind: Kind;
   spans: StyleSpan[];
   edited: { start: number; end: number }[];
   restoreSelectionRef: React.MutableRefObject<{ blockId: string; start: number; end: number } | null>;
+  pendingFocusRef: React.MutableRefObject<string | null>;
   onSave: (blockId: string, text: string) => Promise<void>;
   onFocusBlock: (blockId: string) => void;
 }) {
   const ref = useRef<HTMLElement | null>(null);
 
-  const html = decoratedHtml(block.text, spans, edited);
+  const html = decoratedHtml(text, spans, edited);
   // Remount whenever content or decorations change server- or optimistic-side.
-  const key = `${block.id}:${block.text.length}:${html.length}:${kind}`;
+  const key = `${block.id}:${text.length}:${html.length}:${kind}`;
 
   const shared = {
     ref: (el: HTMLElement | null) => {
@@ -331,18 +379,25 @@ function EditableBlock({
           selectRange(el, pending.start, pending.end);
         });
       }
+      // A just-inserted paragraph starts focused, ready to type into.
+      if (el && pendingFocusRef.current === block.id) {
+        pendingFocusRef.current = null;
+        requestAnimationFrame(() => el.focus());
+      }
     },
     contentEditable: "plaintext-only" as const,
     suppressContentEditableWarning: true,
     "data-edit-block": block.id,
+    "data-placeholder": "Type here",
     onFocus: () => onFocusBlock(block.id),
     onBlur: () => {
       const next = ref.current?.textContent ?? "";
-      if (next.trim() && next !== block.text) void onSave(block.id, next);
+      if (next !== text) void onSave(block.id, next);
     },
     dangerouslySetInnerHTML: { __html: html },
   };
-  const editable = "rounded-lg outline-none focus:bg-card/60 whitespace-pre-wrap";
+  const editable =
+    "rounded-lg outline-none focus:bg-card/60 whitespace-pre-wrap empty:before:content-[attr(data-placeholder)] empty:before:text-sand-500";
 
   const base = block.type === "CODE" || block.type === "EQUATION"
     ? "my-4 overflow-x-auto rounded-2xl bg-sand-200 p-4 text-sm"

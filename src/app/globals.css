@@ -235,6 +235,11 @@ mark,
   background: color-mix(in srgb, #a78bfa 28%, transparent);
   border-bottom: 2px solid color-mix(in srgb, #a78bfa 65%, transparent);
 }
+/* More than one highlight covers this span: a double underline says "stacked". */
+.hl-stacked {
+  border-bottom-width: 3px;
+  border-bottom-style: double;
+}
 .annotation-mark {
   cursor: pointer;
 }

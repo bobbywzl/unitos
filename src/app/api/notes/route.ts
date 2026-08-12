@@ -8,6 +8,11 @@ const createSchema = z.object({
   sectionId: z.string().min(1),
   content: z.string().min(1).max(50_000),
   source: sourceInputSchema.optional(),
+  // Assistant-written notes carry their authorship, and land pending when the
+  // user has not approved them one by one (Auto mode). Nothing enters notes
+  // silently (SPEC.md §1).
+  origin: z.enum(["assistant"]).optional(),
+  pending: z.boolean().optional(),
 });
 
 // Manual notes, with an optional anchor (manual extract). Derived notes are created by /api/derive.
@@ -33,7 +38,8 @@ export async function POST(req: Request) {
     data: {
       sectionId: data.sectionId,
       content: data.content,
-      status: "ACCEPTED",
+      status: data.pending ? "PENDING" : "ACCEPTED",
+      ...(data.origin === "assistant" ? { derivationType: "SYNTHESIS" as const } : {}),
       order: count,
       ...(data.source
         ? {

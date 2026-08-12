@@ -12,8 +12,10 @@ import {
   HistoryIcon,
   MoreIcon,
   NotesIcon,
+  QuestionIcon,
   SparkleIcon,
 } from "@/components/icons";
+import { GuideDialog } from "@/components/guide-dialog";
 import { NotebookTitle } from "@/components/notebook-title";
 import { NotesTray } from "@/components/outline/notes-tray";
 import { useOutline } from "@/components/outline/use-outline";
@@ -62,6 +64,7 @@ export function Workspace({
   const [tab, setTab] = useState<Tab>("notes");
   const [menuOpen, setMenuOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(profile.autoOpen);
+  const [guideOpen, setGuideOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   const noteCount = countNotes(tree);
@@ -150,6 +153,14 @@ export function Workspace({
             {pending.length} pending
           </span>
         )}
+        <button
+          onClick={() => setGuideOpen(true)}
+          aria-label="Guide"
+          title="What every tool does"
+          className="flex size-[38px] shrink-0 items-center justify-center rounded-full text-sand-600 hover:bg-clay-100 hover:text-clay-800"
+        >
+          <QuestionIcon size={18} />
+        </button>
       </header>
 
       <div className="flex min-h-0">
@@ -308,6 +319,7 @@ export function Workspace({
         open={profileOpen}
         onClose={() => setProfileOpen(false)}
       />
+      <GuideDialog open={guideOpen} onClose={() => setGuideOpen(false)} />
     </div>
   );
 }

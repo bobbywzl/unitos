@@ -40,6 +40,14 @@ export async function POST(req: Request) {
   if (!block || block.documentId !== data.fromDocumentId) {
     return NextResponse.json({ error: "Block not found in this document" }, { status: 404 });
   }
+  // Provenance is non-negotiable (SPEC.md §1): the quote must be the text at
+  // those offsets, or the anchor is a lie and is rejected.
+  if (
+    data.anchor.endOffset > block.text.length ||
+    block.text.slice(data.anchor.startOffset, data.anchor.endOffset) !== data.anchor.quotedText
+  ) {
+    return NextResponse.json({ error: "Anchor does not match the block text" }, { status: 400 });
+  }
 
   if (data.toAnchor) {
     if (data.toAnchor.endOffset <= data.toAnchor.startOffset) {
@@ -48,6 +56,13 @@ export async function POST(req: Request) {
     const toBlock = await db.block.findUnique({ where: { id: data.toAnchor.blockId } });
     if (!toBlock || toBlock.documentId !== data.toDocumentId) {
       return NextResponse.json({ error: "Block not found in the target document" }, { status: 404 });
+    }
+    if (
+      data.toAnchor.endOffset > toBlock.text.length ||
+      toBlock.text.slice(data.toAnchor.startOffset, data.toAnchor.endOffset) !==
+        data.toAnchor.quotedText
+    ) {
+      return NextResponse.json({ error: "Anchor does not match the block text" }, { status: 400 });
     }
   }
 

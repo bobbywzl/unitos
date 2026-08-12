@@ -268,13 +268,21 @@ export default async function NotebookPage(props: {
         quotedText: link.quotedText,
         targetQuotedText: link.toQuotedText,
         orphaned: resolved === null,
+        targetOrphaned: link.toOrphaned,
         detached,
       });
-      if (!resolved) continue;
+      if (!resolved) {
+        // Orphan flags write back, so both ends report honestly (SPEC.md §5).
+        if (!link.fromOrphaned) {
+          await db.docLink.update({ where: { id: link.id }, data: { fromOrphaned: true } });
+        }
+        continue;
+      }
       if (
         resolved.blockId !== link.fromBlockId ||
         resolved.start !== link.startOffset ||
-        resolved.end !== link.endOffset
+        resolved.end !== link.endOffset ||
+        link.fromOrphaned
       ) {
         await db.docLink.update({
           where: { id: link.id },
@@ -282,6 +290,7 @@ export default async function NotebookPage(props: {
             fromBlockId: resolved.blockId,
             startOffset: resolved.start,
             endOffset: resolved.end,
+            fromOrphaned: false,
           },
         });
       }
@@ -303,53 +312,62 @@ export default async function NotebookPage(props: {
     // Incoming two-ended links paint their end in THIS document too, and click
     // through to the source end. Same ladder, write-back on rebind.
     for (const link of incoming) {
+      const twoEnded =
+        link.fromDocumentId !== activeDocument.id &&
+        link.toQuotedText !== null &&
+        link.toBlockId !== null &&
+        link.toStartOffset !== null &&
+        link.toEndOffset !== null;
+      let resolved: { blockId: string; start: number; end: number } | null = null;
+      if (twoEnded) {
+        const selector = {
+          quotedText: link.toQuotedText!,
+          prefix: link.toPrefix ?? "",
+          suffix: link.toSuffix ?? "",
+        };
+        const stored = blockById.get(link.toBlockId!);
+        if (
+          stored &&
+          stored.text.slice(link.toStartOffset!, link.toEndOffset!) === link.toQuotedText
+        ) {
+          resolved = { blockId: link.toBlockId!, start: link.toStartOffset!, end: link.toEndOffset! };
+        } else if (stored) {
+          const hit = matchInText(stored.text, selector);
+          if (hit) resolved = { blockId: stored.id, ...hit };
+        }
+        if (!resolved) {
+          for (const block of activeDocument.blocks) {
+            if (block.id === link.toBlockId) continue;
+            const hit = matchInText(block.text, selector);
+            if (hit) {
+              resolved = { blockId: block.id, ...hit };
+              break;
+            }
+          }
+        }
+      }
       linksIn.push({
         id: link.id,
         fromDocumentId: link.fromDocumentId,
         fromTitle: link.fromDocument.title,
         quotedText: link.quotedText,
         hereQuotedText: link.toQuotedText,
+        orphaned: twoEnded && resolved === null,
+        fromOrphaned: link.fromOrphaned,
       });
-      if (
-        link.fromDocumentId === activeDocument.id ||
-        !link.toQuotedText ||
-        link.toBlockId === null ||
-        link.toStartOffset === null ||
-        link.toEndOffset === null
-      ) {
+      if (!twoEnded) continue;
+      if (!resolved) {
+        // Orphan flags write back, so both ends report honestly (SPEC.md §5).
+        if (!link.toOrphaned) {
+          await db.docLink.update({ where: { id: link.id }, data: { toOrphaned: true } });
+        }
         continue;
       }
-      const selector = {
-        quotedText: link.toQuotedText,
-        prefix: link.toPrefix ?? "",
-        suffix: link.toSuffix ?? "",
-      };
-      const stored = blockById.get(link.toBlockId);
-      let resolved: { blockId: string; start: number; end: number } | null = null;
-      if (
-        stored &&
-        stored.text.slice(link.toStartOffset, link.toEndOffset) === link.toQuotedText
-      ) {
-        resolved = { blockId: link.toBlockId, start: link.toStartOffset, end: link.toEndOffset };
-      } else if (stored) {
-        const hit = matchInText(stored.text, selector);
-        if (hit) resolved = { blockId: stored.id, ...hit };
-      }
-      if (!resolved) {
-        for (const block of activeDocument.blocks) {
-          if (stored && block.id === stored.id) continue;
-          const hit = matchInText(block.text, selector);
-          if (hit) {
-            resolved = { blockId: block.id, ...hit };
-            break;
-          }
-        }
-      }
-      if (!resolved) continue;
       if (
         resolved.blockId !== link.toBlockId ||
         resolved.start !== link.toStartOffset ||
-        resolved.end !== link.toEndOffset
+        resolved.end !== link.toEndOffset ||
+        link.toOrphaned
       ) {
         await db.docLink.update({
           where: { id: link.id },
@@ -357,6 +375,7 @@ export default async function NotebookPage(props: {
             toBlockId: resolved.blockId,
             toStartOffset: resolved.start,
             toEndOffset: resolved.end,
+            toOrphaned: false,
           },
         });
       }
@@ -466,7 +485,9 @@ export default async function NotebookPage(props: {
           linksIn={linksIn}
         />
       }
-      editsPanel={<EditsPanel edits={edits} />}
+      editsPanel={
+        <EditsPanel edits={edits} liveBlockIds={activeDocument?.blocks.map((b) => b.id) ?? []} />
+      }
       annotationCount={annotations.length + linksOut.length + linksIn.length}
       reader={
         activeDocument ? (

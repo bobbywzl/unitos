@@ -6,7 +6,7 @@ import { parseBody } from "@/lib/validate";
 const createSchema = z.object({
   documentId: z.string().min(1),
   afterBlockId: z.string().min(1),
-  text: z.string().min(1).max(50_000).optional(),
+  text: z.string().max(50_000).optional(),
 });
 
 // Insert a paragraph after a block. User-authored blocks carry originalText ""
@@ -30,7 +30,8 @@ export async function POST(req: Request) {
         documentId: data.documentId,
         order: after.order + 1,
         type: "PARAGRAPH",
-        text: data.text ?? "New paragraph",
+        // Empty until the user types; the editor shows a placeholder.
+        text: data.text ?? "",
         originalText: "",
       },
     });

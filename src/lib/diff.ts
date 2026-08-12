@@ -1,6 +1,9 @@
 /** Character ranges of `current` that differ from `original` — word-level LCS,
     so an inserted or replaced word paints without dragging the whole block in.
-    Ranges cover current-text offsets, the same space highlights paint in. */
+    Punctuation tokenizes separately, so "fox," with only "fox" changed does not
+    paint the comma. A pure deletion paints the word after the join, so removed
+    text still leaves a visible trace. Ranges cover current-text offsets, the
+    same space highlights paint in. */
 export function editedRanges(
   original: string,
   current: string,
@@ -10,7 +13,8 @@ export function editedRanges(
 
   const tokenize = (s: string) => {
     const tokens: { text: string; start: number; end: number }[] = [];
-    const re = /\S+/g;
+    // Words (apostrophes included) and single punctuation marks are separate tokens.
+    const re = /[\p{L}\p{N}]+(?:['’][\p{L}\p{N}]+)*|[^\s\p{L}\p{N}]/gu;
     let m: RegExpExecArray | null;
     while ((m = re.exec(s))) tokens.push({ text: m[0], start: m.index, end: m.index + m[0].length });
     return tokens;
@@ -33,7 +37,8 @@ export function editedRanges(
     }
   }
 
-  // Walk: current-side tokens not on the LCS are edited.
+  // Walk: current-side tokens not on the LCS are edited. A deletion (original-side
+  // token skipped) marks the next current-side token, so the join stays visible.
   const editedTokens: boolean[] = new Array<boolean>(b.length).fill(false);
   let i = 0;
   let j = 0;
@@ -42,12 +47,14 @@ export function editedRanges(
       i++;
       j++;
     } else if (dp[(i + 1) * cols + j] >= dp[i * cols + j + 1]) {
+      editedTokens[j] = true; // deletion before this token
       i++;
     } else {
       editedTokens[j] = true;
       j++;
     }
   }
+  if (i < a.length && b.length > 0) editedTokens[b.length - 1] = true; // deletion at the end
   for (; j < b.length; j++) editedTokens[j] = true;
 
   // Merge adjacent edited tokens into ranges (spanning the whitespace between).

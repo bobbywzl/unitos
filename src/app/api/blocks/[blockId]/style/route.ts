@@ -44,6 +44,20 @@ export async function POST(req: Request, ctx: { params: Promise<{ blockId: strin
           },
         ];
 
-  const updated = await db.block.update({ where: { id: blockId }, data: { styles: next } });
+  const quotedText = block.text.slice(data.startOffset, data.endOffset);
+  const [updated] = await db.$transaction([
+    db.block.update({ where: { id: blockId }, data: { styles: next } }),
+    // STYLE history row, so styling is auditable like every other edit.
+    db.blockEdit.create({
+      data: {
+        documentId: block.documentId,
+        blockId: block.id,
+        kind: "STYLE",
+        before: existing >= 0 ? data.style : null,
+        after: existing >= 0 ? null : data.style,
+        meta: { style: data.style, on: existing < 0, quotedText },
+      },
+    }),
+  ]);
   return NextResponse.json(updated);
 }

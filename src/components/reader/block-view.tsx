@@ -96,7 +96,7 @@ function markedText(text: string, highlights: Highlight[]) {
                 }
               : undefined
           }
-          className={`${anchor ? anchorClass(anchor.color) : "salience-mark"} rounded-[4px] ${focusable ? "annotation-mark" : ""}${editedClass}`}
+          className={`${anchor ? anchorClass(anchor.color) : "salience-mark"}${anchors.length > 1 ? " hl-stacked" : ""} rounded-[4px] ${focusable ? "annotation-mark" : ""}${editedClass}`}
         >
           {segment}
         </mark>,

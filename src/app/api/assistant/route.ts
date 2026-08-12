@@ -104,13 +104,9 @@ export async function POST(req: Request) {
     system = await notebookContext(data.notebookId);
     scopeLabel = "the notebook's accepted notes";
   } else {
-    if (!embeddingsConfigured()) {
-      return NextResponse.json(
-        { error: "VOYAGE_API_KEY is not set. Corpus search needs it." },
-        { status: 503 },
-      );
-    }
-    await ensureNoteEmbeddings();
+    // With VOYAGE_API_KEY set, corpus search is semantic (embeddings);
+    // without it, it falls back to Postgres full-text search.
+    if (embeddingsConfigured()) await ensureNoteEmbeddings();
     const matches = await corpusSearch(data.question ?? "");
     system = corpusContext(data.question ?? "", matches);
     scopeLabel = "corpus matches across all notebooks";

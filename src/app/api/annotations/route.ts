@@ -52,6 +52,18 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Block not found in this document" }, { status: 404 });
   }
 
+  // Provenance is non-negotiable (SPEC.md §1): the quote must be the text at
+  // those offsets, or the anchor is a lie and is rejected.
+  if (
+    data.anchor.endOffset > block.text.length ||
+    block.text.slice(data.anchor.startOffset, data.anchor.endOffset) !== data.anchor.quotedText
+  ) {
+    return NextResponse.json(
+      { error: "Anchor does not match the block text" },
+      { status: 400 },
+    );
+  }
+
   const section = await annotationsSection(data.notebookId);
   const order = await db.note.count({ where: { sectionId: section.id } });
 
@@ -60,6 +72,25 @@ export async function POST(req: Request) {
   const comment = data.comment?.trim();
   const content = comment ? comment : data.anchor.quotedText.slice(0, 5000);
   const color = data.color ?? (comment ? null : "clay");
+
+  // The same highlight twice is one highlight, not two stacked cards.
+  const duplicate = await db.note.findFirst({
+    where: {
+      sectionId: section.id,
+      content,
+      color,
+      sources: {
+        some: {
+          blockId: data.anchor.blockId,
+          startOffset: data.anchor.startOffset,
+          endOffset: data.anchor.endOffset,
+          orphaned: false,
+        },
+      },
+    },
+    include: { sources: true },
+  });
+  if (duplicate) return NextResponse.json(duplicate, { status: 200 });
 
   const note = await db.note.create({
     data: {

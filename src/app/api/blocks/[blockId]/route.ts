@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { diffSegments, remapAnchor, remapRange } from "@/lib/anchors/remap";
 import { db } from "@/lib/db";
 import { parseBody } from "@/lib/validate";
 
 const patchSchema = z
   .object({
-    text: z.string().min(1).max(50_000).optional(),
+    text: z.string().max(50_000).optional(),
     kind: z.enum(["paragraph", "h1", "h2", "h3"]).optional(),
   })
   .refine((d) => d.text !== undefined || d.kind !== undefined, {
@@ -24,6 +25,8 @@ function kindOf(type: string, html: string | null): string {
   const m = html?.match(/^<h([1-3])/);
   return m ? `h${m[1]}` : "h2";
 }
+
+type StyleSpan = { start: number; end: number; style: string; quotedText: string };
 
 // Edit a block's text. TABLE and FIGURE content is sanitized html, not text, so they are
 // not editable. block.html is left untouched — for HEADING it stores the level tag.
@@ -55,6 +58,8 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ blockId: stri
           documentId: block.documentId,
           blockId: block.id,
           kind: "FORMAT",
+          before: from,
+          after: data.kind,
           meta: { from, to: data.kind },
         },
       }),
@@ -63,31 +68,110 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ blockId: stri
   }
 
   if (data.text === undefined || data.text === block.text) return NextResponse.json(block);
+  const newText = data.text;
 
-  const [updated] = await db.$transaction([
-    db.block.update({
+  // Remap every anchor on this block through the edit, the way Google Docs
+  // moves highlights while you type: shift, grow, shrink, or orphan visibly.
+  const segments = diffSegments(block.text, newText);
+  const [sources, links] = await Promise.all([
+    db.source.findMany({ where: { blockId, orphaned: false } }),
+    db.docLink.findMany({
+      where: { OR: [{ fromBlockId: blockId }, { toBlockId: blockId }] },
+    }),
+  ]);
+
+  const spans = (Array.isArray(block.styles) ? block.styles : []) as unknown as StyleSpan[];
+  const nextSpans = spans.flatMap((s) => {
+    const r = remapRange(segments, s.start, s.end);
+    if (r.orphaned) return []; // the styled words are gone; the style goes with them
+    return [{ ...s, start: r.start, end: r.end, quotedText: newText.slice(r.start, r.end) }];
+  });
+
+  const updated = await db.$transaction(async (tx) => {
+    const saved = await tx.block.update({
       where: { id: blockId },
       // First edit freezes the original, so edited-vs-original coloring always
       // diffs against the text as parsed.
       data: {
-        text: data.text,
+        text: newText,
+        styles: nextSpans,
         ...(block.originalText === null ? { originalText: block.text } : {}),
       },
-    }),
-    db.blockEdit.create({
+    });
+    await tx.blockEdit.create({
       data: {
         documentId: block.documentId,
         blockId: block.id,
         kind: "TEXT_EDIT",
         before: block.text,
-        after: data.text,
+        after: newText,
       },
-    }),
-  ]);
+    });
+    for (const src of sources) {
+      const r = remapAnchor(segments, newText, src);
+      await tx.source.update({
+        where: { id: src.id },
+        data: {
+          startOffset: r.startOffset,
+          endOffset: r.endOffset,
+          quotedText: r.quotedText,
+          prefix: r.prefix,
+          suffix: r.suffix,
+          orphaned: r.orphaned,
+        },
+      });
+    }
+    for (const link of links) {
+      if (link.fromBlockId === blockId && !link.fromOrphaned) {
+        const r = remapAnchor(segments, newText, {
+          startOffset: link.startOffset,
+          endOffset: link.endOffset,
+          quotedText: link.quotedText,
+        });
+        await tx.docLink.update({
+          where: { id: link.id },
+          data: {
+            startOffset: r.startOffset,
+            endOffset: r.endOffset,
+            quotedText: r.quotedText,
+            prefix: r.prefix,
+            suffix: r.suffix,
+            fromOrphaned: r.orphaned,
+          },
+        });
+      }
+      if (
+        link.toBlockId === blockId &&
+        !link.toOrphaned &&
+        link.toStartOffset !== null &&
+        link.toEndOffset !== null &&
+        link.toQuotedText !== null
+      ) {
+        const r = remapAnchor(segments, newText, {
+          startOffset: link.toStartOffset,
+          endOffset: link.toEndOffset,
+          quotedText: link.toQuotedText,
+        });
+        await tx.docLink.update({
+          where: { id: link.id },
+          data: {
+            toStartOffset: r.startOffset,
+            toEndOffset: r.endOffset,
+            toQuotedText: r.quotedText,
+            toPrefix: r.prefix,
+            toSuffix: r.suffix,
+            toOrphaned: r.orphaned,
+          },
+        });
+      }
+    }
+    return saved;
+  });
   return NextResponse.json(updated);
 }
 
-// Remove a block. Anchors on it re-resolve or orphan visibly (SPEC.md §5).
+// Remove a block. Its anchors orphan visibly (SPEC.md §5); the Edits panel can
+// restore the block from the recorded text, format, and position.
 export async function DELETE(_req: Request, ctx: { params: Promise<{ blockId: string }> }) {
   const { blockId } = await ctx.params;
   const block = await db.block.findUnique({ where: { id: blockId } });
@@ -98,12 +182,21 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ blockId: st
 
   await db.$transaction([
     db.block.delete({ where: { id: blockId } }),
+    db.source.updateMany({ where: { blockId }, data: { orphaned: true } }),
+    db.docLink.updateMany({ where: { fromBlockId: blockId }, data: { fromOrphaned: true } }),
+    db.docLink.updateMany({ where: { toBlockId: blockId }, data: { toOrphaned: true } }),
     db.blockEdit.create({
       data: {
         documentId: block.documentId,
         blockId: block.id,
         kind: "BLOCK_REMOVE",
         before: block.text,
+        meta: {
+          order: block.order,
+          type: block.type,
+          html: block.html,
+          originalText: block.originalText,
+        },
       },
     }),
   ]);
