@@ -36,13 +36,15 @@ export type NotebookView = {
 
 /** One annotation on the open document, shown in the Annotations tab.
     kind: "highlight" = manual color highlight, "comment" = margin comment,
-    "explain" = AI explanation. All live as notes in the hidden Annotations
-    section; highlights carry a color, comments carry the user's text. */
+    "explain" = AI explanation, "visualize" = AI visualization. All live as
+    notes in the hidden Annotations section; highlights carry a color, comments
+    carry the user's text, visualizations carry svg. */
 export type AnnotationItem = {
   id: string; // note id
-  kind: "explain" | "highlight" | "comment";
+  kind: "explain" | "highlight" | "comment" | "visualize";
   content: string;
   color: string | null; // "clay" | "sage" | "gold" for highlights
+  svg: string | null; // sanitized render payload, kind "visualize" only
   sourceId: string | null;
   quotedText: string | null;
   orphaned: boolean;

@@ -41,6 +41,7 @@ model Note {
   status         NoteStatus                   @default(ACCEPTED) // manual notes are ACCEPTED on create
   derivationType DerivationType? // null = manually written
   color          String? // manual highlight hue: "clay" | "sage" | "gold"
+  svg            String? // VISUALIZE render payload, sanitized before store (like Block.html)
   order          Int
   sources        Source[]
   embedding      Unsupported("vector(1024)")? // pgvector, Phase 6
@@ -59,6 +60,7 @@ enum DerivationType {
   SIMPLIFY
   SALIENCE
   EXTRACT
+  VISUALIZE
   SYNTHESIS // notebook-scope assistant output
 }
 

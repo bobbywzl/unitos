@@ -62,6 +62,31 @@ function buildResponse(all) {
     return JSON.stringify({ spans: spans.length > 0 ? spans : [{ blockId: blocks[0]?.id ?? "x", start: 0, end: 10 }] });
   }
 
+  // Visualize: a small labeled SVG built from the selection, echoing the focus.
+  if (all.includes('"svg"') && all.includes("visualization")) {
+    const selMatch = all.match(/Selected passage:\n([\s\S]*?)\n\nContext after/);
+    const focusMatch = all.match(/visualization to show:\n(.*)/);
+    const words = (selMatch?.[1] ?? "the selected passage")
+      .trim()
+      .split(/\s+/)
+      .slice(0, 4)
+      .join(" ")
+      .replace(/[<>&"]/g, "");
+    const focus = (focusMatch?.[1] ?? "").trim();
+    return JSON.stringify({
+      title: "Mock visualization",
+      caption: `Mock visualization of “${words}”. Focus given: ${focus.slice(0, 80)}`,
+      svg:
+        '<svg viewBox="0 0 800 320">' +
+        '<rect x="40" y="80" width="300" height="90" rx="12" fill="#c67139" fill-opacity="0.25" stroke="currentColor"/>' +
+        '<rect x="460" y="80" width="300" height="90" rx="12" fill="#7a8a5e" fill-opacity="0.25" stroke="currentColor"/>' +
+        '<line x1="340" y1="125" x2="460" y2="125" stroke="currentColor" stroke-width="2"/>' +
+        `<text x="190" y="130" text-anchor="middle" fill="currentColor" font-size="16" font-family="inherit">${words}</text>` +
+        '<text x="610" y="130" text-anchor="middle" fill="currentColor" font-size="16" font-family="inherit">mock outcome</text>' +
+        "</svg>",
+    });
+  }
+
   // Extract: note into the first listed section, quoting the selection.
   if (all.includes('"quotedSpans"')) {
     const sectionMatch = all.match(/Notebook sections:\n- ([^:]+):/);

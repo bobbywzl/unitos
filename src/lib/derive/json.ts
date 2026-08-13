@@ -42,6 +42,18 @@ export const extractOutputSchema = z.object({
   quotedSpans: z.array(spanSchema).min(1).max(5),
 });
 
+export const visualizeOutputSchema = z.object({
+  title: z.string().min(1).max(120),
+  caption: z.string().min(1).max(600),
+  svg: z
+    .string()
+    .min(1)
+    .max(30_000)
+    .refine((s) => s.includes("<svg") && s.includes("viewBox="), {
+      message: "svg must be one <svg> element with a viewBox",
+    }),
+});
+
 export type Span = z.infer<typeof spanSchema>;
 
 // Clamp a span to its block text; drop it when it does not resolve to non-empty text.

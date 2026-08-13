@@ -71,6 +71,12 @@ export function GuideDialog({ open, onClose }: { open: boolean; onClose: () => v
               become part of your notes without copying by hand.
             </li>
             <li>
+              <span className={term}>Visualize</span> — turns the selection into a diagram or
+              chart, using the whole document for context. It asks what the visualization
+              should show first — answer generally or specifically, or leave it empty and the
+              assistant chooses. Saved under Annotations.
+            </li>
+            <li>
               <span className={term}>Colors</span> — highlight the selection. Type a comment
               first, then pick a color, and the note rides on the highlight.
             </li>
@@ -130,8 +136,8 @@ export function GuideDialog({ open, onClose }: { open: boolean; onClose: () => v
             <span className={term}>Assistant</span> — ask questions at document, notebook, or
             corpus scope, and run checks (contradictions, gaps).{" "}
             <span className={term}>Annotations</span> — highlights, comments, explanations,
-            links; Jump scrolls to the source. <span className={term}>Edits</span> — the edit
-            history.
+            visualizations, links; Jump scrolls to the source.{" "}
+            <span className={term}>Edits</span> — the edit history.
           </p>
         </section>
       </div>

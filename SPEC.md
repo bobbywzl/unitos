@@ -79,6 +79,7 @@ enum DerivationType {
   SIMPLIFY
   SALIENCE
   EXTRACT
+  VISUALIZE  // SVG visualization of a selection; svg stored on the note
   SYNTHESIS  // notebook-scope assistant output
 }
 
@@ -157,11 +158,12 @@ Single server route: `POST /api/derive`
 
 ```typescript
 type DeriveRequest = {
-  type: 'EXPLAIN' | 'SIMPLIFY' | 'SALIENCE' | 'EXTRACT';
+  type: 'EXPLAIN' | 'SIMPLIFY' | 'SALIENCE' | 'EXTRACT' | 'VISUALIZE';
   documentId: string;
   notebookId: string;
-  anchor?: AnchorInput;        // required for EXPLAIN/SIMPLIFY/EXTRACT
+  anchor?: AnchorInput;        // required for EXPLAIN/SIMPLIFY/EXTRACT/VISUALIZE
   targetSectionId?: string;    // EXTRACT only; null = let AI propose section
+  focus?: string;              // VISUALIZE only; what the reader wants the visualization to show
 };
 ```
 
@@ -174,6 +176,7 @@ Flow:
    - `SIMPLIFY` → inline replacement in the reader (ephemeral, not persisted; toggle to revert)
    - `SALIENCE` → highlight layer (persisted as document-level Json, per notebook)
    - `EXTRACT` → `Note` with `status: PENDING` in the target section
+   - `VISUALIZE` → note in the hidden Annotations section (svg on the note, sanitized allowlist-style before store), rendered in a bubble at the selection and listed in the Annotations tab. The tool asks for a focus before generating; empty focus = model picks the view.
 
 Prompt templates always receive: reader profile, document title, section skeleton (for EXTRACT), and the anchored text with surrounding context (±2 blocks).
 

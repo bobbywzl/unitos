@@ -6,6 +6,7 @@ export const DERIVATION_MODEL: Record<DerivationType, string> = {
   SIMPLIFY: "claude-sonnet-4-6",
   SALIENCE: "claude-sonnet-4-6",
   EXTRACT: "claude-sonnet-4-6",
+  VISUALIZE: "claude-sonnet-4-6",
   SYNTHESIS: "claude-sonnet-4-6",
 };
 
@@ -14,6 +15,7 @@ export const MAX_OUTPUT_TOKENS: Record<DerivationType, number> = {
   SIMPLIFY: 1024,
   SALIENCE: 4096,
   EXTRACT: 2048,
+  VISUALIZE: 8192, // SVG markup is verbose
   SYNTHESIS: 8192,
 };
 

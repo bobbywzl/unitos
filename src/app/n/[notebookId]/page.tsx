@@ -197,14 +197,17 @@ export default async function NotebookPage(props: {
           const kind =
             n.derivationType === "EXPLAIN"
               ? ("explain" as const)
-              : n.color
-                ? ("highlight" as const)
-                : ("comment" as const);
+              : n.derivationType === "VISUALIZE"
+                ? ("visualize" as const)
+                : n.color
+                  ? ("highlight" as const)
+                  : ("comment" as const);
           return {
             id: n.id,
             kind,
             content: n.content,
             color: n.color,
+            svg: n.svg,
             sourceId: source.id,
             quotedText: source.quotedText,
             orphaned: resolutionById.get(source.id)?.orphaned ?? source.orphaned,

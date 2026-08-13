@@ -89,6 +89,7 @@ export function AnnotationsPanel({
   const highlights = annotations.filter((a) => a.kind === "highlight");
   const comments = annotations.filter((a) => a.kind === "comment");
   const explanations = annotations.filter((a) => a.kind === "explain");
+  const visualizations = annotations.filter((a) => a.kind === "visualize");
 
   async function mutate(id: string, run: () => Promise<unknown>) {
     if (busyId) return;
@@ -177,6 +178,36 @@ export function AnnotationsPanel({
           <span className={label}>Explanations</span>
           {explanations.map((a) => (
             <div key={a.id} data-annotation-source-id={a.sourceId ?? undefined} className={card}>
+              <div className="text-[13px]">
+                <Markdown>{a.content}</Markdown>
+              </div>
+              {a.orphaned && a.quotedText && (
+                <p className="mt-2 line-clamp-2 border-l-2 border-red-300 pl-2 text-xs text-sand-500">
+                  was anchored to: {a.quotedText}
+                </p>
+              )}
+              <AnnotationActions
+                annotation={a}
+                notebookId={notebookId}
+                documentId={documentId}
+                onDelete={deleteAnnotation}
+              />
+            </div>
+          ))}
+        </div>
+      )}
+
+      {visualizations.length > 0 && (
+        <div className="flex flex-col gap-2">
+          <span className={label}>Visualizations</span>
+          {visualizations.map((a) => (
+            <div key={a.id} data-annotation-source-id={a.sourceId ?? undefined} className={card}>
+              {a.svg && (
+                <div
+                  className="mb-2 [&_svg]:h-auto [&_svg]:w-full"
+                  dangerouslySetInnerHTML={{ __html: a.svg }}
+                />
+              )}
               <div className="text-[13px]">
                 <Markdown>{a.content}</Markdown>
               </div>

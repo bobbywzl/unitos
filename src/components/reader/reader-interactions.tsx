@@ -82,11 +82,13 @@ const ACTION_LABEL: Record<AssistantAction["type"], string> = {
   format_block: "Format",
   style: "Style",
 };
-type ExplainBubble = {
-  kind: "explain" | "assistant";
+type Bubble = {
+  kind: "explain" | "assistant" | "visualize";
   x: number;
   y: number;
-  text: string;
+  text: string; // explain/assistant: markdown body; visualize: the caption
+  title?: string; // visualize only
+  svg?: string; // visualize only, sanitized server-side
   streaming: boolean;
   error: string | null;
 };
@@ -137,11 +139,12 @@ export function ReaderInteractions({
   // The popover's submenus (section list, link targets) are custom lists, not
   // native selects: the popover preventDefaults mousedown to keep the text
   // selection alive, which also keeps a native select from ever opening.
-  const [submenu, setSubmenu] = useState<null | "add" | "ai" | "comment">(null);
+  const [submenu, setSubmenu] = useState<null | "add" | "ai" | "comment" | "visualize">(null);
   const [commentDraft, setCommentDraft] = useState("");
+  const [visualizeFocus, setVisualizeFocus] = useState("");
   // The page is only editable in edit mode; reading mode never opens editors.
   const [editMode, setEditMode] = useState(false);
-  const [bubble, setBubble] = useState<ExplainBubble | null>(null);
+  const [bubble, setBubble] = useState<Bubble | null>(null);
   const [busy, setBusy] = useState(false);
   const [swaps, setSwaps] = useState<Record<string, string>>({});
   const swapsRef = useRef<Record<string, string>>({});
@@ -206,6 +209,7 @@ export function ReaderInteractions({
     setBubble(null);
     setEditMode(false);
     setCommentDraft("");
+    setVisualizeFocus("");
     setLocalAnchors({});
   }
 
@@ -293,6 +297,7 @@ export function ReaderInteractions({
         setPopover(captured);
         setSubmenu(null);
         setCommentDraft("");
+        setVisualizeFocus("");
         // A stale assistant reply must not sit over the new popover's controls.
         if (captured) setBubble((b) => (b?.kind === "assistant" ? null : b));
         if (captured) {
@@ -388,7 +393,7 @@ export function ReaderInteractions({
     }
   }
 
-  function deriveBody(type: string, anchor: Anchor) {
+  function deriveBody(type: string, anchor: Anchor, extra?: Record<string, unknown>) {
     return JSON.stringify({
       type,
       documentId,
@@ -398,6 +403,7 @@ export function ReaderInteractions({
         startOffset: anchor.startOffset,
         endOffset: anchor.endOffset,
       },
+      ...extra,
     });
   }
 
@@ -466,6 +472,43 @@ export function ReaderInteractions({
         return next;
       });
       showToast(err instanceof Error ? err.message : "Simplify failed");
+    }
+  }
+
+  // VISUALIZE: the submenu asks what the visualization should show, then the
+  // visualization renders in a bubble at the selection. Persists like EXPLAIN,
+  // so it lists in the Annotations tab.
+  async function visualize() {
+    if (!popover) return;
+    const { anchor, x, y } = popover;
+    const focus = visualizeFocus.trim();
+    setPopover(null);
+    setSubmenu(null);
+    setVisualizeFocus("");
+    window.getSelection()?.removeAllRanges();
+    setBubble({ kind: "visualize", x, y, text: "", streaming: true, error: null });
+    try {
+      const res = await fetch("/api/derive", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: deriveBody("VISUALIZE", anchor, focus ? { focus } : undefined),
+      });
+      const json = (await res.json().catch(() => null)) as {
+        error?: string;
+        title?: string;
+        caption?: string;
+        svg?: string;
+      } | null;
+      if (!res.ok || !json?.svg) throw new Error(json?.error ?? `Visualize failed (${res.status})`);
+      setBubble((b) =>
+        b
+          ? { ...b, streaming: false, title: json.title, text: json.caption ?? "", svg: json.svg }
+          : b,
+      );
+      router.refresh();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Visualize failed";
+      setBubble((b) => (b ? { ...b, streaming: false, error: message } : b));
     }
   }
 
@@ -1062,9 +1105,11 @@ export function ReaderInteractions({
             top: popover.yTop,
             left: Math.max(
               6,
-              popover.textLeft - (submenu === "ai" || submenu === "comment" ? 248 : 116) - 10,
+              popover.textLeft -
+                (submenu === "ai" || submenu === "comment" || submenu === "visualize" ? 248 : 116) -
+                10,
             ),
-            width: submenu === "ai" || submenu === "comment" ? 248 : 116,
+            width: submenu === "ai" || submenu === "comment" || submenu === "visualize" ? 248 : 116,
           }}
         >
           {popover.truncated && (
@@ -1174,6 +1219,51 @@ export function ReaderInteractions({
           >
             Extract
           </button>
+          <button
+            onClick={() => setSubmenu(submenu === "visualize" ? null : "visualize")}
+            aria-expanded={submenu === "visualize"}
+            className={`flex w-full items-center rounded-full px-2.5 py-[5px] text-left text-[12px] ${
+              submenu === "visualize"
+                ? "bg-clay-100 text-clay-800"
+                : "text-sand-800 hover:bg-clay-100 hover:text-clay-800"
+            }`}
+          >
+            Visualize
+          </button>
+          {submenu === "visualize" && (
+            <form
+              className="flex flex-col gap-1.5 p-1"
+              onSubmit={(e) => {
+                e.preventDefault();
+                void visualize();
+              }}
+            >
+              <textarea
+                autoFocus
+                value={visualizeFocus}
+                onChange={(e) => setVisualizeFocus(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    void visualize();
+                  }
+                  if (e.key === "Escape") {
+                    e.stopPropagation();
+                    setSubmenu(null);
+                  }
+                }}
+                placeholder="What should the visualization show? General or specific — leave empty and the assistant chooses."
+                rows={3}
+                className="w-full resize-none rounded-xl bg-sand-100 p-2 text-[12px] outline-none placeholder:text-sand-500"
+              />
+              <button
+                type="submit"
+                className="self-end rounded-full bg-clay px-3 py-1 text-[11px] font-semibold text-clay-fg hover:bg-clay-600"
+              >
+                Visualize
+              </button>
+            </form>
+          )}
 
           <div className="flex items-center gap-1.5 px-2.5 py-1">
             {(["clay", "sage", "gold", "plum"] as const).map((color) => (
@@ -1286,16 +1376,22 @@ export function ReaderInteractions({
       {bubble && (
         <div
           data-selection-popover
-          className="absolute z-20 w-96 max-w-[85%] -translate-x-1/2 rounded-[24px] bg-card p-4 shadow-float"
+          className={`absolute z-20 ${
+            bubble.kind === "visualize" ? "w-[560px]" : "w-96"
+          } max-w-[85%] -translate-x-1/2 rounded-[24px] bg-card p-4 shadow-float`}
           style={{ left: bubble.x, top: bubble.y }}
         >
           <div className="mb-2 flex items-center justify-between">
             <span className="text-[11px] font-bold tracking-[0.08em] text-clay-800 uppercase">
               {bubble.streaming
-                ? "Explaining…"
+                ? bubble.kind === "visualize"
+                  ? "Visualizing…"
+                  : "Explaining…"
                 : bubble.kind === "assistant"
                   ? "Assistant"
-                  : "Explanation"}
+                  : bubble.kind === "visualize"
+                    ? (bubble.title ?? "Visualization")
+                    : "Explanation"}
             </span>
             <button
               onClick={() => setBubble(null)}
@@ -1307,6 +1403,18 @@ export function ReaderInteractions({
           </div>
           {bubble.error ? (
             <p className="text-sm text-red-600">{bubble.error}</p>
+          ) : bubble.kind === "visualize" ? (
+            bubble.svg ? (
+              <div className="max-h-[70vh] overflow-y-auto">
+                <div
+                  className="[&_svg]:h-auto [&_svg]:w-full"
+                  dangerouslySetInnerHTML={{ __html: bubble.svg }}
+                />
+                {bubble.text && <p className="mt-2 text-[12.5px] text-sand-600">{bubble.text}</p>}
+              </div>
+            ) : (
+              <p className="text-sm text-sand-500">…</p>
+            )
           ) : bubble.text ? (
             <div className="max-h-80 overflow-y-auto text-sm">
               <Markdown>{bubble.text}</Markdown>

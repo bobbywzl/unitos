@@ -11,8 +11,14 @@ import {
   loadProfile,
   sectionSkeleton,
 } from "@/lib/derive/context";
-import { extractOutputSchema, resolveSpan, salienceOutputSchema } from "@/lib/derive/json";
+import {
+  extractOutputSchema,
+  resolveSpan,
+  salienceOutputSchema,
+  visualizeOutputSchema,
+} from "@/lib/derive/json";
 import { callForJson } from "@/lib/derive/json-call";
+import { sanitizeSvg } from "@/lib/derive/svg";
 import { promptTemplates } from "@/lib/prompts";
 import type { PromptCtx } from "@/lib/prompts/types";
 import { parseBody } from "@/lib/validate";
@@ -22,7 +28,7 @@ export const maxDuration = 120;
 // The one derivation pipeline (SPEC.md §4). Never fork per feature: new derivation =
 // new prompt template + destination handler below.
 const deriveSchema = z.object({
-  type: z.enum(["EXPLAIN", "SIMPLIFY", "SALIENCE", "EXTRACT"]),
+  type: z.enum(["EXPLAIN", "SIMPLIFY", "SALIENCE", "EXTRACT", "VISUALIZE"]),
   documentId: z.string().min(1),
   notebookId: z.string().min(1),
   anchor: z
@@ -33,9 +39,10 @@ const deriveSchema = z.object({
     })
     .optional(),
   targetSectionId: z.string().min(1).nullish(),
+  focus: z.string().max(500).optional(), // VISUALIZE: what the reader wants the visualization to show
 });
 
-const ANCHOR_REQUIRED = new Set(["EXPLAIN", "SIMPLIFY", "EXTRACT"]);
+const ANCHOR_REQUIRED = new Set(["EXPLAIN", "SIMPLIFY", "EXTRACT", "VISUALIZE"]);
 
 export async function POST(req: Request) {
   if (!process.env.ANTHROPIC_API_KEY) {
@@ -95,7 +102,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Target section not found" }, { status: 404 });
   }
 
-  const ctx: PromptCtx & { targetSectionId?: string | null } = {
+  const ctx: PromptCtx & { targetSectionId?: string | null; focus?: string } = {
     profile,
     documentTitle: document.title,
     anchoredText: anchored?.anchoredText ?? "",
@@ -103,6 +110,7 @@ export async function POST(req: Request) {
     contextAfter: anchored?.contextAfter ?? "",
     sectionSkeleton: skeleton,
     targetSectionId: data.targetSectionId,
+    focus: data.focus,
   };
 
   // 2. Template by type. The document is the cached prefix, byte-identical for every
@@ -194,6 +202,59 @@ export async function POST(req: Request) {
       data: { salience: spans },
     });
     return NextResponse.json({ ok: true, spanCount: spans.length });
+  }
+
+  if (data.type === "VISUALIZE") {
+    const result = await callForJson({
+      model,
+      messages,
+      maxOutputTokens,
+      schema: visualizeOutputSchema,
+      label: "VISUALIZE",
+    });
+    if (!result.ok) {
+      return NextResponse.json({ error: `Visualize failed. ${result.error}` }, { status: 422 });
+    }
+    const svg = sanitizeSvg(result.data.svg);
+    if (!svg) {
+      return NextResponse.json({ error: "Visualize returned no drawable SVG" }, { status: 422 });
+    }
+    const block = data.anchor ? blockById.get(data.anchor.blockId) : undefined;
+    if (!data.anchor || !block) {
+      return NextResponse.json({ error: "Anchor does not resolve in this document" }, { status: 400 });
+    }
+    // Same destination as EXPLAIN: a note in the hidden Annotations section, so the
+    // visualization is searchable and lists in the Annotations tab (SPEC.md §4).
+    const section = await annotationsSection(data.notebookId);
+    const count = await db.note.count({ where: { sectionId: section.id } });
+    const note = await db.note.create({
+      data: {
+        sectionId: section.id,
+        content: `**${result.data.title}**\n\n${result.data.caption}`,
+        svg,
+        status: "ACCEPTED",
+        derivationType: "VISUALIZE",
+        order: count,
+        sources: {
+          create: {
+            documentId: data.documentId,
+            blockId: data.anchor.blockId,
+            startOffset: data.anchor.startOffset,
+            endOffset: data.anchor.endOffset,
+            quotedText: block.text.slice(data.anchor.startOffset, data.anchor.endOffset),
+            prefix: block.text.slice(
+              Math.max(0, data.anchor.startOffset - 32),
+              data.anchor.startOffset,
+            ),
+            suffix: block.text.slice(data.anchor.endOffset, data.anchor.endOffset + 32),
+          },
+        },
+      },
+    });
+    return NextResponse.json(
+      { ok: true, noteId: note.id, title: result.data.title, caption: result.data.caption, svg },
+      { status: 201 },
+    );
   }
 
   // EXTRACT
