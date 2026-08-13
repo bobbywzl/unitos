@@ -22,13 +22,16 @@ function tableText(el: Element): string {
     .join("\n");
 }
 
-export async function parseUrl(url: string): Promise<ParsedDocument> {
+// onFetched fires once the page is downloaded, before the (slower) readability
+// extraction begins — the fetch/parse progress boundary for callers that report it.
+export async function parseUrl(url: string, onFetched?: () => void): Promise<ParsedDocument> {
   const res = await outboundFetch(url, {
     headers: { "User-Agent": "Mozilla/5.0 (compatible; Unitos/1.0)" },
     signal: AbortSignal.timeout(30_000),
   });
   if (!res.ok) throw new Error(`Fetch failed (${res.status})`);
   const rawHtml = await res.text();
+  onFetched?.();
 
   const dom = new JSDOM(rawHtml, { url });
   const article = new Readability(dom.window.document).parse();

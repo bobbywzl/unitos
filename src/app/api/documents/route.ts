@@ -2,12 +2,35 @@ import { after, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { buildGlossary } from "@/lib/glossary";
+import { ndjsonWriter } from "@/lib/ndjson";
 import { attachDocument } from "@/lib/parse/attach";
+import type { OnIngestProgress } from "@/lib/parse/ingest";
 import { parseBody } from "@/lib/validate";
 
 export const maxDuration = 120;
 
 const MAX_PDF_BYTES = 50 * 1024 * 1024;
+
+// Once validation passes, ingest is real work worth showing progress for (parse, save).
+// The HTTP status is committed to 200 the moment this stream opens, so failures from here
+// on are reported in-band as a final {error} line instead of a status code — same tradeoff
+// the /api/derive text stream already makes.
+function progressResponse(run: (onProgress: OnIngestProgress) => Promise<{ id: string; title: string; deduped: boolean }>) {
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      const send = ndjsonWriter(controller);
+      try {
+        const result = await run((stage) => send({ stage }));
+        send(result);
+      } catch (err) {
+        send({ error: err instanceof Error ? err.message : "Request failed" });
+      } finally {
+        controller.close();
+      }
+    },
+  });
+  return new Response(stream, { headers: { "Content-Type": "application/x-ndjson; charset=utf-8" } });
+}
 
 export async function GET() {
   const documents = await db.document.findMany({
@@ -75,30 +98,34 @@ export async function POST(req: Request) {
     if (bytes.length < 5 || String.fromCharCode(...bytes.slice(0, 5)) !== "%PDF-") {
       return NextResponse.json({ error: "File is not a PDF" }, { status: 400 });
     }
-    try {
-      const { document, deduped } = await parse.ingestPdf(bytes, fields.data.filename);
-      await attachDocument(fields.data.notebookId, document.id);
-      // On-ingest glossary extraction (SPEC.md §8 Phase 7). Best-effort; after() keeps it
-      // alive past the response on serverless.
-      if (!deduped) after(() => buildGlossary(document.id).catch(() => {}));
-      return NextResponse.json({ id: document.id, title: document.title, deduped }, { status: 201 });
-    } catch (err) {
-      console.error("PDF ingest failed:", err);
-      return NextResponse.json({ error: "Could not parse this PDF" }, { status: 422 });
-    }
+    return progressResponse(async (onProgress) => {
+      try {
+        const { document, deduped } = await parse.ingestPdf(bytes, fields.data.filename, onProgress);
+        await attachDocument(fields.data.notebookId, document.id);
+        // On-ingest glossary extraction (SPEC.md §8 Phase 7). Best-effort; after() keeps it
+        // alive past the response on serverless.
+        if (!deduped) after(() => buildGlossary(document.id).catch(() => {}));
+        return { id: document.id, title: document.title, deduped };
+      } catch (err) {
+        console.error("PDF ingest failed:", err);
+        throw new Error("Could not parse this PDF");
+      }
+    });
   }
 
   const { data, error } = await parseBody(req, urlSchema);
   if (error) return error;
   const notebook = await db.notebook.findUnique({ where: { id: data.notebookId } });
   if (!notebook) return NextResponse.json({ error: "Notebook not found" }, { status: 404 });
-  try {
-    const { document, deduped } = await parse.ingestUrl(data.url);
-    await attachDocument(data.notebookId, document.id);
-    if (!deduped) after(() => buildGlossary(document.id).catch(() => {}));
-    return NextResponse.json({ id: document.id, title: document.title, deduped }, { status: 201 });
-  } catch (err) {
-    console.error("URL ingest failed:", err);
-    return NextResponse.json({ error: "Could not ingest this URL" }, { status: 422 });
-  }
+  return progressResponse(async (onProgress) => {
+    try {
+      const { document, deduped } = await parse.ingestUrl(data.url, onProgress);
+      await attachDocument(data.notebookId, document.id);
+      if (!deduped) after(() => buildGlossary(document.id).catch(() => {}));
+      return { id: document.id, title: document.title, deduped };
+    } catch (err) {
+      console.error("URL ingest failed:", err);
+      throw new Error("Could not ingest this URL");
+    }
+  });
 }

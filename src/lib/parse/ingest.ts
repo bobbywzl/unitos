@@ -4,6 +4,11 @@ import { parsePdf } from "@/lib/parse/pdf";
 import { parseUrl } from "@/lib/parse/url";
 import type { ParsedBlock } from "@/lib/parse/types";
 
+// Ingest progress, reported to the caller as each stage starts. Dedupe hits report
+// nothing — there is no parse or save to do, the caller treats "no events" as instant.
+export type IngestStage = "parse" | "save";
+export type OnIngestProgress = (stage: IngestStage) => void;
+
 async function createDocumentWithBlocks(data: {
   title: string;
   sourceUrl?: string;
@@ -34,13 +39,19 @@ async function createDocumentWithBlocks(data: {
 }
 
 // Upload path. Dedupe by fileHash: a re-upload returns the existing document, no re-parse.
-export async function ingestPdf(bytes: Uint8Array<ArrayBuffer>, filename: string) {
+export async function ingestPdf(
+  bytes: Uint8Array<ArrayBuffer>,
+  filename: string,
+  onProgress?: OnIngestProgress,
+) {
   const fileHash = createHash("sha256").update(bytes).digest("hex");
   const existing = await db.document.findUnique({ where: { fileHash } });
   if (existing) return { document: existing, deduped: true };
 
+  onProgress?.("parse");
   const parsed = await parsePdf(bytes);
   const title = parsed.title ?? filename.replace(/\.pdf$/i, "");
+  onProgress?.("save");
   const document = await createDocumentWithBlocks({
     title,
     fileHash,
@@ -51,11 +62,13 @@ export async function ingestPdf(bytes: Uint8Array<ArrayBuffer>, filename: string
 }
 
 // URL path. Dedupe by exact sourceUrl.
-export async function ingestUrl(url: string) {
+export async function ingestUrl(url: string, onProgress?: OnIngestProgress) {
   const existing = await db.document.findFirst({ where: { sourceUrl: url } });
   if (existing) return { document: existing, deduped: true };
 
-  const parsed = await parseUrl(url);
+  // parseUrl fetches then extracts; the fetched callback marks the fetch/parse boundary.
+  const parsed = await parseUrl(url, () => onProgress?.("parse"));
+  onProgress?.("save");
   const document = await createDocumentWithBlocks({
     title: parsed.title ?? url,
     sourceUrl: url,

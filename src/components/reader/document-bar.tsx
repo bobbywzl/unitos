@@ -4,9 +4,27 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { Logo } from "@/components/logo";
+import { readNdjson } from "@/lib/ndjson";
+import {
+  IngestProgress,
+  advanceIngestSteps,
+  completeIngestSteps,
+  initialIngestSteps,
+  type IngestStep,
+} from "@/components/reader/ingest-progress";
 
 export type AttachedDocument = { id: string; title: string };
 type LibraryDocument = { id: string; title: string; _count: { blocks: number } };
+type IngestPhase = { fileLabel: string; steps: IngestStep[] };
+// Wire format from /api/documents: a stage event per line, then one terminal line.
+type IngestEvent =
+  | { stage: "parse" | "save" }
+  | { id: string; title: string; deduped: boolean }
+  | { error: string };
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 // Platform errors (Vercel 413, crashed function) return empty or non-JSON bodies.
 async function readJson<T>(res: Response): Promise<T | null> {
@@ -32,7 +50,7 @@ export function DocumentBar({
   const router = useRouter();
   const fileRef = useRef<HTMLInputElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
-  const [busy, setBusy] = useState<string | null>(null);
+  const [phase, setPhase] = useState<IngestPhase | null>(null);
   const [menu, setMenu] = useState<null | "root" | "url" | "library">(null);
   const [url, setUrl] = useState("");
   const [library, setLibrary] = useState<LibraryDocument[] | null>(null);
@@ -58,25 +76,54 @@ export function DocumentBar({
     router.push(`/n/${notebookId}?doc=${docId}`);
   }
 
+  // Drives one ingest call: seeds the 3-step pill, streams stage events into it, and
+  // resolves with the terminal result. Shared by PDF upload and URL ingestion below.
+  async function runIngest(
+    fileLabel: string,
+    receiveLabel: string,
+    send: () => Promise<Response>,
+  ): Promise<{ id: string; title: string; deduped: boolean }> {
+    setPhase({ fileLabel, steps: initialIngestSteps(receiveLabel) });
+    const res = await send();
+    if (!res.ok) {
+      const detail = await readJson<{ error?: string }>(res);
+      throw new Error(detail?.error ?? statusMessage(res.status));
+    }
+    let result: IngestEvent | null = null;
+    for await (const event of readNdjson<IngestEvent>(res)) {
+      if ("stage" in event) {
+        setPhase((p) => (p ? { ...p, steps: advanceIngestSteps(p.steps, event.stage) } : p));
+      } else {
+        result = event;
+      }
+    }
+    if (!result || "error" in result) {
+      throw new Error(result && "error" in result ? result.error : "Upload failed");
+    }
+    setPhase((p) => (p ? { ...p, steps: completeIngestSteps(p.steps) } : p));
+    await sleep(250); // let the last checkmark register before the pill clears
+    return result;
+  }
+
   async function uploadPdfs(files: File[]) {
     setError(null);
     let lastId: string | null = null;
     try {
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
-        setBusy(files.length > 1 ? `Parsing ${file.name} (${i + 1}/${files.length})…` : `Parsing ${file.name}…`);
-        const form = new FormData();
-        form.set("file", file);
-        form.set("notebookId", notebookId);
-        const res = await fetch("/api/documents", { method: "POST", body: form });
-        const json = await readJson<{ id?: string; error?: string }>(res);
-        if (!res.ok || !json?.id) throw new Error(json?.error ?? statusMessage(res.status));
-        lastId = json.id;
+        const label = files.length > 1 ? `${file.name} (${i + 1}/${files.length})` : file.name;
+        const result = await runIngest(label, "Uploading", () => {
+          const form = new FormData();
+          form.set("file", file);
+          form.set("notebookId", notebookId);
+          return fetch("/api/documents", { method: "POST", body: form });
+        });
+        lastId = result.id;
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed");
     } finally {
-      setBusy(null);
+      setPhase(null);
       if (fileRef.current) fileRef.current.value = "";
     }
     if (lastId) {
@@ -135,24 +182,23 @@ export function DocumentBar({
   async function addUrl() {
     const trimmed = url.trim();
     if (!trimmed) return;
-    setBusy("Fetching URL…");
     setError(null);
     try {
-      const res = await fetch("/api/documents", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: trimmed, notebookId }),
-      });
-      const json = await readJson<{ id?: string; error?: string }>(res);
-      if (!res.ok || !json?.id) throw new Error(json?.error ?? statusMessage(res.status));
+      const result = await runIngest(trimmed, "Fetching", () =>
+        fetch("/api/documents", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url: trimmed, notebookId }),
+        }),
+      );
       setUrl("");
       setMenu(null);
-      open(json.id);
+      open(result.id);
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Ingest failed");
     } finally {
-      setBusy(null);
+      setPhase(null);
     }
   }
 
@@ -243,7 +289,7 @@ export function DocumentBar({
                     setMenu(null);
                     fileRef.current?.click();
                   }}
-                  disabled={busy !== null}
+                  disabled={phase !== null}
                   className={`${menuItem} disabled:opacity-40`}
                 >
                   Upload PDF
@@ -285,7 +331,7 @@ export function DocumentBar({
                 <div className="flex items-center gap-2">
                   <button
                     type="submit"
-                    disabled={busy !== null}
+                    disabled={phase !== null}
                     className="rounded-full bg-clay px-4 py-1.5 text-xs font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
                   >
                     Ingest
@@ -335,7 +381,7 @@ export function DocumentBar({
         )}
       </div>
 
-      {busy && <span className="animate-pulse text-xs text-sand-500">{busy}</span>}
+      {phase && <IngestProgress fileLabel={phase.fileLabel} steps={phase.steps} />}
       {error && <span className="text-xs text-red-500">{error}</span>}
 
       <input

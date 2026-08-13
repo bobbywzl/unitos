@@ -155,3 +155,20 @@ export function QuestionIcon(props: IconProps) {
     </Icon>
   );
 }
+
+// Three-quarter arc: spin it for a loading state.
+export function SpinnerIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+    </Icon>
+  );
+}
+
+export function CheckIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M20 6 9 17l-5-5" />
+    </Icon>
+  );
+}
