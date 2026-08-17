@@ -1,9 +1,16 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import type { SourceInput } from "@/lib/anchors/input";
+import {
+  parseSimplified,
+  splitSentences,
+  stripSimplifyMarkers,
+  type SentenceSpan,
+  type SimplifiedSentence,
+} from "@/lib/sentences";
 import type { AssistantAction, AssistantPlan } from "@/lib/types";
 import { MicIcon, SparkleIcon } from "@/components/icons";
 import { Markdown } from "@/components/markdown";
@@ -128,6 +135,10 @@ type SimplifyCard = {
   text: string;
   streaming: boolean;
   error: string | null;
+  // Set when the stream ends and the output carried source markers: one entry
+  // per simplified sentence. active = the pressed sentence, mirrored in the text.
+  sentences: SimplifiedSentence[] | null;
+  active: number | null;
 };
 
 // Client layer over the reader: selection capture, popover, EXPLAIN bubble,
@@ -699,7 +710,7 @@ export function ReaderInteractions({
     }
     setPopover(null);
     window.getSelection()?.removeAllRanges();
-    setSimplifyCard({ anchor, top: yTop, left, text: "", streaming: true, error: null });
+    setSimplifyCard({ anchor, top: yTop, left, text: "", streaming: true, error: null, sentences: null, active: null });
     try {
       const res = await fetch("/api/derive", {
         method: "POST",
@@ -718,7 +729,9 @@ export function ReaderInteractions({
         const chunk = decoder.decode(value, { stream: true });
         setSimplifyCard((c) => (c ? { ...c, text: c.text + chunk } : c));
       }
-      setSimplifyCard((c) => (c ? { ...c, streaming: false } : c));
+      setSimplifyCard((c) =>
+        c ? { ...c, streaming: false, sentences: parseSimplified(c.text), active: null } : c,
+      );
     } catch (err) {
       const message = err instanceof Error ? err.message : "Simplify failed";
       setSimplifyCard((c) => (c ? { ...c, streaming: false, error: message } : c));
@@ -1239,11 +1252,31 @@ export function ReaderInteractions({
     }
   }
   if (simplifyCard) {
-    const { blockId, startOffset, endOffset } = simplifyCard.anchor;
+    const { blockId, startOffset, endOffset, quotedText } = simplifyCard.anchor;
     const existing = highlightsByBlock[blockId] ?? [];
+    // With a pressed sentence, only its source sentences tint — the mirroring.
+    // Otherwise the whole selection keeps the light tint.
+    const pressed =
+      simplifyCard.active !== null && simplifyCard.sentences
+        ? simplifyCard.sentences[simplifyCard.active]
+        : null;
+    const sourceSpans = pressed ? splitSentences(quotedText) : [];
+    const ranges = pressed
+      ? pressed.refs
+          .map((n) => sourceSpans[n - 1])
+          .filter((span): span is SentenceSpan => Boolean(span))
+          .map((span) => ({
+            sourceId: null,
+            start: startOffset + span.start,
+            end: startOffset + span.end,
+            kind: "simplify" as const,
+          }))
+      : [];
     highlightsByBlock[blockId] = [
       ...existing,
-      { sourceId: null, start: startOffset, end: endOffset, kind: "simplify" as const },
+      ...(ranges.length > 0
+        ? ranges
+        : [{ sourceId: null, start: startOffset, end: endOffset, kind: "simplify" as const }]),
     ];
   }
   for (const [blockId, list] of Object.entries(termsByBlock)) {
@@ -1625,9 +1658,35 @@ export function ReaderInteractions({
           </div>
           {simplifyCard.error ? (
             <p className="text-sm text-red-600">{simplifyCard.error}</p>
+          ) : simplifyCard.sentences ? (
+            <p className="max-h-96 overflow-y-auto text-[13.5px] leading-relaxed whitespace-pre-wrap">
+              {simplifyCard.sentences.map((sentence, i) => {
+                const lead = /^\s*/.exec(sentence.text)![0];
+                return (
+                  <Fragment key={i}>
+                    {lead}
+                    <span
+                      onClick={() =>
+                        setSimplifyCard((c) =>
+                          c ? { ...c, active: c.active === i ? null : i } : c,
+                        )
+                      }
+                      title="Press to see what this restates in the original"
+                      className={
+                        simplifyCard.active === i
+                          ? "simplify-sentence simplify-sentence-active"
+                          : "simplify-sentence"
+                      }
+                    >
+                      {sentence.text.slice(lead.length)}
+                    </span>
+                  </Fragment>
+                );
+              })}
+            </p>
           ) : (
             <p className="max-h-96 overflow-y-auto text-[13.5px] leading-relaxed whitespace-pre-wrap">
-              {simplifyCard.text || "…"}
+              {stripSimplifyMarkers(simplifyCard.text) || "…"}
             </p>
           )}
         </div>

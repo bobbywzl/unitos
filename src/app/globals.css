@@ -406,6 +406,21 @@ mark,
   line-height: 1.75;
 }
 
+/* Simplified bubble sentences: lightly tinted and pressable; the pressed one
+   goes solid and its source sentences tint in the article. */
+.simplify-sentence {
+  background: color-mix(in srgb, var(--sage-200) 55%, transparent);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.simplify-sentence:hover {
+  background: var(--sage-200);
+}
+.simplify-sentence-active {
+  background: var(--sage-300);
+}
+
 /* The edit hint fades in beside the article, waits, and fades away. */
 @keyframes hint-fade {
   0% {

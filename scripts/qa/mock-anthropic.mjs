@@ -126,6 +126,15 @@ function buildResponse(all) {
     return JSON.stringify({ ops });
   }
 
+  // Simplify with source markers: one plain sentence per numbered original.
+  if (all.includes("source marker")) {
+    const nums = [...all.matchAll(/^\[(\d+)\] /gm)].map((x) => Number(x[1]));
+    const count = nums.length > 0 ? Math.max(...nums) : 1;
+    const parts = [];
+    for (let i = 1; i <= count; i++) parts.push(`Mock plain sentence ${i}. [[${i}]]`);
+    return parts.join(" ");
+  }
+
   // EXPLAIN / SIMPLIFY / ask: plain prose.
   return "Mock response: this passage sets out the core claim in plain terms, with the key figure restated for the reader's purpose.";
 }

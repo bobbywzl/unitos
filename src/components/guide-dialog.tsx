@@ -60,9 +60,10 @@ export function GuideDialog({ open, onClose }: { open: boolean; onClose: () => v
             </li>
             <li>
               <span className={term}>Simplify</span> — rewrites the selection in plain words,
-              in a bubble beside the article. The document text never changes. The rewrite is
-              saved under Simplified in the Annotations tab, so it is still there when you
-              come back.
+              in a bubble beside the article. Each sentence in the bubble is lightly tinted:
+              press one and it goes solid while the original sentences it restates light up
+              in the text. The rewrite is saved under Simplified in the Annotations tab, so
+              it is still there when you come back.
             </li>
             <li>
               <span className={term}>Extract</span> — the note-taking tool. It turns the

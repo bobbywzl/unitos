@@ -6,6 +6,7 @@ import { useState } from "react";
 import type { AnnotationItem, LinkIn, LinkOut } from "@/lib/types";
 import { api } from "@/lib/api";
 import { Markdown } from "@/components/markdown";
+import { stripSimplifyMarkers } from "@/lib/sentences";
 
 const label = "text-[11px] font-bold tracking-[0.08em] uppercase text-sand-600";
 const card = "rounded-2xl bg-card p-3.5 shadow-soft";
@@ -203,7 +204,7 @@ export function AnnotationsPanel({
           {simplifications.map((a) => (
             <div key={a.id} data-annotation-source-id={a.sourceId ?? undefined} className={card}>
               <div className="text-[13px]">
-                <Markdown>{a.content}</Markdown>
+                <Markdown>{stripSimplifyMarkers(a.content)}</Markdown>
               </div>
               {a.quotedText && (
                 <p className="mt-2 line-clamp-2 border-l-2 border-sage-300 pl-2 text-xs text-sand-500">
