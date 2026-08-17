@@ -19,4 +19,5 @@ export type UrlParseProgress = (stage: "extract", detail?: string) => void;
 // parsing improves; documents stamped with an older version re-parse
 // automatically — on open, and when their URL is added again.
 // 2: structural DOM walk + structure pass. 3: core pass separates article from page chrome.
-export const PARSER_VERSION = 3;
+// 4: marker lists (icon or numbered rows → LIST) and styled dividers → SEPARATOR.
+export const PARSER_VERSION = 4;
