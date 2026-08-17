@@ -85,6 +85,26 @@ function buildResponse(all) {
   // Notebook tasks: no issues found.
   if (all.includes('"issues"')) return JSON.stringify({ issues: [] });
 
+  // Ingest structure pass: drop placeholder junk the way the real model would —
+  // blocks that are nothing but a bare number, an unhydrated counter value, or
+  // bracketed chrome. Exercises the ops apply path end-to-end.
+  if (all.includes('"ops"')) {
+    const ops = [];
+    const lineRe = /^\[(\d+)\] (\w+): (.*)$/gm;
+    let m;
+    while ((m = lineRe.exec(all))) {
+      const text = m[3].trim();
+      if (
+        /^(0|0\.0M|[\d,.]+\+?)$/.test(text) ||
+        /^\[ .{0,40} \]$/.test(text) ||
+        /^Category:/.test(text)
+      ) {
+        ops.push({ index: Number(m[1]), action: "drop" });
+      }
+    }
+    return JSON.stringify({ ops });
+  }
+
   // EXPLAIN / SIMPLIFY / ask: plain prose.
   return "Mock response: this passage sets out the core claim in plain terms, with the key figure restated for the reader's purpose.";
 }

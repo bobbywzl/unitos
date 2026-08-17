@@ -1,13 +1,16 @@
 import { createHash } from "node:crypto";
 import { db } from "@/lib/db";
 import { parsePdf } from "@/lib/parse/pdf";
+import { structureBlocks } from "@/lib/parse/structure";
 import { parseUrl } from "@/lib/parse/url";
 import type { ParsedBlock } from "@/lib/parse/types";
 
-// Ingest progress, reported to the caller as each stage starts. Dedupe hits report
+// Ingest progress, reported to the caller as each stage starts. A repeated stage
+// updates the detail line ("148 figures · 152 equations"). Dedupe hits report
 // nothing — there is no parse or save to do, the caller treats "no events" as instant.
-export type IngestStage = "parse" | "save";
-export type OnIngestProgress = (stage: IngestStage) => void;
+// PDF stages: parse, save. URL stages: fetch, extract, structure, save.
+export type IngestStage = "parse" | "save" | "fetch" | "extract" | "structure";
+export type OnIngestProgress = (stage: IngestStage, detail?: string) => void;
 
 async function createDocumentWithBlocks(data: {
   title: string;
@@ -66,13 +69,14 @@ export async function ingestUrl(url: string, onProgress?: OnIngestProgress) {
   const existing = await db.document.findFirst({ where: { sourceUrl: url } });
   if (existing) return { document: existing, deduped: true };
 
-  // parseUrl fetches then extracts; the fetched callback marks the fetch/parse boundary.
-  const parsed = await parseUrl(url, () => onProgress?.("parse"));
+  const parsed = await parseUrl(url, onProgress);
+  onProgress?.("structure");
+  const blocks = await structureBlocks(parsed.blocks, parsed.title);
   onProgress?.("save");
   const document = await createDocumentWithBlocks({
     title: parsed.title ?? url,
     sourceUrl: url,
-    blocks: parsed.blocks,
+    blocks,
   });
   return { document, deduped: false };
 }
@@ -86,7 +90,8 @@ export async function reparseDocument(documentId: string) {
   if (document.fileData) {
     blocks = (await parsePdf(new Uint8Array(document.fileData))).blocks;
   } else if (document.sourceUrl) {
-    blocks = (await parseUrl(document.sourceUrl)).blocks;
+    const parsed = await parseUrl(document.sourceUrl);
+    blocks = await structureBlocks(parsed.blocks, parsed.title);
   } else {
     throw new Error("Document has no stored file and no source URL");
   }

@@ -95,6 +95,11 @@ export function GuideDialog({ open, onClose }: { open: boolean; onClose: () => v
           <span className={h}>Reading</span>
           <ul className="flex flex-col gap-1.5 text-[13px] leading-relaxed text-sand-800">
             <li>
+              <span className={term}>Add URL</span> (+ in the header) — rebuilds the page in the
+              reader: headings, lists, tables, figures, images, videos, charts, and equations,
+              all editable. A progress card shows each step while the cat dances.
+            </li>
+            <li>
               <span className={term}>Salience</span> (top right) — an overlay that marks the
               load-bearing passages of the document, so you can skim what matters.
             </li>

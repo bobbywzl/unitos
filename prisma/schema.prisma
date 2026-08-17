@@ -175,6 +175,7 @@ enum BlockType {
   EQUATION
   LIST
   CODE
+  SEPARATOR
 }
 
 model Feedback {

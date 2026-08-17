@@ -284,6 +284,36 @@ mark,
   --tw-prose-td-borders: var(--sand-200);
 }
 
+/* Ingest card: the cat dances while the pipeline works. */
+@keyframes cat-bop {
+  0%,
+  100% {
+    transform: translateY(0) rotate(-4deg);
+  }
+  50% {
+    transform: translateY(-2.5px) rotate(4deg);
+  }
+}
+@keyframes cat-tail {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  50% {
+    transform: rotate(20deg);
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .cat-bop {
+    animation: cat-bop 0.7s ease-in-out infinite;
+    transform-origin: 24px 42px;
+  }
+  .cat-tail {
+    animation: cat-tail 0.7s ease-in-out infinite;
+    transform-origin: 35px 39px;
+  }
+}
+
 /* SIMPLIFY bubble: slides in beside the article (SPEC.md §6). */
 @keyframes bubble-in {
   from {
@@ -333,11 +363,41 @@ mark,
 .reader-figure img {
   max-width: 100%;
   height: auto;
+  border-radius: 10px;
 }
-.reader-figure figcaption {
+.reader-figure svg {
+  width: 100%;
+  height: auto;
+  background: #ffffff;
+  border-radius: 10px;
+}
+.reader-figure video {
+  max-width: 100%;
+  border-radius: 10px;
+}
+/* A gallery figure (many clips) lays out as a grid, not a stack. */
+.reader-figure video:not(:only-of-type) {
+  width: calc(33.33% - 4px);
+  display: inline-block;
+  vertical-align: top;
+  margin: 2px;
+}
+.reader-figure iframe {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border: 0;
+  border-radius: 10px;
+}
+.reader-figure figcaption,
+.reader-figure p {
   font-size: 0.8rem;
   color: var(--sand-600);
   margin-top: 0.25rem;
+}
+
+/* EQUATION blocks: KaTeX display math, scrollable when wide. */
+.equation-block .katex-display {
+  margin: 0;
 }
 
 /* The reading column: airy, book-like, ~80 characters at 17px (design 1a). */

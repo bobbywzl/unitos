@@ -1,4 +1,5 @@
 import type { BlockType } from "@prisma/client";
+import { Equation } from "@/components/reader/equation";
 
 export type BlockData = {
   id: string;
@@ -171,7 +172,6 @@ export function BlockView({
         </div>
       );
     case "CODE":
-    case "EQUATION":
       return (
         <pre
           data-block-id={block.id}
@@ -179,6 +179,23 @@ export function BlockView({
         >
           {content}
         </pre>
+      );
+    case "EQUATION":
+      return (
+        <div
+          data-block-id={block.id}
+          data-math-block
+          data-source-id={firstSourceId}
+          className={`${shared} my-4 ${htmlHighlighted}`}
+        >
+          <Equation tex={block.text} />
+        </div>
+      );
+    case "SEPARATOR":
+      return (
+        <div data-block-id={block.id} className={`${shared} my-8`} aria-hidden>
+          <hr className="border-t border-line" />
+        </div>
       );
     case "TABLE":
       if (block.html) {

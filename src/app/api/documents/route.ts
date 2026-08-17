@@ -20,7 +20,7 @@ function progressResponse(run: (onProgress: OnIngestProgress) => Promise<{ id: s
     async start(controller) {
       const send = ndjsonWriter(controller);
       try {
-        const result = await run((stage) => send({ stage }));
+        const result = await run((stage, detail) => send({ stage, detail }));
         send(result);
       } catch (err) {
         send({ error: err instanceof Error ? err.message : "Request failed" });

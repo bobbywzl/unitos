@@ -235,6 +235,9 @@ export function ReaderInteractions({
     if (!startBlock) return null;
     const blockId = startBlock.dataset.blockId;
     if (!blockId) return null;
+    // A rendered equation's DOM text is not the stored TeX; offsets there would
+    // anchor to the wrong characters. No selection tools on math blocks.
+    if (startBlock.hasAttribute("data-math-block")) return null;
 
     const preRange = document.createRange();
     preRange.selectNodeContents(startBlock);

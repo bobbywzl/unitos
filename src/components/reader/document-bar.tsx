@@ -18,7 +18,7 @@ type LibraryDocument = { id: string; title: string; _count: { blocks: number } }
 type IngestPhase = { fileLabel: string; steps: IngestStep[] };
 // Wire format from /api/documents: a stage event per line, then one terminal line.
 type IngestEvent =
-  | { stage: "parse" | "save" }
+  | { stage: string; detail?: string }
   | { id: string; title: string; deduped: boolean }
   | { error: string };
 
@@ -76,14 +76,14 @@ export function DocumentBar({
     router.push(`/n/${notebookId}?doc=${docId}`);
   }
 
-  // Drives one ingest call: seeds the 3-step pill, streams stage events into it, and
-  // resolves with the terminal result. Shared by PDF upload and URL ingestion below.
+  // Drives one ingest call: seeds the progress card, streams stage events into it,
+  // and resolves with the terminal result. Shared by PDF upload and URL ingestion below.
   async function runIngest(
     fileLabel: string,
-    receiveLabel: string,
+    kind: "pdf" | "url",
     send: () => Promise<Response>,
   ): Promise<{ id: string; title: string; deduped: boolean }> {
-    setPhase({ fileLabel, steps: initialIngestSteps(receiveLabel) });
+    setPhase({ fileLabel, steps: initialIngestSteps(kind) });
     const res = await send();
     if (!res.ok) {
       const detail = await readJson<{ error?: string }>(res);
@@ -92,7 +92,9 @@ export function DocumentBar({
     let result: IngestEvent | null = null;
     for await (const event of readNdjson<IngestEvent>(res)) {
       if ("stage" in event) {
-        setPhase((p) => (p ? { ...p, steps: advanceIngestSteps(p.steps, event.stage) } : p));
+        setPhase((p) =>
+          p ? { ...p, steps: advanceIngestSteps(p.steps, event.stage, event.detail) } : p,
+        );
       } else {
         result = event;
       }
@@ -112,7 +114,7 @@ export function DocumentBar({
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
         const label = files.length > 1 ? `${file.name} (${i + 1}/${files.length})` : file.name;
-        const result = await runIngest(label, "Uploading", () => {
+        const result = await runIngest(label, "pdf", () => {
           const form = new FormData();
           form.set("file", file);
           form.set("notebookId", notebookId);
@@ -184,7 +186,7 @@ export function DocumentBar({
     if (!trimmed) return;
     setError(null);
     try {
-      const result = await runIngest(trimmed, "Fetching", () =>
+      const result = await runIngest(trimmed, "url", () =>
         fetch("/api/documents", {
           method: "POST",
           headers: { "Content-Type": "application/json" },

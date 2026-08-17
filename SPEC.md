@@ -21,7 +21,7 @@ A notes-centric web app for completely dissecting complex documents (research pa
 - **DB:** PostgreSQL + Prisma
 - **AI:** Anthropic API via Vercel AI SDK (`ai` package), streaming responses. Model: `claude-sonnet-4-6` default; make model a per-derivation-type config constant.
 - **Prompt caching:** Cache the full parsed document as a prompt prefix per session (Anthropic prompt caching, `cache_control` on the document content block). Every selection-level derivation must reuse the cached prefix.
-- **Parsing:** PDF → blocks server-side. Use `unpdf` or `pdf-parse` for text extraction; preserve reading order. URL ingestion via `@mozilla/readability` + `jsdom`.
+- **Parsing:** PDF → blocks server-side. Use `unpdf` or `pdf-parse` for text extraction; preserve reading order. URL ingestion: full-DOM structural parse via `jsdom` — equations keep their TeX (KaTeX/MathJax annotations, rendered with KaTeX in the reader), charts keep their inline SVG, figures keep their images and videos, lists/tables/separators keep their shape — followed by an AI structure pass that may only drop, retype, or merge existing blocks by index (the model never writes text). `@mozilla/readability` is the fallback for pages the structural walk cannot read. Ingest streams stage progress (fetch → extract → structure → save) to the client.
 - **Anchoring:** W3C Web Annotation selectors via `apache-annotator` (`@apache-annotator/dom`, `@apache-annotator/selector`).
 - **Embeddings (Phase 6):** Voyage AI or OpenAI embeddings on notes, stored via `pgvector`.
 - **Styling:** Tailwind. Split-pane layout via CSS grid, not a heavy library.
