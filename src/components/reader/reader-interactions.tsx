@@ -91,8 +91,19 @@ type ExplainBubble = {
   error: string | null;
 };
 
+// SIMPLIFY output: a translucent bubble beside the article, level with the
+// selection. The selection stays tinted while the bubble is open (SPEC.md §6).
+type SimplifyCard = {
+  anchor: Anchor;
+  top: number;
+  left: number;
+  text: string;
+  streaming: boolean;
+  error: string | null;
+};
+
 // Client layer over the reader: selection capture, popover, EXPLAIN bubble,
-// SIMPLIFY in-place swaps, SALIENCE overlay toggle, EXTRACT, jump-to-anchor.
+// SIMPLIFY bubble, SALIENCE overlay toggle, EXTRACT, jump-to-anchor.
 export function ReaderInteractions({
   documentId,
   notebookId,
@@ -143,9 +154,7 @@ export function ReaderInteractions({
   const [editMode, setEditMode] = useState(false);
   const [bubble, setBubble] = useState<ExplainBubble | null>(null);
   const [busy, setBusy] = useState(false);
-  const [swaps, setSwaps] = useState<Record<string, string>>({});
-  const swapsRef = useRef<Record<string, string>>({});
-  swapsRef.current = swaps;
+  const [simplifyCard, setSimplifyCard] = useState<SimplifyCard | null>(null);
   const [salienceOn, setSalienceOn] = useState(false);
   const [salienceBusy, setSalienceBusy] = useState(false);
   // Optimistic highlight marks: painted the instant a color dot is clicked,
@@ -204,6 +213,7 @@ export function ReaderInteractions({
     setPopover(null);
     setSubmenu(null);
     setBubble(null);
+    setSimplifyCard(null);
     setEditMode(false);
     setCommentDraft("");
     setLocalAnchors({});
@@ -225,9 +235,6 @@ export function ReaderInteractions({
     if (!startBlock) return null;
     const blockId = startBlock.dataset.blockId;
     if (!blockId) return null;
-    // A simplified block displays swapped text; offsets against it would not
-    // match the stored block text. No selection tools there.
-    if (swapsRef.current[blockId] !== undefined) return null;
 
     const preRange = document.createRange();
     preRange.selectNodeContents(startBlock);
@@ -266,13 +273,14 @@ export function ReaderInteractions({
     };
   }, []);
 
-  // Escape dismisses the selection popover and the bubble, wherever focus is.
+  // Escape dismisses the selection popover and the bubbles, wherever focus is.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
       setPopover(null);
       setSubmenu(null);
       setBubble(null);
+      setSimplifyCard(null);
       window.getSelection()?.removeAllRanges();
     };
     window.addEventListener("keydown", onKey);
@@ -434,13 +442,27 @@ export function ReaderInteractions({
     }
   }
 
-  // SIMPLIFY: swap the block in place, streaming. Ephemeral; click the block to revert (SPEC.md §6).
+  // SIMPLIFY: stream the layman rewrite into a bubble beside the article,
+  // level with the selection. Ephemeral; close the bubble to dismiss (SPEC.md §6).
   async function simplify() {
     if (!popover || busy) return;
-    const { anchor } = popover;
+    const { anchor, yTop } = popover;
+    // The bubble docks in the right margin. When the margin is narrower than
+    // the bubble, it overlaps the article edge — it is translucent on purpose.
+    const container = containerRef.current;
+    const containerRect = container?.getBoundingClientRect();
+    const articleRect = container?.querySelector("article")?.getBoundingClientRect();
+    const width = 320;
+    let left = 12;
+    if (containerRect) {
+      const articleRight = articleRect
+        ? articleRect.right - containerRect.left
+        : containerRect.width;
+      left = Math.max(8, Math.min(articleRight + 20, containerRect.width - width - 12));
+    }
     setPopover(null);
     window.getSelection()?.removeAllRanges();
-    setSwaps((s) => ({ ...s, [anchor.blockId]: "" }));
+    setSimplifyCard({ anchor, top: yTop, left, text: "", streaming: true, error: null });
     try {
       const res = await fetch("/api/derive", {
         method: "POST",
@@ -457,15 +479,12 @@ export function ReaderInteractions({
         const { done, value } = await reader.read();
         if (done) break;
         const chunk = decoder.decode(value, { stream: true });
-        setSwaps((s) => ({ ...s, [anchor.blockId]: (s[anchor.blockId] ?? "") + chunk }));
+        setSimplifyCard((c) => (c ? { ...c, text: c.text + chunk } : c));
       }
+      setSimplifyCard((c) => (c ? { ...c, streaming: false } : c));
     } catch (err) {
-      setSwaps((s) => {
-        const next = { ...s };
-        delete next[anchor.blockId];
-        return next;
-      });
-      showToast(err instanceof Error ? err.message : "Simplify failed");
+      const message = err instanceof Error ? err.message : "Simplify failed";
+      setSimplifyCard((c) => (c ? { ...c, streaming: false, error: message } : c));
     }
   }
 
@@ -801,6 +820,7 @@ export function ReaderInteractions({
     setPopover(null);
     setSubmenu(null);
     setBubble(null);
+    setSimplifyCard(null);
     setEditMode(!editMode);
   }
 
@@ -969,6 +989,14 @@ export function ReaderInteractions({
       ];
     }
   }
+  if (simplifyCard) {
+    const { blockId, startOffset, endOffset } = simplifyCard.anchor;
+    const existing = highlightsByBlock[blockId] ?? [];
+    highlightsByBlock[blockId] = [
+      ...existing,
+      { sourceId: null, start: startOffset, end: endOffset, kind: "simplify" as const },
+    ];
+  }
   for (const [blockId, list] of Object.entries(termsByBlock)) {
     const existing = highlightsByBlock[blockId] ?? [];
     highlightsByBlock[blockId] = [
@@ -1028,14 +1056,6 @@ export function ReaderInteractions({
         title={title}
         blocks={blocks}
         highlightsByBlock={highlightsByBlock}
-        swaps={swaps}
-        onRevertSwap={(blockId) =>
-          setSwaps((s) => {
-            const next = { ...s };
-            delete next[blockId];
-            return next;
-          })
-        }
         mode={editMode ? "edit" : "read"}
         font={font}
         stylesByBlock={stylesByBlock}
@@ -1313,6 +1333,35 @@ export function ReaderInteractions({
             </div>
           ) : (
             <p className="text-sm text-sand-500">…</p>
+          )}
+        </div>
+      )}
+
+      {simplifyCard && (
+        <div
+          key={`${simplifyCard.anchor.blockId}:${simplifyCard.anchor.startOffset}`}
+          data-selection-popover
+          className="bubble-in absolute z-20 w-[320px] rounded-[20px] border border-line bg-card/80 p-4 shadow-float backdrop-blur-md"
+          style={{ top: simplifyCard.top, left: simplifyCard.left }}
+        >
+          <div className="mb-2 flex items-center justify-between">
+            <span className="text-[11px] font-bold tracking-[0.08em] text-sage-800 uppercase">
+              {simplifyCard.streaming ? "Simplifying…" : "Simplified"}
+            </span>
+            <button
+              onClick={() => setSimplifyCard(null)}
+              className="text-xs text-sand-500 hover:text-clay-700"
+              aria-label="Close"
+            >
+              ✕
+            </button>
+          </div>
+          {simplifyCard.error ? (
+            <p className="text-sm text-red-600">{simplifyCard.error}</p>
+          ) : (
+            <p className="max-h-96 overflow-y-auto text-[13.5px] leading-relaxed whitespace-pre-wrap">
+              {simplifyCard.text || "…"}
+            </p>
           )}
         </div>
       )}

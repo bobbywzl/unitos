@@ -240,6 +240,10 @@ mark,
   border-bottom-width: 3px;
   border-bottom-style: double;
 }
+/* SIMPLIFY: the selection stays tinted while its bubble is open. */
+.simplify-mark {
+  background: color-mix(in srgb, var(--sage-500) 30%, transparent);
+}
 .annotation-mark {
   cursor: pointer;
 }
@@ -278,6 +282,23 @@ mark,
   --tw-prose-pre-bg: var(--sand-200);
   --tw-prose-th-borders: var(--sand-300);
   --tw-prose-td-borders: var(--sand-200);
+}
+
+/* SIMPLIFY bubble: slides in beside the article (SPEC.md §6). */
+@keyframes bubble-in {
+  from {
+    opacity: 0;
+    transform: translateX(16px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .bubble-in {
+    animation: bubble-in 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
 }
 
 /* Source chip click: flash the anchor (SPEC.md §6). */

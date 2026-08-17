@@ -15,6 +15,7 @@ import { extractOutputSchema, resolveSpan, salienceOutputSchema } from "@/lib/de
 import { callForJson } from "@/lib/derive/json-call";
 import { promptTemplates } from "@/lib/prompts";
 import type { PromptCtx } from "@/lib/prompts/types";
+import { SUMMARY_DEPTHS, type SummaryLevels } from "@/lib/types";
 import { parseBody } from "@/lib/validate";
 
 export const maxDuration = 120;
@@ -22,7 +23,7 @@ export const maxDuration = 120;
 // The one derivation pipeline (SPEC.md §4). Never fork per feature: new derivation =
 // new prompt template + destination handler below.
 const deriveSchema = z.object({
-  type: z.enum(["EXPLAIN", "SIMPLIFY", "SALIENCE", "EXTRACT"]),
+  type: z.enum(["EXPLAIN", "SIMPLIFY", "SALIENCE", "EXTRACT", "SUMMARIZE"]),
   documentId: z.string().min(1),
   notebookId: z.string().min(1),
   anchor: z
@@ -33,6 +34,7 @@ const deriveSchema = z.object({
     })
     .optional(),
   targetSectionId: z.string().min(1).nullish(),
+  depth: z.enum(SUMMARY_DEPTHS).optional(), // SUMMARIZE only
 });
 
 const ANCHOR_REQUIRED = new Set(["EXPLAIN", "SIMPLIFY", "EXTRACT"]);
@@ -95,6 +97,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Target section not found" }, { status: 404 });
   }
 
+  const depth = data.depth ?? "layman";
   const ctx: PromptCtx & { targetSectionId?: string | null } = {
     profile,
     documentTitle: document.title,
@@ -103,6 +106,7 @@ export async function POST(req: Request) {
     contextAfter: anchored?.contextAfter ?? "",
     sectionSkeleton: skeleton,
     targetSectionId: data.targetSectionId,
+    depth,
   };
 
   // 2. Template by type. The document is the cached prefix, byte-identical for every
@@ -119,8 +123,8 @@ export async function POST(req: Request) {
   const maxOutputTokens = MAX_OUTPUT_TOKENS[data.type];
 
   // 3 + 4. Stream or collect, then route by destination.
-  // EXPLAIN and SIMPLIFY stream text. SALIENCE and EXTRACT return validated JSON.
-  if (data.type === "EXPLAIN" || data.type === "SIMPLIFY") {
+  // EXPLAIN, SIMPLIFY, and SUMMARIZE stream text. SALIENCE and EXTRACT return validated JSON.
+  if (data.type === "EXPLAIN" || data.type === "SIMPLIFY" || data.type === "SUMMARIZE") {
     const result = streamText({
       model,
       maxOutputTokens,
@@ -132,6 +136,19 @@ export async function POST(req: Request) {
             `cacheWrite=${usage.inputTokenDetails.cacheWriteTokens ?? 0} ` +
             `output=${usage.outputTokens ?? 0}`,
         );
+        // SUMMARIZE persists per notebook+document+depth, so reopening the
+        // Summary tab does not re-pay tokens. Regenerate overwrites the depth.
+        if (data.type === "SUMMARIZE" && text.trim()) {
+          const where = {
+            notebookId_documentId: { notebookId: data.notebookId, documentId: data.documentId },
+          };
+          const nd = await db.notebookDocument.findUnique({ where, select: { summaries: true } });
+          const current = (nd?.summaries ?? {}) as SummaryLevels;
+          await db.notebookDocument.update({
+            where,
+            data: { summaries: { ...current, [depth]: text } },
+          });
+        }
         // EXPLAIN persists in the hidden Annotations section. SIMPLIFY is ephemeral.
         if (data.type === "EXPLAIN" && data.anchor && text.trim()) {
           const block = blockById.get(data.anchor.blockId);

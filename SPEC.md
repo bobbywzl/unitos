@@ -10,7 +10,7 @@ A notes-centric web app for completely dissecting complex documents (research pa
 2. **One primitive, many features.** Explain, laymanize, salience highlighting, and extraction-to-notes are all the same pipeline (anchor → LLM derivation → destination) with different prompt templates and destinations. Never build them as separate subsystems.
 3. **User approves everything.** All AI output that writes into notes lands as `pending` and requires one-keystroke accept/reject. Nothing enters notes silently.
 4. **Provenance is non-negotiable.** Every note line must click back to its source anchor in the original document.
-5. **The retrieval test.** A feature only writes to notes if its output is something the user will read again. Transient comprehension aids (laymanization) render inline in the reader, not in notes.
+5. **The retrieval test.** A feature only writes to notes if its output is something the user will read again. Transient comprehension aids (laymanization) render in the reader, not in notes.
 6. **Reader profile conditions everything.** The user's background, purpose, and intended application are injected into every prompt, not scoped to one feature.
 
 ---
@@ -79,6 +79,7 @@ enum DerivationType {
   SIMPLIFY
   SALIENCE
   EXTRACT
+  SUMMARIZE  // document-level summary, one per depth
   SYNTHESIS  // notebook-scope assistant output
 }
 
@@ -115,6 +116,8 @@ model NotebookDocument {
   documentId String
   notebook   Notebook @relation(fields: [notebookId], references: [id], onDelete: Cascade)
   document   Document @relation(fields: [documentId], references: [id])
+  salience   Json?    // SALIENCE layer: [{blockId, start, end}], per notebook per document
+  summaries  Json?    // SUMMARIZE output: {layman?, intermediate?, professional?}
   @@id([notebookId, documentId])
 }
 
@@ -157,11 +160,12 @@ Single server route: `POST /api/derive`
 
 ```typescript
 type DeriveRequest = {
-  type: 'EXPLAIN' | 'SIMPLIFY' | 'SALIENCE' | 'EXTRACT';
+  type: 'EXPLAIN' | 'SIMPLIFY' | 'SALIENCE' | 'EXTRACT' | 'SUMMARIZE';
   documentId: string;
   notebookId: string;
   anchor?: AnchorInput;        // required for EXPLAIN/SIMPLIFY/EXTRACT
   targetSectionId?: string;    // EXTRACT only; null = let AI propose section
+  depth?: 'layman' | 'intermediate' | 'professional'; // SUMMARIZE only; default layman
 };
 ```
 
@@ -171,9 +175,10 @@ Flow:
 3. Stream response.
 4. Route output by destination:
    - `EXPLAIN` → annotation bubble in the reader rail (persisted as a Note in a hidden "Annotations" section, so it's searchable, but rendered in the rail)
-   - `SIMPLIFY` → inline replacement in the reader (ephemeral, not persisted; toggle to revert)
+   - `SIMPLIFY` → bubble beside the article, level with the selection (ephemeral, not persisted; close to dismiss)
    - `SALIENCE` → highlight layer (persisted as document-level Json, per notebook)
    - `EXTRACT` → `Note` with `status: PENDING` in the target section
+   - `SUMMARIZE` → Summary tab in the side panel (persisted on `NotebookDocument.summaries`, one summary per depth; Regenerate overwrites)
 
 Prompt templates always receive: reader profile, document title, section skeleton (for EXTRACT), and the anchored text with surrounding context (±2 blocks).
 
@@ -202,7 +207,8 @@ DOM ranges are never the source of truth. Convert selection → block-relative o
 
 **Other UX rules:**
 - Clicking a source chip on any note scrolls the reader to that anchor and flashes the highlight. If the document isn't open, open it.
-- SIMPLIFY swaps the paragraph in place with a subtle left-border indicator; click to revert. Never append below the original.
+- SIMPLIFY opens a translucent bubble to the right of the article, level with the selection, sliding in with a smooth animation. The selection stays tinted while the bubble is open. The document text never changes.
+- Summary lives in the side panel: one rail button, a depth control with three levels (layman / intermediate / professional), one stored summary per depth.
 - Salience layer is a toggleable highlight overlay, off by default, one click to show.
 - Reader profile onboarding: max 3 questions (background / purpose / application), shown on first notebook creation, editable per notebook.
 - Keyboard-first: `j/k` navigate pending queue, `Enter` accept, `Backspace` reject, `e` edit, `g` jump to source.

@@ -14,6 +14,7 @@ import {
   NotesIcon,
   QuestionIcon,
   SparkleIcon,
+  SummaryIcon,
 } from "@/components/icons";
 import { GuideDialog } from "@/components/guide-dialog";
 import { NotebookTitle } from "@/components/notebook-title";
@@ -22,11 +23,12 @@ import { useOutline } from "@/components/outline/use-outline";
 import { ProfileDialog, type ProfileValues } from "@/components/profile-dialog";
 import { DocumentBar, type AttachedDocument } from "@/components/reader/document-bar";
 
-type Tab = "notes" | "assistant" | "annotations" | "edits";
+type Tab = "notes" | "assistant" | "summary" | "annotations" | "edits";
 
 const TAB_TITLES: Record<Tab, string> = {
   notes: "Notes",
   assistant: "Assistant",
+  summary: "Summary",
   annotations: "Annotations",
   edits: "Edits",
 };
@@ -44,6 +46,7 @@ export function Workspace({
   activeDocumentId,
   reader,
   assistant,
+  summaryPanel,
   annotationsPanel,
   editsPanel,
   annotationCount,
@@ -54,6 +57,7 @@ export function Workspace({
   activeDocumentId: string | null;
   reader: React.ReactNode;
   assistant: React.ReactNode;
+  summaryPanel: React.ReactNode;
   annotationsPanel: React.ReactNode;
   editsPanel: React.ReactNode;
   annotationCount: number;
@@ -192,6 +196,7 @@ export function Workspace({
             <div className="min-h-0 flex-1 overflow-y-auto">
               {tab === "notes" && <NotesTray tree={tree} pending={pending} actions={actions} />}
               {tab === "assistant" && assistant}
+              {tab === "summary" && summaryPanel}
               {tab === "annotations" && annotationsPanel}
               {tab === "edits" && editsPanel}
             </div>
@@ -254,6 +259,16 @@ export function Workspace({
             className={!collapsed && tab === "assistant" ? RAIL_BUTTON_ON : RAIL_BUTTON}
           >
             <SparkleIcon />
+          </button>
+
+          <button
+            onClick={() => show("summary")}
+            aria-label="Summary"
+            title="Summarize the open document"
+            aria-current={!collapsed && tab === "summary"}
+            className={!collapsed && tab === "summary" ? RAIL_BUTTON_ON : RAIL_BUTTON}
+          >
+            <SummaryIcon />
           </button>
 
           <button

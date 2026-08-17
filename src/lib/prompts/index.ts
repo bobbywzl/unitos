@@ -3,6 +3,7 @@ import { explainPrompt } from "@/lib/prompts/explain";
 import { extractPrompt } from "@/lib/prompts/extract";
 import { saliencePrompt } from "@/lib/prompts/salience";
 import { simplifyPrompt } from "@/lib/prompts/simplify";
+import { summarizePrompt } from "@/lib/prompts/summarize";
 import type { PromptCtx } from "@/lib/prompts/types";
 
 // One template per DerivationType. New derivation = new template + destination handler,
@@ -14,4 +15,5 @@ export const promptTemplates: Partial<
   SIMPLIFY: simplifyPrompt,
   SALIENCE: saliencePrompt,
   EXTRACT: extractPrompt,
+  SUMMARIZE: summarizePrompt,
 };

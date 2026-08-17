@@ -12,10 +12,12 @@ import type {
   LinkOut,
   NotebookView,
   SectionView,
+  SummaryLevels,
 } from "@/lib/types";
 import { AssistantPanel } from "@/components/assistant/assistant-panel";
 import { AnnotationsPanel } from "@/components/panels/annotations-panel";
 import { EditsPanel } from "@/components/panels/edits-panel";
+import { SummaryPanel } from "@/components/panels/summary-panel";
 import { ReaderInteractions } from "@/components/reader/reader-interactions";
 import { Workspace } from "@/components/reader/workspace";
 
@@ -96,11 +98,17 @@ export default async function NotebookPage(props: {
     }
   }
 
+  // Stored summaries for the open document, one per depth (SPEC.md §4).
+  const activeAttachment = activeDocument
+    ? notebook.documents.find((d) => d.documentId === activeDocument.id)
+    : null;
+  const summaries = (activeAttachment?.summaries as SummaryLevels | null) ?? {};
+
   // Salience overlay spans, healed against current block text at render time.
   const salienceByBlock: Record<string, { start: number; end: number }[]> = {};
   let hasSalience = false;
   if (activeDocument) {
-    const nd = notebook.documents.find((d) => d.documentId === activeDocument.id);
+    const nd = activeAttachment;
     const spans = (nd?.salience as SalienceSpan[] | null) ?? null;
     if (spans && Array.isArray(spans)) {
       hasSalience = true;
@@ -475,6 +483,14 @@ export default async function NotebookPage(props: {
       }}
       assistant={
         <AssistantPanel notebookId={notebook.id} documentId={activeDocument?.id ?? null} />
+      }
+      summaryPanel={
+        <SummaryPanel
+          key={activeDocument?.id ?? "none"}
+          notebookId={notebook.id}
+          documentId={activeDocument?.id ?? null}
+          initial={summaries}
+        />
       }
       annotationsPanel={
         <AnnotationsPanel

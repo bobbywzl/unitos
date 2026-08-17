@@ -99,8 +99,6 @@ export function Reader({
   title,
   blocks,
   highlightsByBlock,
-  swaps,
-  onRevertSwap,
   mode,
   font,
   stylesByBlock,
@@ -114,8 +112,6 @@ export function Reader({
   title: string;
   blocks: BlockData[];
   highlightsByBlock: Record<string, Highlight[]>;
-  swaps: Record<string, string>;
-  onRevertSwap: (blockId: string) => void;
   mode: "read" | "edit";
   font: string | null;
   stylesByBlock: Record<string, StyleSpan[]>;
@@ -316,8 +312,6 @@ export function Reader({
               key={block.id}
               block={block}
               highlights={highlightsByBlock[block.id]}
-              swap={swaps[block.id]}
-              onRevertSwap={onRevertSwap}
             />
           ),
         )}

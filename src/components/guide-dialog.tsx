@@ -59,8 +59,9 @@ export function GuideDialog({ open, onClose }: { open: boolean; onClose: () => v
               tuned to your reader profile. Saved under Annotations.
             </li>
             <li>
-              <span className={term}>Simplify</span> — rewrites the paragraph in plainer words,
-              in place. Temporary: click the paragraph to get the original back.
+              <span className={term}>Simplify</span> — rewrites the selection in plain words,
+              in a bubble beside the article. The document text never changes; close the
+              bubble when you are done.
             </li>
             <li>
               <span className={term}>Extract</span> — the note-taking tool. It turns the
@@ -129,6 +130,8 @@ export function GuideDialog({ open, onClose }: { open: boolean; onClose: () => v
             <span className={term}>Notes</span> — your sections and the pending queue.{" "}
             <span className={term}>Assistant</span> — ask questions at document, notebook, or
             corpus scope, and run checks (contradictions, gaps).{" "}
+            <span className={term}>Summary</span> — the whole document summarized at the depth
+            you pick: layman, intermediate, or professional. Each depth is kept once generated.{" "}
             <span className={term}>Annotations</span> — highlights, comments, explanations,
             links; Jump scrolls to the source. <span className={term}>Edits</span> — the edit
             history.

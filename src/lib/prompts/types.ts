@@ -1,3 +1,5 @@
+import type { SummaryDepth } from "@/lib/types";
+
 // Context passed to every prompt template. Templates are one file per DerivationType,
 // each exporting a single function (ctx) => string (CLAUDE.md).
 export type ReaderProfileCtx = {
@@ -15,6 +17,8 @@ export type PromptCtx = {
   contextAfter: string;
   // Section skeleton of the notebook, for EXTRACT.
   sectionSkeleton: { id: string; title: string; parentTitle: string | null }[];
+  // Summary depth, for SUMMARIZE.
+  depth?: SummaryDepth;
 };
 
 export function profileLines(profile: ReaderProfileCtx): string {

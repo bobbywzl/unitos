@@ -59,6 +59,7 @@ enum DerivationType {
   SIMPLIFY
   SALIENCE
   EXTRACT
+  SUMMARIZE // document-level summary, one per depth
   SYNTHESIS // notebook-scope assistant output
 }
 
@@ -149,6 +150,7 @@ model NotebookDocument {
   notebook   Notebook @relation(fields: [notebookId], references: [id], onDelete: Cascade)
   document   Document @relation(fields: [documentId], references: [id])
   salience   Json? // SALIENCE layer: [{blockId, start, end}], per notebook per document (SPEC.md §4)
+  summaries  Json? // SUMMARIZE output: {layman?, intermediate?, professional?}, per notebook per document (SPEC.md §4)
 
   @@id([notebookId, documentId])
 }

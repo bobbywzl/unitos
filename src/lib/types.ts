@@ -32,6 +32,13 @@ export type NotebookView = {
   sections: SectionView[];
 };
 
+// ── SUMMARIZE: document-level summary, one per depth ───────────────────────
+
+export const SUMMARY_DEPTHS = ["layman", "intermediate", "professional"] as const;
+export type SummaryDepth = (typeof SUMMARY_DEPTHS)[number];
+/** Stored on NotebookDocument.summaries: one summary per generated depth. */
+export type SummaryLevels = Partial<Record<SummaryDepth, string>>;
+
 // ── Reader side panel: annotations and edit history ────────────────────────
 
 /** One annotation on the open document, shown in the Annotations tab.

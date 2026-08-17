@@ -1,6 +1,6 @@
 import { profileLines, type PromptCtx } from "@/lib/prompts/types";
 
-// SIMPLIFY: inline replacement in the reader. Ephemeral, never persisted (SPEC.md §4).
+// SIMPLIFY: layman rewrite in a bubble beside the article. Ephemeral, never persisted (SPEC.md §4).
 export function simplifyPrompt(ctx: PromptCtx): string {
   return [
     profileLines(ctx.profile),
@@ -10,10 +10,10 @@ export function simplifyPrompt(ctx: PromptCtx): string {
     "Selected passage:",
     ctx.anchoredText,
     "",
-    "Rewrite the passage in plain language for this reader.",
-    "1. Keep every claim and number. Do not drop content or add content.",
-    "2. Replace jargon the reader may not know. Keep terms their background covers.",
-    "3. Match the passage's length within reason. Shorter is fine, longer is not.",
+    "Rewrite the passage so a reader with no training in this field understands it on first read.",
+    "1. Use everyday words. Replace every technical term with plain language, or define it in the sentence where it first appears.",
+    "2. Keep every claim and number. Do not drop content or add content.",
+    "3. Word it intuitively: say what happens before you say why it matters. A short analogy is fine when it makes the meaning clearer.",
     "Return only the rewritten passage as plain text. No preamble, no markdown headings.",
   ].join("\n");
 }

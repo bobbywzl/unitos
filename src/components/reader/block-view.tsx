@@ -11,7 +11,7 @@ export type Highlight = {
   sourceId: string | null;
   start: number;
   end: number;
-  kind: "anchor" | "salience" | "term" | "link" | "edited" | "style";
+  kind: "anchor" | "salience" | "simplify" | "term" | "link" | "edited" | "style";
   styleKind?: "bold" | "italic"; // kind "style" only
   definition?: string; // glossary hover text, kind "term" only
   color?: string | null; // highlight hue ("clay" | "sage" | "gold" | "plum"), kind "anchor" only
@@ -63,6 +63,7 @@ function markedText(text: string, highlights: Highlight[]) {
         ? anchors.reduce((n, h) => (h.end - h.start < n.end - n.start ? h : n))
         : anchors[0];
     const salience = covering.find((h) => h.kind === "salience");
+    const simplify = covering.find((h) => h.kind === "simplify");
     const term = covering.find((h) => h.kind === "term");
     if (link) {
       parts.push(
@@ -77,7 +78,7 @@ function markedText(text: string, highlights: Highlight[]) {
           {segment}
         </a>,
       );
-    } else if (anchor || salience) {
+    } else if (anchor || salience || simplify) {
       const focusable = anchor?.annotation && anchor.sourceId;
       parts.push(
         <mark
@@ -96,7 +97,7 @@ function markedText(text: string, highlights: Highlight[]) {
                 }
               : undefined
           }
-          className={`${anchor ? anchorClass(anchor.color) : "salience-mark"}${anchors.length > 1 ? " hl-stacked" : ""} rounded-[4px] ${focusable ? "annotation-mark" : ""}${editedClass}`}
+          className={`${anchor ? anchorClass(anchor.color) : salience ? "salience-mark" : "simplify-mark"}${anchors.length > 1 ? " hl-stacked" : ""} rounded-[4px] ${focusable ? "annotation-mark" : ""}${editedClass}`}
         >
           {segment}
         </mark>,
@@ -130,32 +131,14 @@ function markedText(text: string, highlights: Highlight[]) {
 
 // Text blocks render block.text verbatim so DOM text content matches stored text
 // (anchor offsets depend on this, SPEC.md §5). Tables and figures render sanitized html.
-// A swap replaces the block content in place (SIMPLIFY, ephemeral); click to revert.
 export function BlockView({
   block,
   highlights = [],
-  swap,
-  onRevertSwap,
 }: {
   block: BlockData;
   highlights?: Highlight[];
-  swap?: string;
-  onRevertSwap?: (blockId: string) => void;
 }) {
   const shared = "reader-block";
-
-  if (swap !== undefined) {
-    return (
-      <div
-        data-block-id={block.id}
-        title="Simplified. Click to revert."
-        onClick={() => onRevertSwap?.(block.id)}
-        className={`${shared} my-4 cursor-pointer border-l-4 border-sage-500 pl-4 whitespace-pre-wrap`}
-      >
-        {swap || "…"}
-      </div>
-    );
-  }
 
   const content = highlights.length > 0 ? markedText(block.text, highlights) : block.text;
   const anchorIds = highlights.filter((h) => h.kind === "anchor" && h.sourceId);

@@ -128,6 +128,16 @@ export function HistoryIcon(props: IconProps) {
   );
 }
 
+export function SummaryIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M21 6H3" />
+      <path d="M15 12H3" />
+      <path d="M17 18H3" />
+    </Icon>
+  );
+}
+
 export function MicIcon(props: IconProps) {
   return (
     <Icon {...props}>
