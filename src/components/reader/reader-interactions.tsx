@@ -18,7 +18,35 @@ type Popover = {
   yTop: number;
   textLeft: number;
   truncated: boolean; // selection crossed into another paragraph; anchor covers the first
+  figure?: boolean; // opened by the hold-and-circle gesture on a figure; no Simplify or Extract
 };
+
+// Hold the pointer on a figure and draw a small circle: the figure's tools open.
+// Total turning angle ≥ 300° reads as a circle; a straight drag never does.
+function circleSweepDegrees(points: { x: number; y: number }[]): number {
+  let sweep = 0;
+  let prev: { x: number; y: number } | null = null;
+  let prevAngle: number | null = null;
+  for (const point of points) {
+    if (!prev) {
+      prev = point;
+      continue;
+    }
+    const dx = point.x - prev.x;
+    const dy = point.y - prev.y;
+    if (Math.hypot(dx, dy) < 3) continue;
+    const angle = Math.atan2(dy, dx);
+    if (prevAngle !== null) {
+      let d = angle - prevAngle;
+      while (d > Math.PI) d -= 2 * Math.PI;
+      while (d < -Math.PI) d += 2 * Math.PI;
+      sweep += d;
+    }
+    prevAngle = angle;
+    prev = point;
+  }
+  return Math.abs((sweep * 180) / Math.PI);
+}
 
 type SpeechRec = {
   lang: string;
@@ -138,7 +166,7 @@ export function ReaderInteractions({
     { linkId: string; start: number; end: number; href: string; title: string }[]
   >;
   editedByBlock: Record<string, { start: number; end: number }[]>;
-  stylesByBlock: Record<string, { start: number; end: number; style: "bold" | "italic" }[]>;
+  stylesByBlock: Record<string, { start: number; end: number; style: "bold" | "italic" | "underline" }[]>;
   font: string | null;
 }) {
   const router = useRouter();
@@ -197,6 +225,16 @@ export function ReaderInteractions({
   const recognitionRef = useRef<SpeechRec | null>(null);
   const editModeRef = useRef(false);
   editModeRef.current = editMode;
+  const blocksRef = useRef(blocks);
+  blocksRef.current = blocks;
+  const overlayOpenRef = useRef(false);
+  overlayOpenRef.current = popover !== null || bubble !== null || simplifyCard !== null;
+  // The mouseup that ends a hold-and-circle gesture must not run selection
+  // capture — it would replace the figure popover it just opened.
+  const suppressNextMouseUp = useRef(false);
+  // The fading hint that replaces the Edit button. Shows on document open until
+  // the reader double-clicks into edit mode once.
+  const [editHint, setEditHint] = useState(false);
   function setAssistantMode(auto: boolean) {
     setAutoRun(auto);
     autoRunRef.current = auto;
@@ -220,6 +258,7 @@ export function ReaderInteractions({
   }
 
   // Selection → block-relative offsets via data-block-id (SPEC.md §5). DOM ranges are never persisted.
+  // Edit mode marks blocks with data-edit-block instead; both carry the block id.
   const captureSelection = useCallback((): Popover | null => {
     const container = containerRef.current;
     const selection = window.getSelection();
@@ -229,11 +268,11 @@ export function ReaderInteractions({
 
     const blockOf = (node: Node): HTMLElement | null => {
       const el = node instanceof HTMLElement ? node : node.parentElement;
-      return el?.closest("[data-block-id]") ?? null;
+      return el?.closest("[data-block-id], [data-edit-block]") ?? null;
     };
     const startBlock = blockOf(range.startContainer);
     if (!startBlock) return null;
-    const blockId = startBlock.dataset.blockId;
+    const blockId = startBlock.dataset.blockId ?? startBlock.dataset.editBlock;
     if (!blockId) return null;
     // A rendered equation's DOM text is not the stored TeX; offsets there would
     // anchor to the wrong characters. No selection tools on math blocks.
@@ -276,25 +315,46 @@ export function ReaderInteractions({
     };
   }, []);
 
-  // Escape dismisses the selection popover and the bubbles, wherever focus is.
+  // Escape closes the popover and bubbles first; with nothing open it leaves
+  // edit mode, saving unsaved typing on the way out.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
-      setPopover(null);
-      setSubmenu(null);
-      setBubble(null);
-      setSimplifyCard(null);
-      window.getSelection()?.removeAllRanges();
+      if (overlayOpenRef.current) {
+        setPopover(null);
+        setSubmenu(null);
+        setBubble(null);
+        setSimplifyCard(null);
+        window.getSelection()?.removeAllRanges();
+        return;
+      }
+      if (editModeRef.current) {
+        const active = document.activeElement as HTMLElement | null;
+        const editingId = active?.dataset.editBlock;
+        if (editingId) {
+          const live = active?.textContent ?? "";
+          const stored = blocksRef.current.find((b) => b.id === editingId);
+          if (stored && live !== stored.text) void saveBlockEdit(editingId, live);
+        }
+        editModeRef.current = false;
+        setEditMode(false);
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Selection → popover, in reading AND edit mode: highlighting text while
+  // editing offers the same tools.
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
     const onMouseUp = (event: MouseEvent) => {
-      if (editModeRef.current) return; // selections in edit mode are for editing
+      if (suppressNextMouseUp.current) {
+        suppressNextMouseUp.current = false;
+        return;
+      }
       if (event.target instanceof Element && event.target.closest("[data-selection-popover]")) return;
       // A drag that started inside the comment box can end over the article —
       // that is text editing, not a new selection.
@@ -319,6 +379,133 @@ export function ReaderInteractions({
     container.addEventListener("mouseup", onMouseUp);
     return () => container.removeEventListener("mouseup", onMouseUp);
   }, [captureSelection, documentId]);
+
+  // Double-click a text block to edit it in place. The hint card teaches this
+  // once; after the first double-click it never shows again.
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const onDblClick = (e: MouseEvent) => {
+      if (editModeRef.current) return;
+      const target = e.target as Element;
+      if (target.closest("[data-selection-popover]")) return;
+      const blockEl = target.closest<HTMLElement>("[data-block-id]");
+      const blockId = blockEl?.dataset.blockId;
+      if (!blockId) return;
+      const block = blocksRef.current.find((b) => b.id === blockId);
+      if (!block || block.type === "FIGURE" || block.type === "TABLE" || block.type === "SEPARATOR")
+        return;
+      window.getSelection()?.removeAllRanges();
+      setPopover(null);
+      setSubmenu(null);
+      editModeRef.current = true;
+      setEditMode(true);
+      localStorage.setItem("unitos-edit-hint", "done");
+      setEditHint(false);
+      // Focus the clicked block once its editable mounts; land the caret where
+      // the double-click happened.
+      const { clientX, clientY } = e;
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() => {
+          const el = document.querySelector<HTMLElement>(`[data-edit-block="${blockId}"]`);
+          if (!el) return;
+          el.focus();
+          const doc = document as Document & {
+            caretRangeFromPoint?: (x: number, y: number) => Range | null;
+          };
+          const range = doc.caretRangeFromPoint?.(clientX, clientY);
+          const selection = window.getSelection();
+          if (range && el.contains(range.startContainer) && selection) {
+            selection.removeAllRanges();
+            selection.addRange(range);
+          }
+        }),
+      );
+    };
+    container.addEventListener("dblclick", onDblClick);
+    return () => container.removeEventListener("dblclick", onDblClick);
+  }, []);
+
+  useEffect(() => {
+    if (localStorage.getItem("unitos-edit-hint") === "done") return;
+    // Post-hydration reveal on purpose: localStorage is client-only, so the
+    // SSR pass must render without the hint.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setEditHint(true);
+  }, [documentId]);
+
+  // Hold-and-circle gesture on figures and equations opens their tools.
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    let tracking: {
+      pointerId: number;
+      blockId: string;
+      points: { x: number; y: number }[];
+      minX: number;
+      maxX: number;
+      minY: number;
+      maxY: number;
+    } | null = null;
+    const figureAt = (target: Element | null): string | null => {
+      const el = target?.closest?.<HTMLElement>("[data-block-id]");
+      const blockId = el?.dataset.blockId;
+      if (!blockId) return null;
+      const block = blocksRef.current.find((b) => b.id === blockId);
+      return block && (block.type === "FIGURE" || block.type === "EQUATION") ? blockId : null;
+    };
+    const onDown = (e: PointerEvent) => {
+      if (e.button !== 0) return;
+      const blockId = figureAt(e.target as Element);
+      if (!blockId) return;
+      tracking = {
+        pointerId: e.pointerId,
+        blockId,
+        points: [{ x: e.clientX, y: e.clientY }],
+        minX: e.clientX,
+        maxX: e.clientX,
+        minY: e.clientY,
+        maxY: e.clientY,
+      };
+    };
+    const onMove = (e: PointerEvent) => {
+      if (!tracking || e.pointerId !== tracking.pointerId) return;
+      tracking.points.push({ x: e.clientX, y: e.clientY });
+      tracking.minX = Math.min(tracking.minX, e.clientX);
+      tracking.maxX = Math.max(tracking.maxX, e.clientX);
+      tracking.minY = Math.min(tracking.minY, e.clientY);
+      tracking.maxY = Math.max(tracking.maxY, e.clientY);
+      // Spread out past a hand-sized area = a drag or a scroll, not a circle.
+      if (tracking.maxX - tracking.minX > 320 || tracking.maxY - tracking.minY > 320) {
+        tracking = null;
+        return;
+      }
+      if (tracking.points.length >= 12 && circleSweepDegrees(tracking.points) >= 300) {
+        const { blockId } = tracking;
+        tracking = null;
+        openFigureTools(blockId, e.clientX, e.clientY);
+      }
+    };
+    const onUp = () => {
+      tracking = null;
+    };
+    const onDragStart = (e: DragEvent) => {
+      if (figureAt(e.target as Element)) e.preventDefault();
+    };
+    container.addEventListener("pointerdown", onDown);
+    container.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+    container.addEventListener("dragstart", onDragStart);
+    return () => {
+      container.removeEventListener("pointerdown", onDown);
+      container.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+      container.removeEventListener("dragstart", onDragStart);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Scroll to an anchor and flash it. Retries while the refreshed tree paints.
   const flashSource = useCallback((sourceId: string) => {
@@ -380,10 +567,55 @@ export function ReaderInteractions({
     toastTimer.current = setTimeout(() => setToast(null), 5000);
   }
 
+  // The figure popover: anchored to the whole caption (offsets 0..length), so
+  // provenance validation holds and the annotation lists like any other.
+  function openFigureTools(blockId: string, clientX: number, clientY: number) {
+    const container = containerRef.current;
+    const block = blocksRef.current.find((b) => b.id === blockId);
+    if (!container || !block) return;
+    const text = block.text;
+    if (!text.trim()) {
+      showToast("This figure has no caption to anchor to.");
+      return;
+    }
+    const containerRect = container.getBoundingClientRect();
+    const y = clientY - containerRect.top + container.scrollTop;
+    suppressNextMouseUp.current = true;
+    window.getSelection()?.removeAllRanges();
+    setSubmenu(null);
+    setCommentDraft("");
+    setPopover({
+      anchor: { blockId, startOffset: 0, endOffset: text.length, quotedText: text, prefix: "", suffix: "" },
+      figure: true,
+      x: Math.max(120, clientX - containerRect.left),
+      y: y + 8,
+      yTop: Math.max(8, y - 8),
+      textLeft: Math.min(clientX - containerRect.left + 130, containerRect.width - 20),
+      truncated: false,
+    });
+  }
+
+  // Edit mode: unsaved typing must reach the server before an anchor referencing
+  // the live text is stored — the anchor's offsets describe what is on screen.
+  async function flushLiveBlock(blockId: string) {
+    if (!editModeRef.current) return;
+    const el = document.querySelector<HTMLElement>(`[data-edit-block="${blockId}"]`);
+    const stored = blocksRef.current.find((b) => b.id === blockId);
+    const live = el?.textContent;
+    if (el && stored && live !== undefined && live !== stored.text) {
+      try {
+        await api(`/api/blocks/${blockId}`, "PATCH", { text: live });
+      } catch {
+        // The action still runs; the anchor may orphan and heal by quote.
+      }
+    }
+  }
+
   async function addToSection(sectionId: string) {
     if (!popover || busy) return;
     setBusy(true);
     try {
+      await flushLiveBlock(popover.anchor.blockId);
       await api("/api/notes", "POST", {
         sectionId,
         content: popover.anchor.quotedText,
@@ -416,6 +648,7 @@ export function ReaderInteractions({
   async function explain() {
     if (!popover || busy) return;
     const { anchor, x, y } = popover;
+    await flushLiveBlock(anchor.blockId);
     setPopover(null);
     window.getSelection()?.removeAllRanges();
     setBubble({ kind: "explain", x, y, text: "", streaming: true, error: null });
@@ -450,6 +683,7 @@ export function ReaderInteractions({
   async function simplify() {
     if (!popover || busy) return;
     const { anchor, yTop } = popover;
+    await flushLiveBlock(anchor.blockId);
     // The bubble docks in the right margin. When the margin is narrower than
     // the bubble, it overlaps the article edge — it is translucent on purpose.
     const container = containerRef.current;
@@ -499,6 +733,7 @@ export function ReaderInteractions({
       return;
     }
     const { anchor } = popover;
+    await flushLiveBlock(anchor.blockId);
     setPopover(null);
     window.getSelection()?.removeAllRanges();
     setBusy(true);
@@ -527,6 +762,7 @@ export function ReaderInteractions({
     if (!popover || busy) return;
     if (input.comment !== undefined && !input.comment.trim()) return;
     const { anchor } = popover;
+    await flushLiveBlock(anchor.blockId);
     const optimistic = { start: anchor.startOffset, end: anchor.endOffset, color: input.color ?? null };
     setLocalAnchors((prev) => ({
       ...prev,
@@ -568,6 +804,7 @@ export function ReaderInteractions({
   // Two-ended link, phase 1: hold this selection as the first end.
   function beginLink() {
     if (!popover) return;
+    void flushLiveBlock(popover.anchor.blockId);
     setPendingLink({ fromDocumentId: documentId, anchor: popover.anchor });
     setPopover(null);
     setSubmenu(null);
@@ -590,6 +827,7 @@ export function ReaderInteractions({
     }
     setBusy(true);
     try {
+      await flushLiveBlock(to.blockId);
       await api("/api/links", "POST", {
         fromDocumentId: pendingLink.fromDocumentId,
         toDocumentId: documentId,
@@ -824,12 +1062,20 @@ export function ReaderInteractions({
     setSubmenu(null);
     setBubble(null);
     setSimplifyCard(null);
+    editModeRef.current = !editMode;
     setEditMode(!editMode);
   }
 
-  async function formatBlock(blockId: string, kind: "paragraph" | "h1" | "h2" | "h3") {
+  async function formatBlock(
+    blockId: string,
+    kind: "paragraph" | "h1" | "h2" | "h3" | "list" | "numbered",
+    text?: string,
+  ) {
     try {
-      await api(`/api/blocks/${blockId}`, "PATCH", { kind });
+      await api(`/api/blocks/${blockId}`, "PATCH", {
+        kind,
+        ...(text !== undefined ? { text } : {}),
+      });
       router.refresh();
     } catch (err) {
       showToast(err instanceof Error ? err.message : "Format failed");
@@ -840,7 +1086,7 @@ export function ReaderInteractions({
     blockId: string,
     start: number,
     end: number,
-    style: "bold" | "italic",
+    style: "bold" | "italic" | "underline",
   ) {
     try {
       await api(`/api/blocks/${blockId}/style`, "POST", {
@@ -1032,15 +1278,15 @@ export function ReaderInteractions({
             <option value="mono">Mono</option>
           </select>
         )}
-        <button
-          onClick={toggleEditMode}
-          className={`rounded-full px-3.5 py-1.5 text-xs font-semibold shadow-soft ${
-            editMode ? "bg-clay text-clay-fg hover:bg-clay-600" : "bg-sand-100 text-sand-600 hover:text-clay-800"
-          }`}
-          title={editMode ? "Back to reading" : "Edit the whole page in place"}
-        >
-          {editMode ? "Done" : "Edit"}
-        </button>
+        {editMode && (
+          <button
+            onClick={toggleEditMode}
+            className="rounded-full bg-clay px-3.5 py-1.5 text-xs font-semibold text-clay-fg shadow-soft hover:bg-clay-600"
+            title="Back to reading (Esc)"
+          >
+            Done
+          </button>
+        )}
         <button
           onClick={() => void toggleSalience()}
           disabled={salienceBusy}
@@ -1054,6 +1300,16 @@ export function ReaderInteractions({
           {salienceBusy ? "Salience…" : salienceOn ? "Salience on" : "Salience"}
         </button>
       </div>
+
+      {editHint && !editMode && (
+        <div
+          onAnimationEnd={() => setEditHint(false)}
+          className="hint-fade pointer-events-none absolute top-16 right-5 z-10 max-w-64 rounded-2xl bg-card px-4 py-2.5 text-[12px] leading-relaxed text-sand-700 shadow-lift"
+        >
+          Double-click any paragraph to edit it. Hold and draw a small circle on a figure for its
+          tools.
+        </div>
+      )}
 
       <Reader
         title={title}
@@ -1094,6 +1350,9 @@ export function ReaderInteractions({
             <p className="px-2.5 py-1 text-[10.5px] leading-snug text-sand-500">
               Anchors to the first paragraph of the selection
             </p>
+          )}
+          {popover.figure && (
+            <p className="px-2.5 py-1 text-[10.5px] leading-snug text-sand-500">Figure tools</p>
           )}
           {pendingLink && (
             <button
@@ -1180,23 +1439,28 @@ export function ReaderInteractions({
 
           <button
             onClick={() => void explain()}
+            title={popover.figure ? "The AI deciphers what the visualization shows" : undefined}
             className="flex w-full items-center rounded-full px-2.5 py-[5px] text-left text-[12px] text-sand-800 hover:bg-clay-100 hover:text-clay-800"
           >
             Explain
           </button>
-          <button
-            onClick={() => void simplify()}
-            className="flex w-full items-center rounded-full px-2.5 py-[5px] text-left text-[12px] text-sand-800 hover:bg-clay-100 hover:text-clay-800"
-          >
-            Simplify
-          </button>
-          <button
-            onClick={() => void extract()}
-            disabled={busy}
-            className="flex w-full items-center rounded-full px-2.5 py-[5px] text-left text-[12px] text-sand-800 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40"
-          >
-            Extract
-          </button>
+          {!popover.figure && (
+            <button
+              onClick={() => void simplify()}
+              className="flex w-full items-center rounded-full px-2.5 py-[5px] text-left text-[12px] text-sand-800 hover:bg-clay-100 hover:text-clay-800"
+            >
+              Simplify
+            </button>
+          )}
+          {!popover.figure && (
+            <button
+              onClick={() => void extract()}
+              disabled={busy}
+              className="flex w-full items-center rounded-full px-2.5 py-[5px] text-left text-[12px] text-sand-800 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40"
+            >
+              Extract
+            </button>
+          )}
 
           <div className="flex items-center gap-1.5 px-2.5 py-1">
             {(["clay", "sage", "gold", "plum"] as const).map((color) => (

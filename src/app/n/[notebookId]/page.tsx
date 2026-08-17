@@ -218,9 +218,11 @@ export default async function NotebookPage(props: {
           const kind =
             n.derivationType === "EXPLAIN"
               ? ("explain" as const)
-              : n.color
-                ? ("highlight" as const)
-                : ("comment" as const);
+              : n.derivationType === "SIMPLIFY"
+                ? ("simplify" as const)
+                : n.color
+                  ? ("highlight" as const)
+                  : ("comment" as const);
           return {
             id: n.id,
             kind,
@@ -427,7 +429,7 @@ export default async function NotebookPage(props: {
   type StyleSpan = { start: number; end: number; style: string; quotedText: string };
   const stylesByBlock: Record<
     string,
-    { start: number; end: number; style: "bold" | "italic" }[]
+    { start: number; end: number; style: "bold" | "italic" | "underline" }[]
   > = {};
   if (activeDocument) {
     for (const b of activeDocument.blocks) {

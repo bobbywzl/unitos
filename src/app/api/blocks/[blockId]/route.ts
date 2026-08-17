@@ -7,20 +7,27 @@ import { parseBody } from "@/lib/validate";
 const patchSchema = z
   .object({
     text: z.string().max(50_000).optional(),
-    kind: z.enum(["paragraph", "h1", "h2", "h3"]).optional(),
+    kind: z.enum(["paragraph", "h1", "h2", "h3", "list", "numbered"]).optional(),
   })
   .refine((d) => d.text !== undefined || d.kind !== undefined, {
     message: "text or kind is required",
   });
 
-const KIND_TO_BLOCK: Record<string, { type: "PARAGRAPH" | "HEADING"; html: string | null }> = {
+const KIND_TO_BLOCK: Record<
+  string,
+  { type: "PARAGRAPH" | "HEADING" | "LIST"; html: string | null }
+> = {
   paragraph: { type: "PARAGRAPH", html: null },
   h1: { type: "HEADING", html: "<h1>" },
   h2: { type: "HEADING", html: "<h2>" },
   h3: { type: "HEADING", html: "<h3>" },
+  // Both list kinds store as LIST; the numbering lives in the text markers.
+  list: { type: "LIST", html: null },
+  numbered: { type: "LIST", html: null },
 };
 
-function kindOf(type: string, html: string | null): string {
+function kindOf(type: string, html: string | null, text: string): string {
+  if (type === "LIST") return /^\s*\d{1,3}[.)]\s/.test(text) ? "numbered" : "list";
   if (type !== "HEADING") return "paragraph";
   const m = html?.match(/^<h([1-3])/);
   return m ? `h${m[1]}` : "h2";
@@ -43,11 +50,14 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ blockId: stri
     return NextResponse.json({ error: "Only text blocks can be edited" }, { status: 400 });
   }
 
-  // Format change: heading level or paragraph, recorded as FORMAT.
-  if (data.kind !== undefined && data.text === undefined) {
-    const target = KIND_TO_BLOCK[data.kind];
-    const from = kindOf(block.type, block.html);
-    if (from === data.kind) return NextResponse.json(block);
+  const target = data.kind !== undefined ? KIND_TO_BLOCK[data.kind] : null;
+  const fromKind = kindOf(block.type, block.html, block.text);
+  const kindChanges = data.kind !== undefined && fromKind !== data.kind;
+
+  // Format change without a text change: heading level, paragraph, or list kind,
+  // recorded as FORMAT. List conversions send text too and take the path below.
+  if (data.text === undefined || data.text === block.text) {
+    if (!kindChanges || !target) return NextResponse.json(block);
     const [formatted] = await db.$transaction([
       db.block.update({
         where: { id: blockId },
@@ -58,16 +68,15 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ blockId: stri
           documentId: block.documentId,
           blockId: block.id,
           kind: "FORMAT",
-          before: from,
+          before: fromKind,
           after: data.kind,
-          meta: { from, to: data.kind },
+          meta: { from: fromKind, to: data.kind },
         },
       }),
     ]);
     return NextResponse.json(formatted);
   }
 
-  if (data.text === undefined || data.text === block.text) return NextResponse.json(block);
   const newText = data.text;
 
   // Remap every anchor on this block through the edit, the way Google Docs
@@ -95,6 +104,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ blockId: stri
       data: {
         text: newText,
         styles: nextSpans,
+        ...(kindChanges && target ? { type: target.type, html: target.html } : {}),
         ...(block.originalText === null ? { originalText: block.text } : {}),
       },
     });
@@ -107,6 +117,18 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ blockId: stri
         after: newText,
       },
     });
+    if (kindChanges && data.kind !== undefined) {
+      await tx.blockEdit.create({
+        data: {
+          documentId: block.documentId,
+          blockId: block.id,
+          kind: "FORMAT",
+          before: fromKind,
+          after: data.kind,
+          meta: { from: fromKind, to: data.kind },
+        },
+      });
+    }
     for (const src of sources) {
       const r = remapAnchor(segments, newText, src);
       await tx.source.update({

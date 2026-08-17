@@ -6,7 +6,7 @@ import { parseBody } from "@/lib/validate";
 const styleSchema = z.object({
   startOffset: z.number().int().min(0),
   endOffset: z.number().int().min(0),
-  style: z.enum(["bold", "italic"]),
+  style: z.enum(["bold", "italic", "underline"]),
 });
 
 type StyleSpan = { start: number; end: number; style: string; quotedText: string };

@@ -13,7 +13,7 @@ export type Highlight = {
   start: number;
   end: number;
   kind: "anchor" | "salience" | "simplify" | "term" | "link" | "edited" | "style";
-  styleKind?: "bold" | "italic"; // kind "style" only
+  styleKind?: "bold" | "italic" | "underline"; // kind "style" only
   definition?: string; // glossary hover text, kind "term" only
   color?: string | null; // highlight hue ("clay" | "sage" | "gold" | "plum"), kind "anchor" only
   annotation?: boolean; // anchor belongs to an annotation; click focuses its card
@@ -57,7 +57,8 @@ function markedText(text: string, highlights: Highlight[]) {
     const edited = covering.some((h) => h.kind === "edited");
     const bold = covering.some((h) => h.kind === "style" && h.styleKind === "bold");
     const italic = covering.some((h) => h.kind === "style" && h.styleKind === "italic");
-    const editedClass = `${edited ? " edited-text" : ""}${bold ? " font-bold" : ""}${italic ? " italic" : ""}`;
+    const underlined = covering.some((h) => h.kind === "style" && h.styleKind === "underline");
+    const editedClass = `${edited ? " edited-text" : ""}${bold ? " font-bold" : ""}${italic ? " italic" : ""}${underlined ? " underline" : ""}`;
     const anchors = covering.filter((h) => h.kind === "anchor");
     const anchor =
       anchors.length > 1
@@ -130,6 +131,40 @@ function markedText(text: string, highlights: Highlight[]) {
   return parts;
 }
 
+const LABEL_DOT: Record<string, string> = {
+  clay: "var(--clay-400)",
+  sage: "var(--sage-500)",
+  gold: "#d9a54a",
+  plum: "#a78bfa",
+};
+
+// A highlighted figure gets a side label instead of text marks: it sits to the
+// right of the figure and jumps to the annotation. Outside the block element,
+// so the block's DOM text stays exactly the stored text (SPEC.md §5).
+function HighlightLabel({ anchors }: { anchors: Highlight[] }) {
+  const focusable = anchors.find((h) => h.annotation && h.sourceId);
+  const color = anchors.find((h) => h.color)?.color ?? "clay";
+  return (
+    <button
+      onClick={
+        focusable?.sourceId
+          ? () =>
+              window.dispatchEvent(
+                new CustomEvent("dissect:focus-annotation", {
+                  detail: { sourceId: focusable.sourceId },
+                }),
+              )
+          : undefined
+      }
+      title={focusable ? "Highlighted. Click to open it in Annotations" : "Highlighted"}
+      className="absolute top-2 right-0 z-10 flex translate-x-[calc(100%+10px)] items-center gap-1.5 rounded-full bg-card px-2.5 py-1 text-[10.5px] font-semibold text-sand-700 shadow-soft hover:text-clay-800"
+    >
+      <span aria-hidden className="size-2 rounded-full" style={{ background: LABEL_DOT[color] ?? LABEL_DOT.clay }} />
+      Highlighted
+    </button>
+  );
+}
+
 // Text blocks render block.text verbatim so DOM text content matches stored text
 // (anchor offsets depend on this, SPEC.md §5). Tables and figures render sanitized html.
 export function BlockView({
@@ -143,6 +178,7 @@ export function BlockView({
 
   const content = highlights.length > 0 ? markedText(block.text, highlights) : block.text;
   const anchorIds = highlights.filter((h) => h.kind === "anchor" && h.sourceId);
+  const figureAnchors = highlights.filter((h) => h.kind === "anchor");
   const htmlHighlighted = anchorIds.length > 0 ? "rounded-lg ring-2 ring-clay-300" : "";
   const firstSourceId = anchorIds[0]?.sourceId ?? undefined;
 
@@ -182,13 +218,16 @@ export function BlockView({
       );
     case "EQUATION":
       return (
-        <div
-          data-block-id={block.id}
-          data-math-block
-          data-source-id={firstSourceId}
-          className={`${shared} my-4 ${htmlHighlighted}`}
-        >
-          <Equation tex={block.text} />
+        <div className="relative">
+          <div
+            data-block-id={block.id}
+            data-math-block
+            data-source-id={firstSourceId}
+            className={`${shared} my-4 ${htmlHighlighted}`}
+          >
+            <Equation tex={block.text} />
+          </div>
+          {figureAnchors.length > 0 && <HighlightLabel anchors={figureAnchors} />}
         </div>
       );
     case "SEPARATOR":
@@ -216,12 +255,15 @@ export function BlockView({
     case "FIGURE":
       if (block.html) {
         return (
-          <div
-            data-block-id={block.id}
-            data-source-id={firstSourceId}
-            className={`${shared} reader-figure my-4 ${htmlHighlighted}`}
-            dangerouslySetInnerHTML={{ __html: block.html }}
-          />
+          <div className="relative">
+            <div
+              data-block-id={block.id}
+              data-source-id={firstSourceId}
+              className={`${shared} reader-figure my-4 ${htmlHighlighted}`}
+              dangerouslySetInnerHTML={{ __html: block.html }}
+            />
+            {figureAnchors.length > 0 && <HighlightLabel anchors={figureAnchors} />}
+          </div>
         );
       }
       return (

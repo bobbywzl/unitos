@@ -12,8 +12,9 @@ const FONT_STACK: Record<string, string | undefined> = {
   mono: "ui-monospace, SFMono-Regular, Menlo, monospace",
 };
 
-type Kind = "paragraph" | "h1" | "h2" | "h3";
-type StyleSpan = { start: number; end: number; style: "bold" | "italic" };
+type Kind = "paragraph" | "h1" | "h2" | "h3" | "list" | "numbered";
+type StyleKind = "bold" | "italic" | "underline";
+type StyleSpan = { start: number; end: number; style: StyleKind };
 
 function headingLevel(html: string | null): 1 | 2 | 3 {
   const m = html?.match(/^<h([1-3])/);
@@ -21,8 +22,35 @@ function headingLevel(html: string | null): 1 | 2 | 3 {
 }
 
 function blockKind(block: BlockData): Kind {
+  if (block.type === "LIST") return /^\s*\d{1,3}[.)]\s/.test(block.text) ? "numbered" : "list";
   if (block.type !== "HEADING") return "paragraph";
   return `h${headingLevel(block.html)}` as Kind;
+}
+
+// List markers live in the text ("- " / "N. ", two-space indents — the parser's
+// convention). Converting a block rewrites its line markers.
+function stripMarkers(text: string): string {
+  return text
+    .split("\n")
+    .map((l) => l.replace(/^(\s*)(?:-|\d{1,3}[.)])\s+/, "$1"))
+    .join("\n");
+}
+
+function withMarkers(text: string, kind: "list" | "numbered"): string {
+  const counters: number[] = [];
+  return stripMarkers(text)
+    .split("\n")
+    .map((line) => {
+      const indent = /^\s*/.exec(line)![0];
+      const body = line.slice(indent.length);
+      if (!body) return line;
+      if (kind === "list") return `${indent}- ${body}`;
+      const depth = Math.floor(indent.length / 2);
+      counters.length = depth + 1;
+      counters[depth] = (counters[depth] ?? 0) + 1;
+      return `${indent}${counters[depth]}. ${body}`;
+    })
+    .join("\n");
 }
 
 function escapeHtml(s: string): string {
@@ -54,8 +82,9 @@ function decoratedHtml(text: string, spans: StyleSpan[], edited: { start: number
     const segment = escapeHtml(text.slice(from, to));
     const bold = spans.some((s) => s.style === "bold" && s.start <= from && s.end >= to);
     const italic = spans.some((s) => s.style === "italic" && s.start <= from && s.end >= to);
+    const underline = spans.some((s) => s.style === "underline" && s.start <= from && s.end >= to);
     const isEdited = edited.some((r) => r.start <= from && r.end >= to);
-    const cls = `${isEdited ? "edited-text " : ""}${bold ? "font-bold " : ""}${italic ? "italic" : ""}`.trim();
+    const cls = `${isEdited ? "edited-text " : ""}${bold ? "font-bold " : ""}${italic ? "italic " : ""}${underline ? "underline" : ""}`.trim();
     html += cls ? `<span class="${cls}">${segment}</span>` : segment;
   }
   return html;
@@ -117,8 +146,8 @@ export function Reader({
   stylesByBlock: Record<string, StyleSpan[]>;
   editedByBlock: Record<string, { start: number; end: number }[]>;
   onSaveText: (blockId: string, text: string) => Promise<void>;
-  onFormatBlock: (blockId: string, kind: Kind) => Promise<void>;
-  onToggleStyle: (blockId: string, start: number, end: number, style: "bold" | "italic") => Promise<void>;
+  onFormatBlock: (blockId: string, kind: Kind, text?: string) => Promise<void>;
+  onToggleStyle: (blockId: string, start: number, end: number, style: StyleKind) => Promise<void>;
   onInsertBlock: (afterBlockId: string) => Promise<string | null>;
   onDeleteBlock: (blockId: string) => Promise<void>;
 }) {
@@ -160,7 +189,7 @@ export function Reader({
     return onSaveText(blockId, live);
   }
 
-  function applyStyle(style: "bold" | "italic") {
+  function applyStyle(style: StyleKind) {
     if (!focusedBlockId) return;
     const el = document.querySelector<HTMLElement>(`[data-edit-block="${focusedBlockId}"]`);
     const selection = window.getSelection();
@@ -198,6 +227,8 @@ export function Reader({
   function applyFormat(kind: Kind) {
     if (!focusedBlockId) return;
     const blockId = focusedBlockId;
+    const block = blocks.find((b) => b.id === blockId);
+    if (!block) return;
     // Keep the caret where it was through the remount.
     const el = document.querySelector<HTMLElement>(`[data-edit-block="${blockId}"]`);
     const selection = window.getSelection();
@@ -212,9 +243,60 @@ export function Reader({
       }
     }
     const flush = flushFocused();
+    // List conversions rewrite line markers; leaving a list strips them.
+    const liveText = el?.textContent ?? effectiveText(block);
+    const current = effectiveKind(block);
+    let nextText: string | undefined;
+    if (kind === "list" || kind === "numbered") nextText = withMarkers(liveText, kind);
+    else if (current === "list" || current === "numbered") nextText = stripMarkers(liveText);
+    if (nextText === liveText) nextText = undefined;
     setLocalKinds((prev) => ({ ...prev, [blockId]: kind }));
-    if (flush) void flush.then(() => onFormatBlock(blockId, kind));
-    else void onFormatBlock(blockId, kind);
+    if (nextText !== undefined) {
+      const text = nextText;
+      setLocalTexts((prev) => ({ ...prev, [blockId]: text }));
+    }
+    if (flush) void flush.then(() => onFormatBlock(blockId, kind, nextText));
+    else void onFormatBlock(blockId, kind, nextText);
+  }
+
+  // Indent or outdent the caret's line by two spaces (the list nesting step).
+  function applyIndent(delta: 1 | -1) {
+    if (!focusedBlockId) return;
+    const blockId = focusedBlockId;
+    const block = blocks.find((b) => b.id === blockId);
+    const el = document.querySelector<HTMLElement>(`[data-edit-block="${blockId}"]`);
+    if (!block || !el) return;
+    const selection = window.getSelection();
+    let caret = 0;
+    if (selection && selection.rangeCount > 0) {
+      const range = selection.getRangeAt(0);
+      if (el.contains(range.commonAncestorContainer)) {
+        const pre = document.createRange();
+        pre.selectNodeContents(el);
+        pre.setEnd(range.startContainer, range.startOffset);
+        caret = pre.toString().length;
+      }
+    }
+    const text = el.textContent ?? "";
+    const lineStart = text.lastIndexOf("\n", Math.max(0, caret - 1)) + 1;
+    let next: string;
+    let shift: number;
+    if (delta === 1) {
+      next = `${text.slice(0, lineStart)}  ${text.slice(lineStart)}`;
+      shift = 2;
+    } else {
+      const lead = /^ {1,2}/.exec(text.slice(lineStart));
+      if (!lead) return;
+      next = text.slice(0, lineStart) + text.slice(lineStart + lead[0].length);
+      shift = -lead[0].length;
+    }
+    setLocalTexts((prev) => ({ ...prev, [blockId]: next }));
+    restoreSelectionRef.current = {
+      blockId,
+      start: Math.max(lineStart, caret + shift),
+      end: Math.max(lineStart, caret + shift),
+    };
+    void onSaveText(blockId, next);
   }
 
   const barButton =
@@ -225,27 +307,47 @@ export function Reader({
     <div className="relative">
       {mode === "edit" && (
         <div className="sticky top-3 z-30 mx-auto flex w-fit items-center gap-0.5 rounded-full bg-card px-2 py-1.5 shadow-float print:hidden">
-          {(["paragraph", "h1", "h2", "h3"] as const).map((kind) => (
+          {(
+            [
+              ["paragraph", "¶", "Paragraph"],
+              ["h1", "H1", "Heading 1"],
+              ["h2", "H2", "Heading 2"],
+              ["h3", "H3", "Heading 3"],
+              ["list", "•", "Bulleted list"],
+              ["numbered", "1.", "Numbered list"],
+            ] as const
+          ).map(([kind, label, title]) => (
             <button
               key={kind}
               onMouseDown={keep}
               disabled={!focusedBlock}
               onClick={() => applyFormat(kind)}
+              title={title}
               className={
                 focusedBlock && effectiveKind(focusedBlock) === kind
                   ? "rounded-full bg-clay-100 px-2.5 py-1 text-[11.5px] font-semibold text-clay-800"
                   : barButton
               }
             >
-              {kind === "paragraph" ? "¶" : kind.toUpperCase()}
+              {label}
             </button>
           ))}
           <span aria-hidden className="mx-1 h-4 w-px bg-line" />
-          <button onMouseDown={keep} disabled={!focusedBlock} onClick={() => applyStyle("bold")} className={`${barButton} font-bold`}>
+          <button onMouseDown={keep} disabled={!focusedBlock} onClick={() => applyStyle("bold")} title="Bold" className={`${barButton} font-bold`}>
             B
           </button>
-          <button onMouseDown={keep} disabled={!focusedBlock} onClick={() => applyStyle("italic")} className={`${barButton} italic`}>
+          <button onMouseDown={keep} disabled={!focusedBlock} onClick={() => applyStyle("italic")} title="Italic" className={`${barButton} italic`}>
             I
+          </button>
+          <button onMouseDown={keep} disabled={!focusedBlock} onClick={() => applyStyle("underline")} title="Underline" className={`${barButton} underline`}>
+            U
+          </button>
+          <span aria-hidden className="mx-1 h-4 w-px bg-line" />
+          <button onMouseDown={keep} disabled={!focusedBlock} onClick={() => applyIndent(-1)} title="Outdent the current line" className={barButton}>
+            ⇤
+          </button>
+          <button onMouseDown={keep} disabled={!focusedBlock} onClick={() => applyIndent(1)} title="Indent the current line" className={barButton}>
+            ⇥
           </button>
           <span aria-hidden className="mx-1 h-4 w-px bg-line" />
           <button
@@ -328,6 +430,8 @@ const KIND_CLASS: Record<Kind, string> = {
   h1: "mt-10 mb-3 text-[26px] font-display",
   h2: "mt-8 mb-2.5 text-[22px] font-display",
   h3: "mt-6 mb-2.5 text-[20px] font-display",
+  list: "my-4 pl-5",
+  numbered: "my-4 pl-5",
 };
 
 // One seamlessly editable block. Decorations (bold, italic, edited color) are
@@ -393,9 +497,10 @@ function EditableBlock({
   const editable =
     "rounded-lg outline-none focus:bg-card/60 whitespace-pre-wrap empty:before:content-[attr(data-placeholder)] empty:before:text-sand-500";
 
+  const isList = kind === "list" || kind === "numbered" || block.type === "LIST";
   const base = block.type === "CODE" || block.type === "EQUATION"
     ? "my-4 overflow-x-auto rounded-2xl bg-sand-200 p-4 text-sm"
-    : block.type === "LIST"
+    : isList
       ? "my-4 pl-5"
       : KIND_CLASS[kind];
 
@@ -405,6 +510,6 @@ function EditableBlock({
   if (kind === "h1") return <h1 key={key} {...shared} className={`${base} ${editable}`} />;
   if (kind === "h2") return <h2 key={key} {...shared} className={`${base} ${editable}`} />;
   if (kind === "h3") return <h3 key={key} {...shared} className={`${base} ${editable}`} />;
-  if (block.type === "LIST") return <div key={key} {...shared} className={`${base} ${editable}`} />;
+  if (isList) return <div key={key} {...shared} className={`${base} ${editable}`} />;
   return <p key={key} {...shared} className={`${base} ${editable}`} />;
 }

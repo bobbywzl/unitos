@@ -406,6 +406,27 @@ mark,
   line-height: 1.75;
 }
 
+/* The edit hint fades in beside the article, waits, and fades away. */
+@keyframes hint-fade {
+  0% {
+    opacity: 0;
+    transform: translateX(10px);
+  }
+  8% {
+    opacity: 1;
+    transform: none;
+  }
+  78% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+.hint-fade {
+  animation: hint-fade 6s ease forwards;
+}
+
 /* Print: the open document only. The app shell flattens and chrome hides via
    print: utilities (workspace, reader); these rules cover pagination and media. */
 @media print {

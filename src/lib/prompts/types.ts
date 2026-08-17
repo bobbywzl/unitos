@@ -21,6 +21,10 @@ export type PromptCtx = {
   sectionSkeleton: { id: string; title: string; parentTitle: string | null }[];
   // Summary depth, for SUMMARIZE.
   depth?: SummaryDepth;
+  // Set when EXPLAIN targets a figure block: the model deciphers the visual.
+  // kind image: the image is attached to the message. kind svg: the chart's SVG
+  // source is in svgSource. kind video: the model only has caption and context.
+  figure?: { kind: "image" | "svg" | "video" | "figure"; caption: string; svgSource?: string };
 };
 
 export function profileLines(profile: ReaderProfileCtx): string {

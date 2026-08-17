@@ -60,8 +60,9 @@ export function GuideDialog({ open, onClose }: { open: boolean; onClose: () => v
             </li>
             <li>
               <span className={term}>Simplify</span> — rewrites the selection in plain words,
-              in a bubble beside the article. The document text never changes; close the
-              bubble when you are done.
+              in a bubble beside the article. The document text never changes. The rewrite is
+              saved under Simplified in the Annotations tab, so it is still there when you
+              come back.
             </li>
             <li>
               <span className={term}>Extract</span> — the note-taking tool. It turns the
@@ -113,6 +114,11 @@ export function GuideDialog({ open, onClose }: { open: boolean; onClose: () => v
               j/k to move, Enter to accept, Backspace to reject, Undo to take a rejection back.
             </li>
             <li>
+              <span className={term}>Figure tools</span> — hold and draw a small circle on a
+              figure or equation: Explain deciphers the visual, a highlight color adds a side
+              label that jumps to Annotations, Comment and Link work like on text.
+            </li>
+            <li>
               <span className={term}>Print document</span> (+ in the header) — prints the open
               document, article only: no app chrome, full length, highlights kept.
             </li>
@@ -123,9 +129,13 @@ export function GuideDialog({ open, onClose }: { open: boolean; onClose: () => v
           <span className={h}>Editing</span>
           <ul className="flex flex-col gap-1.5 text-[13px] leading-relaxed text-sand-800">
             <li>
-              <span className={term}>Edit</span> (top right) — the whole page becomes editable
-              in place: headings, bold, italics, font, insert and remove paragraphs. Changed
-              words show in the edited color. Reading mode never edits.
+              <span className={term}>Double-click</span> any paragraph — the page becomes
+              editable in place: headings, bold, italic, underline, bulleted and numbered
+              lists, indent and outdent, font, insert and remove paragraphs. Changed words
+              show in the edited color. Done or Esc returns to reading.
+            </li>
+            <li>
+              Selecting text while editing still opens the highlight and AI tools.
             </li>
             <li>
               <span className={term}>Edits tab</span> — every change, newest first. Revert a

@@ -109,6 +109,35 @@ export async function POST(req: Request) {
     depth,
   };
 
+  // EXPLAIN on a figure block: the model deciphers the visual. An image figure
+  // attaches its image to the message; an SVG chart attaches its source; a
+  // video figure explains from caption and context only.
+  let figureImage: URL | null = null;
+  if (data.type === "EXPLAIN" && data.anchor) {
+    const anchoredBlock = await db.block.findUnique({
+      where: { id: data.anchor.blockId },
+      select: { type: true, html: true, text: true },
+    });
+    if (anchoredBlock?.type === "FIGURE") {
+      const html = anchoredBlock.html ?? "";
+      const imgSrc = html.match(/<img[^>]*\ssrc="([^"]+)"/i)?.[1]?.replace(/&amp;/g, "&");
+      const svgStart = html.indexOf("<svg");
+      const svgSource = !imgSrc && svgStart >= 0 ? html.slice(svgStart, svgStart + 12_000) : undefined;
+      ctx.figure = {
+        kind: imgSrc ? "image" : svgSource ? "svg" : /<video/i.test(html) ? "video" : "figure",
+        caption: anchoredBlock.text,
+        svgSource,
+      };
+      if (imgSrc && /^https?:\/\//.test(imgSrc)) {
+        try {
+          figureImage = new URL(imgSrc);
+        } catch {
+          figureImage = null;
+        }
+      }
+    }
+  }
+
   // 2. Template by type. The document is the cached prefix, byte-identical for every
   // derivation on this document (SPEC.md §2).
   const messages: ModelMessage[] = [
@@ -117,7 +146,15 @@ export async function POST(req: Request) {
       content: documentPrefix(document.title, document.blocks),
       providerOptions: { anthropic: { cacheControl: { type: "ephemeral" } } },
     },
-    { role: "user", content: template(ctx) },
+    figureImage
+      ? {
+          role: "user",
+          content: [
+            { type: "text", text: template(ctx) },
+            { type: "image", image: figureImage },
+          ],
+        }
+      : { role: "user", content: template(ctx) },
   ];
   const model = anthropic(DERIVATION_MODEL[data.type]);
   const maxOutputTokens = MAX_OUTPUT_TOKENS[data.type];
@@ -149,8 +186,9 @@ export async function POST(req: Request) {
             data: { summaries: { ...current, [depth]: text } },
           });
         }
-        // EXPLAIN persists in the hidden Annotations section. SIMPLIFY is ephemeral.
-        if (data.type === "EXPLAIN" && data.anchor && text.trim()) {
+        // EXPLAIN and SIMPLIFY persist in the hidden Annotations section, so
+        // the output is still there when the reader leaves and comes back.
+        if ((data.type === "EXPLAIN" || data.type === "SIMPLIFY") && data.anchor && text.trim()) {
           const block = blockById.get(data.anchor.blockId);
           if (!block) return;
           const section = await annotationsSection(data.notebookId);
@@ -160,7 +198,7 @@ export async function POST(req: Request) {
               sectionId: section.id,
               content: text,
               status: "ACCEPTED",
-              derivationType: "EXPLAIN",
+              derivationType: data.type,
               order: count,
               sources: {
                 create: {

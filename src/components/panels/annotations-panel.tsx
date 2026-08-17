@@ -69,7 +69,7 @@ function AnnotationActions({
 }
 
 // Annotations tab of the reader side panel. Highlights, comments, explanations,
-// then links — each annotation card jumps to its anchor and deletes in place.
+// simplified rewrites, then links — each annotation card jumps to its anchor and deletes in place.
 export function AnnotationsPanel({
   notebookId,
   documentId,
@@ -89,6 +89,7 @@ export function AnnotationsPanel({
   const highlights = annotations.filter((a) => a.kind === "highlight");
   const comments = annotations.filter((a) => a.kind === "comment");
   const explanations = annotations.filter((a) => a.kind === "explain");
+  const simplifications = annotations.filter((a) => a.kind === "simplify");
 
   async function mutate(id: string, run: () => Promise<unknown>) {
     if (busyId) return;
@@ -183,6 +184,30 @@ export function AnnotationsPanel({
               {a.orphaned && a.quotedText && (
                 <p className="mt-2 line-clamp-2 border-l-2 border-red-300 pl-2 text-xs text-sand-500">
                   was anchored to: {a.quotedText}
+                </p>
+              )}
+              <AnnotationActions
+                annotation={a}
+                notebookId={notebookId}
+                documentId={documentId}
+                onDelete={deleteAnnotation}
+              />
+            </div>
+          ))}
+        </div>
+      )}
+
+      {simplifications.length > 0 && (
+        <div className="flex flex-col gap-2">
+          <span className={label}>Simplified</span>
+          {simplifications.map((a) => (
+            <div key={a.id} data-annotation-source-id={a.sourceId ?? undefined} className={card}>
+              <div className="text-[13px]">
+                <Markdown>{a.content}</Markdown>
+              </div>
+              {a.quotedText && (
+                <p className="mt-2 line-clamp-2 border-l-2 border-sage-300 pl-2 text-xs text-sand-500">
+                  {a.quotedText}
                 </p>
               )}
               <AnnotationActions

@@ -43,11 +43,12 @@ export type SummaryLevels = Partial<Record<SummaryDepth, string>>;
 
 /** One annotation on the open document, shown in the Annotations tab.
     kind: "highlight" = manual color highlight, "comment" = margin comment,
-    "explain" = AI explanation. All live as notes in the hidden Annotations
-    section; highlights carry a color, comments carry the user's text. */
+    "explain" = AI explanation, "simplify" = AI simplified rewrite. All live as
+    notes in the hidden Annotations section; highlights carry a color, comments
+    carry the user's text. */
 export type AnnotationItem = {
   id: string; // note id
-  kind: "explain" | "highlight" | "comment";
+  kind: "explain" | "simplify" | "highlight" | "comment";
   content: string;
   color: string | null; // "clay" | "sage" | "gold" for highlights
   sourceId: string | null;
