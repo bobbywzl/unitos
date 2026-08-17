@@ -27,6 +27,16 @@ const requestSchema = z.object({
       endOffset: z.number().int().min(0),
     })
     .optional(),
+  // The assistant chat sends the turns so far; the command continues them.
+  history: z
+    .array(
+      z.object({
+        role: z.enum(["user", "assistant"]),
+        content: z.string().min(1).max(4000),
+      }),
+    )
+    .max(20)
+    .optional(),
 });
 
 const quote = z.string().min(1).max(2000);
@@ -216,6 +226,13 @@ export async function POST(req: Request) {
     "4. description: one plain sentence of what the action does, for the reader's approval list.",
     "5. TABLE and FIGURE blocks cannot be edited or removed.",
     "",
+    ...(data.history && data.history.length > 0
+      ? [
+          "Conversation so far. The command continues it:",
+          ...data.history.map((m) => `${m.role === "user" ? "Reader" : "Assistant"}: ${m.content}`),
+          "",
+        ]
+      : []),
     `Command: ${data.command}`,
     "",
     'Return ONLY JSON: {"reply": string or null, "actions": [...]}',

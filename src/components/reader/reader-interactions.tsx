@@ -118,12 +118,25 @@ const ACTION_LABEL: Record<AssistantAction["type"], string> = {
   style: "Style",
 };
 type ExplainBubble = {
-  kind: "explain" | "assistant";
-  x: number;
-  y: number;
+  left: number;
+  top: number;
+  width: number;
   text: string;
   streaming: boolean;
   error: string | null;
+};
+
+type ChatMessage = { role: "user" | "assistant"; content: string };
+// The assistant as a miniature chat, docked beside the article. anchor = the
+// selection the conversation started from; every turn keeps applying to it.
+type AssistantChat = {
+  anchor: Anchor | null;
+  left: number;
+  top: number;
+  width: number;
+  messages: ChatMessage[];
+  input: string;
+  busy: boolean;
 };
 
 // SIMPLIFY output: a translucent bubble beside the article, level with the
@@ -132,6 +145,7 @@ type SimplifyCard = {
   anchor: Anchor;
   top: number;
   left: number;
+  width: number;
   text: string;
   streaming: boolean;
   error: string | null;
@@ -238,11 +252,56 @@ export function ReaderInteractions({
   editModeRef.current = editMode;
   const blocksRef = useRef(blocks);
   blocksRef.current = blocks;
+  const [assistantChat, setAssistantChat] = useState<AssistantChat | null>(null);
+  const chatScrollRef = useRef<HTMLDivElement>(null);
   const overlayOpenRef = useRef(false);
-  overlayOpenRef.current = popover !== null || bubble !== null || simplifyCard !== null;
+  overlayOpenRef.current =
+    popover !== null || bubble !== null || simplifyCard !== null || assistantChat !== null;
   // The mouseup that ends a hold-and-circle gesture must not run selection
   // capture — it would replace the figure popover it just opened.
   const suppressNextMouseUp = useRef(false);
+
+  // Floating cards dock beside the article, never over it: the first open card
+  // takes the right margin, the second the left, later ones stack below on the
+  // same sides. A slot frees when its card closes.
+  const sideSlots = useRef(new Map<"explain" | "simplify" | "assistant", number>());
+  function claimSideSlot(kind: "explain" | "simplify" | "assistant", preferredTop: number) {
+    const container = containerRef.current;
+    const article = container?.querySelector("article");
+    const used = new Set(sideSlots.current.values());
+    let index = 0;
+    while (used.has(index)) index++;
+    sideSlots.current.set(kind, index);
+    const cw = container?.clientWidth ?? 1200;
+    const crect = container?.getBoundingClientRect();
+    const arect = article?.getBoundingClientRect();
+    const articleLeft = crect && arect ? arect.left - crect.left : cw;
+    const articleRight = crect && arect ? arect.right - crect.left : 0;
+    const side = index % 2 === 0 ? "right" : "left";
+    const stack = Math.floor(index / 2);
+    const margin = side === "right" ? cw - articleRight - 24 : articleLeft - 24;
+    const width = Math.max(260, Math.min(320, margin));
+    const left =
+      side === "right"
+        ? Math.min(articleRight + 16, cw - width - 8)
+        : Math.max(8, articleLeft - width - 16);
+    return { left, top: Math.max(8, preferredTop) + stack * 420, width };
+  }
+  function releaseSideSlot(kind: "explain" | "simplify" | "assistant") {
+    sideSlots.current.delete(kind);
+  }
+  function closeExplain() {
+    releaseSideSlot("explain");
+    setBubble(null);
+  }
+  function closeSimplify() {
+    releaseSideSlot("simplify");
+    setSimplifyCard(null);
+  }
+  function closeAssistantChat() {
+    releaseSideSlot("assistant");
+    setAssistantChat(null);
+  }
   // The fading hint that replaces the Edit button. Shows on document open until
   // the reader double-clicks into edit mode once.
   const [editHint, setEditHint] = useState(false);
@@ -263,6 +322,8 @@ export function ReaderInteractions({
     setSubmenu(null);
     setBubble(null);
     setSimplifyCard(null);
+    setAssistantChat(null);
+    sideSlots.current.clear();
     setEditMode(false);
     setCommentDraft("");
     setLocalAnchors({});
@@ -336,6 +397,8 @@ export function ReaderInteractions({
         setSubmenu(null);
         setBubble(null);
         setSimplifyCard(null);
+        setAssistantChat(null);
+        sideSlots.current.clear();
         window.getSelection()?.removeAllRanges();
         return;
       }
@@ -375,8 +438,6 @@ export function ReaderInteractions({
         setPopover(captured);
         setSubmenu(null);
         setCommentDraft("");
-        // A stale assistant reply must not sit over the new popover's controls.
-        if (captured) setBubble((b) => (b?.kind === "assistant" ? null : b));
         if (captured) {
           // The assistant panel's Selection scope tracks the latest selection.
           window.dispatchEvent(
@@ -436,6 +497,12 @@ export function ReaderInteractions({
     container.addEventListener("dblclick", onDblClick);
     return () => container.removeEventListener("dblclick", onDblClick);
   }, []);
+
+  const chatMessageCount = assistantChat?.messages.length ?? 0;
+  useEffect(() => {
+    const el = chatScrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [chatMessageCount]);
 
   useEffect(() => {
     if (localStorage.getItem("unitos-edit-hint") === "done") return;
@@ -655,14 +722,16 @@ export function ReaderInteractions({
     });
   }
 
-  // EXPLAIN: stream into an annotation bubble at the selection (SPEC.md §4).
+  // EXPLAIN: stream into a bubble docked beside the article (SPEC.md §4, §6).
   async function explain() {
     if (!popover || busy) return;
-    const { anchor, x, y } = popover;
+    const { anchor, yTop } = popover;
     await flushLiveBlock(anchor.blockId);
     setPopover(null);
     window.getSelection()?.removeAllRanges();
-    setBubble({ kind: "explain", x, y, text: "", streaming: true, error: null });
+    releaseSideSlot("explain");
+    const slot = claimSideSlot("explain", yTop);
+    setBubble({ ...slot, text: "", streaming: true, error: null });
     try {
       const res = await fetch("/api/derive", {
         method: "POST",
@@ -695,22 +764,11 @@ export function ReaderInteractions({
     if (!popover || busy) return;
     const { anchor, yTop } = popover;
     await flushLiveBlock(anchor.blockId);
-    // The bubble docks in the right margin. When the margin is narrower than
-    // the bubble, it overlaps the article edge — it is translucent on purpose.
-    const container = containerRef.current;
-    const containerRect = container?.getBoundingClientRect();
-    const articleRect = container?.querySelector("article")?.getBoundingClientRect();
-    const width = 320;
-    let left = 12;
-    if (containerRect) {
-      const articleRight = articleRect
-        ? articleRect.right - containerRect.left
-        : containerRect.width;
-      left = Math.max(8, Math.min(articleRight + 20, containerRect.width - width - 12));
-    }
     setPopover(null);
     window.getSelection()?.removeAllRanges();
-    setSimplifyCard({ anchor, top: yTop, left, text: "", streaming: true, error: null, sentences: null, active: null });
+    releaseSideSlot("simplify");
+    const slot = claimSideSlot("simplify", yTop);
+    setSimplifyCard({ anchor, ...slot, text: "", streaming: true, error: null, sentences: null, active: null });
     try {
       const res = await fetch("/api/derive", {
         method: "POST",
@@ -865,48 +923,102 @@ export function ReaderInteractions({
   async function runAssistant(commandText?: string) {
     const command = (commandText ?? aiCommandRef.current).trim();
     if (!command || aiBusy || !popover) return;
-    const { anchor, x, y } = popover;
+    const { anchor, yTop } = popover;
     setAiBusy(true);
     try {
-      const res = await fetch("/api/assistant/act", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          notebookId,
-          documentId,
-          command,
-          anchor: {
-            blockId: anchor.blockId,
-            startOffset: anchor.startOffset,
-            endOffset: anchor.endOffset,
-          },
-        }),
-      });
-      const plan = (await res.json().catch(() => null)) as
-        | (AssistantPlan & { error?: string })
-        | null;
-      if (!res.ok || !plan) throw new Error(plan?.error ?? `Assistant failed (${res.status})`);
+      await flushLiveBlock(anchor.blockId);
+      const reply = await assistantTurn(command, anchor, []);
       setPopover(null);
       setSubmenu(null);
       setAiCommand("");
       window.getSelection()?.removeAllRanges();
-      // The reply shows in the plan card when there are actions; the bubble is
-      // only for a plain answer, so it never doubles or blocks the card.
-      if (plan.reply && plan.actions.length === 0) {
-        setBubble({ kind: "assistant", x, y, text: plan.reply, streaming: false, error: null });
-      }
-      if (plan.actions.length === 0) {
-        if (!plan.reply) showToast(plan.warnings[0] ?? "The assistant proposed no actions.");
-      } else if (autoRunRef.current) {
-        await executePlan(plan.actions, plan.warnings);
-      } else {
-        setAiPlan(plan);
-        setPlanChecked(new Set(plan.actions.map((_, i) => i)));
-      }
+      // The conversation continues in a chat card docked beside the article.
+      releaseSideSlot("assistant");
+      const slot = claimSideSlot("assistant", yTop);
+      setAssistantChat({
+        anchor,
+        ...slot,
+        messages: [
+          { role: "user", content: command },
+          { role: "assistant", content: reply },
+        ],
+        input: "",
+        busy: false,
+      });
     } catch (err) {
       showToast(err instanceof Error ? err.message : "Assistant failed");
     } finally {
       setAiBusy(false);
+    }
+  }
+
+  // One assistant turn: command + history → reply text. Plans route through the
+  // existing approval card (or run immediately in Auto), and the chat narrates it.
+  async function assistantTurn(
+    command: string,
+    anchor: Anchor | null,
+    history: ChatMessage[],
+  ): Promise<string> {
+    const res = await fetch("/api/assistant/act", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        notebookId,
+        documentId,
+        command,
+        anchor: anchor
+          ? {
+              blockId: anchor.blockId,
+              startOffset: anchor.startOffset,
+              endOffset: anchor.endOffset,
+            }
+          : undefined,
+        history: history.slice(-12),
+      }),
+    });
+    const plan = (await res.json().catch(() => null)) as
+      | (AssistantPlan & { error?: string })
+      | null;
+    if (!res.ok || !plan) throw new Error(plan?.error ?? `Assistant failed (${res.status})`);
+    const parts: string[] = [];
+    if (plan.reply) parts.push(plan.reply);
+    if (plan.actions.length > 0) {
+      const n = plan.actions.length;
+      if (autoRunRef.current) {
+        await executePlan(plan.actions, plan.warnings);
+        parts.push(`Applied ${n} action${n === 1 ? "" : "s"}.`);
+      } else {
+        setAiPlan(plan);
+        setPlanChecked(new Set(plan.actions.map((_, i) => i)));
+        parts.push(`Proposed ${n} action${n === 1 ? "" : "s"} — approve them in the plan card.`);
+      }
+    }
+    if (parts.length === 0) parts.push(plan.warnings[0] ?? "The assistant proposed no actions.");
+    return parts.join("\n\n");
+  }
+
+  async function sendChatMessage() {
+    const chat = assistantChat;
+    const text = chat?.input.trim();
+    if (!chat || !text || chat.busy) return;
+    const history = chat.messages;
+    setAssistantChat((c) =>
+      c
+        ? { ...c, input: "", busy: true, messages: [...c.messages, { role: "user", content: text }] }
+        : c,
+    );
+    try {
+      const reply = await assistantTurn(text, chat.anchor, history);
+      setAssistantChat((c) =>
+        c ? { ...c, busy: false, messages: [...c.messages, { role: "assistant", content: reply }] } : c,
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Assistant failed";
+      setAssistantChat((c) =>
+        c
+          ? { ...c, busy: false, messages: [...c.messages, { role: "assistant", content: message }] }
+          : c,
+      );
     }
   }
 
@@ -1606,19 +1718,15 @@ export function ReaderInteractions({
       {bubble && (
         <div
           data-selection-popover
-          className="absolute z-20 w-96 max-w-[85%] -translate-x-1/2 rounded-[24px] bg-card p-4 shadow-float"
-          style={{ left: bubble.x, top: bubble.y }}
+          className="bubble-in absolute z-20 rounded-[20px] border border-line bg-card/90 p-4 shadow-float backdrop-blur-md"
+          style={{ left: bubble.left, top: bubble.top, width: bubble.width }}
         >
           <div className="mb-2 flex items-center justify-between">
             <span className="text-[11px] font-bold tracking-[0.08em] text-clay-800 uppercase">
-              {bubble.streaming
-                ? "Explaining…"
-                : bubble.kind === "assistant"
-                  ? "Assistant"
-                  : "Explanation"}
+              {bubble.streaming ? "Explaining…" : "Explanation"}
             </span>
             <button
-              onClick={() => setBubble(null)}
+              onClick={closeExplain}
               className="text-xs text-sand-500 hover:text-clay-700"
               aria-label="Close"
             >
@@ -1641,15 +1749,15 @@ export function ReaderInteractions({
         <div
           key={`${simplifyCard.anchor.blockId}:${simplifyCard.anchor.startOffset}`}
           data-selection-popover
-          className="bubble-in absolute z-20 w-[320px] rounded-[20px] border border-line bg-card/80 p-4 shadow-float backdrop-blur-md"
-          style={{ top: simplifyCard.top, left: simplifyCard.left }}
+          className="bubble-in absolute z-20 rounded-[20px] border border-line bg-card/80 p-4 shadow-float backdrop-blur-md"
+          style={{ top: simplifyCard.top, left: simplifyCard.left, width: simplifyCard.width }}
         >
           <div className="mb-2 flex items-center justify-between">
             <span className="text-[11px] font-bold tracking-[0.08em] text-sage-800 uppercase">
               {simplifyCard.streaming ? "Simplifying…" : "Simplified"}
             </span>
             <button
-              onClick={() => setSimplifyCard(null)}
+              onClick={closeSimplify}
               className="text-xs text-sand-500 hover:text-clay-700"
               aria-label="Close"
             >
@@ -1689,6 +1797,75 @@ export function ReaderInteractions({
               {stripSimplifyMarkers(simplifyCard.text) || "…"}
             </p>
           )}
+        </div>
+      )}
+
+      {assistantChat && (
+        <div
+          data-selection-popover
+          className="bubble-in absolute z-20 flex flex-col rounded-[20px] border border-line bg-card/95 shadow-float backdrop-blur-md"
+          style={{ left: assistantChat.left, top: assistantChat.top, width: assistantChat.width }}
+        >
+          <div className="flex items-center justify-between px-4 pt-3 pb-1">
+            <span className="text-[11px] font-bold tracking-[0.08em] text-clay-800 uppercase">
+              Assistant
+            </span>
+            <button
+              onClick={closeAssistantChat}
+              className="text-xs text-sand-500 hover:text-clay-700"
+              aria-label="Close"
+            >
+              ✕
+            </button>
+          </div>
+          <div ref={chatScrollRef} className="flex max-h-72 flex-col gap-2 overflow-y-auto px-4 py-2">
+            {assistantChat.messages.map((message, i) =>
+              message.role === "user" ? (
+                <p
+                  key={i}
+                  className="ml-6 self-end rounded-2xl bg-clay-100 px-3 py-1.5 text-[12.5px] text-clay-800"
+                >
+                  {message.content}
+                </p>
+              ) : (
+                <div key={i} className="text-[13px]">
+                  <Markdown>{message.content}</Markdown>
+                </div>
+              ),
+            )}
+            {assistantChat.busy && <p className="text-[12px] text-sand-500">Thinking…</p>}
+          </div>
+          <form
+            className="flex items-end gap-1.5 px-3 pb-3"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void sendChatMessage();
+            }}
+          >
+            <textarea
+              value={assistantChat.input}
+              rows={1}
+              onChange={(e) =>
+                setAssistantChat((c) => (c ? { ...c, input: e.target.value } : c))
+              }
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  void sendChatMessage();
+                }
+              }}
+              placeholder="Reply…"
+              aria-label="Message the assistant"
+              className="min-h-8 flex-1 resize-none rounded-xl bg-sand-100 px-3 py-1.5 text-[12.5px] outline-none placeholder:text-sand-500"
+            />
+            <button
+              type="submit"
+              disabled={assistantChat.busy || !assistantChat.input.trim()}
+              className="rounded-full bg-clay px-3 py-1.5 text-[11px] font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
+            >
+              Send
+            </button>
+          </form>
         </div>
       )}
 

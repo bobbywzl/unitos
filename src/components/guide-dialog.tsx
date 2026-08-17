@@ -52,7 +52,9 @@ export function GuideDialog({ open, onClose }: { open: boolean; onClose: () => v
               <span className={term}>Assistant</span> — type or speak a command about the
               selection (“highlight the key claim and add a note to Thesis”). It proposes a plan;
               in Ask mode you approve each action before it runs, in Auto mode it runs
-              immediately. Auto-mode notes still land pending for your review.
+              immediately. Auto-mode notes still land pending for your review. The reply opens
+              a small chat beside the article — keep talking in it; every turn still applies
+              to your selection.
             </li>
             <li>
               <span className={term}>Explain</span> — a short explanation of the selection,
