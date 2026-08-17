@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { Logo } from "@/components/logo";
 import { readNdjson } from "@/lib/ndjson";
+import { PARSER_VERSION } from "@/lib/parse/types";
 import {
   IngestProgress,
   advanceIngestSteps,
@@ -13,7 +14,13 @@ import {
   type IngestStep,
 } from "@/components/reader/ingest-progress";
 
-export type AttachedDocument = { id: string; title: string };
+export type AttachedDocument = {
+  id: string;
+  title: string;
+  sourceUrl: string | null;
+  parserVersion: number;
+  hasFile: boolean;
+};
 type LibraryDocument = { id: string; title: string; _count: { blocks: number } };
 type IngestPhase = { fileLabel: string; steps: IngestStep[] };
 // Wire format from /api/documents: a stage event per line, then one terminal line.
@@ -32,8 +39,19 @@ async function readJson<T>(res: Response): Promise<T | null> {
 }
 
 function statusMessage(status: number): string {
-  if (status === 413) return "File too large for the server. Vercel caps uploads at about 4.5 MB.";
+  if (status === 413) return "Upload too large for the server.";
   return `Request failed (${status})`;
+}
+
+// Vercel caps a request body at about 4.5 MB, so bigger PDFs upload in chunks
+// (/api/uploads) and /api/uploads/complete assembles them. The server caps
+// assembled PDFs at 50 MB.
+const MAX_PDF_BYTES = 50 * 1024 * 1024;
+const SINGLE_REQUEST_BYTES = 4 * 1024 * 1024;
+const CHUNK_BYTES = 3_500_000;
+
+function megabytes(bytes: number): string {
+  return (bytes / 1024 / 1024).toFixed(1);
 }
 
 // Documents in the header (design 1a): a pill per attached document, everything
@@ -76,15 +94,48 @@ export function DocumentBar({
     router.push(`/n/${notebookId}?doc=${docId}`);
   }
 
+  // Re-parse with the current parser. Runs automatically when the open document
+  // was parsed by an older pipeline, and manually from the + menu.
+  const reparseAttempted = useRef(new Set<string>());
+  const active = documents.find((d) => d.id === activeId) ?? null;
+  const activeStale =
+    active !== null && active.sourceUrl !== null && active.parserVersion < PARSER_VERSION;
+
+  async function reparse(doc: AttachedDocument) {
+    setError(null);
+    try {
+      await runIngest(doc.title, doc.sourceUrl ? "url" : "pdf", () =>
+        fetch(`/api/documents/${doc.id}/reparse`, { method: "POST" }),
+      );
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Re-parse failed");
+    } finally {
+      setPhase(null);
+    }
+  }
+
+  useEffect(() => {
+    if (!activeStale || active === null || phase !== null) return;
+    if (reparseAttempted.current.has(active.id)) return;
+    reparseAttempted.current.add(active.id);
+    void reparse(active);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeId, activeStale]);
+
   // Drives one ingest call: seeds the progress card, streams stage events into it,
   // and resolves with the terminal result. Shared by PDF upload and URL ingestion below.
+  // send gets an emit callback so a chunked upload can report progress before the
+  // server response starts streaming.
   async function runIngest(
     fileLabel: string,
     kind: "pdf" | "url",
-    send: () => Promise<Response>,
+    send: (emit: (stage: string, detail?: string) => void) => Promise<Response>,
   ): Promise<{ id: string; title: string; deduped: boolean }> {
     setPhase({ fileLabel, steps: initialIngestSteps(kind) });
-    const res = await send();
+    const emit = (stage: string, detail?: string) =>
+      setPhase((p) => (p ? { ...p, steps: advanceIngestSteps(p.steps, stage, detail) } : p));
+    const res = await send(emit);
     if (!res.ok) {
       const detail = await readJson<{ error?: string }>(res);
       throw new Error(detail?.error ?? statusMessage(res.status));
@@ -92,9 +143,7 @@ export function DocumentBar({
     let result: IngestEvent | null = null;
     for await (const event of readNdjson<IngestEvent>(res)) {
       if ("stage" in event) {
-        setPhase((p) =>
-          p ? { ...p, steps: advanceIngestSteps(p.steps, event.stage, event.detail) } : p,
-        );
+        emit(event.stage, event.detail);
       } else {
         result = event;
       }
@@ -107,14 +156,44 @@ export function DocumentBar({
     return result;
   }
 
+  // Chunked upload for PDFs past the single-request cap. Sends slices to
+  // /api/uploads, reports progress on the receive step, then asks
+  // /api/uploads/complete to assemble and ingest — its response streams the
+  // same stage events as /api/documents.
+  async function uploadChunked(file: File, emit: (stage: string, detail?: string) => void) {
+    const uploadId = crypto.randomUUID();
+    const totalLabel = megabytes(file.size);
+    for (let sent = 0; sent < file.size; sent += CHUNK_BYTES) {
+      const index = Math.floor(sent / CHUNK_BYTES);
+      const res = await fetch(`/api/uploads?uploadId=${uploadId}&index=${index}`, {
+        method: "POST",
+        body: file.slice(sent, sent + CHUNK_BYTES),
+      });
+      if (!res.ok) {
+        const detail = await readJson<{ error?: string }>(res);
+        throw new Error(detail?.error ?? statusMessage(res.status));
+      }
+      emit("receive", `${megabytes(Math.min(sent + CHUNK_BYTES, file.size))} of ${totalLabel} MB`);
+    }
+    return fetch("/api/uploads/complete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ uploadId, filename: file.name, notebookId }),
+    });
+  }
+
   async function uploadPdfs(files: File[]) {
     setError(null);
     let lastId: string | null = null;
     try {
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
+        if (file.size > MAX_PDF_BYTES) {
+          throw new Error(`${file.name} is larger than 50 MB.`);
+        }
         const label = files.length > 1 ? `${file.name} (${i + 1}/${files.length})` : file.name;
-        const result = await runIngest(label, "pdf", () => {
+        const result = await runIngest(label, "pdf", (emit) => {
+          if (file.size > SINGLE_REQUEST_BYTES) return uploadChunked(file, emit);
           const form = new FormData();
           form.set("file", file);
           form.set("notebookId", notebookId);
@@ -302,6 +381,19 @@ export function DocumentBar({
                 <button onClick={() => void openLibrary()} className={menuItem}>
                   Library
                 </button>
+                {active && (active.sourceUrl !== null || active.hasFile) && (
+                  <button
+                    onClick={() => {
+                      setMenu(null);
+                      void reparse(active);
+                    }}
+                    disabled={phase !== null}
+                    className={`${menuItem} disabled:opacity-40`}
+                    title="Parse the open document again with the current parser"
+                  >
+                    Re-parse document
+                  </button>
+                )}
                 {activeId && (
                   <button
                     onClick={() => void detach(activeId)}

@@ -43,7 +43,13 @@ export default async function NotebookPage(props: {
   const notebook = await db.notebook.findUnique({
     where: { id: notebookId },
     include: {
-      documents: { include: { document: { select: { id: true, title: true } } } },
+      documents: {
+        include: {
+          document: {
+            select: { id: true, title: true, sourceUrl: true, parserVersion: true, fileHash: true },
+          },
+        },
+      },
       sections: {
         orderBy: { order: "asc" },
         include: {
@@ -60,7 +66,13 @@ export default async function NotebookPage(props: {
   });
   if (!notebook) notFound();
 
-  const attached = notebook.documents.map((nd) => nd.document);
+  const attached = notebook.documents.map((nd) => ({
+    id: nd.document.id,
+    title: nd.document.title,
+    sourceUrl: nd.document.sourceUrl,
+    parserVersion: nd.document.parserVersion,
+    hasFile: nd.document.fileHash !== null,
+  }));
   const activeId = doc && attached.some((d) => d.id === doc) ? doc : (attached[0]?.id ?? null);
   const activeDocument = activeId
     ? await db.document.findUnique({

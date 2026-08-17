@@ -14,3 +14,8 @@ export type ParsedDocument = {
 // Progress reported while a URL parses: "extract" when the fetch lands and
 // extraction begins, again with a detail line when extraction finishes.
 export type UrlParseProgress = (stage: "extract", detail?: string) => void;
+
+// Version of the parse pipeline that produced a document's blocks. Bump when
+// parsing improves; documents stamped with an older version re-parse
+// automatically — on open, and when their URL is added again.
+export const PARSER_VERSION = 2;

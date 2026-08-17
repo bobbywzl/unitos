@@ -21,7 +21,7 @@ A notes-centric web app for completely dissecting complex documents (research pa
 - **DB:** PostgreSQL + Prisma
 - **AI:** Anthropic API via Vercel AI SDK (`ai` package), streaming responses. Model: `claude-sonnet-4-6` default; make model a per-derivation-type config constant.
 - **Prompt caching:** Cache the full parsed document as a prompt prefix per session (Anthropic prompt caching, `cache_control` on the document content block). Every selection-level derivation must reuse the cached prefix.
-- **Parsing:** PDF → blocks server-side. Use `unpdf` or `pdf-parse` for text extraction; preserve reading order. URL ingestion: full-DOM structural parse via `jsdom` — equations keep their TeX (KaTeX/MathJax annotations, rendered with KaTeX in the reader), charts keep their inline SVG, figures keep their images and videos, lists/tables/separators keep their shape — followed by an AI structure pass that may only drop, retype, or merge existing blocks by index (the model never writes text). `@mozilla/readability` is the fallback for pages the structural walk cannot read. Ingest streams stage progress (fetch → extract → structure → save) to the client.
+- **Parsing:** PDF → blocks server-side. Use `unpdf` or `pdf-parse` for text extraction; preserve reading order. URL ingestion: full-DOM structural parse via `jsdom` — equations keep their TeX (KaTeX/MathJax annotations, rendered with KaTeX in the reader), charts keep their inline SVG, figures keep their images and videos, lists/tables/separators keep their shape — followed by an AI structure pass that may only drop, retype, or merge existing blocks by index (the model never writes text). `@mozilla/readability` is the fallback for pages the structural walk cannot read. Ingest streams stage progress (fetch → extract → structure → save) to the client. Every document is stamped with the parser version that produced it; a URL document stamped with an older version re-parses automatically — on open, and when its URL is added again — and can be re-parsed manually from the document menu.
 - **Anchoring:** W3C Web Annotation selectors via `apache-annotator` (`@apache-annotator/dom`, `@apache-annotator/selector`).
 - **Embeddings (Phase 6):** Voyage AI or OpenAI embeddings on notes, stored via `pgvector`.
 - **Styling:** Tailwind. Split-pane layout via CSS grid, not a heavy library.
@@ -241,6 +241,7 @@ Each phase must be fully working end-to-end before starting the next.
 
 ### Phase 2 — Documents: ingest, render, attach
 - Upload PDF / paste URL → parse to blocks → persist → render in reader pane.
+- PDFs up to 50 MB. Vercel caps a request body at about 4.5 MB, so the client splits bigger files into chunks (`/api/uploads`) and `/api/uploads/complete` assembles them into the same ingest path.
 - Attach documents to notebooks. Split view shell (reader left, notes drawer right).
 - **Done when:** a 30-page PDF renders with correct block order, headings, and tables legible; same document attaches to two notebooks without re-parsing (dedupe by fileHash).
 

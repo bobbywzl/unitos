@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 import { parsePdf } from "@/lib/parse/pdf";
 import { structureBlocks } from "@/lib/parse/structure";
 import { parseUrl } from "@/lib/parse/url";
-import type { ParsedBlock } from "@/lib/parse/types";
+import { PARSER_VERSION, type ParsedBlock } from "@/lib/parse/types";
 
 // Ingest progress, reported to the caller as each stage starts. A repeated stage
 // updates the detail line ("148 figures · 152 equations"). Dedupe hits report
@@ -26,6 +26,7 @@ async function createDocumentWithBlocks(data: {
         sourceUrl: data.sourceUrl,
         fileHash: data.fileHash,
         fileData: data.fileData,
+        parserVersion: PARSER_VERSION,
       },
     });
     await tx.block.createMany({
@@ -64,10 +65,17 @@ export async function ingestPdf(
   return { document, deduped: false };
 }
 
-// URL path. Dedupe by exact sourceUrl.
+// URL path. Dedupe by exact sourceUrl. A stale stored parse upgrades in place:
+// adding the URL again must never hand back blocks from an older parser.
 export async function ingestUrl(url: string, onProgress?: OnIngestProgress) {
   const existing = await db.document.findFirst({ where: { sourceUrl: url } });
-  if (existing) return { document: existing, deduped: true };
+  if (existing) {
+    if (existing.parserVersion < PARSER_VERSION) {
+      const document = await reparseDocument(existing.id, onProgress);
+      if (document) return { document, deduped: false };
+    }
+    return { document: existing, deduped: true };
+  }
 
   const parsed = await parseUrl(url, onProgress);
   onProgress?.("structure");
@@ -82,20 +90,23 @@ export async function ingestUrl(url: string, onProgress?: OnIngestProgress) {
 }
 
 // Re-parse from stored bytes or source URL. Block ids change; anchors re-resolve by quote (SPEC.md §5).
-export async function reparseDocument(documentId: string) {
+export async function reparseDocument(documentId: string, onProgress?: OnIngestProgress) {
   const document = await db.document.findUnique({ where: { id: documentId } });
   if (!document) return null;
 
   let blocks: ParsedBlock[];
   if (document.fileData) {
+    onProgress?.("parse");
     blocks = (await parsePdf(new Uint8Array(document.fileData))).blocks;
   } else if (document.sourceUrl) {
-    const parsed = await parseUrl(document.sourceUrl);
+    const parsed = await parseUrl(document.sourceUrl, onProgress);
+    onProgress?.("structure");
     blocks = await structureBlocks(parsed.blocks, parsed.title);
   } else {
     throw new Error("Document has no stored file and no source URL");
   }
 
+  onProgress?.("save");
   await db.$transaction(async (tx) => {
     await tx.block.deleteMany({ where: { documentId } });
     await tx.block.createMany({
@@ -106,6 +117,10 @@ export async function reparseDocument(documentId: string) {
         text: b.text,
         html: b.html,
       })),
+    });
+    await tx.document.update({
+      where: { id: documentId },
+      data: { parserVersion: PARSER_VERSION },
     });
   });
   return db.document.findUnique({ where: { id: documentId } });

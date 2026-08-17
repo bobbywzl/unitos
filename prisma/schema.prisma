@@ -80,10 +80,11 @@ model Source {
 }
 
 model Document {
-  id        String             @id @default(cuid())
-  title     String
-  font      String? // reader body font: null = default, "serif", "mono"
-  sourceUrl String?
+  id            String             @id @default(cuid())
+  title         String
+  font          String? // reader body font: null = default, "serif", "mono"
+  parserVersion Int                @default(0) // parse pipeline version; stale URL documents re-parse automatically
+  sourceUrl     String?
   fileHash  String?            @unique // dedupe re-uploads
   fileData  Bytes? // original PDF bytes, kept for forced re-parse (SPEC.md §8 Phase 3)
   blocks    Block[]
@@ -176,6 +177,20 @@ enum BlockType {
   LIST
   CODE
   SEPARATOR
+}
+
+// Staging for PDF uploads larger than one request. Vercel caps a request body
+// at about 4.5 MB, so the client splits big files into chunks (/api/uploads);
+// /api/uploads/complete assembles them, runs normal ingest, and deletes the rows.
+model UploadChunk {
+  id        String   @id @default(cuid())
+  uploadId  String
+  index     Int
+  data      Bytes
+  createdAt DateTime @default(now())
+
+  @@unique([uploadId, index])
+  @@index([createdAt])
 }
 
 model Feedback {
