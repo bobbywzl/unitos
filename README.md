@@ -10,13 +10,13 @@ Notes-centric web app for deep reading. Documents attach to notebooks; every AI 
 - Anchoring that survives reload and re-parse: block offsets + quote fallback, orphans render visibly
 - Derivations via one pipeline (`/api/derive`): EXPLAIN (annotation rail), SIMPLIFY (inline swap, revert on click), SALIENCE (toggleable overlay), EXTRACT (pending note with sources)
 - Pending queue keyboard flow: `j/k` move, `Enter` accept, `Backspace` reject, `e` edit, `g` jump to source
-- Reader profile (background, purpose, application) injected into every prompt; per-notebook override
+- Context (background, purpose, application) injected into every prompt; edited from the Context tab in the header, saved globally or as a per-notebook override
 - Assistant panel with scopes: selection, document, notebook, corpus; contradiction, gap, and unsourced checks as clickable cards
 - Voyage embeddings + pgvector for corpus search across all notebooks
 - Glossary extraction on ingest; hover definitions in the reader
 - Export notebook to Markdown or .docx with `documentTitle, blockId` footnotes
 - Feedback button + admin inbox (`/admin`) with new → seen → resolved triage
-- Settings (`/settings`): light/dark/system theme, reader profile, service status
+- Settings (`/settings`): light/dark/system theme, context, service status
 
 ## Stack
 

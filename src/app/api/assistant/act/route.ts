@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { DERIVATION_MODEL, MAX_OUTPUT_TOKENS } from "@/lib/derive/config";
 import { anchorContext, documentPrefix, loadProfile, sectionSkeleton } from "@/lib/derive/context";
 import { callForJson } from "@/lib/derive/json-call";
+import { profileLines } from "@/lib/prompts/types";
 import { parseBody } from "@/lib/validate";
 import type { AssistantAction, AssistantAnchor, AssistantPlan } from "@/lib/types";
 
@@ -179,9 +180,7 @@ export async function POST(req: Request) {
   const userPrompt = [
     "Convert the reader's command into a plan of actions on this document and notebook. The reader approves the plan before anything runs.",
     "",
-    profile
-      ? `Reader profile: background: ${profile.background}. Purpose: ${profile.purpose}. Application: ${profile.application}.`
-      : "Reader profile: not set.",
+    profileLines(profile),
     "",
     selectionBlock || "The reader has no text selected. The command applies to the document.",
     "",

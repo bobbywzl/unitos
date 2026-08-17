@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { api } from "@/lib/api";
 
 type Theme = "light" | "dark" | "system";
-type ProfileValues = { background: string; purpose: string; application: string };
+type ContextValues = { background: string; purpose: string; application: string };
 
 const THEMES: { value: Theme; label: string; description: string }[] = [
   { value: "light", label: "Light", description: "Always light" },
@@ -38,32 +38,36 @@ function setTheme(theme: Theme) {
 }
 
 // Settings sections. Changes save automatically (release-edu pattern): theme to
-// localStorage on click, reader profile debounced to the profile API.
+// localStorage on click, context debounced to the profile API.
 export function SettingsForm({
   profile,
   services,
 }: {
-  profile: ProfileValues | null;
+  profile: ContextValues | null;
   services: { anthropic: boolean; voyage: boolean; admin: boolean };
 }) {
   const theme = useSyncExternalStore(subscribeTheme, readTheme, () => "system");
 
-  const [values, setValues] = useState<ProfileValues>(
+  const [values, setValues] = useState<ContextValues>(
     profile ?? { background: "", purpose: "", application: "" },
   );
   const [status, setStatus] = useState<"idle" | "saving" | "saved">("idle");
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const lastSaved = useRef(JSON.stringify(profile));
+  const lastSaved = useRef(
+    JSON.stringify({
+      background: (profile?.background ?? "").trim(),
+      purpose: (profile?.purpose ?? "").trim(),
+      application: (profile?.application ?? "").trim(),
+    }),
+  );
 
-  // Debounced auto-save. Saves only when all three fields have content (the API
-  // requires all three) and something changed.
+  // Debounced auto-save. Every field is optional; saves whenever something changed.
   useEffect(() => {
     const trimmed = {
       background: values.background.trim(),
       purpose: values.purpose.trim(),
       application: values.application.trim(),
     };
-    if (!trimmed.background || !trimmed.purpose || !trimmed.application) return;
     const payload = JSON.stringify(trimmed);
     if (payload === lastSaved.current) return;
     setStatus("saving");
@@ -80,7 +84,7 @@ export function SettingsForm({
     }, 700);
   }, [values]);
 
-  const field = (key: keyof ProfileValues, label: string, placeholder: string) => (
+  const field = (key: keyof ContextValues, label: string, placeholder: string) => (
     <label className="block">
       <span className="text-xs text-sand-700">{label}</span>
       <textarea
@@ -141,11 +145,11 @@ export function SettingsForm({
 
       <section className="space-y-3">
         <h2 className="text-[11px] font-bold tracking-[0.08em] text-sand-600 uppercase">
-          Reader profile
+          Context
         </h2>
         <p className="text-xs text-sand-600">
-          Injected into every AI prompt. Three questions, be concrete. A work can override this from
-          its rail menu.
+          Injected into every AI prompt: notes, extraction, analysis. Every field is optional. A
+          work can override this from its Context tab.
         </p>
         <div className="space-y-3">
           {field("background", "Background", "e.g. Stanford student, stochastic calc + stats + quantum")}

@@ -1,6 +1,7 @@
 import { Logo } from "@/components/logo";
 import { notFound } from "next/navigation";
 import { matchInText } from "@/lib/anchors/match";
+import { hasContext } from "@/lib/derive/context";
 import { editedRanges } from "@/lib/diff";
 import { resolveDocumentSources } from "@/lib/anchors/resolve";
 import { USER_ID } from "@/lib/constants";
@@ -35,10 +36,10 @@ type SalienceSpan = {
 // Split view: reader left, notes drawer right (SPEC.md §6).
 export default async function NotebookPage(props: {
   params: Promise<{ notebookId: string }>;
-  searchParams: Promise<{ doc?: string; src?: string; onboard?: string }>;
+  searchParams: Promise<{ doc?: string; src?: string }>;
 }) {
   const { notebookId } = await props.params;
-  const { doc, onboard } = await props.searchParams;
+  const { doc } = await props.searchParams;
 
   const notebook = await db.notebook.findUnique({
     where: { id: notebookId },
@@ -454,15 +455,21 @@ export default async function NotebookPage(props: {
       }))
     : [];
 
-  // Reader profile: notebook override wins over the global profile (SPEC.md §3).
+  // Context for the Context tab: notebook override wins over the global context
+  // (SPEC.md §3). Same ladder as loadProfile.
   const globalProfile = await db.readerProfile.findUnique({ where: { userId: USER_ID } });
   const override = notebook.profile as {
-    background: string;
-    purpose: string;
-    application: string;
+    background?: string;
+    purpose?: string;
+    application?: string;
   } | null;
-  const profileValues = override
-    ? override
+  const hasOverride = hasContext(override);
+  const contextValues = hasOverride
+    ? {
+        background: override?.background ?? "",
+        purpose: override?.purpose ?? "",
+        application: override?.application ?? "",
+      }
     : globalProfile
       ? {
           background: globalProfile.background,
@@ -476,10 +483,10 @@ export default async function NotebookPage(props: {
       notebook={view}
       documents={attached}
       activeDocumentId={activeDocument?.id ?? null}
-      profile={{
-        initial: profileValues,
-        hasOverride: override !== null,
-        autoOpen: onboard === "1" && profileValues === null,
+      context={{
+        initial: contextValues,
+        hasOverride,
+        isSet: hasContext(contextValues),
       }}
       assistant={
         <AssistantPanel notebookId={notebook.id} documentId={activeDocument?.id ?? null} />

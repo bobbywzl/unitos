@@ -11,7 +11,7 @@ A notes-centric web app for completely dissecting complex documents (research pa
 3. **User approves everything.** All AI output that writes into notes lands as `pending` and requires one-keystroke accept/reject. Nothing enters notes silently.
 4. **Provenance is non-negotiable.** Every note line must click back to its source anchor in the original document.
 5. **The retrieval test.** A feature only writes to notes if its output is something the user will read again. Transient comprehension aids (laymanization) render in the reader, not in notes.
-6. **Reader profile conditions everything.** The user's background, purpose, and intended application are injected into every prompt, not scoped to one feature.
+6. **Context conditions everything.** The reader's background, purpose, and intended application (the Context tab; stored as `ReaderProfile`) are injected into every prompt, not scoped to one feature. Context is optional and never blocks reading or upload.
 
 ---
 
@@ -180,7 +180,7 @@ Flow:
    - `EXTRACT` → `Note` with `status: PENDING` in the target section
    - `SUMMARIZE` → Summary tab in the side panel (persisted on `NotebookDocument.summaries`, one summary per depth; Regenerate overwrites)
 
-Prompt templates always receive: reader profile, document title, section skeleton (for EXTRACT), and the anchored text with surrounding context (±2 blocks).
+Prompt templates always receive: reader context, document title, section skeleton (for EXTRACT), and the anchored text with surrounding context (±2 blocks).
 
 **EXTRACT output contract:** model returns JSON `{sectionId, content, quotedSpans: [{blockId, start, end}]}`. Validate strictly; on parse failure, retry once with the error appended, then surface failure to user. Never write malformed output to DB.
 
@@ -210,7 +210,7 @@ DOM ranges are never the source of truth. Convert selection → block-relative o
 - SIMPLIFY opens a translucent bubble to the right of the article, level with the selection, sliding in with a smooth animation. The selection stays tinted while the bubble is open. The document text never changes.
 - Summary lives in the side panel: one rail button, a depth control with three levels (layman / intermediate / professional), one stored summary per depth.
 - Salience layer is a toggleable highlight overlay, off by default, one click to show.
-- Reader profile onboarding: max 3 questions (background / purpose / application), shown on first notebook creation, editable per notebook.
+- Context tab in the workspace header: background / purpose / application, every field optional, editable any time. Saves globally or as a per-notebook override. No onboarding dialog — nothing blocks reading or upload.
 - Keyboard-first: `j/k` navigate pending queue, `Enter` accept, `Backspace` reject, `e` edit, `g` jump to source.
 
 ---
@@ -255,8 +255,8 @@ Each phase must be fully working end-to-end before starting the next.
 - Persist as Note in hidden Annotations section.
 - **Done when:** second EXPLAIN call on the same document measurably reuses the cached prefix (log cache hit tokens); response streams in <2s to first token.
 
-### Phase 5 — Reader profile + remaining derivations
-- Profile onboarding + injection into all prompts.
+### Phase 5 — Context + remaining derivations
+- Context (background / purpose / application) + injection into all prompts.
 - SIMPLIFY (inline swap/revert), SALIENCE (overlay), EXTRACT (pending queue with keyboard flow).
 - **Checkpoint:** compare EXPLAIN output with/without profile on the same passage. If not meaningfully better than generic output, stop and rethink prompts before building more.
 

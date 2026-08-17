@@ -16,11 +16,11 @@ import {
   SparkleIcon,
   SummaryIcon,
 } from "@/components/icons";
+import { ContextTab, type ContextValues } from "@/components/context-tab";
 import { GuideDialog } from "@/components/guide-dialog";
 import { NotebookTitle } from "@/components/notebook-title";
 import { NotesTray } from "@/components/outline/notes-tray";
 import { useOutline } from "@/components/outline/use-outline";
-import { ProfileDialog, type ProfileValues } from "@/components/profile-dialog";
 import { DocumentBar, type AttachedDocument } from "@/components/reader/document-bar";
 
 type Tab = "notes" | "assistant" | "summary" | "annotations" | "edits";
@@ -50,7 +50,7 @@ export function Workspace({
   annotationsPanel,
   editsPanel,
   annotationCount,
-  profile,
+  context,
 }: {
   notebook: NotebookView;
   documents: AttachedDocument[];
@@ -61,13 +61,12 @@ export function Workspace({
   annotationsPanel: React.ReactNode;
   editsPanel: React.ReactNode;
   annotationCount: number;
-  profile: { initial: ProfileValues | null; hasOverride: boolean; autoOpen: boolean };
+  context: { initial: ContextValues | null; hasOverride: boolean; isSet: boolean };
 }) {
   const { tree, pending, actions, lastRejected, undoReject } = useOutline(notebook);
   const [collapsed, setCollapsed] = useState(false);
   const [tab, setTab] = useState<Tab>("notes");
   const [menuOpen, setMenuOpen] = useState(false);
-  const [profileOpen, setProfileOpen] = useState(profile.autoOpen);
   const [guideOpen, setGuideOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -152,6 +151,12 @@ export function Workspace({
             activeId={activeDocumentId}
           />
         </div>
+        <ContextTab
+          notebookId={notebook.id}
+          initial={context.initial}
+          hasOverride={context.hasOverride}
+          isSet={context.isSet}
+        />
         {pending.length > 0 && (
           <span className="shrink-0 rounded-full bg-clay-200 px-3.5 py-1.5 text-xs font-semibold text-clay-800">
             {pending.length} pending
@@ -306,15 +311,6 @@ export function Workspace({
                 >
                   Notes full page
                 </Link>
-                <button
-                  onClick={() => {
-                    setMenuOpen(false);
-                    setProfileOpen(true);
-                  }}
-                  className="px-4 py-2 text-left text-sm text-sand-700 hover:bg-clay-100 hover:text-clay-800"
-                >
-                  Reader profile
-                </button>
                 <Link
                   href="/settings"
                   className="px-4 py-2 text-sm text-sand-700 hover:bg-clay-100 hover:text-clay-800"
@@ -327,13 +323,6 @@ export function Workspace({
         </nav>
       </div>
 
-      <ProfileDialog
-        notebookId={notebook.id}
-        initial={profile.initial}
-        hasOverride={profile.hasOverride}
-        open={profileOpen}
-        onClose={() => setProfileOpen(false)}
-      />
       <GuideDialog open={guideOpen} onClose={() => setGuideOpen(false)} />
     </div>
   );

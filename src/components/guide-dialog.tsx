@@ -56,7 +56,7 @@ export function GuideDialog({ open, onClose }: { open: boolean; onClose: () => v
             </li>
             <li>
               <span className={term}>Explain</span> — a short explanation of the selection,
-              tuned to your reader profile. Saved under Annotations.
+              tuned to your context. Saved under Annotations.
             </li>
             <li>
               <span className={term}>Simplify</span> — rewrites the selection in plain words,
@@ -98,6 +98,11 @@ export function GuideDialog({ open, onClose }: { open: boolean; onClose: () => v
               <span className={term}>Add URL</span> (+ in the header) — rebuilds the page in the
               reader: headings, lists, tables, figures, images, videos, charts, and equations,
               all editable. A progress card shows each step while the cat dances.
+            </li>
+            <li>
+              <span className={term}>Context</span> (top bar) — who you are, why you read, what
+              the notes feed. Injected into every AI prompt: notes, extraction, analysis. Every
+              field is optional; edit any time. Save it everywhere or for this work only.
             </li>
             <li>
               <span className={term}>Salience</span> (top right) — an overlay that marks the
