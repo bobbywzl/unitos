@@ -396,6 +396,18 @@ export function DocumentBar({
                 )}
                 {activeId && (
                   <button
+                    onClick={() => {
+                      setMenu(null);
+                      window.print();
+                    }}
+                    className={menuItem}
+                    title="Print the open document, article only"
+                  >
+                    Print document
+                  </button>
+                )}
+                {activeId && (
+                  <button
                     onClick={() => void detach(activeId)}
                     className="px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-950"
                     title="Detach the open document from this work"

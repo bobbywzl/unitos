@@ -406,6 +406,32 @@ mark,
   line-height: 1.75;
 }
 
+/* Print: the open document only. The app shell flattens and chrome hides via
+   print: utilities (workspace, reader); these rules cover pagination and media. */
+@media print {
+  @page {
+    margin: 16mm;
+  }
+  .reader-prose figure,
+  .reader-prose [data-math-block],
+  .reader-prose pre,
+  .reader-prose table,
+  .reader-prose img,
+  .reader-prose svg {
+    break-inside: avoid;
+  }
+  /* Video and embeds do not print; captions stay. */
+  .reader-prose video,
+  .reader-prose iframe {
+    display: none;
+  }
+  /* Highlights keep their tint when the browser prints backgrounds. */
+  .reader-prose mark {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}
+
 /* Instruments fan out from behind a work's cover on hover (design 2a). They rest
    tucked below the cover and spring to their own --fan position; the per-instrument
    transition-delay staggers the five into an arc. Driven by CSS, not React state,

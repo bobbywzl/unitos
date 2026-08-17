@@ -1015,8 +1015,8 @@ export function ReaderInteractions({
   }
 
   return (
-    <div ref={containerRef} className="relative min-h-0 flex-1 overflow-y-auto">
-      <div className="sticky top-4 z-10 float-right mr-4 flex items-center gap-2">
+    <div ref={containerRef} className="relative min-h-0 flex-1 overflow-y-auto print:overflow-visible">
+      <div className="sticky top-4 z-10 float-right mr-4 flex items-center gap-2 print:hidden">
         {toast && (
           <span className="rounded-full bg-ink/90 px-3 py-1.5 text-xs text-paper">{toast}</span>
         )}

@@ -224,7 +224,7 @@ export function Reader({
   return (
     <div className="relative">
       {mode === "edit" && (
-        <div className="sticky top-3 z-30 mx-auto flex w-fit items-center gap-0.5 rounded-full bg-card px-2 py-1.5 shadow-float">
+        <div className="sticky top-3 z-30 mx-auto flex w-fit items-center gap-0.5 rounded-full bg-card px-2 py-1.5 shadow-float print:hidden">
           {(["paragraph", "h1", "h2", "h3"] as const).map((kind) => (
             <button
               key={kind}
@@ -266,8 +266,8 @@ export function Reader({
         </div>
       )}
 
-      <article className="reader-prose mx-auto w-[720px] max-w-full px-6 py-11" style={{ fontFamily }}>
-        <p className="mb-2.5 text-[11px] font-bold tracking-[0.09em] text-clay-700 uppercase">
+      <article className="reader-prose mx-auto w-[720px] max-w-full px-6 py-11 print:py-0" style={{ fontFamily }}>
+        <p className="mb-2.5 text-[11px] font-bold tracking-[0.09em] text-clay-700 uppercase print:hidden">
           Document · {blocks.length} blocks{mode === "edit" ? " · editing" : ""}
         </p>
         <h2 className="mb-[26px] text-[33px]">{title}</h2>

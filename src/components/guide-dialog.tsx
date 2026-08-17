@@ -112,6 +112,10 @@ export function GuideDialog({ open, onClose }: { open: boolean; onClose: () => v
               <span className={term}>Notes tray</span> (right) — pending notes wait in a queue:
               j/k to move, Enter to accept, Backspace to reject, Undo to take a rejection back.
             </li>
+            <li>
+              <span className={term}>Print document</span> (+ in the header) — prints the open
+              document, article only: no app chrome, full length, highlights kept.
+            </li>
           </ul>
         </section>
 

@@ -133,8 +133,10 @@ export function Workspace({
   }
 
   return (
-    <div className="grid h-screen grid-rows-[68px_1fr] bg-paper">
-      <header className="flex min-w-0 items-center gap-3.5 border-b border-line px-5">
+    // print: the shell flattens to plain flow so the whole document prints,
+    // not one screen of the scroll pane; chrome and trays hide.
+    <div className="grid h-screen grid-rows-[68px_1fr] bg-paper print:block print:h-auto">
+      <header className="flex min-w-0 items-center gap-3.5 border-b border-line px-5 print:hidden">
         <Link
           href="/"
           aria-label="All works"
@@ -172,17 +174,17 @@ export function Workspace({
         </button>
       </header>
 
-      <div className="flex min-h-0">
-        <div className="relative min-w-0 flex-1 overflow-hidden">
+      <div className="flex min-h-0 print:block">
+        <div className="relative min-w-0 flex-1 overflow-hidden print:overflow-visible">
           {reader}
           <div
             aria-hidden
-            className="pointer-events-none absolute inset-x-0 bottom-0 h-[72px] bg-gradient-to-b from-transparent to-paper"
+            className="pointer-events-none absolute inset-x-0 bottom-0 h-[72px] bg-gradient-to-b from-transparent to-paper print:hidden"
           />
         </div>
 
         {!collapsed && (
-          <aside className="flex min-h-0 w-[352px] shrink-0 flex-col gap-3.5 border-l border-line bg-sand-100 p-[18px] pb-4">
+          <aside className="flex min-h-0 w-[352px] shrink-0 flex-col gap-3.5 border-l border-line bg-sand-100 p-[18px] pb-4 print:hidden">
             <div className="flex items-center gap-2.5">
               <span className="font-display text-[18px]">{TAB_TITLES[tab]}</span>
               {tab === "notes" && <span className="text-[13px] text-sand-600">{noteCount}</span>}
@@ -233,7 +235,7 @@ export function Workspace({
 
         <nav
           aria-label="Workspace"
-          className="flex w-[52px] shrink-0 flex-col items-center gap-1.5 border-l border-line bg-sand-100 py-2.5"
+          className="flex w-[52px] shrink-0 flex-col items-center gap-1.5 border-l border-line bg-sand-100 py-2.5 print:hidden"
         >
           <button
             onClick={() => setCollapsed(!collapsed)}

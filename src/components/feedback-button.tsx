@@ -41,12 +41,12 @@ export function FeedbackButton() {
       <button
         onClick={() => setOpen(!open)}
         aria-label="Send feedback"
-        className="fixed right-4 bottom-4 z-30 rounded-full bg-card px-4 py-2 text-sm text-sand-700 shadow-lift hover:bg-clay-100 hover:text-clay-800"
+        className="fixed right-4 bottom-4 z-30 rounded-full bg-card px-4 py-2 text-sm text-sand-700 shadow-lift hover:bg-clay-100 hover:text-clay-800 print:hidden"
       >
         Feedback
       </button>
       {open && (
-        <div className="fixed right-4 bottom-16 z-30 w-80 rounded-[28px] bg-card p-5 shadow-float">
+        <div className="fixed right-4 bottom-16 z-30 w-80 rounded-[28px] bg-card p-5 shadow-float print:hidden">
           <form onSubmit={submit} className="space-y-2">
             <div className="flex gap-1">
               {(["bug", "idea", "other"] as const).map((c) => (
