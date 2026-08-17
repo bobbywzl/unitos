@@ -639,6 +639,28 @@ export function ReaderInteractions({
     return () => window.removeEventListener("dissect:flash-source", onFlash);
   }, [flashSource]);
 
+  // ¶ chips in AI text (Markdown) jump to the block they cite.
+  useEffect(() => {
+    const onFlashBlock = (e: Event) => {
+      const { blockId } = (e as CustomEvent<{ blockId: string }>).detail;
+      const container = containerRef.current;
+      const el = container?.querySelector<HTMLElement>(
+        `[data-block-id="${blockId}"], [data-edit-block="${blockId}"]`,
+      );
+      if (!el) {
+        setToast("That block is not in the open document.");
+        if (toastTimer.current) clearTimeout(toastTimer.current);
+        toastTimer.current = setTimeout(() => setToast(null), 5000);
+        return;
+      }
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      el.classList.add("anchor-flash");
+      setTimeout(() => el.classList.remove("anchor-flash"), 2000);
+    };
+    window.addEventListener("dissect:flash-block", onFlashBlock);
+    return () => window.removeEventListener("dissect:flash-block", onFlashBlock);
+  }, []);
+
   function showToast(message: string) {
     setToast(message);
     if (toastTimer.current) clearTimeout(toastTimer.current);
@@ -1803,8 +1825,17 @@ export function ReaderInteractions({
       {assistantChat && (
         <div
           data-selection-popover
-          className="bubble-in absolute z-20 flex flex-col rounded-[20px] border border-line bg-card/95 shadow-float backdrop-blur-md"
-          style={{ left: assistantChat.left, top: assistantChat.top, width: assistantChat.width }}
+          className="bubble-in absolute z-20 flex resize flex-col overflow-hidden rounded-[20px] border border-line bg-card/95 shadow-float backdrop-blur-md"
+          style={{
+            left: assistantChat.left,
+            top: assistantChat.top,
+            width: assistantChat.width,
+            height: 340,
+            minWidth: 260,
+            minHeight: 220,
+            maxWidth: 680,
+            maxHeight: "80vh",
+          }}
         >
           <div className="flex items-center justify-between px-4 pt-3 pb-1">
             <span className="text-[11px] font-bold tracking-[0.08em] text-clay-800 uppercase">
@@ -1818,7 +1849,7 @@ export function ReaderInteractions({
               ✕
             </button>
           </div>
-          <div ref={chatScrollRef} className="flex max-h-72 flex-col gap-2 overflow-y-auto px-4 py-2">
+          <div ref={chatScrollRef} className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-4 py-2">
             {assistantChat.messages.map((message, i) =>
               message.role === "user" ? (
                 <p

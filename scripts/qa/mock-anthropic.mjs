@@ -135,8 +135,9 @@ function buildResponse(all) {
     return parts.join(" ");
   }
 
-  // EXPLAIN / SIMPLIFY / ask: plain prose.
-  return "Mock response: this passage sets out the core claim in plain terms, with the key figure restated for the reader's purpose.";
+  // EXPLAIN / SIMPLIFY / ask: plain prose, citing a real block tag.
+  const cited = blocks[0] ? ` See [block ${blocks[0].id}] for the setup.` : "";
+  return `Mock response: this passage sets out the core claim in plain terms, with the key figure restated for the reader's purpose.${cited}`;
 }
 
 const server = http.createServer((req, res) => {

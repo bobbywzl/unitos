@@ -43,6 +43,7 @@ export function explainPrompt(ctx: PromptCtx): string {
     "1. State what the passage claims or does in one sentence.",
     "2. Explain the parts the reader is least likely to know, given their background.",
     "3. Connect the passage to their purpose when the connection is real. Skip forced connections.",
+    "When you point at another part of the document, cite its block tag exactly as written above ([block <id>]) — the tag renders as a link the reader can click.",
     "Keep it under 200 words. Use markdown. Start with the explanation, no preamble.",
   ].join("\n");
 }

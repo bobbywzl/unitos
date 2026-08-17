@@ -54,11 +54,12 @@ export function GuideDialog({ open, onClose }: { open: boolean; onClose: () => v
               in Ask mode you approve each action before it runs, in Auto mode it runs
               immediately. Auto-mode notes still land pending for your review. The reply opens
               a small chat beside the article — keep talking in it; every turn still applies
-              to your selection.
+              to your selection. Drag its corner to resize it freely.
             </li>
             <li>
               <span className={term}>Explain</span> — a short explanation of the selection,
-              tuned to your context. Saved under Annotations.
+              tuned to your context. Saved under Annotations. When the AI cites a block, the
+              tag renders as a ¶ chip — click it to jump there.
             </li>
             <li>
               <span className={term}>Simplify</span> — rewrites the selection in plain words,

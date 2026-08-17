@@ -225,6 +225,7 @@ export async function POST(req: Request) {
     "3. Use the smallest set of actions that fulfils the command. Never change text the command did not ask to change.",
     "4. description: one plain sentence of what the action does, for the reader's approval list.",
     "5. TABLE and FIGURE blocks cannot be edited or removed.",
+    "6. In reply, cite blocks as [block <id>] when you point at specific parts of the document — the tags render as links the reader can click.",
     "",
     ...(data.history && data.history.length > 0
       ? [
