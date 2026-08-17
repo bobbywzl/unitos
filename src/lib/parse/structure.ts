@@ -25,6 +25,12 @@ const structureSchema = z.object({
     .max(600),
 });
 
+const coreSchema = z.object({
+  ranges: z
+    .array(z.object({ start: z.number().int().min(0), end: z.number().int().min(0) }))
+    .max(50),
+});
+
 function clip(s: string, n = 160): string {
   const t = s.replace(/\s+/g, " ").trim();
   return t.length > n ? `${t.slice(0, n)}…` : t;
@@ -50,6 +56,70 @@ function structurePrompt(title: string | null, blocks: ParsedBlock[]): string {
     "Blocks:",
     listing,
   ].join("\n");
+}
+
+function corePrompt(title: string | null, blocks: ParsedBlock[]): string {
+  const listing = blocks.map((b, i) => `[${i}] ${b.type}: ${clip(b.text)}`).join("\n");
+  return [
+    `A web page${title ? ` titled "${title}"` : ""} was parsed into the numbered blocks below.`,
+    "Separate the core article from everything else on the page.",
+    "Return ranges of block indexes that are the core article — the content a reader",
+    "opened this page for: title, byline, abstract, headings, paragraphs, figures,",
+    "tables, equations, code, footnotes, references.",
+    "Every block outside the ranges is dropped: site navigation, header and footer",
+    "link lists, newsletter signup, cookie banners, social links, related-article",
+    "promos, comment sections, legal boilerplate.",
+    "Ranges are inclusive. Use several ranges when promos interrupt the article.",
+    "When unsure about a block, keep it inside a range.",
+    'Return ONLY JSON: {"ranges": [{"start": 2, "end": 41}]}',
+    "",
+    "Blocks:",
+    listing,
+  ].join("\n");
+}
+
+// Core pass: the model marks which block ranges are the article; everything else
+// on the page is dropped. Runs before the structure pass, so the structure pass
+// only tidies real content. References blocks by index only — it cannot invent
+// content. On any failure, or a selection that keeps almost nothing, the full
+// block list stands.
+export async function selectCoreBlocks(
+  blocks: ParsedBlock[],
+  title: string | null,
+): Promise<ParsedBlock[]> {
+  if (!process.env.ANTHROPIC_API_KEY || blocks.length < 5) return blocks;
+  const listed = blocks.slice(0, MAX_LISTED_BLOCKS);
+
+  const messages: ModelMessage[] = [{ role: "user", content: corePrompt(title, listed) }];
+  const result = await callForJson({
+    model: anthropic(INGEST_STRUCTURE_MODEL),
+    messages,
+    maxOutputTokens: 4096,
+    schema: coreSchema,
+    label: "INGEST_CORE",
+  });
+  if (!result.ok) {
+    console.warn(`[ingest] core pass failed, keeping all blocks: ${result.error}`);
+    return blocks;
+  }
+
+  const keep = new Set<number>();
+  for (const range of result.data.ranges) {
+    const end = Math.min(listed.length - 1, range.end);
+    for (let i = Math.max(0, range.start); i <= end; i++) keep.add(i);
+  }
+  // Blocks past the listing cap were never judged; keep them.
+  for (let i = listed.length; i < blocks.length; i++) keep.add(i);
+
+  const kept = blocks.filter((_, i) => keep.has(i));
+  const keptChars = kept.reduce((n, b) => n + b.text.length, 0);
+  // Underreach guard: a selection that keeps almost nothing is wrong.
+  if (kept.length < 3 || keptChars < 400) {
+    console.warn(`[ingest] core pass kept ${kept.length} blocks / ${keptChars} chars, ignored`);
+    return blocks;
+  }
+  console.log(`[ingest] core: kept ${kept.length}/${blocks.length} blocks`);
+  return kept;
 }
 
 export async function structureBlocks(

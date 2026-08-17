@@ -15,6 +15,7 @@ const STEP_TEMPLATES: Record<"pdf" | "url", { key: string; label: string }[]> = 
   url: [
     { key: "fetch", label: "Fetching the page" },
     { key: "extract", label: "Reading the page" },
+    { key: "select", label: "Finding the article" },
     { key: "structure", label: "Structuring" },
     { key: "save", label: "Saving" },
   ],

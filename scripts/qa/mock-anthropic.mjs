@@ -85,6 +85,27 @@ function buildResponse(all) {
   // Notebook tasks: no issues found.
   if (all.includes('"issues"')) return JSON.stringify({ issues: [] });
 
+  // Ingest core pass: keep ranges around everything that does not look like page
+  // chrome — bracketed chrome, footer link words, copyright lines. Exercises the
+  // range apply path end-to-end.
+  if (all.includes('"ranges"')) {
+    const junkRe =
+      /^(\[ .{0,40} \]|Discover:?|About:?|Social:?|Home|Company|Careers|News|Contact|Research|YouTube|LinkedIn|Twitter|Instagram|Policy|Terms.*|Privacy.*|©.*|Our research straight to your inbox\.?)$/;
+    const keep = [];
+    const lineRe = /^\[(\d+)\] (\w+): (.*)$/gm;
+    let m;
+    while ((m = lineRe.exec(all))) {
+      if (!junkRe.test(m[3].trim())) keep.push(Number(m[1]));
+    }
+    const ranges = [];
+    for (const i of keep) {
+      const last = ranges[ranges.length - 1];
+      if (last && i === last.end + 1) last.end = i;
+      else ranges.push({ start: i, end: i });
+    }
+    return JSON.stringify({ ranges });
+  }
+
   // Ingest structure pass: drop placeholder junk the way the real model would —
   // blocks that are nothing but a bare number, an unhydrated counter value, or
   // bracketed chrome. Exercises the ops apply path end-to-end.

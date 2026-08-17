@@ -1,16 +1,25 @@
 import { createHash } from "node:crypto";
 import { db } from "@/lib/db";
 import { parsePdf } from "@/lib/parse/pdf";
-import { structureBlocks } from "@/lib/parse/structure";
+import { selectCoreBlocks, structureBlocks } from "@/lib/parse/structure";
 import { parseUrl } from "@/lib/parse/url";
-import { PARSER_VERSION, type ParsedBlock } from "@/lib/parse/types";
+import { PARSER_VERSION, type ParsedBlock, type ParsedDocument } from "@/lib/parse/types";
 
 // Ingest progress, reported to the caller as each stage starts. A repeated stage
 // updates the detail line ("148 figures · 152 equations"). Dedupe hits report
 // nothing — there is no parse or save to do, the caller treats "no events" as instant.
-// PDF stages: parse, save. URL stages: fetch, extract, structure, save.
-export type IngestStage = "parse" | "save" | "fetch" | "extract" | "structure";
+// PDF stages: parse, save. URL stages: fetch, extract, select, structure, save.
+export type IngestStage = "parse" | "save" | "fetch" | "extract" | "select" | "structure";
 export type OnIngestProgress = (stage: IngestStage, detail?: string) => void;
+
+// URL blocks pass through two model passes: the core pass separates the article
+// from page chrome, then the structure pass tidies what survives (SPEC.md §2).
+async function refineUrlBlocks(parsed: ParsedDocument, onProgress?: OnIngestProgress) {
+  onProgress?.("select");
+  const core = await selectCoreBlocks(parsed.blocks, parsed.title);
+  onProgress?.("structure");
+  return structureBlocks(core, parsed.title);
+}
 
 async function createDocumentWithBlocks(data: {
   title: string;
@@ -78,8 +87,7 @@ export async function ingestUrl(url: string, onProgress?: OnIngestProgress) {
   }
 
   const parsed = await parseUrl(url, onProgress);
-  onProgress?.("structure");
-  const blocks = await structureBlocks(parsed.blocks, parsed.title);
+  const blocks = await refineUrlBlocks(parsed, onProgress);
   onProgress?.("save");
   const document = await createDocumentWithBlocks({
     title: parsed.title ?? url,
@@ -100,8 +108,7 @@ export async function reparseDocument(documentId: string, onProgress?: OnIngestP
     blocks = (await parsePdf(new Uint8Array(document.fileData))).blocks;
   } else if (document.sourceUrl) {
     const parsed = await parseUrl(document.sourceUrl, onProgress);
-    onProgress?.("structure");
-    blocks = await structureBlocks(parsed.blocks, parsed.title);
+    blocks = await refineUrlBlocks(parsed, onProgress);
   } else {
     throw new Error("Document has no stored file and no source URL");
   }
