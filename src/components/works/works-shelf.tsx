@@ -8,13 +8,7 @@ import { WorkCard, type WorkItem } from "@/components/works/work-card";
 export type { WorkItem };
 
 // The works shelf: the front door (design 2a).
-export function WorksShelf({
-  works,
-  hasProfile,
-}: {
-  works: WorkItem[];
-  hasProfile: boolean;
-}) {
+export function WorksShelf({ works }: { works: WorkItem[] }) {
   const router = useRouter();
   const [title, setTitle] = useState("");
   const [busy, setBusy] = useState(false);
@@ -26,8 +20,7 @@ export function WorksShelf({
     try {
       const work = await api<{ id: string }>("/api/notebooks", "POST", { title: trimmed });
       setTitle("");
-      // Profile onboarding on first work creation (SPEC.md §6).
-      router.push(`/n/${work.id}${hasProfile ? "" : "?onboard=1"}`);
+      router.push(`/n/${work.id}`);
     } finally {
       setBusy(false);
     }

@@ -2,6 +2,8 @@ import type { SummaryDepth } from "@/lib/types";
 
 // Context passed to every prompt template. Templates are one file per DerivationType,
 // each exporting a single function (ctx) => string (CLAUDE.md).
+// The reader's context comes from the Context tab: stored as ReaderProfile globally,
+// as notebook.profile when a work overrides it. Any field may be empty.
 export type ReaderProfileCtx = {
   background: string;
   purpose: string;
@@ -22,11 +24,17 @@ export type PromptCtx = {
 };
 
 export function profileLines(profile: ReaderProfileCtx): string {
-  if (!profile) return "Reader profile: not set. Assume a technically literate generalist.";
-  return [
-    "Reader profile:",
-    `- Background: ${profile.background}`,
-    `- Purpose: ${profile.purpose}`,
-    `- Application: ${profile.application}`,
-  ].join("\n");
+  const fields = profile
+    ? (
+        [
+          ["Background", profile.background],
+          ["Purpose", profile.purpose],
+          ["Application", profile.application],
+        ] as const
+      ).filter(([, value]) => value.trim() !== "")
+    : [];
+  if (fields.length === 0) {
+    return "Reader context: not set. Assume a technically literate generalist.";
+  }
+  return ["Reader context:", ...fields.map(([label, value]) => `- ${label}: ${value}`)].join("\n");
 }

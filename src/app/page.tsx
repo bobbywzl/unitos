@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { USER_ID } from "@/lib/constants";
 import { db } from "@/lib/db";
 import { Logo } from "@/components/logo";
 import { WorksShelf } from "@/components/works/works-shelf";
@@ -7,19 +6,16 @@ import { WorksShelf } from "@/components/works/works-shelf";
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
-  const [works, profile] = await Promise.all([
-    db.notebook.findMany({
-      orderBy: { updatedAt: "desc" },
-      include: {
-        // Hidden sections (Annotations) stay out of the count, so the tag on a work
-        // matches the number of sections its outline shows.
-        _count: { select: { sections: { where: { hidden: false } }, documents: true } },
-        // The pending queue carries to the front door (design 2a).
-        sections: { select: { _count: { select: { notes: { where: { status: "PENDING" } } } } } },
-      },
-    }),
-    db.readerProfile.findUnique({ where: { userId: USER_ID } }),
-  ]);
+  const works = await db.notebook.findMany({
+    orderBy: { updatedAt: "desc" },
+    include: {
+      // Hidden sections (Annotations) stay out of the count, so the tag on a work
+      // matches the number of sections its outline shows.
+      _count: { select: { sections: { where: { hidden: false } }, documents: true } },
+      // The pending queue carries to the front door (design 2a).
+      sections: { select: { _count: { select: { notes: { where: { status: "PENDING" } } } } } },
+    },
+  });
 
   return (
     <main className="mx-auto w-full max-w-[1080px] px-16 pb-16">
@@ -49,7 +45,6 @@ export default async function Home() {
 
       <div className="pt-16">
         <WorksShelf
-          hasProfile={profile !== null}
           works={works.map((w) => ({
             id: w.id,
             title: w.title,

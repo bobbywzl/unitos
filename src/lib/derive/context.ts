@@ -21,16 +21,33 @@ export function documentPrefix(title: string, blocks: Pick<Block, "id" | "type" 
   ].join("\n");
 }
 
+// Context is set when any field has content. Any field may be empty.
+export function hasContext(
+  profile: { background?: string; purpose?: string; application?: string } | null,
+): boolean {
+  if (!profile) return false;
+  return Boolean(
+    profile.background?.trim() || profile.purpose?.trim() || profile.application?.trim(),
+  );
+}
+
+// The reader's context: notebook override wins over the global context (SPEC.md §3).
 export async function loadProfile(notebookId: string): Promise<ReaderProfileCtx> {
   const notebook = await db.notebook.findUnique({ where: { id: notebookId } });
   const override = notebook?.profile as ReaderProfileCtx | null;
-  if (override && override.background) return override;
+  if (hasContext(override)) {
+    return {
+      background: override?.background ?? "",
+      purpose: override?.purpose ?? "",
+      application: override?.application ?? "",
+    };
+  }
   const profile = await db.readerProfile.findUnique({ where: { userId: USER_ID } });
-  if (!profile) return null;
+  if (!hasContext(profile)) return null;
   return {
-    background: profile.background,
-    purpose: profile.purpose,
-    application: profile.application,
+    background: profile!.background,
+    purpose: profile!.purpose,
+    application: profile!.application,
   };
 }
 

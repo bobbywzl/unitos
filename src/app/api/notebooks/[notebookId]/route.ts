@@ -6,12 +6,13 @@ import { parseBody } from "@/lib/validate";
 
 const patchSchema = z.object({
   title: z.string().min(1).max(200).optional(),
-  // ReaderProfile override for this notebook; null clears it (SPEC.md §3).
+  // Context override for this notebook; null clears it (SPEC.md §3). Every field
+  // is optional: the Context tab saves whatever is filled.
   profile: z
     .object({
-      background: z.string().min(1).max(2000),
-      purpose: z.string().min(1).max(2000),
-      application: z.string().min(1).max(2000),
+      background: z.string().max(2000),
+      purpose: z.string().max(2000),
+      application: z.string().max(2000),
     })
     .nullable()
     .optional(),
@@ -21,14 +22,22 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ notebookId: s
   const { notebookId } = await ctx.params;
   const { data, error } = await parseBody(req, patchSchema);
   if (error) return error;
+  // An all-empty override is no override: store null so prompts fall back to the
+  // global context.
+  const profileValue =
+    data.profile === null ||
+    (data.profile !== undefined &&
+      !data.profile.background.trim() &&
+      !data.profile.purpose.trim() &&
+      !data.profile.application.trim())
+      ? Prisma.JsonNull
+      : data.profile;
   const notebook = await db.notebook
     .update({
       where: { id: notebookId },
       data: {
         ...(data.title !== undefined ? { title: data.title } : {}),
-        ...(data.profile !== undefined
-          ? { profile: data.profile === null ? Prisma.JsonNull : data.profile }
-          : {}),
+        ...(data.profile !== undefined ? { profile: profileValue } : {}),
       },
     })
     .catch(() => null);

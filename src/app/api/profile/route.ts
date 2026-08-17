@@ -9,13 +9,14 @@ export async function GET() {
   return NextResponse.json(profile);
 }
 
+// Every field is optional: the Context tab saves whatever is filled.
 const putSchema = z.object({
-  background: z.string().min(1).max(2000),
-  purpose: z.string().min(1).max(2000),
-  application: z.string().min(1).max(2000),
+  background: z.string().max(2000),
+  purpose: z.string().max(2000),
+  application: z.string().max(2000),
 });
 
-// Reader profile conditions every prompt (SPEC.md §1).
+// Context conditions every prompt (SPEC.md §1). Stored as ReaderProfile.
 export async function PUT(req: Request) {
   const { data, error } = await parseBody(req, putSchema);
   if (error) return error;
