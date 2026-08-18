@@ -12,12 +12,12 @@ export type Highlight = {
   sourceId: string | null;
   start: number;
   end: number;
-  kind: "anchor" | "salience" | "simplify" | "term" | "link" | "citation" | "edited" | "style";
+  kind: "anchor" | "salience" | "simplify" | "term" | "link" | "citation" | "weblink" | "edited" | "style";
   styleKind?: "bold" | "italic" | "underline"; // kind "style" only
   definition?: string; // glossary hover text, kind "term" only
   color?: string | null; // highlight hue ("clay" | "sage" | "gold" | "plum"), kind "anchor" only
   annotation?: boolean; // anchor belongs to an annotation; click focuses its card
-  href?: string; // navigation target, kind "link" only
+  href?: string; // navigation target, kinds "link" and "weblink"
   linkTitle?: string; // the other end's document title, kind "link" only
   linkId?: string; // for arrival flashing via ?link=, kind "link" only
   referenceId?: string; // target reference entry, kind "citation" only
@@ -57,6 +57,7 @@ function markedText(text: string, highlights: Highlight[]) {
     }
     const link = covering.find((h) => h.kind === "link");
     const citation = covering.find((h) => h.kind === "citation");
+    const weblink = covering.find((h) => h.kind === "weblink");
     const edited = covering.some((h) => h.kind === "edited");
     const bold = covering.some((h) => h.kind === "style" && h.styleKind === "bold");
     const italic = covering.some((h) => h.kind === "style" && h.styleKind === "italic");
@@ -101,6 +102,20 @@ function markedText(text: string, highlights: Highlight[]) {
             );
           }}
           className={`citation-mark rounded-[4px]${editedClass}`}
+        >
+          {segment}
+        </a>,
+      );
+    } else if (weblink) {
+      // URL-shaped text: a plain hyperlink out of the app.
+      parts.push(
+        <a
+          key={from}
+          href={weblink.href}
+          target="_blank"
+          rel="noopener noreferrer"
+          data-source-id={anchor?.sourceId ?? undefined}
+          className={`weblink-mark${editedClass}`}
         >
           {segment}
         </a>,

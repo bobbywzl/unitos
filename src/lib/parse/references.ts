@@ -1,4 +1,5 @@
 import type { CitationSpan, DocumentReference, ParsedBlock } from "@/lib/parse/types";
+import { findWeblinks } from "@/lib/weblinks";
 
 // Citations and references for URL ingestion (SPEC.md §2). Two jobs, one pass:
 // 1. Find the article's reference list, turn each entry into a DocumentReference,
@@ -28,10 +29,11 @@ function normalizeText(s: string): string {
 
 // ── Reference list detection ────────────────────────────────────────────────
 
+// Leading decoration tolerated: "§ References", "8. References".
 const REF_HEADING_RX =
-  /^(references?|bibliography|works cited|citations?|notes|endnotes|footnotes|sources|literature cited)\b[\s\d.:]*$/i;
+  /^[^a-z]*(references?|bibliography|works cited|citations?|notes|endnotes|footnotes|sources|literature cited)\b[\s\d.:]*$/i;
 // Paragraph-style reference lists only under an unambiguous heading.
-const STRONG_REF_HEADING_RX = /^(references?|bibliography|works cited|literature cited)\b[\s\d.:]*$/i;
+const STRONG_REF_HEADING_RX = /^[^a-z]*(references?|bibliography|works cited|literature cited)\b[\s\d.:]*$/i;
 // Class or id hints that a container is the reference list.
 const REF_HINT_RX =
   /\b(references|bibliography|footnotes|endnotes|citation-list|works[-_]?cited|ref[-_]?list|reflist|refbegin|biblist|literature)\b/i;
@@ -220,7 +222,9 @@ function headedLists(root: Element, captured: Set<Element>): ReferenceGroup[] {
 // ── Entry building ──────────────────────────────────────────────────────────
 
 /** First outbound http(s) URL in an entry, resolved absolute. Fragment links
-    (backlinks, cross-entry links) never count. */
+    (backlinks, cross-entry links) never count. With no link element, a
+    URL-shaped token in the entry text still gives the entry its target —
+    plain-text "mcap.dev" style references. */
 function entryUrl(el: Element, baseUrl: string): string | null {
   for (const a of el.querySelectorAll("a[href]")) {
     const href = a.getAttribute("href") ?? "";
@@ -232,7 +236,8 @@ function entryUrl(el: Element, baseUrl: string): string | null {
       continue;
     }
   }
-  return null;
+  const [weblink] = findWeblinks(normalizeText(el.textContent ?? ""));
+  return weblink?.href ?? null;
 }
 
 function buildEntry(

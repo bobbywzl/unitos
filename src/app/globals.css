@@ -59,6 +59,9 @@
   --elev-md: 0 3px 10px color-mix(in srgb, #2e2b25 16%, transparent);
   --elev-lg: 0 12px 32px color-mix(in srgb, #2e2b25 22%, transparent);
 
+  /* Weblinks: outbound hyperlinks are blue, like the web. */
+  --weblink: #1d4ed8;
+
   --background: var(--paper);
   --foreground: var(--ink);
   color-scheme: light;
@@ -108,6 +111,8 @@
   --elev-sm: 0 1px 2px rgb(0 0 0 / 0.5);
   --elev-md: 0 3px 10px rgb(0 0 0 / 0.55);
   --elev-lg: 0 12px 32px rgb(0 0 0 / 0.6);
+
+  --weblink: #8ab4f8;
 
   color-scheme: dark;
 }
@@ -271,6 +276,22 @@ mark,
 }
 .citation-mark:hover {
   background: color-mix(in srgb, var(--clay-400) 22%, transparent);
+}
+/* Weblink: URL-shaped text, and real hyperlinks inside rendered figure and
+   table html. Blue, underlined, opens outside the app. */
+.weblink-mark,
+.reader-figure a,
+.reader-table a {
+  color: var(--weblink);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.weblink-mark:hover,
+.reader-figure a:hover,
+.reader-table a:hover {
+  text-decoration-thickness: 2px;
 }
 
 /* Rendered markdown (notes, explanations, assistant answers). Pointing the

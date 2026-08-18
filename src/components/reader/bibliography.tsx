@@ -77,7 +77,7 @@ export function Bibliography({ references }: { references: DocumentReference[] }
                       href={reference.url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="whitespace-nowrap font-semibold text-clay-700 hover:text-clay-800 hover:underline"
+                      className="weblink-mark whitespace-nowrap font-semibold"
                     >
                       {referenceHost(reference.url)} ↗
                     </a>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { Fragment, useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import type { SourceInput } from "@/lib/anchors/input";
 import {
@@ -13,6 +13,7 @@ import {
 } from "@/lib/sentences";
 import type { AssistantAction, AssistantPlan } from "@/lib/types";
 import type { DocumentReference } from "@/lib/parse/types";
+import { findWeblinks } from "@/lib/weblinks";
 import { MicIcon, SparkleIcon } from "@/components/icons";
 import { Markdown } from "@/components/markdown";
 import type { BlockData, Highlight } from "@/components/reader/block-view";
@@ -279,6 +280,18 @@ export function ReaderInteractions({
   }
   const [toast, setToast] = useState<string | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Weblinks: URL-shaped text renders as a hyperlink. Render-time only, so
+  // every document gets them without a re-parse. CODE keeps its text plain.
+  const weblinksByBlock = useMemo(() => {
+    const out: Record<string, { start: number; end: number; href: string }[]> = {};
+    for (const block of blocks) {
+      if (block.type === "CODE" || block.type === "EQUATION" || block.type === "SEPARATOR") continue;
+      const spans = findWeblinks(block.text);
+      if (spans.length > 0) out[block.id] = spans;
+    }
+    return out;
+  }, [blocks]);
 
   // Two-ended linking: the first selection waits here while the reader finds
   // the other end — in this or any other attached document. Survives document
@@ -1608,6 +1621,26 @@ export function ReaderInteractions({
         referenceId: c.referenceId,
         referenceText: referenceById.get(c.referenceId)?.text,
       })),
+    ];
+  }
+  for (const [blockId, list] of Object.entries(weblinksByBlock)) {
+    // A span already marked as a citation or a link stays what it is.
+    const taken = [
+      ...(citationsByBlock[blockId] ?? []),
+      ...(linksByBlock[blockId] ?? []),
+    ];
+    const existing = highlightsByBlock[blockId] ?? [];
+    highlightsByBlock[blockId] = [
+      ...existing,
+      ...list
+        .filter((w) => !taken.some((t) => t.start < w.end && t.end > w.start))
+        .map((w) => ({
+          sourceId: null,
+          start: w.start,
+          end: w.end,
+          kind: "weblink" as const,
+          href: w.href,
+        })),
     ];
   }
   if (salienceOn) {
