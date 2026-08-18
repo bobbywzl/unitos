@@ -11,7 +11,7 @@ import {
 import { db } from "@/lib/db";
 import { DERIVATION_MODEL, MAX_OUTPUT_TOKENS } from "@/lib/derive/config";
 import { anchorContext, documentPrefix, loadProfile } from "@/lib/derive/context";
-import { callForJson } from "@/lib/derive/json-call";
+import { callForJson, modelErrorMessage } from "@/lib/derive/json-call";
 import { synthesisAskPrompt, synthesisTaskPrompt } from "@/lib/prompts/synthesis";
 import { parseBody } from "@/lib/validate";
 
@@ -45,7 +45,20 @@ const issuesSchema = z.object({
     .max(30),
 });
 
+// Any unexpected throw still answers with the reason, never a bare 500.
 export async function POST(req: Request) {
+  try {
+    return await handle(req);
+  } catch (err) {
+    console.error("[assistant] failed:", err);
+    return NextResponse.json(
+      { error: `The assistant failed. ${modelErrorMessage(err)}` },
+      { status: 500 },
+    );
+  }
+}
+
+async function handle(req: Request) {
   if (!process.env.ANTHROPIC_API_KEY) {
     return NextResponse.json(
       { error: "ANTHROPIC_API_KEY is not set. The assistant needs it." },

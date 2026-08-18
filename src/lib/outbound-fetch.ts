@@ -13,8 +13,10 @@ export type OutboundInit = {
 export type OutboundResponse = {
   ok: boolean;
   status: number;
+  headers: { get(name: string): string | null };
   text(): Promise<string>;
   json(): Promise<unknown>;
+  arrayBuffer(): Promise<ArrayBuffer>;
 };
 
 type Outbound = (url: string, init: OutboundInit) => Promise<OutboundResponse>;

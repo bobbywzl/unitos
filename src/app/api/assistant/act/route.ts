@@ -5,7 +5,8 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { DERIVATION_MODEL, MAX_OUTPUT_TOKENS } from "@/lib/derive/config";
 import { anchorContext, documentPrefix, loadProfile, sectionSkeleton } from "@/lib/derive/context";
-import { callForJson } from "@/lib/derive/json-call";
+import { fetchFigureImage, figureContent, type FigureImage } from "@/lib/derive/figure";
+import { callForJson, modelErrorMessage } from "@/lib/derive/json-call";
 import { profileLines } from "@/lib/prompts/types";
 import { parseBody } from "@/lib/validate";
 import type { AssistantAction, AssistantAnchor, AssistantPlan } from "@/lib/types";
@@ -124,7 +125,21 @@ function buildAnchor(blockText: string, quoteText: string, blockId: string) {
   };
 }
 
+// Any unexpected throw still answers with the reason, never a bare 500 —
+// the client toast shows this message.
 export async function POST(req: Request) {
+  try {
+    return await handle(req);
+  } catch (err) {
+    console.error("[assistant:act] failed:", err);
+    return NextResponse.json(
+      { error: `The assistant failed. ${modelErrorMessage(err)}` },
+      { status: 500 },
+    );
+  }
+}
+
+async function handle(req: Request) {
   if (!process.env.ANTHROPIC_API_KEY) {
     return NextResponse.json(
       { error: "ANTHROPIC_API_KEY is not set. The assistant needs it." },
@@ -169,7 +184,11 @@ export async function POST(req: Request) {
     }),
   ]);
 
+  // A selection on a FIGURE block carries the figure itself: image bytes when
+  // they can be fetched, SVG source for charts — same treatment as EXPLAIN
+  // (SPEC.md §4: one pipeline).
   let selectionBlock = "";
+  let figureImage: FigureImage | null = null;
   if (data.anchor) {
     const anchored = anchorContext(
       document.blocks,
@@ -180,7 +199,25 @@ export async function POST(req: Request) {
     if (!anchored) {
       return NextResponse.json({ error: "Anchor does not resolve" }, { status: 400 });
     }
-    selectionBlock = `The reader has selected this text in block ${data.anchor.blockId}:\n"${anchored.anchoredText.slice(0, 2000)}"\nThe command applies to this selection unless it says otherwise.`;
+    const anchoredBlock = await db.block.findUnique({
+      where: { id: data.anchor.blockId },
+      select: { type: true, html: true, text: true },
+    });
+    const figure = figureContent(anchoredBlock);
+    if (figure) {
+      if (figure.imageUrl) figureImage = await fetchFigureImage(figure.imageUrl, document.sourceUrl);
+      selectionBlock = [
+        `The reader has selected the figure in block ${data.anchor.blockId}. Its caption: "${figure.caption.slice(0, 500) || "(no caption)"}".`,
+        ...(figureImage ? ["The figure's image is attached."] : []),
+        ...(figure.svgSource ? ["The figure is this SVG chart:", figure.svgSource] : []),
+        ...(figure.kind === "video"
+          ? ["The figure is a video you cannot watch. Work from the caption and the document."]
+          : []),
+        "The command applies to this figure unless it says otherwise.",
+      ].join("\n");
+    } else {
+      selectionBlock = `The reader has selected this text in block ${data.anchor.blockId}:\n"${anchored.anchoredText.slice(0, 2000)}"\nThe command applies to this selection unless it says otherwise.`;
+    }
   }
 
   const otherDocs = attachedDocs
@@ -245,7 +282,15 @@ export async function POST(req: Request) {
       content: documentPrefix(document.title, document.blocks, document.references),
       providerOptions: { anthropic: { cacheControl: { type: "ephemeral" } } },
     },
-    { role: "user", content: userPrompt },
+    figureImage
+      ? {
+          role: "user",
+          content: [
+            { type: "text", text: userPrompt },
+            { type: "image", image: figureImage.bytes, mediaType: figureImage.mediaType },
+          ],
+        }
+      : { role: "user", content: userPrompt },
   ];
 
   const result = await callForJson({

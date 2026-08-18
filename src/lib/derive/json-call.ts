@@ -5,8 +5,17 @@ import { extractJson } from "@/lib/derive/json";
 
 type JsonCallResult<T> = { ok: true; data: T } | { ok: false; error: string };
 
+/** A model-call failure as a readable message. The route returns it to the
+    client, so the toast shows the real reason, never a bare 500. */
+export function modelErrorMessage(err: unknown): string {
+  const message = err instanceof Error ? err.message : String(err);
+  return message.length > 400 ? `${message.slice(0, 400)}…` : message;
+}
+
 // JSON-output derivations: validate strictly; on failure retry once with the error
-// appended; then surface failure (SPEC.md §4).
+// appended; then surface failure (SPEC.md §4). A thrown model call (API error,
+// overload, oversized request) also surfaces as ok: false — never as an
+// unhandled 500.
 export async function callForJson<S extends z.ZodType>(params: {
   model: LanguageModel;
   messages: ModelMessage[];
@@ -29,7 +38,13 @@ export async function callForJson<S extends z.ZodType>(params: {
     return result.text;
   };
 
-  const first = await attempt(params.messages);
+  let first: string;
+  try {
+    first = await attempt(params.messages);
+  } catch (err) {
+    console.error(`[derive] ${params.label} model call failed:`, err);
+    return { ok: false, error: modelErrorMessage(err) };
+  }
   const firstJson = extractJson(first);
   const firstParsed = params.schema.safeParse(firstJson);
   if (firstParsed.success) return { ok: true, data: firstParsed.data };
@@ -46,7 +61,13 @@ export async function callForJson<S extends z.ZodType>(params: {
       content: `${error}\nReturn ONLY the corrected JSON. No other text.`,
     },
   ];
-  const second = await attempt(retryMessages);
+  let second: string;
+  try {
+    second = await attempt(retryMessages);
+  } catch (err) {
+    console.error(`[derive] ${params.label} model call failed on retry:`, err);
+    return { ok: false, error: modelErrorMessage(err) };
+  }
   const secondJson = extractJson(second);
   const secondParsed = params.schema.safeParse(secondJson);
   if (secondParsed.success) return { ok: true, data: secondParsed.data };

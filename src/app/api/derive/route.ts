@@ -11,6 +11,7 @@ import {
   loadProfile,
   sectionSkeleton,
 } from "@/lib/derive/context";
+import { fetchFigureImage, figureContent, type FigureImage } from "@/lib/derive/figure";
 import { extractOutputSchema, resolveSpan, salienceOutputSchema } from "@/lib/derive/json";
 import { callForJson } from "@/lib/derive/json-call";
 import { promptTemplates } from "@/lib/prompts";
@@ -110,31 +111,25 @@ export async function POST(req: Request) {
   };
 
   // EXPLAIN on a figure block: the model deciphers the visual. An image figure
-  // attaches its image to the message; an SVG chart attaches its source; a
-  // video figure explains from caption and context only.
-  let figureImage: URL | null = null;
+  // attaches its image bytes (fetched here — a failed fetch degrades to
+  // caption and context, never fails the request); an SVG chart attaches its
+  // source; a video figure explains from caption and context only.
+  let figureImage: FigureImage | null = null;
   if (data.type === "EXPLAIN" && data.anchor) {
     const anchoredBlock = await db.block.findUnique({
       where: { id: data.anchor.blockId },
       select: { type: true, html: true, text: true },
     });
-    if (anchoredBlock?.type === "FIGURE") {
-      const html = anchoredBlock.html ?? "";
-      const imgSrc = html.match(/<img[^>]*\ssrc="([^"]+)"/i)?.[1]?.replace(/&amp;/g, "&");
-      const svgStart = html.indexOf("<svg");
-      const svgSource = !imgSrc && svgStart >= 0 ? html.slice(svgStart, svgStart + 12_000) : undefined;
+    const figure = figureContent(anchoredBlock);
+    if (figure) {
+      if (figure.imageUrl) figureImage = await fetchFigureImage(figure.imageUrl, document.sourceUrl);
       ctx.figure = {
-        kind: imgSrc ? "image" : svgSource ? "svg" : /<video/i.test(html) ? "video" : "figure",
-        caption: anchoredBlock.text,
-        svgSource,
+        // An image figure whose image could not be fetched is a plain figure:
+        // the prompt must never claim an attachment that is not there.
+        kind: figure.kind === "image" && !figureImage ? "figure" : figure.kind,
+        caption: figure.caption,
+        svgSource: figure.svgSource,
       };
-      if (imgSrc && /^https?:\/\//.test(imgSrc)) {
-        try {
-          figureImage = new URL(imgSrc);
-        } catch {
-          figureImage = null;
-        }
-      }
     }
   }
 
@@ -151,7 +146,7 @@ export async function POST(req: Request) {
           role: "user",
           content: [
             { type: "text", text: template(ctx) },
-            { type: "image", image: figureImage },
+            { type: "image", image: figureImage.bytes, mediaType: figureImage.mediaType },
           ],
         }
       : { role: "user", content: template(ctx) },
