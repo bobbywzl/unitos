@@ -47,7 +47,7 @@ export async function buildGlossary(documentId: string): Promise<number> {
   const messages: ModelMessage[] = [
     {
       role: "system",
-      content: documentPrefix(document.title, document.blocks),
+      content: documentPrefix(document.title, document.blocks, document.references),
       providerOptions: { anthropic: { cacheControl: { type: "ephemeral" } } },
     },
     { role: "user", content: glossaryPrompt() },

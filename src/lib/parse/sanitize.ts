@@ -1,4 +1,5 @@
 import { JSDOM } from "jsdom";
+import { stripCitationTokens } from "@/lib/parse/references";
 
 // Allowlist sanitizer. Runs at ingest time; stored html is clean, render trusts it.
 const ALLOWED: Record<string, Set<string>> = {
@@ -210,5 +211,6 @@ export function sanitizeHtml(html: string, baseUrl?: string): string {
     }
   };
   walk(document.body);
-  return document.body.innerHTML;
+  // Citation sentinel tokens belong in block text, never in stored html.
+  return stripCitationTokens(document.body.innerHTML);
 }

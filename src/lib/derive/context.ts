@@ -2,15 +2,24 @@ import type { Block } from "@prisma/client";
 import { db } from "@/lib/db";
 import { ANNOTATIONS_SECTION_TITLE } from "@/lib/derive/config";
 import { USER_ID } from "@/lib/constants";
+import { documentReferences } from "@/lib/parse/types";
 import type { PromptCtx, ReaderProfileCtx } from "@/lib/prompts/types";
 
 // The document rendered as the cached prompt prefix (SPEC.md §2). Byte-identical across
 // every derivation on the same document, so all types reuse one cache entry.
 // Block ids are included so EXTRACT and SALIENCE can reference them.
-export function documentPrefix(title: string, blocks: Pick<Block, "id" | "type" | "text">[]): string {
+// The reference list is appended so in-text citations stay explainable — pass
+// Document.references verbatim; parsing happens here so every caller builds
+// the same prefix.
+export function documentPrefix(
+  title: string,
+  blocks: Pick<Block, "id" | "type" | "text">[],
+  references?: unknown,
+): string {
   const rendered = blocks
     .map((b) => `[block ${b.id}] (${b.type})\n${b.text}`)
     .join("\n\n");
+  const referenceList = documentReferences(references ?? null);
   return [
     "You assist a reader dissecting a document. The full document follows.",
     "Each block starts with its id in the form [block <id>]. Reference block ids exactly as given when asked for them.",
@@ -18,6 +27,13 @@ export function documentPrefix(title: string, blocks: Pick<Block, "id" | "type" 
     `Document title: ${title}`,
     "",
     rendered,
+    ...(referenceList.length > 0
+      ? [
+          "",
+          "References (in-text citations like [12] point at these entries):",
+          ...referenceList.map((r) => `[${r.label}] ${r.text}${r.url ? ` — ${r.url}` : ""}`),
+        ]
+      : []),
   ].join("\n");
 }
 

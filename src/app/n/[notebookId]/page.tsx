@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { matchInText } from "@/lib/anchors/match";
 import { hasContext } from "@/lib/derive/context";
 import { editedRanges } from "@/lib/diff";
+import { documentReferences } from "@/lib/parse/types";
 import { resolveDocumentSources } from "@/lib/anchors/resolve";
 import { USER_ID } from "@/lib/constants";
 import { db } from "@/lib/db";
@@ -450,6 +451,32 @@ export default async function NotebookPage(props: {
     }
   }
 
+  // References of the open document, and each block's citation spans — healed
+  // against current block text at render time, like styles.
+  type CitationJson = { start: number; end: number; refId: string; quotedText: string };
+  const references = documentReferences(activeDocument?.references);
+  const referenceIds = new Set(references.map((r) => r.id));
+  const citationsByBlock: Record<string, { start: number; end: number; referenceId: string }[]> =
+    {};
+  if (activeDocument && references.length > 0) {
+    for (const b of activeDocument.blocks) {
+      const spans = (Array.isArray(b.citations) ? b.citations : []) as unknown as CitationJson[];
+      for (const span of spans) {
+        if (!referenceIds.has(span.refId)) continue;
+        let hit: { start: number; end: number } | null = null;
+        if (b.text.slice(span.start, span.end) === span.quotedText) {
+          hit = { start: span.start, end: span.end };
+        } else {
+          hit = matchInText(b.text, { quotedText: span.quotedText, prefix: "", suffix: "" });
+        }
+        if (!hit) continue;
+        const list = citationsByBlock[b.id] ?? [];
+        list.push({ start: hit.start, end: hit.end, referenceId: span.refId });
+        citationsByBlock[b.id] = list;
+      }
+    }
+  }
+
   // Edit history for the open document, newest first.
   const edits: EditItem[] = activeDocument
     ? (
@@ -553,6 +580,8 @@ export default async function NotebookPage(props: {
               linksByBlock={linksByBlock}
               editedByBlock={editedByBlock}
               stylesByBlock={stylesByBlock}
+              citationsByBlock={citationsByBlock}
+              references={references}
               font={activeDocument.font}
             />
           </div>

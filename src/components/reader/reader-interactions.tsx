@@ -12,9 +12,11 @@ import {
   type SimplifiedSentence,
 } from "@/lib/sentences";
 import type { AssistantAction, AssistantPlan } from "@/lib/types";
+import type { DocumentReference } from "@/lib/parse/types";
 import { MicIcon, SparkleIcon } from "@/components/icons";
 import { Markdown } from "@/components/markdown";
 import type { BlockData, Highlight } from "@/components/reader/block-view";
+import { Bibliography } from "@/components/reader/bibliography";
 import { Reader } from "@/components/reader/reader";
 
 type Anchor = Omit<SourceInput, "documentId">;
@@ -219,6 +221,8 @@ export function ReaderInteractions({
   linksByBlock,
   editedByBlock,
   stylesByBlock,
+  citationsByBlock,
+  references,
   font,
 }: {
   documentId: string;
@@ -243,6 +247,8 @@ export function ReaderInteractions({
   >;
   editedByBlock: Record<string, { start: number; end: number }[]>;
   stylesByBlock: Record<string, { start: number; end: number; style: "bold" | "italic" | "underline" }[]>;
+  citationsByBlock: Record<string, { start: number; end: number; referenceId: string }[]>;
+  references: DocumentReference[];
   font: string | null;
 }) {
   const router = useRouter();
@@ -1589,6 +1595,21 @@ export function ReaderInteractions({
       })),
     ];
   }
+  const referenceById = new Map(references.map((r) => [r.id, r]));
+  for (const [blockId, list] of Object.entries(citationsByBlock)) {
+    const existing = highlightsByBlock[blockId] ?? [];
+    highlightsByBlock[blockId] = [
+      ...existing,
+      ...list.map((c) => ({
+        sourceId: null,
+        start: c.start,
+        end: c.end,
+        kind: "citation" as const,
+        referenceId: c.referenceId,
+        referenceText: referenceById.get(c.referenceId)?.text,
+      })),
+    ];
+  }
   if (salienceOn) {
     for (const [blockId, list] of Object.entries(salienceByBlock)) {
       const existing = highlightsByBlock[blockId] ?? [];
@@ -1705,6 +1726,8 @@ export function ReaderInteractions({
         onInsertBlock={insertBlock}
         onDeleteBlock={deleteBlock}
       />
+
+      <Bibliography references={references} />
 
       {connectors.length > 0 && (
         <svg

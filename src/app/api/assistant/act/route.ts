@@ -242,7 +242,7 @@ export async function POST(req: Request) {
   const messages: ModelMessage[] = [
     {
       role: "system",
-      content: documentPrefix(document.title, document.blocks),
+      content: documentPrefix(document.title, document.blocks, document.references),
       providerOptions: { anthropic: { cacheControl: { type: "ephemeral" } } },
     },
     { role: "user", content: userPrompt },

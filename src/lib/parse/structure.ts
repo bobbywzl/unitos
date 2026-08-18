@@ -164,13 +164,21 @@ export async function structureBlocks(
     let next = block;
     const retype = retypes.get(i);
     if (retype && retype !== block.type) {
-      next = { type: retype, text: block.text }; // html belongs to the old type
+      next = { type: retype, text: block.text, citations: block.citations }; // html belongs to the old type
     }
     const previous = out[out.length - 1];
     if (merges.has(i) && previous?.type === "PARAGRAPH" && next.type === "PARAGRAPH") {
+      // Both texts are normalized, so the join is one space: citation offsets
+      // in the merged-up block shift by previous.text.length + 1.
+      const shift = previous.text.length + 1;
+      const citations = [
+        ...(previous.citations ?? []),
+        ...(next.citations ?? []).map((c) => ({ ...c, start: c.start + shift, end: c.end + shift })),
+      ];
       out[out.length - 1] = {
         ...previous,
         text: `${previous.text} ${next.text}`.replace(/\s+/g, " ").trim(),
+        ...(citations.length > 0 ? { citations } : {}),
       };
       return;
     }

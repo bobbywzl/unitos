@@ -96,6 +96,15 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ blockId: stri
     return [{ ...s, start: r.start, end: r.end, quotedText: newText.slice(r.start, r.end) }];
   });
 
+  // Citation spans remap the same way; a citation whose words are gone goes with them.
+  type CitationSpan = { start: number; end: number; refId: string; quotedText: string };
+  const citations = (Array.isArray(block.citations) ? block.citations : []) as unknown as CitationSpan[];
+  const nextCitations = citations.flatMap((c) => {
+    const r = remapRange(segments, c.start, c.end);
+    if (r.orphaned) return [];
+    return [{ ...c, start: r.start, end: r.end, quotedText: newText.slice(r.start, r.end) }];
+  });
+
   const updated = await db.$transaction(async (tx) => {
     const saved = await tx.block.update({
       where: { id: blockId },
@@ -104,6 +113,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ blockId: stri
       data: {
         text: newText,
         styles: nextSpans,
+        ...(citations.length > 0 ? { citations: nextCitations } : {}),
         ...(kindChanges && target ? { type: target.type, html: target.html } : {}),
         ...(block.originalText === null ? { originalText: block.text } : {}),
       },

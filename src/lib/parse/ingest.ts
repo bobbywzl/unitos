@@ -1,9 +1,15 @@
 import { createHash } from "node:crypto";
 import { db } from "@/lib/db";
 import { parsePdf } from "@/lib/parse/pdf";
+import { pruneReferences } from "@/lib/parse/references";
 import { selectCoreBlocks, structureBlocks } from "@/lib/parse/structure";
 import { parseUrl } from "@/lib/parse/url";
-import { PARSER_VERSION, type ParsedBlock, type ParsedDocument } from "@/lib/parse/types";
+import {
+  PARSER_VERSION,
+  type DocumentReference,
+  type ParsedBlock,
+  type ParsedDocument,
+} from "@/lib/parse/types";
 
 // Ingest progress, reported to the caller as each stage starts. A repeated stage
 // updates the detail line ("148 figures · 152 equations"). Dedupe hits report
@@ -14,11 +20,19 @@ export type OnIngestProgress = (stage: IngestStage, detail?: string) => void;
 
 // URL blocks pass through two model passes: the core pass separates the article
 // from page chrome, then the structure pass tidies what survives (SPEC.md §2).
+// References prune afterwards: a link reference whose citing blocks were
+// dropped was chrome, not a citation.
 async function refineUrlBlocks(parsed: ParsedDocument, onProgress?: OnIngestProgress) {
   onProgress?.("select");
   const core = await selectCoreBlocks(parsed.blocks, parsed.title);
   onProgress?.("structure");
-  return structureBlocks(core, parsed.title);
+  const blocks = await structureBlocks(core, parsed.title);
+  const references = pruneReferences(
+    blocks,
+    parsed.references ?? [],
+    parsed.formalReferences ?? 0,
+  );
+  return { blocks, references };
 }
 
 async function createDocumentWithBlocks(data: {
@@ -27,6 +41,7 @@ async function createDocumentWithBlocks(data: {
   fileHash?: string;
   fileData?: Uint8Array<ArrayBuffer>;
   blocks: ParsedBlock[];
+  references?: DocumentReference[];
 }) {
   return db.$transaction(async (tx) => {
     const document = await tx.document.create({
@@ -36,6 +51,7 @@ async function createDocumentWithBlocks(data: {
         fileHash: data.fileHash,
         fileData: data.fileData,
         parserVersion: PARSER_VERSION,
+        references: data.references,
       },
     });
     await tx.block.createMany({
@@ -45,6 +61,7 @@ async function createDocumentWithBlocks(data: {
         type: b.type,
         text: b.text,
         html: b.html,
+        citations: b.citations,
       })),
     });
     return document;
@@ -87,12 +104,13 @@ export async function ingestUrl(url: string, onProgress?: OnIngestProgress) {
   }
 
   const parsed = await parseUrl(url, onProgress);
-  const blocks = await refineUrlBlocks(parsed, onProgress);
+  const { blocks, references } = await refineUrlBlocks(parsed, onProgress);
   onProgress?.("save");
   const document = await createDocumentWithBlocks({
     title: parsed.title ?? url,
     sourceUrl: url,
     blocks,
+    references,
   });
   return { document, deduped: false };
 }
@@ -103,12 +121,13 @@ export async function reparseDocument(documentId: string, onProgress?: OnIngestP
   if (!document) return null;
 
   let blocks: ParsedBlock[];
+  let references: DocumentReference[] | undefined;
   if (document.fileData) {
     onProgress?.("parse");
     blocks = (await parsePdf(new Uint8Array(document.fileData))).blocks;
   } else if (document.sourceUrl) {
     const parsed = await parseUrl(document.sourceUrl, onProgress);
-    blocks = await refineUrlBlocks(parsed, onProgress);
+    ({ blocks, references } = await refineUrlBlocks(parsed, onProgress));
   } else {
     throw new Error("Document has no stored file and no source URL");
   }
@@ -123,11 +142,12 @@ export async function reparseDocument(documentId: string, onProgress?: OnIngestP
         type: b.type,
         text: b.text,
         html: b.html,
+        citations: b.citations,
       })),
     });
     await tx.document.update({
       where: { id: documentId },
-      data: { parserVersion: PARSER_VERSION },
+      data: { parserVersion: PARSER_VERSION, references },
     });
   });
   return db.document.findUnique({ where: { id: documentId } });

@@ -12,7 +12,7 @@ export type Highlight = {
   sourceId: string | null;
   start: number;
   end: number;
-  kind: "anchor" | "salience" | "simplify" | "term" | "link" | "edited" | "style";
+  kind: "anchor" | "salience" | "simplify" | "term" | "link" | "citation" | "edited" | "style";
   styleKind?: "bold" | "italic" | "underline"; // kind "style" only
   definition?: string; // glossary hover text, kind "term" only
   color?: string | null; // highlight hue ("clay" | "sage" | "gold" | "plum"), kind "anchor" only
@@ -20,6 +20,8 @@ export type Highlight = {
   href?: string; // navigation target, kind "link" only
   linkTitle?: string; // the other end's document title, kind "link" only
   linkId?: string; // for arrival flashing via ?link=, kind "link" only
+  referenceId?: string; // target reference entry, kind "citation" only
+  referenceText?: string; // the reference text, shown on hover, kind "citation" only
 };
 
 function anchorClass(color: string | null | undefined): string {
@@ -54,6 +56,7 @@ function markedText(text: string, highlights: Highlight[]) {
       continue;
     }
     const link = covering.find((h) => h.kind === "link");
+    const citation = covering.find((h) => h.kind === "citation");
     const edited = covering.some((h) => h.kind === "edited");
     const bold = covering.some((h) => h.kind === "style" && h.styleKind === "bold");
     const italic = covering.some((h) => h.kind === "style" && h.styleKind === "italic");
@@ -76,6 +79,28 @@ function markedText(text: string, highlights: Highlight[]) {
           data-source-id={anchor?.sourceId ?? undefined}
           title={link.linkTitle ? `Linked: ${link.linkTitle}` : undefined}
           className={`link-mark rounded-[4px]${editedClass}`}
+        >
+          {segment}
+        </a>,
+      );
+    } else if (citation) {
+      // In-text citation: click jumps to its entry in the References section.
+      parts.push(
+        <a
+          key={from}
+          href={`#reference-${citation.referenceId}`}
+          data-source-id={anchor?.sourceId ?? undefined}
+          title={citation.referenceText}
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            window.dispatchEvent(
+              new CustomEvent("dissect:open-reference", {
+                detail: { referenceId: citation.referenceId },
+              }),
+            );
+          }}
+          className={`citation-mark rounded-[4px]${editedClass}`}
         >
           {segment}
         </a>,

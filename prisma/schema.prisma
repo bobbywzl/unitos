@@ -94,6 +94,7 @@ model Document {
   linksFrom DocLink[]          @relation("DocLinkFrom")
   linksTo   DocLink[]          @relation("DocLinkTo")
   glossary  Json? // Phase 7: [{term, definition, blockIds[]}]
+  references Json? // the article's reference list, extracted at ingest: [{id, label, text, url}]
   createdAt DateTime           @default(now())
 }
 
@@ -166,6 +167,7 @@ model Block {
   originalText String? // as first parsed; null = text is unedited. "" = user-authored block.
   html         String? // rendered content for figures/tables
   styles       Json? // inline decoration spans: [{start, end, style: "bold"|"italic", quotedText}]
+  citations    Json? // in-text citation spans: [{start, end, refId, quotedText}], refId → Document.references
 }
 
 enum BlockType {

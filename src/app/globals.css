@@ -261,6 +261,17 @@ mark,
 .link-mark:hover {
   background: color-mix(in srgb, var(--clay-400) 30%, transparent);
 }
+/* In-text citation: dotted underline (solid = cross-document link), click
+   jumps to the entry in the References section. */
+.citation-mark {
+  border-bottom: 2px dotted color-mix(in srgb, var(--clay-500) 80%, transparent);
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+.citation-mark:hover {
+  background: color-mix(in srgb, var(--clay-400) 22%, transparent);
+}
 
 /* Rendered markdown (notes, explanations, assistant answers). Pointing the
    typography plugin at the palette means one set of tokens covers both themes —

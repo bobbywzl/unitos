@@ -1,15 +1,55 @@
 import type { BlockType } from "@prisma/client";
 
+// One entry in the document's reference list. Formal entries come from the
+// article's own reference list; the rest come from hyperlinks in the article
+// text. Stored on Document.references.
+export type DocumentReference = {
+  id: string; // "r1", "r2", … stable within the document
+  label: string; // display number in the References section
+  text: string; // the reference text
+  url: string | null; // outbound target; null when the entry has no link
+};
+
+// One in-text citation: a span of block text that points at a reference.
+// Stored on Block.citations. Offsets are against block plain text; quotedText
+// re-resolves the span after edits and re-parses, like every other anchor.
+export type CitationSpan = {
+  start: number;
+  end: number;
+  refId: string; // DocumentReference.id
+  quotedText: string;
+};
+
 export type ParsedBlock = {
   type: BlockType;
   text: string;
   html?: string;
+  citations?: CitationSpan[];
 };
 
 export type ParsedDocument = {
   title: string | null;
   blocks: ParsedBlock[];
+  references?: DocumentReference[];
+  // How many leading references came from the article's own reference list.
+  // The rest came from hyperlinks; pruneReferences drops the uncited ones
+  // after the model passes settle which blocks survive.
+  formalReferences?: number;
 };
+
+/** Document.references as stored Json → typed entries. Defensive: bad rows drop. */
+export function documentReferences(json: unknown): DocumentReference[] {
+  if (!Array.isArray(json)) return [];
+  return json.filter(
+    (r): r is DocumentReference =>
+      typeof r === "object" &&
+      r !== null &&
+      typeof (r as DocumentReference).id === "string" &&
+      typeof (r as DocumentReference).label === "string" &&
+      typeof (r as DocumentReference).text === "string" &&
+      ((r as DocumentReference).url === null || typeof (r as DocumentReference).url === "string"),
+  );
+}
 
 // Progress reported while a URL parses: "extract" when the fetch lands and
 // extraction begins, again with a detail line when extraction finishes.
@@ -20,4 +60,5 @@ export type UrlParseProgress = (stage: "extract", detail?: string) => void;
 // automatically — on open, and when their URL is added again.
 // 2: structural DOM walk + structure pass. 3: core pass separates article from page chrome.
 // 4: marker lists (icon or numbered rows → LIST) and styled dividers → SEPARATOR.
-export const PARSER_VERSION = 4;
+// 5: in-text citations resolve to reference entries; the reference list moves to Document.references.
+export const PARSER_VERSION = 5;

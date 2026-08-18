@@ -82,7 +82,7 @@ export async function POST(req: Request) {
       include: { blocks: { orderBy: { order: "asc" }, select: { id: true, type: true, text: true } } },
     });
     if (!document) return NextResponse.json({ error: "Document not found" }, { status: 404 });
-    system = documentPrefix(document.title, document.blocks);
+    system = documentPrefix(document.title, document.blocks, document.references);
     if (data.scope === "selection") {
       if (!data.anchor) {
         return NextResponse.json({ error: "Selection scope needs a selection" }, { status: 400 });
