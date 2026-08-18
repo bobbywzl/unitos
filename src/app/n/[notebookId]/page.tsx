@@ -91,7 +91,14 @@ export default async function NotebookPage(props: {
   );
   const anchorHighlights: Record<
     string,
-    { sourceId: string; start: number; end: number; color: string | null; annotation: boolean }[]
+    {
+      sourceId: string;
+      start: number;
+      end: number;
+      color: string | null;
+      annotation: boolean;
+      comment: boolean;
+    }[]
   > = {};
   const resolutionById = new Map<string, { orphaned: boolean }>();
   if (activeDocument) {
@@ -100,12 +107,16 @@ export default async function NotebookPage(props: {
       resolutionById.set(r.id, { orphaned: r.orphaned });
       if (r.orphaned || !noteById.has(r.noteId)) continue;
       const list = anchorHighlights[r.blockId] ?? [];
+      const note = noteById.get(r.noteId);
       list.push({
         sourceId: r.id,
         start: r.start,
         end: r.end,
-        color: noteById.get(r.noteId)?.color ?? null,
+        color: note?.color ?? null,
         annotation: annotationNoteIds.has(r.noteId),
+        // Comment annotation: a comment icon renders beside the text.
+        comment:
+          annotationNoteIds.has(r.noteId) && note?.derivationType == null && note?.color == null,
       });
       anchorHighlights[r.blockId] = list;
     }
@@ -544,8 +555,15 @@ export default async function NotebookPage(props: {
               anchorHighlights={anchorHighlights}
               annotationBubbles={Object.fromEntries(
                 annotations
-                  .filter((a) => (a.kind === "explain" || a.kind === "simplify") && a.sourceId)
-                  .map((a) => [a.sourceId as string, { kind: a.kind as "explain" | "simplify", content: a.content }]),
+                  .filter(
+                    (a) =>
+                      (a.kind === "explain" || a.kind === "simplify" || a.kind === "comment") &&
+                      a.sourceId,
+                  )
+                  .map((a) => [
+                    a.sourceId as string,
+                    { kind: a.kind as "explain" | "simplify" | "comment", content: a.content },
+                  ]),
               )}
               salienceByBlock={salienceByBlock}
               hasSalience={hasSalience}

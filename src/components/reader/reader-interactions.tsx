@@ -229,11 +229,18 @@ export function ReaderInteractions({
   blocks: BlockData[];
   anchorHighlights: Record<
     string,
-    { sourceId: string; start: number; end: number; color: string | null; annotation: boolean }[]
+    {
+      sourceId: string;
+      start: number;
+      end: number;
+      color: string | null;
+      annotation: boolean;
+      comment: boolean;
+    }[]
   >;
-  // Stored EXPLAIN and SIMPLIFY output by source id: clicking their mark
-  // reopens the bubble with this content.
-  annotationBubbles: Record<string, { kind: "explain" | "simplify"; content: string }>;
+  // Stored EXPLAIN, SIMPLIFY, and comment content by source id: clicking their
+  // mark (or the comment icon) reopens the card with this content.
+  annotationBubbles: Record<string, { kind: "explain" | "simplify" | "comment"; content: string }>;
   salienceByBlock: Record<string, { start: number; end: number }[]>;
   hasSalience: boolean;
   termsByBlock: Record<string, { start: number; end: number; definition: string }[]>;
@@ -308,10 +315,22 @@ export function ReaderInteractions({
   const anchorHighlightsRef = useRef(anchorHighlights);
   anchorHighlightsRef.current = anchorHighlights;
   const [assistantChat, setAssistantChat] = useState<AssistantChat | null>(null);
+  // A stored comment, opened from its icon beside the text.
+  const [commentCard, setCommentCard] = useState<{
+    left: number;
+    top: number;
+    width: number;
+    content: string;
+    anchor: Anchor | null;
+  } | null>(null);
   const chatScrollRef = useRef<HTMLDivElement>(null);
   const overlayOpenRef = useRef(false);
   overlayOpenRef.current =
-    popover !== null || bubble !== null || simplifyCard !== null || assistantChat !== null;
+    popover !== null ||
+    bubble !== null ||
+    simplifyCard !== null ||
+    assistantChat !== null ||
+    commentCard !== null;
   // The mouseup that ends a hold-and-circle gesture must not run selection
   // capture — it would replace the figure popover it just opened.
   const suppressNextMouseUp = useRef(false);
@@ -322,7 +341,10 @@ export function ReaderInteractions({
   // right before left, top to bottom. Never over the article.
   const CARD_ESTIMATE = 360;
   const CARD_GAP = 14;
-  function claimSideSlot(kind: "explain" | "simplify" | "assistant", preferredTop: number) {
+  function claimSideSlot(
+    kind: "explain" | "simplify" | "assistant" | "comment",
+    preferredTop: number,
+  ) {
     const { rects, articleLeft, articleRight, cw } = measureSideCards(containerRef.current, kind);
     const articleMid = (articleLeft + articleRight) / 2;
     let top = Math.max(8, preferredTop);
@@ -359,6 +381,9 @@ export function ReaderInteractions({
   }
   function closeAssistantChat() {
     setAssistantChat(null);
+  }
+  function closeCommentCard() {
+    setCommentCard(null);
   }
 
   // Cards are freely moveable: drag the header. Buttons and inputs still work.
@@ -411,6 +436,7 @@ export function ReaderInteractions({
     setBubble(null);
     setSimplifyCard(null);
     setAssistantChat(null);
+    setCommentCard(null);
     setEditMode(false);
     setCommentDraft("");
     setLocalAnchors({});
@@ -499,6 +525,7 @@ export function ReaderInteractions({
         setBubble(null);
         setSimplifyCard(null);
         setAssistantChat(null);
+        setCommentCard(null);
         window.getSelection()?.removeAllRanges();
         return;
       }
@@ -618,6 +645,7 @@ export function ReaderInteractions({
         explain: bubble?.anchor,
         simplify: simplifyCard?.anchor,
         assistant: assistantChat?.anchor,
+        comment: commentCard?.anchor,
       };
       for (const el of container.querySelectorAll<HTMLElement>("[data-side-card]")) {
         const anchor = anchors[el.dataset.sideCard ?? ""];
@@ -644,7 +672,7 @@ export function ReaderInteractions({
       setConnectorHeight(container.scrollHeight);
     });
     return () => cancelAnimationFrame(raf);
-  }, [bubble, simplifyCard, assistantChat]);
+  }, [bubble, simplifyCard, assistantChat, commentCard]);
 
   const chatMessageCount = assistantChat?.messages.length ?? 0;
   useEffect(() => {
@@ -824,6 +852,11 @@ export function ReaderInteractions({
           suffix: "",
         };
         break;
+      }
+      if (stored.kind === "comment") {
+        const slot = claimSideSlot("comment", top);
+        setCommentCard({ ...slot, content: stored.content, anchor });
+        return;
       }
       if (stored.kind === "explain") {
         const slot = claimSideSlot("explain", top);
@@ -2062,6 +2095,44 @@ export function ReaderInteractions({
           ) : (
             <p className="max-h-96 overflow-y-auto text-[13.5px] leading-relaxed whitespace-pre-wrap">
               {stripSimplifyMarkers(simplifyCard.text) || "…"}
+            </p>
+          )}
+        </div>
+      )}
+
+      {commentCard && (
+        <div
+          data-selection-popover
+          data-side-card="comment"
+          className="bubble-in absolute z-20 rounded-[20px] border border-line bg-card/90 p-4 shadow-float backdrop-blur-md"
+          style={{ left: commentCard.left, top: commentCard.top, width: commentCard.width }}
+        >
+          <div
+            onPointerDown={dragCard(
+              () => (commentCard ? { left: commentCard.left, top: commentCard.top } : null),
+              (left, top) => setCommentCard((c) => (c ? { ...c, left, top } : c)),
+            )}
+            style={{ touchAction: "none" }}
+            title="Drag to move"
+            className="mb-2 flex cursor-move items-center justify-between"
+          >
+            <span className="text-[11px] font-bold tracking-[0.08em] text-clay-800 uppercase">
+              Comment
+            </span>
+            <button
+              onClick={closeCommentCard}
+              className="text-xs text-sand-500 hover:text-clay-700"
+              aria-label="Close"
+            >
+              ✕
+            </button>
+          </div>
+          <div className="max-h-80 overflow-y-auto text-[13px]">
+            <Markdown>{commentCard.content}</Markdown>
+          </div>
+          {commentCard.anchor && (
+            <p className="mt-2 line-clamp-2 border-l-2 border-sand-300 pl-2 text-xs text-sand-500">
+              {commentCard.anchor.quotedText}
             </p>
           )}
         </div>
