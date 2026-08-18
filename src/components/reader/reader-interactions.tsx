@@ -13,6 +13,7 @@ import {
 } from "@/lib/sentences";
 import type { AssistantAction, AssistantPlan } from "@/lib/types";
 import type { DocumentReference } from "@/lib/parse/types";
+import { splitStreamError } from "@/lib/derive/config";
 import { findWeblinks } from "@/lib/weblinks";
 import { MicIcon, SparkleIcon } from "@/components/icons";
 import { Markdown } from "@/components/markdown";
@@ -205,6 +206,29 @@ type SimplifyCard = {
   active: number | null;
 };
 
+// On-mark card for a highlight or comment: opens on its mark, edits the
+// comment, recolors, deletes — no trip to the Annotations tab.
+type AnnotationCard = {
+  sourceId: string;
+  noteId: string;
+  kind: "highlight" | "comment";
+  color: string | null;
+  quotedText: string | null;
+  draft: string;
+  saved: string; // comment as loaded; Save enables on change
+  top: number;
+  left: number;
+  busy: boolean;
+};
+
+const HIGHLIGHT_HUES = ["clay", "sage", "gold", "plum"] as const;
+const HUE_DOT: Record<(typeof HIGHLIGHT_HUES)[number], string> = {
+  clay: "var(--clay-400)",
+  sage: "var(--sage-500)",
+  gold: "#d9a54a",
+  plum: "#a78bfa",
+};
+
 // Client layer over the reader: selection capture, popover, EXPLAIN bubble,
 // SIMPLIFY bubble, SALIENCE overlay toggle, EXTRACT, jump-to-anchor.
 export function ReaderInteractions({
@@ -215,6 +239,7 @@ export function ReaderInteractions({
   title,
   blocks,
   anchorHighlights,
+  annotationsBySource,
   annotationBubbles,
   salienceByBlock,
   hasSalience,
@@ -235,6 +260,18 @@ export function ReaderInteractions({
   anchorHighlights: Record<
     string,
     { sourceId: string; start: number; end: number; color: string | null; annotation: boolean }[]
+  >;
+  // Highlights and comments by source id: clicking their mark opens the
+  // on-mark card with edit, recolor, and delete.
+  annotationsBySource: Record<
+    string,
+    {
+      noteId: string;
+      kind: "highlight" | "comment";
+      color: string | null;
+      content: string;
+      quotedText: string | null;
+    }
   >;
   // Stored EXPLAIN and SIMPLIFY output by source id: clicking their mark
   // reopens the bubble with this content.
@@ -324,13 +361,20 @@ export function ReaderInteractions({
   blocksRef.current = blocks;
   const annotationBubblesRef = useRef(annotationBubbles);
   annotationBubblesRef.current = annotationBubbles;
+  const annotationsBySourceRef = useRef(annotationsBySource);
+  annotationsBySourceRef.current = annotationsBySource;
+  const [annotationCard, setAnnotationCard] = useState<AnnotationCard | null>(null);
   const anchorHighlightsRef = useRef(anchorHighlights);
   anchorHighlightsRef.current = anchorHighlights;
   const [assistantChat, setAssistantChat] = useState<AssistantChat | null>(null);
   const chatScrollRef = useRef<HTMLDivElement>(null);
   const overlayOpenRef = useRef(false);
   overlayOpenRef.current =
-    popover !== null || bubble !== null || simplifyCard !== null || assistantChat !== null;
+    popover !== null ||
+    bubble !== null ||
+    simplifyCard !== null ||
+    assistantChat !== null ||
+    annotationCard !== null;
   // The mouseup that ends a hold-and-circle gesture must not run selection
   // capture — it would replace the figure popover it just opened.
   const suppressNextMouseUp = useRef(false);
@@ -814,9 +858,39 @@ export function ReaderInteractions({
       const { sourceId } = (e as CustomEvent<{ sourceId: string }>).detail;
       const stored = annotationBubblesRef.current[sourceId];
       if (!stored) {
-        window.dispatchEvent(
-          new CustomEvent("dissect:focus-annotation", { detail: { sourceId } }),
-        );
+        // Highlight or comment: the on-mark card, right below the mark.
+        const summary = annotationsBySourceRef.current[sourceId];
+        const container = containerRef.current;
+        const markEl = container?.querySelector<HTMLElement>(`[data-source-id="${sourceId}"]`);
+        if (!summary || !container || !markEl) {
+          window.dispatchEvent(
+            new CustomEvent("dissect:focus-annotation", { detail: { sourceId } }),
+          );
+          return;
+        }
+        const containerRect = container.getBoundingClientRect();
+        const markRect = markEl.getBoundingClientRect();
+        const width = 300;
+        // A pure highlight stores its quote as content; its comment starts empty.
+        const comment = summary.content === (summary.quotedText ?? "") ? "" : summary.content;
+        setAnnotationCard({
+          sourceId,
+          noteId: summary.noteId,
+          kind: summary.kind,
+          color: summary.color,
+          quotedText: summary.quotedText,
+          draft: comment,
+          saved: comment,
+          top: markRect.bottom - containerRect.top + container.scrollTop + 8,
+          left: Math.max(
+            12,
+            Math.min(
+              markRect.left - containerRect.left + container.scrollLeft,
+              container.clientWidth - width - 12,
+            ),
+          ),
+          busy: false,
+        });
         return;
       }
       const container = containerRef.current;
@@ -870,6 +944,19 @@ export function ReaderInteractions({
     return () => window.removeEventListener("dissect:open-annotation", onOpen);
      
   }, []);
+
+  // The on-mark card closes on a click anywhere else. A click on another mark
+  // stays: the open handler replaces the card.
+  useEffect(() => {
+    if (!annotationCard) return;
+    const onMouseDown = (e: MouseEvent) => {
+      const target = e.target as Element | null;
+      if (target?.closest("[data-selection-popover], [data-source-id]")) return;
+      setAnnotationCard(null);
+    };
+    window.addEventListener("mousedown", onMouseDown);
+    return () => window.removeEventListener("mousedown", onMouseDown);
+  }, [annotationCard]);
 
   // ¶ chips in AI text (Markdown) jump to the block they cite.
   useEffect(() => {
@@ -1006,7 +1093,17 @@ export function ReaderInteractions({
         const chunk = decoder.decode(value, { stream: true });
         setBubble((b) => (b ? { ...b, text: b.text + chunk } : b));
       }
-      setBubble((b) => (b ? { ...b, streaming: false } : b));
+      // A failure mid-stream arrives in-band; an empty stream is a failure too.
+      setBubble((b) => {
+        if (!b) return b;
+        const { text, error } = splitStreamError(b.text);
+        return {
+          ...b,
+          text,
+          streaming: false,
+          error: error ?? (text.trim() ? null : "The model returned an empty response. Try again."),
+        };
+      });
       router.refresh();
     } catch (err) {
       const message = err instanceof Error ? err.message : "Derive failed";
@@ -1042,12 +1139,78 @@ export function ReaderInteractions({
         const chunk = decoder.decode(value, { stream: true });
         setSimplifyCard((c) => (c ? { ...c, text: c.text + chunk } : c));
       }
-      setSimplifyCard((c) =>
-        c ? { ...c, streaming: false, sentences: parseSimplified(c.text), active: null } : c,
-      );
+      // A failure mid-stream arrives in-band; an empty stream is a failure too.
+      setSimplifyCard((c) => {
+        if (!c) return c;
+        const { text, error } = splitStreamError(c.text);
+        return {
+          ...c,
+          text,
+          streaming: false,
+          error: error ?? (text.trim() ? null : "The model returned an empty response. Try again."),
+          sentences: error || !text.trim() ? null : parseSimplified(text),
+          active: null,
+        };
+      });
     } catch (err) {
       const message = err instanceof Error ? err.message : "Simplify failed";
       setSimplifyCard((c) => (c ? { ...c, streaming: false, error: message } : c));
+    }
+  }
+
+  // On-mark card actions: recolor, save the comment, delete. Every action
+  // syncs through the normal notes API and refreshes the painted marks.
+  async function recolorAnnotation(color: (typeof HIGHLIGHT_HUES)[number]) {
+    const card = annotationCard;
+    if (!card || card.busy || card.color === color) return;
+    setAnnotationCard({ ...card, color, busy: true });
+    try {
+      await api(`/api/notes/${card.noteId}`, "PATCH", { color });
+      router.refresh();
+      setAnnotationCard((c) => (c && c.sourceId === card.sourceId ? { ...c, busy: false } : c));
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Recolor failed");
+      setAnnotationCard((c) =>
+        c && c.sourceId === card.sourceId ? { ...c, color: card.color, busy: false } : c,
+      );
+    }
+  }
+
+  async function saveAnnotation() {
+    const card = annotationCard;
+    if (!card || card.busy) return;
+    const draft = card.draft.trim();
+    // A comment needs text; a highlight with its comment cleared keeps the
+    // quote as content — the same convention the create route uses.
+    const content = draft || (card.kind === "highlight" ? (card.quotedText ?? "").slice(0, 5000) : "");
+    if (!content) {
+      showToast("Comment is empty. Delete removes it.");
+      return;
+    }
+    setAnnotationCard({ ...card, busy: true });
+    try {
+      await api(`/api/notes/${card.noteId}`, "PATCH", { content });
+      router.refresh();
+      setAnnotationCard(null);
+      showToast("Saved");
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Save failed");
+      setAnnotationCard((c) => (c ? { ...c, busy: false } : c));
+    }
+  }
+
+  async function deleteAnnotation() {
+    const card = annotationCard;
+    if (!card || card.busy) return;
+    setAnnotationCard({ ...card, busy: true });
+    try {
+      await api(`/api/notes/${card.noteId}`, "DELETE");
+      router.refresh();
+      setAnnotationCard(null);
+      showToast(card.kind === "highlight" ? "Highlight removed" : "Comment removed");
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Delete failed");
+      setAnnotationCard((c) => (c ? { ...c, busy: false } : c));
     }
   }
 
@@ -1761,6 +1924,72 @@ export function ReaderInteractions({
       />
 
       <Bibliography references={references} />
+
+      {annotationCard && (
+        <div
+          data-selection-popover
+          className="absolute z-30 w-[300px] rounded-2xl bg-card p-3 shadow-float"
+          style={{ top: annotationCard.top, left: annotationCard.left }}
+        >
+          <div className="mb-2 flex items-center justify-between">
+            <span className="text-[11px] font-bold tracking-[0.08em] text-sand-600 uppercase">
+              {annotationCard.kind === "highlight" ? "Highlight" : "Comment"}
+            </span>
+            <button
+              onClick={() => setAnnotationCard(null)}
+              aria-label="Close"
+              className="rounded-full px-1.5 text-sand-500 hover:text-clay-800"
+            >
+              ✕
+            </button>
+          </div>
+          {annotationCard.kind === "highlight" && (
+            <div className="mb-2.5 flex items-center gap-2">
+              {HIGHLIGHT_HUES.map((color) => (
+                <button
+                  key={color}
+                  onClick={() => void recolorAnnotation(color)}
+                  disabled={annotationCard.busy}
+                  aria-label={`Recolor ${color}`}
+                  title={`Recolor ${color}`}
+                  className={`size-5 rounded-full disabled:opacity-40 ${
+                    annotationCard.color === color ? "ring-2 ring-sand-600 ring-offset-2" : ""
+                  }`}
+                  style={{ background: HUE_DOT[color] }}
+                />
+              ))}
+            </div>
+          )}
+          <textarea
+            value={annotationCard.draft}
+            onChange={(e) =>
+              setAnnotationCard((c) => (c ? { ...c, draft: e.target.value } : c))
+            }
+            onKeyDown={(e) => {
+              if (e.key === "Escape") setAnnotationCard(null);
+            }}
+            placeholder="Add a comment"
+            rows={3}
+            className="w-full resize-none rounded-xl bg-sand-100 px-2.5 py-2 text-[13px] outline-none placeholder:text-sand-500"
+          />
+          <div className="mt-2 flex items-center justify-between">
+            <button
+              onClick={() => void deleteAnnotation()}
+              disabled={annotationCard.busy}
+              className="text-xs font-semibold text-red-500 hover:text-red-700 disabled:opacity-40"
+            >
+              Delete
+            </button>
+            <button
+              onClick={() => void saveAnnotation()}
+              disabled={annotationCard.busy || annotationCard.draft.trim() === annotationCard.saved.trim()}
+              className="rounded-full bg-clay px-3 py-1 text-[11px] font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
+            >
+              Save
+            </button>
+          </div>
+        </div>
+      )}
 
       {connectors.length > 0 && (
         <svg

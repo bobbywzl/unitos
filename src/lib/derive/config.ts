@@ -20,3 +20,17 @@ export const MAX_OUTPUT_TOKENS: Record<DerivationType, number> = {
 };
 
 export const ANNOTATIONS_SECTION_TITLE = "Annotations";
+
+// A streaming derivation commits HTTP 200 the moment the stream opens, so a
+// failure after that reports in-band: the stream ends with this token and the
+// reason. The client splits it off and shows the reason, never a silent stall.
+export const STREAM_ERROR_TOKEN = "\u0000error\u0000";
+
+export function splitStreamError(text: string): { text: string; error: string | null } {
+  const at = text.indexOf(STREAM_ERROR_TOKEN);
+  if (at === -1) return { text, error: null };
+  return {
+    text: text.slice(0, at),
+    error: text.slice(at + STREAM_ERROR_TOKEN.length) || "The model call failed.",
+  };
+}

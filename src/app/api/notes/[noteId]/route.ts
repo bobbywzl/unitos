@@ -7,6 +7,7 @@ import { parseBody } from "@/lib/validate";
 
 const patchSchema = z.object({
   content: z.string().min(1).max(50_000).optional(),
+  color: z.enum(["clay", "sage", "gold", "plum"]).optional(), // highlight hue
   order: z.number().int().min(0).optional(),
   sectionId: z.string().min(1).optional(),
   status: z.enum(["PENDING", "ACCEPTED", "REJECTED"]).optional(),
@@ -32,12 +33,13 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ noteId: strin
     });
   }
 
-  if (data.content !== undefined || data.status !== undefined) {
+  if (data.content !== undefined || data.status !== undefined || data.color !== undefined) {
     await db.note.update({
       where: { id: noteId },
       data: {
         ...(data.content !== undefined ? { content: data.content } : {}),
         ...(data.status !== undefined ? { status: data.status } : {}),
+        ...(data.color !== undefined ? { color: data.color } : {}),
       },
     });
     // Embeddings track accepted content: edits invalidate, accepts backfill (SPEC.md §2).

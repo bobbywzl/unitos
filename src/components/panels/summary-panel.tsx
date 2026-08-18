@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { splitStreamError } from "@/lib/derive/config";
 import { SUMMARY_DEPTHS, type SummaryDepth, type SummaryLevels } from "@/lib/types";
 import { Markdown } from "@/components/markdown";
 
@@ -60,12 +61,20 @@ export function SummaryPanel({
       }
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
+      let streamed = "";
       for (;;) {
         const { done, value } = await reader.read();
         if (done) break;
         const chunk = decoder.decode(value, { stream: true });
+        streamed += chunk;
         setTexts((t) => ({ ...t, [target]: (t[target] ?? "") + chunk }));
       }
+      // A failure mid-stream arrives in-band; an empty stream is a failure too.
+      const { text, error: streamError } = splitStreamError(streamed);
+      if (streamError || !text.trim()) {
+        throw new Error(streamError ?? "The model returned an empty response. Try again.");
+      }
+      setTexts((t) => ({ ...t, [target]: text }));
       router.refresh();
     } catch (err) {
       setTexts((t) => {

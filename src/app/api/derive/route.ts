@@ -3,7 +3,7 @@ import { streamText, type ModelMessage } from "ai";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { DERIVATION_MODEL, MAX_OUTPUT_TOKENS } from "@/lib/derive/config";
+import { DERIVATION_MODEL, MAX_OUTPUT_TOKENS, STREAM_ERROR_TOKEN } from "@/lib/derive/config";
 import {
   anchorContext,
   annotationsSection,
@@ -13,7 +13,7 @@ import {
 } from "@/lib/derive/context";
 import { fetchFigureImage, figureContent, type FigureImage } from "@/lib/derive/figure";
 import { extractOutputSchema, resolveSpan, salienceOutputSchema } from "@/lib/derive/json";
-import { callForJson } from "@/lib/derive/json-call";
+import { callForJson, modelErrorMessage } from "@/lib/derive/json-call";
 import { promptTemplates } from "@/lib/prompts";
 import type { PromptCtx } from "@/lib/prompts/types";
 import { SUMMARY_DEPTHS, type SummaryLevels } from "@/lib/types";
@@ -217,7 +217,25 @@ export async function POST(req: Request) {
         console.error("[derive] stream error:", err);
       },
     });
-    return result.toTextStreamResponse();
+    // The stream commits HTTP 200 when it opens, so a failure after that
+    // reports in-band: the stream ends with STREAM_ERROR_TOKEN + the reason,
+    // and the client shows it. A failed stream persists nothing.
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream<Uint8Array>({
+      async start(controller) {
+        try {
+          for await (const chunk of result.textStream) {
+            controller.enqueue(encoder.encode(chunk));
+          }
+        } catch (err) {
+          controller.enqueue(encoder.encode(`${STREAM_ERROR_TOKEN}${modelErrorMessage(err)}`));
+        }
+        controller.close();
+      },
+    });
+    return new Response(stream, {
+      headers: { "Content-Type": "text/plain; charset=utf-8" },
+    });
   }
 
   if (data.type === "SALIENCE") {

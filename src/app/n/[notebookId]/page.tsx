@@ -237,6 +237,30 @@ export default async function NotebookPage(props: {
         .filter((a): a is AnnotationItem => a !== null)
     : [];
 
+  // Highlights and comments by source id, for the on-mark card: clicking a
+  // mark edits, recolors, or deletes the annotation in place.
+  const annotationsBySource: Record<
+    string,
+    {
+      noteId: string;
+      kind: "highlight" | "comment";
+      color: string | null;
+      content: string;
+      quotedText: string | null;
+    }
+  > = {};
+  for (const a of annotations) {
+    if ((a.kind === "highlight" || a.kind === "comment") && a.sourceId) {
+      annotationsBySource[a.sourceId] = {
+        noteId: a.id,
+        kind: a.kind,
+        color: a.color,
+        content: a.content,
+        quotedText: a.quotedText,
+      };
+    }
+  }
+
   // Cross-document links for the open document: outgoing ranges paint as
   // hyperlinks in the text (healed like anchors); both directions list in the
   // Annotations tab.
@@ -569,6 +593,7 @@ export default async function NotebookPage(props: {
                 html: b.html,
               }))}
               anchorHighlights={anchorHighlights}
+              annotationsBySource={annotationsBySource}
               annotationBubbles={Object.fromEntries(
                 annotations
                   .filter((a) => (a.kind === "explain" || a.kind === "simplify") && a.sourceId)
