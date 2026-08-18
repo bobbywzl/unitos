@@ -346,6 +346,89 @@ mark,
   }
 }
 
+/* The cat runs laps around the ingest card's border, hopping as it goes.
+   Lap and hop durations randomize per run (--cat-lap, --cat-hop). Without
+   offset-path support the cat sits on the card's top right corner. */
+@keyframes cat-lap {
+  from {
+    offset-distance: 0%;
+  }
+  to {
+    offset-distance: 100%;
+  }
+}
+@keyframes cat-hop {
+  0%,
+  34%,
+  57%,
+  100% {
+    transform: translateY(0);
+  }
+  22% {
+    transform: translateY(-9px);
+  }
+  46% {
+    transform: translateY(-4px);
+  }
+  78% {
+    transform: translateY(-11px);
+  }
+}
+.cat-runner {
+  position: absolute;
+  top: -20px;
+  right: 20px;
+}
+@media (prefers-reduced-motion: no-preference) {
+  @supports (offset-path: inset(0 round 24px)) {
+    .cat-runner {
+      top: 0;
+      right: auto;
+      left: 0;
+      offset-path: inset(-10px round 28px);
+      offset-rotate: 0deg;
+      animation: cat-lap var(--cat-lap, 7.5s) linear infinite;
+    }
+  }
+  .cat-hopper {
+    animation: cat-hop var(--cat-hop, 0.9s) ease-in-out infinite;
+  }
+  .cat-runner-done,
+  .cat-runner-done .cat-hopper {
+    animation-play-state: paused;
+  }
+}
+
+/* Tool block loading: three dots that take turns jumping. */
+@keyframes dot-jump {
+  0%,
+  60%,
+  100% {
+    transform: translateY(0);
+  }
+  30% {
+    transform: translateY(-5px);
+  }
+}
+.loading-dot {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  border-radius: 9999px;
+  background: currentColor;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .loading-dot {
+    animation: dot-jump 0.9s ease-in-out infinite;
+  }
+  .loading-dot:nth-child(2) {
+    animation-delay: 0.15s;
+  }
+  .loading-dot:nth-child(3) {
+    animation-delay: 0.3s;
+  }
+}
+
 /* SIMPLIFY bubble: slides in beside the article (SPEC.md §6). */
 @keyframes bubble-in {
   from {

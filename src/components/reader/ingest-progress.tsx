@@ -1,3 +1,6 @@
+"use client";
+
+import { useState } from "react";
 import { CheckIcon, SpinnerIcon } from "@/components/icons";
 
 export type IngestStepStatus = "pending" | "active" | "done";
@@ -88,7 +91,8 @@ function DancingCat({ done }: { done: boolean }) {
 
 // Ingest progress card: what has loaded, what is being worked on, how far along.
 // Driven entirely by real backend stage events (see /api/documents), never a
-// simulated timer. The cat is there to ease the wait.
+// simulated timer. The cat runs laps around the card border to ease the wait —
+// gait randomized per run, paused when done or when reduced motion is set.
 export function IngestProgress({ fileLabel, steps }: { fileLabel: string; steps: IngestStep[] }) {
   const activeIndex = steps.findIndex((s) => s.status === "active");
   const doneCount = steps.filter((s) => s.status === "done").length;
@@ -98,11 +102,23 @@ export function IngestProgress({ fileLabel, steps }: { fileLabel: string; steps:
     ? steps.length
     : Math.min(activeIndex === -1 ? steps.length : activeIndex + 1, steps.length);
   const fillPercent = complete ? 100 : ((doneCount + (activeIndex === -1 ? 0 : 0.5)) / steps.length) * 100;
+  const [gait] = useState(() => ({
+    lap: 6.5 + Math.random() * 3,
+    hop: 0.7 + Math.random() * 0.5,
+  }));
 
   return (
     <div className="fixed top-24 left-1/2 z-50 w-[380px] max-w-[92vw] -translate-x-1/2 rounded-[24px] bg-card p-4 shadow-float">
+      <span
+        aria-hidden
+        className={`cat-runner${complete ? " cat-runner-done" : ""}`}
+        style={{ "--cat-lap": `${gait.lap}s`, "--cat-hop": `${gait.hop}s` } as React.CSSProperties}
+      >
+        <span className="cat-hopper inline-block">
+          <DancingCat done={complete} />
+        </span>
+      </span>
       <div className="flex items-center gap-3">
-        <DancingCat done={complete} />
         <div className="min-w-0 flex-1">
           <p className="truncate text-[13px] font-semibold text-sand-800">
             {complete ? "Done" : `${current.label}…`}

@@ -171,6 +171,7 @@ type ExplainBubble = {
   left: number;
   top: number;
   width: number;
+  side: "right" | "left"; // which article edge the card docks to
   text: string;
   streaming: boolean;
   error: string | null;
@@ -185,6 +186,7 @@ type AssistantChat = {
   left: number;
   top: number;
   width: number;
+  side: "right" | "left";
   messages: ChatMessage[];
   input: string;
   busy: boolean;
@@ -197,6 +199,7 @@ type SimplifyCard = {
   top: number;
   left: number;
   width: number;
+  side: "right" | "left";
   text: string;
   streaming: boolean;
   error: string | null;
@@ -228,6 +231,33 @@ const HUE_DOT: Record<(typeof HIGHLIGHT_HUES)[number], string> = {
   gold: "#d9a54a",
   plum: "#a78bfa",
 };
+
+// Three dots that take turns jumping: a tool block is waiting on the model.
+function LoadingDots() {
+  return (
+    <span aria-label="Loading" className="inline-flex items-center gap-1 py-1">
+      <span className="loading-dot" />
+      <span className="loading-dot" />
+      <span className="loading-dot" />
+    </span>
+  );
+}
+
+/** Horizontal dock for a side card: right next to the article on its side. */
+function dockSideCard(
+  side: "right" | "left",
+  articleLeft: number,
+  articleRight: number,
+  cw: number,
+) {
+  const margin = side === "right" ? cw - articleRight - 24 : articleLeft - 24;
+  const width = Math.max(260, Math.min(320, margin));
+  const left =
+    side === "right"
+      ? Math.min(articleRight + 16, cw - width - 8)
+      : Math.max(8, articleLeft - width - 16);
+  return { left, width };
+}
 
 // Client layer over the reader: selection capture, popover, EXPLAIN bubble,
 // SIMPLIFY bubble, SALIENCE overlay toggle, EXTRACT, jump-to-anchor.
@@ -379,6 +409,7 @@ export function ReaderInteractions({
     left: number;
     top: number;
     width: number;
+    side: "right" | "left";
     noteId: string | null; // null = comment not in annotationsBySource; read-only
     draft: string;
     saved: string;
@@ -428,13 +459,7 @@ export function ReaderInteractions({
       top = Math.min(...clears) + CARD_GAP;
       side = "right";
     }
-    const margin = side === "right" ? cw - articleRight - 24 : articleLeft - 24;
-    const width = Math.max(260, Math.min(320, margin));
-    const left =
-      side === "right"
-        ? Math.min(articleRight + 16, cw - width - 8)
-        : Math.max(8, articleLeft - width - 16);
-    return { left, top, width };
+    return { ...dockSideCard(side, articleLeft, articleRight, cw), top, side };
   }
   function closeExplain() {
     setBubble(null);
@@ -986,6 +1011,37 @@ export function ReaderInteractions({
     window.addEventListener("dissect:open-annotation", onOpen);
     return () => window.removeEventListener("dissect:open-annotation", onOpen);
      
+  }, []);
+
+  // Side cards dock to the article's edge; the notes tray collapsing or the
+  // window resizing moves that edge. Re-dock every open card so they stay
+  // right next to the content body. Position popovers close instead — their
+  // coordinates are stale the moment the layout shifts.
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    let lastWidth = container.clientWidth;
+    const observer = new ResizeObserver(() => {
+      const width = container.clientWidth;
+      if (width === lastWidth) return;
+      lastWidth = width;
+      const { articleLeft, articleRight, cw } = measureSideCards(container);
+      setBubble((b) => (b ? { ...b, ...dockSideCard(b.side, articleLeft, articleRight, cw) } : b));
+      setSimplifyCard((c) =>
+        c ? { ...c, ...dockSideCard(c.side, articleLeft, articleRight, cw) } : c,
+      );
+      setAssistantChat((c) =>
+        c ? { ...c, ...dockSideCard(c.side, articleLeft, articleRight, cw) } : c,
+      );
+      setCommentCard((c) =>
+        c ? { ...c, ...dockSideCard(c.side, articleLeft, articleRight, cw) } : c,
+      );
+      setAnnotationCard(null);
+      setPopover(null);
+      setSubmenu(null);
+    });
+    observer.observe(container);
+    return () => observer.disconnect();
   }, []);
 
   // The on-mark card closes on a click anywhere else. A click on another mark
@@ -2362,7 +2418,9 @@ export function ReaderInteractions({
               <Markdown>{bubble.text}</Markdown>
             </div>
           ) : (
-            <p className="text-sm text-sand-500">…</p>
+            <p className="text-sm text-sand-500">
+              <LoadingDots />
+            </p>
           )}
         </div>
       )}
@@ -2425,7 +2483,7 @@ export function ReaderInteractions({
             </p>
           ) : (
             <p className="max-h-96 overflow-y-auto text-[13.5px] leading-relaxed whitespace-pre-wrap">
-              {stripSimplifyMarkers(simplifyCard.text) || "…"}
+              {stripSimplifyMarkers(simplifyCard.text) || <LoadingDots />}
             </p>
           )}
         </div>
@@ -2559,7 +2617,12 @@ export function ReaderInteractions({
                 </div>
               ),
             )}
-            {assistantChat.busy && <p className="text-[12px] text-sand-500">Thinking…</p>}
+            {assistantChat.busy && (
+              <p className="flex items-center gap-1.5 text-[12px] text-sand-500">
+                Thinking
+                <LoadingDots />
+              </p>
+            )}
           </div>
           <form
             className="flex items-end gap-1.5 px-3 pb-3"
