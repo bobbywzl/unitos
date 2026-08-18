@@ -101,6 +101,7 @@ export function DocumentBar({
   const activeStale =
     active !== null && active.sourceUrl !== null && active.parserVersion < PARSER_VERSION;
 
+  // Manual re-parse: the progress card shows, errors show.
   async function reparse(doc: AttachedDocument) {
     setError(null);
     try {
@@ -115,11 +116,30 @@ export function DocumentBar({
     }
   }
 
+  // Automatic upgrade re-parse: the document already reads fine, so no
+  // progress card and no error banner — the reader never waits on it. Success
+  // swaps the upgraded blocks in with a refresh; failure logs and leaves the
+  // old parse standing until the next open tries again.
+  async function reparseSilently(doc: AttachedDocument) {
+    try {
+      const res = await fetch(`/api/documents/${doc.id}/reparse`, { method: "POST" });
+      if (!res.ok || !res.body) return;
+      let result: IngestEvent | null = null;
+      for await (const event of readNdjson<IngestEvent>(res)) {
+        if (!("stage" in event)) result = event;
+      }
+      if (result && "id" in result) router.refresh();
+      else if (result && "error" in result) console.warn("[reparse] upgrade failed:", result.error);
+    } catch (err) {
+      console.warn("[reparse] upgrade failed:", err);
+    }
+  }
+
   useEffect(() => {
     if (!activeStale || active === null || phase !== null) return;
     if (reparseAttempted.current.has(active.id)) return;
     reparseAttempted.current.add(active.id);
-    void reparse(active);
+    void reparseSilently(active);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeId, activeStale]);
 
