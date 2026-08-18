@@ -26,6 +26,11 @@ type Popover = {
   textLeft: number;
   truncated: boolean; // selection crossed into another paragraph; anchor covers the first
   figure?: boolean; // opened by the hold-and-circle gesture on a figure; no Simplify or Extract
+  // Placement, by proximity to open tool blocks: right of the text first, then
+  // left, then directly below the highlighted text. Bases are container coords.
+  side: "right" | "left" | "below";
+  rightBase: number;
+  cw: number;
 };
 
 // Hold the pointer on a figure and draw a small circle: the figure's tools open.
@@ -53,6 +58,47 @@ function circleSweepDegrees(points: { x: number; y: number }[]): number {
     prev = point;
   }
   return Math.abs((sweep * 180) / Math.PI);
+}
+
+// Live geometry of the open tool blocks, in container content coordinates.
+// Measured from the DOM so dragged and resized cards count where they are.
+type CardRect = { left: number; right: number; top: number; bottom: number };
+
+function measureSideCards(container: HTMLElement | null, excludeKind?: string) {
+  if (!container) {
+    return { rects: [] as CardRect[], articleLeft: 0, articleRight: 0, cw: 1200 };
+  }
+  const crect = container.getBoundingClientRect();
+  const arect = container.querySelector("article")?.getBoundingClientRect();
+  const cw = container.clientWidth;
+  const articleLeft = arect ? arect.left - crect.left : cw;
+  const articleRight = arect ? arect.right - crect.left : 0;
+  const rects = [...container.querySelectorAll<HTMLElement>("[data-side-card]")]
+    .filter((el) => el.dataset.sideCard !== excludeKind)
+    .map((el) => {
+      const r = el.getBoundingClientRect();
+      return {
+        left: r.left - crect.left,
+        right: r.right - crect.left,
+        top: r.top - crect.top + container.scrollTop,
+        bottom: r.bottom - crect.top + container.scrollTop,
+      };
+    });
+  return { rects, articleLeft, articleRight, cw };
+}
+
+function blocksOnSide(
+  rects: CardRect[],
+  articleMid: number,
+  side: "right" | "left",
+  top: number,
+  height: number,
+): CardRect[] {
+  return rects.filter((r) => {
+    const mid = (r.left + r.right) / 2;
+    const onSide = side === "right" ? mid >= articleMid : mid < articleMid;
+    return onSide && r.top < top + height && r.bottom > top;
+  });
 }
 
 type SpeechRec = {
@@ -124,6 +170,7 @@ type ExplainBubble = {
   text: string;
   streaming: boolean;
   error: string | null;
+  anchor: Anchor | null; // the highlighted text this bubble explains
 };
 
 type ChatMessage = { role: "user" | "assistant"; content: string };
@@ -269,45 +316,48 @@ export function ReaderInteractions({
   // capture — it would replace the figure popover it just opened.
   const suppressNextMouseUp = useRef(false);
 
-  // Floating cards dock beside the article, never over it: the first open card
-  // takes the right margin, the second the left, later ones stack below on the
-  // same sides. A slot frees when its card closes.
-  const sideSlots = useRef(new Map<"explain" | "simplify" | "assistant", number>());
+  // Tool block placement, by proximity to the highlighted text: with nothing
+  // beside it a new block goes right; with a block already close on the right
+  // it goes left; with both sides taken it drops below the existing blocks —
+  // right before left, top to bottom. Never over the article.
+  const CARD_ESTIMATE = 360;
+  const CARD_GAP = 14;
   function claimSideSlot(kind: "explain" | "simplify" | "assistant", preferredTop: number) {
-    const container = containerRef.current;
-    const article = container?.querySelector("article");
-    const used = new Set(sideSlots.current.values());
-    let index = 0;
-    while (used.has(index)) index++;
-    sideSlots.current.set(kind, index);
-    const cw = container?.clientWidth ?? 1200;
-    const crect = container?.getBoundingClientRect();
-    const arect = article?.getBoundingClientRect();
-    const articleLeft = crect && arect ? arect.left - crect.left : cw;
-    const articleRight = crect && arect ? arect.right - crect.left : 0;
-    const side = index % 2 === 0 ? "right" : "left";
-    const stack = Math.floor(index / 2);
+    const { rects, articleLeft, articleRight, cw } = measureSideCards(containerRef.current, kind);
+    const articleMid = (articleLeft + articleRight) / 2;
+    let top = Math.max(8, preferredTop);
+    let side: "right" | "left" = "right";
+    for (let step = 0; step < 12; step++) {
+      if (blocksOnSide(rects, articleMid, "right", top, CARD_ESTIMATE).length === 0) {
+        side = "right";
+        break;
+      }
+      if (blocksOnSide(rects, articleMid, "left", top, CARD_ESTIMATE).length === 0) {
+        side = "left";
+        break;
+      }
+      // Both sides busy at this height: drop below whichever clears first.
+      const clears = (["right", "left"] as const).map((s) =>
+        Math.max(...blocksOnSide(rects, articleMid, s, top, CARD_ESTIMATE).map((r) => r.bottom)),
+      );
+      top = Math.min(...clears) + CARD_GAP;
+      side = "right";
+    }
     const margin = side === "right" ? cw - articleRight - 24 : articleLeft - 24;
     const width = Math.max(260, Math.min(320, margin));
     const left =
       side === "right"
         ? Math.min(articleRight + 16, cw - width - 8)
         : Math.max(8, articleLeft - width - 16);
-    return { left, top: Math.max(8, preferredTop) + stack * 420, width };
-  }
-  function releaseSideSlot(kind: "explain" | "simplify" | "assistant") {
-    sideSlots.current.delete(kind);
+    return { left, top, width };
   }
   function closeExplain() {
-    releaseSideSlot("explain");
     setBubble(null);
   }
   function closeSimplify() {
-    releaseSideSlot("simplify");
     setSimplifyCard(null);
   }
   function closeAssistantChat() {
-    releaseSideSlot("assistant");
     setAssistantChat(null);
   }
 
@@ -361,7 +411,6 @@ export function ReaderInteractions({
     setBubble(null);
     setSimplifyCard(null);
     setAssistantChat(null);
-    sideSlots.current.clear();
     setEditMode(false);
     setCommentDraft("");
     setLocalAnchors({});
@@ -412,16 +461,30 @@ export function ReaderInteractions({
     const containerRect = container.getBoundingClientRect();
     const rawX = rect.left + rect.width / 2 - containerRect.left;
     const margin = Math.min(240, containerRect.width / 2);
-    // The tool rail docks in the left margin, level with the selection.
     const articleRect = container.querySelector("article")?.getBoundingClientRect();
     const textLeft = articleRect ? articleRect.left - containerRect.left + 24 : 24;
+    const yTop = Math.max(8, rect.top - containerRect.top + container.scrollTop);
+    // The rail's side follows the tool blocks nearby: right of the text when
+    // that side is clear, else left, else directly below the highlight.
+    const { rects, articleLeft, articleRight, cw } = measureSideCards(container);
+    const articleMid = (articleLeft + articleRight) / 2;
+    const POPOVER_ESTIMATE = 280;
+    const side =
+      blocksOnSide(rects, articleMid, "right", yTop, POPOVER_ESTIMATE).length === 0
+        ? ("right" as const)
+        : blocksOnSide(rects, articleMid, "left", yTop, POPOVER_ESTIMATE).length === 0
+          ? ("left" as const)
+          : ("below" as const);
     return {
       anchor: { blockId, startOffset, endOffset, quotedText, prefix, suffix },
       x: Math.max(margin, Math.min(rawX, containerRect.width - margin)),
       y: rect.bottom - containerRect.top + container.scrollTop + 6,
-      yTop: Math.max(8, rect.top - containerRect.top + container.scrollTop),
+      yTop,
       textLeft,
       truncated,
+      side,
+      rightBase: articleRight + 10,
+      cw,
     };
   }, []);
 
@@ -436,7 +499,6 @@ export function ReaderInteractions({
         setBubble(null);
         setSimplifyCard(null);
         setAssistantChat(null);
-        sideSlots.current.clear();
         window.getSelection()?.removeAllRanges();
         return;
       }
@@ -535,6 +597,54 @@ export function ReaderInteractions({
     container.addEventListener("dblclick", onDblClick);
     return () => container.removeEventListener("dblclick", onDblClick);
   }, []);
+
+  // Connector lines: each open tool block gets a faint line from the edge of
+  // its highlighted text to the card, so the correspondence is visible even
+  // with several cards open. Recomputed whenever a card opens, moves, or closes.
+  const [connectors, setConnectors] = useState<
+    { x1: number; y1: number; x2: number; y2: number }[]
+  >([]);
+  const [connectorHeight, setConnectorHeight] = useState(0);
+  useEffect(() => {
+    const raf = requestAnimationFrame(() => {
+      const container = containerRef.current;
+      if (!container) {
+        setConnectors([]);
+        return;
+      }
+      const crect = container.getBoundingClientRect();
+      const lines: { x1: number; y1: number; x2: number; y2: number }[] = [];
+      const anchors: Record<string, Anchor | null | undefined> = {
+        explain: bubble?.anchor,
+        simplify: simplifyCard?.anchor,
+        assistant: assistantChat?.anchor,
+      };
+      for (const el of container.querySelectorAll<HTMLElement>("[data-side-card]")) {
+        const anchor = anchors[el.dataset.sideCard ?? ""];
+        if (!anchor) continue;
+        const blockEl = container.querySelector<HTMLElement>(
+          `[data-block-id="${anchor.blockId}"], [data-edit-block="${anchor.blockId}"]`,
+        );
+        if (!blockEl) continue;
+        const b = blockEl.getBoundingClientRect();
+        const c = el.getBoundingClientRect();
+        const toY = (clientY: number) => clientY - crect.top + container.scrollTop;
+        const cardMidX = (c.left + c.right) / 2;
+        const blockMidX = (b.left + b.right) / 2;
+        const cardOnRight = cardMidX >= blockMidX;
+        const y1 = Math.min(Math.max(toY(c.top) + 20, toY(b.top) + 8), toY(b.bottom) - 8);
+        lines.push({
+          x1: (cardOnRight ? b.right : b.left) - crect.left,
+          y1,
+          x2: (cardOnRight ? c.left : c.right) - crect.left,
+          y2: toY(c.top) + 20,
+        });
+      }
+      setConnectors(lines);
+      setConnectorHeight(container.scrollHeight);
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [bubble, simplifyCard, assistantChat]);
 
   const chatMessageCount = assistantChat?.messages.length ?? 0;
   useEffect(() => {
@@ -697,14 +807,8 @@ export function ReaderInteractions({
         markEl && containerRect && container
           ? markEl.getBoundingClientRect().top - containerRect.top + container.scrollTop
           : 80;
-      if (stored.kind === "explain") {
-        releaseSideSlot("explain");
-        const slot = claimSideSlot("explain", top);
-        setBubble({ ...slot, text: stored.content, streaming: false, error: null });
-        return;
-      }
-      // SIMPLIFY: rebuild the anchor from the mark's highlight entry so the
-      // sentence mirroring works on reopen.
+      // Rebuild the anchor from the mark's highlight entry: the connector line
+      // needs it, and SIMPLIFY's sentence mirroring maps against it.
       let anchor: Anchor | null = null;
       for (const [blockId, list] of Object.entries(anchorHighlightsRef.current)) {
         const hit = list.find((h) => h.sourceId === sourceId);
@@ -721,13 +825,17 @@ export function ReaderInteractions({
         };
         break;
       }
+      if (stored.kind === "explain") {
+        const slot = claimSideSlot("explain", top);
+        setBubble({ ...slot, text: stored.content, streaming: false, error: null, anchor });
+        return;
+      }
       if (!anchor) {
         window.dispatchEvent(
           new CustomEvent("dissect:focus-annotation", { detail: { sourceId } }),
         );
         return;
       }
-      releaseSideSlot("simplify");
       const slot = claimSideSlot("simplify", top);
       setSimplifyCard({
         anchor,
@@ -797,6 +905,9 @@ export function ReaderInteractions({
       yTop: Math.max(8, y - 8),
       textLeft: Math.min(clientX - containerRect.left + 130, containerRect.width - 20),
       truncated: false,
+      side: "left",
+      rightBase: containerRect.width - 130,
+      cw: containerRect.width,
     });
   }
 
@@ -856,9 +967,8 @@ export function ReaderInteractions({
     await flushLiveBlock(anchor.blockId);
     setPopover(null);
     window.getSelection()?.removeAllRanges();
-    releaseSideSlot("explain");
     const slot = claimSideSlot("explain", yTop);
-    setBubble({ ...slot, text: "", streaming: true, error: null });
+    setBubble({ ...slot, text: "", streaming: true, error: null, anchor });
     try {
       const res = await fetch("/api/derive", {
         method: "POST",
@@ -893,7 +1003,6 @@ export function ReaderInteractions({
     await flushLiveBlock(anchor.blockId);
     setPopover(null);
     window.getSelection()?.removeAllRanges();
-    releaseSideSlot("simplify");
     const slot = claimSideSlot("simplify", yTop);
     setSimplifyCard({ anchor, ...slot, text: "", streaming: true, error: null, sentences: null, active: null });
     try {
@@ -1060,7 +1169,6 @@ export function ReaderInteractions({
       setAiCommand("");
       window.getSelection()?.removeAllRanges();
       // The conversation continues in a chat card docked beside the article.
-      releaseSideSlot("assistant");
       const slot = claimSideSlot("assistant", yTop);
       setAssistantChat({
         anchor,
@@ -1598,6 +1706,18 @@ export function ReaderInteractions({
         onDeleteBlock={deleteBlock}
       />
 
+      {connectors.length > 0 && (
+        <svg
+          aria-hidden
+          className="pointer-events-none absolute top-0 left-0 z-10 w-full"
+          style={{ height: connectorHeight }}
+        >
+          {connectors.map((line, i) => (
+            <line key={i} className="connector-line" {...line} />
+          ))}
+        </svg>
+      )}
+
       {popover && (
         <div
           data-selection-popover
@@ -1609,14 +1729,16 @@ export function ReaderInteractions({
             e.preventDefault();
           }}
           className="absolute z-20 flex flex-col gap-0.5 rounded-2xl bg-card p-1.5 shadow-float"
-          style={{
-            top: popover.yTop,
-            left: Math.max(
-              6,
-              popover.textLeft - (submenu === "ai" || submenu === "comment" ? 248 : 116) - 10,
-            ),
-            width: submenu === "ai" || submenu === "comment" ? 248 : 116,
-          }}
+          style={(() => {
+            const w = submenu === "ai" || submenu === "comment" ? 248 : 116;
+            if (popover.side === "right") {
+              return { top: popover.yTop, left: Math.min(popover.rightBase, popover.cw - w - 6), width: w };
+            }
+            if (popover.side === "below") {
+              return { top: popover.y, left: Math.max(6, Math.min(popover.x - w / 2, popover.cw - w - 6)), width: w };
+            }
+            return { top: popover.yTop, left: Math.max(6, popover.textLeft - w - 10), width: w };
+          })()}
         >
           {popover.truncated && (
             <p className="px-2.5 py-1 text-[10.5px] leading-snug text-sand-500">
@@ -1845,6 +1967,7 @@ export function ReaderInteractions({
       {bubble && (
         <div
           data-selection-popover
+          data-side-card="explain"
           className="bubble-in absolute z-20 rounded-[20px] border border-line bg-card/90 p-4 shadow-float backdrop-blur-md"
           style={{ left: bubble.left, top: bubble.top, width: bubble.width }}
         >
@@ -1884,6 +2007,7 @@ export function ReaderInteractions({
         <div
           key={`${simplifyCard.anchor.blockId}:${simplifyCard.anchor.startOffset}`}
           data-selection-popover
+          data-side-card="simplify"
           className="bubble-in absolute z-20 rounded-[20px] border border-line bg-card/80 p-4 shadow-float backdrop-blur-md"
           style={{ top: simplifyCard.top, left: simplifyCard.left, width: simplifyCard.width }}
         >
@@ -1946,6 +2070,7 @@ export function ReaderInteractions({
       {assistantChat && (
         <div
           data-selection-popover
+          data-side-card="assistant"
           className="bubble-in absolute z-20 flex resize flex-col overflow-hidden rounded-[20px] border border-line bg-card/95 shadow-float backdrop-blur-md"
           style={{
             left: assistantChat.left,

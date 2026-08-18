@@ -68,7 +68,7 @@ export function GuideDialog({ open, onClose }: { open: boolean; onClose: () => v
               press one and it goes solid while the original sentences it restates light up
               in the text. The rewrite is saved under Simplified in the Annotations tab;
               click the highlighted text any time to reopen the bubble. Drag any bubble by
-              its header to move it.
+              its header to move it; a faint line ties each bubble to the text it came from.
             </li>
             <li>
               <span className={term}>Extract</span> — the note-taking tool. It turns the

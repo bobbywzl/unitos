@@ -406,6 +406,13 @@ mark,
   line-height: 1.75;
 }
 
+/* Connector line: highlighted text → its tool block. Faint on purpose. */
+.connector-line {
+  stroke: color-mix(in srgb, var(--sand-500) 50%, transparent);
+  stroke-width: 1.5;
+  stroke-dasharray: 4 4;
+}
+
 /* Simplified bubble sentences: lightly tinted and pressable; the pressed one
    goes solid and its source sentences tint in the article. */
 .simplify-sentence {
