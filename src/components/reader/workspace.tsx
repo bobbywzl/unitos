@@ -185,19 +185,13 @@ export function Workspace({
 
         {!collapsed && (
           <aside className="flex min-h-0 w-[352px] shrink-0 flex-col gap-3.5 border-l border-line bg-sand-100 p-[18px] pb-4 print:hidden">
+            {/* The rail's chevron collapses the tray; the header stays clean. */}
             <div className="flex items-center gap-2.5">
               <span className="font-display text-[18px]">{TAB_TITLES[tab]}</span>
               {tab === "notes" && <span className="text-[13px] text-sand-600">{noteCount}</span>}
               {tab === "annotations" && annotationCount > 0 && (
                 <span className="text-[13px] text-sand-600">{annotationCount}</span>
               )}
-              <button
-                onClick={() => setCollapsed(true)}
-                aria-label="Collapse the notes tray"
-                className="ml-auto flex size-8 items-center justify-center rounded-full text-sand-600 hover:bg-clay-100 hover:text-clay-800"
-              >
-                <ChevronRightIcon size={16} />
-              </button>
             </div>
 
             <div className="min-h-0 flex-1 overflow-y-auto">

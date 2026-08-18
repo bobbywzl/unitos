@@ -84,7 +84,8 @@ export function GuideDialog({ open, onClose }: { open: boolean; onClose: () => v
             </li>
             <li>
               <span className={term}>Comment</span> — attach a comment to the selection without
-              a highlight.
+              a highlight. A small comment icon sits beside the text; click it to open the
+              comment in a card.
             </li>
             <li>
               <span className={term}>Add to</span> — file the selection verbatim as a note in a

@@ -17,6 +17,7 @@ export type Highlight = {
   definition?: string; // glossary hover text, kind "term" only
   color?: string | null; // highlight hue ("clay" | "sage" | "gold" | "plum"), kind "anchor" only
   annotation?: boolean; // anchor belongs to an annotation; click focuses its card
+  comment?: boolean; // comment annotation: a comment icon renders after the span
   href?: string; // navigation target, kinds "link" and "weblink"
   linkTitle?: string; // the other end's document title, kind "link" only
   linkId?: string; // for arrival flashing via ?link=, kind "link" only
@@ -122,6 +123,11 @@ function markedText(text: string, highlights: Highlight[]) {
       );
     } else if (anchor || salience || simplify) {
       const focusable = anchor?.annotation && anchor.sourceId;
+      // A comment's icon sits right after its span; SVG only, so the block's
+      // DOM text stays exactly the stored text (SPEC.md §5).
+      const commentEnding = covering.find(
+        (h) => h.kind === "anchor" && h.comment && h.sourceId && h.end === to,
+      );
       parts.push(
         <mark
           key={from}
@@ -144,6 +150,29 @@ function markedText(text: string, highlights: Highlight[]) {
           {segment}
         </mark>,
       );
+      if (commentEnding) {
+        parts.push(
+          <button
+            key={`comment-${from}`}
+            type="button"
+            aria-label="Open the comment"
+            title="Open the comment"
+            onClick={(e) => {
+              e.stopPropagation();
+              window.dispatchEvent(
+                new CustomEvent("dissect:open-annotation", {
+                  detail: { sourceId: commentEnding.sourceId },
+                }),
+              );
+            }}
+            className="comment-dot mx-0.5 inline-flex size-[16px] items-center justify-center rounded-full bg-clay-100 align-text-top text-clay-700 hover:bg-clay-200 hover:text-clay-800"
+          >
+            <svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+            </svg>
+          </button>,
+        );
+      }
     } else if (term) {
       // Glossary term: hover for the definition (SPEC.md §8 Phase 7).
       parts.push(

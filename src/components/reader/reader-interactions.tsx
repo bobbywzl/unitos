@@ -259,10 +259,17 @@ export function ReaderInteractions({
   blocks: BlockData[];
   anchorHighlights: Record<
     string,
-    { sourceId: string; start: number; end: number; color: string | null; annotation: boolean }[]
+    {
+      sourceId: string;
+      start: number;
+      end: number;
+      color: string | null;
+      annotation: boolean;
+      comment: boolean;
+    }[]
   >;
-  // Highlights and comments by source id: clicking their mark opens the
-  // on-mark card with edit, recolor, and delete.
+  // Highlights and comments by source id: their marks open on-page edit
+  // controls — recolor, comment text, delete.
   annotationsBySource: Record<
     string,
     {
@@ -273,9 +280,9 @@ export function ReaderInteractions({
       quotedText: string | null;
     }
   >;
-  // Stored EXPLAIN and SIMPLIFY output by source id: clicking their mark
-  // reopens the bubble with this content.
-  annotationBubbles: Record<string, { kind: "explain" | "simplify"; content: string }>;
+  // Stored EXPLAIN, SIMPLIFY, and comment content by source id: clicking their
+  // mark (or the comment icon) reopens the card with this content.
+  annotationBubbles: Record<string, { kind: "explain" | "simplify" | "comment"; content: string }>;
   salienceByBlock: Record<string, { start: number; end: number }[]>;
   hasSalience: boolean;
   termsByBlock: Record<string, { start: number; end: number; definition: string }[]>;
@@ -367,6 +374,17 @@ export function ReaderInteractions({
   const anchorHighlightsRef = useRef(anchorHighlights);
   anchorHighlightsRef.current = anchorHighlights;
   const [assistantChat, setAssistantChat] = useState<AssistantChat | null>(null);
+  // A stored comment, opened from its icon beside the text — editable in place.
+  const [commentCard, setCommentCard] = useState<{
+    left: number;
+    top: number;
+    width: number;
+    noteId: string | null; // null = comment not in annotationsBySource; read-only
+    draft: string;
+    saved: string;
+    busy: boolean;
+    anchor: Anchor | null;
+  } | null>(null);
   const chatScrollRef = useRef<HTMLDivElement>(null);
   const overlayOpenRef = useRef(false);
   overlayOpenRef.current =
@@ -374,7 +392,8 @@ export function ReaderInteractions({
     bubble !== null ||
     simplifyCard !== null ||
     assistantChat !== null ||
-    annotationCard !== null;
+    annotationCard !== null ||
+    commentCard !== null;
   // The mouseup that ends a hold-and-circle gesture must not run selection
   // capture — it would replace the figure popover it just opened.
   const suppressNextMouseUp = useRef(false);
@@ -385,7 +404,10 @@ export function ReaderInteractions({
   // right before left, top to bottom. Never over the article.
   const CARD_ESTIMATE = 360;
   const CARD_GAP = 14;
-  function claimSideSlot(kind: "explain" | "simplify" | "assistant", preferredTop: number) {
+  function claimSideSlot(
+    kind: "explain" | "simplify" | "assistant" | "comment",
+    preferredTop: number,
+  ) {
     const { rects, articleLeft, articleRight, cw } = measureSideCards(containerRef.current, kind);
     const articleMid = (articleLeft + articleRight) / 2;
     let top = Math.max(8, preferredTop);
@@ -422,6 +444,9 @@ export function ReaderInteractions({
   }
   function closeAssistantChat() {
     setAssistantChat(null);
+  }
+  function closeCommentCard() {
+    setCommentCard(null);
   }
 
   // Cards are freely moveable: drag the header. Buttons and inputs still work.
@@ -474,6 +499,8 @@ export function ReaderInteractions({
     setBubble(null);
     setSimplifyCard(null);
     setAssistantChat(null);
+    setCommentCard(null);
+    setAnnotationCard(null);
     setEditMode(false);
     setCommentDraft("");
     setLocalAnchors({});
@@ -562,6 +589,8 @@ export function ReaderInteractions({
         setBubble(null);
         setSimplifyCard(null);
         setAssistantChat(null);
+        setCommentCard(null);
+        setAnnotationCard(null);
         window.getSelection()?.removeAllRanges();
         return;
       }
@@ -681,6 +710,7 @@ export function ReaderInteractions({
         explain: bubble?.anchor,
         simplify: simplifyCard?.anchor,
         assistant: assistantChat?.anchor,
+        comment: commentCard?.anchor,
       };
       for (const el of container.querySelectorAll<HTMLElement>("[data-side-card]")) {
         const anchor = anchors[el.dataset.sideCard ?? ""];
@@ -707,7 +737,7 @@ export function ReaderInteractions({
       setConnectorHeight(container.scrollHeight);
     });
     return () => cancelAnimationFrame(raf);
-  }, [bubble, simplifyCard, assistantChat]);
+  }, [bubble, simplifyCard, assistantChat, commentCard]);
 
   const chatMessageCount = assistantChat?.messages.length ?? 0;
   useEffect(() => {
@@ -917,6 +947,19 @@ export function ReaderInteractions({
           suffix: "",
         };
         break;
+      }
+      if (stored.kind === "comment") {
+        const slot = claimSideSlot("comment", top);
+        const summary = annotationsBySourceRef.current[sourceId];
+        setCommentCard({
+          ...slot,
+          noteId: summary?.noteId ?? null,
+          draft: stored.content,
+          saved: stored.content,
+          busy: false,
+          anchor,
+        });
+        return;
       }
       if (stored.kind === "explain") {
         const slot = claimSideSlot("explain", top);
@@ -1211,6 +1254,42 @@ export function ReaderInteractions({
     } catch (err) {
       showToast(err instanceof Error ? err.message : "Delete failed");
       setAnnotationCard((c) => (c ? { ...c, busy: false } : c));
+    }
+  }
+
+  // The comment card edits in place too: same notes API, same refresh.
+  async function saveCommentCard() {
+    const card = commentCard;
+    if (!card || card.busy || !card.noteId) return;
+    const content = card.draft.trim();
+    if (!content) {
+      showToast("Comment is empty. Delete removes it.");
+      return;
+    }
+    setCommentCard({ ...card, busy: true });
+    try {
+      await api(`/api/notes/${card.noteId}`, "PATCH", { content });
+      router.refresh();
+      setCommentCard((c) => (c ? { ...c, saved: content, busy: false } : c));
+      showToast("Saved");
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Save failed");
+      setCommentCard((c) => (c ? { ...c, busy: false } : c));
+    }
+  }
+
+  async function deleteCommentCard() {
+    const card = commentCard;
+    if (!card || card.busy || !card.noteId) return;
+    setCommentCard({ ...card, busy: true });
+    try {
+      await api(`/api/notes/${card.noteId}`, "DELETE");
+      router.refresh();
+      setCommentCard(null);
+      showToast("Comment removed");
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Delete failed");
+      setCommentCard((c) => (c ? { ...c, busy: false } : c));
     }
   }
 
@@ -2348,6 +2427,83 @@ export function ReaderInteractions({
             <p className="max-h-96 overflow-y-auto text-[13.5px] leading-relaxed whitespace-pre-wrap">
               {stripSimplifyMarkers(simplifyCard.text) || "…"}
             </p>
+          )}
+        </div>
+      )}
+
+      {commentCard && (
+        <div
+          data-selection-popover
+          data-side-card="comment"
+          className="bubble-in absolute z-20 rounded-[20px] border border-line bg-card/90 p-4 shadow-float backdrop-blur-md"
+          style={{ left: commentCard.left, top: commentCard.top, width: commentCard.width }}
+        >
+          <div
+            onPointerDown={dragCard(
+              () => (commentCard ? { left: commentCard.left, top: commentCard.top } : null),
+              (left, top) => setCommentCard((c) => (c ? { ...c, left, top } : c)),
+            )}
+            style={{ touchAction: "none" }}
+            title="Drag to move"
+            className="mb-2 flex cursor-move items-center justify-between"
+          >
+            <span className="text-[11px] font-bold tracking-[0.08em] text-clay-800 uppercase">
+              Comment
+            </span>
+            <button
+              onClick={closeCommentCard}
+              className="text-xs text-sand-500 hover:text-clay-700"
+              aria-label="Close"
+            >
+              ✕
+            </button>
+          </div>
+          {commentCard.noteId ? (
+            <>
+              <textarea
+                value={commentCard.draft}
+                onChange={(e) =>
+                  setCommentCard((c) => (c ? { ...c, draft: e.target.value } : c))
+                }
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") setCommentCard(null);
+                }}
+                rows={4}
+                className="w-full resize-none rounded-xl bg-sand-100 px-2.5 py-2 text-[13px] outline-none placeholder:text-sand-500"
+              />
+              {commentCard.anchor && (
+                <p className="mt-2 line-clamp-2 border-l-2 border-sand-300 pl-2 text-xs text-sand-500">
+                  {commentCard.anchor.quotedText}
+                </p>
+              )}
+              <div className="mt-2 flex items-center justify-between">
+                <button
+                  onClick={() => void deleteCommentCard()}
+                  disabled={commentCard.busy}
+                  className="text-xs font-semibold text-red-500 hover:text-red-700 disabled:opacity-40"
+                >
+                  Delete
+                </button>
+                <button
+                  onClick={() => void saveCommentCard()}
+                  disabled={commentCard.busy || commentCard.draft.trim() === commentCard.saved.trim()}
+                  className="rounded-full bg-clay px-3 py-1 text-[11px] font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
+                >
+                  Save
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="max-h-80 overflow-y-auto text-[13px]">
+                <Markdown>{commentCard.draft}</Markdown>
+              </div>
+              {commentCard.anchor && (
+                <p className="mt-2 line-clamp-2 border-l-2 border-sand-300 pl-2 text-xs text-sand-500">
+                  {commentCard.anchor.quotedText}
+                </p>
+              )}
+            </>
           )}
         </div>
       )}
