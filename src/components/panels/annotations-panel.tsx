@@ -90,6 +90,7 @@ export function AnnotationsPanel({
   const highlights = annotations.filter((a) => a.kind === "highlight");
   const comments = annotations.filter((a) => a.kind === "comment");
   const explanations = annotations.filter((a) => a.kind === "explain");
+  const conversations = annotations.filter((a) => a.kind === "assistant");
   const simplifications = annotations.filter((a) => a.kind === "simplify");
 
   async function mutate(id: string, run: () => Promise<unknown>) {
@@ -180,6 +181,30 @@ export function AnnotationsPanel({
           {explanations.map((a) => (
             <div key={a.id} data-annotation-source-id={a.sourceId ?? undefined} className={card}>
               <div className="text-[13px]">
+                <Markdown>{a.content}</Markdown>
+              </div>
+              {a.orphaned && a.quotedText && (
+                <p className="mt-2 line-clamp-2 border-l-2 border-red-300 pl-2 text-xs text-sand-500">
+                  was anchored to: {a.quotedText}
+                </p>
+              )}
+              <AnnotationActions
+                annotation={a}
+                notebookId={notebookId}
+                documentId={documentId}
+                onDelete={deleteAnnotation}
+              />
+            </div>
+          ))}
+        </div>
+      )}
+
+      {conversations.length > 0 && (
+        <div className="flex flex-col gap-2">
+          <span className={label}>Assistant</span>
+          {conversations.map((a) => (
+            <div key={a.id} data-annotation-source-id={a.sourceId ?? undefined} className={card}>
+              <div className="max-h-56 overflow-y-auto text-[13px]">
                 <Markdown>{a.content}</Markdown>
               </div>
               {a.orphaned && a.quotedText && (

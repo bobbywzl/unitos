@@ -50,7 +50,7 @@ export type SummaryLevels = Partial<Record<SummaryDepth, string>>;
     carry the user's text. */
 export type AnnotationItem = {
   id: string; // note id
-  kind: "explain" | "simplify" | "highlight" | "comment";
+  kind: "explain" | "simplify" | "highlight" | "comment" | "assistant";
   content: string;
   color: string | null; // "clay" | "sage" | "gold" for highlights
   sourceId: string | null;
@@ -125,6 +125,8 @@ export type AssistantPlan = {
   reply: string | null;
   actions: AssistantAction[];
   warnings: string[];
+  // The persisted conversation note, when the chat is anchored to a selection.
+  conversationNoteId: string | null;
 };
 
 /** One row of the Edits tab. TEXT_EDIT rows can revert (PATCH the block back

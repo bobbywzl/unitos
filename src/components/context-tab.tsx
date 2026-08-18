@@ -142,7 +142,7 @@ export function ContextTab({
                 checked={scope === "notebook"}
                 onChange={() => setScope("notebook")}
               />
-              This work only
+              This corpus only
             </label>
           </div>
           {error && <p className="mt-2 text-xs text-red-500">{error}</p>}

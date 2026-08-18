@@ -191,9 +191,11 @@ export default async function NotebookPage(props: {
             ? ("explain" as const)
             : n.derivationType === "SIMPLIFY"
               ? ("simplify" as const)
-              : n.color
-                ? ("highlight" as const)
-                : ("comment" as const);
+              : n.derivationType === "SYNTHESIS"
+                ? ("assistant" as const)
+                : n.color
+                  ? ("highlight" as const)
+                  : ("comment" as const);
         return {
           id: n.id,
           kind,
@@ -206,15 +208,25 @@ export default async function NotebookPage(props: {
       })
       .filter((a): a is AnnotationItem => a !== null);
 
-    // Stored EXPLAIN, SIMPLIFY, and comment content by source id.
+    // Stored EXPLAIN, SIMPLIFY, comment, and assistant conversation content by
+    // source id: clicking the mark reopens the card with this content.
     const annotationBubbles = Object.fromEntries(
       annotations
         .filter(
-          (a) => (a.kind === "explain" || a.kind === "simplify" || a.kind === "comment") && a.sourceId,
+          (a) =>
+            (a.kind === "explain" ||
+              a.kind === "simplify" ||
+              a.kind === "comment" ||
+              a.kind === "assistant") &&
+            a.sourceId,
         )
         .map((a) => [
           a.sourceId as string,
-          { kind: a.kind as "explain" | "simplify" | "comment", content: a.content },
+          {
+            kind: a.kind as "explain" | "simplify" | "comment" | "assistant",
+            content: a.content,
+            noteId: a.id,
+          },
         ]),
     );
 

@@ -44,7 +44,7 @@ export function synthesisTaskPrompt(params: {
   return [
     profileLines(params.profile),
     "",
-    "The notebook's accepted notes and section skeleton are above.",
+    "The corpus's accepted notes and section skeleton are above.",
     "",
     TASK_INSTRUCTIONS[params.task],
     "",

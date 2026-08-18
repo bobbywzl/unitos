@@ -4,7 +4,13 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { DERIVATION_MODEL, MAX_OUTPUT_TOKENS } from "@/lib/derive/config";
-import { anchorContext, documentPrefix, loadProfile, sectionSkeleton } from "@/lib/derive/context";
+import {
+  anchorContext,
+  annotationsSection,
+  documentPrefix,
+  loadProfile,
+  sectionSkeleton,
+} from "@/lib/derive/context";
 import { fetchFigureImage, figureContent, type FigureImage } from "@/lib/derive/figure";
 import { callForJson, modelErrorMessage } from "@/lib/derive/json-call";
 import { profileLines } from "@/lib/prompts/types";
@@ -38,6 +44,8 @@ const requestSchema = z.object({
     )
     .max(20)
     .optional(),
+  // The persisted conversation note; later turns update it in place.
+  conversationNoteId: z.string().optional(),
 });
 
 const quote = z.string().min(1).max(2000);
@@ -150,14 +158,14 @@ async function handle(req: Request) {
   if (error) return error;
 
   const notebook = await db.notebook.findUnique({ where: { id: data.notebookId } });
-  if (!notebook) return NextResponse.json({ error: "Notebook not found" }, { status: 404 });
+  if (!notebook) return NextResponse.json({ error: "Corpus not found" }, { status: 404 });
   const attachment = await db.notebookDocument.findUnique({
     where: {
       notebookId_documentId: { notebookId: data.notebookId, documentId: data.documentId },
     },
   });
   if (!attachment) {
-    return NextResponse.json({ error: "Document is not attached to this notebook" }, { status: 404 });
+    return NextResponse.json({ error: "Document is not attached to this corpus" }, { status: 404 });
   }
   const document = await db.document.findUnique({
     where: { id: data.documentId },
@@ -231,11 +239,11 @@ async function handle(req: Request) {
     "",
     selectionBlock || "The reader has no text selected. The command applies to the document.",
     "",
-    `Sections in the notebook (id — title):\n${sections.length > 0 ? sections.map((s) => `${s.id} — ${s.parentTitle ? `${s.parentTitle} / ` : ""}${s.title}`).join("\n") : "none yet"}`,
+    `Sections in the corpus (id — title):\n${sections.length > 0 ? sections.map((s) => `${s.id} — ${s.parentTitle ? `${s.parentTitle} / ` : ""}${s.title}`).join("\n") : "none yet"}`,
     "",
     `Other attached documents (id — title):\n${otherDocs.length > 0 ? otherDocs.map((d) => `${d.id} — ${d.title}`).join("\n") : "none"}`,
     "",
-    `The reader's notes across the notebook (section: note):\n${
+    `The reader's notes across the corpus (section: note):\n${
       notes.filter((n) => !n.section.hidden).length > 0
         ? notes
             .filter((n) => !n.section.hidden)
@@ -392,6 +400,63 @@ async function handle(req: Request) {
     }
   }
 
-  const plan: AssistantPlan = { reply: result.data.reply, actions, warnings };
+  // An anchored conversation persists like EXPLAIN output: one note in the
+  // hidden Annotations section, anchored to the selection, updated per turn.
+  // Clicking the mark reopens the conversation; the Annotations tab deletes it.
+  let conversationNoteId: string | null = data.conversationNoteId ?? null;
+  if (data.anchor) {
+    const replyText =
+      result.data.reply ??
+      (actions.length > 0
+        ? `Applied ${actions.length} action${actions.length === 1 ? "" : "s"}.`
+        : "No actions proposed.");
+    const transcript = [
+      ...(data.history ?? []),
+      { role: "user" as const, content: data.command },
+      { role: "assistant" as const, content: replyText },
+    ]
+      .map((m) => `**${m.role === "user" ? "Reader" : "Assistant"}:** ${m.content}`)
+      .join("\n\n");
+    if (conversationNoteId) {
+      try {
+        await db.note.update({ where: { id: conversationNoteId }, data: { content: transcript } });
+      } catch {
+        conversationNoteId = null; // the note was deleted; a new one starts below
+      }
+    }
+    if (!conversationNoteId) {
+      const block = document.blocks.find((b) => b.id === data.anchor!.blockId);
+      if (block) {
+        const section = await annotationsSection(data.notebookId);
+        const count = await db.note.count({ where: { sectionId: section.id } });
+        const note = await db.note.create({
+          data: {
+            sectionId: section.id,
+            content: transcript,
+            status: "ACCEPTED",
+            derivationType: "SYNTHESIS",
+            order: count,
+            sources: {
+              create: {
+                documentId: data.documentId,
+                blockId: data.anchor.blockId,
+                startOffset: data.anchor.startOffset,
+                endOffset: data.anchor.endOffset,
+                quotedText: block.text.slice(data.anchor.startOffset, data.anchor.endOffset),
+                prefix: block.text.slice(
+                  Math.max(0, data.anchor.startOffset - 32),
+                  data.anchor.startOffset,
+                ),
+                suffix: block.text.slice(data.anchor.endOffset, data.anchor.endOffset + 32),
+              },
+            },
+          },
+        });
+        conversationNoteId = note.id;
+      }
+    }
+  }
+
+  const plan: AssistantPlan = { reply: result.data.reply, actions, warnings, conversationNoteId };
   return NextResponse.json(plan);
 }

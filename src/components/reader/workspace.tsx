@@ -135,7 +135,7 @@ export function Workspace({
       <header className="flex min-w-0 items-center gap-3.5 border-b border-line px-5 print:hidden">
         <Link
           href="/"
-          aria-label="All works"
+          aria-label="All corpora"
           className="flex size-[38px] shrink-0 items-center justify-center rounded-full text-sand-700 hover:bg-clay-100 hover:text-clay-800"
         >
           <ArrowLeftIcon size={18} />
@@ -235,6 +235,15 @@ export function Workspace({
           </button>
 
           <button
+            onClick={() => show("assistant")}
+            aria-label="Assistant"
+            aria-current={!collapsed && tab === "assistant"}
+            className={!collapsed && tab === "assistant" ? RAIL_BUTTON_ON : RAIL_BUTTON}
+          >
+            <SparkleIcon />
+          </button>
+
+          <button
             onClick={() => show("notes")}
             aria-label="Notes"
             aria-current={!collapsed && tab === "notes"}
@@ -246,15 +255,6 @@ export function Workspace({
                 {pending.length}
               </span>
             )}
-          </button>
-
-          <button
-            onClick={() => show("assistant")}
-            aria-label="Assistant"
-            aria-current={!collapsed && tab === "assistant"}
-            className={!collapsed && tab === "assistant" ? RAIL_BUTTON_ON : RAIL_BUTTON}
-          >
-            <SparkleIcon />
           </button>
 
           <button

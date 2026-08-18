@@ -15,7 +15,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ notebookId: st
   if (error) return error;
 
   const notebook = await db.notebook.findUnique({ where: { id: notebookId } });
-  if (!notebook) return NextResponse.json({ error: "Notebook not found" }, { status: 404 });
+  if (!notebook) return NextResponse.json({ error: "Corpus not found" }, { status: 404 });
   const document = await db.document.findUnique({ where: { id: data.documentId } });
   if (!document) return NextResponse.json({ error: "Document not found" }, { status: 404 });
 

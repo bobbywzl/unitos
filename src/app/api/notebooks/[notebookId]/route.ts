@@ -41,13 +41,13 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ notebookId: s
       },
     })
     .catch(() => null);
-  if (!notebook) return NextResponse.json({ error: "Notebook not found" }, { status: 404 });
+  if (!notebook) return NextResponse.json({ error: "Corpus not found" }, { status: 404 });
   return NextResponse.json(notebook);
 }
 
 export async function DELETE(_req: Request, ctx: { params: Promise<{ notebookId: string }> }) {
   const { notebookId } = await ctx.params;
   const notebook = await db.notebook.delete({ where: { id: notebookId } }).catch(() => null);
-  if (!notebook) return NextResponse.json({ error: "Notebook not found" }, { status: 404 });
+  if (!notebook) return NextResponse.json({ error: "Corpus not found" }, { status: 404 });
   return NextResponse.json({ ok: true });
 }

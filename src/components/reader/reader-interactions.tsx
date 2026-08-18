@@ -179,10 +179,23 @@ type ExplainBubble = {
 };
 
 type ChatMessage = { role: "user" | "assistant"; content: string };
+
+// Transcript format written by /api/assistant/act: "**Reader:** …" and
+// "**Assistant:** …" turns separated by blank lines.
+function parseConversation(content: string): ChatMessage[] {
+  const chunks = content.split(/\n\n(?=\*\*(?:Reader|Assistant):\*\* )/);
+  const messages: ChatMessage[] = [];
+  for (const chunk of chunks) {
+    const m = /^\*\*(Reader|Assistant):\*\* ([\s\S]*)$/.exec(chunk.trim());
+    if (m) messages.push({ role: m[1] === "Reader" ? "user" : "assistant", content: m[2] });
+  }
+  return messages.length > 0 ? messages : [{ role: "assistant", content }];
+}
 // The assistant as a miniature chat, docked beside the article. anchor = the
 // selection the conversation started from; every turn keeps applying to it.
 type AssistantChat = {
   anchor: Anchor | null;
+  noteId: string | null; // the persisted conversation note; turns update it
   left: number;
   top: number;
   width: number;
@@ -310,9 +323,12 @@ export function ReaderInteractions({
       quotedText: string | null;
     }
   >;
-  // Stored EXPLAIN, SIMPLIFY, and comment content by source id: clicking their
-  // mark (or the comment icon) reopens the card with this content.
-  annotationBubbles: Record<string, { kind: "explain" | "simplify" | "comment"; content: string }>;
+  // Stored EXPLAIN, SIMPLIFY, comment, and assistant conversation content by
+  // source id: clicking their mark (or icon) reopens the card with this content.
+  annotationBubbles: Record<
+    string,
+    { kind: "explain" | "simplify" | "comment" | "assistant"; content: string; noteId: string }
+  >;
   salienceByBlock: Record<string, { start: number; end: number }[]>;
   hasSalience: boolean;
   termsByBlock: Record<string, { start: number; end: number; definition: string }[]>;
@@ -523,6 +539,18 @@ export function ReaderInteractions({
   }
   function closeAssistantChat() {
     setAssistantChat(null);
+  }
+  async function deleteAssistantConversation() {
+    const chat = assistantChat;
+    if (!chat?.noteId || chat.busy) return;
+    try {
+      await api(`/api/notes/${chat.noteId}`, "DELETE");
+      setAssistantChat(null);
+      router.refresh();
+      showToast("Conversation removed");
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Delete failed");
+    }
   }
   function closeCommentCard() {
     setCommentCard(null);
@@ -1034,6 +1062,18 @@ export function ReaderInteractions({
           suffix: "",
         };
         break;
+      }
+      if (stored.kind === "assistant") {
+        const slot = claimSideSlot("assistant", top);
+        setAssistantChat({
+          anchor,
+          noteId: stored.noteId,
+          ...slot,
+          messages: parseConversation(stored.content),
+          input: "",
+          busy: false,
+        });
+        return;
       }
       if (stored.kind === "comment") {
         const slot = claimSideSlot("comment", top);
@@ -1558,7 +1598,7 @@ export function ReaderInteractions({
     setAiBusy(true);
     try {
       await flushLiveBlock(anchor.blockId);
-      const reply = await assistantTurn(command, anchor, []);
+      const turn = await assistantTurn(command, anchor, [], null);
       setPopover(null);
       setSubmenu(null);
       setAiCommand("");
@@ -1567,10 +1607,11 @@ export function ReaderInteractions({
       const slot = claimSideSlot("assistant", yTop);
       setAssistantChat({
         anchor,
+        noteId: turn.noteId,
         ...slot,
         messages: [
           { role: "user", content: command },
-          { role: "assistant", content: reply },
+          { role: "assistant", content: turn.reply },
         ],
         input: "",
         busy: false,
@@ -1588,7 +1629,8 @@ export function ReaderInteractions({
     command: string,
     anchor: Anchor | null,
     history: ChatMessage[],
-  ): Promise<string> {
+    conversationNoteId: string | null,
+  ): Promise<{ reply: string; noteId: string | null }> {
     const res = await fetch("/api/assistant/act", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1604,6 +1646,7 @@ export function ReaderInteractions({
             }
           : undefined,
         history: history.slice(-12),
+        conversationNoteId: conversationNoteId ?? undefined,
       }),
     });
     const plan = (await res.json().catch(() => null)) as
@@ -1624,7 +1667,9 @@ export function ReaderInteractions({
       }
     }
     if (parts.length === 0) parts.push(plan.warnings[0] ?? "The assistant proposed no actions.");
-    return parts.join("\n\n");
+    // The anchored conversation persisted server-side; refresh paints its mark.
+    if (plan.conversationNoteId) router.refresh();
+    return { reply: parts.join("\n\n"), noteId: plan.conversationNoteId ?? null };
   }
 
   async function sendChatMessage() {
@@ -1638,9 +1683,16 @@ export function ReaderInteractions({
         : c,
     );
     try {
-      const reply = await assistantTurn(text, chat.anchor, history);
+      const turn = await assistantTurn(text, chat.anchor, history, chat.noteId);
       setAssistantChat((c) =>
-        c ? { ...c, busy: false, messages: [...c.messages, { role: "assistant", content: reply }] } : c,
+        c
+          ? {
+              ...c,
+              busy: false,
+              noteId: turn.noteId ?? c.noteId,
+              messages: [...c.messages, { role: "assistant", content: turn.reply }],
+            }
+          : c,
       );
     } catch (err) {
       const message = err instanceof Error ? err.message : "Assistant failed";
@@ -2676,13 +2728,24 @@ export function ReaderInteractions({
             <span className="text-[11px] font-bold tracking-[0.08em] text-clay-800 uppercase">
               Assistant
             </span>
-            <button
-              onClick={closeAssistantChat}
-              className="text-xs text-sand-500 hover:text-clay-700"
-              aria-label="Close"
-            >
-              ✕
-            </button>
+            <span className="flex items-center gap-3">
+              {assistantChat.noteId && (
+                <button
+                  onClick={() => void deleteAssistantConversation()}
+                  className="text-xs font-semibold text-red-500 hover:text-red-700"
+                  title="Delete this conversation and its mark"
+                >
+                  Delete
+                </button>
+              )}
+              <button
+                onClick={closeAssistantChat}
+                className="text-xs text-sand-500 hover:text-clay-700"
+                aria-label="Close"
+              >
+                ✕
+              </button>
+            </span>
           </div>
           <div ref={chatScrollRef} className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-4 py-2">
             {assistantChat.messages.map((message, i) =>

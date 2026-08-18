@@ -19,7 +19,7 @@ export function extractPrompt(ctx: PromptCtx & { targetSectionId?: string | null
     "Context after the selection:",
     ctx.contextAfter || "(end of document)",
     "",
-    "Notebook sections:",
+    "Corpus sections:",
     skeleton || "(no sections yet)",
     "",
     "Write a note that captures what this passage contributes, for this reader's purpose.",

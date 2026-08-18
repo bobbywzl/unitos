@@ -36,7 +36,7 @@ export async function POST(req: Request) {
   }
 
   const notebook = await db.notebook.findUnique({ where: { id: data.notebookId } });
-  if (!notebook) return NextResponse.json({ error: "Notebook not found" }, { status: 404 });
+  if (!notebook) return NextResponse.json({ error: "Corpus not found" }, { status: 404 });
 
   const attachment = await db.notebookDocument.findUnique({
     where: {
@@ -44,7 +44,7 @@ export async function POST(req: Request) {
     },
   });
   if (!attachment) {
-    return NextResponse.json({ error: "Document is not attached to this notebook" }, { status: 404 });
+    return NextResponse.json({ error: "Document is not attached to this corpus" }, { status: 404 });
   }
 
   const block = await db.block.findUnique({ where: { id: data.anchor.blockId } });

@@ -14,7 +14,7 @@ export async function POST(req: Request) {
   if (error) return error;
 
   const notebook = await db.notebook.findUnique({ where: { id: data.notebookId } });
-  if (!notebook) return NextResponse.json({ error: "Notebook not found" }, { status: 404 });
+  if (!notebook) return NextResponse.json({ error: "Corpus not found" }, { status: 404 });
 
   if (data.parentId) {
     const parent = await db.section.findUnique({ where: { id: data.parentId } });

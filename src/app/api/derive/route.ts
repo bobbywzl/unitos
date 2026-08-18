@@ -65,7 +65,7 @@ export async function POST(req: Request) {
     },
   });
   if (!attachment) {
-    return NextResponse.json({ error: "Document is not attached to this notebook" }, { status: 404 });
+    return NextResponse.json({ error: "Document is not attached to this corpus" }, { status: 404 });
   }
 
   // 1. Load document blocks (the cached prompt prefix), profile, section skeleton.

@@ -69,14 +69,14 @@ async function handle(req: Request) {
   if (error) return error;
 
   if (data.task !== "ask" && data.scope !== "notebook") {
-    return NextResponse.json({ error: "This task runs at notebook scope" }, { status: 400 });
+    return NextResponse.json({ error: "This task runs at corpus scope" }, { status: 400 });
   }
   if (data.task === "ask" && !data.question) {
     return NextResponse.json({ error: "Question is required" }, { status: 400 });
   }
 
   const notebook = await db.notebook.findUnique({ where: { id: data.notebookId } });
-  if (!notebook) return NextResponse.json({ error: "Notebook not found" }, { status: 404 });
+  if (!notebook) return NextResponse.json({ error: "Corpus not found" }, { status: 404 });
   const profile = await loadProfile(data.notebookId);
 
   const model = anthropic(DERIVATION_MODEL.SYNTHESIS);
@@ -115,14 +115,14 @@ async function handle(req: Request) {
     }
   } else if (data.scope === "notebook") {
     system = await notebookContext(data.notebookId);
-    scopeLabel = "the notebook's accepted notes";
+    scopeLabel = "this corpus's accepted notes";
   } else {
     // With VOYAGE_API_KEY set, corpus search is semantic (embeddings);
     // without it, it falls back to Postgres full-text search.
     if (embeddingsConfigured()) await ensureNoteEmbeddings();
     const matches = await corpusSearch(data.question ?? "");
     system = corpusContext(data.question ?? "", matches);
-    scopeLabel = "corpus matches across all notebooks";
+    scopeLabel = "matches across all your corpora";
     cache = false; // query-dependent prefix
   }
 

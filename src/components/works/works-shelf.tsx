@@ -27,13 +27,13 @@ export function WorksShelf({ works }: { works: WorkItem[] }) {
   }
 
   async function remove(id: string) {
-    if (!confirm("Delete this work and all its notes?")) return;
+    if (!confirm("Delete this corpus and all its notes?")) return;
     await api(`/api/notebooks/${id}`, "DELETE");
     router.refresh();
   }
 
   async function rename(id: string, current: string) {
-    const next = prompt("Work title", current)?.trim();
+    const next = prompt("Corpus title", current)?.trim();
     if (!next || next === current) return;
     await api(`/api/notebooks/${id}`, "PATCH", { title: next });
     router.refresh();
@@ -41,7 +41,7 @@ export function WorksShelf({ works }: { works: WorkItem[] }) {
 
   return (
     <>
-      <h1 className="mb-7 text-[46px]">Works</h1>
+      <h1 className="mb-7 text-[46px]">Corpora</h1>
 
       <form
         className="mb-11 flex gap-2.5"
@@ -53,8 +53,8 @@ export function WorksShelf({ works }: { works: WorkItem[] }) {
         <input
           value={title}
           onChange={(e) => setTitle(e.target.value)}
-          placeholder="New work title"
-          aria-label="New work title"
+          placeholder="New corpus title"
+          aria-label="New corpus title"
           className="w-[340px] rounded-full bg-card px-5 py-3 text-sm shadow-soft outline-none placeholder:text-sand-500"
         />
         <button
@@ -72,7 +72,7 @@ export function WorksShelf({ works }: { works: WorkItem[] }) {
         ))}
         <li className="list-none">
           <button
-            onClick={() => document.querySelector<HTMLInputElement>("input[aria-label='New work title']")?.focus()}
+            onClick={() => document.querySelector<HTMLInputElement>("input[aria-label='New corpus title']")?.focus()}
             className="flex aspect-[5.5/8.5] w-full flex-col items-center justify-center gap-2 rounded-[18px] border-[1.5px] border-dashed border-sand-400 text-sm text-sand-600 hover:bg-clay-100 hover:text-clay-800"
           >
             <svg

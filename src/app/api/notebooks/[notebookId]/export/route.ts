@@ -112,7 +112,7 @@ async function toDocx(data: { title: string; sections: ExportSection[] }): Promi
 }
 
 function slug(title: string): string {
-  return title.replace(/[^\w\d]+/g, "-").replace(/^-+|-+$/g, "").toLowerCase() || "notebook";
+  return title.replace(/[^\w\d]+/g, "-").replace(/^-+|-+$/g, "").toLowerCase() || "corpus";
 }
 
 export async function GET(req: Request, ctx: { params: Promise<{ notebookId: string }> }) {
@@ -122,7 +122,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ notebookId: str
     return NextResponse.json({ error: "format must be md or docx" }, { status: 400 });
   }
   const data = await loadExport(notebookId);
-  if (!data) return NextResponse.json({ error: "Notebook not found" }, { status: 404 });
+  if (!data) return NextResponse.json({ error: "Corpus not found" }, { status: 404 });
 
   if (format === "md") {
     return new NextResponse(toMarkdown(data), {

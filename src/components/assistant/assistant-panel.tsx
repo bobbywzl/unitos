@@ -17,11 +17,13 @@ type SelectionDetail = {
   quotedText: string;
 };
 
-const SCOPES: { id: Scope; label: string }[] = [
-  { id: "selection", label: "Selection" },
-  { id: "document", label: "Document" },
-  { id: "notebook", label: "Notebook" },
-  { id: "corpus", label: "Corpus" },
+// Scope ids stay as wire values; the labels say Corpus for this binding of
+// documents and Corpora for all of them.
+const SCOPES: { id: Scope; label: string; hint: string }[] = [
+  { id: "selection", label: "Selection", hint: "The text you selected, with its document for context." },
+  { id: "document", label: "Document", hint: "The open document." },
+  { id: "notebook", label: "Corpus", hint: "This corpus: every attached document, in full, plus your notes." },
+  { id: "corpus", label: "Corpora", hint: "Search your notes across all corpora." },
 ];
 
 // Recommended functions for the open document, in this order. Insiders
@@ -274,6 +276,7 @@ export function AssistantPanel({
             key={s.id}
             onClick={() => setScope(s.id)}
             disabled={(s.id === "document" || s.id === "selection") && !documentId}
+            title={s.hint}
             className={`rounded-full px-3 py-1 text-xs font-semibold disabled:opacity-40 ${
               scope === s.id
                 ? "bg-ink text-paper"
@@ -284,6 +287,7 @@ export function AssistantPanel({
           </button>
         ))}
       </div>
+      <p className="text-xs text-sand-500">{SCOPES.find((s) => s.id === scope)?.hint}</p>
 
       {scope === "selection" && (
         <p className="truncate text-xs text-sand-500">

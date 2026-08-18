@@ -18,6 +18,9 @@ const createSchema = z.object({
 export async function POST(req: Request) {
   const { data, error } = await parseBody(req, createSchema);
   if (error) return error;
-  const notebook = await db.notebook.create({ data: { title: data.title } });
+  // Every corpus starts with a default Notes section.
+  const notebook = await db.notebook.create({
+    data: { title: data.title, sections: { create: { title: "Notes", order: 0 } } },
+  });
   return NextResponse.json(notebook, { status: 201 });
 }

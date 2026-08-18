@@ -70,7 +70,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "PDF is larger than 50MB" }, { status: 413 });
     }
     const notebook = await db.notebook.findUnique({ where: { id: fields.data.notebookId } });
-    if (!notebook) return NextResponse.json({ error: "Notebook not found" }, { status: 404 });
+    if (!notebook) return NextResponse.json({ error: "Corpus not found" }, { status: 404 });
 
     const bytes = new Uint8Array(await file.arrayBuffer());
     if (bytes.length < 5 || String.fromCharCode(...bytes.slice(0, 5)) !== "%PDF-") {
@@ -94,7 +94,7 @@ export async function POST(req: Request) {
   const { data, error } = await parseBody(req, urlSchema);
   if (error) return error;
   const notebook = await db.notebook.findUnique({ where: { id: data.notebookId } });
-  if (!notebook) return NextResponse.json({ error: "Notebook not found" }, { status: 404 });
+  if (!notebook) return NextResponse.json({ error: "Corpus not found" }, { status: 404 });
   return progressResponse(async (onProgress) => {
     try {
       const { document, deduped } = await parse.ingestUrl(data.url, onProgress);

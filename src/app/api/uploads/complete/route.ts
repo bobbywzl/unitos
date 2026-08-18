@@ -35,7 +35,7 @@ export async function POST(req: Request) {
   const { data, error } = await parseBody(req, bodySchema);
   if (error) return error;
   const notebook = await db.notebook.findUnique({ where: { id: data.notebookId } });
-  if (!notebook) return NextResponse.json({ error: "Notebook not found" }, { status: 404 });
+  if (!notebook) return NextResponse.json({ error: "Corpus not found" }, { status: 404 });
 
   const chunks = await db.uploadChunk.findMany({
     where: { uploadId: data.uploadId },

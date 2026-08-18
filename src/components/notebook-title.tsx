@@ -34,7 +34,7 @@ export function NotebookTitle({ id, title }: { id: string; title: string }) {
             setEditing(false);
           }
         }}
-        aria-label="Work title"
+        aria-label="Corpus title"
         className="min-w-0 rounded-full bg-card px-4 py-1 font-display text-xl shadow-soft outline-none"
       />
     );
@@ -44,7 +44,7 @@ export function NotebookTitle({ id, title }: { id: string; title: string }) {
     <button
       onClick={() => setEditing(true)}
       className="max-w-64 shrink-0 truncate font-display text-xl"
-      title="Rename work"
+      title="Rename corpus"
     >
       {title}
     </button>

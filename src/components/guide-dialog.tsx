@@ -73,7 +73,7 @@ export function GuideDialog({ open, onClose }: { open: boolean; onClose: () => v
             <li>
               <span className={term}>Extract</span> — the note-taking tool. It turns the
               selection into a note: the AI condenses the passage, proposes which section of
-              your notebook it belongs in, and keeps an anchor back to the exact words. The
+              your corpus it belongs in, and keeps an anchor back to the exact words. The
               note lands <span className={term}>pending</span> — nothing enters your notes until
               you accept it (Enter) or reject it (Backspace). Use it whenever a passage should
               become part of your notes without copying by hand.
@@ -110,7 +110,7 @@ export function GuideDialog({ open, onClose }: { open: boolean; onClose: () => v
             <li>
               <span className={term}>Context</span> (top bar) — who you are, why you read, what
               the notes feed. Injected into every AI prompt: notes, extraction, analysis. Every
-              field is optional; edit any time. Save it everywhere or for this work only.
+              field is optional; edit any time. Save it everywhere or for this corpus only.
             </li>
             <li>
               <span className={term}>Salience</span> (top right) — an overlay that marks the
@@ -159,8 +159,8 @@ export function GuideDialog({ open, onClose }: { open: boolean; onClose: () => v
           <span className={h}>Side panel</span>
           <p className="text-[13px] leading-relaxed text-sand-800">
             <span className={term}>Notes</span> — your sections and the pending queue.{" "}
-            <span className={term}>Assistant</span> — ask questions at document, notebook, or
-            corpus scope, and run checks (contradictions, gaps).{" "}
+            <span className={term}>Assistant</span> — ask questions at document, corpus, or
+            corpora scope, and run checks (contradictions, gaps).{" "}
             <span className={term}>Summary</span> — the whole document summarized at the depth
             you pick: layman, intermediate, or professional. Each depth is kept once generated.{" "}
             <span className={term}>Annotations</span> — highlights, comments, explanations,
