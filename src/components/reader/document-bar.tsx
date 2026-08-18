@@ -71,6 +71,8 @@ export function DocumentBar({
   const menuRef = useRef<HTMLDivElement>(null);
   const [phase, setPhase] = useState<IngestPhase | null>(null);
   const [menu, setMenu] = useState<null | "root" | "url" | "library">(null);
+  // Per-pill menu: document-specific actions live on the document's own pill.
+  const [pillMenu, setPillMenu] = useState<string | null>(null);
   const [url, setUrl] = useState("");
   const [library, setLibrary] = useState<LibraryDocument[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -90,6 +92,22 @@ export function DocumentBar({
       window.removeEventListener("keydown", onKeyDown);
     };
   }, [menu]);
+
+  useEffect(() => {
+    if (pillMenu === null) return;
+    const onPointerDown = (e: PointerEvent) => {
+      if (!(e.target as Element).closest("[data-pill-menu]")) setPillMenu(null);
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setPillMenu(null);
+    };
+    window.addEventListener("pointerdown", onPointerDown);
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("pointerdown", onPointerDown);
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [pillMenu]);
 
   // Opening a document keeps the reader view: view and doc2 ride along.
   function open(docId: string) {
@@ -330,8 +348,9 @@ export function DocumentBar({
 
   async function detach(documentId: string) {
     setMenu(null);
+    setPillMenu(null);
     await api(`/api/notebooks/${notebookId}/documents/${documentId}`, "DELETE");
-    router.push(`/n/${notebookId}`);
+    if (documentId === activeId) router.push(`/n/${notebookId}`);
     router.refresh();
   }
 
@@ -353,18 +372,75 @@ export function DocumentBar({
   return (
     <div className="flex min-w-0 items-center gap-2">
       {documents.map((d) => (
-        <button
-          key={d.id}
-          onClick={() => open(d.id)}
-          className={`max-w-56 truncate rounded-full text-[13px] ${
-            d.id === activeId
-              ? "bg-ink px-[15px] py-[7px] font-semibold text-paper"
-              : "border border-line px-3.5 py-1.5 text-sand-700 hover:bg-clay-100 hover:text-clay-800"
-          }`}
-          title={d.title}
-        >
-          {d.title}
-        </button>
+        <div key={d.id} data-pill-menu className="relative flex shrink-0 items-center">
+          <button
+            onClick={() => open(d.id)}
+            className={`max-w-56 truncate rounded-full pr-8 text-[13px] ${
+              d.id === activeId
+                ? "bg-ink py-[7px] pl-[15px] font-semibold text-paper"
+                : "border border-line py-1.5 pl-3.5 text-sand-700 hover:bg-clay-100 hover:text-clay-800"
+            }`}
+            title={d.title}
+          >
+            {d.title}
+          </button>
+          <button
+            onClick={() => setPillMenu(pillMenu === d.id ? null : d.id)}
+            aria-label={`Document actions: ${d.title}`}
+            aria-expanded={pillMenu === d.id}
+            title="Document actions"
+            className={`absolute right-2 flex size-5 items-center justify-center rounded-full ${
+              d.id === activeId
+                ? "text-sand-400 hover:bg-sand-800 hover:text-paper"
+                : "text-sand-500 hover:bg-clay-100 hover:text-clay-800"
+            }`}
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+              <circle cx="12" cy="5" r="2" />
+              <circle cx="12" cy="12" r="2" />
+              <circle cx="12" cy="19" r="2" />
+            </svg>
+          </button>
+          {pillMenu === d.id && (
+            <div className="absolute top-full left-0 z-30 mt-2 flex w-56 flex-col overflow-hidden rounded-2xl bg-card py-1 shadow-float">
+              {(d.sourceUrl !== null || d.hasFile) && (
+                <button
+                  onClick={() => {
+                    setPillMenu(null);
+                    void reparse(d);
+                  }}
+                  disabled={phase !== null}
+                  className={`${menuItem} disabled:opacity-40`}
+                  title="Parse this document again with the current parser"
+                >
+                  Re-parse document
+                </button>
+              )}
+              <button
+                onClick={() => {
+                  setPillMenu(null);
+                  window.print();
+                }}
+                disabled={d.id !== activeId}
+                className={`${menuItem} disabled:opacity-40`}
+                title={
+                  d.id === activeId
+                    ? "Print this document, article only"
+                    : "Open the document to print it"
+                }
+              >
+                Print document
+              </button>
+              <button
+                onClick={() => void detach(d.id)}
+                className="px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-950"
+                title="Detach this document from this work"
+              >
+                Detach document
+              </button>
+            </div>
+          )}
+        </div>
       ))}
 
       <div ref={menuRef} className="relative shrink-0">
@@ -409,40 +485,6 @@ export function DocumentBar({
                 <button onClick={() => void openLibrary()} className={menuItem}>
                   Library
                 </button>
-                {active && (active.sourceUrl !== null || active.hasFile) && (
-                  <button
-                    onClick={() => {
-                      setMenu(null);
-                      void reparse(active);
-                    }}
-                    disabled={phase !== null}
-                    className={`${menuItem} disabled:opacity-40`}
-                    title="Parse the open document again with the current parser"
-                  >
-                    Re-parse document
-                  </button>
-                )}
-                {activeId && (
-                  <button
-                    onClick={() => {
-                      setMenu(null);
-                      window.print();
-                    }}
-                    className={menuItem}
-                    title="Print the open document, article only"
-                  >
-                    Print document
-                  </button>
-                )}
-                {activeId && (
-                  <button
-                    onClick={() => void detach(activeId)}
-                    className="px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-950"
-                    title="Detach the open document from this work"
-                  >
-                    Detach open document
-                  </button>
-                )}
               </div>
             )}
 
