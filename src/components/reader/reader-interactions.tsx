@@ -165,6 +165,7 @@ export function ReaderInteractions({
   title,
   blocks,
   anchorHighlights,
+  annotationBubbles,
   salienceByBlock,
   hasSalience,
   termsByBlock,
@@ -183,6 +184,9 @@ export function ReaderInteractions({
     string,
     { sourceId: string; start: number; end: number; color: string | null; annotation: boolean }[]
   >;
+  // Stored EXPLAIN and SIMPLIFY output by source id: clicking their mark
+  // reopens the bubble with this content.
+  annotationBubbles: Record<string, { kind: "explain" | "simplify"; content: string }>;
   salienceByBlock: Record<string, { start: number; end: number }[]>;
   hasSalience: boolean;
   termsByBlock: Record<string, { start: number; end: number; definition: string }[]>;
@@ -252,6 +256,10 @@ export function ReaderInteractions({
   editModeRef.current = editMode;
   const blocksRef = useRef(blocks);
   blocksRef.current = blocks;
+  const annotationBubblesRef = useRef(annotationBubbles);
+  annotationBubblesRef.current = annotationBubbles;
+  const anchorHighlightsRef = useRef(anchorHighlights);
+  anchorHighlightsRef.current = anchorHighlights;
   const [assistantChat, setAssistantChat] = useState<AssistantChat | null>(null);
   const chatScrollRef = useRef<HTMLDivElement>(null);
   const overlayOpenRef = useRef(false);
@@ -301,6 +309,36 @@ export function ReaderInteractions({
   function closeAssistantChat() {
     releaseSideSlot("assistant");
     setAssistantChat(null);
+  }
+
+  // Cards are freely moveable: drag the header. Buttons and inputs still work.
+  function dragCard(
+    getPos: () => { left: number; top: number } | null,
+    apply: (left: number, top: number) => void,
+  ) {
+    return (e: React.PointerEvent) => {
+      if (e.button !== 0) return;
+      if ((e.target as Element).closest("button, textarea, input, a")) return;
+      const start = getPos();
+      if (!start) return;
+      e.preventDefault();
+      const fromX = e.clientX;
+      const fromY = e.clientY;
+      const container = containerRef.current;
+      const onMove = (ev: PointerEvent) => {
+        const maxLeft = (container?.clientWidth ?? 1200) - 80;
+        apply(
+          Math.max(4, Math.min(start.left + ev.clientX - fromX, maxLeft)),
+          Math.max(4, start.top + ev.clientY - fromY),
+        );
+      };
+      const onUp = () => {
+        window.removeEventListener("pointermove", onMove);
+        window.removeEventListener("pointerup", onUp);
+      };
+      window.addEventListener("pointermove", onMove);
+      window.addEventListener("pointerup", onUp);
+    };
   }
   // The fading hint that replaces the Edit button. Shows on document open until
   // the reader double-clicks into edit mode once.
@@ -638,6 +676,73 @@ export function ReaderInteractions({
     window.addEventListener("dissect:flash-source", onFlash);
     return () => window.removeEventListener("dissect:flash-source", onFlash);
   }, [flashSource]);
+
+  // Clicking an annotation mark: EXPLAIN and SIMPLIFY reopen their bubble with
+  // the stored content, beside the mark; everything else focuses its card in
+  // the Annotations tab.
+  useEffect(() => {
+    const onOpen = (e: Event) => {
+      const { sourceId } = (e as CustomEvent<{ sourceId: string }>).detail;
+      const stored = annotationBubblesRef.current[sourceId];
+      if (!stored) {
+        window.dispatchEvent(
+          new CustomEvent("dissect:focus-annotation", { detail: { sourceId } }),
+        );
+        return;
+      }
+      const container = containerRef.current;
+      const markEl = container?.querySelector<HTMLElement>(`[data-source-id="${sourceId}"]`);
+      const containerRect = container?.getBoundingClientRect();
+      const top =
+        markEl && containerRect && container
+          ? markEl.getBoundingClientRect().top - containerRect.top + container.scrollTop
+          : 80;
+      if (stored.kind === "explain") {
+        releaseSideSlot("explain");
+        const slot = claimSideSlot("explain", top);
+        setBubble({ ...slot, text: stored.content, streaming: false, error: null });
+        return;
+      }
+      // SIMPLIFY: rebuild the anchor from the mark's highlight entry so the
+      // sentence mirroring works on reopen.
+      let anchor: Anchor | null = null;
+      for (const [blockId, list] of Object.entries(anchorHighlightsRef.current)) {
+        const hit = list.find((h) => h.sourceId === sourceId);
+        if (!hit) continue;
+        const block = blocksRef.current.find((b) => b.id === blockId);
+        if (!block) break;
+        anchor = {
+          blockId,
+          startOffset: hit.start,
+          endOffset: hit.end,
+          quotedText: block.text.slice(hit.start, hit.end),
+          prefix: "",
+          suffix: "",
+        };
+        break;
+      }
+      if (!anchor) {
+        window.dispatchEvent(
+          new CustomEvent("dissect:focus-annotation", { detail: { sourceId } }),
+        );
+        return;
+      }
+      releaseSideSlot("simplify");
+      const slot = claimSideSlot("simplify", top);
+      setSimplifyCard({
+        anchor,
+        ...slot,
+        text: stored.content,
+        streaming: false,
+        error: null,
+        sentences: parseSimplified(stored.content),
+        active: null,
+      });
+    };
+    window.addEventListener("dissect:open-annotation", onOpen);
+    return () => window.removeEventListener("dissect:open-annotation", onOpen);
+     
+  }, []);
 
   // ¶ chips in AI text (Markdown) jump to the block they cite.
   useEffect(() => {
@@ -1743,7 +1848,15 @@ export function ReaderInteractions({
           className="bubble-in absolute z-20 rounded-[20px] border border-line bg-card/90 p-4 shadow-float backdrop-blur-md"
           style={{ left: bubble.left, top: bubble.top, width: bubble.width }}
         >
-          <div className="mb-2 flex items-center justify-between">
+          <div
+            onPointerDown={dragCard(
+              () => (bubble ? { left: bubble.left, top: bubble.top } : null),
+              (left, top) => setBubble((b) => (b ? { ...b, left, top } : b)),
+            )}
+            style={{ touchAction: "none" }}
+            title="Drag to move"
+            className="mb-2 flex cursor-move items-center justify-between"
+          >
             <span className="text-[11px] font-bold tracking-[0.08em] text-clay-800 uppercase">
               {bubble.streaming ? "Explaining…" : "Explanation"}
             </span>
@@ -1774,7 +1887,15 @@ export function ReaderInteractions({
           className="bubble-in absolute z-20 rounded-[20px] border border-line bg-card/80 p-4 shadow-float backdrop-blur-md"
           style={{ top: simplifyCard.top, left: simplifyCard.left, width: simplifyCard.width }}
         >
-          <div className="mb-2 flex items-center justify-between">
+          <div
+            onPointerDown={dragCard(
+              () => (simplifyCard ? { left: simplifyCard.left, top: simplifyCard.top } : null),
+              (left, top) => setSimplifyCard((c) => (c ? { ...c, left, top } : c)),
+            )}
+            style={{ touchAction: "none" }}
+            title="Drag to move"
+            className="mb-2 flex cursor-move items-center justify-between"
+          >
             <span className="text-[11px] font-bold tracking-[0.08em] text-sage-800 uppercase">
               {simplifyCard.streaming ? "Simplifying…" : "Simplified"}
             </span>
@@ -1837,7 +1958,15 @@ export function ReaderInteractions({
             maxHeight: "80vh",
           }}
         >
-          <div className="flex items-center justify-between px-4 pt-3 pb-1">
+          <div
+            onPointerDown={dragCard(
+              () => (assistantChat ? { left: assistantChat.left, top: assistantChat.top } : null),
+              (left, top) => setAssistantChat((c) => (c ? { ...c, left, top } : c)),
+            )}
+            style={{ touchAction: "none" }}
+            title="Drag to move"
+            className="flex cursor-move items-center justify-between px-4 pt-3 pb-1"
+          >
             <span className="text-[11px] font-bold tracking-[0.08em] text-clay-800 uppercase">
               Assistant
             </span>

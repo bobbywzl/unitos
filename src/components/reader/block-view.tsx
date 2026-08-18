@@ -92,14 +92,14 @@ function markedText(text: string, highlights: Highlight[]) {
               ? (e) => {
                   e.stopPropagation();
                   window.dispatchEvent(
-                    new CustomEvent("dissect:focus-annotation", {
+                    new CustomEvent("dissect:open-annotation", {
                       detail: { sourceId: anchor.sourceId },
                     }),
                   );
                 }
               : undefined
           }
-          className={`${anchor ? anchorClass(anchor.color) : salience ? "salience-mark" : "simplify-mark"}${anchors.length > 1 ? " hl-stacked" : ""} rounded-[4px] ${focusable ? "annotation-mark" : ""}${editedClass}`}
+          className={`${simplify ? "simplify-mark" : anchor ? anchorClass(anchor.color) : "salience-mark"}${anchors.length > 1 ? " hl-stacked" : ""} rounded-[4px] ${focusable ? "annotation-mark" : ""}${editedClass}`}
         >
           {segment}
         </mark>,
@@ -150,7 +150,7 @@ function HighlightLabel({ anchors }: { anchors: Highlight[] }) {
         focusable?.sourceId
           ? () =>
               window.dispatchEvent(
-                new CustomEvent("dissect:focus-annotation", {
+                new CustomEvent("dissect:open-annotation", {
                   detail: { sourceId: focusable.sourceId },
                 }),
               )

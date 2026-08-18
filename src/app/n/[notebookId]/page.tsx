@@ -542,6 +542,11 @@ export default async function NotebookPage(props: {
                 html: b.html,
               }))}
               anchorHighlights={anchorHighlights}
+              annotationBubbles={Object.fromEntries(
+                annotations
+                  .filter((a) => (a.kind === "explain" || a.kind === "simplify") && a.sourceId)
+                  .map((a) => [a.sourceId as string, { kind: a.kind as "explain" | "simplify", content: a.content }]),
+              )}
               salienceByBlock={salienceByBlock}
               hasSalience={hasSalience}
               termsByBlock={termsByBlock}

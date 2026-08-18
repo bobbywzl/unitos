@@ -58,15 +58,17 @@ export function GuideDialog({ open, onClose }: { open: boolean; onClose: () => v
             </li>
             <li>
               <span className={term}>Explain</span> — a short explanation of the selection,
-              tuned to your context. Saved under Annotations. When the AI cites a block, the
-              tag renders as a ¶ chip — click it to jump there.
+              tuned to your context. Saved under Annotations; click the highlighted text any
+              time to reopen the bubble. When the AI cites a block, the tag renders as a
+              ¶ chip — click it to jump there.
             </li>
             <li>
               <span className={term}>Simplify</span> — rewrites the selection in plain words,
               in a bubble beside the article. Each sentence in the bubble is lightly tinted:
               press one and it goes solid while the original sentences it restates light up
-              in the text. The rewrite is saved under Simplified in the Annotations tab, so
-              it is still there when you come back.
+              in the text. The rewrite is saved under Simplified in the Annotations tab;
+              click the highlighted text any time to reopen the bubble. Drag any bubble by
+              its header to move it.
             </li>
             <li>
               <span className={term}>Extract</span> — the note-taking tool. It turns the
