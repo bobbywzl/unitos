@@ -19,7 +19,6 @@ import type {
 import { AssistantPanel } from "@/components/assistant/assistant-panel";
 import { AnnotationsPanel } from "@/components/panels/annotations-panel";
 import { EditsPanel } from "@/components/panels/edits-panel";
-import { SummaryPanel } from "@/components/panels/summary-panel";
 import { ReaderInteractions } from "@/components/reader/reader-interactions";
 import { ReaderPanes, type ReaderViewKind } from "@/components/reader/reader-panes";
 import { Workspace } from "@/components/reader/workspace";
@@ -617,14 +616,11 @@ export default async function NotebookPage(props: {
         isSet: hasContext(contextValues),
       }}
       assistant={
-        <AssistantPanel notebookId={notebook.id} documentId={paneOne?.document.id ?? null} />
-      }
-      summaryPanel={
-        <SummaryPanel
+        <AssistantPanel
           key={paneOne?.document.id ?? "none"}
           notebookId={notebook.id}
           documentId={paneOne?.document.id ?? null}
-          initial={paneOne?.summaries ?? {}}
+          summaries={paneOne?.summaries ?? {}}
         />
       }
       annotationsPanel={
