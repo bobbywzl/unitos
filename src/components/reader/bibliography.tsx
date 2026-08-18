@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ChevronDownIcon, ChevronRightIcon } from "@/components/icons";
 import type { DocumentReference } from "@/lib/parse/types";
 
@@ -18,16 +18,25 @@ function referenceHost(url: string): string {
 // a URL link out. Print always shows the entries.
 export function Bibliography({ references }: { references: DocumentReference[] }) {
   const [open, setOpen] = useState(false);
+  const sectionRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
     const onOpenReference = (e: Event) => {
-      const referenceId = (e as CustomEvent).detail?.referenceId as string | undefined;
-      if (!referenceId) return;
+      const detail = (e as CustomEvent).detail as
+        | { referenceId?: string; origin?: Element }
+        | undefined;
+      const referenceId = detail?.referenceId;
+      if (!referenceId || !sectionRef.current) return;
+      // Split view runs one reader per pane: only the pane the citation was
+      // clicked in opens its References section.
+      const root = sectionRef.current.closest("[data-reader-root]");
+      if (detail?.origin && root && detail.origin.closest("[data-reader-root]") !== root) return;
       setOpen(true);
-      // Scroll after the expanded list paints. Retries while it does.
+      // Scroll after the expanded list paints. Retries while it does. The
+      // entry is found inside this section — pane ids can repeat across panes.
       let tries = 0;
       const seek = () => {
-        const el = document.getElementById(`reference-${referenceId}`);
+        const el = sectionRef.current?.querySelector<HTMLElement>(`#reference-${referenceId}`);
         if (el && el.getBoundingClientRect().height > 0) {
           el.scrollIntoView({ behavior: "smooth", block: "center" });
           el.classList.add("anchor-flash");
@@ -45,7 +54,7 @@ export function Bibliography({ references }: { references: DocumentReference[] }
   if (references.length === 0) return null;
 
   return (
-    <section className="mx-auto w-[720px] max-w-full px-6 pb-14 print:pb-0">
+    <section ref={sectionRef} className="mx-auto w-[720px] max-w-full px-6 pb-14 print:pb-0">
       <div className="border-t border-line pt-5">
         <button
           onClick={() => setOpen((v) => !v)}

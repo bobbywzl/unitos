@@ -1,5 +1,9 @@
 import type { BlockType } from "@prisma/client";
+import { LinkIcon, UnlinkIcon } from "@/components/icons";
 import { Equation } from "@/components/reader/equation";
+
+const CHAIN_BUTTON =
+  "link-chain mx-0.5 inline-flex size-[16px] items-center justify-center rounded-full bg-clay-100 align-text-top text-clay-700 hover:bg-clay-200 hover:text-clay-800";
 
 export type BlockData = {
   id: string;
@@ -85,6 +89,20 @@ function markedText(text: string, highlights: Highlight[]) {
           {segment}
         </a>,
       );
+      // A completed link carries a closed chain at its right side.
+      if (link.end === to) {
+        parts.push(
+          <a
+            key={`chain-${from}`}
+            href={link.href}
+            aria-label={link.linkTitle ? `Linked: ${link.linkTitle}` : "Linked"}
+            title={link.linkTitle ? `Linked: ${link.linkTitle}` : "Linked"}
+            className={CHAIN_BUTTON}
+          >
+            <LinkIcon size={10} />
+          </a>,
+        );
+      }
     } else if (citation) {
       // In-text citation: click jumps to its entry in the References section.
       parts.push(
@@ -98,7 +116,7 @@ function markedText(text: string, highlights: Highlight[]) {
             e.stopPropagation();
             window.dispatchEvent(
               new CustomEvent("dissect:open-reference", {
-                detail: { referenceId: citation.referenceId },
+                detail: { referenceId: citation.referenceId, origin: e.currentTarget },
               }),
             );
           }}
@@ -170,6 +188,32 @@ function markedText(text: string, highlights: Highlight[]) {
             <svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
               <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
             </svg>
+          </button>,
+        );
+      }
+      // A highlight's broken chain starts a link from it: the next text the
+      // reader highlights — this article or another — completes the link.
+      const linkStart = covering.find(
+        (h) => h.kind === "anchor" && h.color && h.sourceId && h.end === to,
+      );
+      if (linkStart) {
+        parts.push(
+          <button
+            key={`link-start-${from}`}
+            type="button"
+            aria-label="Link to other texts"
+            title="Link to other texts"
+            onClick={(e) => {
+              e.stopPropagation();
+              window.dispatchEvent(
+                new CustomEvent("dissect:start-link", {
+                  detail: { sourceId: linkStart.sourceId, origin: e.currentTarget },
+                }),
+              );
+            }}
+            className={CHAIN_BUTTON}
+          >
+            <UnlinkIcon size={10} />
           </button>,
         );
       }

@@ -293,6 +293,13 @@ mark,
 .reader-table a:hover {
   text-decoration-thickness: 2px;
 }
+/* A link whose two ends are visible in two panes: a dashed line between the marks. */
+.link-line {
+  stroke: var(--clay-500);
+  stroke-width: 1.5;
+  stroke-dasharray: 6 5;
+  opacity: 0.55;
+}
 
 /* Rendered markdown (notes, explanations, assistant answers). Pointing the
    typography plugin at the palette means one set of tokens covers both themes —

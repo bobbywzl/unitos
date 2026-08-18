@@ -368,12 +368,66 @@ export function ReaderInteractions({
   }, [blocks]);
 
   // Two-ended linking: the first selection waits here while the reader finds
-  // the other end — in this or any other attached document. Survives document
-  // switches on purpose.
+  // the other end — in this document, another attached document, or the other
+  // pane in a split view. Panes share the pending link through a window event.
   const [pendingLink, setPendingLink] = useState<{
     fromDocumentId: string;
     anchor: Anchor;
   } | null>(null);
+  const pendingLinkRef = useRef<{ fromDocumentId: string; anchor: Anchor } | null>(null);
+  pendingLinkRef.current = pendingLink;
+  const documentIdRef = useRef(documentId);
+  documentIdRef.current = documentId;
+
+  function broadcastPendingLink(next: { fromDocumentId: string; anchor: Anchor } | null) {
+    setPendingLink(next);
+    pendingLinkRef.current = next;
+    window.dispatchEvent(new CustomEvent("dissect:pending-link", { detail: next }));
+  }
+  useEffect(() => {
+    const onPending = (e: Event) => {
+      const next = (e as CustomEvent<{ fromDocumentId: string; anchor: Anchor } | null>).detail;
+      setPendingLink(next ?? null);
+      pendingLinkRef.current = next ?? null;
+    };
+    window.addEventListener("dissect:pending-link", onPending);
+    return () => window.removeEventListener("dissect:pending-link", onPending);
+  }, []);
+
+  // A highlight's broken chain starts a link from that highlight. Only the
+  // pane that owns the clicked chain handles the event.
+  useEffect(() => {
+    const onStartLink = (e: Event) => {
+      const { sourceId, origin } = (e as CustomEvent<{ sourceId: string; origin?: Element }>)
+        .detail;
+      const container = containerRef.current;
+      if (!container || !origin || !container.contains(origin)) return;
+      for (const [blockId, list] of Object.entries(anchorHighlightsRef.current)) {
+        const hit = list.find((h) => h.sourceId === sourceId);
+        if (!hit) continue;
+        const block = blocksRef.current.find((b) => b.id === blockId);
+        if (!block) return;
+        const next = {
+          fromDocumentId: documentIdRef.current,
+          anchor: {
+            blockId,
+            startOffset: hit.start,
+            endOffset: hit.end,
+            quotedText: block.text.slice(hit.start, hit.end),
+            prefix: "",
+            suffix: "",
+          },
+        };
+        setPendingLink(next);
+        pendingLinkRef.current = next;
+        window.dispatchEvent(new CustomEvent("dissect:pending-link", { detail: next }));
+        showToast("Highlight the other end to complete the link.");
+        return;
+      }
+    };
+    window.addEventListener("dissect:start-link", onStartLink);
+    return () => window.removeEventListener("dissect:start-link", onStartLink);
+  }, []);
 
   // The assistant as an actor: a command becomes a plan; the plan runs after
   // approval, or immediately when the reader toggled auto.
@@ -652,6 +706,13 @@ export function ReaderInteractions({
       if (document.activeElement?.closest("[data-selection-popover]")) return;
       requestAnimationFrame(() => {
         const captured = captureSelection();
+        // A pending link closes on the next highlighted text — no menu step.
+        if (captured && pendingLinkRef.current) {
+          setPopover(null);
+          setSubmenu(null);
+          void completeLinkTo(captured.anchor);
+          return;
+        }
         setPopover(captured);
         setSubmenu(null);
         setCommentDraft("");
@@ -667,6 +728,7 @@ export function ReaderInteractions({
     };
     container.addEventListener("mouseup", onMouseUp);
     return () => container.removeEventListener("mouseup", onMouseUp);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [captureSelection, documentId]);
 
   // Double-click a text block to edit it in place. The hint card teaches this
@@ -911,13 +973,15 @@ export function ReaderInteractions({
   useEffect(() => {
     const onOpen = (e: Event) => {
       const { sourceId } = (e as CustomEvent<{ sourceId: string }>).detail;
+      const container = containerRef.current;
+      // Another pane owns marks this pane does not paint.
+      if (!container?.querySelector(`[data-source-id="${sourceId}"]`)) return;
       const stored = annotationBubblesRef.current[sourceId];
       if (!stored) {
         // Highlight or comment: the on-mark card, right below the mark.
         const summary = annotationsBySourceRef.current[sourceId];
-        const container = containerRef.current;
-        const markEl = container?.querySelector<HTMLElement>(`[data-source-id="${sourceId}"]`);
-        if (!summary || !container || !markEl) {
+        const markEl = container.querySelector<HTMLElement>(`[data-source-id="${sourceId}"]`);
+        if (!summary || !markEl) {
           window.dispatchEvent(
             new CustomEvent("dissect:focus-annotation", { detail: { sourceId } }),
           );
@@ -948,13 +1012,11 @@ export function ReaderInteractions({
         });
         return;
       }
-      const container = containerRef.current;
-      const markEl = container?.querySelector<HTMLElement>(`[data-source-id="${sourceId}"]`);
-      const containerRect = container?.getBoundingClientRect();
-      const top =
-        markEl && containerRect && container
-          ? markEl.getBoundingClientRect().top - containerRect.top + container.scrollTop
-          : 80;
+      const markEl = container.querySelector<HTMLElement>(`[data-source-id="${sourceId}"]`);
+      const containerRect = container.getBoundingClientRect();
+      const top = markEl
+        ? markEl.getBoundingClientRect().top - containerRect.top + container.scrollTop
+        : 80;
       // Rebuild the anchor from the mark's highlight entry: the connector line
       // needs it, and SIMPLIFY's sentence mirroring maps against it.
       let anchor: Anchor | null = null;
@@ -1066,6 +1128,12 @@ export function ReaderInteractions({
         `[data-block-id="${blockId}"], [data-edit-block="${blockId}"]`,
       );
       if (!el) {
+        // Another pane may own the block; only toast when no pane does.
+        if (
+          document.querySelector(`[data-block-id="${blockId}"], [data-edit-block="${blockId}"]`)
+        ) {
+          return;
+        }
         setToast("That block is not in the open document.");
         if (toastTimer.current) clearTimeout(toastTimer.current);
         toastTimer.current = setTimeout(() => setToast(null), 5000);
@@ -1429,45 +1497,55 @@ export function ReaderInteractions({
   function beginLink() {
     if (!popover) return;
     void flushLiveBlock(popover.anchor.blockId);
-    setPendingLink({ fromDocumentId: documentId, anchor: popover.anchor });
+    broadcastPendingLink({ fromDocumentId: documentId, anchor: popover.anchor });
     setPopover(null);
     setSubmenu(null);
     window.getSelection()?.removeAllRanges();
   }
 
-  // Phase 2: the current selection is the other end. Both ends paint and
-  // navigate to each other; the pair lists in the Annotations tab.
-  async function completeLink() {
-    if (!popover || !pendingLink || busy) return;
-    const from = pendingLink.anchor;
-    const to = popover.anchor;
+  // Phase 2: an anchor is the other end — from a selection directly, or from
+  // the popover's option. Both ends paint and navigate to each other; the
+  // pair lists in the Annotations tab. Same-article ends are allowed.
+  async function completeLinkTo(to: Anchor): Promise<boolean> {
+    const pending = pendingLinkRef.current;
+    if (!pending || busy) return false;
+    const from = pending.anchor;
     if (
-      pendingLink.fromDocumentId === documentId &&
+      pending.fromDocumentId === documentId &&
       from.blockId === to.blockId &&
       from.startOffset === to.startOffset
     ) {
       showToast("Select a different passage for the other end.");
-      return;
+      return false;
     }
     setBusy(true);
     try {
       await flushLiveBlock(to.blockId);
       await api("/api/links", "POST", {
-        fromDocumentId: pendingLink.fromDocumentId,
+        fromDocumentId: pending.fromDocumentId,
         toDocumentId: documentId,
         anchor: from,
         toAnchor: to,
       });
-      setPendingLink(null);
-      setPopover(null);
-      setSubmenu(null);
+      broadcastPendingLink(null);
       window.getSelection()?.removeAllRanges();
       router.refresh();
       showToast("Link created");
+      return true;
     } catch (err) {
       showToast(err instanceof Error ? err.message : "Link failed");
+      return false;
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function completeLink() {
+    if (!popover) return;
+    const done = await completeLinkTo(popover.anchor);
+    if (done) {
+      setPopover(null);
+      setSubmenu(null);
     }
   }
 
@@ -1993,7 +2071,11 @@ export function ReaderInteractions({
   }
 
   return (
-    <div ref={containerRef} className="relative min-h-0 flex-1 overflow-y-auto print:overflow-visible">
+    <div
+      ref={containerRef}
+      data-reader-root
+      className="relative min-h-0 flex-1 overflow-y-auto print:overflow-visible"
+    >
       <div className="sticky top-4 z-10 float-right mr-4 flex items-center gap-2 print:hidden">
         {toast && (
           <span className="rounded-full bg-ink/90 px-3 py-1.5 text-xs text-paper">{toast}</span>
@@ -2670,7 +2752,7 @@ export function ReaderInteractions({
             — select the other end, then press Link here
           </span>
           <button
-            onClick={() => setPendingLink(null)}
+            onClick={() => broadcastPendingLink(null)}
             aria-label="Cancel the link"
             className="shrink-0 text-xs text-sand-500 hover:text-clay-700"
           >

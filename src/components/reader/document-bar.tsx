@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { Logo } from "@/components/logo";
@@ -66,6 +66,7 @@ export function DocumentBar({
   activeId: string | null;
 }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const fileRef = useRef<HTMLInputElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const [phase, setPhase] = useState<IngestPhase | null>(null);
@@ -90,8 +91,15 @@ export function DocumentBar({
     };
   }, [menu]);
 
+  // Opening a document keeps the reader view: view and doc2 ride along.
   function open(docId: string) {
-    router.push(`/n/${notebookId}?doc=${docId}`);
+    const params = new URLSearchParams();
+    params.set("doc", docId);
+    const view = searchParams.get("view");
+    const doc2 = searchParams.get("doc2");
+    if (view) params.set("view", view);
+    if (doc2) params.set("doc2", doc2);
+    router.push(`/n/${notebookId}?${params.toString()}`);
   }
 
   // Re-parse with the current parser. Runs automatically when the open document
