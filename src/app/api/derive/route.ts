@@ -3,7 +3,12 @@ import { streamText, type ModelMessage } from "ai";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { DERIVATION_MODEL, MAX_OUTPUT_TOKENS, STREAM_ERROR_TOKEN } from "@/lib/derive/config";
+import {
+  DERIVATION_MODEL,
+  MAX_OUTPUT_TOKENS,
+  STREAM_ERROR_TOKEN,
+  STREAM_NOTE_TOKEN,
+} from "@/lib/derive/config";
 import {
   anchorContext,
   annotationsSection,
@@ -181,37 +186,6 @@ export async function POST(req: Request) {
             data: { summaries: { ...current, [depth]: text } },
           });
         }
-        // EXPLAIN and SIMPLIFY persist in the hidden Annotations section, so
-        // the output is still there when the reader leaves and comes back.
-        if ((data.type === "EXPLAIN" || data.type === "SIMPLIFY") && data.anchor && text.trim()) {
-          const block = blockById.get(data.anchor.blockId);
-          if (!block) return;
-          const section = await annotationsSection(data.notebookId);
-          const count = await db.note.count({ where: { sectionId: section.id } });
-          await db.note.create({
-            data: {
-              sectionId: section.id,
-              content: text,
-              status: "ACCEPTED",
-              derivationType: data.type,
-              order: count,
-              sources: {
-                create: {
-                  documentId: data.documentId,
-                  blockId: data.anchor.blockId,
-                  startOffset: data.anchor.startOffset,
-                  endOffset: data.anchor.endOffset,
-                  quotedText: block.text.slice(data.anchor.startOffset, data.anchor.endOffset),
-                  prefix: block.text.slice(
-                    Math.max(0, data.anchor.startOffset - 32),
-                    data.anchor.startOffset,
-                  ),
-                  suffix: block.text.slice(data.anchor.endOffset, data.anchor.endOffset + 32),
-                },
-              },
-            },
-          });
-        }
       },
       onError: (err) => {
         console.error("[derive] stream error:", err);
@@ -220,15 +194,61 @@ export async function POST(req: Request) {
     // The stream commits HTTP 200 when it opens, so a failure after that
     // reports in-band: the stream ends with STREAM_ERROR_TOKEN + the reason,
     // and the client shows it. A failed stream persists nothing.
+    // EXPLAIN and SIMPLIFY persist in the hidden Annotations section before the
+    // stream closes, then the stream ends with STREAM_NOTE_TOKEN + the note id:
+    // the client's refresh always finds the stored mark, and the card can
+    // delete its annotation in place.
     const encoder = new TextEncoder();
     const stream = new ReadableStream<Uint8Array>({
       async start(controller) {
+        let text = "";
         try {
           for await (const chunk of result.textStream) {
+            text += chunk;
             controller.enqueue(encoder.encode(chunk));
           }
         } catch (err) {
           controller.enqueue(encoder.encode(`${STREAM_ERROR_TOKEN}${modelErrorMessage(err)}`));
+          controller.close();
+          return;
+        }
+        if ((data.type === "EXPLAIN" || data.type === "SIMPLIFY") && data.anchor && text.trim()) {
+          try {
+            const block = blockById.get(data.anchor.blockId);
+            if (block) {
+              const section = await annotationsSection(data.notebookId);
+              const count = await db.note.count({ where: { sectionId: section.id } });
+              const note = await db.note.create({
+                data: {
+                  sectionId: section.id,
+                  content: text,
+                  status: "ACCEPTED",
+                  derivationType: data.type,
+                  order: count,
+                  sources: {
+                    create: {
+                      documentId: data.documentId,
+                      blockId: data.anchor.blockId,
+                      startOffset: data.anchor.startOffset,
+                      endOffset: data.anchor.endOffset,
+                      quotedText: block.text.slice(data.anchor.startOffset, data.anchor.endOffset),
+                      prefix: block.text.slice(
+                        Math.max(0, data.anchor.startOffset - 32),
+                        data.anchor.startOffset,
+                      ),
+                      suffix: block.text.slice(data.anchor.endOffset, data.anchor.endOffset + 32),
+                    },
+                  },
+                },
+              });
+              controller.enqueue(encoder.encode(`${STREAM_NOTE_TOKEN}${note.id}`));
+            }
+          } catch (err) {
+            console.error("[derive] annotation save failed:", err);
+            controller.enqueue(
+              encoder.encode(`${STREAM_ERROR_TOKEN}The annotation did not save. Try again.`),
+            );
+          }
         }
         controller.close();
       },

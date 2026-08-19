@@ -13,7 +13,7 @@ import {
 } from "@/lib/sentences";
 import type { AssistantAction, AssistantPlan } from "@/lib/types";
 import type { DocumentReference } from "@/lib/parse/types";
-import { splitStreamError } from "@/lib/derive/config";
+import { splitStreamError, splitStreamNote } from "@/lib/derive/config";
 import { findWeblinks } from "@/lib/weblinks";
 import { MicIcon, SparkleIcon } from "@/components/icons";
 import { Markdown } from "@/components/markdown";
@@ -176,6 +176,7 @@ type ExplainBubble = {
   streaming: boolean;
   error: string | null;
   anchor: Anchor | null; // the highlighted text this bubble explains
+  noteId: string | null; // the persisted annotation; Delete removes it and its mark
 };
 
 type ChatMessage = { role: "user" | "assistant"; content: string };
@@ -216,6 +217,7 @@ type SimplifyCard = {
   text: string;
   streaming: boolean;
   error: string | null;
+  noteId: string | null; // the persisted annotation; Delete removes it and its mark
   // Set when the stream ends and the output carried source markers: one entry
   // per simplified sentence. active = the pressed sentence, mirrored in the text.
   sentences: SimplifiedSentence[] | null;
@@ -366,7 +368,20 @@ export function ReaderInteractions({
   const [prevAnchorsProp, setPrevAnchorsProp] = useState(anchorHighlights);
   if (prevAnchorsProp !== anchorHighlights) {
     setPrevAnchorsProp(anchorHighlights);
-    setLocalAnchors({});
+    // Clear an optimistic mark only once the server's copy of its span is in
+    // the props: a refresh from an older action would otherwise blank the mark
+    // until the next refresh lands.
+    setLocalAnchors((prev) => {
+      const next: typeof prev = {};
+      for (const [blockId, list] of Object.entries(prev)) {
+        const confirmed = anchorHighlights[blockId] ?? [];
+        const keep = list.filter(
+          (h) => !confirmed.some((c) => c.start === h.start && c.end === h.end),
+        );
+        if (keep.length > 0) next[blockId] = keep;
+      }
+      return next;
+    });
   }
   const [toast, setToast] = useState<string | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -534,8 +549,32 @@ export function ReaderInteractions({
   function closeExplain() {
     setBubble(null);
   }
+  async function deleteExplain() {
+    const card = bubble;
+    if (!card?.noteId || card.streaming) return;
+    try {
+      await api(`/api/notes/${card.noteId}`, "DELETE");
+      setBubble(null);
+      router.refresh();
+      showToast("Explanation removed");
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Delete failed");
+    }
+  }
   function closeSimplify() {
     setSimplifyCard(null);
+  }
+  async function deleteSimplify() {
+    const card = simplifyCard;
+    if (!card?.noteId || card.streaming) return;
+    try {
+      await api(`/api/notes/${card.noteId}`, "DELETE");
+      setSimplifyCard(null);
+      router.refresh();
+      showToast("Simplified removed");
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Delete failed");
+    }
   }
   function closeAssistantChat() {
     setAssistantChat(null);
@@ -1090,7 +1129,14 @@ export function ReaderInteractions({
       }
       if (stored.kind === "explain") {
         const slot = claimSideSlot("explain", top);
-        setBubble({ ...slot, text: stored.content, streaming: false, error: null, anchor });
+        setBubble({
+          ...slot,
+          text: stored.content,
+          streaming: false,
+          error: null,
+          anchor,
+          noteId: stored.noteId,
+        });
         return;
       }
       if (!anchor) {
@@ -1106,6 +1152,7 @@ export function ReaderInteractions({
         text: stored.content,
         streaming: false,
         error: null,
+        noteId: stored.noteId,
         sentences: parseSimplified(stored.content),
         active: null,
       });
@@ -1281,7 +1328,7 @@ export function ReaderInteractions({
     setPopover(null);
     window.getSelection()?.removeAllRanges();
     const slot = claimSideSlot("explain", yTop);
-    setBubble({ ...slot, text: "", streaming: true, error: null, anchor });
+    setBubble({ ...slot, text: "", streaming: true, error: null, anchor, noteId: null });
     try {
       const res = await fetch("/api/derive", {
         method: "POST",
@@ -1301,12 +1348,16 @@ export function ReaderInteractions({
         setBubble((b) => (b ? { ...b, text: b.text + chunk } : b));
       }
       // A failure mid-stream arrives in-band; an empty stream is a failure too.
+      // The note id trailer means the annotation persisted before the stream
+      // closed, so the refresh below always finds the stored mark.
       setBubble((b) => {
         if (!b) return b;
-        const { text, error } = splitStreamError(b.text);
+        const note = splitStreamNote(b.text);
+        const { text, error } = splitStreamError(note.text);
         return {
           ...b,
           text,
+          noteId: note.noteId ?? b.noteId,
           streaming: false,
           error: error ?? (text.trim() ? null : "The model returned an empty response. Try again."),
         };
@@ -1319,7 +1370,7 @@ export function ReaderInteractions({
   }
 
   // SIMPLIFY: stream the layman rewrite into a bubble beside the article,
-  // level with the selection. Ephemeral; close the bubble to dismiss (SPEC.md §6).
+  // level with the selection. Persists in the hidden Annotations section (SPEC.md §6).
   async function simplify() {
     if (!popover || busy) return;
     const { anchor, yTop } = popover;
@@ -1327,7 +1378,16 @@ export function ReaderInteractions({
     setPopover(null);
     window.getSelection()?.removeAllRanges();
     const slot = claimSideSlot("simplify", yTop);
-    setSimplifyCard({ anchor, ...slot, text: "", streaming: true, error: null, sentences: null, active: null });
+    setSimplifyCard({
+      anchor,
+      ...slot,
+      text: "",
+      streaming: true,
+      error: null,
+      noteId: null,
+      sentences: null,
+      active: null,
+    });
     try {
       const res = await fetch("/api/derive", {
         method: "POST",
@@ -1347,18 +1407,23 @@ export function ReaderInteractions({
         setSimplifyCard((c) => (c ? { ...c, text: c.text + chunk } : c));
       }
       // A failure mid-stream arrives in-band; an empty stream is a failure too.
+      // The note id trailer means the annotation persisted before the stream
+      // closed, so the refresh below always finds the stored mark.
       setSimplifyCard((c) => {
         if (!c) return c;
-        const { text, error } = splitStreamError(c.text);
+        const note = splitStreamNote(c.text);
+        const { text, error } = splitStreamError(note.text);
         return {
           ...c,
           text,
+          noteId: note.noteId ?? c.noteId,
           streaming: false,
           error: error ?? (text.trim() ? null : "The model returned an empty response. Try again."),
           sentences: error || !text.trim() ? null : parseSimplified(text),
           active: null,
         };
       });
+      router.refresh();
     } catch (err) {
       const message = err instanceof Error ? err.message : "Simplify failed";
       setSimplifyCard((c) => (c ? { ...c, streaming: false, error: message } : c));
@@ -2108,6 +2173,21 @@ export function ReaderInteractions({
         : [{ sourceId: null, start: startOffset, end: endOffset, kind: "simplify" as const }]),
     ];
   }
+  // While an Explanation, Assistant, or Comment card is open, its anchor keeps
+  // the anchor tint — the same mark its stored annotation paints after refresh.
+  // Spans the server already marks are skipped, so the text never double-marks.
+  for (const anchor of [bubble?.anchor, assistantChat?.anchor, commentCard?.anchor]) {
+    if (!anchor) continue;
+    const existing = highlightsByBlock[anchor.blockId] ?? [];
+    const marked = existing.some(
+      (h) => h.kind === "anchor" && h.start === anchor.startOffset && h.end === anchor.endOffset,
+    );
+    if (marked) continue;
+    highlightsByBlock[anchor.blockId] = [
+      ...existing,
+      { sourceId: null, start: anchor.startOffset, end: anchor.endOffset, kind: "anchor" as const },
+    ];
+  }
   for (const [blockId, list] of Object.entries(termsByBlock)) {
     const existing = highlightsByBlock[blockId] ?? [];
     highlightsByBlock[blockId] = [
@@ -2537,13 +2617,24 @@ export function ReaderInteractions({
             <span className="text-[11px] font-bold tracking-[0.08em] text-clay-800 uppercase">
               {bubble.streaming ? "Explaining…" : "Explanation"}
             </span>
-            <button
-              onClick={closeExplain}
-              className="text-xs text-sand-500 hover:text-clay-700"
-              aria-label="Close"
-            >
-              ✕
-            </button>
+            <span className="flex items-center gap-3">
+              {bubble.noteId && !bubble.streaming && (
+                <button
+                  onClick={() => void deleteExplain()}
+                  className="text-xs font-semibold text-red-500 hover:text-red-700"
+                  title="Delete this explanation and its mark"
+                >
+                  Delete
+                </button>
+              )}
+              <button
+                onClick={closeExplain}
+                className="text-xs text-sand-500 hover:text-clay-700"
+                aria-label="Close"
+              >
+                ✕
+              </button>
+            </span>
           </div>
           {bubble.error ? (
             <p className="text-sm text-red-600">{bubble.error}</p>
@@ -2579,13 +2670,24 @@ export function ReaderInteractions({
             <span className="text-[11px] font-bold tracking-[0.08em] text-sage-800 uppercase">
               {simplifyCard.streaming ? "Simplifying…" : "Simplified"}
             </span>
-            <button
-              onClick={closeSimplify}
-              className="text-xs text-sand-500 hover:text-clay-700"
-              aria-label="Close"
-            >
-              ✕
-            </button>
+            <span className="flex items-center gap-3">
+              {simplifyCard.noteId && !simplifyCard.streaming && (
+                <button
+                  onClick={() => void deleteSimplify()}
+                  className="text-xs font-semibold text-red-500 hover:text-red-700"
+                  title="Delete this simplified rewrite and its mark"
+                >
+                  Delete
+                </button>
+              )}
+              <button
+                onClick={closeSimplify}
+                className="text-xs text-sand-500 hover:text-clay-700"
+                aria-label="Close"
+              >
+                ✕
+              </button>
+            </span>
           </div>
           {simplifyCard.error ? (
             <p className="text-sm text-red-600">{simplifyCard.error}</p>

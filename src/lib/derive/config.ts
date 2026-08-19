@@ -34,3 +34,17 @@ export function splitStreamError(text: string): { text: string; error: string | 
     error: text.slice(at + STREAM_ERROR_TOKEN.length) || "The model call failed.",
   };
 }
+
+// EXPLAIN and SIMPLIFY persist their annotation before the stream closes, then
+// the stream ends with this token + the note id. The client splits it off, so
+// the card can delete its annotation and a refresh always finds the stored mark.
+export const STREAM_NOTE_TOKEN = "\u0000note\u0000";
+
+export function splitStreamNote(text: string): { text: string; noteId: string | null } {
+  const at = text.indexOf(STREAM_NOTE_TOKEN);
+  if (at === -1) return { text, noteId: null };
+  return {
+    text: text.slice(0, at),
+    noteId: text.slice(at + STREAM_NOTE_TOKEN.length) || null,
+  };
+}
