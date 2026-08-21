@@ -49,10 +49,13 @@ export type VideoAnnotationItem = {
 
 export type TranscriptStatusName = "NONE" | "PENDING" | "READY" | "FAILED";
 
-/** What the video pane needs to know about the stored video. */
+/** What the video pane needs to know about the video. kind UPLOAD streams
+    from /api/video/[documentId]; kind YOUTUBE plays through the IFrame player. */
 export type VideoInfo = {
-  mimeType: string;
-  size: number;
+  kind: "UPLOAD" | "YOUTUBE";
+  youtubeId: string | null;
+  mimeType: string | null;
+  size: number | null;
   duration: number | null;
   width: number | null;
   height: number | null;

@@ -506,6 +506,8 @@ export default async function NotebookPage(props: {
     // with a time anchor, and a seek time per time source for chip jumps.
     const video: VideoInfo | null = document.video
       ? {
+          kind: document.video.kind,
+          youtubeId: document.video.youtubeId,
           mimeType: document.video.mimeType,
           size: document.video.size,
           duration: document.video.duration,

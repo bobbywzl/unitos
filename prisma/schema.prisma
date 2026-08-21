@@ -194,15 +194,19 @@ enum BlockType {
   TRANSCRIPT // one transcript line, timed with startTime/endTime
 }
 
-// The stored video of a video document: bytes in VideoChunk rows, streamed with
-// HTTP Range support by /api/video/[documentId] (SPEC.md §11).
+// The video of a video document (SPEC.md §11). kind UPLOAD: bytes in
+// VideoChunk rows, streamed with HTTP Range support by /api/video/[documentId];
+// mimeType/size/chunkSize set. kind YOUTUBE: plays through the YouTube IFrame
+// player; youtubeId set, no bytes stored.
 model VideoAsset {
   id               String           @id @default(cuid())
   documentId       String           @unique
   document         Document         @relation(fields: [documentId], references: [id], onDelete: Cascade)
-  mimeType         String
-  size             Int
-  chunkSize        Int
+  kind             VideoKind        @default(UPLOAD)
+  youtubeId        String?          @unique // kind YOUTUBE only; dedupes re-adds
+  mimeType         String? // kind UPLOAD only
+  size             Int? // kind UPLOAD only
+  chunkSize        Int? // kind UPLOAD only
   duration         Float? // seconds; written by the client after metadata loads
   width            Int?
   height           Int?
@@ -213,6 +217,11 @@ model VideoAsset {
   transcriptStartedAt DateTime?
   chunks              VideoChunk[]
   createdAt           DateTime     @default(now())
+}
+
+enum VideoKind {
+  UPLOAD
+  YOUTUBE
 }
 
 model VideoChunk {

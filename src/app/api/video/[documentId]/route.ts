@@ -13,9 +13,12 @@ export async function GET(req: Request, ctx: { params: Promise<{ documentId: str
   const { documentId } = await ctx.params;
   const asset = await db.videoAsset.findUnique({
     where: { documentId },
-    select: { id: true, mimeType: true, size: true, chunkSize: true },
+    select: { id: true, kind: true, mimeType: true, size: true, chunkSize: true },
   });
   if (!asset) return NextResponse.json({ error: "Video not found" }, { status: 404 });
+  if (asset.kind !== "UPLOAD" || asset.mimeType === null || asset.size === null || asset.chunkSize === null) {
+    return NextResponse.json({ error: "This video plays from YouTube" }, { status: 404 });
+  }
 
   const sharedHeaders = {
     "Content-Type": asset.mimeType,
@@ -45,8 +48,9 @@ export async function GET(req: Request, ctx: { params: Promise<{ documentId: str
 
 const patchSchema = z.object({
   duration: z.number().positive().max(24 * 60 * 60),
-  width: z.number().int().positive().max(16_384),
-  height: z.number().int().positive().max(16_384),
+  // The YouTube player reports no frame size; uploads report both.
+  width: z.number().int().positive().max(16_384).optional(),
+  height: z.number().int().positive().max(16_384).optional(),
 });
 
 // The client reports duration and frame size once metadata loads; the deck and

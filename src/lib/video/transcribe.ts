@@ -1,14 +1,55 @@
 import { z } from "zod";
+import { extractJson } from "@/lib/derive/json";
+import { outboundFetch } from "@/lib/outbound-fetch";
+import { parseTimeInput } from "@/lib/video/types";
 
-// Transcription (SPEC.md §11): the video goes to OpenAI Whisper, which returns
-// timed segments. Segments group into transcript lines here; the route writes
-// them as TRANSCRIPT blocks.
+// Transcription (SPEC.md §11) is a provider ladder, ordered by source:
+//   YouTube video:  Gemini reads the video by URL → YouTube caption tracks.
+//   Uploaded video: Whisper → Gemini with the bytes inline.
+// Each rung throws a plain reason; the ladder tries the next and reports every
+// reason when all fail. Segments group into transcript lines at the end; the
+// route writes them as TRANSCRIPT blocks.
 
 export const TRANSCRIBE_MAX_BYTES = 25 * 1024 * 1024; // Whisper's upload cap
+// Inline bytes reach Gemini base64-encoded inside a 20 MB request.
+const GEMINI_INLINE_MAX_BYTES = 14 * 1024 * 1024;
+const GEMINI_MODEL = "gemini-2.5-flash";
 
 export type TranscriptSegment = { start: number; end: number; text: string };
 
-const responseSchema = z.object({
+export type TranscribeSource =
+  | { kind: "upload"; bytes: Uint8Array<ArrayBuffer>; mimeType: string | null }
+  | { kind: "youtube"; youtubeId: string };
+
+export async function transcribe(
+  source: TranscribeSource,
+): Promise<{ segments: TranscriptSegment[]; provider: string }> {
+  const rungs: [string, () => Promise<TranscriptSegment[]>][] =
+    source.kind === "youtube"
+      ? [
+          ["Gemini", () => geminiYouTube(source.youtubeId)],
+          ["YouTube captions", () => youtubeCaptions(source.youtubeId)],
+        ]
+      : [
+          ["Whisper", () => whisper(source.bytes, source.mimeType ?? "video/mp4")],
+          ["Gemini", () => geminiUpload(source.bytes, source.mimeType ?? "video/mp4")],
+        ];
+  const failures: string[] = [];
+  for (const [name, run] of rungs) {
+    try {
+      return { segments: await run(), provider: name };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.warn(`[transcribe] ${name} failed:`, message);
+      failures.push(`${name}: ${message}`);
+    }
+  }
+  throw new Error(failures.join(" · "));
+}
+
+// ── Whisper ─────────────────────────────────────────────────────────────────
+
+const whisperResponseSchema = z.object({
   segments: z
     .array(
       z.object({
@@ -27,12 +68,13 @@ const EXTENSION: Record<string, string> = {
   "video/ogg": "ogg",
 };
 
-export async function transcribeVideo(
+async function whisper(
   bytes: Uint8Array<ArrayBuffer>,
   mimeType: string,
 ): Promise<TranscriptSegment[]> {
   const key = process.env.OPENAI_API_KEY;
-  if (!key) throw new Error("OPENAI_API_KEY is not set. Transcription needs it.");
+  if (!key) throw new Error("OPENAI_API_KEY is not set");
+  if (bytes.length > TRANSCRIBE_MAX_BYTES) throw new Error("video is larger than the 25 MB cap");
 
   const form = new FormData();
   form.set("file", new Blob([bytes], { type: mimeType }), `video.${EXTENSION[mimeType] ?? "mp4"}`);
@@ -40,6 +82,7 @@ export async function transcribeVideo(
   form.set("response_format", "verbose_json");
   form.append("timestamp_granularities[]", "segment");
 
+  // Plain fetch: multipart bodies do not fit outboundFetch's string body.
   const res = await fetch("https://api.openai.com/v1/audio/transcriptions", {
     method: "POST",
     headers: { Authorization: `Bearer ${key}` },
@@ -47,15 +90,187 @@ export async function transcribeVideo(
   });
   if (!res.ok) {
     const detail = (await res.json().catch(() => null)) as { error?: { message?: string } } | null;
-    throw new Error(detail?.error?.message ?? `Transcription failed (${res.status})`);
+    throw new Error(detail?.error?.message ?? `request failed (${res.status})`);
   }
-  const parsed = responseSchema.safeParse(await res.json());
-  if (!parsed.success) {
-    throw new Error("Transcription returned no timed segments");
+  const parsed = whisperResponseSchema.safeParse(await res.json());
+  if (!parsed.success) throw new Error("no timed segments returned");
+  return normalizeSegments(parsed.data.segments);
+}
+
+// ── Gemini ──────────────────────────────────────────────────────────────────
+
+const GEMINI_TRANSCRIPT_PROMPT = [
+  "Transcribe this video's speech with timestamps.",
+  'Return ONLY JSON: {"segments": [{"start": <seconds>, "end": <seconds>, "text": "…"}]}',
+  "1. One segment per sentence or phrase, 5–15 seconds each.",
+  "2. start and end are numbers in seconds from the video start.",
+  "3. Transcribe the spoken words exactly; no summaries, no speaker labels.",
+  '4. No speech: return {"segments": []}.',
+].join("\n");
+
+// Seconds as Gemini writes them: a number, "92", "1:32", or "1:02:05".
+const secondsSchema = z.union([z.number().min(0), z.string()]).transform((value, ctx) => {
+  if (typeof value === "number") return value;
+  const parsed = parseTimeInput(value);
+  if (parsed === null) {
+    ctx.addIssue({ code: "custom", message: `not a time: ${value}` });
+    return z.NEVER;
   }
-  return parsed.data.segments
-    .map((s) => ({ start: s.start, end: Math.max(s.end, s.start), text: s.text.trim() }))
+  return parsed;
+});
+
+const geminiSegmentsSchema = z.object({
+  segments: z.array(z.object({ start: secondsSchema, end: secondsSchema, text: z.string() })),
+});
+
+async function geminiSegments(parts: unknown[]): Promise<TranscriptSegment[]> {
+  const key = process.env.GEMINI_API_KEY;
+  if (!key) throw new Error("GEMINI_API_KEY is not set");
+  const res = await outboundFetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-goog-api-key": key },
+      body: JSON.stringify({
+        contents: [{ role: "user", parts }],
+        generationConfig: { responseMimeType: "application/json", maxOutputTokens: 65536 },
+      }),
+    },
+  );
+  if (!res.ok) {
+    const detail = (await res.json().catch(() => null)) as { error?: { message?: string } } | null;
+    throw new Error(detail?.error?.message ?? `request failed (${res.status})`);
+  }
+  const body = (await res.json()) as {
+    candidates?: { content?: { parts?: { text?: string }[] } }[];
+  };
+  const text = body.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("") ?? "";
+  const parsed = geminiSegmentsSchema.safeParse(extractJson(text));
+  if (!parsed.success) throw new Error("output was not timed segments");
+  if (parsed.data.segments.length === 0) throw new Error("no speech found");
+  return normalizeSegments(parsed.data.segments);
+}
+
+// Gemini reads public YouTube videos directly by URL.
+function geminiYouTube(youtubeId: string): Promise<TranscriptSegment[]> {
+  return geminiSegments([
+    { fileData: { fileUri: `https://www.youtube.com/watch?v=${youtubeId}` } },
+    { text: GEMINI_TRANSCRIPT_PROMPT },
+  ]);
+}
+
+function geminiUpload(
+  bytes: Uint8Array<ArrayBuffer>,
+  mimeType: string,
+): Promise<TranscriptSegment[]> {
+  if (bytes.length > GEMINI_INLINE_MAX_BYTES) {
+    return Promise.reject(new Error("video is larger than the 14 MB inline cap"));
+  }
+  return geminiSegments([
+    { inlineData: { mimeType, data: Buffer.from(bytes).toString("base64") } },
+    { text: GEMINI_TRANSCRIPT_PROMPT },
+  ]);
+}
+
+// ── YouTube caption tracks ──────────────────────────────────────────────────
+
+const captionTracksSchema = z
+  .array(
+    z.object({
+      baseUrl: z.string().url(),
+      languageCode: z.string().optional(),
+      kind: z.string().optional(), // "asr" = auto-generated
+    }),
+  )
+  .min(1);
+
+const timedTextSchema = z.object({
+  events: z.array(
+    z.object({
+      tStartMs: z.number().optional(),
+      dDurationMs: z.number().optional(),
+      segs: z.array(z.object({ utf8: z.string().optional() })).optional(),
+    }),
+  ),
+});
+
+// The value of `"<key>": [...]` in a script blob, by bracket matching — the
+// array nests objects and strings that a regex cannot bound.
+function extractJsonArray(source: string, key: string): unknown | null {
+  const at = source.indexOf(`"${key}":`);
+  if (at === -1) return null;
+  const start = source.indexOf("[", at);
+  if (start === -1) return null;
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let i = start; i < source.length; i++) {
+    const ch = source[i];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (ch === "\\") escaped = true;
+      else if (ch === '"') inString = false;
+    } else if (ch === '"') inString = true;
+    else if (ch === "[") depth += 1;
+    else if (ch === "]") {
+      depth -= 1;
+      if (depth === 0) {
+        try {
+          return JSON.parse(source.slice(start, i + 1));
+        } catch {
+          return null;
+        }
+      }
+    }
+  }
+  return null;
+}
+
+async function youtubeCaptions(youtubeId: string): Promise<TranscriptSegment[]> {
+  const watch = await outboundFetch(`https://www.youtube.com/watch?v=${youtubeId}&hl=en`, {
+    headers: {
+      "User-Agent":
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
+      "Accept-Language": "en",
+    },
+  });
+  if (!watch.ok) throw new Error(`watch page fetch failed (${watch.status})`);
+  const tracks = captionTracksSchema.safeParse(
+    extractJsonArray(await watch.text(), "captionTracks"),
+  );
+  if (!tracks.success) throw new Error("no caption tracks on this video");
+  // Prefer human English captions, then auto-generated English, then anything.
+  const track =
+    tracks.data.find((t) => t.languageCode?.startsWith("en") && t.kind !== "asr") ??
+    tracks.data.find((t) => t.languageCode?.startsWith("en")) ??
+    tracks.data[0];
+
+  const timed = await outboundFetch(`${track.baseUrl}&fmt=json3`, {});
+  if (!timed.ok) throw new Error(`caption track fetch failed (${timed.status})`);
+  const parsed = timedTextSchema.safeParse(await timed.json());
+  if (!parsed.success) throw new Error("caption track was not readable");
+  const segments = parsed.data.events
+    .map((event) => ({
+      start: (event.tStartMs ?? 0) / 1000,
+      end: ((event.tStartMs ?? 0) + (event.dDurationMs ?? 2000)) / 1000,
+      text: (event.segs ?? [])
+        .map((s) => s.utf8 ?? "")
+        .join("")
+        .replace(/\n/g, " ")
+        .trim(),
+    }))
     .filter((s) => s.text !== "");
+  if (segments.length === 0) throw new Error("caption track was empty");
+  return normalizeSegments(segments);
+}
+
+// ── Shared ──────────────────────────────────────────────────────────────────
+
+function normalizeSegments(segments: TranscriptSegment[]): TranscriptSegment[] {
+  return segments
+    .map((s) => ({ start: s.start, end: Math.max(s.end, s.start), text: s.text.trim() }))
+    .filter((s) => s.text !== "")
+    .sort((a, b) => a.start - b.start);
 }
 
 // Group segments into transcript lines: one line reads like a sentence or two.

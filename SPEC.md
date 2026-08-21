@@ -314,9 +314,11 @@ model VideoAsset {
   id               String           @id @default(cuid())
   documentId       String           @unique
   document         Document         @relation(fields: [documentId], references: [id], onDelete: Cascade)
-  mimeType         String
-  size             Int
-  chunkSize        Int
+  kind             VideoKind        @default(UPLOAD)
+  youtubeId        String?          @unique // kind YOUTUBE only; dedupes re-adds
+  mimeType         String?          // kind UPLOAD only
+  size             Int?             // kind UPLOAD only
+  chunkSize        Int?             // kind UPLOAD only
   duration         Float?           // seconds; written by the client after metadata loads
   width            Int?
   height           Int?
@@ -335,13 +337,16 @@ model VideoChunk {
   @@unique([videoId, index])
 }
 
+enum VideoKind { UPLOAD YOUTUBE }
 enum TranscriptStatus { NONE PENDING READY FAILED }
 ```
 
 - `Document` ↔ `VideoAsset` is one-to-one. A document with a VideoAsset is a video document; the reader renders the video pane for it instead of the text reader.
+- Upload video takes an mp4/webm/ogg/mov file or a YouTube link. A file becomes kind `UPLOAD`; a YouTube link becomes kind `YOUTUBE` (title from oEmbed, deduped by `youtubeId`, no bytes stored). A YouTube link pasted into Add URL lands in the same path.
 - Every video document has exactly one `VIDEO` block at order 0. Video anchors point at it when no transcript block fits.
 - Transcript lines are `TRANSCRIPT` blocks with `Block.startTime`/`Block.endTime` (seconds). Same text machinery as every other block.
-- Video bytes live in `VideoChunk` rows (2 MB each), streamed by `GET /api/video/[documentId]` with HTTP Range support so the scrubber seeks without downloading the file. 200 MB cap per video. Postgres holds the bytes for the same reason it holds PDF bytes: zero-config deploys. Blob storage is the upgrade path, not a v1 requirement.
+- Upload bytes live in `VideoChunk` rows, streamed by `GET /api/video/[documentId]` with HTTP Range support so the scrubber seeks without downloading the file. 200 MB cap per video. Postgres holds the bytes for the same reason it holds PDF bytes: zero-config deploys. Blob storage is the upgrade path, not a v1 requirement.
+- A YouTube video plays through the IFrame player behind the same overlay, controls, markers, and deck. The frame cannot be captured cross-origin, so Explain works from the transcript alone there.
 
 ### Time anchors (§5 extended)
 
@@ -362,7 +367,12 @@ enum TranscriptStatus { NONE PENDING READY FAILED }
 
 ### Transcription
 
-`POST /api/documents/[documentId]/transcribe` sends the video to OpenAI Whisper (`OPENAI_API_KEY`; 25 MB cap for now) and writes the timed segments as TRANSCRIPT blocks. `VideoAsset.transcriptStatus`: NONE → PENDING → READY | FAILED with the reason stored. Upload and playback work without the key; the transcript pane offers Transcribe and states plainly what is missing.
+`POST /api/documents/[documentId]/transcribe` runs a provider ladder ordered by source, writes the timed segments as TRANSCRIPT blocks, and stores which rung succeeded:
+
+- **YouTube video:** Gemini reads the video by URL (`GEMINI_API_KEY`) → YouTube caption tracks (keyless). Most YouTube videos carry transcripts Gemini reads directly.
+- **Uploaded video:** OpenAI Whisper (`OPENAI_API_KEY`; 25 MB cap for now) → Gemini with the bytes inline (≤14 MB).
+
+Each rung fails with a plain reason; the ladder tries the next and reports every reason when all fail. `VideoAsset.transcriptStatus`: NONE → PENDING → READY | FAILED with the reason stored. Upload and playback work without any key; the transcript pane offers Transcribe and states plainly what is missing.
 
 ### Video derivations (same pipeline, §4)
 

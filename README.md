@@ -6,8 +6,8 @@ Notes-centric web app for deep reading. Documents attach to notebooks; every AI 
 
 - Notebooks with sections (one nesting level, drag-reorder) and markdown notes
 - PDF upload and URL ingestion, parsed to blocks (two-column PDFs handled), deduped by file hash
-- Video documents: upload up to 200 MB, custom player with Range streaming; circle a spot and comment on it — annotations carry a time range and replay on an overlay whenever playback crosses it, with a marker per annotation on the scrubber and a deck of frame cards underneath
-- Video transcript via Whisper (`OPENAI_API_KEY`): read-along highlight, click a line to seek; Find searches the transcript and answers with seekable time ranges; Explain reads the circled frame plus the transcript and saves the explanation as an annotation at that moment
+- Video documents: upload an mp4 (up to 200 MB, custom player with Range streaming) or add a YouTube link (plays through the IFrame player behind the same controls); circle a spot and comment on it — annotations carry a time range and replay on an overlay whenever playback crosses it, with a marker per annotation on the scrubber and a deck of frame cards underneath
+- Video transcript via a provider ladder — YouTube: Gemini (`GEMINI_API_KEY`), then YouTube captions; uploads: Whisper (`OPENAI_API_KEY`), then Gemini — with read-along highlight and click-to-seek; Find searches the transcript and answers with seekable time ranges; Explain reads the circled frame plus the transcript and saves the explanation as an annotation at that moment
 - Split view: reader left, notes drawer right; notes full-page view for reorganizing and export
 - Anchoring that survives reload and re-parse: block offsets + quote fallback, orphans render visibly
 - Derivations via one pipeline (`/api/derive`): EXPLAIN (annotation rail), SIMPLIFY (inline swap, revert on click), SALIENCE (toggleable overlay), EXTRACT (pending note with sources)
@@ -41,13 +41,13 @@ npx prisma migrate deploy
 npm run dev                   # → http://localhost:3000
 ```
 
-Reading, notes, anchoring, and export work with no API keys. Add `ANTHROPIC_API_KEY` to `.env` for the AI features, `VOYAGE_API_KEY` for corpus search, and `OPENAI_API_KEY` for video transcription.
+Reading, notes, anchoring, and export work with no API keys. Add `ANTHROPIC_API_KEY` to `.env` for the AI features, `VOYAGE_API_KEY` for corpus search, and `OPENAI_API_KEY` and/or `GEMINI_API_KEY` for video transcription.
 
 ## Deploy (Vercel)
 
 1. Import this repo on vercel.com.
 2. Storage → Create Database → **Neon** (Postgres) → connect it to the project. Vercel adds the database env vars; the build maps them and runs migrations (the first migration creates the `vector` extension).
-3. Settings → Environment Variables: `ANTHROPIC_API_KEY` (AI features), `VOYAGE_API_KEY` (corpus search), `OPENAI_API_KEY` (video transcription), `ADMIN_PASSWORD` (`/admin`), `CRON_SECRET` (cleanup cron). All optional to boot; add and redeploy any time.
+3. Settings → Environment Variables: `ANTHROPIC_API_KEY` (AI features), `VOYAGE_API_KEY` (corpus search), `OPENAI_API_KEY` and/or `GEMINI_API_KEY` (video transcription), `ADMIN_PASSWORD` (`/admin`), `CRON_SECRET` (cleanup cron). All optional to boot; add and redeploy any time.
 4. Deployments → Redeploy the latest.
 
 Vercel caps request bodies at about 4.5 MB, so PDF uploads above that fail there. Self-hosted deployments take PDFs up to 50 MB.
@@ -62,7 +62,8 @@ Supabase instead of Neon works too: enable the `vector` extension, then set `DAT
    - `DIRECT_URL` — Supabase direct connection (port 5432), used for migrations
    - `ANTHROPIC_API_KEY` — required for derivations, the assistant, and glossary
    - `VOYAGE_API_KEY` — required for corpus search embeddings
-   - `OPENAI_API_KEY` — required for video transcription (Whisper)
+   - `OPENAI_API_KEY` — video transcription for uploads (Whisper first)
+   - `GEMINI_API_KEY` — video transcription for YouTube videos (Gemini first) and the upload fallback
    - `ADMIN_PASSWORD` — enables `/admin` (unset = admin off)
    - `CRON_SECRET` — enables `/api/cron/cleanup` (deletes rejected notes older than 7 days; vercel.json schedules it daily)
 3. In Supabase, enable the `vector` extension: Database → Extensions → vector.
