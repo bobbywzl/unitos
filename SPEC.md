@@ -369,7 +369,7 @@ enum TranscriptStatus { NONE PENDING READY FAILED }
 
 `POST /api/documents/[documentId]/transcribe` runs a provider ladder ordered by source, writes the timed segments as TRANSCRIPT blocks, and stores which rung succeeded:
 
-- **YouTube video:** Gemini reads the video by URL (`GEMINI_API_KEY`) → YouTube caption tracks (keyless). Most YouTube videos carry transcripts Gemini reads directly.
+- **YouTube video:** Gemini reads the video by URL (`GEMINI_API_KEY`; gemini-2.5-flash, then gemini-2.0-flash) → caption tracks from the player API, keyless (ANDROID client, then IOS — mobile clients answer datacenter IPs that the web surfaces refuse) → caption tracks scraped from the watch page. Most YouTube videos carry transcripts Gemini reads directly.
 - **Uploaded video:** OpenAI Whisper (`OPENAI_API_KEY`; 25 MB cap for now) → Gemini with the bytes inline (≤14 MB).
 
 Each rung fails with a plain reason; the ladder tries the next and reports every reason when all fail. `VideoAsset.transcriptStatus`: NONE → PENDING → READY | FAILED with the reason stored. Upload and playback work without any key; the transcript pane offers Transcribe and states plainly what is missing.
