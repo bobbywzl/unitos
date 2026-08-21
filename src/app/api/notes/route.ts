@@ -2,18 +2,31 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { sourceInputSchema } from "@/lib/anchors/input";
+import { videoAnchorFor } from "@/lib/video/anchor";
+import { timeRangeSchema } from "@/lib/video/types";
 import { parseBody } from "@/lib/validate";
 
-const createSchema = z.object({
-  sectionId: z.string().min(1),
-  content: z.string().min(1).max(50_000),
-  source: sourceInputSchema.optional(),
-  // Assistant-written notes carry their authorship, and land pending when the
-  // user has not approved them one by one (Auto mode). Nothing enters notes
-  // silently (SPEC.md §1).
-  origin: z.enum(["assistant"]).optional(),
-  pending: z.boolean().optional(),
-});
+const createSchema = z
+  .object({
+    sectionId: z.string().min(1),
+    content: z.string().min(1).max(50_000),
+    source: sourceInputSchema.optional(),
+    // A video source (SPEC.md §11): a time range; the server picks the anchor
+    // block and the quoted text. Used by Find's "Add to notes".
+    video: z
+      .object({
+        documentId: z.string().min(1),
+        startTime: z.number().min(0),
+        endTime: z.number().min(0),
+      })
+      .optional(),
+    // Assistant-written notes carry their authorship, and land pending when the
+    // user has not approved them one by one (Auto mode). Find results always
+    // land pending. Nothing enters notes silently (SPEC.md §1).
+    origin: z.enum(["assistant", "find"]).optional(),
+    pending: z.boolean().optional(),
+  })
+  .refine((d) => !(d.source && d.video), { message: "Provide source or video, not both" });
 
 // Manual notes, with an optional anchor (manual extract). Derived notes are created by /api/derive.
 export async function POST(req: Request) {
@@ -33,13 +46,40 @@ export async function POST(req: Request) {
     }
   }
 
+  let videoSource: {
+    documentId: string;
+    blockId: string;
+    quotedText: string;
+    startTime: number;
+    endTime: number;
+  } | null = null;
+  if (data.video) {
+    if (!timeRangeSchema.safeParse(data.video).success) {
+      return NextResponse.json({ error: "The end must be after the start" }, { status: 400 });
+    }
+    const anchor = await videoAnchorFor(data.video.documentId, data.video.startTime, data.video.endTime);
+    if (!anchor) {
+      return NextResponse.json({ error: "This document has no video block" }, { status: 404 });
+    }
+    videoSource = {
+      documentId: data.video.documentId,
+      blockId: anchor.blockId,
+      quotedText: anchor.quotedText,
+      startTime: data.video.startTime,
+      endTime: data.video.endTime,
+    };
+  }
+
+  const derivationType =
+    data.origin === "assistant" ? ("SYNTHESIS" as const) : data.origin === "find" ? ("FIND" as const) : undefined;
   const count = await db.note.count({ where: { sectionId: data.sectionId } });
   const note = await db.note.create({
     data: {
       sectionId: data.sectionId,
       content: data.content,
-      status: data.pending ? "PENDING" : "ACCEPTED",
-      ...(data.origin === "assistant" ? { derivationType: "SYNTHESIS" as const } : {}),
+      // Find output is AI output: it lands PENDING, no exceptions (SPEC.md §1).
+      status: data.pending || data.origin === "find" ? "PENDING" : "ACCEPTED",
+      ...(derivationType ? { derivationType } : {}),
       order: count,
       ...(data.source
         ? {
@@ -52,6 +92,23 @@ export async function POST(req: Request) {
                 quotedText: data.source.quotedText,
                 prefix: data.source.prefix,
                 suffix: data.source.suffix,
+              },
+            },
+          }
+        : {}),
+      ...(videoSource
+        ? {
+            sources: {
+              create: {
+                documentId: videoSource.documentId,
+                blockId: videoSource.blockId,
+                startOffset: 0,
+                endOffset: 0,
+                quotedText: videoSource.quotedText,
+                prefix: "",
+                suffix: "",
+                startTime: videoSource.startTime,
+                endTime: videoSource.endTime,
               },
             },
           }

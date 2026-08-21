@@ -17,11 +17,23 @@ import {
   sectionSkeleton,
 } from "@/lib/derive/context";
 import { fetchFigureImage, figureContent, type FigureImage } from "@/lib/derive/figure";
-import { extractOutputSchema, resolveSpan, salienceOutputSchema } from "@/lib/derive/json";
+import {
+  extractOutputSchema,
+  findOutputSchema,
+  resolveSpan,
+  salienceOutputSchema,
+} from "@/lib/derive/json";
 import { callForJson, modelErrorMessage } from "@/lib/derive/json-call";
 import { promptTemplates } from "@/lib/prompts";
 import type { PromptCtx } from "@/lib/prompts/types";
 import { SUMMARY_DEPTHS, type SummaryLevels } from "@/lib/types";
+import { videoAnchorFor } from "@/lib/video/anchor";
+import {
+  formatTimeRange,
+  regionSchema,
+  timeRangeSchema,
+  type VideoFindMatch,
+} from "@/lib/video/types";
 import { parseBody } from "@/lib/validate";
 
 export const maxDuration = 120;
@@ -29,7 +41,7 @@ export const maxDuration = 120;
 // The one derivation pipeline (SPEC.md §4). Never fork per feature: new derivation =
 // new prompt template + destination handler below.
 const deriveSchema = z.object({
-  type: z.enum(["EXPLAIN", "SIMPLIFY", "SALIENCE", "EXTRACT", "SUMMARIZE"]),
+  type: z.enum(["EXPLAIN", "SIMPLIFY", "SALIENCE", "EXTRACT", "SUMMARIZE", "FIND"]),
   documentId: z.string().min(1),
   notebookId: z.string().min(1),
   anchor: z
@@ -41,6 +53,21 @@ const deriveSchema = z.object({
     .optional(),
   targetSectionId: z.string().min(1).nullish(),
   depth: z.enum(SUMMARY_DEPTHS).optional(), // SUMMARIZE only
+  query: z.string().min(1).max(500).optional(), // FIND only
+  // EXPLAIN on a video moment (SPEC.md §11): the time range, the drawn region,
+  // and the paused frame as a JPEG data URL when the client could capture it.
+  video: z
+    .object({
+      startTime: z.number().min(0),
+      endTime: z.number().min(0),
+      region: regionSchema.optional(),
+      frame: z
+        .string()
+        .startsWith("data:image/jpeg;base64,")
+        .max(2_000_000)
+        .optional(),
+    })
+    .optional(),
 });
 
 const ANCHOR_REQUIRED = new Set(["EXPLAIN", "SIMPLIFY", "EXTRACT"]);
@@ -60,8 +87,15 @@ export async function POST(req: Request) {
   if (!template) {
     return NextResponse.json({ error: `${data.type} is not built yet` }, { status: 501 });
   }
-  if (ANCHOR_REQUIRED.has(data.type) && !data.anchor) {
+  // A video anchor stands in for a text anchor on EXPLAIN (SPEC.md §11).
+  if (ANCHOR_REQUIRED.has(data.type) && !data.anchor && !(data.type === "EXPLAIN" && data.video)) {
     return NextResponse.json({ error: `${data.type} requires an anchor` }, { status: 400 });
+  }
+  if (data.type === "FIND" && !data.query) {
+    return NextResponse.json({ error: "FIND requires a query" }, { status: 400 });
+  }
+  if (data.video && !timeRangeSchema.safeParse(data.video).success) {
+    return NextResponse.json({ error: "The end must be after the start" }, { status: 400 });
   }
 
   const attachment = await db.notebookDocument.findUnique({
@@ -113,7 +147,46 @@ export async function POST(req: Request) {
     sectionSkeleton: skeleton,
     targetSectionId: data.targetSectionId,
     depth,
+    query: data.query,
   };
+
+  // FIND searches the transcript; without one there is nothing to search.
+  const timedBlocks = document.blocks.filter(
+    (b) => b.type === "TRANSCRIPT" && b.startTime !== null && b.endTime !== null,
+  );
+  if (data.type === "FIND" && timedBlocks.length === 0) {
+    return NextResponse.json(
+      { error: "Transcribe the video first — Find searches the transcript" },
+      { status: 400 },
+    );
+  }
+
+  // EXPLAIN on a video moment: the anchor is the time range; the frame rides
+  // along as an image when the client could capture it.
+  let videoAnchor: { blockId: string; quotedText: string } | null = null;
+  let frameImage: Uint8Array | null = null;
+  if (data.type === "EXPLAIN" && data.video) {
+    videoAnchor = await videoAnchorFor(document.id, data.video.startTime, data.video.endTime);
+    if (!videoAnchor) {
+      return NextResponse.json({ error: "This document has no video block" }, { status: 400 });
+    }
+    if (data.video.frame) {
+      frameImage = new Uint8Array(
+        Buffer.from(data.video.frame.slice("data:image/jpeg;base64,".length), "base64"),
+      );
+      if (frameImage.length === 0) frameImage = null;
+    }
+    const excerpt = timedBlocks
+      .filter((b) => b.startTime! < data.video!.endTime && b.endTime! > data.video!.startTime)
+      .map((b) => b.text)
+      .join(" ");
+    ctx.video = {
+      timeRange: formatTimeRange(data.video.startTime, data.video.endTime),
+      transcriptExcerpt: excerpt.length > 1500 ? `${excerpt.slice(0, 1499)}…` : excerpt,
+      hasFrame: frameImage !== null,
+      hasRegion: Boolean(data.video.region),
+    };
+  }
 
   // EXPLAIN on a figure block: the model deciphers the visual. An image figure
   // attaches its image bytes (fetched here — a failed fetch degrades to
@@ -140,18 +213,23 @@ export async function POST(req: Request) {
 
   // 2. Template by type. The document is the cached prefix, byte-identical for every
   // derivation on this document (SPEC.md §2).
+  const attachedImage = figureImage
+    ? { bytes: figureImage.bytes, mediaType: figureImage.mediaType }
+    : frameImage
+      ? { bytes: frameImage, mediaType: "image/jpeg" }
+      : null;
   const messages: ModelMessage[] = [
     {
       role: "system",
       content: documentPrefix(document.title, document.blocks, document.references),
       providerOptions: { anthropic: { cacheControl: { type: "ephemeral" } } },
     },
-    figureImage
+    attachedImage
       ? {
           role: "user",
           content: [
             { type: "text", text: template(ctx) },
-            { type: "image", image: figureImage.bytes, mediaType: figureImage.mediaType },
+            { type: "image", image: attachedImage.bytes, mediaType: attachedImage.mediaType },
           ],
         }
       : { role: "user", content: template(ctx) },
@@ -250,12 +328,81 @@ export async function POST(req: Request) {
             );
           }
         }
+        // A video EXPLAIN persists with its time anchor, so the explained
+        // moment joins the overlay and the deck (SPEC.md §11).
+        if (data.type === "EXPLAIN" && data.video && videoAnchor && text.trim()) {
+          try {
+            const section = await annotationsSection(data.notebookId);
+            const count = await db.note.count({ where: { sectionId: section.id } });
+            const note = await db.note.create({
+              data: {
+                sectionId: section.id,
+                content: text,
+                status: "ACCEPTED",
+                derivationType: "EXPLAIN",
+                order: count,
+                sources: {
+                  create: {
+                    documentId: data.documentId,
+                    blockId: videoAnchor.blockId,
+                    startOffset: 0,
+                    endOffset: 0,
+                    quotedText: videoAnchor.quotedText,
+                    prefix: "",
+                    suffix: "",
+                    startTime: data.video.startTime,
+                    endTime: data.video.endTime,
+                    region: data.video.region,
+                  },
+                },
+              },
+            });
+            controller.enqueue(encoder.encode(`${STREAM_NOTE_TOKEN}${note.id}`));
+          } catch (err) {
+            console.error("[derive] annotation save failed:", err);
+            controller.enqueue(
+              encoder.encode(`${STREAM_ERROR_TOKEN}The annotation did not save. Try again.`),
+            );
+          }
+        }
         controller.close();
       },
     });
     return new Response(stream, {
       headers: { "Content-Type": "text/plain; charset=utf-8" },
     });
+  }
+
+  // FIND: matches reference transcript blocks; resolve them to time ranges.
+  // Renders as seekable cards — never persisted without the user (SPEC.md §11).
+  if (data.type === "FIND") {
+    const result = await callForJson({
+      model,
+      messages,
+      maxOutputTokens,
+      schema: findOutputSchema,
+      label: "FIND",
+    });
+    if (!result.ok) {
+      return NextResponse.json({ error: `Find failed. ${result.error}` }, { status: 422 });
+    }
+    const timedById = new Map(timedBlocks.map((b) => [b.id, b]));
+    const matches: VideoFindMatch[] = [];
+    for (const match of result.data.matches) {
+      const blocks = match.blockIds
+        .map((id) => timedById.get(id))
+        .filter((b) => b !== undefined);
+      if (blocks.length === 0) continue;
+      const text = blocks.map((b) => b.text).join(" ");
+      matches.push({
+        startTime: Math.min(...blocks.map((b) => b.startTime!)),
+        endTime: Math.max(...blocks.map((b) => b.endTime!)),
+        explanation: match.explanation,
+        quotedText: text.length > 240 ? `${text.slice(0, 239)}…` : text,
+        blockIds: blocks.map((b) => b.id),
+      });
+    }
+    return NextResponse.json({ ok: true, matches });
   }
 
   if (data.type === "SALIENCE") {

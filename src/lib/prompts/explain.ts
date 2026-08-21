@@ -3,7 +3,31 @@ import { profileLines, type PromptCtx } from "@/lib/prompts/types";
 // EXPLAIN: annotation bubble in the reader rail. Persisted as a note in the hidden
 // Annotations section (SPEC.md §4).
 // Figure variant: the reader circled a figure; the model deciphers the visual.
+// Video variant: the reader marked a moment of a video document (SPEC.md §11);
+// the paused frame is attached when the client could capture it.
 export function explainPrompt(ctx: PromptCtx): string {
+  if (ctx.video) {
+    return [
+      profileLines(ctx.profile),
+      "",
+      `The reader marked ${ctx.video.timeRange} of the video "${ctx.documentTitle}". The full timed transcript is above.`,
+      "",
+      ctx.video.hasRegion && ctx.video.hasFrame
+        ? "They circled a spot on the frame; the attached image is cropped toward it."
+        : ctx.video.hasFrame
+          ? "The attached image is the frame at that moment."
+          : "No frame is attached. Work from the transcript.",
+      "",
+      "Transcript at that range:",
+      ctx.video.transcriptExcerpt || "(no transcript for this range)",
+      "",
+      "Explain what is happening at this moment for this reader.",
+      "1. Say what the moment shows or claims in one sentence.",
+      "2. Read out the concrete content of the frame — text, numbers, diagrams, whatever is actually visible. Never invent what you cannot see.",
+      "3. Tie it to the surrounding discussion using the timed transcript, and to their purpose when the connection is real.",
+      "Keep it under 200 words. Use markdown. Start with the explanation, no preamble.",
+    ].join("\n");
+  }
   if (ctx.figure) {
     return [
       profileLines(ctx.profile),

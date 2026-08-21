@@ -3,9 +3,12 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api";
+import { Markdown } from "@/components/markdown";
 import { Deck } from "@/components/video/deck";
+import { FindPanel } from "@/components/video/find-panel";
 import { TranscriptPane } from "@/components/video/transcript-pane";
 import { VideoPlayer, type VideoPlayerHandle } from "@/components/video/video-player";
+import { splitStreamError, splitStreamNote } from "@/lib/derive/config";
 import {
   formatTime,
   parseTimeInput,
@@ -41,6 +44,7 @@ export function VideoPane({
   transcript,
   annotations,
   seekBySource,
+  sectionChoices,
 }: {
   notebookId: string;
   documentId: string;
@@ -51,6 +55,7 @@ export function VideoPane({
   /** startTime per source id, for every time anchor in this document — note
       chips and annotation cards jump through ?src=. */
   seekBySource: Record<string, number>;
+  sectionChoices: { id: string; label: string }[];
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -59,6 +64,11 @@ export function VideoPane({
   const [activeLineId, setActiveLineId] = useState<string | null>(null);
   const [drawing, setDrawing] = useState(false);
   const [composer, setComposer] = useState<Composer | null>(null);
+  const [explaining, setExplaining] = useState<{
+    content: string;
+    done: boolean;
+    error: string | null;
+  } | null>(null);
   const [flashSourceId, setFlashSourceId] = useState<string | null>(null);
   const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -143,11 +153,12 @@ export function VideoPane({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [drawing]);
 
-  // ── Annotate: circle, then comment ────────────────────────────────────────
+  // ── Annotate: circle, then comment or explain ─────────────────────────────
   function toggleAnnotate() {
-    if (drawing || composer) {
+    if (drawing || composer || explaining) {
       setDrawing(false);
       setComposer(null);
+      setExplaining(null);
       return;
     }
     playerRef.current?.pause();
@@ -211,6 +222,60 @@ export function VideoPane({
     }
   }
 
+  // Explain the circled spot (SPEC.md §11): capture the paused frame cropped
+  // toward the circle, stream EXPLAIN with the time anchor. The server persists
+  // the output as an annotation at that range, so it joins the deck.
+  async function explainComposer() {
+    if (!composer || composer.busy) return;
+    const startTime = parseTimeInput(composer.startTime);
+    const endTime = parseTimeInput(composer.endTime);
+    if (startTime === null || endTime === null || endTime <= startTime) {
+      setComposer({ ...composer, error: "Times are m:ss, and the end must be after the start." });
+      return;
+    }
+    const frame = playerRef.current?.capture(composer.region) ?? undefined;
+    setComposer({ ...composer, busy: true, error: null });
+    setExplaining({ content: "", done: false, error: null });
+    try {
+      const res = await fetch("/api/derive", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "EXPLAIN",
+          documentId,
+          notebookId,
+          video: { startTime, endTime, region: composer.region ?? undefined, frame },
+        }),
+      });
+      if (!res.ok || !res.body) {
+        const detail = (await res.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(detail?.error ?? `Request failed (${res.status})`);
+      }
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let raw = "";
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        raw += decoder.decode(value, { stream: true });
+        const text = splitStreamNote(splitStreamError(raw).text).text;
+        setExplaining({ content: text, done: false, error: null });
+      }
+      const { text: withoutError, error: streamError } = splitStreamError(raw);
+      const { text } = splitStreamNote(withoutError);
+      setExplaining({ content: text, done: true, error: streamError });
+      if (!streamError) router.refresh();
+    } catch (err) {
+      setExplaining({
+        content: "",
+        done: true,
+        error: err instanceof Error ? err.message : "Explain failed",
+      });
+    } finally {
+      setComposer((c) => (c ? { ...c, busy: false } : c));
+    }
+  }
+
   async function onDeckDelete(noteId: string) {
     setRemoved((prev) => new Set(prev).add(noteId));
     router.refresh();
@@ -254,7 +319,35 @@ export function VideoPane({
           </p>
         )}
 
-        {composer && (
+        {explaining && (
+          <div className="mt-4 rounded-2xl bg-card p-4 shadow-float">
+            <div className="mb-2 flex items-center gap-2">
+              <span className="text-[11px] font-bold tracking-[0.08em] text-sand-600 uppercase">
+                Explanation
+              </span>
+              {!explaining.done && (
+                <span className="text-xs text-sand-500">streaming…</span>
+              )}
+              {explaining.done && !explaining.error && (
+                <span className="text-xs text-sand-500">Saved as an annotation</span>
+              )}
+              <button
+                onClick={() => {
+                  setExplaining(null);
+                  setComposer(null);
+                }}
+                aria-label="Close"
+                className="ml-auto rounded-full px-1.5 text-sand-500 hover:text-clay-800"
+              >
+                ✕
+              </button>
+            </div>
+            {explaining.content && <Markdown>{explaining.content}</Markdown>}
+            {explaining.error && <p className="mt-1.5 text-xs text-red-500">{explaining.error}</p>}
+          </div>
+        )}
+
+        {composer && !explaining && (
           <div className="mt-4 rounded-2xl bg-card p-4 shadow-float">
             <div className="mb-2.5 flex items-center gap-2">
               <span className="text-[11px] font-bold tracking-[0.08em] text-sand-600 uppercase">
@@ -306,6 +399,14 @@ export function VideoPane({
                 {composer.busy ? "Saving…" : "Save annotation"}
               </button>
               <button
+                onClick={() => void explainComposer()}
+                disabled={composer.busy}
+                title="The model reads the circled frame and the transcript; the explanation saves as an annotation here"
+                className="rounded-full border border-line px-3.5 py-1.5 text-xs font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40"
+              >
+                Explain the circled spot
+              </button>
+              <button
                 onClick={() => setComposer(null)}
                 className="rounded-full border border-line px-3.5 py-1.5 text-xs text-sand-700 hover:bg-clay-100 hover:text-clay-800"
               >
@@ -327,16 +428,27 @@ export function VideoPane({
       </article>
       </div>
 
-      <TranscriptPane
-        documentId={documentId}
-        video={video}
-        transcript={transcript}
-        activeLineId={activeLineId}
-        onSeek={(line) => {
-          playerRef.current?.seek(line.startTime);
-          setActiveLineId(line.id);
-        }}
-      />
+      <aside className="flex w-[280px] shrink-0 flex-col border-l border-line">
+        <FindPanel
+          notebookId={notebookId}
+          documentId={documentId}
+          hasTranscript={transcript.length > 0}
+          sectionChoices={sectionChoices}
+          onSeek={(startTime) => {
+            playerRef.current?.seek(startTime);
+          }}
+        />
+        <TranscriptPane
+          documentId={documentId}
+          video={video}
+          transcript={transcript}
+          activeLineId={activeLineId}
+          onSeek={(line) => {
+            playerRef.current?.seek(line.startTime);
+            setActiveLineId(line.id);
+          }}
+        />
+      </aside>
     </div>
   );
 }

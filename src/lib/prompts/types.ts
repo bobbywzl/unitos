@@ -25,6 +25,17 @@ export type PromptCtx = {
   // kind image: the image is attached to the message. kind svg: the chart's SVG
   // source is in svgSource. kind video: the model only has caption and context.
   figure?: { kind: "image" | "svg" | "video" | "figure"; caption: string; svgSource?: string };
+  // Set when EXPLAIN targets a moment of a video document (SPEC.md §11).
+  // hasFrame: the paused frame is attached to the message; hasRegion: the
+  // reader circled a spot and the frame is cropped toward it.
+  video?: {
+    timeRange: string; // "0:12–0:31"
+    transcriptExcerpt: string; // transcript at that range; "" = none
+    hasFrame: boolean;
+    hasRegion: boolean;
+  };
+  // The search, for FIND.
+  query?: string;
 };
 
 export function profileLines(profile: ReaderProfileCtx): string {

@@ -42,6 +42,19 @@ export const extractOutputSchema = z.object({
   quotedSpans: z.array(spanSchema).min(1).max(5),
 });
 
+// FIND (SPEC.md §11): matches reference transcript blocks by id; the route
+// resolves them to time ranges. An empty list is a correct answer.
+export const findOutputSchema = z.object({
+  matches: z
+    .array(
+      z.object({
+        blockIds: z.array(z.string().min(1)).min(1).max(40),
+        explanation: z.string().min(1).max(2_000),
+      }),
+    )
+    .max(10),
+});
+
 export type Span = z.infer<typeof spanSchema>;
 
 // Clamp a span to its block text; drop it when it does not resolve to non-empty text.

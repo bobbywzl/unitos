@@ -1,6 +1,7 @@
 import type { DerivationType } from "@prisma/client";
 import { explainPrompt } from "@/lib/prompts/explain";
 import { extractPrompt } from "@/lib/prompts/extract";
+import { findPrompt } from "@/lib/prompts/find";
 import { saliencePrompt } from "@/lib/prompts/salience";
 import { simplifyPrompt } from "@/lib/prompts/simplify";
 import { summarizePrompt } from "@/lib/prompts/summarize";
@@ -16,4 +17,5 @@ export const promptTemplates: Partial<
   SALIENCE: saliencePrompt,
   EXTRACT: extractPrompt,
   SUMMARIZE: summarizePrompt,
+  FIND: findPrompt,
 };

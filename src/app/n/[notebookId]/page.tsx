@@ -659,6 +659,7 @@ export default async function NotebookPage(props: {
           transcript={pane.transcript}
           annotations={pane.videoAnnotations}
           seekBySource={pane.videoSeekBySource}
+          sectionChoices={sectionChoices}
         />
       ) : (
         <ReaderInteractions
