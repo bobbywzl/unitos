@@ -5,6 +5,7 @@ import { api } from "@/lib/api";
 import { useVideoThumbnails } from "@/components/video/use-thumbnails";
 import {
   formatTimeRange,
+  regionPathD,
   type VideoAnnotationItem,
 } from "@/lib/video/types";
 
@@ -72,16 +73,27 @@ export function Deck({
                     preserveAspectRatio="none"
                     className="absolute inset-0 h-full w-full"
                   >
-                    <ellipse
-                      cx={a.region.cx}
-                      cy={a.region.cy}
-                      rx={a.region.rx}
-                      ry={a.region.ry}
-                      fill="none"
-                      stroke="var(--clay-400)"
-                      strokeWidth={2}
-                      vectorEffect="non-scaling-stroke"
-                    />
+                    {a.region.kind === "ellipse" ? (
+                      <ellipse
+                        cx={a.region.cx}
+                        cy={a.region.cy}
+                        rx={a.region.rx}
+                        ry={a.region.ry}
+                        fill="none"
+                        stroke="var(--clay-400)"
+                        strokeWidth={2}
+                        vectorEffect="non-scaling-stroke"
+                      />
+                    ) : (
+                      <path
+                        d={regionPathD(a.region.points)}
+                        fill="none"
+                        stroke="var(--clay-400)"
+                        strokeWidth={2}
+                        strokeLinejoin="round"
+                        vectorEffect="non-scaling-stroke"
+                      />
+                    )}
                   </svg>
                 )}
                 <span className="absolute bottom-1.5 left-1.5 rounded-full bg-black/65 px-2 py-0.5 text-[10.5px] font-semibold tabular-nums text-[#f5ead8]">

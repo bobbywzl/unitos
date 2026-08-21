@@ -266,11 +266,3 @@ export function MuteIcon(props: IconProps) {
   );
 }
 
-export function CircleDrawIcon(props: IconProps) {
-  return (
-    <Icon {...props}>
-      <path d="M20.5 12a8.5 8.5 0 1 1-4.1-7.28" />
-      <path d="M20.5 3.5 21 7l-3.5.5" />
-    </Icon>
-  );
-}

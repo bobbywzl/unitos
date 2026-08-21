@@ -353,14 +353,14 @@ enum TranscriptStatus { NONE PENDING READY FAILED }
 `Source` gains three nullable columns: `startTime`, `endTime` (seconds), `region` (Json). A source with `startTime` set is a video anchor:
 
 - It cites a span of the video. `blockId` points at the VIDEO block or a transcript block; `quotedText` holds the transcript excerpt for the range (or the formatted time range) so chips read well.
-- `region` is an optional drawn shape in percent coordinates of the video frame — `{kind: "ellipse", cx, cy, rx, ry}`, each 0–100 — so it stays glued to the same spot at any player size. Pixels are never stored.
+- `region` is an optional drawn shape in percent coordinates of the video frame, so it stays glued to the same spot at any player size. The draw tool makes a freehand closed loop — `{kind: "path", points: [[x, y], …]}`, each coordinate 0–100; `{kind: "ellipse", cx, cy, rx, ry}` stays valid for older annotations. Pixels are never stored.
 - Resolution: time anchors skip the text-matching ladder and never orphan. The video file never changes.
 - Clicking a source chip on a video anchor seeks the player to `startTime` and flashes the annotation — the video equivalent of scroll + flash.
 
 ### The video pane
 
 - Player: plain `<video>` with custom controls. The scrubber carries a marker dot per annotation; clicking a marker seeks to it.
-- Overlay: a transparent SVG layer sized to the frame. Annotate pauses the video; drag draws an ellipse; a comment card saves the note (Annotations section, time source; range defaults to [t, t+4s], editable).
+- Overlay: a transparent SVG layer sized to the frame. Annotate (the magnifier button) pauses the video; the drag draws a freehand loop that closes itself; a comment card saves the note (Annotations section, time source; range defaults to [t, t+4s], editable).
 - Replay: while playing, every annotation whose range contains the current time fades in on the overlay and fades out past its end.
 - Deck: a filmstrip of annotation cards under the player — the captured frame with the region drawn on it, the time range, the comment. Click a card → seek there. The deck is the visual note layer; the video stays untouched.
 - Transcript beside the player: click a line to seek; the current line highlights and follows playback.

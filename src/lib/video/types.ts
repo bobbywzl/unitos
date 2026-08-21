@@ -12,18 +12,60 @@ export const UPLOAD_CHUNK_BYTES = 3_500_000;
 
 // A drawn region on the video frame, in percent coordinates (0–100) of the
 // frame — never pixels — so it stays glued to the same spot at any player size.
-export const regionSchema = z.object({
-  kind: z.literal("ellipse"),
-  cx: z.number().min(0).max(100),
-  cy: z.number().min(0).max(100),
-  rx: z.number().min(0.5).max(60),
-  ry: z.number().min(0.5).max(60),
-});
+// The draw tool makes a freehand closed loop (kind "path"); kind "ellipse"
+// stays valid for annotations drawn before the loop tool.
+export const regionSchema = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("ellipse"),
+    cx: z.number().min(0).max(100),
+    cy: z.number().min(0).max(100),
+    rx: z.number().min(0.5).max(60),
+    ry: z.number().min(0.5).max(60),
+  }),
+  z.object({
+    kind: z.literal("path"),
+    points: z
+      .array(z.tuple([z.number().min(0).max(100), z.number().min(0).max(100)]))
+      .min(3)
+      .max(400),
+  }),
+]);
 export type Region = z.infer<typeof regionSchema>;
 
 export function parseRegion(value: unknown): Region | null {
   const parsed = regionSchema.safeParse(value);
   return parsed.success ? parsed.data : null;
+}
+
+/** The region's bounding box in percent coordinates, for frame cropping and
+    card placement. */
+export function regionBounds(region: Region): {
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+} {
+  if (region.kind === "ellipse") {
+    return {
+      x1: region.cx - region.rx,
+      y1: region.cy - region.ry,
+      x2: region.cx + region.rx,
+      y2: region.cy + region.ry,
+    };
+  }
+  const xs = region.points.map(([x]) => x);
+  const ys = region.points.map(([, y]) => y);
+  return {
+    x1: Math.min(...xs),
+    y1: Math.min(...ys),
+    x2: Math.max(...xs),
+    y2: Math.max(...ys),
+  };
+}
+
+/** A closed SVG path for a loop's points, in the overlay's percent space. */
+export function regionPathD(points: [number, number][]): string {
+  return points.map(([x, y], i) => `${i === 0 ? "M" : "L"}${x} ${y}`).join(" ") + " Z";
 }
 
 // The time range of a video anchor. endTime is always after startTime.

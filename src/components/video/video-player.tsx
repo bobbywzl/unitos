@@ -10,17 +10,19 @@ import {
   useState,
 } from "react";
 import {
-  CircleDrawIcon,
   FullscreenIcon,
   MuteIcon,
   PauseIcon,
   PlayIcon,
+  SearchIcon,
   SpinnerIcon,
   VolumeIcon,
 } from "@/components/icons";
 import {
   formatTime,
   formatTimeRange,
+  regionBounds,
+  regionPathD,
   type Region,
   type VideoAnnotationItem,
 } from "@/lib/video/types";
@@ -117,7 +119,13 @@ const STAGE_MUTED = "rgba(245, 234, 216, 0.55)";
 const CONTROL_BUTTON =
   "flex size-8 shrink-0 items-center justify-center rounded-full text-[color:var(--player-text)] hover:bg-white/10";
 
-type DrawState = { startX: number; startY: number; x: number; y: number } | null;
+// The freehand loop being drawn: pointer positions in percent coordinates.
+type DrawState = { points: { x: number; y: number }[] } | null;
+
+// An ellipse as a path, so the dashed pending outline renders one way.
+function ellipsePathD(r: { cx: number; cy: number; rx: number; ry: number }): string {
+  return `M ${r.cx - r.rx} ${r.cy} a ${r.rx} ${r.ry} 0 1 0 ${2 * r.rx} 0 a ${r.rx} ${r.ry} 0 1 0 ${-2 * r.rx} 0`;
+}
 
 export const VideoPlayer = forwardRef<
   VideoPlayerHandle,
@@ -206,11 +214,12 @@ export const VideoPlayer = forwardRef<
           let sw = video.videoWidth;
           let sh = video.videoHeight;
           if (region) {
-            const pad = 2.5; // percent of frame around the ellipse
-            const x1 = Math.max(0, ((region.cx - region.rx - pad) / 100) * video.videoWidth);
-            const y1 = Math.max(0, ((region.cy - region.ry - pad) / 100) * video.videoHeight);
-            const x2 = Math.min(video.videoWidth, ((region.cx + region.rx + pad) / 100) * video.videoWidth);
-            const y2 = Math.min(video.videoHeight, ((region.cy + region.ry + pad) / 100) * video.videoHeight);
+            const b = regionBounds(region);
+            const pad = 2.5; // percent of frame around the loop
+            const x1 = Math.max(0, ((b.x1 - pad) / 100) * video.videoWidth);
+            const y1 = Math.max(0, ((b.y1 - pad) / 100) * video.videoHeight);
+            const x2 = Math.min(video.videoWidth, ((b.x2 + pad) / 100) * video.videoWidth);
+            const y2 = Math.min(video.videoHeight, ((b.y2 + pad) / 100) * video.videoHeight);
             if (x2 - x1 > 16 && y2 - y1 > 16) {
               sx = x1;
               sy = y1;
@@ -421,34 +430,40 @@ export const VideoPlayer = forwardRef<
     };
   }
 
-  function drawnRegion(d: NonNullable<DrawState>): Region {
-    const cx = (d.startX + d.x) / 2;
-    const cy = (d.startY + d.y) / 2;
-    const rx = Math.max(0.5, Math.abs(d.x - d.startX) / 2);
-    const ry = Math.max(0.5, Math.abs(d.y - d.startY) / 2);
-    return { kind: "ellipse", cx, cy, rx: Math.min(rx, 60), ry: Math.min(ry, 60) };
-  }
-
+  // The drag draws a freehand loop; releasing closes it into the region.
   function startDraw(e: React.PointerEvent<HTMLDivElement>) {
     if (!drawing) return;
     const p = overlayPercent(e);
     if (!p) return;
     e.currentTarget.setPointerCapture(e.pointerId);
     engineRef.current?.pause();
-    setDraw({ startX: p.x, startY: p.y, x: p.x, y: p.y });
+    setDraw({ points: [p] });
   }
   function moveDraw(e: React.PointerEvent<HTMLDivElement>) {
     if (!draw || !e.currentTarget.hasPointerCapture(e.pointerId)) return;
     const p = overlayPercent(e);
-    if (p) setDraw({ ...draw, x: p.x, y: p.y });
+    if (!p) return;
+    const last = draw.points[draw.points.length - 1];
+    if (Math.hypot(p.x - last.x, p.y - last.y) < 0.7) return;
+    setDraw({ points: [...draw.points, p] });
   }
   function endDraw(e: React.PointerEvent<HTMLDivElement>) {
     if (!draw) return;
     e.currentTarget.releasePointerCapture(e.pointerId);
-    const region = drawnRegion(draw);
+    const raw = draw.points;
     setDraw(null);
-    // A click without a drag is not a circle; ignore it.
-    if (region.rx >= 1.5 || region.ry >= 1.5) onDrawn(region);
+    // A tap or a tiny scribble is not a loop; ignore it.
+    const xs = raw.map((p) => p.x);
+    const ys = raw.map((p) => p.y);
+    const spanX = Math.max(...xs) - Math.min(...xs);
+    const spanY = Math.max(...ys) - Math.min(...ys);
+    if (raw.length < 6 || (spanX < 2 && spanY < 2)) return;
+    // Cap the stored point count; the loop closes itself when rendered.
+    const step = Math.max(1, Math.ceil(raw.length / 300));
+    const points = raw
+      .filter((_, i) => i % step === 0)
+      .map((p): [number, number] => [Math.round(p.x * 100) / 100, Math.round(p.y * 100) / 100]);
+    onDrawn({ kind: "path", points });
   }
 
   // Annotations visible now: inside their range, or force-shown by a flash.
@@ -545,48 +560,54 @@ export const VideoPlayer = forwardRef<
             preserveAspectRatio="none"
             className="pointer-events-none absolute inset-0 h-full w-full"
           >
-            {annotations.map(
-              (a) =>
-                a.region && (
-                  <ellipse
-                    key={a.sourceId}
-                    cx={a.region.cx}
-                    cy={a.region.cy}
-                    rx={a.region.rx}
-                    ry={a.region.ry}
-                    className={`transition-opacity duration-300 ${
-                      active.has(a.sourceId) ? "opacity-100" : "opacity-0"
-                    }${a.sourceId === flashSourceId ? " video-flash" : ""}`}
-                    fill="none"
-                    stroke="var(--clay-400)"
-                    strokeWidth={2.5}
-                    vectorEffect="non-scaling-stroke"
-                    style={{ filter: "drop-shadow(0 0 6px rgba(246, 160, 107, 0.55))" }}
-                  />
-                ),
-            )}
-            {draw && (
-              <ellipse
-                cx={(draw.startX + draw.x) / 2}
-                cy={(draw.startY + draw.y) / 2}
-                rx={Math.max(0.5, Math.abs(draw.x - draw.startX) / 2)}
-                ry={Math.max(0.5, Math.abs(draw.y - draw.startY) / 2)}
+            {annotations.map((a) => {
+              if (!a.region) return null;
+              const shared = {
+                className: `transition-opacity duration-300 ${
+                  active.has(a.sourceId) ? "opacity-100" : "opacity-0"
+                }${a.sourceId === flashSourceId ? " video-flash" : ""}`,
+                fill: "none",
+                stroke: "var(--clay-400)",
+                strokeWidth: 2.5,
+                strokeLinejoin: "round" as const,
+                vectorEffect: "non-scaling-stroke" as const,
+                style: { filter: "drop-shadow(0 0 6px rgba(246, 160, 107, 0.55))" },
+              };
+              return a.region.kind === "ellipse" ? (
+                <ellipse
+                  key={a.sourceId}
+                  cx={a.region.cx}
+                  cy={a.region.cy}
+                  rx={a.region.rx}
+                  ry={a.region.ry}
+                  {...shared}
+                />
+              ) : (
+                <path key={a.sourceId} d={regionPathD(a.region.points)} {...shared} />
+              );
+            })}
+            {draw && draw.points.length > 1 && (
+              <path
+                d={regionPathD(draw.points.map((p): [number, number] => [p.x, p.y]))}
                 fill="rgba(246, 160, 107, 0.08)"
                 stroke="var(--clay-400)"
                 strokeWidth={2.5}
+                strokeLinejoin="round"
                 strokeDasharray="6 4"
                 vectorEffect="non-scaling-stroke"
               />
             )}
             {pendingRegion && !draw && (
-              <ellipse
-                cx={pendingRegion.cx}
-                cy={pendingRegion.cy}
-                rx={pendingRegion.rx}
-                ry={pendingRegion.ry}
+              <path
+                d={
+                  pendingRegion.kind === "path"
+                    ? regionPathD(pendingRegion.points)
+                    : ellipsePathD(pendingRegion)
+                }
                 fill="rgba(246, 160, 107, 0.08)"
                 stroke="var(--clay-400)"
                 strokeWidth={2.5}
+                strokeLinejoin="round"
                 strokeDasharray="6 4"
                 vectorEffect="non-scaling-stroke"
               />
@@ -597,10 +618,11 @@ export const VideoPlayer = forwardRef<
               circle sit along the bottom. */}
           {annotations.map((a) => {
             const shown = active.has(a.sourceId);
-            const left = a.region ? `${Math.min(86, Math.max(6, a.region.cx))}%` : "50%";
-            const top = a.region
-              ? `${Math.min(88, a.region.cy + a.region.ry + 3)}%`
-              : undefined;
+            const bounds = a.region ? regionBounds(a.region) : null;
+            const left = bounds
+              ? `${Math.min(86, Math.max(6, (bounds.x1 + bounds.x2) / 2))}%`
+              : "50%";
+            const top = bounds ? `${Math.min(88, bounds.y2 + 3)}%` : undefined;
             return (
               <div
                 key={a.sourceId}
@@ -732,14 +754,14 @@ export const VideoPlayer = forwardRef<
         <button
           onClick={onAnnotate}
           aria-label="Annotate"
-          title="Circle a spot and comment on it"
+          title="Circle a spot on the frame and comment on it"
           className={
             drawing
               ? "flex size-8 shrink-0 items-center justify-center rounded-full bg-clay text-clay-fg"
               : CONTROL_BUTTON
           }
         >
-          <CircleDrawIcon size={17} />
+          <SearchIcon size={17} />
         </button>
 
         <button

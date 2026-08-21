@@ -294,7 +294,12 @@ export function VideoPane({
   return (
     <div className="flex h-full min-h-0">
       <div className="relative min-h-0 min-w-0 flex-1 overflow-y-auto">
-      <article className="reader-prose mx-auto w-[860px] max-w-full px-6 py-11">
+      {/* Fluid column: the player grows with the pane — collapsing the tray
+          widens it — capped so the frame stays fully on screen. */}
+      <article
+        className="reader-prose mx-auto w-full px-8 py-11"
+        style={{ maxWidth: `max(640px, calc((100vh - 320px) * ${aspect}))` }}
+      >
         <p className="mb-2.5 text-[11px] font-bold tracking-[0.09em] text-clay-700 uppercase">
           {video.kind === "YOUTUBE" ? "YouTube" : "Video"}
           {video.duration !== null ? ` · ${formatTime(video.duration)}` : ""}
@@ -325,7 +330,8 @@ export function VideoPane({
 
         {drawing && (
           <p className="mt-3 text-[13px] text-sand-600">
-            Drag on the frame to circle a spot. Esc or the circle button cancels.
+            Draw around a spot on the frame — the loop closes itself. Esc or the magnifier button
+            cancels.
           </p>
         )}
 
