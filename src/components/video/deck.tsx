@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { api } from "@/lib/api";
+import { markdownPreview } from "@/components/markdown";
 import { useVideoThumbnails } from "@/components/video/use-thumbnails";
 import {
   formatTimeRange,
@@ -102,7 +103,7 @@ export function Deck({
               </button>
               <div className="flex items-start gap-1.5 px-3 py-2.5">
                 <p className="min-w-0 flex-1 text-[12.5px] leading-snug text-sand-800 [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2] overflow-hidden">
-                  {a.content}
+                  {markdownPreview(a.content)}
                 </p>
                 <button
                   onClick={() => void remove(a.noteId)}

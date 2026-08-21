@@ -16,7 +16,13 @@ export function explainPrompt(ctx: PromptCtx): string {
         ? "They circled a spot on the frame; the attached image is cropped toward it."
         : ctx.video.hasFrame
           ? "The attached image is the frame at that moment."
-          : "No frame is attached. Work from the transcript.",
+          : ctx.video.frameDescription
+            ? [
+                "A vision model watched that clip. On screen:",
+                ctx.video.frameDescription,
+                "Treat this description as what is visible; the frame itself is not attached.",
+              ].join("\n")
+            : "No frame is attached. Work from the transcript.",
       "",
       "Transcript at that range:",
       ctx.video.transcriptExcerpt || "(no transcript for this range)",
@@ -25,7 +31,7 @@ export function explainPrompt(ctx: PromptCtx): string {
       "1. Say what the moment shows or claims in one sentence.",
       "2. Read out the concrete content of the frame — text, numbers, diagrams, whatever is actually visible. Never invent what you cannot see.",
       "3. Tie it to the surrounding discussion using the timed transcript, and to their purpose when the connection is real.",
-      "Keep it under 200 words. Use markdown. Start with the explanation, no preamble.",
+      "Keep it under 200 words, in flowing prose — no headings, no numbered sections. Start with the explanation, no preamble.",
     ].join("\n");
   }
   if (ctx.figure) {

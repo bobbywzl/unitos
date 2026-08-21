@@ -5,6 +5,7 @@ import { buildGlossary } from "@/lib/glossary";
 import { progressResponse } from "@/lib/ingest-response";
 import { attachDocument } from "@/lib/parse/attach";
 import { ingestYouTube } from "@/lib/video/ingest-youtube";
+import { runTranscription } from "@/lib/video/transcription-job";
 import { parseYouTubeId } from "@/lib/video/youtube";
 import { parseBody } from "@/lib/validate";
 
@@ -104,6 +105,10 @@ export async function POST(req: Request) {
     return progressResponse(async (onProgress) => {
       const { document, deduped } = await ingestYouTube(youtubeId, onProgress);
       await attachDocument(data.notebookId, document.id);
+      // Transcription starts on its own — the transcript is the point.
+      // after() keeps it alive past the response on serverless; the pane
+      // polls the status in.
+      if (!deduped) after(() => runTranscription(document.id).catch(() => {}));
       return { id: document.id, title: document.title, deduped };
     });
   }

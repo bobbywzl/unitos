@@ -6,6 +6,7 @@ import { buildGlossary } from "@/lib/glossary";
 import { progressResponse } from "@/lib/ingest-response";
 import { attachDocument } from "@/lib/parse/attach";
 import { sniffVideo } from "@/lib/video/storage";
+import { runTranscription } from "@/lib/video/transcription-job";
 import { MAX_VIDEO_BYTES, UPLOAD_CHUNK_BYTES } from "@/lib/video/types";
 import { parseBody } from "@/lib/validate";
 
@@ -184,6 +185,8 @@ async function completeVideo(data: Body) {
       }
       await db.uploadChunk.deleteMany({ where: { uploadId: data.uploadId } });
       await attachDocument(data.notebookId, document.id);
+      // Transcription starts on its own — the transcript is the point.
+      after(() => runTranscription(document.id).catch(() => {}));
     } catch (err) {
       // A half-saved video document must not survive; chunks cascade with it.
       await db.document.delete({ where: { id: document.id } }).catch(() => {});

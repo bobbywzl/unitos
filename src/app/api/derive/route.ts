@@ -28,6 +28,7 @@ import { promptTemplates } from "@/lib/prompts";
 import type { PromptCtx } from "@/lib/prompts/types";
 import { SUMMARY_DEPTHS, type SummaryLevels } from "@/lib/types";
 import { videoAnchorFor } from "@/lib/video/anchor";
+import { describeYouTubeClip } from "@/lib/video/gemini";
 import {
   formatTimeRange,
   regionSchema,
@@ -162,7 +163,9 @@ export async function POST(req: Request) {
   }
 
   // EXPLAIN on a video moment: the anchor is the time range; the frame rides
-  // along as an image when the client could capture it.
+  // along as an image when the client could capture it. A YouTube frame cannot
+  // be captured cross-origin, so Gemini watches the clip instead and its
+  // description grounds the explanation (SPEC.md §11).
   let videoAnchor: { blockId: string; quotedText: string } | null = null;
   let frameImage: Uint8Array | null = null;
   if (data.type === "EXPLAIN" && data.video) {
@@ -176,6 +179,24 @@ export async function POST(req: Request) {
       );
       if (frameImage.length === 0) frameImage = null;
     }
+    let frameDescription: string | undefined;
+    if (!frameImage && process.env.GEMINI_API_KEY) {
+      const asset = await db.videoAsset.findUnique({
+        where: { documentId: document.id },
+        select: { kind: true, youtubeId: true },
+      });
+      if (asset?.kind === "YOUTUBE" && asset.youtubeId) {
+        frameDescription = await describeYouTubeClip(
+          asset.youtubeId,
+          data.video.startTime,
+          data.video.endTime,
+          data.video.region ?? null,
+        ).catch((err) => {
+          console.warn("[derive] clip description failed:", err);
+          return undefined;
+        });
+      }
+    }
     const excerpt = timedBlocks
       .filter((b) => b.startTime! < data.video!.endTime && b.endTime! > data.video!.startTime)
       .map((b) => b.text)
@@ -185,6 +206,7 @@ export async function POST(req: Request) {
       transcriptExcerpt: excerpt.length > 1500 ? `${excerpt.slice(0, 1499)}…` : excerpt,
       hasFrame: frameImage !== null,
       hasRegion: Boolean(data.video.region),
+      frameDescription,
     };
   }
 

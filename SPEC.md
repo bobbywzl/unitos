@@ -346,7 +346,7 @@ enum TranscriptStatus { NONE PENDING READY FAILED }
 - Every video document has exactly one `VIDEO` block at order 0. Video anchors point at it when no transcript block fits.
 - Transcript lines are `TRANSCRIPT` blocks with `Block.startTime`/`Block.endTime` (seconds). Same text machinery as every other block.
 - Upload bytes live in `VideoChunk` rows, streamed by `GET /api/video/[documentId]` with HTTP Range support so the scrubber seeks without downloading the file. 200 MB cap per video. Postgres holds the bytes for the same reason it holds PDF bytes: zero-config deploys. Blob storage is the upgrade path, not a v1 requirement.
-- A YouTube video plays through the IFrame player behind the same overlay, controls, markers, and deck. The frame cannot be captured cross-origin, so Explain works from the transcript alone there.
+- A YouTube video plays through the IFrame player behind the same overlay, controls, markers, and deck. The frame cannot be captured cross-origin, so Gemini watches the clip instead (`GEMINI_API_KEY`) and its description grounds Explain; without the key, Explain works from the transcript alone.
 
 ### Time anchors (§5 extended)
 
@@ -360,14 +360,16 @@ enum TranscriptStatus { NONE PENDING READY FAILED }
 ### The video pane
 
 - Player: plain `<video>` with custom controls. The scrubber carries a marker dot per annotation; clicking a marker seeks to it.
-- Overlay: a transparent SVG layer sized to the frame. Annotate (the magnifier button) pauses the video; the drag draws a freehand loop that closes itself; a comment card saves the note (Annotations section, time source; range defaults to [t, t+4s], editable).
+- Overlay: a transparent SVG layer sized to the frame. Annotate (the magnifier button) pauses the video; the drag draws a freehand loop that closes itself, or "Use the whole frame" skips the loop; a comment card saves the note (Annotations section, time source; range defaults to [t, t+4s], editable).
 - Replay: while playing, every annotation whose range contains the current time fades in on the overlay and fades out past its end.
-- Deck: a filmstrip of annotation cards under the player — the captured frame with the region drawn on it, the time range, the comment. Click a card → seek there. The deck is the visual note layer; the video stays untouched.
-- Transcript beside the player: click a line to seek; the current line highlights and follows playback.
+- One surface under the player: the tool bar — Circle & comment, the Find box, the transcript status — then Find results, the deck, and the transcript. Nothing video lives anywhere else.
+- Deck: a filmstrip of annotation cards — the captured frame with the region drawn on it, the time range, the comment. Click a card → seek there. The deck is the visual note layer; the video stays untouched.
+- Transcript: its own scroll box under the deck. Click a line to seek; the current line highlights and follows playback without moving the page.
+- On open, a caption floats over the player for a few seconds naming the tools — circle to comment, search the video, click a transcript line to seek — then fades.
 
 ### Transcription
 
-`POST /api/documents/[documentId]/transcribe` runs a provider ladder ordered by source, writes the timed segments as TRANSCRIPT blocks, and stores which rung succeeded:
+Transcription starts on its own the moment a video is added — the transcript is the point. The pane never shows a Transcribe button: it shows Transcribing…, then the lines; Retry appears only when every rung failed, and Transcribe again redoes a finished transcript. The job runs a provider ladder ordered by source, writes the timed segments as TRANSCRIPT blocks, and stores which rung succeeded (`POST /api/documents/[documentId]/transcribe` runs the same job for retries):
 
 - **YouTube video:** Gemini reads the video by URL (`GEMINI_API_KEY`; gemini-2.5-flash, then gemini-2.0-flash) → caption tracks from the player API, keyless (ANDROID client, then IOS — mobile clients answer datacenter IPs that the web surfaces refuse) → caption tracks scraped from the watch page. Most YouTube videos carry transcripts Gemini reads directly.
 - **Uploaded video:** OpenAI Whisper (`OPENAI_API_KEY`; 25 MB cap for now) → Gemini with the bytes inline (≤14 MB).
@@ -378,7 +380,7 @@ Each rung fails with a plain reason; the ladder tries the next and reports every
 
 - The cached document prefix tags timed blocks: `[block <id>] (TRANSCRIPT 12.4s–18.2s)`. One cache entry per video document, like every document.
 - `FIND` — the video content reader. `{type: FIND, query}` → JSON `{matches: [{blockIds, explanation}]}`; the server resolves each match's blocks to a time range. Renders as cards with seek chips. "Add to notes" lands a `PENDING` note with a time source — never persisted without the user.
-- `EXPLAIN` with a video anchor `{startTime, endTime, region?}`: the client captures the paused frame (cropped toward the region when one is drawn) and attaches it; the model reads the frame plus the timed transcript. Output persists as an annotation with the same time source, so explained moments join the deck.
+- `EXPLAIN` with a video anchor `{startTime, endTime, region?}`: the client captures the paused frame (cropped toward the region when one is drawn) and attaches it; the model reads the frame plus the timed transcript. On YouTube the frame cannot be captured, so Gemini watches that clip and its description stands in for the frame. Output persists as an annotation with the same time source, so explained moments join the deck.
 
 ### Build phases (continue §8 order)
 

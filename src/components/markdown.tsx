@@ -12,6 +12,20 @@ function linkifyBlockTags(text: string): string {
   return text.replace(BLOCK_TAG, "[¶](#dissect-block-$1)");
 }
 
+// Markdown as one plain line, for small previews (deck cards, overlay
+// captions) where rendered markdown has no room.
+export function markdownPreview(text: string): string {
+  return text
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(BLOCK_TAG, "")
+    .replace(/^#{1,6}\s+/gm, "")
+    .replace(/\*\*([^*]+)\*\*/g, "$1")
+    .replace(/\*([^*]+)\*/g, "$1")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 export function Markdown({ children }: { children: string }) {
   return (
     <div className="prose prose-sm max-w-none prose-p:my-1.5 prose-headings:my-2 prose-ul:my-1.5 prose-ol:my-1.5">

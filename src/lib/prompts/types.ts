@@ -28,11 +28,14 @@ export type PromptCtx = {
   // Set when EXPLAIN targets a moment of a video document (SPEC.md §11).
   // hasFrame: the paused frame is attached to the message; hasRegion: the
   // reader circled a spot and the frame is cropped toward it.
+  // frameDescription: a vision model watched the clip (YouTube: the frame
+  // cannot attach) and this is what is on screen.
   video?: {
     timeRange: string; // "0:12–0:31"
     transcriptExcerpt: string; // transcript at that range; "" = none
     hasFrame: boolean;
     hasRegion: boolean;
+    frameDescription?: string;
   };
   // The search, for FIND.
   query?: string;

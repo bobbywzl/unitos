@@ -3,10 +3,11 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api";
+import { SearchIcon, SpinnerIcon } from "@/components/icons";
 import { Markdown } from "@/components/markdown";
 import { Deck } from "@/components/video/deck";
 import { FindPanel } from "@/components/video/find-panel";
-import { TranscriptPane } from "@/components/video/transcript-pane";
+import { Transcript } from "@/components/video/transcript";
 import {
   VideoPlayer,
   type VideoPlayerHandle,
@@ -22,9 +23,11 @@ import {
   type VideoInfo,
 } from "@/lib/video/types";
 
-// The video pane (SPEC.md §11): player + overlay + deck in the reader's place.
-// Circle a spot, comment on it, and the annotation replays whenever playback
-// crosses its time range. Source chips seek here instead of scrolling.
+// The video pane (SPEC.md §11): the player with everything for dissecting the
+// video in one surface under it — circle and comment, Find, the transcript.
+// Transcription starts on its own when the video is added; a floating caption
+// teaches the tools for a few seconds. Source chips seek here instead of
+// scrolling.
 
 type Composer = {
   region: Region | null;
@@ -75,6 +78,8 @@ export function VideoPane({
   } | null>(null);
   const [flashSourceId, setFlashSourceId] = useState<string | null>(null);
   const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The tool caption floats over the player for a few seconds on open.
+  const [hint, setHint] = useState(true);
 
   // Optimistic annotations and deletes, reconciled when the server props land.
   const [added, setAdded] = useState<VideoAnnotationItem[]>([]);
@@ -101,6 +106,56 @@ export function VideoPane({
   const captureSrc = source.kind === "upload" ? source.src : null;
   const aspect =
     video.width && video.height && video.height > 0 ? video.width / video.height : 16 / 9;
+
+  // ── Transcription: starts on its own, polls in, retries on demand ─────────
+  const [transcribing, setTranscribing] = useState(false);
+  const [transcribeError, setTranscribeError] = useState<string | null>(null);
+  const autoFired = useRef(false);
+
+  async function transcribe() {
+    if (transcribing) return;
+    setTranscribing(true);
+    setTranscribeError(null);
+    try {
+      const res = await fetch(`/api/documents/${documentId}/transcribe`, { method: "POST" });
+      // 409 = a run started elsewhere (the add already kicked one off); benign.
+      if (!res.ok && res.status !== 409) {
+        const detail = (await res.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(detail?.error ?? `Request failed (${res.status})`);
+      }
+    } catch (err) {
+      setTranscribeError(err instanceof Error ? err.message : "Transcription failed");
+    } finally {
+      setTranscribing(false);
+      router.refresh();
+    }
+  }
+
+  // Adding the video already starts transcription server-side; this covers
+  // documents from before that, and local runs where the kick-off died.
+  useEffect(() => {
+    if (autoFired.current || transcript.length > 0 || video.transcriptStatus !== "NONE") return;
+    autoFired.current = true;
+    void transcribe();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // While a run is live server-side, refresh until the lines land.
+  useEffect(() => {
+    if (video.transcriptStatus !== "PENDING" || video.transcriptStale || transcribing) return;
+    const timer = setInterval(() => router.refresh(), 5000);
+    return () => clearInterval(timer);
+  }, [video.transcriptStatus, video.transcriptStale, transcribing, router]);
+
+  const transcriptPending =
+    transcribing || (video.transcriptStatus === "PENDING" && !video.transcriptStale);
+  const transcriptFailedMessage =
+    transcribeError ??
+    (video.transcriptStatus === "FAILED"
+      ? video.transcriptError
+      : video.transcriptStale
+        ? "The last run did not finish."
+        : null);
 
   function flash(sourceId: string) {
     if (flashTimer.current) clearTimeout(flashTimer.current);
@@ -163,7 +218,7 @@ export function VideoPane({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [drawing]);
 
-  // ── Annotate: circle, then comment or explain ─────────────────────────────
+  // ── Annotate: circle a spot or take the whole frame, then comment or explain ─
   function toggleAnnotate() {
     if (drawing || composer || explaining) {
       setDrawing(false);
@@ -175,7 +230,7 @@ export function VideoPane({
     setDrawing(true);
   }
 
-  function onDrawn(region: Region) {
+  function onDrawn(region: Region | null) {
     setDrawing(false);
     const t = Math.floor(playerRef.current?.time() ?? 0);
     setComposer({
@@ -233,7 +288,7 @@ export function VideoPane({
   }
 
   // Explain the circled spot (SPEC.md §11): capture the paused frame cropped
-  // toward the circle, stream EXPLAIN with the time anchor. The server persists
+  // toward the loop, stream EXPLAIN with the time anchor. The server persists
   // the output as an annotation at that range, so it joins the deck.
   async function explainComposer() {
     if (!composer || composer.busy) return;
@@ -291,9 +346,10 @@ export function VideoPane({
     router.refresh();
   }
 
+  const annotateOn = drawing || composer !== null || explaining !== null;
+
   return (
-    <div className="flex h-full min-h-0">
-      <div className="relative min-h-0 min-w-0 flex-1 overflow-y-auto">
+    <div className="relative min-h-0 flex-1 overflow-y-auto">
       {/* Fluid column: the player grows with the pane — collapsing the tray
           widens it — capped so the frame stays fully on screen. */}
       <article
@@ -303,35 +359,90 @@ export function VideoPane({
         <p className="mb-2.5 text-[11px] font-bold tracking-[0.09em] text-clay-700 uppercase">
           {video.kind === "YOUTUBE" ? "YouTube" : "Video"}
           {video.duration !== null ? ` · ${formatTime(video.duration)}` : ""}
-          {transcript.length > 0 ? ` · ${transcript.length} transcript lines` : ""}
         </p>
         <h2 className="mb-[26px] text-[33px]">{title}</h2>
 
-        <VideoPlayer
-          ref={playerRef}
-          source={source}
-          aspect={aspect}
-          storedDuration={video.duration}
-          annotations={all}
-          flashSourceId={flashSourceId}
-          drawing={drawing}
-          onDrawn={onDrawn}
-          pendingRegion={composer?.region ?? null}
-          onMetadata={onMetadata}
-          onTime={(t) => {
-            currentTimeRef.current = t;
-            // The transcript follows playback: one state change per line, not
-            // one per tick.
-            const line = transcript.find((l) => t >= l.startTime && t < l.endTime) ?? null;
-            setActiveLineId((prev) => (prev === (line?.id ?? null) ? prev : (line?.id ?? null)));
-          }}
-          onAnnotate={toggleAnnotate}
-        />
+        <div className="relative">
+          <VideoPlayer
+            ref={playerRef}
+            source={source}
+            aspect={aspect}
+            storedDuration={video.duration}
+            annotations={all}
+            flashSourceId={flashSourceId}
+            drawing={drawing}
+            onDrawn={onDrawn}
+            pendingRegion={composer?.region ?? null}
+            onMetadata={onMetadata}
+            onTime={(t) => {
+              currentTimeRef.current = t;
+              // The transcript follows playback: one state change per line, not
+              // one per tick.
+              const line = transcript.find((l) => t >= l.startTime && t < l.endTime) ?? null;
+              setActiveLineId((prev) => (prev === (line?.id ?? null) ? prev : (line?.id ?? null)));
+            }}
+            onAnnotate={toggleAnnotate}
+          />
+          {/* The tool caption: floats up for a few seconds, then fades. */}
+          {hint && (
+            <div className="pointer-events-none absolute bottom-20 left-1/2 z-10 -translate-x-1/2">
+              <div
+                onAnimationEnd={() => setHint(false)}
+                className="hint-fade rounded-full bg-black/75 px-5 py-2.5 text-[12.5px] font-medium whitespace-nowrap text-[#f5ead8] backdrop-blur-sm"
+              >
+                Circle a spot to comment · Search the video · Click a transcript line to seek
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* The tool bar: everything for dissecting the video, one surface. */}
+        <div className="mt-4">
+          <FindPanel
+            notebookId={notebookId}
+            documentId={documentId}
+            hasTranscript={transcript.length > 0}
+            sectionChoices={sectionChoices}
+            onSeek={(startTime) => {
+              playerRef.current?.seek(startTime);
+            }}
+            leading={
+              <button
+                onClick={toggleAnnotate}
+                title="Pause and circle a spot on the frame — or take the whole frame — then comment or explain"
+                className={
+                  annotateOn
+                    ? "flex shrink-0 items-center gap-1.5 rounded-full bg-clay px-3.5 py-2 text-xs font-semibold text-clay-fg"
+                    : "flex shrink-0 items-center gap-1.5 rounded-full border border-line px-3.5 py-2 text-xs font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800"
+                }
+              >
+                <SearchIcon size={13} />
+                Circle &amp; comment
+              </button>
+            }
+            trailing={
+              transcript.length > 0 ? (
+                <span className="shrink-0 rounded-full bg-sand-100 px-3 py-1.5 text-[11.5px] font-semibold text-sand-600">
+                  {transcript.length} lines
+                </span>
+              ) : transcriptFailedMessage ? (
+                <span className="shrink-0 rounded-full bg-sand-100 px-3 py-1.5 text-[11.5px] font-semibold text-red-500">
+                  Transcript failed
+                </span>
+              ) : (
+                <span className="flex shrink-0 items-center gap-1.5 rounded-full bg-sand-100 px-3 py-1.5 text-[11.5px] font-semibold text-sand-600">
+                  <SpinnerIcon size={12} className="text-clay motion-safe:animate-spin" />
+                  Transcribing…
+                </span>
+              )
+            }
+          />
+        </div>
 
         {drawing && (
           <p className="mt-3 text-[13px] text-sand-600">
-            Draw around a spot on the frame — the loop closes itself. Esc or the magnifier button
-            cancels.
+            Draw around a spot on the frame — the loop closes itself — or use the whole frame.
+            Esc cancels.
           </p>
         )}
 
@@ -383,7 +494,9 @@ export function VideoPane({
                 className="w-16 rounded-full bg-sand-100 px-2.5 py-1 text-center text-xs tabular-nums outline-none"
               />
               <span className="text-xs text-sand-500">
-                The annotation shows whenever playback is inside this range.
+                {composer.region
+                  ? "The annotation shows whenever playback is inside this range."
+                  : "Whole frame: the comment shows over the video in this range."}
               </span>
               <button
                 onClick={() => setComposer(null)}
@@ -401,7 +514,9 @@ export function VideoPane({
                 if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void saveComposer();
                 if (e.key === "Escape") setComposer(null);
               }}
-              placeholder="Comment on the circled spot"
+              placeholder={
+                composer.region ? "Comment on the circled spot" : "Comment on this moment"
+              }
               rows={2}
               className="w-full resize-y rounded-2xl bg-sand-100 px-3.5 py-2.5 text-sm outline-none placeholder:text-sand-500"
             />
@@ -417,10 +532,10 @@ export function VideoPane({
               <button
                 onClick={() => void explainComposer()}
                 disabled={composer.busy}
-                title="The model reads the circled frame and the transcript; the explanation saves as an annotation here"
+                title="The model reads the frame and the transcript; the explanation saves as an annotation here"
                 className="rounded-full border border-line px-3.5 py-1.5 text-xs font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40"
               >
-                Explain the circled spot
+                {composer.region ? "Explain the circled spot" : "Explain this moment"}
               </button>
               <button
                 onClick={() => setComposer(null)}
@@ -441,30 +556,19 @@ export function VideoPane({
           }}
           onDelete={onDeckDelete}
         />
-      </article>
-      </div>
 
-      <aside className="flex w-[280px] shrink-0 flex-col border-l border-line">
-        <FindPanel
-          notebookId={notebookId}
-          documentId={documentId}
-          hasTranscript={transcript.length > 0}
-          sectionChoices={sectionChoices}
-          onSeek={(startTime) => {
-            playerRef.current?.seek(startTime);
-          }}
-        />
-        <TranscriptPane
-          documentId={documentId}
-          video={video}
+        <Transcript
           transcript={transcript}
           activeLineId={activeLineId}
+          pending={transcriptPending}
+          failedMessage={transcriptFailedMessage}
           onSeek={(line) => {
             playerRef.current?.seek(line.startTime);
             setActiveLineId(line.id);
           }}
+          onTranscribe={() => void transcribe()}
         />
-      </aside>
+      </article>
     </div>
   );
 }

@@ -18,6 +18,7 @@ import {
   SpinnerIcon,
   VolumeIcon,
 } from "@/components/icons";
+import { markdownPreview } from "@/components/markdown";
 import {
   formatTime,
   formatTimeRange,
@@ -136,9 +137,10 @@ export const VideoPlayer = forwardRef<
     annotations: VideoAnnotationItem[];
     /** Annotation to force visible and flash (a source chip was clicked). */
     flashSourceId: string | null;
-    /** Draw mode: the overlay takes the pointer and drags draw an ellipse. */
+    /** Draw mode: the drag draws a freehand loop; "Use the whole frame"
+        annotates with no loop (region null). */
     drawing: boolean;
-    onDrawn: (region: Region) => void;
+    onDrawn: (region: Region | null) => void;
     /** The just-drawn circle, kept visible (dashed) while the composer is open. */
     pendingRegion: Region | null;
     onMetadata: (m: { duration: number; width?: number; height?: number }) => void;
@@ -623,6 +625,7 @@ export const VideoPlayer = forwardRef<
               ? `${Math.min(86, Math.max(6, (bounds.x1 + bounds.x2) / 2))}%`
               : "50%";
             const top = bounds ? `${Math.min(88, bounds.y2 + 3)}%` : undefined;
+            const preview = markdownPreview(a.content);
             return (
               <div
                 key={a.sourceId}
@@ -640,7 +643,7 @@ export const VideoPlayer = forwardRef<
                 <span className="mr-2 font-semibold tabular-nums" style={{ color: "var(--clay-400)" }}>
                   {formatTime(a.startTime)}
                 </span>
-                {a.content.length > 220 ? `${a.content.slice(0, 220)}…` : a.content}
+                {preview.length > 220 ? `${preview.slice(0, 220)}…` : preview}
               </div>
             );
           })}
@@ -659,6 +662,15 @@ export const VideoPlayer = forwardRef<
               onPointerUp={endDraw}
               className="absolute inset-0 cursor-crosshair touch-none"
             />
+          )}
+          {drawing && !draw && (
+            <button
+              onClick={() => onDrawn(null)}
+              className="absolute top-3 left-1/2 z-10 -translate-x-1/2 rounded-full bg-black/70 px-4 py-1.5 text-xs font-semibold backdrop-blur-sm hover:bg-black/85"
+              style={{ color: STAGE_TEXT }}
+            >
+              Use the whole frame
+            </button>
           )}
 
           {waiting && !error && (
@@ -733,9 +745,7 @@ export const VideoPlayer = forwardRef<
                   seek(a.startTime, { play: false });
                 }}
                 aria-label={`Annotation at ${formatTime(a.startTime)}`}
-                title={`${formatTimeRange(a.startTime, a.endTime)} · ${
-                  a.content.length > 80 ? `${a.content.slice(0, 80)}…` : a.content
-                }`}
+                title={`${formatTimeRange(a.startTime, a.endTime)} · ${markdownPreview(a.content).slice(0, 80)}`}
                 className="absolute top-1/2 size-[9px] -translate-x-1/2 -translate-y-1/2 rounded-full border border-black/40 bg-clay-300 hover:scale-125"
                 style={{ left: `${(a.startTime / duration) * 100}%` }}
               />

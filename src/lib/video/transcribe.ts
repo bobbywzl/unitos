@@ -1,7 +1,9 @@
 import { z } from "zod";
 import { extractJson } from "@/lib/derive/json";
 import { outboundFetch } from "@/lib/outbound-fetch";
+import { geminiCall } from "@/lib/video/gemini";
 import { parseTimeInput } from "@/lib/video/types";
+import { youtubeWatchUrl } from "@/lib/video/youtube";
 
 // Transcription (SPEC.md §11) is a provider ladder, ordered by source:
 //   YouTube video:  Gemini reads the video by URL → caption tracks from the
@@ -15,8 +17,6 @@ import { parseTimeInput } from "@/lib/video/types";
 export const TRANSCRIBE_MAX_BYTES = 25 * 1024 * 1024; // Whisper's upload cap
 // Inline bytes reach Gemini base64-encoded inside a 20 MB request.
 const GEMINI_INLINE_MAX_BYTES = 14 * 1024 * 1024;
-// The first model that answers wins; the second covers quota and outages.
-const GEMINI_MODELS = ["gemini-2.5-flash", "gemini-2.0-flash"];
 
 export type TranscriptSegment = { start: number; end: number; text: string };
 
@@ -127,48 +127,19 @@ const geminiSegmentsSchema = z.object({
   segments: z.array(z.object({ start: secondsSchema, end: secondsSchema, text: z.string() })),
 });
 
-async function geminiSegments(parts: unknown[]): Promise<TranscriptSegment[]> {
-  const key = process.env.GEMINI_API_KEY;
-  if (!key) throw new Error("GEMINI_API_KEY is not set");
-  const failures: string[] = [];
-  for (const model of GEMINI_MODELS) {
-    try {
-      const res = await outboundFetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "x-goog-api-key": key },
-          body: JSON.stringify({
-            contents: [{ role: "user", parts }],
-            generationConfig: { responseMimeType: "application/json", maxOutputTokens: 65536 },
-          }),
-        },
-      );
-      if (!res.ok) {
-        const detail = (await res.json().catch(() => null)) as {
-          error?: { message?: string };
-        } | null;
-        throw new Error(detail?.error?.message ?? `request failed (${res.status})`);
-      }
-      const body = (await res.json()) as {
-        candidates?: { content?: { parts?: { text?: string }[] } }[];
-      };
-      const text = body.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("") ?? "";
-      const parsed = geminiSegmentsSchema.safeParse(extractJson(text));
-      if (!parsed.success) throw new Error("output was not timed segments");
-      if (parsed.data.segments.length === 0) throw new Error("no speech found");
-      return normalizeSegments(parsed.data.segments);
-    } catch (err) {
-      failures.push(`${model}: ${err instanceof Error ? err.message : String(err)}`);
-    }
-  }
-  throw new Error(failures.join("; "));
+function geminiSegments(parts: unknown[]): Promise<TranscriptSegment[]> {
+  return geminiCall(parts, { json: true, maxOutputTokens: 65536 }, (text) => {
+    const parsed = geminiSegmentsSchema.safeParse(extractJson(text));
+    if (!parsed.success) throw new Error("output was not timed segments");
+    if (parsed.data.segments.length === 0) throw new Error("no speech found");
+    return normalizeSegments(parsed.data.segments);
+  });
 }
 
 // Gemini reads public YouTube videos directly by URL.
 function geminiYouTube(youtubeId: string): Promise<TranscriptSegment[]> {
   return geminiSegments([
-    { fileData: { fileUri: `https://www.youtube.com/watch?v=${youtubeId}` } },
+    { fileData: { fileUri: youtubeWatchUrl(youtubeId) } },
     { text: GEMINI_TRANSCRIPT_PROMPT },
   ]);
 }

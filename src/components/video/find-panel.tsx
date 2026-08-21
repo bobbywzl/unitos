@@ -6,22 +6,28 @@ import { api } from "@/lib/api";
 import { SearchIcon, SpinnerIcon } from "@/components/icons";
 import { formatTimeRange, type VideoFindMatch } from "@/lib/video/types";
 
-// Find (SPEC.md §11): the video content reader. Ask for something; the model
-// searches the timed transcript and each match renders as a card with a seek
-// chip. "Add to notes" lands the match as a PENDING note with a time source —
-// nothing enters notes without the user.
+// Find (SPEC.md §11): the video content reader, front and center in the tool
+// bar under the player. Ask for something; the model searches the timed
+// transcript and each match renders as a card with a seek chip. "Add to notes"
+// lands the match as a PENDING note with a time source — nothing enters notes
+// without the user. `leading`/`trailing` slot the annotate button and the
+// transcript status into the same bar, one unified surface.
 export function FindPanel({
   notebookId,
   documentId,
   hasTranscript,
   sectionChoices,
   onSeek,
+  leading,
+  trailing,
 }: {
   notebookId: string;
   documentId: string;
   hasTranscript: boolean;
   sectionChoices: { id: string; label: string }[];
   onSeek: (startTime: number, endTime: number) => void;
+  leading?: React.ReactNode;
+  trailing?: React.ReactNode;
 }) {
   const router = useRouter();
   const [query, setQuery] = useState("");
@@ -75,38 +81,41 @@ export function FindPanel({
   }
 
   return (
-    <div className="shrink-0 border-b border-line p-3">
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          void find();
-        }}
-        className="flex items-center gap-2 rounded-full bg-sand-100 px-3.5 py-2"
-      >
-        <SearchIcon size={14} className="shrink-0 text-sand-500" />
-        <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Find in this video…"
-          aria-label="Find in this video"
-          disabled={!hasTranscript}
-          className="min-w-0 flex-1 bg-transparent text-[13px] outline-none placeholder:text-sand-500 disabled:opacity-60"
-        />
-        {busy && <SpinnerIcon size={13} className="shrink-0 text-clay motion-safe:animate-spin" />}
-      </form>
-      {!hasTranscript && (
-        <p className="mt-2 px-1 text-xs text-sand-500">
-          Transcribe first — Find searches the transcript.
-        </p>
-      )}
+    <div>
+      {/* The unified tool bar: circle and comment, Find, transcript status. */}
+      <div className="flex items-center gap-2 rounded-2xl bg-card p-2 shadow-soft">
+        {leading}
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            void find();
+          }}
+          className="flex min-w-0 flex-1 items-center gap-2 rounded-full bg-sand-100 px-3.5 py-2"
+        >
+          <SearchIcon size={14} className="shrink-0 text-sand-500" />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder={
+              hasTranscript ? "Find in this video…" : "Find in this video (needs the transcript)…"
+            }
+            aria-label="Find in this video"
+            disabled={!hasTranscript}
+            className="min-w-0 flex-1 bg-transparent text-[13px] outline-none placeholder:text-sand-500 disabled:opacity-60"
+          />
+          {busy && <SpinnerIcon size={13} className="shrink-0 text-clay motion-safe:animate-spin" />}
+        </form>
+        {trailing}
+      </div>
+
       {error && <p className="mt-2 px-1 text-xs text-red-500">{error}</p>}
       {matches !== null && matches.length === 0 && (
         <p className="mt-2 px-1 text-xs text-sand-600">Nothing in the video answers that.</p>
       )}
       {matches !== null && matches.length > 0 && (
-        <div className="mt-2.5 flex max-h-[40vh] flex-col gap-2 overflow-y-auto">
+        <div className="mt-2.5 flex flex-col gap-2">
           {matches.map((match, i) => (
-            <div key={i} className="rounded-2xl bg-card p-3 shadow-soft">
+            <div key={i} className="rounded-2xl bg-card p-3.5 shadow-soft">
               <button
                 onClick={() => onSeek(match.startTime, match.endTime)}
                 className="rounded-full bg-clay-100 px-2.5 py-0.5 text-[11px] font-semibold tabular-nums text-clay-800 hover:bg-clay-200"
@@ -114,12 +123,8 @@ export function FindPanel({
               >
                 {formatTimeRange(match.startTime, match.endTime)}
               </button>
-              <p className="mt-2 text-[12.5px] leading-relaxed text-sand-800">
-                {match.explanation}
-              </p>
-              <p className="mt-1.5 text-[11.5px] leading-snug text-sand-500">
-                “{match.quotedText}”
-              </p>
+              <p className="mt-2 text-[13px] leading-relaxed text-sand-800">{match.explanation}</p>
+              <p className="mt-1.5 text-[12px] leading-snug text-sand-500">“{match.quotedText}”</p>
               <div className="mt-2">
                 {saved.has(i) ? (
                   <span className="text-[11.5px] font-semibold text-sage-700">
