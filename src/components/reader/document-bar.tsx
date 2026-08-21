@@ -6,6 +6,7 @@ import { api } from "@/lib/api";
 import { Logo } from "@/components/logo";
 import { readNdjson } from "@/lib/ndjson";
 import { PARSER_VERSION } from "@/lib/parse/types";
+import { MAX_VIDEO_BYTES, UPLOAD_CHUNK_BYTES } from "@/lib/video/types";
 import {
   IngestProgress,
   advanceIngestSteps,
@@ -43,12 +44,20 @@ function statusMessage(status: number): string {
   return `Request failed (${status})`;
 }
 
-// Vercel caps a request body at about 4.5 MB, so bigger PDFs upload in chunks
+// Vercel caps a request body at about 4.5 MB, so bigger files upload in chunks
 // (/api/uploads) and /api/uploads/complete assembles them. The server caps
-// assembled PDFs at 50 MB.
+// assembled PDFs at 50 MB and videos at 200 MB. Videos always take the chunked
+// path — one code path, and the server keeps the staged chunks as the stored
+// video bytes.
 const MAX_PDF_BYTES = 50 * 1024 * 1024;
 const SINGLE_REQUEST_BYTES = 4 * 1024 * 1024;
-const CHUNK_BYTES = 3_500_000;
+const CHUNK_BYTES = UPLOAD_CHUNK_BYTES;
+
+const VIDEO_EXTENSIONS = /\.(mp4|m4v|webm|ogv|ogg|mov)$/i;
+
+function isVideoFile(file: File): boolean {
+  return file.type.startsWith("video/") || VIDEO_EXTENSIONS.test(file.name);
+}
 
 function megabytes(bytes: number): string {
   return (bytes / 1024 / 1024).toFixed(1);
@@ -175,7 +184,7 @@ export function DocumentBar({
   // server response starts streaming.
   async function runIngest(
     fileLabel: string,
-    kind: "pdf" | "url",
+    kind: "pdf" | "url" | "video",
     send: (emit: (stage: string, detail?: string) => void) => Promise<Response>,
   ): Promise<{ id: string; title: string; deduped: boolean }> {
     setPhase({ fileLabel, steps: initialIngestSteps(kind) });
@@ -202,11 +211,15 @@ export function DocumentBar({
     return result;
   }
 
-  // Chunked upload for PDFs past the single-request cap. Sends slices to
+  // Chunked upload for files past the single-request cap. Sends slices to
   // /api/uploads, reports progress on the receive step, then asks
   // /api/uploads/complete to assemble and ingest — its response streams the
   // same stage events as /api/documents.
-  async function uploadChunked(file: File, emit: (stage: string, detail?: string) => void) {
+  async function uploadChunked(
+    file: File,
+    kind: "pdf" | "video",
+    emit: (stage: string, detail?: string) => void,
+  ) {
     const uploadId = crypto.randomUUID();
     const totalLabel = megabytes(file.size);
     for (let sent = 0; sent < file.size; sent += CHUNK_BYTES) {
@@ -224,22 +237,27 @@ export function DocumentBar({
     return fetch("/api/uploads/complete", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ uploadId, filename: file.name, notebookId }),
+      body: JSON.stringify({ uploadId, filename: file.name, notebookId, kind }),
     });
   }
 
-  async function uploadPdfs(files: File[]) {
+  async function uploadFiles(files: File[]) {
     setError(null);
     let lastId: string | null = null;
     try {
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
-        if (file.size > MAX_PDF_BYTES) {
+        const video = isVideoFile(file);
+        if (video && file.size > MAX_VIDEO_BYTES) {
+          throw new Error(`${file.name} is larger than 200 MB.`);
+        }
+        if (!video && file.size > MAX_PDF_BYTES) {
           throw new Error(`${file.name} is larger than 50 MB.`);
         }
         const label = files.length > 1 ? `${file.name} (${i + 1}/${files.length})` : file.name;
-        const result = await runIngest(label, "pdf", (emit) => {
-          if (file.size > SINGLE_REQUEST_BYTES) return uploadChunked(file, emit);
+        const result = await runIngest(label, video ? "video" : "pdf", (emit) => {
+          if (video) return uploadChunked(file, "video", emit);
+          if (file.size > SINGLE_REQUEST_BYTES) return uploadChunked(file, "pdf", emit);
           const form = new FormData();
           form.set("file", file);
           form.set("notebookId", notebookId);
@@ -284,14 +302,14 @@ export function DocumentBar({
       dragDepth.current = 0;
       setDragging(false);
       const files = [...(e.dataTransfer?.files ?? [])];
-      const pdfs = files.filter(
-        (f) => f.type === "application/pdf" || f.name.toLowerCase().endsWith(".pdf"),
+      const accepted = files.filter(
+        (f) => f.type === "application/pdf" || f.name.toLowerCase().endsWith(".pdf") || isVideoFile(f),
       );
-      if (pdfs.length === 0) {
-        setError("Drop PDF files.");
+      if (accepted.length === 0) {
+        setError("Drop PDF or video files.");
         return;
       }
-      void uploadPdfs(pdfs);
+      void uploadFiles(accepted);
     };
     window.addEventListener("dragenter", onEnter);
     window.addEventListener("dragover", onOver);
@@ -477,7 +495,7 @@ export function DocumentBar({
                   disabled={phase !== null}
                   className={`${menuItem} disabled:opacity-40`}
                 >
-                  Upload PDF
+                  Upload PDF or video
                 </button>
                 <button onClick={() => setMenu("url")} className={menuItem}>
                   Add URL
@@ -563,12 +581,12 @@ export function DocumentBar({
       <input
         ref={fileRef}
         type="file"
-        accept="application/pdf"
+        accept="application/pdf,video/mp4,video/webm,video/ogg,video/quicktime,.mp4,.m4v,.webm,.ogv,.ogg,.mov"
         multiple
         className="hidden"
         onChange={(e) => {
           const files = [...(e.target.files ?? [])];
-          if (files.length > 0) void uploadPdfs(files);
+          if (files.length > 0) void uploadFiles(files);
         }}
       />
 
@@ -577,7 +595,7 @@ export function DocumentBar({
           <div className="flex flex-col items-center gap-3 rounded-[28px] border-2 border-dashed border-sand-400 bg-card px-14 py-10 shadow-float">
             <Logo size={72} className="text-clay" />
             <p className="text-sm font-semibold text-sand-800">
-              Drop PDFs to add them to this work
+              Drop PDFs or videos to add them to this work
             </p>
           </div>
         </div>

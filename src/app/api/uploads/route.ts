@@ -4,11 +4,11 @@ import { db } from "@/lib/db";
 
 export const maxDuration = 60;
 
-// One chunk of a large PDF upload. Vercel caps a request body at about 4.5 MB,
+// One chunk of a large upload. Vercel caps a request body at about 4.5 MB,
 // so the client splits big files and sends each piece here; /api/uploads/complete
 // assembles them and runs normal ingest. Chunks are staging rows only.
 const MAX_CHUNK_BYTES = 4 * 1024 * 1024;
-const MAX_CHUNKS = 16; // 50 MB total at 3.5 MB per chunk
+const MAX_CHUNKS = 64; // 200 MB total at 3.5 MB per chunk (videos; PDFs cap at 50 MB)
 
 const paramsSchema = z.object({
   uploadId: z.string().regex(/^[a-zA-Z0-9-]{8,64}$/),

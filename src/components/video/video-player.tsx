@@ -1,0 +1,566 @@
+"use client";
+
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import {
+  CircleDrawIcon,
+  FullscreenIcon,
+  MuteIcon,
+  PauseIcon,
+  PlayIcon,
+  SpinnerIcon,
+  VolumeIcon,
+} from "@/components/icons";
+import {
+  formatTime,
+  formatTimeRange,
+  type Region,
+  type VideoAnnotationItem,
+} from "@/lib/video/types";
+
+// The player (SPEC.md §11): a plain <video> with custom controls, an SVG
+// overlay for annotations, and a scrubber with one marker per annotation.
+// The video file is never modified — the overlay is the note layer on top.
+// Regions are percent coordinates of the frame; the overlay is sized to the
+// frame's content box, so they stay glued at any player size and in fullscreen.
+
+export type VideoPlayerHandle = {
+  seek: (t: number, opts?: { play?: boolean }) => void;
+  pause: () => void;
+  time: () => number;
+  /** The current frame as a JPEG data URL, cropped toward the region when one
+      is given. Null when the frame is not ready. */
+  capture: (region?: Region | null) => string | null;
+};
+
+// Fixed warm-dark stage colors: the player frame stays dark in both themes.
+const STAGE = "#12100e";
+const STAGE_TEXT = "#f5ead8";
+const STAGE_MUTED = "rgba(245, 234, 216, 0.55)";
+
+const CONTROL_BUTTON =
+  "flex size-8 shrink-0 items-center justify-center rounded-full text-[color:var(--player-text)] hover:bg-white/10";
+
+type DrawState = { startX: number; startY: number; x: number; y: number } | null;
+
+export const VideoPlayer = forwardRef<
+  VideoPlayerHandle,
+  {
+    src: string;
+    aspect: number; // width / height; stored value until metadata loads
+    storedDuration: number | null;
+    annotations: VideoAnnotationItem[];
+    /** Annotation to force visible and flash (a source chip was clicked). */
+    flashSourceId: string | null;
+    /** Draw mode: the overlay takes the pointer and drags draw an ellipse. */
+    drawing: boolean;
+    onDrawn: (region: Region) => void;
+    /** The just-drawn circle, kept visible (dashed) while the composer is open. */
+    pendingRegion: Region | null;
+    onMetadata: (m: { duration: number; width: number; height: number }) => void;
+    onTime: (t: number) => void; // ~4 Hz, for the transcript follow-along
+    onAnnotate: () => void; // the pencil button; pane opens the composer
+  }
+>(function VideoPlayer(
+  {
+    src,
+    aspect,
+    storedDuration,
+    annotations,
+    flashSourceId,
+    drawing,
+    onDrawn,
+    pendingRegion,
+    onMetadata,
+    onTime,
+    onAnnotate,
+  },
+  ref,
+) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const stageRef = useRef<HTMLDivElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const trackRef = useRef<HTMLDivElement>(null);
+  const [playing, setPlaying] = useState(false);
+  const [muted, setMuted] = useState(false);
+  const [time, setTime] = useState(0);
+  const [duration, setDuration] = useState(storedDuration ?? 0);
+  const [videoAspect, setVideoAspect] = useState(aspect);
+  const [waiting, setWaiting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [fullscreen, setFullscreen] = useState(false);
+  // The frame's content box inside the stage (letterbox math); the overlay and
+  // the <video> both size to it, so percent coordinates always mean the frame.
+  const [box, setBox] = useState<{ w: number; h: number } | null>(null);
+  const [draw, setDraw] = useState<DrawState>(null);
+  const wasPlayingRef = useRef(false);
+
+  const seek = useCallback((t: number, opts?: { play?: boolean }) => {
+    const video = videoRef.current;
+    if (!video) return;
+    const clamped = Math.max(0, Math.min(t, video.duration || t));
+    video.currentTime = clamped;
+    setTime(clamped);
+    if (opts?.play) void video.play();
+  }, []);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      seek,
+      pause: () => videoRef.current?.pause(),
+      time: () => videoRef.current?.currentTime ?? 0,
+      capture: (region?: Region | null) => {
+        const video = videoRef.current;
+        if (!video || video.videoWidth === 0) return null;
+        try {
+          const canvas = document.createElement("canvas");
+          // Crop toward the region with padding, so the model sees the circled
+          // spot in context; no region = the full frame. Cap the long edge.
+          let sx = 0;
+          let sy = 0;
+          let sw = video.videoWidth;
+          let sh = video.videoHeight;
+          if (region) {
+            const pad = 2.5; // percent of frame around the ellipse
+            const x1 = Math.max(0, ((region.cx - region.rx - pad) / 100) * video.videoWidth);
+            const y1 = Math.max(0, ((region.cy - region.ry - pad) / 100) * video.videoHeight);
+            const x2 = Math.min(video.videoWidth, ((region.cx + region.rx + pad) / 100) * video.videoWidth);
+            const y2 = Math.min(video.videoHeight, ((region.cy + region.ry + pad) / 100) * video.videoHeight);
+            if (x2 - x1 > 16 && y2 - y1 > 16) {
+              sx = x1;
+              sy = y1;
+              sw = x2 - x1;
+              sh = y2 - y1;
+            }
+          }
+          const scale = Math.min(1, 1024 / Math.max(sw, sh));
+          canvas.width = Math.round(sw * scale);
+          canvas.height = Math.round(sh * scale);
+          const ctx = canvas.getContext("2d");
+          if (!ctx) return null;
+          ctx.drawImage(video, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+          return canvas.toDataURL("image/jpeg", 0.85);
+        } catch {
+          return null; // tainted canvas or decode failure
+        }
+      },
+    }),
+    [seek],
+  );
+
+  // Smooth clock: rAF while playing, so the scrubber and overlay track the
+  // frame, not the 4 Hz timeupdate.
+  useEffect(() => {
+    if (!playing) return;
+    let raf = 0;
+    const tick = () => {
+      const video = videoRef.current;
+      if (video) setTime(video.currentTime);
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [playing]);
+
+  // Letterbox math: the frame's content box inside the stage.
+  useEffect(() => {
+    const stage = stageRef.current;
+    if (!stage) return;
+    const measure = () => {
+      const rect = stage.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0) return;
+      const w = Math.min(rect.width, rect.height * videoAspect);
+      setBox({ w, h: w / videoAspect });
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(stage);
+    return () => observer.disconnect();
+  }, [videoAspect]);
+
+  useEffect(() => {
+    const onChange = () => setFullscreen(document.fullscreenElement === containerRef.current);
+    document.addEventListener("fullscreenchange", onChange);
+    return () => document.removeEventListener("fullscreenchange", onChange);
+  }, []);
+
+  function togglePlay() {
+    const video = videoRef.current;
+    if (!video) return;
+    if (video.paused) void video.play();
+    else video.pause();
+  }
+
+  function toggleFullscreen() {
+    if (document.fullscreenElement === containerRef.current) void document.exitFullscreen();
+    else void containerRef.current?.requestFullscreen();
+  }
+
+  // ── Scrubbing ─────────────────────────────────────────────────────────────
+  function timeAtPointer(clientX: number): number {
+    const track = trackRef.current;
+    if (!track || duration === 0) return 0;
+    const rect = track.getBoundingClientRect();
+    const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+    return ratio * duration;
+  }
+
+  function startScrub(e: React.PointerEvent<HTMLDivElement>) {
+    const video = videoRef.current;
+    if (!video || duration === 0) return;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    wasPlayingRef.current = !video.paused;
+    video.pause();
+    seek(timeAtPointer(e.clientX));
+  }
+  function moveScrub(e: React.PointerEvent<HTMLDivElement>) {
+    if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
+    seek(timeAtPointer(e.clientX));
+  }
+  function endScrub(e: React.PointerEvent<HTMLDivElement>) {
+    if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
+    e.currentTarget.releasePointerCapture(e.pointerId);
+    if (wasPlayingRef.current) void videoRef.current?.play();
+  }
+
+  // ── Drawing (annotate mode) ───────────────────────────────────────────────
+  function overlayPercent(e: React.PointerEvent): { x: number; y: number } | null {
+    const el = e.currentTarget as HTMLElement;
+    const rect = el.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return null;
+    return {
+      x: Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100)),
+      y: Math.max(0, Math.min(100, ((e.clientY - rect.top) / rect.height) * 100)),
+    };
+  }
+
+  function drawnRegion(d: NonNullable<DrawState>): Region {
+    const cx = (d.startX + d.x) / 2;
+    const cy = (d.startY + d.y) / 2;
+    const rx = Math.max(0.5, Math.abs(d.x - d.startX) / 2);
+    const ry = Math.max(0.5, Math.abs(d.y - d.startY) / 2);
+    return { kind: "ellipse", cx, cy, rx: Math.min(rx, 60), ry: Math.min(ry, 60) };
+  }
+
+  function startDraw(e: React.PointerEvent<HTMLDivElement>) {
+    if (!drawing) return;
+    const p = overlayPercent(e);
+    if (!p) return;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    videoRef.current?.pause();
+    setDraw({ startX: p.x, startY: p.y, x: p.x, y: p.y });
+  }
+  function moveDraw(e: React.PointerEvent<HTMLDivElement>) {
+    if (!draw || !e.currentTarget.hasPointerCapture(e.pointerId)) return;
+    const p = overlayPercent(e);
+    if (p) setDraw({ ...draw, x: p.x, y: p.y });
+  }
+  function endDraw(e: React.PointerEvent<HTMLDivElement>) {
+    if (!draw) return;
+    e.currentTarget.releasePointerCapture(e.pointerId);
+    const region = drawnRegion(draw);
+    setDraw(null);
+    // A click without a drag is not a circle; ignore it.
+    if (region.rx >= 1.5 || region.ry >= 1.5) onDrawn(region);
+  }
+
+  // Annotations visible now: inside their range, or force-shown by a flash.
+  const active = useMemo(
+    () =>
+      new Set(
+        annotations
+          .filter(
+            (a) =>
+              (time >= a.startTime && time <= a.endTime) || a.sourceId === flashSourceId,
+          )
+          .map((a) => a.sourceId),
+      ),
+    [annotations, time, flashSourceId],
+  );
+
+  function onKeyDown(e: React.KeyboardEvent) {
+    const target = e.target as HTMLElement;
+    if (target.closest("input, textarea, [contenteditable=true]")) return;
+    if (e.key === " " || e.key === "k") {
+      e.preventDefault();
+      togglePlay();
+    } else if (e.key === "ArrowLeft") {
+      e.preventDefault();
+      seek(Math.max(0, time - 5));
+    } else if (e.key === "ArrowRight") {
+      e.preventDefault();
+      seek(Math.min(duration, time + 5));
+    } else if (e.key === "f") {
+      e.preventDefault();
+      toggleFullscreen();
+    }
+  }
+
+  const progress = duration > 0 ? (time / duration) * 100 : 0;
+
+  return (
+    <div
+      ref={containerRef}
+      tabIndex={0}
+      onKeyDown={onKeyDown}
+      className="flex flex-col overflow-hidden rounded-[24px] shadow-float outline-none"
+      style={{ background: STAGE, "--player-text": STAGE_TEXT } as React.CSSProperties}
+    >
+      {/* Stage: the frame's content box centers inside; overlay matches it exactly. */}
+      <div
+        ref={stageRef}
+        className={`relative flex items-center justify-center ${fullscreen ? "min-h-0 flex-1" : ""}`}
+        style={fullscreen ? undefined : { aspectRatio: videoAspect }}
+      >
+        <div
+          className={box ? "relative" : "relative h-full w-full"}
+          style={box ? { width: box.w, height: box.h } : undefined}
+        >
+          <video
+            ref={videoRef}
+            src={src}
+            preload="metadata"
+            playsInline
+            muted={muted}
+            onClick={drawing ? undefined : togglePlay}
+            onPlay={() => setPlaying(true)}
+            onPause={() => setPlaying(false)}
+            onWaiting={() => setWaiting(true)}
+            onPlaying={() => setWaiting(false)}
+            onCanPlay={() => setWaiting(false)}
+            onTimeUpdate={(e) => onTime(e.currentTarget.currentTime)}
+            onLoadedMetadata={(e) => {
+              const video = e.currentTarget;
+              setDuration(video.duration);
+              if (video.videoWidth > 0 && video.videoHeight > 0) {
+                setVideoAspect(video.videoWidth / video.videoHeight);
+                onMetadata({
+                  duration: video.duration,
+                  width: video.videoWidth,
+                  height: video.videoHeight,
+                });
+              }
+            }}
+            onError={() => setError("This video did not play in this browser.")}
+            className="h-full w-full"
+          />
+
+          {/* The annotation layer: every annotation renders once and fades with
+              its range, so replay is a CSS transition, never a mount flash. */}
+          <svg
+            aria-hidden
+            viewBox="0 0 100 100"
+            preserveAspectRatio="none"
+            className="pointer-events-none absolute inset-0 h-full w-full"
+          >
+            {annotations.map(
+              (a) =>
+                a.region && (
+                  <ellipse
+                    key={a.sourceId}
+                    cx={a.region.cx}
+                    cy={a.region.cy}
+                    rx={a.region.rx}
+                    ry={a.region.ry}
+                    className={`transition-opacity duration-300 ${
+                      active.has(a.sourceId) ? "opacity-100" : "opacity-0"
+                    }${a.sourceId === flashSourceId ? " video-flash" : ""}`}
+                    fill="none"
+                    stroke="var(--clay-400)"
+                    strokeWidth={2.5}
+                    vectorEffect="non-scaling-stroke"
+                    style={{ filter: "drop-shadow(0 0 6px rgba(246, 160, 107, 0.55))" }}
+                  />
+                ),
+            )}
+            {draw && (
+              <ellipse
+                cx={(draw.startX + draw.x) / 2}
+                cy={(draw.startY + draw.y) / 2}
+                rx={Math.max(0.5, Math.abs(draw.x - draw.startX) / 2)}
+                ry={Math.max(0.5, Math.abs(draw.y - draw.startY) / 2)}
+                fill="rgba(246, 160, 107, 0.08)"
+                stroke="var(--clay-400)"
+                strokeWidth={2.5}
+                strokeDasharray="6 4"
+                vectorEffect="non-scaling-stroke"
+              />
+            )}
+            {pendingRegion && !draw && (
+              <ellipse
+                cx={pendingRegion.cx}
+                cy={pendingRegion.cy}
+                rx={pendingRegion.rx}
+                ry={pendingRegion.ry}
+                fill="rgba(246, 160, 107, 0.08)"
+                stroke="var(--clay-400)"
+                strokeWidth={2.5}
+                strokeDasharray="6 4"
+                vectorEffect="non-scaling-stroke"
+              />
+            )}
+          </svg>
+
+          {/* Comment cards beside their circles; timed comments without a
+              circle sit along the bottom. */}
+          {annotations.map((a) => {
+            const shown = active.has(a.sourceId);
+            const left = a.region ? `${Math.min(86, Math.max(6, a.region.cx))}%` : "50%";
+            const top = a.region
+              ? `${Math.min(88, a.region.cy + a.region.ry + 3)}%`
+              : undefined;
+            return (
+              <div
+                key={a.sourceId}
+                data-video-annotation={a.sourceId}
+                className={`pointer-events-none absolute max-w-[46%] -translate-x-1/2 rounded-2xl bg-black/65 px-3.5 py-2 text-[12.5px] leading-snug backdrop-blur-sm transition-opacity duration-300 ${
+                  shown ? "opacity-100" : "opacity-0"
+                }`}
+                style={{
+                  left,
+                  top,
+                  bottom: a.region ? undefined : "8%",
+                  color: STAGE_TEXT,
+                }}
+              >
+                <span className="mr-2 font-semibold tabular-nums" style={{ color: "var(--clay-400)" }}>
+                  {formatTime(a.startTime)}
+                </span>
+                {a.content.length > 220 ? `${a.content.slice(0, 220)}…` : a.content}
+              </div>
+            );
+          })}
+
+          {/* Draw layer: takes the pointer only in annotate mode. */}
+          {drawing && (
+            <div
+              onPointerDown={startDraw}
+              onPointerMove={moveDraw}
+              onPointerUp={endDraw}
+              className="absolute inset-0 cursor-crosshair touch-none"
+            />
+          )}
+
+          {waiting && !error && (
+            <div
+              className="pointer-events-none absolute inset-0 flex items-center justify-center"
+              style={{ color: STAGE_MUTED }}
+            >
+              <SpinnerIcon size={34} className="motion-safe:animate-spin" />
+            </div>
+          )}
+        </div>
+
+        {error && (
+          <div
+            className="absolute inset-0 flex items-center justify-center px-8 text-center text-sm"
+            style={{ color: STAGE_MUTED }}
+          >
+            {error}
+          </div>
+        )}
+      </div>
+
+      {/* Controls: one bar, always visible, markers on the scrubber. */}
+      <div className="flex items-center gap-2 px-3 py-2.5">
+        <button
+          onClick={togglePlay}
+          aria-label={playing ? "Pause" : "Play"}
+          title={playing ? "Pause (space)" : "Play (space)"}
+          className={CONTROL_BUTTON}
+        >
+          {playing ? <PauseIcon size={18} /> : <PlayIcon size={18} />}
+        </button>
+
+        <span className="shrink-0 text-[12px] tabular-nums" style={{ color: STAGE_MUTED }}>
+          <span style={{ color: STAGE_TEXT }}>{formatTime(time)}</span>
+          {" / "}
+          {formatTime(duration)}
+        </span>
+
+        <div
+          ref={trackRef}
+          onPointerDown={startScrub}
+          onPointerMove={moveScrub}
+          onPointerUp={endScrub}
+          onPointerCancel={endScrub}
+          role="slider"
+          aria-label="Seek"
+          aria-valuemin={0}
+          aria-valuemax={Math.round(duration)}
+          aria-valuenow={Math.round(time)}
+          aria-valuetext={formatTime(time)}
+          className="group relative mx-1 h-7 min-w-0 flex-1 cursor-pointer touch-none"
+        >
+          <div className="absolute inset-x-0 top-1/2 h-[5px] -translate-y-1/2 rounded-full bg-white/20">
+            <div
+              className="h-full rounded-full bg-clay"
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+          <div
+            className="absolute top-1/2 size-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-clay opacity-0 shadow-soft transition-opacity group-hover:opacity-100"
+            style={{ left: `${progress}%` }}
+          />
+          {/* One marker per annotation; click seeks to its start. */}
+          {duration > 0 &&
+            annotations.map((a) => (
+              <button
+                key={a.sourceId}
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  seek(a.startTime, { play: false });
+                }}
+                aria-label={`Annotation at ${formatTime(a.startTime)}`}
+                title={`${formatTimeRange(a.startTime, a.endTime)} · ${
+                  a.content.length > 80 ? `${a.content.slice(0, 80)}…` : a.content
+                }`}
+                className="absolute top-1/2 size-[9px] -translate-x-1/2 -translate-y-1/2 rounded-full border border-black/40 bg-clay-300 hover:scale-125"
+                style={{ left: `${(a.startTime / duration) * 100}%` }}
+              />
+            ))}
+        </div>
+
+        <button
+          onClick={() => setMuted((m) => !m)}
+          aria-label={muted ? "Unmute" : "Mute"}
+          title={muted ? "Unmute" : "Mute"}
+          className={CONTROL_BUTTON}
+        >
+          {muted ? <MuteIcon size={17} /> : <VolumeIcon size={17} />}
+        </button>
+
+        <button
+          onClick={onAnnotate}
+          aria-label="Annotate"
+          title="Circle a spot and comment on it"
+          className={
+            drawing
+              ? "flex size-8 shrink-0 items-center justify-center rounded-full bg-clay text-clay-fg"
+              : CONTROL_BUTTON
+          }
+        >
+          <CircleDrawIcon size={17} />
+        </button>
+
+        <button
+          onClick={toggleFullscreen}
+          aria-label={fullscreen ? "Exit fullscreen" : "Fullscreen"}
+          title={fullscreen ? "Exit fullscreen (f)" : "Fullscreen (f)"}
+          className={CONTROL_BUTTON}
+        >
+          <FullscreenIcon size={17} />
+        </button>
+      </div>
+    </div>
+  );
+});

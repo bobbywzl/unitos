@@ -466,6 +466,21 @@ mark,
   animation: anchor-flash 1.8s ease-out;
 }
 
+/* Source chip click on a video anchor: flash the circle on the overlay (SPEC.md §11). */
+@keyframes video-flash {
+  0%, 60% {
+    stroke: #ffffff;
+    stroke-width: 4px;
+  }
+  100% {
+    stroke: var(--clay-400);
+    stroke-width: 2.5px;
+  }
+}
+.video-flash {
+  animation: video-flash 1.8s ease-out;
+}
+
 /* Sanitized ingest html: tables and figures in the reader. */
 .reader-table table {
   border-collapse: collapse;

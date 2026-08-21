@@ -195,3 +195,82 @@ export function CheckIcon(props: IconProps) {
     </Icon>
   );
 }
+
+export function PlayIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M6 4.5 19 12 6 19.5Z" />
+    </Icon>
+  );
+}
+
+export function PauseIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M8 5v14" />
+      <path d="M16 5v14" />
+    </Icon>
+  );
+}
+
+export function FullscreenIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M8 3H5a2 2 0 0 0-2 2v3" />
+      <path d="M21 8V5a2 2 0 0 0-2-2h-3" />
+      <path d="M3 16v3a2 2 0 0 0 2 2h3" />
+      <path d="M16 21h3a2 2 0 0 0 2-2v-3" />
+    </Icon>
+  );
+}
+
+export function FilmIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <rect x="3" y="4" width="18" height="16" rx="3" />
+      <path d="M8 4v16" />
+      <path d="M16 4v16" />
+      <path d="M3 9h5" />
+      <path d="M3 15h5" />
+      <path d="M16 9h5" />
+      <path d="M16 15h5" />
+    </Icon>
+  );
+}
+
+export function SearchIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <circle cx="11" cy="11" r="7" />
+      <path d="m20 20-3.35-3.35" />
+    </Icon>
+  );
+}
+
+export function VolumeIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M11 5 6 9H3v6h3l5 4z" />
+      <path d="M15.5 8.5a5 5 0 0 1 0 7" />
+    </Icon>
+  );
+}
+
+export function MuteIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M11 5 6 9H3v6h3l5 4z" />
+      <path d="m16 9 5 6" />
+      <path d="m21 9-5 6" />
+    </Icon>
+  );
+}
+
+export function CircleDrawIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M20.5 12a8.5 8.5 0 1 1-4.1-7.28" />
+      <path d="M20.5 3.5 21 7l-3.5.5" />
+    </Icon>
+  );
+}

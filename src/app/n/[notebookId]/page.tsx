@@ -22,6 +22,13 @@ import { EditsPanel } from "@/components/panels/edits-panel";
 import { ReaderInteractions } from "@/components/reader/reader-interactions";
 import { ReaderPanes, type ReaderViewKind } from "@/components/reader/reader-panes";
 import { Workspace } from "@/components/reader/workspace";
+import { VideoPane } from "@/components/video/video-pane";
+import {
+  parseRegion,
+  type TranscriptLine,
+  type VideoAnnotationItem,
+  type VideoInfo,
+} from "@/lib/video/types";
 
 export const dynamic = "force-dynamic";
 
@@ -100,10 +107,18 @@ export default async function NotebookPage(props: {
   async function paneData(documentId: string) {
     const document = await db.document.findUnique({
       where: { id: documentId },
-      include: { blocks: { orderBy: { order: "asc" } } },
+      include: { blocks: { orderBy: { order: "asc" } }, video: true },
     });
     if (!document) return null;
     const blockById = new Map(document.blocks.map((b) => [b.id, b]));
+    // Video anchors are time ranges, not text spans: they skip the text
+    // highlight painting and render on the player overlay (SPEC.md §11).
+    const sourceById = new Map(
+      notebook!.sections
+        .flatMap((s) => s.notes)
+        .flatMap((n) => n.sources)
+        .map((src) => [src.id, src]),
+    );
 
     // Resolve anchors, then paint only this notebook's notes. A note's color
     // rides along so manual highlights paint in their chosen hue.
@@ -122,6 +137,7 @@ export default async function NotebookPage(props: {
     for (const r of resolved) {
       resolutionById.set(r.id, { orphaned: r.orphaned });
       if (r.orphaned || !noteById.has(r.noteId)) continue;
+      if (sourceById.get(r.id)?.startTime != null) continue;
       const list = anchorHighlights[r.blockId] ?? [];
       const note = noteById.get(r.noteId);
       list.push({
@@ -484,6 +500,47 @@ export default async function NotebookPage(props: {
       }
     }
 
+    // ── Video documents (SPEC.md §11) ───────────────────────────────────────
+    // The pane needs the stored video, the transcript lines, every annotation
+    // with a time anchor, and a seek time per time source for chip jumps.
+    const video: VideoInfo | null = document.video
+      ? {
+          mimeType: document.video.mimeType,
+          size: document.video.size,
+          duration: document.video.duration,
+          width: document.video.width,
+          height: document.video.height,
+          transcriptStatus: document.video.transcriptStatus,
+          transcriptError: document.video.transcriptError,
+        }
+      : null;
+    const transcript: TranscriptLine[] = document.blocks
+      .filter((b) => b.type === "TRANSCRIPT" && b.startTime !== null && b.endTime !== null)
+      .map((b) => ({ id: b.id, text: b.text, startTime: b.startTime!, endTime: b.endTime! }));
+    const videoAnnotations: VideoAnnotationItem[] = notebook!.sections
+      .filter((s) => s.hidden)
+      .flatMap((s) => s.notes)
+      .flatMap((n) =>
+        n.sources
+          .filter((src) => src.documentId === document.id && src.startTime !== null)
+          .map((src) => ({
+            noteId: n.id,
+            sourceId: src.id,
+            kind: n.derivationType === "EXPLAIN" ? ("explain" as const) : ("comment" as const),
+            content: n.content,
+            startTime: src.startTime!,
+            endTime: src.endTime ?? src.startTime! + 4,
+            region: parseRegion(src.region),
+          })),
+      )
+      .sort((a, b) => a.startTime - b.startTime || a.endTime - b.endTime);
+    const videoSeekBySource: Record<string, number> = {};
+    for (const src of sourceById.values()) {
+      if (src.documentId === document.id && src.startTime !== null) {
+        videoSeekBySource[src.id] = src.startTime;
+      }
+    }
+
     return {
       document,
       summaries,
@@ -501,6 +558,10 @@ export default async function NotebookPage(props: {
       stylesByBlock,
       citationsByBlock,
       references,
+      video,
+      transcript,
+      videoAnnotations,
+      videoSeekBySource,
     };
   }
 
@@ -589,31 +650,43 @@ export default async function NotebookPage(props: {
 
   const paneNode = (pane: NonNullable<typeof paneOne>, key: string) => (
     <div key={key} className="flex h-full min-h-0 flex-col">
-      <ReaderInteractions
-        documentId={pane.document.id}
-        notebookId={notebook.id}
-        sectionChoices={sectionChoices}
-        attachedDocuments={attached}
-        title={pane.document.title}
-        blocks={pane.document.blocks.map((b) => ({
-          id: b.id,
-          type: b.type,
-          text: b.text,
-          html: b.html,
-        }))}
-        anchorHighlights={pane.anchorHighlights}
-        annotationsBySource={pane.annotationsBySource}
-        annotationBubbles={pane.annotationBubbles}
-        salienceByBlock={pane.salienceByBlock}
-        hasSalience={pane.hasSalience}
-        termsByBlock={pane.termsByBlock}
-        linksByBlock={pane.linksByBlock}
-        editedByBlock={pane.editedByBlock}
-        stylesByBlock={pane.stylesByBlock}
-        citationsByBlock={pane.citationsByBlock}
-        references={pane.references}
-        font={pane.document.font}
-      />
+      {pane.video ? (
+        <VideoPane
+          notebookId={notebook.id}
+          documentId={pane.document.id}
+          title={pane.document.title}
+          video={pane.video}
+          transcript={pane.transcript}
+          annotations={pane.videoAnnotations}
+          seekBySource={pane.videoSeekBySource}
+        />
+      ) : (
+        <ReaderInteractions
+          documentId={pane.document.id}
+          notebookId={notebook.id}
+          sectionChoices={sectionChoices}
+          attachedDocuments={attached}
+          title={pane.document.title}
+          blocks={pane.document.blocks.map((b) => ({
+            id: b.id,
+            type: b.type,
+            text: b.text,
+            html: b.html,
+          }))}
+          anchorHighlights={pane.anchorHighlights}
+          annotationsBySource={pane.annotationsBySource}
+          annotationBubbles={pane.annotationBubbles}
+          salienceByBlock={pane.salienceByBlock}
+          hasSalience={pane.hasSalience}
+          termsByBlock={pane.termsByBlock}
+          linksByBlock={pane.linksByBlock}
+          editedByBlock={pane.editedByBlock}
+          stylesByBlock={pane.stylesByBlock}
+          citationsByBlock={pane.citationsByBlock}
+          references={pane.references}
+          font={pane.document.font}
+        />
+      )}
     </div>
   );
 

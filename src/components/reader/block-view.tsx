@@ -349,6 +349,20 @@ export function BlockView({
           <hr className="border-t border-line" />
         </div>
       );
+    // Video documents render in the video pane; these cases keep the switch
+    // total for the odd place a video block meets the text renderer.
+    case "TRANSCRIPT":
+      return (
+        <p data-block-id={block.id} className={`${shared} my-4 whitespace-pre-wrap`}>
+          {content}
+        </p>
+      );
+    case "VIDEO":
+      return (
+        <p data-block-id={block.id} className={`${shared} my-4 text-sm text-sand-600 italic`}>
+          Video: {block.text}
+        </p>
+      );
     case "TABLE":
       if (block.html) {
         return (

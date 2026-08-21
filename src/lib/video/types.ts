@@ -4,6 +4,12 @@ import { z } from "zod";
 // Shared shapes for video documents: the drawn region, the time anchor, the
 // annotation as the player and deck render it, and the Find result.
 
+// Videos cap at 200 MB. Upload staging slices are the stored chunk size too, so
+// completing a video upload copies staged rows to VideoChunk rows without ever
+// assembling the file in memory.
+export const MAX_VIDEO_BYTES = 200 * 1024 * 1024;
+export const UPLOAD_CHUNK_BYTES = 3_500_000;
+
 // A drawn region on the video frame, in percent coordinates (0–100) of the
 // frame — never pixels — so it stays glued to the same spot at any player size.
 export const regionSchema = z.object({
@@ -84,4 +90,12 @@ export function formatTime(seconds: number): string {
 
 export function formatTimeRange(startTime: number, endTime: number): string {
   return `${formatTime(startTime)}–${formatTime(endTime)}`;
+}
+
+// Inverse of formatTime for the composer's time inputs: "92", "1:32", "1:02:05".
+export function parseTimeInput(value: string): number | null {
+  const parts = value.trim().split(":");
+  if (parts.length === 0 || parts.length > 3) return null;
+  if (parts.some((p) => p === "" || !/^\d+(\.\d+)?$/.test(p))) return null;
+  return parts.map(Number).reduce((total, n) => total * 60 + n, 0);
 }
