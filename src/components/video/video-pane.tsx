@@ -4,6 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { Deck } from "@/components/video/deck";
+import { TranscriptPane } from "@/components/video/transcript-pane";
 import { VideoPlayer, type VideoPlayerHandle } from "@/components/video/video-player";
 import {
   formatTime,
@@ -55,6 +56,7 @@ export function VideoPane({
   const searchParams = useSearchParams();
   const playerRef = useRef<VideoPlayerHandle>(null);
   const currentTimeRef = useRef(0);
+  const [activeLineId, setActiveLineId] = useState<string | null>(null);
   const [drawing, setDrawing] = useState(false);
   const [composer, setComposer] = useState<Composer | null>(null);
   const [flashSourceId, setFlashSourceId] = useState<string | null>(null);
@@ -215,7 +217,8 @@ export function VideoPane({
   }
 
   return (
-    <div className="relative min-h-0 flex-1 overflow-y-auto">
+    <div className="flex h-full min-h-0">
+      <div className="relative min-h-0 min-w-0 flex-1 overflow-y-auto">
       <article className="reader-prose mx-auto w-[860px] max-w-full px-6 py-11">
         <p className="mb-2.5 text-[11px] font-bold tracking-[0.09em] text-clay-700 uppercase">
           Video
@@ -237,6 +240,10 @@ export function VideoPane({
           onMetadata={onMetadata}
           onTime={(t) => {
             currentTimeRef.current = t;
+            // The transcript follows playback: one state change per line, not
+            // one per tick.
+            const line = transcript.find((l) => t >= l.startTime && t < l.endTime) ?? null;
+            setActiveLineId((prev) => (prev === (line?.id ?? null) ? prev : (line?.id ?? null)));
           }}
           onAnnotate={toggleAnnotate}
         />
@@ -318,6 +325,18 @@ export function VideoPane({
           onDelete={onDeckDelete}
         />
       </article>
+      </div>
+
+      <TranscriptPane
+        documentId={documentId}
+        video={video}
+        transcript={transcript}
+        activeLineId={activeLineId}
+        onSeek={(line) => {
+          playerRef.current?.seek(line.startTime);
+          setActiveLineId(line.id);
+        }}
+      />
     </div>
   );
 }

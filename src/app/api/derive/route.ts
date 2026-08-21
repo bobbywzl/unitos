@@ -76,7 +76,7 @@ export async function POST(req: Request) {
   // 1. Load document blocks (the cached prompt prefix), profile, section skeleton.
   const document = await db.document.findUnique({
     where: { id: data.documentId },
-    include: { blocks: { orderBy: { order: "asc" }, select: { id: true, type: true, text: true } } },
+    include: { blocks: { orderBy: { order: "asc" }, select: { id: true, type: true, text: true, startTime: true, endTime: true } } },
   });
   if (!document) return NextResponse.json({ error: "Document not found" }, { status: 404 });
   const blockById = new Map(document.blocks.map((b) => [b.id, { id: b.id, text: b.text }]));

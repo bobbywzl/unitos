@@ -40,7 +40,7 @@ export async function buildGlossary(documentId: string): Promise<number> {
   if (!process.env.ANTHROPIC_API_KEY) return 0;
   const document = await db.document.findUnique({
     where: { id: documentId },
-    include: { blocks: { orderBy: { order: "asc" }, select: { id: true, type: true, text: true } } },
+    include: { blocks: { orderBy: { order: "asc" }, select: { id: true, type: true, text: true, startTime: true, endTime: true } } },
   });
   if (!document || document.blocks.length === 0) return 0;
 

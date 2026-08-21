@@ -8,16 +8,24 @@ import type { PromptCtx, ReaderProfileCtx } from "@/lib/prompts/types";
 // The document rendered as the cached prompt prefix (SPEC.md §2). Byte-identical across
 // every derivation on the same document, so all types reuse one cache entry.
 // Block ids are included so EXTRACT and SALIENCE can reference them.
+// Timed blocks tag their seconds — `(TRANSCRIPT 12.4s–18.2s)` — so FIND can
+// resolve answers to time ranges (SPEC.md §11).
 // The reference list is appended so in-text citations stay explainable — pass
 // Document.references verbatim; parsing happens here so every caller builds
 // the same prefix.
 export function documentPrefix(
   title: string,
-  blocks: Pick<Block, "id" | "type" | "text">[],
+  blocks: (Pick<Block, "id" | "type" | "text"> & Partial<Pick<Block, "startTime" | "endTime">>)[],
   references?: unknown,
 ): string {
   const rendered = blocks
-    .map((b) => `[block ${b.id}] (${b.type})\n${b.text}`)
+    .map((b) => {
+      const tag =
+        b.startTime != null && b.endTime != null
+          ? `(${b.type} ${b.startTime.toFixed(1)}s–${b.endTime.toFixed(1)}s)`
+          : `(${b.type})`;
+      return `[block ${b.id}] ${tag}\n${b.text}`;
+    })
     .join("\n\n");
   const referenceList = documentReferences(references ?? null);
   return [

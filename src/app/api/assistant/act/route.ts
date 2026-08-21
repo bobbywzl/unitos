@@ -170,7 +170,7 @@ async function handle(req: Request) {
   const document = await db.document.findUnique({
     where: { id: data.documentId },
     include: {
-      blocks: { orderBy: { order: "asc" }, select: { id: true, type: true, text: true } },
+      blocks: { orderBy: { order: "asc" }, select: { id: true, type: true, text: true, startTime: true, endTime: true } },
     },
   });
   if (!document) return NextResponse.json({ error: "Document not found" }, { status: 404 });
