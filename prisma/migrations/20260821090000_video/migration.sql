@@ -25,6 +25,7 @@ CREATE TABLE "VideoAsset" (
     "height" INTEGER,
     "transcriptStatus" "TranscriptStatus" NOT NULL DEFAULT 'NONE',
     "transcriptError" TEXT,
+    "transcriptStartedAt" TIMESTAMP(3),
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "VideoAsset_pkey" PRIMARY KEY ("id")

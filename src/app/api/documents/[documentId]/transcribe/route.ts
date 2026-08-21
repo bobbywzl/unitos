@@ -18,7 +18,7 @@ export async function POST(_req: Request, ctx: { params: Promise<{ documentId: s
   const { documentId } = await ctx.params;
   const asset = await db.videoAsset.findUnique({
     where: { documentId },
-    select: { id: true, size: true, mimeType: true, transcriptStatus: true },
+    select: { id: true, size: true, mimeType: true, transcriptStatus: true, transcriptStartedAt: true },
   });
   if (!asset) return NextResponse.json({ error: "This document has no video" }, { status: 404 });
   if (asset.size > TRANSCRIBE_MAX_BYTES) {
@@ -27,13 +27,19 @@ export async function POST(_req: Request, ctx: { params: Promise<{ documentId: s
       { status: 413 },
     );
   }
-  if (asset.transcriptStatus === "PENDING") {
+  // A PENDING older than 10 minutes is a dead run (the function timed out or
+  // crashed before writing FAILED) and may start again.
+  const running =
+    asset.transcriptStatus === "PENDING" &&
+    asset.transcriptStartedAt !== null &&
+    Date.now() - asset.transcriptStartedAt.getTime() < 10 * 60 * 1000;
+  if (running) {
     return NextResponse.json({ error: "Transcription is already running" }, { status: 409 });
   }
 
   await db.videoAsset.update({
     where: { id: asset.id },
-    data: { transcriptStatus: "PENDING", transcriptError: null },
+    data: { transcriptStatus: "PENDING", transcriptError: null, transcriptStartedAt: new Date() },
   });
 
   try {

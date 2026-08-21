@@ -58,7 +58,23 @@ export type VideoInfo = {
   height: number | null;
   transcriptStatus: TranscriptStatusName;
   transcriptError: string | null;
+  transcriptStale: boolean; // PENDING but the run is dead; Transcribe may start again
 };
+
+// A PENDING older than this is a dead run: the transcribe function timed out
+// or crashed before writing FAILED. The route lets it start again; the pane
+// shows Transcribe again instead of a spinner.
+export const TRANSCRIBE_STALE_MS = 10 * 60 * 1000;
+
+export function transcriptIsStale(
+  status: TranscriptStatusName,
+  startedAt: Date | null,
+): boolean {
+  return (
+    status === "PENDING" &&
+    (startedAt === null || Date.now() - startedAt.getTime() > TRANSCRIBE_STALE_MS)
+  );
+}
 
 /** One transcript line: a TRANSCRIPT block with its time range. */
 export type TranscriptLine = {

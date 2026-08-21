@@ -208,8 +208,11 @@ model VideoAsset {
   height           Int?
   transcriptStatus TranscriptStatus @default(NONE)
   transcriptError  String? // FAILED only: the reason, shown in the transcript pane
-  chunks           VideoChunk[]
-  createdAt        DateTime         @default(now())
+  // When the running transcription started. A PENDING older than 10 minutes is
+  // a dead run and may start again.
+  transcriptStartedAt DateTime?
+  chunks              VideoChunk[]
+  createdAt           DateTime     @default(now())
 }
 
 model VideoChunk {

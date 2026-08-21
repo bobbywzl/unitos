@@ -27,16 +27,24 @@ export function TranscriptPane({
   const listRef = useRef<HTMLDivElement>(null);
   const hoveredRef = useRef(false);
 
-  const pending = running || video.transcriptStatus === "PENDING";
-  const failedMessage = error ?? (video.transcriptStatus === "FAILED" ? video.transcriptError : null);
+  // A stale PENDING is a dead run (the server judges staleness): offer
+  // Transcribe again instead of a spinner that never resolves.
+  const pending = running || (video.transcriptStatus === "PENDING" && !video.transcriptStale);
+  const failedMessage =
+    error ??
+    (video.transcriptStatus === "FAILED"
+      ? video.transcriptError
+      : video.transcriptStale
+        ? "The last run did not finish."
+        : null);
 
   // Transcription may have been started in another tab; while it runs, refresh
   // until the lines land.
   useEffect(() => {
-    if (video.transcriptStatus !== "PENDING" || running) return;
+    if (!pending || running) return;
     const timer = setInterval(() => router.refresh(), 5000);
     return () => clearInterval(timer);
-  }, [video.transcriptStatus, running, router]);
+  }, [pending, running, router]);
 
   // Follow playback — unless the pointer is on the list, so reading ahead is
   // never fought.

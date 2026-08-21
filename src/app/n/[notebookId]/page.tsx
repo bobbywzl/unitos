@@ -25,6 +25,7 @@ import { Workspace } from "@/components/reader/workspace";
 import { VideoPane } from "@/components/video/video-pane";
 import {
   parseRegion,
+  transcriptIsStale,
   type TranscriptLine,
   type VideoAnnotationItem,
   type VideoInfo,
@@ -512,6 +513,10 @@ export default async function NotebookPage(props: {
           height: document.video.height,
           transcriptStatus: document.video.transcriptStatus,
           transcriptError: document.video.transcriptError,
+          transcriptStale: transcriptIsStale(
+            document.video.transcriptStatus,
+            document.video.transcriptStartedAt,
+          ),
         }
       : null;
     const transcript: TranscriptLine[] = document.blocks
