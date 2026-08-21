@@ -7,7 +7,11 @@ import { Markdown } from "@/components/markdown";
 import { Deck } from "@/components/video/deck";
 import { FindPanel } from "@/components/video/find-panel";
 import { TranscriptPane } from "@/components/video/transcript-pane";
-import { VideoPlayer, type VideoPlayerHandle } from "@/components/video/video-player";
+import {
+  VideoPlayer,
+  type VideoPlayerHandle,
+  type VideoSource,
+} from "@/components/video/video-player";
 import { splitStreamError, splitStreamNote } from "@/lib/derive/config";
 import {
   formatTime,
@@ -88,7 +92,13 @@ export function VideoPane({
       .sort((a, b) => a.startTime - b.startTime || a.endTime - b.endTime);
   }, [annotations, added, removed]);
 
-  const src = `/api/video/${documentId}`;
+  const source: VideoSource =
+    video.kind === "YOUTUBE" && video.youtubeId
+      ? { kind: "youtube", youtubeId: video.youtubeId }
+      : { kind: "upload", src: `/api/video/${documentId}` };
+  // Deck thumbnails capture from the file; a YouTube frame cannot be captured
+  // cross-origin, so those cards fall back to their time tile.
+  const captureSrc = source.kind === "upload" ? source.src : null;
   const aspect =
     video.width && video.height && video.height > 0 ? video.width / video.height : 16 / 9;
 
@@ -133,14 +143,14 @@ export function VideoPane({
   // Report duration and frame size once metadata loads, when the stored values
   // are missing or stale.
   const reported = useRef(false);
-  function onMetadata(m: { duration: number; width: number; height: number }) {
+  function onMetadata(m: { duration: number; width?: number; height?: number }) {
     if (reported.current) return;
     reported.current = true;
     const stale =
       video.duration === null ||
       Math.abs(video.duration - m.duration) > 0.25 ||
-      video.width !== m.width ||
-      video.height !== m.height;
+      (m.width !== undefined && video.width !== m.width) ||
+      (m.height !== undefined && video.height !== m.height);
     if (stale) void api(`/api/video/${documentId}`, "PATCH", m).catch(() => {});
   }
 
@@ -286,7 +296,7 @@ export function VideoPane({
       <div className="relative min-h-0 min-w-0 flex-1 overflow-y-auto">
       <article className="reader-prose mx-auto w-[860px] max-w-full px-6 py-11">
         <p className="mb-2.5 text-[11px] font-bold tracking-[0.09em] text-clay-700 uppercase">
-          Video
+          {video.kind === "YOUTUBE" ? "YouTube" : "Video"}
           {video.duration !== null ? ` · ${formatTime(video.duration)}` : ""}
           {transcript.length > 0 ? ` · ${transcript.length} transcript lines` : ""}
         </p>
@@ -294,7 +304,7 @@ export function VideoPane({
 
         <VideoPlayer
           ref={playerRef}
-          src={src}
+          source={source}
           aspect={aspect}
           storedDuration={video.duration}
           annotations={all}
@@ -417,7 +427,7 @@ export function VideoPane({
         )}
 
         <Deck
-          src={src}
+          src={captureSrc}
           annotations={all}
           onSeek={(sourceId, t) => {
             playerRef.current?.seek(t);

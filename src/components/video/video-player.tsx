@@ -25,20 +25,89 @@ import {
   type VideoAnnotationItem,
 } from "@/lib/video/types";
 
-// The player (SPEC.md §11): a plain <video> with custom controls, an SVG
-// overlay for annotations, and a scrubber with one marker per annotation.
-// The video file is never modified — the overlay is the note layer on top.
+// The player (SPEC.md §11): custom controls, an SVG overlay for annotations,
+// and a scrubber with one marker per annotation. Two engines behind one
+// surface — a plain <video> for uploads, the YouTube IFrame player for
+// YouTube videos — so the overlay, drawing, markers, and deck behave the same.
+// The video itself is never modified; the overlay is the note layer on top.
 // Regions are percent coordinates of the frame; the overlay is sized to the
 // frame's content box, so they stay glued at any player size and in fullscreen.
+
+export type VideoSource =
+  | { kind: "upload"; src: string }
+  | { kind: "youtube"; youtubeId: string };
 
 export type VideoPlayerHandle = {
   seek: (t: number, opts?: { play?: boolean }) => void;
   pause: () => void;
   time: () => number;
   /** The current frame as a JPEG data URL, cropped toward the region when one
-      is given. Null when the frame is not ready. */
+      is given. Null when the frame is not ready — always null for YouTube:
+      the frame cannot be captured cross-origin. */
   capture: (region?: Region | null) => string | null;
 };
+
+// What both engines expose to the controls.
+type Engine = {
+  play(): void;
+  pause(): void;
+  seek(t: number): void;
+  time(): number;
+  duration(): number;
+  setMuted(muted: boolean): void;
+};
+
+// ── The YouTube IFrame API, loaded once ─────────────────────────────────────
+
+type YTPlayerInstance = {
+  playVideo(): void;
+  pauseVideo(): void;
+  seekTo(t: number, allowSeekAhead: boolean): void;
+  getCurrentTime(): number;
+  getDuration(): number;
+  mute(): void;
+  unMute(): void;
+  destroy(): void;
+};
+type YTEvent = { target: YTPlayerInstance; data?: number };
+type YTNamespace = {
+  Player: new (
+    el: HTMLElement,
+    opts: {
+      videoId: string;
+      width: string;
+      height: string;
+      playerVars: Record<string, string | number>;
+      events: {
+        onReady?: (e: YTEvent) => void;
+        onStateChange?: (e: YTEvent) => void;
+        onError?: (e: YTEvent) => void;
+      };
+    },
+  ) => YTPlayerInstance;
+};
+
+let ytApiPromise: Promise<YTNamespace> | null = null;
+function loadYouTubeApi(): Promise<YTNamespace> {
+  const w = window as unknown as {
+    YT?: YTNamespace & { Player?: unknown };
+    onYouTubeIframeAPIReady?: () => void;
+  };
+  if (w.YT?.Player) return Promise.resolve(w.YT as YTNamespace);
+  if (!ytApiPromise) {
+    ytApiPromise = new Promise((resolve) => {
+      const previous = w.onYouTubeIframeAPIReady;
+      w.onYouTubeIframeAPIReady = () => {
+        previous?.();
+        resolve(w.YT as YTNamespace);
+      };
+      const script = document.createElement("script");
+      script.src = "https://www.youtube.com/iframe_api";
+      document.head.appendChild(script);
+    });
+  }
+  return ytApiPromise;
+}
 
 // Fixed warm-dark stage colors: the player frame stays dark in both themes.
 const STAGE = "#12100e";
@@ -53,7 +122,7 @@ type DrawState = { startX: number; startY: number; x: number; y: number } | null
 export const VideoPlayer = forwardRef<
   VideoPlayerHandle,
   {
-    src: string;
+    source: VideoSource;
     aspect: number; // width / height; stored value until metadata loads
     storedDuration: number | null;
     annotations: VideoAnnotationItem[];
@@ -64,13 +133,13 @@ export const VideoPlayer = forwardRef<
     onDrawn: (region: Region) => void;
     /** The just-drawn circle, kept visible (dashed) while the composer is open. */
     pendingRegion: Region | null;
-    onMetadata: (m: { duration: number; width: number; height: number }) => void;
+    onMetadata: (m: { duration: number; width?: number; height?: number }) => void;
     onTime: (t: number) => void; // ~4 Hz, for the transcript follow-along
     onAnnotate: () => void; // the pencil button; pane opens the composer
   }
 >(function VideoPlayer(
   {
-    src,
+    source,
     aspect,
     storedDuration,
     annotations,
@@ -87,7 +156,9 @@ export const VideoPlayer = forwardRef<
   const containerRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const ytHostRef = useRef<HTMLDivElement>(null);
   const trackRef = useRef<HTMLDivElement>(null);
+  const engineRef = useRef<Engine | null>(null);
   const [playing, setPlaying] = useState(false);
   const [muted, setMuted] = useState(false);
   const [time, setTime] = useState(0);
@@ -97,26 +168,32 @@ export const VideoPlayer = forwardRef<
   const [error, setError] = useState<string | null>(null);
   const [fullscreen, setFullscreen] = useState(false);
   // The frame's content box inside the stage (letterbox math); the overlay and
-  // the <video> both size to it, so percent coordinates always mean the frame.
+  // the frame both size to it, so percent coordinates always mean the frame.
   const [box, setBox] = useState<{ w: number; h: number } | null>(null);
   const [draw, setDraw] = useState<DrawState>(null);
   const wasPlayingRef = useRef(false);
+  const onTimeRef = useRef(onTime);
+  onTimeRef.current = onTime;
+  const onMetadataRef = useRef(onMetadata);
+  onMetadataRef.current = onMetadata;
 
   const seek = useCallback((t: number, opts?: { play?: boolean }) => {
-    const video = videoRef.current;
-    if (!video) return;
-    const clamped = Math.max(0, Math.min(t, video.duration || t));
-    video.currentTime = clamped;
+    const engine = engineRef.current;
+    if (!engine) return;
+    const total = engine.duration();
+    const clamped = Math.max(0, total > 0 ? Math.min(t, total) : t);
+    engine.seek(clamped);
     setTime(clamped);
-    if (opts?.play) void video.play();
+    onTimeRef.current(clamped);
+    if (opts?.play) engine.play();
   }, []);
 
   useImperativeHandle(
     ref,
     () => ({
       seek,
-      pause: () => videoRef.current?.pause(),
-      time: () => videoRef.current?.currentTime ?? 0,
+      pause: () => engineRef.current?.pause(),
+      time: () => engineRef.current?.time() ?? 0,
       capture: (region?: Region | null) => {
         const video = videoRef.current;
         if (!video || video.videoWidth === 0) return null;
@@ -156,14 +233,117 @@ export const VideoPlayer = forwardRef<
     [seek],
   );
 
+  // ── Engines ───────────────────────────────────────────────────────────────
+
+  useEffect(() => {
+    if (source.kind !== "upload") return;
+    const video = videoRef.current;
+    if (!video) return;
+    engineRef.current = {
+      play: () => void video.play(),
+      pause: () => video.pause(),
+      seek: (t) => {
+        video.currentTime = t;
+      },
+      time: () => video.currentTime,
+      duration: () => video.duration || 0,
+      setMuted: (m) => {
+        video.muted = m;
+      },
+    };
+    return () => {
+      engineRef.current = null;
+    };
+  }, [source.kind]);
+
+  const youtubeId = source.kind === "youtube" ? source.youtubeId : null;
+  useEffect(() => {
+    if (!youtubeId) return;
+    let player: YTPlayerInstance | null = null;
+    let cancelled = false;
+    void loadYouTubeApi().then((YT) => {
+      if (cancelled || !ytHostRef.current) return;
+      player = new YT.Player(ytHostRef.current, {
+        videoId: youtubeId,
+        width: "100%",
+        height: "100%",
+        // Our controls drive the player; YouTube's own UI stays out of the way.
+        playerVars: {
+          controls: 0,
+          rel: 0,
+          playsinline: 1,
+          disablekb: 1,
+          iv_load_policy: 3,
+          fs: 0,
+          origin: window.location.origin,
+        },
+        events: {
+          onReady: (e) => {
+            engineRef.current = {
+              play: () => e.target.playVideo(),
+              pause: () => e.target.pauseVideo(),
+              seek: (t) => e.target.seekTo(t, true),
+              time: () => e.target.getCurrentTime(),
+              duration: () => e.target.getDuration(),
+              setMuted: (m) => (m ? e.target.mute() : e.target.unMute()),
+            };
+            const total = e.target.getDuration();
+            if (total > 0) {
+              setDuration(total);
+              onMetadataRef.current({ duration: total });
+            }
+          },
+          onStateChange: (e) => {
+            // 1 playing, 3 buffering; 0 ended, 2 paused, 5 cued.
+            if (e.data === 1) {
+              setPlaying(true);
+              setWaiting(false);
+            } else if (e.data === 3) {
+              setWaiting(true);
+            } else {
+              setPlaying(false);
+              setWaiting(false);
+            }
+          },
+          onError: () =>
+            setError("This YouTube video did not play. It may be private or embedding-disabled."),
+        },
+      });
+    });
+    return () => {
+      cancelled = true;
+      engineRef.current = null;
+      try {
+        player?.destroy();
+      } catch {
+        // the iframe may already be gone
+      }
+    };
+  }, [youtubeId]);
+
+  useEffect(() => {
+    engineRef.current?.setMuted(muted);
+  }, [muted]);
+
   // Smooth clock: rAF while playing, so the scrubber and overlay track the
-  // frame, not the 4 Hz timeupdate.
+  // frame. The transcript follow-along gets ~4 Hz through the same loop.
   useEffect(() => {
     if (!playing) return;
     let raf = 0;
+    let lastEmit = 0;
     const tick = () => {
-      const video = videoRef.current;
-      if (video) setTime(video.currentTime);
+      const engine = engineRef.current;
+      if (engine) {
+        const t = engine.time();
+        setTime(t);
+        // Some YouTube videos report duration 0 until playback starts.
+        const total = engine.duration();
+        if (total > 0) setDuration((prev) => (Math.abs(prev - total) > 0.5 ? total : prev));
+        if (Math.abs(t - lastEmit) > 0.25) {
+          lastEmit = t;
+          onTimeRef.current(t);
+        }
+      }
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
@@ -193,10 +373,10 @@ export const VideoPlayer = forwardRef<
   }, []);
 
   function togglePlay() {
-    const video = videoRef.current;
-    if (!video) return;
-    if (video.paused) void video.play();
-    else video.pause();
+    const engine = engineRef.current;
+    if (!engine) return;
+    if (playing) engine.pause();
+    else engine.play();
   }
 
   function toggleFullscreen() {
@@ -214,11 +394,10 @@ export const VideoPlayer = forwardRef<
   }
 
   function startScrub(e: React.PointerEvent<HTMLDivElement>) {
-    const video = videoRef.current;
-    if (!video || duration === 0) return;
+    if (!engineRef.current || duration === 0) return;
     e.currentTarget.setPointerCapture(e.pointerId);
-    wasPlayingRef.current = !video.paused;
-    video.pause();
+    wasPlayingRef.current = playing;
+    engineRef.current.pause();
     seek(timeAtPointer(e.clientX));
   }
   function moveScrub(e: React.PointerEvent<HTMLDivElement>) {
@@ -228,7 +407,7 @@ export const VideoPlayer = forwardRef<
   function endScrub(e: React.PointerEvent<HTMLDivElement>) {
     if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
     e.currentTarget.releasePointerCapture(e.pointerId);
-    if (wasPlayingRef.current) void videoRef.current?.play();
+    if (wasPlayingRef.current) engineRef.current?.play();
   }
 
   // ── Drawing (annotate mode) ───────────────────────────────────────────────
@@ -255,7 +434,7 @@ export const VideoPlayer = forwardRef<
     const p = overlayPercent(e);
     if (!p) return;
     e.currentTarget.setPointerCapture(e.pointerId);
-    videoRef.current?.pause();
+    engineRef.current?.pause();
     setDraw({ startX: p.x, startY: p.y, x: p.x, y: p.y });
   }
   function moveDraw(e: React.PointerEvent<HTMLDivElement>) {
@@ -324,34 +503,39 @@ export const VideoPlayer = forwardRef<
           className={box ? "relative" : "relative h-full w-full"}
           style={box ? { width: box.w, height: box.h } : undefined}
         >
-          <video
-            ref={videoRef}
-            src={src}
-            preload="metadata"
-            playsInline
-            muted={muted}
-            onClick={drawing ? undefined : togglePlay}
-            onPlay={() => setPlaying(true)}
-            onPause={() => setPlaying(false)}
-            onWaiting={() => setWaiting(true)}
-            onPlaying={() => setWaiting(false)}
-            onCanPlay={() => setWaiting(false)}
-            onTimeUpdate={(e) => onTime(e.currentTarget.currentTime)}
-            onLoadedMetadata={(e) => {
-              const video = e.currentTarget;
-              setDuration(video.duration);
-              if (video.videoWidth > 0 && video.videoHeight > 0) {
-                setVideoAspect(video.videoWidth / video.videoHeight);
-                onMetadata({
-                  duration: video.duration,
-                  width: video.videoWidth,
-                  height: video.videoHeight,
-                });
-              }
-            }}
-            onError={() => setError("This video did not play in this browser.")}
-            className="h-full w-full"
-          />
+          {source.kind === "upload" ? (
+            <video
+              ref={videoRef}
+              src={source.src}
+              preload="metadata"
+              playsInline
+              muted={muted}
+              onClick={drawing ? undefined : togglePlay}
+              onPlay={() => setPlaying(true)}
+              onPause={() => setPlaying(false)}
+              onWaiting={() => setWaiting(true)}
+              onPlaying={() => setWaiting(false)}
+              onCanPlay={() => setWaiting(false)}
+              onLoadedMetadata={(e) => {
+                const video = e.currentTarget;
+                setDuration(video.duration);
+                if (video.videoWidth > 0 && video.videoHeight > 0) {
+                  setVideoAspect(video.videoWidth / video.videoHeight);
+                  onMetadataRef.current({
+                    duration: video.duration,
+                    width: video.videoWidth,
+                    height: video.videoHeight,
+                  });
+                }
+              }}
+              onError={() => setError("This video did not play in this browser.")}
+              className="h-full w-full"
+            />
+          ) : (
+            <div className="absolute inset-0">
+              <div ref={ytHostRef} className="h-full w-full" />
+            </div>
+          )}
 
           {/* The annotation layer: every annotation renders once and fades with
               its range, so replay is a CSS transition, never a mount flash. */}
@@ -438,6 +622,12 @@ export const VideoPlayer = forwardRef<
               </div>
             );
           })}
+
+          {/* The iframe swallows clicks, so a catcher above it keeps
+              click-to-toggle working; our controls drive the player. */}
+          {source.kind === "youtube" && !drawing && (
+            <div onClick={togglePlay} className="absolute inset-0" aria-hidden />
+          )}
 
           {/* Draw layer: takes the pointer only in annotate mode. */}
           {drawing && (

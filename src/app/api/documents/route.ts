@@ -4,6 +4,8 @@ import { db } from "@/lib/db";
 import { buildGlossary } from "@/lib/glossary";
 import { progressResponse } from "@/lib/ingest-response";
 import { attachDocument } from "@/lib/parse/attach";
+import { ingestYouTube } from "@/lib/video/ingest-youtube";
+import { parseYouTubeId } from "@/lib/video/youtube";
 import { parseBody } from "@/lib/validate";
 
 export const maxDuration = 120;
@@ -95,6 +97,17 @@ export async function POST(req: Request) {
   if (error) return error;
   const notebook = await db.notebook.findUnique({ where: { id: data.notebookId } });
   if (!notebook) return NextResponse.json({ error: "Corpus not found" }, { status: 404 });
+
+  // A YouTube link is a video document, wherever it was pasted (SPEC.md §11).
+  const youtubeId = parseYouTubeId(data.url);
+  if (youtubeId) {
+    return progressResponse(async (onProgress) => {
+      const { document, deduped } = await ingestYouTube(youtubeId, onProgress);
+      await attachDocument(data.notebookId, document.id);
+      return { id: document.id, title: document.title, deduped };
+    });
+  }
+
   return progressResponse(async (onProgress) => {
     try {
       const { document, deduped } = await parse.ingestUrl(data.url, onProgress);

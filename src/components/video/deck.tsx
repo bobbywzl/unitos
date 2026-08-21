@@ -18,7 +18,8 @@ export function Deck({
   onSeek,
   onDelete,
 }: {
-  src: string;
+  /** File URL to capture thumbnails from; null (YouTube) falls back to time tiles. */
+  src: string | null;
   annotations: VideoAnnotationItem[];
   onSeek: (sourceId: string, startTime: number) => void;
   onDelete: (noteId: string) => Promise<void>;

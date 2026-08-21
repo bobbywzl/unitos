@@ -9,7 +9,7 @@ export type IngestStep = { key: string; label: string; detail?: string; status: 
 // Ordered step templates, one per source. Keys match the stage events the server
 // sends (see /api/documents); the first step is active from the moment the
 // request leaves, before any event arrives.
-const STEP_TEMPLATES: Record<"pdf" | "url" | "video", { key: string; label: string }[]> = {
+const STEP_TEMPLATES: Record<"pdf" | "url" | "video" | "youtube", { key: string; label: string }[]> = {
   pdf: [
     { key: "receive", label: "Uploading" },
     { key: "parse", label: "Parsing" },
@@ -26,9 +26,13 @@ const STEP_TEMPLATES: Record<"pdf" | "url" | "video", { key: string; label: stri
     { key: "receive", label: "Uploading" },
     { key: "save", label: "Saving" },
   ],
+  youtube: [
+    { key: "fetch", label: "Fetching video info" },
+    { key: "save", label: "Saving" },
+  ],
 };
 
-export function initialIngestSteps(kind: "pdf" | "url" | "video"): IngestStep[] {
+export function initialIngestSteps(kind: "pdf" | "url" | "video" | "youtube"): IngestStep[] {
   return STEP_TEMPLATES[kind].map((s, i) => ({
     ...s,
     status: i === 0 ? "active" : "pending",

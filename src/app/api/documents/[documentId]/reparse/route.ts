@@ -23,8 +23,16 @@ export async function POST(_req: Request, ctx: { params: Promise<{ documentId: s
     );
   }
 
-  const document = await db.document.findUnique({ where: { id: documentId }, select: { id: true } });
+  const document = await db.document.findUnique({
+    where: { id: documentId },
+    select: { id: true, video: { select: { id: true } } },
+  });
   if (!document) return NextResponse.json({ error: "Document not found" }, { status: 404 });
+  // A video document's blocks are its player and transcript — re-parsing its
+  // sourceUrl as an article would replace them (SPEC.md §11).
+  if (document.video) {
+    return NextResponse.json({ error: "Video documents do not re-parse" }, { status: 400 });
+  }
 
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {

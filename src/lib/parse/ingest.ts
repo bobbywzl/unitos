@@ -116,9 +116,14 @@ export async function ingestUrl(url: string, onProgress?: OnIngestProgress) {
 }
 
 // Re-parse from stored bytes or source URL. Block ids change; anchors re-resolve by quote (SPEC.md §5).
+// Video documents never re-parse: their blocks are the player and the transcript (SPEC.md §11).
 export async function reparseDocument(documentId: string, onProgress?: OnIngestProgress) {
-  const document = await db.document.findUnique({ where: { id: documentId } });
+  const document = await db.document.findUnique({
+    where: { id: documentId },
+    include: { video: { select: { id: true } } },
+  });
   if (!document) return null;
+  if (document.video) throw new Error("Video documents do not re-parse");
 
   let blocks: ParsedBlock[];
   let references: DocumentReference[] | undefined;

@@ -5,7 +5,8 @@ import { useEffect, useRef, useState } from "react";
 // Deck card thumbnails: one hidden <video> element seeks through the requested
 // times and draws each frame to a canvas. Serial queue — seeking is the slow
 // part — and every captured frame caches by its time for the session.
-export function useVideoThumbnails(src: string, times: number[]): Record<string, string> {
+// src null (YouTube: no capturable file) captures nothing.
+export function useVideoThumbnails(src: string | null, times: number[]): Record<string, string> {
   const [thumbs, setThumbs] = useState<Record<string, string>>({});
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const queueRef = useRef<number[]>([]);
@@ -13,6 +14,7 @@ export function useVideoThumbnails(src: string, times: number[]): Record<string,
   const doneRef = useRef(new Set<string>());
 
   useEffect(() => {
+    if (!src) return;
     const video = document.createElement("video");
     video.src = src;
     video.muted = true;

@@ -7,6 +7,7 @@ import { Logo } from "@/components/logo";
 import { readNdjson } from "@/lib/ndjson";
 import { PARSER_VERSION } from "@/lib/parse/types";
 import { MAX_VIDEO_BYTES, UPLOAD_CHUNK_BYTES } from "@/lib/video/types";
+import { parseYouTubeId } from "@/lib/video/youtube";
 import {
   IngestProgress,
   advanceIngestSteps,
@@ -21,6 +22,7 @@ export type AttachedDocument = {
   sourceUrl: string | null;
   parserVersion: number;
   hasFile: boolean;
+  hasVideo: boolean; // video documents never re-parse (SPEC.md §11)
 };
 type LibraryDocument = { id: string; title: string; _count: { blocks: number } };
 type IngestPhase = { fileLabel: string; steps: IngestStep[] };
@@ -77,12 +79,14 @@ export function DocumentBar({
   const router = useRouter();
   const searchParams = useSearchParams();
   const fileRef = useRef<HTMLInputElement>(null);
+  const videoFileRef = useRef<HTMLInputElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const [phase, setPhase] = useState<IngestPhase | null>(null);
-  const [menu, setMenu] = useState<null | "root" | "url" | "library">(null);
+  const [menu, setMenu] = useState<null | "root" | "url" | "video" | "library">(null);
   // Per-pill menu: document-specific actions live on the document's own pill.
   const [pillMenu, setPillMenu] = useState<string | null>(null);
   const [url, setUrl] = useState("");
+  const [videoUrl, setVideoUrl] = useState("");
   const [library, setLibrary] = useState<LibraryDocument[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -134,7 +138,10 @@ export function DocumentBar({
   const reparseAttempted = useRef(new Set<string>());
   const active = documents.find((d) => d.id === activeId) ?? null;
   const activeStale =
-    active !== null && active.sourceUrl !== null && active.parserVersion < PARSER_VERSION;
+    active !== null &&
+    !active.hasVideo &&
+    active.sourceUrl !== null &&
+    active.parserVersion < PARSER_VERSION;
 
   // Manual re-parse: the progress card shows, errors show.
   async function reparse(doc: AttachedDocument) {
@@ -184,7 +191,7 @@ export function DocumentBar({
   // server response starts streaming.
   async function runIngest(
     fileLabel: string,
-    kind: "pdf" | "url" | "video",
+    kind: "pdf" | "url" | "video" | "youtube",
     send: (emit: (stage: string, detail?: string) => void) => Promise<Response>,
   ): Promise<{ id: string; title: string; deduped: boolean }> {
     setPhase({ fileLabel, steps: initialIngestSteps(kind) });
@@ -270,6 +277,7 @@ export function DocumentBar({
     } finally {
       setPhase(null);
       if (fileRef.current) fileRef.current.value = "";
+      if (videoFileRef.current) videoFileRef.current.value = "";
     }
     if (lastId) {
       open(lastId);
@@ -329,7 +337,9 @@ export function DocumentBar({
     if (!trimmed) return;
     setError(null);
     try {
-      const result = await runIngest(trimmed, "url", () =>
+      // A pasted YouTube link is a video document; the server routes it the
+      // same way, this only picks the matching progress steps.
+      const result = await runIngest(trimmed, parseYouTubeId(trimmed) ? "youtube" : "url", () =>
         fetch("/api/documents", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -337,6 +347,35 @@ export function DocumentBar({
         }),
       );
       setUrl("");
+      setMenu(null);
+      open(result.id);
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Ingest failed");
+    } finally {
+      setPhase(null);
+    }
+  }
+
+  // The Upload video menu takes a YouTube link. Other video links are not
+  // supported yet; files go through the file picker beside it.
+  async function addYouTube() {
+    const trimmed = videoUrl.trim();
+    if (!trimmed) return;
+    if (!parseYouTubeId(trimmed)) {
+      setError("Only YouTube links work here. Paste a watch, shorts, or youtu.be link.");
+      return;
+    }
+    setError(null);
+    try {
+      const result = await runIngest(trimmed, "youtube", () =>
+        fetch("/api/documents", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url: trimmed, notebookId }),
+        }),
+      );
+      setVideoUrl("");
       setMenu(null);
       open(result.id);
       router.refresh();
@@ -421,7 +460,7 @@ export function DocumentBar({
           </button>
           {pillMenu === d.id && (
             <div className="absolute top-full left-0 z-30 mt-2 flex w-56 flex-col overflow-hidden rounded-2xl bg-card py-1 shadow-float">
-              {(d.sourceUrl !== null || d.hasFile) && (
+              {!d.hasVideo && (d.sourceUrl !== null || d.hasFile) && (
                 <button
                   onClick={() => {
                     setPillMenu(null);
@@ -495,7 +534,10 @@ export function DocumentBar({
                   disabled={phase !== null}
                   className={`${menuItem} disabled:opacity-40`}
                 >
-                  Upload PDF or video
+                  Upload PDF
+                </button>
+                <button onClick={() => setMenu("video")} className={menuItem}>
+                  Upload video
                 </button>
                 <button onClick={() => setMenu("url")} className={menuItem}>
                   Add URL
@@ -503,6 +545,56 @@ export function DocumentBar({
                 <button onClick={() => void openLibrary()} className={menuItem}>
                   Library
                 </button>
+              </div>
+            )}
+
+            {menu === "video" && (
+              <div className="flex flex-col gap-2 p-3">
+                <button
+                  onClick={() => {
+                    setMenu(null);
+                    videoFileRef.current?.click();
+                  }}
+                  disabled={phase !== null}
+                  className="rounded-full bg-clay px-4 py-2 text-xs font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
+                >
+                  Choose a video file
+                </button>
+                <span className="text-center text-[11px] text-sand-500">
+                  mp4, webm, ogg, or mov · up to 200 MB · or a YouTube link:
+                </span>
+                <form
+                  className="flex flex-col gap-2"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    void addYouTube();
+                  }}
+                >
+                  <input
+                    autoFocus
+                    value={videoUrl}
+                    onChange={(e) => setVideoUrl(e.target.value)}
+                    placeholder="https://www.youtube.com/watch?v=…"
+                    aria-label="YouTube link"
+                    className="w-full rounded-full bg-sand-100 px-4 py-2 text-sm outline-none placeholder:text-sand-500"
+                  />
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="submit"
+                      disabled={phase !== null}
+                      className="rounded-full bg-clay px-4 py-1.5 text-xs font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
+                    >
+                      Add video
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setMenu("root")}
+                      className="rounded-full border border-line px-3 py-1 text-xs text-sand-700 hover:bg-clay-100 hover:text-clay-800"
+                    >
+                      Back
+                    </button>
+                  </div>
+                </form>
               </div>
             )}
 
@@ -581,7 +673,18 @@ export function DocumentBar({
       <input
         ref={fileRef}
         type="file"
-        accept="application/pdf,video/mp4,video/webm,video/ogg,video/quicktime,.mp4,.m4v,.webm,.ogv,.ogg,.mov"
+        accept="application/pdf,.pdf"
+        multiple
+        className="hidden"
+        onChange={(e) => {
+          const files = [...(e.target.files ?? [])];
+          if (files.length > 0) void uploadFiles(files);
+        }}
+      />
+      <input
+        ref={videoFileRef}
+        type="file"
+        accept="video/mp4,video/webm,video/ogg,video/quicktime,.mp4,.m4v,.webm,.ogv,.ogg,.mov"
         multiple
         className="hidden"
         onChange={(e) => {

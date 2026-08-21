@@ -58,7 +58,14 @@ export default async function NotebookPage(props: {
       documents: {
         include: {
           document: {
-            select: { id: true, title: true, sourceUrl: true, parserVersion: true, fileHash: true },
+            select: {
+              id: true,
+              title: true,
+              sourceUrl: true,
+              parserVersion: true,
+              fileHash: true,
+              video: { select: { id: true } },
+            },
           },
         },
       },
@@ -84,6 +91,7 @@ export default async function NotebookPage(props: {
     sourceUrl: nd.document.sourceUrl,
     parserVersion: nd.document.parserVersion,
     hasFile: nd.document.fileHash !== null,
+    hasVideo: nd.document.video !== null,
   }));
   const activeId = doc && attached.some((d) => d.id === doc) ? doc : (attached[0]?.id ?? null);
   // The reader view is a per-visit choice carried in the URL; a fresh open is Normal.
