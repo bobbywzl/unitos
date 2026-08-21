@@ -300,3 +300,89 @@ Each phase must be fully working end-to-end before starting the next.
 - Anchor resolution success on unchanged documents: 100%; on re-parsed documents: >95%, remainder orphaned visibly.
 - No AI output ever enters accepted notes without explicit user action.
 - Every accepted note with a derivationType has ≥1 Source.
+
+---
+
+## 11. Video
+
+A video is a document. Its transcript is its blocks; a video anchor is a time range instead of a text span. Everything downstream — notes, source chips, pending/accept, the derivation pipeline — is unchanged. The video file is never modified; annotations are a layer on top of the player.
+
+### Data model additions
+
+```prisma
+model VideoAsset {
+  id               String           @id @default(cuid())
+  documentId       String           @unique
+  document         Document         @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  mimeType         String
+  size             Int
+  chunkSize        Int
+  duration         Float?           // seconds; written by the client after metadata loads
+  width            Int?
+  height           Int?
+  transcriptStatus TranscriptStatus @default(NONE)
+  transcriptError  String?          // FAILED only: the reason, shown in the transcript pane
+  chunks           VideoChunk[]
+}
+
+model VideoChunk {
+  id      String     @id @default(cuid())
+  videoId String
+  video   VideoAsset @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  index   Int
+  data    Bytes
+  @@unique([videoId, index])
+}
+
+enum TranscriptStatus { NONE PENDING READY FAILED }
+```
+
+- `Document` ↔ `VideoAsset` is one-to-one. A document with a VideoAsset is a video document; the reader renders the video pane for it instead of the text reader.
+- Every video document has exactly one `VIDEO` block at order 0. Video anchors point at it when no transcript block fits.
+- Transcript lines are `TRANSCRIPT` blocks with `Block.startTime`/`Block.endTime` (seconds). Same text machinery as every other block.
+- Video bytes live in `VideoChunk` rows (2 MB each), streamed by `GET /api/video/[documentId]` with HTTP Range support so the scrubber seeks without downloading the file. 200 MB cap per video. Postgres holds the bytes for the same reason it holds PDF bytes: zero-config deploys. Blob storage is the upgrade path, not a v1 requirement.
+
+### Time anchors (§5 extended)
+
+`Source` gains three nullable columns: `startTime`, `endTime` (seconds), `region` (Json). A source with `startTime` set is a video anchor:
+
+- It cites a span of the video. `blockId` points at the VIDEO block or a transcript block; `quotedText` holds the transcript excerpt for the range (or the formatted time range) so chips read well.
+- `region` is an optional drawn shape in percent coordinates of the video frame — `{kind: "ellipse", cx, cy, rx, ry}`, each 0–100 — so it stays glued to the same spot at any player size. Pixels are never stored.
+- Resolution: time anchors skip the text-matching ladder and never orphan. The video file never changes.
+- Clicking a source chip on a video anchor seeks the player to `startTime` and flashes the annotation — the video equivalent of scroll + flash.
+
+### The video pane
+
+- Player: plain `<video>` with custom controls. The scrubber carries a marker dot per annotation; clicking a marker seeks to it.
+- Overlay: a transparent SVG layer sized to the frame. Annotate pauses the video; drag draws an ellipse; a comment card saves the note (Annotations section, time source; range defaults to [t, t+4s], editable).
+- Replay: while playing, every annotation whose range contains the current time fades in on the overlay and fades out past its end.
+- Deck: a filmstrip of annotation cards under the player — the captured frame with the region drawn on it, the time range, the comment. Click a card → seek there. The deck is the visual note layer; the video stays untouched.
+- Transcript beside the player: click a line to seek; the current line highlights and follows playback.
+
+### Transcription
+
+`POST /api/documents/[documentId]/transcribe` sends the video to OpenAI Whisper (`OPENAI_API_KEY`; 25 MB cap for now) and writes the timed segments as TRANSCRIPT blocks. `VideoAsset.transcriptStatus`: NONE → PENDING → READY | FAILED with the reason stored. Upload and playback work without the key; the transcript pane offers Transcribe and states plainly what is missing.
+
+### Video derivations (same pipeline, §4)
+
+- The cached document prefix tags timed blocks: `[block <id>] (TRANSCRIPT 12.4s–18.2s)`. One cache entry per video document, like every document.
+- `FIND` — the video content reader. `{type: FIND, query}` → JSON `{matches: [{blockIds, explanation}]}`; the server resolves each match's blocks to a time range. Renders as cards with seek chips. "Add to notes" lands a `PENDING` note with a time source — never persisted without the user.
+- `EXPLAIN` with a video anchor `{startTime, endTime, region?}`: the client captures the paused frame (cropped toward the region when one is drawn) and attaches it; the model reads the frame plus the timed transcript. Output persists as an annotation with the same time source, so explained moments join the deck.
+
+### Build phases (continue §8 order)
+
+### Phase V1 — Upload, store, play
+- Video files through the chunked upload path → Document + VIDEO block + VideoAsset → video pane with custom player.
+- **Done when:** an mp4 uploads, plays, seeks smoothly via Range requests, survives reload, and a re-upload dedupes by fileHash.
+
+### Phase V2 — Transcript
+- Transcribe route → TRANSCRIPT blocks → transcript pane with click-to-seek and follow-along highlight.
+- **Done when:** clicking a line seeks the player; the playing line highlights and scrolls into view; a missing key degrades to a plain message, never a broken pane.
+
+### Phase V3 — Annotations
+- Circle + comment overlay, replay at their times, marker strip, deck.
+- **Done when:** an annotation drawn at 0:12–0:31 reappears whenever playback crosses that range, at any player size, and survives reload.
+
+### Phase V4 — Find + Explain
+- FIND over the transcript; EXPLAIN with frame capture.
+- **Done when:** "where do they discuss X" returns seekable ranges with explanations; explaining a circled region yields an annotation citing that time range.

@@ -8,6 +8,7 @@ export const DERIVATION_MODEL: Record<DerivationType, string> = {
   EXTRACT: "claude-sonnet-4-6",
   SUMMARIZE: "claude-sonnet-4-6",
   SYNTHESIS: "claude-sonnet-4-6",
+  FIND: "claude-sonnet-4-6",
 };
 
 export const MAX_OUTPUT_TOKENS: Record<DerivationType, number> = {
@@ -17,6 +18,7 @@ export const MAX_OUTPUT_TOKENS: Record<DerivationType, number> = {
   EXTRACT: 2048,
   SUMMARIZE: 2048,
   SYNTHESIS: 8192,
+  FIND: 2048,
 };
 
 export const ANNOTATIONS_SECTION_TITLE = "Annotations";

@@ -61,6 +61,7 @@ enum DerivationType {
   EXTRACT
   SUMMARIZE // document-level summary, one per depth
   SYNTHESIS // notebook-scope assistant output
+  FIND // video content reader: query → time ranges + explanations (SPEC.md §11)
 }
 
 model Source {
@@ -77,6 +78,12 @@ model Source {
   prefix      String // 32 chars before selection
   suffix      String // 32 chars after selection
   orphaned    Boolean @default(false)
+  // Video anchor (SPEC.md §11): a time range instead of a text span. When
+  // startTime is set the anchor skips the text ladder and never orphans —
+  // the video file never changes.
+  startTime Float?
+  endTime   Float?
+  region    Json? // drawn shape in percent coordinates: {kind: "ellipse", cx, cy, rx, ry}
 }
 
 model Document {
@@ -95,6 +102,7 @@ model Document {
   linksTo   DocLink[]          @relation("DocLinkTo")
   glossary  Json? // Phase 7: [{term, definition, blockIds[]}]
   references Json? // the article's reference list, extracted at ingest: [{id, label, text, url}]
+  video     VideoAsset? // set = video document; the reader renders the video pane (SPEC.md §11)
   createdAt DateTime           @default(now())
 }
 
@@ -168,6 +176,9 @@ model Block {
   html         String? // rendered content for figures/tables
   styles       Json? // inline decoration spans: [{start, end, style: "bold"|"italic", quotedText}]
   citations    Json? // in-text citation spans: [{start, end, refId, quotedText}], refId → Document.references
+  // TRANSCRIPT blocks: seconds into the video (SPEC.md §11).
+  startTime Float?
+  endTime   Float?
 }
 
 enum BlockType {
@@ -179,6 +190,43 @@ enum BlockType {
   LIST
   CODE
   SEPARATOR
+  VIDEO // the video document's player block, exactly one per video document
+  TRANSCRIPT // one transcript line, timed with startTime/endTime
+}
+
+// The stored video of a video document: bytes in VideoChunk rows, streamed with
+// HTTP Range support by /api/video/[documentId] (SPEC.md §11).
+model VideoAsset {
+  id               String           @id @default(cuid())
+  documentId       String           @unique
+  document         Document         @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  mimeType         String
+  size             Int
+  chunkSize        Int
+  duration         Float? // seconds; written by the client after metadata loads
+  width            Int?
+  height           Int?
+  transcriptStatus TranscriptStatus @default(NONE)
+  transcriptError  String? // FAILED only: the reason, shown in the transcript pane
+  chunks           VideoChunk[]
+  createdAt        DateTime         @default(now())
+}
+
+model VideoChunk {
+  id      String     @id @default(cuid())
+  videoId String
+  video   VideoAsset @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  index   Int
+  data    Bytes
+
+  @@unique([videoId, index])
+}
+
+enum TranscriptStatus {
+  NONE
+  PENDING
+  READY
+  FAILED
 }
 
 // Staging for PDF uploads larger than one request. Vercel caps a request body

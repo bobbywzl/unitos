@@ -32,6 +32,19 @@ export async function resolveDocumentSources(documentId: string): Promise<Resolv
   const writes: ReturnType<typeof db.source.update>[] = [];
 
   for (const source of sources) {
+    // Video anchor (SPEC.md §11): a time range, not a text span. It skips the
+    // text ladder and never orphans — the video file never changes.
+    if (source.startTime !== null) {
+      resolved.push({
+        id: source.id,
+        noteId: source.noteId,
+        blockId: source.blockId,
+        start: source.startOffset,
+        end: source.endOffset,
+        orphaned: false,
+      });
+      continue;
+    }
     const r = resolveOne(source, blockById, blocks);
     resolved.push({ id: source.id, noteId: source.noteId, ...r });
     const changed =
