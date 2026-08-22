@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { extractJson } from "@/lib/derive/json";
 import { outboundFetch } from "@/lib/outbound-fetch";
-import { geminiCall } from "@/lib/video/gemini";
+import { geminiCall, geminiCountTokens } from "@/lib/video/gemini";
 import { parseTimeInput } from "@/lib/video/types";
 import { youtubeWatchUrl } from "@/lib/video/youtube";
 
@@ -17,6 +17,17 @@ import { youtubeWatchUrl } from "@/lib/video/youtube";
 export const TRANSCRIBE_MAX_BYTES = 25 * 1024 * 1024; // Whisper's upload cap
 // Inline bytes reach Gemini base64-encoded inside a 20 MB request.
 const GEMINI_INLINE_MAX_BYTES = 14 * 1024 * 1024;
+
+// A video costs Gemini roughly 100 tokens per second, so a feature-length one
+// runs past the 1M context window in a single call (and its transcript would
+// crowd the output cap). Past this many tokens the video transcribes in
+// windows that are stitched back together.
+const GEMINI_SINGLE_CALL_TOKENS = 700_000;
+const CHUNK_SECONDS = 900; // 15 minutes per window — a longer one invites a partial answer
+const MAX_CHUNKS = 16; // 4 hours; past that the run cannot finish inside one request
+// Windows run together, so a long video costs about one window of wall clock
+// rather than the sum — the request has to finish inside the function timeout.
+const CHUNK_CONCURRENCY = 6;
 
 export type TranscriptSegment = { start: number; end: number; text: string };
 
@@ -107,7 +118,7 @@ const GEMINI_TRANSCRIPT_PROMPT = [
   "Transcribe this video's speech with timestamps.",
   'Return ONLY JSON: {"segments": [{"start": <seconds>, "end": <seconds>, "text": "…"}]}',
   "1. One segment per sentence or phrase, 5–15 seconds each.",
-  "2. start and end are numbers in seconds from the video start.",
+  "2. start and end are plain numbers of SECONDS from the start of what you were given — never milliseconds, never a formatted clock.",
   "3. Transcribe the spoken words exactly; no summaries, no speaker labels.",
   '4. No speech: return {"segments": []}.',
 ].join("\n");
@@ -127,21 +138,168 @@ const geminiSegmentsSchema = z.object({
   segments: z.array(z.object({ start: secondsSchema, end: secondsSchema, text: z.string() })),
 });
 
-function geminiSegments(parts: unknown[]): Promise<TranscriptSegment[]> {
-  return geminiCall(parts, { json: true, maxOutputTokens: 65536 }, (text) => {
-    const parsed = geminiSegmentsSchema.safeParse(extractJson(text));
-    if (!parsed.success) throw new Error("output was not timed segments");
-    if (parsed.data.segments.length === 0) throw new Error("no speech found");
-    return normalizeSegments(parsed.data.segments);
+function geminiSegments(
+  parts: unknown[],
+  opts: { allowEmpty?: boolean } = {},
+): Promise<TranscriptSegment[]> {
+  return geminiCall(
+    parts,
+    { json: true, maxOutputTokens: 65536, lowResolution: true },
+    (text) => {
+      const parsed = geminiSegmentsSchema.safeParse(extractJson(text));
+      if (!parsed.success) throw new Error("output was not timed segments");
+      if (parsed.data.segments.length === 0 && !opts.allowEmpty) {
+        throw new Error("no speech found");
+      }
+      return normalizeSegments(parsed.data.segments);
+    },
+  );
+}
+
+function youtubeVideoPart(
+  youtubeId: string,
+  window?: { start: number; end: number; last?: boolean },
+) {
+  return {
+    fileData: { fileUri: youtubeWatchUrl(youtubeId) },
+    ...(window
+      ? {
+          videoMetadata: {
+            startOffset: `${Math.floor(window.start)}s`,
+            // The last window runs open-ended to the real end of the video.
+            // The duration is an estimate that deliberately overshoots, and
+            // asking for time past the end returns nothing useful.
+            ...(window.last ? {} : { endOffset: `${Math.ceil(window.end)}s` }),
+          },
+        }
+      : {}),
+  };
+}
+
+// One window of a long video, on the video's own clock.
+function transcribeWindow(
+  youtubeId: string,
+  w: { start: number; end: number; last?: boolean },
+): Promise<TranscriptSegment[]> {
+  return geminiSegments(
+    [youtubeVideoPart(youtubeId, w), { text: GEMINI_TRANSCRIPT_PROMPT }],
+    { allowEmpty: true },
+  ).then((segments) => {
+    if (segments.length === 0) return segments;
+    const span = w.end - w.start;
+    let latest = Math.max(...segments.map((s) => s.end));
+
+    // Unit first: a window's timestamps cannot run far past the window's own
+    // end, so a value orders of magnitude too large is milliseconds.
+    const scale = latest > (w.end + span) * 20 ? 1000 : 1;
+    const scaled =
+      scale === 1
+        ? segments
+        : segments.map((s) => ({ ...s, start: s.start / scale, end: s.end / scale }));
+    latest /= scale;
+
+    // Then the clock: a window answers on its own clock or on the video's, and
+    // which one varies per call. Past the first window the two ranges cannot
+    // overlap — a window starting at 30:00 is either 0..30:00 or 30:00..60:00 —
+    // so the largest timestamp says which came back, and only a window clock
+    // gets shifted onto the video's.
+    const aligned =
+      latest > span * 1.15
+        ? scaled
+        : scaled.map((s) => ({
+            ...s,
+            start: s.start + w.start,
+            end: Math.min(s.end + w.start, w.end),
+          }));
+
+    return aligned;
   });
 }
 
-// Gemini reads public YouTube videos directly by URL.
-function geminiYouTube(youtubeId: string): Promise<TranscriptSegment[]> {
-  return geminiSegments([
-    { fileData: { fileUri: youtubeWatchUrl(youtubeId) } },
+// How much of its own span a window actually answered for.
+function windowCoverage(segments: TranscriptSegment[], w: { start: number }): number {
+  if (segments.length === 0) return 0;
+  return Math.max(...segments.map((s) => s.end)) - w.start;
+}
+
+// One window, with a second attempt when the first comes back short. A window
+// that answers for only part of its span leaves a hole in the transcript, so
+// it is worth asking again — but a partial answer still beats none, so the
+// better of the two attempts is what survives. The final window is exempt:
+// the video ends inside it.
+async function transcribeWindowBest(
+  youtubeId: string,
+  w: { start: number; end: number; last?: boolean },
+): Promise<TranscriptSegment[]> {
+  const span = w.end - w.start;
+  let best: TranscriptSegment[] = [];
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const segments = await transcribeWindow(youtubeId, w);
+      if (windowCoverage(segments, w) > windowCoverage(best, w)) best = segments;
+    } catch (err) {
+      console.warn(
+        `[transcribe] window ${w.start}-${w.end}s attempt ${attempt + 1} failed:`,
+        err instanceof Error ? err.message : err,
+      );
+    }
+    if (w.last || windowCoverage(best, w) >= span * 0.75) break;
+  }
+  const covered = windowCoverage(best, w);
+  if (!w.last && covered < span * 0.75) {
+    console.warn(
+      `[transcribe] window ${w.start}-${w.end}s covered ${Math.round(covered)}s of ${Math.round(span)}s`,
+    );
+  }
+  return best;
+}
+
+// Gemini reads public YouTube videos directly by URL. A video short enough to
+// fit the context window goes in one call; a longer one is measured, split
+// into windows, and stitched. Timestamps inside a window come back relative to
+// that window, so each window's offset is added back.
+async function geminiYouTube(youtubeId: string): Promise<TranscriptSegment[]> {
+  const whole = [youtubeVideoPart(youtubeId), { text: GEMINI_TRANSCRIPT_PROMPT }];
+  const total = await geminiCountTokens(whole);
+  if (total === null || total <= GEMINI_SINGLE_CALL_TOKENS) {
+    return geminiSegments(whole);
+  }
+
+  // Too long for one call. The video's own token rate converts the total into
+  // a duration: count one known minute, then divide.
+  const probe = await geminiCountTokens([
+    youtubeVideoPart(youtubeId, { start: 0, end: 60 }),
     { text: GEMINI_TRANSCRIPT_PROMPT },
   ]);
+  if (probe === null || probe <= 0) throw new Error("video is too long to measure");
+  const duration = (total / (probe / 60)) * 1.05; // slight overshoot; empty tail windows drop out
+  const count = Math.ceil(duration / CHUNK_SECONDS);
+  if (count > MAX_CHUNKS) {
+    throw new Error(
+      `video is about ${Math.round(duration / 60)} minutes — longer than the ${(MAX_CHUNKS * CHUNK_SECONDS) / 3600}-hour transcription limit`,
+    );
+  }
+  const windows = Array.from({ length: count }, (_, i) => ({
+    start: i * CHUNK_SECONDS,
+    end: Math.min((i + 1) * CHUNK_SECONDS, Math.ceil(duration)),
+    last: i === count - 1,
+  }));
+  console.log(
+    `[transcribe] ${Math.round(duration / 60)}min video (${total} tokens) → ${count} windows`,
+  );
+
+  const results: TranscriptSegment[][] = [];
+  for (let i = 0; i < windows.length; i += CHUNK_CONCURRENCY) {
+    const batch = windows.slice(i, i + CHUNK_CONCURRENCY);
+    results.push(
+      ...(await Promise.all(
+        batch.map((w) => transcribeWindowBest(youtubeId, w)),
+      )),
+    );
+  }
+  const segments = normalizeSegments(results.flat());
+  if (segments.length === 0) throw new Error("no speech found");
+  return segments;
 }
 
 function geminiUpload(
@@ -160,8 +318,8 @@ function geminiUpload(
 // ── YouTube caption tracks ──────────────────────────────────────────────────
 // Two independent ways to the same tracks. The player API answers datacenter
 // IPs that the watch page refuses ("confirm you're not a bot"), so it goes
-// first — ANDROID client, then IOS. The watch-page scrape stays as the last
-// resort for networks where the API is the blocked one.
+// first. The watch-page scrape stays as the last resort for networks where
+// the API is the blocked one.
 
 const captionTracksSchema = z
   .array(
@@ -218,9 +376,23 @@ async function fetchTimedText(baseUrl: string, userAgent: string): Promise<Trans
   return normalizeSegments(segments);
 }
 
-// The player API caption tracks, mobile clients first — they answer where the
-// web surfaces demand a sign-in.
+// The player API caption tracks. Embedded-device clients go first: the phone
+// and web clients now answer datacenter IPs with a bot check, while the VR
+// client still serves them.
 const INNERTUBE_CLIENTS = [
+  {
+    label: "ANDROID_VR",
+    userAgent:
+      "com.google.android.apps.youtube.vr.oculus/1.60.19 (Linux; U; Android 12; GB) gzip",
+    client: {
+      clientName: "ANDROID_VR",
+      clientVersion: "1.60.19",
+      deviceMake: "Oculus",
+      deviceModel: "Quest 3",
+      androidSdkVersion: 32,
+      hl: "en",
+    },
+  },
   {
     label: "ANDROID",
     userAgent: "com.google.android.youtube/20.10.38 (Linux; U; Android 11) gzip",

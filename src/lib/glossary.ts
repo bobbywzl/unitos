@@ -7,7 +7,7 @@ import { callForJson } from "@/lib/derive/json-call";
 
 // On-ingest glossary extraction: terms, acronyms, symbols (SPEC.md §8 Phase 7).
 // Stored as Document.glossary: [{term, definition, blockIds[]}].
-const GLOSSARY_MODEL = "claude-sonnet-4-6";
+const GLOSSARY_MODEL = "claude-opus-5";
 
 const glossarySchema = z.object({
   terms: z

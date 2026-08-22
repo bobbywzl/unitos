@@ -3,14 +3,15 @@ import { regionBounds, type Region } from "@/lib/video/types";
 import { youtubeWatchUrl } from "@/lib/video/youtube";
 
 // Gemini calls for video (SPEC.md §11): transcription segments and clip
-// descriptions. One core: the first model that answers wins; the second
-// covers quota and outages. A caller's parse throwing counts as a failure,
-// so a bad answer from one model retries on the next.
-const GEMINI_MODELS = ["gemini-2.5-flash", "gemini-2.0-flash"];
+// descriptions. The first model that answers wins; the alias rung means a
+// retired model can never take the feature down — it always resolves to the
+// current flash. A caller's parse throwing counts as a failure, so a bad
+// answer from one model retries on the next.
+const GEMINI_MODELS = ["gemini-3.7-flash", "gemini-flash-latest"];
 
 export async function geminiCall<T>(
   parts: unknown[],
-  opts: { json?: boolean; maxOutputTokens: number },
+  opts: { json?: boolean; maxOutputTokens: number; lowResolution?: boolean },
   parse: (text: string) => T,
 ): Promise<T> {
   const key = process.env.GEMINI_API_KEY;
@@ -27,6 +28,9 @@ export async function geminiCall<T>(
             contents: [{ role: "user", parts }],
             generationConfig: {
               ...(opts.json ? { responseMimeType: "application/json" } : {}),
+              // Transcription needs the audio, not the pixels: low media
+              // resolution cuts the video tokens a long video spends.
+              ...(opts.lowResolution ? { mediaResolution: "MEDIA_RESOLUTION_LOW" } : {}),
               maxOutputTokens: opts.maxOutputTokens,
             },
           }),
@@ -48,6 +52,32 @@ export async function geminiCall<T>(
     }
   }
   throw new Error(failures.join("; "));
+}
+
+// Token count for a request, so a long video can be split before it runs into
+// the context window. Null when the count is unavailable — the caller then
+// takes its normal path and lets the real call report any limit.
+export async function geminiCountTokens(parts: unknown[]): Promise<number | null> {
+  const key = process.env.GEMINI_API_KEY;
+  if (!key) return null;
+  const model = GEMINI_MODELS[0];
+  try {
+    const res = await outboundFetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:countTokens`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-goog-api-key": key },
+        body: JSON.stringify({
+          generateContentRequest: { model: `models/${model}`, contents: [{ role: "user", parts }] },
+        }),
+      },
+    );
+    if (!res.ok) return null;
+    const body = (await res.json()) as { totalTokens?: number };
+    return typeof body.totalTokens === "number" ? body.totalTokens : null;
+  } catch {
+    return null;
+  }
 }
 
 // What is on screen in a clip of a YouTube video. EXPLAIN uses this when the

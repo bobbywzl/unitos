@@ -8,7 +8,7 @@ import type { ParsedBlock } from "@/lib/parse/types";
 // the block list — drop residual junk, fix a wrong type, merge a split fragment.
 // It references blocks by index only and never writes text, so it cannot invent
 // content. On any failure the mechanical blocks stand (SPEC.md §2 quality bar).
-const INGEST_STRUCTURE_MODEL = "claude-sonnet-4-6";
+const INGEST_STRUCTURE_MODEL = "claude-opus-5";
 const MAX_LISTED_BLOCKS = 500;
 
 const RETYPABLE = new Set(["PARAGRAPH", "HEADING", "LIST", "CODE"]);

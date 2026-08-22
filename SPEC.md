@@ -19,7 +19,7 @@ A notes-centric web app for completely dissecting complex documents (research pa
 
 - **Framework:** Next.js 14+ (App Router, TypeScript, server components where possible)
 - **DB:** PostgreSQL + Prisma
-- **AI:** Anthropic API via Vercel AI SDK (`ai` package), streaming responses. Model: `claude-sonnet-4-6` default; make model a per-derivation-type config constant.
+- **AI:** Anthropic API via Vercel AI SDK (`ai` package), streaming responses. Model: `claude-opus-5` default; make model a per-derivation-type config constant.
 - **Prompt caching:** Cache the full parsed document as a prompt prefix per session (Anthropic prompt caching, `cache_control` on the document content block). Every selection-level derivation must reuse the cached prefix.
 - **Parsing:** PDF → blocks server-side. Use `unpdf` or `pdf-parse` for text extraction; preserve reading order. URL ingestion: full-DOM structural parse via `jsdom` — equations keep their TeX (KaTeX/MathJax annotations, rendered with KaTeX in the reader), charts keep their inline SVG, figures keep their images and videos, lists/tables/separators keep their shape — followed by two AI passes that reference blocks by index and never write text: the core pass returns the block ranges that are the article (site navigation, footer link lists, newsletter, social, and legal chrome fall outside the ranges and are dropped), then the structure pass may drop, retype, or merge what survives. `@mozilla/readability` is the fallback for pages the structural walk cannot read. Ingest streams stage progress (fetch → extract → select → structure → save) to the client. Every document is stamped with the parser version that produced it; a URL document stamped with an older version re-parses automatically — on open, and when its URL is added again — and can be re-parsed manually from the document menu.
 - **Anchoring:** W3C Web Annotation selectors via `apache-annotator` (`@apache-annotator/dom`, `@apache-annotator/selector`).
@@ -371,8 +371,12 @@ enum TranscriptStatus { NONE PENDING READY FAILED }
 
 Transcription starts on its own the moment a video is added — the transcript is the point. The pane never shows a Transcribe button: it shows Transcribing…, then the lines; Retry appears only when every rung failed, and Transcribe again redoes a finished transcript. The job runs a provider ladder ordered by source, writes the timed segments as TRANSCRIPT blocks, and stores which rung succeeded (`POST /api/documents/[documentId]/transcribe` runs the same job for retries):
 
-- **YouTube video:** Gemini reads the video by URL (`GEMINI_API_KEY`; gemini-2.5-flash, then gemini-2.0-flash) → caption tracks from the player API, keyless (ANDROID client, then IOS — mobile clients answer datacenter IPs that the web surfaces refuse) → caption tracks scraped from the watch page. Most YouTube videos carry transcripts Gemini reads directly.
+- **YouTube video:** Gemini reads the video by URL (`GEMINI_API_KEY`; `gemini-3.7-flash`, then the `gemini-flash-latest` alias, so a retired model can never take the feature down) → caption tracks from the player API, keyless (ANDROID_VR client first — embedded-device clients answer datacenter IPs where the phone and web clients now demand a bot check — then ANDROID, then IOS) → caption tracks scraped from the watch page. Most YouTube videos carry transcripts Gemini reads directly.
+
+A video costs Gemini about 100 tokens per second, so anything past roughly two hours overruns the 1M context window in one call. Past 700k tokens the video transcribes in 30-minute windows: `countTokens` on the whole video and on one known minute gives the video's own token rate, and the two divide into a duration. Windows run together (six at a time, four hours maximum) so the wall clock is about one window rather than their sum, timestamps inside a window are clip-relative and get shifted back onto the video's clock, and one dead window leaves a gap instead of losing the transcript.
 - **Uploaded video:** OpenAI Whisper (`OPENAI_API_KEY`; 25 MB cap for now) → Gemini with the bytes inline (≤14 MB).
+
+Transcription runs at low media resolution throughout — it needs the audio, not the pixels.
 
 Each rung fails with a plain reason; the ladder tries the next and reports every reason when all fail. `VideoAsset.transcriptStatus`: NONE → PENDING → READY | FAILED with the reason stored. Upload and playback work without any key; the transcript pane offers Transcribe and states plainly what is missing.
 

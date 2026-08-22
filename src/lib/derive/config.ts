@@ -2,23 +2,26 @@ import type { DerivationType } from "@prisma/client";
 
 // Model per derivation type (SPEC.md §2). One place to change.
 export const DERIVATION_MODEL: Record<DerivationType, string> = {
-  EXPLAIN: "claude-sonnet-4-6",
-  SIMPLIFY: "claude-sonnet-4-6",
-  SALIENCE: "claude-sonnet-4-6",
-  EXTRACT: "claude-sonnet-4-6",
-  SUMMARIZE: "claude-sonnet-4-6",
-  SYNTHESIS: "claude-sonnet-4-6",
-  FIND: "claude-sonnet-4-6",
+  EXPLAIN: "claude-opus-5",
+  SIMPLIFY: "claude-opus-5",
+  SALIENCE: "claude-opus-5",
+  EXTRACT: "claude-opus-5",
+  SUMMARIZE: "claude-opus-5",
+  SYNTHESIS: "claude-opus-5",
+  FIND: "claude-opus-5",
 };
 
+// Reasoning tokens count against this ceiling on current models, so every
+// budget leaves room for the model to think before it writes. Too tight a
+// ceiling truncates a JSON derivation mid-object and fails validation.
 export const MAX_OUTPUT_TOKENS: Record<DerivationType, number> = {
-  EXPLAIN: 1024,
-  SIMPLIFY: 1024,
-  SALIENCE: 4096,
-  EXTRACT: 2048,
-  SUMMARIZE: 2048,
-  SYNTHESIS: 8192,
-  FIND: 2048,
+  EXPLAIN: 4096,
+  SIMPLIFY: 4096,
+  SALIENCE: 8192,
+  EXTRACT: 8192,
+  SUMMARIZE: 8192,
+  SYNTHESIS: 16384,
+  FIND: 8192,
 };
 
 export const ANNOTATIONS_SECTION_TITLE = "Annotations";
