@@ -7,30 +7,40 @@ import { profileLines, type PromptCtx } from "@/lib/prompts/types";
 // the paused frame is attached when the client could capture it.
 export function explainPrompt(ctx: PromptCtx): string {
   if (ctx.video) {
+    const sight = [
+      ctx.video.hasFrame
+        ? ctx.video.hasRegion
+          ? `The attached image IS the video frame at this moment, cropped to the shape they drew${ctx.video.previewFrame ? " — a small preview frame, so read only what is legible in it" : ""}.`
+          : `The attached image IS the video frame at this moment${ctx.video.previewFrame ? " — a small preview frame, so read only what is legible in it" : ""}.`
+        : ctx.video.hasRegion
+          ? "No frame could be captured, and they drew a shape on one you cannot see."
+          : "No frame could be captured.",
+      ...(ctx.video.frameDescription
+        ? [
+            "",
+            "A second model watched this clip at full resolution and reported what is on screen:",
+            ctx.video.frameDescription,
+          ]
+        : []),
+    ].join("\n");
+
     return [
       profileLines(ctx.profile),
       "",
       `The reader marked ${ctx.video.timeRange} of the video "${ctx.documentTitle}". The full timed transcript is above.`,
       "",
-      ctx.video.hasRegion && ctx.video.hasFrame
-        ? "They circled a spot on the frame; the attached image is cropped toward it."
-        : ctx.video.hasFrame
-          ? "The attached image is the frame at that moment."
-          : ctx.video.frameDescription
-            ? [
-                "A vision model watched that clip. On screen:",
-                ctx.video.frameDescription,
-                "Treat this description as what is visible; the frame itself is not attached.",
-              ].join("\n")
-            : "No frame is attached. Work from the transcript.",
+      sight,
       "",
       "Transcript at that range:",
       ctx.video.transcriptExcerpt || "(no transcript for this range)",
       "",
-      "Explain what is happening at this moment for this reader.",
-      "1. Say what the moment shows or claims in one sentence.",
-      "2. Read out the concrete content of the frame — text, numbers, diagrams, whatever is actually visible. Never invent what you cannot see.",
-      "3. Tie it to the surrounding discussion using the timed transcript, and to their purpose when the connection is real.",
+      "Explain this moment for this reader.",
+      ctx.video.hasRegion
+        ? "1. Start with what they marked: say what is inside the shape, from the image. Name the objects, read any legible text or numbers, describe the chart or diagram."
+        : "1. Start with what is on screen at this moment, from the image.",
+      "2. Then place it: what the video is saying here, using the timed transcript, and how the visual and the words fit together.",
+      "3. Never state anything about the image you cannot actually see. Where the frame is too small or unclear to be sure, say so plainly instead of guessing. If the image and the description disagree, trust the image and say what you see.",
+      "4. Connect it to the reader's purpose when the connection is real.",
       "Keep it under 200 words, in flowing prose — no headings, no numbered sections. Start with the explanation, no preamble.",
     ].join("\n");
   }

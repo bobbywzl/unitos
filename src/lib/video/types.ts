@@ -2,7 +2,7 @@ import { z } from "zod";
 
 // ── Video (SPEC.md §11) ─────────────────────────────────────────────────────
 // Shared shapes for video documents: the drawn region, the time anchor, the
-// annotation as the player and deck render it, and the Find result.
+// annotation as the player and Visual render it, and the Find result.
 
 // Videos cap at 200 MB. Upload staging slices are the stored chunk size too, so
 // completing a video upload copies staged rows to VideoChunk rows without ever
@@ -78,7 +78,7 @@ export const timeRangeSchema = z
 
 /** One annotation on the video: a note in the hidden Annotations section whose
     source carries a time range and an optional region. The overlay shows it
-    while playback is inside its range; the deck lists it as a card. */
+    while playback is inside its range; Visual lists it as a card. */
 export type VideoAnnotationItem = {
   noteId: string;
   sourceId: string;
@@ -139,7 +139,7 @@ export type VideoFindMatch = {
 };
 
 // 0:07 under a minute, 1:32 under an hour, 1:02:05 over. Used everywhere a
-// time renders: transcript, chips, deck cards, the scrubber clock.
+// time renders: transcript, chips, Visual cards, the scrubber clock.
 export function formatTime(seconds: number): string {
   const whole = Math.max(0, Math.floor(seconds));
   const h = Math.floor(whole / 3600);

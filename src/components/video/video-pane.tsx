@@ -5,7 +5,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { SearchIcon, SpinnerIcon } from "@/components/icons";
 import { Markdown } from "@/components/markdown";
-import { Deck } from "@/components/video/deck";
+import { Visual } from "@/components/video/visual";
+import type { ThumbnailSource } from "@/components/video/use-thumbnails";
 import { FindPanel } from "@/components/video/find-panel";
 import { Transcript } from "@/components/video/transcript";
 import {
@@ -14,8 +15,10 @@ import {
   type VideoSource,
 } from "@/components/video/video-player";
 import { splitStreamError, splitStreamNote } from "@/lib/derive/config";
+import { captureStoryboardFrame } from "@/lib/video/frame-client";
 import {
   formatTime,
+  formatTimeRange,
   parseTimeInput,
   type Region,
   type TranscriptLine,
@@ -76,6 +79,7 @@ export function VideoPane({
     done: boolean;
     error: string | null;
   } | null>(null);
+  const [openNote, setOpenNote] = useState<VideoAnnotationItem | null>(null);
   const [flashSourceId, setFlashSourceId] = useState<string | null>(null);
   const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // The tool caption floats over the player for a few seconds on open.
@@ -101,9 +105,12 @@ export function VideoPane({
     video.kind === "YOUTUBE" && video.youtubeId
       ? { kind: "youtube", youtubeId: video.youtubeId }
       : { kind: "upload", src: `/api/video/${documentId}` };
-  // Deck thumbnails capture from the file; a YouTube frame cannot be captured
-  // cross-origin, so those cards fall back to their time tile.
-  const captureSrc = source.kind === "upload" ? source.src : null;
+  // Visual cards draw from the file when there is one; a YouTube frame comes
+  // from the storyboard sheets instead (SPEC.md §11).
+  const thumbnailSource: ThumbnailSource =
+    source.kind === "upload"
+      ? { kind: "upload", src: source.src }
+      : { kind: "youtube", documentId };
   const aspect =
     video.width && video.height && video.height > 0 ? video.width / video.height : 16 / 9;
 
@@ -289,7 +296,7 @@ export function VideoPane({
 
   // Explain the circled spot (SPEC.md §11): capture the paused frame cropped
   // toward the loop, stream EXPLAIN with the time anchor. The server persists
-  // the output as an annotation at that range, so it joins the deck.
+  // the output as an annotation at that range, so it joins Visual.
   async function explainComposer() {
     if (!composer || composer.busy) return;
     const startTime = parseTimeInput(composer.startTime);
@@ -298,10 +305,25 @@ export function VideoPane({
       setComposer({ ...composer, error: "Times are m:ss, and the end must be after the start." });
       return;
     }
-    const frame = playerRef.current?.capture(composer.region) ?? undefined;
     setComposer({ ...composer, busy: true, error: null });
+    await runExplain({ startTime, endTime, region: composer.region });
+  }
+
+  // The frame at a moment, cropped to what was circled: drawn from the file
+  // for an upload, pulled from the storyboard sheets for a YouTube video.
+  async function captureFrame(region: Region | null, time: number) {
+    if (source.kind === "upload") {
+      return (await playerRef.current?.captureAt(time, region)) ?? undefined;
+    }
+    return (await captureStoryboardFrame(documentId, time, region)) ?? undefined;
+  }
+
+  async function runExplain(anchor: { startTime: number; endTime: number; region: Region | null }) {
+    const { startTime, endTime, region } = anchor;
+    setOpenNote(null);
     setExplaining({ content: "", done: false, error: null });
     try {
+      const frame = await captureFrame(region, startTime);
       const res = await fetch("/api/derive", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -309,7 +331,7 @@ export function VideoPane({
           type: "EXPLAIN",
           documentId,
           notebookId,
-          video: { startTime, endTime, region: composer.region ?? undefined, frame },
+          video: { startTime, endTime, region: region ?? undefined, frame },
         }),
       });
       if (!res.ok || !res.body) {
@@ -341,7 +363,37 @@ export function VideoPane({
     }
   }
 
-  async function onDeckDelete(noteId: string) {
+  // A transcript line is an anchor like a circled spot: same tools, same time
+  // range, no drawn region (SPEC.md §11).
+  function commentOnLine(line: TranscriptLine) {
+    playerRef.current?.seek(line.startTime);
+    setActiveLineId(line.id);
+    setDrawing(false);
+    setExplaining(null);
+    setOpenNote(null);
+    setComposer({
+      region: null,
+      startTime: formatTime(line.startTime),
+      endTime: formatTime(Math.ceil(line.endTime)),
+      text: "",
+      busy: false,
+      error: null,
+    });
+  }
+
+  function explainLine(line: TranscriptLine) {
+    playerRef.current?.seek(line.startTime);
+    setActiveLineId(line.id);
+    setDrawing(false);
+    setComposer(null);
+    void runExplain({
+      startTime: line.startTime,
+      endTime: Math.ceil(line.endTime),
+      region: null,
+    });
+  }
+
+  async function onVisualDelete(noteId: string) {
     setRemoved((prev) => new Set(prev).add(noteId));
     router.refresh();
   }
@@ -446,6 +498,27 @@ export function VideoPane({
           </p>
         )}
 
+        {openNote && !explaining && (
+          <div className="mt-4 rounded-2xl bg-card p-4 shadow-float">
+            <div className="mb-2 flex items-center gap-2">
+              <span className="text-[11px] font-bold tracking-[0.08em] text-sand-600 uppercase">
+                {openNote.kind === "explain" ? "Explanation" : "Comment"}
+              </span>
+              <span className="rounded-full bg-clay-100 px-2.5 py-0.5 text-[11px] font-semibold tabular-nums text-clay-800">
+                {formatTimeRange(openNote.startTime, openNote.endTime)}
+              </span>
+              <button
+                onClick={() => setOpenNote(null)}
+                aria-label="Close"
+                className="ml-auto rounded-full px-1.5 text-sand-500 hover:text-clay-800"
+              >
+                ✕
+              </button>
+            </div>
+            <Markdown>{openNote.content}</Markdown>
+          </div>
+        )}
+
         {explaining && (
           <div className="mt-4 rounded-2xl bg-card p-4 shadow-float">
             <div className="mb-2 flex items-center gap-2">
@@ -547,24 +620,35 @@ export function VideoPane({
           </div>
         )}
 
-        <Deck
-          src={captureSrc}
+        <Visual
+          source={thumbnailSource}
           annotations={all}
-          onSeek={(sourceId, t) => {
-            playerRef.current?.seek(t);
-            flash(sourceId);
+          onOpen={(a) => {
+            playerRef.current?.seek(a.startTime);
+            flash(a.sourceId);
+            setExplaining(null);
+            setOpenNote(a);
           }}
-          onDelete={onDeckDelete}
+          onDelete={onVisualDelete}
         />
 
         <Transcript
           transcript={transcript}
           activeLineId={activeLineId}
+          annotations={all}
           pending={transcriptPending}
           failedMessage={transcriptFailedMessage}
           onSeek={(line) => {
             playerRef.current?.seek(line.startTime);
             setActiveLineId(line.id);
+          }}
+          onComment={commentOnLine}
+          onExplain={explainLine}
+          onOpenAnnotation={(a) => {
+            playerRef.current?.seek(a.startTime);
+            flash(a.sourceId);
+            setExplaining(null);
+            setOpenNote(a);
           }}
           onTranscribe={() => void transcribe()}
         />

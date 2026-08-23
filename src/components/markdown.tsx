@@ -12,7 +12,7 @@ function linkifyBlockTags(text: string): string {
   return text.replace(BLOCK_TAG, "[¶](#dissect-block-$1)");
 }
 
-// Markdown as one plain line, for small previews (deck cards, overlay
+// Markdown as one plain line, for small previews (Visual cards, overlay
 // captions) where rendered markdown has no room.
 export function markdownPreview(text: string): string {
   return text

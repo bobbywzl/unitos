@@ -53,7 +53,7 @@ const patchSchema = z.object({
   height: z.number().int().positive().max(16_384).optional(),
 });
 
-// The client reports duration and frame size once metadata loads; the deck and
+// The client reports duration and frame size once metadata loads; the Visual strip and
 // the scrubber read them server-side on the next render.
 export async function PATCH(req: Request, ctx: { params: Promise<{ documentId: string }> }) {
   const { documentId } = await ctx.params;

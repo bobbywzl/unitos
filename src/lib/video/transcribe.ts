@@ -2,6 +2,7 @@ import { z } from "zod";
 import { extractJson } from "@/lib/derive/json";
 import { outboundFetch } from "@/lib/outbound-fetch";
 import { geminiCall, geminiCountTokens } from "@/lib/video/gemini";
+import { fetchPlayerResponse } from "@/lib/video/innertube";
 import { parseTimeInput } from "@/lib/video/types";
 import { youtubeWatchUrl } from "@/lib/video/youtube";
 
@@ -376,70 +377,13 @@ async function fetchTimedText(baseUrl: string, userAgent: string): Promise<Trans
   return normalizeSegments(segments);
 }
 
-// The player API caption tracks. Embedded-device clients go first: the phone
-// and web clients now answer datacenter IPs with a bot check, while the VR
-// client still serves them.
-const INNERTUBE_CLIENTS = [
-  {
-    label: "ANDROID_VR",
-    userAgent:
-      "com.google.android.apps.youtube.vr.oculus/1.60.19 (Linux; U; Android 12; GB) gzip",
-    client: {
-      clientName: "ANDROID_VR",
-      clientVersion: "1.60.19",
-      deviceMake: "Oculus",
-      deviceModel: "Quest 3",
-      androidSdkVersion: 32,
-      hl: "en",
-    },
-  },
-  {
-    label: "ANDROID",
-    userAgent: "com.google.android.youtube/20.10.38 (Linux; U; Android 11) gzip",
-    client: { clientName: "ANDROID", clientVersion: "20.10.38", androidSdkVersion: 30, hl: "en" },
-  },
-  {
-    label: "IOS",
-    userAgent: "com.google.ios.youtube/20.10.4 (iPhone16,2; U; CPU iOS 17_5_1 like Mac OS X)",
-    client: { clientName: "IOS", clientVersion: "20.10.4", deviceModel: "iPhone16,2", hl: "en" },
-  },
-];
-
-const playerResponseSchema = z.object({
-  playabilityStatus: z.object({ status: z.string(), reason: z.string().optional() }).optional(),
-  captions: z
-    .object({
-      playerCaptionsTracklistRenderer: z.object({ captionTracks: z.unknown() }).optional(),
-    })
-    .optional(),
-});
-
 async function youtubeCaptionsApi(youtubeId: string): Promise<TranscriptSegment[]> {
-  const failures: string[] = [];
-  for (const { label, userAgent, client } of INNERTUBE_CLIENTS) {
-    try {
-      const res = await outboundFetch("https://www.youtube.com/youtubei/v1/player", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "User-Agent": userAgent },
-        body: JSON.stringify({ context: { client }, videoId: youtubeId }),
-      });
-      if (!res.ok) throw new Error(`player request failed (${res.status})`);
-      const body = playerResponseSchema.safeParse(await res.json());
-      if (!body.success) throw new Error("player response was not readable");
-      const status = body.data.playabilityStatus;
-      if (status && status.status !== "OK") {
-        throw new Error(status.reason ?? status.status);
-      }
-      const tracks = captionTracksSchema.safeParse(
-        body.data.captions?.playerCaptionsTracklistRenderer?.captionTracks,
-      );
-      if (!tracks.success) throw new Error("no caption tracks on this video");
-      return await fetchTimedText(pickTrack(tracks.data).baseUrl, userAgent);
-    } catch (err) {
-      failures.push(`${label}: ${err instanceof Error ? err.message : String(err)}`);
-    }
-  }
-  throw new Error(failures.join("; "));
+  const { userAgent, data } = await fetchPlayerResponse(youtubeId);
+  const tracks = captionTracksSchema.safeParse(
+    data.captions?.playerCaptionsTracklistRenderer?.captionTracks,
+  );
+  if (!tracks.success) throw new Error("no caption tracks on this video");
+  return fetchTimedText(pickTrack(tracks.data).baseUrl, userAgent);
 }
 
 // The value of `"<key>": [...]` in a script blob, by bracket matching — the

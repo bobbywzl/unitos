@@ -3,32 +3,31 @@
 import { useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import { markdownPreview } from "@/components/markdown";
-import { useVideoThumbnails } from "@/components/video/use-thumbnails";
+import { useVideoThumbnails, type ThumbnailSource } from "@/components/video/use-thumbnails";
 import {
   formatTimeRange,
   regionPathD,
   type VideoAnnotationItem,
 } from "@/lib/video/types";
 
-// The deck (SPEC.md §11): a filmstrip of annotation cards under the player —
-// the captured frame with the drawn region on it, the time range, the comment.
-// Click a card to seek there. The video itself is never modified; the deck is
-// the visual note layer, spliced to specific parts.
-export function Deck({
-  src,
+// Visual (SPEC.md §11): a strip of cards, one per annotation — the frame at
+// the moment it was made, the loop drawn on it, the time range, the note.
+// Clicking a card seeks there and opens what the AI wrote at that moment.
+// The video itself is never modified; this is the visual note layer.
+export function Visual({
+  source,
   annotations,
-  onSeek,
+  onOpen,
   onDelete,
 }: {
-  /** File URL to capture thumbnails from; null (YouTube) falls back to time tiles. */
-  src: string | null;
+  source: ThumbnailSource;
   annotations: VideoAnnotationItem[];
-  onSeek: (sourceId: string, startTime: number) => void;
+  onOpen: (annotation: VideoAnnotationItem) => void;
   onDelete: (noteId: string) => Promise<void>;
 }) {
   const [busyId, setBusyId] = useState<string | null>(null);
   const times = useMemo(() => annotations.map((a) => a.startTime), [annotations]);
-  const thumbs = useVideoThumbnails(src, times);
+  const thumbs = useVideoThumbnails(source, times);
 
   if (annotations.length === 0) return null;
 
@@ -46,7 +45,7 @@ export function Deck({
     <section className="mt-6">
       <div className="mb-2.5 flex items-center gap-2">
         <span className="text-[11px] font-bold tracking-[0.08em] text-sand-600 uppercase">
-          Deck
+          Visual
         </span>
         <span className="text-[13px] text-sand-600">{annotations.length}</span>
       </div>
@@ -59,8 +58,8 @@ export function Deck({
               className="group/card w-[218px] shrink-0 overflow-hidden rounded-2xl bg-card shadow-soft"
             >
               <button
-                onClick={() => onSeek(a.sourceId, a.startTime)}
-                title="Jump to this moment"
+                onClick={() => onOpen(a)}
+                title="Jump here and open the note"
                 className="relative block aspect-video w-full bg-[#12100e]"
               >
                 {thumb && (
@@ -102,9 +101,12 @@ export function Deck({
                 </span>
               </button>
               <div className="flex items-start gap-1.5 px-3 py-2.5">
-                <p className="min-w-0 flex-1 text-[12.5px] leading-snug text-sand-800 [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2] overflow-hidden">
+                <button
+                  onClick={() => onOpen(a)}
+                  className="min-w-0 flex-1 text-left text-[12.5px] leading-snug text-sand-800 [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2] overflow-hidden hover:text-clay-800"
+                >
                   {markdownPreview(a.content)}
-                </p>
+                </button>
                 <button
                   onClick={() => void remove(a.noteId)}
                   disabled={busyId === a.noteId}

@@ -1,22 +1,31 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { captureStoryboardFrame } from "@/lib/video/frame-client";
 
-// Deck card thumbnails: one hidden <video> element seeks through the requested
-// times and draws each frame to a canvas. Serial queue — seeking is the slow
-// part — and every captured frame caches by its time for the session.
-// src null (YouTube: no capturable file) captures nothing.
-export function useVideoThumbnails(src: string | null, times: number[]): Record<string, string> {
+// Visual card frames (SPEC.md §11). An uploaded video seeks a hidden <video>
+// through the requested times and draws each frame; a YouTube video cannot be
+// drawn from its iframe, so its frames come from the storyboard sheets. Both
+// run one at a time — seeking is the slow part — and cache by time.
+export type ThumbnailSource =
+  | { kind: "upload"; src: string }
+  | { kind: "youtube"; documentId: string };
+
+export function useVideoThumbnails(
+  source: ThumbnailSource,
+  times: number[],
+): Record<string, string> {
   const [thumbs, setThumbs] = useState<Record<string, string>>({});
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const queueRef = useRef<number[]>([]);
   const busyRef = useRef(false);
   const doneRef = useRef(new Set<string>());
+  const key = source.kind === "upload" ? source.src : source.documentId;
 
   useEffect(() => {
-    if (!src) return;
+    if (source.kind !== "upload") return;
     const video = document.createElement("video");
-    video.src = src;
+    video.src = source.src;
     video.muted = true;
     video.preload = "metadata";
     video.crossOrigin = "anonymous";
@@ -26,17 +35,35 @@ export function useVideoThumbnails(src: string | null, times: number[]): Record<
       video.load();
       videoRef.current = null;
     };
-  }, [src]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
 
   useEffect(() => {
-    const video = videoRef.current;
-    if (!video) return;
     const keyOf = (t: number) => t.toFixed(1);
     const fresh = times.filter((t) => !doneRef.current.has(keyOf(t)));
     if (fresh.length === 0) return;
     fresh.forEach((t) => doneRef.current.add(keyOf(t)));
     queueRef.current.push(...fresh);
 
+    // A YouTube frame is a fetch and a crop, not a seek.
+    if (source.kind === "youtube") {
+      const documentId = source.documentId;
+      const pump = async () => {
+        if (busyRef.current) return;
+        busyRef.current = true;
+        while (queueRef.current.length > 0) {
+          const t = queueRef.current.shift()!;
+          const dataUrl = await captureStoryboardFrame(documentId, t, null);
+          if (dataUrl) setThumbs((prev) => ({ ...prev, [keyOf(t)]: dataUrl }));
+        }
+        busyRef.current = false;
+      };
+      void pump();
+      return;
+    }
+
+    const video = videoRef.current;
+    if (!video) return;
     const capture = (t: number) =>
       new Promise<string | null>((resolve) => {
         const onSeeked = () => {
@@ -92,7 +119,8 @@ export function useVideoThumbnails(src: string | null, times: number[]): Record<
       busyRef.current = false;
     };
     void pump();
-  }, [times]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [times, key]);
 
   return thumbs;
 }

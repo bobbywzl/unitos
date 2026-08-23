@@ -179,23 +179,26 @@ export async function POST(req: Request) {
       );
       if (frameImage.length === 0) frameImage = null;
     }
+    // A YouTube frame comes from the storyboard sheets, which are small. Gemini
+    // watches the same clip at full resolution, so the model gets two
+    // independent looks at the moment: the actual cropped frame and a
+    // description of it. They corroborate each other.
+    const asset = await db.videoAsset.findUnique({
+      where: { documentId: document.id },
+      select: { kind: true, youtubeId: true },
+    });
+    const previewFrame = asset?.kind === "YOUTUBE";
     let frameDescription: string | undefined;
-    if (!frameImage && process.env.GEMINI_API_KEY) {
-      const asset = await db.videoAsset.findUnique({
-        where: { documentId: document.id },
-        select: { kind: true, youtubeId: true },
+    if (previewFrame && asset?.youtubeId && process.env.GEMINI_API_KEY) {
+      frameDescription = await describeYouTubeClip(
+        asset.youtubeId,
+        data.video.startTime,
+        data.video.endTime,
+        data.video.region ?? null,
+      ).catch((err) => {
+        console.warn("[derive] clip description failed:", err);
+        return undefined;
       });
-      if (asset?.kind === "YOUTUBE" && asset.youtubeId) {
-        frameDescription = await describeYouTubeClip(
-          asset.youtubeId,
-          data.video.startTime,
-          data.video.endTime,
-          data.video.region ?? null,
-        ).catch((err) => {
-          console.warn("[derive] clip description failed:", err);
-          return undefined;
-        });
-      }
     }
     const excerpt = timedBlocks
       .filter((b) => b.startTime! < data.video!.endTime && b.endTime! > data.video!.startTime)
@@ -206,6 +209,7 @@ export async function POST(req: Request) {
       transcriptExcerpt: excerpt.length > 1500 ? `${excerpt.slice(0, 1499)}…` : excerpt,
       hasFrame: frameImage !== null,
       hasRegion: Boolean(data.video.region),
+      previewFrame: previewFrame && frameImage !== null,
       frameDescription,
     };
   }
@@ -351,7 +355,7 @@ export async function POST(req: Request) {
           }
         }
         // A video EXPLAIN persists with its time anchor, so the explained
-        // moment joins the overlay and the deck (SPEC.md §11).
+        // moment joins the overlay and Visual (SPEC.md §11).
         if (data.type === "EXPLAIN" && data.video && videoAnchor && text.trim()) {
           try {
             const section = await annotationsSection(data.notebookId);

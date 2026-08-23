@@ -31,7 +31,7 @@ import {
 // The player (SPEC.md §11): custom controls, an SVG overlay for annotations,
 // and a scrubber with one marker per annotation. Two engines behind one
 // surface — a plain <video> for uploads, the YouTube IFrame player for
-// YouTube videos — so the overlay, drawing, markers, and deck behave the same.
+// YouTube videos — so the overlay, drawing, markers, and Visual behave alike.
 // The video itself is never modified; the overlay is the note layer on top.
 // Regions are percent coordinates of the frame; the overlay is sized to the
 // frame's content box, so they stay glued at any player size and in fullscreen.
@@ -45,9 +45,14 @@ export type VideoPlayerHandle = {
   pause: () => void;
   time: () => number;
   /** The current frame as a JPEG data URL, cropped toward the region when one
-      is given. Null when the frame is not ready — always null for YouTube:
-      the frame cannot be captured cross-origin. */
+      is given. Null when the frame is not ready, and always null for a YouTube
+      video: its iframe cannot be drawn. The pane pulls those frames from the
+      storyboard sheets instead (SPEC.md §11). */
   capture: (region?: Region | null) => string | null;
+  /** The frame at a given time, seeking there first and waiting for it to
+      render. Capturing straight after a seek otherwise catches the frame the
+      player has not replaced yet. */
+  captureAt: (time: number, region?: Region | null) => Promise<string | null>;
 };
 
 // What both engines expose to the controls.
@@ -128,6 +133,42 @@ function ellipsePathD(r: { cx: number; cy: number; rx: number; ry: number }): st
   return `M ${r.cx - r.rx} ${r.cy} a ${r.rx} ${r.ry} 0 1 0 ${2 * r.rx} 0 a ${r.rx} ${r.ry} 0 1 0 ${-2 * r.rx} 0`;
 }
 
+// The frame currently showing in a <video>, as a JPEG data URL, cropped
+// toward a region with a little context around it.
+function drawFrame(video: HTMLVideoElement | null, region?: Region | null): string | null {
+  if (!video || video.videoWidth === 0) return null;
+  try {
+    const canvas = document.createElement("canvas");
+    let sx = 0;
+    let sy = 0;
+    let sw = video.videoWidth;
+    let sh = video.videoHeight;
+    if (region) {
+      const b = regionBounds(region);
+      const pad = 2.5; // percent of frame around the loop
+      const x1 = Math.max(0, ((b.x1 - pad) / 100) * video.videoWidth);
+      const y1 = Math.max(0, ((b.y1 - pad) / 100) * video.videoHeight);
+      const x2 = Math.min(video.videoWidth, ((b.x2 + pad) / 100) * video.videoWidth);
+      const y2 = Math.min(video.videoHeight, ((b.y2 + pad) / 100) * video.videoHeight);
+      if (x2 - x1 > 16 && y2 - y1 > 16) {
+        sx = x1;
+        sy = y1;
+        sw = x2 - x1;
+        sh = y2 - y1;
+      }
+    }
+    const scale = Math.min(1, 1024 / Math.max(sw, sh));
+    canvas.width = Math.round(sw * scale);
+    canvas.height = Math.round(sh * scale);
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return null;
+    ctx.drawImage(video, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL("image/jpeg", 0.85);
+  } catch {
+    return null; // tainted canvas or decode failure
+  }
+}
+
 export const VideoPlayer = forwardRef<
   VideoPlayerHandle,
   {
@@ -204,42 +245,26 @@ export const VideoPlayer = forwardRef<
       seek,
       pause: () => engineRef.current?.pause(),
       time: () => engineRef.current?.time() ?? 0,
-      capture: (region?: Region | null) => {
+      captureAt: async (time: number, region?: Region | null) => {
         const video = videoRef.current;
-        if (!video || video.videoWidth === 0) return null;
-        try {
-          const canvas = document.createElement("canvas");
-          // Crop toward the region with padding, so the model sees the circled
-          // spot in context; no region = the full frame. Cap the long edge.
-          let sx = 0;
-          let sy = 0;
-          let sw = video.videoWidth;
-          let sh = video.videoHeight;
-          if (region) {
-            const b = regionBounds(region);
-            const pad = 2.5; // percent of frame around the loop
-            const x1 = Math.max(0, ((b.x1 - pad) / 100) * video.videoWidth);
-            const y1 = Math.max(0, ((b.y1 - pad) / 100) * video.videoHeight);
-            const x2 = Math.min(video.videoWidth, ((b.x2 + pad) / 100) * video.videoWidth);
-            const y2 = Math.min(video.videoHeight, ((b.y2 + pad) / 100) * video.videoHeight);
-            if (x2 - x1 > 16 && y2 - y1 > 16) {
-              sx = x1;
-              sy = y1;
-              sw = x2 - x1;
-              sh = y2 - y1;
-            }
-          }
-          const scale = Math.min(1, 1024 / Math.max(sw, sh));
-          canvas.width = Math.round(sw * scale);
-          canvas.height = Math.round(sh * scale);
-          const ctx = canvas.getContext("2d");
-          if (!ctx) return null;
-          ctx.drawImage(video, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
-          return canvas.toDataURL("image/jpeg", 0.85);
-        } catch {
-          return null; // tainted canvas or decode failure
+        if (!video) return null;
+        // Capturing straight after a seek catches the frame the player has not
+        // replaced yet, so wait for the new one.
+        if (Math.abs(video.currentTime - time) > 0.3) {
+          await new Promise<void>((resolve) => {
+            const done = () => {
+              video.removeEventListener("seeked", done);
+              clearTimeout(timer);
+              resolve();
+            };
+            const timer = setTimeout(done, 3000);
+            video.addEventListener("seeked", done);
+            video.currentTime = time;
+          });
         }
+        return drawFrame(videoRef.current, region);
       },
+      capture: (region?: Region | null) => drawFrame(videoRef.current, region),
     }),
     [seek],
   );
