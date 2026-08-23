@@ -436,16 +436,17 @@ export default async function NotebookPage(props: {
       if (ranges.length > 0) editedByBlock[b.id] = ranges;
     }
 
-    // Inline styles (bold/italic): decoration spans healed like salience.
+    // Inline styles (bold/italic/underline/code): decoration spans healed like salience.
     type StyleSpan = { start: number; end: number; style: string; quotedText: string };
+    const STYLE_KINDS = new Set(["bold", "italic", "underline", "code"]);
     const stylesByBlock: Record<
       string,
-      { start: number; end: number; style: "bold" | "italic" | "underline" }[]
+      { start: number; end: number; style: "bold" | "italic" | "underline" | "code" }[]
     > = {};
     for (const b of document.blocks) {
       const spans = (Array.isArray(b.styles) ? b.styles : []) as unknown as StyleSpan[];
       for (const span of spans) {
-        if (span.style !== "bold" && span.style !== "italic") continue;
+        if (!STYLE_KINDS.has(span.style)) continue;
         let hit: { start: number; end: number } | null = null;
         if (b.text.slice(span.start, span.end) === span.quotedText) {
           hit = { start: span.start, end: span.end };
@@ -454,8 +455,50 @@ export default async function NotebookPage(props: {
         }
         if (!hit) continue;
         const list = stylesByBlock[b.id] ?? [];
-        list.push({ start: hit.start, end: hit.end, style: span.style });
+        list.push({
+          start: hit.start,
+          end: hit.end,
+          style: span.style as "bold" | "italic" | "underline" | "code",
+        });
         stylesByBlock[b.id] = list;
+      }
+    }
+
+    // Contents links and PDF hyperlinks: spans healed like styles. targetOrder
+    // resolves to the heading block at that order; a missing target drops the span.
+    type LinkSpanJson = {
+      start: number;
+      end: number;
+      quotedText: string;
+      targetOrder?: number;
+      href?: string;
+    };
+    const blockByOrder = new Map(document.blocks.map((b) => [b.order, b]));
+    const contentsLinksByBlock: Record<
+      string,
+      { start: number; end: number; targetBlockId?: string; href?: string }[]
+    > = {};
+    for (const b of document.blocks) {
+      const spans = (Array.isArray(b.links) ? b.links : []) as unknown as LinkSpanJson[];
+      for (const span of spans) {
+        const target =
+          span.targetOrder !== undefined ? blockByOrder.get(span.targetOrder) : undefined;
+        if (!target && !span.href) continue;
+        let hit: { start: number; end: number } | null = null;
+        if (b.text.slice(span.start, span.end) === span.quotedText) {
+          hit = { start: span.start, end: span.end };
+        } else {
+          hit = matchInText(b.text, { quotedText: span.quotedText, prefix: "", suffix: "" });
+        }
+        if (!hit) continue;
+        const list = contentsLinksByBlock[b.id] ?? [];
+        list.push({
+          start: hit.start,
+          end: hit.end,
+          targetBlockId: target?.id,
+          href: span.href,
+        });
+        contentsLinksByBlock[b.id] = list;
       }
     }
 
@@ -499,6 +542,7 @@ export default async function NotebookPage(props: {
       linksIn,
       editedByBlock,
       stylesByBlock,
+      contentsLinksByBlock,
       citationsByBlock,
       references,
     };
@@ -610,6 +654,7 @@ export default async function NotebookPage(props: {
         linksByBlock={pane.linksByBlock}
         editedByBlock={pane.editedByBlock}
         stylesByBlock={pane.stylesByBlock}
+        contentsLinksByBlock={pane.contentsLinksByBlock}
         citationsByBlock={pane.citationsByBlock}
         references={pane.references}
         font={pane.document.font}

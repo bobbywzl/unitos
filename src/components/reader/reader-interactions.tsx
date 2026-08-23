@@ -292,6 +292,7 @@ export function ReaderInteractions({
   linksByBlock,
   editedByBlock,
   stylesByBlock,
+  contentsLinksByBlock,
   citationsByBlock,
   references,
   font,
@@ -339,7 +340,16 @@ export function ReaderInteractions({
     { linkId: string; start: number; end: number; href: string; title: string }[]
   >;
   editedByBlock: Record<string, { start: number; end: number }[]>;
-  stylesByBlock: Record<string, { start: number; end: number; style: "bold" | "italic" | "underline" }[]>;
+  stylesByBlock: Record<
+    string,
+    { start: number; end: number; style: "bold" | "italic" | "underline" | "code" }[]
+  >;
+  // Contents links (targetBlockId: click scrolls the reader to that block) and
+  // PDF hyperlinks (href: a plain hyperlink out of the app).
+  contentsLinksByBlock: Record<
+    string,
+    { start: number; end: number; targetBlockId?: string; href?: string }[]
+  >;
   citationsByBlock: Record<string, { start: number; end: number; referenceId: string }[]>;
   references: DocumentReference[];
   font: string | null;
@@ -2116,11 +2126,35 @@ export function ReaderInteractions({
       })),
     ];
   }
+  for (const [blockId, list] of Object.entries(contentsLinksByBlock)) {
+    const existing = highlightsByBlock[blockId] ?? [];
+    highlightsByBlock[blockId] = [
+      ...existing,
+      ...list.map((l) =>
+        l.targetBlockId
+          ? {
+              sourceId: null,
+              start: l.start,
+              end: l.end,
+              kind: "toc" as const,
+              targetBlockId: l.targetBlockId,
+            }
+          : {
+              sourceId: null,
+              start: l.start,
+              end: l.end,
+              kind: "weblink" as const,
+              href: l.href,
+            },
+      ),
+    ];
+  }
   for (const [blockId, list] of Object.entries(weblinksByBlock)) {
     // A span already marked as a citation or a link stays what it is.
     const taken = [
       ...(citationsByBlock[blockId] ?? []),
       ...(linksByBlock[blockId] ?? []),
+      ...(contentsLinksByBlock[blockId] ?? []),
     ];
     const existing = highlightsByBlock[blockId] ?? [];
     highlightsByBlock[blockId] = [

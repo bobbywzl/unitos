@@ -166,8 +166,9 @@ model Block {
   text         String // plain text content
   originalText String? // as first parsed; null = text is unedited. "" = user-authored block.
   html         String? // rendered content for figures/tables
-  styles       Json? // inline decoration spans: [{start, end, style: "bold"|"italic", quotedText}]
+  styles       Json? // inline decoration spans: [{start, end, style: "bold"|"italic"|"underline"|"code", quotedText}]
   citations    Json? // in-text citation spans: [{start, end, refId, quotedText}], refId → Document.references
+  links        Json? // link spans: [{start, end, quotedText, targetOrder?, href?}] — Contents entries and PDF hyperlinks
 }
 
 enum BlockType {

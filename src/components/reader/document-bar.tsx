@@ -125,7 +125,9 @@ export function DocumentBar({
   const reparseAttempted = useRef(new Set<string>());
   const active = documents.find((d) => d.id === activeId) ?? null;
   const activeStale =
-    active !== null && active.sourceUrl !== null && active.parserVersion < PARSER_VERSION;
+    active !== null &&
+    (active.sourceUrl !== null || active.hasFile) &&
+    active.parserVersion < PARSER_VERSION;
 
   // Manual re-parse: the progress card shows, errors show.
   async function reparse(doc: AttachedDocument) {

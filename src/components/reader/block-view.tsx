@@ -16,8 +16,8 @@ export type Highlight = {
   sourceId: string | null;
   start: number;
   end: number;
-  kind: "anchor" | "salience" | "simplify" | "term" | "link" | "citation" | "weblink" | "edited" | "style";
-  styleKind?: "bold" | "italic" | "underline"; // kind "style" only
+  kind: "anchor" | "salience" | "simplify" | "term" | "link" | "citation" | "weblink" | "edited" | "style" | "toc";
+  styleKind?: "bold" | "italic" | "underline" | "code"; // kind "style" only
   definition?: string; // glossary hover text, kind "term" only
   color?: string | null; // highlight hue ("clay" | "sage" | "gold" | "plum"), kind "anchor" only
   annotation?: boolean; // anchor belongs to an annotation; click focuses its card
@@ -27,6 +27,7 @@ export type Highlight = {
   linkId?: string; // for arrival flashing via ?link=, kind "link" only
   referenceId?: string; // target reference entry, kind "citation" only
   referenceText?: string; // the reference text, shown on hover, kind "citation" only
+  targetBlockId?: string; // Contents entry target: click scrolls to the block, kind "toc" only
 };
 
 function anchorClass(color: string | null | undefined): string {
@@ -63,11 +64,13 @@ function markedText(text: string, highlights: Highlight[]) {
     const link = covering.find((h) => h.kind === "link");
     const citation = covering.find((h) => h.kind === "citation");
     const weblink = covering.find((h) => h.kind === "weblink");
+    const toc = covering.find((h) => h.kind === "toc");
     const edited = covering.some((h) => h.kind === "edited");
     const bold = covering.some((h) => h.kind === "style" && h.styleKind === "bold");
     const italic = covering.some((h) => h.kind === "style" && h.styleKind === "italic");
     const underlined = covering.some((h) => h.kind === "style" && h.styleKind === "underline");
-    const editedClass = `${edited ? " edited-text" : ""}${bold ? " font-bold" : ""}${italic ? " italic" : ""}${underlined ? " underline" : ""}`;
+    const code = covering.some((h) => h.kind === "style" && h.styleKind === "code");
+    const editedClass = `${edited ? " edited-text" : ""}${bold ? " font-bold" : ""}${italic ? " italic" : ""}${underlined ? " underline" : ""}${code ? " code-mark" : ""}`;
     const anchors = covering.filter((h) => h.kind === "anchor");
     const anchor =
       anchors.length > 1
@@ -121,6 +124,28 @@ function markedText(text: string, highlights: Highlight[]) {
             );
           }}
           className={`citation-mark rounded-[4px]${editedClass}`}
+        >
+          {segment}
+        </a>,
+      );
+    } else if (toc) {
+      // Contents entry: click scrolls the reader to its section heading.
+      parts.push(
+        <a
+          key={from}
+          href={`#block-${toc.targetBlockId}`}
+          data-source-id={anchor?.sourceId ?? undefined}
+          title="Jump to this section"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            window.dispatchEvent(
+              new CustomEvent("dissect:flash-block", {
+                detail: { blockId: toc.targetBlockId },
+              }),
+            );
+          }}
+          className={`toc-mark rounded-[4px]${editedClass}`}
         >
           {segment}
         </a>,

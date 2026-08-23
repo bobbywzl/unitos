@@ -20,11 +20,34 @@ export type CitationSpan = {
   quotedText: string;
 };
 
+// One inline decoration span over block plain text. "code" marks monospace
+// runs (identifiers, badges) inside prose. Stored on Block.styles; quotedText
+// re-resolves the span after edits and re-parses, like every other anchor.
+export type StyleSpan = {
+  start: number;
+  end: number;
+  style: "bold" | "italic" | "underline" | "code";
+  quotedText: string;
+};
+
+// One link span in block text. Contents entries carry targetOrder (the target
+// heading's block order); hyperlinks from PDF link annotations carry href.
+// Stored on Block.links; quotedText re-resolves the span like styles.
+export type LinkSpan = {
+  start: number;
+  end: number;
+  quotedText: string;
+  targetOrder?: number;
+  href?: string;
+};
+
 export type ParsedBlock = {
   type: BlockType;
   text: string;
   html?: string;
   citations?: CitationSpan[];
+  styles?: StyleSpan[];
+  links?: LinkSpan[];
 };
 
 export type ParsedDocument = {
@@ -61,4 +84,8 @@ export type UrlParseProgress = (stage: "extract", detail?: string) => void;
 // 2: structural DOM walk + structure pass. 3: core pass separates article from page chrome.
 // 4: marker lists (icon or numbered rows → LIST) and styled dividers → SEPARATOR.
 // 5: in-text citations resolve to reference entries; the reference list moves to Document.references.
-export const PARSER_VERSION = 5;
+// 6: PDF parse keeps fonts and geometry — bold/italic/code style spans, CODE blocks,
+//    glyphless lists, tables with header rows and wrapped cells, field rows,
+//    letter-spaced caps collapsed, repeated page furniture dropped, Contents
+//    entries linked to their section headings, PDF hyperlinks kept.
+export const PARSER_VERSION = 6;
