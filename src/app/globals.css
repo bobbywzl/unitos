@@ -293,6 +293,38 @@ mark,
 .reader-table a:hover {
   text-decoration-thickness: 2px;
 }
+/* Contents entry: click scrolls the reader to its section heading. */
+.toc-mark {
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+.toc-mark:hover {
+  color: var(--clay);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+/* Inline code: monospace runs from the document — identifiers and the
+   confidence chips (PRESS, DISC, 3P, GAP, EST, DER). Rendered as a chip. */
+.code-mark,
+.reader-table code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.82em;
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+  border-radius: 5px;
+  padding: 0.06em 0.32em;
+}
+.reader-table code {
+  white-space: nowrap;
+}
+/* Invisible cell separators: they keep the table's DOM text equal to block
+   text (tab between cells, newline between rows), so text anchors inside
+   tables resolve. Zero-size, never visible, still selectable. */
+.reader-table .cell-gap {
+  font-size: 0;
+  line-height: 0;
+}
 /* A link whose two ends are visible in two panes: a dashed line between the marks. */
 .link-line {
   stroke: var(--clay-500);
@@ -485,17 +517,22 @@ mark,
 .reader-table table {
   border-collapse: collapse;
   width: 100%;
+  font-variant-numeric: tabular-nums;
 }
 .reader-table td,
 .reader-table th {
   border: 1px solid var(--sand-300);
-  padding: 0.25rem 0.5rem;
+  padding: 0.4rem 0.6rem;
   vertical-align: top;
   text-align: left;
+  line-height: 1.5;
 }
 .reader-table th {
   font-weight: 600;
   background: color-mix(in srgb, var(--ink) 5%, transparent);
+}
+.reader-table tbody tr:nth-child(even) td {
+  background: color-mix(in srgb, var(--ink) 2.5%, transparent);
 }
 .reader-figure img {
   max-width: 100%;

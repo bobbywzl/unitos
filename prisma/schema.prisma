@@ -65,11 +65,11 @@ enum DerivationType {
 }
 
 model Source {
-  id         String   @id @default(cuid())
-  noteId     String
-  note       Note     @relation(fields: [noteId], references: [id], onDelete: Cascade)
-  documentId String
-  document   Document @relation(fields: [documentId], references: [id])
+  id          String   @id @default(cuid())
+  noteId      String
+  note        Note     @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  documentId  String
+  document    Document @relation(fields: [documentId], references: [id])
   // Anchor: dual strategy (see SPEC.md §5)
   blockId     String
   startOffset Int
@@ -77,13 +77,13 @@ model Source {
   quotedText  String
   prefix      String // 32 chars before selection
   suffix      String // 32 chars after selection
-  orphaned    Boolean @default(false)
+  orphaned    Boolean  @default(false)
   // Video anchor (SPEC.md §11): a time range instead of a text span. When
   // startTime is set the anchor skips the text ladder and never orphans —
   // the video file never changes.
-  startTime Float?
-  endTime   Float?
-  region    Json? // drawn shape in percent coordinates: {kind: "ellipse", cx, cy, rx, ry}
+  startTime   Float?
+  endTime     Float?
+  region      Json? // drawn shape in percent coordinates: {kind: "ellipse", cx, cy, rx, ry}
 }
 
 model Document {
@@ -92,18 +92,18 @@ model Document {
   font          String? // reader body font: null = default, "serif", "mono"
   parserVersion Int                @default(0) // parse pipeline version; stale URL documents re-parse automatically
   sourceUrl     String?
-  fileHash  String?            @unique // dedupe re-uploads
-  fileData  Bytes? // original PDF bytes, kept for forced re-parse (SPEC.md §8 Phase 3)
-  blocks    Block[]
-  notebooks NotebookDocument[]
-  sources   Source[]
-  edits     BlockEdit[]
-  linksFrom DocLink[]          @relation("DocLinkFrom")
-  linksTo   DocLink[]          @relation("DocLinkTo")
-  glossary  Json? // Phase 7: [{term, definition, blockIds[]}]
-  references Json? // the article's reference list, extracted at ingest: [{id, label, text, url}]
-  video     VideoAsset? // set = video document; the reader renders the video pane (SPEC.md §11)
-  createdAt DateTime           @default(now())
+  fileHash      String?            @unique // dedupe re-uploads
+  fileData      Bytes? // original PDF bytes, kept for forced re-parse (SPEC.md §8 Phase 3)
+  blocks        Block[]
+  notebooks     NotebookDocument[]
+  sources       Source[]
+  edits         BlockEdit[]
+  linksFrom     DocLink[]          @relation("DocLinkFrom")
+  linksTo       DocLink[]          @relation("DocLinkTo")
+  glossary      Json? // Phase 7: [{term, definition, blockIds[]}]
+  references    Json? // the article's reference list, extracted at ingest: [{id, label, text, url}]
+  video         VideoAsset? // set = video document; the reader renders the video pane (SPEC.md §11)
+  createdAt     DateTime           @default(now())
 }
 
 // One row per user change to a document: block text edits and link add/remove.
@@ -174,11 +174,12 @@ model Block {
   text         String // plain text content
   originalText String? // as first parsed; null = text is unedited. "" = user-authored block.
   html         String? // rendered content for figures/tables
-  styles       Json? // inline decoration spans: [{start, end, style: "bold"|"italic", quotedText}]
+  styles       Json? // inline decoration spans: [{start, end, style: "bold"|"italic"|"underline"|"code", quotedText}]
   citations    Json? // in-text citation spans: [{start, end, refId, quotedText}], refId → Document.references
   // TRANSCRIPT blocks: seconds into the video (SPEC.md §11).
-  startTime Float?
-  endTime   Float?
+  startTime    Float?
+  endTime      Float?
+  links        Json? // link spans: [{start, end, quotedText, targetOrder?, href?}] — Contents entries and PDF hyperlinks
 }
 
 enum BlockType {
@@ -199,24 +200,24 @@ enum BlockType {
 // mimeType/size/chunkSize set. kind YOUTUBE: plays through the YouTube IFrame
 // player; youtubeId set, no bytes stored.
 model VideoAsset {
-  id               String           @id @default(cuid())
-  documentId       String           @unique
-  document         Document         @relation(fields: [documentId], references: [id], onDelete: Cascade)
-  kind             VideoKind        @default(UPLOAD)
-  youtubeId        String?          @unique // kind YOUTUBE only; dedupes re-adds
-  mimeType         String? // kind UPLOAD only
-  size             Int? // kind UPLOAD only
-  chunkSize        Int? // kind UPLOAD only
-  duration         Float? // seconds; written by the client after metadata loads
-  width            Int?
-  height           Int?
-  transcriptStatus TranscriptStatus @default(NONE)
-  transcriptError  String? // FAILED only: the reason, shown in the transcript pane
+  id                  String           @id @default(cuid())
+  documentId          String           @unique
+  document            Document         @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  kind                VideoKind        @default(UPLOAD)
+  youtubeId           String?          @unique // kind YOUTUBE only; dedupes re-adds
+  mimeType            String? // kind UPLOAD only
+  size                Int? // kind UPLOAD only
+  chunkSize           Int? // kind UPLOAD only
+  duration            Float? // seconds; written by the client after metadata loads
+  width               Int?
+  height              Int?
+  transcriptStatus    TranscriptStatus @default(NONE)
+  transcriptError     String? // FAILED only: the reason, shown in the transcript pane
   // When the running transcription started. A PENDING older than 10 minutes is
   // a dead run and may start again.
   transcriptStartedAt DateTime?
   chunks              VideoChunk[]
-  createdAt           DateTime     @default(now())
+  createdAt           DateTime         @default(now())
 }
 
 enum VideoKind {

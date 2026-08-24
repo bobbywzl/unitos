@@ -12,6 +12,7 @@ import {
 import {
   anchorContext,
   annotationsSection,
+  corpusSection,
   documentPrefix,
   loadProfile,
   sectionSkeleton,
@@ -237,6 +238,14 @@ export async function POST(req: Request) {
     }
   }
 
+  // EXPLAIN answers confusions, so it also sees the corpus: related passages
+  // from the other documents, the reader's notes, and their annotations. Its
+  // own system message after the cached prefix, so the prefix cache holds.
+  const corpus =
+    data.type === "EXPLAIN"
+      ? await corpusSection(data.notebookId, data.documentId, anchored?.anchoredText ?? "")
+      : null;
+
   // 2. Template by type. The document is the cached prefix, byte-identical for every
   // derivation on this document (SPEC.md §2).
   const attachedImage = figureImage
@@ -250,6 +259,15 @@ export async function POST(req: Request) {
       content: documentPrefix(document.title, document.blocks, document.references),
       providerOptions: { anthropic: { cacheControl: { type: "ephemeral" } } },
     },
+    ...(corpus
+      ? [
+          {
+            role: "system" as const,
+            content: corpus,
+            providerOptions: { anthropic: { cacheControl: { type: "ephemeral" as const } } },
+          },
+        ]
+      : []),
     attachedImage
       ? {
           role: "user",

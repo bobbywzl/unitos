@@ -62,6 +62,8 @@ async function createDocumentWithBlocks(data: {
         text: b.text,
         html: b.html,
         citations: b.citations,
+        styles: b.styles,
+        links: b.links,
       })),
     });
     return document;
@@ -148,6 +150,8 @@ export async function reparseDocument(documentId: string, onProgress?: OnIngestP
         text: b.text,
         html: b.html,
         citations: b.citations,
+        styles: b.styles,
+        links: b.links,
       })),
     });
     await tx.document.update({

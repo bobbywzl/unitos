@@ -13,7 +13,9 @@ const FONT_STACK: Record<string, string | undefined> = {
 };
 
 type Kind = "paragraph" | "h1" | "h2" | "h3" | "list" | "numbered";
-type StyleKind = "bold" | "italic" | "underline";
+// "code" spans come from the parser (monospace runs); the toolbar toggles the other three.
+type StyleKind = "bold" | "italic" | "underline" | "code";
+type ToggleStyleKind = "bold" | "italic" | "underline";
 type StyleSpan = { start: number; end: number; style: StyleKind };
 
 function headingLevel(html: string | null): 1 | 2 | 3 {
@@ -83,8 +85,9 @@ function decoratedHtml(text: string, spans: StyleSpan[], edited: { start: number
     const bold = spans.some((s) => s.style === "bold" && s.start <= from && s.end >= to);
     const italic = spans.some((s) => s.style === "italic" && s.start <= from && s.end >= to);
     const underline = spans.some((s) => s.style === "underline" && s.start <= from && s.end >= to);
+    const code = spans.some((s) => s.style === "code" && s.start <= from && s.end >= to);
     const isEdited = edited.some((r) => r.start <= from && r.end >= to);
-    const cls = `${isEdited ? "edited-text " : ""}${bold ? "font-bold " : ""}${italic ? "italic " : ""}${underline ? "underline" : ""}`.trim();
+    const cls = `${isEdited ? "edited-text " : ""}${bold ? "font-bold " : ""}${italic ? "italic " : ""}${underline ? "underline " : ""}${code ? "code-mark" : ""}`.trim();
     html += cls ? `<span class="${cls}">${segment}</span>` : segment;
   }
   return html;
@@ -147,7 +150,7 @@ export function Reader({
   editedByBlock: Record<string, { start: number; end: number }[]>;
   onSaveText: (blockId: string, text: string) => Promise<void>;
   onFormatBlock: (blockId: string, kind: Kind, text?: string) => Promise<void>;
-  onToggleStyle: (blockId: string, start: number, end: number, style: StyleKind) => Promise<void>;
+  onToggleStyle: (blockId: string, start: number, end: number, style: ToggleStyleKind) => Promise<void>;
   onInsertBlock: (afterBlockId: string) => Promise<string | null>;
   onDeleteBlock: (blockId: string) => Promise<void>;
 }) {
@@ -189,7 +192,7 @@ export function Reader({
     return onSaveText(blockId, live);
   }
 
-  function applyStyle(style: StyleKind) {
+  function applyStyle(style: ToggleStyleKind) {
     if (!focusedBlockId) return;
     const el = document.querySelector<HTMLElement>(`[data-edit-block="${focusedBlockId}"]`);
     const selection = window.getSelection();

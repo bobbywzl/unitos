@@ -140,7 +140,7 @@ export function DocumentBar({
   const activeStale =
     active !== null &&
     !active.hasVideo &&
-    active.sourceUrl !== null &&
+    (active.sourceUrl !== null || active.hasFile) &&
     active.parserVersion < PARSER_VERSION;
 
   // Manual re-parse: the progress card shows, errors show.

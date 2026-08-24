@@ -16,8 +16,8 @@ export type Highlight = {
   sourceId: string | null;
   start: number;
   end: number;
-  kind: "anchor" | "salience" | "simplify" | "term" | "link" | "citation" | "weblink" | "edited" | "style";
-  styleKind?: "bold" | "italic" | "underline"; // kind "style" only
+  kind: "anchor" | "salience" | "simplify" | "term" | "link" | "citation" | "weblink" | "edited" | "style" | "toc";
+  styleKind?: "bold" | "italic" | "underline" | "code"; // kind "style" only
   definition?: string; // glossary hover text, kind "term" only
   color?: string | null; // highlight hue ("clay" | "sage" | "gold" | "plum"), kind "anchor" only
   annotation?: boolean; // anchor belongs to an annotation; click focuses its card
@@ -27,6 +27,8 @@ export type Highlight = {
   linkId?: string; // for arrival flashing via ?link=, kind "link" only
   referenceId?: string; // target reference entry, kind "citation" only
   referenceText?: string; // the reference text, shown on hover, kind "citation" only
+  targetBlockId?: string; // Contents entry target: click scrolls to the block, kind "toc" only
+  figureLabel?: string | null; // "A1"… label on an annotated figure/table/equation anchor
 };
 
 function anchorClass(color: string | null | undefined): string {
@@ -63,11 +65,13 @@ function markedText(text: string, highlights: Highlight[]) {
     const link = covering.find((h) => h.kind === "link");
     const citation = covering.find((h) => h.kind === "citation");
     const weblink = covering.find((h) => h.kind === "weblink");
+    const toc = covering.find((h) => h.kind === "toc");
     const edited = covering.some((h) => h.kind === "edited");
     const bold = covering.some((h) => h.kind === "style" && h.styleKind === "bold");
     const italic = covering.some((h) => h.kind === "style" && h.styleKind === "italic");
     const underlined = covering.some((h) => h.kind === "style" && h.styleKind === "underline");
-    const editedClass = `${edited ? " edited-text" : ""}${bold ? " font-bold" : ""}${italic ? " italic" : ""}${underlined ? " underline" : ""}`;
+    const code = covering.some((h) => h.kind === "style" && h.styleKind === "code");
+    const editedClass = `${edited ? " edited-text" : ""}${bold ? " font-bold" : ""}${italic ? " italic" : ""}${underlined ? " underline" : ""}${code ? " code-mark" : ""}`;
     const anchors = covering.filter((h) => h.kind === "anchor");
     const anchor =
       anchors.length > 1
@@ -121,6 +125,28 @@ function markedText(text: string, highlights: Highlight[]) {
             );
           }}
           className={`citation-mark rounded-[4px]${editedClass}`}
+        >
+          {segment}
+        </a>,
+      );
+    } else if (toc) {
+      // Contents entry: click scrolls the reader to its section heading.
+      parts.push(
+        <a
+          key={from}
+          href={`#block-${toc.targetBlockId}`}
+          data-source-id={anchor?.sourceId ?? undefined}
+          title="Jump to this section"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            window.dispatchEvent(
+              new CustomEvent("dissect:flash-block", {
+                detail: { blockId: toc.targetBlockId },
+              }),
+            );
+          }}
+          className={`toc-mark rounded-[4px]${editedClass}`}
         >
           {segment}
         </a>,
@@ -251,12 +277,16 @@ const LABEL_DOT: Record<string, string> = {
   plum: "#a78bfa",
 };
 
-// A highlighted figure gets a side label instead of text marks: it sits to the
-// right of the figure and jumps to the annotation. Outside the block element,
-// so the block's DOM text stays exactly the stored text (SPEC.md §5).
+// A highlighted figure, table, or equation gets a side label instead of text
+// marks: it sits to the right of the block and jumps to the annotation. The
+// label shows the block's annotation ids ("A1"), matching the chips on the
+// annotation cards. Outside the block element, so the block's DOM text stays
+// exactly the stored text (SPEC.md §5).
 function HighlightLabel({ anchors }: { anchors: Highlight[] }) {
   const focusable = anchors.find((h) => h.annotation && h.sourceId);
   const color = anchors.find((h) => h.color)?.color ?? "clay";
+  const labels = anchors.map((h) => h.figureLabel).filter((l): l is string => Boolean(l));
+  const text = labels.length > 0 ? labels.join(" · ") : "Highlighted";
   return (
     <button
       onClick={
@@ -269,11 +299,13 @@ function HighlightLabel({ anchors }: { anchors: Highlight[] }) {
               )
           : undefined
       }
-      title={focusable ? "Highlighted. Click to open it in Annotations" : "Highlighted"}
+      title={
+        focusable ? `${text} — annotated. Click to open it in Annotations` : `${text} — highlighted`
+      }
       className="absolute top-2 right-0 z-10 flex translate-x-[calc(100%+10px)] items-center gap-1.5 rounded-full bg-card px-2.5 py-1 text-[10.5px] font-semibold text-sand-700 shadow-soft hover:text-clay-800"
     >
       <span aria-hidden className="size-2 rounded-full" style={{ background: LABEL_DOT[color] ?? LABEL_DOT.clay }} />
-      Highlighted
+      {text}
     </button>
   );
 }
@@ -366,18 +398,24 @@ export function BlockView({
     case "TABLE":
       if (block.html) {
         return (
-          <div
-            data-block-id={block.id}
-            data-source-id={firstSourceId}
-            className={`${shared} reader-table my-3 overflow-x-auto text-sm ${htmlHighlighted}`}
-            dangerouslySetInnerHTML={{ __html: block.html }}
-          />
+          <div className="relative">
+            <div
+              data-block-id={block.id}
+              data-source-id={firstSourceId}
+              className={`${shared} reader-table my-3 overflow-x-auto text-sm ${htmlHighlighted}`}
+              dangerouslySetInnerHTML={{ __html: block.html }}
+            />
+            {figureAnchors.length > 0 && <HighlightLabel anchors={figureAnchors} />}
+          </div>
         );
       }
       return (
-        <pre data-block-id={block.id} data-source-id={firstSourceId} className={`${shared} my-3 overflow-x-auto font-mono text-sm ${htmlHighlighted}`}>
-          {content}
-        </pre>
+        <div className="relative">
+          <pre data-block-id={block.id} data-source-id={firstSourceId} className={`${shared} my-3 overflow-x-auto font-mono text-sm ${htmlHighlighted}`}>
+            {content}
+          </pre>
+          {figureAnchors.length > 0 && <HighlightLabel anchors={figureAnchors} />}
+        </div>
       );
     case "FIGURE":
       if (block.html) {
