@@ -312,6 +312,7 @@ export function ReaderInteractions({
       color: string | null;
       annotation: boolean;
       comment: boolean;
+      figureLabel: string | null;
     }[]
   >;
   // Highlights and comments by source id: their marks open on-page edit

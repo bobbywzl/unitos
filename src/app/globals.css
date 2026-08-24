@@ -318,6 +318,13 @@ mark,
 .reader-table code {
   white-space: nowrap;
 }
+/* Invisible cell separators: they keep the table's DOM text equal to block
+   text (tab between cells, newline between rows), so text anchors inside
+   tables resolve. Zero-size, never visible, still selectable. */
+.reader-table .cell-gap {
+  font-size: 0;
+  line-height: 0;
+}
 /* A link whose two ends are visible in two panes: a dashed line between the marks. */
 .link-line {
   stroke: var(--clay-500);

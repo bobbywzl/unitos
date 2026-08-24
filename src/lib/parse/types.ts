@@ -88,4 +88,6 @@ export type UrlParseProgress = (stage: "extract", detail?: string) => void;
 //    glyphless lists, tables with header rows and wrapped cells, field rows,
 //    letter-spaced caps collapsed, repeated page furniture dropped, Contents
 //    entries linked to their section headings, PDF hyperlinks kept.
-export const PARSER_VERSION = 6;
+// 7: table html carries invisible cell separators so table DOM text equals block
+//    text — text anchors inside tables resolve.
+export const PARSER_VERSION = 7;

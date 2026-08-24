@@ -28,6 +28,7 @@ export type Highlight = {
   referenceId?: string; // target reference entry, kind "citation" only
   referenceText?: string; // the reference text, shown on hover, kind "citation" only
   targetBlockId?: string; // Contents entry target: click scrolls to the block, kind "toc" only
+  figureLabel?: string | null; // "A1"… label on an annotated figure/table/equation anchor
 };
 
 function anchorClass(color: string | null | undefined): string {
@@ -276,12 +277,16 @@ const LABEL_DOT: Record<string, string> = {
   plum: "#a78bfa",
 };
 
-// A highlighted figure gets a side label instead of text marks: it sits to the
-// right of the figure and jumps to the annotation. Outside the block element,
-// so the block's DOM text stays exactly the stored text (SPEC.md §5).
+// A highlighted figure, table, or equation gets a side label instead of text
+// marks: it sits to the right of the block and jumps to the annotation. The
+// label shows the block's annotation ids ("A1"), matching the chips on the
+// annotation cards. Outside the block element, so the block's DOM text stays
+// exactly the stored text (SPEC.md §5).
 function HighlightLabel({ anchors }: { anchors: Highlight[] }) {
   const focusable = anchors.find((h) => h.annotation && h.sourceId);
   const color = anchors.find((h) => h.color)?.color ?? "clay";
+  const labels = anchors.map((h) => h.figureLabel).filter((l): l is string => Boolean(l));
+  const text = labels.length > 0 ? labels.join(" · ") : "Highlighted";
   return (
     <button
       onClick={
@@ -294,11 +299,13 @@ function HighlightLabel({ anchors }: { anchors: Highlight[] }) {
               )
           : undefined
       }
-      title={focusable ? "Highlighted. Click to open it in Annotations" : "Highlighted"}
+      title={
+        focusable ? `${text} — annotated. Click to open it in Annotations` : `${text} — highlighted`
+      }
       className="absolute top-2 right-0 z-10 flex translate-x-[calc(100%+10px)] items-center gap-1.5 rounded-full bg-card px-2.5 py-1 text-[10.5px] font-semibold text-sand-700 shadow-soft hover:text-clay-800"
     >
       <span aria-hidden className="size-2 rounded-full" style={{ background: LABEL_DOT[color] ?? LABEL_DOT.clay }} />
-      Highlighted
+      {text}
     </button>
   );
 }
@@ -377,18 +384,24 @@ export function BlockView({
     case "TABLE":
       if (block.html) {
         return (
-          <div
-            data-block-id={block.id}
-            data-source-id={firstSourceId}
-            className={`${shared} reader-table my-3 overflow-x-auto text-sm ${htmlHighlighted}`}
-            dangerouslySetInnerHTML={{ __html: block.html }}
-          />
+          <div className="relative">
+            <div
+              data-block-id={block.id}
+              data-source-id={firstSourceId}
+              className={`${shared} reader-table my-3 overflow-x-auto text-sm ${htmlHighlighted}`}
+              dangerouslySetInnerHTML={{ __html: block.html }}
+            />
+            {figureAnchors.length > 0 && <HighlightLabel anchors={figureAnchors} />}
+          </div>
         );
       }
       return (
-        <pre data-block-id={block.id} data-source-id={firstSourceId} className={`${shared} my-3 overflow-x-auto font-mono text-sm ${htmlHighlighted}`}>
-          {content}
-        </pre>
+        <div className="relative">
+          <pre data-block-id={block.id} data-source-id={firstSourceId} className={`${shared} my-3 overflow-x-auto font-mono text-sm ${htmlHighlighted}`}>
+            {content}
+          </pre>
+          {figureAnchors.length > 0 && <HighlightLabel anchors={figureAnchors} />}
+        </div>
       );
     case "FIGURE":
       if (block.html) {

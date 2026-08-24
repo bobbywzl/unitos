@@ -597,18 +597,27 @@ function tableFromRun(run: Line[], leading: number): Segment {
       rows[0].cells.reduce((n, c) => n + c.text.length, 0),
     ) > 0.5;
   // Header cells render bold on their own; strip bold runs so <th> holds no <strong>.
-  const rowHtml = (row: TableRow, tag: "td" | "th") =>
+  // Every cell ends with an invisible separator (tab between cells, newline
+  // between rows) so the table's DOM text equals block text exactly — text
+  // anchors inside tables depend on this (SPEC.md §5).
+  const rowHtml = (row: TableRow, tag: "td" | "th", rowIdx: number) =>
     `<tr>${row.cells
-      .map((c) => {
+      .map((c, cellIdx) => {
         const runs = tag === "th" ? c.runs.map((r) => ({ ...r, bold: false })) : c.runs;
-        return `<${tag}>${cellHtml(c.text, runs)}</${tag}>`;
+        const last = cellIdx === row.cells.length - 1;
+        const gap = last
+          ? rowIdx === rows.length - 1
+            ? ""
+            : '<span class="cell-gap">\n</span>'
+          : '<span class="cell-gap">\t</span>';
+        return `<${tag}>${cellHtml(c.text, runs)}${gap}</${tag}>`;
       })
       .join("")}</tr>`;
   const bodyRows = headerRow ? rows.slice(1) : rows;
   const html =
     "<table>" +
-    (headerRow ? `<thead>${rowHtml(rows[0], "th")}</thead>` : "") +
-    `<tbody>${bodyRows.map((r) => rowHtml(r, "td")).join("")}</tbody>` +
+    (headerRow ? `<thead>${rowHtml(rows[0], "th", 0)}</thead>` : "") +
+    `<tbody>${bodyRows.map((r, i) => rowHtml(r, "td", (headerRow ? 1 : 0) + i)).join("")}</tbody>` +
     "</table>";
   const text = rows.map((r) => r.cells.map((c) => c.text).join("\t")).join("\n");
   return { type: "TABLE", text, html, page };

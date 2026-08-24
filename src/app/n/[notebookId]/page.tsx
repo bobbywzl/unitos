@@ -116,9 +116,35 @@ export default async function NotebookPage(props: {
         color: string | null;
         annotation: boolean;
         comment: boolean;
+        figureLabel: string | null;
       }[]
     > = {};
     const resolved = await resolveDocumentSources(document.id);
+
+    // Annotated figure, table, and equation blocks carry sequential labels
+    // ("A1", "A2", …) in document order. The label renders at the block and on
+    // the annotation card, so the connection is visible at both ends.
+    const NONTEXT_TYPES = new Set(["FIGURE", "TABLE", "EQUATION"]);
+    const figureLabelBySource = new Map<string, string>();
+    {
+      const byBlock = new Map<string, typeof resolved>();
+      for (const r of resolved) {
+        if (r.orphaned || !noteById.has(r.noteId)) continue;
+        const block = blockById.get(r.blockId);
+        if (!block || !NONTEXT_TYPES.has(block.type)) continue;
+        const list = byBlock.get(r.blockId) ?? [];
+        list.push(r);
+        byBlock.set(r.blockId, list);
+      }
+      let counter = 0;
+      for (const b of document.blocks) {
+        const list = byBlock.get(b.id);
+        if (!list) continue;
+        list.sort((x, y) => x.start - y.start || x.id.localeCompare(y.id));
+        for (const r of list) figureLabelBySource.set(r.id, `A${++counter}`);
+      }
+    }
+
     for (const r of resolved) {
       resolutionById.set(r.id, { orphaned: r.orphaned });
       if (r.orphaned || !noteById.has(r.noteId)) continue;
@@ -133,6 +159,7 @@ export default async function NotebookPage(props: {
         // Comment annotation: a comment icon renders beside the text.
         comment:
           annotationNoteIds.has(r.noteId) && note?.derivationType == null && note?.color == null,
+        figureLabel: figureLabelBySource.get(r.id) ?? null,
       });
       anchorHighlights[r.blockId] = list;
     }
@@ -204,6 +231,7 @@ export default async function NotebookPage(props: {
           sourceId: source.id,
           quotedText: source.quotedText,
           orphaned: resolutionById.get(source.id)?.orphaned ?? source.orphaned,
+          figureLabel: figureLabelBySource.get(source.id) ?? null,
         };
       })
       .filter((a): a is AnnotationItem => a !== null);

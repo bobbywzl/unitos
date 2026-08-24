@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { AnnotationItem, LinkIn, LinkOut } from "@/lib/types";
 import { api } from "@/lib/api";
+import { LocateIcon } from "@/components/icons";
 import { Markdown } from "@/components/markdown";
 import { stripSimplifyMarkers } from "@/lib/sentences";
 
@@ -43,25 +44,36 @@ function AnnotationActions({
   function jump() {
     router.push(`/n/${notebookId}?doc=${documentId}&src=${annotation.sourceId}`);
     // The ?src effect only re-runs when the param changes; the event covers a
-    // second Jump to the same annotation.
+    // second jump to the same annotation.
     window.dispatchEvent(
       new CustomEvent("dissect:flash-source", { detail: { sourceId: annotation.sourceId } }),
     );
   }
 
   return (
-    <div className="mt-2 flex items-center gap-3">
+    <div className="mt-2 flex items-center gap-2">
       {canJump && (
-        <button onClick={jump} className="text-xs text-sand-600 hover:text-clay-700">
-          Jump
+        <button
+          onClick={jump}
+          aria-label="Jump to the anchor in the reader"
+          title="Jump to the anchor in the reader"
+          className="inline-flex items-center gap-1.5 rounded-full bg-clay-100 px-2.5 py-1 text-[11px] font-semibold text-clay-800 hover:bg-clay-200"
+        >
+          <LocateIcon size={11} />
+          {annotation.figureLabel ?? ""}
         </button>
+      )}
+      {!canJump && annotation.figureLabel && (
+        <span className="rounded-full bg-sand-200 px-2.5 py-1 text-[11px] font-semibold text-sand-600">
+          {annotation.figureLabel}
+        </span>
       )}
       {annotation.orphaned && (
         <span className="text-[11px] font-semibold text-red-500">Anchor unresolved</span>
       )}
       <button
         onClick={() => void onDelete(annotation.id)}
-        className="text-xs text-red-500 hover:text-red-700"
+        className="ml-auto text-xs text-red-500 hover:text-red-700"
       >
         Delete
       </button>

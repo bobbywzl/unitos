@@ -56,6 +56,9 @@ export type AnnotationItem = {
   sourceId: string | null;
   quotedText: string | null;
   orphaned: boolean;
+  // Set when the anchor sits on a figure, table, or equation block: the label
+  // ("A1", "A2", …) shown at the block in the reader and on this card.
+  figureLabel: string | null;
 };
 
 export type LinkOut = {

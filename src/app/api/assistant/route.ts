@@ -10,7 +10,7 @@ import {
 } from "@/lib/assistant/embeddings";
 import { db } from "@/lib/db";
 import { DERIVATION_MODEL, MAX_OUTPUT_TOKENS } from "@/lib/derive/config";
-import { anchorContext, documentPrefix, loadProfile } from "@/lib/derive/context";
+import { anchorContext, corpusSection, documentPrefix, loadProfile } from "@/lib/derive/context";
 import { callForJson, modelErrorMessage } from "@/lib/derive/json-call";
 import { synthesisAskPrompt, synthesisTaskPrompt } from "@/lib/prompts/synthesis";
 import { parseBody } from "@/lib/validate";
@@ -86,6 +86,11 @@ async function handle(req: Request) {
   let system: string;
   let cache = true;
   let scopeLabel: string;
+  // Selection and document scopes also see the corpus — related passages from
+  // the other documents, the reader's notes and annotations — so answers can
+  // reference them and draw analogies. Its own system message after the
+  // cached document prefix, so the prefix cache holds.
+  let corpus: string | null = null;
   if (data.scope === "selection" || data.scope === "document") {
     if (!data.documentId) {
       return NextResponse.json({ error: "This scope needs an open document" }, { status: 400 });
@@ -96,6 +101,7 @@ async function handle(req: Request) {
     });
     if (!document) return NextResponse.json({ error: "Document not found" }, { status: 404 });
     system = documentPrefix(document.title, document.blocks, document.references);
+    let focusText = data.question ?? "";
     if (data.scope === "selection") {
       if (!data.anchor) {
         return NextResponse.json({ error: "Selection scope needs a selection" }, { status: 400 });
@@ -109,10 +115,12 @@ async function handle(req: Request) {
       if (!anchored) {
         return NextResponse.json({ error: "Anchor does not resolve" }, { status: 400 });
       }
+      focusText = `${anchored.anchoredText} ${focusText}`;
       scopeLabel = `the reader's selection: "${anchored.anchoredText.slice(0, 500)}" with the document for context`;
     } else {
       scopeLabel = `the document "${document.title}"`;
     }
+    corpus = await corpusSection(data.notebookId, data.documentId, focusText);
   } else if (data.scope === "notebook") {
     system = await notebookContext(data.notebookId);
     scopeLabel = "this corpus's accepted notes";
@@ -132,6 +140,15 @@ async function handle(req: Request) {
       content: system,
       ...(cache ? { providerOptions: { anthropic: { cacheControl: { type: "ephemeral" } } } } : {}),
     },
+    ...(corpus
+      ? [
+          {
+            role: "system" as const,
+            content: corpus,
+            providerOptions: { anthropic: { cacheControl: { type: "ephemeral" as const } } },
+          },
+        ]
+      : []),
     {
       role: "user",
       content:
