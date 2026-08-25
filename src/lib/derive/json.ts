@@ -36,10 +36,14 @@ export const salienceOutputSchema = z.object({
   spans: z.array(spanSchema).min(1).max(200),
 });
 
-export const extractOutputSchema = z.object({
-  sectionId: z.string().min(1),
-  content: z.string().min(1).max(10_000),
-  quotedSpans: z.array(spanSchema).min(1).max(5),
+// DISTILL (SPEC.md §4): the quotes that answer the reader's question, each with
+// a caption. Spans use the same block-id + offset contract as SALIENCE; the
+// route resolves every span against the real block text before anything persists.
+export const distillOutputSchema = z.object({
+  quotes: z
+    .array(spanSchema.extend({ caption: z.string().min(1).max(1_000) }))
+    .min(1)
+    .max(20),
 });
 
 // FIND (SPEC.md §11): matches reference transcript blocks by id; the route

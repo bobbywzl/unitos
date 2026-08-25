@@ -17,8 +17,10 @@ export type PromptCtx = {
   anchoredText: string;
   contextBefore: string;
   contextAfter: string;
-  // Section skeleton of the notebook, for EXTRACT.
+  // Section skeleton of the notebook.
   sectionSkeleton: { id: string; title: string; parentTitle: string | null }[];
+  // The reader's question, for DISTILL.
+  question?: string;
   // Summary depth, for SUMMARIZE.
   depth?: SummaryDepth;
   // Set when EXPLAIN targets a figure block: the model deciphers the visual.

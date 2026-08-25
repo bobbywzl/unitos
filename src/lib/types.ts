@@ -41,6 +41,39 @@ export type SummaryDepth = (typeof SUMMARY_DEPTHS)[number];
 /** Stored on NotebookDocument.summaries: one summary per generated depth. */
 export type SummaryLevels = Partial<Record<SummaryDepth, string>>;
 
+// ── DISTILL: question → the quotes that answer it ──────────────────────────
+
+/** One quote of a distillation: a verbatim span (same dual anchor as Source,
+    SPEC.md §5) plus the caption saying how it answers the question. */
+export type DistillQuote = {
+  blockId: string;
+  start: number;
+  end: number;
+  quotedText: string;
+  prefix: string;
+  suffix: string;
+  caption: string;
+};
+
+/** Stored on NotebookDocument.distillations, newest first. */
+export type Distillation = {
+  id: string;
+  question: string;
+  createdAt: string; // ISO
+  quotes: DistillQuote[];
+};
+
+/** One distillation as the reader sees it: quotes re-resolved against the
+    current blocks, orphaned visibly when the words are gone (SPEC.md §5). */
+export type DistillationView = Omit<Distillation, "quotes"> & {
+  quotes: (DistillQuote & { orphaned: boolean })[];
+};
+
+/** Tolerant read of the Json column; anything malformed reads as empty. */
+export function distillationList(value: unknown): Distillation[] {
+  return Array.isArray(value) ? (value as Distillation[]) : [];
+}
+
 // ── Reader side panel: annotations and edit history ────────────────────────
 
 /** One annotation on the open document, shown in the Annotations tab.

@@ -7,7 +7,7 @@ import type { PromptCtx, ReaderProfileCtx } from "@/lib/prompts/types";
 
 // The document rendered as the cached prompt prefix (SPEC.md §2). Byte-identical across
 // every derivation on the same document, so all types reuse one cache entry.
-// Block ids are included so EXTRACT and SALIENCE can reference them.
+// Block ids are included so DISTILL and SALIENCE can reference them.
 // Timed blocks tag their seconds — `(TRANSCRIPT 12.4s–18.2s)` — so FIND can
 // resolve answers to time ranges (SPEC.md §11).
 // The reference list is appended so in-text citations stay explainable — pass

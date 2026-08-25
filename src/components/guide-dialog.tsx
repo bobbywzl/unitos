@@ -71,12 +71,13 @@ export function GuideDialog({ open, onClose }: { open: boolean; onClose: () => v
               its header to move it; a faint line ties each bubble to the text it came from.
             </li>
             <li>
-              <span className={term}>Extract</span> — the note-taking tool. It turns the
-              selection into a note: the AI condenses the passage, proposes which section of
-              your corpus it belongs in, and keeps an anchor back to the exact words. The
-              note lands <span className={term}>pending</span> — nothing enters your notes until
-              you accept it (Enter) or reject it (Backspace). Use it whenever a passage should
-              become part of your notes without copying by hand.
+              <span className={term}>Distill</span> — ask the article one question. The AI
+              scans the whole document and opens the distilled page: your question large at
+              the top, under it the quotes that answer it, each with a caption saying how it
+              answers the question and how it sits in the document. Click a quote to jump to
+              its exact words in the text. Add to notes files a quote as a{" "}
+              <span className={term}>pending</span> note with its anchor — nothing enters your
+              notes until you accept it (Enter) or reject it (Backspace).
             </li>
             <li>
               <span className={term}>Colors</span> — highlight the selection. Type a comment
@@ -108,8 +109,15 @@ export function GuideDialog({ open, onClose }: { open: boolean; onClose: () => v
               all editable. A progress card shows each step while the cat dances.
             </li>
             <li>
+              <span className={term}>Assistant menu</span> (top left) — the frequent functions,
+              always one click away: Summarize article, Key takeaways, and Explain simply send
+              the question to the assistant, which reads the whole document and answers in a
+              chat beside the article; Ask the assistant opens the same chat for your own
+              question; Distill opens the distilled page.
+            </li>
+            <li>
               <span className={term}>Context</span> (top bar) — who you are, why you read, what
-              the notes feed. Injected into every AI prompt: notes, extraction, analysis. Every
+              the notes feed. Injected into every AI prompt: notes, distillation, analysis. Every
               field is optional; edit any time. Save it everywhere or for this corpus only.
             </li>
             <li>

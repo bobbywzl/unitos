@@ -21,9 +21,9 @@ const createSchema = z
       })
       .optional(),
     // Assistant-written notes carry their authorship, and land pending when the
-    // user has not approved them one by one (Auto mode). Find results always
-    // land pending. Nothing enters notes silently (SPEC.md §1).
-    origin: z.enum(["assistant", "find"]).optional(),
+    // user has not approved them one by one (Auto mode). Find and distill
+    // results always land pending. Nothing enters notes silently (SPEC.md §1).
+    origin: z.enum(["assistant", "find", "distill"]).optional(),
     pending: z.boolean().optional(),
   })
   .refine((d) => !(d.source && d.video), { message: "Provide source or video, not both" });
@@ -71,14 +71,20 @@ export async function POST(req: Request) {
   }
 
   const derivationType =
-    data.origin === "assistant" ? ("SYNTHESIS" as const) : data.origin === "find" ? ("FIND" as const) : undefined;
+    data.origin === "assistant"
+      ? ("SYNTHESIS" as const)
+      : data.origin === "find"
+        ? ("FIND" as const)
+        : data.origin === "distill"
+          ? ("DISTILL" as const)
+          : undefined;
   const count = await db.note.count({ where: { sectionId: data.sectionId } });
   const note = await db.note.create({
     data: {
       sectionId: data.sectionId,
       content: data.content,
-      // Find output is AI output: it lands PENDING, no exceptions (SPEC.md §1).
-      status: data.pending || data.origin === "find" ? "PENDING" : "ACCEPTED",
+      // Find and distill output is AI output: it lands PENDING, no exceptions (SPEC.md §1).
+      status: data.pending || data.origin === "find" || data.origin === "distill" ? "PENDING" : "ACCEPTED",
       ...(derivationType ? { derivationType } : {}),
       order: count,
       ...(data.source

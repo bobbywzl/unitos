@@ -9,7 +9,7 @@ export type ContextValues = { background: string; purpose: string; application: 
 const EMPTY: ContextValues = { background: "", purpose: "", application: "" };
 
 // The Context tab in the workspace header: who the reader is and what they're
-// after. Injected into every AI prompt: notes, extraction, analysis. Optional —
+// after. Injected into every AI prompt: notes, distillation, analysis. Optional —
 // it never blocks reading or upload. Saves globally (ReaderProfile) or as this
 // work's override (notebook.profile).
 export function ContextTab({
@@ -101,7 +101,7 @@ export function ContextTab({
       <button
         onClick={toggle}
         aria-expanded={open}
-        title="Injected into every AI prompt: notes, extraction, analysis."
+        title="Injected into every AI prompt: notes, distillation, analysis."
         className={`rounded-full px-3.5 py-1.5 text-[13px] hover:bg-clay-100 hover:text-clay-800 ${
           isSet
             ? "border border-line text-sand-700"
@@ -114,7 +114,7 @@ export function ContextTab({
       {open && (
         <div className="absolute right-0 z-30 mt-2 w-[340px] rounded-2xl bg-card p-4 shadow-float">
           <p className="text-xs text-sand-600">
-            Injected into every AI prompt: notes, extraction, analysis. Every field is optional.
+            Injected into every AI prompt: notes, distillation, analysis. Every field is optional.
           </p>
           <div className="mt-3 space-y-3">
             {field(

@@ -58,10 +58,11 @@ enum DerivationType {
   EXPLAIN
   SIMPLIFY
   SALIENCE
-  EXTRACT
+  EXTRACT // legacy notes only; the tool became DISTILL
   SUMMARIZE // document-level summary, one per depth
   SYNTHESIS // notebook-scope assistant output
   FIND // video content reader: query → time ranges + explanations (SPEC.md §11)
+  DISTILL // question → the quotes that answer it, stored on the attachment (SPEC.md §4)
 }
 
 model Source {
@@ -159,8 +160,9 @@ model NotebookDocument {
   documentId String
   notebook   Notebook @relation(fields: [notebookId], references: [id], onDelete: Cascade)
   document   Document @relation(fields: [documentId], references: [id])
-  salience   Json? // SALIENCE layer: [{blockId, start, end}], per notebook per document (SPEC.md §4)
-  summaries  Json? // SUMMARIZE output: {layman?, intermediate?, professional?}, per notebook per document (SPEC.md §4)
+  salience      Json? // SALIENCE layer: [{blockId, start, end}], per notebook per document (SPEC.md §4)
+  summaries     Json? // SUMMARIZE output: {layman?, intermediate?, professional?}, per notebook per document (SPEC.md §4)
+  distillations Json? // DISTILL output: [{id, question, createdAt, quotes}], newest first, per notebook per document (SPEC.md §4)
 
   @@id([notebookId, documentId])
 }

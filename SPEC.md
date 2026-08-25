@@ -78,9 +78,10 @@ enum DerivationType {
   EXPLAIN
   SIMPLIFY
   SALIENCE
-  EXTRACT
+  EXTRACT    // legacy notes only; the tool became DISTILL
   SUMMARIZE  // document-level summary, one per depth
   SYNTHESIS  // notebook-scope assistant output
+  DISTILL    // question → the quotes that answer it, stored on the attachment
 }
 
 model Source {
@@ -112,12 +113,13 @@ model Document {
 }
 
 model NotebookDocument {
-  notebookId String
-  documentId String
-  notebook   Notebook @relation(fields: [notebookId], references: [id], onDelete: Cascade)
-  document   Document @relation(fields: [documentId], references: [id])
-  salience   Json?    // SALIENCE layer: [{blockId, start, end}], per notebook per document
-  summaries  Json?    // SUMMARIZE output: {layman?, intermediate?, professional?}
+  notebookId    String
+  documentId    String
+  notebook      Notebook @relation(fields: [notebookId], references: [id], onDelete: Cascade)
+  document      Document @relation(fields: [documentId], references: [id])
+  salience      Json?    // SALIENCE layer: [{blockId, start, end}], per notebook per document
+  summaries     Json?    // SUMMARIZE output: {layman?, intermediate?, professional?}
+  distillations Json?    // DISTILL output: [{id, question, createdAt, quotes}], newest first
   @@id([notebookId, documentId])
 }
 
@@ -160,11 +162,11 @@ Single server route: `POST /api/derive`
 
 ```typescript
 type DeriveRequest = {
-  type: 'EXPLAIN' | 'SIMPLIFY' | 'SALIENCE' | 'EXTRACT' | 'SUMMARIZE';
+  type: 'EXPLAIN' | 'SIMPLIFY' | 'SALIENCE' | 'DISTILL' | 'SUMMARIZE';
   documentId: string;
   notebookId: string;
-  anchor?: AnchorInput;        // required for EXPLAIN/SIMPLIFY/EXTRACT
-  targetSectionId?: string;    // EXTRACT only; null = let AI propose section
+  anchor?: AnchorInput;        // required for EXPLAIN/SIMPLIFY; optional focus for DISTILL
+  question?: string;           // DISTILL only: the question the quotes must answer
   depth?: 'layman' | 'intermediate' | 'professional'; // SUMMARIZE only; default layman
 };
 ```
@@ -177,12 +179,12 @@ Flow:
    - `EXPLAIN` → annotation bubble in the reader rail (persisted as a Note in a hidden "Annotations" section, so it's searchable, but rendered in the rail)
    - `SIMPLIFY` → bubble beside the article, level with the selection (ephemeral, not persisted; close to dismiss)
    - `SALIENCE` → highlight layer (persisted as document-level Json, per notebook)
-   - `EXTRACT` → `Note` with `status: PENDING` in the target section
+   - `DISTILL` → distillation on `NotebookDocument.distillations`, rendered as the distilled page; a quote reaches notes only through the page's "Add to notes", which lands a `Note` with `status: PENDING`
    - `SUMMARIZE` → Summary tab in the side panel (persisted on `NotebookDocument.summaries`, one summary per depth; Regenerate overwrites)
 
-Prompt templates always receive: reader context, document title, section skeleton (for EXTRACT), and the anchored text with surrounding context (±2 blocks).
+Prompt templates always receive: reader context, document title, section skeleton, and the anchored text with surrounding context (±2 blocks).
 
-**EXTRACT output contract:** model returns JSON `{sectionId, content, quotedSpans: [{blockId, start, end}]}`. Validate strictly; on parse failure, retry once with the error appended, then surface failure to user. Never write malformed output to DB.
+**DISTILL output contract:** model returns JSON `{quotes: [{blockId, start, end, caption}]}` — the verbatim spans across the whole document that answer the question, each captioned with how it answers the question in the document's context. Validate strictly; resolve every span against the real block text and drop what does not resolve; on parse failure, retry once with the error appended, then surface failure to user. Never write malformed output to DB. Stored quotes heal at render like salience and orphan visibly (§5). (EXTRACT, the v1 selection-to-note tool, was folded into DISTILL; the enum value remains for legacy notes.)
 
 ---
 
@@ -201,7 +203,7 @@ DOM ranges are never the source of truth. Convert selection → block-relative o
 ## 6. Layout & UX
 
 **Split view, both panes persistent:**
-- **Left:** document reader. Blocks rendered from DB, selection popover on highlight with four buttons: Explain / Simplify / Extract to notes / Add manually.
+- **Left:** document reader. Blocks rendered from DB, selection popover on highlight with four buttons: Explain / Simplify / Distill / Add manually.
 - **Right:** docked notes drawer showing the section skeleton of the current notebook. Pending notes render with amber left-border + Accept (`Enter`) / Reject (`Backspace`) / Edit (`e`). Accepting must be exactly one keystroke when a pending note is focused.
 - Notes full-page view exists only for reorganizing/editing/export.
 
@@ -219,6 +221,8 @@ DOM ranges are never the source of truth. Convert selection → block-relative o
 - The selection popover follows the same rule: right of the text when that side is clear, else left, else directly below the highlighted text.
 - A faint dashed connector line runs from the edge of each tool block's highlighted text to the block, so the correspondence stays visible with several blocks open.
 - Figures and equations open their tools with a hold-and-circle gesture (pointer down + ≥300° of turning). The figure popover has Explain (the model deciphers the visual — image figures attach the image, SVG charts attach their source, videos explain from caption), highlight colors, Comment, and Link — no Simplify or Extract. A highlighted figure shows a side label on its right that jumps to the annotation, instead of text marks.
+- Distill: the reader asks the article one question — from the selection popover (the selection rides along as the starting point) or the article menu. The distilled page opens over the article: the question large at the top, under it the quotes that answer it, in document order, each with a caption saying how it answers the question and how it sits in the document's context. Clicking a quote closes the page and jumps to its exact span. Add to notes lands the quote as a PENDING note (caption as content, quote as source). Distillations persist per notebook per document, newest first; the page lists them and deletes them one by one.
+- The article menu sits sticky at the top left of the reader — always one click away. It lists the frequent functions: Summarize article, Key takeaways, and Explain simply send the question to the assistant, which reads the whole document (document scope, cached prefix) and answers in the assistant chat card beside the article; Ask the assistant opens the same chat empty; Distill opens the distilled page.
 - Summary lives in the side panel: one rail button, a depth control with three levels (layman / intermediate / professional), one stored summary per depth.
 - Salience layer is a toggleable highlight overlay, off by default, one click to show.
 - Context tab in the workspace header: background / purpose / application, every field optional, editable any time. Saves globally or as a per-notebook override. No onboarding dialog — nothing blocks reading or upload.

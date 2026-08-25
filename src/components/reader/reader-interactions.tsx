@@ -11,14 +11,20 @@ import {
   type SentenceSpan,
   type SimplifiedSentence,
 } from "@/lib/sentences";
-import type { AssistantAction, AssistantPlan } from "@/lib/types";
+import type {
+  AssistantAction,
+  AssistantPlan,
+  Distillation,
+  DistillationView,
+} from "@/lib/types";
 import type { DocumentReference } from "@/lib/parse/types";
 import { splitStreamError, splitStreamNote } from "@/lib/derive/config";
 import { findWeblinks } from "@/lib/weblinks";
-import { MicIcon, SparkleIcon } from "@/components/icons";
+import { ChevronDownIcon, MicIcon, SparkleIcon } from "@/components/icons";
 import { Markdown } from "@/components/markdown";
 import type { BlockData, Highlight } from "@/components/reader/block-view";
 import { Bibliography } from "@/components/reader/bibliography";
+import { DistillPage } from "@/components/reader/distill-page";
 import { Reader } from "@/components/reader/reader";
 
 type Anchor = Omit<SourceInput, "documentId">;
@@ -29,7 +35,7 @@ type Popover = {
   yTop: number;
   textLeft: number;
   truncated: boolean; // selection crossed into another paragraph; anchor covers the first
-  figure?: boolean; // opened by the hold-and-circle gesture on a figure; no Simplify or Extract
+  figure?: boolean; // opened by the hold-and-circle gesture on a figure; no Simplify or Distill
   // Placement, by proximity to open tool blocks: right of the text first, then
   // left, then directly below the highlighted text. Bases are container coords.
   side: "right" | "left" | "below";
@@ -239,6 +245,17 @@ type AnnotationCard = {
   busy: boolean;
 };
 
+// The article menu's frequent asks: one click sends the question to the
+// assistant, which reads the whole document and answers in the chat card.
+const FREQUENT_ASKS: { label: string; question: string }[] = [
+  { label: "Summarize article", question: "Summarize this article." },
+  { label: "Key takeaways", question: "What are the key takeaways of this article?" },
+  {
+    label: "Explain simply",
+    question: "Explain this article in plain words for a reader new to the field.",
+  },
+];
+
 const HIGHLIGHT_HUES = ["clay", "sage", "gold", "plum"] as const;
 const HUE_DOT: Record<(typeof HIGHLIGHT_HUES)[number], string> = {
   clay: "var(--clay-400)",
@@ -275,7 +292,8 @@ function dockSideCard(
 }
 
 // Client layer over the reader: selection capture, popover, EXPLAIN bubble,
-// SIMPLIFY bubble, SALIENCE overlay toggle, EXTRACT, jump-to-anchor.
+// SIMPLIFY bubble, SALIENCE overlay toggle, DISTILL page, the article menu,
+// jump-to-anchor.
 export function ReaderInteractions({
   documentId,
   notebookId,
@@ -286,6 +304,7 @@ export function ReaderInteractions({
   anchorHighlights,
   annotationsBySource,
   annotationBubbles,
+  distillations,
   salienceByBlock,
   hasSalience,
   termsByBlock,
@@ -333,6 +352,9 @@ export function ReaderInteractions({
     string,
     { kind: "explain" | "simplify" | "comment" | "assistant"; content: string; noteId: string }
   >;
+  // Stored distillations for this document, newest first, quotes healed
+  // against the current blocks.
+  distillations: DistillationView[];
   salienceByBlock: Record<string, { start: number; end: number }[]>;
   hasSalience: boolean;
   termsByBlock: Record<string, { start: number; end: number; definition: string }[]>;
@@ -371,6 +393,25 @@ export function ReaderInteractions({
   const [simplifyCard, setSimplifyCard] = useState<SimplifyCard | null>(null);
   const [salienceOn, setSalienceOn] = useState(false);
   const [salienceBusy, setSalienceBusy] = useState(false);
+  // The distilled page: ask view (shownId null) or one distillation. A fresh
+  // result shows from local state until the refresh delivers it as a prop.
+  const [distillOpen, setDistillOpen] = useState(false);
+  const [distillShownId, setDistillShownId] = useState<string | null>(null);
+  const [distillRun, setDistillRun] = useState<{ question: string } | null>(null);
+  const [distillError, setDistillError] = useState<string | null>(null);
+  const [distillAnchor, setDistillAnchor] = useState<Anchor | null>(null);
+  const [localDistillations, setLocalDistillations] = useState<DistillationView[]>([]);
+  const distillReturnScroll = useRef<number | null>(null);
+  // The span a distilled quote jumped to: tinted while the reader lands on it.
+  const [distillFlash, setDistillFlash] = useState<{
+    blockId: string;
+    start: number;
+    end: number;
+  } | null>(null);
+  const distillFlashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The article menu: frequent asks + Distill, top left of the article.
+  const [articleMenuOpen, setArticleMenuOpen] = useState(false);
+  const articleMenuRef = useRef<HTMLDivElement>(null);
   // Optimistic highlight marks: painted the instant a color dot is clicked,
   // cleared when the server's anchors arrive with the refresh.
   const [localAnchors, setLocalAnchors] = useState<
@@ -661,6 +702,15 @@ export function ReaderInteractions({
     setEditMode(false);
     setCommentDraft("");
     setLocalAnchors({});
+    setDistillOpen(false);
+    setDistillShownId(null);
+    setDistillRun(null);
+    setDistillError(null);
+    setDistillAnchor(null);
+    setLocalDistillations([]);
+    setDistillFlash(null);
+    setArticleMenuOpen(false);
+    distillReturnScroll.current = null;
   }
 
   // Selection → block-relative offsets via data-block-id (SPEC.md §5). DOM ranges are never persisted.
@@ -1217,6 +1267,23 @@ export function ReaderInteractions({
     return () => window.removeEventListener("mousedown", onMouseDown);
   }, [annotationCard]);
 
+  // The article menu closes on a click anywhere else, and on Escape.
+  useEffect(() => {
+    if (!articleMenuOpen) return;
+    const onPointerDown = (e: PointerEvent) => {
+      if (!articleMenuRef.current?.contains(e.target as Node)) setArticleMenuOpen(false);
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setArticleMenuOpen(false);
+    };
+    window.addEventListener("pointerdown", onPointerDown);
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("pointerdown", onPointerDown);
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [articleMenuOpen]);
+
   // ¶ chips in AI text (Markdown) jump to the block they cite.
   useEffect(() => {
     const onFlashBlock = (e: Event) => {
@@ -1533,34 +1600,205 @@ export function ReaderInteractions({
     }
   }
 
-  // EXTRACT: pending note in a section; AI proposes the section (SPEC.md §4).
-  async function extract() {
-    if (!popover || busy) return;
-    if (sectionChoices.length === 0) {
-      showToast("Add a section first. Extract needs a section to propose.");
-      return;
+  // DISTILL: one question, the whole article, the quotes that answer it
+  // (SPEC.md §4). The page opens on the ask view; Run scans the article.
+  const allDistillations = [
+    ...localDistillations.filter((d) => !distillations.some((p) => p.id === d.id)),
+    ...distillations,
+  ];
+
+  function openDistillPage(shownId: string | null, anchor: Anchor | null) {
+    const container = containerRef.current;
+    if (container && !distillOpen) {
+      distillReturnScroll.current = container.scrollTop;
+      container.scrollTo({ top: 0 });
     }
+    setDistillAnchor(anchor);
+    setDistillShownId(shownId);
+    setDistillError(null);
+    setDistillOpen(true);
+  }
+
+  function closeDistillPage() {
+    setDistillOpen(false);
+    const container = containerRef.current;
+    if (container && distillReturnScroll.current !== null) {
+      container.scrollTo({ top: distillReturnScroll.current });
+    }
+    distillReturnScroll.current = null;
+  }
+
+  // Distill from the toolbar: the selection rides along as the starting point.
+  function beginDistill() {
+    if (!popover) return;
     const { anchor } = popover;
-    await flushLiveBlock(anchor.blockId);
     setPopover(null);
+    setSubmenu(null);
     window.getSelection()?.removeAllRanges();
-    setBusy(true);
-    showToast("Extracting…");
+    openDistillPage(null, anchor);
+  }
+
+  async function runDistill(question: string) {
+    const q = question.trim();
+    if (!q || distillRun) return;
+    const anchor = distillAnchor;
+    const runDocumentId = documentId;
+    if (anchor) await flushLiveBlock(anchor.blockId);
+    setDistillRun({ question: q });
+    setDistillError(null);
+    setDistillShownId(null);
     try {
       const res = await fetch("/api/derive", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: deriveBody("EXTRACT", anchor),
+        body: JSON.stringify({
+          type: "DISTILL",
+          documentId,
+          notebookId,
+          question: q,
+          ...(anchor
+            ? {
+                anchor: {
+                  blockId: anchor.blockId,
+                  startOffset: anchor.startOffset,
+                  endOffset: anchor.endOffset,
+                },
+              }
+            : {}),
+        }),
       });
-      const json = (await res.json().catch(() => null)) as { error?: string } | null;
-      if (!res.ok) throw new Error(json?.error ?? `Extract failed (${res.status})`);
-      setToast(null);
+      const json = (await res.json().catch(() => null)) as {
+        distillation?: Distillation;
+        error?: string;
+      } | null;
+      if (!res.ok || !json?.distillation) {
+        throw new Error(json?.error ?? `Distill failed (${res.status})`);
+      }
+      if (documentIdRef.current !== runDocumentId) return;
+      const fresh: DistillationView = {
+        ...json.distillation,
+        quotes: json.distillation.quotes.map((quote) => ({ ...quote, orphaned: false })),
+      };
+      setLocalDistillations((prev) => [fresh, ...prev]);
+      setDistillShownId(fresh.id);
+      setDistillAnchor(null);
       router.refresh();
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "Extract failed");
+      if (documentIdRef.current !== runDocumentId) return;
+      setDistillError(err instanceof Error ? err.message : "Distill failed");
     } finally {
-      setBusy(false);
+      if (documentIdRef.current === runDocumentId) setDistillRun(null);
     }
+  }
+
+  async function deleteDistillation(id: string) {
+    try {
+      await api(`/api/notebooks/${notebookId}/documents/${documentId}`, "PATCH", {
+        removeDistillationId: id,
+      });
+      setLocalDistillations((prev) => prev.filter((d) => d.id !== id));
+      if (distillShownId === id) setDistillShownId(null);
+      router.refresh();
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Delete failed");
+    }
+  }
+
+  // A distilled quote lands as a note: caption as content, quote as source,
+  // PENDING like every AI note (SPEC.md §1).
+  async function addQuoteNote(
+    _distillation: DistillationView,
+    quote: DistillationView["quotes"][number],
+  ): Promise<boolean> {
+    const section = sectionChoices[0];
+    if (!section) {
+      showToast("Add a section first.");
+      return false;
+    }
+    try {
+      await api("/api/notes", "POST", {
+        sectionId: section.id,
+        content: quote.caption,
+        source: {
+          documentId,
+          blockId: quote.blockId,
+          startOffset: quote.start,
+          endOffset: quote.end,
+          quotedText: quote.quotedText,
+          prefix: quote.prefix,
+          suffix: quote.suffix,
+        },
+        origin: "distill",
+      });
+      router.refresh();
+      return true;
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Add failed");
+      return false;
+    }
+  }
+
+  // Jump from the distilled page: close it, scroll to the block, flash it,
+  // and tint the quote's exact span while the reader lands on it.
+  function jumpToQuote(quote: { blockId: string; start: number; end: number; orphaned: boolean }) {
+    if (quote.orphaned) return;
+    setDistillOpen(false);
+    distillReturnScroll.current = null;
+    setDistillFlash({ blockId: quote.blockId, start: quote.start, end: quote.end });
+    if (distillFlashTimer.current) clearTimeout(distillFlashTimer.current);
+    distillFlashTimer.current = setTimeout(() => setDistillFlash(null), 2600);
+    requestAnimationFrame(() => {
+      const el = containerRef.current?.querySelector<HTMLElement>(
+        `[data-block-id="${quote.blockId}"], [data-edit-block="${quote.blockId}"]`,
+      );
+      if (!el) return;
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      el.classList.add("anchor-flash");
+      setTimeout(() => el.classList.remove("anchor-flash"), 2000);
+    });
+  }
+
+  // The article menu's asks: the assistant reads the whole document — no
+  // anchor, document scope — and answers in the chat card beside the article.
+  // question null opens an empty chat for the reader's own question.
+  function openArticleChat(question: string | null) {
+    setArticleMenuOpen(false);
+    const container = containerRef.current;
+    const slot = claimSideSlot("assistant", (container?.scrollTop ?? 0) + 56);
+    if (question === null) {
+      setAssistantChat({ anchor: null, noteId: null, ...slot, messages: [], input: "", busy: false });
+      return;
+    }
+    setAssistantChat({
+      anchor: null,
+      noteId: null,
+      ...slot,
+      messages: [{ role: "user", content: question }],
+      input: "",
+      busy: true,
+    });
+    void (async () => {
+      try {
+        const turn = await assistantTurn(question, null, [], null);
+        setAssistantChat((c) =>
+          c
+            ? {
+                ...c,
+                busy: false,
+                noteId: turn.noteId ?? c.noteId,
+                messages: [...c.messages, { role: "assistant", content: turn.reply }],
+              }
+            : c,
+        );
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Assistant failed";
+        setAssistantChat((c) =>
+          c
+            ? { ...c, busy: false, messages: [...c.messages, { role: "assistant", content: message }] }
+            : c,
+        );
+      }
+    })();
   }
 
   // Manual annotation: highlight (color, content = quote) or comment (user text).
@@ -2208,6 +2446,20 @@ export function ReaderInteractions({
         : [{ sourceId: null, start: startOffset, end: endOffset, kind: "simplify" as const }]),
     ];
   }
+  // A quote jumped to from the distilled page keeps its exact span tinted
+  // while the reader lands on it.
+  if (distillFlash) {
+    const existing = highlightsByBlock[distillFlash.blockId] ?? [];
+    highlightsByBlock[distillFlash.blockId] = [
+      ...existing,
+      {
+        sourceId: null,
+        start: distillFlash.start,
+        end: distillFlash.end,
+        kind: "anchor" as const,
+      },
+    ];
+  }
   // While an Explanation, Assistant, or Comment card is open, its anchor keeps
   // the anchor tint — the same mark its stored annotation paints after refresh.
   // Spans the server already marks are skipped, so the text never double-marks.
@@ -2243,6 +2495,53 @@ export function ReaderInteractions({
       data-reader-root
       className="relative min-h-0 flex-1 overflow-y-auto print:overflow-visible"
     >
+      {/* The article menu: always one click away at the top left. Frequent
+          asks go to the assistant at document scope; Distill opens the
+          distilled page. */}
+      <div ref={articleMenuRef} className="sticky top-4 z-10 float-left ml-4 print:hidden">
+        <button
+          onClick={() => setArticleMenuOpen(!articleMenuOpen)}
+          aria-expanded={articleMenuOpen}
+          aria-haspopup="menu"
+          title="Frequent functions for this article"
+          className="flex items-center gap-1.5 rounded-full bg-sand-100 px-3.5 py-1.5 text-xs font-semibold text-sand-600 shadow-soft hover:text-clay-800"
+        >
+          <SparkleIcon size={12} />
+          Assistant
+          <ChevronDownIcon size={11} />
+        </button>
+        {articleMenuOpen && (
+          <div className="absolute top-full left-0 mt-2 flex w-56 flex-col overflow-hidden rounded-2xl bg-card py-1.5 shadow-float">
+            {FREQUENT_ASKS.map((ask) => (
+              <button
+                key={ask.label}
+                onClick={() => openArticleChat(ask.question)}
+                className="px-4 py-2 text-left text-[12.5px] text-sand-800 hover:bg-clay-100 hover:text-clay-800"
+              >
+                {ask.label}
+              </button>
+            ))}
+            <button
+              onClick={() => openArticleChat(null)}
+              className="px-4 py-2 text-left text-[12.5px] text-sand-800 hover:bg-clay-100 hover:text-clay-800"
+            >
+              Ask the assistant…
+            </button>
+            <div className="mx-3 my-1 border-t border-line" />
+            <button
+              onClick={() => {
+                setArticleMenuOpen(false);
+                openDistillPage(null, null);
+              }}
+              title="Ask the article a question; the AI pulls the quotes that answer it"
+              className="px-4 py-2 text-left text-[12.5px] text-sand-800 hover:bg-clay-100 hover:text-clay-800"
+            >
+              Distill{allDistillations.length > 0 ? ` (${allDistillations.length})` : ""}
+            </button>
+          </div>
+        )}
+      </div>
+
       <div className="sticky top-4 z-10 float-right mr-4 flex items-center gap-2 print:hidden">
         {toast && (
           <span className="rounded-full bg-ink/90 px-3 py-1.5 text-xs text-paper">{toast}</span>
@@ -2517,11 +2816,11 @@ export function ReaderInteractions({
           )}
           {!popover.figure && (
             <button
-              onClick={() => void extract()}
-              disabled={busy}
-              className="flex w-full items-center rounded-full px-2.5 py-[5px] text-left text-[12px] text-sand-800 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40"
+              onClick={beginDistill}
+              title="Ask the article a question; the AI pulls the quotes that answer it"
+              className="flex w-full items-center rounded-full px-2.5 py-[5px] text-left text-[12px] text-sand-800 hover:bg-clay-100 hover:text-clay-800"
             >
-              Extract
+              Distill
             </button>
           )}
 
@@ -3033,6 +3332,32 @@ export function ReaderInteractions({
             </button>
           </div>
         </div>
+      )}
+
+      {distillOpen && (
+        <DistillPage
+          distillations={allDistillations}
+          shownId={distillShownId}
+          running={distillRun}
+          error={distillError}
+          focusQuote={distillAnchor?.quotedText ?? null}
+          canAddNotes={sectionChoices.length > 0}
+          addNoteHint={
+            sectionChoices.length === 0
+              ? "Add a section first"
+              : `Add as a pending note in ${sectionChoices[0].label}`
+          }
+          onRun={(question) => void runDistill(question)}
+          onOpen={(id) => {
+            setDistillShownId(id);
+            setDistillError(null);
+          }}
+          onAsk={() => setDistillShownId(null)}
+          onClose={closeDistillPage}
+          onDelete={(id) => void deleteDistillation(id)}
+          onJump={jumpToQuote}
+          onAddNote={addQuoteNote}
+        />
       )}
     </div>
   );

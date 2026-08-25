@@ -7,14 +7,16 @@ import { documentReferences } from "@/lib/parse/types";
 import { resolveDocumentSources } from "@/lib/anchors/resolve";
 import { USER_ID } from "@/lib/constants";
 import { db } from "@/lib/db";
-import type {
-  AnnotationItem,
-  EditItem,
-  LinkIn,
-  LinkOut,
-  NotebookView,
-  SectionView,
-  SummaryLevels,
+import {
+  distillationList,
+  type AnnotationItem,
+  type DistillationView,
+  type EditItem,
+  type LinkIn,
+  type LinkOut,
+  type NotebookView,
+  type SectionView,
+  type SummaryLevels,
 } from "@/lib/types";
 import { AssistantPanel } from "@/components/assistant/assistant-panel";
 import { AnnotationsPanel } from "@/components/panels/annotations-panel";
@@ -210,6 +212,26 @@ export default async function NotebookPage(props: {
         salienceByBlock[span.blockId] = list;
       }
     }
+
+    // Stored distillations heal at render like salience: exact offsets first,
+    // then the quote matcher within the block, else orphaned visibly (SPEC.md §5).
+    const distillations: DistillationView[] = distillationList(attachment?.distillations).map(
+      (d) => ({
+        id: d.id,
+        question: d.question,
+        createdAt: d.createdAt,
+        quotes: (d.quotes ?? []).map((q) => {
+          const block = blockById.get(q.blockId);
+          if (block && block.text.slice(q.start, q.end) === q.quotedText) {
+            return { ...q, orphaned: false };
+          }
+          const hit = block ? matchInText(block.text, q) : null;
+          return hit
+            ? { ...q, start: hit.start, end: hit.end, orphaned: false }
+            : { ...q, orphaned: true };
+        }),
+      }),
+    );
 
     // Glossary hover terms: first occurrence per term per listed block.
     const termsByBlock: Record<string, { start: number; end: number; definition: string }[]> = {};
@@ -630,6 +652,7 @@ export default async function NotebookPage(props: {
     return {
       document,
       summaries,
+      distillations,
       anchorHighlights,
       annotations,
       annotationBubbles,
@@ -764,6 +787,7 @@ export default async function NotebookPage(props: {
           anchorHighlights={pane.anchorHighlights}
           annotationsBySource={pane.annotationsBySource}
           annotationBubbles={pane.annotationBubbles}
+          distillations={pane.distillations}
           salienceByBlock={pane.salienceByBlock}
           hasSalience={pane.hasSalience}
           termsByBlock={pane.termsByBlock}

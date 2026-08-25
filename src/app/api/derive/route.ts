@@ -19,7 +19,7 @@ import {
 } from "@/lib/derive/context";
 import { fetchFigureImage, figureContent, type FigureImage } from "@/lib/derive/figure";
 import {
-  extractOutputSchema,
+  distillOutputSchema,
   findOutputSchema,
   resolveSpan,
   salienceOutputSchema,
@@ -27,7 +27,7 @@ import {
 import { callForJson, modelErrorMessage } from "@/lib/derive/json-call";
 import { promptTemplates } from "@/lib/prompts";
 import type { PromptCtx } from "@/lib/prompts/types";
-import { SUMMARY_DEPTHS, type SummaryLevels } from "@/lib/types";
+import { distillationList, SUMMARY_DEPTHS, type Distillation, type SummaryLevels } from "@/lib/types";
 import { videoAnchorFor } from "@/lib/video/anchor";
 import { describeYouTubeClip } from "@/lib/video/gemini";
 import {
@@ -43,7 +43,7 @@ export const maxDuration = 120;
 // The one derivation pipeline (SPEC.md §4). Never fork per feature: new derivation =
 // new prompt template + destination handler below.
 const deriveSchema = z.object({
-  type: z.enum(["EXPLAIN", "SIMPLIFY", "SALIENCE", "EXTRACT", "SUMMARIZE", "FIND"]),
+  type: z.enum(["EXPLAIN", "SIMPLIFY", "SALIENCE", "DISTILL", "SUMMARIZE", "FIND"]),
   documentId: z.string().min(1),
   notebookId: z.string().min(1),
   anchor: z
@@ -53,9 +53,9 @@ const deriveSchema = z.object({
       endOffset: z.number().int().min(0),
     })
     .optional(),
-  targetSectionId: z.string().min(1).nullish(),
   depth: z.enum(SUMMARY_DEPTHS).optional(), // SUMMARIZE only
   query: z.string().min(1).max(500).optional(), // FIND only
+  question: z.string().min(1).max(500).optional(), // DISTILL only; anchor is optional focus
   // EXPLAIN on a video moment (SPEC.md §11): the time range, the drawn region,
   // and the paused frame as a JPEG data URL when the client could capture it.
   video: z
@@ -72,7 +72,7 @@ const deriveSchema = z.object({
     .optional(),
 });
 
-const ANCHOR_REQUIRED = new Set(["EXPLAIN", "SIMPLIFY", "EXTRACT"]);
+const ANCHOR_REQUIRED = new Set(["EXPLAIN", "SIMPLIFY"]);
 
 export async function POST(req: Request) {
   if (!process.env.ANTHROPIC_API_KEY) {
@@ -95,6 +95,9 @@ export async function POST(req: Request) {
   }
   if (data.type === "FIND" && !data.query) {
     return NextResponse.json({ error: "FIND requires a query" }, { status: 400 });
+  }
+  if (data.type === "DISTILL" && !data.question?.trim()) {
+    return NextResponse.json({ error: "DISTILL requires a question" }, { status: 400 });
   }
   if (data.video && !timeRangeSchema.safeParse(data.video).success) {
     return NextResponse.json({ error: "The end must be after the start" }, { status: 400 });
@@ -135,21 +138,17 @@ export async function POST(req: Request) {
     sectionSkeleton(data.notebookId),
   ]);
 
-  if (data.targetSectionId && !skeleton.some((s) => s.id === data.targetSectionId)) {
-    return NextResponse.json({ error: "Target section not found" }, { status: 404 });
-  }
-
   const depth = data.depth ?? "layman";
-  const ctx: PromptCtx & { targetSectionId?: string | null } = {
+  const ctx: PromptCtx = {
     profile,
     documentTitle: document.title,
     anchoredText: anchored?.anchoredText ?? "",
     contextBefore: anchored?.contextBefore ?? "",
     contextAfter: anchored?.contextAfter ?? "",
     sectionSkeleton: skeleton,
-    targetSectionId: data.targetSectionId,
     depth,
     query: data.query,
+    question: data.question?.trim(),
   };
 
   // FIND searches the transcript; without one there is nothing to search.
@@ -282,7 +281,7 @@ export async function POST(req: Request) {
   const maxOutputTokens = MAX_OUTPUT_TOKENS[data.type];
 
   // 3 + 4. Stream or collect, then route by destination.
-  // EXPLAIN, SIMPLIFY, and SUMMARIZE stream text. SALIENCE and EXTRACT return validated JSON.
+  // EXPLAIN, SIMPLIFY, and SUMMARIZE stream text. SALIENCE and DISTILL return validated JSON.
   if (data.type === "EXPLAIN" || data.type === "SIMPLIFY" || data.type === "SUMMARIZE") {
     const result = streamText({
       model,
@@ -475,49 +474,56 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true, spanCount: spans.length });
   }
 
-  // EXTRACT
+  // DISTILL: question → the quotes that answer it. Every span resolves against
+  // the real block text (clamped, dropped when empty) before anything persists,
+  // so the page always shows verbatim article text. The distillation stores on
+  // the attachment, newest first; quotes only reach notes through the page's
+  // "Add to notes", which lands them PENDING (SPEC.md §1).
   const result = await callForJson({
     model,
     messages,
     maxOutputTokens,
-    schema: extractOutputSchema,
-    label: "EXTRACT",
+    schema: distillOutputSchema,
+    label: "DISTILL",
   });
   if (!result.ok) {
-    return NextResponse.json({ error: `Extract failed. ${result.error}` }, { status: 422 });
+    return NextResponse.json({ error: `Distill failed. ${result.error}` }, { status: 422 });
   }
-  const sectionId = data.targetSectionId ?? result.data.sectionId;
-  if (!skeleton.some((s) => s.id === sectionId)) {
-    return NextResponse.json({ error: "Extract proposed an unknown section" }, { status: 422 });
+  const orderByBlock = new Map(document.blocks.map((b, i) => [b.id, i]));
+  const quotes = result.data.quotes
+    .map((q) => {
+      const span = resolveSpan(q, blockById);
+      return span ? { ...span, caption: q.caption } : null;
+    })
+    .filter((q) => q !== null)
+    .sort(
+      (a, b) => (orderByBlock.get(a.blockId) ?? 0) - (orderByBlock.get(b.blockId) ?? 0) || a.start - b.start,
+    );
+  if (quotes.length === 0) {
+    return NextResponse.json({ error: "Distill returned no resolvable quotes" }, { status: 422 });
   }
-  const spans = result.data.quotedSpans
-    .map((s) => resolveSpan(s, blockById))
-    .filter((s) => s !== null);
-  if (spans.length === 0) {
-    return NextResponse.json({ error: "Extract returned no resolvable spans" }, { status: 422 });
-  }
-  const count = await db.note.count({ where: { sectionId } });
-  const note = await db.note.create({
+  const distillation: Distillation = {
+    id: crypto.randomUUID(),
+    question: data.question!.trim(),
+    createdAt: new Date().toISOString(),
+    quotes: quotes.map((q) => ({
+      blockId: q.blockId,
+      start: q.start,
+      end: q.end,
+      quotedText: q.quotedText,
+      prefix: q.prefix,
+      suffix: q.suffix,
+      caption: q.caption,
+    })),
+  };
+  await db.notebookDocument.update({
+    where: {
+      notebookId_documentId: { notebookId: data.notebookId, documentId: data.documentId },
+    },
     data: {
-      sectionId,
-      content: result.data.content,
-      status: "PENDING", // user approves everything (SPEC.md §1)
-      derivationType: "EXTRACT",
-      order: count,
-      sources: {
-        createMany: {
-          data: spans.map((s) => ({
-            documentId: data.documentId,
-            blockId: s.blockId,
-            startOffset: s.start,
-            endOffset: s.end,
-            quotedText: s.quotedText,
-            prefix: s.prefix,
-            suffix: s.suffix,
-          })),
-        },
-      },
+      // Keep the newest 20; the page deletes the rest one by one.
+      distillations: [distillation, ...distillationList(attachment.distillations)].slice(0, 20),
     },
   });
-  return NextResponse.json({ ok: true, noteId: note.id, sectionId }, { status: 201 });
+  return NextResponse.json({ ok: true, distillation }, { status: 201 });
 }

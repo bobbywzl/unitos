@@ -148,7 +148,7 @@ export function SettingsForm({
           Context
         </h2>
         <p className="text-xs text-sand-600">
-          Injected into every AI prompt: notes, extraction, analysis. Every field is optional. A
+          Injected into every AI prompt: notes, distillation, analysis. Every field is optional. A
           work can override this from its Context tab.
         </p>
         <div className="space-y-3">
