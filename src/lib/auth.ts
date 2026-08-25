@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import type { User } from "@prisma/client";
 import { SESSION_COOKIE, STATE_COOKIE, USER_ID } from "@/lib/constants";
 import { db } from "@/lib/db";
+import { serverT } from "@/lib/i18n/server";
 import { outboundFetch } from "@/lib/outbound-fetch";
 
 // Google sign-in (Scalae pattern): hand-rolled OIDC authorization-code flow,
@@ -207,14 +208,18 @@ export async function currentUser(): Promise<User | null> {
 // not yours answers 404, not 403 — its existence is not disclosed.
 export async function notebookGuard(notebookId: string): Promise<NextResponse | null> {
   const user = await currentUser();
-  if (!user) return NextResponse.json({ error: "Sign in to continue." }, { status: 401 });
+  if (!user) {
+    const t = await serverT();
+    return NextResponse.json({ error: t("common.signInToContinue") }, { status: 401 });
+  }
   if (!authEnabled()) return null;
   const notebook = await db.notebook.findUnique({
     where: { id: notebookId },
     select: { userId: true },
   });
   if (!notebook || notebook.userId !== user.id) {
-    return NextResponse.json({ error: "Corpus not found" }, { status: 404 });
+    const t = await serverT();
+    return NextResponse.json({ error: t("common.corpusNotFound") }, { status: 404 });
   }
   return null;
 }

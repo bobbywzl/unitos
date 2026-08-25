@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
+import { serverT } from "@/lib/i18n/server";
 
 export const ADMIN_COOKIE = "admin-auth";
 
@@ -8,7 +9,8 @@ export const ADMIN_COOKIE = "admin-auth";
 export async function adminApiGuard(): Promise<NextResponse | null> {
   const cookie = (await cookies()).get(ADMIN_COOKIE)?.value;
   if (cookie !== "true") {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const t = await serverT();
+    return NextResponse.json({ error: t("common.unauthorized") }, { status: 401 });
   }
   return null;
 }

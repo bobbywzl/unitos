@@ -6,6 +6,7 @@ import { useState } from "react";
 import type { AnnotationItem, LinkIn, LinkOut } from "@/lib/types";
 import { api } from "@/lib/api";
 import { LocateIcon } from "@/components/icons";
+import { useT } from "@/components/lang-provider";
 import { Markdown } from "@/components/markdown";
 import { stripSimplifyMarkers } from "@/lib/sentences";
 
@@ -39,6 +40,7 @@ function AnnotationActions({
   onDelete: (id: string) => Promise<void>;
 }) {
   const router = useRouter();
+  const t = useT();
   const canJump = Boolean(annotation.sourceId) && !annotation.orphaned && documentId !== null;
 
   function jump() {
@@ -55,8 +57,8 @@ function AnnotationActions({
       {canJump && (
         <button
           onClick={jump}
-          aria-label="Jump to the anchor in the reader"
-          title="Jump to the anchor in the reader"
+          aria-label={t("panels.jumpToAnchor")}
+          title={t("panels.jumpToAnchor")}
           className="inline-flex items-center gap-1.5 rounded-full bg-clay-100 px-2.5 py-1 text-[11px] font-semibold text-clay-800 hover:bg-clay-200"
         >
           <LocateIcon size={11} />
@@ -69,13 +71,15 @@ function AnnotationActions({
         </span>
       )}
       {annotation.orphaned && (
-        <span className="text-[11px] font-semibold text-red-500">Anchor unresolved</span>
+        <span className="text-[11px] font-semibold text-red-500">
+          {t("panels.anchorUnresolved")}
+        </span>
       )}
       <button
         onClick={() => void onDelete(annotation.id)}
         className="ml-auto text-xs text-red-500 hover:text-red-700"
       >
-        Delete
+        {t("common.delete")}
       </button>
     </div>
   );
@@ -97,6 +101,7 @@ export function AnnotationsPanel({
   linksIn: LinkIn[];
 }) {
   const router = useRouter();
+  const t = useT();
   const [busyId, setBusyId] = useState<string | null>(null);
   const [errorText, setErrorText] = useState<string | null>(null);
   const highlights = annotations.filter((a) => a.kind === "highlight");
@@ -113,7 +118,7 @@ export function AnnotationsPanel({
       await run();
       router.refresh();
     } catch (err) {
-      setErrorText(err instanceof Error ? err.message : "Request failed");
+      setErrorText(err instanceof Error ? err.message : t("common.requestFailed"));
     } finally {
       setBusyId(null);
     }
@@ -128,11 +133,7 @@ export function AnnotationsPanel({
   }
 
   if (annotations.length === 0 && linksOut.length === 0 && linksIn.length === 0) {
-    return (
-      <p className="text-[13px] text-sand-600">
-        No annotations yet. Select text in the reader to highlight, comment, or link.
-      </p>
-    );
+    return <p className="text-[13px] text-sand-600">{t("panels.annotationsEmpty")}</p>;
   }
 
   return (
@@ -140,7 +141,7 @@ export function AnnotationsPanel({
       {errorText && <p className="text-[13px] text-red-600">{errorText}</p>}
       {highlights.length > 0 && (
         <div className="flex flex-col gap-2">
-          <span className={label}>Highlights</span>
+          <span className={label}>{t("panels.highlights")}</span>
           {highlights.map((a) => (
             <div key={a.id} data-annotation-source-id={a.sourceId ?? undefined} className={card}>
               <div className="flex items-start gap-2">
@@ -149,7 +150,7 @@ export function AnnotationsPanel({
               </div>
               {a.orphaned && a.quotedText && a.quotedText !== a.content && (
                 <p className="mt-2 line-clamp-2 border-l-2 border-red-300 pl-2 text-xs text-sand-500">
-                  was anchored to: {a.quotedText}
+                  {t("panels.wasAnchoredTo", { text: a.quotedText })}
                 </p>
               )}
               <AnnotationActions
@@ -165,7 +166,7 @@ export function AnnotationsPanel({
 
       {comments.length > 0 && (
         <div className="flex flex-col gap-2">
-          <span className={label}>Comments</span>
+          <span className={label}>{t("panels.comments")}</span>
           {comments.map((a) => (
             <div key={a.id} data-annotation-source-id={a.sourceId ?? undefined} className={card}>
               <div className="text-[13px]">
@@ -189,7 +190,7 @@ export function AnnotationsPanel({
 
       {explanations.length > 0 && (
         <div className="flex flex-col gap-2">
-          <span className={label}>Explanations</span>
+          <span className={label}>{t("panels.explanations")}</span>
           {explanations.map((a) => (
             <div key={a.id} data-annotation-source-id={a.sourceId ?? undefined} className={card}>
               <div className="text-[13px]">
@@ -197,7 +198,7 @@ export function AnnotationsPanel({
               </div>
               {a.orphaned && a.quotedText && (
                 <p className="mt-2 line-clamp-2 border-l-2 border-red-300 pl-2 text-xs text-sand-500">
-                  was anchored to: {a.quotedText}
+                  {t("panels.wasAnchoredTo", { text: a.quotedText })}
                 </p>
               )}
               <AnnotationActions
@@ -213,7 +214,7 @@ export function AnnotationsPanel({
 
       {conversations.length > 0 && (
         <div className="flex flex-col gap-2">
-          <span className={label}>Assistant</span>
+          <span className={label}>{t("panels.assistant")}</span>
           {conversations.map((a) => (
             <div key={a.id} data-annotation-source-id={a.sourceId ?? undefined} className={card}>
               <div className="max-h-56 overflow-y-auto text-[13px]">
@@ -221,7 +222,7 @@ export function AnnotationsPanel({
               </div>
               {a.orphaned && a.quotedText && (
                 <p className="mt-2 line-clamp-2 border-l-2 border-red-300 pl-2 text-xs text-sand-500">
-                  was anchored to: {a.quotedText}
+                  {t("panels.wasAnchoredTo", { text: a.quotedText })}
                 </p>
               )}
               <AnnotationActions
@@ -237,7 +238,7 @@ export function AnnotationsPanel({
 
       {simplifications.length > 0 && (
         <div className="flex flex-col gap-2">
-          <span className={label}>Simplified</span>
+          <span className={label}>{t("panels.simplified")}</span>
           {simplifications.map((a) => (
             <div key={a.id} data-annotation-source-id={a.sourceId ?? undefined} className={card}>
               <div className="text-[13px]">
@@ -261,7 +262,7 @@ export function AnnotationsPanel({
 
       {(linksOut.length > 0 || linksIn.length > 0) && (
         <div className="flex flex-col gap-2">
-          <span className={label}>Links</span>
+          <span className={label}>{t("panels.links")}</span>
           {linksOut.map((l) => (
             <div key={l.id} className={card}>
               <p className="line-clamp-2 text-[13px]">{l.quotedText}</p>
@@ -273,7 +274,7 @@ export function AnnotationsPanel({
               <div className="mt-2 flex flex-wrap items-center gap-3">
                 {l.detached ? (
                   <span className="rounded-full bg-sand-200 px-2.5 py-0.5 text-[11px] font-semibold text-sand-600">
-                    ⇄ {l.toTitle} · not attached
+                    ⇄ {l.toTitle} · {t("panels.notAttached")}
                   </span>
                 ) : (
                   <Link
@@ -284,18 +285,20 @@ export function AnnotationsPanel({
                   </Link>
                 )}
                 {l.orphaned && (
-                  <span className="text-[11px] font-semibold text-red-500">Anchor unresolved</span>
+                  <span className="text-[11px] font-semibold text-red-500">
+                    {t("panels.anchorUnresolved")}
+                  </span>
                 )}
                 {l.targetOrphaned && (
                   <span className="text-[11px] font-semibold text-red-500">
-                    Other end unresolved
+                    {t("panels.otherEndUnresolved")}
                   </span>
                 )}
                 <button
                   onClick={() => void removeLink(l.id)}
                   className="text-xs text-red-500 hover:text-red-700"
                 >
-                  Remove
+                  {t("common.remove")}
                 </button>
               </div>
             </div>
@@ -313,18 +316,20 @@ export function AnnotationsPanel({
                   ⇄ {l.fromTitle}
                 </Link>
                 {l.orphaned && (
-                  <span className="text-[11px] font-semibold text-red-500">Anchor unresolved</span>
+                  <span className="text-[11px] font-semibold text-red-500">
+                    {t("panels.anchorUnresolved")}
+                  </span>
                 )}
                 {l.fromOrphaned && (
                   <span className="text-[11px] font-semibold text-red-500">
-                    Other end unresolved
+                    {t("panels.otherEndUnresolved")}
                   </span>
                 )}
                 <button
                   onClick={() => void removeLink(l.id)}
                   className="text-xs text-red-500 hover:text-red-700"
                 >
-                  Remove
+                  {t("common.remove")}
                 </button>
               </div>
             </div>

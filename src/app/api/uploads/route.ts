@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
+import { serverT } from "@/lib/i18n/server";
 
 export const maxDuration = 60;
 
@@ -16,6 +17,7 @@ const paramsSchema = z.object({
 });
 
 export async function POST(req: Request) {
+  const t = await serverT();
   const { searchParams } = new URL(req.url);
   const params = paramsSchema.safeParse({
     uploadId: searchParams.get("uploadId"),
@@ -23,17 +25,17 @@ export async function POST(req: Request) {
   });
   if (!params.success) {
     return NextResponse.json(
-      { error: "Validation failed", issues: params.error.issues },
+      { error: t("api.validationFailed"), issues: params.error.issues },
       { status: 400 },
     );
   }
 
   const bytes = new Uint8Array(await req.arrayBuffer());
   if (bytes.length === 0) {
-    return NextResponse.json({ error: "Empty chunk" }, { status: 400 });
+    return NextResponse.json({ error: t("api.emptyChunk") }, { status: 400 });
   }
   if (bytes.length > MAX_CHUNK_BYTES) {
-    return NextResponse.json({ error: "Chunk is larger than 4 MB" }, { status: 413 });
+    return NextResponse.json({ error: t("api.chunkTooLarge") }, { status: 413 });
   }
 
   const { uploadId, index } = params.data;

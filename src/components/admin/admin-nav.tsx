@@ -2,11 +2,13 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useT } from "@/components/lang-provider";
 
 // Shared header of the admin pages (Scalae admin pattern): one tab per page,
 // App link, sign out.
 export function AdminNav({ active }: { active: "feedback" | "digest" }) {
   const router = useRouter();
+  const t = useT();
 
   async function signOut() {
     await fetch("/api/admin/auth", { method: "DELETE" });
@@ -26,14 +28,14 @@ export function AdminNav({ active }: { active: "feedback" | "digest" }) {
 
   return (
     <nav className="mb-6 flex items-center gap-1">
-      {tab("/admin", "feedback", "Feedback")}
-      {tab("/admin/digest", "digest", "Digest")}
+      {tab("/admin", "feedback", t("admin.feedback"))}
+      {tab("/admin/digest", "digest", t("admin.digest"))}
       <div className="ml-auto flex items-center gap-3 text-sm">
         <Link href="/" className="text-sand-600 hover:text-clay-700">
-          App
+          {t("common.app")}
         </Link>
         <button onClick={() => void signOut()} className="text-sand-600 hover:text-clay-700">
-          Sign out
+          {t("common.signOut")}
         </button>
       </div>
     </nav>

@@ -2,6 +2,7 @@ import { after, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { buildGlossary } from "@/lib/glossary";
+import { serverT } from "@/lib/i18n/server";
 import { progressResponse } from "@/lib/ingest-response";
 import { attachDocument } from "@/lib/parse/attach";
 import { ingestYouTube } from "@/lib/video/ingest-youtube";
@@ -39,6 +40,7 @@ const fileFieldsSchema = z.object({
 
 // PDF upload (multipart) or URL ingestion (JSON). Both attach to the notebook.
 export async function POST(req: Request) {
+  const t = await serverT();
   // The parse chain (jsdom, unpdf) loads per request. Loading it with the route module
   // broke every response on Vercel; loading it here keeps GET working and turns a load
   // failure into a readable error.
@@ -49,7 +51,7 @@ export async function POST(req: Request) {
     console.error("Parse module load failed:", err);
     const message = err instanceof Error ? err.message : String(err);
     return NextResponse.json(
-      { error: `Document parsing is unavailable: ${message}` },
+      { error: t("api.parsingUnavailable", { message }) },
       { status: 500 },
     );
   }
@@ -60,24 +62,24 @@ export async function POST(req: Request) {
     const form = await req.formData();
     const file = form.get("file");
     if (!(file instanceof Blob)) {
-      return NextResponse.json({ error: "Missing file" }, { status: 400 });
+      return NextResponse.json({ error: t("api.missingFile") }, { status: 400 });
     }
     const fields = fileFieldsSchema.safeParse({
       notebookId: form.get("notebookId"),
       filename: file instanceof File ? file.name : "document.pdf",
     });
     if (!fields.success) {
-      return NextResponse.json({ error: "Validation failed", issues: fields.error.issues }, { status: 400 });
+      return NextResponse.json({ error: t("api.validationFailed"), issues: fields.error.issues }, { status: 400 });
     }
     if (file.size > MAX_PDF_BYTES) {
-      return NextResponse.json({ error: "PDF is larger than 50MB" }, { status: 413 });
+      return NextResponse.json({ error: t("api.pdfTooLarge") }, { status: 413 });
     }
     const notebook = await db.notebook.findUnique({ where: { id: fields.data.notebookId } });
-    if (!notebook) return NextResponse.json({ error: "Corpus not found" }, { status: 404 });
+    if (!notebook) return NextResponse.json({ error: t("api.corpusNotFound") }, { status: 404 });
 
     const bytes = new Uint8Array(await file.arrayBuffer());
     if (bytes.length < 5 || String.fromCharCode(...bytes.slice(0, 5)) !== "%PDF-") {
-      return NextResponse.json({ error: "File is not a PDF" }, { status: 400 });
+      return NextResponse.json({ error: t("api.notPdf") }, { status: 400 });
     }
     return progressResponse(async (onProgress) => {
       try {
@@ -89,7 +91,7 @@ export async function POST(req: Request) {
         return { id: document.id, title: document.title, deduped };
       } catch (err) {
         console.error("PDF ingest failed:", err);
-        throw new Error("Could not parse this PDF");
+        throw new Error(t("api.pdfParseFailed"));
       }
     });
   }
@@ -97,7 +99,7 @@ export async function POST(req: Request) {
   const { data, error } = await parseBody(req, urlSchema);
   if (error) return error;
   const notebook = await db.notebook.findUnique({ where: { id: data.notebookId } });
-  if (!notebook) return NextResponse.json({ error: "Corpus not found" }, { status: 404 });
+  if (!notebook) return NextResponse.json({ error: t("api.corpusNotFound") }, { status: 404 });
 
   // A YouTube link is a video document, wherever it was pasted (SPEC.md §11).
   const youtubeId = parseYouTubeId(data.url);
@@ -121,7 +123,7 @@ export async function POST(req: Request) {
       return { id: document.id, title: document.title, deduped };
     } catch (err) {
       console.error("URL ingest failed:", err);
-      throw new Error("Could not ingest this URL");
+      throw new Error(t("api.urlIngestFailed"));
     }
   });
 }

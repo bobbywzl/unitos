@@ -27,6 +27,7 @@ import {
   salienceOutputSchema,
 } from "@/lib/derive/json";
 import { callForJson, modelErrorMessage } from "@/lib/derive/json-call";
+import { serverT } from "@/lib/i18n/server";
 import { promptTemplates } from "@/lib/prompts";
 import type { PromptCtx } from "@/lib/prompts/types";
 import {
@@ -84,11 +85,9 @@ const deriveSchema = z.object({
 const ANCHOR_REQUIRED = new Set(["EXPLAIN", "SIMPLIFY", "EXTRACT"]);
 
 export async function POST(req: Request) {
+  const t = await serverT();
   if (!process.env.ANTHROPIC_API_KEY) {
-    return NextResponse.json(
-      { error: "ANTHROPIC_API_KEY is not set. Derivations need it." },
-      { status: 503 },
-    );
+    return NextResponse.json({ error: t("api.deriveNeedsKey") }, { status: 503 });
   }
 
   const { data, error } = await parseBody(req, deriveSchema);
@@ -98,20 +97,20 @@ export async function POST(req: Request) {
 
   const template = promptTemplates[data.type];
   if (!template) {
-    return NextResponse.json({ error: `${data.type} is not built yet` }, { status: 501 });
+    return NextResponse.json({ error: t("api.typeNotBuilt", { type: data.type }) }, { status: 501 });
   }
   // A video anchor stands in for a text anchor on EXPLAIN (SPEC.md §11).
   if (ANCHOR_REQUIRED.has(data.type) && !data.anchor && !(data.type === "EXPLAIN" && data.video)) {
-    return NextResponse.json({ error: `${data.type} requires an anchor` }, { status: 400 });
+    return NextResponse.json({ error: t("api.typeRequiresAnchor", { type: data.type }) }, { status: 400 });
   }
   if (data.type === "FIND" && !data.query) {
-    return NextResponse.json({ error: "FIND requires a query" }, { status: 400 });
+    return NextResponse.json({ error: t("api.findRequiresQuery") }, { status: 400 });
   }
   if (data.type === "DISTILL" && !data.question?.trim()) {
-    return NextResponse.json({ error: "DISTILL requires a question" }, { status: 400 });
+    return NextResponse.json({ error: t("api.distillRequiresQuestion") }, { status: 400 });
   }
   if (data.video && !timeRangeSchema.safeParse(data.video).success) {
-    return NextResponse.json({ error: "The end must be after the start" }, { status: 400 });
+    return NextResponse.json({ error: t("api.endBeforeStart") }, { status: 400 });
   }
 
   const attachment = await db.notebookDocument.findUnique({
@@ -120,7 +119,7 @@ export async function POST(req: Request) {
     },
   });
   if (!attachment) {
-    return NextResponse.json({ error: "Document is not attached to this corpus" }, { status: 404 });
+    return NextResponse.json({ error: t("api.documentNotAttachedToCorpus") }, { status: 404 });
   }
 
   // 1. Load document blocks (the cached prompt prefix), profile, section skeleton.
@@ -128,7 +127,7 @@ export async function POST(req: Request) {
     where: { id: data.documentId },
     include: { blocks: { orderBy: { order: "asc" }, select: { id: true, type: true, text: true, startTime: true, endTime: true } } },
   });
-  if (!document) return NextResponse.json({ error: "Document not found" }, { status: 404 });
+  if (!document) return NextResponse.json({ error: t("api.documentNotFound") }, { status: 404 });
   const blockById = new Map(document.blocks.map((b) => [b.id, { id: b.id, text: b.text }]));
 
   let anchored: ReturnType<typeof anchorContext> = null;
@@ -140,7 +139,7 @@ export async function POST(req: Request) {
       data.anchor.endOffset,
     );
     if (!anchored || !anchored.anchoredText.trim()) {
-      return NextResponse.json({ error: "Anchor does not resolve in this document" }, { status: 400 });
+      return NextResponse.json({ error: t("api.anchorNotResolvedInDocument") }, { status: 400 });
     }
   }
 
@@ -167,10 +166,7 @@ export async function POST(req: Request) {
     (b) => b.type === "TRANSCRIPT" && b.startTime !== null && b.endTime !== null,
   );
   if (data.type === "FIND" && timedBlocks.length === 0) {
-    return NextResponse.json(
-      { error: "Transcribe the video first — Find searches the transcript" },
-      { status: 400 },
-    );
+    return NextResponse.json({ error: t("api.findNeedsTranscript") }, { status: 400 });
   }
 
   // EXPLAIN on a video moment: the anchor is the time range; the frame rides
@@ -182,7 +178,7 @@ export async function POST(req: Request) {
   if (data.type === "EXPLAIN" && data.video) {
     videoAnchor = await videoAnchorFor(document.id, data.video.startTime, data.video.endTime);
     if (!videoAnchor) {
-      return NextResponse.json({ error: "This document has no video block" }, { status: 400 });
+      return NextResponse.json({ error: t("api.noVideoBlock") }, { status: 400 });
     }
     if (data.video.frame) {
       frameImage = new Uint8Array(
@@ -378,7 +374,7 @@ export async function POST(req: Request) {
           } catch (err) {
             console.error("[derive] annotation save failed:", err);
             controller.enqueue(
-              encoder.encode(`${STREAM_ERROR_TOKEN}The annotation did not save. Try again.`),
+              encoder.encode(`${STREAM_ERROR_TOKEN}${t("api.annotationNotSaved")}`),
             );
           }
         }
@@ -415,7 +411,7 @@ export async function POST(req: Request) {
           } catch (err) {
             console.error("[derive] annotation save failed:", err);
             controller.enqueue(
-              encoder.encode(`${STREAM_ERROR_TOKEN}The annotation did not save. Try again.`),
+              encoder.encode(`${STREAM_ERROR_TOKEN}${t("api.annotationNotSaved")}`),
             );
           }
         }
@@ -438,7 +434,7 @@ export async function POST(req: Request) {
       label: "FIND",
     });
     if (!result.ok) {
-      return NextResponse.json({ error: `Find failed. ${result.error}` }, { status: 422 });
+      return NextResponse.json({ error: t("api.findFailed", { reason: result.error }) }, { status: 422 });
     }
     const timedById = new Map(timedBlocks.map((b) => [b.id, b]));
     const matches: VideoFindMatch[] = [];
@@ -468,13 +464,13 @@ export async function POST(req: Request) {
       label: "SALIENCE",
     });
     if (!result.ok) {
-      return NextResponse.json({ error: `Salience failed. ${result.error}` }, { status: 422 });
+      return NextResponse.json({ error: t("api.salienceFailed", { reason: result.error }) }, { status: 422 });
     }
     const spans = result.data.spans
       .map((s) => resolveSpan(s, blockById))
       .filter((s) => s !== null);
     if (spans.length === 0) {
-      return NextResponse.json({ error: "Salience returned no resolvable spans" }, { status: 422 });
+      return NextResponse.json({ error: t("api.salienceNoSpans") }, { status: 422 });
     }
     await db.notebookDocument.update({
       where: {
@@ -498,7 +494,7 @@ export async function POST(req: Request) {
       label: "EXTRACT",
     });
     if (!result.ok) {
-      return NextResponse.json({ error: `Extract failed. ${result.error}` }, { status: 422 });
+      return NextResponse.json({ error: t("api.extractFailed", { reason: result.error }) }, { status: 422 });
     }
     const origin = resolveSpan(
       {
@@ -509,7 +505,7 @@ export async function POST(req: Request) {
       blockById,
     );
     if (!origin) {
-      return NextResponse.json({ error: "Anchor does not resolve in this document" }, { status: 400 });
+      return NextResponse.json({ error: t("api.anchorNotResolvedInDocument") }, { status: 400 });
     }
     const orderByBlock = new Map(document.blocks.map((b, i) => [b.id, i]));
     const spans: NonNullable<ReturnType<typeof resolveSpan>>[] = [];
@@ -529,7 +525,7 @@ export async function POST(req: Request) {
       if (!overlapsOrigin && !overlapsKept) spans.push(span);
     }
     if (spans.length === 0) {
-      return NextResponse.json({ error: "Extract returned no resolvable spans" }, { status: 422 });
+      return NextResponse.json({ error: t("api.extractNoSpans") }, { status: 422 });
     }
     const toSpan = (s: NonNullable<ReturnType<typeof resolveSpan>>) => ({
       blockId: s.blockId,
@@ -590,7 +586,7 @@ export async function POST(req: Request) {
         });
         if (cancelled || req.signal.aborted) return;
         if (!result.ok) {
-          fail(`Distill failed. ${result.error}`);
+          fail(t("api.distillFailed", { reason: result.error }));
           return;
         }
         const orderByBlock = new Map(document.blocks.map((b, i) => [b.id, i]));
@@ -606,7 +602,7 @@ export async function POST(req: Request) {
               a.start - b.start,
           );
         if (quotes.length === 0) {
-          fail("Distill returned no resolvable quotes");
+          fail(t("api.distillNoQuotes"));
           return;
         }
         const distillation: Distillation = {
@@ -637,7 +633,7 @@ export async function POST(req: Request) {
       } catch (err) {
         if (!cancelled && !req.signal.aborted) {
           console.error("[derive] DISTILL failed:", err);
-          fail(`Distill failed. ${modelErrorMessage(err)}`);
+          fail(t("api.distillFailed", { reason: modelErrorMessage(err) }));
         }
       } finally {
         if (heartbeat) clearInterval(heartbeat);

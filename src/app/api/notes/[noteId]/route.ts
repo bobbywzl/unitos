@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
+import { serverT } from "@/lib/i18n/server";
 import { normalizeNoteOrders, movedOrder } from "@/lib/order";
 import { parseBody } from "@/lib/validate";
 
@@ -13,18 +14,19 @@ const patchSchema = z.object({
 });
 
 export async function PATCH(req: Request, ctx: { params: Promise<{ noteId: string }> }) {
+  const t = await serverT();
   const { noteId } = await ctx.params;
   const { data, error } = await parseBody(req, patchSchema);
   if (error) return error;
 
   const note = await db.note.findUnique({ where: { id: noteId } });
-  if (!note) return NextResponse.json({ error: "Note not found" }, { status: 404 });
+  if (!note) return NextResponse.json({ error: t("api.noteNotFound") }, { status: 404 });
 
   const fromSectionId = note.sectionId;
 
   if (data.sectionId && data.sectionId !== note.sectionId) {
     const target = await db.section.findUnique({ where: { id: data.sectionId } });
-    if (!target) return NextResponse.json({ error: "Section not found" }, { status: 404 });
+    if (!target) return NextResponse.json({ error: t("api.sectionNotFound") }, { status: 404 });
     const count = await db.note.count({ where: { sectionId: data.sectionId } });
     await db.note.update({
       where: { id: noteId },
@@ -67,9 +69,10 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ noteId: strin
 }
 
 export async function DELETE(_req: Request, ctx: { params: Promise<{ noteId: string }> }) {
+  const t = await serverT();
   const { noteId } = await ctx.params;
   const note = await db.note.delete({ where: { id: noteId } }).catch(() => null);
-  if (!note) return NextResponse.json({ error: "Note not found" }, { status: 404 });
+  if (!note) return NextResponse.json({ error: t("api.noteNotFound") }, { status: 404 });
   await normalizeNoteOrders(note.sectionId);
   return NextResponse.json({ ok: true });
 }

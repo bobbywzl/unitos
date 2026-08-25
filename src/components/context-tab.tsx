@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
+import { useT } from "@/components/lang-provider";
 
 export type ContextValues = { background: string; purpose: string; application: string };
 
@@ -24,6 +25,7 @@ export function ContextTab({
   isSet: boolean;
 }) {
   const router = useRouter();
+  const t = useT();
   const panelRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [values, setValues] = useState<ContextValues>(initial ?? EMPTY);
@@ -77,7 +79,7 @@ export function ContextTab({
       setOpen(false);
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Save failed");
+      setError(err instanceof Error ? err.message : t("panels.saveFailed"));
     } finally {
       setBusy(false);
     }
@@ -101,29 +103,23 @@ export function ContextTab({
       <button
         onClick={toggle}
         aria-expanded={open}
-        title="Injected into every AI prompt: notes, distillation, analysis."
+        title={t("panels.contextHint")}
         className={`rounded-full px-3.5 py-1.5 text-[13px] hover:bg-clay-100 hover:text-clay-800 ${
           isSet
             ? "border border-line text-sand-700"
             : "border border-dashed border-sand-400 text-sand-600"
         }`}
       >
-        {isSet ? "Context" : "Add context"}
+        {isSet ? t("panels.context") : t("panels.addContext")}
       </button>
 
       {open && (
         <div className="absolute right-0 z-30 mt-2 w-[340px] rounded-2xl bg-card p-4 shadow-float">
-          <p className="text-xs text-sand-600">
-            Injected into every AI prompt: notes, distillation, analysis. Every field is optional.
-          </p>
+          <p className="text-xs text-sand-600">{t("panels.contextDesc")}</p>
           <div className="mt-3 space-y-3">
-            {field(
-              "background",
-              "Background",
-              "e.g. Stanford student, stochastic calc + stats + quantum",
-            )}
-            {field("purpose", "Purpose", "e.g. due diligence, exam prep, replicate results")}
-            {field("application", "Application", "e.g. investment decision for Bough Capital")}
+            {field("background", t("panels.fieldBackground"), t("panels.fieldBackgroundPh"))}
+            {field("purpose", t("panels.fieldPurpose"), t("panels.fieldPurposePh"))}
+            {field("application", t("panels.fieldApplication"), t("panels.fieldApplicationPh"))}
           </div>
           <div className="mt-3 flex items-center gap-4 text-xs text-sand-700">
             <label className="flex cursor-pointer items-center gap-1.5">
@@ -133,7 +129,7 @@ export function ContextTab({
                 checked={scope === "global"}
                 onChange={() => setScope("global")}
               />
-              Everywhere
+              {t("panels.scopeEverywhere")}
             </label>
             <label className="flex cursor-pointer items-center gap-1.5">
               <input
@@ -142,7 +138,7 @@ export function ContextTab({
                 checked={scope === "notebook"}
                 onChange={() => setScope("notebook")}
               />
-              This corpus only
+              {t("panels.scopeThisCorpus")}
             </label>
           </div>
           {error && <p className="mt-2 text-xs text-red-500">{error}</p>}
@@ -152,7 +148,7 @@ export function ContextTab({
               disabled={busy}
               className="rounded-full bg-clay px-5 py-2 text-sm font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
             >
-              {busy ? "Saving…" : "Save"}
+              {busy ? t("common.saving") : t("common.save")}
             </button>
           </div>
         </div>

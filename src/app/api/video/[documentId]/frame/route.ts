@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
+import { serverT } from "@/lib/i18n/server";
 import { outboundFetch } from "@/lib/outbound-fetch";
 import { storyboardFrame } from "@/lib/video/storyboard";
 
@@ -17,6 +18,7 @@ const paramsSchema = z.object({
 // a cross-origin image taints the canvas, and the client has to read pixels to
 // crop the frame to what the reader circled.
 export async function GET(req: Request, ctx: { params: Promise<{ documentId: string }> }) {
+  const t = await serverT();
   const { documentId } = await ctx.params;
   const { searchParams } = new URL(req.url);
   const params = paramsSchema.safeParse({
@@ -24,7 +26,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ documentId: str
     sheet: searchParams.get("sheet") ?? undefined,
   });
   if (!params.success) {
-    return NextResponse.json({ error: "Validation failed" }, { status: 400 });
+    return NextResponse.json({ error: t("api.validationFailed") }, { status: 400 });
   }
 
   const asset = await db.videoAsset.findUnique({
@@ -32,7 +34,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ documentId: str
     select: { kind: true, youtubeId: true },
   });
   if (!asset?.youtubeId || asset.kind !== "YOUTUBE") {
-    return NextResponse.json({ error: "This video has no storyboard" }, { status: 404 });
+    return NextResponse.json({ error: t("api.noStoryboard") }, { status: 404 });
   }
 
   let frame: Awaited<ReturnType<typeof storyboardFrame>>;
@@ -40,9 +42,9 @@ export async function GET(req: Request, ctx: { params: Promise<{ documentId: str
     frame = await storyboardFrame(asset.youtubeId, params.data.t);
   } catch (err) {
     console.warn("[frame] storyboard lookup failed:", err);
-    return NextResponse.json({ error: "Frame is unavailable" }, { status: 502 });
+    return NextResponse.json({ error: t("api.frameUnavailable") }, { status: 502 });
   }
-  if (!frame) return NextResponse.json({ error: "Frame is unavailable" }, { status: 404 });
+  if (!frame) return NextResponse.json({ error: t("api.frameUnavailable") }, { status: 404 });
 
   if (!params.data.sheet) {
     return NextResponse.json({
@@ -56,7 +58,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ documentId: str
 
   const sheet = await outboundFetch(frame.sheetUrl, {});
   if (!sheet.ok) {
-    return NextResponse.json({ error: `Frame fetch failed (${sheet.status})` }, { status: 502 });
+    return NextResponse.json({ error: t("api.frameFetchFailed", { status: sheet.status }) }, { status: 502 });
   }
   return new Response(await sheet.arrayBuffer(), {
     headers: {

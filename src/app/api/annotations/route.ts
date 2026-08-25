@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { annotationsSection } from "@/lib/derive/context";
+import { serverT } from "@/lib/i18n/server";
+import type { TFunc } from "@/lib/i18n/dictionaries";
 import { regionSchema, timeRangeSchema } from "@/lib/video/types";
 import { videoAnchorFor } from "@/lib/video/anchor";
 import { parseBody } from "@/lib/validate";
@@ -42,15 +44,16 @@ const createSchema = z
 // content = the comment text. A video annotation is a comment whose source is a
 // time range instead of a text span.
 export async function POST(req: Request) {
+  const t = await serverT();
   const { data, error } = await parseBody(req, createSchema);
   if (error) return error;
 
   if (data.comment !== undefined && !data.comment.trim()) {
-    return NextResponse.json({ error: "Comment is empty" }, { status: 400 });
+    return NextResponse.json({ error: t("api.commentEmpty") }, { status: 400 });
   }
 
   const notebook = await db.notebook.findUnique({ where: { id: data.notebookId } });
-  if (!notebook) return NextResponse.json({ error: "Corpus not found" }, { status: 404 });
+  if (!notebook) return NextResponse.json({ error: t("api.corpusNotFound") }, { status: 404 });
 
   const attachment = await db.notebookDocument.findUnique({
     where: {
@@ -58,18 +61,18 @@ export async function POST(req: Request) {
     },
   });
   if (!attachment) {
-    return NextResponse.json({ error: "Document is not attached to this corpus" }, { status: 404 });
+    return NextResponse.json({ error: t("api.documentNotAttachedToCorpus") }, { status: 404 });
   }
 
-  if (data.video) return createVideoAnnotation(data.notebookId, data.documentId, data.video);
-  if (!data.anchor) return NextResponse.json({ error: "Anchor is missing" }, { status: 400 });
+  if (data.video) return createVideoAnnotation(data.notebookId, data.documentId, data.video, t);
+  if (!data.anchor) return NextResponse.json({ error: t("api.anchorMissing") }, { status: 400 });
   if (data.anchor.endOffset <= data.anchor.startOffset) {
-    return NextResponse.json({ error: "Anchor offsets are invalid" }, { status: 400 });
+    return NextResponse.json({ error: t("api.anchorOffsetsInvalid") }, { status: 400 });
   }
 
   const block = await db.block.findUnique({ where: { id: data.anchor.blockId } });
   if (!block || block.documentId !== data.documentId) {
-    return NextResponse.json({ error: "Block not found in this document" }, { status: 404 });
+    return NextResponse.json({ error: t("api.blockNotInDocument") }, { status: 404 });
   }
 
   // Provenance is non-negotiable (SPEC.md §1): the quote must be the text at
@@ -78,10 +81,7 @@ export async function POST(req: Request) {
     data.anchor.endOffset > block.text.length ||
     block.text.slice(data.anchor.startOffset, data.anchor.endOffset) !== data.anchor.quotedText
   ) {
-    return NextResponse.json(
-      { error: "Anchor does not match the block text" },
-      { status: 400 },
-    );
+    return NextResponse.json({ error: t("api.anchorMismatch") }, { status: 400 });
   }
 
   const section = await annotationsSection(data.notebookId);
@@ -142,28 +142,29 @@ async function createVideoAnnotation(
   notebookId: string,
   documentId: string,
   video: z.infer<typeof videoSchema>,
+  t: TFunc,
 ) {
   if (!timeRangeSchema.safeParse(video).success) {
-    return NextResponse.json({ error: "The end must be after the start" }, { status: 400 });
+    return NextResponse.json({ error: t("api.endBeforeStart") }, { status: 400 });
   }
   const asset = await db.videoAsset.findUnique({
     where: { documentId },
     select: { duration: true },
   });
   if (!asset) {
-    return NextResponse.json({ error: "This document has no video" }, { status: 404 });
+    return NextResponse.json({ error: t("api.noVideo") }, { status: 404 });
   }
   const { startTime } = video;
   let endTime = video.endTime;
   if (asset.duration !== null) {
     if (startTime >= asset.duration) {
-      return NextResponse.json({ error: "Start is past the end of the video" }, { status: 400 });
+      return NextResponse.json({ error: t("api.startPastVideoEnd") }, { status: 400 });
     }
     endTime = Math.min(endTime, asset.duration);
   }
   const anchor = await videoAnchorFor(documentId, startTime, endTime);
   if (!anchor) {
-    return NextResponse.json({ error: "This document has no video block" }, { status: 404 });
+    return NextResponse.json({ error: t("api.noVideoBlock") }, { status: 404 });
   }
 
   const section = await annotationsSection(notebookId);

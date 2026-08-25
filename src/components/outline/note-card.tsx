@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import type { NoteView, SourceChip } from "@/lib/types";
+import { useT } from "@/components/lang-provider";
 import { Markdown } from "@/components/markdown";
 import { DragHandle, type HandleProps } from "@/components/sortable";
 import type { OutlineActions } from "@/components/outline/use-outline";
@@ -30,6 +31,7 @@ function AnchorIcon({ size = 11 }: { size?: number }) {
 }
 
 function SourceChips({ sources, notebookId }: { sources: SourceChip[]; notebookId: string }) {
+  const t = useT();
   if (sources.length === 0) return null;
   return (
     <div className="flex flex-wrap gap-1.5">
@@ -37,11 +39,13 @@ function SourceChips({ sources, notebookId }: { sources: SourceChip[]; notebookI
         source.orphaned ? (
           <span
             key={source.id}
-            title={`Anchor unresolved. Quoted text: ${source.quotedText}`}
+            title={t("outline.anchorUnresolvedTitle", { quote: source.quotedText })}
             className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-dashed border-red-400 px-2.5 py-0.5 text-[11px] font-semibold text-red-500"
           >
             <AnchorIcon />
-            <span className="shrink-0">{source.documentTitle} · unresolved:</span>
+            <span className="shrink-0">
+              {source.documentTitle} · {t("outline.unresolvedLabel")}
+            </span>
             <span className="truncate font-normal text-sand-500">“{source.quotedText}”</span>
           </span>
         ) : (
@@ -71,6 +75,7 @@ export function NoteCard({
   handle?: HandleProps;
   variant?: Variant;
 }) {
+  const t = useT();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(note.content);
   const [copied, setCopied] = useState(false);
@@ -124,7 +129,7 @@ export function NoteCard({
             onClick={() => void save()}
             className="rounded-full bg-sage-600 px-3.5 py-1 text-xs font-semibold text-sage-fg hover:bg-sage-700"
           >
-            Save
+            {t("common.save")}
           </button>
           <button
             onClick={() => {
@@ -133,7 +138,7 @@ export function NoteCard({
             }}
             className="rounded-full border border-line px-3 py-1 text-xs text-sand-700 hover:bg-clay-100 hover:text-clay-800"
           >
-            Cancel
+            {t("common.cancel")}
           </button>
         </div>
       </div>
@@ -156,7 +161,7 @@ export function NoteCard({
       <div className="flex items-start gap-1.5">
         {handle && (
           <div className="pt-0.5 opacity-0 transition-opacity group-hover/note:opacity-100">
-            <DragHandle handle={handle} label="Reorder note" />
+            <DragHandle handle={handle} label={t("outline.reorderNote")} />
           </div>
         )}
         <div className={`min-w-0 flex-1 ${tray ? "text-[13.5px] leading-[1.6]" : "text-sm leading-[1.65]"}`}>
@@ -179,16 +184,16 @@ export function NoteCard({
           <button
             onClick={() => void actions.acceptNote(note.id)}
             className={`rounded-full bg-sage-600 px-3.5 py-1.5 text-xs font-semibold text-sage-fg hover:bg-sage-700 ${tray ? "" : "ml-auto"}`}
-            title="Accept (Enter)"
+            title={t("outline.acceptTitle")}
           >
-            Accept
+            {t("common.accept")}
           </button>
           <button
             onClick={() => void actions.rejectNote(note.id)}
             className="rounded-full border border-line px-3 py-1 text-xs text-sand-700 hover:bg-clay-100 hover:text-clay-800"
-            title="Reject (Backspace)"
+            title={t("outline.rejectTitle")}
           >
-            Reject
+            {t("common.reject")}
           </button>
           <button
             onClick={() => {
@@ -196,9 +201,9 @@ export function NoteCard({
               setEditing(true);
             }}
             className={`text-xs text-sand-600 hover:text-clay-700 ${tray ? "ml-auto" : ""}`}
-            title="Edit (e)"
+            title={t("outline.editTitle")}
           >
-            edit
+            {t("outline.editLower")}
           </button>
         </div>
       ) : (
@@ -212,7 +217,7 @@ export function NoteCard({
             }}
             className="text-xs text-sand-600 hover:text-clay-700"
           >
-            Edit
+            {t("common.edit")}
           </button>
           <button
             onClick={() => {
@@ -221,9 +226,9 @@ export function NoteCard({
               setTimeout(() => setCopied(false), 1500);
             }}
             className="text-xs text-sand-600 hover:text-clay-700"
-            title="Copy the note text"
+            title={t("outline.copyTitle")}
           >
-            {copied ? "Copied" : "Copy"}
+            {copied ? t("outline.copied") : t("outline.copy")}
           </button>
           <select
             value=""
@@ -231,10 +236,10 @@ export function NoteCard({
               if (e.target.value) void actions.moveNoteToSection(note.id, e.target.value);
             }}
             className="rounded-full border-none bg-transparent text-xs text-sand-600 outline-none hover:text-clay-700"
-            aria-label="Move this note to another section"
+            aria-label={t("outline.moveNoteAria")}
           >
             <option value="" disabled>
-              Move to…
+              {t("outline.moveTo")}
             </option>
             {actions.sectionChoices.map((s) => (
               <option key={s.id} value={s.id}>
@@ -244,11 +249,11 @@ export function NoteCard({
           </select>
           <button
             onClick={() => {
-              if (confirm("Delete this note?")) void actions.deleteNote(note.id);
+              if (confirm(t("outline.confirmDeleteNote"))) void actions.deleteNote(note.id);
             }}
             className="text-xs text-red-500 hover:text-red-700"
           >
-            Delete
+            {t("common.delete")}
           </button>
         </div>
       )}

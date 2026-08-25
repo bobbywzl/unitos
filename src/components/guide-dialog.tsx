@@ -1,10 +1,15 @@
 "use client";
 
 import { useEffect } from "react";
+import { useT } from "@/components/lang-provider";
 
 // The reader's guide: every selection tool and feature, in one place.
-// Opened from the ? button in the header.
+// Opened from the ? button in the header. Body strings carry their own
+// leading separator and joining spaces (see dict/works.ts), so bold terms
+// and bodies concatenate with no literal whitespace between them.
 export function GuideDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const t = useT();
+
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -28,17 +33,17 @@ export function GuideDialog({ open, onClose }: { open: boolean; onClose: () => v
       onClick={onClose}
       role="dialog"
       aria-modal
-      aria-label="Guide"
+      aria-label={t("works.guideLabel")}
     >
       <div
         onClick={(e) => e.stopPropagation()}
         className="flex max-h-[85vh] w-[560px] max-w-full flex-col gap-4 overflow-y-auto rounded-[24px] bg-card p-6 shadow-float"
       >
         <div className="flex items-center">
-          <span className="font-display text-[20px]">How to dissect a document</span>
+          <span className="font-display text-[20px]">{t("works.guideTitle")}</span>
           <button
             onClick={onClose}
-            aria-label="Close"
+            aria-label={t("common.close")}
             className="ml-auto flex size-8 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-700"
           >
             ✕
@@ -46,154 +51,118 @@ export function GuideDialog({ open, onClose }: { open: boolean; onClose: () => v
         </div>
 
         <section className="flex flex-col gap-1.5">
-          <span className={h}>Select text — the tools appear on the left</span>
+          <span className={h}>{t("works.guideSelectHeader")}</span>
           <ul className="flex flex-col gap-1.5 text-[13px] leading-relaxed text-sand-800">
             <li>
-              <span className={term}>Assistant</span> — type or speak a command about the
-              selection (“highlight the key claim and add a note to Thesis”). It proposes a plan;
-              in Ask mode you approve each action before it runs, in Auto mode it runs
-              immediately. Auto-mode notes still land pending for your review. The reply opens
-              a small chat beside the article — keep talking in it; every turn still applies
-              to your selection. Drag its corner to resize it freely.
+              <span className={term}>{t("works.guideAssistant")}</span>
+              {t("works.guideAssistantBody")}
             </li>
             <li>
-              <span className={term}>Explain</span> — a short explanation of the selection,
-              tuned to your context. Saved under Annotations; click the highlighted text any
-              time to reopen the bubble. When the AI cites a block, the tag renders as a
-              ¶ chip — click it to jump there.
+              <span className={term}>{t("works.guideExplain")}</span>
+              {t("works.guideExplainBody")}
             </li>
             <li>
-              <span className={term}>Simplify</span> — rewrites the selection in plain words,
-              in a bubble beside the article. Each sentence in the bubble is lightly tinted:
-              press one and it goes solid while the original sentences it restates light up
-              in the text. The rewrite is saved under Simplified in the Annotations tab;
-              click the highlighted text any time to reopen the bubble. Drag any bubble by
-              its header to move it; a faint line ties each bubble to the text it came from.
+              <span className={term}>{t("works.guideSimplify")}</span>
+              {t("works.guideSimplifyBody")}
             </li>
             <li>
-              <span className={term}>Extract</span> — highlights the passages across the
-              article that reveal what the selection focuses on. The selection keeps a solid
-              underline; every found passage gets a dashed one plus a label chip (E1, E2, …)
-              that jumps back to the selection. Click the selection&apos;s own chip for the
-              extract card: the passage count and Delete.
+              <span className={term}>{t("works.guideExtract")}</span>
+              {t("works.guideExtractBody")}
             </li>
             <li>
-              <span className={term}>Colors</span> — highlight the selection. Type a comment
-              first, then pick a color, and the note rides on the highlight.
+              <span className={term}>{t("works.guideColors")}</span>
+              {t("works.guideColorsBody")}
             </li>
             <li>
-              <span className={term}>Comment</span> — attach a comment to the selection without
-              a highlight. A small comment icon sits beside the text; click it to open the
-              comment in a card.
+              <span className={term}>{t("works.guideComment")}</span>
+              {t("works.guideCommentBody")}
             </li>
             <li>
-              <span className={term}>Add to</span> — file the selection verbatim as a note in a
-              section you pick. No AI involved.
+              <span className={term}>{t("works.guideAddTo")}</span>
+              {t("works.guideAddToBody")}
             </li>
             <li>
-              <span className={term}>Link across texts</span> — connect this passage to a
-              passage in this or another document. Select the other end and press Link here.
-              Both ends become clickable and are listed under Annotations.
+              <span className={term}>{t("works.guideLink")}</span>
+              {t("works.guideLinkBody")}
             </li>
             <li>
-              <span className={term}>Voice</span> — the round bubble under the tools reads the
-              highlighted text aloud, Chinese and English alike. The reading continues if you
-              dismiss the selection; press the bubble again or the floating Stop reading
-              control to stop.
+              <span className={term}>{t("works.guideVoice")}</span>
+              {t("works.guideVoiceBody")}
             </li>
           </ul>
         </section>
 
         <section className="flex flex-col gap-1.5">
-          <span className={h}>Reading</span>
+          <span className={h}>{t("works.guideReadingHeader")}</span>
           <ul className="flex flex-col gap-1.5 text-[13px] leading-relaxed text-sand-800">
             <li>
-              <span className={term}>Add URL</span> (+ in the header) — rebuilds the page in the
-              reader: headings, lists, tables, figures, images, videos, charts, and equations,
-              all editable. A progress card shows each step while the cat dances.
+              <span className={term}>{t("works.guideAddUrl")}</span>
+              {t("works.guideAddUrlBody")}
             </li>
             <li>
-              <span className={term}>Assistant menu</span> (top left) — floats open at the top
-              of the page: Summarize article, Key takeaways, and Explain simply send the
-              question to the assistant, which reads the whole document and answers in a chat
-              beside the article; Ask the assistant opens the same chat for your own question;
-              Distill opens the distilled page. The menu hides while you scroll and returns
-              when you are back at the top.
+              <span className={term}>{t("works.guideAssistantMenu")}</span>
+              {t("works.guideAssistantMenuBody")}
             </li>
             <li>
-              <span className={term}>Context</span> (top bar) — who you are, why you read, what
-              the notes feed. Injected into every AI prompt: notes, distillation, analysis. Every
-              field is optional; edit any time. Save it everywhere or for this corpus only.
+              <span className={term}>{t("works.guideContext")}</span>
+              {t("works.guideContextBody")}
             </li>
             <li>
-              <span className={term}>Key terms</span> — dotted underlines mark the document&apos;s
-              key terms. Hover for the definition; click for the toolbar on the term, with
-              Extract first — recommended.
+              <span className={term}>{t("works.guideKeyTerms")}</span>
+              {t("works.guideKeyTermsBody")}
             </li>
             <li>
-              <span className={term}>Distill</span> (top right) — ask the article one
-              question. The AI scans the whole document and opens the distilled page: your
-              question large at the top, under it the quotes that answer it, each with a
-              caption saying how it answers the question and how it sits in the document.
-              Click a quote to jump to its exact words. Add to notes files a quote as a{" "}
-              <span className={term}>pending</span> note with its anchor. Cancel stops a
-              running scan and keeps the question for editing; Delete removes a stored
-              distillation. Close the page and keep reading — a progress bar under the button
-              shows while a distillation runs, and the Distill tab in the side tray lists
-              every distillation of the open document.
+              <span className={term}>{t("works.guideDistill")}</span>
+              {t("works.guideDistillBody1")}
+              <span className={term}>{t("common.pending")}</span>
+              {t("works.guideDistillBody2")}
             </li>
             <li>
-              <span className={term}>Notes tray</span> (right) — pending notes wait in a queue:
-              j/k to move, Enter to accept, Backspace to reject, Undo to take a rejection back.
+              <span className={term}>{t("works.guideNotesTray")}</span>
+              {t("works.guideNotesTrayBody")}
             </li>
             <li>
-              <span className={term}>Figure tools</span> — hold and draw a small circle on a
-              figure or equation: Explain deciphers the visual, a highlight color adds a side
-              label that jumps to Annotations, Comment and Link work like on text.
+              <span className={term}>{t("works.guideFigureTools")}</span>
+              {t("works.guideFigureToolsBody")}
             </li>
             <li>
-              <span className={term}>Print document</span> (+ in the header) — prints the open
-              document, article only: no app chrome, full length, highlights kept.
+              <span className={term}>{t("works.guidePrint")}</span>
+              {t("works.guidePrintBody")}
             </li>
           </ul>
         </section>
 
         <section className="flex flex-col gap-1.5">
-          <span className={h}>Editing</span>
+          <span className={h}>{t("works.guideEditingHeader")}</span>
           <ul className="flex flex-col gap-1.5 text-[13px] leading-relaxed text-sand-800">
             <li>
-              <span className={term}>Double-click</span> any paragraph — the page becomes
-              editable in place: headings, bold, italic, underline, bulleted and numbered
-              lists, indent and outdent, font, insert and remove paragraphs. Changed words
-              show in the edited color. Done or Esc returns to reading.
+              <span className={term}>{t("works.guideDoubleClick")}</span>
+              {t("works.guideDoubleClickBody")}
             </li>
+            <li>{t("works.guideEditSelect")}</li>
             <li>
-              Selecting text while editing still opens the highlight and AI tools.
+              <span className={term}>{t("works.guideEditsTab")}</span>
+              {t("works.guideEditsTabBody")}
             </li>
-            <li>
-              <span className={term}>Edits tab</span> — every change, newest first. Revert a
-              text edit; restore a removed paragraph.
-            </li>
-            <li>
-              Highlights, comments, and links move with your edits. If the words they pointed at
-              are gone, they say “Anchor unresolved” — they never point at the wrong words.
-            </li>
+            <li>{t("works.guideAnchors")}</li>
           </ul>
         </section>
 
         <section className="flex flex-col gap-1.5">
-          <span className={h}>Side panel</span>
+          <span className={h}>{t("works.guidePanelHeader")}</span>
           <p className="text-[13px] leading-relaxed text-sand-800">
-            <span className={term}>Notes</span> — your sections and the pending queue.{" "}
-            <span className={term}>Assistant</span> — ask questions at document, corpus, or
-            corpora scope, and run checks (contradictions, gaps).{" "}
-            <span className={term}>Distill</span> — every distillation of the open document;
-            open one to read its quotes.{" "}
-            <span className={term}>Summary</span> — the whole document summarized at the depth
-            you pick: layman, intermediate, or professional. Each depth is kept once generated.{" "}
-            <span className={term}>Annotations</span> — highlights, comments, explanations,
-            links; Jump scrolls to the source. <span className={term}>Edits</span> — the edit
-            history.
+            <span className={term}>{t("works.notes")}</span>
+            {t("works.guidePanelNotesBody")}
+            <span className={term}>{t("works.guideAssistant")}</span>
+            {t("works.guidePanelAssistantBody")}
+            <span className={term}>{t("works.guideDistill")}</span>
+            {t("works.guidePanelDistillBody")}
+            <span className={term}>{t("works.guidePanelSummary")}</span>
+            {t("works.guidePanelSummaryBody")}
+            <span className={term}>{t("works.guidePanelAnnotations")}</span>
+            {t("works.guidePanelAnnotationsBody")}
+            <span className={term}>{t("works.guidePanelEdits")}</span>
+            {t("works.guidePanelEditsBody")}
           </p>
         </section>
       </div>

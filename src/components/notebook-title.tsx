@@ -3,9 +3,11 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { api } from "@/lib/api";
+import { useT } from "@/components/lang-provider";
 
 export function NotebookTitle({ id, title }: { id: string; title: string }) {
   const router = useRouter();
+  const t = useT();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(title);
 
@@ -34,7 +36,7 @@ export function NotebookTitle({ id, title }: { id: string; title: string }) {
             setEditing(false);
           }
         }}
-        aria-label="Corpus title"
+        aria-label={t("works.corpusTitle")}
         className="min-w-0 rounded-full bg-card px-4 py-1 font-display text-xl shadow-soft outline-none"
       />
     );
@@ -44,7 +46,7 @@ export function NotebookTitle({ id, title }: { id: string; title: string }) {
     <button
       onClick={() => setEditing(true)}
       className="max-w-64 shrink-0 truncate font-display text-xl"
-      title="Rename corpus"
+      title={t("works.renameCorpus")}
     >
       {title}
     </button>

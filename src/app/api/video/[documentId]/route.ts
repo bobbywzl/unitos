@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
+import { serverT } from "@/lib/i18n/server";
 import { parseByteRange, videoByteStream } from "@/lib/video/storage";
 import { parseBody } from "@/lib/validate";
 
@@ -10,14 +11,15 @@ export const maxDuration = 300;
 // The video document's bytes, with HTTP Range support so the player seeks
 // without downloading the file (SPEC.md §11). The <video> element is the caller.
 export async function GET(req: Request, ctx: { params: Promise<{ documentId: string }> }) {
+  const t = await serverT();
   const { documentId } = await ctx.params;
   const asset = await db.videoAsset.findUnique({
     where: { documentId },
     select: { id: true, kind: true, mimeType: true, size: true, chunkSize: true },
   });
-  if (!asset) return NextResponse.json({ error: "Video not found" }, { status: 404 });
+  if (!asset) return NextResponse.json({ error: t("api.videoNotFound") }, { status: 404 });
   if (asset.kind !== "UPLOAD" || asset.mimeType === null || asset.size === null || asset.chunkSize === null) {
-    return NextResponse.json({ error: "This video plays from YouTube" }, { status: 404 });
+    return NextResponse.json({ error: t("api.videoPlaysFromYouTube") }, { status: 404 });
   }
 
   const sharedHeaders = {
@@ -56,11 +58,12 @@ const patchSchema = z.object({
 // The client reports duration and frame size once metadata loads; the Visual strip and
 // the scrubber read them server-side on the next render.
 export async function PATCH(req: Request, ctx: { params: Promise<{ documentId: string }> }) {
+  const t = await serverT();
   const { documentId } = await ctx.params;
   const { data, error } = await parseBody(req, patchSchema);
   if (error) return error;
   const asset = await db.videoAsset.findUnique({ where: { documentId }, select: { id: true } });
-  if (!asset) return NextResponse.json({ error: "Video not found" }, { status: 404 });
+  if (!asset) return NextResponse.json({ error: t("api.videoNotFound") }, { status: 404 });
   await db.videoAsset.update({
     where: { id: asset.id },
     data: { duration: data.duration, width: data.width, height: data.height },

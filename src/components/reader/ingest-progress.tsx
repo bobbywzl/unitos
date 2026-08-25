@@ -2,33 +2,36 @@
 
 import { useState } from "react";
 import { CheckIcon, SpinnerIcon } from "@/components/icons";
+import { useT } from "@/components/lang-provider";
+import type { TKey } from "@/lib/i18n/dictionaries";
 
 export type IngestStepStatus = "pending" | "active" | "done";
-export type IngestStep = { key: string; label: string; detail?: string; status: IngestStepStatus };
+// labelKey is translated at render; key stays the wire stage id.
+export type IngestStep = { key: string; labelKey: TKey; detail?: string; status: IngestStepStatus };
 
 // Ordered step templates, one per source. Keys match the stage events the server
 // sends (see /api/documents); the first step is active from the moment the
 // request leaves, before any event arrives.
-const STEP_TEMPLATES: Record<"pdf" | "url" | "video" | "youtube", { key: string; label: string }[]> = {
+const STEP_TEMPLATES: Record<"pdf" | "url" | "video" | "youtube", { key: string; labelKey: TKey }[]> = {
   pdf: [
-    { key: "receive", label: "Uploading" },
-    { key: "parse", label: "Parsing" },
-    { key: "save", label: "Saving" },
+    { key: "receive", labelKey: "panes.stepUploading" },
+    { key: "parse", labelKey: "panes.stepParsing" },
+    { key: "save", labelKey: "panes.stepSaving" },
   ],
   url: [
-    { key: "fetch", label: "Fetching the page" },
-    { key: "extract", label: "Reading the page" },
-    { key: "select", label: "Finding the article" },
-    { key: "structure", label: "Structuring" },
-    { key: "save", label: "Saving" },
+    { key: "fetch", labelKey: "panes.stepFetchingPage" },
+    { key: "extract", labelKey: "panes.stepReadingPage" },
+    { key: "select", labelKey: "panes.stepFindingArticle" },
+    { key: "structure", labelKey: "panes.stepStructuring" },
+    { key: "save", labelKey: "panes.stepSaving" },
   ],
   video: [
-    { key: "receive", label: "Uploading" },
-    { key: "save", label: "Saving" },
+    { key: "receive", labelKey: "panes.stepUploading" },
+    { key: "save", labelKey: "panes.stepSaving" },
   ],
   youtube: [
-    { key: "fetch", label: "Fetching video info" },
-    { key: "save", label: "Saving" },
+    { key: "fetch", labelKey: "panes.stepFetchingVideoInfo" },
+    { key: "save", labelKey: "panes.stepSaving" },
   ],
 };
 
@@ -102,6 +105,7 @@ function DancingCat({ done }: { done: boolean }) {
 // simulated timer. The cat runs laps around the card border to ease the wait —
 // gait randomized per run, paused when done or when reduced motion is set.
 export function IngestProgress({ fileLabel, steps }: { fileLabel: string; steps: IngestStep[] }) {
+  const t = useT();
   const activeIndex = steps.findIndex((s) => s.status === "active");
   const doneCount = steps.filter((s) => s.status === "done").length;
   const complete = doneCount === steps.length;
@@ -129,7 +133,7 @@ export function IngestProgress({ fileLabel, steps }: { fileLabel: string; steps:
       <div className="flex items-center gap-3">
         <div className="min-w-0 flex-1">
           <p className="truncate text-[13px] font-semibold text-sand-800">
-            {complete ? "Done" : `${current.label}…`}
+            {complete ? t("common.done") : `${t(current.labelKey)}…`}
           </p>
           <p className="truncate text-xs text-sand-500">{fileLabel}</p>
         </div>
@@ -156,7 +160,7 @@ export function IngestProgress({ fileLabel, steps }: { fileLabel: string; steps:
               <span aria-hidden className="mx-[3px] size-1.5 shrink-0 rounded-full bg-sand-300" />
             )}
             <span className={s.status === "pending" ? "text-sand-500" : "font-medium text-sand-700"}>
-              {s.label}
+              {t(s.labelKey)}
             </span>
             {s.detail && s.status !== "pending" && (
               <span className="min-w-0 truncate text-sand-500">· {s.detail}</span>

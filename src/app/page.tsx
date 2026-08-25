@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { authEnabled, currentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { serverT } from "@/lib/i18n/server";
 import { Logo } from "@/components/logo";
 import { WorksShelf } from "@/components/works/works-shelf";
 
@@ -10,6 +11,7 @@ export const dynamic = "force-dynamic";
 export default async function Home() {
   const user = await currentUser();
   if (!user) redirect("/signin");
+  const t = await serverT();
   const works = await db.notebook.findMany({
     // With sign-in on, the shelf is the signed-in reader's corpora.
     where: authEnabled() ? { userId: user.id } : undefined,
@@ -27,7 +29,7 @@ export default async function Home() {
     <main className="mx-auto w-full max-w-[1080px] px-16 pb-16">
       <header className="flex items-center gap-3 pt-[26px]">
         <Logo size={38} className="text-clay" />
-        <span className="font-display text-[21px]">Unitos</span>
+        <span className="font-display text-[21px]">{t("common.appName")}</span>
         {authEnabled() && (
           <span className="ml-auto flex items-center gap-2">
             {user.picture ? (
@@ -43,7 +45,7 @@ export default async function Home() {
         )}
         <Link
           href="/settings"
-          aria-label="Settings"
+          aria-label={t("common.settings")}
           className="ml-auto flex size-[38px] items-center justify-center rounded-full text-sand-600 hover:bg-clay-100 hover:text-clay-800"
         >
           <svg

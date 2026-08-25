@@ -9,6 +9,8 @@ import { loadProfile } from "@/lib/derive/context";
 import { callForJson, modelErrorMessage } from "@/lib/derive/json-call";
 import { ensureAllDigests, ensureDigest } from "@/lib/digest/ensure";
 import { corporaSystem, corpusSystem } from "@/lib/digest/render";
+import { serverT } from "@/lib/i18n/server";
+import type { TFunc } from "@/lib/i18n/dictionaries";
 import { synthesisAskPrompt, synthesisTaskPrompt } from "@/lib/prompts/synthesis";
 import { parseBody } from "@/lib/validate";
 
@@ -38,32 +40,30 @@ const issuesSchema = z.object({
 
 // Any unexpected throw still answers with the reason, never a bare 500.
 export async function POST(req: Request) {
+  const t = await serverT();
   try {
-    return await handle(req);
+    return await handle(req, t);
   } catch (err) {
     console.error("[assistant] failed:", err);
     return NextResponse.json(
-      { error: `The assistant failed. ${modelErrorMessage(err)}` },
+      { error: t("api.assistantFailed", { reason: modelErrorMessage(err) }) },
       { status: 500 },
     );
   }
 }
 
-async function handle(req: Request) {
+async function handle(req: Request, t: TFunc) {
   if (!process.env.ANTHROPIC_API_KEY) {
-    return NextResponse.json(
-      { error: "ANTHROPIC_API_KEY is not set. The assistant needs it." },
-      { status: 503 },
-    );
+    return NextResponse.json({ error: t("api.assistantNeedsKey") }, { status: 503 });
   }
   const { data, error } = await parseBody(req, assistantSchema);
   if (error) return error;
 
   if (data.task !== "ask" && data.scope !== "notebook") {
-    return NextResponse.json({ error: "This task runs at Corpus scope" }, { status: 400 });
+    return NextResponse.json({ error: t("api.taskCorpusScope") }, { status: 400 });
   }
   if (data.task === "ask" && !data.question) {
-    return NextResponse.json({ error: "Question is required" }, { status: 400 });
+    return NextResponse.json({ error: t("api.questionRequired") }, { status: 400 });
   }
   const denied = await notebookGuard(data.notebookId);
   if (denied) return denied;
@@ -78,7 +78,7 @@ async function handle(req: Request) {
   let scopeLabel: string;
   if (data.scope === "notebook") {
     const digest = await ensureDigest(data.notebookId);
-    if (!digest) return NextResponse.json({ error: "Corpus not found" }, { status: 404 });
+    if (!digest) return NextResponse.json({ error: t("api.corpusNotFound") }, { status: 404 });
     system = corpusSystem(digest.parts);
     scopeLabel =
       "this corpus: every document in full, and every note, annotation, distillation, extraction, and summary in it";
@@ -132,7 +132,7 @@ async function handle(req: Request) {
     label: `assistant:${data.task}`,
   });
   if (!result.ok) {
-    return NextResponse.json({ error: `Task failed. ${result.error}` }, { status: 422 });
+    return NextResponse.json({ error: t("api.taskFailed", { reason: result.error }) }, { status: 422 });
   }
   // Keep only note ids that exist in this corpus.
   const validIds = new Set(

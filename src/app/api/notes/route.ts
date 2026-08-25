@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { sourceInputSchema } from "@/lib/anchors/input";
+import { serverT } from "@/lib/i18n/server";
 import { videoAnchorFor } from "@/lib/video/anchor";
 import { timeRangeSchema } from "@/lib/video/types";
 import { parseBody } from "@/lib/validate";
@@ -30,19 +31,20 @@ const createSchema = z
 
 // Manual notes, with an optional anchor (manual extract). Derived notes are created by /api/derive.
 export async function POST(req: Request) {
+  const t = await serverT();
   const { data, error } = await parseBody(req, createSchema);
   if (error) return error;
 
   const section = await db.section.findUnique({ where: { id: data.sectionId } });
-  if (!section) return NextResponse.json({ error: "Section not found" }, { status: 404 });
+  if (!section) return NextResponse.json({ error: t("api.sectionNotFound") }, { status: 404 });
 
   if (data.source) {
     const block = await db.block.findUnique({ where: { id: data.source.blockId } });
     if (!block || block.documentId !== data.source.documentId) {
-      return NextResponse.json({ error: "Block not found" }, { status: 404 });
+      return NextResponse.json({ error: t("api.blockNotFound") }, { status: 404 });
     }
     if (data.source.endOffset <= data.source.startOffset) {
-      return NextResponse.json({ error: "Anchor offsets are invalid" }, { status: 400 });
+      return NextResponse.json({ error: t("api.anchorOffsetsInvalid") }, { status: 400 });
     }
   }
 
@@ -55,11 +57,11 @@ export async function POST(req: Request) {
   } | null = null;
   if (data.video) {
     if (!timeRangeSchema.safeParse(data.video).success) {
-      return NextResponse.json({ error: "The end must be after the start" }, { status: 400 });
+      return NextResponse.json({ error: t("api.endBeforeStart") }, { status: 400 });
     }
     const anchor = await videoAnchorFor(data.video.documentId, data.video.startTime, data.video.endTime);
     if (!anchor) {
-      return NextResponse.json({ error: "This document has no video block" }, { status: 404 });
+      return NextResponse.json({ error: t("api.noVideoBlock") }, { status: 404 });
     }
     videoSource = {
       documentId: data.video.documentId,

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
+import { serverT } from "@/lib/i18n/server";
 import { parseBody } from "@/lib/validate";
 
 const createSchema = z.object({
@@ -12,12 +13,13 @@ const createSchema = z.object({
 // Insert a paragraph after a block. User-authored blocks carry originalText ""
 // so the whole paragraph paints as edited.
 export async function POST(req: Request) {
+  const t = await serverT();
   const { data, error } = await parseBody(req, createSchema);
   if (error) return error;
 
   const after = await db.block.findUnique({ where: { id: data.afterBlockId } });
   if (!after || after.documentId !== data.documentId) {
-    return NextResponse.json({ error: "Block not found in this document" }, { status: 404 });
+    return NextResponse.json({ error: t("api.blockNotInDocument") }, { status: 404 });
   }
 
   const block = await db.$transaction(async (tx) => {

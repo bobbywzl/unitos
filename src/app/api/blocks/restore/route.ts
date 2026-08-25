@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
+import { serverT } from "@/lib/i18n/server";
 import { parseBody } from "@/lib/validate";
 
 const restoreSchema = z.object({ editId: z.string().min(1) });
@@ -10,16 +11,17 @@ const restoreSchema = z.object({ editId: z.string().min(1) });
 // the id and text come back; link ends are un-orphaned here when their quote
 // still matches.
 export async function POST(req: Request) {
+  const t = await serverT();
   const { data, error } = await parseBody(req, restoreSchema);
   if (error) return error;
 
   const edit = await db.blockEdit.findUnique({ where: { id: data.editId } });
   if (!edit || edit.kind !== "BLOCK_REMOVE" || !edit.blockId || edit.before === null) {
-    return NextResponse.json({ error: "Edit is not a removed paragraph" }, { status: 400 });
+    return NextResponse.json({ error: t("api.editNotRemovedParagraph") }, { status: 400 });
   }
   const existing = await db.block.findUnique({ where: { id: edit.blockId } });
   if (existing) {
-    return NextResponse.json({ error: "Paragraph is already back" }, { status: 400 });
+    return NextResponse.json({ error: t("api.paragraphAlreadyBack") }, { status: 400 });
   }
 
   const meta = (edit.meta ?? {}) as {

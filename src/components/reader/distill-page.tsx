@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import type { DistillationView } from "@/lib/types";
 import { ChevronLeftIcon } from "@/components/icons";
+import { useLang, useT } from "@/components/lang-provider";
 
 type DistillQuoteView = DistillationView["quotes"][number];
 
@@ -43,6 +44,10 @@ export function DistillPage({
   onJump: (quote: DistillQuoteView) => void;
   onAddNote: (distillation: DistillationView, quote: DistillQuoteView) => Promise<boolean>;
 }) {
+  const t = useT();
+  const lang = useLang();
+  // Dates follow the app language; English keeps the browser default.
+  const dateLocale = lang === "zh" ? "zh-CN" : undefined;
   const [question, setQuestion] = useState("");
   const [saved, setSaved] = useState<Set<string>>(new Set());
   const [savingKey, setSavingKey] = useState<string | null>(null);
@@ -78,24 +83,24 @@ export function DistillPage({
               className="flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold text-sand-600 hover:bg-clay-100 hover:text-clay-800"
             >
               <ChevronLeftIcon size={14} />
-              Distill
+              {t("panes.distill")}
             </button>
           ) : (
-            <span className="font-display text-[18px]">Distill</span>
+            <span className="font-display text-[18px]">{t("panes.distill")}</span>
           )}
           <span className="ml-auto flex items-center gap-3">
             {shown && !running && (
               <button
                 onClick={() => onDelete(shown.id)}
                 className="text-xs font-semibold text-red-500 hover:text-red-700"
-                title="Delete this distillation"
+                title={t("panes.deleteDistillation")}
               >
-                Delete
+                {t("common.delete")}
               </button>
             )}
             <button
               onClick={onClose}
-              aria-label="Close"
+              aria-label={t("common.close")}
               className="flex size-8 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-700"
             >
               ✕
@@ -107,7 +112,7 @@ export function DistillPage({
           <div>
             <h1 className="font-display text-[26px] leading-snug text-ink">{running.question}</h1>
             <p className="mt-5 flex items-center gap-2 text-sm text-sand-600">
-              Scanning the article for the quotes that answer it
+              {t("panes.scanningArticle")}
               <span className="inline-flex items-center gap-1">
                 <span className="loading-dot" />
                 <span className="loading-dot" />
@@ -116,18 +121,20 @@ export function DistillPage({
             </p>
             <button
               onClick={onCancel}
-              title="Stop this scan and edit the question"
+              title={t("panes.stopScan")}
               className="mt-4 rounded-full border border-line px-3.5 py-1 text-xs font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800"
             >
-              Cancel
+              {t("common.cancel")}
             </button>
           </div>
         ) : shown ? (
           <div>
             <h1 className="font-display text-[26px] leading-snug text-ink">{shown.question}</h1>
             <p className="mt-1.5 text-xs text-sand-500">
-              {shown.quotes.length} quote{shown.quotes.length === 1 ? "" : "s"} ·{" "}
-              {new Date(shown.createdAt).toLocaleDateString()}
+              {t(shown.quotes.length === 1 ? "panes.quoteCount1" : "panes.quoteCountN", {
+                n: shown.quotes.length,
+              })}{" "}
+              · {new Date(shown.createdAt).toLocaleDateString(dateLocale)}
             </p>
             <div className="mt-5 flex flex-col gap-3">
               {shown.quotes.map((quote, i) => {
@@ -141,7 +148,7 @@ export function DistillPage({
                     ) : (
                       <button
                         onClick={() => onJump(quote)}
-                        title="Jump to this passage in the article"
+                        title={t("panes.jumpToPassage")}
                         className="group block w-full text-left"
                       >
                         <blockquote className="border-l-2 border-clay-300 pl-3 text-[14px] leading-relaxed text-sand-800 group-hover:border-clay-500 group-hover:text-ink">
@@ -153,12 +160,12 @@ export function DistillPage({
                     <div className="mt-2.5 flex items-center gap-3">
                       {quote.orphaned && (
                         <span className="text-[11px] font-medium text-amber-700">
-                          Anchor unresolved — the quoted words changed
+                          {t("panes.anchorUnresolvedChanged")}
                         </span>
                       )}
                       {saved.has(key) ? (
                         <span className="text-[11.5px] font-semibold text-sage-700">
-                          Added — pending in Notes
+                          {t("panes.addedPendingInNotes")}
                         </span>
                       ) : (
                         <button
@@ -167,7 +174,7 @@ export function DistillPage({
                           title={addNoteHint}
                           className="rounded-full border border-line px-3 py-1 text-[11.5px] font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40"
                         >
-                          {savingKey === key ? "Adding…" : "Add to notes"}
+                          {savingKey === key ? t("panes.adding") : t("panes.addToNotes")}
                         </button>
                       )}
                     </div>
@@ -194,28 +201,25 @@ export function DistillPage({
                     onRun(question);
                   }
                 }}
-                placeholder="What should this article answer?"
+                placeholder={t("panes.askPlaceholder")}
                 rows={2}
                 className="w-full resize-none rounded-2xl bg-card p-4 font-display text-[20px] leading-snug shadow-soft outline-none placeholder:text-sand-400"
               />
-              <p className="mt-2 text-xs text-sand-500">
-                One question. The AI scans the whole article and pulls the quotes that answer it,
-                each with a caption saying how it answers the question.
-              </p>
+              <p className="mt-2 text-xs text-sand-500">{t("panes.askHint")}</p>
               {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
               <button
                 type="submit"
                 disabled={!question.trim()}
                 className="mt-3 rounded-full bg-clay px-4 py-1.5 text-xs font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
               >
-                Distill
+                {t("panes.distill")}
               </button>
             </form>
 
             {distillations.length > 0 && (
               <div className="mt-8">
                 <span className="text-[11px] font-bold tracking-[0.08em] text-sand-600 uppercase">
-                  Distilled
+                  {t("panes.distilled")}
                 </span>
                 <div className="mt-2 flex flex-col gap-1.5">
                   {distillations.map((d) => (
@@ -226,20 +230,22 @@ export function DistillPage({
                       <button
                         onClick={() => onOpen(d.id)}
                         className="min-w-0 flex-1 text-left"
-                        title="Open this distillation"
+                        title={t("panes.openDistillation")}
                       >
                         <span className="block truncate text-[13.5px] font-semibold text-sand-800 hover:text-clay-800">
                           {d.question}
                         </span>
                         <span className="mt-0.5 block text-[11px] text-sand-500">
-                          {d.quotes.length} quote{d.quotes.length === 1 ? "" : "s"} ·{" "}
-                          {new Date(d.createdAt).toLocaleDateString()}
+                          {t(d.quotes.length === 1 ? "panes.quoteCount1" : "panes.quoteCountN", {
+                            n: d.quotes.length,
+                          })}{" "}
+                          · {new Date(d.createdAt).toLocaleDateString(dateLocale)}
                         </span>
                       </button>
                       <button
                         onClick={() => onDelete(d.id)}
-                        aria-label="Delete this distillation"
-                        title="Delete this distillation"
+                        aria-label={t("panes.deleteDistillation")}
+                        title={t("panes.deleteDistillation")}
                         className="shrink-0 rounded-full px-1.5 text-sand-400 hover:text-red-600"
                       >
                         ✕

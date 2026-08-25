@@ -1,8 +1,9 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { api } from "@/lib/api";
+import { useT } from "@/components/lang-provider";
 import { WorkCard, type WorkItem } from "@/components/works/work-card";
 
 export type { WorkItem };
@@ -10,6 +11,8 @@ export type { WorkItem };
 // The works shelf: the front door (design 2a).
 export function WorksShelf({ works }: { works: WorkItem[] }) {
   const router = useRouter();
+  const t = useT();
+  const inputRef = useRef<HTMLInputElement>(null);
   const [title, setTitle] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -27,13 +30,13 @@ export function WorksShelf({ works }: { works: WorkItem[] }) {
   }
 
   async function remove(id: string) {
-    if (!confirm("Delete this corpus and all its notes?")) return;
+    if (!confirm(t("works.deleteCorpusConfirm"))) return;
     await api(`/api/notebooks/${id}`, "DELETE");
     router.refresh();
   }
 
   async function rename(id: string, current: string) {
-    const next = prompt("Corpus title", current)?.trim();
+    const next = prompt(t("works.corpusTitle"), current)?.trim();
     if (!next || next === current) return;
     await api(`/api/notebooks/${id}`, "PATCH", { title: next });
     router.refresh();
@@ -41,7 +44,7 @@ export function WorksShelf({ works }: { works: WorkItem[] }) {
 
   return (
     <>
-      <h1 className="mb-7 text-[46px]">Corpora</h1>
+      <h1 className="mb-7 text-[46px]">{t("works.corpora")}</h1>
 
       <form
         className="mb-11 flex gap-2.5"
@@ -51,10 +54,11 @@ export function WorksShelf({ works }: { works: WorkItem[] }) {
         }}
       >
         <input
+          ref={inputRef}
           value={title}
           onChange={(e) => setTitle(e.target.value)}
-          placeholder="New corpus title"
-          aria-label="New corpus title"
+          placeholder={t("works.newCorpusTitle")}
+          aria-label={t("works.newCorpusTitle")}
           className="w-[340px] rounded-full bg-card px-5 py-3 text-sm shadow-soft outline-none placeholder:text-sand-500"
         />
         <button
@@ -62,7 +66,7 @@ export function WorksShelf({ works }: { works: WorkItem[] }) {
           disabled={!title.trim() || busy}
           className="rounded-full bg-clay px-6 py-3 text-sm font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
         >
-          Create
+          {t("works.create")}
         </button>
       </form>
 
@@ -72,7 +76,7 @@ export function WorksShelf({ works }: { works: WorkItem[] }) {
         ))}
         <li className="list-none">
           <button
-            onClick={() => document.querySelector<HTMLInputElement>("input[aria-label='New corpus title']")?.focus()}
+            onClick={() => inputRef.current?.focus()}
             className="flex aspect-[5.5/8.5] w-full flex-col items-center justify-center gap-2 rounded-[18px] border-[1.5px] border-dashed border-sand-400 text-sm text-sand-600 hover:bg-clay-100 hover:text-clay-800"
           >
             <svg
@@ -88,7 +92,7 @@ export function WorksShelf({ works }: { works: WorkItem[] }) {
               <path d="M5 12h14" />
               <path d="M12 5v14" />
             </svg>
-            New work
+            {t("works.newWork")}
           </button>
         </li>
       </ul>

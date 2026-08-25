@@ -2,16 +2,25 @@
 
 import { usePathname } from "next/navigation";
 import { useState } from "react";
+import { useT } from "@/components/lang-provider";
 
 // Floating feedback button, mounted app-wide (release-edu pattern).
 export function FeedbackButton() {
   const pathname = usePathname();
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [category, setCategory] = useState<"bug" | "idea" | "other">("bug");
   const [message, setMessage] = useState("");
   const [state, setState] = useState<"idle" | "busy" | "sent" | "error">("idle");
 
   if (pathname.startsWith("/admin")) return null;
+
+  // Wire values stay "bug" | "idea" | "other"; only the chip label translates.
+  const categoryLabel = {
+    bug: t("works.feedbackBug"),
+    idea: t("works.feedbackIdea"),
+    other: t("works.feedbackOther"),
+  } as const;
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -40,10 +49,10 @@ export function FeedbackButton() {
     <>
       <button
         onClick={() => setOpen(!open)}
-        aria-label="Send feedback"
+        aria-label={t("works.sendFeedback")}
         className="fixed right-4 bottom-4 z-30 rounded-full bg-card px-4 py-2 text-sm text-sand-700 shadow-lift hover:bg-clay-100 hover:text-clay-800 print:hidden"
       >
-        Feedback
+        {t("works.feedback")}
       </button>
       {open && (
         <div className="fixed right-4 bottom-16 z-30 w-80 rounded-[28px] bg-card p-5 shadow-float print:hidden">
@@ -60,28 +69,34 @@ export function FeedbackButton() {
                       : "bg-sand-100 text-sand-600 hover:text-clay-800"
                   }`}
                 >
-                  {c}
+                  {categoryLabel[c]}
                 </button>
               ))}
             </div>
             <textarea
               value={message}
               onChange={(e) => setMessage(e.target.value)}
-              placeholder="What happened, or what would help?"
+              placeholder={t("works.feedbackPlaceholder")}
               rows={4}
               className="w-full rounded-2xl bg-sand-100 p-3 text-sm outline-none placeholder:text-sand-500"
             />
-            {state === "error" && <p className="text-xs text-red-600">Send failed. Try again.</p>}
+            {state === "error" && (
+              <p className="text-xs text-red-600">{t("works.feedbackFailed")}</p>
+            )}
             <div className="flex justify-end gap-2">
               <button type="button" onClick={() => setOpen(false)} className="rounded-full px-3 py-1 text-xs text-sand-600 hover:text-clay-700">
-                Close
+                {t("common.close")}
               </button>
               <button
                 type="submit"
                 disabled={state === "busy" || !message.trim()}
                 className="rounded-full bg-clay px-4 py-1.5 text-xs font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
               >
-                {state === "sent" ? "Sent ✓" : state === "busy" ? "Sending…" : "Send"}
+                {state === "sent"
+                  ? t("works.feedbackSent")
+                  : state === "busy"
+                    ? t("works.feedbackSending")
+                    : t("works.feedbackSend")}
               </button>
             </div>
           </form>

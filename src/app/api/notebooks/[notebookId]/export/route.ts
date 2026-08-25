@@ -9,6 +9,7 @@ import {
 import { NextResponse } from "next/server";
 import { notebookGuard } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { serverT } from "@/lib/i18n/server";
 
 // Export notebook → Markdown or .docx. Footnotes resolve to
 // `documentTitle, block <blockId>` citations (SPEC.md §8 Phase 7).
@@ -117,15 +118,16 @@ function slug(title: string): string {
 }
 
 export async function GET(req: Request, ctx: { params: Promise<{ notebookId: string }> }) {
+  const t = await serverT();
   const { notebookId } = await ctx.params;
   const denied = await notebookGuard(notebookId);
   if (denied) return denied;
   const format = new URL(req.url).searchParams.get("format") ?? "md";
   if (format !== "md" && format !== "docx") {
-    return NextResponse.json({ error: "format must be md or docx" }, { status: 400 });
+    return NextResponse.json({ error: t("api.exportFormatInvalid") }, { status: 400 });
   }
   const data = await loadExport(notebookId);
-  if (!data) return NextResponse.json({ error: "Corpus not found" }, { status: 404 });
+  if (!data) return NextResponse.json({ error: t("api.corpusNotFound") }, { status: 404 });
 
   if (format === "md") {
     return new NextResponse(toMarkdown(data), {

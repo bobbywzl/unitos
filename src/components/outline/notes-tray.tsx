@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import type { NoteView, SectionView } from "@/lib/types";
 import { ChevronDownIcon, ChevronRightIcon } from "@/components/icons";
+import { useT } from "@/components/lang-provider";
 import { NoteCard } from "@/components/outline/note-card";
 import { filterSections, type OutlineActions } from "@/components/outline/use-outline";
 
@@ -19,6 +20,7 @@ export function NotesTray({
   pending: NoteView[];
   actions: OutlineActions;
 }) {
+  const t = useT();
   const [query, setQuery] = useState("");
   const label = "text-[11px] font-bold tracking-[0.08em] uppercase";
   const shown = filterSections(tree, query);
@@ -33,16 +35,18 @@ export function NotesTray({
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         onKeyDown={(e) => e.key === "Escape" && setQuery("")}
-        placeholder="Search notes"
-        aria-label="Search notes"
+        placeholder={t("outline.searchNotes")}
+        aria-label={t("outline.searchNotes")}
         className="w-full rounded-full bg-card px-4 py-2 text-[13px] shadow-soft outline-none placeholder:text-sand-500"
       />
 
       {shownPending.length > 0 && (
         <div className="flex flex-col gap-2">
           <div className="flex items-baseline gap-2">
-            <span className={`${label} text-clay-800`}>Pending · {shownPending.length}</span>
-            <span className="ml-auto text-[11px] text-sand-500">⏎ accept · ⌫ reject</span>
+            <span className={`${label} text-clay-800`}>
+              {t("outline.pendingHeader", { n: shownPending.length })}
+            </span>
+            <span className="ml-auto text-[11px] text-sand-500">{t("outline.trayKeyHint")}</span>
           </div>
           {shownPending.map((note) => (
             <NoteCard key={note.id} note={note} actions={actions} variant="tray" />
@@ -55,16 +59,18 @@ export function NotesTray({
       ))}
 
       {needle && shown.length === 0 && shownPending.length === 0 && (
-        <p className="text-[13px] text-sand-600">No notes match “{query.trim()}”.</p>
+        <p className="text-[13px] text-sand-600">
+          {t("outline.noNotesMatch", { query: query.trim() })}
+        </p>
       )}
 
       {tree.length === 0 && (
         <p className="text-[13px] text-sand-600">
-          No sections yet. Add one on the{" "}
+          {t("outline.emptyTrayPrefix")}
           <Link href={`/n/${actions.notebookId}/notes`} className="text-clay hover:text-clay-600">
-            notes full page
+            {t("outline.notesFullPage")}
           </Link>
-          .
+          {t("outline.emptyTraySuffix")}
         </p>
       )}
     </div>
@@ -82,6 +88,7 @@ function TraySection({
   labelClass: string;
   nested?: boolean;
 }) {
+  const t = useT();
   const [collapsed, setCollapsed] = useState(false);
   const [composing, setComposing] = useState(false);
   const [draft, setDraft] = useState("");
@@ -106,7 +113,7 @@ function TraySection({
             onClick={() => setComposing(true)}
             className="ml-auto text-[11px] text-sand-600 opacity-0 transition-opacity group-hover/section:opacity-100 focus-visible:opacity-100 hover:text-clay-700"
           >
-            + note
+            {t("outline.addNoteBtn")}
           </button>
         )}
       </div>
@@ -136,7 +143,7 @@ function TraySection({
                   if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) e.currentTarget.form?.requestSubmit();
                   if (e.key === "Escape") setComposing(false);
                 }}
-                placeholder="Write a note (markdown)"
+                placeholder={t("outline.writeNotePlaceholder")}
                 rows={3}
                 className="w-full rounded-2xl bg-card p-3 text-[13.5px] shadow-soft outline-none placeholder:text-sand-500"
               />
@@ -145,14 +152,14 @@ function TraySection({
                   type="submit"
                   className="rounded-full bg-sage-600 px-3.5 py-1 text-xs font-semibold text-sage-fg hover:bg-sage-700"
                 >
-                  Save
+                  {t("common.save")}
                 </button>
                 <button
                   type="button"
                   onClick={() => setComposing(false)}
                   className="rounded-full border border-line px-3 py-1 text-xs text-sand-700 hover:bg-clay-100 hover:text-clay-800"
                 >
-                  Cancel
+                  {t("common.cancel")}
                 </button>
               </div>
             </form>

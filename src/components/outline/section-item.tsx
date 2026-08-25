@@ -71,15 +71,15 @@ export function SectionItem({
           onClick={() => setComposing(true)}
           className="ml-auto text-xs text-sand-600 hover:text-clay-700"
         >
-          + note
+          {t("outline.addNoteBtn")}
         </button>
         <button
           onClick={() => {
-            if (confirm("Delete this section and its notes?")) void actions.deleteSection(section.id);
+            if (confirm(t("outline.confirmDeleteSection"))) void actions.deleteSection(section.id);
           }}
           className="text-xs text-red-500 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 hover:text-red-700"
         >
-          Delete
+          {t("common.delete")}
         </button>
       </div>
 
@@ -117,7 +117,7 @@ export function SectionItem({
                 if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) e.currentTarget.form?.requestSubmit();
                 if (e.key === "Escape") setComposing(false);
               }}
-              placeholder="Write a note (markdown)"
+              placeholder={t("outline.writeNotePlaceholder")}
               rows={3}
               className="w-full rounded-2xl bg-card p-4 text-sm shadow-soft outline-none placeholder:text-sand-500"
             />
@@ -126,14 +126,14 @@ export function SectionItem({
                 type="submit"
                 className="rounded-full bg-sage-600 px-3.5 py-1 text-xs font-semibold text-sage-fg hover:bg-sage-700"
               >
-                Save
+                {t("common.save")}
               </button>
               <button
                 type="button"
                 onClick={() => setComposing(false)}
                 className="rounded-full border border-line px-3 py-1 text-xs text-sand-700 hover:bg-clay-100 hover:text-clay-800"
               >
-                Cancel
+                {t("common.cancel")}
               </button>
             </div>
           </form>

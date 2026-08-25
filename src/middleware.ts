@@ -1,5 +1,14 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { SESSION_COOKIE } from "@/lib/constants";
+import { isLang, LANG_COOKIE, type Lang } from "@/lib/i18n/config";
+import { translate } from "@/lib/i18n/dictionaries";
+
+// The dictionaries are plain data, safe at the edge. The request cookie picks
+// the language for the two error bodies this gate can send.
+function requestLang(request: NextRequest): Lang {
+  const value = request.cookies.get(LANG_COOKIE)?.value;
+  return isLang(value) ? value : "en";
+}
 
 // Edge gate, two doors (Scalae pattern):
 // 1. /admin has its own password cookie gate (lib/admin-auth), deliberately
@@ -18,7 +27,10 @@ export function middleware(request: NextRequest) {
     const adminAuth = request.cookies.get("admin-auth")?.value;
     if (adminAuth !== "true") {
       if (pathname.startsWith("/api/")) {
-        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        return NextResponse.json(
+          { error: translate(requestLang(request), "common.unauthorized") },
+          { status: 401 },
+        );
       }
       return NextResponse.redirect(new URL("/admin/login", request.url));
     }
@@ -37,7 +49,10 @@ export function middleware(request: NextRequest) {
   }
   if (request.cookies.get(SESSION_COOKIE)?.value) return NextResponse.next();
   if (pathname.startsWith("/api/")) {
-    return NextResponse.json({ error: "Sign in to continue." }, { status: 401 });
+    return NextResponse.json(
+      { error: translate(requestLang(request), "common.signInToContinue") },
+      { status: 401 },
+    );
   }
   return NextResponse.redirect(new URL("/signin", request.url));
 }

@@ -2,9 +2,11 @@
 
 import { useEffect, useRef, useState } from "react";
 import { ChevronDownIcon } from "@/components/icons";
+import { useT } from "@/components/lang-provider";
 
 // Markdown and Word fold into one Export menu (design 2b).
 export function ExportMenu({ notebookId }: { notebookId: string }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -31,7 +33,7 @@ export function ExportMenu({ notebookId }: { notebookId: string }) {
         aria-expanded={open}
         className="flex items-center gap-1.5 rounded-full border border-line px-4 py-1.5 text-[13px] text-sand-700 hover:bg-clay-100 hover:text-clay-800"
       >
-        Export
+        {t("outline.export")}
         <ChevronDownIcon size={13} />
       </button>
       {open && (
@@ -41,14 +43,14 @@ export function ExportMenu({ notebookId }: { notebookId: string }) {
             onClick={() => setOpen(false)}
             className="px-4 py-2 text-sm text-sand-700 hover:bg-clay-100 hover:text-clay-800"
           >
-            Markdown
+            {t("outline.exportMarkdown")}
           </a>
           <a
             href={`/api/notebooks/${notebookId}/export?format=docx`}
             onClick={() => setOpen(false)}
             className="px-4 py-2 text-sm text-sand-700 hover:bg-clay-100 hover:text-clay-800"
           >
-            Word
+            {t("outline.exportWord")}
           </a>
         </div>
       )}

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { authEnabled, currentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { serverT } from "@/lib/i18n/server";
 import type { NotebookView, SectionView } from "@/lib/types";
 import { ArrowLeftIcon } from "@/components/icons";
 import { ExportMenu } from "@/components/export-menu";
@@ -31,6 +32,7 @@ export default async function NotesPage(props: { params: Promise<{ notebookId: s
     },
   });
   if (!notebook || (authEnabled() && notebook.userId !== user.id)) notFound();
+  const t = await serverT();
 
   const toView = (s: (typeof notebook.sections)[number]): SectionView => ({
     id: s.id,
@@ -75,14 +77,14 @@ export default async function NotesPage(props: { params: Promise<{ notebookId: s
           className="flex items-center gap-2 rounded-full bg-sand-100 py-[7px] pr-4 pl-3 text-[13px] text-sand-700 shadow-soft hover:bg-clay-100 hover:text-clay-800"
         >
           <ArrowLeftIcon size={15} />
-          Works
+          {t("common.works")}
         </Link>
         <div className="ml-auto flex items-center gap-2">
           <Link
             href={`/n/${notebook.id}`}
             className="rounded-full border border-line px-4 py-1.5 text-[13px] text-sand-700 hover:bg-clay-100 hover:text-clay-800"
           >
-            Reader
+            {t("outline.reader")}
           </Link>
           <ExportMenu notebookId={notebook.id} />
         </div>

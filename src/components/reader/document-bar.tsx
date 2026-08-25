@@ -3,7 +3,9 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
+import { useT } from "@/components/lang-provider";
 import { Logo } from "@/components/logo";
+import type { TFunc } from "@/lib/i18n/dictionaries";
 import { readNdjson } from "@/lib/ndjson";
 import { PARSER_VERSION } from "@/lib/parse/types";
 import { MAX_VIDEO_BYTES, UPLOAD_CHUNK_BYTES } from "@/lib/video/types";
@@ -41,9 +43,9 @@ async function readJson<T>(res: Response): Promise<T | null> {
   return res.json().catch(() => null) as Promise<T | null>;
 }
 
-function statusMessage(status: number): string {
-  if (status === 413) return "Upload too large for the server.";
-  return `Request failed (${status})`;
+function statusMessage(t: TFunc, status: number): string {
+  if (status === 413) return t("panes.uploadTooLarge");
+  return t("panes.requestFailedStatus", { status });
 }
 
 // Vercel caps a request body at about 4.5 MB, so bigger files upload in chunks
@@ -76,6 +78,7 @@ export function DocumentBar({
   documents: AttachedDocument[];
   activeId: string | null;
 }) {
+  const t = useT();
   const router = useRouter();
   const searchParams = useSearchParams();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -152,7 +155,7 @@ export function DocumentBar({
       );
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Re-parse failed");
+      setError(err instanceof Error ? err.message : t("panes.reparseFailed"));
     } finally {
       setPhase(null);
     }
@@ -200,7 +203,7 @@ export function DocumentBar({
     const res = await send(emit);
     if (!res.ok) {
       const detail = await readJson<{ error?: string }>(res);
-      throw new Error(detail?.error ?? statusMessage(res.status));
+      throw new Error(detail?.error ?? statusMessage(t, res.status));
     }
     let result: IngestEvent | null = null;
     for await (const event of readNdjson<IngestEvent>(res)) {
@@ -211,7 +214,7 @@ export function DocumentBar({
       }
     }
     if (!result || "error" in result) {
-      throw new Error(result && "error" in result ? result.error : "Upload failed");
+      throw new Error(result && "error" in result ? result.error : t("panes.uploadFailed"));
     }
     setPhase((p) => (p ? { ...p, steps: completeIngestSteps(p.steps) } : p));
     await sleep(250); // let the last checkmark register before the pill clears
@@ -237,9 +240,15 @@ export function DocumentBar({
       });
       if (!res.ok) {
         const detail = await readJson<{ error?: string }>(res);
-        throw new Error(detail?.error ?? statusMessage(res.status));
+        throw new Error(detail?.error ?? statusMessage(t, res.status));
       }
-      emit("receive", `${megabytes(Math.min(sent + CHUNK_BYTES, file.size))} of ${totalLabel} MB`);
+      emit(
+        "receive",
+        t("panes.uploadProgress", {
+          sent: megabytes(Math.min(sent + CHUNK_BYTES, file.size)),
+          total: totalLabel,
+        }),
+      );
     }
     return fetch("/api/uploads/complete", {
       method: "POST",
@@ -256,10 +265,10 @@ export function DocumentBar({
         const file = files[i];
         const video = isVideoFile(file);
         if (video && file.size > MAX_VIDEO_BYTES) {
-          throw new Error(`${file.name} is larger than 200 MB.`);
+          throw new Error(t("panes.fileTooLarge", { name: file.name, mb: 200 }));
         }
         if (!video && file.size > MAX_PDF_BYTES) {
-          throw new Error(`${file.name} is larger than 50 MB.`);
+          throw new Error(t("panes.fileTooLarge", { name: file.name, mb: 50 }));
         }
         const label = files.length > 1 ? `${file.name} (${i + 1}/${files.length})` : file.name;
         const result = await runIngest(label, video ? "video" : "pdf", (emit) => {
@@ -273,7 +282,7 @@ export function DocumentBar({
         lastId = result.id;
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Upload failed");
+      setError(err instanceof Error ? err.message : t("panes.uploadFailed"));
     } finally {
       setPhase(null);
       if (fileRef.current) fileRef.current.value = "";
@@ -314,7 +323,7 @@ export function DocumentBar({
         (f) => f.type === "application/pdf" || f.name.toLowerCase().endsWith(".pdf") || isVideoFile(f),
       );
       if (accepted.length === 0) {
-        setError("Drop PDF or video files.");
+        setError(t("panes.dropPdfOrVideo"));
         return;
       }
       void uploadFiles(accepted);
@@ -351,7 +360,7 @@ export function DocumentBar({
       open(result.id);
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Ingest failed");
+      setError(err instanceof Error ? err.message : t("panes.ingestFailed"));
     } finally {
       setPhase(null);
     }
@@ -363,7 +372,7 @@ export function DocumentBar({
     const trimmed = videoUrl.trim();
     if (!trimmed) return;
     if (!parseYouTubeId(trimmed)) {
-      setError("Only YouTube links work here. Paste a watch, shorts, or youtu.be link.");
+      setError(t("panes.onlyYouTube"));
       return;
     }
     setError(null);
@@ -380,7 +389,7 @@ export function DocumentBar({
       open(result.id);
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Ingest failed");
+      setError(err instanceof Error ? err.message : t("panes.ingestFailed"));
     } finally {
       setPhase(null);
     }
@@ -392,7 +401,7 @@ export function DocumentBar({
       const res = await fetch("/api/documents");
       const json = await readJson<LibraryDocument[]>(res);
       if (res.ok && json) setLibrary(json);
-      else setError(statusMessage(res.status));
+      else setError(statusMessage(t, res.status));
     }
   }
 
@@ -412,13 +421,13 @@ export function DocumentBar({
   }
 
   async function removeFromLibrary(documentId: string) {
-    if (!confirm("Delete this document from the library?")) return;
+    if (!confirm(t("panes.confirmDeleteFromLibrary"))) return;
     setError(null);
     try {
       await api(`/api/documents/${documentId}`, "DELETE");
       setLibrary((prev) => (prev ? prev.filter((d) => d.id !== documentId) : prev));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Delete failed");
+      setError(err instanceof Error ? err.message : t("panes.deleteFailed"));
     }
   }
 
@@ -443,9 +452,9 @@ export function DocumentBar({
           </button>
           <button
             onClick={() => setPillMenu(pillMenu === d.id ? null : d.id)}
-            aria-label={`Document actions: ${d.title}`}
+            aria-label={t("panes.documentActionsFor", { title: d.title })}
             aria-expanded={pillMenu === d.id}
-            title="Document actions"
+            title={t("panes.documentActions")}
             className={`absolute right-2 flex size-5 items-center justify-center rounded-full ${
               d.id === activeId
                 ? "text-sand-400 hover:bg-sand-800 hover:text-paper"
@@ -468,9 +477,9 @@ export function DocumentBar({
                   }}
                   disabled={phase !== null}
                   className={`${menuItem} disabled:opacity-40`}
-                  title="Parse this document again with the current parser"
+                  title={t("panes.reparseDocumentTitle")}
                 >
-                  Re-parse document
+                  {t("panes.reparseDocument")}
                 </button>
               )}
               <button
@@ -482,18 +491,18 @@ export function DocumentBar({
                 className={`${menuItem} disabled:opacity-40`}
                 title={
                   d.id === activeId
-                    ? "Print this document, article only"
-                    : "Open the document to print it"
+                    ? t("panes.printDocumentTitle")
+                    : t("panes.printDocumentOpenFirst")
                 }
               >
-                Print document
+                {t("panes.printDocument")}
               </button>
               <button
                 onClick={() => void detach(d.id)}
                 className="px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-950"
-                title="Detach this document from this corpus"
+                title={t("panes.detachDocumentTitle")}
               >
-                Detach document
+                {t("panes.detachDocument")}
               </button>
             </div>
           )}
@@ -503,7 +512,7 @@ export function DocumentBar({
       <div ref={menuRef} className="relative shrink-0">
         <button
           onClick={() => setMenu(menu === null ? "root" : null)}
-          aria-label="Add a document"
+          aria-label={t("panes.addDocument")}
           aria-expanded={menu !== null}
           className="flex size-8 items-center justify-center rounded-full border border-dashed border-sand-400 text-sand-600 hover:bg-clay-100 hover:text-clay-800"
         >
@@ -534,16 +543,16 @@ export function DocumentBar({
                   disabled={phase !== null}
                   className={`${menuItem} disabled:opacity-40`}
                 >
-                  Upload PDF
+                  {t("panes.uploadPdf")}
                 </button>
                 <button onClick={() => setMenu("video")} className={menuItem}>
-                  Upload video
+                  {t("panes.uploadVideo")}
                 </button>
                 <button onClick={() => setMenu("url")} className={menuItem}>
-                  Add URL
+                  {t("panes.addUrl")}
                 </button>
                 <button onClick={() => void openLibrary()} className={menuItem}>
-                  Library
+                  {t("panes.library")}
                 </button>
               </div>
             )}
@@ -558,10 +567,10 @@ export function DocumentBar({
                   disabled={phase !== null}
                   className="rounded-full bg-clay px-4 py-2 text-xs font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
                 >
-                  Choose a video file
+                  {t("panes.chooseVideoFile")}
                 </button>
                 <span className="text-center text-[11px] text-sand-500">
-                  mp4, webm, ogg, or mov · up to 200 MB · or a YouTube link:
+                  {t("panes.videoHint")}
                 </span>
                 <form
                   className="flex flex-col gap-2"
@@ -575,7 +584,7 @@ export function DocumentBar({
                     value={videoUrl}
                     onChange={(e) => setVideoUrl(e.target.value)}
                     placeholder="https://www.youtube.com/watch?v=…"
-                    aria-label="YouTube link"
+                    aria-label={t("panes.youtubeLink")}
                     className="w-full rounded-full bg-sand-100 px-4 py-2 text-sm outline-none placeholder:text-sand-500"
                   />
                   <div className="flex items-center gap-2">
@@ -584,14 +593,14 @@ export function DocumentBar({
                       disabled={phase !== null}
                       className="rounded-full bg-clay px-4 py-1.5 text-xs font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
                     >
-                      Add video
+                      {t("panes.addVideo")}
                     </button>
                     <button
                       type="button"
                       onClick={() => setMenu("root")}
                       className="rounded-full border border-line px-3 py-1 text-xs text-sand-700 hover:bg-clay-100 hover:text-clay-800"
                     >
-                      Back
+                      {t("panes.back")}
                     </button>
                   </div>
                 </form>
@@ -611,7 +620,7 @@ export function DocumentBar({
                   value={url}
                   onChange={(e) => setUrl(e.target.value)}
                   placeholder="https://…"
-                  aria-label="Document URL"
+                  aria-label={t("panes.documentUrl")}
                   className="w-full rounded-full bg-sand-100 px-4 py-2 text-sm outline-none placeholder:text-sand-500"
                 />
                 <div className="flex items-center gap-2">
@@ -620,14 +629,14 @@ export function DocumentBar({
                     disabled={phase !== null}
                     className="rounded-full bg-clay px-4 py-1.5 text-xs font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
                   >
-                    Ingest
+                    {t("panes.ingest")}
                   </button>
                   <button
                     type="button"
                     onClick={() => setMenu("root")}
                     className="rounded-full border border-line px-3 py-1 text-xs text-sand-700 hover:bg-clay-100 hover:text-clay-800"
                   >
-                    Back
+                    {t("panes.back")}
                   </button>
                 </div>
               </form>
@@ -635,10 +644,12 @@ export function DocumentBar({
 
             {menu === "library" && (
               <ul className="max-h-64 overflow-y-auto py-1">
-                {library === null && <li className="px-4 py-2 text-sm text-sand-500">Loading…</li>}
+                {library === null && (
+                  <li className="px-4 py-2 text-sm text-sand-500">{t("common.loading")}</li>
+                )}
                 {library !== null && library.filter((d) => !attachedIds.has(d.id)).length === 0 && (
                   <li className="px-4 py-2 text-sm text-sand-500">
-                    No other documents in the library.
+                    {t("panes.noOtherDocuments")}
                   </li>
                 )}
                 {library
@@ -650,12 +661,14 @@ export function DocumentBar({
                         className="min-w-0 flex-1 truncate rounded-full px-3 py-2 text-left text-sm text-sand-700 hover:bg-clay-100 hover:text-clay-800"
                       >
                         {d.title}{" "}
-                        <span className="text-xs text-sand-500">({d._count.blocks} blocks)</span>
+                        <span className="text-xs text-sand-500">
+                          {t("panes.blockCount", { n: d._count.blocks })}
+                        </span>
                       </button>
                       <button
                         onClick={() => void removeFromLibrary(d.id)}
                         className="rounded-full px-2 py-1 text-xs text-sand-400 hover:text-red-500"
-                        title="Delete from the library"
+                        title={t("panes.deleteFromLibrary")}
                       >
                         ✕
                       </button>
@@ -698,7 +711,7 @@ export function DocumentBar({
           <div className="flex flex-col items-center gap-3 rounded-[28px] border-2 border-dashed border-sand-400 bg-card px-14 py-10 shadow-float">
             <Logo size={72} className="text-clay" />
             <p className="text-sm font-semibold text-sand-800">
-              Drop PDFs or videos to add them to this work
+              {t("panes.dropToAdd")}
             </p>
           </div>
         </div>

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import { useT } from "@/components/lang-provider";
 import { Instruments } from "@/components/works/instruments";
 
 export type WorkItem = {
@@ -12,10 +13,6 @@ export type WorkItem = {
   pendingCount: number;
   updatedAt: string;
 };
-
-function plural(n: number, word: string) {
-  return `${n} ${word}${n === 1 ? "" : "s"}`;
-}
 
 // A work: a 5.5 × 8.5 book with a spine, its counts as tags, and the instrument
 // fan behind the cover (design 2a). Rename and delete sit behind the quiet ⋯.
@@ -28,6 +25,7 @@ export function WorkCard({
   onRename: (id: string, current: string) => void;
   onDelete: (id: string) => void;
 }) {
+  const t = useT();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -63,14 +61,18 @@ export function WorkCard({
         <span aria-hidden className="mx-auto mt-4 size-2 rounded-full bg-sage-500" />
         <span className="mt-auto flex flex-wrap justify-center gap-1.5">
           <span className="rounded-full bg-sand-200 px-3 py-1 text-xs font-semibold text-sand-700">
-            {plural(work.sectionCount, "section")}
+            {t(work.sectionCount === 1 ? "works.sectionCountOne" : "works.sectionCountOther", {
+              n: work.sectionCount,
+            })}
           </span>
           <span className="rounded-full bg-sand-200 px-3 py-1 text-xs font-semibold text-sand-700">
-            {plural(work.documentCount, "document")}
+            {t(work.documentCount === 1 ? "works.documentCountOne" : "works.documentCountOther", {
+              n: work.documentCount,
+            })}
           </span>
           {work.pendingCount > 0 && (
             <span className="rounded-full bg-clay-200 px-3 py-1 text-xs font-semibold text-clay-800">
-              {work.pendingCount} pending
+              {t("works.pendingCount", { n: work.pendingCount })}
             </span>
           )}
         </span>
@@ -79,7 +81,7 @@ export function WorkCard({
       <div ref={menuRef} className="absolute top-2.5 right-2.5 z-2">
         <button
           onClick={() => setMenuOpen(!menuOpen)}
-          aria-label={`More actions for ${work.title}`}
+          aria-label={t("works.moreActionsFor", { title: work.title })}
           aria-expanded={menuOpen}
           className="flex size-8 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-800"
         >
@@ -104,7 +106,7 @@ export function WorkCard({
               href={`/n/${work.id}/notes`}
               className="px-4 py-2 text-left text-sm text-sand-700 hover:bg-clay-100 hover:text-clay-800"
             >
-              Notes
+              {t("works.notes")}
             </Link>
             <button
               onClick={() => {
@@ -113,7 +115,7 @@ export function WorkCard({
               }}
               className="px-4 py-2 text-left text-sm text-sand-700 hover:bg-clay-100 hover:text-clay-800"
             >
-              Rename
+              {t("works.rename")}
             </button>
             <button
               onClick={() => {
@@ -122,7 +124,7 @@ export function WorkCard({
               }}
               className="px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-950"
             >
-              Delete
+              {t("common.delete")}
             </button>
           </div>
         )}

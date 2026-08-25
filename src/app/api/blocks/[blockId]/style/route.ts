@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
+import { serverT } from "@/lib/i18n/server";
 import { parseBody } from "@/lib/validate";
 
 const styleSchema = z.object({
@@ -14,17 +15,18 @@ type StyleSpan = { start: number; end: number; style: string; quotedText: string
 // Toggle an inline decoration span. Styling is a layer over the text, never
 // markup inside it, so anchor offsets stay untouched (SPEC.md §5).
 export async function POST(req: Request, ctx: { params: Promise<{ blockId: string }> }) {
+  const t = await serverT();
   const { blockId } = await ctx.params;
   const { data, error } = await parseBody(req, styleSchema);
   if (error) return error;
 
   const block = await db.block.findUnique({ where: { id: blockId } });
-  if (!block) return NextResponse.json({ error: "Block not found" }, { status: 404 });
+  if (!block) return NextResponse.json({ error: t("api.blockNotFound") }, { status: 404 });
   if (block.type === "TABLE" || block.type === "FIGURE") {
-    return NextResponse.json({ error: "Only text blocks can be styled" }, { status: 400 });
+    return NextResponse.json({ error: t("api.onlyTextBlocksStyled") }, { status: 400 });
   }
   if (data.endOffset <= data.startOffset || data.endOffset > block.text.length) {
-    return NextResponse.json({ error: "Style offsets are invalid" }, { status: 400 });
+    return NextResponse.json({ error: t("api.styleOffsetsInvalid") }, { status: 400 });
   }
 
   const spans = (Array.isArray(block.styles) ? block.styles : []) as unknown as StyleSpan[];

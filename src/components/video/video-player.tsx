@@ -18,6 +18,7 @@ import {
   SpinnerIcon,
   VolumeIcon,
 } from "@/components/icons";
+import { useT } from "@/components/lang-provider";
 import { markdownPreview } from "@/components/markdown";
 import {
   formatTime,
@@ -204,6 +205,7 @@ export const VideoPlayer = forwardRef<
   },
   ref,
 ) {
+  const t = useT();
   const containerRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -216,7 +218,9 @@ export const VideoPlayer = forwardRef<
   const [duration, setDuration] = useState(storedDuration ?? 0);
   const [videoAspect, setVideoAspect] = useState(aspect);
   const [waiting, setWaiting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // The dictionary key, not the text: the message stays right if the language
+  // changes after the error.
+  const [error, setError] = useState<"youtubeError" | "videoError" | null>(null);
   const [fullscreen, setFullscreen] = useState(false);
   // The frame's content box inside the stage (letterbox math); the overlay and
   // the frame both size to it, so percent coordinates always mean the frame.
@@ -341,8 +345,7 @@ export const VideoPlayer = forwardRef<
               setWaiting(false);
             }
           },
-          onError: () =>
-            setError("This YouTube video did not play. It may be private or embedding-disabled."),
+          onError: () => setError("youtubeError"),
         },
       });
     });
@@ -570,7 +573,7 @@ export const VideoPlayer = forwardRef<
                   });
                 }
               }}
-              onError={() => setError("This video did not play in this browser.")}
+              onError={() => setError("videoError")}
               className="h-full w-full"
             />
           ) : (
@@ -694,7 +697,7 @@ export const VideoPlayer = forwardRef<
               className="absolute top-3 left-1/2 z-10 -translate-x-1/2 rounded-full bg-black/70 px-4 py-1.5 text-xs font-semibold backdrop-blur-sm hover:bg-black/85"
               style={{ color: STAGE_TEXT }}
             >
-              Use the whole frame
+              {t("video.useWholeFrame")}
             </button>
           )}
 
@@ -713,7 +716,7 @@ export const VideoPlayer = forwardRef<
             className="absolute inset-0 flex items-center justify-center px-8 text-center text-sm"
             style={{ color: STAGE_MUTED }}
           >
-            {error}
+            {t(error === "youtubeError" ? "video.youtubeError" : "video.videoError")}
           </div>
         )}
       </div>
@@ -722,8 +725,8 @@ export const VideoPlayer = forwardRef<
       <div className="flex items-center gap-2 px-3 py-2.5">
         <button
           onClick={togglePlay}
-          aria-label={playing ? "Pause" : "Play"}
-          title={playing ? "Pause (space)" : "Play (space)"}
+          aria-label={playing ? t("video.pause") : t("video.play")}
+          title={playing ? t("video.pauseSpace") : t("video.playSpace")}
           className={CONTROL_BUTTON}
         >
           {playing ? <PauseIcon size={18} /> : <PlayIcon size={18} />}
@@ -742,7 +745,7 @@ export const VideoPlayer = forwardRef<
           onPointerUp={endScrub}
           onPointerCancel={endScrub}
           role="slider"
-          aria-label="Seek"
+          aria-label={t("video.seek")}
           aria-valuemin={0}
           aria-valuemax={Math.round(duration)}
           aria-valuenow={Math.round(time)}
@@ -769,7 +772,7 @@ export const VideoPlayer = forwardRef<
                   e.stopPropagation();
                   seek(a.startTime, { play: false });
                 }}
-                aria-label={`Annotation at ${formatTime(a.startTime)}`}
+                aria-label={t("video.annotationAt", { time: formatTime(a.startTime) })}
                 title={`${formatTimeRange(a.startTime, a.endTime)} · ${markdownPreview(a.content).slice(0, 80)}`}
                 className="absolute top-1/2 size-[9px] -translate-x-1/2 -translate-y-1/2 rounded-full border border-black/40 bg-clay-300 hover:scale-125"
                 style={{ left: `${(a.startTime / duration) * 100}%` }}
@@ -779,8 +782,8 @@ export const VideoPlayer = forwardRef<
 
         <button
           onClick={() => setMuted((m) => !m)}
-          aria-label={muted ? "Unmute" : "Mute"}
-          title={muted ? "Unmute" : "Mute"}
+          aria-label={muted ? t("video.unmute") : t("video.mute")}
+          title={muted ? t("video.unmute") : t("video.mute")}
           className={CONTROL_BUTTON}
         >
           {muted ? <MuteIcon size={17} /> : <VolumeIcon size={17} />}
@@ -788,8 +791,8 @@ export const VideoPlayer = forwardRef<
 
         <button
           onClick={onAnnotate}
-          aria-label="Annotate"
-          title="Circle a spot on the frame and comment on it"
+          aria-label={t("video.annotate")}
+          title={t("video.annotateTitle")}
           className={
             drawing
               ? "flex size-8 shrink-0 items-center justify-center rounded-full bg-clay text-clay-fg"
@@ -801,8 +804,8 @@ export const VideoPlayer = forwardRef<
 
         <button
           onClick={toggleFullscreen}
-          aria-label={fullscreen ? "Exit fullscreen" : "Fullscreen"}
-          title={fullscreen ? "Exit fullscreen (f)" : "Fullscreen (f)"}
+          aria-label={fullscreen ? t("video.exitFullscreen") : t("video.fullscreen")}
+          title={fullscreen ? t("video.exitFullscreenF") : t("video.fullscreenF")}
           className={CONTROL_BUTTON}
         >
           <FullscreenIcon size={17} />

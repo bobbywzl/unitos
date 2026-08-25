@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { notebookGuard } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { serverT } from "@/lib/i18n/server";
 import { parseBody } from "@/lib/validate";
 
 const patchSchema = z.object({
@@ -20,6 +21,7 @@ const patchSchema = z.object({
 });
 
 export async function PATCH(req: Request, ctx: { params: Promise<{ notebookId: string }> }) {
+  const t = await serverT();
   const { notebookId } = await ctx.params;
   const denied = await notebookGuard(notebookId);
   if (denied) return denied;
@@ -44,15 +46,16 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ notebookId: s
       },
     })
     .catch(() => null);
-  if (!notebook) return NextResponse.json({ error: "Corpus not found" }, { status: 404 });
+  if (!notebook) return NextResponse.json({ error: t("api.corpusNotFound") }, { status: 404 });
   return NextResponse.json(notebook);
 }
 
 export async function DELETE(_req: Request, ctx: { params: Promise<{ notebookId: string }> }) {
+  const t = await serverT();
   const { notebookId } = await ctx.params;
   const denied = await notebookGuard(notebookId);
   if (denied) return denied;
   const notebook = await db.notebook.delete({ where: { id: notebookId } }).catch(() => null);
-  if (!notebook) return NextResponse.json({ error: "Corpus not found" }, { status: 404 });
+  if (!notebook) return NextResponse.json({ error: t("api.corpusNotFound") }, { status: 404 });
   return NextResponse.json({ ok: true });
 }

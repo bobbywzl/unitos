@@ -4,6 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { SearchIcon, SpinnerIcon } from "@/components/icons";
+import { useT } from "@/components/lang-provider";
 import { Markdown } from "@/components/markdown";
 import { Visual } from "@/components/video/visual";
 import type { ThumbnailSource } from "@/components/video/use-thumbnails";
@@ -69,6 +70,7 @@ export function VideoPane({
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const t = useT();
   const playerRef = useRef<VideoPlayerHandle>(null);
   const currentTimeRef = useRef(0);
   const [activeLineId, setActiveLineId] = useState<string | null>(null);
@@ -128,10 +130,10 @@ export function VideoPane({
       // 409 = a run started elsewhere (the add already kicked one off); benign.
       if (!res.ok && res.status !== 409) {
         const detail = (await res.json().catch(() => null)) as { error?: string } | null;
-        throw new Error(detail?.error ?? `Request failed (${res.status})`);
+        throw new Error(detail?.error ?? t("video.requestFailedStatus", { status: res.status }));
       }
     } catch (err) {
-      setTranscribeError(err instanceof Error ? err.message : "Transcription failed");
+      setTranscribeError(err instanceof Error ? err.message : t("video.transcriptionFailed"));
     } finally {
       setTranscribing(false);
       router.refresh();
@@ -161,7 +163,7 @@ export function VideoPane({
     (video.transcriptStatus === "FAILED"
       ? video.transcriptError
       : video.transcriptStale
-        ? "The last run did not finish."
+        ? t("video.lastRunUnfinished")
         : null);
 
   function flash(sourceId: string) {
@@ -255,12 +257,12 @@ export function VideoPane({
     const startTime = parseTimeInput(composer.startTime);
     const endTime = parseTimeInput(composer.endTime);
     if (startTime === null || endTime === null || endTime <= startTime) {
-      setComposer({ ...composer, error: "Times are m:ss, and the end must be after the start." });
+      setComposer({ ...composer, error: t("video.timesInvalid") });
       return;
     }
     const text = composer.text.trim();
     if (!text) {
-      setComposer({ ...composer, error: "Write the comment first." });
+      setComposer({ ...composer, error: t("video.writeCommentFirst") });
       return;
     }
     setComposer({ ...composer, busy: true, error: null });
@@ -289,7 +291,9 @@ export function VideoPane({
       router.refresh();
     } catch (err) {
       setComposer((c) =>
-        c ? { ...c, busy: false, error: err instanceof Error ? err.message : "Save failed" } : c,
+        c
+          ? { ...c, busy: false, error: err instanceof Error ? err.message : t("video.saveFailed") }
+          : c,
       );
     }
   }
@@ -302,7 +306,7 @@ export function VideoPane({
     const startTime = parseTimeInput(composer.startTime);
     const endTime = parseTimeInput(composer.endTime);
     if (startTime === null || endTime === null || endTime <= startTime) {
-      setComposer({ ...composer, error: "Times are m:ss, and the end must be after the start." });
+      setComposer({ ...composer, error: t("video.timesInvalid") });
       return;
     }
     setComposer({ ...composer, busy: true, error: null });
@@ -336,7 +340,7 @@ export function VideoPane({
       });
       if (!res.ok || !res.body) {
         const detail = (await res.json().catch(() => null)) as { error?: string } | null;
-        throw new Error(detail?.error ?? `Request failed (${res.status})`);
+        throw new Error(detail?.error ?? t("video.requestFailedStatus", { status: res.status }));
       }
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
@@ -356,7 +360,7 @@ export function VideoPane({
       setExplaining({
         content: "",
         done: true,
-        error: err instanceof Error ? err.message : "Explain failed",
+        error: err instanceof Error ? err.message : t("video.explainFailed"),
       });
     } finally {
       setComposer((c) => (c ? { ...c, busy: false } : c));
@@ -409,7 +413,7 @@ export function VideoPane({
         style={{ maxWidth: `max(640px, calc((100vh - 320px) * ${aspect}))` }}
       >
         <p className="mb-2.5 text-[11px] font-bold tracking-[0.09em] text-clay-700 uppercase">
-          {video.kind === "YOUTUBE" ? "YouTube" : "Video"}
+          {video.kind === "YOUTUBE" ? "YouTube" : t("video.kindVideo")}
           {video.duration !== null ? ` · ${formatTime(video.duration)}` : ""}
         </p>
         <h2 className="mb-[26px] text-[33px]">{title}</h2>
@@ -442,7 +446,7 @@ export function VideoPane({
                 onAnimationEnd={() => setHint(false)}
                 className="hint-fade rounded-full bg-black/75 px-5 py-2.5 text-[12.5px] font-medium whitespace-nowrap text-[#f5ead8] backdrop-blur-sm"
               >
-                Circle a spot to comment · Search the video · Click a transcript line to seek
+                {t("video.hintCaption")}
               </div>
             </div>
           )}
@@ -461,7 +465,7 @@ export function VideoPane({
             leading={
               <button
                 onClick={toggleAnnotate}
-                title="Pause and circle a spot on the frame — or take the whole frame — then comment or explain"
+                title={t("video.circleCommentTitle")}
                 className={
                   annotateOn
                     ? "flex shrink-0 items-center gap-1.5 rounded-full bg-clay px-3.5 py-2 text-xs font-semibold text-clay-fg"
@@ -469,22 +473,22 @@ export function VideoPane({
                 }
               >
                 <SearchIcon size={13} />
-                Circle &amp; comment
+                {t("video.circleComment")}
               </button>
             }
             trailing={
               transcript.length > 0 ? (
                 <span className="shrink-0 rounded-full bg-sand-100 px-3 py-1.5 text-[11.5px] font-semibold text-sand-600">
-                  {transcript.length} lines
+                  {t("video.linesCount", { n: transcript.length })}
                 </span>
               ) : transcriptFailedMessage ? (
                 <span className="shrink-0 rounded-full bg-sand-100 px-3 py-1.5 text-[11.5px] font-semibold text-red-500">
-                  Transcript failed
+                  {t("video.transcriptFailedChip")}
                 </span>
               ) : (
                 <span className="flex shrink-0 items-center gap-1.5 rounded-full bg-sand-100 px-3 py-1.5 text-[11.5px] font-semibold text-sand-600">
                   <SpinnerIcon size={12} className="text-clay motion-safe:animate-spin" />
-                  Transcribing…
+                  {t("video.transcribing")}
                 </span>
               )
             }
@@ -492,24 +496,21 @@ export function VideoPane({
         </div>
 
         {drawing && (
-          <p className="mt-3 text-[13px] text-sand-600">
-            Draw around a spot on the frame — the loop closes itself — or use the whole frame.
-            Esc cancels.
-          </p>
+          <p className="mt-3 text-[13px] text-sand-600">{t("video.drawHelp")}</p>
         )}
 
         {openNote && !explaining && (
           <div className="mt-4 rounded-2xl bg-card p-4 shadow-float">
             <div className="mb-2 flex items-center gap-2">
               <span className="text-[11px] font-bold tracking-[0.08em] text-sand-600 uppercase">
-                {openNote.kind === "explain" ? "Explanation" : "Comment"}
+                {openNote.kind === "explain" ? t("video.explanation") : t("video.comment")}
               </span>
               <span className="rounded-full bg-clay-100 px-2.5 py-0.5 text-[11px] font-semibold tabular-nums text-clay-800">
                 {formatTimeRange(openNote.startTime, openNote.endTime)}
               </span>
               <button
                 onClick={() => setOpenNote(null)}
-                aria-label="Close"
+                aria-label={t("common.close")}
                 className="ml-auto rounded-full px-1.5 text-sand-500 hover:text-clay-800"
               >
                 ✕
@@ -523,20 +524,20 @@ export function VideoPane({
           <div className="mt-4 rounded-2xl bg-card p-4 shadow-float">
             <div className="mb-2 flex items-center gap-2">
               <span className="text-[11px] font-bold tracking-[0.08em] text-sand-600 uppercase">
-                Explanation
+                {t("video.explanation")}
               </span>
               {!explaining.done && (
-                <span className="text-xs text-sand-500">streaming…</span>
+                <span className="text-xs text-sand-500">{t("video.streaming")}</span>
               )}
               {explaining.done && !explaining.error && (
-                <span className="text-xs text-sand-500">Saved as an annotation</span>
+                <span className="text-xs text-sand-500">{t("video.savedAsAnnotation")}</span>
               )}
               <button
                 onClick={() => {
                   setExplaining(null);
                   setComposer(null);
                 }}
-                aria-label="Close"
+                aria-label={t("common.close")}
                 className="ml-auto rounded-full px-1.5 text-sand-500 hover:text-clay-800"
               >
                 ✕
@@ -551,29 +552,27 @@ export function VideoPane({
           <div className="mt-4 rounded-2xl bg-card p-4 shadow-float">
             <div className="mb-2.5 flex items-center gap-2">
               <span className="text-[11px] font-bold tracking-[0.08em] text-sand-600 uppercase">
-                New annotation
+                {t("video.newAnnotation")}
               </span>
               <input
                 value={composer.startTime}
                 onChange={(e) => setComposer({ ...composer, startTime: e.target.value })}
-                aria-label="Start time"
+                aria-label={t("video.startTime")}
                 className="w-16 rounded-full bg-sand-100 px-2.5 py-1 text-center text-xs tabular-nums outline-none"
               />
-              <span className="text-xs text-sand-500">to</span>
+              <span className="text-xs text-sand-500">{t("video.to")}</span>
               <input
                 value={composer.endTime}
                 onChange={(e) => setComposer({ ...composer, endTime: e.target.value })}
-                aria-label="End time"
+                aria-label={t("video.endTime")}
                 className="w-16 rounded-full bg-sand-100 px-2.5 py-1 text-center text-xs tabular-nums outline-none"
               />
               <span className="text-xs text-sand-500">
-                {composer.region
-                  ? "The annotation shows whenever playback is inside this range."
-                  : "Whole frame: the comment shows over the video in this range."}
+                {composer.region ? t("video.regionShows") : t("video.wholeFrameShows")}
               </span>
               <button
                 onClick={() => setComposer(null)}
-                aria-label="Close"
+                aria-label={t("common.close")}
                 className="ml-auto rounded-full px-1.5 text-sand-500 hover:text-clay-800"
               >
                 ✕
@@ -588,7 +587,9 @@ export function VideoPane({
                 if (e.key === "Escape") setComposer(null);
               }}
               placeholder={
-                composer.region ? "Comment on the circled spot" : "Comment on this moment"
+                composer.region
+                  ? t("video.commentCircledPlaceholder")
+                  : t("video.commentMomentPlaceholder")
               }
               rows={2}
               className="w-full resize-y rounded-2xl bg-sand-100 px-3.5 py-2.5 text-sm outline-none placeholder:text-sand-500"
@@ -600,21 +601,21 @@ export function VideoPane({
                 disabled={composer.busy}
                 className="rounded-full bg-clay px-4 py-1.5 text-xs font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
               >
-                {composer.busy ? "Saving…" : "Save annotation"}
+                {composer.busy ? t("common.saving") : t("video.saveAnnotation")}
               </button>
               <button
                 onClick={() => void explainComposer()}
                 disabled={composer.busy}
-                title="The model reads the frame and the transcript; the explanation saves as an annotation here"
+                title={t("video.explainButtonTitle")}
                 className="rounded-full border border-line px-3.5 py-1.5 text-xs font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40"
               >
-                {composer.region ? "Explain the circled spot" : "Explain this moment"}
+                {composer.region ? t("video.explainCircled") : t("video.explainThisMoment")}
               </button>
               <button
                 onClick={() => setComposer(null)}
                 className="rounded-full border border-line px-3.5 py-1.5 text-xs text-sand-700 hover:bg-clay-100 hover:text-clay-800"
               >
-                Cancel
+                {t("common.cancel")}
               </button>
             </div>
           </div>

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { notebookGuard } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { serverT } from "@/lib/i18n/server";
 import { distillationList, extractionList } from "@/lib/types";
 import { parseBody } from "@/lib/validate";
 
@@ -19,6 +20,7 @@ export async function PATCH(
   req: Request,
   ctx: { params: Promise<{ notebookId: string; documentId: string }> },
 ) {
+  const t = await serverT();
   const { notebookId, documentId } = await ctx.params;
   const denied = await notebookGuard(notebookId);
   if (denied) return denied;
@@ -28,7 +30,7 @@ export async function PATCH(
     where: { notebookId_documentId: { notebookId, documentId } },
   });
   if (!attachment) {
-    return NextResponse.json({ error: "Document is not attached" }, { status: 404 });
+    return NextResponse.json({ error: t("api.documentNotAttached") }, { status: 404 });
   }
   await db.notebookDocument.update({
     where: { notebookId_documentId: { notebookId, documentId } },
@@ -52,12 +54,13 @@ export async function DELETE(
   _req: Request,
   ctx: { params: Promise<{ notebookId: string; documentId: string }> },
 ) {
+  const t = await serverT();
   const { notebookId, documentId } = await ctx.params;
   const denied = await notebookGuard(notebookId);
   if (denied) return denied;
   const deleted = await db.notebookDocument
     .delete({ where: { notebookId_documentId: { notebookId, documentId } } })
     .catch(() => null);
-  if (!deleted) return NextResponse.json({ error: "Document is not attached" }, { status: 404 });
+  if (!deleted) return NextResponse.json({ error: t("api.documentNotAttached") }, { status: 404 });
   return NextResponse.json({ ok: true });
 }

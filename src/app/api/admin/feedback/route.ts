@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { adminApiGuard } from "@/lib/admin-auth";
 import { db } from "@/lib/db";
+import { serverT } from "@/lib/i18n/server";
 import { parseBody } from "@/lib/validate";
 
 export async function GET() {
@@ -21,6 +22,7 @@ const patchSchema = z.object({
 
 // Triage: new → seen → resolved.
 export async function PATCH(req: Request) {
+  const t = await serverT();
   const denied = await adminApiGuard();
   if (denied) return denied;
   const { data, error } = await parseBody(req, patchSchema);
@@ -28,6 +30,6 @@ export async function PATCH(req: Request) {
   const updated = await db.feedback
     .update({ where: { id: data.id }, data: { status: data.status } })
     .catch(() => null);
-  if (!updated) return NextResponse.json({ error: "Feedback not found" }, { status: 404 });
+  if (!updated) return NextResponse.json({ error: t("api.feedbackNotFound") }, { status: 404 });
   return NextResponse.json(updated);
 }

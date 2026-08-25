@@ -39,6 +39,11 @@ const en = {
   done: "Done",
   open: "Open",
   requestFailed: "Request failed",
+  requestFailedStatus: "Request failed ({status})",
+  signInToContinue: "Sign in to continue.",
+  corpusNotFound: "Corpus not found",
+  unauthorized: "Unauthorized",
+  modelCallFailed: "The model call failed.",
 };
 
 const zh: Record<keyof typeof en, string> = {
@@ -67,6 +72,11 @@ const zh: Record<keyof typeof en, string> = {
   done: "完成",
   open: "打开",
   requestFailed: "请求失败",
+  requestFailedStatus: "请求失败（{status}）",
+  signInToContinue: "登录后继续。",
+  corpusNotFound: "未找到该文集",
+  unauthorized: "未授权",
+  modelCallFailed: "模型调用失败。",
 };
 
 export const common = { en, zh } as const;

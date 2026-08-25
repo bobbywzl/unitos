@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { api } from "@/lib/api";
 import { SearchIcon, SpinnerIcon } from "@/components/icons";
+import { useT } from "@/components/lang-provider";
 import { formatTimeRange, type VideoFindMatch } from "@/lib/video/types";
 
 // Find (SPEC.md §11): the video content reader, front and center in the tool
@@ -30,6 +31,7 @@ export function FindPanel({
   trailing?: React.ReactNode;
 }) {
   const router = useRouter();
+  const t = useT();
   const [query, setQuery] = useState("");
   const [busy, setBusy] = useState(false);
   const [matches, setMatches] = useState<VideoFindMatch[] | null>(null);
@@ -53,7 +55,7 @@ export function FindPanel({
       });
       setMatches(res.matches);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Find failed");
+      setError(err instanceof Error ? err.message : t("video.findFailed"));
     } finally {
       setBusy(false);
     }
@@ -74,7 +76,7 @@ export function FindPanel({
       setSaved((prev) => new Set(prev).add(index));
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Save failed");
+      setError(err instanceof Error ? err.message : t("video.saveFailed"));
     } finally {
       setSaving(null);
     }
@@ -97,9 +99,11 @@ export function FindPanel({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder={
-              hasTranscript ? "Find in this video…" : "Find in this video (needs the transcript)…"
+              hasTranscript
+                ? t("video.findPlaceholder")
+                : t("video.findPlaceholderNeedsTranscript")
             }
-            aria-label="Find in this video"
+            aria-label={t("video.findAria")}
             disabled={!hasTranscript}
             className="min-w-0 flex-1 bg-transparent text-[13px] outline-none placeholder:text-sand-500 disabled:opacity-60"
           />
@@ -110,7 +114,7 @@ export function FindPanel({
 
       {error && <p className="mt-2 px-1 text-xs text-red-500">{error}</p>}
       {matches !== null && matches.length === 0 && (
-        <p className="mt-2 px-1 text-xs text-sand-600">Nothing in the video answers that.</p>
+        <p className="mt-2 px-1 text-xs text-sand-600">{t("video.findEmpty")}</p>
       )}
       {matches !== null && matches.length > 0 && (
         <div className="mt-2.5 flex flex-col gap-2">
@@ -119,7 +123,7 @@ export function FindPanel({
               <button
                 onClick={() => onSeek(match.startTime, match.endTime)}
                 className="rounded-full bg-clay-100 px-2.5 py-0.5 text-[11px] font-semibold tabular-nums text-clay-800 hover:bg-clay-200"
-                title="Jump the player to this part"
+                title={t("video.jumpToPart")}
               >
                 {formatTimeRange(match.startTime, match.endTime)}
               </button>
@@ -128,7 +132,7 @@ export function FindPanel({
               <div className="mt-2">
                 {saved.has(i) ? (
                   <span className="text-[11.5px] font-semibold text-sage-700">
-                    Added — pending in Notes
+                    {t("video.addedPending")}
                   </span>
                 ) : (
                   <button
@@ -136,12 +140,12 @@ export function FindPanel({
                     disabled={saving !== null || sectionChoices.length === 0}
                     title={
                       sectionChoices.length === 0
-                        ? "Add a section first"
-                        : `Add as a pending note in ${sectionChoices[0].label}`
+                        ? t("video.addSectionFirst")
+                        : t("video.addAsPendingNote", { section: sectionChoices[0].label })
                     }
                     className="rounded-full border border-line px-3 py-1 text-[11.5px] font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40"
                   >
-                    {saving === i ? "Adding…" : "Add to notes"}
+                    {saving === i ? t("video.adding") : t("video.addToNotes")}
                   </button>
                 )}
               </div>

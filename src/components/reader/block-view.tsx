@@ -1,6 +1,10 @@
+"use client";
+
 import type { BlockType } from "@prisma/client";
 import { LinkIcon, UnlinkIcon } from "@/components/icons";
+import { useT } from "@/components/lang-provider";
 import { Equation } from "@/components/reader/equation";
+import type { TFunc } from "@/lib/i18n/dictionaries";
 
 const CHAIN_BUTTON =
   "link-chain mx-0.5 inline-flex size-[16px] items-center justify-center rounded-full bg-clay-100 align-text-top text-clay-700 hover:bg-clay-200 hover:text-clay-800";
@@ -50,7 +54,7 @@ function headingLevel(html: string | null): 1 | 2 | 3 {
 
 // Split block text into plain and <mark> segments. Declarative painting: highlights are part
 // of the React tree, never DOM mutation after render (anchor offsets stay stable).
-function markedText(text: string, highlights: Highlight[]) {
+function markedText(text: string, highlights: Highlight[], t: TFunc) {
   const bounds = new Set<number>([0, text.length]);
   for (const h of highlights) {
     bounds.add(Math.max(0, Math.min(h.start, text.length)));
@@ -93,7 +97,7 @@ function markedText(text: string, highlights: Highlight[]) {
           href={link.href}
           data-link-id={link.linkId}
           data-source-id={anchor?.sourceId ?? undefined}
-          title={link.linkTitle ? `Linked: ${link.linkTitle}` : undefined}
+          title={link.linkTitle ? t("panes.linkedTo", { title: link.linkTitle }) : undefined}
           className={`link-mark rounded-[4px]${editedClass}`}
         >
           {segment}
@@ -105,8 +109,8 @@ function markedText(text: string, highlights: Highlight[]) {
           <a
             key={`chain-${from}`}
             href={link.href}
-            aria-label={link.linkTitle ? `Linked: ${link.linkTitle}` : "Linked"}
-            title={link.linkTitle ? `Linked: ${link.linkTitle}` : "Linked"}
+            aria-label={link.linkTitle ? t("panes.linkedTo", { title: link.linkTitle }) : t("panes.linked")}
+            title={link.linkTitle ? t("panes.linkedTo", { title: link.linkTitle }) : t("panes.linked")}
             className={CHAIN_BUTTON}
           >
             <LinkIcon size={10} />
@@ -142,7 +146,7 @@ function markedText(text: string, highlights: Highlight[]) {
           key={from}
           href={`#block-${toc.targetBlockId}`}
           data-source-id={anchor?.sourceId ?? undefined}
-          title="Jump to this section"
+          title={t("panes.jumpToSection")}
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -191,7 +195,7 @@ function markedText(text: string, highlights: Highlight[]) {
         <mark
           key={from}
           data-source-id={anchor?.sourceId ?? undefined}
-          title={focusable ? "Click to view the annotation" : undefined}
+          title={focusable ? t("panes.viewAnnotation") : undefined}
           onClick={
             focusable
               ? (e) => {
@@ -223,13 +227,13 @@ function markedText(text: string, highlights: Highlight[]) {
             type="button"
             aria-label={
               extractEnding.extractOrigin
-                ? `Extract ${extractEnding.extractLabel} started here`
-                : `Jump to the phrase Extract ${extractEnding.extractLabel} started from`
+                ? t("panes.extractStartedHere", { label: extractEnding.extractLabel ?? "" })
+                : t("panes.extractJumpToOrigin", { label: extractEnding.extractLabel ?? "" })
             }
             title={
               extractEnding.extractOrigin
-                ? `Extract ${extractEnding.extractLabel} started here. Click for details`
-                : `Jump to the phrase Extract ${extractEnding.extractLabel} started from`
+                ? t("panes.extractStartedHereDetails", { label: extractEnding.extractLabel ?? "" })
+                : t("panes.extractJumpToOrigin", { label: extractEnding.extractLabel ?? "" })
             }
             onClick={(e) => {
               e.stopPropagation();
@@ -254,8 +258,8 @@ function markedText(text: string, highlights: Highlight[]) {
           <button
             key={`comment-${from}`}
             type="button"
-            aria-label="Open the comment"
-            title="Open the comment"
+            aria-label={t("panes.openComment")}
+            title={t("panes.openComment")}
             onClick={(e) => {
               e.stopPropagation();
               window.dispatchEvent(
@@ -282,8 +286,8 @@ function markedText(text: string, highlights: Highlight[]) {
           <button
             key={`link-start-${from}`}
             type="button"
-            aria-label="Link to other texts"
-            title="Link to other texts"
+            aria-label={t("panes.linkToOtherTexts")}
+            title={t("panes.linkToOtherTexts")}
             onClick={(e) => {
               e.stopPropagation();
               window.dispatchEvent(
@@ -305,7 +309,11 @@ function markedText(text: string, highlights: Highlight[]) {
       parts.push(
         <span
           key={from}
-          title={term.definition ? `${term.definition}\n\nClick for tools` : "Click for tools"}
+          title={
+            term.definition
+              ? `${term.definition}\n\n${t("panes.clickForTools")}`
+              : t("panes.clickForTools")
+          }
           onMouseDown={(e) => {
             if (e.button !== 0) return;
             e.stopPropagation();
@@ -349,10 +357,11 @@ const LABEL_DOT: Record<string, string> = {
 // annotation cards. Outside the block element, so the block's DOM text stays
 // exactly the stored text (SPEC.md §5).
 function HighlightLabel({ anchors }: { anchors: Highlight[] }) {
+  const t = useT();
   const focusable = anchors.find((h) => h.annotation && h.sourceId);
   const color = anchors.find((h) => h.color)?.color ?? "clay";
   const labels = anchors.map((h) => h.figureLabel).filter((l): l is string => Boolean(l));
-  const text = labels.length > 0 ? labels.join(" · ") : "Highlighted";
+  const text = labels.length > 0 ? labels.join(" · ") : t("panes.highlighted");
   return (
     <button
       onClick={
@@ -366,7 +375,9 @@ function HighlightLabel({ anchors }: { anchors: Highlight[] }) {
           : undefined
       }
       title={
-        focusable ? `${text} — annotated. Click to open it in Annotations` : `${text} — highlighted`
+        focusable
+          ? t("panes.figureAnnotatedTitle", { text })
+          : t("panes.figureHighlightedTitle", { text })
       }
       className="absolute top-2 right-0 z-10 flex translate-x-[calc(100%+10px)] items-center gap-1.5 rounded-full bg-card px-2.5 py-1 text-[10.5px] font-semibold text-sand-700 shadow-soft hover:text-clay-800"
     >
@@ -385,9 +396,10 @@ export function BlockView({
   block: BlockData;
   highlights?: Highlight[];
 }) {
+  const t = useT();
   const shared = "reader-block";
 
-  const content = highlights.length > 0 ? markedText(block.text, highlights) : block.text;
+  const content = highlights.length > 0 ? markedText(block.text, highlights, t) : block.text;
   const anchorIds = highlights.filter((h) => h.kind === "anchor" && h.sourceId);
   const figureAnchors = highlights.filter((h) => h.kind === "anchor");
   const htmlHighlighted = anchorIds.length > 0 ? "rounded-lg ring-2 ring-clay-300" : "";
@@ -458,7 +470,7 @@ export function BlockView({
     case "VIDEO":
       return (
         <p data-block-id={block.id} className={`${shared} my-4 text-sm text-sand-600 italic`}>
-          Video: {block.text}
+          {t("panes.videoBlock", { text: block.text })}
         </p>
       );
     case "TABLE":

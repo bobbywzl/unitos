@@ -26,6 +26,7 @@ const NAMESPACES = {
   reader,
   assistant,
   panels,
+  panes,
   video,
   settings,
   admin,

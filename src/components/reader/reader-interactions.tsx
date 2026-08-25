@@ -22,6 +22,8 @@ import type {
 import type { DocumentReference } from "@/lib/parse/types";
 import { splitStreamError, splitStreamNote } from "@/lib/derive/config";
 import { findWeblinks } from "@/lib/weblinks";
+import type { TFunc, TKey } from "@/lib/i18n/dictionaries";
+import { useT } from "@/components/lang-provider";
 import { MicIcon, SparkleIcon, SpinnerIcon, StopIcon, VolumeIcon } from "@/components/icons";
 import { Markdown } from "@/components/markdown";
 import type { BlockData, Highlight } from "@/components/reader/block-view";
@@ -127,54 +129,64 @@ type SpeechRec = {
 
 const clip = (s: string, n = 90) => (s.length > n ? `${s.slice(0, n)}…` : s);
 
+// Format targets of a format_block action, shown in the plan card.
+const FORMAT_KIND_KEY: Record<"paragraph" | "h1" | "h2" | "h3", TKey> = {
+  paragraph: "reader.kindParagraph",
+  h1: "reader.kindH1",
+  h2: "reader.kindH2",
+  h3: "reader.kindH3",
+};
+
 /** The concrete target of a plan action, shown before Apply so approval is
     informed: the quote, the section, the color — not just a label. */
 function actionDetail(
   action: AssistantAction,
   blocks: BlockData[],
   documents: { id: string; title: string }[],
+  t: TFunc,
 ): string | null {
   const blockText = (id: string) => blocks.find((b) => b.id === id)?.text ?? "";
   switch (action.type) {
     case "highlight":
-      return `${action.color} · “${clip(action.anchor.quotedText)}”`;
+      return `${t(HUE_KEY[action.color])} · “${clip(action.anchor.quotedText)}”`;
     case "comment":
     case "style":
       return `“${clip(action.anchor.quotedText)}”`;
     case "add_note": {
-      const where = action.sectionTitle ?? "the section";
-      return `into ${where} · “${clip(action.content)}”`;
+      const where = action.sectionTitle ?? t("reader.theSection");
+      return t("reader.detailInto", { where, quote: clip(action.content) });
     }
     case "add_section":
       return `“${action.title}”`;
     case "edit_block":
-      return `to “${clip(action.newText)}”`;
+      return t("reader.detailTo", { text: clip(action.newText) });
     case "insert_paragraph":
       return `“${clip(action.text)}”`;
     case "remove_block":
       return `“${clip(blockText(action.blockId))}”`;
     case "link": {
-      const target = documents.find((d) => d.id === action.toDocumentId)?.title ?? "a document";
+      const target =
+        documents.find((d) => d.id === action.toDocumentId)?.title ?? t("reader.aDocument");
       return `“${clip(action.anchor.quotedText, 60)}” → ${target}`;
     }
     case "format_block":
-      return `“${clip(blockText(action.blockId), 60)}” → ${action.kind}`;
+      return `“${clip(blockText(action.blockId), 60)}” → ${t(FORMAT_KIND_KEY[action.kind])}`;
     default:
       return null;
   }
 }
 
-const ACTION_LABEL: Record<AssistantAction["type"], string> = {
-  edit_block: "Edit",
-  insert_paragraph: "Add paragraph",
-  remove_block: "Remove",
-  highlight: "Highlight",
-  comment: "Comment",
-  add_note: "Note",
-  add_section: "Section",
-  link: "Link",
-  format_block: "Format",
-  style: "Style",
+const ACTION_LABEL_KEY: Record<AssistantAction["type"], TKey> = {
+  edit_block: "reader.actionEdit",
+  insert_paragraph: "reader.actionAddParagraph",
+  remove_block: "reader.actionRemove",
+  highlight: "reader.actionHighlight",
+  comment: "reader.actionComment",
+  add_note: "reader.actionNote",
+  add_section: "reader.actionSection",
+  link: "reader.actionLink",
+  format_block: "reader.actionFormat",
+  style: "reader.actionStyle",
 };
 type ExplainBubble = {
   left: number;
@@ -250,13 +262,12 @@ type AnnotationCard = {
 
 // The article menu's frequent asks: one click sends the question to the
 // assistant, which reads the whole document and answers in the chat card.
-const FREQUENT_ASKS: { label: string; question: string }[] = [
-  { label: "Summarize article", question: "Summarize this article." },
-  { label: "Key takeaways", question: "What are the key takeaways of this article?" },
-  {
-    label: "Explain simply",
-    question: "Explain this article in plain words for a reader new to the field.",
-  },
+// Keys, not strings — the menu translates at render, and the question goes to
+// the assistant in the reader's language.
+const FREQUENT_ASKS: { labelKey: TKey; questionKey: TKey }[] = [
+  { labelKey: "reader.summarizeLabel", questionKey: "reader.summarizeQuestion" },
+  { labelKey: "reader.takeawaysLabel", questionKey: "reader.takeawaysQuestion" },
+  { labelKey: "reader.explainSimplyLabel", questionKey: "reader.explainSimplyQuestion" },
 ];
 
 const HIGHLIGHT_HUES = ["clay", "sage", "gold", "plum"] as const;
@@ -266,11 +277,22 @@ const HUE_DOT: Record<(typeof HIGHLIGHT_HUES)[number], string> = {
   gold: "#d9a54a",
   plum: "#a78bfa",
 };
+const HUE_KEY: Record<(typeof HIGHLIGHT_HUES)[number], TKey> = {
+  clay: "reader.colorClay",
+  sage: "reader.colorSage",
+  gold: "reader.colorGold",
+  plum: "reader.colorPlum",
+};
+
+// English plural suffix for count phrases ({s} in reader.* keys); zh templates
+// omit {s}.
+const plural = (n: number) => (n === 1 ? "" : "s");
 
 // Three dots that take turns jumping: a tool block is waiting on the model.
 function LoadingDots() {
+  const t = useT();
   return (
-    <span aria-label="Loading" className="inline-flex items-center gap-1 py-1">
+    <span aria-label={t("reader.loading")} className="inline-flex items-center gap-1 py-1">
       <span className="loading-dot" />
       <span className="loading-dot" />
       <span className="loading-dot" />
@@ -382,6 +404,12 @@ export function ReaderInteractions({
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  // Stable translator: mount-time closures (effects, async handlers) keep this
+  // identity but always read the current language through the ref.
+  const tCtx = useT();
+  const tRef = useRef(tCtx);
+  tRef.current = tCtx;
+  const t: TFunc = useCallback((key, params) => tRef.current(key, params), []);
   const containerRef = useRef<HTMLDivElement>(null);
   const [popover, setPopover] = useState<Popover | null>(null);
   // The popover's submenus (section list, link targets) are custom lists, not
@@ -525,13 +553,13 @@ export function ReaderInteractions({
         setPendingLink(next);
         pendingLinkRef.current = next;
         window.dispatchEvent(new CustomEvent("dissect:pending-link", { detail: next }));
-        showToast("Highlight the other end to complete the link.");
+        showToast(t("reader.completeLinkToast"));
         return;
       }
     };
     window.addEventListener("dissect:start-link", onStartLink);
     return () => window.removeEventListener("dissect:start-link", onStartLink);
-  }, []);
+  }, [t]);
 
   // The assistant as an actor: a command becomes a plan; the plan runs after
   // approval, or immediately when the reader toggled auto.
@@ -630,9 +658,9 @@ export function ReaderInteractions({
       await api(`/api/notes/${card.noteId}`, "DELETE");
       setBubble(null);
       router.refresh();
-      showToast("Explanation removed");
+      showToast(t("reader.explanationRemoved"));
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "Delete failed");
+      showToast(err instanceof Error ? err.message : t("reader.deleteFailed"));
     }
   }
   function closeSimplify() {
@@ -645,9 +673,9 @@ export function ReaderInteractions({
       await api(`/api/notes/${card.noteId}`, "DELETE");
       setSimplifyCard(null);
       router.refresh();
-      showToast("Simplified removed");
+      showToast(t("reader.simplifiedRemoved"));
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "Delete failed");
+      showToast(err instanceof Error ? err.message : t("reader.deleteFailed"));
     }
   }
   function closeAssistantChat() {
@@ -660,9 +688,9 @@ export function ReaderInteractions({
       await api(`/api/notes/${chat.noteId}`, "DELETE");
       setAssistantChat(null);
       router.refresh();
-      showToast("Conversation removed");
+      showToast(t("reader.conversationRemoved"));
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "Delete failed");
+      showToast(err instanceof Error ? err.message : t("reader.deleteFailed"));
     }
   }
   function closeCommentCard() {
@@ -1387,14 +1415,14 @@ export function ReaderInteractions({
         return;
       }
       if (extraction.origin.orphaned) {
-        showToast("The origin phrase changed — nothing to jump to.");
+        showToast(t("reader.originChanged"));
         return;
       }
       flashSpan(extraction.origin.blockId, extraction.origin.start, extraction.origin.end);
     };
     window.addEventListener("dissect:extract-chip", onChip);
     return () => window.removeEventListener("dissect:extract-chip", onChip);
-  }, []);
+  }, [t]);
 
   // The Distill panel in the side tray opens the distilled page: a stored
   // distillation by id, or the ask view (id null). Only the pane showing the
@@ -1439,7 +1467,7 @@ export function ReaderInteractions({
         ) {
           return;
         }
-        setToast("That block is not in the open document.");
+        setToast(t("reader.blockNotOpen"));
         if (toastTimer.current) clearTimeout(toastTimer.current);
         toastTimer.current = setTimeout(() => setToast(null), 5000);
         return;
@@ -1450,7 +1478,7 @@ export function ReaderInteractions({
     };
     window.addEventListener("dissect:flash-block", onFlashBlock);
     return () => window.removeEventListener("dissect:flash-block", onFlashBlock);
-  }, []);
+  }, [t]);
 
   function showToast(message: string) {
     setToast(message);
@@ -1466,7 +1494,7 @@ export function ReaderInteractions({
     if (!container || !block) return;
     const text = block.text;
     if (!text.trim()) {
-      showToast("This figure has no caption to anchor to.");
+      showToast(t("reader.figureNoCaption"));
       return;
     }
     const containerRect = container.getBoundingClientRect();
@@ -1519,7 +1547,7 @@ export function ReaderInteractions({
       window.getSelection()?.removeAllRanges();
       router.refresh();
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "Add failed");
+      showToast(err instanceof Error ? err.message : t("reader.addFailed"));
     } finally {
       setBusy(false);
     }
@@ -1555,7 +1583,7 @@ export function ReaderInteractions({
       });
       if (!res.ok || !res.body) {
         const detail = (await res.json().catch(() => null)) as { error?: string } | null;
-        throw new Error(detail?.error ?? `Derive failed (${res.status})`);
+        throw new Error(detail?.error ?? t("reader.deriveFailedStatus", { status: res.status }));
       }
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
@@ -1577,12 +1605,12 @@ export function ReaderInteractions({
           text,
           noteId: note.noteId ?? b.noteId,
           streaming: false,
-          error: error ?? (text.trim() ? null : "The model returned an empty response. Try again."),
+          error: error ?? (text.trim() ? null : t("reader.emptyResponse")),
         };
       });
       router.refresh();
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Derive failed";
+      const message = err instanceof Error ? err.message : t("reader.deriveFailed");
       setBubble((b) => (b ? { ...b, streaming: false, error: message } : b));
     }
   }
@@ -1614,7 +1642,7 @@ export function ReaderInteractions({
       });
       if (!res.ok || !res.body) {
         const detail = (await res.json().catch(() => null)) as { error?: string } | null;
-        throw new Error(detail?.error ?? `Derive failed (${res.status})`);
+        throw new Error(detail?.error ?? t("reader.deriveFailedStatus", { status: res.status }));
       }
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
@@ -1636,14 +1664,14 @@ export function ReaderInteractions({
           text,
           noteId: note.noteId ?? c.noteId,
           streaming: false,
-          error: error ?? (text.trim() ? null : "The model returned an empty response. Try again."),
+          error: error ?? (text.trim() ? null : t("reader.emptyResponse")),
           sentences: error || !text.trim() ? null : parseSimplified(text),
           active: null,
         };
       });
       router.refresh();
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Simplify failed";
+      const message = err instanceof Error ? err.message : t("reader.simplifyFailed");
       setSimplifyCard((c) => (c ? { ...c, streaming: false, error: message } : c));
     }
   }
@@ -1659,7 +1687,7 @@ export function ReaderInteractions({
       router.refresh();
       setAnnotationCard((c) => (c && c.sourceId === card.sourceId ? { ...c, busy: false } : c));
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "Recolor failed");
+      showToast(err instanceof Error ? err.message : t("reader.recolorFailed"));
       setAnnotationCard((c) =>
         c && c.sourceId === card.sourceId ? { ...c, color: card.color, busy: false } : c,
       );
@@ -1674,7 +1702,7 @@ export function ReaderInteractions({
     // quote as content — the same convention the create route uses.
     const content = draft || (card.kind === "highlight" ? (card.quotedText ?? "").slice(0, 5000) : "");
     if (!content) {
-      showToast("Comment is empty. Delete removes it.");
+      showToast(t("reader.commentEmpty"));
       return;
     }
     setAnnotationCard({ ...card, busy: true });
@@ -1682,9 +1710,9 @@ export function ReaderInteractions({
       await api(`/api/notes/${card.noteId}`, "PATCH", { content });
       router.refresh();
       setAnnotationCard(null);
-      showToast("Saved");
+      showToast(t("common.saved"));
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "Save failed");
+      showToast(err instanceof Error ? err.message : t("reader.saveFailed"));
       setAnnotationCard((c) => (c ? { ...c, busy: false } : c));
     }
   }
@@ -1697,9 +1725,9 @@ export function ReaderInteractions({
       await api(`/api/notes/${card.noteId}`, "DELETE");
       router.refresh();
       setAnnotationCard(null);
-      showToast(card.kind === "highlight" ? "Highlight removed" : "Comment removed");
+      showToast(card.kind === "highlight" ? t("reader.highlightRemoved") : t("reader.commentRemoved"));
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "Delete failed");
+      showToast(err instanceof Error ? err.message : t("reader.deleteFailed"));
       setAnnotationCard((c) => (c ? { ...c, busy: false } : c));
     }
   }
@@ -1710,7 +1738,7 @@ export function ReaderInteractions({
     if (!card || card.busy || !card.noteId) return;
     const content = card.draft.trim();
     if (!content) {
-      showToast("Comment is empty. Delete removes it.");
+      showToast(t("reader.commentEmpty"));
       return;
     }
     setCommentCard({ ...card, busy: true });
@@ -1718,9 +1746,9 @@ export function ReaderInteractions({
       await api(`/api/notes/${card.noteId}`, "PATCH", { content });
       router.refresh();
       setCommentCard((c) => (c ? { ...c, saved: content, busy: false } : c));
-      showToast("Saved");
+      showToast(t("common.saved"));
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "Save failed");
+      showToast(err instanceof Error ? err.message : t("reader.saveFailed"));
       setCommentCard((c) => (c ? { ...c, busy: false } : c));
     }
   }
@@ -1733,9 +1761,9 @@ export function ReaderInteractions({
       await api(`/api/notes/${card.noteId}`, "DELETE");
       router.refresh();
       setCommentCard(null);
-      showToast("Comment removed");
+      showToast(t("reader.commentRemoved"));
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "Delete failed");
+      showToast(err instanceof Error ? err.message : t("reader.deleteFailed"));
       setCommentCard((c) => (c ? { ...c, busy: false } : c));
     }
   }
@@ -1803,7 +1831,7 @@ export function ReaderInteractions({
       });
       if (!res.ok || !res.body) {
         const detail = (await res.json().catch(() => null)) as { error?: string } | null;
-        throw new Error(detail?.error ?? `Distill failed (${res.status})`);
+        throw new Error(detail?.error ?? t("reader.distillFailedStatus", { status: res.status }));
       }
       // The response streams heartbeat spaces while the model works; the
       // payload is the trailer — the distillation JSON, or the in-band error.
@@ -1823,7 +1851,7 @@ export function ReaderInteractions({
       } catch {
         payload = null;
       }
-      if (!payload?.distillation) throw new Error("Distill did not finish. Try again.");
+      if (!payload?.distillation) throw new Error(t("reader.distillUnfinished"));
       if (controller.signal.aborted || documentIdRef.current !== runDocumentId) return;
       const fresh: DistillationView = {
         ...payload.distillation,
@@ -1833,13 +1861,13 @@ export function ReaderInteractions({
       setDistillShownId(fresh.id);
       // The page may be closed: the pill's progress bar stops, and the toast
       // says where the result is.
-      if (!distillOpenRef.current) showToast("Distilled — open Distill to read it");
+      if (!distillOpenRef.current) showToast(t("reader.distilledToast"));
       router.refresh();
     } catch (err) {
       // A cancelled run is not a failure: the ask view keeps the question.
       if (controller.signal.aborted) return;
       if (documentIdRef.current !== runDocumentId) return;
-      const message = err instanceof Error ? err.message : "Distill failed";
+      const message = err instanceof Error ? err.message : t("reader.distillFailed");
       setDistillError(message);
       if (!distillOpenRef.current) showToast(message);
     } finally {
@@ -1857,7 +1885,7 @@ export function ReaderInteractions({
       if (distillShownId === id) setDistillShownId(null);
       router.refresh();
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "Delete failed");
+      showToast(err instanceof Error ? err.message : t("reader.deleteFailed"));
     }
   }
 
@@ -1869,7 +1897,7 @@ export function ReaderInteractions({
   ): Promise<boolean> {
     const section = sectionChoices[0];
     if (!section) {
-      showToast("Add a section first.");
+      showToast(t("reader.addSectionFirstDot"));
       return false;
     }
     try {
@@ -1890,7 +1918,7 @@ export function ReaderInteractions({
       router.refresh();
       return true;
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "Add failed");
+      showToast(err instanceof Error ? err.message : t("reader.addFailed"));
       return false;
     }
   }
@@ -1931,7 +1959,7 @@ export function ReaderInteractions({
     setSubmenu(null);
     window.getSelection()?.removeAllRanges();
     setExtractBusy(true);
-    showToast("Extracting…");
+    showToast(t("reader.extracting"));
     try {
       const res = await fetch("/api/derive", {
         method: "POST",
@@ -1943,7 +1971,7 @@ export function ReaderInteractions({
         error?: string;
       } | null;
       if (!res.ok || !json?.extraction) {
-        throw new Error(json?.error ?? `Extract failed (${res.status})`);
+        throw new Error(json?.error ?? t("reader.extractFailedStatus", { status: res.status }));
       }
       const label = `E${allExtractionsRef.current.length + 1}`;
       const fresh: ExtractionView = {
@@ -1955,11 +1983,11 @@ export function ReaderInteractions({
       };
       setLocalExtractions((prev) => [...prev, fresh]);
       showToast(
-        `Extract ${label}: ${fresh.spans.length} passage${fresh.spans.length === 1 ? "" : "s"} highlighted`,
+        t("reader.extractDone", { label, n: fresh.spans.length, s: plural(fresh.spans.length) }),
       );
       router.refresh();
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "Extract failed");
+      showToast(err instanceof Error ? err.message : t("reader.extractFailed"));
     } finally {
       setExtractBusy(false);
     }
@@ -1973,9 +2001,9 @@ export function ReaderInteractions({
       setLocalExtractions((prev) => prev.filter((x) => x.id !== id));
       setExtractCard(null);
       router.refresh();
-      showToast("Extraction removed");
+      showToast(t("reader.extractionRemoved"));
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "Delete failed");
+      showToast(err instanceof Error ? err.message : t("reader.deleteFailed"));
     }
   }
 
@@ -1998,7 +2026,7 @@ export function ReaderInteractions({
     const synth = window.speechSynthesis;
     if (!synth) {
       setVoice("idle");
-      showToast("Voice is not available in this browser.");
+      showToast(t("reader.voiceUnavailable"));
       return;
     }
     const utterance = new SpeechSynthesisUtterance(text);
@@ -2037,7 +2065,7 @@ export function ReaderInteractions({
       }
       if (!res.ok) {
         const detail = (await res.json().catch(() => null)) as { error?: string } | null;
-        throw new Error(detail?.error ?? `Voice failed (${res.status})`);
+        throw new Error(detail?.error ?? t("reader.voiceFailedStatus", { status: res.status }));
       }
       const blob = await res.blob();
       if (voiceRunRef.current !== run) return;
@@ -2056,7 +2084,7 @@ export function ReaderInteractions({
     } catch (err) {
       if (voiceRunRef.current !== run) return;
       setVoice("idle");
-      showToast(err instanceof Error ? err.message : "Voice failed");
+      showToast(err instanceof Error ? err.message : t("reader.voiceFailed"));
     }
   }
 
@@ -2092,7 +2120,7 @@ export function ReaderInteractions({
             : c,
         );
       } catch (err) {
-        const message = err instanceof Error ? err.message : "Assistant failed";
+        const message = err instanceof Error ? err.message : t("reader.assistantFailed");
         setAssistantChat((c) =>
           c
             ? { ...c, busy: false, messages: [...c.messages, { role: "assistant", content: message }] }
@@ -2134,7 +2162,7 @@ export function ReaderInteractions({
       });
       if (!res.ok) {
         const detail = (await res.json().catch(() => null)) as { error?: string } | null;
-        throw new Error(detail?.error ?? `Annotation failed (${res.status})`);
+        throw new Error(detail?.error ?? t("reader.annotationFailedStatus", { status: res.status }));
       }
       router.refresh();
     } catch (err) {
@@ -2142,7 +2170,7 @@ export function ReaderInteractions({
         ...prev,
         [anchor.blockId]: (prev[anchor.blockId] ?? []).filter((h) => h !== optimistic),
       }));
-      showToast(err instanceof Error ? err.message : "Annotation failed");
+      showToast(err instanceof Error ? err.message : t("reader.annotationFailed"));
     } finally {
       setBusy(false);
     }
@@ -2170,7 +2198,7 @@ export function ReaderInteractions({
       from.blockId === to.blockId &&
       from.startOffset === to.startOffset
     ) {
-      showToast("Select a different passage for the other end.");
+      showToast(t("reader.samePassage"));
       return false;
     }
     setBusy(true);
@@ -2185,10 +2213,10 @@ export function ReaderInteractions({
       broadcastPendingLink(null);
       window.getSelection()?.removeAllRanges();
       router.refresh();
-      showToast("Link created");
+      showToast(t("reader.linkCreated"));
       return true;
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "Link failed");
+      showToast(err instanceof Error ? err.message : t("reader.linkFailed"));
       return false;
     } finally {
       setBusy(false);
@@ -2232,7 +2260,7 @@ export function ReaderInteractions({
         busy: false,
       });
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "Assistant failed");
+      showToast(err instanceof Error ? err.message : t("reader.assistantFailed"));
     } finally {
       setAiBusy(false);
     }
@@ -2267,21 +2295,22 @@ export function ReaderInteractions({
     const plan = (await res.json().catch(() => null)) as
       | (AssistantPlan & { error?: string })
       | null;
-    if (!res.ok || !plan) throw new Error(plan?.error ?? `Assistant failed (${res.status})`);
+    if (!res.ok || !plan)
+      throw new Error(plan?.error ?? t("reader.assistantFailedStatus", { status: res.status }));
     const parts: string[] = [];
     if (plan.reply) parts.push(plan.reply);
     if (plan.actions.length > 0) {
       const n = plan.actions.length;
       if (autoRunRef.current) {
         await executePlan(plan.actions, plan.warnings);
-        parts.push(`Applied ${n} action${n === 1 ? "" : "s"}.`);
+        parts.push(t("reader.appliedActions", { n, s: plural(n) }));
       } else {
         setAiPlan(plan);
         setPlanChecked(new Set(plan.actions.map((_, i) => i)));
-        parts.push(`Proposed ${n} action${n === 1 ? "" : "s"} — approve them in the plan card.`);
+        parts.push(t("reader.proposedActions", { n, s: plural(n) }));
       }
     }
-    if (parts.length === 0) parts.push(plan.warnings[0] ?? "The assistant proposed no actions.");
+    if (parts.length === 0) parts.push(plan.warnings[0] ?? t("reader.noActions"));
     // The anchored conversation persisted server-side; refresh paints its mark.
     if (plan.conversationNoteId) router.refresh();
     return { reply: parts.join("\n\n"), noteId: plan.conversationNoteId ?? null };
@@ -2310,7 +2339,7 @@ export function ReaderInteractions({
           : c,
       );
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Assistant failed";
+      const message = err instanceof Error ? err.message : t("reader.assistantFailed");
       setAssistantChat((c) =>
         c
           ? { ...c, busy: false, messages: [...c.messages, { role: "assistant", content: message }] }
@@ -2374,7 +2403,7 @@ export function ReaderInteractions({
                 ? sectionIdByTitle.get(action.sectionTitle.toLowerCase())
                 : undefined);
             if (!sectionId) {
-              const title = action.sectionTitle ?? "Notes";
+              const title = action.sectionTitle ?? t("reader.defaultSectionTitle");
               const created = await api<{ id: string }>("/api/sections", "POST", {
                 notebookId,
                 title,
@@ -2419,8 +2448,8 @@ export function ReaderInteractions({
     }
     router.refresh();
     const summary = [
-      `${applied} action${applied === 1 ? "" : "s"} applied`,
-      ...(failed.length > 0 ? [`failed: ${failed[0]}`] : []),
+      t("reader.actionsApplied", { n: applied, s: plural(applied) }),
+      ...(failed.length > 0 ? [t("reader.failedPrefix", { what: failed[0] })] : []),
       ...(warnings.length > 0 ? [warnings[0]] : []),
     ].join(" · ");
     showToast(summary);
@@ -2446,7 +2475,7 @@ export function ReaderInteractions({
     };
     const Ctor = w.SpeechRecognition ?? w.webkitSpeechRecognition;
     if (!Ctor) {
-      showToast("Voice input is not available in this browser.");
+      showToast(t("reader.voiceInputUnavailable"));
       return;
     }
     const rec = new Ctor();
@@ -2500,7 +2529,7 @@ export function ReaderInteractions({
       });
       router.refresh();
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "Format failed");
+      showToast(err instanceof Error ? err.message : t("reader.formatFailed"));
     }
   }
 
@@ -2518,7 +2547,7 @@ export function ReaderInteractions({
       });
       router.refresh();
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "Style failed");
+      showToast(err instanceof Error ? err.message : t("reader.styleFailed"));
     }
   }
 
@@ -2527,7 +2556,7 @@ export function ReaderInteractions({
       await api(`/api/documents/${documentId}`, "PATCH", { font: next });
       router.refresh();
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "Font change failed");
+      showToast(err instanceof Error ? err.message : t("reader.fontFailed"));
     }
   }
 
@@ -2539,11 +2568,12 @@ export function ReaderInteractions({
         body: JSON.stringify({ documentId, afterBlockId }),
       });
       const json = (await res.json().catch(() => null)) as { id?: string; error?: string } | null;
-      if (!res.ok || !json?.id) throw new Error(json?.error ?? `Insert failed (${res.status})`);
+      if (!res.ok || !json?.id)
+        throw new Error(json?.error ?? t("reader.insertFailedStatus", { status: res.status }));
       router.refresh();
       return json.id;
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "Insert failed");
+      showToast(err instanceof Error ? err.message : t("reader.insertFailed"));
       return null;
     }
   }
@@ -2553,11 +2583,11 @@ export function ReaderInteractions({
       const res = await fetch(`/api/blocks/${blockId}`, { method: "DELETE" });
       if (!res.ok) {
         const detail = (await res.json().catch(() => null)) as { error?: string } | null;
-        throw new Error(detail?.error ?? `Remove failed (${res.status})`);
+        throw new Error(detail?.error ?? t("reader.removeFailedStatus", { status: res.status }));
       }
       router.refresh();
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "Remove failed");
+      showToast(err instanceof Error ? err.message : t("reader.removeFailed"));
     }
   }
 
@@ -2566,7 +2596,7 @@ export function ReaderInteractions({
       await api(`/api/blocks/${blockId}`, "PATCH", { text });
       router.refresh();
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "Edit failed");
+      showToast(err instanceof Error ? err.message : t("reader.editFailed"));
     }
   }
 
@@ -2795,30 +2825,31 @@ export function ReaderInteractions({
         <div className="flex w-56 flex-col overflow-hidden rounded-2xl bg-card py-1.5 shadow-float">
           <span className="flex items-center gap-1.5 px-4 pt-1.5 pb-1 text-[11px] font-bold tracking-[0.08em] text-clay-800 uppercase">
             <SparkleIcon size={12} />
-            Assistant
+            {t("reader.assistant")}
           </span>
           {FREQUENT_ASKS.map((ask) => (
             <button
-              key={ask.label}
-              onClick={() => openArticleChat(ask.question)}
+              key={ask.labelKey}
+              onClick={() => openArticleChat(t(ask.questionKey))}
               className="px-4 py-2 text-left text-[12.5px] text-sand-800 hover:bg-clay-100 hover:text-clay-800"
             >
-              {ask.label}
+              {t(ask.labelKey)}
             </button>
           ))}
           <button
             onClick={() => openArticleChat(null)}
             className="px-4 py-2 text-left text-[12.5px] text-sand-800 hover:bg-clay-100 hover:text-clay-800"
           >
-            Ask the assistant…
+            {t("reader.askAssistant")}
           </button>
           <div className="mx-3 my-1 border-t border-line" />
           <button
             onClick={() => openDistillPage(null)}
-            title="Ask the article a question; the AI pulls the quotes that answer it"
+            title={t("reader.distillMenuTitle")}
             className="px-4 py-2 text-left text-[12.5px] text-sand-800 hover:bg-clay-100 hover:text-clay-800"
           >
-            Distill{allDistillations.length > 0 ? ` (${allDistillations.length})` : ""}
+            {t("reader.distill")}
+            {allDistillations.length > 0 ? ` (${allDistillations.length})` : ""}
           </button>
         </div>
       </div>
@@ -2831,21 +2862,21 @@ export function ReaderInteractions({
           <select
             value={font ?? "default"}
             onChange={(e) => void setFont(e.target.value)}
-            aria-label="Reader font"
+            aria-label={t("reader.readerFont")}
             className="rounded-full bg-sand-100 px-3 py-1.5 text-xs font-semibold text-sand-700 shadow-soft outline-none"
           >
             <option value="default">Figtree</option>
-            <option value="serif">Serif</option>
-            <option value="mono">Mono</option>
+            <option value="serif">{t("reader.fontSerif")}</option>
+            <option value="mono">{t("reader.fontMono")}</option>
           </select>
         )}
         {editMode && (
           <button
             onClick={toggleEditMode}
             className="rounded-full bg-clay px-3.5 py-1.5 text-xs font-semibold text-clay-fg shadow-soft hover:bg-clay-600"
-            title="Back to reading (Esc)"
+            title={t("reader.backToReading")}
           >
-            Done
+            {t("common.done")}
           </button>
         )}
         {/* Distill (in Salience's old spot): a link into the distilled page.
@@ -2854,9 +2885,10 @@ export function ReaderInteractions({
           <button
             onClick={() => openDistillPage(distillShownId)}
             className="rounded-full bg-sand-100 px-3.5 py-1.5 text-xs font-semibold text-sand-600 shadow-soft hover:text-clay-800"
-            title="Open the distilled page"
+            title={t("reader.distillButtonTitle")}
           >
-            Distill{allDistillations.length > 0 ? ` (${allDistillations.length})` : ""}
+            {t("reader.distill")}
+            {allDistillations.length > 0 ? ` (${allDistillations.length})` : ""}
           </button>
           {distillRun && (
             <span aria-hidden className="progress-track absolute right-1.5 -bottom-[7px] left-1.5">
@@ -2871,8 +2903,7 @@ export function ReaderInteractions({
           onAnimationEnd={() => setEditHint(false)}
           className="hint-fade pointer-events-none absolute top-16 right-5 z-10 max-w-64 rounded-2xl bg-card px-4 py-2.5 text-[12px] leading-relaxed text-sand-700 shadow-lift"
         >
-          Double-click any paragraph to edit it. Hold and draw a small circle on a figure for its
-          tools.
+          {t("reader.editHint")}
         </div>
       )}
 
@@ -2901,11 +2932,11 @@ export function ReaderInteractions({
         >
           <div className="mb-2 flex items-center justify-between">
             <span className="text-[11px] font-bold tracking-[0.08em] text-sand-600 uppercase">
-              {annotationCard.kind === "highlight" ? "Highlight" : "Comment"}
+              {annotationCard.kind === "highlight" ? t("reader.highlight") : t("reader.comment")}
             </span>
             <button
               onClick={() => setAnnotationCard(null)}
-              aria-label="Close"
+              aria-label={t("common.close")}
               className="rounded-full px-1.5 text-sand-500 hover:text-clay-800"
             >
               ✕
@@ -2918,8 +2949,8 @@ export function ReaderInteractions({
                   key={color}
                   onClick={() => void recolorAnnotation(color)}
                   disabled={annotationCard.busy}
-                  aria-label={`Recolor ${color}`}
-                  title={`Recolor ${color}`}
+                  aria-label={t("reader.recolor", { color: t(HUE_KEY[color]) })}
+                  title={t("reader.recolor", { color: t(HUE_KEY[color]) })}
                   className={`size-5 rounded-full disabled:opacity-40 ${
                     annotationCard.color === color ? "ring-2 ring-sand-600 ring-offset-2" : ""
                   }`}
@@ -2936,7 +2967,7 @@ export function ReaderInteractions({
             onKeyDown={(e) => {
               if (e.key === "Escape") setAnnotationCard(null);
             }}
-            placeholder="Add a comment"
+            placeholder={t("reader.addCommentPlaceholder")}
             rows={3}
             className="w-full resize-none rounded-xl bg-sand-100 px-2.5 py-2 text-[13px] outline-none placeholder:text-sand-500"
           />
@@ -2946,14 +2977,14 @@ export function ReaderInteractions({
               disabled={annotationCard.busy}
               className="text-xs font-semibold text-red-500 hover:text-red-700 disabled:opacity-40"
             >
-              Delete
+              {t("common.delete")}
             </button>
             <button
               onClick={() => void saveAnnotation()}
               disabled={annotationCard.busy || annotationCard.draft.trim() === annotationCard.saved.trim()}
               className="rounded-full bg-clay px-3 py-1 text-[11px] font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
             >
-              Save
+              {t("common.save")}
             </button>
           </div>
         </div>
@@ -2971,11 +3002,11 @@ export function ReaderInteractions({
             >
               <div className="mb-2 flex items-center justify-between">
                 <span className="text-[11px] font-bold tracking-[0.08em] text-sand-600 uppercase">
-                  Extract {extraction.label}
+                  {t("reader.extractLabel", { label: extraction.label })}
                 </span>
                 <button
                   onClick={() => setExtractCard(null)}
-                  aria-label="Close"
+                  aria-label={t("common.close")}
                   className="rounded-full px-1.5 text-sand-500 hover:text-clay-800"
                 >
                   ✕
@@ -2985,16 +3016,19 @@ export function ReaderInteractions({
                 {extraction.origin.quotedText}
               </p>
               <p className="mt-2 text-xs text-sand-500">
-                {extraction.spans.length} passage{extraction.spans.length === 1 ? "" : "s"}{" "}
-                highlighted across the article. Each {extraction.label} chip jumps back here.
+                {t("reader.extractCardBody", {
+                  n: extraction.spans.length,
+                  s: plural(extraction.spans.length),
+                  label: extraction.label,
+                })}
               </p>
               <div className="mt-2 flex items-center justify-between">
                 <button
                   onClick={() => void deleteExtraction(extraction.id)}
                   className="text-xs font-semibold text-red-500 hover:text-red-700"
-                  title="Remove this extraction and its highlights"
+                  title={t("reader.deleteExtractionTitle")}
                 >
-                  Delete
+                  {t("common.delete")}
                 </button>
               </div>
             </div>
@@ -3037,14 +3071,18 @@ export function ReaderInteractions({
         >
           {popover.truncated && (
             <p className="px-2.5 py-1 text-[10.5px] leading-snug text-sand-500">
-              Anchors to the first paragraph of the selection
+              {t("reader.anchorsFirstParagraph")}
             </p>
           )}
           {popover.figure && (
-            <p className="px-2.5 py-1 text-[10.5px] leading-snug text-sand-500">Figure tools</p>
+            <p className="px-2.5 py-1 text-[10.5px] leading-snug text-sand-500">
+              {t("reader.figureTools")}
+            </p>
           )}
           {popover.term && (
-            <p className="px-2.5 py-1 text-[10.5px] leading-snug text-sand-500">Key term</p>
+            <p className="px-2.5 py-1 text-[10.5px] leading-snug text-sand-500">
+              {t("reader.keyTerm")}
+            </p>
           )}
           {pendingLink && (
             <button
@@ -3052,7 +3090,7 @@ export function ReaderInteractions({
               onClick={() => void completeLink()}
               className="flex w-full items-center rounded-full bg-sage-600 px-2.5 py-[5px] text-left text-[12px] font-semibold text-sage-fg hover:bg-sage-700 disabled:opacity-40"
             >
-              Link here
+              {t("reader.linkHere")}
             </button>
           )}
 
@@ -3066,7 +3104,7 @@ export function ReaderInteractions({
             }`}
           >
             <SparkleIcon size={12} />
-            Assistant
+            {t("reader.assistant")}
           </button>
           {submenu === "ai" && (
             <div className="flex flex-col gap-1.5 p-1">
@@ -3084,15 +3122,15 @@ export function ReaderInteractions({
                     setSubmenu(null);
                   }
                 }}
-                placeholder="Tell the assistant what to do with this selection…"
+                placeholder={t("reader.assistantPlaceholder")}
                 rows={2}
                 className="w-full resize-none rounded-xl bg-sand-100 p-2 text-[12px] outline-none placeholder:text-sand-500"
               />
               <div className="flex items-center gap-1.5">
                 <button
                   onClick={toggleVoice}
-                  aria-label={aiListening ? "Stop listening" : "Speak the command"}
-                  title={aiListening ? "Stop listening" : "Speak the command"}
+                  aria-label={aiListening ? t("reader.stopListening") : t("reader.speakCommand")}
+                  title={aiListening ? t("reader.stopListening") : t("reader.speakCommand")}
                   className={`flex size-7 items-center justify-center rounded-full ${
                     aiListening
                       ? "animate-pulse bg-red-500 text-white"
@@ -3103,19 +3141,19 @@ export function ReaderInteractions({
                 </button>
                 <div
                   className="flex overflow-hidden rounded-full border border-line text-[10px] font-semibold"
-                  title="Ask first shows every plan for approval. Auto applies it immediately."
+                  title={t("reader.askAutoTitle")}
                 >
                   <button
                     onClick={() => setAssistantMode(false)}
                     className={autoRun ? "px-2 py-0.5 text-sand-600" : "bg-ink px-2 py-0.5 text-paper"}
                   >
-                    Ask
+                    {t("reader.ask")}
                   </button>
                   <button
                     onClick={() => setAssistantMode(true)}
                     className={autoRun ? "bg-ink px-2 py-0.5 text-paper" : "px-2 py-0.5 text-sand-600"}
                   >
-                    Auto
+                    {t("reader.auto")}
                   </button>
                 </div>
                 <button
@@ -3123,7 +3161,7 @@ export function ReaderInteractions({
                   onClick={() => void runAssistant()}
                   className="ml-auto rounded-full bg-clay px-3 py-1 text-[11px] font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
                 >
-                  {aiBusy ? "Working…" : "Run"}
+                  {aiBusy ? t("common.working") : t("reader.run")}
                 </button>
               </div>
             </div>
@@ -3133,39 +3171,39 @@ export function ReaderInteractions({
             <button
               onClick={() => void extract()}
               disabled={extractBusy}
-              title="Recommended for this key term: highlight the passages across the article that reveal it"
+              title={t("reader.extractTermTitle")}
               className="flex w-full items-center justify-between gap-2 rounded-full bg-clay-100 px-2.5 py-[5px] text-left text-[12px] font-semibold text-clay-800 hover:bg-clay-200 disabled:opacity-40"
             >
-              Extract
+              {t("reader.extract")}
               <span className="text-[9px] font-bold tracking-[0.06em] text-clay-700 uppercase">
-                Recommended
+                {t("reader.recommended")}
               </span>
             </button>
           )}
 
           <button
             onClick={() => void explain()}
-            title={popover.figure ? "The AI deciphers what the visualization shows" : undefined}
+            title={popover.figure ? t("reader.explainFigureTitle") : undefined}
             className="flex w-full items-center rounded-full px-2.5 py-[5px] text-left text-[12px] text-sand-800 hover:bg-clay-100 hover:text-clay-800"
           >
-            Explain
+            {t("reader.explain")}
           </button>
           {!popover.figure && (
             <button
               onClick={() => void simplify()}
               className="flex w-full items-center rounded-full px-2.5 py-[5px] text-left text-[12px] text-sand-800 hover:bg-clay-100 hover:text-clay-800"
             >
-              Simplify
+              {t("reader.simplify")}
             </button>
           )}
           {!popover.figure && !popover.term && (
             <button
               onClick={() => void extract()}
               disabled={extractBusy}
-              title="Highlight the passages across the article that reveal what this focuses on"
+              title={t("reader.extractTitle")}
               className="flex w-full items-center rounded-full px-2.5 py-[5px] text-left text-[12px] text-sand-800 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40"
             >
-              Extract
+              {t("reader.extract")}
             </button>
           )}
 
@@ -3175,8 +3213,11 @@ export function ReaderInteractions({
                 key={color}
                 disabled={busy}
                 onClick={() => void annotate({ color, comment: commentDraft.trim() || undefined })}
-                aria-label={`Highlight in ${color}`}
-                title={`Highlight in ${color}${commentDraft.trim() ? " with your note" : ""}`}
+                aria-label={t("reader.highlightIn", { color: t(HUE_KEY[color]) })}
+                title={t(
+                  commentDraft.trim() ? "reader.highlightInWithNote" : "reader.highlightIn",
+                  { color: t(HUE_KEY[color]) },
+                )}
                 className="size-[18px] rounded-full transition-transform hover:scale-110 disabled:opacity-40"
                 style={{
                   background:
@@ -3201,7 +3242,7 @@ export function ReaderInteractions({
                 : "text-sand-800 hover:bg-clay-100 hover:text-clay-800"
             }`}
           >
-            Comment
+            {t("reader.comment")}
           </button>
           {submenu === "comment" && (
             <form
@@ -3225,7 +3266,7 @@ export function ReaderInteractions({
                     setSubmenu(null);
                   }
                 }}
-                placeholder="Comment on this passage — or pick a color to attach it to a highlight"
+                placeholder={t("reader.commentPlaceholder")}
                 rows={2}
                 className="w-full resize-none rounded-xl bg-sand-100 p-2 text-[12px] outline-none placeholder:text-sand-500"
               />
@@ -3234,7 +3275,7 @@ export function ReaderInteractions({
                 disabled={busy || !commentDraft.trim()}
                 className="self-end rounded-full bg-clay px-3 py-1 text-[11px] font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
               >
-                Save
+                {t("common.save")}
               </button>
             </form>
           )}
@@ -3249,7 +3290,7 @@ export function ReaderInteractions({
                   : "text-sand-800 hover:bg-clay-100 hover:text-clay-800"
               }`}
             >
-              Add to ▾
+              {t("reader.addTo")}
             </button>
           )}
           {submenu === "add" && (
@@ -3269,10 +3310,10 @@ export function ReaderInteractions({
 
           <button
             onClick={beginLink}
-            title="Connect this passage to a passage in this or another document"
+            title={t("reader.linkTitle")}
             className="flex w-full items-center rounded-full px-2.5 py-[5px] text-left text-[12px] text-sand-800 hover:bg-clay-100 hover:text-clay-800"
           >
-            Link across texts
+            {t("reader.linkAcrossTexts")}
           </button>
 
           {/* Voice: a separate bubble under the toolbar reads the highlighted
@@ -3280,8 +3321,8 @@ export function ReaderInteractions({
           <div className="absolute top-full left-0 mt-2">
             <button
               onClick={() => void speakSelection()}
-              aria-label={voice === "idle" ? "Read the highlighted text aloud" : "Stop reading"}
-              title={voice === "idle" ? "Read the highlighted text aloud" : "Stop reading"}
+              aria-label={voice === "idle" ? t("reader.readAloud") : t("reader.stopReading")}
+              title={voice === "idle" ? t("reader.readAloud") : t("reader.stopReading")}
               className={`flex size-[34px] items-center justify-center rounded-full shadow-float ${
                 voice === "idle"
                   ? "bg-card text-sand-700 hover:text-clay-800"
@@ -3313,26 +3354,26 @@ export function ReaderInteractions({
               (left, top) => setBubble((b) => (b ? { ...b, left, top } : b)),
             )}
             style={{ touchAction: "none" }}
-            title="Drag to move"
+            title={t("reader.dragToMove")}
             className="mb-2 flex cursor-move items-center justify-between"
           >
             <span className="text-[11px] font-bold tracking-[0.08em] text-clay-800 uppercase">
-              {bubble.streaming ? "Explaining…" : "Explanation"}
+              {bubble.streaming ? t("reader.explaining") : t("reader.explanation")}
             </span>
             <span className="flex items-center gap-3">
               {bubble.noteId && !bubble.streaming && (
                 <button
                   onClick={() => void deleteExplain()}
                   className="text-xs font-semibold text-red-500 hover:text-red-700"
-                  title="Delete this explanation and its mark"
+                  title={t("reader.deleteExplainTitle")}
                 >
-                  Delete
+                  {t("common.delete")}
                 </button>
               )}
               <button
                 onClick={closeExplain}
                 className="text-xs text-sand-500 hover:text-clay-700"
-                aria-label="Close"
+                aria-label={t("common.close")}
               >
                 ✕
               </button>
@@ -3366,26 +3407,26 @@ export function ReaderInteractions({
               (left, top) => setSimplifyCard((c) => (c ? { ...c, left, top } : c)),
             )}
             style={{ touchAction: "none" }}
-            title="Drag to move"
+            title={t("reader.dragToMove")}
             className="mb-2 flex cursor-move items-center justify-between"
           >
             <span className="text-[11px] font-bold tracking-[0.08em] text-sage-800 uppercase">
-              {simplifyCard.streaming ? "Simplifying…" : "Simplified"}
+              {simplifyCard.streaming ? t("reader.simplifying") : t("reader.simplified")}
             </span>
             <span className="flex items-center gap-3">
               {simplifyCard.noteId && !simplifyCard.streaming && (
                 <button
                   onClick={() => void deleteSimplify()}
                   className="text-xs font-semibold text-red-500 hover:text-red-700"
-                  title="Delete this simplified rewrite and its mark"
+                  title={t("reader.deleteSimplifyTitle")}
                 >
-                  Delete
+                  {t("common.delete")}
                 </button>
               )}
               <button
                 onClick={closeSimplify}
                 className="text-xs text-sand-500 hover:text-clay-700"
-                aria-label="Close"
+                aria-label={t("common.close")}
               >
                 ✕
               </button>
@@ -3406,7 +3447,7 @@ export function ReaderInteractions({
                           c ? { ...c, active: c.active === i ? null : i } : c,
                         )
                       }
-                      title="Press to see what this restates in the original"
+                      title={t("reader.sentenceTitle")}
                       className={
                         simplifyCard.active === i
                           ? "simplify-sentence simplify-sentence-active"
@@ -3440,16 +3481,16 @@ export function ReaderInteractions({
               (left, top) => setCommentCard((c) => (c ? { ...c, left, top } : c)),
             )}
             style={{ touchAction: "none" }}
-            title="Drag to move"
+            title={t("reader.dragToMove")}
             className="mb-2 flex cursor-move items-center justify-between"
           >
             <span className="text-[11px] font-bold tracking-[0.08em] text-clay-800 uppercase">
-              Comment
+              {t("reader.comment")}
             </span>
             <button
               onClick={closeCommentCard}
               className="text-xs text-sand-500 hover:text-clay-700"
-              aria-label="Close"
+              aria-label={t("common.close")}
             >
               ✕
             </button>
@@ -3478,14 +3519,14 @@ export function ReaderInteractions({
                   disabled={commentCard.busy}
                   className="text-xs font-semibold text-red-500 hover:text-red-700 disabled:opacity-40"
                 >
-                  Delete
+                  {t("common.delete")}
                 </button>
                 <button
                   onClick={() => void saveCommentCard()}
                   disabled={commentCard.busy || commentCard.draft.trim() === commentCard.saved.trim()}
                   className="rounded-full bg-clay px-3 py-1 text-[11px] font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
                 >
-                  Save
+                  {t("common.save")}
                 </button>
               </div>
             </>
@@ -3526,26 +3567,26 @@ export function ReaderInteractions({
               (left, top) => setAssistantChat((c) => (c ? { ...c, left, top } : c)),
             )}
             style={{ touchAction: "none" }}
-            title="Drag to move"
+            title={t("reader.dragToMove")}
             className="flex cursor-move items-center justify-between px-4 pt-3 pb-1"
           >
             <span className="text-[11px] font-bold tracking-[0.08em] text-clay-800 uppercase">
-              Assistant
+              {t("reader.assistant")}
             </span>
             <span className="flex items-center gap-3">
               {assistantChat.noteId && (
                 <button
                   onClick={() => void deleteAssistantConversation()}
                   className="text-xs font-semibold text-red-500 hover:text-red-700"
-                  title="Delete this conversation and its mark"
+                  title={t("reader.deleteConversationTitle")}
                 >
-                  Delete
+                  {t("common.delete")}
                 </button>
               )}
               <button
                 onClick={closeAssistantChat}
                 className="text-xs text-sand-500 hover:text-clay-700"
-                aria-label="Close"
+                aria-label={t("common.close")}
               >
                 ✕
               </button>
@@ -3568,7 +3609,7 @@ export function ReaderInteractions({
             )}
             {assistantChat.busy && (
               <p className="flex items-center gap-1.5 text-[12px] text-sand-500">
-                Thinking
+                {t("reader.thinking")}
                 <LoadingDots />
               </p>
             )}
@@ -3592,8 +3633,8 @@ export function ReaderInteractions({
                   void sendChatMessage();
                 }
               }}
-              placeholder="Reply…"
-              aria-label="Message the assistant"
+              placeholder={t("reader.replyPlaceholder")}
+              aria-label={t("reader.messageAssistant")}
               className="min-h-8 flex-1 resize-none rounded-xl bg-sand-100 px-3 py-1.5 text-[12.5px] outline-none placeholder:text-sand-500"
             />
             <button
@@ -3601,7 +3642,7 @@ export function ReaderInteractions({
               disabled={assistantChat.busy || !assistantChat.input.trim()}
               className="rounded-full bg-clay px-3 py-1.5 text-[11px] font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
             >
-              Send
+              {t("reader.send")}
             </button>
           </form>
         </div>
@@ -3619,24 +3660,27 @@ export function ReaderInteractions({
           ) : (
             <VolumeIcon size={14} className="text-clay" />
           )}
-          Stop reading
+          {t("reader.stopReading")}
         </button>
       )}
 
       {pendingLink && (
         <div className="fixed top-24 left-1/2 z-40 flex max-w-[80vw] -translate-x-1/2 items-center gap-3 rounded-full bg-card px-4 py-2 shadow-float">
           <span className="truncate text-[12.5px] text-sand-700">
-            Linking “{pendingLink.anchor.quotedText.slice(0, 48)}
-            {pendingLink.anchor.quotedText.length > 48 ? "…" : ""}” from{" "}
-            {pendingLink.fromDocumentId === documentId
-              ? "this document"
-              : (attachedDocuments.find((d) => d.id === pendingLink.fromDocumentId)?.title ??
-                "another document")}{" "}
-            — select the other end, then press Link here
+            {t("reader.linkingBanner", {
+              quote:
+                pendingLink.anchor.quotedText.slice(0, 48) +
+                (pendingLink.anchor.quotedText.length > 48 ? "…" : ""),
+              source:
+                pendingLink.fromDocumentId === documentId
+                  ? t("reader.thisDocument")
+                  : (attachedDocuments.find((d) => d.id === pendingLink.fromDocumentId)?.title ??
+                    t("reader.anotherDocument")),
+            })}
           </span>
           <button
             onClick={() => broadcastPendingLink(null)}
-            aria-label="Cancel the link"
+            aria-label={t("reader.cancelLink")}
             className="shrink-0 text-xs text-sand-500 hover:text-clay-700"
           >
             ✕
@@ -3648,9 +3692,9 @@ export function ReaderInteractions({
         <div className="fixed bottom-6 left-1/2 z-40 w-[440px] max-w-[92vw] -translate-x-1/2 rounded-[24px] bg-card p-4 shadow-float">
           <div className="mb-2 flex items-center gap-2">
             <SparkleIcon size={15} className="text-clay" />
-            <span className="font-display text-[15px]">Assistant plan</span>
+            <span className="font-display text-[15px]">{t("reader.assistantPlan")}</span>
             <span className="ml-auto rounded-full bg-sand-200 px-2.5 py-0.5 text-[10px] font-semibold text-sand-600">
-              Ask first
+              {t("reader.askFirst")}
             </span>
           </div>
           {aiPlan.reply && (
@@ -3679,12 +3723,12 @@ export function ReaderInteractions({
                 />
                 <span className="min-w-0">
                   <span className="mr-1.5 rounded-full bg-sand-200 px-2 py-0.5 text-[10px] font-semibold text-sand-700">
-                    {ACTION_LABEL[action.type]}
+                    {t(ACTION_LABEL_KEY[action.type])}
                   </span>
                   {action.description}
-                  {actionDetail(action, blocks, attachedDocuments) && (
+                  {actionDetail(action, blocks, attachedDocuments, t) && (
                     <span className="mt-0.5 block text-[11px] text-sand-500">
-                      {actionDetail(action, blocks, attachedDocuments)}
+                      {actionDetail(action, blocks, attachedDocuments, t)}
                     </span>
                   )}
                 </span>
@@ -3706,13 +3750,13 @@ export function ReaderInteractions({
               onClick={() => void approvePlan()}
               className="rounded-full bg-clay px-4 py-1.5 text-xs font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
             >
-              Apply {planChecked.size} action{planChecked.size === 1 ? "" : "s"}
+              {t("reader.applyActions", { n: planChecked.size, s: plural(planChecked.size) })}
             </button>
             <button
               onClick={() => setAiPlan(null)}
               className="rounded-full border border-line px-3 py-1 text-xs text-sand-700 hover:bg-clay-100 hover:text-clay-800"
             >
-              Cancel
+              {t("common.cancel")}
             </button>
           </div>
         </div>
@@ -3727,8 +3771,8 @@ export function ReaderInteractions({
           canAddNotes={sectionChoices.length > 0}
           addNoteHint={
             sectionChoices.length === 0
-              ? "Add a section first"
-              : `Add as a pending note in ${sectionChoices[0].label}`
+              ? t("reader.addSectionFirst")
+              : t("reader.addPendingNote", { section: sectionChoices[0].label })
           }
           onRun={(question) => void runDistill(question)}
           onCancel={cancelDistill}

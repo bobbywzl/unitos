@@ -18,19 +18,21 @@ import {
 } from "@/components/icons";
 import { ContextTab, type ContextValues } from "@/components/context-tab";
 import { GuideDialog } from "@/components/guide-dialog";
+import { useT } from "@/components/lang-provider";
 import { NotebookTitle } from "@/components/notebook-title";
 import { NotesTray } from "@/components/outline/notes-tray";
 import { useOutline } from "@/components/outline/use-outline";
 import { DocumentBar, type AttachedDocument } from "@/components/reader/document-bar";
+import type { TKey } from "@/lib/i18n/dictionaries";
 
 type Tab = "notes" | "assistant" | "distill" | "annotations" | "edits";
 
-const TAB_TITLES: Record<Tab, string> = {
-  notes: "Notes",
-  assistant: "Assistant",
-  distill: "Distill",
-  annotations: "Annotations",
-  edits: "Edits",
+const TAB_TITLES: Record<Tab, TKey> = {
+  notes: "panes.notes",
+  assistant: "panes.assistant",
+  distill: "panes.distill",
+  annotations: "panes.annotations",
+  edits: "panes.edits",
 };
 
 const RAIL_BUTTON =
@@ -65,6 +67,7 @@ export function Workspace({
   distillationCount: number;
   context: { initial: ContextValues | null; hasOverride: boolean; isSet: boolean };
 }) {
+  const t = useT();
   const { tree, pending, actions, lastRejected, undoReject } = useOutline(notebook);
   const [collapsed, setCollapsed] = useState(false);
   const [tab, setTab] = useState<Tab>("notes");
@@ -141,7 +144,7 @@ export function Workspace({
       <header className="flex min-w-0 items-center gap-3.5 border-b border-line px-5 print:hidden">
         <Link
           href="/"
-          aria-label="All corpora"
+          aria-label={t("panes.allCorpora")}
           className="flex size-[38px] shrink-0 items-center justify-center rounded-full text-sand-700 hover:bg-clay-100 hover:text-clay-800"
         >
           <ArrowLeftIcon size={18} />
@@ -163,13 +166,13 @@ export function Workspace({
         />
         {pending.length > 0 && (
           <span className="shrink-0 rounded-full bg-clay-200 px-3.5 py-1.5 text-xs font-semibold text-clay-800">
-            {pending.length} pending
+            {t("panes.pendingCount", { n: pending.length })}
           </span>
         )}
         <button
           onClick={() => setGuideOpen(true)}
-          aria-label="Guide"
-          title="What every tool does"
+          aria-label={t("panes.guide")}
+          title={t("panes.guideTitle")}
           className="flex size-[38px] shrink-0 items-center justify-center rounded-full text-sand-600 hover:bg-clay-100 hover:text-clay-800"
         >
           <QuestionIcon size={18} />
@@ -189,7 +192,7 @@ export function Workspace({
           <aside className="flex min-h-0 w-[352px] shrink-0 flex-col gap-3.5 border-l border-line bg-sand-100 p-[18px] pb-4 print:hidden">
             {/* The rail's chevron collapses the tray; the header stays clean. */}
             <div className="flex items-center gap-2.5">
-              <span className="font-display text-[18px]">{TAB_TITLES[tab]}</span>
+              <span className="font-display text-[18px]">{t(TAB_TITLES[tab])}</span>
               {tab === "notes" && <span className="text-[13px] text-sand-600">{noteCount}</span>}
               {tab === "distill" && distillationCount > 0 && (
                 <span className="text-[13px] text-sand-600">{distillationCount}</span>
@@ -209,12 +212,12 @@ export function Workspace({
 
             {lastRejected && (
               <div className="flex shrink-0 items-center gap-3 rounded-full bg-card px-4 py-2.5 shadow-soft">
-                <span className="text-[13px] text-sand-600">Note rejected</span>
+                <span className="text-[13px] text-sand-600">{t("panes.noteRejected")}</span>
                 <button
                   onClick={() => void undoReject()}
                   className="ml-auto rounded-full bg-clay px-3.5 py-1 text-xs font-semibold text-clay-fg hover:bg-clay-600"
                 >
-                  Undo
+                  {t("panes.undo")}
                 </button>
               </div>
             )}
@@ -222,23 +225,23 @@ export function Workspace({
             {tab === "notes" && (
               <Link
                 href={`/n/${notebook.id}/notes`}
-                title="Reorganize, edit, and export your notes"
+                title={t("panes.notesFullPageTitle")}
                 className="flex shrink-0 items-center justify-center gap-2 rounded-full bg-card px-4 py-2.5 text-[13px] font-semibold text-sand-700 shadow-soft hover:bg-clay-100 hover:text-clay-800"
               >
                 <ExpandIcon size={15} />
-                Notes full page
+                {t("panes.notesFullPage")}
               </Link>
             )}
           </aside>
         )}
 
         <nav
-          aria-label="Workspace"
+          aria-label={t("panes.workspace")}
           className="flex w-[52px] shrink-0 flex-col items-center gap-1.5 border-l border-line bg-sand-100 py-2.5 print:hidden"
         >
           <button
             onClick={() => setCollapsed(!collapsed)}
-            aria-label={collapsed ? "Expand the notes tray" : "Collapse the notes tray"}
+            aria-label={collapsed ? t("panes.expandTray") : t("panes.collapseTray")}
             className={RAIL_BUTTON}
           >
             {collapsed ? <ChevronLeftIcon /> : <ChevronRightIcon />}
@@ -246,7 +249,7 @@ export function Workspace({
 
           <button
             onClick={() => show("assistant")}
-            aria-label="Assistant"
+            aria-label={t("panes.assistant")}
             aria-current={!collapsed && tab === "assistant"}
             className={!collapsed && tab === "assistant" ? RAIL_BUTTON_ON : RAIL_BUTTON}
           >
@@ -255,7 +258,7 @@ export function Workspace({
 
           <button
             onClick={() => show("notes")}
-            aria-label="Notes"
+            aria-label={t("panes.notes")}
             aria-current={!collapsed && tab === "notes"}
             className={!collapsed && tab === "notes" ? RAIL_BUTTON_ON : RAIL_BUTTON}
           >
@@ -269,7 +272,7 @@ export function Workspace({
 
           <button
             onClick={() => show("distill")}
-            aria-label="Distill"
+            aria-label={t("panes.distill")}
             aria-current={!collapsed && tab === "distill"}
             className={!collapsed && tab === "distill" ? RAIL_BUTTON_ON : RAIL_BUTTON}
           >
@@ -278,7 +281,7 @@ export function Workspace({
 
           <button
             onClick={() => show("annotations")}
-            aria-label="Annotations"
+            aria-label={t("panes.annotations")}
             aria-current={!collapsed && tab === "annotations"}
             className={!collapsed && tab === "annotations" ? RAIL_BUTTON_ON : RAIL_BUTTON}
           >
@@ -287,7 +290,7 @@ export function Workspace({
 
           <button
             onClick={() => show("edits")}
-            aria-label="Edit history"
+            aria-label={t("panes.editHistory")}
             aria-current={!collapsed && tab === "edits"}
             className={!collapsed && tab === "edits" ? RAIL_BUTTON_ON : RAIL_BUTTON}
           >
@@ -297,7 +300,7 @@ export function Workspace({
           <div ref={menuRef} className="relative mt-auto">
             <button
               onClick={() => setMenuOpen(!menuOpen)}
-              aria-label="More"
+              aria-label={t("panes.more")}
               aria-expanded={menuOpen}
               className={RAIL_BUTTON}
             >
@@ -309,13 +312,13 @@ export function Workspace({
                   href={`/n/${notebook.id}/notes`}
                   className="px-4 py-2 text-sm text-sand-700 hover:bg-clay-100 hover:text-clay-800"
                 >
-                  Notes full page
+                  {t("panes.notesFullPage")}
                 </Link>
                 <Link
                   href="/settings"
                   className="px-4 py-2 text-sm text-sand-700 hover:bg-clay-100 hover:text-clay-800"
                 >
-                  Settings
+                  {t("common.settings")}
                 </Link>
               </div>
             )}

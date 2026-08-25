@@ -2,6 +2,8 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { useT } from "@/components/lang-provider";
+import type { TKey } from "@/lib/i18n/dictionaries";
 
 // Reader views: Normal shows one document; Side by Side and Top and Bottom
 // show two panes, each with the full tool set. The choice lives in the URL —
@@ -10,10 +12,10 @@ import { useEffect, useRef, useState } from "react";
 
 export type ReaderViewKind = "normal" | "side" | "stack";
 
-const VIEW_LABEL: Record<ReaderViewKind, string> = {
-  normal: "Normal",
-  side: "Side by Side",
-  stack: "Top and Bottom",
+const VIEW_LABEL: Record<ReaderViewKind, TKey> = {
+  normal: "panes.viewNormal",
+  side: "panes.viewSide",
+  stack: "panes.viewStack",
 };
 
 function ViewGlyph({ kind, size = 15 }: { kind: ReaderViewKind; size?: number }) {
@@ -154,6 +156,7 @@ export function ReaderPanes({
   paneOne: React.ReactNode;
   paneTwo: React.ReactNode | null;
 }) {
+  const t = useT();
   const router = useRouter();
   const [menu, setMenu] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -202,8 +205,8 @@ export function ReaderPanes({
       <div ref={menuRef} className="absolute top-4 left-4 z-30 print:hidden">
         <button
           onClick={() => setMenu((v) => !v)}
-          aria-label="Reader view"
-          title="Reader view"
+          aria-label={t("panes.readerView")}
+          title={t("panes.readerView")}
           className="flex items-center justify-center rounded-full bg-sand-100 p-2 text-sand-600 shadow-soft hover:text-clay-800"
         >
           <ViewGlyph kind={view} />
@@ -221,7 +224,7 @@ export function ReaderPanes({
                 }`}
               >
                 <ViewGlyph kind={kind} size={13} />
-                {VIEW_LABEL[kind]}
+                {t(VIEW_LABEL[kind])}
               </button>
             ))}
           </div>
@@ -239,7 +242,7 @@ export function ReaderPanes({
               <select
                 value={paneTwoId ?? ""}
                 onChange={(e) => go(view, e.target.value)}
-                aria-label="Second pane document"
+                aria-label={t("panes.secondPaneDocument")}
                 className="w-full truncate rounded-full bg-sand-100 px-3 py-1.5 text-xs font-semibold text-sand-700 shadow-soft outline-none"
               >
                 {documents.map((d) => (

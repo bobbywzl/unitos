@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { serverT } from "@/lib/i18n/server";
 import { ndjsonWriter } from "@/lib/ndjson";
 
 export const maxDuration = 120;
@@ -8,6 +9,7 @@ export const maxDuration = 120;
 // survive via quote fallback (SPEC.md §5). Streams the same stage events as
 // /api/documents so the client shows the same progress card.
 export async function POST(_req: Request, ctx: { params: Promise<{ documentId: string }> }) {
+  const t = await serverT();
   const { documentId } = await ctx.params;
 
   // Parse chain (jsdom, unpdf) loads per request; see /api/documents.
@@ -18,7 +20,7 @@ export async function POST(_req: Request, ctx: { params: Promise<{ documentId: s
     console.error("Parse module load failed:", err);
     const message = err instanceof Error ? err.message : String(err);
     return NextResponse.json(
-      { error: `Document parsing is unavailable: ${message}` },
+      { error: t("api.parsingUnavailable", { message }) },
       { status: 500 },
     );
   }
@@ -27,11 +29,11 @@ export async function POST(_req: Request, ctx: { params: Promise<{ documentId: s
     where: { id: documentId },
     select: { id: true, video: { select: { id: true } } },
   });
-  if (!document) return NextResponse.json({ error: "Document not found" }, { status: 404 });
+  if (!document) return NextResponse.json({ error: t("api.documentNotFound") }, { status: 404 });
   // A video document's blocks are its player and transcript — re-parsing its
   // sourceUrl as an article would replace them (SPEC.md §11).
   if (document.video) {
-    return NextResponse.json({ error: "Video documents do not re-parse" }, { status: 400 });
+    return NextResponse.json({ error: t("api.videoNoReparse") }, { status: 400 });
   }
 
   const stream = new ReadableStream<Uint8Array>({
@@ -41,11 +43,11 @@ export async function POST(_req: Request, ctx: { params: Promise<{ documentId: s
         const updated = await parse.reparseDocument(documentId, (stage, detail) =>
           send({ stage, detail }),
         );
-        if (!updated) send({ error: "Document not found" });
+        if (!updated) send({ error: t("api.documentNotFound") });
         else send({ id: updated.id, title: updated.title, deduped: false });
       } catch (err) {
         console.error("Re-parse failed:", err);
-        send({ error: err instanceof Error ? err.message : "Re-parse failed" });
+        send({ error: err instanceof Error ? err.message : t("api.reparseFailed") });
       } finally {
         controller.close();
       }

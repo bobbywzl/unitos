@@ -14,6 +14,8 @@ import {
 } from "@/lib/derive/context";
 import { fetchFigureImage, figureContent, type FigureImage } from "@/lib/derive/figure";
 import { callForJson, modelErrorMessage } from "@/lib/derive/json-call";
+import { serverT } from "@/lib/i18n/server";
+import type { TFunc } from "@/lib/i18n/dictionaries";
 import { profileLines } from "@/lib/prompts/types";
 import { parseBody } from "@/lib/validate";
 import type { AssistantAction, AssistantAnchor, AssistantPlan } from "@/lib/types";
@@ -137,23 +139,21 @@ function buildAnchor(blockText: string, quoteText: string, blockId: string) {
 // Any unexpected throw still answers with the reason, never a bare 500 —
 // the client toast shows this message.
 export async function POST(req: Request) {
+  const t = await serverT();
   try {
-    return await handle(req);
+    return await handle(req, t);
   } catch (err) {
     console.error("[assistant:act] failed:", err);
     return NextResponse.json(
-      { error: `The assistant failed. ${modelErrorMessage(err)}` },
+      { error: t("api.assistantFailed", { reason: modelErrorMessage(err) }) },
       { status: 500 },
     );
   }
 }
 
-async function handle(req: Request) {
+async function handle(req: Request, t: TFunc) {
   if (!process.env.ANTHROPIC_API_KEY) {
-    return NextResponse.json(
-      { error: "ANTHROPIC_API_KEY is not set. The assistant needs it." },
-      { status: 503 },
-    );
+    return NextResponse.json({ error: t("api.assistantNeedsKey") }, { status: 503 });
   }
   const { data, error } = await parseBody(req, requestSchema);
   if (error) return error;
@@ -161,14 +161,14 @@ async function handle(req: Request) {
   if (denied) return denied;
 
   const notebook = await db.notebook.findUnique({ where: { id: data.notebookId } });
-  if (!notebook) return NextResponse.json({ error: "Corpus not found" }, { status: 404 });
+  if (!notebook) return NextResponse.json({ error: t("api.corpusNotFound") }, { status: 404 });
   const attachment = await db.notebookDocument.findUnique({
     where: {
       notebookId_documentId: { notebookId: data.notebookId, documentId: data.documentId },
     },
   });
   if (!attachment) {
-    return NextResponse.json({ error: "Document is not attached to this corpus" }, { status: 404 });
+    return NextResponse.json({ error: t("api.documentNotAttachedToCorpus") }, { status: 404 });
   }
   const document = await db.document.findUnique({
     where: { id: data.documentId },
@@ -176,7 +176,7 @@ async function handle(req: Request) {
       blocks: { orderBy: { order: "asc" }, select: { id: true, type: true, text: true, startTime: true, endTime: true } },
     },
   });
-  if (!document) return NextResponse.json({ error: "Document not found" }, { status: 404 });
+  if (!document) return NextResponse.json({ error: t("api.documentNotFound") }, { status: 404 });
 
   const [profile, sections, attachedDocs, notes] = await Promise.all([
     loadProfile(data.notebookId),
@@ -208,7 +208,7 @@ async function handle(req: Request) {
       data.anchor.endOffset,
     );
     if (!anchored) {
-      return NextResponse.json({ error: "Anchor does not resolve" }, { status: 400 });
+      return NextResponse.json({ error: t("api.anchorNotResolved") }, { status: 400 });
     }
     const anchoredBlock = await db.block.findUnique({
       where: { id: data.anchor.blockId },
@@ -312,7 +312,7 @@ async function handle(req: Request) {
     label: "assistant:act",
   });
   if (!result.ok) {
-    return NextResponse.json({ error: `The assistant could not form a plan. ${result.error}` }, { status: 422 });
+    return NextResponse.json({ error: t("api.planFailed", { reason: result.error }) }, { status: 422 });
   }
 
   // Validate and enrich every action against the real document, so the client
@@ -335,7 +335,7 @@ async function handle(req: Request) {
         const block = blockById.get(action.blockId);
         const anchor = block ? buildAnchor(block.text, action.quote, block.id) : null;
         if (anchor) source = { documentId: data.documentId, ...anchor };
-        else warnings.push(`Note source dropped: the quote was not found. (${action.description})`);
+        else warnings.push(t("api.warnSourceQuoteNotFound", { description: action.description }));
       }
       actions.push({
         type: "add_note",
@@ -350,7 +350,7 @@ async function handle(req: Request) {
     if (action.type === "format_block") {
       const target = blockById.get(action.blockId);
       if (!target || !TEXT_TYPES.has(target.type)) {
-        warnings.push(`Skipped: block not found or not text. (${action.description})`);
+        warnings.push(t("api.warnBlockNotFoundOrNotText", { description: action.description }));
         continue;
       }
       actions.push(action);
@@ -360,7 +360,7 @@ async function handle(req: Request) {
       const target = blockById.get(action.blockId);
       const anchor = target ? buildAnchor(target.text, action.quote, target.id) : null;
       if (!anchor) {
-        warnings.push(`Skipped: the quote was not found in its block. (${action.description})`);
+        warnings.push(t("api.warnQuoteNotFound", { description: action.description }));
         continue;
       }
       actions.push({ type: "style", anchor, style: action.style, description: action.description });
@@ -370,14 +370,14 @@ async function handle(req: Request) {
       action.type === "insert_paragraph" ? action.afterBlockId : action.blockId,
     );
     if (!block) {
-      warnings.push(`Skipped: block not found. (${action.description})`);
+      warnings.push(t("api.warnBlockNotFound", { description: action.description }));
       continue;
     }
     if (
       (action.type === "edit_block" || action.type === "remove_block") &&
       !TEXT_TYPES.has(block.type)
     ) {
-      warnings.push(`Skipped: only text blocks can be edited. (${action.description})`);
+      warnings.push(t("api.warnOnlyTextEdited", { description: action.description }));
       continue;
     }
     if (action.type === "edit_block" || action.type === "remove_block" || action.type === "insert_paragraph") {
@@ -387,7 +387,7 @@ async function handle(req: Request) {
     // highlight / comment / link carry exact quotes: resolve to offsets now.
     const anchor = buildAnchor(block.text, action.quote, block.id);
     if (!anchor) {
-      warnings.push(`Skipped: the quote was not found in its block. (${action.description})`);
+      warnings.push(t("api.warnQuoteNotFound", { description: action.description }));
       continue;
     }
     if (action.type === "highlight") {
@@ -396,7 +396,7 @@ async function handle(req: Request) {
       actions.push({ type: "comment", anchor, comment: action.comment, description: action.description });
     } else {
       if (!attachedIds.has(action.toDocumentId) || action.toDocumentId === data.documentId) {
-        warnings.push(`Skipped: the link target is not another attached document. (${action.description})`);
+        warnings.push(t("api.warnLinkTargetNotAttached", { description: action.description }));
         continue;
       }
       actions.push({ type: "link", anchor, toDocumentId: action.toDocumentId, description: action.description });

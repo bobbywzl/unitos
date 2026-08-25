@@ -1,4 +1,6 @@
 import type { DerivationType } from "@prisma/client";
+import { isLang, LANG_COOKIE } from "@/lib/i18n/config";
+import { translate } from "@/lib/i18n/dictionaries";
 
 // Model per derivation type (SPEC.md §2). One place to change.
 export const DERIVATION_MODEL: Record<DerivationType, string> = {
@@ -38,8 +40,16 @@ export function splitStreamError(text: string): { text: string; error: string | 
   if (at === -1) return { text, error: null };
   return {
     text: text.slice(0, at),
-    error: text.slice(at + STREAM_ERROR_TOKEN.length) || "The model call failed.",
+    error: text.slice(at + STREAM_ERROR_TOKEN.length) || modelCallFailed(),
   };
+}
+
+// The token with no reason falls back to a translated line. Only the client
+// splits streams, so the language comes from the cookie, same as lib/api.ts.
+function modelCallFailed(): string {
+  if (typeof document === "undefined") return translate("en", "common.modelCallFailed");
+  const value = document.cookie.match(new RegExp(`(?:^|; )${LANG_COOKIE}=([^;]+)`))?.[1];
+  return translate(isLang(value) ? value : "en", "common.modelCallFailed");
 }
 
 // EXPLAIN and SIMPLIFY persist their annotation before the stream closes, then

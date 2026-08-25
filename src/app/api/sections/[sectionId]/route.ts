@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
+import { serverT } from "@/lib/i18n/server";
 import { normalizeSectionOrders, movedOrder } from "@/lib/order";
 import { parseBody } from "@/lib/validate";
 
@@ -11,6 +12,7 @@ const patchSchema = z.object({
 });
 
 export async function PATCH(req: Request, ctx: { params: Promise<{ sectionId: string }> }) {
+  const t = await serverT();
   const { sectionId } = await ctx.params;
   const { data, error } = await parseBody(req, patchSchema);
   if (error) return error;
@@ -19,19 +21,19 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ sectionId: st
     where: { id: sectionId },
     include: { _count: { select: { children: true } } },
   });
-  if (!section) return NextResponse.json({ error: "Section not found" }, { status: 404 });
+  if (!section) return NextResponse.json({ error: t("api.sectionNotFound") }, { status: 404 });
 
   if (data.parentId !== undefined && data.parentId !== section.parentId) {
     if (data.parentId) {
       if (section._count.children > 0) {
-        return NextResponse.json({ error: "Sections nest one level deep" }, { status: 400 });
+        return NextResponse.json({ error: t("api.sectionsNestOneLevel") }, { status: 400 });
       }
       const parent = await db.section.findUnique({ where: { id: data.parentId } });
       if (!parent || parent.notebookId !== section.notebookId || parent.id === section.id) {
-        return NextResponse.json({ error: "Parent section not found" }, { status: 404 });
+        return NextResponse.json({ error: t("api.parentSectionNotFound") }, { status: 404 });
       }
       if (parent.parentId) {
-        return NextResponse.json({ error: "Sections nest one level deep" }, { status: 400 });
+        return NextResponse.json({ error: t("api.sectionsNestOneLevel") }, { status: 400 });
       }
     }
     const siblingCount = await db.section.count({
@@ -68,9 +70,10 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ sectionId: st
 }
 
 export async function DELETE(_req: Request, ctx: { params: Promise<{ sectionId: string }> }) {
+  const t = await serverT();
   const { sectionId } = await ctx.params;
   const section = await db.section.findUnique({ where: { id: sectionId } });
-  if (!section) return NextResponse.json({ error: "Section not found" }, { status: 404 });
+  if (!section) return NextResponse.json({ error: t("api.sectionNotFound") }, { status: 404 });
   // Children are promoted to top level (parentId set to null by the default referential action).
   await db.section.delete({ where: { id: sectionId } });
   await normalizeSectionOrders(section.notebookId);

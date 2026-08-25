@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { PlusIcon } from "@/components/icons";
+import { useT } from "@/components/lang-provider";
 import { BlockView, type BlockData, type Highlight } from "@/components/reader/block-view";
 
 const TEXT_TYPES = new Set(["PARAGRAPH", "HEADING", "LIST", "CODE", "EQUATION"]);
@@ -154,6 +155,7 @@ export function Reader({
   onInsertBlock: (afterBlockId: string) => Promise<string | null>;
   onDeleteBlock: (blockId: string) => Promise<void>;
 }) {
+  const t = useT();
   const [focusedBlockId, setFocusedBlockId] = useState<string | null>(null);
   // Optimistic overrides: applied the instant a bar button is clicked, cleared
   // when the server round-trip lands (the blocks prop identity changes then).
@@ -312,20 +314,20 @@ export function Reader({
         <div className="sticky top-3 z-30 mx-auto flex w-fit items-center gap-0.5 rounded-full bg-card px-2 py-1.5 shadow-float print:hidden">
           {(
             [
-              ["paragraph", "¶", "Paragraph"],
-              ["h1", "H1", "Heading 1"],
-              ["h2", "H2", "Heading 2"],
-              ["h3", "H3", "Heading 3"],
-              ["list", "•", "Bulleted list"],
-              ["numbered", "1.", "Numbered list"],
+              ["paragraph", "¶", "panes.formatParagraph"],
+              ["h1", "H1", "panes.formatHeading1"],
+              ["h2", "H2", "panes.formatHeading2"],
+              ["h3", "H3", "panes.formatHeading3"],
+              ["list", "•", "panes.formatBulletedList"],
+              ["numbered", "1.", "panes.formatNumberedList"],
             ] as const
-          ).map(([kind, label, title]) => (
+          ).map(([kind, label, titleKey]) => (
             <button
               key={kind}
               onMouseDown={keep}
               disabled={!focusedBlock}
               onClick={() => applyFormat(kind)}
-              title={title}
+              title={t(titleKey)}
               className={
                 focusedBlock && effectiveKind(focusedBlock) === kind
                   ? "rounded-full bg-clay-100 px-2.5 py-1 text-[11.5px] font-semibold text-clay-800"
@@ -336,20 +338,20 @@ export function Reader({
             </button>
           ))}
           <span aria-hidden className="mx-1 h-4 w-px bg-line" />
-          <button onMouseDown={keep} disabled={!focusedBlock} onClick={() => applyStyle("bold")} title="Bold" className={`${barButton} font-bold`}>
+          <button onMouseDown={keep} disabled={!focusedBlock} onClick={() => applyStyle("bold")} title={t("panes.bold")} className={`${barButton} font-bold`}>
             B
           </button>
-          <button onMouseDown={keep} disabled={!focusedBlock} onClick={() => applyStyle("italic")} title="Italic" className={`${barButton} italic`}>
+          <button onMouseDown={keep} disabled={!focusedBlock} onClick={() => applyStyle("italic")} title={t("panes.italic")} className={`${barButton} italic`}>
             I
           </button>
-          <button onMouseDown={keep} disabled={!focusedBlock} onClick={() => applyStyle("underline")} title="Underline" className={`${barButton} underline`}>
+          <button onMouseDown={keep} disabled={!focusedBlock} onClick={() => applyStyle("underline")} title={t("panes.underline")} className={`${barButton} underline`}>
             U
           </button>
           <span aria-hidden className="mx-1 h-4 w-px bg-line" />
-          <button onMouseDown={keep} disabled={!focusedBlock} onClick={() => applyIndent(-1)} title="Outdent the current line" className={barButton}>
+          <button onMouseDown={keep} disabled={!focusedBlock} onClick={() => applyIndent(-1)} title={t("panes.outdentLine")} className={barButton}>
             ⇤
           </button>
-          <button onMouseDown={keep} disabled={!focusedBlock} onClick={() => applyIndent(1)} title="Indent the current line" className={barButton}>
+          <button onMouseDown={keep} disabled={!focusedBlock} onClick={() => applyIndent(1)} title={t("panes.indentLine")} className={barButton}>
             ⇥
           </button>
           <span aria-hidden className="mx-1 h-4 w-px bg-line" />
@@ -357,23 +359,22 @@ export function Reader({
             onMouseDown={keep}
             disabled={!focusedBlock}
             onClick={() => {
-              if (
-                focusedBlockId &&
-                confirm("Remove this paragraph? Notes anchored to it will show as unresolved.")
-              ) {
+              if (focusedBlockId && confirm(t("panes.confirmRemoveParagraph"))) {
                 void onDeleteBlock(focusedBlockId);
               }
             }}
             className="rounded-full px-2.5 py-1 text-[11.5px] font-semibold text-red-500 hover:bg-red-50 hover:text-red-700 dark:hover:bg-red-950"
           >
-            Remove ¶
+            {t("panes.removeParagraph")}
           </button>
         </div>
       )}
 
       <article className="reader-prose mx-auto w-[720px] max-w-full px-6 py-11 print:py-0" style={{ fontFamily }}>
         <p className="mb-2.5 text-[11px] font-bold tracking-[0.09em] text-clay-700 uppercase print:hidden">
-          Document · {blocks.length} blocks{mode === "edit" ? " · editing" : ""}
+          {t(mode === "edit" ? "panes.documentBlocksEditing" : "panes.documentBlocks", {
+            n: blocks.length,
+          })}
         </p>
         <h2 className="mb-[26px] text-[33px]">{title}</h2>
 
@@ -403,12 +404,12 @@ export function Reader({
                       if (id) pendingFocusRef.current = id;
                     })
                   }
-                  aria-label="Insert a paragraph here"
-                  title="Insert a paragraph here"
+                  aria-label={t("panes.insertParagraphHere")}
+                  title={t("panes.insertParagraphHere")}
                   className="absolute top-1/2 left-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center gap-1 rounded-full bg-card px-2.5 py-0.5 text-[11px] font-semibold text-sand-600 opacity-0 shadow-soft transition-opacity hover:bg-clay-100 hover:text-clay-800 hover:opacity-100 focus-visible:opacity-100 group-hover/block:opacity-60"
                 >
                   <PlusIcon size={10} />
-                  paragraph
+                  {t("panes.paragraphLower")}
                 </button>
               </div>
             </div>
@@ -421,7 +422,7 @@ export function Reader({
           ),
         )}
         {blocks.length === 0 && (
-          <p className="text-sm text-sand-600">This document has no blocks. Re-parse it.</p>
+          <p className="text-sm text-sand-600">{t("panes.noBlocks")}</p>
         )}
       </article>
     </div>
@@ -462,6 +463,7 @@ function EditableBlock({
   onSave: (blockId: string, text: string) => Promise<void>;
   onFocusBlock: (blockId: string) => void;
 }) {
+  const t = useT();
   const ref = useRef<HTMLElement | null>(null);
 
   const html = decoratedHtml(text, spans, edited);
@@ -489,7 +491,7 @@ function EditableBlock({
     contentEditable: "plaintext-only" as const,
     suppressContentEditableWarning: true,
     "data-edit-block": block.id,
-    "data-placeholder": "Type here",
+    "data-placeholder": t("panes.typeHere"),
     onFocus: () => onFocusBlock(block.id),
     onBlur: () => {
       const next = ref.current?.textContent ?? "";

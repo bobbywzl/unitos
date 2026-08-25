@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
+import { serverT } from "@/lib/i18n/server";
 import { parseBody } from "@/lib/validate";
 
 const createSchema = z.object({
@@ -10,19 +11,20 @@ const createSchema = z.object({
 });
 
 export async function POST(req: Request) {
+  const t = await serverT();
   const { data, error } = await parseBody(req, createSchema);
   if (error) return error;
 
   const notebook = await db.notebook.findUnique({ where: { id: data.notebookId } });
-  if (!notebook) return NextResponse.json({ error: "Corpus not found" }, { status: 404 });
+  if (!notebook) return NextResponse.json({ error: t("api.corpusNotFound") }, { status: 404 });
 
   if (data.parentId) {
     const parent = await db.section.findUnique({ where: { id: data.parentId } });
     if (!parent || parent.notebookId !== data.notebookId) {
-      return NextResponse.json({ error: "Parent section not found" }, { status: 404 });
+      return NextResponse.json({ error: t("api.parentSectionNotFound") }, { status: 404 });
     }
     if (parent.parentId) {
-      return NextResponse.json({ error: "Sections nest one level deep" }, { status: 400 });
+      return NextResponse.json({ error: t("api.sectionsNestOneLevel") }, { status: 400 });
     }
   }
 

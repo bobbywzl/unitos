@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { diffSegments, remapAnchor, remapRange } from "@/lib/anchors/remap";
 import { db } from "@/lib/db";
+import { serverT } from "@/lib/i18n/server";
 import { parseBody } from "@/lib/validate";
 
 const patchSchema = z
@@ -39,15 +40,16 @@ type StyleSpan = { start: number; end: number; style: string; quotedText: string
 // not editable. block.html is left untouched — for HEADING it stores the level tag.
 // The document glossary is left alone; term offsets re-resolve at render.
 export async function PATCH(req: Request, ctx: { params: Promise<{ blockId: string }> }) {
+  const t = await serverT();
   const { blockId } = await ctx.params;
   const { data, error } = await parseBody(req, patchSchema);
   if (error) return error;
 
   const block = await db.block.findUnique({ where: { id: blockId } });
-  if (!block) return NextResponse.json({ error: "Block not found" }, { status: 404 });
+  if (!block) return NextResponse.json({ error: t("api.blockNotFound") }, { status: 404 });
 
   if (block.type === "TABLE" || block.type === "FIGURE") {
-    return NextResponse.json({ error: "Only text blocks can be edited" }, { status: 400 });
+    return NextResponse.json({ error: t("api.onlyTextBlocksEdited") }, { status: 400 });
   }
 
   const target = data.kind !== undefined ? KIND_TO_BLOCK[data.kind] : null;
@@ -205,11 +207,12 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ blockId: stri
 // Remove a block. Its anchors orphan visibly (SPEC.md §5); the Edits panel can
 // restore the block from the recorded text, format, and position.
 export async function DELETE(_req: Request, ctx: { params: Promise<{ blockId: string }> }) {
+  const t = await serverT();
   const { blockId } = await ctx.params;
   const block = await db.block.findUnique({ where: { id: blockId } });
-  if (!block) return NextResponse.json({ error: "Block not found" }, { status: 404 });
+  if (!block) return NextResponse.json({ error: t("api.blockNotFound") }, { status: 404 });
   if (block.type === "TABLE" || block.type === "FIGURE") {
-    return NextResponse.json({ error: "Only text blocks can be removed" }, { status: 400 });
+    return NextResponse.json({ error: t("api.onlyTextBlocksRemoved") }, { status: 400 });
   }
 
   await db.$transaction([

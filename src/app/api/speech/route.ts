@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { serverT } from "@/lib/i18n/server";
 import { parseBody } from "@/lib/validate";
 
 export const maxDuration = 60;
@@ -13,10 +14,11 @@ const speechSchema = z.object({
 });
 
 export async function POST(req: Request) {
+  const t = await serverT();
   const { data, error } = await parseBody(req, speechSchema);
   if (error) return error;
   if (!process.env.OPENAI_API_KEY) {
-    return NextResponse.json({ error: "OPENAI_API_KEY is not set" }, { status: 503 });
+    return NextResponse.json({ error: t("api.speechNeedsKey") }, { status: 503 });
   }
   let res: Response;
   try {
@@ -35,12 +37,12 @@ export async function POST(req: Request) {
     });
   } catch (err) {
     console.error("[speech] TTS request failed:", err);
-    return NextResponse.json({ error: "Voice failed. Try again." }, { status: 502 });
+    return NextResponse.json({ error: t("api.voiceFailedRetry") }, { status: 502 });
   }
   if (!res.ok || !res.body) {
     const detail = await res.text().catch(() => "");
     console.error("[speech] TTS failed:", res.status, detail.slice(0, 300));
-    return NextResponse.json({ error: `Voice failed (${res.status})` }, { status: 502 });
+    return NextResponse.json({ error: t("api.voiceFailedStatus", { status: res.status }) }, { status: 502 });
   }
   return new Response(res.body, { headers: { "Content-Type": "audio/mpeg" } });
 }

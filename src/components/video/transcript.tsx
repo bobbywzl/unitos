@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef } from "react";
 import { SpinnerIcon } from "@/components/icons";
+import { useT } from "@/components/lang-provider";
 import { formatTime, type TranscriptLine, type VideoAnnotationItem } from "@/lib/video/types";
 
 // The transcript under the player (SPEC.md §11): click a line to seek; the
@@ -32,6 +33,7 @@ export function Transcript({
   onOpenAnnotation: (annotation: VideoAnnotationItem) => void;
   onTranscribe: () => void;
 }) {
+  const t = useT();
   const listRef = useRef<HTMLDivElement>(null);
   const hoveredRef = useRef(false);
 
@@ -64,7 +66,7 @@ export function Transcript({
     <section className="mt-6">
       <div className="mb-2.5 flex items-center gap-2">
         <span className="text-[11px] font-bold tracking-[0.08em] text-sand-600 uppercase">
-          Transcript
+          {t("video.transcript")}
         </span>
         {transcript.length > 0 && (
           <span className="text-[13px] text-sand-600">{transcript.length}</span>
@@ -73,9 +75,9 @@ export function Transcript({
           <button
             onClick={onTranscribe}
             className="ml-auto rounded-full px-2 py-0.5 text-[11px] font-semibold text-sand-600 hover:bg-clay-100 hover:text-clay-800"
-            title="Transcribe the video again; the lines are replaced"
+            title={t("video.transcribeAgainTitle")}
           >
-            Transcribe again
+            {t("video.transcribeAgain")}
           </button>
         )}
       </div>
@@ -99,7 +101,7 @@ export function Transcript({
               >
                 <button
                   onClick={() => onSeek(line)}
-                  title="Jump here"
+                  title={t("video.jumpHere")}
                   className="w-10 shrink-0 pt-[2px] text-left text-[11px] tabular-nums text-sand-500 hover:text-clay-800"
                 >
                   {formatTime(line.startTime)}
@@ -114,19 +116,27 @@ export function Transcript({
                     {line.text}
                   </button>
                   <div className="mt-0.5 flex items-center gap-1 opacity-0 transition-opacity group-hover/line:opacity-100">
-                    <button onClick={() => onComment(line)} className={action} title="Comment on this line">
-                      Comment
+                    <button
+                      onClick={() => onComment(line)}
+                      className={action}
+                      title={t("video.commentOnLineTitle")}
+                    >
+                      {t("video.comment")}
                     </button>
-                    <button onClick={() => onExplain(line)} className={action} title="Explain this moment">
-                      Explain
+                    <button
+                      onClick={() => onExplain(line)}
+                      className={action}
+                      title={t("video.explainThisMoment")}
+                    >
+                      {t("video.explain")}
                     </button>
                     {annotated && (
                       <button
                         onClick={() => onOpenAnnotation(annotated)}
                         className={action}
-                        title="Open the note on this moment"
+                        title={t("video.openNoteTitle")}
                       >
-                        Open note
+                        {t("video.openNote")}
                       </button>
                     )}
                   </div>
@@ -140,20 +150,19 @@ export function Transcript({
           {pending ? (
             <p className="flex items-center gap-2 text-[13px] text-sand-600">
               <SpinnerIcon size={14} className="shrink-0 text-clay motion-safe:animate-spin" />
-              Transcribing… takes a minute or two. Read along, click a line to seek, and search
-              the video once it lands.
+              {t("video.transcribingLong")}
             </p>
           ) : (
             <div className="flex flex-col gap-2.5">
               <p className="text-[13px] leading-relaxed text-sand-600">
-                The transcript did not land. It powers read-along, click-to-seek, and Find.
+                {t("video.transcriptFailedBody")}
               </p>
               {failedMessage && <p className="text-xs text-red-500">{failedMessage}</p>}
               <button
                 onClick={onTranscribe}
                 className="self-start rounded-full bg-clay px-4 py-1.5 text-xs font-semibold text-clay-fg hover:bg-clay-600"
               >
-                Retry
+                {t("common.retry")}
               </button>
             </div>
           )}

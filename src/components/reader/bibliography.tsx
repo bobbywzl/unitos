@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { ChevronDownIcon, ChevronRightIcon } from "@/components/icons";
+import { useT } from "@/components/lang-provider";
 import type { DocumentReference } from "@/lib/parse/types";
 
 function referenceHost(url: string): string {
@@ -17,6 +18,7 @@ function referenceHost(url: string): string {
 // text expands the section, scrolls to the entry, and flashes it. Entries with
 // a URL link out. Print always shows the entries.
 export function Bibliography({ references }: { references: DocumentReference[] }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const sectionRef = useRef<HTMLElement>(null);
 
@@ -62,10 +64,10 @@ export function Bibliography({ references }: { references: DocumentReference[] }
           className="flex items-center gap-1.5 text-[12px] font-bold tracking-[0.09em] text-clay-700 uppercase hover:text-clay-800 print:hidden"
         >
           {open ? <ChevronDownIcon size={13} /> : <ChevronRightIcon size={13} />}
-          References ({references.length})
+          {t("panes.referencesCount", { n: references.length })}
         </button>
         <p className="hidden text-[12px] font-bold tracking-[0.09em] text-clay-700 uppercase print:block">
-          References ({references.length})
+          {t("panes.referencesCount", { n: references.length })}
         </p>
         <ol className={`mt-4 space-y-2 ${open ? "" : "hidden print:block"}`}>
           {references.map((reference) => (

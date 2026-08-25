@@ -2,6 +2,8 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { useT } from "@/components/lang-provider";
+import type { TFunc, TKey } from "@/lib/i18n/dictionaries";
 
 export type FeedbackItem = {
   id: string;
@@ -16,8 +18,25 @@ export type FeedbackItem = {
 const FILTERS = ["new", "seen", "resolved", "all"] as const;
 type Filter = (typeof FILTERS)[number];
 
+// Display labels of the wire values; the values themselves never change.
+const VALUE_LABELS: Record<string, TKey> = {
+  new: "admin.statusNew",
+  seen: "admin.statusSeen",
+  resolved: "admin.statusResolved",
+  all: "admin.filterAll",
+  bug: "admin.categoryBug",
+  idea: "admin.categoryIdea",
+  other: "admin.categoryOther",
+};
+
+function valueLabel(t: TFunc, value: string): string {
+  const key = VALUE_LABELS[value];
+  return key ? t(key) : value;
+}
+
 export function FeedbackInbox({ items }: { items: FeedbackItem[] }) {
   const router = useRouter();
+  const t = useT();
   const [filter, setFilter] = useState<Filter>("new");
   const newCount = items.filter((f) => f.status === "new").length;
   const visible = filter === "all" ? items : items.filter((f) => f.status === filter);
@@ -34,7 +53,7 @@ export function FeedbackInbox({ items }: { items: FeedbackItem[] }) {
   return (
     <div>
       <header className="mb-6 flex items-center gap-3">
-        <h1 className="text-[28px]">Feedback</h1>
+        <h1 className="text-[28px]">{t("admin.feedback")}</h1>
         <div className="flex gap-1">
           {FILTERS.map((f) => (
             <button
@@ -46,7 +65,7 @@ export function FeedbackInbox({ items }: { items: FeedbackItem[] }) {
                   : "bg-card text-sand-600 shadow-soft hover:text-clay-800"
               }`}
             >
-              {f}
+              {valueLabel(t, f)}
               {f === "new" && newCount > 0 ? ` (${newCount})` : ""}
             </button>
           ))}
@@ -54,7 +73,11 @@ export function FeedbackInbox({ items }: { items: FeedbackItem[] }) {
       </header>
 
       {visible.length === 0 ? (
-        <p className="text-sm text-sand-600">No {filter === "all" ? "" : filter + " "}feedback.</p>
+        <p className="text-sm text-sand-600">
+          {filter === "all"
+            ? t("admin.feedbackEmpty")
+            : t("admin.feedbackEmptyFiltered", { filter: valueLabel(t, filter) })}
+        </p>
       ) : (
         <ul className="space-y-3">
           {visible.map((f) => (
@@ -69,11 +92,11 @@ export function FeedbackInbox({ items }: { items: FeedbackItem[] }) {
                         : "bg-sand-200 text-sand-700"
                   }`}
                 >
-                  {f.category}
+                  {valueLabel(t, f.category)}
                 </span>
                 <span>{new Date(f.createdAt).toLocaleString()}</span>
                 {f.page && <span className="truncate">· {f.page}</span>}
-                <span className="ml-auto">{f.status}</span>
+                <span className="ml-auto">{valueLabel(t, f.status)}</span>
               </div>
               <p className="mt-2 text-sm whitespace-pre-wrap">{f.message}</p>
               <div className="mt-2 flex gap-2">
@@ -82,7 +105,7 @@ export function FeedbackInbox({ items }: { items: FeedbackItem[] }) {
                     onClick={() => void setStatus(f.id, "seen")}
                     className="text-xs text-sand-600 hover:text-clay-700"
                   >
-                    Mark seen
+                    {t("admin.markSeen")}
                   </button>
                 )}
                 {f.status !== "resolved" && (
@@ -90,7 +113,7 @@ export function FeedbackInbox({ items }: { items: FeedbackItem[] }) {
                     onClick={() => void setStatus(f.id, "resolved")}
                     className="text-xs font-semibold text-sage-700 hover:text-sage-800"
                   >
-                    Resolve
+                    {t("admin.resolve")}
                   </button>
                 )}
                 {f.status === "resolved" && (
@@ -98,7 +121,7 @@ export function FeedbackInbox({ items }: { items: FeedbackItem[] }) {
                     onClick={() => void setStatus(f.id, "new")}
                     className="text-xs text-sand-600 hover:text-clay-700"
                   >
-                    Reopen
+                    {t("admin.reopen")}
                   </button>
                 )}
               </div>
