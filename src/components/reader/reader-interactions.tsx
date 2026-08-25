@@ -22,7 +22,7 @@ import type {
 import type { DocumentReference } from "@/lib/parse/types";
 import { splitStreamError, splitStreamNote } from "@/lib/derive/config";
 import { findWeblinks } from "@/lib/weblinks";
-import { MicIcon, SparkleIcon } from "@/components/icons";
+import { MicIcon, SparkleIcon, SpinnerIcon, StopIcon, VolumeIcon } from "@/components/icons";
 import { Markdown } from "@/components/markdown";
 import type { BlockData, Highlight } from "@/components/reader/block-view";
 import { Bibliography } from "@/components/reader/bibliography";
@@ -423,6 +423,13 @@ export function ReaderInteractions({
   const [extractCard, setExtractCard] = useState<{ id: string; top: number; left: number } | null>(
     null,
   );
+  // Voice: the bubble under the toolbar reads the highlighted text aloud.
+  // OpenAI TTS through /api/speech; without the key, the browser voice reads
+  // instead — Chinese and English alike. The reading outlives the toolbar; a
+  // floating Stop reading control shows while it plays without a selection.
+  const [voice, setVoice] = useState<"idle" | "loading" | "playing">("idle");
+  const voiceAudioRef = useRef<HTMLAudioElement | null>(null);
+  const voiceRunRef = useRef(0);
   // The article menu floats open at the top of the page; it hides once the
   // reader scrolls and returns when the reader is back at the top.
   const [atTop, setAtTop] = useState(true);
@@ -727,6 +734,11 @@ export function ReaderInteractions({
     setExtractCard(null);
     distillAbortRef.current?.abort();
     distillReturnScroll.current = null;
+    voiceRunRef.current += 1;
+    voiceAudioRef.current?.pause();
+    voiceAudioRef.current = null;
+    window.speechSynthesis?.cancel();
+    setVoice("idle");
   }
 
   // Selection → block-relative offsets via data-block-id (SPEC.md §5). DOM ranges are never persisted.
@@ -1975,6 +1987,87 @@ export function ReaderInteractions({
     }
   }
 
+  // Voice: stop whatever is reading — the audio element or the browser voice.
+  function stopVoice() {
+    voiceRunRef.current += 1;
+    const audio = voiceAudioRef.current;
+    if (audio) {
+      audio.pause();
+      URL.revokeObjectURL(audio.src);
+      voiceAudioRef.current = null;
+    }
+    window.speechSynthesis?.cancel();
+    setVoice("idle");
+  }
+
+  // The browser voice reads when the server has no OPENAI_API_KEY. The
+  // utterance language follows the text: Chinese characters → zh-CN, else en-US.
+  function browserSpeak(text: string, run: number) {
+    const synth = window.speechSynthesis;
+    if (!synth) {
+      setVoice("idle");
+      showToast("Voice is not available in this browser.");
+      return;
+    }
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = /[一-鿿]/.test(text) ? "zh-CN" : "en-US";
+    utterance.onend = () => {
+      if (voiceRunRef.current === run) setVoice("idle");
+    };
+    utterance.onerror = () => {
+      if (voiceRunRef.current === run) setVoice("idle");
+    };
+    synth.cancel();
+    synth.speak(utterance);
+    setVoice("playing");
+  }
+
+  async function speakSelection() {
+    if (voice !== "idle") {
+      stopVoice();
+      return;
+    }
+    if (!popover) return;
+    const text = popover.anchor.quotedText.slice(0, 4000);
+    if (!text.trim()) return;
+    const run = ++voiceRunRef.current;
+    setVoice("loading");
+    try {
+      const res = await fetch("/api/speech", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      });
+      if (voiceRunRef.current !== run) return;
+      if (res.status === 503) {
+        browserSpeak(text, run);
+        return;
+      }
+      if (!res.ok) {
+        const detail = (await res.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(detail?.error ?? `Voice failed (${res.status})`);
+      }
+      const blob = await res.blob();
+      if (voiceRunRef.current !== run) return;
+      const audio = new Audio(URL.createObjectURL(blob));
+      voiceAudioRef.current = audio;
+      const done = () => {
+        if (voiceRunRef.current !== run) return;
+        URL.revokeObjectURL(audio.src);
+        voiceAudioRef.current = null;
+        setVoice("idle");
+      };
+      audio.onended = done;
+      audio.onerror = done;
+      await audio.play();
+      if (voiceRunRef.current === run) setVoice("playing");
+    } catch (err) {
+      if (voiceRunRef.current !== run) return;
+      setVoice("idle");
+      showToast(err instanceof Error ? err.message : "Voice failed");
+    }
+  }
+
   // The article menu's asks: the assistant reads the whole document — no
   // anchor, document scope — and answers in the chat card beside the article.
   // question null opens an empty chat for the reader's own question.
@@ -3189,6 +3282,29 @@ export function ReaderInteractions({
           >
             Link across texts
           </button>
+
+          {/* Voice: a separate bubble under the toolbar reads the highlighted
+              text aloud. Press again to stop. */}
+          <div className="absolute top-full left-0 mt-2">
+            <button
+              onClick={() => void speakSelection()}
+              aria-label={voice === "idle" ? "Read the highlighted text aloud" : "Stop reading"}
+              title={voice === "idle" ? "Read the highlighted text aloud" : "Stop reading"}
+              className={`flex size-[34px] items-center justify-center rounded-full shadow-float ${
+                voice === "idle"
+                  ? "bg-card text-sand-700 hover:text-clay-800"
+                  : "bg-clay text-clay-fg hover:bg-clay-600"
+              }`}
+            >
+              {voice === "loading" ? (
+                <SpinnerIcon size={14} className="motion-safe:animate-spin" />
+              ) : voice === "playing" ? (
+                <StopIcon size={13} />
+              ) : (
+                <VolumeIcon size={15} />
+              )}
+            </button>
+          </div>
         </div>
       )}
 
@@ -3497,6 +3613,22 @@ export function ReaderInteractions({
             </button>
           </form>
         </div>
+      )}
+
+      {/* The voice outlives the toolbar: with the selection dismissed while
+          reading, this floating control stops it. */}
+      {voice !== "idle" && !popover && (
+        <button
+          onClick={stopVoice}
+          className="fixed bottom-6 left-1/2 z-40 flex -translate-x-1/2 items-center gap-2 rounded-full bg-card px-4 py-2 text-[12.5px] font-semibold text-sand-700 shadow-float hover:text-clay-800"
+        >
+          {voice === "loading" ? (
+            <SpinnerIcon size={13} className="motion-safe:animate-spin" />
+          ) : (
+            <VolumeIcon size={14} className="text-clay" />
+          )}
+          Stop reading
+        </button>
       )}
 
       {pendingLink && (

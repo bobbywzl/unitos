@@ -95,6 +95,12 @@ export function GuideDialog({ open, onClose }: { open: boolean; onClose: () => v
               passage in this or another document. Select the other end and press Link here.
               Both ends become clickable and are listed under Annotations.
             </li>
+            <li>
+              <span className={term}>Voice</span> — the round bubble under the tools reads the
+              highlighted text aloud, Chinese and English alike. The reading continues if you
+              dismiss the selection; press the bubble again or the floating Stop reading
+              control to stop.
+            </li>
           </ul>
         </section>
 
