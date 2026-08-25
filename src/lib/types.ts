@@ -74,6 +74,41 @@ export function distillationList(value: unknown): Distillation[] {
   return Array.isArray(value) ? (value as Distillation[]) : [];
 }
 
+// ── EXTRACT: origin phrase → the passages that reveal its topic ────────────
+
+/** One anchored span of an extraction (same dual anchor as Source, SPEC.md §5). */
+export type ExtractionSpan = {
+  blockId: string;
+  start: number;
+  end: number;
+  quotedText: string;
+  prefix: string;
+  suffix: string;
+};
+
+/** Stored on NotebookDocument.extractions, oldest first — the index gives the
+    label (E1, E2, …). origin = the phrase Extract was applied on; spans = the
+    passages across the document most revealing about its topic. */
+export type Extraction = {
+  id: string;
+  createdAt: string; // ISO
+  origin: ExtractionSpan;
+  spans: ExtractionSpan[];
+};
+
+/** One extraction as the reader sees it: spans re-resolved against the
+    current blocks; an unresolvable span stays stored but unpainted. */
+export type ExtractionView = Omit<Extraction, "origin" | "spans"> & {
+  label: string; // "E1"…
+  origin: ExtractionSpan & { orphaned: boolean };
+  spans: (ExtractionSpan & { orphaned: boolean })[];
+};
+
+/** Tolerant read of the Json column; anything malformed reads as empty. */
+export function extractionList(value: unknown): Extraction[] {
+  return Array.isArray(value) ? (value as Extraction[]) : [];
+}
+
 // ── Reader side panel: annotations and edit history ────────────────────────
 
 /** One annotation on the open document, shown in the Annotations tab.

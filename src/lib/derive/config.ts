@@ -5,7 +5,7 @@ export const DERIVATION_MODEL: Record<DerivationType, string> = {
   EXPLAIN: "claude-opus-5",
   SIMPLIFY: "claude-opus-5",
   SALIENCE: "claude-opus-5",
-  EXTRACT: "claude-opus-5", // legacy notes only; the tool became DISTILL
+  EXTRACT: "claude-opus-5",
   SUMMARIZE: "claude-opus-5",
   SYNTHESIS: "claude-opus-5",
   FIND: "claude-opus-5",
@@ -19,7 +19,7 @@ export const MAX_OUTPUT_TOKENS: Record<DerivationType, number> = {
   EXPLAIN: 4096,
   SIMPLIFY: 4096,
   SALIENCE: 8192,
-  EXTRACT: 8192, // legacy notes only; the tool became DISTILL
+  EXTRACT: 8192,
   SUMMARIZE: 8192,
   SYNTHESIS: 16384,
   FIND: 8192,

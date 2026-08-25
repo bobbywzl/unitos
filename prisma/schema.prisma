@@ -58,7 +58,7 @@ enum DerivationType {
   EXPLAIN
   SIMPLIFY
   SALIENCE
-  EXTRACT // legacy notes only; the tool became DISTILL
+  EXTRACT // origin phrase → the passages that reveal its topic, stored on the attachment (SPEC.md §4)
   SUMMARIZE // document-level summary, one per depth
   SYNTHESIS // notebook-scope assistant output
   FIND // video content reader: query → time ranges + explanations (SPEC.md §11)
@@ -163,6 +163,7 @@ model NotebookDocument {
   salience      Json? // SALIENCE layer: [{blockId, start, end}], per notebook per document (SPEC.md §4)
   summaries     Json? // SUMMARIZE output: {layman?, intermediate?, professional?}, per notebook per document (SPEC.md §4)
   distillations Json? // DISTILL output: [{id, question, createdAt, quotes}], newest first, per notebook per document (SPEC.md §4)
+  extractions   Json? // EXTRACT output: [{id, createdAt, origin, spans}], oldest first — the index gives the label (SPEC.md §4)
 
   @@id([notebookId, documentId])
 }

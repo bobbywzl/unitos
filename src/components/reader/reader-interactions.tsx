@@ -16,6 +16,8 @@ import type {
   AssistantPlan,
   Distillation,
   DistillationView,
+  Extraction,
+  ExtractionView,
 } from "@/lib/types";
 import type { DocumentReference } from "@/lib/parse/types";
 import { splitStreamError, splitStreamNote } from "@/lib/derive/config";
@@ -36,6 +38,7 @@ type Popover = {
   textLeft: number;
   truncated: boolean; // selection crossed into another paragraph; anchor covers the first
   figure?: boolean; // opened by the hold-and-circle gesture on a figure; no Simplify or Distill
+  term?: boolean; // opened by clicking a key term; Extract leads, recommended
   // Placement, by proximity to open tool blocks: right of the text first, then
   // left, then directly below the highlighted text. Bases are container coords.
   side: "right" | "left" | "below";
@@ -305,6 +308,7 @@ export function ReaderInteractions({
   annotationsBySource,
   annotationBubbles,
   distillations,
+  extractions,
   salienceByBlock,
   hasSalience,
   termsByBlock,
@@ -355,6 +359,9 @@ export function ReaderInteractions({
   // Stored distillations for this document, newest first, quotes healed
   // against the current blocks.
   distillations: DistillationView[];
+  // Stored extractions for this document, oldest first (labels E1…), spans
+  // healed against the current blocks.
+  extractions: ExtractionView[];
   salienceByBlock: Record<string, { start: number; end: number }[]>;
   hasSalience: boolean;
   termsByBlock: Record<string, { start: number; end: number; definition: string }[]>;
@@ -405,13 +412,22 @@ export function ReaderInteractions({
   // the ask view for editing; nothing persists from an aborted run.
   const distillAbortRef = useRef<AbortController | null>(null);
   const distillReturnScroll = useRef<number | null>(null);
-  // The span a distilled quote jumped to: tinted while the reader lands on it.
-  const [distillFlash, setDistillFlash] = useState<{
+  // The span a jump landed on (a distilled quote, an extract origin): tinted
+  // while the reader arrives.
+  const [spanFlash, setSpanFlash] = useState<{
     blockId: string;
     start: number;
     end: number;
   } | null>(null);
-  const distillFlashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const spanFlashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // EXTRACT: the highlighted phrase's topic → labeled passages (SPEC.md §4).
+  // A fresh extraction shows from local state until the refresh delivers it.
+  const [localExtractions, setLocalExtractions] = useState<ExtractionView[]>([]);
+  const [extractBusy, setExtractBusy] = useState(false);
+  // The card an origin chip opens: the origin quote, the count, Delete.
+  const [extractCard, setExtractCard] = useState<{ id: string; top: number; left: number } | null>(
+    null,
+  );
   // The article menu floats open at the top of the page; it hides once the
   // reader scrolls and returns when the reader is back at the top.
   const [atTop, setAtTop] = useState(true);
@@ -564,7 +580,8 @@ export function ReaderInteractions({
     simplifyCard !== null ||
     assistantChat !== null ||
     annotationCard !== null ||
-    commentCard !== null;
+    commentCard !== null ||
+    extractCard !== null;
   // The mouseup that ends a hold-and-circle gesture must not run selection
   // capture — it would replace the figure popover it just opened.
   const suppressNextMouseUp = useRef(false);
@@ -711,7 +728,9 @@ export function ReaderInteractions({
     setDistillError(null);
     setDistillAnchor(null);
     setLocalDistillations([]);
-    setDistillFlash(null);
+    setSpanFlash(null);
+    setLocalExtractions([]);
+    setExtractCard(null);
     distillAbortRef.current?.abort();
     distillReturnScroll.current = null;
   }
@@ -801,6 +820,7 @@ export function ReaderInteractions({
         setAssistantChat(null);
         setCommentCard(null);
         setAnnotationCard(null);
+        setExtractCard(null);
         window.getSelection()?.removeAllRanges();
         return;
       }
@@ -1280,6 +1300,116 @@ export function ReaderInteractions({
     return () => container.removeEventListener("scroll", onScroll);
   }, []);
 
+  // Pressing a dotted key term opens the selection toolbar on it, with Extract
+  // recommended on top. Fires on mousedown, so the toolbar survives the
+  // selection capture on mouseup. Only the pane that owns the term handles it.
+  useEffect(() => {
+    const onTermTools = (e: Event) => {
+      const { start, end, origin } = (
+        e as CustomEvent<{ start: number; end: number; origin: Element }>
+      ).detail;
+      const container = containerRef.current;
+      if (!container || !origin || !container.contains(origin)) return;
+      const blockId = origin.closest<HTMLElement>("[data-block-id]")?.dataset.blockId;
+      if (!blockId) return;
+      const block = blocksRef.current.find((b) => b.id === blockId);
+      if (!block) return;
+      const quotedText = block.text.slice(start, end);
+      if (!quotedText.trim()) return;
+      suppressNextMouseUp.current = true;
+      window.getSelection()?.removeAllRanges();
+      const rect = origin.getBoundingClientRect();
+      const containerRect = container.getBoundingClientRect();
+      const margin = Math.min(240, containerRect.width / 2);
+      const articleRect = container.querySelector("article")?.getBoundingClientRect();
+      const yTop = Math.max(8, rect.top - containerRect.top + container.scrollTop);
+      const { rects, articleLeft, articleRight, cw } = measureSideCards(container);
+      const articleMid = (articleLeft + articleRight) / 2;
+      const POPOVER_ESTIMATE = 280;
+      const side =
+        blocksOnSide(rects, articleMid, "right", yTop, POPOVER_ESTIMATE).length === 0
+          ? ("right" as const)
+          : blocksOnSide(rects, articleMid, "left", yTop, POPOVER_ESTIMATE).length === 0
+            ? ("left" as const)
+            : ("below" as const);
+      const rawX = rect.left + rect.width / 2 - containerRect.left;
+      setSubmenu(null);
+      setCommentDraft("");
+      setPopover({
+        anchor: {
+          blockId,
+          startOffset: start,
+          endOffset: end,
+          quotedText,
+          prefix: block.text.slice(Math.max(0, start - 32), start),
+          suffix: block.text.slice(end, end + 32),
+        },
+        x: Math.max(margin, Math.min(rawX, containerRect.width - margin)),
+        y: rect.bottom - containerRect.top + container.scrollTop + 6,
+        yTop,
+        textLeft: articleRect ? articleRect.left - containerRect.left + 24 : 24,
+        truncated: false,
+        term: true,
+        side,
+        rightBase: articleRight + 10,
+        cw,
+      });
+    };
+    window.addEventListener("dissect:term-tools", onTermTools);
+    return () => window.removeEventListener("dissect:term-tools", onTermTools);
+
+  }, []);
+
+  // Extract label chips: a passage's chip jumps back to the origin phrase;
+  // the origin's chip opens the extract card. Only the owning pane handles it.
+  useEffect(() => {
+    const onChip = (e: Event) => {
+      const { extractId, origin, element } = (
+        e as CustomEvent<{ extractId: string; origin: boolean; element: Element }>
+      ).detail;
+      const container = containerRef.current;
+      if (!container || !element || !container.contains(element)) return;
+      const extraction = allExtractionsRef.current.find((x) => x.id === extractId);
+      if (!extraction) return;
+      if (origin) {
+        const containerRect = container.getBoundingClientRect();
+        const rect = element.getBoundingClientRect();
+        const width = 280;
+        setExtractCard({
+          id: extractId,
+          top: rect.bottom - containerRect.top + container.scrollTop + 8,
+          left: Math.max(
+            12,
+            Math.min(
+              rect.left - containerRect.left + container.scrollLeft,
+              container.clientWidth - width - 12,
+            ),
+          ),
+        });
+        return;
+      }
+      if (extraction.origin.orphaned) {
+        showToast("The origin phrase changed — nothing to jump to.");
+        return;
+      }
+      flashSpan(extraction.origin.blockId, extraction.origin.start, extraction.origin.end);
+    };
+    window.addEventListener("dissect:extract-chip", onChip);
+    return () => window.removeEventListener("dissect:extract-chip", onChip);
+  }, []);
+
+  // The extract card closes on a click anywhere else.
+  useEffect(() => {
+    if (!extractCard) return;
+    const onMouseDown = (e: MouseEvent) => {
+      const target = e.target as Element | null;
+      if (target?.closest("[data-selection-popover]")) return;
+      setExtractCard(null);
+    };
+    window.addEventListener("mousedown", onMouseDown);
+    return () => window.removeEventListener("mousedown", onMouseDown);
+  }, [extractCard]);
+
   // ¶ chips in AI text (Markdown) jump to the block they cite.
   useEffect(() => {
     const onFlashBlock = (e: Event) => {
@@ -1603,6 +1733,14 @@ export function ReaderInteractions({
     ...distillations,
   ];
 
+  // Oldest first, matching the stored order — the index gives the label.
+  const allExtractions = [
+    ...extractions,
+    ...localExtractions.filter((x) => !extractions.some((p) => p.id === x.id)),
+  ];
+  const allExtractionsRef = useRef(allExtractions);
+  allExtractionsRef.current = allExtractions;
+
   function openDistillPage(shownId: string | null, anchor: Anchor | null) {
     const container = containerRef.current;
     if (container && !distillOpen) {
@@ -1765,24 +1903,88 @@ export function ReaderInteractions({
     }
   }
 
-  // Jump from the distilled page: close it, scroll to the block, flash it,
-  // and tint the quote's exact span while the reader lands on it.
-  function jumpToQuote(quote: { blockId: string; start: number; end: number; orphaned: boolean }) {
-    if (quote.orphaned) return;
-    setDistillOpen(false);
-    distillReturnScroll.current = null;
-    setDistillFlash({ blockId: quote.blockId, start: quote.start, end: quote.end });
-    if (distillFlashTimer.current) clearTimeout(distillFlashTimer.current);
-    distillFlashTimer.current = setTimeout(() => setDistillFlash(null), 2600);
+  // Jump to a span: scroll to its block, flash it, and tint the exact span
+  // while the reader lands on it. Distilled quotes and extract chips share it.
+  function flashSpan(blockId: string, start: number, end: number) {
+    setSpanFlash({ blockId, start, end });
+    if (spanFlashTimer.current) clearTimeout(spanFlashTimer.current);
+    spanFlashTimer.current = setTimeout(() => setSpanFlash(null), 2600);
     requestAnimationFrame(() => {
       const el = containerRef.current?.querySelector<HTMLElement>(
-        `[data-block-id="${quote.blockId}"], [data-edit-block="${quote.blockId}"]`,
+        `[data-block-id="${blockId}"], [data-edit-block="${blockId}"]`,
       );
       if (!el) return;
       el.scrollIntoView({ behavior: "smooth", block: "center" });
       el.classList.add("anchor-flash");
       setTimeout(() => el.classList.remove("anchor-flash"), 2000);
     });
+  }
+
+  // Jump from the distilled page: close it, then land on the quote.
+  function jumpToQuote(quote: { blockId: string; start: number; end: number; orphaned: boolean }) {
+    if (quote.orphaned) return;
+    setDistillOpen(false);
+    distillReturnScroll.current = null;
+    flashSpan(quote.blockId, quote.start, quote.end);
+  }
+
+  // EXTRACT: the highlighted phrase's topic → the passages across the article
+  // that reveal it, painted with a label chip that jumps back to the origin
+  // (SPEC.md §4).
+  async function extract() {
+    if (!popover || extractBusy) return;
+    const { anchor } = popover;
+    await flushLiveBlock(anchor.blockId);
+    setPopover(null);
+    setSubmenu(null);
+    window.getSelection()?.removeAllRanges();
+    setExtractBusy(true);
+    showToast("Extracting…");
+    try {
+      const res = await fetch("/api/derive", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: deriveBody("EXTRACT", anchor),
+      });
+      const json = (await res.json().catch(() => null)) as {
+        extraction?: Extraction;
+        error?: string;
+      } | null;
+      if (!res.ok || !json?.extraction) {
+        throw new Error(json?.error ?? `Extract failed (${res.status})`);
+      }
+      const label = `E${allExtractionsRef.current.length + 1}`;
+      const fresh: ExtractionView = {
+        id: json.extraction.id,
+        createdAt: json.extraction.createdAt,
+        label,
+        origin: { ...json.extraction.origin, orphaned: false },
+        spans: json.extraction.spans.map((s) => ({ ...s, orphaned: false })),
+      };
+      setLocalExtractions((prev) => [...prev, fresh]);
+      showToast(
+        `Extract ${label}: ${fresh.spans.length} passage${fresh.spans.length === 1 ? "" : "s"} highlighted`,
+      );
+      router.refresh();
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Extract failed");
+    } finally {
+      setExtractBusy(false);
+    }
+  }
+
+  async function deleteExtraction(id: string) {
+    try {
+      await api(`/api/notebooks/${notebookId}/documents/${documentId}`, "PATCH", {
+        removeExtractionId: id,
+      });
+      setLocalExtractions((prev) => prev.filter((x) => x.id !== id));
+      setExtractCard(null);
+      router.refresh();
+      showToast("Extraction removed");
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Delete failed");
+    }
   }
 
   // The article menu's asks: the assistant reads the whole document — no
@@ -2472,16 +2674,39 @@ export function ReaderInteractions({
         : [{ sourceId: null, start: startOffset, end: endOffset, kind: "simplify" as const }]),
     ];
   }
-  // A quote jumped to from the distilled page keeps its exact span tinted
-  // while the reader lands on it.
-  if (distillFlash) {
-    const existing = highlightsByBlock[distillFlash.blockId] ?? [];
-    highlightsByBlock[distillFlash.blockId] = [
+  // Extraction layers: the origin phrase and its revealing passages, each
+  // carrying the extraction's label chip. Unresolvable spans stay unpainted.
+  for (const extraction of allExtractions) {
+    const entries = [
+      ...(!extraction.origin.orphaned ? [{ span: extraction.origin, isOrigin: true }] : []),
+      ...extraction.spans.filter((s) => !s.orphaned).map((span) => ({ span, isOrigin: false })),
+    ];
+    for (const { span, isOrigin } of entries) {
+      const existing = highlightsByBlock[span.blockId] ?? [];
+      highlightsByBlock[span.blockId] = [
+        ...existing,
+        {
+          sourceId: null,
+          start: span.start,
+          end: span.end,
+          kind: "extract" as const,
+          extractId: extraction.id,
+          extractLabel: extraction.label,
+          extractOrigin: isOrigin,
+        },
+      ];
+    }
+  }
+  // A span jumped to (a distilled quote, an extract origin) keeps its exact
+  // range tinted while the reader lands on it.
+  if (spanFlash) {
+    const existing = highlightsByBlock[spanFlash.blockId] ?? [];
+    highlightsByBlock[spanFlash.blockId] = [
       ...existing,
       {
         sourceId: null,
-        start: distillFlash.start,
-        end: distillFlash.end,
+        start: spanFlash.start,
+        end: spanFlash.end,
         kind: "anchor" as const,
       },
     ];
@@ -2693,6 +2918,48 @@ export function ReaderInteractions({
         </div>
       )}
 
+      {extractCard &&
+        (() => {
+          const extraction = allExtractions.find((x) => x.id === extractCard.id);
+          if (!extraction) return null;
+          return (
+            <div
+              data-selection-popover
+              className="absolute z-30 w-[280px] rounded-2xl bg-card p-3 shadow-float"
+              style={{ top: extractCard.top, left: extractCard.left }}
+            >
+              <div className="mb-2 flex items-center justify-between">
+                <span className="text-[11px] font-bold tracking-[0.08em] text-sand-600 uppercase">
+                  Extract {extraction.label}
+                </span>
+                <button
+                  onClick={() => setExtractCard(null)}
+                  aria-label="Close"
+                  className="rounded-full px-1.5 text-sand-500 hover:text-clay-800"
+                >
+                  ✕
+                </button>
+              </div>
+              <p className="line-clamp-2 border-l-2 border-sand-300 pl-2 text-xs text-sand-600">
+                {extraction.origin.quotedText}
+              </p>
+              <p className="mt-2 text-xs text-sand-500">
+                {extraction.spans.length} passage{extraction.spans.length === 1 ? "" : "s"}{" "}
+                highlighted across the article. Each {extraction.label} chip jumps back here.
+              </p>
+              <div className="mt-2 flex items-center justify-between">
+                <button
+                  onClick={() => void deleteExtraction(extraction.id)}
+                  className="text-xs font-semibold text-red-500 hover:text-red-700"
+                  title="Remove this extraction and its highlights"
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          );
+        })()}
+
       {connectors.length > 0 && (
         <svg
           aria-hidden
@@ -2734,6 +3001,9 @@ export function ReaderInteractions({
           )}
           {popover.figure && (
             <p className="px-2.5 py-1 text-[10.5px] leading-snug text-sand-500">Figure tools</p>
+          )}
+          {popover.term && (
+            <p className="px-2.5 py-1 text-[10.5px] leading-snug text-sand-500">Key term</p>
           )}
           {pendingLink && (
             <button
@@ -2818,6 +3088,20 @@ export function ReaderInteractions({
             </div>
           )}
 
+          {popover.term && (
+            <button
+              onClick={() => void extract()}
+              disabled={extractBusy}
+              title="Recommended for this key term: highlight the passages across the article that reveal it"
+              className="flex w-full items-center justify-between gap-2 rounded-full bg-clay-100 px-2.5 py-[5px] text-left text-[12px] font-semibold text-clay-800 hover:bg-clay-200 disabled:opacity-40"
+            >
+              Extract
+              <span className="text-[9px] font-bold tracking-[0.06em] text-clay-700 uppercase">
+                Recommended
+              </span>
+            </button>
+          )}
+
           <button
             onClick={() => void explain()}
             title={popover.figure ? "The AI deciphers what the visualization shows" : undefined}
@@ -2840,6 +3124,16 @@ export function ReaderInteractions({
               className="flex w-full items-center rounded-full px-2.5 py-[5px] text-left text-[12px] text-sand-800 hover:bg-clay-100 hover:text-clay-800"
             >
               Distill
+            </button>
+          )}
+          {!popover.figure && !popover.term && (
+            <button
+              onClick={() => void extract()}
+              disabled={extractBusy}
+              title="Highlight the passages across the article that reveal what this focuses on"
+              className="flex w-full items-center rounded-full px-2.5 py-[5px] text-left text-[12px] text-sand-800 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40"
+            >
+              Extract
             </button>
           )}
 

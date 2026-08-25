@@ -16,7 +16,7 @@ export type Highlight = {
   sourceId: string | null;
   start: number;
   end: number;
-  kind: "anchor" | "salience" | "simplify" | "term" | "link" | "citation" | "weblink" | "edited" | "style" | "toc";
+  kind: "anchor" | "salience" | "simplify" | "term" | "link" | "citation" | "weblink" | "edited" | "style" | "toc" | "extract";
   styleKind?: "bold" | "italic" | "underline" | "code"; // kind "style" only
   definition?: string; // glossary hover text, kind "term" only
   color?: string | null; // highlight hue ("clay" | "sage" | "gold" | "plum"), kind "anchor" only
@@ -29,6 +29,11 @@ export type Highlight = {
   referenceText?: string; // the reference text, shown on hover, kind "citation" only
   targetBlockId?: string; // Contents entry target: click scrolls to the block, kind "toc" only
   figureLabel?: string | null; // "A1"… label on an annotated figure/table/equation anchor
+  // kind "extract": the extraction this span belongs to. The label chip after
+  // a passage jumps to the origin; the origin's chip opens the extract card.
+  extractId?: string;
+  extractLabel?: string;
+  extractOrigin?: boolean;
 };
 
 function anchorClass(color: string | null | undefined): string {
@@ -80,6 +85,7 @@ function markedText(text: string, highlights: Highlight[]) {
     const salience = covering.find((h) => h.kind === "salience");
     const simplify = covering.find((h) => h.kind === "simplify");
     const term = covering.find((h) => h.kind === "term");
+    const extract = covering.find((h) => h.kind === "extract");
     if (link) {
       parts.push(
         <a
@@ -165,13 +171,22 @@ function markedText(text: string, highlights: Highlight[]) {
           {segment}
         </a>,
       );
-    } else if (anchor || salience || simplify) {
+    } else if (anchor || salience || simplify || extract) {
       const focusable = anchor?.annotation && anchor.sourceId;
       // A comment's icon sits right after its span; SVG only, so the block's
       // DOM text stays exactly the stored text (SPEC.md §5).
       const commentEnding = covering.find(
         (h) => h.kind === "anchor" && h.comment && h.sourceId && h.end === to,
       );
+      const markClass = simplify
+        ? "simplify-mark"
+        : anchor
+          ? anchorClass(anchor.color)
+          : extract
+            ? extract.extractOrigin
+              ? "extract-origin-mark"
+              : "extract-mark"
+            : "salience-mark";
       parts.push(
         <mark
           key={from}
@@ -189,11 +204,51 @@ function markedText(text: string, highlights: Highlight[]) {
                 }
               : undefined
           }
-          className={`${simplify ? "simplify-mark" : anchor ? anchorClass(anchor.color) : "salience-mark"}${anchors.length > 1 ? " hl-stacked" : ""} rounded-[4px] ${focusable ? "annotation-mark" : ""}${editedClass}`}
+          className={`${markClass}${anchors.length > 1 ? " hl-stacked" : ""} rounded-[4px] ${focusable ? "annotation-mark" : ""}${editedClass}`}
         >
           {segment}
         </mark>,
       );
+      // An extract span carries its label chip right after the span: a
+      // passage's chip jumps back to the origin phrase; the origin's chip
+      // opens the extract card. SVG-free inline button, so the block's DOM
+      // text stays exactly the stored text (SPEC.md §5).
+      const extractEnding = covering.find(
+        (h) => h.kind === "extract" && h.end === to && h.extractLabel,
+      );
+      if (extractEnding) {
+        parts.push(
+          <button
+            key={`extract-${from}`}
+            type="button"
+            aria-label={
+              extractEnding.extractOrigin
+                ? `Extract ${extractEnding.extractLabel} started here`
+                : `Jump to the phrase Extract ${extractEnding.extractLabel} started from`
+            }
+            title={
+              extractEnding.extractOrigin
+                ? `Extract ${extractEnding.extractLabel} started here. Click for details`
+                : `Jump to the phrase Extract ${extractEnding.extractLabel} started from`
+            }
+            onClick={(e) => {
+              e.stopPropagation();
+              window.dispatchEvent(
+                new CustomEvent("dissect:extract-chip", {
+                  detail: {
+                    extractId: extractEnding.extractId,
+                    origin: Boolean(extractEnding.extractOrigin),
+                    element: e.currentTarget,
+                  },
+                }),
+              );
+            }}
+            className="mx-0.5 inline-flex h-4 items-center rounded-full bg-clay-100 px-1.5 align-text-top text-[9.5px] font-bold text-clay-700 hover:bg-clay-200 hover:text-clay-800"
+          >
+            {extractEnding.extractLabel}
+          </button>,
+        );
+      }
       if (commentEnding) {
         parts.push(
           <button
@@ -244,12 +299,23 @@ function markedText(text: string, highlights: Highlight[]) {
         );
       }
     } else if (term) {
-      // Glossary term: hover for the definition (SPEC.md §8 Phase 7).
+      // Glossary term: hover for the definition; press for the selection
+      // toolbar on the term, with Extract recommended. Dispatched on mousedown
+      // so the toolbar survives the selection capture on mouseup.
       parts.push(
         <span
           key={from}
-          title={term.definition}
-          className={`glossary-term cursor-help border-b-2 border-dotted border-clay-400${editedClass}`}
+          title={term.definition ? `${term.definition}\n\nClick for tools` : "Click for tools"}
+          onMouseDown={(e) => {
+            if (e.button !== 0) return;
+            e.stopPropagation();
+            window.dispatchEvent(
+              new CustomEvent("dissect:term-tools", {
+                detail: { start: term.start, end: term.end, origin: e.currentTarget },
+              }),
+            );
+          }}
+          className={`glossary-term cursor-pointer border-b-2 border-dotted border-clay-400 hover:border-clay-600${editedClass}`}
         >
           {segment}
         </span>,

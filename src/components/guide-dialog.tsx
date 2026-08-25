@@ -82,6 +82,13 @@ export function GuideDialog({ open, onClose }: { open: boolean; onClose: () => v
               distillation.
             </li>
             <li>
+              <span className={term}>Extract</span> — highlights the passages across the
+              article that reveal what the selection focuses on. The selection keeps a solid
+              underline; every found passage gets a dashed one plus a label chip (E1, E2, …)
+              that jumps back to the selection. Click the selection&apos;s own chip for the
+              extract card: the passage count and Delete.
+            </li>
+            <li>
               <span className={term}>Colors</span> — highlight the selection. Type a comment
               first, then pick a color, and the note rides on the highlight.
             </li>
@@ -122,6 +129,11 @@ export function GuideDialog({ open, onClose }: { open: boolean; onClose: () => v
               <span className={term}>Context</span> (top bar) — who you are, why you read, what
               the notes feed. Injected into every AI prompt: notes, distillation, analysis. Every
               field is optional; edit any time. Save it everywhere or for this corpus only.
+            </li>
+            <li>
+              <span className={term}>Key terms</span> — dotted underlines mark the document&apos;s
+              key terms. Hover for the definition; click for the toolbar on the term, with
+              Extract first — recommended.
             </li>
             <li>
               <span className={term}>Salience</span> (top right) — an overlay that marks the

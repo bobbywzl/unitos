@@ -1,6 +1,7 @@
 import type { DerivationType } from "@prisma/client";
 import { distillPrompt } from "@/lib/prompts/distill";
 import { explainPrompt } from "@/lib/prompts/explain";
+import { extractPrompt } from "@/lib/prompts/extract";
 import { findPrompt } from "@/lib/prompts/find";
 import { saliencePrompt } from "@/lib/prompts/salience";
 import { simplifyPrompt } from "@/lib/prompts/simplify";
@@ -13,6 +14,7 @@ export const promptTemplates: Partial<Record<DerivationType, (ctx: PromptCtx) =>
   EXPLAIN: explainPrompt,
   SIMPLIFY: simplifyPrompt,
   SALIENCE: saliencePrompt,
+  EXTRACT: extractPrompt,
   DISTILL: distillPrompt,
   SUMMARIZE: summarizePrompt,
   FIND: findPrompt,

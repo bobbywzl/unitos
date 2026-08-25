@@ -228,6 +228,16 @@ mark,
 .salience-mark {
   background: color-mix(in srgb, var(--sage-500) 28%, transparent);
 }
+/* EXTRACT layer: passages that reveal the origin phrase's topic. The origin
+   carries the solid underline; its passages the dashed one. */
+.extract-mark {
+  background: color-mix(in srgb, #d9a54a 20%, transparent);
+  border-bottom: 2px dashed color-mix(in srgb, #d9a54a 75%, transparent);
+}
+.extract-origin-mark {
+  background: color-mix(in srgb, #d9a54a 34%, transparent);
+  border-bottom: 2px solid #d9a54a;
+}
 .hl-sage {
   background: color-mix(in srgb, var(--sage-500) 32%, transparent);
   border-bottom: 2px solid color-mix(in srgb, var(--sage-600) 70%, transparent);

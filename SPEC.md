@@ -78,7 +78,7 @@ enum DerivationType {
   EXPLAIN
   SIMPLIFY
   SALIENCE
-  EXTRACT    // legacy notes only; the tool became DISTILL
+  EXTRACT    // origin phrase → the passages that reveal its topic, stored on the attachment
   SUMMARIZE  // document-level summary, one per depth
   SYNTHESIS  // notebook-scope assistant output
   DISTILL    // question → the quotes that answer it, stored on the attachment
@@ -120,6 +120,7 @@ model NotebookDocument {
   salience      Json?    // SALIENCE layer: [{blockId, start, end}], per notebook per document
   summaries     Json?    // SUMMARIZE output: {layman?, intermediate?, professional?}
   distillations Json?    // DISTILL output: [{id, question, createdAt, quotes}], newest first
+  extractions   Json?    // EXTRACT output: [{id, createdAt, origin, spans}], oldest first — the index gives the label
   @@id([notebookId, documentId])
 }
 
@@ -162,10 +163,10 @@ Single server route: `POST /api/derive`
 
 ```typescript
 type DeriveRequest = {
-  type: 'EXPLAIN' | 'SIMPLIFY' | 'SALIENCE' | 'DISTILL' | 'SUMMARIZE';
+  type: 'EXPLAIN' | 'SIMPLIFY' | 'SALIENCE' | 'EXTRACT' | 'DISTILL' | 'SUMMARIZE';
   documentId: string;
   notebookId: string;
-  anchor?: AnchorInput;        // required for EXPLAIN/SIMPLIFY; optional focus for DISTILL
+  anchor?: AnchorInput;        // required for EXPLAIN/SIMPLIFY/EXTRACT; optional focus for DISTILL
   question?: string;           // DISTILL only: the question the quotes must answer
   depth?: 'layman' | 'intermediate' | 'professional'; // SUMMARIZE only; default layman
 };
@@ -179,12 +180,15 @@ Flow:
    - `EXPLAIN` → annotation bubble in the reader rail (persisted as a Note in a hidden "Annotations" section, so it's searchable, but rendered in the rail)
    - `SIMPLIFY` → bubble beside the article, level with the selection (ephemeral, not persisted; close to dismiss)
    - `SALIENCE` → highlight layer (persisted as document-level Json, per notebook)
+   - `EXTRACT` → extraction on `NotebookDocument.extractions`, painted as a labeled highlight layer: the origin phrase plus the passages across the document that reveal its topic; each passage's label chip jumps back to the origin
    - `DISTILL` → distillation on `NotebookDocument.distillations`, rendered as the distilled page; a quote reaches notes only through the page's "Add to notes", which lands a `Note` with `status: PENDING`
    - `SUMMARIZE` → Summary tab in the side panel (persisted on `NotebookDocument.summaries`, one summary per depth; Regenerate overwrites)
 
 Prompt templates always receive: reader context, document title, section skeleton, and the anchored text with surrounding context (±2 blocks).
 
-**DISTILL output contract:** model returns JSON `{quotes: [{blockId, start, end, caption}]}` — the verbatim spans across the whole document that answer the question, each captioned with how it answers the question in the document's context. Validate strictly; resolve every span against the real block text and drop what does not resolve; on parse failure, retry once with the error appended, then surface failure to user. Never write malformed output to DB. Stored quotes heal at render like salience and orphan visibly (§5). The HTTP response streams heartbeat bytes while the model works and ends with the distillation JSON (or the in-band error token), so the connection survives a minutes-long scan. (EXTRACT, the v1 selection-to-note tool, was folded into DISTILL; the enum value remains for legacy notes.)
+**DISTILL output contract:** model returns JSON `{quotes: [{blockId, start, end, caption}]}` — the verbatim spans across the whole document that answer the question, each captioned with how it answers the question in the document's context. Validate strictly; resolve every span against the real block text and drop what does not resolve; on parse failure, retry once with the error appended, then surface failure to user. Never write malformed output to DB. Stored quotes heal at render like salience and orphan visibly (§5). The HTTP response streams heartbeat bytes while the model works and ends with the distillation JSON (or the in-band error token), so the connection survives a minutes-long scan.
+
+**EXTRACT output contract:** model returns JSON `{spans: [{blockId, start, end}]}` — the passages across the whole document most revealing about the highlighted phrase's topic. Validate strictly; resolve every span against the real block text; drop spans that overlap the origin or each other. Stored per notebook per document, oldest first — the index gives the label (E1, E2, …). Spans heal at render like salience; an unresolvable span stays stored but unpainted. (The v1 EXTRACT selection-to-note flow lives on as DISTILL's "Add to notes".)
 
 ---
 
@@ -222,6 +226,8 @@ DOM ranges are never the source of truth. Convert selection → block-relative o
 - A faint dashed connector line runs from the edge of each tool block's highlighted text to the block, so the correspondence stays visible with several blocks open.
 - Figures and equations open their tools with a hold-and-circle gesture (pointer down + ≥300° of turning). The figure popover has Explain (the model deciphers the visual — image figures attach the image, SVG charts attach their source, videos explain from caption), highlight colors, Comment, and Link — no Simplify or Extract. A highlighted figure shows a side label on its right that jumps to the annotation, instead of text marks.
 - Distill: the reader asks the article one question — from the selection popover (the selection rides along as the starting point) or the article menu. The distilled page opens over the article: the question large at the top, under it the quotes that answer it, in document order, each with a caption saying how it answers the question and how it sits in the document's context. Clicking a quote closes the page and jumps to its exact span. Add to notes lands the quote as a PENDING note (caption as content, quote as source). Cancel stops a running distillation — the request aborts, nothing persists, and the ask view keeps the question for editing. Distillations persist per notebook per document, newest first; the page lists them and deletes them one by one.
+- Extract: from the selection popover, the passages across the document that reveal the highlighted phrase's topic paint as a labeled layer — the origin phrase solid-underlined, its passages dash-underlined, every span carrying the extraction's label chip (E1, E2, …). A passage's chip jumps back to the origin; the origin's chip opens the extract card (origin quote, passage count, Delete).
+- Key terms (the dotted glossary underlines) are pressable: hover for the definition, press for the selection toolbar on the term with Extract first, marked recommended.
 - The article menu floats open at the top left of the page. It hides once the reader scrolls and returns when the reader is back at the top. It lists the frequent functions: Summarize article, Key takeaways, and Explain simply send the question to the assistant, which reads the whole document (document scope, cached prefix) and answers in the assistant chat card beside the article; Ask the assistant opens the same chat empty; Distill opens the distilled page.
 - Summary lives in the side panel: one rail button, a depth control with three levels (layman / intermediate / professional), one stored summary per depth.
 - Salience layer is a toggleable highlight overlay, off by default, one click to show.

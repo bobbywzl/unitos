@@ -36,6 +36,13 @@ export const salienceOutputSchema = z.object({
   spans: z.array(spanSchema).min(1).max(200),
 });
 
+// EXTRACT (SPEC.md §4): the passages across the document most revealing about
+// the highlighted phrase's topic. Same span contract as SALIENCE; the route
+// resolves every span against the real block text before anything persists.
+export const extractOutputSchema = z.object({
+  spans: z.array(spanSchema).min(1).max(30),
+});
+
 // DISTILL (SPEC.md §4): the quotes that answer the reader's question, each with
 // a caption. Spans use the same block-id + offset contract as SALIENCE; the
 // route resolves every span against the real block text before anything persists.

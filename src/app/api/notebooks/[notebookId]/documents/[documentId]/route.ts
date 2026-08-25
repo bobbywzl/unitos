@@ -1,13 +1,18 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { distillationList } from "@/lib/types";
+import { distillationList, extractionList } from "@/lib/types";
 import { parseBody } from "@/lib/validate";
 
-// Delete one stored distillation from the attachment.
-const patchSchema = z.object({
-  removeDistillationId: z.string().min(1),
-});
+// Delete one stored distillation or extraction from the attachment.
+const patchSchema = z
+  .object({
+    removeDistillationId: z.string().min(1).optional(),
+    removeExtractionId: z.string().min(1).optional(),
+  })
+  .refine((d) => Boolean(d.removeDistillationId) !== Boolean(d.removeExtractionId), {
+    message: "Provide removeDistillationId or removeExtractionId, not both",
+  });
 
 export async function PATCH(
   req: Request,
@@ -22,12 +27,19 @@ export async function PATCH(
   if (!attachment) {
     return NextResponse.json({ error: "Document is not attached" }, { status: 404 });
   }
-  const next = distillationList(attachment.distillations).filter(
-    (d) => d.id !== data.removeDistillationId,
-  );
   await db.notebookDocument.update({
     where: { notebookId_documentId: { notebookId, documentId } },
-    data: { distillations: next },
+    data: data.removeDistillationId
+      ? {
+          distillations: distillationList(attachment.distillations).filter(
+            (d) => d.id !== data.removeDistillationId,
+          ),
+        }
+      : {
+          extractions: extractionList(attachment.extractions).filter(
+            (x) => x.id !== data.removeExtractionId,
+          ),
+        },
   });
   return NextResponse.json({ ok: true });
 }

@@ -9,9 +9,11 @@ import { USER_ID } from "@/lib/constants";
 import { db } from "@/lib/db";
 import {
   distillationList,
+  extractionList,
   type AnnotationItem,
   type DistillationView,
   type EditItem,
+  type ExtractionView,
   type LinkIn,
   type LinkOut,
   type NotebookView,
@@ -213,25 +215,36 @@ export default async function NotebookPage(props: {
       }
     }
 
-    // Stored distillations heal at render like salience: exact offsets first,
-    // then the quote matcher within the block, else orphaned visibly (SPEC.md §5).
+    // Stored distillation quotes and extraction spans heal at render like
+    // salience: exact offsets first, then the quote matcher within the block,
+    // else orphaned (SPEC.md §5).
+    const healSpan = <T extends { blockId: string; start: number; end: number; quotedText: string; prefix: string; suffix: string }>(
+      q: T,
+    ): T & { orphaned: boolean } => {
+      const block = blockById.get(q.blockId);
+      if (block && block.text.slice(q.start, q.end) === q.quotedText) {
+        return { ...q, orphaned: false };
+      }
+      const hit = block ? matchInText(block.text, q) : null;
+      return hit
+        ? { ...q, start: hit.start, end: hit.end, orphaned: false }
+        : { ...q, orphaned: true };
+    };
     const distillations: DistillationView[] = distillationList(attachment?.distillations).map(
       (d) => ({
         id: d.id,
         question: d.question,
         createdAt: d.createdAt,
-        quotes: (d.quotes ?? []).map((q) => {
-          const block = blockById.get(q.blockId);
-          if (block && block.text.slice(q.start, q.end) === q.quotedText) {
-            return { ...q, orphaned: false };
-          }
-          const hit = block ? matchInText(block.text, q) : null;
-          return hit
-            ? { ...q, start: hit.start, end: hit.end, orphaned: false }
-            : { ...q, orphaned: true };
-        }),
+        quotes: (d.quotes ?? []).map(healSpan),
       }),
     );
+    const extractions: ExtractionView[] = extractionList(attachment?.extractions).map((x, i) => ({
+      id: x.id,
+      createdAt: x.createdAt,
+      label: `E${i + 1}`,
+      origin: healSpan(x.origin),
+      spans: (x.spans ?? []).map(healSpan),
+    }));
 
     // Glossary hover terms: first occurrence per term per listed block.
     const termsByBlock: Record<string, { start: number; end: number; definition: string }[]> = {};
@@ -653,6 +666,7 @@ export default async function NotebookPage(props: {
       document,
       summaries,
       distillations,
+      extractions,
       anchorHighlights,
       annotations,
       annotationBubbles,
@@ -788,6 +802,7 @@ export default async function NotebookPage(props: {
           annotationsBySource={pane.annotationsBySource}
           annotationBubbles={pane.annotationBubbles}
           distillations={pane.distillations}
+          extractions={pane.extractions}
           salienceByBlock={pane.salienceByBlock}
           hasSalience={pane.hasSalience}
           termsByBlock={pane.termsByBlock}

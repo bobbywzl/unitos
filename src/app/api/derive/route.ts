@@ -20,6 +20,7 @@ import {
 import { fetchFigureImage, figureContent, type FigureImage } from "@/lib/derive/figure";
 import {
   distillOutputSchema,
+  extractOutputSchema,
   findOutputSchema,
   resolveSpan,
   salienceOutputSchema,
@@ -27,7 +28,14 @@ import {
 import { callForJson, modelErrorMessage } from "@/lib/derive/json-call";
 import { promptTemplates } from "@/lib/prompts";
 import type { PromptCtx } from "@/lib/prompts/types";
-import { distillationList, SUMMARY_DEPTHS, type Distillation, type SummaryLevels } from "@/lib/types";
+import {
+  distillationList,
+  extractionList,
+  SUMMARY_DEPTHS,
+  type Distillation,
+  type Extraction,
+  type SummaryLevels,
+} from "@/lib/types";
 import { videoAnchorFor } from "@/lib/video/anchor";
 import { describeYouTubeClip } from "@/lib/video/gemini";
 import {
@@ -43,7 +51,7 @@ export const maxDuration = 120;
 // The one derivation pipeline (SPEC.md §4). Never fork per feature: new derivation =
 // new prompt template + destination handler below.
 const deriveSchema = z.object({
-  type: z.enum(["EXPLAIN", "SIMPLIFY", "SALIENCE", "DISTILL", "SUMMARIZE", "FIND"]),
+  type: z.enum(["EXPLAIN", "SIMPLIFY", "SALIENCE", "EXTRACT", "DISTILL", "SUMMARIZE", "FIND"]),
   documentId: z.string().min(1),
   notebookId: z.string().min(1),
   anchor: z
@@ -72,7 +80,7 @@ const deriveSchema = z.object({
     .optional(),
 });
 
-const ANCHOR_REQUIRED = new Set(["EXPLAIN", "SIMPLIFY"]);
+const ANCHOR_REQUIRED = new Set(["EXPLAIN", "SIMPLIFY", "EXTRACT"]);
 
 export async function POST(req: Request) {
   if (!process.env.ANTHROPIC_API_KEY) {
@@ -472,6 +480,78 @@ export async function POST(req: Request) {
       data: { salience: spans },
     });
     return NextResponse.json({ ok: true, spanCount: spans.length });
+  }
+
+  // EXTRACT: the highlighted phrase's topic → the passages across the document
+  // that reveal it, stored on the attachment as a labeled layer. Spans resolve
+  // against the real block text; spans overlapping the origin or each other
+  // drop — the origin is already marked, and stacked marks read as one.
+  if (data.type === "EXTRACT") {
+    const result = await callForJson({
+      model,
+      messages,
+      maxOutputTokens,
+      schema: extractOutputSchema,
+      label: "EXTRACT",
+    });
+    if (!result.ok) {
+      return NextResponse.json({ error: `Extract failed. ${result.error}` }, { status: 422 });
+    }
+    const origin = resolveSpan(
+      {
+        blockId: data.anchor!.blockId,
+        start: data.anchor!.startOffset,
+        end: data.anchor!.endOffset,
+      },
+      blockById,
+    );
+    if (!origin) {
+      return NextResponse.json({ error: "Anchor does not resolve in this document" }, { status: 400 });
+    }
+    const orderByBlock = new Map(document.blocks.map((b, i) => [b.id, i]));
+    const spans: NonNullable<ReturnType<typeof resolveSpan>>[] = [];
+    for (const span of result.data.spans
+      .map((s) => resolveSpan(s, blockById))
+      .filter((s) => s !== null)
+      .sort(
+        (a, b) =>
+          (orderByBlock.get(a.blockId) ?? 0) - (orderByBlock.get(b.blockId) ?? 0) ||
+          a.start - b.start,
+      )) {
+      const overlapsOrigin =
+        span.blockId === origin.blockId && span.start < origin.end && span.end > origin.start;
+      const overlapsKept = spans.some(
+        (s) => s.blockId === span.blockId && span.start < s.end && span.end > s.start,
+      );
+      if (!overlapsOrigin && !overlapsKept) spans.push(span);
+    }
+    if (spans.length === 0) {
+      return NextResponse.json({ error: "Extract returned no resolvable spans" }, { status: 422 });
+    }
+    const toSpan = (s: NonNullable<ReturnType<typeof resolveSpan>>) => ({
+      blockId: s.blockId,
+      start: s.start,
+      end: s.end,
+      quotedText: s.quotedText,
+      prefix: s.prefix,
+      suffix: s.suffix,
+    });
+    const extraction: Extraction = {
+      id: crypto.randomUUID(),
+      createdAt: new Date().toISOString(),
+      origin: toSpan(origin),
+      spans: spans.map(toSpan),
+    };
+    await db.notebookDocument.update({
+      where: {
+        notebookId_documentId: { notebookId: data.notebookId, documentId: data.documentId },
+      },
+      data: {
+        // Oldest first — the index gives the label. Keep the newest 20.
+        extractions: [...extractionList(attachment.extractions), extraction].slice(-20),
+      },
+    });
+    return NextResponse.json({ ok: true, extraction }, { status: 201 });
   }
 
   // DISTILL: question → the quotes that answer it. Every span resolves against
