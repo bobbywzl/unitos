@@ -189,9 +189,9 @@ export default async function NotebookPage(props: {
     const attachment = notebook!.documents.find((d) => d.documentId === document.id);
     const summaries = (attachment?.summaries as SummaryLevels | null) ?? {};
 
-    // Stored distillation quotes and extraction spans heal at render like
-    // salience: exact offsets first, then the quote matcher within the block,
-    // else orphaned (SPEC.md §5).
+    // Stored distillation quotes and extraction spans heal at render with the
+    // anchor ladder (SPEC.md §5): exact offsets, the quote matcher within the
+    // stored block, then across all blocks — a re-parse gives new block ids.
     const healSpan = <T extends { blockId: string; start: number; end: number; quotedText: string; prefix: string; suffix: string }>(
       q: T,
     ): T & { orphaned: boolean } => {
@@ -199,10 +199,16 @@ export default async function NotebookPage(props: {
       if (block && block.text.slice(q.start, q.end) === q.quotedText) {
         return { ...q, orphaned: false };
       }
-      const hit = block ? matchInText(block.text, q) : null;
-      return hit
-        ? { ...q, start: hit.start, end: hit.end, orphaned: false }
-        : { ...q, orphaned: true };
+      if (block) {
+        const hit = matchInText(block.text, q);
+        if (hit) return { ...q, start: hit.start, end: hit.end, orphaned: false };
+      }
+      for (const b of document.blocks) {
+        if (b.id === q.blockId) continue;
+        const hit = matchInText(b.text, q);
+        if (hit) return { ...q, blockId: b.id, start: hit.start, end: hit.end, orphaned: false };
+      }
+      return { ...q, orphaned: true };
     };
     const distillations: DistillationView[] = distillationList(attachment?.distillations).map(
       (d) => ({

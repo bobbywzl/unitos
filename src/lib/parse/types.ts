@@ -90,4 +90,4 @@ export type UrlParseProgress = (stage: "extract", detail?: string) => void;
 //    entries linked to their section headings, PDF hyperlinks kept.
 // 7: table html carries invisible cell separators so table DOM text equals block
 //    text — text anchors inside tables resolve.
-export const PARSER_VERSION = 7;
+export const PARSER_VERSION = 8;
