@@ -40,7 +40,9 @@ type Segment = ParsedBlock & {
 const BULLET_RE = /^\s*([•▪◦‣●·*-]|\d{1,2}[.)]|\([a-z\d]{1,3}\)|[ivx]{1,4}[.)])\s+/i;
 // Numbered heading: the number must close with "." or ")" or dot into a
 // sub-number — "3.1 Results" and "1. Summary" match, "23 advertisers" does not.
-const HEADING_NUM_STRICT_RE = /^\d{1,2}((\.\d{1,2})+\.?|[.)])\s+\S/;
+// "3.1 Results", "2. Background", and the bare "2 Background" (ACL style).
+// The word after the number starts uppercase — a body line rarely does.
+const HEADING_NUM_STRICT_RE = /^\d{1,2}((\.\d{1,2})+\.?|[.)])?\s+[\p{Lu}\p{Lo}]/u;
 const TOC_LABEL_RE = /^(contents|table of contents|inside|outline|in this issue)$/i;
 const TOC_ENTRY_RE = /^(\d{1,2})[.)]?\s+\S/;
 const ATTACH_PUNCT_RE = /^[.,;:!?)\]…%]/;
@@ -203,20 +205,31 @@ function pageLines(items: Item[], pageWidth: number, page: number): Line[] {
   const right = items.filter((i) => i.x >= g);
   const full = items.filter((i) => i.x < g && i.x + i.w > g);
 
+  // Prose columns start their lines at the body edge or the paragraph indent —
+  // two x positions cover almost every line. Table sides scatter across many.
   const columnShaped = (side: Item[]): boolean => {
     const lines = buildLines(side, page);
     if (lines.length < 6) return false;
-    const xs = lines.map((l) => Math.round(l.x / 4) * 4);
     const counts = new Map<number, number>();
-    for (const x of xs) counts.set(x, (counts.get(x) ?? 0) + 1);
-    const dominant = Math.max(...counts.values());
-    return dominant >= lines.length * 0.7;
+    for (const line of lines) {
+      const x = Math.round(line.x / 4) * 4;
+      counts.set(x, (counts.get(x) ?? 0) + 1);
+    }
+    const sorted = [...counts.values()].sort((a, b) => b - a);
+    return (sorted[0] ?? 0) + (sorted[1] ?? 0) >= lines.length * 0.7;
   };
+  // Independent columns rarely share baselines; table rows always do.
+  const leftSide = buildLines(left, page);
+  const rightSide = buildLines(right, page);
+  const sharedBaselines =
+    leftSide.filter((l) => rightSide.some((r) => Math.abs(r.y - l.y) < 2)).length /
+    Math.max(1, leftSide.length);
   const twoColumn =
     best !== null &&
     best.crossChars / total < 0.12 &&
     chars(left) / total > 0.2 &&
     chars(right) / total > 0.2 &&
+    sharedBaselines < 0.6 &&
     columnShaped(left) &&
     columnShaped(right);
 
@@ -648,6 +661,9 @@ type PageContext = {
   bodySize: number;
   leading: number; // line leading as a multiple of font size
   columnLeft: number;
+  // Some PDFs expose no bold flags at all (font subsetting); heading rules
+  // that require bold would then match nothing.
+  hasBold: boolean;
 };
 
 function isIndented(line: Line, ctx: PageContext): boolean {
@@ -852,7 +868,8 @@ function segmentPage(lines: Line[], ctx: PageContext): Segment[] {
       continue;
     }
 
-    // Numbered heading at body size: "3.1 Results" — bold, short, isolated.
+    // Numbered heading at body size: "3.1 Results" — short, isolated, and
+    // bold, or set larger than body, or in a document with no bold flags at all.
     if (
       single &&
       HEADING_NUM_STRICT_RE.test(line.text) &&
@@ -860,7 +877,10 @@ function segmentPage(lines: Line[], ctx: PageContext): Segment[] {
       line.text.length < 120 &&
       !/[.,;:]$/.test(line.text) &&
       line.size >= body * 0.98 &&
-      boldShare(line.runs, line.text.length) > 0.6
+      (boldShare(line.runs, line.text.length) > 0.6 ||
+        line.size >= body * 1.05 ||
+        !ctx.hasBold ||
+        /^\d{1,2}(\.\d{1,2})+/.test(line.text))
     ) {
       const below = lines[i + 1];
       const isolated = !below || line.y - below.y > line.size * ctx.leading * 1.15;
@@ -1326,6 +1346,7 @@ export async function parsePdf(
   }
   const bodySize = median(allBodySizes);
   const leading = leadingRatios.length >= 3 ? median(leadingRatios) : 1.45;
+  const hasBold = cleaned.some((lines) => lines.some((l) => l.runs.some((r) => r.bold)));
 
   let segments: Segment[] = [];
   for (const lines of cleaned) {
@@ -1345,9 +1366,13 @@ export async function parsePdf(
     if (!Number.isFinite(columnLeft)) {
       columnLeft = lines.length > 0 ? Math.min(...lines.map((l) => l.x)) : 0;
     }
-    segments.push(...segmentPage(lines, { bodySize, leading, columnLeft }));
+    segments.push(...segmentPage(lines, { bodySize, leading, columnLeft, hasBold }));
   }
   segments = segments.filter((s) => s.text.trim().length > 0);
+  // Vector-figure debris: chart axis ticks read as tiny numeric-only lines.
+  segments = segments.filter(
+    (s) => !(s.type === "PARAGRAPH" && s.text.length <= 14 && /^[\d\s.,%−–-]+$/.test(s.text)),
+  );
 
   // Same-page paragraph fragments that end mid-sentence join the next paragraph.
   const fused: Segment[] = [];

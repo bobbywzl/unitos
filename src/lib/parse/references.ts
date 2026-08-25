@@ -35,8 +35,10 @@ const REF_HEADING_RX =
 // Paragraph-style reference lists only under an unambiguous heading.
 const STRONG_REF_HEADING_RX = /^[^a-z]*(references?|bibliography|works cited|literature cited)\b[\s\d.:]*$/i;
 // Class or id hints that a container is the reference list.
+// No content words here: "literature" matched section ids like
+// #literature-review and swallowed body lists (unitoscompareloop).
 const REF_HINT_RX =
-  /\b(references|bibliography|footnotes|endnotes|citation-list|works[-_]?cited|ref[-_]?list|reflist|refbegin|biblist|literature)\b/i;
+  /\b(references|bibliography|footnotes|endnotes|citation-list|works[-_]?cited|ref[-_]?list|reflist|refbegin|biblist)\b/i;
 // Entry element ids that in-text citation links point at.
 const ENTRY_ID_RX = /^(cite[_-]?note|citeref|ref|reference|fn|footnote|note|bib|endnote)[-_:.]?/i;
 const SHORT_ENTRY_ID_RX = /^(b|r|cr)-?\d+$/i;
@@ -132,18 +134,34 @@ function hintedLists(root: Element, captured: Set<Element>): ReferenceGroup[] {
     if (list.parentElement?.closest("ol, ul")) continue; // nested list: the outer one decides
     const items = directItems(list);
     if (items.length === 0) continue;
+    // The hint must sit on the list or its direct wrapper — a hinted section
+    // three levels up captures body lists that merely live in that section.
     let hinted = false;
     let ancestor: Element | null = list;
-    for (let depth = 0; ancestor && depth < 3; depth++) {
+    for (let depth = 0; ancestor && depth < 2; depth++) {
       if (hasReferenceHint(ancestor)) {
         hinted = true;
         break;
       }
       ancestor = ancestor.parentElement;
     }
+    // A hinted list must also be shaped like citations — years, entry
+    // numbers, DOIs — or it is body content wearing a hinted wrapper.
+    const shaped =
+      items.filter((li) => {
+        const text = normalizeText(li.textContent ?? "");
+        return (
+          text.length <= 800 &&
+          (/\b(19|20)\d{2}\b/.test(text) ||
+            /^\[?\d{1,4}[\]).]/.test(text) ||
+            /doi\.org|arxiv\.org/i.test(text))
+        );
+      }).length *
+        2 >
+      items.length;
     const idMatches = items.filter(hasEntryId).length;
     const byIds = items.length >= 3 && idMatches * 2 > items.length;
-    if (!(hinted && items.length >= 2) && !byIds) continue;
+    if (!(hinted && shaped && items.length >= 2) && !byIds) continue;
     captured.add(list);
     const heading = labelingHeading(list);
     groups.push({ entries: items, removal: heading ? [heading, list] : [list] });
