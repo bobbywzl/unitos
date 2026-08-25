@@ -216,20 +216,15 @@ function pageLines(items: Item[], pageWidth: number, page: number): Line[] {
       counts.set(x, (counts.get(x) ?? 0) + 1);
     }
     const sorted = [...counts.values()].sort((a, b) => b - a);
-    return (sorted[0] ?? 0) + (sorted[1] ?? 0) >= lines.length * 0.7;
+    return (sorted[0] ?? 0) + (sorted[1] ?? 0) >= lines.length * 0.62;
   };
-  // Independent columns rarely share baselines; table rows always do.
-  const leftSide = buildLines(left, page);
-  const rightSide = buildLines(right, page);
-  const sharedBaselines =
-    leftSide.filter((l) => rightSide.some((r) => Math.abs(r.y - l.y) < 2)).length /
-    Math.max(1, leftSide.length);
+  // Shared baselines do NOT discriminate: LaTeX sets both columns on one
+  // baseline grid, so real columns share most baselines. Shape decides.
   const twoColumn =
     best !== null &&
-    best.crossChars / total < 0.12 &&
+    best.crossChars / total < 0.15 &&
     chars(left) / total > 0.2 &&
     chars(right) / total > 0.2 &&
-    sharedBaselines < 0.6 &&
     columnShaped(left) &&
     columnShaped(right);
 
@@ -1401,6 +1396,24 @@ export async function parsePdf(
   segments = mergeAcrossPages(fused);
   assignHeadingLevels(segments, bodySize);
   resolveContentsLinks(segments);
+
+  // A long title wraps across layout lines: consecutive equal-size HEADING
+  // segments at the top of page 0 are one title, not several headings.
+  while (
+    segments.length >= 2 &&
+    segments[0].page === 0 &&
+    segments[1].page === 0 &&
+    segments[0].type === "HEADING" &&
+    segments[1].type === "HEADING" &&
+    segments[0].rawSize !== undefined &&
+    segments[1].rawSize !== undefined &&
+    Math.abs(segments[0].rawSize - segments[1].rawSize) < 0.5
+  ) {
+    const offset = segments[0].text.length + 1;
+    segments[0].text = `${segments[0].text} ${segments[1].text}`;
+    shiftSpansInto(segments[0], segments[1], offset);
+    segments.splice(1, 1);
+  }
 
   // Title: the biggest heading on the first page.
   let title: string | null = null;

@@ -479,6 +479,9 @@ export function takeCitations(raw: string): { text: string; citations: CitationS
   const citations: CitationSpan[] = [];
   const open: { refId: string; start: number }[] = [];
   let i = 0;
+  // Set while the last removed thing was a token: only then may a following
+  // space be dropped. Without it, every line-leading indent would die too.
+  let dropped = false;
   while (i < raw.length) {
     const ch = raw[i];
     if (ch === CITE_OPEN) {
@@ -487,9 +490,11 @@ export function takeCitations(raw: string): { text: string; citations: CitationS
       if (/^r\d+$/.test(refId)) {
         open.push({ refId, start: out.length });
         i = mid + 1;
+        dropped = true;
         continue;
       }
       i++; // stray OPEN: drop the character
+      dropped = true;
       continue;
     }
     if (ch === CITE_CLOSE) {
@@ -504,18 +509,25 @@ export function takeCitations(raw: string): { text: string; citations: CitationS
         }
       }
       i++;
+      dropped = true;
       continue;
     }
     if (ch === CITE_MID) {
       i++; // stray MID: drop the character
+      dropped = true;
       continue;
     }
-    if (ch === " " && (out.endsWith(" ") || out.endsWith("\n") || out.length === 0)) {
+    if (
+      ch === " " &&
+      dropped &&
+      (out.endsWith(" ") || out.endsWith("\n") || out.length === 0)
+    ) {
       i++; // token removal must not leave doubled or leading spaces
       continue;
     }
     out += ch;
     i++;
+    dropped = false;
   }
   while (out.endsWith(" ")) out = out.slice(0, -1);
   return { text: out, citations };
@@ -546,10 +558,19 @@ export function liftCitations(blocks: ParsedBlock[]): ParsedBlock[] {
         };
       }
       const stripped = stripCitationTokens(block.text);
-      // CODE keeps its spacing; prose-ish text collapses the doubled spaces.
+      // CODE keeps its spacing. Prose-ish text collapses doubled spaces INSIDE
+      // a line only — the leading spaces are nested-list indentation.
+      const tidied = stripped
+        .split("\n")
+        .map((line) => {
+          const indent = /^ */.exec(line)![0];
+          return indent + line.slice(indent.length).replace(/ {2,}/g, " ").trimEnd();
+        })
+        .join("\n")
+        .replace(/^\n+|\s+$/g, "");
       return {
         ...block,
-        text: block.type === "CODE" ? stripped : stripped.replace(/ {2,}/g, " ").trim(),
+        text: block.type === "CODE" ? stripped : tidied,
       };
     })
     .filter((block) => block.text.trim().length > 0);

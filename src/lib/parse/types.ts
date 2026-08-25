@@ -90,4 +90,11 @@ export type UrlParseProgress = (stage: "extract", detail?: string) => void;
 //    entries linked to their section headings, PDF hyperlinks kept.
 // 7: table html carries invisible cell separators so table DOM text equals block
 //    text — text anchors inside tables resolve.
-export const PARSER_VERSION = 9;
+// 8: blockquotes with their own blocks recurse; <br>-run paragraphs split.
+// 9: compare-loop round 1 — layout tables recurse, rowspan/colspan grids,
+//    MathML and MediaWiki math, junk pruning, PDF column detection tuned.
+// 10: compare-loop round 2 — nested lists inside wrapper divs kept, footnote
+//    markers kept inline, promo rails and comment sections dropped, collapsed
+//    accordion content kept, PDF columns split by shape alone, PDF titles
+//    merge across wrapped lines.
+export const PARSER_VERSION = 10;
