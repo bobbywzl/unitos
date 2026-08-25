@@ -8,6 +8,7 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
   CommentIcon,
+  DistillIcon,
   ExpandIcon,
   HistoryIcon,
   MoreIcon,
@@ -22,11 +23,12 @@ import { NotesTray } from "@/components/outline/notes-tray";
 import { useOutline } from "@/components/outline/use-outline";
 import { DocumentBar, type AttachedDocument } from "@/components/reader/document-bar";
 
-type Tab = "notes" | "assistant" | "annotations" | "edits";
+type Tab = "notes" | "assistant" | "distill" | "annotations" | "edits";
 
 const TAB_TITLES: Record<Tab, string> = {
   notes: "Notes",
   assistant: "Assistant",
+  distill: "Distill",
   annotations: "Annotations",
   edits: "Edits",
 };
@@ -44,9 +46,11 @@ export function Workspace({
   activeDocumentId,
   reader,
   assistant,
+  distillPanel,
   annotationsPanel,
   editsPanel,
   annotationCount,
+  distillationCount,
   context,
 }: {
   notebook: NotebookView;
@@ -54,9 +58,11 @@ export function Workspace({
   activeDocumentId: string | null;
   reader: React.ReactNode;
   assistant: React.ReactNode;
+  distillPanel: React.ReactNode;
   annotationsPanel: React.ReactNode;
   editsPanel: React.ReactNode;
   annotationCount: number;
+  distillationCount: number;
   context: { initial: ContextValues | null; hasOverride: boolean; isSet: boolean };
 }) {
   const { tree, pending, actions, lastRejected, undoReject } = useOutline(notebook);
@@ -185,6 +191,9 @@ export function Workspace({
             <div className="flex items-center gap-2.5">
               <span className="font-display text-[18px]">{TAB_TITLES[tab]}</span>
               {tab === "notes" && <span className="text-[13px] text-sand-600">{noteCount}</span>}
+              {tab === "distill" && distillationCount > 0 && (
+                <span className="text-[13px] text-sand-600">{distillationCount}</span>
+              )}
               {tab === "annotations" && annotationCount > 0 && (
                 <span className="text-[13px] text-sand-600">{annotationCount}</span>
               )}
@@ -193,6 +202,7 @@ export function Workspace({
             <div className="min-h-0 flex-1 overflow-y-auto">
               {tab === "notes" && <NotesTray tree={tree} pending={pending} actions={actions} />}
               {tab === "assistant" && assistant}
+              {tab === "distill" && distillPanel}
               {tab === "annotations" && annotationsPanel}
               {tab === "edits" && editsPanel}
             </div>
@@ -255,6 +265,15 @@ export function Workspace({
                 {pending.length}
               </span>
             )}
+          </button>
+
+          <button
+            onClick={() => show("distill")}
+            aria-label="Distill"
+            aria-current={!collapsed && tab === "distill"}
+            className={!collapsed && tab === "distill" ? RAIL_BUTTON_ON : RAIL_BUTTON}
+          >
+            <DistillIcon />
           </button>
 
           <button

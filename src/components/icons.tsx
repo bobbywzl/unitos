@@ -141,6 +141,14 @@ export function HistoryIcon(props: IconProps) {
   );
 }
 
+export function DistillIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M21 4H3l7 8.5V20l4-2v-5.5L21 4z" />
+    </Icon>
+  );
+}
+
 export function SummaryIcon(props: IconProps) {
   return (
     <Icon {...props}>

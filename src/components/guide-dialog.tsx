@@ -71,17 +71,6 @@ export function GuideDialog({ open, onClose }: { open: boolean; onClose: () => v
               its header to move it; a faint line ties each bubble to the text it came from.
             </li>
             <li>
-              <span className={term}>Distill</span> — ask the article one question. The AI
-              scans the whole document and opens the distilled page: your question large at
-              the top, under it the quotes that answer it, each with a caption saying how it
-              answers the question and how it sits in the document. Click a quote to jump to
-              its exact words in the text. Add to notes files a quote as a{" "}
-              <span className={term}>pending</span> note with its anchor — nothing enters your
-              notes until you accept it (Enter) or reject it (Backspace). Cancel stops a
-              running scan and keeps the question for editing; Delete removes a stored
-              distillation.
-            </li>
-            <li>
               <span className={term}>Extract</span> — highlights the passages across the
               article that reveal what the selection focuses on. The selection keeps a solid
               underline; every found passage gets a dashed one plus a label chip (E1, E2, …)
@@ -136,8 +125,16 @@ export function GuideDialog({ open, onClose }: { open: boolean; onClose: () => v
               Extract first — recommended.
             </li>
             <li>
-              <span className={term}>Salience</span> (top right) — an overlay that marks the
-              load-bearing passages of the document, so you can skim what matters.
+              <span className={term}>Distill</span> (top right) — ask the article one
+              question. The AI scans the whole document and opens the distilled page: your
+              question large at the top, under it the quotes that answer it, each with a
+              caption saying how it answers the question and how it sits in the document.
+              Click a quote to jump to its exact words. Add to notes files a quote as a{" "}
+              <span className={term}>pending</span> note with its anchor. Cancel stops a
+              running scan and keeps the question for editing; Delete removes a stored
+              distillation. Close the page and keep reading — a progress bar under the button
+              shows while a distillation runs, and the Distill tab in the side tray lists
+              every distillation of the open document.
             </li>
             <li>
               <span className={term}>Notes tray</span> (right) — pending notes wait in a queue:
@@ -184,6 +181,8 @@ export function GuideDialog({ open, onClose }: { open: boolean; onClose: () => v
             <span className={term}>Notes</span> — your sections and the pending queue.{" "}
             <span className={term}>Assistant</span> — ask questions at document, corpus, or
             corpora scope, and run checks (contradictions, gaps).{" "}
+            <span className={term}>Distill</span> — every distillation of the open document;
+            open one to read its quotes.{" "}
             <span className={term}>Summary</span> — the whole document summarized at the depth
             you pick: layman, intermediate, or professional. Each depth is kept once generated.{" "}
             <span className={term}>Annotations</span> — highlights, comments, explanations,

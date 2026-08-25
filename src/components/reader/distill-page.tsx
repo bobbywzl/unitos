@@ -17,7 +17,6 @@ export function DistillPage({
   shownId,
   running,
   error,
-  focusQuote,
   canAddNotes,
   addNoteHint,
   onRun,
@@ -33,7 +32,6 @@ export function DistillPage({
   shownId: string | null; // null = ask view
   running: { question: string } | null;
   error: string | null;
-  focusQuote: string | null; // the selection the page opened from, or null
   canAddNotes: boolean;
   addNoteHint: string; // title for the Add to notes button
   onRun: (question: string) => void;
@@ -204,11 +202,6 @@ export function DistillPage({
                 One question. The AI scans the whole article and pulls the quotes that answer it,
                 each with a caption saying how it answers the question.
               </p>
-              {focusQuote && (
-                <p className="mt-2 line-clamp-2 border-l-2 border-sand-300 pl-2 text-xs text-sand-500">
-                  Starting from your selection: “{focusQuote}”
-                </p>
-              )}
               {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
               <button
                 type="submit"

@@ -238,6 +238,31 @@ mark,
   background: color-mix(in srgb, #d9a54a 34%, transparent);
   border-bottom: 2px solid #d9a54a;
 }
+/* The progress bar under the Distill button while a distillation runs. */
+.progress-track {
+  display: block;
+  height: 3px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--clay-400) 30%, transparent);
+}
+.progress-fill {
+  display: block;
+  position: relative;
+  height: 100%;
+  width: 40%;
+  border-radius: 999px;
+  background: var(--clay-500);
+  animation: progress-slide 1.3s ease-in-out infinite;
+}
+@keyframes progress-slide {
+  0% {
+    left: -40%;
+  }
+  100% {
+    left: 100%;
+  }
+}
 .hl-sage {
   background: color-mix(in srgb, var(--sage-500) 32%, transparent);
   border-bottom: 2px solid color-mix(in srgb, var(--sage-600) 70%, transparent);

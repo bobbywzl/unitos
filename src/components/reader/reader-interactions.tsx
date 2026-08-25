@@ -309,8 +309,6 @@ export function ReaderInteractions({
   annotationBubbles,
   distillations,
   extractions,
-  salienceByBlock,
-  hasSalience,
   termsByBlock,
   linksByBlock,
   editedByBlock,
@@ -362,8 +360,6 @@ export function ReaderInteractions({
   // Stored extractions for this document, oldest first (labels E1…), spans
   // healed against the current blocks.
   extractions: ExtractionView[];
-  salienceByBlock: Record<string, { start: number; end: number }[]>;
-  hasSalience: boolean;
   termsByBlock: Record<string, { start: number; end: number; definition: string }[]>;
   linksByBlock: Record<
     string,
@@ -398,15 +394,14 @@ export function ReaderInteractions({
   const [bubble, setBubble] = useState<ExplainBubble | null>(null);
   const [busy, setBusy] = useState(false);
   const [simplifyCard, setSimplifyCard] = useState<SimplifyCard | null>(null);
-  const [salienceOn, setSalienceOn] = useState(false);
-  const [salienceBusy, setSalienceBusy] = useState(false);
   // The distilled page: ask view (shownId null) or one distillation. A fresh
   // result shows from local state until the refresh delivers it as a prop.
   const [distillOpen, setDistillOpen] = useState(false);
+  const distillOpenRef = useRef(false);
+  distillOpenRef.current = distillOpen;
   const [distillShownId, setDistillShownId] = useState<string | null>(null);
   const [distillRun, setDistillRun] = useState<{ question: string } | null>(null);
   const [distillError, setDistillError] = useState<string | null>(null);
-  const [distillAnchor, setDistillAnchor] = useState<Anchor | null>(null);
   const [localDistillations, setLocalDistillations] = useState<DistillationView[]>([]);
   // The running request, so Cancel can abort it. Cancel keeps the question in
   // the ask view for editing; nothing persists from an aborted run.
@@ -726,7 +721,6 @@ export function ReaderInteractions({
     setDistillShownId(null);
     setDistillRun(null);
     setDistillError(null);
-    setDistillAnchor(null);
     setLocalDistillations([]);
     setSpanFlash(null);
     setLocalExtractions([]);
@@ -1398,6 +1392,22 @@ export function ReaderInteractions({
     return () => window.removeEventListener("dissect:extract-chip", onChip);
   }, []);
 
+  // The Distill panel in the side tray opens the distilled page: a stored
+  // distillation by id, or the ask view (id null). Only the pane showing the
+  // panel's document handles it.
+  useEffect(() => {
+    const onOpen = (e: Event) => {
+      const { documentId: forDocument, distillationId } = (
+        e as CustomEvent<{ documentId: string; distillationId: string | null }>
+      ).detail;
+      if (forDocument !== documentIdRef.current) return;
+      openDistillPage(distillationId);
+    };
+    window.addEventListener("dissect:open-distillation", onOpen);
+    return () => window.removeEventListener("dissect:open-distillation", onOpen);
+     
+  }, []);
+
   // The extract card closes on a click anywhere else.
   useEffect(() => {
     if (!extractCard) return;
@@ -1741,20 +1751,20 @@ export function ReaderInteractions({
   const allExtractionsRef = useRef(allExtractions);
   allExtractionsRef.current = allExtractions;
 
-  function openDistillPage(shownId: string | null, anchor: Anchor | null) {
+  function openDistillPage(shownId: string | null) {
     const container = containerRef.current;
-    if (container && !distillOpen) {
+    if (container && !distillOpenRef.current) {
       distillReturnScroll.current = container.scrollTop;
       container.scrollTo({ top: 0 });
     }
-    setDistillAnchor(anchor);
     setDistillShownId(shownId);
     setDistillError(null);
     setDistillOpen(true);
   }
 
+  // Closing the page never cancels: a running distillation keeps going, with
+  // the progress bar under the Distill button showing it.
   function closeDistillPage() {
-    cancelDistill();
     setDistillOpen(false);
     const container = containerRef.current;
     if (container && distillReturnScroll.current !== null) {
@@ -1771,22 +1781,10 @@ export function ReaderInteractions({
     setDistillRun(null);
   }
 
-  // Distill from the toolbar: the selection rides along as the starting point.
-  function beginDistill() {
-    if (!popover) return;
-    const { anchor } = popover;
-    setPopover(null);
-    setSubmenu(null);
-    window.getSelection()?.removeAllRanges();
-    openDistillPage(null, anchor);
-  }
-
   async function runDistill(question: string) {
     const q = question.trim();
     if (!q || distillRun) return;
-    const anchor = distillAnchor;
     const runDocumentId = documentId;
-    if (anchor) await flushLiveBlock(anchor.blockId);
     const controller = new AbortController();
     distillAbortRef.current = controller;
     setDistillRun({ question: q });
@@ -1797,21 +1795,7 @@ export function ReaderInteractions({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         signal: controller.signal,
-        body: JSON.stringify({
-          type: "DISTILL",
-          documentId,
-          notebookId,
-          question: q,
-          ...(anchor
-            ? {
-                anchor: {
-                  blockId: anchor.blockId,
-                  startOffset: anchor.startOffset,
-                  endOffset: anchor.endOffset,
-                },
-              }
-            : {}),
-        }),
+        body: JSON.stringify({ type: "DISTILL", documentId, notebookId, question: q }),
       });
       if (!res.ok || !res.body) {
         const detail = (await res.json().catch(() => null)) as { error?: string } | null;
@@ -1843,13 +1827,17 @@ export function ReaderInteractions({
       };
       setLocalDistillations((prev) => [fresh, ...prev]);
       setDistillShownId(fresh.id);
-      setDistillAnchor(null);
+      // The page may be closed: the pill's progress bar stops, and the toast
+      // says where the result is.
+      if (!distillOpenRef.current) showToast("Distilled — open Distill to read it");
       router.refresh();
     } catch (err) {
       // A cancelled run is not a failure: the ask view keeps the question.
       if (controller.signal.aborted) return;
       if (documentIdRef.current !== runDocumentId) return;
-      setDistillError(err instanceof Error ? err.message : "Distill failed");
+      const message = err instanceof Error ? err.message : "Distill failed";
+      setDistillError(message);
+      if (!distillOpenRef.current) showToast(message);
     } finally {
       if (distillAbortRef.current === controller) distillAbortRef.current = null;
       if (documentIdRef.current === runDocumentId) setDistillRun(null);
@@ -2497,34 +2485,7 @@ export function ReaderInteractions({
     }
   }
 
-  // SALIENCE: toggleable overlay, off by default; computed once per notebook+document (SPEC.md §6).
-  async function toggleSalience() {
-    if (salienceBusy) return;
-    if (hasSalience || Object.keys(salienceByBlock).length > 0) {
-      setSalienceOn(!salienceOn);
-      return;
-    }
-    setSalienceBusy(true);
-    showToast("Computing salience…");
-    try {
-      const res = await fetch("/api/derive", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: "SALIENCE", documentId, notebookId }),
-      });
-      const json = (await res.json().catch(() => null)) as { error?: string } | null;
-      if (!res.ok) throw new Error(json?.error ?? `Salience failed (${res.status})`);
-      setToast(null);
-      setSalienceOn(true);
-      router.refresh();
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : "Salience failed");
-    } finally {
-      setSalienceBusy(false);
-    }
-  }
-
-  // Merge anchor, salience, term, and link layers per block.
+  // Merge anchor, extraction, term, and link layers per block.
   const highlightsByBlock: Record<string, Highlight[]> = {};
   for (const [blockId, list] of Object.entries(anchorHighlights)) {
     highlightsByBlock[blockId] = list.map((h) => ({ ...h, kind: "anchor" as const }));
@@ -2636,15 +2597,6 @@ export function ReaderInteractions({
           href: w.href,
         })),
     ];
-  }
-  if (salienceOn) {
-    for (const [blockId, list] of Object.entries(salienceByBlock)) {
-      const existing = highlightsByBlock[blockId] ?? [];
-      highlightsByBlock[blockId] = [
-        ...existing,
-        ...list.map((h) => ({ sourceId: null, start: h.start, end: h.end, kind: "salience" as const })),
-      ];
-    }
   }
   if (simplifyCard) {
     const { blockId, startOffset, endOffset, quotedText } = simplifyCard.anchor;
@@ -2777,7 +2729,7 @@ export function ReaderInteractions({
           </button>
           <div className="mx-3 my-1 border-t border-line" />
           <button
-            onClick={() => openDistillPage(null, null)}
+            onClick={() => openDistillPage(null)}
             title="Ask the article a question; the AI pulls the quotes that answer it"
             className="px-4 py-2 text-left text-[12.5px] text-sand-800 hover:bg-clay-100 hover:text-clay-800"
           >
@@ -2811,18 +2763,22 @@ export function ReaderInteractions({
             Done
           </button>
         )}
-        <button
-          onClick={() => void toggleSalience()}
-          disabled={salienceBusy}
-          className={`rounded-full px-3.5 py-1.5 text-xs font-semibold shadow-soft disabled:opacity-40 ${
-            salienceOn
-              ? "bg-sage-200 text-sage-800"
-              : "bg-sand-100 text-sand-600 hover:text-clay-800"
-          }`}
-          title="Toggle the salience overlay"
-        >
-          {salienceBusy ? "Salience…" : salienceOn ? "Salience on" : "Salience"}
-        </button>
+        {/* Distill (in Salience's old spot): a link into the distilled page.
+            While a distillation runs, a progress bar shows under the button. */}
+        <div className="relative">
+          <button
+            onClick={() => openDistillPage(distillShownId)}
+            className="rounded-full bg-sand-100 px-3.5 py-1.5 text-xs font-semibold text-sand-600 shadow-soft hover:text-clay-800"
+            title="Open the distilled page"
+          >
+            Distill{allDistillations.length > 0 ? ` (${allDistillations.length})` : ""}
+          </button>
+          {distillRun && (
+            <span aria-hidden className="progress-track absolute right-1.5 -bottom-[7px] left-1.5">
+              <span className="progress-fill" />
+            </span>
+          )}
+        </div>
       </div>
 
       {editHint && !editMode && (
@@ -3115,15 +3071,6 @@ export function ReaderInteractions({
               className="flex w-full items-center rounded-full px-2.5 py-[5px] text-left text-[12px] text-sand-800 hover:bg-clay-100 hover:text-clay-800"
             >
               Simplify
-            </button>
-          )}
-          {!popover.figure && (
-            <button
-              onClick={beginDistill}
-              title="Ask the article a question; the AI pulls the quotes that answer it"
-              className="flex w-full items-center rounded-full px-2.5 py-[5px] text-left text-[12px] text-sand-800 hover:bg-clay-100 hover:text-clay-800"
-            >
-              Distill
             </button>
           )}
           {!popover.figure && !popover.term && (
@@ -3653,7 +3600,6 @@ export function ReaderInteractions({
           shownId={distillShownId}
           running={distillRun}
           error={distillError}
-          focusQuote={distillAnchor?.quotedText ?? null}
           canAddNotes={sectionChoices.length > 0}
           addNoteHint={
             sectionChoices.length === 0

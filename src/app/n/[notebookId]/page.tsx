@@ -22,6 +22,7 @@ import {
 } from "@/lib/types";
 import { AssistantPanel } from "@/components/assistant/assistant-panel";
 import { AnnotationsPanel } from "@/components/panels/annotations-panel";
+import { DistillPanel } from "@/components/panels/distill-panel";
 import { EditsPanel } from "@/components/panels/edits-panel";
 import { ReaderInteractions } from "@/components/reader/reader-interactions";
 import { ReaderPanes, type ReaderViewKind } from "@/components/reader/reader-panes";
@@ -36,15 +37,6 @@ import {
 } from "@/lib/video/types";
 
 export const dynamic = "force-dynamic";
-
-type SalienceSpan = {
-  blockId: string;
-  start: number;
-  end: number;
-  quotedText: string;
-  prefix: string;
-  suffix: string;
-};
 
 // Split view: reader left, notes drawer right (SPEC.md §6). The reader itself
 // shows one document (Normal) or two panes (Side by Side, Top and Bottom);
@@ -193,27 +185,9 @@ export default async function NotebookPage(props: {
       anchorHighlights[r.blockId] = list;
     }
 
-    // Stored summaries and salience live on the attachment (SPEC.md §4).
+    // Stored summaries, distillations, and extractions live on the attachment (SPEC.md §4).
     const attachment = notebook!.documents.find((d) => d.documentId === document.id);
     const summaries = (attachment?.summaries as SummaryLevels | null) ?? {};
-    const salienceByBlock: Record<string, { start: number; end: number }[]> = {};
-    const salienceSpans = (attachment?.salience as SalienceSpan[] | null) ?? null;
-    const hasSalience = Boolean(salienceSpans && Array.isArray(salienceSpans));
-    if (salienceSpans && Array.isArray(salienceSpans)) {
-      for (const span of salienceSpans) {
-        const block = blockById.get(span.blockId);
-        let hit: { start: number; end: number } | null = null;
-        if (block && block.text.slice(span.start, span.end) === span.quotedText) {
-          hit = { start: span.start, end: span.end };
-        } else if (block) {
-          hit = matchInText(block.text, span);
-        }
-        if (!hit) continue;
-        const list = salienceByBlock[span.blockId] ?? [];
-        list.push(hit);
-        salienceByBlock[span.blockId] = list;
-      }
-    }
 
     // Stored distillation quotes and extraction spans heal at render like
     // salience: exact offsets first, then the quote matcher within the block,
@@ -671,8 +645,6 @@ export default async function NotebookPage(props: {
       annotations,
       annotationBubbles,
       annotationsBySource,
-      salienceByBlock,
-      hasSalience,
       termsByBlock,
       linksByBlock,
       linksOut,
@@ -803,8 +775,6 @@ export default async function NotebookPage(props: {
           annotationBubbles={pane.annotationBubbles}
           distillations={pane.distillations}
           extractions={pane.extractions}
-          salienceByBlock={pane.salienceByBlock}
-          hasSalience={pane.hasSalience}
           termsByBlock={pane.termsByBlock}
           linksByBlock={pane.linksByBlock}
           editedByBlock={pane.editedByBlock}
@@ -836,6 +806,12 @@ export default async function NotebookPage(props: {
           summaries={paneOne?.summaries ?? {}}
         />
       }
+      distillPanel={
+        <DistillPanel
+          documentId={paneOne && !paneOne.video ? paneOne.document.id : null}
+          distillations={paneOne?.distillations ?? []}
+        />
+      }
       annotationsPanel={
         <AnnotationsPanel
           notebookId={notebook.id}
@@ -856,6 +832,7 @@ export default async function NotebookPage(props: {
         (paneOne?.linksOut.length ?? 0) +
         (paneOne?.linksIn.length ?? 0)
       }
+      distillationCount={paneOne?.distillations.length ?? 0}
       reader={
         paneOne ? (
           <ReaderPanes
