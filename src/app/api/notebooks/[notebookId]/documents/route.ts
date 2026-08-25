@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { notebookGuard } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { attachDocument } from "@/lib/parse/attach";
 import { parseBody } from "@/lib/validate";
@@ -11,6 +12,8 @@ const attachSchema = z.object({
 // Attach an existing document from the library. No re-parse.
 export async function POST(req: Request, ctx: { params: Promise<{ notebookId: string }> }) {
   const { notebookId } = await ctx.params;
+  const denied = await notebookGuard(notebookId);
+  if (denied) return denied;
   const { data, error } = await parseBody(req, attachSchema);
   if (error) return error;
 

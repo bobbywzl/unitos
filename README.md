@@ -13,19 +13,20 @@ Notes-centric web app for deep reading. Documents attach to notebooks; every AI 
 - Derivations via one pipeline (`/api/derive`): EXPLAIN (annotation rail), SIMPLIFY (inline swap, revert on click), SALIENCE (toggleable overlay), EXTRACT (pending note with sources)
 - Pending queue keyboard flow: `j/k` move, `Enter` accept, `Backspace` reject, `e` edit, `g` jump to source
 - Context (background, purpose, application) injected into every prompt; edited from the Context tab in the header, saved globally or as a per-notebook override
-- Assistant panel with scopes: selection, document, notebook, corpus; contradiction, gap, and unsourced checks as clickable cards
-- Voyage embeddings + pgvector for corpus search across all notebooks
+- Assistant panel with two scopes — Corpus (this corpus whole) and Corpora (every corpus whole) — plus contradiction, gap, and unsourced checks as clickable cards
+- The digest: the assistant's stored context, one row per corpus per user — every document in full, every note, annotation, distillation, extraction, and summary; stale rows rebuild on read via a content fingerprint
 - Glossary extraction on ingest; hover definitions in the reader
 - Export notebook to Markdown or .docx with `documentTitle, blockId` footnotes
-- Feedback button + admin inbox (`/admin`) with new → seen → resolved triage
-- Settings (`/settings`): light/dark/system theme, context, service status
+- Google sign-in at `/signin` (dual mode: without `GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET` + `SESSION_SECRET` the app runs as a single local reader, nothing gated). Corpora, context, and digests belong to the signed-in account; the first account to sign in adopts the local reader's data
+- English and Chinese, whole-surface: the switcher (Settings, `/signin`) changes every UI string and API error message at once
+- Feedback button + admin inbox (`/admin`) with new → seen → resolved triage; admin digest page (`/admin/digest`) showing the store per account — every corpus → document → annotations, notes, distillations — with forced rebuilds and the exact text each scope sends. The admin gate (`ADMIN_PASSWORD`) is separate from reader sign-in
+- Settings (`/settings`): account + sign out, language, light/dark/system theme, context, service status
 
 ## Stack
 
 - Next.js (App Router, TypeScript strict, server components by default)
-- PostgreSQL (Supabase) + Prisma, pgvector
-- Anthropic API via the AI SDK, streaming, prompt caching (the parsed document is the cached prefix)
-- Voyage AI embeddings
+- PostgreSQL (Supabase) + Prisma
+- Anthropic API via the AI SDK, streaming, prompt caching (the parsed document — and the digest at assistant scopes — is the cached prefix)
 - Tailwind
 
 ## Run it locally
@@ -41,13 +42,13 @@ npx prisma migrate deploy
 npm run dev                   # → http://localhost:3000
 ```
 
-Reading, notes, anchoring, and export work with no API keys. Add `ANTHROPIC_API_KEY` to `.env` for the AI features, `VOYAGE_API_KEY` for corpus search, and `OPENAI_API_KEY` and/or `GEMINI_API_KEY` for video transcription.
+Reading, notes, anchoring, and export work with no API keys. Add `ANTHROPIC_API_KEY` to `.env` for the AI features, and `OPENAI_API_KEY` and/or `GEMINI_API_KEY` for video transcription.
 
 ## Deploy (Vercel)
 
 1. Import this repo on vercel.com.
 2. Storage → Create Database → **Neon** (Postgres) → connect it to the project. Vercel adds the database env vars; the build maps them and runs migrations (the first migration creates the `vector` extension).
-3. Settings → Environment Variables: `ANTHROPIC_API_KEY` (AI features), `VOYAGE_API_KEY` (corpus search), `OPENAI_API_KEY` and/or `GEMINI_API_KEY` (video transcription), `ADMIN_PASSWORD` (`/admin`), `CRON_SECRET` (cleanup cron). All optional to boot; add and redeploy any time.
+3. Settings → Environment Variables: `ANTHROPIC_API_KEY` (AI features), `OPENAI_API_KEY` and/or `GEMINI_API_KEY` (video transcription), `GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET` + `SESSION_SECRET` (Google sign-in at `/signin`; authorized redirect URI is `<your origin>/api/auth/callback` in the Google Cloud console), `ADMIN_PASSWORD` (`/admin`), `CRON_SECRET` (cleanup cron). All optional to boot; add and redeploy any time.
 4. Deployments → Redeploy the latest.
 
 Vercel caps request bodies at about 4.5 MB, so PDF uploads above that fail there. Self-hosted deployments take PDFs up to 50 MB.
@@ -61,7 +62,7 @@ Supabase instead of Neon works too: enable the `vector` extension, then set `DAT
    - `DATABASE_URL` — Supabase pooled connection (port 6543, `?pgbouncer=true&connection_limit=1`)
    - `DIRECT_URL` — Supabase direct connection (port 5432), used for migrations
    - `ANTHROPIC_API_KEY` — required for derivations, the assistant, and glossary
-   - `VOYAGE_API_KEY` — required for corpus search embeddings
+   - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `SESSION_SECRET` — Google sign-in at `/signin`; unset = single local reader, nothing gated. Redirect URI: `<origin>/api/auth/callback`
    - `OPENAI_API_KEY` — video transcription for uploads (Whisper first)
    - `GEMINI_API_KEY` — video transcription for YouTube videos (Gemini first) and the upload fallback
    - `ADMIN_PASSWORD` — enables `/admin` (unset = admin off)

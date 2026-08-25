@@ -44,7 +44,7 @@ export function synthesisTaskPrompt(params: {
   return [
     profileLines(params.profile),
     "",
-    "The corpus's accepted notes and section skeleton are above.",
+    "The corpus is above: its documents, its notes (pending ones marked), and every annotation and layer on them.",
     "",
     TASK_INSTRUCTIONS[params.task],
     "",

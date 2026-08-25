@@ -13,12 +13,13 @@ import type { PromptCtx, ReaderProfileCtx } from "@/lib/prompts/types";
 // The reference list is appended so in-text citations stay explainable — pass
 // Document.references verbatim; parsing happens here so every caller builds
 // the same prefix.
-export function documentPrefix(
-  title: string,
-  blocks: (Pick<Block, "id" | "type" | "text"> & Partial<Pick<Block, "startTime" | "endTime">>)[],
-  references?: unknown,
-): string {
-  const rendered = blocks
+type PrefixBlock = Pick<Block, "id" | "type" | "text"> &
+  Partial<Pick<Block, "startTime" | "endTime">>;
+
+// One rendering of blocks for every prompt and for the digest: `[block <id>]
+// (TYPE)` tags, timed blocks tagging their seconds.
+export function renderBlockLines(blocks: PrefixBlock[]): string {
+  return blocks
     .map((b) => {
       const tag =
         b.startTime != null && b.endTime != null
@@ -27,21 +28,32 @@ export function documentPrefix(
       return `[block ${b.id}] ${tag}\n${b.text}`;
     })
     .join("\n\n");
+}
+
+// One rendering of the reference list for every prompt and for the digest.
+export function renderReferenceLines(references: unknown): string[] {
   const referenceList = documentReferences(references ?? null);
+  if (referenceList.length === 0) return [];
+  return [
+    "References (in-text citations like [12] point at these entries):",
+    ...referenceList.map((r) => `[${r.label}] ${r.text}${r.url ? ` — ${r.url}` : ""}`),
+  ];
+}
+
+export function documentPrefix(
+  title: string,
+  blocks: PrefixBlock[],
+  references?: unknown,
+): string {
+  const referenceLines = renderReferenceLines(references);
   return [
     "You assist a reader dissecting a document. The full document follows.",
     "Each block starts with its id in the form [block <id>]. Reference block ids exactly as given when asked for them.",
     "",
     `Document title: ${title}`,
     "",
-    rendered,
-    ...(referenceList.length > 0
-      ? [
-          "",
-          "References (in-text citations like [12] point at these entries):",
-          ...referenceList.map((r) => `[${r.label}] ${r.text}${r.url ? ` — ${r.url}` : ""}`),
-        ]
-      : []),
+    renderBlockLines(blocks),
+    ...(referenceLines.length > 0 ? ["", ...referenceLines] : []),
   ].join("\n");
 }
 
@@ -55,7 +67,8 @@ export function hasContext(
   );
 }
 
-// The reader's context: notebook override wins over the global context (SPEC.md §3).
+// The reader's context: notebook override wins over the corpus owner's global
+// context (SPEC.md §3).
 export async function loadProfile(notebookId: string): Promise<ReaderProfileCtx> {
   const notebook = await db.notebook.findUnique({ where: { id: notebookId } });
   const override = notebook?.profile as ReaderProfileCtx | null;
@@ -66,7 +79,9 @@ export async function loadProfile(notebookId: string): Promise<ReaderProfileCtx>
       application: override?.application ?? "",
     };
   }
-  const profile = await db.readerProfile.findUnique({ where: { userId: USER_ID } });
+  const profile = await db.readerProfile.findUnique({
+    where: { userId: notebook?.userId ?? USER_ID },
+  });
   if (!hasContext(profile)) return null;
   return {
     background: profile!.background,

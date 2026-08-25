@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { clearNoteEmbedding, ensureNoteEmbeddings } from "@/lib/assistant/embeddings";
 import { db } from "@/lib/db";
 import { normalizeNoteOrders, movedOrder } from "@/lib/order";
 import { parseBody } from "@/lib/validate";
@@ -42,11 +41,6 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ noteId: strin
         ...(data.color !== undefined ? { color: data.color } : {}),
       },
     });
-    // Embeddings track accepted content: edits invalidate, accepts backfill (SPEC.md §2).
-    if (data.content !== undefined) await clearNoteEmbedding(noteId);
-    if (data.status === "ACCEPTED" || data.content !== undefined) {
-      void ensureNoteEmbeddings().catch(() => {});
-    }
   }
 
   if (data.order !== undefined) {

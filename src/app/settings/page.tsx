@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { USER_ID } from "@/lib/constants";
+import { redirect } from "next/navigation";
+import { authEnabled, currentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { Logo } from "@/components/logo";
 import { SettingsForm } from "@/components/settings-form";
@@ -7,14 +8,19 @@ import { SettingsForm } from "@/components/settings-form";
 export const dynamic = "force-dynamic";
 
 export default async function SettingsPage() {
-  const profile = await db.readerProfile.findUnique({ where: { userId: USER_ID } });
+  const user = await currentUser();
+  if (!user) redirect("/signin");
+  const profile = await db.readerProfile.findUnique({ where: { userId: user.id } });
 
   // Status only — values never leave the server.
   const services = {
     anthropic: Boolean(process.env.ANTHROPIC_API_KEY),
-    voyage: Boolean(process.env.VOYAGE_API_KEY),
+    google: authEnabled(),
     admin: Boolean(process.env.ADMIN_PASSWORD),
   };
+  const account = authEnabled()
+    ? { email: user.email, name: user.name, picture: user.picture }
+    : null;
 
   return (
     <main className="mx-auto max-w-2xl px-6 py-8">
@@ -39,6 +45,7 @@ export default async function SettingsPage() {
             : null
         }
         services={services}
+        account={account}
       />
     </main>
   );

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { SectionView } from "@/lib/types";
+import { useT } from "@/components/lang-provider";
 import { DragHandle, SortableItem, SortableList, type HandleProps } from "@/components/sortable";
 import { AddSection } from "@/components/outline/add-section";
 import { NoteCard } from "@/components/outline/note-card";
@@ -18,6 +19,7 @@ export function SectionItem({
   handle: HandleProps;
   nested?: boolean;
 }) {
+  const t = useT();
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState(section.title);
   const [composing, setComposing] = useState(false);
@@ -37,7 +39,7 @@ export function SectionItem({
     <section className={`group flex flex-col gap-2.5 ${nested ? "mt-4 pl-5" : ""}`}>
       <div className="flex items-baseline gap-2.5">
         <span className="self-center">
-          <DragHandle handle={handle} label={`Reorder section ${section.title}`} />
+          <DragHandle handle={handle} label={t("outline.reorderSection", { title: section.title })} />
         </span>
         {editing ? (
           <input
@@ -52,14 +54,14 @@ export function SectionItem({
                 setEditing(false);
               }
             }}
-            aria-label="Section title"
+            aria-label={t("outline.sectionTitle")}
             className={`rounded-full bg-card px-4 py-1 font-display shadow-soft outline-none ${nested ? "text-lg" : "text-[22px]"}`}
           />
         ) : (
           <button
             onClick={() => setEditing(true)}
             className={`text-left font-display ${nested ? "text-lg" : "text-[22px]"}`}
-            title="Rename section"
+            title={t("outline.renameSection")}
           >
             {section.title}
           </button>

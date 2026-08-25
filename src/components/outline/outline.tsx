@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { NotebookView } from "@/lib/types";
+import { useT } from "@/components/lang-provider";
 import { SortableItem, SortableList } from "@/components/sortable";
 import { AddSection } from "@/components/outline/add-section";
 import { NoteCard } from "@/components/outline/note-card";
@@ -12,6 +13,7 @@ import { filterSections, useOutline } from "@/components/outline/use-outline";
 // grips, notes are flat cards, and pending ones stay in place with Accept/Reject
 // inline — unlike the tray, which hoists the whole pending queue to the top.
 export function Outline({ notebook }: { notebook: NotebookView }) {
+  const t = useT();
   const { tree, pending, actions, lastRejected, undoReject } = useOutline(notebook);
   const [query, setQuery] = useState("");
   const searching = query.trim().length > 0;
@@ -23,18 +25,18 @@ export function Outline({ notebook }: { notebook: NotebookView }) {
         <h1 className="text-[38px]">{notebook.title}</h1>
         {pending.length > 0 && (
           <span className="rounded-full bg-clay-200 px-3.5 py-1 text-xs font-semibold text-clay-800">
-            {pending.length} pending
+            {t("outline.pendingCount", { n: pending.length })}
           </span>
         )}
-        <span className="text-[11px] text-sand-500">⏎ accept · ⌫ reject · e edit · g source</span>
+        <span className="text-[11px] text-sand-500">{t("outline.pageKeyHint")}</span>
       </div>
 
       <input
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         onKeyDown={(e) => e.key === "Escape" && setQuery("")}
-        placeholder="Search notes"
-        aria-label="Search notes"
+        placeholder={t("outline.searchNotes")}
+        aria-label={t("outline.searchNotes")}
         className="mt-2 w-72 rounded-full bg-card px-4 py-2 text-[13px] shadow-soft outline-none placeholder:text-sand-500"
       />
 
@@ -66,7 +68,9 @@ export function Outline({ notebook }: { notebook: NotebookView }) {
               </section>
             ))}
             {results.length === 0 && (
-              <p className="text-sm text-sand-600">No notes match “{query.trim()}”.</p>
+              <p className="text-sm text-sand-600">
+                {t("outline.noNotesMatch", { query: query.trim() })}
+              </p>
             )}
           </>
         ) : (
@@ -86,7 +90,7 @@ export function Outline({ notebook }: { notebook: NotebookView }) {
             <AddSection onAdd={(title) => actions.addSection(null, title)} />
 
             {tree.length === 0 && (
-              <p className="text-sm text-sand-600">No sections yet. Add one to start taking notes.</p>
+              <p className="text-sm text-sand-600">{t("outline.emptySections")}</p>
             )}
           </>
         )}
@@ -94,12 +98,12 @@ export function Outline({ notebook }: { notebook: NotebookView }) {
 
       {lastRejected && (
         <div className="fixed bottom-6 left-1/2 z-30 flex -translate-x-1/2 items-center gap-3 rounded-full bg-card px-5 py-2.5 shadow-float">
-          <span className="text-[13px] text-sand-600">Note rejected</span>
+          <span className="text-[13px] text-sand-600">{t("outline.noteRejected")}</span>
           <button
             onClick={() => void undoReject()}
             className="rounded-full bg-clay px-3.5 py-1 text-xs font-semibold text-clay-fg hover:bg-clay-600"
           >
-            Undo
+            {t("outline.undo")}
           </button>
         </div>
       )}

@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
+import { authEnabled, currentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { Logo } from "@/components/logo";
 import { WorksShelf } from "@/components/works/works-shelf";
@@ -6,7 +8,11 @@ import { WorksShelf } from "@/components/works/works-shelf";
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
+  const user = await currentUser();
+  if (!user) redirect("/signin");
   const works = await db.notebook.findMany({
+    // With sign-in on, the shelf is the signed-in reader's corpora.
+    where: authEnabled() ? { userId: user.id } : undefined,
     orderBy: { updatedAt: "desc" },
     include: {
       // Hidden sections (Annotations) stay out of the count, so the tag on a work
@@ -22,6 +28,19 @@ export default async function Home() {
       <header className="flex items-center gap-3 pt-[26px]">
         <Logo size={38} className="text-clay" />
         <span className="font-display text-[21px]">Unitos</span>
+        {authEnabled() && (
+          <span className="ml-auto flex items-center gap-2">
+            {user.picture ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={user.picture} alt="" className="size-7 rounded-full" />
+            ) : (
+              <span className="flex size-7 items-center justify-center rounded-full bg-clay-100 text-xs font-semibold text-clay-800">
+                {user.name[0]?.toUpperCase()}
+              </span>
+            )}
+            <span className="max-w-[200px] truncate text-xs text-sand-600">{user.email}</span>
+          </span>
+        )}
         <Link
           href="/settings"
           aria-label="Settings"

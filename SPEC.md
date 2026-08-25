@@ -23,23 +23,56 @@ A notes-centric web app for completely dissecting complex documents (research pa
 - **Prompt caching:** Cache the full parsed document as a prompt prefix per session (Anthropic prompt caching, `cache_control` on the document content block). Every selection-level derivation must reuse the cached prefix.
 - **Parsing:** PDF → blocks server-side. Use `unpdf` or `pdf-parse` for text extraction; preserve reading order. URL ingestion: full-DOM structural parse via `jsdom` — equations keep their TeX (KaTeX/MathJax annotations, rendered with KaTeX in the reader), charts keep their inline SVG, figures keep their images and videos, lists/tables/separators keep their shape — followed by two AI passes that reference blocks by index and never write text: the core pass returns the block ranges that are the article (site navigation, footer link lists, newsletter, social, and legal chrome fall outside the ranges and are dropped), then the structure pass may drop, retype, or merge what survives. `@mozilla/readability` is the fallback for pages the structural walk cannot read. Ingest streams stage progress (fetch → extract → select → structure → save) to the client. Every document is stamped with the parser version that produced it; a URL document stamped with an older version re-parses automatically — on open, and when its URL is added again — and can be re-parsed manually from the document menu.
 - **Anchoring:** W3C Web Annotation selectors via `apache-annotator` (`@apache-annotator/dom`, `@apache-annotator/selector`).
-- **Embeddings (Phase 6):** Voyage AI or OpenAI embeddings on notes, stored via `pgvector`.
+- **Digest (Phase 6):** the assistant's stored context — one `NotebookDigest` row per corpus per user, rebuilt on read when a content fingerprint moves (§7). No embeddings: the assistant reads the corpus whole.
 - **Styling:** Tailwind. Split-pane layout via CSS grid, not a heavy library.
-- **Auth:** Single-user for v1. Stub a `userId` constant; structure schema so multi-user is a migration, not a rewrite.
+- **Auth:** dual mode (Scalae pattern). With `GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET` + `SESSION_SECRET` set, Google sign-in (hand-rolled OIDC code flow, database sessions in an httpOnly cookie, 30 days) gates the app at `/signin`; corpora, profiles, and digests belong to accounts, and the first account to sign in adopts the local reader's data. Unset, the app runs as the single local reader (`user-1`), nothing gated. `/admin` keeps its own `ADMIN_PASSWORD` gate, decoupled from reader sign-in. Corpus routes verify ownership; object routes stay id-capability-based (cuids) — per-object ACLs are the next migration. `/api/auth/test-login` is a QA door, sealed unless `TEST_LOGIN_TOKEN` is set.
+- **Language:** English and Chinese, whole-surface. Typed dictionaries in `/lib/i18n/dict` (one namespace per surface; en and zh keys enforced identical by type), `dissect-lang` cookie with Accept-Language first-visit fallback, switcher in Settings and on `/signin`. Every UI surface and API error message translates; prompts, the digest, and stored data stay English (model context and data, not UI).
 
 ---
 
 ## 3. Data Model (Prisma)
 
 ```prisma
+model User {
+  id         String    @id @default(cuid())
+  email      String    @unique
+  name       String
+  picture    String    @default("")
+  createdAt  DateTime  @default(now())
+  lastSeenAt DateTime  @default(now())
+  sessions   Session[]
+}
+
+model Session {
+  token     String   @id
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+}
+
 model Notebook {
   id        String    @id @default(cuid())
+  userId    String    @default("user-1") // owner account; "user-1" = the local reader
   title     String
   profile   Json?     // ReaderProfile override for this notebook
   sections  Section[]
   documents NotebookDocument[]
+  digest    NotebookDigest?
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
+}
+
+model NotebookDigest {
+  id          String   @id @default(cuid())
+  notebookId  String   @unique
+  notebook    Notebook @relation(fields: [notebookId], references: [id], onDelete: Cascade)
+  userId      String   // per-user store; constant in v1
+  fingerprint String   // cheap aggregates over the content tables; mismatch = stale
+  parts       Json     // DigestParts: documents with text and layers, notes, sections
+  counts      Json     // DigestCounts: documents, notes, annotations, distillations, …
+  chars       Int      // rendered size before budget cuts
+  builtAt     DateTime @default(now())
 }
 
 model Section {
@@ -63,7 +96,6 @@ model Note {
   derivationType DerivationType? // null = manually written
   order          Int
   sources        Source[]
-  embedding      Unsupported("vector(1024)")? // pgvector, Phase 6
   createdAt      DateTime   @default(now())
   updatedAt      DateTime   @updatedAt
 }
@@ -237,18 +269,24 @@ DOM ranges are never the source of truth. Convert selection → block-relative o
 
 ---
 
-## 7. Assistant Scope Selector (Phase 6)
+## 7. Assistant Scopes + the Digest (Phase 6)
 
-One assistant panel with a scope control:
+One assistant panel with two scopes, both reading the digest:
 
 | Scope | Context sent | Example queries |
 |---|---|---|
-| Selection | anchor + ±2 blocks | explain, simplify |
-| Document | full doc (cached) | "map claims to evidence", "what's missing" |
-| Notebook | all accepted notes + section skeleton | "where do my notes contradict", "which sections are thin", "what's unsourced" |
-| Corpus | embedding search over all notes | "have I read about X before" |
+| Corpus (wire value `notebook`) | this corpus's digest, whole | "map claims to evidence", "where do my notes contradict", "which sections are thin" |
+| Corpora (wire value `corpus`) | every corpus's digest, whole | "have I read about X before", "where are mentions of X concentrated" |
 
-Notebook-scope contradiction/gap detection is the differentiating feature. Implementation: pass all accepted notes (with IDs) in one prompt; output JSON list of `{noteIds[], issue, explanation}`; render as clickable cards.
+**The digest** is the assistant's storage: one `NotebookDigest` row per corpus per user holding the serialized corpus — every document in full (text and video transcripts, block-tagged), every note (pending ones marked), every annotation (highlights, comments, explanations, simplified rewrites, assistant conversations), every distillation, extraction, summary, salience span, link, and edit. Never a similarity search: the assistant sees everything, so questions about counts, spread, and absence are answerable.
+
+- **Staleness:** a fingerprint of cheap grouped aggregates over the content tables (note counts and `updatedAt`, block id sets, `BlockEdit` rows, layer Json hashes, titles) is compared on every read; a mismatch rebuilds the row. No mutation hooks to forget.
+- **Determinism:** the rendered digest is byte-identical until content changes, so both scopes cache their prompt prefix (§2).
+- **Budgets:** past the character budget, document text cuts at block boundaries with a declared marker, never silently. Notes and layers have their own budget. At Corpora scope a document attached to several corpora renders its text once; later corpora point back to it.
+- **Selection and document questions** stay in the reader: the selection popover's assistant chat and the article menu (`/api/assistant/act`) already carry the anchor and the cached document prefix.
+- **Admin digest page** (`/admin/digest`, admin-gated like the feedback inbox): the store per user — every corpus → every document → its annotations, notes, and distillations — with counts, built time, forced Rebuild, and the exact text each scope sends (`/api/admin/digest`).
+
+Corpus-scope contradiction/gap detection is the differentiating feature. Implementation: the digest carries all notes (with IDs) in one prompt; output JSON list of `{noteIds[], issue, explanation}`; render as clickable cards.
 
 ---
 
@@ -283,9 +321,10 @@ Each phase must be fully working end-to-end before starting the next.
 - SIMPLIFY (inline swap/revert), SALIENCE (overlay), EXTRACT (pending queue with keyboard flow).
 - **Checkpoint:** compare EXPLAIN output with/without profile on the same passage. If not meaningfully better than generic output, stop and rethink prompts before building more.
 
-### Phase 6 — Notebook-scope assistant
-- pgvector embeddings on accepted notes.
-- Assistant panel with scope selector. Contradiction detection, gap detection, corpus search.
+### Phase 6 — Assistant scopes + the digest
+- The digest store (§7): `NotebookDigest` rows, fingerprint staleness, deterministic render.
+- Assistant panel with the two scopes. Contradiction detection, gap detection.
+- Admin digest page at `/admin/digest`.
 
 ### Phase 7 — Glossary + export
 - On-ingest glossary extraction (terms/acronyms/symbols); hover definitions in reader.

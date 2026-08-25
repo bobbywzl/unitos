@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { notebookGuard } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { parseBody } from "@/lib/validate";
 
@@ -20,6 +21,8 @@ const patchSchema = z.object({
 
 export async function PATCH(req: Request, ctx: { params: Promise<{ notebookId: string }> }) {
   const { notebookId } = await ctx.params;
+  const denied = await notebookGuard(notebookId);
+  if (denied) return denied;
   const { data, error } = await parseBody(req, patchSchema);
   if (error) return error;
   // An all-empty override is no override: store null so prompts fall back to the
@@ -47,6 +50,8 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ notebookId: s
 
 export async function DELETE(_req: Request, ctx: { params: Promise<{ notebookId: string }> }) {
   const { notebookId } = await ctx.params;
+  const denied = await notebookGuard(notebookId);
+  if (denied) return denied;
   const notebook = await db.notebook.delete({ where: { id: notebookId } }).catch(() => null);
   if (!notebook) return NextResponse.json({ error: "Corpus not found" }, { status: 404 });
   return NextResponse.json({ ok: true });

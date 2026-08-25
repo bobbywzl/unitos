@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { isAdmin } from "@/lib/admin-auth";
 import { db } from "@/lib/db";
+import { AdminNav } from "@/components/admin/admin-nav";
 import { FeedbackInbox } from "@/components/admin/feedback-inbox";
 
 export const dynamic = "force-dynamic";
@@ -16,6 +17,7 @@ export default async function AdminPage() {
 
   return (
     <main className="mx-auto max-w-3xl px-6 py-8">
+      <AdminNav active="feedback" />
       <FeedbackInbox
         items={feedback.map((f) => ({
           id: f.id,

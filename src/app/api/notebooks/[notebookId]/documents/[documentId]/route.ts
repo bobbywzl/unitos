@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { notebookGuard } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { distillationList, extractionList } from "@/lib/types";
 import { parseBody } from "@/lib/validate";
@@ -19,6 +20,8 @@ export async function PATCH(
   ctx: { params: Promise<{ notebookId: string; documentId: string }> },
 ) {
   const { notebookId, documentId } = await ctx.params;
+  const denied = await notebookGuard(notebookId);
+  if (denied) return denied;
   const { data, error } = await parseBody(req, patchSchema);
   if (error) return error;
   const attachment = await db.notebookDocument.findUnique({
@@ -50,6 +53,8 @@ export async function DELETE(
   ctx: { params: Promise<{ notebookId: string; documentId: string }> },
 ) {
   const { notebookId, documentId } = await ctx.params;
+  const denied = await notebookGuard(notebookId);
+  if (denied) return denied;
   const deleted = await db.notebookDocument
     .delete({ where: { notebookId_documentId: { notebookId, documentId } } })
     .catch(() => null);

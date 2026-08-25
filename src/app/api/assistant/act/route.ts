@@ -2,6 +2,7 @@ import { anthropic } from "@ai-sdk/anthropic";
 import type { ModelMessage } from "ai";
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { notebookGuard } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { DERIVATION_MODEL, MAX_OUTPUT_TOKENS } from "@/lib/derive/config";
 import {
@@ -156,6 +157,8 @@ async function handle(req: Request) {
   }
   const { data, error } = await parseBody(req, requestSchema);
   if (error) return error;
+  const denied = await notebookGuard(data.notebookId);
+  if (denied) return denied;
 
   const notebook = await db.notebook.findUnique({ where: { id: data.notebookId } });
   if (!notebook) return NextResponse.json({ error: "Corpus not found" }, { status: 404 });

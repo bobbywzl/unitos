@@ -1,22 +1,48 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { SESSION_COOKIE } from "@/lib/constants";
 
-// Edge gate for the admin area. /admin/login and /api/admin/auth stay open —
-// they are the gate (release-edu pattern).
+// Edge gate, two doors (Scalae pattern):
+// 1. /admin has its own password cookie gate (lib/admin-auth), deliberately
+//    decoupled from reader sign-in — an admin need not be a signed-in reader.
+// 2. Everything else requires a session cookie when Google sign-in is
+//    configured. A fast presence check only — real validation happens in
+//    lib/auth (currentUser); this shapes the redirect UX. With sign-in off
+//    (single-reader mode) everything passes through.
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  if (pathname === "/admin/login" || pathname.startsWith("/api/admin/auth")) {
+
+  if (pathname.startsWith("/admin") || pathname.startsWith("/api/admin")) {
+    if (pathname === "/admin/login" || pathname.startsWith("/api/admin/auth")) {
+      return NextResponse.next();
+    }
+    const adminAuth = request.cookies.get("admin-auth")?.value;
+    if (adminAuth !== "true") {
+      if (pathname.startsWith("/api/")) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      }
+      return NextResponse.redirect(new URL("/admin/login", request.url));
+    }
     return NextResponse.next();
   }
-  const adminAuth = request.cookies.get("admin-auth")?.value;
-  if (adminAuth !== "true") {
-    if (pathname.startsWith("/api/")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-    return NextResponse.redirect(new URL("/admin/login", request.url));
+
+  // Same three-variable switch as lib/auth authEnabled() — not imported, that
+  // module needs node:crypto and this runs at the edge.
+  const authOn = Boolean(
+    process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET && process.env.SESSION_SECRET,
+  );
+  if (!authOn) return NextResponse.next();
+
+  if (pathname === "/signin" || pathname.startsWith("/api/auth/") || pathname.startsWith("/api/cron/")) {
+    return NextResponse.next();
   }
-  return NextResponse.next();
+  if (request.cookies.get(SESSION_COOKIE)?.value) return NextResponse.next();
+  if (pathname.startsWith("/api/")) {
+    return NextResponse.json({ error: "Sign in to continue." }, { status: 401 });
+  }
+  return NextResponse.redirect(new URL("/signin", request.url));
 }
 
 export const config = {
-  matcher: ["/admin/:path*", "/api/admin/:path*"],
+  // Everything except Next internals and static assets.
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|ico)$).*)"],
 };

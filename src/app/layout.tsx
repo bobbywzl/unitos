@@ -2,6 +2,9 @@ import type { Metadata } from "next";
 import { Caprasimo, Figtree } from "next/font/google";
 import "./globals.css";
 import { FeedbackButton } from "@/components/feedback-button";
+import { LangProvider } from "@/components/lang-provider";
+import { htmlLangOf } from "@/lib/i18n/config";
+import { currentLang } from "@/lib/i18n/server";
 
 // Caprasimo sets every heading; Figtree carries body text and UI.
 const caprasimo = Caprasimo({
@@ -26,10 +29,11 @@ export const metadata: Metadata = {
 // Applies the stored theme before paint; follows the system while theme is "system".
 const themeScript = `(function(){try{var m=window.matchMedia("(prefers-color-scheme: dark)");function a(){var t=localStorage.getItem("theme");document.documentElement.classList.toggle("dark",t==="dark"||(t!=="light"&&m.matches));}a();m.addEventListener("change",a);}catch(e){}})();`;
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default async function RootLayout({ children }: LayoutProps<"/">) {
+  const lang = await currentLang();
   return (
     <html
-      lang="en"
+      lang={htmlLangOf(lang)}
       suppressHydrationWarning
       className={`${caprasimo.variable} ${figtree.variable} h-full antialiased`}
     >
@@ -37,8 +41,10 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
       <body className="min-h-full flex flex-col">
-        {children}
-        <FeedbackButton />
+        <LangProvider lang={lang}>
+          {children}
+          <FeedbackButton />
+        </LangProvider>
       </body>
     </html>
   );

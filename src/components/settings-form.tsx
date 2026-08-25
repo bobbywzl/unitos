@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { LangSwitcher } from "@/components/lang-switcher";
 import { api } from "@/lib/api";
 
 type Theme = "light" | "dark" | "system";
@@ -42,9 +43,12 @@ function setTheme(theme: Theme) {
 export function SettingsForm({
   profile,
   services,
+  account,
 }: {
   profile: ContextValues | null;
-  services: { anthropic: boolean; voyage: boolean; admin: boolean };
+  services: { anthropic: boolean; google: boolean; admin: boolean };
+  // The signed-in account; null = sign-in off (single-reader mode).
+  account: { email: string; name: string; picture: string } | null;
 }) {
   const theme = useSyncExternalStore(subscribeTheme, readTheme, () => "system");
 
@@ -120,6 +124,44 @@ export function SettingsForm({
       </div>
 
       <section className="space-y-3">
+        <h2 className="text-[11px] font-bold tracking-[0.08em] text-sand-600 uppercase">Account</h2>
+        {account ? (
+          <div className="flex items-center gap-3 rounded-2xl bg-card p-4 shadow-soft">
+            {account.picture ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={account.picture} alt="" className="size-9 rounded-full" />
+            ) : (
+              <span className="flex size-9 items-center justify-center rounded-full bg-clay-100 text-sm font-semibold text-clay-800">
+                {account.name[0]?.toUpperCase()}
+              </span>
+            )}
+            <div className="min-w-0">
+              <div className="text-sm font-semibold">{account.name}</div>
+              <div className="truncate text-xs text-sand-600">{account.email}</div>
+            </div>
+            <a
+              href="/api/auth/logout"
+              className="ml-auto rounded-full border border-line px-3 py-1 text-xs text-sand-700 hover:bg-clay-100 hover:text-clay-800"
+            >
+              Sign out
+            </a>
+          </div>
+        ) : (
+          <p className="text-xs text-sand-600">
+            Sign-in is off — this instance runs as a single reader. Set GOOGLE_CLIENT_ID,
+            GOOGLE_CLIENT_SECRET, and SESSION_SECRET to open Google sign-in at /signin.
+          </p>
+        )}
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="text-[11px] font-bold tracking-[0.08em] text-sand-600 uppercase">
+          Language
+        </h2>
+        <LangSwitcher />
+      </section>
+
+      <section className="space-y-3">
         <h2 className="text-[11px] font-bold tracking-[0.08em] text-sand-600 uppercase">Theme</h2>
         <div className="grid grid-cols-3 gap-3">
           {THEMES.map((t) => (
@@ -163,8 +205,8 @@ export function SettingsForm({
           Services
         </h2>
         {statusRow("ANTHROPIC_API_KEY", "Derivations, assistant, glossary", services.anthropic)}
-        {statusRow("VOYAGE_API_KEY", "Corpus search", services.voyage)}
-        {statusRow("ADMIN_PASSWORD", "Feedback inbox at /admin", services.admin)}
+        {statusRow("GOOGLE_CLIENT_ID + SESSION_SECRET", "Google sign-in at /signin", services.google)}
+        {statusRow("ADMIN_PASSWORD", "Feedback inbox and digest at /admin", services.admin)}
         <p className="pt-2 text-xs text-sand-600">
           Set these in your host&apos;s environment variables and redeploy. On Vercel: Settings →
           Environment Variables.

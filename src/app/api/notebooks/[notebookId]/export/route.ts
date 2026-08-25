@@ -7,6 +7,7 @@ import {
   TextRun,
 } from "docx";
 import { NextResponse } from "next/server";
+import { notebookGuard } from "@/lib/auth";
 import { db } from "@/lib/db";
 
 // Export notebook → Markdown or .docx. Footnotes resolve to
@@ -117,6 +118,8 @@ function slug(title: string): string {
 
 export async function GET(req: Request, ctx: { params: Promise<{ notebookId: string }> }) {
   const { notebookId } = await ctx.params;
+  const denied = await notebookGuard(notebookId);
+  if (denied) return denied;
   const format = new URL(req.url).searchParams.get("format") ?? "md";
   if (format !== "md" && format !== "docx") {
     return NextResponse.json({ error: "format must be md or docx" }, { status: 400 });

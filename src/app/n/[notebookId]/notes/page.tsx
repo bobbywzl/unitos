@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
+import { authEnabled, currentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import type { NotebookView, SectionView } from "@/lib/types";
 import { ArrowLeftIcon } from "@/components/icons";
@@ -10,6 +11,8 @@ export const dynamic = "force-dynamic";
 
 export default async function NotesPage(props: { params: Promise<{ notebookId: string }> }) {
   const { notebookId } = await props.params;
+  const user = await currentUser();
+  if (!user) redirect("/signin");
   const notebook = await db.notebook.findUnique({
     where: { id: notebookId },
     include: {
@@ -27,7 +30,7 @@ export default async function NotesPage(props: { params: Promise<{ notebookId: s
       },
     },
   });
-  if (!notebook) notFound();
+  if (!notebook || (authEnabled() && notebook.userId !== user.id)) notFound();
 
   const toView = (s: (typeof notebook.sections)[number]): SectionView => ({
     id: s.id,

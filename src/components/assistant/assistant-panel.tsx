@@ -1,29 +1,29 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { splitStreamError } from "@/lib/derive/config";
 import type { SummaryDepth, SummaryLevels } from "@/lib/types";
 import { Markdown } from "@/components/markdown";
 
-type Scope = "selection" | "document" | "notebook" | "corpus";
+type Scope = "notebook" | "corpus";
 type Task = "contradictions" | "gaps" | "unsourced";
 type Issue = { noteIds: string[]; issue: string; explanation: string };
-type SelectionDetail = {
-  documentId: string;
-  blockId: string;
-  startOffset: number;
-  endOffset: number;
-  quotedText: string;
-};
 
-// Scope ids stay as wire values; the labels say Corpus for this binding of
-// documents and Corpora for all of them.
+// Two scopes, both reading the digest (SPEC.md §7). Scope ids stay as wire
+// values; the labels say Corpus for this binding of documents and Corpora for
+// all of them.
 const SCOPES: { id: Scope; label: string; hint: string }[] = [
-  { id: "selection", label: "Selection", hint: "The text you selected, with its document for context." },
-  { id: "document", label: "Document", hint: "The open document." },
-  { id: "notebook", label: "Corpus", hint: "This corpus: every attached document, in full, plus your notes." },
-  { id: "corpus", label: "Corpora", hint: "Search your notes across all corpora." },
+  {
+    id: "notebook",
+    label: "Corpus",
+    hint: "This corpus: every document in full, plus every note, annotation, and distillation.",
+  },
+  {
+    id: "corpus",
+    label: "Corpora",
+    hint: "All your corpora: every document, note, annotation, and distillation across all works.",
+  },
 ];
 
 // Recommended functions for the open document, in this order. Insiders
@@ -60,21 +60,11 @@ export function AssistantPanel({
   const [taskRun, setTaskRun] = useState<Task | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [selection, setSelection] = useState<SelectionDetail | null>(null);
   // Recommended output: generated in this session, over the stored initials.
   const [recDepth, setRecDepth] = useState<SummaryDepth | null>(null);
   const [recTexts, setRecTexts] = useState<SummaryLevels>({});
   const [recBusy, setRecBusy] = useState<SummaryDepth | null>(null);
   const [recError, setRecError] = useState<string | null>(null);
-
-  // The reader broadcasts the latest selection; Selection scope uses it.
-  useEffect(() => {
-    const onSelection = (e: Event) => {
-      setSelection((e as CustomEvent<SelectionDetail>).detail);
-    };
-    window.addEventListener("dissect:selection", onSelection);
-    return () => window.removeEventListener("dissect:selection", onSelection);
-  }, []);
 
   function reset() {
     setAnswer("");
@@ -142,20 +132,7 @@ export function AssistantPanel({
     reset();
     setBusy(true);
     try {
-      const body: Record<string, unknown> = { notebookId, scope, task: "ask", question: q };
-      if (scope === "document" || scope === "selection") {
-        body.documentId = documentId;
-        if (scope === "selection") {
-          if (!selection || selection.documentId !== documentId) {
-            throw new Error("Select text in the reader first.");
-          }
-          body.anchor = {
-            blockId: selection.blockId,
-            startOffset: selection.startOffset,
-            endOffset: selection.endOffset,
-          };
-        }
-      }
+      const body = { notebookId, scope, task: "ask", question: q };
       const res = await fetch("/api/assistant", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -275,7 +252,6 @@ export function AssistantPanel({
           <button
             key={s.id}
             onClick={() => setScope(s.id)}
-            disabled={(s.id === "document" || s.id === "selection") && !documentId}
             title={s.hint}
             className={`rounded-full px-3 py-1 text-xs font-semibold disabled:opacity-40 ${
               scope === s.id
@@ -289,12 +265,6 @@ export function AssistantPanel({
       </div>
       <p className="text-xs text-sand-500">{SCOPES.find((s) => s.id === scope)?.hint}</p>
 
-      {scope === "selection" && (
-        <p className="truncate text-xs text-sand-500">
-          {selection ? `Selection: "${selection.quotedText.slice(0, 80)}"` : "Select text in the reader."}
-        </p>
-      )}
-
       <form
         className="flex gap-2"
         onSubmit={(e) => {
@@ -305,9 +275,7 @@ export function AssistantPanel({
         <input
           value={question}
           onChange={(e) => setQuestion(e.target.value)}
-          placeholder={
-            scope === "corpus" ? "Have I read about…" : scope === "notebook" ? "Ask about your notes" : "Ask about this scope"
-          }
+          placeholder={scope === "corpus" ? "Ask across your corpora" : "Ask about this corpus"}
           className="min-w-0 flex-1 rounded-full bg-card px-4 py-2 text-sm shadow-soft outline-none placeholder:text-sand-500"
         />
         <button

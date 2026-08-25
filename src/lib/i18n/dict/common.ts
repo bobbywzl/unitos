@@ -1,0 +1,72 @@
+// Shared vocabulary: the app name, generic actions, and statuses.
+//
+// zh terminology glossary — every namespace keeps to these exact terms
+// (CLAUDE.md rule 2 holds in Chinese too: one term per concept, everywhere):
+//   corpus 文集 · Corpora(全部) 全部文集 · works shelf 书架 · section 章节 ·
+//   note 笔记 · source 出处 · anchor 锚点 · block 块 · pending 待定 ·
+//   accepted 已接受 · distill/distillation 提炼 · quote 引文 · caption 说明 ·
+//   extract/extraction 提取 · summary 摘要 · digest 汇编 · annotation 批注 ·
+//   highlight 高亮 · comment 评论 · explain 解释 · simplify 简化 ·
+//   assistant 助手 · document 文档 · video 视频 · transcript 逐字稿 ·
+//   salient 要点 · link 链接 · edit 编辑 · reader 阅读器 · glossary 术语表 ·
+//   sign in 登录 · sign out 退出登录 · settings 设置 · admin 管理 ·
+//   feedback 反馈 · depths: insights 行家洞见 / layman 通俗 / intermediate 进阶 /
+//   professional 专业
+
+const en = {
+  appName: "Unitos",
+  works: "Works",
+  settings: "Settings",
+  signOut: "Sign out",
+  cancel: "Cancel",
+  close: "Close",
+  delete: "Delete",
+  save: "Save",
+  saving: "Saving…",
+  saved: "Saved",
+  edit: "Edit",
+  retry: "Retry",
+  regenerate: "Regenerate",
+  working: "Working…",
+  loading: "Loading…",
+  accept: "Accept",
+  reject: "Reject",
+  pending: "pending",
+  none: "none",
+  app: "App",
+  add: "Add",
+  remove: "Remove",
+  done: "Done",
+  open: "Open",
+  requestFailed: "Request failed",
+};
+
+const zh: Record<keyof typeof en, string> = {
+  appName: "Unitos",
+  works: "书架",
+  settings: "设置",
+  signOut: "退出登录",
+  cancel: "取消",
+  close: "关闭",
+  delete: "删除",
+  save: "保存",
+  saving: "保存中…",
+  saved: "已保存",
+  edit: "编辑",
+  retry: "重试",
+  regenerate: "重新生成",
+  working: "处理中…",
+  loading: "加载中…",
+  accept: "接受",
+  reject: "拒绝",
+  pending: "待定",
+  none: "无",
+  app: "应用",
+  add: "添加",
+  remove: "移除",
+  done: "完成",
+  open: "打开",
+  requestFailed: "请求失败",
+};
+
+export const common = { en, zh } as const;

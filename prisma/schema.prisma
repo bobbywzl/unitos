@@ -10,14 +10,63 @@ datasource db {
   extensions = [vector]
 }
 
+// One reader account (SPEC.md §2). Rows exist only when Google sign-in is
+// configured; with sign-in off the app runs as the implicit local reader
+// ("user-1") and owner columns keep that id. The first account to sign in
+// adopts the local reader's data.
+model User {
+  id         String    @id @default(cuid())
+  email      String    @unique
+  name       String
+  picture    String    @default("")
+  createdAt  DateTime  @default(now())
+  lastSeenAt DateTime  @default(now())
+  sessions   Session[]
+}
+
+// One sign-in session: random token in an httpOnly cookie, 30 days.
+model Session {
+  token     String   @id
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+
+  @@index([userId])
+}
+
 model Notebook {
   id        String             @id @default(cuid())
+  userId    String             @default("user-1") // owner account; "user-1" = the local reader
   title     String
   profile   Json? // ReaderProfile override for this notebook
   sections  Section[]
   documents NotebookDocument[]
+  digest    NotebookDigest?
   createdAt DateTime           @default(now())
   updatedAt DateTime           @updatedAt
+
+  @@index([userId])
+}
+
+// The digest: the stored context the assistant reads (SPEC.md §7). One row per
+// corpus per user holding the whole corpus, serialized: every document (text
+// and transcript), note, annotation, distillation, extraction, summary,
+// salience span, link, and edit. fingerprint is cheap aggregates over the
+// content tables; a mismatch rebuilds the row on read. The admin digest page
+// (/admin/digest) shows the store and rebuilds on demand.
+model NotebookDigest {
+  id          String   @id @default(cuid())
+  notebookId  String   @unique
+  notebook    Notebook @relation(fields: [notebookId], references: [id], onDelete: Cascade)
+  userId      String // per-user store; constant in v1 (SPEC.md §2)
+  fingerprint String
+  parts       Json // DigestParts (src/lib/digest/types.ts)
+  counts      Json // DigestCounts: documents, notes, annotations, distillations, …
+  chars       Int // rendered size before budget cuts
+  builtAt     DateTime @default(now())
+
+  @@index([userId])
 }
 
 model Section {
@@ -34,18 +83,17 @@ model Section {
 }
 
 model Note {
-  id             String                       @id @default(cuid())
+  id             String          @id @default(cuid())
   sectionId      String
-  section        Section                      @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  section        Section         @relation(fields: [sectionId], references: [id], onDelete: Cascade)
   content        String // markdown
-  status         NoteStatus                   @default(ACCEPTED) // manual notes are ACCEPTED on create
+  status         NoteStatus      @default(ACCEPTED) // manual notes are ACCEPTED on create
   derivationType DerivationType? // null = manually written
   color          String? // manual highlight hue: "clay" | "sage" | "gold"
   order          Int
   sources        Source[]
-  embedding      Unsupported("vector(1024)")? // pgvector, Phase 6
-  createdAt      DateTime                     @default(now())
-  updatedAt      DateTime                     @updatedAt
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
 }
 
 enum NoteStatus {

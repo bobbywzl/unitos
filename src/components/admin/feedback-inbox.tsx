@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
@@ -32,11 +31,6 @@ export function FeedbackInbox({ items }: { items: FeedbackItem[] }) {
     router.refresh();
   }
 
-  async function signOut() {
-    await fetch("/api/admin/auth", { method: "DELETE" });
-    router.push("/admin/login");
-  }
-
   return (
     <div>
       <header className="mb-6 flex items-center gap-3">
@@ -56,14 +50,6 @@ export function FeedbackInbox({ items }: { items: FeedbackItem[] }) {
               {f === "new" && newCount > 0 ? ` (${newCount})` : ""}
             </button>
           ))}
-        </div>
-        <div className="ml-auto flex items-center gap-3 text-sm">
-          <Link href="/" className="text-sand-600 hover:text-clay-700">
-            App
-          </Link>
-          <button onClick={() => void signOut()} className="text-sand-600 hover:text-clay-700">
-            Sign out
-          </button>
         </div>
       </header>
 

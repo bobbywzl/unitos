@@ -1,11 +1,11 @@
 import { Logo } from "@/components/logo";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
+import { authEnabled, currentUser } from "@/lib/auth";
 import { matchInText } from "@/lib/anchors/match";
 import { hasContext } from "@/lib/derive/context";
 import { editedRanges } from "@/lib/diff";
 import { documentReferences } from "@/lib/parse/types";
 import { resolveDocumentSources } from "@/lib/anchors/resolve";
-import { USER_ID } from "@/lib/constants";
 import { db } from "@/lib/db";
 import {
   distillationList,
@@ -48,6 +48,9 @@ export default async function NotebookPage(props: {
   const { notebookId } = await props.params;
   const { doc, doc2, view: viewParam } = await props.searchParams;
 
+  const user = await currentUser();
+  if (!user) redirect("/signin");
+
   const notebook = await db.notebook.findUnique({
     where: { id: notebookId },
     include: {
@@ -79,7 +82,7 @@ export default async function NotebookPage(props: {
       },
     },
   });
-  if (!notebook) notFound();
+  if (!notebook || (authEnabled() && notebook.userId !== user.id)) notFound();
 
   const attached = notebook.documents.map((nd) => ({
     id: nd.document.id,
@@ -729,7 +732,7 @@ export default async function NotebookPage(props: {
 
   // Context for the Context tab: notebook override wins over the global context
   // (SPEC.md §3). Same ladder as loadProfile.
-  const globalProfile = await db.readerProfile.findUnique({ where: { userId: USER_ID } });
+  const globalProfile = await db.readerProfile.findUnique({ where: { userId: notebook.userId } });
   const override = notebook.profile as {
     background?: string;
     purpose?: string;

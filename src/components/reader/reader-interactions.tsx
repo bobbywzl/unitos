@@ -873,14 +873,6 @@ export function ReaderInteractions({
         setPopover(captured);
         setSubmenu(null);
         setCommentDraft("");
-        if (captured) {
-          // The assistant panel's Selection scope tracks the latest selection.
-          window.dispatchEvent(
-            new CustomEvent("dissect:selection", {
-              detail: { documentId, ...captured.anchor },
-            }),
-          );
-        }
       });
     };
     container.addEventListener("mouseup", onMouseUp);

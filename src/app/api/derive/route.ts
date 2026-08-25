@@ -2,6 +2,7 @@ import { anthropic } from "@ai-sdk/anthropic";
 import { streamText, type ModelMessage } from "ai";
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { notebookGuard } from "@/lib/auth";
 import { db } from "@/lib/db";
 import {
   DERIVATION_MODEL,
@@ -92,6 +93,8 @@ export async function POST(req: Request) {
 
   const { data, error } = await parseBody(req, deriveSchema);
   if (error) return error;
+  const denied = await notebookGuard(data.notebookId);
+  if (denied) return denied;
 
   const template = promptTemplates[data.type];
   if (!template) {

@@ -1,4 +1,4 @@
-// Fetch for outbound HTTP (URL ingest, Voyage embeddings). When HTTPS_PROXY/HTTP_PROXY
+// Fetch for outbound HTTP (URL ingest). When HTTPS_PROXY/HTTP_PROXY
 // is set (hosts that route egress through a proxy), load undici and use its
 // EnvHttpProxyAgent. Global fetch otherwise. undici loads lazily so it stays out of
 // route module graphs on serverless hosts.
