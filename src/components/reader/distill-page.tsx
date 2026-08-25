@@ -21,6 +21,7 @@ export function DistillPage({
   canAddNotes,
   addNoteHint,
   onRun,
+  onCancel,
   onOpen,
   onAsk,
   onClose,
@@ -36,6 +37,7 @@ export function DistillPage({
   canAddNotes: boolean;
   addNoteHint: string; // title for the Add to notes button
   onRun: (question: string) => void;
+  onCancel: () => void; // abort the running scan; the ask view keeps the question
   onOpen: (id: string) => void;
   onAsk: () => void;
   onClose: () => void;
@@ -114,6 +116,13 @@ export function DistillPage({
                 <span className="loading-dot" />
               </span>
             </p>
+            <button
+              onClick={onCancel}
+              title="Stop this scan and edit the question"
+              className="mt-4 rounded-full border border-line px-3.5 py-1 text-xs font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800"
+            >
+              Cancel
+            </button>
           </div>
         ) : shown ? (
           <div>

@@ -22,6 +22,9 @@ export async function callForJson<S extends z.ZodType>(params: {
   maxOutputTokens: number;
   schema: S;
   label: string;
+  // Aborts the model call when the client disconnects (DISTILL passes the
+  // request signal, so Cancel stops the generation, not just the response).
+  abortSignal?: AbortSignal;
 }): Promise<JsonCallResult<z.infer<S>>> {
   const attempt = async (messages: ModelMessage[]) => {
     const result = await generateText({
@@ -29,6 +32,7 @@ export async function callForJson<S extends z.ZodType>(params: {
       maxOutputTokens: params.maxOutputTokens,
       allowSystemInMessages: true,
       messages,
+      abortSignal: params.abortSignal,
     });
     console.log(
       `[derive] ${params.label} cacheRead=${result.usage.inputTokenDetails.cacheReadTokens ?? 0} ` +

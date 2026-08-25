@@ -77,7 +77,9 @@ export function GuideDialog({ open, onClose }: { open: boolean; onClose: () => v
               answers the question and how it sits in the document. Click a quote to jump to
               its exact words in the text. Add to notes files a quote as a{" "}
               <span className={term}>pending</span> note with its anchor — nothing enters your
-              notes until you accept it (Enter) or reject it (Backspace).
+              notes until you accept it (Enter) or reject it (Backspace). Cancel stops a
+              running scan and keeps the question for editing; Delete removes a stored
+              distillation.
             </li>
             <li>
               <span className={term}>Colors</span> — highlight the selection. Type a comment
@@ -109,11 +111,12 @@ export function GuideDialog({ open, onClose }: { open: boolean; onClose: () => v
               all editable. A progress card shows each step while the cat dances.
             </li>
             <li>
-              <span className={term}>Assistant menu</span> (top left) — the frequent functions,
-              always one click away: Summarize article, Key takeaways, and Explain simply send
-              the question to the assistant, which reads the whole document and answers in a
-              chat beside the article; Ask the assistant opens the same chat for your own
-              question; Distill opens the distilled page.
+              <span className={term}>Assistant menu</span> (top left) — floats open at the top
+              of the page: Summarize article, Key takeaways, and Explain simply send the
+              question to the assistant, which reads the whole document and answers in a chat
+              beside the article; Ask the assistant opens the same chat for your own question;
+              Distill opens the distilled page. The menu hides while you scroll and returns
+              when you are back at the top.
             </li>
             <li>
               <span className={term}>Context</span> (top bar) — who you are, why you read, what

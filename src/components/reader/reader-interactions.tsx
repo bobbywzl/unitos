@@ -20,7 +20,7 @@ import type {
 import type { DocumentReference } from "@/lib/parse/types";
 import { splitStreamError, splitStreamNote } from "@/lib/derive/config";
 import { findWeblinks } from "@/lib/weblinks";
-import { ChevronDownIcon, MicIcon, SparkleIcon } from "@/components/icons";
+import { MicIcon, SparkleIcon } from "@/components/icons";
 import { Markdown } from "@/components/markdown";
 import type { BlockData, Highlight } from "@/components/reader/block-view";
 import { Bibliography } from "@/components/reader/bibliography";
@@ -401,6 +401,9 @@ export function ReaderInteractions({
   const [distillError, setDistillError] = useState<string | null>(null);
   const [distillAnchor, setDistillAnchor] = useState<Anchor | null>(null);
   const [localDistillations, setLocalDistillations] = useState<DistillationView[]>([]);
+  // The running request, so Cancel can abort it. Cancel keeps the question in
+  // the ask view for editing; nothing persists from an aborted run.
+  const distillAbortRef = useRef<AbortController | null>(null);
   const distillReturnScroll = useRef<number | null>(null);
   // The span a distilled quote jumped to: tinted while the reader lands on it.
   const [distillFlash, setDistillFlash] = useState<{
@@ -409,9 +412,9 @@ export function ReaderInteractions({
     end: number;
   } | null>(null);
   const distillFlashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // The article menu: frequent asks + Distill, top left of the article.
-  const [articleMenuOpen, setArticleMenuOpen] = useState(false);
-  const articleMenuRef = useRef<HTMLDivElement>(null);
+  // The article menu floats open at the top of the page; it hides once the
+  // reader scrolls and returns when the reader is back at the top.
+  const [atTop, setAtTop] = useState(true);
   // Optimistic highlight marks: painted the instant a color dot is clicked,
   // cleared when the server's anchors arrive with the refresh.
   const [localAnchors, setLocalAnchors] = useState<
@@ -709,7 +712,7 @@ export function ReaderInteractions({
     setDistillAnchor(null);
     setLocalDistillations([]);
     setDistillFlash(null);
-    setArticleMenuOpen(false);
+    distillAbortRef.current?.abort();
     distillReturnScroll.current = null;
   }
 
@@ -1267,22 +1270,15 @@ export function ReaderInteractions({
     return () => window.removeEventListener("mousedown", onMouseDown);
   }, [annotationCard]);
 
-  // The article menu closes on a click anywhere else, and on Escape.
+  // The article menu tracks the scroll position: visible only at the top.
   useEffect(() => {
-    if (!articleMenuOpen) return;
-    const onPointerDown = (e: PointerEvent) => {
-      if (!articleMenuRef.current?.contains(e.target as Node)) setArticleMenuOpen(false);
-    };
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setArticleMenuOpen(false);
-    };
-    window.addEventListener("pointerdown", onPointerDown);
-    window.addEventListener("keydown", onKeyDown);
-    return () => {
-      window.removeEventListener("pointerdown", onPointerDown);
-      window.removeEventListener("keydown", onKeyDown);
-    };
-  }, [articleMenuOpen]);
+    const container = containerRef.current;
+    if (!container) return;
+    const onScroll = () => setAtTop(container.scrollTop < 24);
+    onScroll();
+    container.addEventListener("scroll", onScroll, { passive: true });
+    return () => container.removeEventListener("scroll", onScroll);
+  }, []);
 
   // ¶ chips in AI text (Markdown) jump to the block they cite.
   useEffect(() => {
@@ -1620,12 +1616,21 @@ export function ReaderInteractions({
   }
 
   function closeDistillPage() {
+    cancelDistill();
     setDistillOpen(false);
     const container = containerRef.current;
     if (container && distillReturnScroll.current !== null) {
       container.scrollTo({ top: distillReturnScroll.current });
     }
     distillReturnScroll.current = null;
+  }
+
+  // Cancel a running distillation: the request aborts, the server persists
+  // nothing, and the ask view keeps the question for editing.
+  function cancelDistill() {
+    distillAbortRef.current?.abort();
+    distillAbortRef.current = null;
+    setDistillRun(null);
   }
 
   // Distill from the toolbar: the selection rides along as the starting point.
@@ -1644,6 +1649,8 @@ export function ReaderInteractions({
     const anchor = distillAnchor;
     const runDocumentId = documentId;
     if (anchor) await flushLiveBlock(anchor.blockId);
+    const controller = new AbortController();
+    distillAbortRef.current = controller;
     setDistillRun({ question: q });
     setDistillError(null);
     setDistillShownId(null);
@@ -1651,6 +1658,7 @@ export function ReaderInteractions({
       const res = await fetch("/api/derive", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
         body: JSON.stringify({
           type: "DISTILL",
           documentId,
@@ -1690,7 +1698,7 @@ export function ReaderInteractions({
         payload = null;
       }
       if (!payload?.distillation) throw new Error("Distill did not finish. Try again.");
-      if (documentIdRef.current !== runDocumentId) return;
+      if (controller.signal.aborted || documentIdRef.current !== runDocumentId) return;
       const fresh: DistillationView = {
         ...payload.distillation,
         quotes: payload.distillation.quotes.map((quote) => ({ ...quote, orphaned: false })),
@@ -1700,9 +1708,12 @@ export function ReaderInteractions({
       setDistillAnchor(null);
       router.refresh();
     } catch (err) {
+      // A cancelled run is not a failure: the ask view keeps the question.
+      if (controller.signal.aborted) return;
       if (documentIdRef.current !== runDocumentId) return;
       setDistillError(err instanceof Error ? err.message : "Distill failed");
     } finally {
+      if (distillAbortRef.current === controller) distillAbortRef.current = null;
       if (documentIdRef.current === runDocumentId) setDistillRun(null);
     }
   }
@@ -1778,7 +1789,6 @@ export function ReaderInteractions({
   // anchor, document scope — and answers in the chat card beside the article.
   // question null opens an empty chat for the reader's own question.
   function openArticleChat(question: string | null) {
-    setArticleMenuOpen(false);
     const container = containerRef.current;
     const slot = claimSideSlot("assistant", (container?.scrollTop ?? 0) + 56);
     if (question === null) {
@@ -2511,51 +2521,44 @@ export function ReaderInteractions({
       data-reader-root
       className="relative min-h-0 flex-1 overflow-y-auto print:overflow-visible"
     >
-      {/* The article menu: always one click away at the top left. Frequent
-          asks go to the assistant at document scope; Distill opens the
-          distilled page. */}
-      <div ref={articleMenuRef} className="sticky top-4 z-10 float-left ml-4 print:hidden">
-        <button
-          onClick={() => setArticleMenuOpen(!articleMenuOpen)}
-          aria-expanded={articleMenuOpen}
-          aria-haspopup="menu"
-          title="Frequent functions for this article"
-          className="flex items-center gap-1.5 rounded-full bg-sand-100 px-3.5 py-1.5 text-xs font-semibold text-sand-600 shadow-soft hover:text-clay-800"
-        >
-          <SparkleIcon size={12} />
-          Assistant
-          <ChevronDownIcon size={11} />
-        </button>
-        {articleMenuOpen && (
-          <div className="absolute top-full left-0 mt-2 flex w-56 flex-col overflow-hidden rounded-2xl bg-card py-1.5 shadow-float">
-            {FREQUENT_ASKS.map((ask) => (
-              <button
-                key={ask.label}
-                onClick={() => openArticleChat(ask.question)}
-                className="px-4 py-2 text-left text-[12.5px] text-sand-800 hover:bg-clay-100 hover:text-clay-800"
-              >
-                {ask.label}
-              </button>
-            ))}
+      {/* The article menu floats open at the top of the page: frequent asks
+          go to the assistant at document scope; Distill opens the distilled
+          page. It hides once the reader scrolls and returns at the top. */}
+      <div
+        inert={!atTop}
+        className={`absolute top-4 left-4 z-10 transition duration-200 print:hidden ${
+          atTop ? "opacity-100" : "-translate-y-2 opacity-0"
+        }`}
+      >
+        <div className="flex w-56 flex-col overflow-hidden rounded-2xl bg-card py-1.5 shadow-float">
+          <span className="flex items-center gap-1.5 px-4 pt-1.5 pb-1 text-[11px] font-bold tracking-[0.08em] text-clay-800 uppercase">
+            <SparkleIcon size={12} />
+            Assistant
+          </span>
+          {FREQUENT_ASKS.map((ask) => (
             <button
-              onClick={() => openArticleChat(null)}
+              key={ask.label}
+              onClick={() => openArticleChat(ask.question)}
               className="px-4 py-2 text-left text-[12.5px] text-sand-800 hover:bg-clay-100 hover:text-clay-800"
             >
-              Ask the assistant…
+              {ask.label}
             </button>
-            <div className="mx-3 my-1 border-t border-line" />
-            <button
-              onClick={() => {
-                setArticleMenuOpen(false);
-                openDistillPage(null, null);
-              }}
-              title="Ask the article a question; the AI pulls the quotes that answer it"
-              className="px-4 py-2 text-left text-[12.5px] text-sand-800 hover:bg-clay-100 hover:text-clay-800"
-            >
-              Distill{allDistillations.length > 0 ? ` (${allDistillations.length})` : ""}
-            </button>
-          </div>
-        )}
+          ))}
+          <button
+            onClick={() => openArticleChat(null)}
+            className="px-4 py-2 text-left text-[12.5px] text-sand-800 hover:bg-clay-100 hover:text-clay-800"
+          >
+            Ask the assistant…
+          </button>
+          <div className="mx-3 my-1 border-t border-line" />
+          <button
+            onClick={() => openDistillPage(null, null)}
+            title="Ask the article a question; the AI pulls the quotes that answer it"
+            className="px-4 py-2 text-left text-[12.5px] text-sand-800 hover:bg-clay-100 hover:text-clay-800"
+          >
+            Distill{allDistillations.length > 0 ? ` (${allDistillations.length})` : ""}
+          </button>
+        </div>
       </div>
 
       <div className="sticky top-4 z-10 float-right mr-4 flex items-center gap-2 print:hidden">
@@ -3364,6 +3367,7 @@ export function ReaderInteractions({
               : `Add as a pending note in ${sectionChoices[0].label}`
           }
           onRun={(question) => void runDistill(question)}
+          onCancel={cancelDistill}
           onOpen={(id) => {
             setDistillShownId(id);
             setDistillError(null);

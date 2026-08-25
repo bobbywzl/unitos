@@ -484,13 +484,18 @@ export async function POST(req: Request) {
   // streams a heartbeat space while the model works, then ends with the
   // payload: the distillation JSON, or STREAM_ERROR_TOKEN + the reason
   // (the same in-band pattern the text streams use).
+  // Cancel aborts the request: the model call stops with it, and a cancelled
+  // run never persists — the reader edits the question and runs again.
   const encoder = new TextEncoder();
+  let cancelled = false;
+  let heartbeat: ReturnType<typeof setInterval> | null = null;
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
-      const heartbeat = setInterval(() => controller.enqueue(encoder.encode(" ")), 5_000);
-      const fail = (message: string) => {
-        controller.enqueue(encoder.encode(`${STREAM_ERROR_TOKEN}${message}`));
+      const send = (text: string) => {
+        if (!cancelled) controller.enqueue(encoder.encode(text));
       };
+      heartbeat = setInterval(() => send(" "), 5_000);
+      const fail = (message: string) => send(`${STREAM_ERROR_TOKEN}${message}`);
       try {
         const result = await callForJson({
           model,
@@ -498,7 +503,9 @@ export async function POST(req: Request) {
           maxOutputTokens,
           schema: distillOutputSchema,
           label: "DISTILL",
+          abortSignal: req.signal,
         });
+        if (cancelled || req.signal.aborted) return;
         if (!result.ok) {
           fail(`Distill failed. ${result.error}`);
           return;
@@ -533,6 +540,7 @@ export async function POST(req: Request) {
             caption: q.caption,
           })),
         };
+        if (cancelled || req.signal.aborted) return;
         await db.notebookDocument.update({
           where: {
             notebookId_documentId: { notebookId: data.notebookId, documentId: data.documentId },
@@ -542,14 +550,20 @@ export async function POST(req: Request) {
             distillations: [distillation, ...distillationList(attachment.distillations)].slice(0, 20),
           },
         });
-        controller.enqueue(encoder.encode(JSON.stringify({ ok: true, distillation })));
+        send(JSON.stringify({ ok: true, distillation }));
       } catch (err) {
-        console.error("[derive] DISTILL failed:", err);
-        fail(`Distill failed. ${modelErrorMessage(err)}`);
+        if (!cancelled && !req.signal.aborted) {
+          console.error("[derive] DISTILL failed:", err);
+          fail(`Distill failed. ${modelErrorMessage(err)}`);
+        }
       } finally {
-        clearInterval(heartbeat);
-        controller.close();
+        if (heartbeat) clearInterval(heartbeat);
+        if (!cancelled) controller.close();
       }
+    },
+    cancel() {
+      cancelled = true;
+      if (heartbeat) clearInterval(heartbeat);
     },
   });
   return new Response(stream, {
