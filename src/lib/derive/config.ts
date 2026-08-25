@@ -23,7 +23,7 @@ export const MAX_OUTPUT_TOKENS: Record<DerivationType, number> = {
   SUMMARIZE: 8192,
   SYNTHESIS: 16384,
   FIND: 8192,
-  DISTILL: 16384,
+  DISTILL: 8192,
 };
 
 export const ANNOTATIONS_SECTION_TITLE = "Annotations";

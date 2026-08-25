@@ -1667,17 +1667,33 @@ export function ReaderInteractions({
             : {}),
         }),
       });
-      const json = (await res.json().catch(() => null)) as {
-        distillation?: Distillation;
-        error?: string;
-      } | null;
-      if (!res.ok || !json?.distillation) {
-        throw new Error(json?.error ?? `Distill failed (${res.status})`);
+      if (!res.ok || !res.body) {
+        const detail = (await res.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(detail?.error ?? `Distill failed (${res.status})`);
       }
+      // The response streams heartbeat spaces while the model works; the
+      // payload is the trailer — the distillation JSON, or the in-band error.
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let raw = "";
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        raw += decoder.decode(value, { stream: true });
+      }
+      const { text, error } = splitStreamError(raw);
+      if (error) throw new Error(error);
+      let payload: { distillation?: Distillation } | null = null;
+      try {
+        payload = JSON.parse(text.trim()) as { distillation?: Distillation };
+      } catch {
+        payload = null;
+      }
+      if (!payload?.distillation) throw new Error("Distill did not finish. Try again.");
       if (documentIdRef.current !== runDocumentId) return;
       const fresh: DistillationView = {
-        ...json.distillation,
-        quotes: json.distillation.quotes.map((quote) => ({ ...quote, orphaned: false })),
+        ...payload.distillation,
+        quotes: payload.distillation.quotes.map((quote) => ({ ...quote, orphaned: false })),
       };
       setLocalDistillations((prev) => [fresh, ...prev]);
       setDistillShownId(fresh.id);

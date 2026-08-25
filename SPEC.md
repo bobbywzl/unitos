@@ -184,7 +184,7 @@ Flow:
 
 Prompt templates always receive: reader context, document title, section skeleton, and the anchored text with surrounding context (±2 blocks).
 
-**DISTILL output contract:** model returns JSON `{quotes: [{blockId, start, end, caption}]}` — the verbatim spans across the whole document that answer the question, each captioned with how it answers the question in the document's context. Validate strictly; resolve every span against the real block text and drop what does not resolve; on parse failure, retry once with the error appended, then surface failure to user. Never write malformed output to DB. Stored quotes heal at render like salience and orphan visibly (§5). (EXTRACT, the v1 selection-to-note tool, was folded into DISTILL; the enum value remains for legacy notes.)
+**DISTILL output contract:** model returns JSON `{quotes: [{blockId, start, end, caption}]}` — the verbatim spans across the whole document that answer the question, each captioned with how it answers the question in the document's context. Validate strictly; resolve every span against the real block text and drop what does not resolve; on parse failure, retry once with the error appended, then surface failure to user. Never write malformed output to DB. Stored quotes heal at render like salience and orphan visibly (§5). The HTTP response streams heartbeat bytes while the model works and ends with the distillation JSON (or the in-band error token), so the connection survives a minutes-long scan. (EXTRACT, the v1 selection-to-note tool, was folded into DISTILL; the enum value remains for legacy notes.)
 
 ---
 

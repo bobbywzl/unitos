@@ -479,51 +479,80 @@ export async function POST(req: Request) {
   // so the page always shows verbatim article text. The distillation stores on
   // the attachment, newest first; quotes only reach notes through the page's
   // "Add to notes", which lands them PENDING (SPEC.md §1).
-  const result = await callForJson({
-    model,
-    messages,
-    maxOutputTokens,
-    schema: distillOutputSchema,
-    label: "DISTILL",
-  });
-  if (!result.ok) {
-    return NextResponse.json({ error: `Distill failed. ${result.error}` }, { status: 422 });
-  }
-  const orderByBlock = new Map(document.blocks.map((b, i) => [b.id, i]));
-  const quotes = result.data.quotes
-    .map((q) => {
-      const span = resolveSpan(q, blockById);
-      return span ? { ...span, caption: q.caption } : null;
-    })
-    .filter((q) => q !== null)
-    .sort(
-      (a, b) => (orderByBlock.get(a.blockId) ?? 0) - (orderByBlock.get(b.blockId) ?? 0) || a.start - b.start,
-    );
-  if (quotes.length === 0) {
-    return NextResponse.json({ error: "Distill returned no resolvable quotes" }, { status: 422 });
-  }
-  const distillation: Distillation = {
-    id: crypto.randomUUID(),
-    question: data.question!.trim(),
-    createdAt: new Date().toISOString(),
-    quotes: quotes.map((q) => ({
-      blockId: q.blockId,
-      start: q.start,
-      end: q.end,
-      quotedText: q.quotedText,
-      prefix: q.prefix,
-      suffix: q.suffix,
-      caption: q.caption,
-    })),
-  };
-  await db.notebookDocument.update({
-    where: {
-      notebookId_documentId: { notebookId: data.notebookId, documentId: data.documentId },
+  // The model call holds one connection for minutes, and a silent connection
+  // dies at idle proxies — the client sees "Failed to fetch". So the response
+  // streams a heartbeat space while the model works, then ends with the
+  // payload: the distillation JSON, or STREAM_ERROR_TOKEN + the reason
+  // (the same in-band pattern the text streams use).
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      const heartbeat = setInterval(() => controller.enqueue(encoder.encode(" ")), 5_000);
+      const fail = (message: string) => {
+        controller.enqueue(encoder.encode(`${STREAM_ERROR_TOKEN}${message}`));
+      };
+      try {
+        const result = await callForJson({
+          model,
+          messages,
+          maxOutputTokens,
+          schema: distillOutputSchema,
+          label: "DISTILL",
+        });
+        if (!result.ok) {
+          fail(`Distill failed. ${result.error}`);
+          return;
+        }
+        const orderByBlock = new Map(document.blocks.map((b, i) => [b.id, i]));
+        const quotes = result.data.quotes
+          .map((q) => {
+            const span = resolveSpan(q, blockById);
+            return span ? { ...span, caption: q.caption } : null;
+          })
+          .filter((q) => q !== null)
+          .sort(
+            (a, b) =>
+              (orderByBlock.get(a.blockId) ?? 0) - (orderByBlock.get(b.blockId) ?? 0) ||
+              a.start - b.start,
+          );
+        if (quotes.length === 0) {
+          fail("Distill returned no resolvable quotes");
+          return;
+        }
+        const distillation: Distillation = {
+          id: crypto.randomUUID(),
+          question: data.question!.trim(),
+          createdAt: new Date().toISOString(),
+          quotes: quotes.map((q) => ({
+            blockId: q.blockId,
+            start: q.start,
+            end: q.end,
+            quotedText: q.quotedText,
+            prefix: q.prefix,
+            suffix: q.suffix,
+            caption: q.caption,
+          })),
+        };
+        await db.notebookDocument.update({
+          where: {
+            notebookId_documentId: { notebookId: data.notebookId, documentId: data.documentId },
+          },
+          data: {
+            // Keep the newest 20; the page deletes the rest one by one.
+            distillations: [distillation, ...distillationList(attachment.distillations)].slice(0, 20),
+          },
+        });
+        controller.enqueue(encoder.encode(JSON.stringify({ ok: true, distillation })));
+      } catch (err) {
+        console.error("[derive] DISTILL failed:", err);
+        fail(`Distill failed. ${modelErrorMessage(err)}`);
+      } finally {
+        clearInterval(heartbeat);
+        controller.close();
+      }
     },
-    data: {
-      // Keep the newest 20; the page deletes the rest one by one.
-      distillations: [distillation, ...distillationList(attachment.distillations)].slice(0, 20),
-    },
   });
-  return NextResponse.json({ ok: true, distillation }, { status: 201 });
+  return new Response(stream, {
+    headers: { "Content-Type": "text/plain; charset=utf-8" },
+  });
 }
