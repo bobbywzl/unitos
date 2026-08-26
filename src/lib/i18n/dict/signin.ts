@@ -2,13 +2,30 @@
 // the reader as it is, key functions as cards. zh glossary: dict/common.ts.
 
 const en = {
-  heroA: "All-powerful notebook.",
-  heroB: "Dissect anything.",
-  heroAccent: "Your understanding, your pace.",
+  heroA: "Your All-Powerful Notebook",
+  heroAccent: "Your Understanding, Your Pace.",
   ctaTitle: "New here? Bind your first corpus",
+  unitos: "Continue with a Unitos account",
+  nameLabel: "Name",
+  emailLabel: "Email",
+  or: "or",
   google: "Continue with Google",
   apple: "Continue with Apple",
   accountNote: "Sign-in creates your account and keeps your corpora yours.",
+
+  // Check-your-email state (/signin?sent=<email>)
+  sentTitle: "Check your email",
+  sentTo: "We sent a confirmation link to",
+  sentRest: "Click it to create your account. The link expires in 30 minutes.",
+  sentBack: "Use a different email",
+
+  // The confirmation email
+  emailSubject: "Confirm your email — Unitos",
+  emailTitle: "Confirm your email",
+  emailBody: "Click the button to confirm this email address and create your Unitos account.",
+  emailCta: "Confirm email",
+  emailExpiry: "The link expires in 30 minutes.",
+  emailIgnore: "If you did not request this, ignore this email.",
 
   // The reader, as it is — callouts point from the text
   showcaseTitle: "The reader, as it is",
@@ -44,7 +61,7 @@ const en = {
   // Single-reader mode
   singleTitle: "Sign-in is off on this instance.",
   singleDesc:
-    "It runs as a single reader. Set SESSION_SECRET plus Google (GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET) or Apple (APPLE_CLIENT_ID, APPLE_TEAM_ID, APPLE_KEY_ID, APPLE_PRIVATE_KEY) credentials to open sign-in.",
+    "It runs as a single reader. Set SESSION_SECRET plus Google (GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET), Apple (APPLE_CLIENT_ID, APPLE_TEAM_ID, APPLE_KEY_ID, APPLE_PRIVATE_KEY), or email (RESEND_API_KEY, EMAIL_FROM) credentials to open sign-in.",
   singleContinue: "Open Unitos",
 
   // Callback errors
@@ -53,16 +70,36 @@ const en = {
   errVerify: "Could not verify your Google identity",
   errAppleNoCode: "Apple returned no code",
   errAppleVerify: "Could not verify your Apple identity",
+  errEmailInvalid: "Enter a valid email",
+  errEmailSend: "Could not send the confirmation email — try again",
+  errEmailToken: "Confirmation link expired or already used — request a new one",
 };
 
 const zh: Record<keyof typeof en, string> = {
-  heroA: "全能笔记本。",
-  heroB: "拆解一切。",
+  heroA: "你的全能笔记本",
   heroAccent: "你的理解，你的节奏。",
   ctaTitle: "新来的？装订你的第一个文集",
+  unitos: "使用 Unitos 账户继续",
+  nameLabel: "名字",
+  emailLabel: "邮箱",
+  or: "或",
   google: "使用 Google 继续",
   apple: "使用 Apple 继续",
   accountNote: "登录会创建你的账户，你的文集只属于你。",
+
+  // Check-your-email state (/signin?sent=<email>)
+  sentTitle: "查收你的邮件",
+  sentTo: "确认链接已发送至",
+  sentRest: "点击链接即可创建账户。链接 30 分钟内有效。",
+  sentBack: "换一个邮箱",
+
+  // The confirmation email
+  emailSubject: "确认你的邮箱——Unitos",
+  emailTitle: "确认你的邮箱",
+  emailBody: "点击按钮确认这个邮箱地址，创建你的 Unitos 账户。",
+  emailCta: "确认邮箱",
+  emailExpiry: "链接 30 分钟内有效。",
+  emailIgnore: "如果这不是你发起的请求，忽略这封邮件即可。",
 
   // The reader, as it is — callouts point from the text
   showcaseTitle: "阅读器，原样呈现",
@@ -98,7 +135,7 @@ const zh: Record<keyof typeof en, string> = {
   // Single-reader mode
   singleTitle: "此实例未开启登录。",
   singleDesc:
-    "当前以单人阅读器模式运行。设置 SESSION_SECRET，并配置 Google（GOOGLE_CLIENT_ID、GOOGLE_CLIENT_SECRET）或 Apple（APPLE_CLIENT_ID、APPLE_TEAM_ID、APPLE_KEY_ID、APPLE_PRIVATE_KEY）凭据即可开启登录。",
+    "当前以单人阅读器模式运行。设置 SESSION_SECRET，并配置 Google（GOOGLE_CLIENT_ID、GOOGLE_CLIENT_SECRET）、Apple（APPLE_CLIENT_ID、APPLE_TEAM_ID、APPLE_KEY_ID、APPLE_PRIVATE_KEY）或邮箱（RESEND_API_KEY、EMAIL_FROM）凭据即可开启登录。",
   singleContinue: "打开 Unitos",
 
   // Callback errors
@@ -107,6 +144,9 @@ const zh: Record<keyof typeof en, string> = {
   errVerify: "无法验证你的 Google 身份",
   errAppleNoCode: "Apple 未返回授权码",
   errAppleVerify: "无法验证你的 Apple 身份",
+  errEmailInvalid: "请输入有效的邮箱",
+  errEmailSend: "确认邮件发送失败——请重试",
+  errEmailToken: "确认链接已过期或已使用——请重新申请",
 };
 
 export const signin = { en, zh } as const;

@@ -1,18 +1,20 @@
-import { createHmac, randomBytes, sign as cryptoSign, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, randomBytes, sign as cryptoSign, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import type { User } from "@prisma/client";
 import { APPLE_STATE_COOKIE, SESSION_COOKIE, STATE_COOKIE, USER_ID } from "@/lib/constants";
 import { db } from "@/lib/db";
+import { sendConfirmationEmail } from "@/lib/email";
+import type { Lang } from "@/lib/i18n/config";
 import { serverT } from "@/lib/i18n/server";
 import { outboundFetch } from "@/lib/outbound-fetch";
 
-// Google and Apple sign-in (Scalae pattern): hand-rolled OIDC
-// authorization-code flows, no dependencies; sessions in the database, token
-// in an httpOnly cookie. Accounts key on the email, so one person signing in
-// through both providers lands in one account.
+// Google, Apple, and email sign-in (Scalae pattern): hand-rolled OIDC
+// authorization-code flows plus an email confirmation flow, no dependencies;
+// sessions in the database, token in an httpOnly cookie. Accounts key on the
+// email, so one person signing in through any provider lands in one account.
 //
-// DUAL MODE: with SESSION_SECRET plus either provider's credentials set,
+// DUAL MODE: with SESSION_SECRET plus any provider's credentials set,
 // /signin gates the app and corpora belong to accounts. Unset, sign-in is off
 // and the app runs as the local reader (USER_ID) — deploys never brick on
 // missing credentials. The /admin area keeps its own ADMIN_PASSWORD gate,
@@ -38,8 +40,14 @@ export function appleEnabled(): boolean {
   );
 }
 
+export function emailEnabled(): boolean {
+  return Boolean(
+    process.env.RESEND_API_KEY && process.env.EMAIL_FROM && process.env.SESSION_SECRET,
+  );
+}
+
 export function authEnabled(): boolean {
-  return googleEnabled() || appleEnabled();
+  return googleEnabled() || appleEnabled() || emailEnabled();
 }
 
 // The implicit reader when sign-in is off. Not a database row.
@@ -253,6 +261,57 @@ export async function appleExchangeCode(
   const verified = claims.email_verified === true || claims.email_verified === "true";
   if (!issOk || !audOk || !fresh || !claims.email || !verified) return null;
   return { email: claims.email, name: claims.email.split("@")[0] };
+}
+
+// ── Email sign-in ───────────────────────────────────────────────────────────
+// Standard confirmation flow: the form takes a name and an email, a link goes
+// to that email, and the account is created only when the link is clicked.
+// Tokens are stored hashed, expire after 30 minutes, and are single-use.
+
+const EMAIL_CONFIRM_MINUTES = 30;
+const sha256 = (s: string) => createHash("sha256").update(s).digest("hex");
+
+// Create the pending confirmation and send the email. One outstanding row per
+// email; a request within 60 seconds of the last is answered without a resend
+// so a refresh cannot flood an inbox.
+export async function startEmailConfirmation(
+  origin: string,
+  email: string,
+  name: string,
+  lang: Lang,
+): Promise<boolean> {
+  const recent = await db.emailConfirmation.findFirst({
+    where: { email, createdAt: { gt: new Date(Date.now() - 60_000) } },
+    select: { id: true },
+  });
+  if (recent) return true;
+
+  const token = randomBytes(32).toString("hex");
+  await db.emailConfirmation.deleteMany({
+    where: { OR: [{ email }, { expiresAt: { lt: new Date() } }] },
+  });
+  await db.emailConfirmation.create({
+    data: {
+      email,
+      name,
+      tokenHash: sha256(token),
+      expiresAt: new Date(Date.now() + EMAIL_CONFIRM_MINUTES * 60_000),
+    },
+  });
+  const url = `${origin}/api/auth/email/confirm?token=${token}`;
+  return sendConfirmationEmail(email, url, lang);
+}
+
+// Redeem the token: delete the row (single-use), reject expired or unknown.
+export async function confirmEmailToken(
+  token: string,
+): Promise<{ email: string; name: string } | null> {
+  if (!/^[0-9a-f]{64}$/.test(token)) return null;
+  const row = await db.emailConfirmation.findUnique({ where: { tokenHash: sha256(token) } });
+  if (!row) return null;
+  await db.emailConfirmation.delete({ where: { id: row.id } }).catch(() => {});
+  if (row.expiresAt < new Date()) return null;
+  return { email: row.email, name: row.name };
 }
 
 // Upsert the account. The first account ever adopts the local reader's data

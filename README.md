@@ -17,7 +17,7 @@ Notes-centric web app for deep reading. Documents attach to notebooks; every AI 
 - The digest: the assistant's stored context, one row per corpus per user — every document in full, every note, annotation, distillation, extraction, and summary; stale rows rebuild on read via a content fingerprint
 - Glossary extraction on ingest; hover definitions in the reader
 - Export notebook to Markdown or .docx with `documentTitle, blockId` footnotes
-- Google and Apple sign-in at `/signin` (dual mode: with `SESSION_SECRET` plus either provider's credentials the app is gated; without, it runs as a single local reader). Corpora, context, and digests belong to the signed-in account; the first account to sign in adopts the local reader's data
+- Google, Apple, and email sign-in at `/signin` (dual mode: with `SESSION_SECRET` plus any provider's credentials the app is gated; without, it runs as a single local reader). Email sign-in takes a name and an email and creates the account only when the confirmation link is clicked. Corpora, context, and digests belong to the signed-in account; the first account to sign in adopts the local reader's data
 - English and Chinese, whole-surface: the switcher (Settings, `/signin`) changes every UI string and API error message at once
 - Feedback button + admin inbox (`/admin`) with new → seen → resolved triage; admin digest page (`/admin/digest`) showing the store per account — every corpus → document → annotations, notes, distillations — with forced rebuilds and the exact text each scope sends. The admin gate (`ADMIN_PASSWORD`) is separate from reader sign-in
 - AI usage telemetry: every model call records tokens and cost (list prices at call time); the admin usage page (`/admin/usage`) shows totals, daily cost, and cost per function, model, and account
@@ -49,7 +49,7 @@ Reading, notes, anchoring, and export work with no API keys. Add `ANTHROPIC_API_
 
 1. Import this repo on vercel.com.
 2. Storage → Create Database → **Neon** (Postgres) → connect it to the project. Vercel adds the database env vars; the build maps them and runs migrations (the first migration creates the `vector` extension).
-3. Settings → Environment Variables: `ANTHROPIC_API_KEY` (AI features), `OPENAI_API_KEY` and/or `GEMINI_API_KEY` (video transcription), `GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET` + `SESSION_SECRET` (Google sign-in; redirect URI `<origin>/api/auth/callback`), `APPLE_CLIENT_ID` + `APPLE_TEAM_ID` + `APPLE_KEY_ID` + `APPLE_PRIVATE_KEY` (Apple sign-in; return URL `<origin>/api/auth/apple/callback` on the Services ID), `ADMIN_PASSWORD` (`/admin`), `CRON_SECRET` (cleanup cron). All optional to boot; add and redeploy any time.
+3. Settings → Environment Variables: `ANTHROPIC_API_KEY` (AI features), `OPENAI_API_KEY` and/or `GEMINI_API_KEY` (video transcription), `GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET` + `SESSION_SECRET` (Google sign-in; redirect URI `<origin>/api/auth/callback`), `APPLE_CLIENT_ID` + `APPLE_TEAM_ID` + `APPLE_KEY_ID` + `APPLE_PRIVATE_KEY` (Apple sign-in; return URL `<origin>/api/auth/apple/callback` on the Services ID), `RESEND_API_KEY` + `EMAIL_FROM` (email sign-in; sender on a domain verified in Resend), `ADMIN_PASSWORD` (`/admin`), `CRON_SECRET` (cleanup cron). All optional to boot; add and redeploy any time.
 4. Deployments → Redeploy the latest.
 
 Vercel caps request bodies at about 4.5 MB, so PDF uploads above that fail there. Self-hosted deployments take PDFs up to 50 MB.
@@ -65,6 +65,7 @@ Supabase instead of Neon works too: enable the `vector` extension, then set `DAT
    - `ANTHROPIC_API_KEY` — required for derivations, the assistant, and glossary
    - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `SESSION_SECRET` — Google sign-in at `/signin`; unset = single local reader, nothing gated. Redirect URI: `<origin>/api/auth/callback`
    - `APPLE_CLIENT_ID` (Services ID), `APPLE_TEAM_ID`, `APPLE_KEY_ID`, `APPLE_PRIVATE_KEY` (.p8 contents) — Sign in with Apple; return URL: `<origin>/api/auth/apple/callback`
+   - `RESEND_API_KEY`, `EMAIL_FROM` — email sign-in with a confirmation link; the account is created only when the link is clicked
    - `OPENAI_API_KEY` — video transcription for uploads (Whisper first)
    - `GEMINI_API_KEY` — video transcription for YouTube videos (Gemini first) and the upload fallback
    - `ADMIN_PASSWORD` — enables `/admin` (unset = admin off)

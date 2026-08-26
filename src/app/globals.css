@@ -736,3 +736,41 @@ mark,
   background-image: radial-gradient(circle, color-mix(in srgb, var(--ink) 7%, transparent) 1px, transparent 1px);
   background-size: 26px 26px;
 }
+
+/* Sign-in reader tour: the cursor glides between dots, dips on the click,
+   and a ripple rings the dot it clicked. CSS only — timing in the component. */
+.tour-cursor {
+  transition:
+    left 0.62s cubic-bezier(0.5, 0.05, 0.25, 1),
+    top 0.62s cubic-bezier(0.5, 0.05, 0.25, 1),
+    opacity 0.4s ease;
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.45));
+}
+@keyframes tour-click {
+  0% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(0.8);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+.tour-click {
+  animation: tour-click 0.3s ease-out both;
+  transform-origin: 25% 15%;
+}
+@keyframes tour-ripple {
+  from {
+    opacity: 0.9;
+    transform: translate(-50%, -50%) scale(0.3);
+  }
+  to {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(2.6);
+  }
+}
+.tour-ripple {
+  animation: tour-ripple 0.7s ease-out both;
+}

@@ -2,9 +2,10 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { LangSwitcher } from "@/components/lang-switcher";
 import { Logo } from "@/components/logo";
-import { appleEnabled, authEnabled, currentUser, googleEnabled } from "@/lib/auth";
+import { appleEnabled, authEnabled, currentUser, emailEnabled, googleEnabled } from "@/lib/auth";
 import { serverT } from "@/lib/i18n/server";
 import type { TKey } from "@/lib/i18n/dictionaries";
+import { ReaderShowcase } from "./reader-showcase";
 
 export const dynamic = "force-dynamic";
 
@@ -41,7 +42,9 @@ function AppleMark({ size = 16 }: { size?: number }) {
 
 // Callouts point from the text: chip, a dotted connector, and a dot on the
 // exact spot in the screenshot. All positions are percent of the image,
-// tuned to public/signin-reader.png.
+// tuned to public/signin-reader.png. Array order is the tour order the
+// cursor walks: highlight → comment → pending note → distill → extract →
+// assistant.
 type Callout = {
   key: TKey;
   chip: { left: string; top: string };
@@ -50,18 +53,6 @@ type Callout = {
   dot: { x: number; y: number };
 };
 const CALLOUTS: Callout[] = [
-  {
-    key: "signin.calloutAssistant",
-    chip: { left: "1.5%", top: "40%" },
-    line: { x1: 6, y1: 39.5, x2: 7.2, y2: 26.5 },
-    dot: { x: 7.2, y: 25 },
-  },
-  {
-    key: "signin.calloutDistill",
-    chip: { left: "36%", top: "2%" },
-    line: { x1: 62, y1: 4.2, x2: 71, y2: 8.2 },
-    dot: { x: 72.3, y: 9 },
-  },
   {
     key: "signin.calloutHighlight",
     chip: { left: "1.5%", top: "48.5%" },
@@ -75,17 +66,29 @@ const CALLOUTS: Callout[] = [
     dot: { x: 69.3, y: 52.3 },
   },
   {
+    key: "signin.calloutPending",
+    chip: { left: "98%", top: "43%" },
+    alignRight: true,
+    line: { x1: 88, y1: 43, x2: 86.2, y2: 30 },
+    dot: { x: 86.2, y: 28 },
+  },
+  {
+    key: "signin.calloutDistill",
+    chip: { left: "36%", top: "2%" },
+    line: { x1: 62, y1: 4.2, x2: 71, y2: 8.2 },
+    dot: { x: 72.3, y: 9 },
+  },
+  {
     key: "signin.calloutExtract",
     chip: { left: "9%", top: "89%" },
     line: { x1: 24, y1: 89, x2: 33.5, y2: 82 },
     dot: { x: 35, y: 80.5 },
   },
   {
-    key: "signin.calloutPending",
-    chip: { left: "98%", top: "43%" },
-    alignRight: true,
-    line: { x1: 88, y1: 43, x2: 86.2, y2: 30 },
-    dot: { x: 86.2, y: 28 },
+    key: "signin.calloutAssistant",
+    chip: { left: "1.5%", top: "40%" },
+    line: { x1: 6, y1: 39.5, x2: 7.2, y2: 26.5 },
+    dot: { x: 7.2, y: 25 },
   },
 ];
 
@@ -132,28 +135,33 @@ const FUNCTIONS: { key: TKey; sub: TKey; icon: React.ReactNode }[] = [
   },
 ];
 
-// The front door (SPEC.md §2), dark by design and covering the screen: three
-// hero lines and one glowing CTA card on the left; on the right the reader as
-// it is — a real screenshot with dotted callouts into the text; below, only
-// the functions you need as panels. The wrapper carries .dark so every token
-// resolves to the dark ramp, whatever theme the visitor's system prefers.
+// The front door (SPEC.md §2), dark by design: the hero, one glowing CTA card
+// (Unitos account form on top, then Google and Apple), and the mark as a
+// dimmed backdrop on the left; on the right the reader in motion — a cursor
+// tours the screenshot and each function's callout fades in as it is used;
+// below, only the functions you need, two rows of panels. The wrapper carries
+// .dark so every token resolves to the dark ramp, whatever theme the
+// visitor's system prefers.
 export default async function SignInPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; sent?: string }>;
 }) {
-  const { error } = await searchParams;
+  const { error, sent } = await searchParams;
   const enabled = authEnabled();
   if (enabled && (await currentUser())) redirect("/");
   const t = await serverT();
 
-  // Known callback failure phrases → the UI language (unknown → raw).
+  // Known failure phrases → the UI language (unknown → raw).
   const authErrors: Record<string, string> = {
     "Google returned no code": t("signin.errNoCode"),
     "Apple returned no code": t("signin.errAppleNoCode"),
     "Sign-in state mismatch — try again": t("signin.errState"),
     "Could not verify your Google identity": t("signin.errVerify"),
     "Could not verify your Apple identity": t("signin.errAppleVerify"),
+    "Enter a valid email": t("signin.errEmailInvalid"),
+    "Could not send the confirmation email — try again": t("signin.errEmailSend"),
+    "Confirmation link expired or already used — request a new one": t("signin.errEmailToken"),
   };
 
   return (
@@ -173,27 +181,66 @@ export default async function SignInPage({
       </header>
 
       <main className="relative z-10 mx-auto w-full max-w-[1560px] flex-1 px-6 pt-10 pb-16 sm:px-10 lg:pt-4">
-        <div className="grid items-center gap-12 lg:min-h-[calc(100svh-8rem)] lg:grid-cols-[1.1fr_0.9fr] lg:gap-14">
-          {/* The pitch: three hero lines, the CTA card */}
-          <div className="rise-in">
-            <h1 className="font-display text-[2rem] leading-[1.14] text-balance text-ink sm:text-[2.6rem] lg:text-[2.2rem] xl:text-[2.85rem]">
-              {t("signin.heroA")}
-              <br />
-              {t("signin.heroB")}
-              <br />
-              <em className="text-clay not-italic [text-shadow:0_0_30px_rgba(217,138,82,0.4)]">
+        <div className="grid items-center gap-12 lg:grid-cols-[1.1fr_0.9fr] lg:gap-14">
+          {/* The pitch: the hero, the CTA card, the mark as a dimmed backdrop */}
+          <div className="rise-in relative">
+            <div
+              aria-hidden
+              className="pointer-events-none absolute -left-10 top-56 hidden opacity-[0.07] lg:block"
+            >
+              <Logo size={460} className="text-clay" />
+            </div>
+
+            <h1 className="font-display text-balance text-ink">
+              <span className="block text-[2.6rem] leading-[1.04] [-webkit-text-stroke:1px_currentColor] sm:text-[3.4rem] xl:text-[4.15rem]">
+                {t("signin.heroA")}
+              </span>
+              <span className="mt-3 block text-[1.45rem] leading-[1.2] text-clay [text-shadow:0_0_30px_rgba(217,138,82,0.45)] sm:text-[1.85rem] xl:text-[2.15rem]">
                 {t("signin.heroAccent")}
-              </em>
+              </span>
             </h1>
 
             {error && (
-              <p className="mt-6 max-w-md rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-2.5 text-sm text-red-300">
+              <p className="relative mt-6 max-w-md rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-2.5 text-sm text-red-300">
                 {authErrors[error] ?? error}
               </p>
             )}
 
-            {enabled ? (
-              <div className="mt-8 max-w-md rounded-2xl border border-clay/30 bg-white/[0.03] p-5 shadow-[0_0_50px_-18px_rgba(217,138,82,0.5)] backdrop-blur-sm">
+            {enabled && sent ? (
+              // Check your email — the account exists once the link is clicked.
+              <div className="relative mt-8 max-w-md rounded-2xl border border-clay/30 bg-white/[0.03] p-5 shadow-[0_0_50px_-18px_rgba(217,138,82,0.5)] backdrop-blur-sm">
+                <span className="mb-3.5 flex size-11 items-center justify-center rounded-xl border border-clay/25 bg-clay/12 text-clay">
+                  <svg
+                    width="20"
+                    height="20"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden
+                  >
+                    <path d="M4 6h16a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1Zm0 1 8 6 8-6" />
+                  </svg>
+                </span>
+                <p className="text-base font-semibold text-ink">{t("signin.sentTitle")}</p>
+                <p className="mt-1.5 text-sm leading-relaxed text-sand-600">
+                  {t("signin.sentTo")}{" "}
+                  <strong className="font-semibold text-ink">{sent}</strong>
+                </p>
+                <p className="mt-1.5 text-sm leading-relaxed text-sand-600">
+                  {t("signin.sentRest")}
+                </p>
+                <Link
+                  href="/signin"
+                  className="mt-3 inline-block text-xs font-semibold text-clay hover:brightness-110"
+                >
+                  {t("signin.sentBack")}
+                </Link>
+              </div>
+            ) : enabled ? (
+              <div className="relative mt-8 max-w-md rounded-2xl border border-clay/30 bg-white/[0.03] p-5 shadow-[0_0_50px_-18px_rgba(217,138,82,0.5)] backdrop-blur-sm">
                 <div className="mb-3.5 flex items-center gap-2">
                   <svg
                     width="16"
@@ -208,28 +255,65 @@ export default async function SignInPage({
                   <span className="text-sm font-semibold text-ink">{t("signin.ctaTitle")}</span>
                 </div>
                 <div className="space-y-3">
+                  {emailEnabled() && (
+                    <form action="/api/auth/email/start" method="post" className="space-y-2.5">
+                      <div className="grid grid-cols-[0.8fr_1.2fr] gap-2.5">
+                        <input
+                          name="name"
+                          type="text"
+                          autoComplete="name"
+                          maxLength={80}
+                          placeholder={t("signin.nameLabel")}
+                          aria-label={t("signin.nameLabel")}
+                          className="h-11 rounded-xl border border-white/10 bg-white/[0.04] px-3.5 text-sm text-ink placeholder:text-sand-600 focus:border-clay/60 focus:outline-none"
+                        />
+                        <input
+                          name="email"
+                          type="email"
+                          required
+                          autoComplete="email"
+                          maxLength={200}
+                          placeholder={t("signin.emailLabel")}
+                          aria-label={t("signin.emailLabel")}
+                          className="h-11 rounded-xl border border-white/10 bg-white/[0.04] px-3.5 text-sm text-ink placeholder:text-sand-600 focus:border-clay/60 focus:outline-none"
+                        />
+                      </div>
+                      <button
+                        type="submit"
+                        className="flex h-12 w-full items-center justify-center gap-2.5 rounded-full bg-clay text-sm font-semibold text-clay-fg shadow-[0_8px_24px_-10px_rgba(217,138,82,0.7)] hover:brightness-110 active:scale-[0.99]"
+                      >
+                        <Logo size={16} />
+                        {t("signin.unitos")}
+                        <svg
+                          width="16"
+                          height="16"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          aria-hidden
+                        >
+                          <path d="M5 12h14m-6-6 6 6-6 6" />
+                        </svg>
+                      </button>
+                    </form>
+                  )}
+                  {emailEnabled() && (googleEnabled() || appleEnabled()) && (
+                    <div className="flex items-center gap-3 text-[11px] text-sand-600">
+                      <span className="h-px flex-1 bg-white/10" />
+                      {t("signin.or")}
+                      <span className="h-px flex-1 bg-white/10" />
+                    </div>
+                  )}
                   {googleEnabled() && (
                     <a
                       href="/api/auth/login"
-                      className="flex h-12 items-center justify-center gap-2.5 rounded-full bg-clay text-sm font-semibold text-clay-fg shadow-[0_8px_24px_-10px_rgba(217,138,82,0.7)] hover:brightness-110 active:scale-[0.99]"
+                      className="flex h-12 items-center justify-center gap-2.5 rounded-full bg-white text-sm font-semibold text-[#3c4043] shadow-soft hover:brightness-95 active:scale-[0.99]"
                     >
-                      <span className="flex size-7 items-center justify-center rounded-full bg-white">
-                        <GoogleMark />
-                      </span>
+                      <GoogleMark />
                       {t("signin.google")}
-                      <svg
-                        width="16"
-                        height="16"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        aria-hidden
-                      >
-                        <path d="M5 12h14m-6-6 6 6-6 6" />
-                      </svg>
                     </a>
                   )}
                   {appleEnabled() && (
@@ -247,7 +331,7 @@ export default async function SignInPage({
                 </p>
               </div>
             ) : (
-              <div className="mt-8 max-w-md rounded-2xl border border-white/10 bg-white/[0.03] p-5 backdrop-blur-sm">
+              <div className="relative mt-8 max-w-md rounded-2xl border border-white/10 bg-white/[0.03] p-5 backdrop-blur-sm">
                 <p className="text-sm font-semibold text-ink">{t("signin.singleTitle")}</p>
                 <p className="mt-1 text-xs leading-relaxed text-sand-600">
                   {t("signin.singleDesc")}
@@ -262,7 +346,7 @@ export default async function SignInPage({
             )}
           </div>
 
-          {/* The reader as it is: a real screenshot, dotted callouts into the text */}
+          {/* The reader in motion: the cursor walks the functions, callouts fade in */}
           <div className="rise-in-late relative">
             <div className="rounded-3xl bg-gradient-to-b from-clay/35 via-white/10 to-transparent p-px shadow-[0_0_80px_-30px_rgba(217,138,82,0.45)]">
               <div className="rounded-[calc(1.5rem-1px)] bg-card/90 p-4 backdrop-blur-xl sm:p-5">
@@ -270,55 +354,17 @@ export default async function SignInPage({
                   <Logo size={14} className="text-clay" />
                   {t("signin.showcaseTitle")}
                 </p>
-                <div className="relative">
-                  <div className="overflow-hidden rounded-xl border border-white/10">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src="/signin-reader.png"
-                      alt={t("signin.screenshotAlt")}
-                      className="block w-full"
-                    />
-                  </div>
-                  <svg
-                    aria-hidden
-                    viewBox="0 0 100 100"
-                    preserveAspectRatio="none"
-                    className="pointer-events-none absolute inset-0 hidden h-full w-full sm:block"
-                  >
-                    {CALLOUTS.map((c) => (
-                      <line
-                        key={c.key}
-                        x1={c.line.x1}
-                        y1={c.line.y1}
-                        x2={c.line.x2}
-                        y2={c.line.y2}
-                        className="stroke-clay"
-                        strokeWidth="1.5"
-                        strokeDasharray="4 4"
-                        vectorEffect="non-scaling-stroke"
-                        strokeLinecap="round"
-                      />
-                    ))}
-                  </svg>
-                  {CALLOUTS.map((c) => (
-                    <span
-                      key={`dot-${c.key}`}
-                      aria-hidden
-                      className="absolute hidden size-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-clay shadow-[0_0_10px_rgba(217,138,82,0.9)] ring-2 ring-black/40 sm:block"
-                      style={{ left: `${c.dot.x}%`, top: `${c.dot.y}%` }}
-                    />
-                  ))}
-                  {CALLOUTS.map((c) => (
-                    <span
-                      key={c.key}
-                      aria-hidden
-                      className={`absolute hidden items-center gap-1.5 rounded-full bg-black/80 px-2.5 py-1 text-[11px] font-semibold whitespace-nowrap text-white shadow-float ring-1 ring-white/25 sm:inline-flex ${c.alignRight ? "-translate-x-full" : ""}`}
-                      style={{ left: c.chip.left, top: c.chip.top }}
-                    >
-                      {t(c.key)}
-                    </span>
-                  ))}
-                </div>
+                <ReaderShowcase
+                  src="/signin-reader.png"
+                  alt={t("signin.screenshotAlt")}
+                  callouts={CALLOUTS.map((c) => ({
+                    text: t(c.key),
+                    chip: c.chip,
+                    alignRight: c.alignRight,
+                    line: c.line,
+                    dot: c.dot,
+                  }))}
+                />
                 <p className="mt-3 text-[11px] leading-relaxed text-sand-600">
                   {t("signin.showcaseCaption")}
                 </p>
@@ -331,34 +377,36 @@ export default async function SignInPage({
           </div>
         </div>
 
-        {/* Only functions you need */}
-        <section className="rise-in-later mt-14 lg:mt-6">
+        {/* Only functions you need: two rows, right beneath the hero */}
+        <section className="rise-in-later mt-12 lg:mt-14">
           <h2 className="text-center font-display text-[1.65rem] text-ink sm:text-3xl">
             {t("signin.functionsTitle")}
           </h2>
-          <div className="mt-8 grid grid-cols-2 gap-4 md:grid-cols-4 xl:grid-cols-7">
+          <div className="mt-8 flex flex-wrap justify-center gap-4">
             {FUNCTIONS.map((f) => (
               <div
                 key={f.key}
-                className="flex min-h-[220px] flex-col rounded-2xl border border-white/[0.07] bg-white/[0.03] p-6 transition-all duration-300 hover:-translate-y-1 hover:border-clay/40 hover:bg-white/[0.05] hover:shadow-[0_0_40px_-12px_rgba(217,138,82,0.6)] xl:min-h-[250px]"
+                className="flex w-full flex-col rounded-2xl border border-white/[0.07] bg-white/[0.03] p-6 transition-all duration-300 hover:-translate-y-1 hover:border-clay/40 hover:bg-white/[0.05] hover:shadow-[0_0_40px_-12px_rgba(217,138,82,0.6)] sm:w-[calc(50%-0.5rem)] lg:w-[calc(25%-0.75rem)]"
               >
-                <span className="mb-4 flex size-12 items-center justify-center rounded-xl border border-clay/25 bg-clay/12 text-clay">
-                  <svg
-                    width="22"
-                    height="22"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.8"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    aria-hidden
-                  >
-                    {f.icon}
-                  </svg>
-                </span>
-                <p className="text-base leading-snug font-bold text-ink">{t(f.key)}</p>
-                <p className="mt-2 text-[13px] leading-relaxed text-sand-600">{t(f.sub)}</p>
+                <div className="flex items-center gap-3.5">
+                  <span className="flex size-12 shrink-0 items-center justify-center rounded-xl border border-clay/25 bg-clay/12 text-clay">
+                    <svg
+                      width="24"
+                      height="24"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      aria-hidden
+                    >
+                      {f.icon}
+                    </svg>
+                  </span>
+                  <p className="text-lg leading-snug font-bold text-ink">{t(f.key)}</p>
+                </div>
+                <p className="mt-3 text-sm leading-relaxed text-sand-600">{t(f.sub)}</p>
               </div>
             ))}
           </div>

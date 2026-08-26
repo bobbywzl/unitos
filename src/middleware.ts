@@ -45,7 +45,8 @@ export function middleware(request: NextRequest) {
         (process.env.APPLE_CLIENT_ID &&
           process.env.APPLE_TEAM_ID &&
           process.env.APPLE_KEY_ID &&
-          process.env.APPLE_PRIVATE_KEY)),
+          process.env.APPLE_PRIVATE_KEY) ||
+        (process.env.RESEND_API_KEY && process.env.EMAIL_FROM)),
   );
   if (!authOn) return NextResponse.next();
 
