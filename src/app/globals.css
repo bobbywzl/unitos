@@ -718,3 +718,19 @@ mark,
 .rise-in-late {
   animation: rise-in 0.7s cubic-bezier(0.22, 1, 0.36, 1) 0.12s both;
 }
+.rise-in-later {
+  animation: rise-in 0.7s cubic-bezier(0.22, 1, 0.36, 1) 0.26s both;
+}
+
+/* Sign-in backdrop: layered clay/sage glows + a masked dot lattice. The page
+   wrapper carries .dark, so the tokens here resolve to the dark ramp. */
+.signin-glow {
+  background-image:
+    radial-gradient(55rem 38rem at 85% -12%, color-mix(in srgb, var(--clay) 17%, transparent), transparent 60%),
+    radial-gradient(46rem 34rem at -12% 108%, color-mix(in srgb, var(--sage) 13%, transparent), transparent 60%);
+}
+.signin-dots {
+  background-image: radial-gradient(circle, color-mix(in srgb, var(--ink) 8%, transparent) 1px, transparent 1px);
+  background-size: 26px 26px;
+  mask-image: radial-gradient(70rem 48rem at 50% 0%, black 40%, transparent 78%);
+}
