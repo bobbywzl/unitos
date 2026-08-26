@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import {
   appOrigin,
-  authEnabled,
+  googleEnabled,
   exchangeCode,
   SESSION_COOKIE,
   signIn,
@@ -12,7 +12,7 @@ import {
 // Google redirects here; verify state, exchange the code, mint a session.
 export async function GET(req: Request) {
   const origin = appOrigin(req);
-  if (!authEnabled()) return NextResponse.redirect(new URL("/", origin));
+  if (!googleEnabled()) return NextResponse.redirect(new URL("/", origin));
   const url = new URL(req.url);
   const code = url.searchParams.get("code");
   const state = url.searchParams.get("state");

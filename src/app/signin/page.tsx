@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { LangSwitcher } from "@/components/lang-switcher";
 import { Logo } from "@/components/logo";
-import { authEnabled, currentUser } from "@/lib/auth";
+import { appleEnabled, authEnabled, currentUser, googleEnabled } from "@/lib/auth";
 import { serverT } from "@/lib/i18n/server";
 import type { TKey } from "@/lib/i18n/dictionaries";
 
@@ -31,35 +31,130 @@ function GoogleMark({ size = 15 }: { size?: number }) {
   );
 }
 
-// Callouts point from the text in the screenshot: label + position in percent
-// of the image, tuned to public/signin-reader.png.
-const CALLOUTS: { key: TKey; left: string; top: string; alignRight?: boolean }[] = [
-  { key: "signin.calloutAssistant", left: "2%", top: "13%" },
-  { key: "signin.calloutDistill", left: "44%", top: "3%" },
-  { key: "signin.calloutHighlight", left: "24%", top: "29%" },
-  { key: "signin.calloutComment", left: "56.5%", top: "48%" },
-  { key: "signin.calloutExtract", left: "22%", top: "84.5%" },
-  { key: "signin.calloutPending", left: "97%", top: "40%", alignRight: true },
+function AppleMark({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+      <path d="M17.05 12.54c-.03-2.36 1.93-3.49 2.02-3.55-1.1-1.61-2.81-1.83-3.42-1.85-1.45-.15-2.84.86-3.58.86-.74 0-1.88-.84-3.1-.82-1.59.02-3.06.93-3.88 2.36-1.66 2.87-.42 7.12 1.19 9.45.79 1.14 1.73 2.42 2.96 2.37 1.19-.05 1.64-.77 3.08-.77s1.84.77 3.1.75c1.28-.02 2.09-1.16 2.87-2.31.9-1.32 1.28-2.6 1.3-2.67-.03-.01-2.5-.96-2.54-3.82ZM14.7 5.6c.65-.79 1.09-1.89.97-2.98-.94.04-2.07.62-2.74 1.41-.6.7-1.13 1.82-.99 2.89 1.05.08 2.11-.53 2.76-1.32Z" />
+    </svg>
+  );
+}
+
+// Callouts point from the text: chip, a dotted connector, and a dot on the
+// exact spot in the screenshot. All positions are percent of the image,
+// tuned to public/signin-reader.png.
+type Callout = {
+  key: TKey;
+  chip: { left: string; top: string };
+  alignRight?: boolean;
+  line: { x1: number; y1: number; x2: number; y2: number };
+  dot: { x: number; y: number };
+};
+const CALLOUTS: Callout[] = [
+  {
+    key: "signin.calloutAssistant",
+    chip: { left: "1.5%", top: "40%" },
+    line: { x1: 6, y1: 39.5, x2: 7.2, y2: 26.5 },
+    dot: { x: 7.2, y: 25 },
+  },
+  {
+    key: "signin.calloutDistill",
+    chip: { left: "36%", top: "2%" },
+    line: { x1: 62, y1: 4.2, x2: 71, y2: 8.2 },
+    dot: { x: 72.3, y: 9 },
+  },
+  {
+    key: "signin.calloutHighlight",
+    chip: { left: "1.5%", top: "48.5%" },
+    line: { x1: 15, y1: 49, x2: 34, y2: 36 },
+    dot: { x: 36, y: 34.3 },
+  },
+  {
+    key: "signin.calloutComment",
+    chip: { left: "46%", top: "60%" },
+    line: { x1: 56, y1: 60.5, x2: 68, y2: 53.5 },
+    dot: { x: 69.3, y: 52.3 },
+  },
+  {
+    key: "signin.calloutExtract",
+    chip: { left: "9%", top: "89%" },
+    line: { x1: 24, y1: 89, x2: 33.5, y2: 82 },
+    dot: { x: 35, y: 80.5 },
+  },
+  {
+    key: "signin.calloutPending",
+    chip: { left: "98%", top: "43%" },
+    alignRight: true,
+    line: { x1: 88, y1: 43, x2: 86.2, y2: 30 },
+    dot: { x: 86.2, y: 28 },
+  },
 ];
 
-const FUNCTIONS: TKey[] = [
-  "signin.fn1",
-  "signin.fn2",
-  "signin.fn3",
-  "signin.fn4",
-  "signin.fn5",
-  "signin.fn6",
-  "signin.fn7",
-  "signin.fn8",
-  "signin.fn9",
-  "signin.fn10",
-  "signin.fn11",
-  "signin.fn12",
+// Key functions as icon pills, tint cycling through the palette.
+const PILL_TINTS = [
+  "bg-clay-100 text-clay-800",
+  "bg-sage-200 text-sage-800",
+  "bg-amber-100 text-amber-800",
+];
+const FUNCTIONS: { key: TKey; icon: React.ReactNode }[] = [
+  {
+    key: "signin.fn1",
+    icon: (
+      <path d="M4 5a2 2 0 0 1 2-2h5v18H6a2 2 0 0 1-2-2V5Zm9-2h5a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-5V3Z" />
+    ),
+  },
+  { key: "signin.fn2", icon: <path d="m14 4 6 6-9 9H5v-6l9-9Zm-3 3-6 6M13 19h7" /> },
+  {
+    key: "signin.fn3",
+    icon: <path d="M21 12a8 8 0 0 1-8 8H4l2-3a8 8 0 1 1 15-5Zm-12-1h6m-6 4h4" />,
+  },
+  {
+    key: "signin.fn4",
+    icon: (
+      <path d="M12 3v3m0 12v3M3 12h3m12 0h3M6 6l2 2m8 8 2 2m0-12-2 2M8 16l-2 2m6-9a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z" />
+    ),
+  },
+  { key: "signin.fn5", icon: <path d="M4 4h16l-6 8v6l-4 2v-8L4 4Z" /> },
+  {
+    key: "signin.fn6",
+    icon: <path d="M4 6h16M4 12h16M4 18h9m4-2 4 4m0-4-4 4" />,
+  },
+  {
+    key: "signin.fn7",
+    icon: <path d="M5 4h14M7 9h10M9 14h6m-4 5h2" />,
+  },
+  {
+    key: "signin.fn8",
+    icon: (
+      <path d="M3 6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6Zm7 3 5 3-5 3V9Z" />
+    ),
+  },
+  {
+    key: "signin.fn9",
+    icon: (
+      <path d="M9 15 15 9m-4.5-3.5 2-2a4 4 0 0 1 5.66 5.66l-2 2m-8.32 2.68-2 2a4 4 0 1 0 5.66 5.66l2-2" />
+    ),
+  },
+  {
+    key: "signin.fn10",
+    icon: (
+      <path d="M12 3a7 7 0 0 1 7 7c0 2.4-1.2 4.5-3 5.7V18a2 2 0 0 1-2 2h-4a2 2 0 0 1-2-2v-2.3A7 7 0 0 1 12 3Zm-2 19h4" />
+    ),
+  },
+  {
+    key: "signin.fn11",
+    icon: <path d="M12 3v12m0 0 4-4m-4 4-4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />,
+  },
+  {
+    key: "signin.fn12",
+    icon: (
+      <path d="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Zm-9 9h18M12 3c2.5 2.4 3.8 5.6 3.8 9s-1.3 6.6-3.8 9c-2.5-2.4-3.8-5.6-3.8-9s1.3-6.6 3.8-9Z" />
+    ),
+  },
 ];
 
-// The front door (SPEC.md §2): the hero and one button on the left; on the
-// right the reader as it is — a real screenshot on Attention Is All You Need
-// with the functions labeled from the text; below, the key functions listed.
+// The front door (SPEC.md §2): three hero lines and the sign-in buttons on
+// the left; on the right the reader as it is — a real screenshot with dotted
+// callouts into the text; below, the key functions as icon pills.
 export default async function SignInPage({
   searchParams,
 }: {
@@ -70,11 +165,13 @@ export default async function SignInPage({
   if (enabled && (await currentUser())) redirect("/");
   const t = await serverT();
 
-  // Known /api/auth/callback failure phrases → the UI language (unknown → raw).
+  // Known callback failure phrases → the UI language (unknown → raw).
   const authErrors: Record<string, string> = {
     "Google returned no code": t("signin.errNoCode"),
+    "Apple returned no code": t("signin.errAppleNoCode"),
     "Sign-in state mismatch — try again": t("signin.errState"),
     "Could not verify your Google identity": t("signin.errVerify"),
+    "Could not verify your Apple identity": t("signin.errAppleVerify"),
   };
 
   return (
@@ -89,12 +186,14 @@ export default async function SignInPage({
 
       <main className="mx-auto w-full max-w-6xl flex-1 py-10 lg:py-14">
         <div className="grid items-center gap-10 lg:grid-cols-[0.85fr_1.15fr] lg:gap-14">
-          {/* The pitch: two lines, one button */}
+          {/* The pitch: three lines, the sign-in buttons */}
           <div className="rise-in">
-            <h1 className="font-display text-4xl leading-[1.15] text-sand-800">
+            <h1 className="font-display text-[2.6rem] leading-[1.14] text-sand-800">
               {t("signin.heroA")}
               <br />
-              <em className="text-clay not-italic">{t("signin.heroAccent")}</em>
+              <em className="text-clay not-italic">{t("signin.heroAccentA")}</em>
+              <br />
+              <em className="text-clay not-italic">{t("signin.heroAccentB")}</em>
             </h1>
 
             {error && (
@@ -104,20 +203,29 @@ export default async function SignInPage({
             )}
 
             {enabled ? (
-              <>
-                <a
-                  href="/api/auth/login"
-                  className="mt-8 flex h-12 max-w-sm items-center justify-center gap-2.5 rounded-full bg-clay text-sm font-semibold text-clay-fg shadow-soft hover:bg-clay-600 active:scale-[0.99]"
-                >
-                  <span className="flex size-7 items-center justify-center rounded-full bg-white">
-                    <GoogleMark />
-                  </span>
-                  {t("signin.google")}
-                </a>
-                <p className="mt-3.5 max-w-sm text-center text-xs text-sand-500">
-                  {t("signin.accountNote")}
-                </p>
-              </>
+              <div className="mt-8 max-w-sm space-y-3">
+                {googleEnabled() && (
+                  <a
+                    href="/api/auth/login"
+                    className="flex h-12 items-center justify-center gap-2.5 rounded-full bg-clay text-sm font-semibold text-clay-fg shadow-soft hover:bg-clay-600 active:scale-[0.99]"
+                  >
+                    <span className="flex size-7 items-center justify-center rounded-full bg-white">
+                      <GoogleMark />
+                    </span>
+                    {t("signin.google")}
+                  </a>
+                )}
+                {appleEnabled() && (
+                  <a
+                    href="/api/auth/apple/login"
+                    className="flex h-12 items-center justify-center gap-2.5 rounded-full bg-ink text-sm font-semibold text-paper shadow-soft hover:opacity-90 active:scale-[0.99]"
+                  >
+                    <AppleMark />
+                    {t("signin.apple")}
+                  </a>
+                )}
+                <p className="text-center text-xs text-sand-500">{t("signin.accountNote")}</p>
+              </div>
             ) : (
               <div className="mt-8 max-w-sm rounded-2xl bg-card px-5 py-4 shadow-soft">
                 <p className="text-sm font-semibold text-sand-800">{t("signin.singleTitle")}</p>
@@ -134,39 +242,82 @@ export default async function SignInPage({
             )}
           </div>
 
-          {/* The reader as it is, functions labeled from the text */}
+          {/* The reader as it is: dotted callouts into the text */}
           <div className="rise-in-late relative">
             <div className="overflow-hidden rounded-2xl border border-line shadow-float">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src="/signin-reader.png" alt={t("signin.screenshotAlt")} className="block w-full" />
             </div>
+            <svg
+              aria-hidden
+              viewBox="0 0 100 100"
+              preserveAspectRatio="none"
+              className="pointer-events-none absolute inset-0 hidden h-full w-full sm:block"
+            >
+              {CALLOUTS.map((c) => (
+                <line
+                  key={c.key}
+                  x1={c.line.x1}
+                  y1={c.line.y1}
+                  x2={c.line.x2}
+                  y2={c.line.y2}
+                  className="stroke-clay-500"
+                  strokeWidth="1.5"
+                  strokeDasharray="4 4"
+                  vectorEffect="non-scaling-stroke"
+                  strokeLinecap="round"
+                />
+              ))}
+            </svg>
+            {CALLOUTS.map((c) => (
+              <span
+                key={`dot-${c.key}`}
+                aria-hidden
+                className="absolute hidden size-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-clay-500 ring-2 ring-paper sm:block"
+                style={{ left: `${c.dot.x}%`, top: `${c.dot.y}%` }}
+              />
+            ))}
             {CALLOUTS.map((c) => (
               <span
                 key={c.key}
                 aria-hidden
                 className={`absolute hidden items-center gap-1.5 rounded-full bg-ink/90 px-2.5 py-1 text-[11px] font-semibold whitespace-nowrap text-paper shadow-float sm:inline-flex ${c.alignRight ? "-translate-x-full" : ""}`}
-                style={{ left: c.left, top: c.top }}
+                style={{ left: c.chip.left, top: c.chip.top }}
               >
-                <span className="size-1.5 rounded-full bg-clay-400" />
                 {t(c.key)}
               </span>
             ))}
           </div>
         </div>
 
-        {/* Key functions, listed */}
+        {/* Key functions as icon pills */}
         <section className="mt-14 lg:mt-16">
-          <h2 className="text-[11px] font-bold tracking-[0.08em] text-sand-600 uppercase">
+          <h2 className="text-center text-[11px] font-bold tracking-[0.08em] text-sand-600 uppercase">
             {t("signin.functionsTitle")}
           </h2>
-          <ul className="mt-3 grid grid-cols-1 gap-x-10 gap-y-2 sm:grid-cols-2 lg:grid-cols-3">
-            {FUNCTIONS.map((key) => (
-              <li key={key} className="flex items-start gap-2.5 text-sm text-sand-700">
-                <span aria-hidden className="mt-[7px] size-1.5 shrink-0 rounded-full bg-clay-300" />
-                {t(key)}
-              </li>
+          <div className="mt-4 flex flex-wrap justify-center gap-2.5">
+            {FUNCTIONS.map((f, i) => (
+              <span
+                key={f.key}
+                className={`inline-flex items-center gap-2 rounded-full py-2 pr-4 pl-3 text-sm font-semibold shadow-soft ${PILL_TINTS[i % PILL_TINTS.length]}`}
+              >
+                <svg
+                  width="17"
+                  height="17"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.9"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden
+                >
+                  {f.icon}
+                </svg>
+                {t(f.key)}
+              </span>
             ))}
-          </ul>
+          </div>
         </section>
       </main>
 

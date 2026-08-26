@@ -6,3 +6,6 @@ export const USER_ID = "user-1";
 // pulling node:crypto from lib/auth.
 export const SESSION_COOKIE = "dissect-session";
 export const STATE_COOKIE = "dissect-oauth-state";
+// Apple posts the callback cross-site (response_mode form_post), so its state
+// cookie needs SameSite=None and its own name.
+export const APPLE_STATE_COOKIE = "dissect-apple-state";

@@ -37,10 +37,15 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Same three-variable switch as lib/auth authEnabled() — not imported, that
-  // module needs node:crypto and this runs at the edge.
+  // Same switch as lib/auth authEnabled() — not imported, that module needs
+  // node:crypto and this runs at the edge.
   const authOn = Boolean(
-    process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET && process.env.SESSION_SECRET,
+    process.env.SESSION_SECRET &&
+      ((process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) ||
+        (process.env.APPLE_CLIENT_ID &&
+          process.env.APPLE_TEAM_ID &&
+          process.env.APPLE_KEY_ID &&
+          process.env.APPLE_PRIVATE_KEY)),
   );
   if (!authOn) return NextResponse.next();
 

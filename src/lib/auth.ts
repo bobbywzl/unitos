@@ -1,29 +1,45 @@
-import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { createHmac, randomBytes, sign as cryptoSign, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import type { User } from "@prisma/client";
-import { SESSION_COOKIE, STATE_COOKIE, USER_ID } from "@/lib/constants";
+import { APPLE_STATE_COOKIE, SESSION_COOKIE, STATE_COOKIE, USER_ID } from "@/lib/constants";
 import { db } from "@/lib/db";
 import { serverT } from "@/lib/i18n/server";
 import { outboundFetch } from "@/lib/outbound-fetch";
 
-// Google sign-in (Scalae pattern): hand-rolled OIDC authorization-code flow,
-// no dependencies; sessions in the database, token in an httpOnly cookie.
+// Google and Apple sign-in (Scalae pattern): hand-rolled OIDC
+// authorization-code flows, no dependencies; sessions in the database, token
+// in an httpOnly cookie. Accounts key on the email, so one person signing in
+// through both providers lands in one account.
 //
-// DUAL MODE: with GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET + SESSION_SECRET
-// set, /signin gates the app and corpora belong to accounts. Unset, sign-in
-// is off and the app runs as the local reader (USER_ID) — deploys never brick
-// on missing credentials. The /admin area keeps its own ADMIN_PASSWORD gate,
+// DUAL MODE: with SESSION_SECRET plus either provider's credentials set,
+// /signin gates the app and corpora belong to accounts. Unset, sign-in is off
+// and the app runs as the local reader (USER_ID) — deploys never brick on
+// missing credentials. The /admin area keeps its own ADMIN_PASSWORD gate,
 // decoupled from reader sign-in.
 
-export { SESSION_COOKIE, STATE_COOKIE };
+export { APPLE_STATE_COOKIE, SESSION_COOKIE, STATE_COOKIE };
 
 const SESSION_DAYS = 30;
 
-export function authEnabled(): boolean {
+export function googleEnabled(): boolean {
   return Boolean(
     process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET && process.env.SESSION_SECRET,
   );
+}
+
+export function appleEnabled(): boolean {
+  return Boolean(
+    process.env.APPLE_CLIENT_ID &&
+      process.env.APPLE_TEAM_ID &&
+      process.env.APPLE_KEY_ID &&
+      process.env.APPLE_PRIVATE_KEY &&
+      process.env.SESSION_SECRET,
+  );
+}
+
+export function authEnabled(): boolean {
+  return googleEnabled() || appleEnabled();
 }
 
 // The implicit reader when sign-in is off. Not a database row.
@@ -131,6 +147,112 @@ export async function exchangeCode(
     name: claims.name ?? claims.email.split("@")[0],
     picture: claims.picture ?? "",
   };
+}
+
+// ── Sign in with Apple ──────────────────────────────────────────────────────
+// Same code flow with two Apple particulars: the callback arrives as a
+// cross-site POST (response_mode form_post — required when scope asks for
+// name or email), and the client_secret is a short-lived ES256 JWT signed
+// with the developer key, not a stored string.
+
+export function appleAuthUrl(origin: string, state: string): string {
+  const p = new URLSearchParams({
+    client_id: process.env.APPLE_CLIENT_ID!,
+    redirect_uri: `${origin}/api/auth/apple/callback`,
+    response_type: "code",
+    scope: "name email",
+    response_mode: "form_post",
+    state,
+  });
+  return `https://appleid.apple.com/auth/authorize?${p}`;
+}
+
+const b64url = (data: string | Buffer) => Buffer.from(data).toString("base64url");
+
+// The client_secret Apple requires: ES256 JWT over the team, key, and
+// Services ID, signed with the .p8 key (newlines may arrive escaped).
+function appleClientSecret(): string {
+  const now = Math.floor(Date.now() / 1000);
+  const header = b64url(JSON.stringify({ alg: "ES256", kid: process.env.APPLE_KEY_ID }));
+  const payload = b64url(
+    JSON.stringify({
+      iss: process.env.APPLE_TEAM_ID,
+      iat: now,
+      exp: now + 600,
+      aud: "https://appleid.apple.com",
+      sub: process.env.APPLE_CLIENT_ID,
+    }),
+  );
+  const data = `${header}.${payload}`;
+  const key = process.env.APPLE_PRIVATE_KEY!.replace(/\\n/g, "\n");
+  const signature = cryptoSign("sha256", Buffer.from(data), {
+    key,
+    dsaEncoding: "ieee-p1363",
+  });
+  return `${data}.${b64url(signature)}`;
+}
+
+// Apple sends the person's name exactly once — as a `user` JSON field on the
+// first authorization's POST. Never again; capture it here or lose it.
+export function appleUserName(userField: string | null): string | null {
+  if (!userField) return null;
+  try {
+    const parsed = JSON.parse(userField) as { name?: { firstName?: string; lastName?: string } };
+    const name = [parsed.name?.firstName, parsed.name?.lastName].filter(Boolean).join(" ").trim();
+    return name || null;
+  } catch {
+    return null;
+  }
+}
+
+// Exchange the authorization code with Apple. The id_token arrives directly
+// from Apple's token endpoint over TLS, so claims validation suffices, same
+// as the Google exchange above. email_verified arrives as a string.
+export async function appleExchangeCode(
+  origin: string,
+  code: string,
+): Promise<{ email: string; name: string } | null> {
+  let clientSecret: string;
+  try {
+    clientSecret = appleClientSecret();
+  } catch (err) {
+    console.error("[auth] apple client secret failed (check APPLE_PRIVATE_KEY):", err);
+    return null;
+  }
+  const res = await outboundFetch("https://appleid.apple.com/auth/token", {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      code,
+      client_id: process.env.APPLE_CLIENT_ID!,
+      client_secret: clientSecret,
+      redirect_uri: `${origin}/api/auth/apple/callback`,
+      grant_type: "authorization_code",
+    }).toString(),
+    signal: AbortSignal.timeout(30_000),
+  });
+  if (!res.ok) {
+    console.error("[auth] apple token exchange failed:", res.status, await res.text());
+    return null;
+  }
+  const data = (await res.json()) as { id_token?: string };
+  const payload = data.id_token?.split(".")[1];
+  if (!payload) return null;
+  type AppleClaims = Omit<IdTokenClaims, "email_verified"> & {
+    email_verified?: boolean | string;
+  };
+  let claims: AppleClaims;
+  try {
+    claims = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as AppleClaims;
+  } catch {
+    return null;
+  }
+  const issOk = claims.iss === "https://appleid.apple.com";
+  const audOk = claims.aud === process.env.APPLE_CLIENT_ID;
+  const fresh = (claims.exp ?? 0) * 1000 > Date.now();
+  const verified = claims.email_verified === true || claims.email_verified === "true";
+  if (!issOk || !audOk || !fresh || !claims.email || !verified) return null;
+  return { email: claims.email, name: claims.email.split("@")[0] };
 }
 
 // Upsert the account. The first account ever adopts the local reader's data
