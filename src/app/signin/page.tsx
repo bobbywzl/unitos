@@ -89,83 +89,54 @@ const CALLOUTS: Callout[] = [
   },
 ];
 
-// Key functions as cards: icon chip, name, one line on what it does.
+// Only functions you need, as panels: icon chip, name, one line on what it does.
 const FUNCTIONS: { key: TKey; sub: TKey; icon: React.ReactNode }[] = [
   {
-    key: "signin.fn1",
-    sub: "signin.fn1Sub",
-    icon: (
-      <path d="M4 5a2 2 0 0 1 2-2h5v18H6a2 2 0 0 1-2-2V5Zm9-2h5a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-5V3Z" />
-    ),
-  },
-  {
-    key: "signin.fn2",
-    sub: "signin.fn2Sub",
-    icon: <path d="m14 4 6 6-9 9H5v-6l9-9Zm-3 3-6 6M13 19h7" />,
-  },
-  {
-    key: "signin.fn3",
-    sub: "signin.fn3Sub",
-    icon: <path d="M21 12a8 8 0 0 1-8 8H4l2-3a8 8 0 1 1 15-5Zm-12-1h6m-6 4h4" />,
-  },
-  {
-    key: "signin.fn4",
-    sub: "signin.fn4Sub",
-    icon: (
-      <path d="M12 3v3m0 12v3M3 12h3m12 0h3M6 6l2 2m8 8 2 2m0-12-2 2M8 16l-2 2m6-9a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z" />
-    ),
-  },
-  { key: "signin.fn5", sub: "signin.fn5Sub", icon: <path d="M4 4h16l-6 8v6l-4 2v-8L4 4Z" /> },
-  {
-    key: "signin.fn6",
-    sub: "signin.fn6Sub",
-    icon: <path d="M4 6h16M4 12h16M4 18h9m4-2 4 4m0-4-4 4" />,
-  },
-  {
-    key: "signin.fn7",
-    sub: "signin.fn7Sub",
-    icon: <path d="M5 4h14M7 9h10M9 14h6m-4 5h2" />,
-  },
-  {
-    key: "signin.fn8",
-    sub: "signin.fn8Sub",
-    icon: (
-      <path d="M3 6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6Zm7 3 5 3-5 3V9Z" />
-    ),
-  },
-  {
-    key: "signin.fn9",
-    sub: "signin.fn9Sub",
-    icon: (
-      <path d="M9 15 15 9m-4.5-3.5 2-2a4 4 0 0 1 5.66 5.66l-2 2m-8.32 2.68-2 2a4 4 0 1 0 5.66 5.66l2-2" />
-    ),
-  },
-  {
-    key: "signin.fn10",
-    sub: "signin.fn10Sub",
+    key: "signin.fnAssistant",
+    sub: "signin.fnAssistantSub",
     icon: (
       <path d="M12 3a7 7 0 0 1 7 7c0 2.4-1.2 4.5-3 5.7V18a2 2 0 0 1-2 2h-4a2 2 0 0 1-2-2v-2.3A7 7 0 0 1 12 3Zm-2 19h4" />
     ),
   },
   {
-    key: "signin.fn11",
-    sub: "signin.fn11Sub",
-    icon: <path d="M12 3v12m0 0 4-4m-4 4-4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />,
+    key: "signin.fnNotes",
+    sub: "signin.fnNotesSub",
+    icon: <path d="m14 4 6 6-9 9H5v-6l9-9Zm-3 3-6 6M13 19h7" />,
   },
   {
-    key: "signin.fn12",
-    sub: "signin.fn12Sub",
+    key: "signin.fnHighlight",
+    sub: "signin.fnHighlightSub",
+    icon: <path d="M21 12a8 8 0 0 1-8 8H4l2-3a8 8 0 1 1 15-5Zm-12-1h6m-6 4h4" />,
+  },
+  {
+    key: "signin.fnExplain",
+    sub: "signin.fnExplainSub",
     icon: (
-      <path d="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Zm-9 9h18M12 3c2.5 2.4 3.8 5.6 3.8 9s-1.3 6.6-3.8 9c-2.5-2.4-3.8-5.6-3.8-9s1.3-6.6 3.8-9Z" />
+      <path d="M12 3v3m0 12v3M3 12h3m12 0h3M6 6l2 2m8 8 2 2m0-12-2 2M8 16l-2 2m6-9a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z" />
     ),
+  },
+  {
+    key: "signin.fnSimplify",
+    sub: "signin.fnSimplifySub",
+    icon: <path d="M5 7h14M8 12h8M10 17h4" />,
+  },
+  {
+    key: "signin.fnDistill",
+    sub: "signin.fnDistillSub",
+    icon: <path d="M4 4h16l-6 8v6l-4 2v-8L4 4Z" />,
+  },
+  {
+    key: "signin.fnExtract",
+    sub: "signin.fnExtractSub",
+    icon: <path d="M4 6h16M4 12h16M4 18h9m4-2 4 4m0-4-4 4" />,
   },
 ];
 
-// The front door (SPEC.md §2), dark by design: badge, three hero lines, one
-// glowing CTA card on the left; on the right the reader as it is — a real
-// screenshot with dotted callouts into the text; below, the key functions as
-// cards. The wrapper carries .dark so every token resolves to the dark ramp,
-// whatever theme the visitor's system prefers.
+// The front door (SPEC.md §2), dark by design and covering the screen: three
+// hero lines and one glowing CTA card on the left; on the right the reader as
+// it is — a real screenshot with dotted callouts into the text; below, only
+// the functions you need as panels. The wrapper carries .dark so every token
+// resolves to the dark ramp, whatever theme the visitor's system prefers.
 export default async function SignInPage({
   searchParams,
 }: {
@@ -191,7 +162,7 @@ export default async function SignInPage({
       <div aria-hidden className="signin-glow pointer-events-none absolute inset-0" />
       <div aria-hidden className="signin-dots pointer-events-none absolute inset-0" />
 
-      <header className="relative z-10 mx-auto flex w-full max-w-6xl items-center justify-between px-6 pt-6">
+      <header className="relative z-10 mx-auto flex w-full max-w-[1560px] items-center justify-between px-6 pt-6 sm:px-10">
         <div className="flex items-center gap-2.5">
           <span className="flex size-10 items-center justify-center rounded-xl border border-clay/30 bg-clay/12">
             <Logo size={22} className="text-clay" />
@@ -201,29 +172,19 @@ export default async function SignInPage({
         <LangSwitcher />
       </header>
 
-      <main className="relative z-10 mx-auto w-full max-w-6xl flex-1 px-6 pt-12 pb-16 lg:pt-16">
-        <div className="grid items-center gap-12 lg:grid-cols-[0.95fr_1.05fr] lg:gap-14">
-          {/* The pitch: badge, three hero lines, the CTA card */}
+      <main className="relative z-10 mx-auto w-full max-w-[1560px] flex-1 px-6 pt-10 pb-16 sm:px-10 lg:pt-4">
+        <div className="grid items-center gap-12 lg:min-h-[calc(100svh-8rem)] lg:grid-cols-[1.1fr_0.9fr] lg:gap-14">
+          {/* The pitch: three hero lines, the CTA card */}
           <div className="rise-in">
-            <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-clay/30 bg-clay/10 px-3 py-1.5 text-xs font-semibold text-clay-800">
-              <span className="relative flex size-2">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-clay-600 opacity-60" />
-                <span className="relative inline-flex size-2 rounded-full bg-clay-600" />
-              </span>
-              {t("signin.badge")}
-            </div>
-
-            <h1 className="font-display text-[2.4rem] leading-[1.1] text-balance text-ink sm:text-[2.8rem] lg:text-[3rem]">
+            <h1 className="font-display text-[2rem] leading-[1.14] text-balance text-ink sm:text-[2.6rem] lg:text-[2.2rem] xl:text-[2.85rem]">
               {t("signin.heroA")}
+              <br />
+              {t("signin.heroB")}
               <br />
               <em className="text-clay not-italic [text-shadow:0_0_30px_rgba(217,138,82,0.4)]">
                 {t("signin.heroAccent")}
               </em>
             </h1>
-
-            <p className="mt-5 max-w-xl text-base leading-relaxed text-sand-700 sm:text-lg">
-              {t("signin.heroSub")}
-            </p>
 
             {error && (
               <p className="mt-6 max-w-md rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-2.5 text-sm text-red-300">
@@ -370,25 +331,25 @@ export default async function SignInPage({
           </div>
         </div>
 
-        {/* Key functions as cards */}
-        <section className="rise-in-later mt-16 lg:mt-20">
-          <h2 className="text-center text-[11px] font-bold tracking-[0.08em] text-sand-600 uppercase">
+        {/* Only functions you need */}
+        <section className="rise-in-later mt-14 lg:mt-6">
+          <h2 className="text-center font-display text-[1.65rem] text-ink sm:text-3xl">
             {t("signin.functionsTitle")}
           </h2>
-          <div className="mt-5 grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="mt-8 grid grid-cols-2 gap-4 md:grid-cols-4 xl:grid-cols-7">
             {FUNCTIONS.map((f) => (
               <div
                 key={f.key}
-                className="rounded-2xl border border-white/[0.07] bg-white/[0.03] p-5 transition-all duration-300 hover:-translate-y-0.5 hover:border-clay/40 hover:bg-white/[0.05] hover:shadow-[0_0_30px_-12px_rgba(217,138,82,0.55)]"
+                className="flex min-h-[220px] flex-col rounded-2xl border border-white/[0.07] bg-white/[0.03] p-6 transition-all duration-300 hover:-translate-y-1 hover:border-clay/40 hover:bg-white/[0.05] hover:shadow-[0_0_40px_-12px_rgba(217,138,82,0.6)] xl:min-h-[250px]"
               >
-                <span className="mb-3 flex size-9 items-center justify-center rounded-xl border border-clay/25 bg-clay/12 text-clay">
+                <span className="mb-4 flex size-12 items-center justify-center rounded-xl border border-clay/25 bg-clay/12 text-clay">
                   <svg
-                    width="17"
-                    height="17"
+                    width="22"
+                    height="22"
                     viewBox="0 0 24 24"
                     fill="none"
                     stroke="currentColor"
-                    strokeWidth="1.9"
+                    strokeWidth="1.8"
                     strokeLinecap="round"
                     strokeLinejoin="round"
                     aria-hidden
@@ -396,8 +357,8 @@ export default async function SignInPage({
                     {f.icon}
                   </svg>
                 </span>
-                <p className="text-sm leading-snug font-bold text-ink">{t(f.key)}</p>
-                <p className="mt-1.5 text-xs leading-relaxed text-sand-600">{t(f.sub)}</p>
+                <p className="text-base leading-snug font-bold text-ink">{t(f.key)}</p>
+                <p className="mt-2 text-[13px] leading-relaxed text-sand-600">{t(f.sub)}</p>
               </div>
             ))}
           </div>
@@ -405,7 +366,7 @@ export default async function SignInPage({
       </main>
 
       <footer className="relative z-10 border-t border-white/[0.06]">
-        <div className="mx-auto flex w-full max-w-6xl flex-col items-center justify-between gap-2 px-6 py-5 text-[11px] text-sand-600 sm:flex-row">
+        <div className="mx-auto flex w-full max-w-[1560px] flex-col items-center justify-between gap-2 px-6 py-5 text-[11px] text-sand-600 sm:flex-row sm:px-10">
           <span className="flex items-center gap-1.5">
             <Logo size={14} className="text-clay/80" />
             {t("common.appName")}
