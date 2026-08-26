@@ -44,7 +44,16 @@ export function middleware(request: NextRequest) {
   );
   if (!authOn) return NextResponse.next();
 
-  if (pathname === "/signin" || pathname.startsWith("/api/auth/") || pathname.startsWith("/api/cron/")) {
+  // Public doors: the sign-in page, the auth callbacks, the cron endpoint, and
+  // the two legal documents — those are linked from Google's consent screen, so
+  // a signed-out reader must reach them without hitting the gate.
+  if (
+    pathname === "/signin" ||
+    pathname === "/privacy" ||
+    pathname === "/terms" ||
+    pathname.startsWith("/api/auth/") ||
+    pathname.startsWith("/api/cron/")
+  ) {
     return NextResponse.next();
   }
   if (request.cookies.get(SESSION_COOKIE)?.value) return NextResponse.next();

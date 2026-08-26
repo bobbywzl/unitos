@@ -2,6 +2,7 @@ import { admin } from "@/lib/i18n/dict/admin";
 import { api } from "@/lib/i18n/dict/api";
 import { assistant } from "@/lib/i18n/dict/assistant";
 import { common } from "@/lib/i18n/dict/common";
+import { legal } from "@/lib/i18n/dict/legal";
 import { outline } from "@/lib/i18n/dict/outline";
 import { panels } from "@/lib/i18n/dict/panels";
 import { panes } from "@/lib/i18n/dict/panes";
@@ -31,6 +32,7 @@ const NAMESPACES = {
   settings,
   admin,
   api,
+  legal,
 } as const;
 
 type Namespaces = typeof NAMESPACES;
