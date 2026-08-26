@@ -2,6 +2,7 @@ import { anthropic } from "@ai-sdk/anthropic";
 import type { ModelMessage } from "ai";
 import { z } from "zod";
 import { callForJson } from "@/lib/derive/json-call";
+import type { UsageMeta } from "@/lib/usage";
 import type { ParsedBlock } from "@/lib/parse/types";
 
 // AI structure pass for URL ingest: after the mechanical parse, the model tidies
@@ -97,6 +98,7 @@ export async function selectCoreBlocks(
     maxOutputTokens: 4096,
     schema: coreSchema,
     label: "INGEST_CORE",
+    usage: { userId: null, feature: "parse", model: INGEST_STRUCTURE_MODEL } satisfies UsageMeta,
   });
   if (!result.ok) {
     console.warn(`[ingest] core pass failed, keeping all blocks: ${result.error}`);
@@ -136,6 +138,7 @@ export async function structureBlocks(
     maxOutputTokens: 8192,
     schema: structureSchema,
     label: "INGEST_STRUCTURE",
+    usage: { userId: null, feature: "parse", model: INGEST_STRUCTURE_MODEL } satisfies UsageMeta,
   });
   if (!result.ok) {
     console.warn(`[ingest] structure pass failed, keeping mechanical blocks: ${result.error}`);

@@ -1,6 +1,10 @@
 import { outboundFetch } from "@/lib/outbound-fetch";
+import { recordUsage } from "@/lib/usage";
 import { regionBounds, type Region } from "@/lib/video/types";
 import { youtubeWatchUrl } from "@/lib/video/youtube";
+
+// Usage telemetry for the admin usage page: whose call, for which function.
+export type GeminiUsageMeta = { userId: string | null; feature: string };
 
 // Gemini calls for video (SPEC.md §11): transcription segments and clip
 // descriptions. The first model that answers wins; the alias rung means a
@@ -11,7 +15,7 @@ const GEMINI_MODELS = ["gemini-3.7-flash", "gemini-flash-latest"];
 
 export async function geminiCall<T>(
   parts: unknown[],
-  opts: { json?: boolean; maxOutputTokens: number; lowResolution?: boolean },
+  opts: { json?: boolean; maxOutputTokens: number; lowResolution?: boolean; usage?: GeminiUsageMeta },
   parse: (text: string) => T,
 ): Promise<T> {
   const key = process.env.GEMINI_API_KEY;
@@ -44,7 +48,22 @@ export async function geminiCall<T>(
       }
       const body = (await res.json()) as {
         candidates?: { content?: { parts?: { text?: string }[] } }[];
+        usageMetadata?: {
+          promptTokenCount?: number;
+          candidatesTokenCount?: number;
+          cachedContentTokenCount?: number;
+        };
       };
+      if (opts.usage && body.usageMetadata) {
+        recordUsage(
+          { userId: opts.usage.userId, feature: opts.usage.feature, model },
+          {
+            inputTokens: body.usageMetadata.promptTokenCount ?? 0,
+            outputTokens: body.usageMetadata.candidatesTokenCount ?? 0,
+            cacheReadTokens: body.usageMetadata.cachedContentTokenCount ?? 0,
+          },
+        );
+      }
       const text = body.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("") ?? "";
       return parse(text);
     } catch (err) {
@@ -88,6 +107,7 @@ export async function describeYouTubeClip(
   startTime: number,
   endTime: number,
   region: Region | null,
+  usage?: GeminiUsageMeta,
 ): Promise<string> {
   const from = Math.max(0, Math.floor(startTime) - 1);
   const to = Math.max(from + 2, Math.ceil(endTime) + 1);
@@ -111,7 +131,7 @@ export async function describeYouTubeClip(
       },
       { text: prompt },
     ],
-    { maxOutputTokens: 1024 },
+    { maxOutputTokens: 1024, usage },
     (text) => {
       const trimmed = text.trim();
       if (!trimmed) throw new Error("no description returned");

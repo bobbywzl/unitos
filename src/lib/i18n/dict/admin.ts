@@ -77,6 +77,28 @@ const en = {
   extractionOrigin: "{label} — origin “{quote}”",
   linkToDocument: "the document",
   editNone: "(none)",
+  // Usage page
+  usage: "Usage",
+  usageDesc:
+    "AI cost and tokens per function, model, and account — estimated from list prices at call time.",
+  usageEmpty: "No usage recorded yet. Telemetry starts with the next AI call.",
+  usageCost90: "Cost (90d)",
+  usageCost30: "Cost (30d)",
+  usageCalls: "Model calls",
+  usageTokensIn: "Input tokens",
+  usageTokensOut: "Output tokens",
+  usageCacheRead: "Cache reads",
+  usageByFunction: "Cost by function",
+  usageByModel: "Cost by model",
+  usageByUser: "Cost by account",
+  usageDaily: "Daily cost — last 30 days",
+  usageColAccount: "Account",
+  usageColCalls: "Calls",
+  usageColInput: "Input",
+  usageColOutput: "Output",
+  usageColCost: "Cost",
+  usageBackground: "Background jobs",
+  usageDetail: "{tokens} tokens · {calls} calls",
 };
 
 const zh: Record<keyof typeof en, string> = {
@@ -144,6 +166,27 @@ const zh: Record<keyof typeof en, string> = {
   extractionOrigin: "{label}——起源“{quote}”",
   linkToDocument: "该文档",
   editNone: "（无）",
+  // Usage page
+  usage: "用量",
+  usageDesc: "按功能、模型和账户统计的 AI 成本与 token 用量——按调用时的列表价估算。",
+  usageEmpty: "尚无用量记录。下一次 AI 调用起开始记录。",
+  usageCost90: "成本（90天）",
+  usageCost30: "成本（30天）",
+  usageCalls: "模型调用",
+  usageTokensIn: "输入 token",
+  usageTokensOut: "输出 token",
+  usageCacheRead: "缓存读取",
+  usageByFunction: "按功能的成本",
+  usageByModel: "按模型的成本",
+  usageByUser: "按账户的成本",
+  usageDaily: "每日成本——最近30天",
+  usageColAccount: "账户",
+  usageColCalls: "调用",
+  usageColInput: "输入",
+  usageColOutput: "输出",
+  usageColCost: "成本",
+  usageBackground: "后台任务",
+  usageDetail: "{tokens} token · {calls} 次调用",
 };
 
 export const admin = { en, zh } as const;

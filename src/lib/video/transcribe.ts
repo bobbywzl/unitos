@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { extractJson } from "@/lib/derive/json";
 import { outboundFetch } from "@/lib/outbound-fetch";
+import { recordUsage } from "@/lib/usage";
 import { geminiCall, geminiCountTokens } from "@/lib/video/gemini";
 import { fetchPlayerResponse } from "@/lib/video/innertube";
 import { parseTimeInput } from "@/lib/video/types";
@@ -110,7 +111,15 @@ async function whisper(
   }
   const parsed = whisperResponseSchema.safeParse(await res.json());
   if (!parsed.success) throw new Error("no timed segments returned");
-  return normalizeSegments(parsed.data.segments);
+  const segments = normalizeSegments(parsed.data.segments);
+  // whisper-1 bills per minute ($0.006/min); tokens do not apply.
+  const minutes = (segments.at(-1)?.end ?? 0) / 60;
+  recordUsage(
+    { userId: null, feature: "transcribe", model: "whisper-1" },
+    { inputTokens: Math.ceil(minutes * 60) },
+    minutes * 0.006,
+  );
+  return segments;
 }
 
 // ── Gemini ──────────────────────────────────────────────────────────────────
@@ -145,7 +154,7 @@ function geminiSegments(
 ): Promise<TranscriptSegment[]> {
   return geminiCall(
     parts,
-    { json: true, maxOutputTokens: 65536, lowResolution: true },
+    { json: true, maxOutputTokens: 65536, lowResolution: true, usage: { userId: null, feature: "transcribe" } },
     (text) => {
       const parsed = geminiSegmentsSchema.safeParse(extractJson(text));
       if (!parsed.success) throw new Error("output was not timed segments");

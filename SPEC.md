@@ -284,6 +284,7 @@ One assistant panel with two scopes, both reading the digest:
 - **Determinism:** the rendered digest is byte-identical until content changes, so both scopes cache their prompt prefix (§2).
 - **Budgets:** past the character budget, document text cuts at block boundaries with a declared marker, never silently. Notes and layers have their own budget. At Corpora scope a document attached to several corpora renders its text once; later corpora point back to it.
 - **Selection and document questions** stay in the reader: the selection popover's assistant chat and the article menu (`/api/assistant/act`) already carry the anchor and the cached document prefix.
+- **Usage telemetry:** every model call records tokens and estimated cost to `UsageEvent` (list prices at call time; fire-and-forget, never blocking a response). The admin usage page (`/admin/usage`) aggregates per function, model, account, and day.
 - **Admin digest page** (`/admin/digest`, admin-gated like the feedback inbox): the store per user — every corpus → every document → its annotations, notes, and distillations — with counts, built time, forced Rebuild, and the exact text each scope sends (`/api/admin/digest`).
 
 Corpus-scope contradiction/gap detection is the differentiating feature. Implementation: the digest carries all notes (with IDs) in one prompt; output JSON list of `{noteIds[], issue, explanation}`; render as clickable cards.

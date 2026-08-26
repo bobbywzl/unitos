@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { after, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
+import { currentUser } from "@/lib/auth";
 import { buildGlossary } from "@/lib/glossary";
 import { serverT } from "@/lib/i18n/server";
 import type { TFunc } from "@/lib/i18n/dictionaries";
@@ -31,6 +32,7 @@ type Body = z.infer<typeof bodySchema>;
 // with the staged chunks copied to VideoChunk rows inside Postgres — the file
 // never assembles in server memory.
 export async function POST(req: Request) {
+  const user = await currentUser();
   const t = await serverT();
   const { data, error } = await parseBody(req, bodySchema);
   if (error) return error;
@@ -87,7 +89,7 @@ export async function POST(req: Request) {
       await attachDocument(data.notebookId, document.id);
       // On-ingest glossary extraction (SPEC.md §8 Phase 7). Best-effort; after() keeps it
       // alive past the response on serverless.
-      if (!deduped) after(() => buildGlossary(document.id).catch(() => {}));
+      if (!deduped) after(() => buildGlossary(document.id, user?.id ?? null).catch(() => {}));
       return { id: document.id, title: document.title, deduped };
     } catch (err) {
       console.error("PDF ingest failed:", err);

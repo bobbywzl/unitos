@@ -4,6 +4,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { documentPrefix } from "@/lib/derive/context";
 import { callForJson } from "@/lib/derive/json-call";
+import type { UsageMeta } from "@/lib/usage";
 
 // On-ingest glossary extraction: terms, acronyms, symbols (SPEC.md §8 Phase 7).
 // Stored as Document.glossary: [{term, definition, blockIds[]}].
@@ -36,7 +37,7 @@ function glossaryPrompt(): string {
   ].join("\n");
 }
 
-export async function buildGlossary(documentId: string): Promise<number> {
+export async function buildGlossary(documentId: string, userId: string | null = null): Promise<number> {
   if (!process.env.ANTHROPIC_API_KEY) return 0;
   const document = await db.document.findUnique({
     where: { id: documentId },
@@ -58,6 +59,7 @@ export async function buildGlossary(documentId: string): Promise<number> {
     maxOutputTokens: 8192,
     schema: glossarySchema,
     label: "GLOSSARY",
+    usage: { userId, feature: "glossary", model: GLOSSARY_MODEL } satisfies UsageMeta,
   });
   if (!result.ok) throw new Error(result.error);
 

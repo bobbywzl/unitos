@@ -307,6 +307,27 @@ model UploadChunk {
   @@index([createdAt])
 }
 
+// AI usage telemetry (Scalae admin pattern): one row per model call, cost
+// locked to list prices at call time. Writes are fire-and-forget — telemetry
+// never breaks or slows a user-facing response. The admin usage page
+// aggregates per function, model, user, and day.
+model UsageEvent {
+  id               String   @id @default(cuid())
+  userId           String? // null = a background job with no signed-in reader
+  provider         String // "anthropic" | "google" | "openai"
+  model            String
+  feature          String // explain | simplify | … | assistant | act | glossary | transcribe | describe | voice
+  inputTokens      Int      @default(0)
+  outputTokens     Int      @default(0)
+  cacheReadTokens  Int      @default(0)
+  cacheWriteTokens Int      @default(0)
+  costUsd          Float
+  createdAt        DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([userId, createdAt])
+}
+
 model Feedback {
   id        String   @id @default(cuid())
   category  String // "bug" | "idea" | "other"

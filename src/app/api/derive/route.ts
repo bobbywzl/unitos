@@ -2,7 +2,7 @@ import { anthropic } from "@ai-sdk/anthropic";
 import { streamText, type ModelMessage } from "ai";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { notebookGuard } from "@/lib/auth";
+import { currentUser, notebookGuard } from "@/lib/auth";
 import { db } from "@/lib/db";
 import {
   DERIVATION_MODEL,
@@ -46,6 +46,7 @@ import {
   timeRangeSchema,
   type VideoFindMatch,
 } from "@/lib/video/types";
+import { recordUsage, sdkTokens } from "@/lib/usage";
 import { parseBody } from "@/lib/validate";
 
 export const maxDuration = 120;
@@ -94,6 +95,12 @@ export async function POST(req: Request) {
   if (error) return error;
   const denied = await notebookGuard(data.notebookId);
   if (denied) return denied;
+  const user = await currentUser();
+  const usageMeta = {
+    userId: user?.id ?? null,
+    feature: data.type.toLowerCase(),
+    model: DERIVATION_MODEL[data.type],
+  };
 
   const template = promptTemplates[data.type];
   if (!template) {
@@ -202,6 +209,7 @@ export async function POST(req: Request) {
         data.video.startTime,
         data.video.endTime,
         data.video.region ?? null,
+        { userId: usageMeta.userId, feature: "describe" },
       ).catch((err) => {
         console.warn("[derive] clip description failed:", err);
         return undefined;
@@ -301,6 +309,7 @@ export async function POST(req: Request) {
             `cacheWrite=${usage.inputTokenDetails.cacheWriteTokens ?? 0} ` +
             `output=${usage.outputTokens ?? 0}`,
         );
+        recordUsage(usageMeta, sdkTokens(usage));
         // SUMMARIZE persists per notebook+document+depth, so reopening the
         // Summary tab does not re-pay tokens. Regenerate overwrites the depth.
         if (data.type === "SUMMARIZE" && text.trim()) {
@@ -432,6 +441,7 @@ export async function POST(req: Request) {
       maxOutputTokens,
       schema: findOutputSchema,
       label: "FIND",
+      usage: usageMeta,
     });
     if (!result.ok) {
       return NextResponse.json({ error: t("api.findFailed", { reason: result.error }) }, { status: 422 });
@@ -462,6 +472,7 @@ export async function POST(req: Request) {
       maxOutputTokens,
       schema: salienceOutputSchema,
       label: "SALIENCE",
+      usage: usageMeta,
     });
     if (!result.ok) {
       return NextResponse.json({ error: t("api.salienceFailed", { reason: result.error }) }, { status: 422 });
@@ -492,6 +503,7 @@ export async function POST(req: Request) {
       maxOutputTokens,
       schema: extractOutputSchema,
       label: "EXTRACT",
+      usage: usageMeta,
     });
     if (!result.ok) {
       return NextResponse.json({ error: t("api.extractFailed", { reason: result.error }) }, { status: 422 });
@@ -582,6 +594,7 @@ export async function POST(req: Request) {
           maxOutputTokens,
           schema: distillOutputSchema,
           label: "DISTILL",
+          usage: usageMeta,
           abortSignal: req.signal,
         });
         if (cancelled || req.signal.aborted) return;

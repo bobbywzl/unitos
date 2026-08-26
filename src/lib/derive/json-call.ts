@@ -2,6 +2,7 @@ import { generateText, type ModelMessage } from "ai";
 import type { LanguageModel } from "ai";
 import type { z } from "zod";
 import { extractJson } from "@/lib/derive/json";
+import { recordUsage, sdkTokens, type UsageMeta } from "@/lib/usage";
 
 type JsonCallResult<T> = { ok: true; data: T } | { ok: false; error: string };
 
@@ -22,6 +23,8 @@ export async function callForJson<S extends z.ZodType>(params: {
   maxOutputTokens: number;
   schema: S;
   label: string;
+  // Usage telemetry for the admin usage page; every call site passes it.
+  usage?: UsageMeta;
   // Aborts the model call when the client disconnects (DISTILL passes the
   // request signal, so Cancel stops the generation, not just the response).
   abortSignal?: AbortSignal;
@@ -39,6 +42,7 @@ export async function callForJson<S extends z.ZodType>(params: {
         `cacheWrite=${result.usage.inputTokenDetails.cacheWriteTokens ?? 0} ` +
         `output=${result.usage.outputTokens ?? 0}`,
     );
+    if (params.usage) recordUsage(params.usage, sdkTokens(result.usage));
     return result.text;
   };
 

@@ -10,6 +10,7 @@ import { callForJson, modelErrorMessage } from "@/lib/derive/json-call";
 import { ensureAllDigests, ensureDigest } from "@/lib/digest/ensure";
 import { corporaSystem, corpusSystem } from "@/lib/digest/render";
 import { serverT } from "@/lib/i18n/server";
+import { recordUsage, sdkTokens } from "@/lib/usage";
 import type { TFunc } from "@/lib/i18n/dictionaries";
 import { synthesisAskPrompt, synthesisTaskPrompt } from "@/lib/prompts/synthesis";
 import { parseBody } from "@/lib/validate";
@@ -67,6 +68,12 @@ async function handle(req: Request, t: TFunc) {
   }
   const denied = await notebookGuard(data.notebookId);
   if (denied) return denied;
+  const user = await currentUser();
+  const usageMeta = {
+    userId: user?.id ?? null,
+    feature: "assistant",
+    model: DERIVATION_MODEL.SYNTHESIS,
+  };
 
   const profile = await loadProfile(data.notebookId);
   const model = anthropic(DERIVATION_MODEL.SYNTHESIS);
@@ -85,7 +92,6 @@ async function handle(req: Request, t: TFunc) {
   } else {
     // Corpora scope: the signed-in reader's corpora (every corpus in
     // single-reader mode).
-    const user = await currentUser();
     const digests = await ensureAllDigests(authEnabled() && user ? user.id : undefined);
     system = corporaSystem(digests.map((d) => d.parts));
     scopeLabel =
@@ -118,6 +124,7 @@ async function handle(req: Request, t: TFunc) {
           `[assistant] ask scope=${data.scope} chars=${system.length} cacheRead=${usage.inputTokenDetails.cacheReadTokens ?? 0} ` +
             `cacheWrite=${usage.inputTokenDetails.cacheWriteTokens ?? 0} output=${usage.outputTokens ?? 0}`,
         );
+        recordUsage(usageMeta, sdkTokens(usage));
       },
       onError: (err) => console.error("[assistant] stream error:", err),
     });
@@ -130,6 +137,7 @@ async function handle(req: Request, t: TFunc) {
     maxOutputTokens,
     schema: issuesSchema,
     label: `assistant:${data.task}`,
+    usage: usageMeta,
   });
   if (!result.ok) {
     return NextResponse.json({ error: t("api.taskFailed", { reason: result.error }) }, { status: 422 });

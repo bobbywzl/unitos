@@ -1,6 +1,7 @@
 import { after, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
+import { currentUser } from "@/lib/auth";
 import { buildGlossary } from "@/lib/glossary";
 import { serverT } from "@/lib/i18n/server";
 import { progressResponse } from "@/lib/ingest-response";
@@ -40,6 +41,7 @@ const fileFieldsSchema = z.object({
 
 // PDF upload (multipart) or URL ingestion (JSON). Both attach to the notebook.
 export async function POST(req: Request) {
+  const user = await currentUser();
   const t = await serverT();
   // The parse chain (jsdom, unpdf) loads per request. Loading it with the route module
   // broke every response on Vercel; loading it here keeps GET working and turns a load
@@ -87,7 +89,7 @@ export async function POST(req: Request) {
         await attachDocument(fields.data.notebookId, document.id);
         // On-ingest glossary extraction (SPEC.md §8 Phase 7). Best-effort; after() keeps it
         // alive past the response on serverless.
-        if (!deduped) after(() => buildGlossary(document.id).catch(() => {}));
+        if (!deduped) after(() => buildGlossary(document.id, user?.id ?? null).catch(() => {}));
         return { id: document.id, title: document.title, deduped };
       } catch (err) {
         console.error("PDF ingest failed:", err);
@@ -119,7 +121,7 @@ export async function POST(req: Request) {
     try {
       const { document, deduped } = await parse.ingestUrl(data.url, onProgress);
       await attachDocument(data.notebookId, document.id);
-      if (!deduped) after(() => buildGlossary(document.id).catch(() => {}));
+      if (!deduped) after(() => buildGlossary(document.id, user?.id ?? null).catch(() => {}));
       return { id: document.id, title: document.title, deduped };
     } catch (err) {
       console.error("URL ingest failed:", err);

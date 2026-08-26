@@ -2,7 +2,7 @@ import { anthropic } from "@ai-sdk/anthropic";
 import type { ModelMessage } from "ai";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { notebookGuard } from "@/lib/auth";
+import { currentUser, notebookGuard } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { DERIVATION_MODEL, MAX_OUTPUT_TOKENS } from "@/lib/derive/config";
 import {
@@ -159,6 +159,7 @@ async function handle(req: Request, t: TFunc) {
   if (error) return error;
   const denied = await notebookGuard(data.notebookId);
   if (denied) return denied;
+  const user = await currentUser();
 
   const notebook = await db.notebook.findUnique({ where: { id: data.notebookId } });
   if (!notebook) return NextResponse.json({ error: t("api.corpusNotFound") }, { status: 404 });
@@ -310,6 +311,7 @@ async function handle(req: Request, t: TFunc) {
     maxOutputTokens: MAX_OUTPUT_TOKENS.SYNTHESIS,
     schema: planSchema,
     label: "assistant:act",
+    usage: { userId: user?.id ?? null, feature: "act", model: DERIVATION_MODEL.SYNTHESIS },
   });
   if (!result.ok) {
     return NextResponse.json({ error: t("api.planFailed", { reason: result.error }) }, { status: 422 });

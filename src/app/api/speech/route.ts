@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { currentUser } from "@/lib/auth";
 import { serverT } from "@/lib/i18n/server";
+import { recordUsage } from "@/lib/usage";
 import { parseBody } from "@/lib/validate";
 
 export const maxDuration = 60;
@@ -44,5 +46,12 @@ export async function POST(req: Request) {
     console.error("[speech] TTS failed:", res.status, detail.slice(0, 300));
     return NextResponse.json({ error: t("api.voiceFailedStatus", { status: res.status }) }, { status: 502 });
   }
+  // Estimate: ~4 chars per text token in, roughly the same in audio tokens out.
+  const user = await currentUser();
+  const tokens = Math.ceil(data.text.length / 4);
+  recordUsage(
+    { userId: user?.id ?? null, feature: "voice", model: "gpt-4o-mini-tts" },
+    { inputTokens: tokens, outputTokens: tokens },
+  );
   return new Response(res.body, { headers: { "Content-Type": "audio/mpeg" } });
 }

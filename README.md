@@ -20,6 +20,7 @@ Notes-centric web app for deep reading. Documents attach to notebooks; every AI 
 - Google sign-in at `/signin` (dual mode: without `GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET` + `SESSION_SECRET` the app runs as a single local reader, nothing gated). Corpora, context, and digests belong to the signed-in account; the first account to sign in adopts the local reader's data
 - English and Chinese, whole-surface: the switcher (Settings, `/signin`) changes every UI string and API error message at once
 - Feedback button + admin inbox (`/admin`) with new → seen → resolved triage; admin digest page (`/admin/digest`) showing the store per account — every corpus → document → annotations, notes, distillations — with forced rebuilds and the exact text each scope sends. The admin gate (`ADMIN_PASSWORD`) is separate from reader sign-in
+- AI usage telemetry: every model call records tokens and cost (list prices at call time); the admin usage page (`/admin/usage`) shows totals, daily cost, and cost per function, model, and account
 - Settings (`/settings`): account + sign out, language, light/dark/system theme, context, service status
 
 ## Stack
