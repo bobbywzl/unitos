@@ -40,6 +40,32 @@ function AppleMark({ size = 16 }: { size?: number }) {
   );
 }
 
+// The clay submit pill every Unitos-account form ends in.
+function UnitosButton({ label }: { label: string }) {
+  return (
+    <button
+      type="submit"
+      className="flex h-12 w-full items-center justify-center gap-2.5 rounded-full bg-clay text-sm font-semibold text-clay-fg shadow-[0_8px_24px_-10px_rgba(217,138,82,0.7)] hover:brightness-110 active:scale-[0.99]"
+    >
+      <Logo size={16} />
+      {label}
+      <svg
+        width="16"
+        height="16"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden
+      >
+        <path d="M5 12h14m-6-6 6 6-6 6" />
+      </svg>
+    </button>
+  );
+}
+
 // Callouts point from the text: chip, a dotted connector, and a dot on the
 // exact spot in the screenshot. All positions are percent of the image,
 // tuned to public/signin-reader.png. Array order is the tour order the
@@ -145,9 +171,12 @@ const FUNCTIONS: { key: TKey; sub: TKey; icon: React.ReactNode }[] = [
 export default async function SignInPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; sent?: string }>;
+  searchParams: Promise<{ error?: string; sent?: string; mode?: string }>;
 }) {
-  const { error, sent } = await searchParams;
+  const { error, sent, mode: rawMode } = await searchParams;
+  // The Unitos-account block has three modes: sign up (default), sign in
+  // (email + password), forgot (email → reset link).
+  const mode = rawMode === "in" || rawMode === "forgot" ? rawMode : "up";
   const enabled = authEnabled();
   if (enabled && (await currentUser())) redirect("/");
   const t = await serverT();
@@ -162,7 +191,19 @@ export default async function SignInPage({
     "Enter a valid email": t("signin.errEmailInvalid"),
     "Could not send the confirmation email — try again": t("signin.errEmailSend"),
     "Confirmation link expired or already used — request a new one": t("signin.errEmailToken"),
+    "Wrong email or password": t("signin.errBadLogin"),
+    "This account has no password yet — use Forgot password to set one":
+      t("signin.errNoPassword"),
   };
+
+  const inputCls =
+    "h-11 w-full rounded-xl border border-white/10 bg-white/[0.04] px-3.5 text-sm text-ink placeholder:text-sand-600 focus:border-clay/60 focus:outline-none";
+  const cardTitle =
+    mode === "in"
+      ? t("signin.signinTitle")
+      : mode === "forgot"
+        ? t("signin.forgotTitle")
+        : t("signin.ctaTitle");
 
   return (
     <div className="dark relative flex min-h-screen flex-col overflow-hidden bg-[#14110d] text-ink">
@@ -226,14 +267,14 @@ export default async function SignInPage({
                 </span>
                 <p className="text-base font-semibold text-ink">{t("signin.sentTitle")}</p>
                 <p className="mt-1.5 text-sm leading-relaxed text-sand-600">
-                  {t("signin.sentTo")}{" "}
+                  {t(mode === "forgot" ? "signin.resetSentTo" : "signin.sentTo")}{" "}
                   <strong className="font-semibold text-ink">{sent}</strong>
                 </p>
                 <p className="mt-1.5 text-sm leading-relaxed text-sand-600">
-                  {t("signin.sentRest")}
+                  {t(mode === "forgot" ? "signin.resetSentRest" : "signin.sentRest")}
                 </p>
                 <Link
-                  href="/signin"
+                  href={mode === "forgot" ? "/signin?mode=forgot" : "/signin"}
                   className="mt-3 inline-block text-xs font-semibold text-clay hover:brightness-110"
                 >
                   {t("signin.sentBack")}
@@ -252,10 +293,10 @@ export default async function SignInPage({
                   >
                     <path d="M11 4l1.7 4.3L17 10l-4.3 1.7L11 16l-1.7-4.3L5 10l4.3-1.7L11 4Zm7 9 .9 2.1L21 16l-2.1.9L18 19l-.9-2.1L15 16l2.1-.9L18 13Z" />
                   </svg>
-                  <span className="text-sm font-semibold text-ink">{t("signin.ctaTitle")}</span>
+                  <span className="text-sm font-semibold text-ink">{cardTitle}</span>
                 </div>
                 <div className="space-y-3">
-                  {emailEnabled() && (
+                  {emailEnabled() && mode === "up" && (
                     <form action="/api/auth/email/start" method="post" className="space-y-2.5">
                       <div className="grid grid-cols-[0.8fr_1.2fr] gap-2.5">
                         <input
@@ -265,7 +306,7 @@ export default async function SignInPage({
                           maxLength={80}
                           placeholder={t("signin.nameLabel")}
                           aria-label={t("signin.nameLabel")}
-                          className="h-11 rounded-xl border border-white/10 bg-white/[0.04] px-3.5 text-sm text-ink placeholder:text-sand-600 focus:border-clay/60 focus:outline-none"
+                          className={inputCls}
                         />
                         <input
                           name="email"
@@ -275,29 +316,68 @@ export default async function SignInPage({
                           maxLength={200}
                           placeholder={t("signin.emailLabel")}
                           aria-label={t("signin.emailLabel")}
-                          className="h-11 rounded-xl border border-white/10 bg-white/[0.04] px-3.5 text-sm text-ink placeholder:text-sand-600 focus:border-clay/60 focus:outline-none"
+                          className={inputCls}
                         />
                       </div>
-                      <button
-                        type="submit"
-                        className="flex h-12 w-full items-center justify-center gap-2.5 rounded-full bg-clay text-sm font-semibold text-clay-fg shadow-[0_8px_24px_-10px_rgba(217,138,82,0.7)] hover:brightness-110 active:scale-[0.99]"
-                      >
-                        <Logo size={16} />
-                        {t("signin.unitos")}
-                        <svg
-                          width="16"
-                          height="16"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          aria-hidden
-                        >
-                          <path d="M5 12h14m-6-6 6 6-6 6" />
-                        </svg>
-                      </button>
+                      <UnitosButton label={t("signin.unitos")} />
+                      <p className="text-center text-xs text-sand-600">
+                        <Link href="/signin?mode=in" className="font-semibold text-clay hover:brightness-110">
+                          {t("signin.toSignin")}
+                        </Link>
+                      </p>
+                    </form>
+                  )}
+                  {emailEnabled() && mode === "in" && (
+                    <form action="/api/auth/password/login" method="post" className="space-y-2.5">
+                      <input
+                        name="email"
+                        type="email"
+                        required
+                        autoComplete="email"
+                        maxLength={200}
+                        placeholder={t("signin.emailLabel")}
+                        aria-label={t("signin.emailLabel")}
+                        className={inputCls}
+                      />
+                      <input
+                        name="password"
+                        type="password"
+                        required
+                        autoComplete="current-password"
+                        maxLength={200}
+                        placeholder={t("signin.passwordLabel")}
+                        aria-label={t("signin.passwordLabel")}
+                        className={inputCls}
+                      />
+                      <UnitosButton label={t("signin.unitos")} />
+                      <p className="flex justify-between text-xs text-sand-600">
+                        <Link href="/signin?mode=forgot" className="font-semibold text-clay hover:brightness-110">
+                          {t("signin.forgot")}
+                        </Link>
+                        <Link href="/signin" className="font-semibold text-clay hover:brightness-110">
+                          {t("signin.toSignup")}
+                        </Link>
+                      </p>
+                    </form>
+                  )}
+                  {emailEnabled() && mode === "forgot" && (
+                    <form action="/api/auth/password/forgot" method="post" className="space-y-2.5">
+                      <input
+                        name="email"
+                        type="email"
+                        required
+                        autoComplete="email"
+                        maxLength={200}
+                        placeholder={t("signin.emailLabel")}
+                        aria-label={t("signin.emailLabel")}
+                        className={inputCls}
+                      />
+                      <UnitosButton label={t("signin.sendReset")} />
+                      <p className="text-center text-xs text-sand-600">
+                        <Link href="/signin?mode=in" className="font-semibold text-clay hover:brightness-110">
+                          {t("signin.toSignin")}
+                        </Link>
+                      </p>
                     </form>
                   )}
                   {emailEnabled() && (googleEnabled() || appleEnabled()) && (

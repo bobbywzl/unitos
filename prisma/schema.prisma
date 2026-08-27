@@ -15,13 +15,14 @@ datasource db {
 // ("user-1") and owner columns keep that id. The first account to sign in
 // adopts the local reader's data.
 model User {
-  id         String    @id @default(cuid())
-  email      String    @unique
-  name       String
-  picture    String    @default("")
-  createdAt  DateTime  @default(now())
-  lastSeenAt DateTime  @default(now())
-  sessions   Session[]
+  id           String    @id @default(cuid())
+  email        String    @unique
+  name         String
+  picture      String    @default("")
+  passwordHash String    @default("") // "" = no password (OAuth or link-only); scrypt "s1$salt$hash"
+  createdAt    DateTime  @default(now())
+  lastSeenAt   DateTime  @default(now())
+  sessions     Session[]
 }
 
 // One sign-in session: random token in an httpOnly cookie, 30 days.
@@ -35,13 +36,15 @@ model Session {
   @@index([userId])
 }
 
-// Email sign-in: one pending confirmation per email. The account is created
-// only when the link is clicked; a row is single-use (deleted on confirm)
-// and expires after 30 minutes. Only the token's SHA-256 is stored.
+// Email sign-in: one pending confirmation per email and purpose. purpose
+// "signup" creates the account when the link is clicked; purpose "reset" sets
+// a new password. A row is single-use (deleted on confirm) and expires after
+// 30 minutes. Only the token's SHA-256 is stored.
 model EmailConfirmation {
   id        String   @id @default(cuid())
   email     String
   name      String   @default("")
+  purpose   String   @default("signup") // "signup" | "reset"
   tokenHash String   @unique
   expiresAt DateTime
   createdAt DateTime @default(now())

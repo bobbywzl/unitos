@@ -1,10 +1,17 @@
-import { createHash, createHmac, randomBytes, sign as cryptoSign, timingSafeEqual } from "node:crypto";
+import {
+  createHash,
+  createHmac,
+  randomBytes,
+  scryptSync,
+  sign as cryptoSign,
+  timingSafeEqual,
+} from "node:crypto";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import type { User } from "@prisma/client";
 import { APPLE_STATE_COOKIE, SESSION_COOKIE, STATE_COOKIE, USER_ID } from "@/lib/constants";
 import { db } from "@/lib/db";
-import { sendConfirmationEmail } from "@/lib/email";
+import { sendConfirmationEmail, sendResetEmail } from "@/lib/email";
 import type { Lang } from "@/lib/i18n/config";
 import { serverT } from "@/lib/i18n/server";
 import { outboundFetch } from "@/lib/outbound-fetch";
@@ -56,6 +63,7 @@ export const LOCAL_USER: User = {
   email: "local@dissect",
   name: "Local reader",
   picture: "",
+  passwordHash: "",
   createdAt: new Date(0),
   lastSeenAt: new Date(0),
 };
@@ -270,48 +278,149 @@ export async function appleExchangeCode(
 
 const EMAIL_CONFIRM_MINUTES = 30;
 const sha256 = (s: string) => createHash("sha256").update(s).digest("hex");
+type TokenPurpose = "signup" | "reset";
 
-// Create the pending confirmation and send the email. One outstanding row per
-// email; a request within 60 seconds of the last is answered without a resend
-// so a refresh cannot flood an inbox.
+// Create the pending row for one email and purpose. One outstanding row per
+// email and purpose; a request within 60 seconds of the last returns null so
+// a refresh cannot flood an inbox.
+async function createEmailToken(
+  email: string,
+  name: string,
+  purpose: TokenPurpose,
+): Promise<string | null> {
+  const recent = await db.emailConfirmation.findFirst({
+    where: { email, purpose, createdAt: { gt: new Date(Date.now() - 60_000) } },
+    select: { id: true },
+  });
+  if (recent) return null;
+
+  const token = randomBytes(32).toString("hex");
+  await db.emailConfirmation.deleteMany({
+    where: { OR: [{ email, purpose }, { expiresAt: { lt: new Date() } }] },
+  });
+  await db.emailConfirmation.create({
+    data: {
+      email,
+      name,
+      purpose,
+      tokenHash: sha256(token),
+      expiresAt: new Date(Date.now() + EMAIL_CONFIRM_MINUTES * 60_000),
+    },
+  });
+  return token;
+}
+
+// Create the pending confirmation and send the email.
 export async function startEmailConfirmation(
   origin: string,
   email: string,
   name: string,
   lang: Lang,
 ): Promise<boolean> {
-  const recent = await db.emailConfirmation.findFirst({
-    where: { email, createdAt: { gt: new Date(Date.now() - 60_000) } },
-    select: { id: true },
-  });
-  if (recent) return true;
-
-  const token = randomBytes(32).toString("hex");
-  await db.emailConfirmation.deleteMany({
-    where: { OR: [{ email }, { expiresAt: { lt: new Date() } }] },
-  });
-  await db.emailConfirmation.create({
-    data: {
-      email,
-      name,
-      tokenHash: sha256(token),
-      expiresAt: new Date(Date.now() + EMAIL_CONFIRM_MINUTES * 60_000),
-    },
-  });
-  const url = `${origin}/api/auth/email/confirm?token=${token}`;
-  return sendConfirmationEmail(email, url, lang);
+  const token = await createEmailToken(email, name, "signup");
+  if (!token) return true; // one is already on its way
+  return sendConfirmationEmail(email, `${origin}/api/auth/email/confirm?token=${token}`, lang);
 }
 
-// Redeem the token: delete the row (single-use), reject expired or unknown.
+// Redeem the token: delete the row (single-use), reject expired, unknown, or
+// wrong-purpose.
 export async function confirmEmailToken(
   token: string,
+  purpose: TokenPurpose,
 ): Promise<{ email: string; name: string } | null> {
   if (!/^[0-9a-f]{64}$/.test(token)) return null;
   const row = await db.emailConfirmation.findUnique({ where: { tokenHash: sha256(token) } });
-  if (!row) return null;
+  if (!row || row.purpose !== purpose) return null;
   await db.emailConfirmation.delete({ where: { id: row.id } }).catch(() => {});
   if (row.expiresAt < new Date()) return null;
   return { email: row.email, name: row.name };
+}
+
+// Check the token without consuming it — the /reset page render.
+export async function peekEmailToken(token: string, purpose: TokenPurpose): Promise<boolean> {
+  if (!/^[0-9a-f]{64}$/.test(token)) return false;
+  const row = await db.emailConfirmation.findUnique({ where: { tokenHash: sha256(token) } });
+  return Boolean(row && row.purpose === purpose && row.expiresAt >= new Date());
+}
+
+// ── Passwords ───────────────────────────────────────────────────────────────
+// scrypt, no dependencies. Stored as "s1$<salt>$<hash>" (hex); "" = the
+// account has no password (OAuth or link-only) — Forgot password sets one.
+
+const SCRYPT_OPTS = { N: 16384, r: 8, p: 1 };
+
+export function hashPassword(password: string): string {
+  const salt = randomBytes(16).toString("hex");
+  const hash = scryptSync(password, salt, 64, SCRYPT_OPTS).toString("hex");
+  return `s1$${salt}$${hash}`;
+}
+
+export function verifyPassword(password: string, stored: string): boolean {
+  const [tag, salt, hash] = stored.split("$");
+  if (tag !== "s1" || !salt || !hash) return false;
+  const check = scryptSync(password, salt, 64, SCRYPT_OPTS);
+  const expect = Buffer.from(hash, "hex");
+  return check.length === expect.length && timingSafeEqual(check, expect);
+}
+
+// Email + password → session. "bad" = unknown email or wrong password (one
+// answer, no account enumeration); "nopass" = the account exists but has no
+// password — the UI points that at Forgot password.
+export async function passwordLogin(
+  email: string,
+  password: string,
+): Promise<{ token: string; expiresAt: Date } | "bad" | "nopass"> {
+  const user = await db.user.findUnique({ where: { email } });
+  if (!user) return "bad";
+  if (!user.passwordHash) return "nopass";
+  if (!verifyPassword(password, user.passwordHash)) return "bad";
+  return createSession(user.id);
+}
+
+export async function setPassword(userId: string, password: string): Promise<void> {
+  await db.user.update({ where: { id: userId }, data: { passwordHash: hashPassword(password) } });
+}
+
+// Create the pending reset and send the email — only when the account exists.
+// The caller answers the same either way (no account enumeration).
+export async function startPasswordReset(origin: string, email: string, lang: Lang): Promise<void> {
+  const user = await db.user.findUnique({ where: { email }, select: { id: true } });
+  if (!user) return;
+  const token = await createEmailToken(email, "", "reset");
+  if (!token) return; // one is already on its way
+  await sendResetEmail(email, `${origin}/reset?token=${token}`, lang);
+}
+
+// Redeem the reset token: set the new password, sign every other session out,
+// mint a fresh one.
+export async function resetPassword(
+  token: string,
+  password: string,
+): Promise<{ token: string; expiresAt: Date } | null> {
+  const pending = await confirmEmailToken(token, "reset");
+  if (!pending) return null;
+  const user = await db.user.findUnique({ where: { email: pending.email }, select: { id: true } });
+  if (!user) return null;
+  await setPassword(user.id, password);
+  await db.session.deleteMany({ where: { userId: user.id } }).catch(() => {});
+  return createSession(user.id);
+}
+
+// The session cookie on a 303 redirect — every sign-in path ends here.
+export function sessionRedirect(
+  origin: string,
+  session: { token: string; expiresAt: Date },
+  path = "/",
+): NextResponse {
+  const res = NextResponse.redirect(new URL(path, origin), 303);
+  res.cookies.set(SESSION_COOKIE, session.token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/",
+    expires: session.expiresAt,
+  });
+  return res;
 }
 
 // Upsert the account. The first account ever adopts the local reader's data

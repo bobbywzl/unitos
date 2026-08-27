@@ -50,11 +50,13 @@ export function middleware(request: NextRequest) {
   );
   if (!authOn) return NextResponse.next();
 
-  // Public doors: the sign-in page, the auth callbacks, the cron endpoint, and
-  // the two legal documents — those are linked from Google's consent screen, so
-  // a signed-out reader must reach them without hitting the gate.
+  // Public doors: the sign-in page, the password reset page, the auth
+  // callbacks, the cron endpoint, and the two legal documents — those are
+  // linked from Google's consent screen, so a signed-out reader must reach
+  // them without hitting the gate.
   if (
     pathname === "/signin" ||
+    pathname === "/reset" ||
     pathname === "/privacy" ||
     pathname === "/terms" ||
     pathname.startsWith("/api/auth/") ||
