@@ -9,14 +9,17 @@ const createSchema = z
   .object({
     noteId: z.string().min(1).optional(),
     blockEditId: z.string().min(1).optional(),
+    docLinkId: z.string().min(1).optional(),
     content: z.string().min(1).max(4000),
   })
-  .refine((d) => Boolean(d.noteId) !== Boolean(d.blockEditId), {
-    message: "Provide noteId or blockEditId, not both",
-  });
+  .refine(
+    (d) => [d.noteId, d.blockEditId, d.docLinkId].filter(Boolean).length === 1,
+    { message: "Provide exactly one of noteId, blockEditId, docLinkId" },
+  );
 
-// One reply under a note (notes and annotations alike) or under one edit —
-// how collaborators comment on each other's work. Editors reply; viewers read.
+// One reply under a note (notes and annotations alike), under one edit, or
+// under one link — how collaborators comment on each other's work. Editors
+// reply; viewers read.
 export async function POST(req: Request) {
   const t = await serverT();
   const { data, error } = await parseBody(req, createSchema);
@@ -34,6 +37,21 @@ export async function POST(req: Request) {
       data: { noteId: data.noteId, userId: access.user.id, content: data.content.trim() },
     });
     await bumpNotebook(note.section.notebookId);
+    return NextResponse.json(reply, { status: 201 });
+  }
+
+  if (data.docLinkId) {
+    const link = await db.docLink.findUnique({
+      where: { id: data.docLinkId },
+      select: { id: true, fromDocumentId: true },
+    });
+    if (!link) return NextResponse.json({ error: t("api.linkNotFound") }, { status: 404 });
+    const access = await documentAccess(link.fromDocumentId, "editor");
+    if (access instanceof NextResponse) return access;
+    const reply = await db.reply.create({
+      data: { docLinkId: link.id, userId: access.user.id, content: data.content.trim() },
+    });
+    await bumpDocument(link.fromDocumentId);
     return NextResponse.json(reply, { status: 201 });
   }
 

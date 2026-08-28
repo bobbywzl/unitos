@@ -65,6 +65,7 @@ export default async function NotesPage(props: { params: Promise<{ notebookId: s
         id: r.id,
         content: r.content,
         userId: r.userId,
+        resolvedById: r.resolvedById,
         createdAt: r.createdAt.toISOString(),
       })),
     })),

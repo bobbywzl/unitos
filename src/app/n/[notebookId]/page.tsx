@@ -15,9 +15,13 @@ import {
   type DistillationView,
   type EditItem,
   type ExtractionView,
+  type GraphEdge,
+  type GraphNode,
+  type HistoryEntry,
   type LinkIn,
   type LinkOut,
   type NotebookView,
+  type ReplyView,
   type SectionView,
   type SummaryLevels,
 } from "@/lib/types";
@@ -119,6 +123,16 @@ export default async function NotebookPage(props: {
   // Anchor resolution across every open pane; note chips read orphan state here.
   const resolutionById = new Map<string, { orphaned: boolean }>();
   const attachedIds = new Set(attached.map((d) => d.id));
+  const toReplyViews = (
+    replies: { id: string; content: string; userId: string; resolvedById: string | null; createdAt: Date }[],
+  ): ReplyView[] =>
+    replies.map((r) => ({
+      id: r.id,
+      content: r.content,
+      userId: r.userId,
+      resolvedById: r.resolvedById,
+      createdAt: r.createdAt.toISOString(),
+    }));
 
   // ── One pane's data: everything the reader needs for one document ─────────
   async function paneData(documentId: string) {
@@ -287,12 +301,7 @@ export default async function NotebookPage(props: {
           orphaned: resolutionById.get(source.id)?.orphaned ?? source.orphaned,
           figureLabel: figureLabelBySource.get(source.id) ?? null,
           createdById: n.createdById,
-          replies: n.replies.map((r) => ({
-            id: r.id,
-            content: r.content,
-            userId: r.userId,
-            createdAt: r.createdAt.toISOString(),
-          })),
+          replies: toReplyViews(n.replies),
         };
       })
       .filter((a): a is AnnotationItem => a !== null);
@@ -355,12 +364,18 @@ export default async function NotebookPage(props: {
       db.docLink.findMany({
         where: { fromDocumentId: document.id },
         orderBy: { createdAt: "desc" },
-        include: { toDocument: { select: { title: true } } },
+        include: {
+          toDocument: { select: { title: true } },
+          replies: { orderBy: { createdAt: "asc" } },
+        },
       }),
       db.docLink.findMany({
         where: { toDocumentId: document.id },
         orderBy: { createdAt: "desc" },
-        include: { fromDocument: { select: { title: true } } },
+        include: {
+          fromDocument: { select: { title: true } },
+          replies: { orderBy: { createdAt: "asc" } },
+        },
       }),
     ]);
     for (const link of outgoing) {
@@ -396,6 +411,10 @@ export default async function NotebookPage(props: {
         orphaned: resolved === null,
         targetOrphaned: link.toOrphaned,
         detached,
+        recommended: link.recommended,
+        reason: link.reason,
+        createdById: link.createdById,
+        replies: toReplyViews(link.replies),
       });
       if (!resolved) {
         // Orphan flags write back, so both ends report honestly (SPEC.md §5).
@@ -422,7 +441,8 @@ export default async function NotebookPage(props: {
       }
       // A link to a detached document would fall back to the first attached
       // document on click — list it in the panel, do not paint it as a link.
-      if (detached) continue;
+      // A recommended link paints nowhere until accepted (SPEC.md §13).
+      if (detached || link.recommended) continue;
       const list = linksByBlock[resolved.blockId] ?? [];
       list.push({
         linkId: link.id,
@@ -479,6 +499,10 @@ export default async function NotebookPage(props: {
           hereQuotedText: link.toQuotedText,
           orphaned: twoEnded && resolved === null,
           fromOrphaned: link.fromOrphaned,
+          recommended: link.recommended,
+          reason: link.reason,
+          createdById: link.createdById,
+          replies: toReplyViews(link.replies),
         });
       }
       if (!twoEnded) continue;
@@ -505,6 +529,7 @@ export default async function NotebookPage(props: {
           },
         });
       }
+      if (link.recommended) continue;
       const list = linksByBlock[resolved.blockId] ?? [];
       list.push({
         linkId: link.id,
@@ -711,12 +736,7 @@ export default async function NotebookPage(props: {
         quotedText: src.quotedText,
         orphaned: resolutionById.get(src.id)?.orphaned ?? src.orphaned,
       })),
-      replies: n.replies.map((r) => ({
-        id: r.id,
-        content: r.content,
-        userId: r.userId,
-        createdAt: r.createdAt.toISOString(),
-      })),
+      replies: toReplyViews(n.replies),
     })),
     children: [],
   });
@@ -753,12 +773,7 @@ export default async function NotebookPage(props: {
         after: e.after,
         meta: e.meta as EditItem["meta"],
         userId: e.userId,
-        replies: e.replies.map((r) => ({
-          id: r.id,
-          content: r.content,
-          userId: r.userId,
-          createdAt: r.createdAt.toISOString(),
-        })),
+        replies: toReplyViews(e.replies),
         createdAt: e.createdAt.toISOString(),
       }))
     : [];
@@ -786,8 +801,82 @@ export default async function NotebookPage(props: {
         }
       : null;
 
+  // The graph (SPEC.md §13): attached documents as nodes; links between them
+  // as undirected weighted edges — thicker with more links, dashed while only
+  // recommended ones connect a pair.
+  const graphNodes: GraphNode[] = attached.map((d) => ({
+    id: d.id,
+    title: d.title,
+    hasVideo: d.hasVideo,
+  }));
+  const graphLinks = await db.docLink.findMany({
+    where: {
+      fromDocumentId: { in: attached.map((d) => d.id) },
+      toDocumentId: { in: attached.map((d) => d.id) },
+    },
+    select: { fromDocumentId: true, toDocumentId: true, recommended: true },
+  });
+  const edgeByPair = new Map<string, GraphEdge>();
+  for (const link of graphLinks) {
+    if (link.fromDocumentId === link.toDocumentId) continue;
+    const [a, b] = [link.fromDocumentId, link.toDocumentId].sort();
+    const edge = edgeByPair.get(`${a}|${b}`) ?? { a, b, accepted: 0, recommended: 0 };
+    if (link.recommended) edge.recommended++;
+    else edge.accepted++;
+    edgeByPair.set(`${a}|${b}`, edge);
+  }
+  const graphEdges = [...edgeByPair.values()];
+
+  // The History panel (SPEC.md §12): corpus events (deletions, detachments)
+  // merged with every attached document's edits, newest first, attributed.
+  const [events, allEdits] = await Promise.all([
+    db.notebookEvent.findMany({
+      where: { notebookId },
+      orderBy: { createdAt: "desc" },
+      take: 80,
+    }),
+    db.blockEdit.findMany({
+      where: { documentId: { in: attached.map((d) => d.id) } },
+      orderBy: { createdAt: "desc" },
+      take: 80,
+      include: { document: { select: { title: true } } },
+    }),
+  ]);
+  const history: HistoryEntry[] = [
+    ...events.map(
+      (e): HistoryEntry => ({
+        id: e.id,
+        userId: e.userId,
+        kind: e.kind as HistoryEntry["kind"],
+        content: e.content,
+        documentTitle: null,
+        createdAt: e.createdAt.toISOString(),
+      }),
+    ),
+    ...allEdits.map(
+      (e): HistoryEntry => ({
+        id: e.id,
+        userId: e.userId,
+        kind: e.kind as HistoryEntry["kind"],
+        content:
+          e.kind === "TEXT_EDIT" || e.kind === "BLOCK_ADD"
+            ? (e.after ?? e.before ?? "")
+            : e.kind === "BLOCK_REMOVE"
+              ? (e.before ?? "")
+              : ((e.meta as { quotedText?: string; to?: string } | null)?.quotedText ??
+                (e.meta as { to?: string } | null)?.to ??
+                ""),
+        documentTitle: e.document.title,
+        createdAt: e.createdAt.toISOString(),
+      }),
+    ),
+  ]
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    .slice(0, 100);
+
   // Everyone whose work is on this page: owner, collaborators, and every
-  // author referenced by a note, edit, distillation, or extraction.
+  // author referenced by a note, edit, link, reply, distillation, extraction,
+  // or history entry.
   const authorIds = new Set<string>([notebook.userId]);
   for (const section of notebook.sections) {
     for (const n of section.notes) {
@@ -799,9 +888,14 @@ export default async function NotebookPage(props: {
     if (e.userId) authorIds.add(e.userId);
     for (const r of e.replies) authorIds.add(r.userId);
   }
+  for (const entry of history) if (entry.userId) authorIds.add(entry.userId);
   for (const pane of [paneOne, paneTwo]) {
     for (const d of pane?.distillations ?? []) if (d.createdById) authorIds.add(d.createdById);
     for (const x of pane?.extractions ?? []) if (x.createdById) authorIds.add(x.createdById);
+    for (const link of [...(pane?.linksOut ?? []), ...(pane?.linksIn ?? [])]) {
+      if (link.createdById) authorIds.add(link.createdById);
+      for (const r of link.replies) authorIds.add(r.userId);
+    }
   }
   if (authEnabled() && notebook.collaborators.length > 0) {
     const collaboratorUsers = await db.user.findMany({
@@ -872,6 +966,8 @@ export default async function NotebookPage(props: {
       activeDocumentId={paneOne?.document.id ?? null}
       collab={collab}
       rev={notebook.rev}
+      graph={{ nodes: graphNodes, edges: graphEdges }}
+      history={history}
       context={{
         initial: contextValues,
         hasOverride,

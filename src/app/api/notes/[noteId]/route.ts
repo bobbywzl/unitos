@@ -86,8 +86,21 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ noteId: str
   await normalizeNoteOrders(note.sectionId);
   const section = await db.section.findUnique({
     where: { id: note.sectionId },
-    select: { notebookId: true },
+    select: { notebookId: true, title: true },
   });
-  if (section) await bumpNotebook(section.notebookId);
+  if (section) {
+    // Deletions are corpus history (SPEC.md §12): the History panel shows who
+    // removed what.
+    await db.notebookEvent.create({
+      data: {
+        notebookId: section.notebookId,
+        userId: access.user.id,
+        kind: "NOTE_REMOVE",
+        content: note.content.slice(0, 500),
+        meta: { sectionTitle: section.title },
+      },
+    });
+    await bumpNotebook(section.notebookId);
+  }
   return NextResponse.json({ ok: true });
 }

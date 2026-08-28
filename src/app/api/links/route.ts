@@ -77,6 +77,7 @@ export async function POST(req: Request) {
   const link = await db.$transaction(async (tx) => {
     const created = await tx.docLink.create({
       data: {
+        createdById: access.user.id,
         fromDocumentId: data.fromDocumentId,
         fromBlockId: data.anchor.blockId,
         startOffset: data.anchor.startOffset,

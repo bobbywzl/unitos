@@ -149,6 +149,38 @@ const en = {
   viewingOnly: "Viewing only",
   leave: "Leave",
   leaveConfirm: "Leave this corpus? You lose access until the owner shares it again.",
+
+  // History panel (history-control.tsx)
+  history: "History",
+  historyTitle: "Every edit and deletion in this corpus, by person",
+  historyDesc: "Every edit and deletion in this corpus, newest first. Press a person to see theirs.",
+  historyEmpty: "No edits or deletions yet.",
+  historyTextEdit: "edited a paragraph",
+  historyBlockAdd: "added a paragraph",
+  historyBlockRemove: "removed a paragraph",
+  historyFormat: "changed a format",
+  historyStyle: "styled text",
+  historyLinkAdd: "added a link",
+  historyLinkRemove: "removed a link",
+  historyNoteRemove: "removed a note",
+  historySectionRemove: "removed a section",
+  historyDocumentDetach: "detached a document",
+
+  // Graph (graph-overlay.tsx, graph-view.tsx)
+  graph: "Graph",
+  graphTitle: "The corpus as a graph: documents and the links between them",
+  graphHint: "Each node is a document. A thicker line means more links between two documents; dashed means recommended links awaiting acceptance. Drag to arrange; click a node to open it.",
+  graphEmpty: "Attach at least two documents — the graph draws the links between them.",
+
+  // Recommended links (annotations-panel.tsx)
+  recommendedLinks: "Recommended links",
+  recommendedLinksDesc: "The AI scanned this document against the corpus. Accept a link to make it real; dismiss what does not hold.",
+  acceptLink: "Accept",
+  dismissLink: "Dismiss",
+  recommendLinks: "Recommend links",
+  recommendLinksTitle: "Scan this document against the corpus for recommended links",
+  recommendLinksDone: "{n} recommended link(s) found",
+  recommendLinksNone: "No new connections found",
 };
 
 const zh: Record<keyof typeof en, string> = {
@@ -287,6 +319,35 @@ const zh: Record<keyof typeof en, string> = {
   viewingOnly: "仅查看",
   leave: "退出共享",
   leaveConfirm: "退出此文集共享？在所有者再次共享前你将失去访问权限。",
+
+  history: "历史",
+  historyTitle: "此文集中每个人的所有编辑与删除",
+  historyDesc: "此文集中的所有编辑与删除，最新在前。点按一个人可只看其操作。",
+  historyEmpty: "还没有编辑或删除。",
+  historyTextEdit: "编辑了一个段落",
+  historyBlockAdd: "添加了一个段落",
+  historyBlockRemove: "移除了一个段落",
+  historyFormat: "更改了格式",
+  historyStyle: "设置了文本样式",
+  historyLinkAdd: "添加了一个链接",
+  historyLinkRemove: "移除了一个链接",
+  historyNoteRemove: "删除了一条笔记",
+  historySectionRemove: "删除了一个章节",
+  historyDocumentDetach: "移除了一个文档",
+
+  graph: "图谱",
+  graphTitle: "文集图谱：文档与它们之间的链接",
+  graphHint: "每个节点是一个文档。线越粗表示两个文档之间的链接越多；虚线是待接受的推荐链接。拖动可调整位置；点击节点打开文档。",
+  graphEmpty: "至少附加两个文档——图谱会画出它们之间的链接。",
+
+  recommendedLinks: "推荐链接",
+  recommendedLinksDesc: "AI 已将此文档与文集比对。接受即成为正式链接；不成立的可忽略。",
+  acceptLink: "接受",
+  dismissLink: "忽略",
+  recommendLinks: "推荐链接扫描",
+  recommendLinksTitle: "将此文档与文集比对，寻找推荐链接",
+  recommendLinksDone: "找到 {n} 条推荐链接",
+  recommendLinksNone: "没有发现新的关联",
 };
 
 export const panes = { en, zh } as const;

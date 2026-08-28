@@ -25,6 +25,40 @@ function buildResponse(all) {
   const blocks = parseBlocks(all);
   const paragraphs = blocks.filter((b) => b.type === "PARAGRAPH" && b.text.length > 40);
 
+  // Recommended links (connect scan): one valid link from the new document to
+  // the first other document, quotes copied verbatim from real blocks.
+  if (all.includes('"fromQuote"') && /\[document [^\]]+\] "/.test(all)) {
+    // The real document headers carry a quoted title — the instruction line's
+    // literal [document <id>] does not.
+    const header = all.match(/\[document ([^\]]+)\] "/);
+    const docAt = header.index;
+    const newPart = all.slice(0, docAt);
+    const otherId = header[1];
+    const newBlocks = parseBlocks(newPart).filter((b) => b.type === "PARAGRAPH" && b.text.length > 60);
+    const otherBlocks = parseBlocks(all.slice(docAt)).filter(
+      (b) => b.type === "PARAGRAPH" && b.text.length > 60,
+    );
+    const from = newBlocks[0];
+    const to = otherBlocks[0];
+    if (!from || !to || !otherId) {
+      console.log("[mock connect] no blocks", { from: !!from, to: !!to, otherId });
+      return JSON.stringify({ links: [] });
+    }
+    console.log("[mock connect]", from.id, "->", otherId, to.id);
+    return JSON.stringify({
+      links: [
+        {
+          fromBlockId: from.id,
+          fromQuote: from.text.slice(0, 80),
+          toDocumentId: otherId,
+          toBlockId: to.id,
+          toQuote: to.text.slice(0, 80),
+          reason: "Both passages discuss the same market-power concept.",
+        },
+      ],
+    });
+  }
+
   // Assistant act: plan JSON with real quotes.
   if (all.includes('"actions"') && all.includes("format_block")) {
     const p = paragraphs[0];

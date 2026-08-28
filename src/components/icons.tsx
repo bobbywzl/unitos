@@ -131,12 +131,37 @@ export function CommentIcon(props: IconProps) {
   );
 }
 
+// The clock-rewind glyph: the corpus History panel in the header.
 export function HistoryIcon(props: IconProps) {
   return (
     <Icon {...props}>
       <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
       <path d="M3 3v5h5" />
       <path d="M12 7v5l4 2" />
+    </Icon>
+  );
+}
+
+// Pencil over a baseline: the Edits tab in the rail.
+export function EditsIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M13 21h8" />
+      <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+    </Icon>
+  );
+}
+
+// Three connected nodes: the corpus graph.
+export function GraphIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <circle cx="5.5" cy="18.5" r="2.5" />
+      <circle cx="18.5" cy="16.5" r="2.5" />
+      <circle cx="11" cy="5.5" r="2.5" />
+      <path d="M9.8 7.8 6.6 16.2" />
+      <path d="m12.4 7.6 4.7 6.8" />
+      <path d="M8 18.2l8-1.4" />
     </Icon>
   );
 }

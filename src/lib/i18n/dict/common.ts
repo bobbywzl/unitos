@@ -13,7 +13,8 @@
 //   feedback 反馈 · depths: insights 行家洞见 / layman 通俗 / intermediate 进阶 /
 //   professional 专业 · share 共享 · collaborator 协作者 · role 角色 ·
 //   owner 所有者 · editor 编辑者 · viewer 查看者 · profile 个人资料 ·
-//   symbol 符号 · background 背景 · reply 回复
+//   symbol 符号 · background 背景 · reply 回复 · resolve 解决 ·
+//   recommended link 推荐链接 · graph 图谱 · history 历史
 
 const en = {
   appName: "Unitos",
@@ -54,11 +55,13 @@ const en = {
   accountSignedOutBody: "You signed out in another tab.",
   accountContinue: "Continue",
   accountSignIn: "Sign in",
-  // Replies: the discussion under a note or an edit.
+  // Replies: the discussion under a note, an edit, or a link.
   reply: "Reply",
-  replyCountOne: "1 reply",
-  replyCountMany: "{n} replies",
   replyPlaceholder: "Reply…",
+  resolve: "Resolve",
+  reopen: "Reopen",
+  resolvedCountOne: "1 resolved",
+  resolvedCountMany: "{n} resolved",
 };
 
 const zh: Record<keyof typeof en, string> = {
@@ -99,9 +102,11 @@ const zh: Record<keyof typeof en, string> = {
   accountContinue: "继续",
   accountSignIn: "登录",
   reply: "回复",
-  replyCountOne: "1 条回复",
-  replyCountMany: "{n} 条回复",
   replyPlaceholder: "回复…",
+  resolve: "解决",
+  reopen: "重新打开",
+  resolvedCountOne: "1 条已解决",
+  resolvedCountMany: "{n} 条已解决",
 };
 
 export const common = { en, zh } as const;

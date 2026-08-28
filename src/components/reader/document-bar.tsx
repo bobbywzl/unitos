@@ -149,6 +149,33 @@ export function DocumentBar({
     active.parserVersion < PARSER_VERSION;
 
   // Manual re-parse: the progress card shows, errors show.
+  const [connecting, setConnecting] = useState<string | null>(null);
+  const [connectNotice, setConnectNotice] = useState<string | null>(null);
+  // The recommended-links scan, on demand — for documents added before the
+  // scan existed (SPEC.md §13).
+  async function recommendLinks(doc: AttachedDocument) {
+    if (connecting) return;
+    setConnecting(doc.id);
+    setConnectNotice(null);
+    setError(null);
+    try {
+      const result = await api<{ linkCount: number }>(`/api/documents/${doc.id}/connect`, "POST", {
+        notebookId,
+      });
+      setConnectNotice(
+        result.linkCount > 0
+          ? t("panes.recommendLinksDone", { n: result.linkCount })
+          : t("panes.recommendLinksNone"),
+      );
+      setTimeout(() => setConnectNotice(null), 4000);
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t("common.requestFailed"));
+    } finally {
+      setConnecting(null);
+    }
+  }
+
   async function reparse(doc: AttachedDocument) {
     setError(null);
     try {
@@ -484,6 +511,19 @@ export function DocumentBar({
                   {t("panes.reparseDocument")}
                 </button>
               )}
+              {canEdit && (
+                <button
+                  onClick={() => {
+                    setPillMenu(null);
+                    void recommendLinks(d);
+                  }}
+                  disabled={connecting !== null}
+                  className={`${menuItem} disabled:opacity-40`}
+                  title={t("panes.recommendLinksTitle")}
+                >
+                  {connecting === d.id ? t("common.working") : t("panes.recommendLinks")}
+                </button>
+              )}
               <button
                 onClick={() => {
                   setPillMenu(null);
@@ -685,6 +725,11 @@ export function DocumentBar({
       </div>
 
       {phase && <IngestProgress fileLabel={phase.fileLabel} steps={phase.steps} />}
+      {connectNotice && (
+        <span className="shrink-0 rounded-full bg-sage-200 px-3 py-1 text-xs font-semibold text-sage-800">
+          {connectNotice}
+        </span>
+      )}
       {error && <span className="text-xs text-red-500">{error}</span>}
 
       <input

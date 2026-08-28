@@ -28,6 +28,10 @@ export const MAX_OUTPUT_TOKENS: Record<DerivationType, number> = {
   DISTILL: 8192,
 };
 
+// The ingest-time corpus scan for recommended links (SPEC.md §13). Not a
+// DerivationType — it runs as a background job, not through /api/derive.
+export const CONNECT_MODEL = "claude-opus-5";
+
 export const ANNOTATIONS_SECTION_TITLE = "Annotations";
 
 // A streaming derivation commits HTTP 200 the moment the stream opens, so a

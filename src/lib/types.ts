@@ -1,10 +1,11 @@
 import type { DerivationType, NoteStatus } from "@prisma/client";
 
-/** One reply in the discussion under a note or an edit. */
+/** One reply in the discussion under a note, an edit, or a link. */
 export type ReplyView = {
   id: string;
   content: string;
   userId: string;
+  resolvedById: string | null; // account that resolved it; null = open
   createdAt: string; // ISO
 };
 
@@ -154,6 +155,10 @@ export type LinkOut = {
   orphaned: boolean; // anchor no longer resolves in the source text
   targetOrphaned: boolean; // the other end no longer resolves in the target text
   detached: boolean; // target document is not attached to this notebook
+  recommended: boolean; // AI-proposed, awaiting Accept; paints nowhere until accepted
+  reason: string | null; // why the AI connected the two passages
+  createdById: string | null;
+  replies: ReplyView[];
 };
 export type LinkIn = {
   id: string;
@@ -163,6 +168,52 @@ export type LinkIn = {
   hereQuotedText: string | null; // this document's end; null = document-level
   orphaned: boolean; // this document's end no longer resolves
   fromOrphaned: boolean; // the other end no longer resolves in its text
+  recommended: boolean;
+  reason: string | null;
+  createdById: string | null;
+  replies: ReplyView[];
+};
+
+// ── History (SPEC.md §12): every edit and deletion in the corpus, attributed ──
+
+/** One entry of the History panel: a NotebookEvent (note and section removals,
+    detachments) or a BlockEdit (document edits and links), merged newest first. */
+export type HistoryEntry = {
+  id: string;
+  userId: string | null;
+  kind:
+    | "TEXT_EDIT"
+    | "LINK_ADD"
+    | "LINK_REMOVE"
+    | "BLOCK_ADD"
+    | "BLOCK_REMOVE"
+    | "FORMAT"
+    | "STYLE"
+    | "NOTE_REMOVE"
+    | "SECTION_REMOVE"
+    | "DOCUMENT_DETACH";
+  // The snippet the entry shows: the edited or removed text, the section or
+  // document title, the linked quote.
+  content: string;
+  documentTitle: string | null; // BlockEdit entries: the document it happened in
+  createdAt: string; // ISO
+};
+
+// ── Graph view (SPEC.md §13): documents as nodes, links as weighted edges ──
+
+export type GraphNode = {
+  id: string; // document id
+  title: string;
+  hasVideo: boolean;
+};
+
+/** One undirected pair of documents. Edge thickness scales with the total;
+    a pair connected only by recommended links draws dashed. */
+export type GraphEdge = {
+  a: string; // document id
+  b: string; // document id
+  accepted: number;
+  recommended: number;
 };
 
 // ── The assistant as an actor ──────────────────────────────────────────────

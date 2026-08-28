@@ -69,6 +69,7 @@ model Notebook {
   digest        NotebookDigest?
   collaborators NotebookCollaborator[]
   presence      NotebookPresence[]
+  events        NotebookEvent[]
   createdAt     DateTime               @default(now())
   updatedAt     DateTime               @updatedAt
 
@@ -95,6 +96,22 @@ model NotebookCollaborator {
 enum CollabRole {
   EDITOR
   VIEWER
+}
+
+// One corpus-level action for the History panel: content deletions and
+// detachments that no BlockEdit row covers. Document edits stay in BlockEdit;
+// the panel merges both, newest first, with the author on every entry.
+model NotebookEvent {
+  id         String   @id @default(cuid())
+  notebookId String
+  notebook   Notebook @relation(fields: [notebookId], references: [id], onDelete: Cascade)
+  userId     String? // account that did it; null = before attribution existed
+  kind       String // "NOTE_REMOVE" | "SECTION_REMOVE" | "DOCUMENT_DETACH"
+  content    String // snapshot: the removed note's text, the section or document title
+  meta       Json? // NOTE_REMOVE: { sectionTitle }; SECTION_REMOVE: { noteCount }
+  createdAt  DateTime @default(now())
+
+  @@index([notebookId, createdAt])
 }
 
 // Who has a corpus open right now: one row per corpus per account, stamped by
@@ -163,22 +180,26 @@ model Note {
   updatedAt      DateTime        @updatedAt
 }
 
-// One reply in the discussion under a note (notes and annotations alike) or
-// under one edit in the Edits panel — how collaborators comment on each
-// other's work. Threads are flat, oldest first. Exactly one of noteId and
-// blockEditId is set.
+// One reply in the discussion under a note (notes and annotations alike),
+// under one edit in the Edits panel, or under one link — how collaborators
+// comment on each other's work. Threads are flat, oldest first. Exactly one
+// of noteId, blockEditId, and docLinkId is set.
 model Reply {
   id          String     @id @default(cuid())
   noteId      String?
   note        Note?      @relation(fields: [noteId], references: [id], onDelete: Cascade)
   blockEditId String?
   blockEdit   BlockEdit? @relation(fields: [blockEditId], references: [id], onDelete: Cascade)
+  docLinkId   String?
+  docLink     DocLink?   @relation(fields: [docLinkId], references: [id], onDelete: Cascade)
   userId      String // account that wrote the reply
   content     String
+  resolvedById String? // account that resolved it; null = open
   createdAt   DateTime   @default(now())
 
   @@index([noteId])
   @@index([blockEditId])
+  @@index([docLinkId])
 }
 
 enum NoteStatus {
@@ -261,8 +282,14 @@ model BlockEdit {
 // A hyperlink from a text range in one document to another document.
 // The anchor uses the same dual strategy as Source (SPEC.md §5), so links
 // heal across re-parses and text edits the same way note anchors do.
+// recommended = AI-proposed on ingest (SPEC.md §13), awaiting Accept in the
+// Annotations panel; reason says why the AI connected the two passages.
 model DocLink {
   id             String   @id @default(cuid())
+  recommended    Boolean  @default(false)
+  reason         String?
+  createdById    String? // account that made the link, or triggered the scan
+  replies        Reply[]
   fromDocumentId String
   fromDocument   Document @relation("DocLinkFrom", fields: [fromDocumentId], references: [id], onDelete: Cascade)
   fromBlockId    String

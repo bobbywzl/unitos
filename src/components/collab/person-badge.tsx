@@ -41,7 +41,8 @@ export function PersonBadge({
 
 // The author label on a note, annotation, distillation, extraction, or edit:
 // the author's badge plus name. Renders nothing on an unshared corpus, for an
-// unknown author, or for content without one — solo work stays unlabeled.
+// unknown author, for content without one — and for the reader's own work:
+// your own stays default; the label marks the other person's.
 export function AuthorChip({
   createdById,
   size = 15,
@@ -52,8 +53,8 @@ export function AuthorChip({
   // Badge only, name in the title — for tight rows.
   nameless?: boolean;
 }) {
-  const { shared, people } = useCollab();
-  if (!shared || !createdById) return null;
+  const { shared, people, myId } = useCollab();
+  if (!shared || !createdById || createdById === myId) return null;
   const person = people[createdById];
   if (!person) return null;
   return (

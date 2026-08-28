@@ -4,6 +4,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { currentUser } from "@/lib/auth";
 import { bumpNotebook, notebookAccess } from "@/lib/collab";
+import { buildConnections } from "@/lib/connect";
 import { buildGlossary } from "@/lib/glossary";
 import { serverT } from "@/lib/i18n/server";
 import type { TFunc } from "@/lib/i18n/dictionaries";
@@ -42,7 +43,7 @@ export async function POST(req: Request) {
   const access = await notebookAccess(data.notebookId, "editor");
   if (access instanceof NextResponse) return access;
 
-  if (data.kind === "video") return completeVideo(data, t);
+  if (data.kind === "video") return completeVideo(data, user?.id ?? null, t);
 
   // The parse chain (jsdom, unpdf) loads per request; see /api/documents.
   let parse: typeof import("@/lib/parse/ingest");
@@ -94,6 +95,7 @@ export async function POST(req: Request) {
       // On-ingest glossary extraction (SPEC.md §8 Phase 7). Best-effort; after() keeps it
       // alive past the response on serverless.
       if (!deduped) after(() => buildGlossary(document.id, user?.id ?? null).catch(() => {}));
+      after(() => buildConnections(data.notebookId, document.id, user?.id ?? null).catch(() => {}));
       return { id: document.id, title: document.title, deduped };
     } catch (err) {
       console.error("PDF ingest failed:", err);
@@ -105,7 +107,7 @@ export async function POST(req: Request) {
 // Video completion. The staged chunks are validated in place (uniform slice
 // size, contiguous), hashed one at a time for dedupe, then copied to VideoChunk
 // rows with one INSERT … SELECT.
-async function completeVideo(data: Body, t: TFunc) {
+async function completeVideo(data: Body, userId: string | null, t: TFunc) {
   const staged = await db.$queryRaw<{ index: number; len: number }[]>`
     SELECT "index", octet_length("data") AS len
     FROM "UploadChunk" WHERE "uploadId" = ${data.uploadId} ORDER BY "index"`;
@@ -153,6 +155,7 @@ async function completeVideo(data: Body, t: TFunc) {
     await db.uploadChunk.deleteMany({ where: { uploadId: data.uploadId } });
     await attachDocument(data.notebookId, existing.id);
     await bumpNotebook(data.notebookId);
+    after(() => buildConnections(data.notebookId, existing.id, userId).catch(() => {}));
     return progressResponse(async () => ({
       id: existing.id,
       title: existing.title,
@@ -193,8 +196,13 @@ async function completeVideo(data: Body, t: TFunc) {
       await db.uploadChunk.deleteMany({ where: { uploadId: data.uploadId } });
       await attachDocument(data.notebookId, document.id);
       await bumpNotebook(data.notebookId);
-      // Transcription starts on its own — the transcript is the point.
-      after(() => runTranscription(document.id).catch(() => {}));
+      // Transcription starts on its own — the transcript is the point. The
+      // recommended-links scan follows it, so it reads the transcript.
+      after(() =>
+        runTranscription(document.id)
+          .then(() => buildConnections(data.notebookId, document.id, userId))
+          .catch(() => {}),
+      );
     } catch (err) {
       // A half-saved video document must not survive; chunks cascade with it.
       await db.document.delete({ where: { id: document.id } }).catch(() => {});
