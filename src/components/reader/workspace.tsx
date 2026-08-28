@@ -2,23 +2,27 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import type { NotebookView } from "@/lib/types";
+import type { CorpusDistillationView, GraphEdge, GraphNode, HistoryEntry, NotebookView } from "@/lib/types";
 import {
   ArrowLeftIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
   CommentIcon,
   DistillIcon,
+  EditsIcon,
   ExpandIcon,
-  HistoryIcon,
+  GraphIcon,
   MoreIcon,
   NotesIcon,
   QuestionIcon,
   SparkleIcon,
 } from "@/components/icons";
 import { CollabProvider, type CollabState } from "@/components/collab/collab-context";
+import { HistoryControl } from "@/components/collab/history-control";
 import { ShareControl } from "@/components/collab/share-control";
 import { useNotebookSync } from "@/components/collab/use-sync";
+import { GraphOverlay } from "@/components/graph/graph-overlay";
+import { CorpusDistillPage } from "@/components/reader/corpus-distill-page";
 import { ContextTab, type ContextValues } from "@/components/context-tab";
 import { GuideDialog } from "@/components/guide-dialog";
 import { useT } from "@/components/lang-provider";
@@ -59,6 +63,9 @@ export function Workspace({
   context,
   collab,
   rev,
+  graph,
+  history,
+  corpusDistillations,
 }: {
   notebook: NotebookView;
   documents: AttachedDocument[];
@@ -73,6 +80,9 @@ export function Workspace({
   context: { initial: ContextValues | null; hasOverride: boolean; isSet: boolean };
   collab: CollabState;
   rev: number;
+  graph: { nodes: GraphNode[]; edges: GraphEdge[] };
+  history: HistoryEntry[];
+  corpusDistillations: CorpusDistillationView[];
 }) {
   const t = useT();
   const canEdit = collab.canEdit;
@@ -90,6 +100,9 @@ export function Workspace({
   const [tab, setTab] = useState<Tab>("notes");
   const [menuOpen, setMenuOpen] = useState(false);
   const [guideOpen, setGuideOpen] = useState(false);
+  const [graphOpen, setGraphOpen] = useState(false);
+  // The corpus distilled page: null = closed; { shownId } open (null = ask view).
+  const [corpusDistill, setCorpusDistill] = useState<{ shownId: string | null } | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
   const noteCount = countNotes(tree);
@@ -125,11 +138,18 @@ export function Workspace({
         }
       }, 150);
     };
+    // The Distill tab opens the corpus distilled page (SPEC.md §13).
+    const onOpenCorpusDistillation = (e: Event) => {
+      const { distillationId } = (e as CustomEvent<{ distillationId: string | null }>).detail;
+      setCorpusDistill({ shownId: distillationId });
+    };
     window.addEventListener("dissect:show-note", onShowNote);
     window.addEventListener("dissect:focus-annotation", onFocusAnnotation);
+    window.addEventListener("dissect:open-corpus-distillation", onOpenCorpusDistillation);
     return () => {
       window.removeEventListener("dissect:show-note", onShowNote);
       window.removeEventListener("dissect:focus-annotation", onFocusAnnotation);
+      window.removeEventListener("dissect:open-corpus-distillation", onOpenCorpusDistillation);
     };
   }, []);
 
@@ -177,6 +197,7 @@ export function Workspace({
           />
         </div>
         <ShareControl notebookId={notebook.id} presence={presence} />
+        <HistoryControl history={history} />
         {canEdit && (
           <ContextTab
             notebookId={notebook.id}
@@ -303,6 +324,15 @@ export function Workspace({
           </button>
 
           <button
+            onClick={() => setGraphOpen(true)}
+            aria-label={t("panes.graph")}
+            title={t("panes.graphTitle")}
+            className={RAIL_BUTTON}
+          >
+            <GraphIcon />
+          </button>
+
+          <button
             onClick={() => show("annotations")}
             aria-label={t("panes.annotations")}
             aria-current={!collapsed && tab === "annotations"}
@@ -317,7 +347,7 @@ export function Workspace({
             aria-current={!collapsed && tab === "edits"}
             className={!collapsed && tab === "edits" ? RAIL_BUTTON_ON : RAIL_BUTTON}
           >
-            <HistoryIcon />
+            <EditsIcon />
           </button>
 
           <div ref={menuRef} className="relative mt-auto">
@@ -350,6 +380,25 @@ export function Workspace({
       </div>
 
       <GuideDialog open={guideOpen} onClose={() => setGuideOpen(false)} />
+      {corpusDistill && (
+        <CorpusDistillPage
+          notebookId={notebook.id}
+          activeDocumentId={activeDocumentId}
+          distillations={corpusDistillations}
+          shownId={corpusDistill.shownId}
+          sectionChoices={actions.sectionChoices}
+          onClose={() => setCorpusDistill(null)}
+        />
+      )}
+      {graphOpen && (
+        <GraphOverlay
+          notebookId={notebook.id}
+          activeDocumentId={activeDocumentId}
+          nodes={graph.nodes}
+          edges={graph.edges}
+          onClose={() => setGraphOpen(false)}
+        />
+      )}
     </div>
     </CollabProvider>
   );

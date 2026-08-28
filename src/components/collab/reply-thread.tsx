@@ -8,22 +8,23 @@ import { useCollab } from "@/components/collab/collab-context";
 import { PersonBadge } from "@/components/collab/person-badge";
 import { useLang, useT } from "@/components/lang-provider";
 
-// The discussion under one note (notes and annotations alike) or one edit —
-// how collaborators comment on each other's work. Collapsed to a count until
-// opened; a flat thread, oldest first. Editors reply; viewers read; a reply
-// deletes by its author or the owner.
+// The discussion under one note (notes and annotations alike), one edit, or
+// one link — how collaborators comment on each other's work. Open replies
+// always show; resolved ones collapse behind a count. Any editor resolves a
+// reply; its author or the owner deletes it. Editors reply; viewers read.
 export function ReplyThread({
   target,
   replies,
 }: {
-  target: { noteId: string } | { blockEditId: string };
+  target: { noteId: string } | { blockEditId: string } | { docLinkId: string };
   replies: ReplyView[];
 }) {
   const router = useRouter();
   const t = useT();
   const lang = useLang();
   const { authOn, canEdit, myId, role, shared, people } = useCollab();
-  const [open, setOpen] = useState(false);
+  const [composing, setComposing] = useState(false);
+  const [showResolved, setShowResolved] = useState(false);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -33,29 +34,15 @@ export function ReplyThread({
   if (replies.length === 0 && (!authOn || !shared || !canEdit)) return null;
 
   const dateLocale = lang === "zh" ? "zh-CN" : undefined;
+  const openReplies = replies.filter((r) => r.resolvedById === null);
+  const resolvedReplies = replies.filter((r) => r.resolvedById !== null);
 
-  async function send() {
-    const content = draft.trim();
-    if (!content || busy) return;
-    setBusy(true);
-    setError(null);
-    try {
-      await api("/api/replies", "POST", { ...target, content });
-      setDraft("");
-      router.refresh();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t("common.requestFailed"));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function remove(id: string) {
+  async function run(fn: () => Promise<unknown>) {
     if (busy) return;
     setBusy(true);
     setError(null);
     try {
-      await api(`/api/replies/${id}`, "DELETE");
+      await fn();
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : t("common.requestFailed"));
@@ -64,75 +51,115 @@ export function ReplyThread({
     }
   }
 
-  if (!open) {
+  const send = () => {
+    const content = draft.trim();
+    if (!content) return;
+    void run(async () => {
+      await api("/api/replies", "POST", { ...target, content });
+      setDraft("");
+      setComposing(false);
+    });
+  };
+  const remove = (id: string) => void run(() => api(`/api/replies/${id}`, "DELETE"));
+  const setResolved = (id: string, resolvedValue: boolean) =>
+    void run(() => api(`/api/replies/${id}`, "PATCH", { resolved: resolvedValue }));
+
+  const row = (reply: ReplyView) => {
+    const person = people[reply.userId];
+    const isResolved = reply.resolvedById !== null;
     return (
-      <button
-        onClick={() => setOpen(true)}
-        className="mt-2 text-[11px] font-semibold text-sand-600 hover:text-clay-700"
-      >
-        {replies.length === 0
-          ? t("common.reply")
-          : replies.length === 1
-            ? t("common.replyCountOne")
-            : t("common.replyCountMany", { n: replies.length })}
-      </button>
+      <div key={reply.id} className={`flex items-start gap-2 ${isResolved ? "opacity-60" : ""}`}>
+        {person && <PersonBadge person={person} size={16} />}
+        <div className="min-w-0 flex-1">
+          <div className="flex items-baseline gap-2">
+            <span className="truncate text-[11px] font-semibold text-sand-700">
+              {person?.name ?? "?"}
+            </span>
+            <span suppressHydrationWarning className="text-[10px] text-sand-500">
+              {new Date(reply.createdAt).toLocaleString(dateLocale, {
+                month: "short",
+                day: "numeric",
+                hour: "2-digit",
+                minute: "2-digit",
+              })}
+            </span>
+            <span className="ml-auto flex items-center gap-2">
+              {canEdit && (
+                <button
+                  onClick={() => setResolved(reply.id, !isResolved)}
+                  className="text-[10px] font-semibold text-sand-500 hover:text-sage-700"
+                >
+                  {isResolved ? t("common.reopen") : t("common.resolve")}
+                </button>
+              )}
+              {(reply.userId === myId || role === "owner") && (
+                <button
+                  onClick={() => remove(reply.id)}
+                  aria-label={t("common.delete")}
+                  title={t("common.delete")}
+                  className="text-[11px] text-sand-400 hover:text-red-600"
+                >
+                  ×
+                </button>
+              )}
+            </span>
+          </div>
+          <p
+            className={`text-[12.5px] leading-relaxed whitespace-pre-wrap ${
+              isResolved ? "line-through decoration-sand-400" : ""
+            }`}
+          >
+            {reply.content}
+          </p>
+        </div>
+      </div>
     );
-  }
+  };
 
   return (
-    <div className="mt-2.5 flex flex-col gap-2 border-t border-line pt-2.5">
-      {replies.map((reply) => {
-        const person = people[reply.userId];
-        return (
-          <div key={reply.id} className="flex items-start gap-2">
-            {person && <PersonBadge person={person} size={16} />}
-            <div className="min-w-0 flex-1">
-              <div className="flex items-baseline gap-2">
-                <span className="truncate text-[11px] font-semibold text-sand-700">
-                  {person?.name ?? "?"}
-                </span>
-                <span suppressHydrationWarning className="text-[10px] text-sand-500">
-                  {new Date(reply.createdAt).toLocaleString(dateLocale, {
-                    month: "short",
-                    day: "numeric",
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
-                </span>
-                {(reply.userId === myId || role === "owner") && (
-                  <button
-                    onClick={() => void remove(reply.id)}
-                    aria-label={t("common.delete")}
-                    title={t("common.delete")}
-                    className="ml-auto text-[11px] text-sand-400 hover:text-red-600"
-                  >
-                    ×
-                  </button>
-                )}
-              </div>
-              <p className="text-[12.5px] leading-relaxed whitespace-pre-wrap">{reply.content}</p>
-            </div>
-          </div>
-        );
-      })}
+    <div
+      className={`flex flex-col gap-2 ${replies.length > 0 ? "mt-2.5 border-t border-line pt-2.5" : "mt-1.5"}`}
+    >
+      {openReplies.map(row)}
 
-      {canEdit && (
+      {resolvedReplies.length > 0 && (
+        <button
+          onClick={() => setShowResolved(!showResolved)}
+          className="self-start text-[10px] font-semibold text-sand-500 hover:text-clay-700"
+        >
+          {resolvedReplies.length === 1
+            ? t("common.resolvedCountOne")
+            : t("common.resolvedCountMany", { n: resolvedReplies.length })}
+        </button>
+      )}
+      {showResolved && resolvedReplies.map(row)}
+
+      {canEdit && !composing && (
+        <button
+          onClick={() => setComposing(true)}
+          className="self-start text-[11px] font-semibold text-sand-600 hover:text-clay-700"
+        >
+          {t("common.reply")}
+        </button>
+      )}
+      {canEdit && composing && (
         <form
           onSubmit={(e) => {
             e.preventDefault();
-            void send();
+            send();
           }}
           className="flex items-end gap-1.5"
         >
           <textarea
+            autoFocus
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
-                void send();
+                send();
               }
-              if (e.key === "Escape") setOpen(false);
+              if (e.key === "Escape") setComposing(false);
             }}
             placeholder={t("common.replyPlaceholder")}
             rows={1}

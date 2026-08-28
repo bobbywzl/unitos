@@ -80,9 +80,19 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ sectionId: 
   if (!section) return NextResponse.json({ error: t("api.sectionNotFound") }, { status: 404 });
   const access = await sectionAccess(sectionId, "editor");
   if (access instanceof NextResponse) return access;
+  const noteCount = await db.note.count({ where: { sectionId } });
   // Children are promoted to top level (parentId set to null by the default referential action).
   await db.section.delete({ where: { id: sectionId } });
   await normalizeSectionOrders(section.notebookId);
+  await db.notebookEvent.create({
+    data: {
+      notebookId: section.notebookId,
+      userId: access.user.id,
+      kind: "SECTION_REMOVE",
+      content: section.title,
+      meta: { noteCount },
+    },
+  });
   await bumpNotebook(section.notebookId);
   return NextResponse.json({ ok: true });
 }

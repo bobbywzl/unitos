@@ -3,6 +3,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { authEnabled, currentUser } from "@/lib/auth";
 import { bumpNotebook, notebookAccess } from "@/lib/collab";
+import { buildConnections } from "@/lib/connect";
 import { buildGlossary } from "@/lib/glossary";
 import { serverT } from "@/lib/i18n/server";
 import { progressResponse } from "@/lib/ingest-response";
@@ -112,6 +113,10 @@ export async function POST(req: Request) {
         // On-ingest glossary extraction (SPEC.md §8 Phase 7). Best-effort; after() keeps it
         // alive past the response on serverless.
         if (!deduped) after(() => buildGlossary(document.id, user?.id ?? null).catch(() => {}));
+        // Recommended links (SPEC.md §13): scan the document against the corpus.
+        after(() =>
+          buildConnections(fields.data.notebookId, document.id, user?.id ?? null).catch(() => {}),
+        );
         return { id: document.id, title: document.title, deduped };
       } catch (err) {
         console.error("PDF ingest failed:", err);
@@ -136,8 +141,17 @@ export async function POST(req: Request) {
       await bumpNotebook(data.notebookId);
       // Transcription starts on its own — the transcript is the point.
       // after() keeps it alive past the response on serverless; the pane
-      // polls the status in.
-      if (!deduped) after(() => runTranscription(document.id).catch(() => {}));
+      // polls the status in. Recommended links scan once the transcript is
+      // there — the transcript is the text the scan reads.
+      if (!deduped) {
+        after(() =>
+          runTranscription(document.id)
+            .then(() => buildConnections(data.notebookId, document.id, user?.id ?? null))
+            .catch(() => {}),
+        );
+      } else {
+        after(() => buildConnections(data.notebookId, document.id, user?.id ?? null).catch(() => {}));
+      }
       return { id: document.id, title: document.title, deduped };
     });
   }
@@ -148,6 +162,7 @@ export async function POST(req: Request) {
       await attachDocument(data.notebookId, document.id);
       await bumpNotebook(data.notebookId);
       if (!deduped) after(() => buildGlossary(document.id, user?.id ?? null).catch(() => {}));
+      after(() => buildConnections(data.notebookId, document.id, user?.id ?? null).catch(() => {}));
       return { id: document.id, title: document.title, deduped };
     } catch (err) {
       console.error("URL ingest failed:", err);

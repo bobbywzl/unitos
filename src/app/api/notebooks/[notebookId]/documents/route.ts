@@ -1,6 +1,7 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { z } from "zod";
 import { bumpNotebook, notebookAccess } from "@/lib/collab";
+import { buildConnections } from "@/lib/connect";
 import { db } from "@/lib/db";
 import { serverT } from "@/lib/i18n/server";
 import { attachDocument } from "@/lib/parse/attach";
@@ -26,5 +27,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ notebookId: st
 
   await attachDocument(notebookId, data.documentId);
   await bumpNotebook(notebookId);
+  // Recommended links (SPEC.md §13): scan the document against this corpus.
+  after(() => buildConnections(notebookId, data.documentId, access.user.id).catch(() => {}));
   return NextResponse.json({ ok: true }, { status: 201 });
 }

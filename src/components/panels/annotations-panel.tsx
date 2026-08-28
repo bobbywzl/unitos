@@ -118,6 +118,10 @@ export function AnnotationsPanel({
   const [busyId, setBusyId] = useState<string | null>(null);
   const [errorText, setErrorText] = useState<string | null>(null);
   const highlights = annotations.filter((a) => a.kind === "highlight");
+  const recommendedOut = linksOut.filter((l) => l.recommended);
+  const recommendedIn = linksIn.filter((l) => l.recommended);
+  const acceptedOut = linksOut.filter((l) => !l.recommended);
+  const acceptedIn = linksIn.filter((l) => !l.recommended);
   const comments = annotations.filter((a) => a.kind === "comment");
   const explanations = annotations.filter((a) => a.kind === "explain");
   const conversations = annotations.filter((a) => a.kind === "assistant");
@@ -143,6 +147,12 @@ export function AnnotationsPanel({
 
   async function removeLink(id: string) {
     await mutate(id, () => api(`/api/links/${id}`, "DELETE"));
+  }
+
+  // A recommended link becomes real on Accept; Dismiss deletes it without a
+  // history entry — it never was one.
+  async function acceptLink(id: string) {
+    await mutate(id, () => api(`/api/links/${id}`, "PATCH", { accept: true }));
   }
 
   if (annotations.length === 0 && linksOut.length === 0 && linksIn.length === 0) {
@@ -273,10 +283,53 @@ export function AnnotationsPanel({
         </div>
       )}
 
-      {(linksOut.length > 0 || linksIn.length > 0) && (
+      {(recommendedOut.length > 0 || recommendedIn.length > 0) && (
+        <div className="flex flex-col gap-2">
+          <span className={label}>{t("panes.recommendedLinks")}</span>
+          <p className="text-[11px] text-sand-500">{t("panes.recommendedLinksDesc")}</p>
+          {[...recommendedOut.map((l) => ({ l, out: true })), ...recommendedIn.map((l) => ({ l, out: false }))].map(
+            ({ l, out }) => (
+              <div key={l.id} className="rounded-2xl border border-dashed border-clay-300 bg-card p-3.5 shadow-soft">
+                {l.reason && <p className="text-[12.5px] leading-snug font-semibold">{l.reason}</p>}
+                <p className="mt-1.5 line-clamp-2 border-l-2 border-clay-300 pl-2 text-xs text-sand-600">
+                  {out ? l.quotedText : ((l as LinkIn).hereQuotedText ?? l.quotedText)}
+                </p>
+                <p className="mt-1 line-clamp-2 border-l-2 border-sand-300 pl-2 text-xs text-sand-500">
+                  {out ? ((l as LinkOut).targetQuotedText ?? "") : l.quotedText}
+                </p>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <span className="rounded-full bg-sand-200 px-2.5 py-0.5 text-[11px] font-semibold text-sand-600">
+                    ⇄ {out ? (l as LinkOut).toTitle : (l as LinkIn).fromTitle}
+                  </span>
+                  <AuthorChip createdById={l.createdById} nameless />
+                  {canEdit && (
+                    <span className="ml-auto flex items-center gap-2">
+                      <button
+                        onClick={() => void acceptLink(l.id)}
+                        className="rounded-full bg-sage-600 px-3 py-1 text-[11px] font-semibold text-sage-fg hover:bg-sage-700"
+                      >
+                        {t("panes.acceptLink")}
+                      </button>
+                      <button
+                        onClick={() => void removeLink(l.id)}
+                        className="rounded-full border border-line px-2.5 py-1 text-[11px] text-sand-700 hover:bg-clay-100 hover:text-clay-800"
+                      >
+                        {t("panes.dismissLink")}
+                      </button>
+                    </span>
+                  )}
+                </div>
+                <ReplyThread target={{ docLinkId: l.id }} replies={l.replies} />
+              </div>
+            ),
+          )}
+        </div>
+      )}
+
+      {(acceptedOut.length > 0 || acceptedIn.length > 0) && (
         <div className="flex flex-col gap-2">
           <span className={label}>{t("panels.links")}</span>
-          {linksOut.map((l) => (
+          {acceptedOut.map((l) => (
             <div key={l.id} className={card}>
               <p className="line-clamp-2 text-[13px]">{l.quotedText}</p>
               {l.targetQuotedText && (
@@ -307,6 +360,7 @@ export function AnnotationsPanel({
                     {t("panels.otherEndUnresolved")}
                   </span>
                 )}
+                <AuthorChip createdById={l.createdById} nameless />
                 {canEdit && (
                   <button
                     onClick={() => void removeLink(l.id)}
@@ -316,9 +370,10 @@ export function AnnotationsPanel({
                   </button>
                 )}
               </div>
+              <ReplyThread target={{ docLinkId: l.id }} replies={l.replies} />
             </div>
           ))}
-          {linksIn.map((l) => (
+          {acceptedIn.map((l) => (
             <div key={l.id} className={card}>
               <p className="line-clamp-2 text-[13px]">{l.hereQuotedText ?? l.quotedText}</p>
               {l.hereQuotedText && (
@@ -340,6 +395,7 @@ export function AnnotationsPanel({
                     {t("panels.otherEndUnresolved")}
                   </span>
                 )}
+                <AuthorChip createdById={l.createdById} nameless />
                 {canEdit && (
                   <button
                     onClick={() => void removeLink(l.id)}
@@ -349,6 +405,7 @@ export function AnnotationsPanel({
                   </button>
                 )}
               </div>
+              <ReplyThread target={{ docLinkId: l.id }} replies={l.replies} />
             </div>
           ))}
         </div>

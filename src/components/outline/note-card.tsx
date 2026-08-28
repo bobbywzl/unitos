@@ -275,8 +275,8 @@ export function NoteCard({
 
 // The author label under a note's content, on shared corpora only.
 function AuthorLine({ createdById }: { createdById: string | null }) {
-  const { shared, people } = useCollab();
-  if (!shared || !createdById || !people[createdById]) return null;
+  const { shared, people, myId } = useCollab();
+  if (!shared || !createdById || createdById === myId || !people[createdById]) return null;
   return (
     <div className="mt-1.5">
       <AuthorChip createdById={createdById} />

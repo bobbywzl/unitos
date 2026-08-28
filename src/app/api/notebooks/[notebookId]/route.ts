@@ -4,6 +4,7 @@ import { z } from "zod";
 import { bumpNotebook, notebookAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
 import { serverT } from "@/lib/i18n/server";
+import { corpusDistillationList } from "@/lib/types";
 import { parseBody } from "@/lib/validate";
 
 const patchSchema = z.object({
@@ -18,6 +19,8 @@ const patchSchema = z.object({
     })
     .nullable()
     .optional(),
+  // Delete one stored corpus distillation (SPEC.md §13).
+  removeDistillationId: z.string().min(1).optional(),
 });
 
 export async function PATCH(req: Request, ctx: { params: Promise<{ notebookId: string }> }) {
@@ -37,12 +40,25 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ notebookId: s
       !data.profile.application.trim())
       ? Prisma.JsonNull
       : data.profile;
+  let removeDistillations: { distillations: object[] } | null = null;
+  if (data.removeDistillationId) {
+    const row = await db.notebook.findUnique({
+      where: { id: notebookId },
+      select: { distillations: true },
+    });
+    removeDistillations = {
+      distillations: corpusDistillationList(row?.distillations).filter(
+        (d) => d.id !== data.removeDistillationId,
+      ),
+    };
+  }
   const notebook = await db.notebook
     .update({
       where: { id: notebookId },
       data: {
         ...(data.title !== undefined ? { title: data.title } : {}),
         ...(data.profile !== undefined ? { profile: profileValue } : {}),
+        ...(removeDistillations ?? {}),
       },
     })
     .catch(() => null);

@@ -1,10 +1,11 @@
 import type { DerivationType, NoteStatus } from "@prisma/client";
 
-/** One reply in the discussion under a note or an edit. */
+/** One reply in the discussion under a note, an edit, or a link. */
 export type ReplyView = {
   id: string;
   content: string;
   userId: string;
+  resolvedById: string | null; // account that resolved it; null = open
   createdAt: string; // ISO
 };
 
@@ -87,6 +88,32 @@ export function distillationList(value: unknown): Distillation[] {
   return Array.isArray(value) ? (value as Distillation[]) : [];
 }
 
+// ── Corpus-scope DISTILL (SPEC.md §13): one question, every document ───────
+
+/** One quote of a corpus distillation: a DistillQuote plus the document it
+    lives in — quotes span the whole corpus. */
+export type CorpusDistillQuote = DistillQuote & { documentId: string };
+
+/** Stored on Notebook.distillations, newest first. */
+export type CorpusDistillation = {
+  id: string;
+  question: string;
+  createdAt: string; // ISO
+  createdById?: string;
+  quotes: CorpusDistillQuote[];
+};
+
+/** One corpus distillation as the reader sees it: quotes re-resolved against
+    the current blocks, each carrying its document's title. */
+export type CorpusDistillationView = Omit<CorpusDistillation, "quotes"> & {
+  quotes: (CorpusDistillQuote & { orphaned: boolean; documentTitle: string })[];
+};
+
+/** Tolerant read of the Json column; anything malformed reads as empty. */
+export function corpusDistillationList(value: unknown): CorpusDistillation[] {
+  return Array.isArray(value) ? (value as CorpusDistillation[]) : [];
+}
+
 // ── EXTRACT: origin phrase → the passages that reveal its topic ────────────
 
 /** One anchored span of an extraction (same dual anchor as Source, SPEC.md §5). */
@@ -154,6 +181,10 @@ export type LinkOut = {
   orphaned: boolean; // anchor no longer resolves in the source text
   targetOrphaned: boolean; // the other end no longer resolves in the target text
   detached: boolean; // target document is not attached to this notebook
+  recommended: boolean; // AI-proposed, awaiting Accept; paints nowhere until accepted
+  reason: string | null; // why the AI connected the two passages
+  createdById: string | null;
+  replies: ReplyView[];
 };
 export type LinkIn = {
   id: string;
@@ -163,6 +194,52 @@ export type LinkIn = {
   hereQuotedText: string | null; // this document's end; null = document-level
   orphaned: boolean; // this document's end no longer resolves
   fromOrphaned: boolean; // the other end no longer resolves in its text
+  recommended: boolean;
+  reason: string | null;
+  createdById: string | null;
+  replies: ReplyView[];
+};
+
+// ── History (SPEC.md §12): every edit and deletion in the corpus, attributed ──
+
+/** One entry of the History panel: a NotebookEvent (note and section removals,
+    detachments) or a BlockEdit (document edits and links), merged newest first. */
+export type HistoryEntry = {
+  id: string;
+  userId: string | null;
+  kind:
+    | "TEXT_EDIT"
+    | "LINK_ADD"
+    | "LINK_REMOVE"
+    | "BLOCK_ADD"
+    | "BLOCK_REMOVE"
+    | "FORMAT"
+    | "STYLE"
+    | "NOTE_REMOVE"
+    | "SECTION_REMOVE"
+    | "DOCUMENT_DETACH";
+  // The snippet the entry shows: the edited or removed text, the section or
+  // document title, the linked quote.
+  content: string;
+  documentTitle: string | null; // BlockEdit entries: the document it happened in
+  createdAt: string; // ISO
+};
+
+// ── Graph view (SPEC.md §13): documents as nodes, links as weighted edges ──
+
+export type GraphNode = {
+  id: string; // document id
+  title: string;
+  hasVideo: boolean;
+};
+
+/** One undirected pair of documents. Edge thickness scales with the total;
+    a pair connected only by recommended links draws dashed. */
+export type GraphEdge = {
+  a: string; // document id
+  b: string; // document id
+  accepted: number;
+  recommended: number;
 };
 
 // ── The assistant as an actor ──────────────────────────────────────────────

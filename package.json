@@ -30,6 +30,7 @@
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "react-markdown": "^10.1.0",
+    "reactflow": "^11.11.4",
     "remark-gfm": "^4.0.1",
     "undici": "^8.10.0",
     "unpdf": "^1.8.0",

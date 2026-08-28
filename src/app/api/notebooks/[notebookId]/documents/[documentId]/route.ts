@@ -59,10 +59,22 @@ export async function DELETE(
   const { notebookId, documentId } = await ctx.params;
   const access = await notebookAccess(notebookId, "editor");
   if (access instanceof NextResponse) return access;
+  const document = await db.document.findUnique({
+    where: { id: documentId },
+    select: { title: true },
+  });
   const deleted = await db.notebookDocument
     .delete({ where: { notebookId_documentId: { notebookId, documentId } } })
     .catch(() => null);
   if (!deleted) return NextResponse.json({ error: t("api.documentNotAttached") }, { status: 404 });
+  await db.notebookEvent.create({
+    data: {
+      notebookId,
+      userId: access.user.id,
+      kind: "DOCUMENT_DETACH",
+      content: document?.title ?? "",
+    },
+  });
   await bumpNotebook(notebookId);
   return NextResponse.json({ ok: true });
 }

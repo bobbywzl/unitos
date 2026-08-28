@@ -509,7 +509,15 @@ Every write bumps `Notebook.rev` (document writes bump every corpus the document
 
 ### Replies
 
-Every note (annotations included — a highlight, comment, explanation, or assistant conversation is a note) and every edit in the Edits panel carries a discussion: `Reply` rows (`noteId` or `blockEditId`, author, content), flat, oldest first. Collaborators comment on each other's work there. Editors reply; viewers read; a reply deletes by its author or the owner. Threads render collapsed to a count on note cards, annotation cards, and edit cards; the Reply affordance appears once the corpus is shared. `POST /api/replies`, `DELETE /api/replies/[replyId]`; replies bump the rev like every write.
+Every note (annotations included — a highlight, comment, explanation, or assistant conversation is a note), every edit in the Edits panel, and every link carries a discussion: `Reply` rows (`noteId`, `blockEditId`, or `docLinkId`; author; content), flat, oldest first. Collaborators comment on each other's work there. Editors reply; viewers read; a reply deletes by its author or the owner. Open replies always render under their card; any editor resolves a reply (`resolvedById`; `PATCH /api/replies/[replyId]`), and resolved ones collapse behind a count. The Reply affordance appears once the corpus is shared. `POST /api/replies`, `DELETE /api/replies/[replyId]`; replies bump the rev like every write.
+
+### Attribution rule
+
+The author label marks the other person's work: your own notes, annotations, and edits render default, unlabeled. Every action still carries its author — the History panel lists everyone's, your own included.
+
+### History
+
+The History panel (the clock-rewind button beside Share) is the corpus's whole record: every edit and every deletion, newest first, each entry signed. It merges `BlockEdit` rows across the attached documents (text edits, formats, styles, links, paragraph add/remove) with `NotebookEvent` rows for what BlockEdit cannot see — note removals (content snapshot), section removals, document detachments — recorded at delete time with the deleter's id. A person's badge in the panel filters the feed to their actions. The rail's per-document Edits tab keeps the pencil icon; the clock-rewind icon is the corpus history's.
 
 ### Stale tabs
 
@@ -520,3 +528,23 @@ Cookies are per browser, not per tab: signing out or switching accounts in one t
 - Share dialog in the workspace header: the owner adds by email with a role, re-roles, removes; a collaborator sees the list and can leave. `GET/POST/DELETE /api/notebooks/[id]/collaborators`.
 - The dashboard shows "Shared with you": the corpora shared with the account, with the owner's name and the role. Editors can rename from the card menu; only Leave replaces Delete.
 - The profile (Settings): picture (uploaded, resized client-side to a small JPEG data URL, stored on `User.picture`), name, symbol, color, and the one Background field (`PUT /api/account`, `PUT /api/profile`). Sign-in fills name and picture only when empty — it never overwrites what the person set. Service/env status lives on `/admin`, not in Settings.
+
+---
+
+## 13. Connections
+
+Every piece of content in a corpus should connect. Two mechanisms:
+
+### Recommended links
+
+When a document joins a corpus — upload, URL, YouTube (after its transcript lands), or attach from the library — a scan (`lib/connect.ts`, prompt in `/lib/prompts/connect.ts`, model `CONNECT_MODEL`) reads it against the corpus's other documents for shared concepts, claims, quotes, and keywords, video transcripts included. Each hit becomes a `DocLink` with `recommended: true`, a `reason`, and both quotes resolved verbatim against the real blocks (unresolvable output drops, SPEC.md §4 discipline). At most 8 per scan; duplicates skip; the scan runs `after()` the response like the glossary, and "Recommend links" in the document menu runs it on demand (`POST /api/documents/[documentId]/connect`).
+
+A recommended link paints nowhere until accepted — the user approves everything (§1). It lives in the Annotations panel under Recommended links: the reason, both quotes, the author badge, a reply thread, and Accept / Dismiss. Accept clears `recommended`, paints the link, and records a LINK_ADD by its accepter; Dismiss deletes it without a history entry.
+
+### Corpus distillation
+
+Distill's second scope: the reader asks the whole corpus one question (`POST /api/derive` with `type: DISTILL, scope: "corpus"`, no documentId). The corpus rides as one cacheable system message — every document rendered `[document <id>] "title"` then block lines, later documents cut whole with a declared marker past the budget — and the model returns the same DISTILL quote contract; the server maps each quote to its document by block id (block ids are unique across the corpus) and stores the distillation on `Notebook.distillations`, newest first, capped at 20. The corpus distilled page (Distill tab → "Distill the corpus") renders each quote under its document's title chip; clicking a quote opens that document; Add to notes lands the quote `PENDING` with a source in its own document — one distillation, sources across the corpus. Delete goes through `PATCH /api/notebooks/[id]` `removeDistillationId`. Quotes heal at render and orphan visibly (§5).
+
+### Graph
+
+The Graph (rail button; full-screen overlay; `reactflow`, the release-edu tree pattern) draws the corpus as a connected whole: every attached document a node, every linked pair one curve. The more links between two documents, the thicker and bolder the curve; a pair held together only by recommended links draws dashed until one is accepted. Nodes drag; click one to open the document; pan and zoom Obsidian-style. Node and edge data come from the workspace page (`GraphNode`, `GraphEdge` in `lib/types.ts`); reactflow lazy-loads when the overlay opens.
