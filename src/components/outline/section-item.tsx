@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { SectionView } from "@/lib/types";
+import { useCollab } from "@/components/collab/collab-context";
 import { useT } from "@/components/lang-provider";
 import { DragHandle, SortableItem, SortableList, type HandleProps } from "@/components/sortable";
 import { AddSection } from "@/components/outline/add-section";
@@ -20,6 +21,7 @@ export function SectionItem({
   nested?: boolean;
 }) {
   const t = useT();
+  const { canEdit } = useCollab();
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState(section.title);
   const [composing, setComposing] = useState(false);
@@ -59,28 +61,32 @@ export function SectionItem({
           />
         ) : (
           <button
-            onClick={() => setEditing(true)}
+            onClick={() => canEdit && setEditing(true)}
             className={`text-left font-display ${nested ? "text-lg" : "text-[22px]"}`}
-            title={t("outline.renameSection")}
+            title={canEdit ? t("outline.renameSection") : undefined}
           >
             {section.title}
           </button>
         )}
         <span className="text-[13px] text-sand-600">{section.notes.length || ""}</span>
-        <button
-          onClick={() => setComposing(true)}
-          className="ml-auto text-xs text-sand-600 hover:text-clay-700"
-        >
-          {t("outline.addNoteBtn")}
-        </button>
-        <button
-          onClick={() => {
-            if (confirm(t("outline.confirmDeleteSection"))) void actions.deleteSection(section.id);
-          }}
-          className="text-xs text-red-500 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 hover:text-red-700"
-        >
-          {t("common.delete")}
-        </button>
+        {canEdit && (
+          <button
+            onClick={() => setComposing(true)}
+            className="ml-auto text-xs text-sand-600 hover:text-clay-700"
+          >
+            {t("outline.addNoteBtn")}
+          </button>
+        )}
+        {canEdit && (
+          <button
+            onClick={() => {
+              if (confirm(t("outline.confirmDeleteSection"))) void actions.deleteSection(section.id);
+            }}
+            className="text-xs text-red-500 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 hover:text-red-700"
+          >
+            {t("common.delete")}
+          </button>
+        )}
       </div>
 
       <div className="flex flex-col gap-2.5">
@@ -154,7 +160,7 @@ export function SectionItem({
                 </SortableItem>
               ))}
             </SortableList>
-            <AddSection small onAdd={(t) => actions.addSection(section.id, t)} />
+            {canEdit && <AddSection small onAdd={(t) => actions.addSection(section.id, t)} />}
           </>
         )}
       </div>

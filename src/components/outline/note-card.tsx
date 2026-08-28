@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import type { NoteView, SourceChip } from "@/lib/types";
+import { useCollab } from "@/components/collab/collab-context";
+import { AuthorChip } from "@/components/collab/person-badge";
 import { useT } from "@/components/lang-provider";
 import { Markdown } from "@/components/markdown";
 import { DragHandle, type HandleProps } from "@/components/sortable";
@@ -76,6 +78,7 @@ export function NoteCard({
   variant?: Variant;
 }) {
   const t = useT();
+  const { canEdit } = useCollab();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(note.content);
   const [copied, setCopied] = useState(false);
@@ -171,10 +174,11 @@ export function NoteCard({
               <SourceChips sources={note.sources} notebookId={actions.notebookId} />
             </div>
           )}
+          <AuthorLine createdById={note.createdById} />
         </div>
       </div>
 
-      {pending ? (
+      {pending && !canEdit ? null : pending ? (
         // Tray: chips above, buttons on their own row (design 1a). Page: chips and
         // buttons share one row, Accept pushed right (design 2b).
         <div
@@ -210,15 +214,17 @@ export function NoteCard({
         <div
           className={`mt-2 flex items-center gap-3 opacity-0 transition-opacity group-hover/note:opacity-100 focus-within:opacity-100 ${handle ? "pl-6" : ""}`}
         >
-          <button
-            onClick={() => {
-              setDraft(note.content);
-              setEditing(true);
-            }}
-            className="text-xs text-sand-600 hover:text-clay-700"
-          >
-            {t("common.edit")}
-          </button>
+          {canEdit && (
+            <button
+              onClick={() => {
+                setDraft(note.content);
+                setEditing(true);
+              }}
+              className="text-xs text-sand-600 hover:text-clay-700"
+            >
+              {t("common.edit")}
+            </button>
+          )}
           <button
             onClick={() => {
               void navigator.clipboard.writeText(note.content);
@@ -230,33 +236,48 @@ export function NoteCard({
           >
             {copied ? t("outline.copied") : t("outline.copy")}
           </button>
-          <select
-            value=""
-            onChange={(e) => {
-              if (e.target.value) void actions.moveNoteToSection(note.id, e.target.value);
-            }}
-            className="rounded-full border-none bg-transparent text-xs text-sand-600 outline-none hover:text-clay-700"
-            aria-label={t("outline.moveNoteAria")}
-          >
-            <option value="" disabled>
-              {t("outline.moveTo")}
-            </option>
-            {actions.sectionChoices.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.label}
+          {canEdit && (
+            <select
+              value=""
+              onChange={(e) => {
+                if (e.target.value) void actions.moveNoteToSection(note.id, e.target.value);
+              }}
+              className="rounded-full border-none bg-transparent text-xs text-sand-600 outline-none hover:text-clay-700"
+              aria-label={t("outline.moveNoteAria")}
+            >
+              <option value="" disabled>
+                {t("outline.moveTo")}
               </option>
-            ))}
-          </select>
-          <button
-            onClick={() => {
-              if (confirm(t("outline.confirmDeleteNote"))) void actions.deleteNote(note.id);
-            }}
-            className="text-xs text-red-500 hover:text-red-700"
-          >
-            {t("common.delete")}
-          </button>
+              {actions.sectionChoices.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.label}
+                </option>
+              ))}
+            </select>
+          )}
+          {canEdit && (
+            <button
+              onClick={() => {
+                if (confirm(t("outline.confirmDeleteNote"))) void actions.deleteNote(note.id);
+              }}
+              className="text-xs text-red-500 hover:text-red-700"
+            >
+              {t("common.delete")}
+            </button>
+          )}
         </div>
       )}
+    </div>
+  );
+}
+
+// The author label under a note's content, on shared corpora only.
+function AuthorLine({ createdById }: { createdById: string | null }) {
+  const { shared, people } = useCollab();
+  if (!shared || !createdById || !people[createdById]) return null;
+  return (
+    <div className="mt-1.5">
+      <AuthorChip createdById={createdById} />
     </div>
   );
 }

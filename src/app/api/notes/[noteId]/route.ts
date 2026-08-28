@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { bumpNotebook, noteAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
 import { serverT } from "@/lib/i18n/server";
 import { normalizeNoteOrders, movedOrder } from "@/lib/order";
@@ -21,6 +22,8 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ noteId: strin
 
   const note = await db.note.findUnique({ where: { id: noteId } });
   if (!note) return NextResponse.json({ error: t("api.noteNotFound") }, { status: 404 });
+  const access = await noteAccess(noteId, "editor");
+  if (access instanceof NextResponse) return access;
 
   const fromSectionId = note.sectionId;
 
@@ -65,14 +68,26 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ noteId: strin
   if (updated && updated.sectionId !== fromSectionId) {
     await normalizeNoteOrders(updated.sectionId);
   }
+  const section = await db.section.findUnique({
+    where: { id: updated?.sectionId ?? fromSectionId },
+    select: { notebookId: true },
+  });
+  if (section) await bumpNotebook(section.notebookId);
   return NextResponse.json(updated);
 }
 
 export async function DELETE(_req: Request, ctx: { params: Promise<{ noteId: string }> }) {
   const t = await serverT();
   const { noteId } = await ctx.params;
+  const access = await noteAccess(noteId, "editor");
+  if (access instanceof NextResponse) return access;
   const note = await db.note.delete({ where: { id: noteId } }).catch(() => null);
   if (!note) return NextResponse.json({ error: t("api.noteNotFound") }, { status: 404 });
   await normalizeNoteOrders(note.sectionId);
+  const section = await db.section.findUnique({
+    where: { id: note.sectionId },
+    select: { notebookId: true },
+  });
+  if (section) await bumpNotebook(section.notebookId);
   return NextResponse.json({ ok: true });
 }

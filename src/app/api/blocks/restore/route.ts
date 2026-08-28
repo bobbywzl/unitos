@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { bumpDocument, documentAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
 import { serverT } from "@/lib/i18n/server";
 import { parseBody } from "@/lib/validate";
@@ -23,6 +24,8 @@ export async function POST(req: Request) {
   if (existing) {
     return NextResponse.json({ error: t("api.paragraphAlreadyBack") }, { status: 400 });
   }
+  const access = await documentAccess(edit.documentId, "editor");
+  if (access instanceof NextResponse) return access;
 
   const meta = (edit.meta ?? {}) as {
     order?: number;
@@ -57,6 +60,7 @@ export async function POST(req: Request) {
         kind: "BLOCK_ADD",
         after: text,
         meta: { restoredFrom: edit.id },
+        userId: access.user.id,
       },
     });
     // Link ends on this block resolve again when their quote still matches.
@@ -83,5 +87,6 @@ export async function POST(req: Request) {
     }
     return created;
   });
+  await bumpDocument(edit.documentId);
   return NextResponse.json(block, { status: 201 });
 }

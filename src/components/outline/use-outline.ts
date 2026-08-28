@@ -53,7 +53,8 @@ export function filterSections(sections: SectionView[], query: string): SectionV
 
 // The notes model shared by the tray (design 1a) and the notes full page (design 2b):
 // one optimistic tree, one pending queue, one set of keyboard bindings (SPEC.md §6).
-export function useOutline(notebook: NotebookView) {
+// canEdit false (a viewer on a shared corpus): keys still navigate, never write.
+export function useOutline(notebook: NotebookView, canEdit = true) {
   const router = useRouter();
   const [tree, setTree] = useState(notebook.sections);
   const [prevSections, setPrevSections] = useState(notebook.sections);
@@ -148,15 +149,15 @@ export function useOutline(notebook: NotebookView) {
           break;
         case "Enter":
           e.preventDefault();
-          if (current) void acceptNote(current.id);
+          if (current && canEdit) void acceptNote(current.id);
           break;
         case "Backspace":
           e.preventDefault();
-          if (current) void rejectNote(current.id);
+          if (current && canEdit) void rejectNote(current.id);
           break;
         case "e":
           e.preventDefault();
-          if (current) setEditRequest({ id: current.id });
+          if (current && canEdit) setEditRequest({ id: current.id });
           break;
         case "g": {
           e.preventDefault();
@@ -170,7 +171,7 @@ export function useOutline(notebook: NotebookView) {
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [pending, focusIndex, notebook.id, router, acceptNote, rejectNote]);
+  }, [pending, focusIndex, notebook.id, router, acceptNote, rejectNote, canEdit]);
 
   const actions: OutlineActions = {
     notebookId: notebook.id,

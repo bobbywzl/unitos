@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import type { NoteView, SectionView } from "@/lib/types";
 import { ChevronDownIcon, ChevronRightIcon } from "@/components/icons";
+import { useCollab } from "@/components/collab/collab-context";
 import { useT } from "@/components/lang-provider";
 import { NoteCard } from "@/components/outline/note-card";
 import { filterSections, type OutlineActions } from "@/components/outline/use-outline";
@@ -89,6 +90,7 @@ function TraySection({
   nested?: boolean;
 }) {
   const t = useT();
+  const { canEdit } = useCollab();
   const [collapsed, setCollapsed] = useState(false);
   const [composing, setComposing] = useState(false);
   const [draft, setDraft] = useState("");
@@ -108,7 +110,7 @@ function TraySection({
           {section.title}
         </button>
         {accepted.length > 0 && <span className="text-[11px] text-sand-500">{accepted.length}</span>}
-        {!collapsed && (
+        {!collapsed && canEdit && (
           <button
             onClick={() => setComposing(true)}
             className="ml-auto text-[11px] text-sand-600 opacity-0 transition-opacity group-hover/section:opacity-100 focus-visible:opacity-100 hover:text-clay-700"

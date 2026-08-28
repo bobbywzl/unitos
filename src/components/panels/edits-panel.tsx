@@ -4,6 +4,8 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { EditItem } from "@/lib/types";
 import { api } from "@/lib/api";
+import { useCollab } from "@/components/collab/collab-context";
+import { AuthorChip } from "@/components/collab/person-badge";
 import { useT } from "@/components/lang-provider";
 import type { TFunc, TKey } from "@/lib/i18n/dictionaries";
 
@@ -98,6 +100,7 @@ function EditCard({
 }) {
   const router = useRouter();
   const t = useT();
+  const { canEdit } = useCollab();
   const [working, setWorking] = useState(false);
   const [errorText, setErrorText] = useState<string | null>(null);
 
@@ -133,8 +136,11 @@ function EditCard({
     <div className="rounded-2xl bg-card p-3.5 shadow-soft">
       <div className="flex items-center gap-2">
         <span className={kindChip}>{t(KIND_KEY[edit.kind])}</span>
-        <span suppressHydrationWarning className="ml-auto text-[11px] text-sand-500">
-          {new Date(edit.createdAt).toLocaleString()}
+        <span className="ml-auto flex items-center gap-2">
+          <AuthorChip createdById={edit.userId} nameless />
+          <span suppressHydrationWarning className="text-[11px] text-sand-500">
+            {new Date(edit.createdAt).toLocaleString()}
+          </span>
         </span>
       </div>
 
@@ -154,7 +160,7 @@ function EditCard({
               <p className="line-clamp-3 text-[13px]">{edit.after}</p>
             </div>
           )}
-          {edit.blockId && edit.before !== null && blockLive && (
+          {edit.blockId && edit.before !== null && blockLive && canEdit && (
             <div>
               <button
                 onClick={() => void revert()}
@@ -187,7 +193,7 @@ function EditCard({
           >
             {edit.after ?? edit.before}
           </p>
-          {edit.kind === "BLOCK_REMOVE" && !blockLive && !alreadyRestored && (
+          {edit.kind === "BLOCK_REMOVE" && !blockLive && !alreadyRestored && canEdit && (
             <div>
               <button
                 onClick={() => void restore()}

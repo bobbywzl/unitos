@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { bumpNotebook, notebookAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
 import { annotationsSection } from "@/lib/derive/context";
 import { serverT } from "@/lib/i18n/server";
@@ -54,6 +55,8 @@ export async function POST(req: Request) {
 
   const notebook = await db.notebook.findUnique({ where: { id: data.notebookId } });
   if (!notebook) return NextResponse.json({ error: t("api.corpusNotFound") }, { status: 404 });
+  const access = await notebookAccess(data.notebookId, "editor");
+  if (access instanceof NextResponse) return access;
 
   const attachment = await db.notebookDocument.findUnique({
     where: {
@@ -64,7 +67,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: t("api.documentNotAttachedToCorpus") }, { status: 404 });
   }
 
-  if (data.video) return createVideoAnnotation(data.notebookId, data.documentId, data.video, t);
+  if (data.video) return createVideoAnnotation(data.notebookId, data.documentId, data.video, access.user.id, t);
   if (!data.anchor) return NextResponse.json({ error: t("api.anchorMissing") }, { status: 400 });
   if (data.anchor.endOffset <= data.anchor.startOffset) {
     return NextResponse.json({ error: t("api.anchorOffsetsInvalid") }, { status: 400 });
@@ -118,6 +121,7 @@ export async function POST(req: Request) {
       content,
       status: "ACCEPTED",
       color,
+      createdById: access.user.id,
       order,
       sources: {
         create: {
@@ -133,6 +137,7 @@ export async function POST(req: Request) {
     },
     include: { sources: true },
   });
+  await bumpNotebook(data.notebookId);
   return NextResponse.json(note, { status: 201 });
 }
 
@@ -142,6 +147,7 @@ async function createVideoAnnotation(
   notebookId: string,
   documentId: string,
   video: z.infer<typeof videoSchema>,
+  createdById: string,
   t: TFunc,
 ) {
   if (!timeRangeSchema.safeParse(video).success) {
@@ -174,6 +180,7 @@ async function createVideoAnnotation(
       sectionId: section.id,
       content: video.comment.trim(),
       status: "ACCEPTED",
+      createdById,
       order,
       sources: {
         create: {
@@ -192,5 +199,6 @@ async function createVideoAnnotation(
     },
     include: { sources: true },
   });
+  await bumpNotebook(notebookId);
   return NextResponse.json(note, { status: 201 });
 }

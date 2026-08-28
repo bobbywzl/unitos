@@ -13,7 +13,6 @@ import { APPLE_STATE_COOKIE, SESSION_COOKIE, STATE_COOKIE, USER_ID } from "@/lib
 import { db } from "@/lib/db";
 import { sendConfirmationEmail, sendResetEmail } from "@/lib/email";
 import type { Lang } from "@/lib/i18n/config";
-import { serverT } from "@/lib/i18n/server";
 import { outboundFetch } from "@/lib/outbound-fetch";
 
 // Google, Apple, and email sign-in (Scalae pattern): hand-rolled OIDC
@@ -63,6 +62,8 @@ export const LOCAL_USER: User = {
   email: "local@dissect",
   name: "Local reader",
   picture: "",
+  symbol: "",
+  color: "",
   passwordHash: "",
   createdAt: new Date(0),
   lastSeenAt: new Date(0),
@@ -433,9 +434,15 @@ export async function upsertUser(profile: {
   const email = profile.email.toLowerCase();
   const existing = await db.user.findUnique({ where: { email } });
   if (existing) {
+    // The profile is the account's own (Settings): a sign-in only fills what
+    // is empty, never overwrites a name or picture the person set.
     return db.user.update({
       where: { id: existing.id },
-      data: { name: profile.name, picture: profile.picture, lastSeenAt: new Date() },
+      data: {
+        ...(existing.name ? {} : { name: profile.name }),
+        ...(existing.picture ? {} : { picture: profile.picture }),
+        lastSeenAt: new Date(),
+      },
     });
   }
   const first = (await db.user.count()) === 0;
@@ -493,23 +500,5 @@ export async function currentUser(): Promise<User | null> {
   return session.user;
 }
 
-// Ownership gate for corpus routes: null = allowed, else the response to send.
-// With sign-in off there is one reader and nothing to check. A corpus that is
-// not yours answers 404, not 403 — its existence is not disclosed.
-export async function notebookGuard(notebookId: string): Promise<NextResponse | null> {
-  const user = await currentUser();
-  if (!user) {
-    const t = await serverT();
-    return NextResponse.json({ error: t("common.signInToContinue") }, { status: 401 });
-  }
-  if (!authEnabled()) return null;
-  const notebook = await db.notebook.findUnique({
-    where: { id: notebookId },
-    select: { userId: true },
-  });
-  if (!notebook || notebook.userId !== user.id) {
-    const t = await serverT();
-    return NextResponse.json({ error: t("common.corpusNotFound") }, { status: 404 });
-  }
-  return null;
-}
+// The corpus access gate lives in lib/collab.ts (notebookAccess): owner plus
+// collaborators, role-checked per route.

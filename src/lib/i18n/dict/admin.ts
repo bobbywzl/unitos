@@ -99,6 +99,15 @@ const en = {
   usageColCost: "Cost",
   usageBackground: "Background jobs",
   usageDetail: "{tokens} tokens · {calls} calls",
+  // Services (env status; moved here from Settings — operator concern, not reader)
+  services: "Services",
+  svcAnthropic: "Derivations, assistant, glossary",
+  svcSignIn: "Sign-in at /signin",
+  svcAdmin: "Feedback inbox and digest at /admin",
+  svcSet: "Set",
+  svcNotSet: "Not set",
+  envHint:
+    "Set these in your host's environment variables and redeploy. On Vercel: Settings → Environment Variables.",
 };
 
 const zh: Record<keyof typeof en, string> = {
@@ -187,6 +196,13 @@ const zh: Record<keyof typeof en, string> = {
   usageColCost: "成本",
   usageBackground: "后台任务",
   usageDetail: "{tokens} token · {calls} 次调用",
+  services: "服务",
+  svcAnthropic: "派生、助手、术语表",
+  svcSignIn: "位于 /signin 的登录",
+  svcAdmin: "位于 /admin 的反馈收件箱与汇编",
+  svcSet: "已设置",
+  svcNotSet: "未设置",
+  envHint: "在托管平台的环境变量中设置这些值并重新部署。Vercel 上：Settings → Environment Variables。",
 };
 
 export const admin = { en, zh } as const;

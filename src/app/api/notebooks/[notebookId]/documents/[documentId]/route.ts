@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { notebookGuard } from "@/lib/auth";
+import { bumpNotebook, notebookAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
 import { serverT } from "@/lib/i18n/server";
 import { distillationList, extractionList } from "@/lib/types";
@@ -22,8 +22,8 @@ export async function PATCH(
 ) {
   const t = await serverT();
   const { notebookId, documentId } = await ctx.params;
-  const denied = await notebookGuard(notebookId);
-  if (denied) return denied;
+  const access = await notebookAccess(notebookId, "editor");
+  if (access instanceof NextResponse) return access;
   const { data, error } = await parseBody(req, patchSchema);
   if (error) return error;
   const attachment = await db.notebookDocument.findUnique({
@@ -46,6 +46,7 @@ export async function PATCH(
           ),
         },
   });
+  await bumpNotebook(notebookId);
   return NextResponse.json({ ok: true });
 }
 
@@ -56,11 +57,12 @@ export async function DELETE(
 ) {
   const t = await serverT();
   const { notebookId, documentId } = await ctx.params;
-  const denied = await notebookGuard(notebookId);
-  if (denied) return denied;
+  const access = await notebookAccess(notebookId, "editor");
+  if (access instanceof NextResponse) return access;
   const deleted = await db.notebookDocument
     .delete({ where: { notebookId_documentId: { notebookId, documentId } } })
     .catch(() => null);
   if (!deleted) return NextResponse.json({ error: t("api.documentNotAttached") }, { status: 404 });
+  await bumpNotebook(notebookId);
   return NextResponse.json({ ok: true });
 }

@@ -10,7 +10,10 @@ export async function GET() {
   const user = await currentUser();
   if (!user) return NextResponse.json({ error: t("api.signInRequired") }, { status: 401 });
   const notebooks = await db.notebook.findMany({
-    where: authEnabled() ? { userId: user.id } : undefined,
+    // With sign-in on, the reader's own corpora plus the ones shared with them.
+    where: authEnabled()
+      ? { OR: [{ userId: user.id }, { collaborators: { some: { email: user.email } } }] }
+      : undefined,
     orderBy: { updatedAt: "desc" },
     include: { _count: { select: { sections: true, documents: true } } },
   });

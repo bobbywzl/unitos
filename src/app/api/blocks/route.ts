@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { bumpDocument, documentAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
 import { serverT } from "@/lib/i18n/server";
 import { parseBody } from "@/lib/validate";
@@ -21,6 +22,8 @@ export async function POST(req: Request) {
   if (!after || after.documentId !== data.documentId) {
     return NextResponse.json({ error: t("api.blockNotInDocument") }, { status: 404 });
   }
+  const access = await documentAccess(data.documentId, "editor");
+  if (access instanceof NextResponse) return access;
 
   const block = await db.$transaction(async (tx) => {
     await tx.block.updateMany({
@@ -43,9 +46,11 @@ export async function POST(req: Request) {
         blockId: created.id,
         kind: "BLOCK_ADD",
         after: created.text,
+        userId: access.user.id,
       },
     });
     return created;
   });
+  await bumpDocument(data.documentId);
   return NextResponse.json(block, { status: 201 });
 }

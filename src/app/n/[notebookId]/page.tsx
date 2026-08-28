@@ -1,6 +1,7 @@
 import { Logo } from "@/components/logo";
 import { notFound, redirect } from "next/navigation";
 import { authEnabled, currentUser } from "@/lib/auth";
+import { peopleByIds, roleOf } from "@/lib/collab";
 import { matchInText } from "@/lib/anchors/match";
 import { hasContext } from "@/lib/derive/context";
 import { editedRanges } from "@/lib/diff";
@@ -21,6 +22,7 @@ import {
   type SummaryLevels,
 } from "@/lib/types";
 import { AssistantPanel } from "@/components/assistant/assistant-panel";
+import type { CollabState } from "@/components/collab/collab-context";
 import { AnnotationsPanel } from "@/components/panels/annotations-panel";
 import { DistillPanel } from "@/components/panels/distill-panel";
 import { EditsPanel } from "@/components/panels/edits-panel";
@@ -54,6 +56,7 @@ export default async function NotebookPage(props: {
   const notebook = await db.notebook.findUnique({
     where: { id: notebookId },
     include: {
+      collaborators: true,
       documents: {
         include: {
           document: {
@@ -82,7 +85,11 @@ export default async function NotebookPage(props: {
       },
     },
   });
-  if (!notebook || (authEnabled() && notebook.userId !== user.id)) notFound();
+  if (!notebook) notFound();
+  // Owner or collaborator opens the corpus; anyone else gets 404 (no
+  // disclosure). Viewers read; the role gates every write server-side too.
+  const myRole = authEnabled() ? roleOf(notebook, user) : "owner";
+  if (!myRole) notFound();
 
   const attached = notebook.documents.map((nd) => ({
     id: nd.document.id,
@@ -218,12 +225,14 @@ export default async function NotebookPage(props: {
         id: d.id,
         question: d.question,
         createdAt: d.createdAt,
+        createdById: d.createdById,
         quotes: (d.quotes ?? []).map(healSpan),
       }),
     );
     const extractions: ExtractionView[] = extractionList(attachment?.extractions).map((x, i) => ({
       id: x.id,
       createdAt: x.createdAt,
+      createdById: x.createdById,
       label: `E${i + 1}`,
       origin: healSpan(x.origin),
       spans: (x.spans ?? []).map(healSpan),
@@ -275,6 +284,7 @@ export default async function NotebookPage(props: {
           quotedText: source.quotedText,
           orphaned: resolutionById.get(source.id)?.orphaned ?? source.orphaned,
           figureLabel: figureLabelBySource.get(source.id) ?? null,
+          createdById: n.createdById,
         };
       })
       .filter((a): a is AnnotationItem => a !== null);
@@ -685,6 +695,7 @@ export default async function NotebookPage(props: {
       status: n.status,
       derivationType: n.derivationType,
       order: n.order,
+      createdById: n.createdById,
       sources: n.sources.map((src) => ({
         id: src.id,
         documentId: src.documentId,
@@ -726,6 +737,7 @@ export default async function NotebookPage(props: {
         before: e.before,
         after: e.after,
         meta: e.meta as EditItem["meta"],
+        userId: e.userId,
         createdAt: e.createdAt.toISOString(),
       }))
     : [];
@@ -752,6 +764,33 @@ export default async function NotebookPage(props: {
           application: globalProfile.application,
         }
       : null;
+
+  // Everyone whose work is on this page: owner, collaborators, and every
+  // author referenced by a note, edit, distillation, or extraction.
+  const authorIds = new Set<string>([notebook.userId]);
+  for (const section of notebook.sections) {
+    for (const n of section.notes) if (n.createdById) authorIds.add(n.createdById);
+  }
+  for (const e of edits) if (e.userId) authorIds.add(e.userId);
+  for (const pane of [paneOne, paneTwo]) {
+    for (const d of pane?.distillations ?? []) if (d.createdById) authorIds.add(d.createdById);
+    for (const x of pane?.extractions ?? []) if (x.createdById) authorIds.add(x.createdById);
+  }
+  if (authEnabled() && notebook.collaborators.length > 0) {
+    const collaboratorUsers = await db.user.findMany({
+      where: { email: { in: notebook.collaborators.map((c) => c.email) } },
+      select: { id: true },
+    });
+    for (const u of collaboratorUsers) authorIds.add(u.id);
+  }
+  const collab: CollabState = {
+    authOn: authEnabled(),
+    role: myRole,
+    canEdit: myRole !== "viewer",
+    shared: authEnabled() && notebook.collaborators.length > 0,
+    myId: user.id,
+    people: await peopleByIds(authorIds),
+  };
 
   const paneNode = (pane: NonNullable<typeof paneOne>, key: string) => (
     <div key={key} className="flex h-full min-h-0 flex-col">
@@ -802,6 +841,8 @@ export default async function NotebookPage(props: {
       notebook={view}
       documents={attached}
       activeDocumentId={paneOne?.document.id ?? null}
+      collab={collab}
+      rev={notebook.rev}
       context={{
         initial: contextValues,
         hasOverride,

@@ -1,7 +1,8 @@
 import { after, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { currentUser } from "@/lib/auth";
+import { authEnabled, currentUser } from "@/lib/auth";
+import { bumpNotebook, notebookAccess } from "@/lib/collab";
 import { buildGlossary } from "@/lib/glossary";
 import { serverT } from "@/lib/i18n/server";
 import { progressResponse } from "@/lib/ingest-response";
@@ -15,8 +16,26 @@ export const maxDuration = 120;
 
 const MAX_PDF_BYTES = 50 * 1024 * 1024;
 
+// The library: the documents attached to corpora the reader can open.
 export async function GET() {
+  const t = await serverT();
+  const user = await currentUser();
+  if (!user) return NextResponse.json({ error: t("api.signInRequired") }, { status: 401 });
   const documents = await db.document.findMany({
+    where: authEnabled()
+      ? {
+          notebooks: {
+            some: {
+              notebook: {
+                OR: [
+                  { userId: user.id },
+                  { collaborators: { some: { email: user.email } } },
+                ],
+              },
+            },
+          },
+        }
+      : undefined,
     orderBy: { createdAt: "desc" },
     select: {
       id: true,
@@ -78,6 +97,8 @@ export async function POST(req: Request) {
     }
     const notebook = await db.notebook.findUnique({ where: { id: fields.data.notebookId } });
     if (!notebook) return NextResponse.json({ error: t("api.corpusNotFound") }, { status: 404 });
+    const access = await notebookAccess(fields.data.notebookId, "editor");
+    if (access instanceof NextResponse) return access;
 
     const bytes = new Uint8Array(await file.arrayBuffer());
     if (bytes.length < 5 || String.fromCharCode(...bytes.slice(0, 5)) !== "%PDF-") {
@@ -87,6 +108,7 @@ export async function POST(req: Request) {
       try {
         const { document, deduped } = await parse.ingestPdf(bytes, fields.data.filename, onProgress);
         await attachDocument(fields.data.notebookId, document.id);
+        await bumpNotebook(fields.data.notebookId);
         // On-ingest glossary extraction (SPEC.md §8 Phase 7). Best-effort; after() keeps it
         // alive past the response on serverless.
         if (!deduped) after(() => buildGlossary(document.id, user?.id ?? null).catch(() => {}));
@@ -102,6 +124,8 @@ export async function POST(req: Request) {
   if (error) return error;
   const notebook = await db.notebook.findUnique({ where: { id: data.notebookId } });
   if (!notebook) return NextResponse.json({ error: t("api.corpusNotFound") }, { status: 404 });
+  const access = await notebookAccess(data.notebookId, "editor");
+  if (access instanceof NextResponse) return access;
 
   // A YouTube link is a video document, wherever it was pasted (SPEC.md §11).
   const youtubeId = parseYouTubeId(data.url);
@@ -109,6 +133,7 @@ export async function POST(req: Request) {
     return progressResponse(async (onProgress) => {
       const { document, deduped } = await ingestYouTube(youtubeId, onProgress);
       await attachDocument(data.notebookId, document.id);
+      await bumpNotebook(data.notebookId);
       // Transcription starts on its own — the transcript is the point.
       // after() keeps it alive past the response on serverless; the pane
       // polls the status in.
@@ -121,6 +146,7 @@ export async function POST(req: Request) {
     try {
       const { document, deduped } = await parse.ingestUrl(data.url, onProgress);
       await attachDocument(data.notebookId, document.id);
+      await bumpNotebook(data.notebookId);
       if (!deduped) after(() => buildGlossary(document.id, user?.id ?? null).catch(() => {}));
       return { id: document.id, title: document.title, deduped };
     } catch (err) {

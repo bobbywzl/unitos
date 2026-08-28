@@ -1,10 +1,13 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { authEnabled, currentUser } from "@/lib/auth";
+import { peopleByIds, roleOf } from "@/lib/collab";
 import { db } from "@/lib/db";
 import { serverT } from "@/lib/i18n/server";
 import type { NotebookView, SectionView } from "@/lib/types";
 import { ArrowLeftIcon } from "@/components/icons";
+import { CollabProvider, type CollabState } from "@/components/collab/collab-context";
+import { SyncRefresh } from "@/components/collab/sync-refresh";
 import { ExportMenu } from "@/components/export-menu";
 import { Outline } from "@/components/outline/outline";
 
@@ -17,6 +20,7 @@ export default async function NotesPage(props: { params: Promise<{ notebookId: s
   const notebook = await db.notebook.findUnique({
     where: { id: notebookId },
     include: {
+      collaborators: true,
       sections: {
         orderBy: { order: "asc" },
         include: {
@@ -31,7 +35,9 @@ export default async function NotesPage(props: { params: Promise<{ notebookId: s
       },
     },
   });
-  if (!notebook || (authEnabled() && notebook.userId !== user.id)) notFound();
+  if (!notebook) notFound();
+  const myRole = authEnabled() ? roleOf(notebook, user) : "owner";
+  if (!myRole) notFound();
   const t = await serverT();
 
   const toView = (s: (typeof notebook.sections)[number]): SectionView => ({
@@ -45,6 +51,7 @@ export default async function NotesPage(props: { params: Promise<{ notebookId: s
       status: n.status,
       derivationType: n.derivationType,
       order: n.order,
+      createdById: n.createdById,
       sources: n.sources.map((src) => ({
         id: src.id,
         documentId: src.documentId,
@@ -69,6 +76,19 @@ export default async function NotesPage(props: { params: Promise<{ notebookId: s
 
   const view: NotebookView = { id: notebook.id, title: notebook.title, sections: top };
 
+  const authorIds = new Set<string>([notebook.userId]);
+  for (const section of notebook.sections) {
+    for (const n of section.notes) if (n.createdById) authorIds.add(n.createdById);
+  }
+  const collab: CollabState = {
+    authOn: authEnabled(),
+    role: myRole,
+    canEdit: myRole !== "viewer",
+    shared: authEnabled() && notebook.collaborators.length > 0,
+    myId: user.id,
+    people: await peopleByIds(authorIds),
+  };
+
   return (
     <main className="mx-auto w-[760px] max-w-full px-6 pt-[26px] pb-24">
       <header className="mb-[34px] flex items-center gap-2">
@@ -89,7 +109,10 @@ export default async function NotesPage(props: { params: Promise<{ notebookId: s
           <ExportMenu notebookId={notebook.id} />
         </div>
       </header>
-      <Outline notebook={view} />
+      <CollabProvider value={collab}>
+        <SyncRefresh notebookId={notebook.id} rev={notebook.rev} />
+        <Outline notebook={view} />
+      </CollabProvider>
     </main>
   );
 }

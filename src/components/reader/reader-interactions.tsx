@@ -28,6 +28,8 @@ import { MicIcon, SparkleIcon, SpinnerIcon, StopIcon, VolumeIcon } from "@/compo
 import { Markdown } from "@/components/markdown";
 import type { BlockData, Highlight } from "@/components/reader/block-view";
 import { Bibliography } from "@/components/reader/bibliography";
+import { useCollab } from "@/components/collab/collab-context";
+import { AuthorChip } from "@/components/collab/person-badge";
 import { DistillPage } from "@/components/reader/distill-page";
 import { Reader } from "@/components/reader/reader";
 
@@ -407,6 +409,11 @@ export function ReaderInteractions({
   // Stable translator: mount-time closures (effects, async handlers) keep this
   // identity but always read the current language through the ref.
   const tCtx = useT();
+  // Viewers on a shared corpus read only: no selection tools, no edit mode,
+  // no assistant. The server rejects their writes; this keeps the surface honest.
+  const { canEdit } = useCollab();
+  const canEditRef = useRef(canEdit);
+  canEditRef.current = canEdit;
   const tRef = useRef(tCtx);
   tRef.current = tCtx;
   const t: TFunc = useCallback((key, params) => tRef.current(key, params), []);
@@ -881,6 +888,7 @@ export function ReaderInteractions({
     const container = containerRef.current;
     if (!container) return;
     const onMouseUp = (event: MouseEvent) => {
+      if (!canEditRef.current) return;
       if (suppressNextMouseUp.current) {
         suppressNextMouseUp.current = false;
         return;
@@ -914,6 +922,7 @@ export function ReaderInteractions({
     const container = containerRef.current;
     if (!container) return;
     const onDblClick = (e: MouseEvent) => {
+      if (!canEditRef.current) return;
       if (editModeRef.current) return;
       const target = e.target as Element;
       if (target.closest("[data-selection-popover]")) return;
@@ -1331,6 +1340,7 @@ export function ReaderInteractions({
   // selection capture on mouseup. Only the pane that owns the term handles it.
   useEffect(() => {
     const onTermTools = (e: Event) => {
+      if (!canEditRef.current) return;
       const { start, end, origin } = (
         e as CustomEvent<{ start: number; end: number; origin: Element }>
       ).detail;
@@ -1497,6 +1507,7 @@ export function ReaderInteractions({
       showToast(t("reader.figureNoCaption"));
       return;
     }
+    if (!canEditRef.current) return;
     const containerRect = container.getBoundingClientRect();
     const y = clientY - containerRect.top + container.scrollTop;
     suppressNextMouseUp.current = true;
@@ -2823,26 +2834,30 @@ export function ReaderInteractions({
         }`}
       >
         <div className="flex w-56 flex-col overflow-hidden rounded-2xl bg-card py-1.5 shadow-float">
-          <span className="flex items-center gap-1.5 px-4 pt-1.5 pb-1 text-[11px] font-bold tracking-[0.08em] text-clay-800 uppercase">
-            <SparkleIcon size={12} />
-            {t("reader.assistant")}
-          </span>
-          {FREQUENT_ASKS.map((ask) => (
-            <button
-              key={ask.labelKey}
-              onClick={() => openArticleChat(t(ask.questionKey))}
-              className="px-4 py-2 text-left text-[12.5px] text-sand-800 hover:bg-clay-100 hover:text-clay-800"
-            >
-              {t(ask.labelKey)}
-            </button>
-          ))}
-          <button
-            onClick={() => openArticleChat(null)}
-            className="px-4 py-2 text-left text-[12.5px] text-sand-800 hover:bg-clay-100 hover:text-clay-800"
-          >
-            {t("reader.askAssistant")}
-          </button>
-          <div className="mx-3 my-1 border-t border-line" />
+          {canEdit && (
+            <>
+              <span className="flex items-center gap-1.5 px-4 pt-1.5 pb-1 text-[11px] font-bold tracking-[0.08em] text-clay-800 uppercase">
+                <SparkleIcon size={12} />
+                {t("reader.assistant")}
+              </span>
+              {FREQUENT_ASKS.map((ask) => (
+                <button
+                  key={ask.labelKey}
+                  onClick={() => openArticleChat(t(ask.questionKey))}
+                  className="px-4 py-2 text-left text-[12.5px] text-sand-800 hover:bg-clay-100 hover:text-clay-800"
+                >
+                  {t(ask.labelKey)}
+                </button>
+              ))}
+              <button
+                onClick={() => openArticleChat(null)}
+                className="px-4 py-2 text-left text-[12.5px] text-sand-800 hover:bg-clay-100 hover:text-clay-800"
+              >
+                {t("reader.askAssistant")}
+              </button>
+              <div className="mx-3 my-1 border-t border-line" />
+            </>
+          )}
           <button
             onClick={() => openDistillPage(null)}
             title={t("reader.distillMenuTitle")}
@@ -3023,13 +3038,16 @@ export function ReaderInteractions({
                 })}
               </p>
               <div className="mt-2 flex items-center justify-between">
-                <button
-                  onClick={() => void deleteExtraction(extraction.id)}
-                  className="text-xs font-semibold text-red-500 hover:text-red-700"
-                  title={t("reader.deleteExtractionTitle")}
-                >
-                  {t("common.delete")}
-                </button>
+                <AuthorChip createdById={extraction.createdById} />
+                {canEdit && (
+                  <button
+                    onClick={() => void deleteExtraction(extraction.id)}
+                    className="text-xs font-semibold text-red-500 hover:text-red-700"
+                    title={t("reader.deleteExtractionTitle")}
+                  >
+                    {t("common.delete")}
+                  </button>
+                )}
               </div>
             </div>
           );

@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { authEnabled, currentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { serverT } from "@/lib/i18n/server";
+import { personOf } from "@/lib/person";
 import { Logo } from "@/components/logo";
 import { SettingsForm } from "@/components/settings-form";
 
@@ -14,14 +15,21 @@ export default async function SettingsPage() {
   if (!user) redirect("/signin");
   const profile = await db.readerProfile.findUnique({ where: { userId: user.id } });
 
-  // Status only — values never leave the server.
-  const services = {
-    anthropic: Boolean(process.env.ANTHROPIC_API_KEY),
-    google: authEnabled(),
-    admin: Boolean(process.env.ADMIN_PASSWORD),
-  };
+  // The profile is one Background field. Older purpose and application values
+  // merge into it here, so nothing typed before the change is lost; the next
+  // save writes the merged text and clears the old columns.
+  const background = [profile?.background, profile?.purpose, profile?.application]
+    .map((v) => v?.trim() ?? "")
+    .filter(Boolean)
+    .join("\n");
+
   const account = authEnabled()
-    ? { email: user.email, name: user.name, picture: user.picture }
+    ? {
+        ...personOf(user),
+        email: user.email,
+        storedSymbol: user.symbol,
+        storedColor: user.color,
+      }
     : null;
 
   return (
@@ -36,19 +44,7 @@ export default async function SettingsPage() {
         </Link>
         <h1 className="text-[28px]">{t("common.settings")}</h1>
       </header>
-      <SettingsForm
-        profile={
-          profile
-            ? {
-                background: profile.background,
-                purpose: profile.purpose,
-                application: profile.application,
-              }
-            : null
-        }
-        services={services}
-        account={account}
-      />
+      <SettingsForm account={account} background={background} />
     </main>
   );
 }

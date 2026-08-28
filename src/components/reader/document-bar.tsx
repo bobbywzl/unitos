@@ -3,6 +3,7 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
+import { useCollab } from "@/components/collab/collab-context";
 import { useT } from "@/components/lang-provider";
 import { Logo } from "@/components/logo";
 import type { TFunc } from "@/lib/i18n/dictionaries";
@@ -78,6 +79,7 @@ export function DocumentBar({
   documents: AttachedDocument[];
   activeId: string | null;
 }) {
+  const { canEdit } = useCollab();
   const t = useT();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -469,7 +471,7 @@ export function DocumentBar({
           </button>
           {pillMenu === d.id && (
             <div className="absolute top-full left-0 z-30 mt-2 flex w-56 flex-col overflow-hidden rounded-2xl bg-card py-1 shadow-float">
-              {!d.hasVideo && (d.sourceUrl !== null || d.hasFile) && (
+              {canEdit && !d.hasVideo && (d.sourceUrl !== null || d.hasFile) && (
                 <button
                   onClick={() => {
                     setPillMenu(null);
@@ -497,19 +499,21 @@ export function DocumentBar({
               >
                 {t("panes.printDocument")}
               </button>
-              <button
-                onClick={() => void detach(d.id)}
-                className="px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-950"
-                title={t("panes.detachDocumentTitle")}
-              >
-                {t("panes.detachDocument")}
-              </button>
+              {canEdit && (
+                <button
+                  onClick={() => void detach(d.id)}
+                  className="px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-950"
+                  title={t("panes.detachDocumentTitle")}
+                >
+                  {t("panes.detachDocument")}
+                </button>
+              )}
             </div>
           )}
         </div>
       ))}
 
-      <div ref={menuRef} className="relative shrink-0">
+      <div ref={menuRef} className={`relative shrink-0 ${canEdit ? "" : "hidden"}`}>
         <button
           onClick={() => setMenu(menu === null ? "root" : null)}
           aria-label={t("panes.addDocument")}

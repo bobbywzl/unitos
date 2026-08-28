@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { NotebookView } from "@/lib/types";
+import { useCollab } from "@/components/collab/collab-context";
 import { useT } from "@/components/lang-provider";
 import { SortableItem, SortableList } from "@/components/sortable";
 import { AddSection } from "@/components/outline/add-section";
@@ -14,7 +15,8 @@ import { filterSections, useOutline } from "@/components/outline/use-outline";
 // inline — unlike the tray, which hoists the whole pending queue to the top.
 export function Outline({ notebook }: { notebook: NotebookView }) {
   const t = useT();
-  const { tree, pending, actions, lastRejected, undoReject } = useOutline(notebook);
+  const { canEdit } = useCollab();
+  const { tree, pending, actions, lastRejected, undoReject } = useOutline(notebook, canEdit);
   const [query, setQuery] = useState("");
   const searching = query.trim().length > 0;
   const results = searching ? filterSections(tree, query) : tree;
@@ -87,7 +89,7 @@ export function Outline({ notebook }: { notebook: NotebookView }) {
               ))}
             </SortableList>
 
-            <AddSection onAdd={(title) => actions.addSection(null, title)} />
+            {canEdit && <AddSection onAdd={(title) => actions.addSection(null, title)} />}
 
             {tree.length === 0 && (
               <p className="text-sm text-sand-600">{t("outline.emptySections")}</p>

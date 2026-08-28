@@ -2,7 +2,8 @@ import { anthropic } from "@ai-sdk/anthropic";
 import { streamText, type ModelMessage } from "ai";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { authEnabled, currentUser, notebookGuard } from "@/lib/auth";
+import { authEnabled } from "@/lib/auth";
+import { notebookAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
 import { DERIVATION_MODEL, MAX_OUTPUT_TOKENS } from "@/lib/derive/config";
 import { loadProfile } from "@/lib/derive/context";
@@ -66,11 +67,12 @@ async function handle(req: Request, t: TFunc) {
   if (data.task === "ask" && !data.question) {
     return NextResponse.json({ error: t("api.questionRequired") }, { status: 400 });
   }
-  const denied = await notebookGuard(data.notebookId);
-  if (denied) return denied;
-  const user = await currentUser();
+  // The assistant reads the digest and can write through act: editor.
+  const access = await notebookAccess(data.notebookId, "editor");
+  if (access instanceof NextResponse) return access;
+  const user = access.user;
   const usageMeta = {
-    userId: user?.id ?? null,
+    userId: user.id,
     feature: "assistant",
     model: DERIVATION_MODEL.SYNTHESIS,
   };
@@ -92,7 +94,7 @@ async function handle(req: Request, t: TFunc) {
   } else {
     // Corpora scope: the signed-in reader's corpora (every corpus in
     // single-reader mode).
-    const digests = await ensureAllDigests(authEnabled() && user ? user.id : undefined);
+    const digests = await ensureAllDigests(authEnabled() ? user.id : undefined);
     system = corporaSystem(digests.map((d) => d.parts));
     scopeLabel =
       "all your corpora: every document, note, annotation, distillation, extraction, and summary across them";
