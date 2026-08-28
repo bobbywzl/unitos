@@ -138,6 +138,9 @@ const en = {
   profileNeedsSignIn: "Profile editing needs sign-in. This instance runs as a single reader.",
   pictureInvalid: "Picture must be a JPEG, PNG, or WebP data URL under 300 KB.",
 
+  // Corpus distillation
+  corpusDistillNeedsDocuments: "Attach a document first — the corpus is empty.",
+
   // Replies
   editNotFound: "Edit not found",
   replyNotFound: "Reply not found",
@@ -261,6 +264,8 @@ const zh: Record<keyof typeof en, string> = {
 
   profileNeedsSignIn: "编辑个人资料需要登录。此实例以单人阅读器模式运行。",
   pictureInvalid: "头像必须是 300 KB 以内的 JPEG、PNG 或 WebP data URL。",
+
+  corpusDistillNeedsDocuments: "请先附加文档——文集为空。",
 
   editNotFound: "未找到该编辑",
   replyNotFound: "未找到该回复",

@@ -181,6 +181,13 @@ const en = {
   recommendLinksTitle: "Scan this document against the corpus for recommended links",
   recommendLinksDone: "{n} recommended link(s) found",
   recommendLinksNone: "No new connections found",
+
+  // Corpus distillation (corpus-distill-page.tsx)
+  distillCorpus: "Distill the corpus",
+  corpusAskPlaceholder: "What should this corpus answer?",
+  corpusAskHint:
+    "One question. The AI scans every document in the corpus and pulls the quotes that answer it, each cited to its document.",
+  scanningCorpus: "Scanning the corpus",
 };
 
 const zh: Record<keyof typeof en, string> = {
@@ -348,6 +355,11 @@ const zh: Record<keyof typeof en, string> = {
   recommendLinksTitle: "将此文档与文集比对，寻找推荐链接",
   recommendLinksDone: "找到 {n} 条推荐链接",
   recommendLinksNone: "没有发现新的关联",
+
+  distillCorpus: "提炼文集",
+  corpusAskPlaceholder: "这个文集应该回答什么？",
+  corpusAskHint: "一个问题。AI 扫描文集中的每个文档，找出回答它的引文，每条引文注明所在文档。",
+  scanningCorpus: "正在扫描文集",
 };
 
 export const panes = { en, zh } as const;

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import type { GraphEdge, GraphNode, HistoryEntry, NotebookView } from "@/lib/types";
+import type { CorpusDistillationView, GraphEdge, GraphNode, HistoryEntry, NotebookView } from "@/lib/types";
 import {
   ArrowLeftIcon,
   ChevronLeftIcon,
@@ -22,6 +22,7 @@ import { HistoryControl } from "@/components/collab/history-control";
 import { ShareControl } from "@/components/collab/share-control";
 import { useNotebookSync } from "@/components/collab/use-sync";
 import { GraphOverlay } from "@/components/graph/graph-overlay";
+import { CorpusDistillPage } from "@/components/reader/corpus-distill-page";
 import { ContextTab, type ContextValues } from "@/components/context-tab";
 import { GuideDialog } from "@/components/guide-dialog";
 import { useT } from "@/components/lang-provider";
@@ -64,6 +65,7 @@ export function Workspace({
   rev,
   graph,
   history,
+  corpusDistillations,
 }: {
   notebook: NotebookView;
   documents: AttachedDocument[];
@@ -80,6 +82,7 @@ export function Workspace({
   rev: number;
   graph: { nodes: GraphNode[]; edges: GraphEdge[] };
   history: HistoryEntry[];
+  corpusDistillations: CorpusDistillationView[];
 }) {
   const t = useT();
   const canEdit = collab.canEdit;
@@ -98,6 +101,8 @@ export function Workspace({
   const [menuOpen, setMenuOpen] = useState(false);
   const [guideOpen, setGuideOpen] = useState(false);
   const [graphOpen, setGraphOpen] = useState(false);
+  // The corpus distilled page: null = closed; { shownId } open (null = ask view).
+  const [corpusDistill, setCorpusDistill] = useState<{ shownId: string | null } | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
   const noteCount = countNotes(tree);
@@ -133,11 +138,18 @@ export function Workspace({
         }
       }, 150);
     };
+    // The Distill tab opens the corpus distilled page (SPEC.md §13).
+    const onOpenCorpusDistillation = (e: Event) => {
+      const { distillationId } = (e as CustomEvent<{ distillationId: string | null }>).detail;
+      setCorpusDistill({ shownId: distillationId });
+    };
     window.addEventListener("dissect:show-note", onShowNote);
     window.addEventListener("dissect:focus-annotation", onFocusAnnotation);
+    window.addEventListener("dissect:open-corpus-distillation", onOpenCorpusDistillation);
     return () => {
       window.removeEventListener("dissect:show-note", onShowNote);
       window.removeEventListener("dissect:focus-annotation", onFocusAnnotation);
+      window.removeEventListener("dissect:open-corpus-distillation", onOpenCorpusDistillation);
     };
   }, []);
 
@@ -368,6 +380,16 @@ export function Workspace({
       </div>
 
       <GuideDialog open={guideOpen} onClose={() => setGuideOpen(false)} />
+      {corpusDistill && (
+        <CorpusDistillPage
+          notebookId={notebook.id}
+          activeDocumentId={activeDocumentId}
+          distillations={corpusDistillations}
+          shownId={corpusDistill.shownId}
+          sectionChoices={actions.sectionChoices}
+          onClose={() => setCorpusDistill(null)}
+        />
+      )}
       {graphOpen && (
         <GraphOverlay
           notebookId={notebook.id}

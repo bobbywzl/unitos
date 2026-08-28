@@ -18,6 +18,7 @@ const en = {
   // Distill tab
   distillNoDoc: "Open a text document to distill it.",
   distillArticle: "Distill the article",
+  distillCorpusTitle: "One question; the AI scans every document in the corpus",
   distillButtonTitle: "Ask the article one question; the AI pulls the quotes that answer it",
   distillEmpty:
     "No distillations yet. Ask the article one question; the quotes that answer it list here.",
@@ -85,6 +86,7 @@ const zh: Record<keyof typeof en, string> = {
   notAttached: "不在此文集",
   distillNoDoc: "打开一篇文本文档即可提炼。",
   distillArticle: "提炼文章",
+  distillCorpusTitle: "一个问题；AI 扫描文集中的每个文档",
   distillButtonTitle: "向文章提一个问题，AI 会摘出回答它的引文",
   distillEmpty: "还没有提炼。向文章提一个问题，回答它的引文会列在这里。",
   openDistillation: "打开此提炼",

@@ -64,6 +64,9 @@ model Notebook {
   // Change counter for live sync: every write to the corpus or its documents
   // increments it; open workspaces poll it and refresh when it moves.
   rev           Int                    @default(0)
+  // Corpus-scope DISTILL output (SPEC.md §13): [{id, question, createdAt,
+  // createdById, quotes}], newest first; each quote carries its documentId.
+  distillations Json?
   sections      Section[]
   documents     NotebookDocument[]
   digest        NotebookDigest?

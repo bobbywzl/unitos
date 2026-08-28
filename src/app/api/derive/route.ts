@@ -16,6 +16,7 @@ import {
   corpusSection,
   documentPrefix,
   loadProfile,
+  renderBlockLines,
   sectionSkeleton,
 } from "@/lib/derive/context";
 import { fetchFigureImage, figureContent, type FigureImage } from "@/lib/derive/figure";
@@ -29,11 +30,14 @@ import {
 import { callForJson, modelErrorMessage } from "@/lib/derive/json-call";
 import { serverT } from "@/lib/i18n/server";
 import { promptTemplates } from "@/lib/prompts";
+import { corpusDistillPrompt } from "@/lib/prompts/distill";
 import type { PromptCtx } from "@/lib/prompts/types";
 import {
+  corpusDistillationList,
   distillationList,
   extractionList,
   SUMMARY_DEPTHS,
+  type CorpusDistillation,
   type Distillation,
   type Extraction,
   type SummaryLevels,
@@ -53,9 +57,13 @@ export const maxDuration = 120;
 
 // The one derivation pipeline (SPEC.md §4). Never fork per feature: new derivation =
 // new prompt template + destination handler below.
-const deriveSchema = z.object({
+const deriveSchema = z
+  .object({
   type: z.enum(["EXPLAIN", "SIMPLIFY", "SALIENCE", "EXTRACT", "DISTILL", "SUMMARIZE", "FIND"]),
-  documentId: z.string().min(1),
+  // Absent only for corpus-scope DISTILL, which reads every document.
+  documentId: z.string().min(1).optional(),
+  // DISTILL only: "corpus" scans every document in the corpus (SPEC.md §13).
+  scope: z.enum(["document", "corpus"]).optional(),
   notebookId: z.string().min(1),
   anchor: z
     .object({
@@ -81,7 +89,13 @@ const deriveSchema = z.object({
         .optional(),
     })
     .optional(),
-});
+  })
+  .refine((d) => d.documentId || (d.type === "DISTILL" && d.scope === "corpus"), {
+    message: "documentId is required",
+  })
+  .refine((d) => d.scope !== "corpus" || d.type === "DISTILL", {
+    message: "scope corpus is DISTILL only",
+  });
 
 const ANCHOR_REQUIRED = new Set(["EXPLAIN", "SIMPLIFY", "EXTRACT"]);
 
@@ -122,9 +136,184 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: t("api.endBeforeStart") }, { status: 400 });
   }
 
+  // ── Corpus scope (SPEC.md §13): one question, every document ──────────────
+  // The corpus rides as one cacheable system message, rendered like the
+  // connect scan; quotes come back as block spans and the server maps each to
+  // its document — block ids are unique across the corpus.
+  if (data.type === "DISTILL" && data.scope === "corpus") {
+    const attachments = await db.notebookDocument.findMany({
+      where: { notebookId: data.notebookId },
+      include: {
+        document: {
+          select: {
+            id: true,
+            title: true,
+            blocks: {
+              orderBy: { order: "asc" },
+              select: { id: true, type: true, text: true, startTime: true, endTime: true },
+            },
+          },
+        },
+      },
+    });
+    const corpusDocs = attachments
+      .map((a) => a.document)
+      .filter((d) => d.blocks.some((b) => b.text.trim()));
+    if (corpusDocs.length === 0) {
+      return NextResponse.json({ error: t("api.corpusDistillNeedsDocuments") }, { status: 400 });
+    }
+    const profile = await loadProfile(data.notebookId);
+
+    // Past the budget, later documents cut whole with a declared marker, never
+    // silently (the digest discipline, SPEC.md §7).
+    const PER_DOCUMENT = 100_000;
+    const TOTAL = 450_000;
+    const sections: string[] = [];
+    const skipped: string[] = [];
+    let used = 0;
+    for (const doc of corpusDocs) {
+      const lines = renderBlockLines(doc.blocks);
+      const rendered = `[document ${doc.id}] "${doc.title}"` + "\n" +
+        (lines.length > PER_DOCUMENT ? lines.slice(0, PER_DOCUMENT) : lines);
+      if (used + rendered.length > TOTAL) {
+        skipped.push(doc.title);
+        continue;
+      }
+      used += rendered.length;
+      sections.push(rendered);
+    }
+    const corpusText = [
+      "You assist a reader dissecting a corpus of documents. Every document follows.",
+      "Each document starts with its id as [document <id>]; each block starts with its id as [block <id>]. Block ids are unique across all documents. Reference block ids exactly as given.",
+      "",
+      sections.join("\n\n"),
+      ...(skipped.length > 0 ? ["", `Documents cut for length (not shown): ${skipped.join("; ")}`] : []),
+    ].join("\n");
+    const corpusMessages: ModelMessage[] = [
+      {
+        role: "system",
+        content: corpusText,
+        providerOptions: { anthropic: { cacheControl: { type: "ephemeral" } } },
+      },
+      { role: "user", content: corpusDistillPrompt({ profile, question: data.question!.trim() }) },
+    ];
+    const corpusBlockById = new Map(
+      corpusDocs.flatMap((d) => d.blocks.map((b) => [b.id, { id: b.id, text: b.text }] as const)),
+    );
+    const docByBlock = new Map(
+      corpusDocs.flatMap((d) => d.blocks.map((b) => [b.id, d.id] as const)),
+    );
+    const orderByBlock = new Map<string, number>();
+    corpusDocs.forEach((d, di) =>
+      d.blocks.forEach((b, bi) => orderByBlock.set(b.id, di * 1_000_000 + bi)),
+    );
+
+    // Same in-band streaming as document DISTILL: heartbeat spaces while the
+    // model works, then the distillation JSON or the error token.
+    const corpusEncoder = new TextEncoder();
+    let corpusCancelled = false;
+    let corpusHeartbeat: ReturnType<typeof setInterval> | null = null;
+    const corpusStream = new ReadableStream<Uint8Array>({
+      async start(controller) {
+        const send = (text: string) => {
+          if (!corpusCancelled) controller.enqueue(corpusEncoder.encode(text));
+        };
+        corpusHeartbeat = setInterval(() => send(" "), 5_000);
+        const fail = (message: string) => send(`${STREAM_ERROR_TOKEN}${message}`);
+        try {
+          const result = await callForJson({
+            model: anthropic(DERIVATION_MODEL.DISTILL),
+            messages: corpusMessages,
+            maxOutputTokens: MAX_OUTPUT_TOKENS.DISTILL,
+            schema: distillOutputSchema,
+            label: "DISTILL:corpus",
+            usage: usageMeta,
+            abortSignal: req.signal,
+          });
+          if (corpusCancelled || req.signal.aborted) return;
+          if (!result.ok) {
+            fail(t("api.distillFailed", { reason: result.error }));
+            return;
+          }
+          const quotes = result.data.quotes
+            .map((q) => {
+              const span = resolveSpan(q, corpusBlockById);
+              const quoteDocumentId = span ? docByBlock.get(span.blockId) : undefined;
+              return span && quoteDocumentId
+                ? { ...span, caption: q.caption, documentId: quoteDocumentId }
+                : null;
+            })
+            .filter((q) => q !== null)
+            .sort(
+              (a, b) =>
+                (orderByBlock.get(a.blockId) ?? 0) - (orderByBlock.get(b.blockId) ?? 0) ||
+                a.start - b.start,
+            );
+          if (quotes.length === 0) {
+            fail(t("api.distillNoQuotes"));
+            return;
+          }
+          const distillation: CorpusDistillation = {
+            id: crypto.randomUUID(),
+            question: data.question!.trim(),
+            createdAt: new Date().toISOString(),
+            createdById: user.id,
+            quotes: quotes.map((q) => ({
+              documentId: q.documentId,
+              blockId: q.blockId,
+              start: q.start,
+              end: q.end,
+              quotedText: q.quotedText,
+              prefix: q.prefix,
+              suffix: q.suffix,
+              caption: q.caption,
+            })),
+          };
+          if (corpusCancelled || req.signal.aborted) return;
+          const notebookRow = await db.notebook.findUnique({
+            where: { id: data.notebookId },
+            select: { distillations: true },
+          });
+          await db.notebook.update({
+            where: { id: data.notebookId },
+            data: {
+              // Keep the newest 20; the page deletes the rest one by one.
+              distillations: [
+                distillation,
+                ...corpusDistillationList(notebookRow?.distillations),
+              ].slice(0, 20),
+            },
+          });
+          await bumpNotebook(data.notebookId);
+          send(JSON.stringify({ ok: true, distillation }));
+        } catch (err) {
+          if (!corpusCancelled && !req.signal.aborted) {
+            console.error("[derive] DISTILL:corpus failed:", err);
+            fail(t("api.distillFailed", { reason: modelErrorMessage(err) }));
+          }
+        } finally {
+          if (corpusHeartbeat) clearInterval(corpusHeartbeat);
+          if (!corpusCancelled) controller.close();
+        }
+      },
+      cancel() {
+        corpusCancelled = true;
+        if (corpusHeartbeat) clearInterval(corpusHeartbeat);
+      },
+    });
+    return new Response(corpusStream, {
+      headers: { "Content-Type": "text/plain; charset=utf-8" },
+    });
+  }
+
+  if (!data.documentId) {
+    return NextResponse.json({ error: t("api.documentNotFound") }, { status: 404 });
+  }
+  const documentId = data.documentId;
+
   const attachment = await db.notebookDocument.findUnique({
     where: {
-      notebookId_documentId: { notebookId: data.notebookId, documentId: data.documentId },
+      notebookId_documentId: { notebookId: data.notebookId, documentId: documentId },
     },
   });
   if (!attachment) {
@@ -133,7 +322,7 @@ export async function POST(req: Request) {
 
   // 1. Load document blocks (the cached prompt prefix), profile, section skeleton.
   const document = await db.document.findUnique({
-    where: { id: data.documentId },
+    where: { id: documentId },
     include: { blocks: { orderBy: { order: "asc" }, select: { id: true, type: true, text: true, startTime: true, endTime: true } } },
   });
   if (!document) return NextResponse.json({ error: t("api.documentNotFound") }, { status: 404 });
@@ -259,7 +448,7 @@ export async function POST(req: Request) {
   // own system message after the cached prefix, so the prefix cache holds.
   const corpus =
     data.type === "EXPLAIN"
-      ? await corpusSection(data.notebookId, data.documentId, anchored?.anchoredText ?? "")
+      ? await corpusSection(data.notebookId, documentId, anchored?.anchoredText ?? "")
       : null;
 
   // 2. Template by type. The document is the cached prefix, byte-identical for every
@@ -316,7 +505,7 @@ export async function POST(req: Request) {
         // Summary tab does not re-pay tokens. Regenerate overwrites the depth.
         if (data.type === "SUMMARIZE" && text.trim()) {
           const where = {
-            notebookId_documentId: { notebookId: data.notebookId, documentId: data.documentId },
+            notebookId_documentId: { notebookId: data.notebookId, documentId: documentId },
           };
           const nd = await db.notebookDocument.findUnique({ where, select: { summaries: true } });
           const current = (nd?.summaries ?? {}) as SummaryLevels;
@@ -368,7 +557,7 @@ export async function POST(req: Request) {
                   order: count,
                   sources: {
                     create: {
-                      documentId: data.documentId,
+                      documentId: documentId,
                       blockId: data.anchor.blockId,
                       startOffset: data.anchor.startOffset,
                       endOffset: data.anchor.endOffset,
@@ -408,7 +597,7 @@ export async function POST(req: Request) {
                 order: count,
                 sources: {
                   create: {
-                    documentId: data.documentId,
+                    documentId: documentId,
                     blockId: videoAnchor.blockId,
                     startOffset: 0,
                     endOffset: 0,
@@ -492,7 +681,7 @@ export async function POST(req: Request) {
     }
     await db.notebookDocument.update({
       where: {
-        notebookId_documentId: { notebookId: data.notebookId, documentId: data.documentId },
+        notebookId_documentId: { notebookId: data.notebookId, documentId: documentId },
       },
       data: { salience: spans },
     });
@@ -564,7 +753,7 @@ export async function POST(req: Request) {
     };
     await db.notebookDocument.update({
       where: {
-        notebookId_documentId: { notebookId: data.notebookId, documentId: data.documentId },
+        notebookId_documentId: { notebookId: data.notebookId, documentId: documentId },
       },
       data: {
         // Oldest first — the index gives the label. Keep the newest 20.
@@ -646,7 +835,7 @@ export async function POST(req: Request) {
         if (cancelled || req.signal.aborted) return;
         await db.notebookDocument.update({
           where: {
-            notebookId_documentId: { notebookId: data.notebookId, documentId: data.documentId },
+            notebookId_documentId: { notebookId: data.notebookId, documentId: documentId },
           },
           data: {
             // Keep the newest 20; the page deletes the rest one by one.

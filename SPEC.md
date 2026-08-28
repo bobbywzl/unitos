@@ -541,6 +541,10 @@ When a document joins a corpus — upload, URL, YouTube (after its transcript la
 
 A recommended link paints nowhere until accepted — the user approves everything (§1). It lives in the Annotations panel under Recommended links: the reason, both quotes, the author badge, a reply thread, and Accept / Dismiss. Accept clears `recommended`, paints the link, and records a LINK_ADD by its accepter; Dismiss deletes it without a history entry.
 
+### Corpus distillation
+
+Distill's second scope: the reader asks the whole corpus one question (`POST /api/derive` with `type: DISTILL, scope: "corpus"`, no documentId). The corpus rides as one cacheable system message — every document rendered `[document <id>] "title"` then block lines, later documents cut whole with a declared marker past the budget — and the model returns the same DISTILL quote contract; the server maps each quote to its document by block id (block ids are unique across the corpus) and stores the distillation on `Notebook.distillations`, newest first, capped at 20. The corpus distilled page (Distill tab → "Distill the corpus") renders each quote under its document's title chip; clicking a quote opens that document; Add to notes lands the quote `PENDING` with a source in its own document — one distillation, sources across the corpus. Delete goes through `PATCH /api/notebooks/[id]` `removeDistillationId`. Quotes heal at render and orphan visibly (§5).
+
 ### Graph
 
 The Graph (rail button; full-screen overlay; `reactflow`, the release-edu tree pattern) draws the corpus as a connected whole: every attached document a node, every linked pair one curve. The more links between two documents, the thicker and bolder the curve; a pair held together only by recommended links draws dashed until one is accepted. Nodes drag; click one to open the document; pan and zoom Obsidian-style. Node and edge data come from the workspace page (`GraphNode`, `GraphEdge` in `lib/types.ts`); reactflow lazy-loads when the overlay opens.

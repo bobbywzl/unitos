@@ -88,6 +88,32 @@ export function distillationList(value: unknown): Distillation[] {
   return Array.isArray(value) ? (value as Distillation[]) : [];
 }
 
+// ── Corpus-scope DISTILL (SPEC.md §13): one question, every document ───────
+
+/** One quote of a corpus distillation: a DistillQuote plus the document it
+    lives in — quotes span the whole corpus. */
+export type CorpusDistillQuote = DistillQuote & { documentId: string };
+
+/** Stored on Notebook.distillations, newest first. */
+export type CorpusDistillation = {
+  id: string;
+  question: string;
+  createdAt: string; // ISO
+  createdById?: string;
+  quotes: CorpusDistillQuote[];
+};
+
+/** One corpus distillation as the reader sees it: quotes re-resolved against
+    the current blocks, each carrying its document's title. */
+export type CorpusDistillationView = Omit<CorpusDistillation, "quotes"> & {
+  quotes: (CorpusDistillQuote & { orphaned: boolean; documentTitle: string })[];
+};
+
+/** Tolerant read of the Json column; anything malformed reads as empty. */
+export function corpusDistillationList(value: unknown): CorpusDistillation[] {
+  return Array.isArray(value) ? (value as CorpusDistillation[]) : [];
+}
+
 // ── EXTRACT: origin phrase → the passages that reveal its topic ────────────
 
 /** One anchored span of an extraction (same dual anchor as Source, SPEC.md §5). */

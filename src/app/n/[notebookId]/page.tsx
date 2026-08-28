@@ -9,9 +9,11 @@ import { documentReferences } from "@/lib/parse/types";
 import { resolveDocumentSources } from "@/lib/anchors/resolve";
 import { db } from "@/lib/db";
 import {
+  corpusDistillationList,
   distillationList,
   extractionList,
   type AnnotationItem,
+  type CorpusDistillationView,
   type DistillationView,
   type EditItem,
   type ExtractionView,
@@ -801,6 +803,53 @@ export default async function NotebookPage(props: {
         }
       : null;
 
+  // Corpus distillations (SPEC.md §13): quotes heal against the current blocks
+  // of every document they cite, orphaning visibly (SPEC.md §5); each quote
+  // carries its document's title for the corpus distilled page.
+  const storedCorpusDistillations = corpusDistillationList(notebook.distillations);
+  const corpusQuoteDocIds = [
+    ...new Set(storedCorpusDistillations.flatMap((d) => d.quotes.map((q) => q.documentId))),
+  ];
+  const corpusQuoteDocs =
+    corpusQuoteDocIds.length > 0
+      ? await db.document.findMany({
+          where: { id: { in: corpusQuoteDocIds } },
+          select: {
+            id: true,
+            title: true,
+            blocks: { orderBy: { order: "asc" }, select: { id: true, text: true } },
+          },
+        })
+      : [];
+  const corpusQuoteDocById = new Map(corpusQuoteDocs.map((d) => [d.id, d]));
+  const corpusDistillations: CorpusDistillationView[] = storedCorpusDistillations.map((d) => ({
+    id: d.id,
+    question: d.question,
+    createdAt: d.createdAt,
+    createdById: d.createdById,
+    quotes: d.quotes.map((q) => {
+      const doc = corpusQuoteDocById.get(q.documentId);
+      const documentTitle = doc?.title ?? "";
+      if (!doc) return { ...q, orphaned: true, documentTitle };
+      const block = doc.blocks.find((b) => b.id === q.blockId);
+      if (block && block.text.slice(q.start, q.end) === q.quotedText) {
+        return { ...q, orphaned: false, documentTitle };
+      }
+      if (block) {
+        const hit = matchInText(block.text, q);
+        if (hit) return { ...q, start: hit.start, end: hit.end, orphaned: false, documentTitle };
+      }
+      for (const b of doc.blocks) {
+        if (b.id === q.blockId) continue;
+        const hit = matchInText(b.text, q);
+        if (hit) {
+          return { ...q, blockId: b.id, start: hit.start, end: hit.end, orphaned: false, documentTitle };
+        }
+      }
+      return { ...q, orphaned: true, documentTitle };
+    }),
+  }));
+
   // The graph (SPEC.md §13): attached documents as nodes; links between them
   // as undirected weighted edges — thicker with more links, dashed while only
   // recommended ones connect a pair.
@@ -889,6 +938,7 @@ export default async function NotebookPage(props: {
     for (const r of e.replies) authorIds.add(r.userId);
   }
   for (const entry of history) if (entry.userId) authorIds.add(entry.userId);
+  for (const d of corpusDistillations) if (d.createdById) authorIds.add(d.createdById);
   for (const pane of [paneOne, paneTwo]) {
     for (const d of pane?.distillations ?? []) if (d.createdById) authorIds.add(d.createdById);
     for (const x of pane?.extractions ?? []) if (x.createdById) authorIds.add(x.createdById);
@@ -968,6 +1018,7 @@ export default async function NotebookPage(props: {
       rev={notebook.rev}
       graph={{ nodes: graphNodes, edges: graphEdges }}
       history={history}
+      corpusDistillations={corpusDistillations}
       context={{
         initial: contextValues,
         hasOverride,
@@ -985,6 +1036,8 @@ export default async function NotebookPage(props: {
         <DistillPanel
           documentId={paneOne && !paneOne.video ? paneOne.document.id : null}
           distillations={paneOne?.distillations ?? []}
+          corpusDistillations={corpusDistillations}
+          hasDocuments={attached.length > 0}
         />
       }
       annotationsPanel={
@@ -1007,7 +1060,7 @@ export default async function NotebookPage(props: {
         (paneOne?.linksOut.length ?? 0) +
         (paneOne?.linksIn.length ?? 0)
       }
-      distillationCount={paneOne?.distillations.length ?? 0}
+      distillationCount={(paneOne?.distillations.length ?? 0) + corpusDistillations.length}
       reader={
         paneOne ? (
           <ReaderPanes
