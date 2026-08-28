@@ -6,6 +6,7 @@ import type { EditItem } from "@/lib/types";
 import { api } from "@/lib/api";
 import { useCollab } from "@/components/collab/collab-context";
 import { AuthorChip } from "@/components/collab/person-badge";
+import { ReplyThread } from "@/components/collab/reply-thread";
 import { useT } from "@/components/lang-provider";
 import type { TFunc, TKey } from "@/lib/i18n/dictionaries";
 
@@ -216,6 +217,7 @@ function EditCard({
           </span>
         </div>
       )}
+      <ReplyThread target={{ blockEditId: edit.id }} replies={edit.replies} />
     </div>
   );
 }

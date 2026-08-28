@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { serverT } from "@/lib/i18n/server";
 import type { NotebookView, SectionView } from "@/lib/types";
 import { ArrowLeftIcon } from "@/components/icons";
+import { AccountGuard } from "@/components/account-guard";
 import { CollabProvider, type CollabState } from "@/components/collab/collab-context";
 import { SyncRefresh } from "@/components/collab/sync-refresh";
 import { ExportMenu } from "@/components/export-menu";
@@ -29,6 +30,7 @@ export default async function NotesPage(props: { params: Promise<{ notebookId: s
             orderBy: { order: "asc" },
             include: {
               sources: { include: { document: { select: { id: true, title: true } } } },
+              replies: { orderBy: { createdAt: "asc" } },
             },
           },
         },
@@ -59,6 +61,12 @@ export default async function NotesPage(props: { params: Promise<{ notebookId: s
         quotedText: src.quotedText,
         orphaned: src.orphaned,
       })),
+      replies: n.replies.map((r) => ({
+        id: r.id,
+        content: r.content,
+        userId: r.userId,
+        createdAt: r.createdAt.toISOString(),
+      })),
     })),
     children: [],
   });
@@ -78,7 +86,10 @@ export default async function NotesPage(props: { params: Promise<{ notebookId: s
 
   const authorIds = new Set<string>([notebook.userId]);
   for (const section of notebook.sections) {
-    for (const n of section.notes) if (n.createdById) authorIds.add(n.createdById);
+    for (const n of section.notes) {
+      if (n.createdById) authorIds.add(n.createdById);
+      for (const r of n.replies) authorIds.add(r.userId);
+    }
   }
   const collab: CollabState = {
     authOn: authEnabled(),
@@ -91,6 +102,7 @@ export default async function NotesPage(props: { params: Promise<{ notebookId: s
 
   return (
     <main className="mx-auto w-[760px] max-w-full px-6 pt-[26px] pb-24">
+      <AccountGuard userId={user.id} enabled={authEnabled()} />
       <header className="mb-[34px] flex items-center gap-2">
         <Link
           href="/"

@@ -7,6 +7,7 @@ import type { AnnotationItem, LinkIn, LinkOut } from "@/lib/types";
 import { api } from "@/lib/api";
 import { useCollab } from "@/components/collab/collab-context";
 import { AuthorChip } from "@/components/collab/person-badge";
+import { ReplyThread } from "@/components/collab/reply-thread";
 import { LocateIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { Markdown } from "@/components/markdown";
@@ -56,6 +57,7 @@ function AnnotationActions({
   }
 
   return (
+    <>
     <div className="mt-2 flex items-center gap-2">
       {canJump && (
         <button
@@ -90,6 +92,8 @@ function AnnotationActions({
         )}
       </span>
     </div>
+    <ReplyThread target={{ noteId: annotation.id }} replies={annotation.replies} />
+    </>
   );
 }
 

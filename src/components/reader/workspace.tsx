@@ -84,6 +84,7 @@ export function Workspace({
     documentId: activeDocumentId,
     rev,
     enabled: true,
+    accountId: collab.authOn ? collab.myId : null,
   });
   const [collapsed, setCollapsed] = useState(false);
   const [tab, setTab] = useState<Tab>("notes");

@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 import type { Person } from "@/lib/person";
+import { readAccountCookie } from "@/lib/tab-account";
 
 export type SyncPresence = Person & { documentId: string | null };
 
@@ -29,11 +30,17 @@ export function useNotebookSync({
   documentId,
   rev,
   enabled,
+  accountId,
 }: {
   notebookId: string;
   documentId: string | null;
   rev: number;
   enabled: boolean;
+  // The account this tab was rendered for; null = sign-in off, no check. When
+  // the browser's account cookie stops matching (signed out or switched in
+  // another tab), polling stops — the tab must not stamp presence or refresh
+  // as someone else. The account guard shows the notice.
+  accountId: string | null;
 }): SyncPresence[] {
   const router = useRouter();
   const [people, setPeople] = useState<SyncPresence[]>([]);
@@ -52,6 +59,7 @@ export function useNotebookSync({
 
     async function poll() {
       if (inFlight.current || document.hidden) return;
+      if (accountId && readAccountCookie() !== accountId) return;
       inFlight.current = true;
       try {
         const doc = documentId ? `?doc=${encodeURIComponent(documentId)}` : "";
@@ -82,7 +90,7 @@ export function useNotebookSync({
       clearInterval(timer);
       document.removeEventListener("visibilitychange", onVisible);
     };
-  }, [notebookId, documentId, enabled, router]);
+  }, [notebookId, documentId, enabled, accountId, router]);
 
   return people;
 }

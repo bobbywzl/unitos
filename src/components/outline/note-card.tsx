@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import type { NoteView, SourceChip } from "@/lib/types";
 import { useCollab } from "@/components/collab/collab-context";
 import { AuthorChip } from "@/components/collab/person-badge";
+import { ReplyThread } from "@/components/collab/reply-thread";
 import { useT } from "@/components/lang-provider";
 import { Markdown } from "@/components/markdown";
 import { DragHandle, type HandleProps } from "@/components/sortable";
@@ -175,6 +176,7 @@ export function NoteCard({
             </div>
           )}
           <AuthorLine createdById={note.createdById} />
+          <ReplyThread target={{ noteId: note.id }} replies={note.replies} />
         </div>
       </div>
 

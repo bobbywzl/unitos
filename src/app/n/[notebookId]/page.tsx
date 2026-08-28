@@ -21,6 +21,7 @@ import {
   type SectionView,
   type SummaryLevels,
 } from "@/lib/types";
+import { AccountGuard } from "@/components/account-guard";
 import { AssistantPanel } from "@/components/assistant/assistant-panel";
 import type { CollabState } from "@/components/collab/collab-context";
 import { AnnotationsPanel } from "@/components/panels/annotations-panel";
@@ -79,6 +80,7 @@ export default async function NotebookPage(props: {
             orderBy: { order: "asc" },
             include: {
               sources: { include: { document: { select: { id: true, title: true } } } },
+              replies: { orderBy: { createdAt: "asc" } },
             },
           },
         },
@@ -285,6 +287,12 @@ export default async function NotebookPage(props: {
           orphaned: resolutionById.get(source.id)?.orphaned ?? source.orphaned,
           figureLabel: figureLabelBySource.get(source.id) ?? null,
           createdById: n.createdById,
+          replies: n.replies.map((r) => ({
+            id: r.id,
+            content: r.content,
+            userId: r.userId,
+            createdAt: r.createdAt.toISOString(),
+          })),
         };
       })
       .filter((a): a is AnnotationItem => a !== null);
@@ -703,6 +711,12 @@ export default async function NotebookPage(props: {
         quotedText: src.quotedText,
         orphaned: resolutionById.get(src.id)?.orphaned ?? src.orphaned,
       })),
+      replies: n.replies.map((r) => ({
+        id: r.id,
+        content: r.content,
+        userId: r.userId,
+        createdAt: r.createdAt.toISOString(),
+      })),
     })),
     children: [],
   });
@@ -729,6 +743,7 @@ export default async function NotebookPage(props: {
           where: { documentId: paneOne.document.id },
           orderBy: { createdAt: "desc" },
           take: 100,
+          include: { replies: { orderBy: { createdAt: "asc" } } },
         })
       ).map((e) => ({
         id: e.id,
@@ -738,6 +753,12 @@ export default async function NotebookPage(props: {
         after: e.after,
         meta: e.meta as EditItem["meta"],
         userId: e.userId,
+        replies: e.replies.map((r) => ({
+          id: r.id,
+          content: r.content,
+          userId: r.userId,
+          createdAt: r.createdAt.toISOString(),
+        })),
         createdAt: e.createdAt.toISOString(),
       }))
     : [];
@@ -769,9 +790,15 @@ export default async function NotebookPage(props: {
   // author referenced by a note, edit, distillation, or extraction.
   const authorIds = new Set<string>([notebook.userId]);
   for (const section of notebook.sections) {
-    for (const n of section.notes) if (n.createdById) authorIds.add(n.createdById);
+    for (const n of section.notes) {
+      if (n.createdById) authorIds.add(n.createdById);
+      for (const r of n.replies) authorIds.add(r.userId);
+    }
   }
-  for (const e of edits) if (e.userId) authorIds.add(e.userId);
+  for (const e of edits) {
+    if (e.userId) authorIds.add(e.userId);
+    for (const r of e.replies) authorIds.add(r.userId);
+  }
   for (const pane of [paneOne, paneTwo]) {
     for (const d of pane?.distillations ?? []) if (d.createdById) authorIds.add(d.createdById);
     for (const x of pane?.extractions ?? []) if (x.createdById) authorIds.add(x.createdById);
@@ -837,6 +864,8 @@ export default async function NotebookPage(props: {
   );
 
   return (
+    <>
+    <AccountGuard userId={user.id} enabled={authEnabled()} />
     <Workspace
       notebook={view}
       documents={attached}
@@ -904,5 +933,6 @@ export default async function NotebookPage(props: {
         )
       }
     />
+    </>
   );
 }

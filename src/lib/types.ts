@@ -1,5 +1,13 @@
 import type { DerivationType, NoteStatus } from "@prisma/client";
 
+/** One reply in the discussion under a note or an edit. */
+export type ReplyView = {
+  id: string;
+  content: string;
+  userId: string;
+  createdAt: string; // ISO
+};
+
 export type SourceChip = {
   id: string;
   documentId: string;
@@ -18,6 +26,7 @@ export type NoteView = {
   // label renders from this when the corpus is shared.
   createdById: string | null;
   sources: SourceChip[];
+  replies: ReplyView[];
 };
 
 export type SectionView = {
@@ -130,6 +139,7 @@ export type AnnotationItem = {
   quotedText: string | null;
   orphaned: boolean;
   createdById: string | null;
+  replies: ReplyView[];
   // Set when the anchor sits on a figure, table, or equation block: the label
   // ("A1", "A2", …) shown at the block in the reader and on this card.
   figureLabel: string | null;
@@ -215,6 +225,7 @@ export type EditItem = {
   before: string | null;
   after: string | null;
   userId: string | null; // account that made the edit; null = before attribution
+  replies: ReplyView[];
   meta: {
     linkId?: string;
     toDocumentId?: string;

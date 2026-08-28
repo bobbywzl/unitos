@@ -137,6 +137,11 @@ const en = {
   // Profile
   profileNeedsSignIn: "Profile editing needs sign-in. This instance runs as a single reader.",
   pictureInvalid: "Picture must be a JPEG, PNG, or WebP data URL under 300 KB.",
+
+  // Replies
+  editNotFound: "Edit not found",
+  replyNotFound: "Reply not found",
+  replyNotYours: "Only the reply's author or the owner can delete it.",
 };
 
 const zh: Record<keyof typeof en, string> = {
@@ -256,6 +261,10 @@ const zh: Record<keyof typeof en, string> = {
 
   profileNeedsSignIn: "编辑个人资料需要登录。此实例以单人阅读器模式运行。",
   pictureInvalid: "头像必须是 300 KB 以内的 JPEG、PNG 或 WebP data URL。",
+
+  editNotFound: "未找到该编辑",
+  replyNotFound: "未找到该回复",
+  replyNotYours: "只有回复的作者或所有者可以删除它。",
 };
 
 export const api = { en, zh } as const;

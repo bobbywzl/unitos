@@ -507,6 +507,14 @@ Every write is labeled with its author: `Note.createdById` (manual notes, highli
 
 Every write bumps `Notebook.rev` (document writes bump every corpus the document is attached to). Open workspaces poll `GET /api/notebooks/[id]/sync` every 4 seconds: the call stamps the caller's `NotebookPresence` row and answers `{rev, people}` — who else has the corpus open (25-second window). When the rev moves, the client refreshes the page — deferred while an input, textarea, or editable block has focus or a selection is open, so typing is never clobbered. Presence renders as badges in the workspace header.
 
+### Replies
+
+Every note (annotations included — a highlight, comment, explanation, or assistant conversation is a note) and every edit in the Edits panel carries a discussion: `Reply` rows (`noteId` or `blockEditId`, author, content), flat, oldest first. Collaborators comment on each other's work there. Editors reply; viewers read; a reply deletes by its author or the owner. Threads render collapsed to a count on note cards, annotation cards, and edit cards; the Reply affordance appears once the corpus is shared. `POST /api/replies`, `DELETE /api/replies/[replyId]`; replies bump the rev like every write.
+
+### Stale tabs
+
+Cookies are per browser, not per tab: signing out or switching accounts in one tab changes every tab's cookies. Sign-in therefore also sets a readable account cookie (`dissect-account`, the account id — grants nothing; the session cookie alone authorizes). Account-scoped pages mount an account guard that latches the account the page was rendered for, watches the cookie (on focus, on visibility, every 5 seconds), confirms a mismatch against `GET /api/auth/account` (which also re-stamps the cookie, healing sessions from before it existed), and freezes the tab with an account-changed notice instead of silently becoming the new account. Live sync stops polling on mismatch so a stale tab never stamps presence or refreshes as someone else. `api()` sends the tab's rendered account as a header; the middleware answers 409 when it no longer matches the cookie, so a stale tab's write can never land as the wrong account.
+
 ### Sharing surfaces
 
 - Share dialog in the workspace header: the owner adds by email with a role, re-roles, removes; a collaborator sees the list and can leave. `GET/POST/DELETE /api/notebooks/[id]/collaborators`.

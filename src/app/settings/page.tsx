@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { serverT } from "@/lib/i18n/server";
 import { personOf } from "@/lib/person";
 import { Logo } from "@/components/logo";
+import { AccountGuard } from "@/components/account-guard";
 import { SettingsForm } from "@/components/settings-form";
 
 export const dynamic = "force-dynamic";
@@ -34,6 +35,7 @@ export default async function SettingsPage() {
 
   return (
     <main className="mx-auto max-w-2xl px-6 py-8">
+      <AccountGuard userId={user.id} enabled={authEnabled()} />
       <header className="mb-8 flex items-center gap-3">
         <Link
           href="/"

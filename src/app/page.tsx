@@ -4,6 +4,7 @@ import { authEnabled, currentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { serverT } from "@/lib/i18n/server";
 import { Logo } from "@/components/logo";
+import { AccountGuard } from "@/components/account-guard";
 import { WorksShelf, type WorkItem } from "@/components/works/works-shelf";
 
 export const dynamic = "force-dynamic";
@@ -64,6 +65,7 @@ export default async function Home() {
 
   return (
     <main className="mx-auto w-full max-w-[1080px] px-16 pb-16">
+      <AccountGuard userId={user.id} enabled={authEnabled()} />
       <header className="flex items-center gap-3 pt-[26px]">
         <Logo size={38} className="text-clay" />
         <span className="font-display text-[21px]">{t("common.appName")}</span>
