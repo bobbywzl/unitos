@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { bumpNotebook, sectionAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
 import { serverT } from "@/lib/i18n/server";
 import { normalizeSectionOrders, movedOrder } from "@/lib/order";
@@ -22,6 +23,8 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ sectionId: st
     include: { _count: { select: { children: true } } },
   });
   if (!section) return NextResponse.json({ error: t("api.sectionNotFound") }, { status: 404 });
+  const access = await sectionAccess(sectionId, "editor");
+  if (access instanceof NextResponse) return access;
 
   if (data.parentId !== undefined && data.parentId !== section.parentId) {
     if (data.parentId) {
@@ -65,6 +68,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ sectionId: st
   }
 
   await normalizeSectionOrders(section.notebookId);
+  await bumpNotebook(section.notebookId);
   const updated = await db.section.findUnique({ where: { id: sectionId } });
   return NextResponse.json(updated);
 }
@@ -74,8 +78,11 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ sectionId: 
   const { sectionId } = await ctx.params;
   const section = await db.section.findUnique({ where: { id: sectionId } });
   if (!section) return NextResponse.json({ error: t("api.sectionNotFound") }, { status: 404 });
+  const access = await sectionAccess(sectionId, "editor");
+  if (access instanceof NextResponse) return access;
   // Children are promoted to top level (parentId set to null by the default referential action).
   await db.section.delete({ where: { id: sectionId } });
   await normalizeSectionOrders(section.notebookId);
+  await bumpNotebook(section.notebookId);
   return NextResponse.json({ ok: true });
 }

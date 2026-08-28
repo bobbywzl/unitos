@@ -134,6 +134,21 @@ const en = {
 
   // References section (bibliography.tsx)
   referencesCount: "References ({n})",
+  // Sharing (share-control.tsx)
+  share: "Share",
+  shareTitle: "Share this corpus",
+  shareDesc:
+    "Collaborators open this corpus from their own account. Editors change it like you do; viewers read only.",
+  shareEmailPh: "email@example.com",
+  role: "Role",
+  roleOwner: "Owner",
+  roleEditor: "Editor",
+  roleViewer: "Viewer",
+  invitedHint: "No account yet. Access starts when they sign in with this email.",
+  alsoHere: "Also here",
+  viewingOnly: "Viewing only",
+  leave: "Leave",
+  leaveConfirm: "Leave this corpus? You lose access until the owner shares it again.",
 };
 
 const zh: Record<keyof typeof en, string> = {
@@ -259,6 +274,19 @@ const zh: Record<keyof typeof en, string> = {
   openDistillation: "打开此提炼",
 
   referencesCount: "参考文献（{n}）",
+  share: "共享",
+  shareTitle: "共享此文集",
+  shareDesc: "协作者用自己的账户打开此文集。编辑者可以像你一样修改；查看者只能阅读。",
+  shareEmailPh: "email@example.com",
+  role: "角色",
+  roleOwner: "所有者",
+  roleEditor: "编辑者",
+  roleViewer: "查看者",
+  invitedHint: "还没有账户。用此邮箱登录后即可访问。",
+  alsoHere: "也在这里",
+  viewingOnly: "仅查看",
+  leave: "退出共享",
+  leaveConfirm: "退出此文集共享？在所有者再次共享前你将失去访问权限。",
 };
 
 export const panes = { en, zh } as const;

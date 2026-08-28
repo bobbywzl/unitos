@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import type { DistillationView } from "@/lib/types";
+import { useCollab } from "@/components/collab/collab-context";
+import { AuthorChip } from "@/components/collab/person-badge";
 import { ChevronLeftIcon } from "@/components/icons";
 import { useLang, useT } from "@/components/lang-provider";
 
@@ -45,6 +47,7 @@ export function DistillPage({
   onAddNote: (distillation: DistillationView, quote: DistillQuoteView) => Promise<boolean>;
 }) {
   const t = useT();
+  const { canEdit } = useCollab();
   const lang = useLang();
   // Dates follow the app language; English keeps the browser default.
   const dateLocale = lang === "zh" ? "zh-CN" : undefined;
@@ -89,7 +92,7 @@ export function DistillPage({
             <span className="font-display text-[18px]">{t("panes.distill")}</span>
           )}
           <span className="ml-auto flex items-center gap-3">
-            {shown && !running && (
+            {shown && !running && canEdit && (
               <button
                 onClick={() => onDelete(shown.id)}
                 className="text-xs font-semibold text-red-500 hover:text-red-700"
@@ -130,11 +133,12 @@ export function DistillPage({
         ) : shown ? (
           <div>
             <h1 className="font-display text-[26px] leading-snug text-ink">{shown.question}</h1>
-            <p className="mt-1.5 text-xs text-sand-500">
+            <p className="mt-1.5 flex items-center gap-1.5 text-xs text-sand-500">
               {t(shown.quotes.length === 1 ? "panes.quoteCount1" : "panes.quoteCountN", {
                 n: shown.quotes.length,
               })}{" "}
               · {new Date(shown.createdAt).toLocaleDateString(dateLocale)}
+              <AuthorChip createdById={shown.createdById} />
             </p>
             <div className="mt-5 flex flex-col gap-3">
               {shown.quotes.map((quote, i) => {
@@ -170,7 +174,7 @@ export function DistillPage({
                       ) : (
                         <button
                           onClick={() => void addNote(shown, quote, key)}
-                          disabled={savingKey !== null || !canAddNotes}
+                          disabled={savingKey !== null || !canAddNotes || !canEdit}
                           title={addNoteHint}
                           className="rounded-full border border-line px-3 py-1 text-[11.5px] font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40"
                         >
@@ -186,6 +190,7 @@ export function DistillPage({
         ) : (
           <div>
             <form
+              className={canEdit ? "" : "hidden"}
               onSubmit={(e) => {
                 e.preventDefault();
                 if (question.trim()) onRun(question);
@@ -235,21 +240,24 @@ export function DistillPage({
                         <span className="block truncate text-[13.5px] font-semibold text-sand-800 hover:text-clay-800">
                           {d.question}
                         </span>
-                        <span className="mt-0.5 block text-[11px] text-sand-500">
+                        <span className="mt-0.5 flex items-center gap-1.5 text-[11px] text-sand-500">
                           {t(d.quotes.length === 1 ? "panes.quoteCount1" : "panes.quoteCountN", {
                             n: d.quotes.length,
                           })}{" "}
                           · {new Date(d.createdAt).toLocaleDateString(dateLocale)}
+                          <AuthorChip createdById={d.createdById} nameless size={13} />
                         </span>
                       </button>
-                      <button
-                        onClick={() => onDelete(d.id)}
-                        aria-label={t("panes.deleteDistillation")}
-                        title={t("panes.deleteDistillation")}
-                        className="shrink-0 rounded-full px-1.5 text-sand-400 hover:text-red-600"
-                      >
-                        ✕
-                      </button>
+                      {canEdit && (
+                        <button
+                          onClick={() => onDelete(d.id)}
+                          aria-label={t("panes.deleteDistillation")}
+                          title={t("panes.deleteDistillation")}
+                          className="shrink-0 rounded-full px-1.5 text-sand-400 hover:text-red-600"
+                        >
+                          ✕
+                        </button>
+                      )}
                     </div>
                   ))}
                 </div>

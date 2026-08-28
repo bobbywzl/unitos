@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { api } from "@/lib/api";
 import { SearchIcon, SpinnerIcon } from "@/components/icons";
+import { useCollab } from "@/components/collab/collab-context";
 import { useT } from "@/components/lang-provider";
 import { formatTimeRange, type VideoFindMatch } from "@/lib/video/types";
 
@@ -31,6 +32,7 @@ export function FindPanel({
   trailing?: React.ReactNode;
 }) {
   const router = useRouter();
+  const { canEdit } = useCollab();
   const t = useT();
   const [query, setQuery] = useState("");
   const [busy, setBusy] = useState(false);
@@ -130,7 +132,7 @@ export function FindPanel({
               <p className="mt-2 text-[13px] leading-relaxed text-sand-800">{match.explanation}</p>
               <p className="mt-1.5 text-[12px] leading-snug text-sand-500">“{match.quotedText}”</p>
               <div className="mt-2">
-                {saved.has(i) ? (
+                {!canEdit ? null : saved.has(i) ? (
                   <span className="text-[11.5px] font-semibold text-sage-700">
                     {t("video.addedPending")}
                   </span>

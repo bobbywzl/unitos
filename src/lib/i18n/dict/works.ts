@@ -114,6 +114,10 @@ const en = {
   feedbackSent: "Sent ✓",
   feedbackSending: "Sending…",
   feedbackSend: "Send",
+  // Shared with you shelf
+  sharedWithYou: "Shared with you",
+  byOwner: "by {name}",
+  sharedBadge: "Shared · {n}",
 };
 
 const zh: Record<keyof typeof en, string> = {
@@ -220,6 +224,9 @@ const zh: Record<keyof typeof en, string> = {
   feedbackSent: "已发送 ✓",
   feedbackSending: "发送中…",
   feedbackSend: "发送",
+  sharedWithYou: "与你共享",
+  byOwner: "来自 {name}",
+  sharedBadge: "已共享 · {n}",
 };
 
 export const works = { en, zh } as const;

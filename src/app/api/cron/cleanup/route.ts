@@ -15,5 +15,9 @@ export async function GET(req: Request) {
   const deleted = await db.note.deleteMany({
     where: { status: "REJECTED", updatedAt: { lt: cutoff } },
   });
+  // Presence rows read as gone after 25 seconds; rows older than a day are litter.
+  await db.notebookPresence.deleteMany({
+    where: { lastSeenAt: { lt: new Date(Date.now() - 24 * 60 * 60 * 1000) } },
+  });
   return NextResponse.json({ ok: true, deleted: deleted.count });
 }

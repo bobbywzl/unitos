@@ -7,7 +7,7 @@ import {
   TextRun,
 } from "docx";
 import { NextResponse } from "next/server";
-import { notebookGuard } from "@/lib/auth";
+import { notebookAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
 import { serverT } from "@/lib/i18n/server";
 
@@ -120,8 +120,9 @@ function slug(title: string): string {
 export async function GET(req: Request, ctx: { params: Promise<{ notebookId: string }> }) {
   const t = await serverT();
   const { notebookId } = await ctx.params;
-  const denied = await notebookGuard(notebookId);
-  if (denied) return denied;
+  // Export is a read: any member downloads, viewers included.
+  const access = await notebookAccess(notebookId, "viewer");
+  if (access instanceof NextResponse) return access;
   const format = new URL(req.url).searchParams.get("format") ?? "md";
   if (format !== "md" && format !== "docx") {
     return NextResponse.json({ error: t("api.exportFormatInvalid") }, { status: 400 });

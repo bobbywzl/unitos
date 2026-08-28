@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { bumpNotebook, sectionAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
 import { sourceInputSchema } from "@/lib/anchors/input";
 import { serverT } from "@/lib/i18n/server";
@@ -37,6 +38,8 @@ export async function POST(req: Request) {
 
   const section = await db.section.findUnique({ where: { id: data.sectionId } });
   if (!section) return NextResponse.json({ error: t("api.sectionNotFound") }, { status: 404 });
+  const access = await sectionAccess(data.sectionId, "editor");
+  if (access instanceof NextResponse) return access;
 
   if (data.source) {
     const block = await db.block.findUnique({ where: { id: data.source.blockId } });
@@ -88,6 +91,7 @@ export async function POST(req: Request) {
       // Find and distill output is AI output: it lands PENDING, no exceptions (SPEC.md §1).
       status: data.pending || data.origin === "find" || data.origin === "distill" ? "PENDING" : "ACCEPTED",
       ...(derivationType ? { derivationType } : {}),
+      createdById: access.user.id,
       order: count,
       ...(data.source
         ? {
@@ -124,5 +128,6 @@ export async function POST(req: Request) {
     },
     include: { sources: true },
   });
+  await bumpNotebook(section.notebookId);
   return NextResponse.json(note, { status: 201 });
 }

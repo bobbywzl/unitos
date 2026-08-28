@@ -5,6 +5,9 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { AnnotationItem, LinkIn, LinkOut } from "@/lib/types";
 import { api } from "@/lib/api";
+import { useCollab } from "@/components/collab/collab-context";
+import { AuthorChip } from "@/components/collab/person-badge";
+import { ReplyThread } from "@/components/collab/reply-thread";
 import { LocateIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { Markdown } from "@/components/markdown";
@@ -41,6 +44,7 @@ function AnnotationActions({
 }) {
   const router = useRouter();
   const t = useT();
+  const { canEdit } = useCollab();
   const canJump = Boolean(annotation.sourceId) && !annotation.orphaned && documentId !== null;
 
   function jump() {
@@ -53,6 +57,7 @@ function AnnotationActions({
   }
 
   return (
+    <>
     <div className="mt-2 flex items-center gap-2">
       {canJump && (
         <button
@@ -75,13 +80,20 @@ function AnnotationActions({
           {t("panels.anchorUnresolved")}
         </span>
       )}
-      <button
-        onClick={() => void onDelete(annotation.id)}
-        className="ml-auto text-xs text-red-500 hover:text-red-700"
-      >
-        {t("common.delete")}
-      </button>
+      <span className="ml-auto flex items-center gap-3">
+        <AuthorChip createdById={annotation.createdById} nameless />
+        {canEdit && (
+          <button
+            onClick={() => void onDelete(annotation.id)}
+            className="text-xs text-red-500 hover:text-red-700"
+          >
+            {t("common.delete")}
+          </button>
+        )}
+      </span>
     </div>
+    <ReplyThread target={{ noteId: annotation.id }} replies={annotation.replies} />
+    </>
   );
 }
 
@@ -102,6 +114,7 @@ export function AnnotationsPanel({
 }) {
   const router = useRouter();
   const t = useT();
+  const { canEdit } = useCollab();
   const [busyId, setBusyId] = useState<string | null>(null);
   const [errorText, setErrorText] = useState<string | null>(null);
   const highlights = annotations.filter((a) => a.kind === "highlight");
@@ -294,12 +307,14 @@ export function AnnotationsPanel({
                     {t("panels.otherEndUnresolved")}
                   </span>
                 )}
-                <button
-                  onClick={() => void removeLink(l.id)}
-                  className="text-xs text-red-500 hover:text-red-700"
-                >
-                  {t("common.remove")}
-                </button>
+                {canEdit && (
+                  <button
+                    onClick={() => void removeLink(l.id)}
+                    className="text-xs text-red-500 hover:text-red-700"
+                  >
+                    {t("common.remove")}
+                  </button>
+                )}
               </div>
             </div>
           ))}
@@ -325,12 +340,14 @@ export function AnnotationsPanel({
                     {t("panels.otherEndUnresolved")}
                   </span>
                 )}
-                <button
-                  onClick={() => void removeLink(l.id)}
-                  className="text-xs text-red-500 hover:text-red-700"
-                >
-                  {t("common.remove")}
-                </button>
+                {canEdit && (
+                  <button
+                    onClick={() => void removeLink(l.id)}
+                    className="text-xs text-red-500 hover:text-red-700"
+                  >
+                    {t("common.remove")}
+                  </button>
+                )}
               </div>
             </div>
           ))}

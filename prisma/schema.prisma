@@ -19,6 +19,10 @@ model User {
   email        String    @unique
   name         String
   picture      String    @default("")
+  // Collaboration label: the symbol and color that mark this account's notes and
+  // edits on shared corpora. "" = defaults (first letter of name; color from id).
+  symbol       String    @default("")
+  color        String    @default("")
   passwordHash String    @default("") // "" = no password (OAuth or link-only); scrypt "s1$salt$hash"
   createdAt    DateTime  @default(now())
   lastSeenAt   DateTime  @default(now())
@@ -53,17 +57,59 @@ model EmailConfirmation {
 }
 
 model Notebook {
-  id        String             @id @default(cuid())
-  userId    String             @default("user-1") // owner account; "user-1" = the local reader
-  title     String
-  profile   Json? // ReaderProfile override for this notebook
-  sections  Section[]
-  documents NotebookDocument[]
-  digest    NotebookDigest?
-  createdAt DateTime           @default(now())
-  updatedAt DateTime           @updatedAt
+  id            String                 @id @default(cuid())
+  userId        String                 @default("user-1") // owner account; "user-1" = the local reader
+  title         String
+  profile       Json? // ReaderProfile override for this notebook
+  // Change counter for live sync: every write to the corpus or its documents
+  // increments it; open workspaces poll it and refresh when it moves.
+  rev           Int                    @default(0)
+  sections      Section[]
+  documents     NotebookDocument[]
+  digest        NotebookDigest?
+  collaborators NotebookCollaborator[]
+  presence      NotebookPresence[]
+  createdAt     DateTime               @default(now())
+  updatedAt     DateTime               @updatedAt
 
   @@index([userId])
+}
+
+// One person a corpus is shared with. Keyed by email (accounts key on the
+// email, SPEC.md §2), so an invite works before the account exists. The owner
+// is Notebook.userId, never a row here. Role EDITOR writes like the owner;
+// VIEWER reads only.
+model NotebookCollaborator {
+  id         String     @id @default(cuid())
+  notebookId String
+  notebook   Notebook   @relation(fields: [notebookId], references: [id], onDelete: Cascade)
+  email      String // lowercase
+  role       CollabRole @default(EDITOR)
+  addedById  String? // account that shared it
+  createdAt  DateTime   @default(now())
+
+  @@unique([notebookId, email])
+  @@index([email])
+}
+
+enum CollabRole {
+  EDITOR
+  VIEWER
+}
+
+// Who has a corpus open right now: one row per corpus per account, stamped by
+// the sync poll. A row older than 25 seconds reads as gone; the daily cron
+// deletes stale rows.
+model NotebookPresence {
+  id         String   @id @default(cuid())
+  notebookId String
+  notebook   Notebook @relation(fields: [notebookId], references: [id], onDelete: Cascade)
+  userId     String
+  documentId String? // the open document; null = the notes full page
+  lastSeenAt DateTime @default(now())
+
+  @@unique([notebookId, userId])
+  @@index([lastSeenAt])
 }
 
 // The digest: the stored context the assistant reads (SPEC.md §7). One row per
@@ -108,9 +154,31 @@ model Note {
   derivationType DerivationType? // null = manually written
   color          String? // manual highlight hue: "clay" | "sage" | "gold"
   order          Int
+  // Account that wrote the note (or ran the derivation that produced it).
+  // Soft reference like Notebook.userId; null = before attribution existed.
+  createdById    String?
   sources        Source[]
+  replies        Reply[]
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
+}
+
+// One reply in the discussion under a note (notes and annotations alike) or
+// under one edit in the Edits panel — how collaborators comment on each
+// other's work. Threads are flat, oldest first. Exactly one of noteId and
+// blockEditId is set.
+model Reply {
+  id          String     @id @default(cuid())
+  noteId      String?
+  note        Note?      @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  blockEditId String?
+  blockEdit   BlockEdit? @relation(fields: [blockEditId], references: [id], onDelete: Cascade)
+  userId      String // account that wrote the reply
+  content     String
+  createdAt   DateTime   @default(now())
+
+  @@index([noteId])
+  @@index([blockEditId])
 }
 
 enum NoteStatus {
@@ -183,6 +251,8 @@ model BlockEdit {
   before     String?
   after      String?
   meta       Json? // link events: { linkId, toDocumentId, toTitle, quotedText }
+  userId     String? // account that made the edit; null = before attribution existed
+  replies    Reply[]
   createdAt  DateTime @default(now())
 
   @@index([documentId, createdAt])

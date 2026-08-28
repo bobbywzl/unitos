@@ -10,8 +10,11 @@ export type WorkItem = {
   title: string;
   sectionCount: number;
   documentCount: number;
+  collaboratorCount: number;
   pendingCount: number;
   updatedAt: string;
+  // Set on the Shared with you shelf: the owner and this account's role.
+  shared?: { ownerName: string; role: "editor" | "viewer" };
 };
 
 // A work: a 5.5 × 8.5 book with a spine, its counts as tags, and the instrument
@@ -20,10 +23,12 @@ export function WorkCard({
   work,
   onRename,
   onDelete,
+  onLeave,
 }: {
   work: WorkItem;
   onRename: (id: string, current: string) => void;
   onDelete: (id: string) => void;
+  onLeave?: (id: string) => void;
 }) {
   const t = useT();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -58,6 +63,11 @@ export function WorkCard({
           className="absolute top-3 bottom-3 left-[13px] w-[3px] rounded-full bg-sand-300"
         />
         <span className="mt-14 px-2 font-display text-[22px] leading-[1.25]">{work.title}</span>
+        {work.shared && (
+          <span className="mt-1.5 px-2 text-xs text-sand-600">
+            {t("works.byOwner", { name: work.shared.ownerName })}
+          </span>
+        )}
         <span aria-hidden className="mx-auto mt-4 size-2 rounded-full bg-sage-500" />
         <span className="mt-auto flex flex-wrap justify-center gap-1.5">
           <span className="rounded-full bg-sand-200 px-3 py-1 text-xs font-semibold text-sand-700">
@@ -74,6 +84,17 @@ export function WorkCard({
             <span className="rounded-full bg-clay-200 px-3 py-1 text-xs font-semibold text-clay-800">
               {t("works.pendingCount", { n: work.pendingCount })}
             </span>
+          )}
+          {work.shared ? (
+            <span className="rounded-full bg-sage-200 px-3 py-1 text-xs font-semibold text-sage-800">
+              {t(work.shared.role === "editor" ? "panes.roleEditor" : "panes.roleViewer")}
+            </span>
+          ) : (
+            work.collaboratorCount > 0 && (
+              <span className="rounded-full bg-sage-200 px-3 py-1 text-xs font-semibold text-sage-800">
+                {t("works.sharedBadge", { n: work.collaboratorCount })}
+              </span>
+            )
           )}
         </span>
       </Link>
@@ -108,24 +129,38 @@ export function WorkCard({
             >
               {t("works.notes")}
             </Link>
-            <button
-              onClick={() => {
-                setMenuOpen(false);
-                onRename(work.id, work.title);
-              }}
-              className="px-4 py-2 text-left text-sm text-sand-700 hover:bg-clay-100 hover:text-clay-800"
-            >
-              {t("works.rename")}
-            </button>
-            <button
-              onClick={() => {
-                setMenuOpen(false);
-                onDelete(work.id);
-              }}
-              className="px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-950"
-            >
-              {t("common.delete")}
-            </button>
+            {(!work.shared || work.shared.role === "editor") && (
+              <button
+                onClick={() => {
+                  setMenuOpen(false);
+                  onRename(work.id, work.title);
+                }}
+                className="px-4 py-2 text-left text-sm text-sand-700 hover:bg-clay-100 hover:text-clay-800"
+              >
+                {t("works.rename")}
+              </button>
+            )}
+            {work.shared ? (
+              <button
+                onClick={() => {
+                  setMenuOpen(false);
+                  onLeave?.(work.id);
+                }}
+                className="px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-950"
+              >
+                {t("panes.leave")}
+              </button>
+            ) : (
+              <button
+                onClick={() => {
+                  setMenuOpen(false);
+                  onDelete(work.id);
+                }}
+                className="px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-950"
+              >
+                {t("common.delete")}
+              </button>
+            )}
           </div>
         )}
       </div>

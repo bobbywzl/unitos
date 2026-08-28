@@ -9,11 +9,10 @@ import {
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import type { User } from "@prisma/client";
-import { APPLE_STATE_COOKIE, SESSION_COOKIE, STATE_COOKIE, USER_ID } from "@/lib/constants";
+import { ACCOUNT_COOKIE, APPLE_STATE_COOKIE, SESSION_COOKIE, STATE_COOKIE, USER_ID } from "@/lib/constants";
 import { db } from "@/lib/db";
 import { sendConfirmationEmail, sendResetEmail } from "@/lib/email";
 import type { Lang } from "@/lib/i18n/config";
-import { serverT } from "@/lib/i18n/server";
 import { outboundFetch } from "@/lib/outbound-fetch";
 
 // Google, Apple, and email sign-in (Scalae pattern): hand-rolled OIDC
@@ -27,7 +26,7 @@ import { outboundFetch } from "@/lib/outbound-fetch";
 // missing credentials. The /admin area keeps its own ADMIN_PASSWORD gate,
 // decoupled from reader sign-in.
 
-export { APPLE_STATE_COOKIE, SESSION_COOKIE, STATE_COOKIE };
+export { ACCOUNT_COOKIE, APPLE_STATE_COOKIE, SESSION_COOKIE, STATE_COOKIE };
 
 const SESSION_DAYS = 30;
 
@@ -63,6 +62,8 @@ export const LOCAL_USER: User = {
   email: "local@dissect",
   name: "Local reader",
   picture: "",
+  symbol: "",
+  color: "",
   passwordHash: "",
   createdAt: new Date(0),
   lastSeenAt: new Date(0),
@@ -369,7 +370,7 @@ export function verifyPassword(password: string, stored: string): boolean {
 export async function passwordLogin(
   email: string,
   password: string,
-): Promise<{ token: string; expiresAt: Date } | "bad" | "nopass"> {
+): Promise<{ token: string; userId: string; expiresAt: Date } | "bad" | "nopass"> {
   const user = await db.user.findUnique({ where: { email } });
   if (!user) return "bad";
   if (!user.passwordHash) return "nopass";
@@ -396,7 +397,7 @@ export async function startPasswordReset(origin: string, email: string, lang: La
 export async function resetPassword(
   token: string,
   password: string,
-): Promise<{ token: string; expiresAt: Date } | null> {
+): Promise<{ token: string; userId: string; expiresAt: Date } | null> {
   const pending = await confirmEmailToken(token, "reset");
   if (!pending) return null;
   const user = await db.user.findUnique({ where: { email: pending.email }, select: { id: true } });
@@ -406,10 +407,13 @@ export async function resetPassword(
   return createSession(user.id);
 }
 
-// The session cookie on a 303 redirect — every sign-in path ends here.
+// The session cookie on a 303 redirect — every sign-in path ends here. The
+// account cookie rides along: the readable account id open tabs watch, so a
+// sign-out or account switch elsewhere in the browser surfaces instead of
+// silently taking the tab over.
 export function sessionRedirect(
   origin: string,
-  session: { token: string; expiresAt: Date },
+  session: { token: string; userId: string; expiresAt: Date },
   path = "/",
 ): NextResponse {
   const res = NextResponse.redirect(new URL(path, origin), 303);
@@ -420,7 +424,26 @@ export function sessionRedirect(
     path: "/",
     expires: session.expiresAt,
   });
+  res.cookies.set(ACCOUNT_COOKIE, session.userId, {
+    httpOnly: false,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/",
+    expires: session.expiresAt,
+  });
   return res;
+}
+
+// Refresh the account cookie on a plain response — the confirm endpoint uses
+// this to heal sessions minted before the cookie existed.
+export function setAccountCookie(res: NextResponse, userId: string): void {
+  res.cookies.set(ACCOUNT_COOKIE, userId, {
+    httpOnly: false,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/",
+    maxAge: SESSION_DAYS * 86_400,
+  });
 }
 
 // Upsert the account. The first account ever adopts the local reader's data
@@ -433,9 +456,15 @@ export async function upsertUser(profile: {
   const email = profile.email.toLowerCase();
   const existing = await db.user.findUnique({ where: { email } });
   if (existing) {
+    // The profile is the account's own (Settings): a sign-in only fills what
+    // is empty, never overwrites a name or picture the person set.
     return db.user.update({
       where: { id: existing.id },
-      data: { name: profile.name, picture: profile.picture, lastSeenAt: new Date() },
+      data: {
+        ...(existing.name ? {} : { name: profile.name }),
+        ...(existing.picture ? {} : { picture: profile.picture }),
+        lastSeenAt: new Date(),
+      },
     });
   }
   const first = (await db.user.count()) === 0;
@@ -452,11 +481,13 @@ export async function upsertUser(profile: {
   return user;
 }
 
-export async function createSession(userId: string): Promise<{ token: string; expiresAt: Date }> {
+export async function createSession(
+  userId: string,
+): Promise<{ token: string; userId: string; expiresAt: Date }> {
   const token = randomBytes(32).toString("hex");
   const expiresAt = new Date(Date.now() + SESSION_DAYS * 86_400_000);
   await db.session.create({ data: { token, userId, expiresAt } });
-  return { token, expiresAt };
+  return { token, userId, expiresAt };
 }
 
 // Sign the profile in: upsert the account, mint a session.
@@ -493,23 +524,5 @@ export async function currentUser(): Promise<User | null> {
   return session.user;
 }
 
-// Ownership gate for corpus routes: null = allowed, else the response to send.
-// With sign-in off there is one reader and nothing to check. A corpus that is
-// not yours answers 404, not 403 — its existence is not disclosed.
-export async function notebookGuard(notebookId: string): Promise<NextResponse | null> {
-  const user = await currentUser();
-  if (!user) {
-    const t = await serverT();
-    return NextResponse.json({ error: t("common.signInToContinue") }, { status: 401 });
-  }
-  if (!authEnabled()) return null;
-  const notebook = await db.notebook.findUnique({
-    where: { id: notebookId },
-    select: { userId: true },
-  });
-  if (!notebook || notebook.userId !== user.id) {
-    const t = await serverT();
-    return NextResponse.json({ error: t("common.corpusNotFound") }, { status: 404 });
-  }
-  return null;
-}
+// The corpus access gate lives in lib/collab.ts (notebookAccess): owner plus
+// collaborators, role-checked per route.

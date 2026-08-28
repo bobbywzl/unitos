@@ -11,7 +11,9 @@
 //   salient 要点 · link 链接 · edit 编辑 · reader 阅读器 · glossary 术语表 ·
 //   sign in 登录 · sign out 退出登录 · settings 设置 · admin 管理 ·
 //   feedback 反馈 · depths: insights 行家洞见 / layman 通俗 / intermediate 进阶 /
-//   professional 专业
+//   professional 专业 · share 共享 · collaborator 协作者 · role 角色 ·
+//   owner 所有者 · editor 编辑者 · viewer 查看者 · profile 个人资料 ·
+//   symbol 符号 · background 背景 · reply 回复
 
 const en = {
   appName: "Unitos",
@@ -44,6 +46,19 @@ const en = {
   corpusNotFound: "Corpus not found",
   unauthorized: "Unauthorized",
   modelCallFailed: "The model call failed.",
+  // Stale tab: the browser signed out or switched accounts in another tab.
+  accountChanged: "This tab was open with a different account. Reload the page.",
+  accountChangedTitle: "Account changed",
+  accountSwitchedBody:
+    "You signed in as {name} in another tab. This tab was open with a different account.",
+  accountSignedOutBody: "You signed out in another tab.",
+  accountContinue: "Continue",
+  accountSignIn: "Sign in",
+  // Replies: the discussion under a note or an edit.
+  reply: "Reply",
+  replyCountOne: "1 reply",
+  replyCountMany: "{n} replies",
+  replyPlaceholder: "Reply…",
 };
 
 const zh: Record<keyof typeof en, string> = {
@@ -77,6 +92,16 @@ const zh: Record<keyof typeof en, string> = {
   corpusNotFound: "未找到该文集",
   unauthorized: "未授权",
   modelCallFailed: "模型调用失败。",
+  accountChanged: "此标签页原先属于其他账户。请刷新页面。",
+  accountChangedTitle: "账户已切换",
+  accountSwitchedBody: "你在另一个标签页登录了 {name}。此标签页原先属于其他账户。",
+  accountSignedOutBody: "你在另一个标签页退出了登录。",
+  accountContinue: "继续",
+  accountSignIn: "登录",
+  reply: "回复",
+  replyCountOne: "1 条回复",
+  replyCountMany: "{n} 条回复",
+  replyPlaceholder: "回复…",
 };
 
 export const common = { en, zh } as const;

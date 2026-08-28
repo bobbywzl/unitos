@@ -3,11 +3,12 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { LangSwitcher } from "@/components/lang-switcher";
 import { useT } from "@/components/lang-provider";
+import { PersonBadge } from "@/components/collab/person-badge";
 import type { TKey } from "@/lib/i18n/dictionaries";
+import { PERSON_COLORS, personOf, type Person } from "@/lib/person";
 import { api } from "@/lib/api";
 
 type Theme = "light" | "dark" | "system";
-type ContextValues = { background: string; purpose: string; application: string };
 
 const THEMES: { value: Theme; label: TKey; description: TKey }[] = [
   { value: "light", label: "settings.themeLight", description: "settings.themeLightDesc" },
@@ -40,89 +41,136 @@ function setTheme(theme: Theme) {
   for (const cb of themeListeners) cb();
 }
 
-// Settings sections. Changes save automatically (release-edu pattern): theme to
-// localStorage on click, context debounced to the profile API.
+// Resize the chosen image to a small square JPEG data URL. 192px covers every
+// badge size; the result stays a few tens of KB.
+async function resizePicture(file: File): Promise<string> {
+  const url = URL.createObjectURL(file);
+  try {
+    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error("image load failed"));
+      img.src = url;
+    });
+    const size = 192;
+    const canvas = document.createElement("canvas");
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("canvas unavailable");
+    // Cover crop: the shorter side fills the square.
+    const scale = Math.max(size / image.width, size / image.height);
+    const w = image.width * scale;
+    const h = image.height * scale;
+    ctx.drawImage(image, (size - w) / 2, (size - h) / 2, w, h);
+    return canvas.toDataURL("image/jpeg", 0.85);
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+const sectionTitle = "text-[11px] font-bold tracking-[0.08em] text-sand-600 uppercase";
+const fieldLabel = "text-xs text-sand-700";
+
+// Settings: one Profile section (picture, name, symbol, color, background),
+// then Language and Theme. Changes save automatically.
 export function SettingsForm({
-  profile,
-  services,
   account,
+  background,
 }: {
-  profile: ContextValues | null;
-  services: { anthropic: boolean; google: boolean; admin: boolean };
   // The signed-in account; null = sign-in off (single-reader mode).
-  account: { email: string; name: string; picture: string } | null;
+  account: (Person & { email: string; storedSymbol: string; storedColor: string }) | null;
+  background: string;
 }) {
   const t = useT();
   const theme = useSyncExternalStore(subscribeTheme, readTheme, () => "system");
+  const fileRef = useRef<HTMLInputElement>(null);
 
-  const [values, setValues] = useState<ContextValues>(
-    profile ?? { background: "", purpose: "", application: "" },
-  );
+  const [name, setName] = useState(account?.name ?? "");
+  const [symbol, setSymbol] = useState(account?.storedSymbol ?? "");
+  const [color, setColor] = useState(account?.storedColor ?? "");
+  const [picture, setPicture] = useState(account?.picture ?? "");
+  const [backgroundText, setBackgroundText] = useState(background);
   const [status, setStatus] = useState<"idle" | "saving" | "saved">("idle");
+  const [error, setError] = useState<string | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSaved = useRef(
     JSON.stringify({
-      background: (profile?.background ?? "").trim(),
-      purpose: (profile?.purpose ?? "").trim(),
-      application: (profile?.application ?? "").trim(),
+      name: account?.name ?? "",
+      symbol: account?.storedSymbol ?? "",
+      color: account?.storedColor ?? "",
+      background: background.trim(),
     }),
   );
 
-  // Debounced auto-save. Every field is optional; saves whenever something changed.
+  // Debounced auto-save: the account fields to /api/account, the background to
+  // /api/profile. Purpose and application columns clear on save — the profile
+  // is one Background field now.
   useEffect(() => {
-    const trimmed = {
-      background: values.background.trim(),
-      purpose: values.purpose.trim(),
-      application: values.application.trim(),
-    };
-    const payload = JSON.stringify(trimmed);
+    const payload = JSON.stringify({
+      name: name.trim(),
+      symbol: symbol.trim(),
+      color,
+      background: backgroundText.trim(),
+    });
     if (payload === lastSaved.current) return;
     setStatus("saving");
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(async () => {
       try {
-        await api("/api/profile", "PUT", trimmed);
+        if (account && name.trim()) {
+          await api("/api/account", "PUT", { name: name.trim(), symbol: symbol.trim(), color });
+        }
+        await api("/api/profile", "PUT", {
+          background: backgroundText.trim(),
+          purpose: "",
+          application: "",
+        });
         lastSaved.current = payload;
+        setError(null);
         setStatus("saved");
         setTimeout(() => setStatus("idle"), 1800);
-      } catch {
+      } catch (err) {
+        setError(err instanceof Error ? err.message : t("common.requestFailed"));
         setStatus("idle");
       }
     }, 700);
-  }, [values]);
+  }, [name, symbol, color, backgroundText, account, t]);
 
-  const field = (key: keyof ContextValues, label: string, placeholder: string) => (
-    <label className="block">
-      <span className="text-xs text-sand-700">{label}</span>
-      <textarea
-        value={values[key]}
-        onChange={(e) => setValues({ ...values, [key]: e.target.value })}
-        placeholder={placeholder}
-        rows={2}
-        className="mt-1 w-full rounded-2xl bg-card p-3 text-sm shadow-soft outline-none placeholder:text-sand-500"
-      />
-    </label>
-  );
+  async function uploadPicture(file: File) {
+    setError(null);
+    setStatus("saving");
+    try {
+      const dataUrl = await resizePicture(file);
+      await api("/api/account", "PUT", { picture: dataUrl });
+      setPicture(dataUrl);
+      setStatus("saved");
+      setTimeout(() => setStatus("idle"), 1800);
+    } catch {
+      setError(t("settings.pictureFailed"));
+      setStatus("idle");
+    }
+  }
 
-  const statusRow = (label: string, description: string, set: boolean) => (
-    <div className="flex items-center justify-between gap-4 py-2">
-      <div>
-        <div className="font-mono text-sm">{label}</div>
-        <div className="text-xs text-sand-600">{description}</div>
-      </div>
-      <span
-        className={`rounded-full px-3 py-0.5 text-xs font-semibold ${
-          set ? "bg-sage-200 text-sage-800" : "bg-sand-200 text-sand-600"
-        }`}
-      >
-        {set ? t("settings.set") : t("settings.notSet")}
-      </span>
-    </div>
-  );
+  async function removePicture() {
+    setError(null);
+    try {
+      await api("/api/account", "PUT", { picture: "" });
+      setPicture("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t("common.requestFailed"));
+    }
+  }
+
+  // The badge preview mirrors what collaborators see, live.
+  const preview = account
+    ? personOf({ id: account.id, name: name.trim() || account.name, symbol, color, picture })
+    : null;
 
   return (
     <div className="space-y-10">
-      <div className="flex h-4 justify-end text-xs text-sand-600">
+      <div className="flex h-4 items-center justify-end gap-3 text-xs text-sand-600">
+        {error && <span className="text-red-500">{error}</span>}
         {status === "saving"
           ? t("common.saving")
           : status === "saved"
@@ -131,46 +179,132 @@ export function SettingsForm({
       </div>
 
       <section className="space-y-3">
-        <h2 className="text-[11px] font-bold tracking-[0.08em] text-sand-600 uppercase">
-          {t("settings.account")}
-        </h2>
-        {account ? (
-          <div className="flex items-center gap-3 rounded-2xl bg-card p-4 shadow-soft">
-            {account.picture ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={account.picture} alt="" className="size-9 rounded-full" />
-            ) : (
-              <span className="flex size-9 items-center justify-center rounded-full bg-clay-100 text-sm font-semibold text-clay-800">
-                {account.name[0]?.toUpperCase()}
-              </span>
-            )}
-            <div className="min-w-0">
-              <div className="text-sm font-semibold">{account.name}</div>
-              <div className="truncate text-xs text-sand-600">{account.email}</div>
+        <h2 className={sectionTitle}>{t("settings.profile")}</h2>
+        {account && preview ? (
+          <div className="space-y-5 rounded-2xl bg-card p-5 shadow-soft">
+            <p className="text-xs text-sand-600">{t("settings.profileDesc")}</p>
+
+            <div className="flex items-center gap-4">
+              <PersonBadge person={preview} size={64} title={t("settings.picture")} />
+              <input
+                ref={fileRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) void uploadPicture(file);
+                  e.target.value = "";
+                }}
+              />
+              <button
+                onClick={() => fileRef.current?.click()}
+                className="rounded-full border border-line px-4 py-1.5 text-xs font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800"
+              >
+                {t("settings.uploadPicture")}
+              </button>
+              {picture && (
+                <button
+                  onClick={() => void removePicture()}
+                  className="text-xs text-sand-600 hover:text-red-600"
+                >
+                  {t("settings.removePicture")}
+                </button>
+              )}
             </div>
-            <a
-              href="/api/auth/logout"
-              className="ml-auto rounded-full border border-line px-3 py-1 text-xs text-sand-700 hover:bg-clay-100 hover:text-clay-800"
-            >
-              {t("common.signOut")}
-            </a>
+
+            <div className="grid grid-cols-[1fr_120px] gap-4">
+              <label className="block">
+                <span className={fieldLabel}>{t("settings.name")}</span>
+                <input
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder={t("settings.namePh")}
+                  className="mt-1 w-full rounded-full bg-sand-100 px-4 py-2 text-sm outline-none placeholder:text-sand-500"
+                />
+              </label>
+              <label className="block">
+                <span className={fieldLabel}>{t("settings.symbol")}</span>
+                <input
+                  value={symbol}
+                  onChange={(e) => setSymbol(e.target.value.slice(0, 4))}
+                  placeholder={preview.symbol}
+                  maxLength={4}
+                  className="mt-1 w-full rounded-full bg-sand-100 px-4 py-2 text-center text-sm outline-none placeholder:text-sand-500"
+                />
+              </label>
+            </div>
+            <p className="-mt-3 text-[11px] text-sand-500">{t("settings.symbolDesc")}</p>
+
+            <div>
+              <span className={fieldLabel}>{t("settings.color")}</span>
+              <div className="mt-1.5 flex gap-2">
+                {PERSON_COLORS.map((c) => (
+                  <button
+                    key={c}
+                    onClick={() => setColor(color === c ? "" : c)}
+                    aria-label={c}
+                    aria-pressed={color === c || (!color && preview.color === c)}
+                    className={`size-7 rounded-full ${
+                      color === c || (!color && preview.color === c)
+                        ? "outline-2 outline-offset-2 outline-clay-500"
+                        : ""
+                    }`}
+                    style={{ background: c }}
+                  />
+                ))}
+              </div>
+            </div>
+
+            <label className="block">
+              <span className={fieldLabel}>{t("settings.background")}</span>
+              <textarea
+                value={backgroundText}
+                onChange={(e) => setBackgroundText(e.target.value)}
+                placeholder={t("settings.backgroundPh")}
+                rows={3}
+                className="mt-1 w-full rounded-2xl bg-sand-100 p-3 text-sm outline-none placeholder:text-sand-500"
+              />
+            </label>
+            <p className="-mt-3 text-[11px] text-sand-500">{t("settings.backgroundDesc")}</p>
+
+            <div className="flex items-center gap-2 border-t border-line pt-4">
+              <span className="truncate text-xs text-sand-600">{account.email}</span>
+              <a
+                href="/api/auth/logout"
+                className="ml-auto rounded-full border border-line px-3 py-1 text-xs text-sand-700 hover:bg-clay-100 hover:text-clay-800"
+              >
+                {t("common.signOut")}
+              </a>
+            </div>
           </div>
         ) : (
-          <p className="text-xs text-sand-600">{t("settings.singleReader")}</p>
+          <div className="space-y-5 rounded-2xl bg-card p-5 shadow-soft">
+            <label className="block">
+              <span className={fieldLabel}>{t("settings.background")}</span>
+              <textarea
+                value={backgroundText}
+                onChange={(e) => setBackgroundText(e.target.value)}
+                placeholder={t("settings.backgroundPh")}
+                rows={3}
+                className="mt-1 w-full rounded-2xl bg-sand-100 p-3 text-sm outline-none placeholder:text-sand-500"
+              />
+            </label>
+            <p className="-mt-3 text-[11px] text-sand-500">{t("settings.backgroundDesc")}</p>
+            <p className="border-t border-line pt-4 text-xs text-sand-600">
+              {t("settings.singleReader")}
+            </p>
+          </div>
         )}
       </section>
 
       <section className="space-y-3">
-        <h2 className="text-[11px] font-bold tracking-[0.08em] text-sand-600 uppercase">
-          {t("settings.language")}
-        </h2>
+        <h2 className={sectionTitle}>{t("settings.language")}</h2>
         <LangSwitcher />
       </section>
 
       <section className="space-y-3">
-        <h2 className="text-[11px] font-bold tracking-[0.08em] text-sand-600 uppercase">
-          {t("settings.theme")}
-        </h2>
+        <h2 className={sectionTitle}>{t("settings.theme")}</h2>
         <div className="grid grid-cols-3 gap-3">
           {THEMES.map((th) => (
             <button
@@ -191,33 +325,6 @@ export function SettingsForm({
             </button>
           ))}
         </div>
-      </section>
-
-      <section className="space-y-3">
-        <h2 className="text-[11px] font-bold tracking-[0.08em] text-sand-600 uppercase">
-          {t("settings.context")}
-        </h2>
-        <p className="text-xs text-sand-600">{t("settings.contextDesc")}</p>
-        <div className="space-y-3">
-          {field("background", t("settings.background"), t("settings.backgroundPh"))}
-          {field("purpose", t("settings.purpose"), t("settings.purposePh"))}
-          {field("application", t("settings.application"), t("settings.applicationPh"))}
-        </div>
-      </section>
-
-      <section className="space-y-1">
-        <h2 className="mb-3 text-[11px] font-bold tracking-[0.08em] text-sand-600 uppercase">
-          {t("settings.services")}
-        </h2>
-        {statusRow("ANTHROPIC_API_KEY", t("settings.svcAnthropic"), services.anthropic)}
-        {statusRow("GOOGLE_CLIENT_ID + SESSION_SECRET", t("settings.svcGoogle"), services.google)}
-        {statusRow("ADMIN_PASSWORD", t("settings.svcAdmin"), services.admin)}
-        <p className="pt-2 text-xs text-sand-600">{t("settings.envHint")}</p>
-        {services.admin && (
-          <a href="/admin" className="inline-block pt-1 text-sm text-clay underline">
-            {t("settings.openInbox")}
-          </a>
-        )}
       </section>
     </div>
   );

@@ -8,8 +8,17 @@ import { WorkCard, type WorkItem } from "@/components/works/work-card";
 
 export type { WorkItem };
 
-// The works shelf: the front door (design 2a).
-export function WorksShelf({ works }: { works: WorkItem[] }) {
+// The works shelf: the front door (design 2a). Shared with you renders as its
+// own shelf under the reader's corpora.
+export function WorksShelf({
+  works,
+  sharedWorks,
+  myEmail,
+}: {
+  works: WorkItem[];
+  sharedWorks: WorkItem[];
+  myEmail: string;
+}) {
   const router = useRouter();
   const t = useT();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -39,6 +48,12 @@ export function WorksShelf({ works }: { works: WorkItem[] }) {
     const next = prompt(t("works.corpusTitle"), current)?.trim();
     if (!next || next === current) return;
     await api(`/api/notebooks/${id}`, "PATCH", { title: next });
+    router.refresh();
+  }
+
+  async function leave(id: string) {
+    if (!confirm(t("panes.leaveConfirm"))) return;
+    await api(`/api/notebooks/${id}/collaborators`, "DELETE", { email: myEmail });
     router.refresh();
   }
 
@@ -96,6 +111,23 @@ export function WorksShelf({ works }: { works: WorkItem[] }) {
           </button>
         </li>
       </ul>
+
+      {sharedWorks.length > 0 && (
+        <>
+          <h2 className="mt-16 mb-7 text-[28px]">{t("works.sharedWithYou")}</h2>
+          <ul className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {sharedWorks.map((work) => (
+              <WorkCard
+                key={work.id}
+                work={work}
+                onRename={rename}
+                onDelete={remove}
+                onLeave={leave}
+              />
+            ))}
+          </ul>
+        </>
+      )}
     </>
   );
 }

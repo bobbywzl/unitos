@@ -1,5 +1,7 @@
+import { ACCOUNT_HEADER } from "@/lib/constants";
 import { DEFAULT_LANG, isLang, LANG_COOKIE, type Lang } from "@/lib/i18n/config";
 import { translate } from "@/lib/i18n/dictionaries";
+import { tabAccount } from "@/lib/tab-account";
 
 // The language on the client, outside React: the same cookie the layout reads.
 function clientLang(): Lang {
@@ -14,9 +16,15 @@ export async function api<T = unknown>(
   method: "POST" | "PUT" | "PATCH" | "DELETE",
   body?: unknown,
 ): Promise<T> {
+  // The tab's rendered account rides along; the middleware rejects the call
+  // when the browser has since signed into a different account (stale tab).
+  const account = tabAccount();
   const res = await fetch(path, {
     method,
-    headers: body !== undefined ? { "Content-Type": "application/json" } : undefined,
+    headers: {
+      ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
+      ...(account ? { [ACCOUNT_HEADER]: account } : {}),
+    },
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
   if (!res.ok) {

@@ -3,7 +3,7 @@ import {
   appOrigin,
   googleEnabled,
   exchangeCode,
-  SESSION_COOKIE,
+  sessionRedirect,
   signIn,
   STATE_COOKIE,
   stateValid,
@@ -32,14 +32,7 @@ export async function GET(req: Request) {
   if (!profile) return fail("Could not verify your Google identity");
 
   const { session } = await signIn(profile);
-  const res = NextResponse.redirect(new URL("/", origin));
-  res.cookies.set(SESSION_COOKIE, session.token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    path: "/",
-    expires: session.expiresAt,
-  });
+  const res = sessionRedirect(origin, session);
   res.cookies.set(STATE_COOKIE, "", { path: "/", maxAge: 0 });
   return res;
 }

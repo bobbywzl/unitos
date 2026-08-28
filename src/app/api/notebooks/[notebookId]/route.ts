@@ -1,7 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { notebookGuard } from "@/lib/auth";
+import { bumpNotebook, notebookAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
 import { serverT } from "@/lib/i18n/server";
 import { parseBody } from "@/lib/validate";
@@ -23,8 +23,8 @@ const patchSchema = z.object({
 export async function PATCH(req: Request, ctx: { params: Promise<{ notebookId: string }> }) {
   const t = await serverT();
   const { notebookId } = await ctx.params;
-  const denied = await notebookGuard(notebookId);
-  if (denied) return denied;
+  const access = await notebookAccess(notebookId, "editor");
+  if (access instanceof NextResponse) return access;
   const { data, error } = await parseBody(req, patchSchema);
   if (error) return error;
   // An all-empty override is no override: store null so prompts fall back to the
@@ -47,14 +47,16 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ notebookId: s
     })
     .catch(() => null);
   if (!notebook) return NextResponse.json({ error: t("api.corpusNotFound") }, { status: 404 });
+  await bumpNotebook(notebookId);
   return NextResponse.json(notebook);
 }
 
+// Deleting a corpus is the owner's alone; an editor edits, never removes.
 export async function DELETE(_req: Request, ctx: { params: Promise<{ notebookId: string }> }) {
   const t = await serverT();
   const { notebookId } = await ctx.params;
-  const denied = await notebookGuard(notebookId);
-  if (denied) return denied;
+  const access = await notebookAccess(notebookId, "owner");
+  if (access instanceof NextResponse) return access;
   const notebook = await db.notebook.delete({ where: { id: notebookId } }).catch(() => null);
   if (!notebook) return NextResponse.json({ error: t("api.corpusNotFound") }, { status: 404 });
   return NextResponse.json({ ok: true });

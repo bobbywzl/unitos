@@ -1,6 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
-import { appOrigin, authEnabled, createSession, SESSION_COOKIE, upsertUser } from "@/lib/auth";
+import { appOrigin, authEnabled, createSession, sessionRedirect, upsertUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 
 // Token-gated test login for QA runs (Scalae pattern). Sealed unless the
@@ -44,13 +44,5 @@ export async function GET(req: Request) {
     );
   }
   const session = await createSession(user.id);
-  const res = NextResponse.redirect(new URL("/", appOrigin(req)));
-  res.cookies.set(SESSION_COOKIE, session.token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    path: "/",
-    expires: session.expiresAt,
-  });
-  return res;
+  return sessionRedirect(appOrigin(req), session);
 }

@@ -1,5 +1,13 @@
 import type { DerivationType, NoteStatus } from "@prisma/client";
 
+/** One reply in the discussion under a note or an edit. */
+export type ReplyView = {
+  id: string;
+  content: string;
+  userId: string;
+  createdAt: string; // ISO
+};
+
 export type SourceChip = {
   id: string;
   documentId: string;
@@ -14,7 +22,11 @@ export type NoteView = {
   status: NoteStatus;
   derivationType: DerivationType | null;
   order: number;
+  // Account that wrote the note; null = before attribution existed. The author
+  // label renders from this when the corpus is shared.
+  createdById: string | null;
   sources: SourceChip[];
+  replies: ReplyView[];
 };
 
 export type SectionView = {
@@ -60,6 +72,7 @@ export type Distillation = {
   id: string;
   question: string;
   createdAt: string; // ISO
+  createdById?: string; // account that ran the distillation; absent = before attribution
   quotes: DistillQuote[];
 };
 
@@ -92,6 +105,7 @@ export type ExtractionSpan = {
 export type Extraction = {
   id: string;
   createdAt: string; // ISO
+  createdById?: string; // account that ran the extraction; absent = before attribution
   origin: ExtractionSpan;
   spans: ExtractionSpan[];
 };
@@ -124,6 +138,8 @@ export type AnnotationItem = {
   sourceId: string | null;
   quotedText: string | null;
   orphaned: boolean;
+  createdById: string | null;
+  replies: ReplyView[];
   // Set when the anchor sits on a figure, table, or equation block: the label
   // ("A1", "A2", …) shown at the block in the reader and on this card.
   figureLabel: string | null;
@@ -208,6 +224,8 @@ export type EditItem = {
   blockId: string | null;
   before: string | null;
   after: string | null;
+  userId: string | null; // account that made the edit; null = before attribution
+  replies: ReplyView[];
   meta: {
     linkId?: string;
     toDocumentId?: string;

@@ -8,6 +8,7 @@ import { useT } from "@/components/lang-provider";
 import { Markdown } from "@/components/markdown";
 import { Visual } from "@/components/video/visual";
 import type { ThumbnailSource } from "@/components/video/use-thumbnails";
+import { useCollab } from "@/components/collab/collab-context";
 import { FindPanel } from "@/components/video/find-panel";
 import { Transcript } from "@/components/video/transcript";
 import {
@@ -70,6 +71,7 @@ export function VideoPane({
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { canEdit } = useCollab();
   const t = useT();
   const playerRef = useRef<VideoPlayerHandle>(null);
   const currentTimeRef = useRef(0);
@@ -229,6 +231,7 @@ export function VideoPane({
 
   // ── Annotate: circle a spot or take the whole frame, then comment or explain ─
   function toggleAnnotate() {
+    if (!canEdit) return;
     if (drawing || composer || explaining) {
       setDrawing(false);
       setComposer(null);
@@ -370,6 +373,7 @@ export function VideoPane({
   // A transcript line is an anchor like a circled spot: same tools, same time
   // range, no drawn region (SPEC.md §11).
   function commentOnLine(line: TranscriptLine) {
+    if (!canEdit) return;
     playerRef.current?.seek(line.startTime);
     setActiveLineId(line.id);
     setDrawing(false);
@@ -386,6 +390,7 @@ export function VideoPane({
   }
 
   function explainLine(line: TranscriptLine) {
+    if (!canEdit) return;
     playerRef.current?.seek(line.startTime);
     setActiveLineId(line.id);
     setDrawing(false);
@@ -438,6 +443,7 @@ export function VideoPane({
               setActiveLineId((prev) => (prev === (line?.id ?? null) ? prev : (line?.id ?? null)));
             }}
             onAnnotate={toggleAnnotate}
+            canAnnotate={canEdit}
           />
           {/* The tool caption: floats up for a few seconds, then fades. */}
           {hint && (
@@ -463,6 +469,7 @@ export function VideoPane({
               playerRef.current?.seek(startTime);
             }}
             leading={
+              !canEdit ? null : (
               <button
                 onClick={toggleAnnotate}
                 title={t("video.circleCommentTitle")}
@@ -475,6 +482,7 @@ export function VideoPane({
                 <SearchIcon size={13} />
                 {t("video.circleComment")}
               </button>
+              )
             }
             trailing={
               transcript.length > 0 ? (

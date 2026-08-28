@@ -16,6 +16,9 @@ import {
   QuestionIcon,
   SparkleIcon,
 } from "@/components/icons";
+import { CollabProvider, type CollabState } from "@/components/collab/collab-context";
+import { ShareControl } from "@/components/collab/share-control";
+import { useNotebookSync } from "@/components/collab/use-sync";
 import { ContextTab, type ContextValues } from "@/components/context-tab";
 import { GuideDialog } from "@/components/guide-dialog";
 import { useT } from "@/components/lang-provider";
@@ -54,6 +57,8 @@ export function Workspace({
   annotationCount,
   distillationCount,
   context,
+  collab,
+  rev,
 }: {
   notebook: NotebookView;
   documents: AttachedDocument[];
@@ -66,9 +71,21 @@ export function Workspace({
   annotationCount: number;
   distillationCount: number;
   context: { initial: ContextValues | null; hasOverride: boolean; isSet: boolean };
+  collab: CollabState;
+  rev: number;
 }) {
   const t = useT();
-  const { tree, pending, actions, lastRejected, undoReject } = useOutline(notebook);
+  const canEdit = collab.canEdit;
+  const { tree, pending, actions, lastRejected, undoReject } = useOutline(notebook, canEdit);
+  // Live sync: poll the corpus's rev, refresh when another account changes it,
+  // and learn who else is here (SPEC.md gained this with sharing).
+  const presence = useNotebookSync({
+    notebookId: notebook.id,
+    documentId: activeDocumentId,
+    rev,
+    enabled: true,
+    accountId: collab.authOn ? collab.myId : null,
+  });
   const [collapsed, setCollapsed] = useState(false);
   const [tab, setTab] = useState<Tab>("notes");
   const [menuOpen, setMenuOpen] = useState(false);
@@ -140,6 +157,7 @@ export function Workspace({
   return (
     // print: the shell flattens to plain flow so the whole document prints,
     // not one screen of the scroll pane; chrome and trays hide.
+    <CollabProvider value={collab}>
     <div className="grid h-screen grid-rows-[68px_1fr] bg-paper print:block print:h-auto">
       <header className="flex min-w-0 items-center gap-3.5 border-b border-line px-5 print:hidden">
         <Link
@@ -158,12 +176,15 @@ export function Workspace({
             activeId={activeDocumentId}
           />
         </div>
-        <ContextTab
-          notebookId={notebook.id}
-          initial={context.initial}
-          hasOverride={context.hasOverride}
-          isSet={context.isSet}
-        />
+        <ShareControl notebookId={notebook.id} presence={presence} />
+        {canEdit && (
+          <ContextTab
+            notebookId={notebook.id}
+            initial={context.initial}
+            hasOverride={context.hasOverride}
+            isSet={context.isSet}
+          />
+        )}
         {pending.length > 0 && (
           <span className="shrink-0 rounded-full bg-clay-200 px-3.5 py-1.5 text-xs font-semibold text-clay-800">
             {t("panes.pendingCount", { n: pending.length })}
@@ -247,14 +268,16 @@ export function Workspace({
             {collapsed ? <ChevronLeftIcon /> : <ChevronRightIcon />}
           </button>
 
-          <button
-            onClick={() => show("assistant")}
-            aria-label={t("panes.assistant")}
-            aria-current={!collapsed && tab === "assistant"}
-            className={!collapsed && tab === "assistant" ? RAIL_BUTTON_ON : RAIL_BUTTON}
-          >
-            <SparkleIcon />
-          </button>
+          {canEdit && (
+            <button
+              onClick={() => show("assistant")}
+              aria-label={t("panes.assistant")}
+              aria-current={!collapsed && tab === "assistant"}
+              className={!collapsed && tab === "assistant" ? RAIL_BUTTON_ON : RAIL_BUTTON}
+            >
+              <SparkleIcon />
+            </button>
+          )}
 
           <button
             onClick={() => show("notes")}
@@ -328,6 +351,7 @@ export function Workspace({
 
       <GuideDialog open={guideOpen} onClose={() => setGuideOpen(false)} />
     </div>
+    </CollabProvider>
   );
 }
 

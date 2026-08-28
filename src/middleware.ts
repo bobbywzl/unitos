@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { SESSION_COOKIE } from "@/lib/constants";
+import { ACCOUNT_COOKIE, ACCOUNT_HEADER, SESSION_COOKIE } from "@/lib/constants";
 import { isLang, LANG_COOKIE, type Lang } from "@/lib/i18n/config";
 import { translate } from "@/lib/i18n/dictionaries";
 
@@ -63,6 +63,20 @@ export function middleware(request: NextRequest) {
     pathname.startsWith("/api/cron/")
   ) {
     return NextResponse.next();
+  }
+  // A stale tab's API call: the page was rendered for one account (the header
+  // api() sends) but the browser has since signed into another (the account
+  // cookie). Refuse instead of writing as the wrong account; the tab's account
+  // guard shows the notice.
+  if (pathname.startsWith("/api/")) {
+    const rendered = request.headers.get(ACCOUNT_HEADER);
+    const account = request.cookies.get(ACCOUNT_COOKIE)?.value;
+    if (rendered && account && rendered !== account) {
+      return NextResponse.json(
+        { error: translate(requestLang(request), "common.accountChanged") },
+        { status: 409 },
+      );
+    }
   }
   if (request.cookies.get(SESSION_COOKIE)?.value) return NextResponse.next();
   if (pathname.startsWith("/api/")) {

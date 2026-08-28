@@ -2,7 +2,7 @@ import { anthropic } from "@ai-sdk/anthropic";
 import { streamText, type ModelMessage } from "ai";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { currentUser, notebookGuard } from "@/lib/auth";
+import { bumpNotebook, notebookAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
 import {
   DERIVATION_MODEL,
@@ -93,11 +93,13 @@ export async function POST(req: Request) {
 
   const { data, error } = await parseBody(req, deriveSchema);
   if (error) return error;
-  const denied = await notebookGuard(data.notebookId);
-  if (denied) return denied;
-  const user = await currentUser();
+  // Every derivation persists something (annotation, layer, summary), so the
+  // gate is editor — except FIND, which persists nothing and stays open to viewers.
+  const access = await notebookAccess(data.notebookId, data.type === "FIND" ? "viewer" : "editor");
+  if (access instanceof NextResponse) return access;
+  const user = access.user;
   const usageMeta = {
-    userId: user?.id ?? null,
+    userId: user.id,
     feature: data.type.toLowerCase(),
     model: DERIVATION_MODEL[data.type],
   };
@@ -322,6 +324,7 @@ export async function POST(req: Request) {
             where,
             data: { summaries: { ...current, [depth]: text } },
           });
+          await bumpNotebook(data.notebookId);
         }
       },
       onError: (err) => {
@@ -361,6 +364,7 @@ export async function POST(req: Request) {
                   content: text,
                   status: "ACCEPTED",
                   derivationType: data.type,
+                  createdById: user.id,
                   order: count,
                   sources: {
                     create: {
@@ -378,6 +382,7 @@ export async function POST(req: Request) {
                   },
                 },
               });
+              await bumpNotebook(data.notebookId);
               controller.enqueue(encoder.encode(`${STREAM_NOTE_TOKEN}${note.id}`));
             }
           } catch (err) {
@@ -399,6 +404,7 @@ export async function POST(req: Request) {
                 content: text,
                 status: "ACCEPTED",
                 derivationType: "EXPLAIN",
+                createdById: user.id,
                 order: count,
                 sources: {
                   create: {
@@ -416,6 +422,7 @@ export async function POST(req: Request) {
                 },
               },
             });
+            await bumpNotebook(data.notebookId);
             controller.enqueue(encoder.encode(`${STREAM_NOTE_TOKEN}${note.id}`));
           } catch (err) {
             console.error("[derive] annotation save failed:", err);
@@ -489,6 +496,7 @@ export async function POST(req: Request) {
       },
       data: { salience: spans },
     });
+    await bumpNotebook(data.notebookId);
     return NextResponse.json({ ok: true, spanCount: spans.length });
   }
 
@@ -550,6 +558,7 @@ export async function POST(req: Request) {
     const extraction: Extraction = {
       id: crypto.randomUUID(),
       createdAt: new Date().toISOString(),
+      createdById: user.id,
       origin: toSpan(origin),
       spans: spans.map(toSpan),
     };
@@ -562,6 +571,7 @@ export async function POST(req: Request) {
         extractions: [...extractionList(attachment.extractions), extraction].slice(-20),
       },
     });
+    await bumpNotebook(data.notebookId);
     return NextResponse.json({ ok: true, extraction }, { status: 201 });
   }
 
@@ -622,6 +632,7 @@ export async function POST(req: Request) {
           id: crypto.randomUUID(),
           question: data.question!.trim(),
           createdAt: new Date().toISOString(),
+          createdById: user.id,
           quotes: quotes.map((q) => ({
             blockId: q.blockId,
             start: q.start,
@@ -642,6 +653,7 @@ export async function POST(req: Request) {
             distillations: [distillation, ...distillationList(attachment.distillations)].slice(0, 20),
           },
         });
+        await bumpNotebook(data.notebookId);
         send(JSON.stringify({ ok: true, distillation }));
       } catch (err) {
         if (!cancelled && !req.signal.aborted) {

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { bumpNotebook, notebookAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
 import { serverT } from "@/lib/i18n/server";
 import { parseBody } from "@/lib/validate";
@@ -17,6 +18,8 @@ export async function POST(req: Request) {
 
   const notebook = await db.notebook.findUnique({ where: { id: data.notebookId } });
   if (!notebook) return NextResponse.json({ error: t("api.corpusNotFound") }, { status: 404 });
+  const access = await notebookAccess(data.notebookId, "editor");
+  if (access instanceof NextResponse) return access;
 
   if (data.parentId) {
     const parent = await db.section.findUnique({ where: { id: data.parentId } });
@@ -39,5 +42,6 @@ export async function POST(req: Request) {
       order: siblingCount,
     },
   });
+  await bumpNotebook(data.notebookId);
   return NextResponse.json(section, { status: 201 });
 }

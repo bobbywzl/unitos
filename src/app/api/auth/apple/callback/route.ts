@@ -5,7 +5,7 @@ import {
   appleExchangeCode,
   appleUserName,
   appOrigin,
-  SESSION_COOKIE,
+  sessionRedirect,
   signIn,
   stateValid,
 } from "@/lib/auth";
@@ -38,14 +38,7 @@ export async function POST(req: Request) {
   // the standing fallback.
   const name = appleUserName(userField) ?? profile.name;
   const { session } = await signIn({ email: profile.email, name, picture: "" });
-  const res = NextResponse.redirect(new URL("/", origin), 303);
-  res.cookies.set(SESSION_COOKIE, session.token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    path: "/",
-    expires: session.expiresAt,
-  });
+  const res = sessionRedirect(origin, session);
   res.cookies.set(APPLE_STATE_COOKIE, "", { path: "/", maxAge: 0 });
   return res;
 }

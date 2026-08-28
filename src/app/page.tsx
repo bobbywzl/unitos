@@ -4,7 +4,8 @@ import { authEnabled, currentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { serverT } from "@/lib/i18n/server";
 import { Logo } from "@/components/logo";
-import { WorksShelf } from "@/components/works/works-shelf";
+import { AccountGuard } from "@/components/account-guard";
+import { WorksShelf, type WorkItem } from "@/components/works/works-shelf";
 
 export const dynamic = "force-dynamic";
 
@@ -12,41 +13,79 @@ export default async function Home() {
   const user = await currentUser();
   if (!user) redirect("/signin");
   const t = await serverT();
+  const workInclude = {
+    // Hidden sections (Annotations) stay out of the count, so the tag on a work
+    // matches the number of sections its outline shows.
+    _count: {
+      select: {
+        sections: { where: { hidden: false } },
+        documents: true,
+        collaborators: true,
+      },
+    },
+    // The pending queue carries to the front door (design 2a).
+    sections: { select: { _count: { select: { notes: { where: { status: "PENDING" as const } } } } } },
+  };
   const works = await db.notebook.findMany({
     // With sign-in on, the shelf is the signed-in reader's corpora.
     where: authEnabled() ? { userId: user.id } : undefined,
     orderBy: { updatedAt: "desc" },
-    include: {
-      // Hidden sections (Annotations) stay out of the count, so the tag on a work
-      // matches the number of sections its outline shows.
-      _count: { select: { sections: { where: { hidden: false } }, documents: true } },
-      // The pending queue carries to the front door (design 2a).
-      sections: { select: { _count: { select: { notes: { where: { status: "PENDING" } } } } } },
-    },
+    include: workInclude,
+  });
+
+  // Corpora shared with this account, with their owners' names.
+  const collabRows = authEnabled()
+    ? await db.notebookCollaborator.findMany({
+        where: { email: user.email },
+        select: { role: true, notebook: { include: workInclude } },
+      })
+    : [];
+  collabRows.sort(
+    (a, b) => b.notebook.updatedAt.getTime() - a.notebook.updatedAt.getTime(),
+  );
+  const owners = await db.user.findMany({
+    where: { id: { in: [...new Set(collabRows.map((r) => r.notebook.userId))] } },
+    select: { id: true, name: true },
+  });
+  const ownerById = new Map(owners.map((o) => [o.id, o.name]));
+
+  const toItem = (
+    w: (typeof works)[number],
+    shared?: { ownerName: string; role: "editor" | "viewer" },
+  ): WorkItem => ({
+    id: w.id,
+    title: w.title,
+    sectionCount: w._count.sections,
+    documentCount: w._count.documents,
+    collaboratorCount: w._count.collaborators,
+    pendingCount: w.sections.reduce((sum, s) => sum + s._count.notes, 0),
+    updatedAt: w.updatedAt.toISOString(),
+    shared,
   });
 
   return (
     <main className="mx-auto w-full max-w-[1080px] px-16 pb-16">
+      <AccountGuard userId={user.id} enabled={authEnabled()} />
       <header className="flex items-center gap-3 pt-[26px]">
         <Logo size={38} className="text-clay" />
         <span className="font-display text-[21px]">{t("common.appName")}</span>
         {authEnabled() && (
-          <span className="ml-auto flex items-center gap-2">
+          <Link href="/settings" className="ml-auto flex items-center gap-2">
             {user.picture ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={user.picture} alt="" className="size-7 rounded-full" />
+              <img src={user.picture} alt="" className="size-7 rounded-full object-cover" />
             ) : (
               <span className="flex size-7 items-center justify-center rounded-full bg-clay-100 text-xs font-semibold text-clay-800">
                 {user.name[0]?.toUpperCase()}
               </span>
             )}
             <span className="max-w-[200px] truncate text-xs text-sand-600">{user.email}</span>
-          </span>
+          </Link>
         )}
         <Link
           href="/settings"
           aria-label={t("common.settings")}
-          className="ml-auto flex size-[38px] items-center justify-center rounded-full text-sand-600 hover:bg-clay-100 hover:text-clay-800"
+          className={`flex size-[38px] items-center justify-center rounded-full text-sand-600 hover:bg-clay-100 hover:text-clay-800 ${authEnabled() ? "" : "ml-auto"}`}
         >
           <svg
             width="18"
@@ -66,14 +105,14 @@ export default async function Home() {
 
       <div className="pt-16">
         <WorksShelf
-          works={works.map((w) => ({
-            id: w.id,
-            title: w.title,
-            sectionCount: w._count.sections,
-            documentCount: w._count.documents,
-            pendingCount: w.sections.reduce((sum, s) => sum + s._count.notes, 0),
-            updatedAt: w.updatedAt.toISOString(),
-          }))}
+          works={works.map((w) => toItem(w))}
+          sharedWorks={collabRows.map((r) =>
+            toItem(r.notebook, {
+              ownerName: ownerById.get(r.notebook.userId) ?? "?",
+              role: r.role === "EDITOR" ? "editor" : "viewer",
+            }),
+          )}
+          myEmail={user.email}
         />
       </div>
     </main>

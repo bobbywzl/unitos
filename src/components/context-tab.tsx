@@ -7,12 +7,19 @@ import { useT } from "@/components/lang-provider";
 
 export type ContextValues = { background: string; purpose: string; application: string };
 
-const EMPTY: ContextValues = { background: "", purpose: "", application: "" };
+// The stored fields merge into one Background text; the next save writes it
+// back as background alone and clears the older purpose and application columns.
+function merged(values: ContextValues | null): string {
+  if (!values) return "";
+  return [values.background, values.purpose, values.application]
+    .map((v) => v.trim())
+    .filter(Boolean)
+    .join("\n");
+}
 
-// The Context tab in the workspace header: who the reader is and what they're
-// after. Injected into every AI prompt: notes, distillation, analysis. Optional —
-// it never blocks reading or upload. Saves globally (ReaderProfile) or as this
-// work's override (notebook.profile).
+// The Context tab in the workspace header: the reader's background, injected
+// into every AI prompt. Optional — it never blocks reading or upload. Saves
+// globally (ReaderProfile) or as this work's override (notebook.profile).
 export function ContextTab({
   notebookId,
   initial,
@@ -28,16 +35,16 @@ export function ContextTab({
   const t = useT();
   const panelRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
-  const [values, setValues] = useState<ContextValues>(initial ?? EMPTY);
+  const [background, setBackground] = useState(merged(initial));
   const [scope, setScope] = useState<"global" | "notebook">(hasOverride ? "notebook" : "global");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Opening seeds the fields from the saved state, so the panel always shows
+  // Opening seeds the field from the saved state, so the panel always shows
   // what is stored, not what a dismissed edit left behind.
   function toggle() {
     if (!open) {
-      setValues(initial ?? EMPTY);
+      setBackground(merged(initial));
       setScope(hasOverride ? "notebook" : "global");
       setError(null);
     }
@@ -62,19 +69,15 @@ export function ContextTab({
 
   async function save() {
     if (busy) return;
-    const trimmed = {
-      background: values.background.trim(),
-      purpose: values.purpose.trim(),
-      application: values.application.trim(),
-    };
+    const values = { background: background.trim(), purpose: "", application: "" };
     setBusy(true);
     setError(null);
     try {
       if (scope === "global") {
-        await api("/api/profile", "PUT", trimmed);
+        await api("/api/profile", "PUT", values);
         if (hasOverride) await api(`/api/notebooks/${notebookId}`, "PATCH", { profile: null });
       } else {
-        await api(`/api/notebooks/${notebookId}`, "PATCH", { profile: trimmed });
+        await api(`/api/notebooks/${notebookId}`, "PATCH", { profile: values });
       }
       setOpen(false);
       router.refresh();
@@ -84,19 +87,6 @@ export function ContextTab({
       setBusy(false);
     }
   }
-
-  const field = (key: keyof ContextValues, label: string, placeholder: string) => (
-    <label className="block">
-      <span className="text-xs text-sand-700">{label}</span>
-      <textarea
-        value={values[key]}
-        onChange={(e) => setValues({ ...values, [key]: e.target.value })}
-        placeholder={placeholder}
-        rows={2}
-        className="mt-1 w-full rounded-2xl bg-sand-100 p-3 text-sm outline-none placeholder:text-sand-500"
-      />
-    </label>
-  );
 
   return (
     <div ref={panelRef} className="relative shrink-0">
@@ -116,11 +106,16 @@ export function ContextTab({
       {open && (
         <div className="absolute right-0 z-30 mt-2 w-[340px] rounded-2xl bg-card p-4 shadow-float">
           <p className="text-xs text-sand-600">{t("panels.contextDesc")}</p>
-          <div className="mt-3 space-y-3">
-            {field("background", t("panels.fieldBackground"), t("panels.fieldBackgroundPh"))}
-            {field("purpose", t("panels.fieldPurpose"), t("panels.fieldPurposePh"))}
-            {field("application", t("panels.fieldApplication"), t("panels.fieldApplicationPh"))}
-          </div>
+          <label className="mt-3 block">
+            <span className="text-xs text-sand-700">{t("panels.fieldBackground")}</span>
+            <textarea
+              value={background}
+              onChange={(e) => setBackground(e.target.value)}
+              placeholder={t("panels.fieldBackgroundPh")}
+              rows={4}
+              className="mt-1 w-full rounded-2xl bg-sand-100 p-3 text-sm outline-none placeholder:text-sand-500"
+            />
+          </label>
           <div className="mt-3 flex items-center gap-4 text-xs text-sand-700">
             <label className="flex cursor-pointer items-center gap-1.5">
               <input

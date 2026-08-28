@@ -25,7 +25,7 @@ A notes-centric web app for completely dissecting complex documents (research pa
 - **Anchoring:** W3C Web Annotation selectors via `apache-annotator` (`@apache-annotator/dom`, `@apache-annotator/selector`).
 - **Digest (Phase 6):** the assistant's stored context — one `NotebookDigest` row per corpus per user, rebuilt on read when a content fingerprint moves (§7). No embeddings: the assistant reads the corpus whole.
 - **Styling:** Tailwind. Split-pane layout via CSS grid, not a heavy library.
-- **Auth:** dual mode (Scalae pattern). With `SESSION_SECRET` plus Google (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`), Apple (`APPLE_CLIENT_ID`, `APPLE_TEAM_ID`, `APPLE_KEY_ID`, `APPLE_PRIVATE_KEY`), or email (`RESEND_API_KEY`, `EMAIL_FROM`) credentials set, sign-in (hand-rolled OIDC code flows, database sessions in an httpOnly cookie, 30 days; accounts key on the email, so every provider lands in one account; Apple's callback is a cross-site form_post with a SameSite=None state cookie and a self-signed ES256 client secret; email sign-in stores a hashed single-use token per `EmailConfirmation` row (`purpose` "signup" | "reset"), 30-minute expiry, and creates the account only when the link is clicked; the link lands on `/welcome` to set a password (scrypt, `User.passwordHash` "s1$salt$hash", "" = none); returning users sign in with email + password at `/signin?mode=in`, and Forgot password emails a reset link to `/reset`, which sets the new password and signs every other session out) gates the app at `/signin`; corpora, profiles, and digests belong to accounts, and the first account to sign in adopts the local reader's data. Unset, the app runs as the single local reader (`user-1`), nothing gated. `/admin` keeps its own `ADMIN_PASSWORD` gate, decoupled from reader sign-in. Corpus routes verify ownership; object routes stay id-capability-based (cuids) — per-object ACLs are the next migration. `/api/auth/test-login` is a QA door, sealed unless `TEST_LOGIN_TOKEN` is set.
+- **Auth:** dual mode (Scalae pattern). With `SESSION_SECRET` plus Google (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`), Apple (`APPLE_CLIENT_ID`, `APPLE_TEAM_ID`, `APPLE_KEY_ID`, `APPLE_PRIVATE_KEY`), or email (`RESEND_API_KEY`, `EMAIL_FROM`) credentials set, sign-in (hand-rolled OIDC code flows, database sessions in an httpOnly cookie, 30 days; accounts key on the email, so every provider lands in one account; Apple's callback is a cross-site form_post with a SameSite=None state cookie and a self-signed ES256 client secret; email sign-in stores a hashed single-use token per `EmailConfirmation` row (`purpose` "signup" | "reset"), 30-minute expiry, and creates the account only when the link is clicked; the link lands on `/welcome` to set a password (scrypt, `User.passwordHash` "s1$salt$hash", "" = none); returning users sign in with email + password at `/signin?mode=in`, and Forgot password emails a reset link to `/reset`, which sets the new password and signs every other session out) gates the app at `/signin`; corpora, profiles, and digests belong to accounts, and the first account to sign in adopts the local reader's data. Unset, the app runs as the single local reader (`user-1`), nothing gated. `/admin` keeps its own `ADMIN_PASSWORD` gate, decoupled from reader sign-in. Corpus routes verify membership (owner or collaborator, §12); object routes resolve their object to its corpus or document and check the same roles. `/api/auth/test-login` is a QA door, sealed unless `TEST_LOGIN_TOKEN` is set.
 - **Language:** English and Chinese, whole-surface. Typed dictionaries in `/lib/i18n/dict` (one namespace per surface; en and zh keys enforced identical by type), `dissect-lang` cookie with Accept-Language first-visit fallback, switcher in Settings and on `/signin`. Every UI surface and API error message translates; prompts, the digest, and stored data stay English (model context and data, not UI).
 
 ---
@@ -264,7 +264,7 @@ DOM ranges are never the source of truth. Convert selection → block-relative o
 - The article menu floats open at the top left of the page. It hides once the reader scrolls and returns when the reader is back at the top. It lists the frequent functions: Summarize article, Key takeaways, and Explain simply send the question to the assistant, which reads the whole document (document scope, cached prefix) and answers in the assistant chat card beside the article; Ask the assistant opens the same chat empty; Distill opens the distilled page.
 - Summary lives in the side panel: one rail button, a depth control with three levels (layman / intermediate / professional), one stored summary per depth.
 - The salience toggle gave its top-right spot to the Distill button; the SALIENCE derivation stays in the pipeline without a reader control.
-- Context tab in the workspace header: background / purpose / application, every field optional, editable any time. Saves globally or as a per-notebook override. No onboarding dialog — nothing blocks reading or upload.
+- Context tab in the workspace header: one Background field, optional, editable any time. Saves globally or as a per-notebook override. Older purpose/application values merge into it on the next save. No onboarding dialog — nothing blocks reading or upload.
 - Keyboard-first: `j/k` navigate pending queue, `Enter` accept, `Backspace` reject, `e` edit, `g` jump to source.
 
 ---
@@ -335,7 +335,6 @@ Each phase must be fully working end-to-end before starting the next.
 
 ## 9. Non-Goals (v1)
 
-- Multi-user / sharing / realtime collaboration
 - Mobile layout (desktop-only; min-width 1024px)
 - Scanned-PDF OCR
 - Browser extension
@@ -454,3 +453,70 @@ Each rung fails with a plain reason; the ladder tries the next and reports every
 ### Phase V4 — Find + Explain
 - FIND over the transcript; EXPLAIN with frame capture.
 - **Done when:** "where do they discuss X" returns seekable ranges with explanations; explaining a circled region yields an annotation citing that time range.
+
+---
+
+## 12. Community
+
+A corpus can be shared (Google Docs pattern). The owner (Notebook.userId) adds collaborators by email with a role; accounts key on the email (§2), so an invite works before the account exists. Everything inside the corpus — documents, notes, annotations, distillations, extractions, edits — is the shared surface; the derivation pipeline (§4) is unchanged.
+
+### Data model additions
+
+```prisma
+model NotebookCollaborator {
+  id         String     @id @default(cuid())
+  notebookId String
+  notebook   Notebook   @relation(fields: [notebookId], references: [id], onDelete: Cascade)
+  email      String     // lowercase; invite works before the account exists
+  role       CollabRole @default(EDITOR)
+  addedById  String?
+  createdAt  DateTime   @default(now())
+  @@unique([notebookId, email])
+}
+
+enum CollabRole { EDITOR VIEWER }
+
+model NotebookPresence {
+  id         String   @id @default(cuid())
+  notebookId String
+  notebook   Notebook @relation(fields: [notebookId], references: [id], onDelete: Cascade)
+  userId     String
+  documentId String?  // the open document; null = the notes full page
+  lastSeenAt DateTime @default(now())
+  @@unique([notebookId, userId])
+}
+```
+
+Plus columns: `Notebook.rev Int` (change counter), `Note.createdById String?`, `BlockEdit.userId String?`, `User.symbol String` and `User.color String` (the badge).
+
+### Roles
+
+| Role | Held by | Can |
+|---|---|---|
+| owner | Notebook.userId | everything, plus delete the corpus and manage sharing |
+| editor | CollabRole EDITOR | read and write: notes, sections, annotations, derivations, block edits, links, documents |
+| viewer | CollabRole VIEWER | read only; FIND (persists nothing) is the one derivation open to viewers |
+
+Enforcement is server-side in `lib/collab.ts`: `notebookAccess(notebookId, min)` for corpus routes, `documentAccess(documentId, min)` for document routes (best role across the corpora the document is attached to), `sectionAccess`/`noteAccess` resolving objects to their corpus. A non-member answers 404 (existence undisclosed); a member below the required role answers 403. The UI mirrors the same rule: viewers get no selection popover, no edit mode, no assistant, no write buttons, and a "Viewing only" badge.
+
+### Attribution
+
+Every write is labeled with its author: `Note.createdById` (manual notes, highlights, comments, EXPLAIN/SIMPLIFY annotations, assistant output), `BlockEdit.userId` (text edits, formats, styles, links, block add/remove), `createdById` inside stored distillations and extractions. The author renders as a person badge — picture, or symbol on color (`lib/person.ts`; defaults: first letter of the name, color hashed from the account id) — on note cards, annotation cards, the Edits panel, the distilled page, and the extract card. Labels render only on shared corpora; solo work stays unlabeled.
+
+### Live sync
+
+Every write bumps `Notebook.rev` (document writes bump every corpus the document is attached to). Open workspaces poll `GET /api/notebooks/[id]/sync` every 4 seconds: the call stamps the caller's `NotebookPresence` row and answers `{rev, people}` — who else has the corpus open (25-second window). When the rev moves, the client refreshes the page — deferred while an input, textarea, or editable block has focus or a selection is open, so typing is never clobbered. Presence renders as badges in the workspace header.
+
+### Replies
+
+Every note (annotations included — a highlight, comment, explanation, or assistant conversation is a note) and every edit in the Edits panel carries a discussion: `Reply` rows (`noteId` or `blockEditId`, author, content), flat, oldest first. Collaborators comment on each other's work there. Editors reply; viewers read; a reply deletes by its author or the owner. Threads render collapsed to a count on note cards, annotation cards, and edit cards; the Reply affordance appears once the corpus is shared. `POST /api/replies`, `DELETE /api/replies/[replyId]`; replies bump the rev like every write.
+
+### Stale tabs
+
+Cookies are per browser, not per tab: signing out or switching accounts in one tab changes every tab's cookies. Sign-in therefore also sets a readable account cookie (`dissect-account`, the account id — grants nothing; the session cookie alone authorizes). Account-scoped pages mount an account guard that latches the account the page was rendered for, watches the cookie (on focus, on visibility, every 5 seconds), confirms a mismatch against `GET /api/auth/account` (which also re-stamps the cookie, healing sessions from before it existed), and freezes the tab with an account-changed notice instead of silently becoming the new account. Live sync stops polling on mismatch so a stale tab never stamps presence or refreshes as someone else. `api()` sends the tab's rendered account as a header; the middleware answers 409 when it no longer matches the cookie, so a stale tab's write can never land as the wrong account.
+
+### Sharing surfaces
+
+- Share dialog in the workspace header: the owner adds by email with a role, re-roles, removes; a collaborator sees the list and can leave. `GET/POST/DELETE /api/notebooks/[id]/collaborators`.
+- The dashboard shows "Shared with you": the corpora shared with the account, with the owner's name and the role. Editors can rename from the card menu; only Leave replaces Delete.
+- The profile (Settings): picture (uploaded, resized client-side to a small JPEG data URL, stored on `User.picture`), name, symbol, color, and the one Background field (`PUT /api/account`, `PUT /api/profile`). Sign-in fills name and picture only when empty — it never overwrites what the person set. Service/env status lives on `/admin`, not in Settings.

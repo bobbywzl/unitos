@@ -188,6 +188,7 @@ export const VideoPlayer = forwardRef<
     onMetadata: (m: { duration: number; width?: number; height?: number }) => void;
     onTime: (t: number) => void; // ~4 Hz, for the transcript follow-along
     onAnnotate: () => void; // the pencil button; pane opens the composer
+    canAnnotate: boolean; // viewers on a shared corpus: false hides the button
   }
 >(function VideoPlayer(
   {
@@ -202,6 +203,7 @@ export const VideoPlayer = forwardRef<
     onMetadata,
     onTime,
     onAnnotate,
+    canAnnotate,
   },
   ref,
 ) {
@@ -789,6 +791,7 @@ export const VideoPlayer = forwardRef<
           {muted ? <MuteIcon size={17} /> : <VolumeIcon size={17} />}
         </button>
 
+        {canAnnotate && (
         <button
           onClick={onAnnotate}
           aria-label={t("video.annotate")}
@@ -801,6 +804,7 @@ export const VideoPlayer = forwardRef<
         >
           <SearchIcon size={17} />
         </button>
+        )}
 
         <button
           onClick={toggleFullscreen}

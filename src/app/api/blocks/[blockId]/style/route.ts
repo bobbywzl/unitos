@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { bumpDocument, documentAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
 import { serverT } from "@/lib/i18n/server";
 import { parseBody } from "@/lib/validate";
@@ -22,6 +23,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ blockId: strin
 
   const block = await db.block.findUnique({ where: { id: blockId } });
   if (!block) return NextResponse.json({ error: t("api.blockNotFound") }, { status: 404 });
+  const access = await documentAccess(block.documentId, "editor");
+  if (access instanceof NextResponse) return access;
   if (block.type === "TABLE" || block.type === "FIGURE") {
     return NextResponse.json({ error: t("api.onlyTextBlocksStyled") }, { status: 400 });
   }
@@ -58,8 +61,10 @@ export async function POST(req: Request, ctx: { params: Promise<{ blockId: strin
         before: existing >= 0 ? data.style : null,
         after: existing >= 0 ? null : data.style,
         meta: { style: data.style, on: existing < 0, quotedText },
+        userId: access.user.id,
       },
     }),
   ]);
+  await bumpDocument(block.documentId);
   return NextResponse.json(updated);
 }

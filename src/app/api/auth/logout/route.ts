@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { appOrigin, SESSION_COOKIE, signOut } from "@/lib/auth";
+import { ACCOUNT_COOKIE, appOrigin, SESSION_COOKIE, signOut } from "@/lib/auth";
 
 // Delete the session and return to /signin.
 export async function GET(req: Request) {
@@ -7,5 +7,6 @@ export async function GET(req: Request) {
   await signOut(token);
   const res = NextResponse.redirect(new URL("/signin", appOrigin(req)));
   res.cookies.set(SESSION_COOKIE, "", { path: "/", maxAge: 0 });
+  res.cookies.set(ACCOUNT_COOKIE, "", { path: "/", maxAge: 0 });
   return res;
 }

@@ -3,6 +3,7 @@ import { after, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { currentUser } from "@/lib/auth";
+import { bumpNotebook, notebookAccess } from "@/lib/collab";
 import { buildGlossary } from "@/lib/glossary";
 import { serverT } from "@/lib/i18n/server";
 import type { TFunc } from "@/lib/i18n/dictionaries";
@@ -38,6 +39,8 @@ export async function POST(req: Request) {
   if (error) return error;
   const notebook = await db.notebook.findUnique({ where: { id: data.notebookId } });
   if (!notebook) return NextResponse.json({ error: t("api.corpusNotFound") }, { status: 404 });
+  const access = await notebookAccess(data.notebookId, "editor");
+  if (access instanceof NextResponse) return access;
 
   if (data.kind === "video") return completeVideo(data, t);
 
@@ -87,6 +90,7 @@ export async function POST(req: Request) {
     try {
       const { document, deduped } = await parse.ingestPdf(bytes, data.filename, onProgress);
       await attachDocument(data.notebookId, document.id);
+      await bumpNotebook(data.notebookId);
       // On-ingest glossary extraction (SPEC.md §8 Phase 7). Best-effort; after() keeps it
       // alive past the response on serverless.
       if (!deduped) after(() => buildGlossary(document.id, user?.id ?? null).catch(() => {}));
@@ -148,6 +152,7 @@ async function completeVideo(data: Body, t: TFunc) {
   if (existing) {
     await db.uploadChunk.deleteMany({ where: { uploadId: data.uploadId } });
     await attachDocument(data.notebookId, existing.id);
+    await bumpNotebook(data.notebookId);
     return progressResponse(async () => ({
       id: existing.id,
       title: existing.title,
@@ -187,6 +192,7 @@ async function completeVideo(data: Body, t: TFunc) {
       }
       await db.uploadChunk.deleteMany({ where: { uploadId: data.uploadId } });
       await attachDocument(data.notebookId, document.id);
+      await bumpNotebook(data.notebookId);
       // Transcription starts on its own — the transcript is the point.
       after(() => runTranscription(document.id).catch(() => {}));
     } catch (err) {

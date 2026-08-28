@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { diffSegments, remapAnchor, remapRange } from "@/lib/anchors/remap";
+import { bumpDocument, documentAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
 import { serverT } from "@/lib/i18n/server";
 import { parseBody } from "@/lib/validate";
@@ -47,6 +48,8 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ blockId: stri
 
   const block = await db.block.findUnique({ where: { id: blockId } });
   if (!block) return NextResponse.json({ error: t("api.blockNotFound") }, { status: 404 });
+  const access = await documentAccess(block.documentId, "editor");
+  if (access instanceof NextResponse) return access;
 
   if (block.type === "TABLE" || block.type === "FIGURE") {
     return NextResponse.json({ error: t("api.onlyTextBlocksEdited") }, { status: 400 });
@@ -73,9 +76,11 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ blockId: stri
           before: fromKind,
           after: data.kind,
           meta: { from: fromKind, to: data.kind },
+          userId: access.user.id,
         },
       }),
     ]);
+    await bumpDocument(block.documentId);
     return NextResponse.json(formatted);
   }
 
@@ -127,6 +132,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ blockId: stri
         kind: "TEXT_EDIT",
         before: block.text,
         after: newText,
+        userId: access.user.id,
       },
     });
     if (kindChanges && data.kind !== undefined) {
@@ -138,6 +144,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ blockId: stri
           before: fromKind,
           after: data.kind,
           meta: { from: fromKind, to: data.kind },
+          userId: access.user.id,
         },
       });
     }
@@ -201,6 +208,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ blockId: stri
     }
     return saved;
   });
+  await bumpDocument(block.documentId);
   return NextResponse.json(updated);
 }
 
@@ -211,6 +219,8 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ blockId: st
   const { blockId } = await ctx.params;
   const block = await db.block.findUnique({ where: { id: blockId } });
   if (!block) return NextResponse.json({ error: t("api.blockNotFound") }, { status: 404 });
+  const access = await documentAccess(block.documentId, "editor");
+  if (access instanceof NextResponse) return access;
   if (block.type === "TABLE" || block.type === "FIGURE") {
     return NextResponse.json({ error: t("api.onlyTextBlocksRemoved") }, { status: 400 });
   }
@@ -232,8 +242,10 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ blockId: st
           html: block.html,
           originalText: block.originalText,
         },
+        userId: access.user.id,
       },
     }),
   ]);
+  await bumpDocument(block.documentId);
   return NextResponse.json({ ok: true });
 }

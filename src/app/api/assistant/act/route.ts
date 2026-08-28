@@ -2,7 +2,7 @@ import { anthropic } from "@ai-sdk/anthropic";
 import type { ModelMessage } from "ai";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { currentUser, notebookGuard } from "@/lib/auth";
+import { bumpNotebook, notebookAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
 import { DERIVATION_MODEL, MAX_OUTPUT_TOKENS } from "@/lib/derive/config";
 import {
@@ -157,9 +157,9 @@ async function handle(req: Request, t: TFunc) {
   }
   const { data, error } = await parseBody(req, requestSchema);
   if (error) return error;
-  const denied = await notebookGuard(data.notebookId);
-  if (denied) return denied;
-  const user = await currentUser();
+  const access = await notebookAccess(data.notebookId, "editor");
+  if (access instanceof NextResponse) return access;
+  const user = access.user;
 
   const notebook = await db.notebook.findUnique({ where: { id: data.notebookId } });
   if (!notebook) return NextResponse.json({ error: t("api.corpusNotFound") }, { status: 404 });
@@ -311,7 +311,7 @@ async function handle(req: Request, t: TFunc) {
     maxOutputTokens: MAX_OUTPUT_TOKENS.SYNTHESIS,
     schema: planSchema,
     label: "assistant:act",
-    usage: { userId: user?.id ?? null, feature: "act", model: DERIVATION_MODEL.SYNTHESIS },
+    usage: { userId: user.id, feature: "act", model: DERIVATION_MODEL.SYNTHESIS },
   });
   if (!result.ok) {
     return NextResponse.json({ error: t("api.planFailed", { reason: result.error }) }, { status: 422 });
@@ -425,6 +425,7 @@ async function handle(req: Request, t: TFunc) {
     if (conversationNoteId) {
       try {
         await db.note.update({ where: { id: conversationNoteId }, data: { content: transcript } });
+        await bumpNotebook(data.notebookId);
       } catch {
         conversationNoteId = null; // the note was deleted; a new one starts below
       }
@@ -440,6 +441,7 @@ async function handle(req: Request, t: TFunc) {
             content: transcript,
             status: "ACCEPTED",
             derivationType: "SYNTHESIS",
+            createdById: user.id,
             order: count,
             sources: {
               create: {
@@ -458,6 +460,7 @@ async function handle(req: Request, t: TFunc) {
           },
         });
         conversationNoteId = note.id;
+        await bumpNotebook(data.notebookId);
       }
     }
   }

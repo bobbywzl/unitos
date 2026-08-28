@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { bumpDocument, documentAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
 import { serverT } from "@/lib/i18n/server";
 import { ndjsonWriter } from "@/lib/ndjson";
@@ -11,6 +12,8 @@ export const maxDuration = 120;
 export async function POST(_req: Request, ctx: { params: Promise<{ documentId: string }> }) {
   const t = await serverT();
   const { documentId } = await ctx.params;
+  const access = await documentAccess(documentId, "editor");
+  if (access instanceof NextResponse) return access;
 
   // Parse chain (jsdom, unpdf) loads per request; see /api/documents.
   let parse: typeof import("@/lib/parse/ingest");
@@ -44,7 +47,10 @@ export async function POST(_req: Request, ctx: { params: Promise<{ documentId: s
           send({ stage, detail }),
         );
         if (!updated) send({ error: t("api.documentNotFound") });
-        else send({ id: updated.id, title: updated.title, deduped: false });
+        else {
+          await bumpDocument(documentId);
+          send({ id: updated.id, title: updated.title, deduped: false });
+        }
       } catch (err) {
         console.error("Re-parse failed:", err);
         send({ error: err instanceof Error ? err.message : t("api.reparseFailed") });

@@ -124,6 +124,24 @@ const en = {
   // Admin
   adminNotConfigured: "Admin login is not configured (ADMIN_PASSWORD unset).",
   invalidPassword: "Invalid password",
+
+  // Sharing
+  viewingOnly: "You can view this corpus, not change it.",
+  ownerOnly: "Only the owner can do this.",
+  sharingNeedsSignIn: "Sharing needs sign-in. This instance runs as a single reader.",
+  invalidEmail: "Enter a valid email address.",
+  cannotShareWithOwner: "The owner already has access.",
+  collaboratorLimit: "A corpus can have at most 30 collaborators.",
+  collaboratorNotFound: "Collaborator not found",
+
+  // Profile
+  profileNeedsSignIn: "Profile editing needs sign-in. This instance runs as a single reader.",
+  pictureInvalid: "Picture must be a JPEG, PNG, or WebP data URL under 300 KB.",
+
+  // Replies
+  editNotFound: "Edit not found",
+  replyNotFound: "Reply not found",
+  replyNotYours: "Only the reply's author or the owner can delete it.",
 };
 
 const zh: Record<keyof typeof en, string> = {
@@ -232,6 +250,21 @@ const zh: Record<keyof typeof en, string> = {
 
   adminNotConfigured: "管理登录未配置（未设置 ADMIN_PASSWORD）。",
   invalidPassword: "密码错误",
+
+  viewingOnly: "你可以查看此文集，但不能修改。",
+  ownerOnly: "只有所有者可以执行此操作。",
+  sharingNeedsSignIn: "共享需要登录。此实例以单人阅读器模式运行。",
+  invalidEmail: "请输入有效的邮箱地址。",
+  cannotShareWithOwner: "所有者已经拥有访问权限。",
+  collaboratorLimit: "一个文集最多可有 30 位协作者。",
+  collaboratorNotFound: "未找到协作者",
+
+  profileNeedsSignIn: "编辑个人资料需要登录。此实例以单人阅读器模式运行。",
+  pictureInvalid: "头像必须是 300 KB 以内的 JPEG、PNG 或 WebP data URL。",
+
+  editNotFound: "未找到该编辑",
+  replyNotFound: "未找到该回复",
+  replyNotYours: "只有回复的作者或所有者可以删除它。",
 };
 
 export const api = { en, zh } as const;
