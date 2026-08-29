@@ -154,6 +154,15 @@ function layerItems(doc: DigestDocument): string[] {
       ...doc.summaries.map((s) => `(${s.depth}) ${s.text}`),
     );
   }
+  if (doc.formalized) {
+    // The transcript already rides in full above; the article's title and
+    // opening say it exists without paying for the whole rewrite.
+    const opening =
+      doc.formalized.markdown.length > 600
+        ? `${doc.formalized.markdown.slice(0, 599)}…`
+        : doc.formalized.markdown;
+    items.push(`Formalized article of this transcript: "${doc.formalized.title}" — ${opening}`);
+  }
   if (doc.salience.length > 0) {
     items.push(
       `Salient passages: ${doc.salience.map((q) => `"${q.quote}"${q.orphaned ? " (orphaned)" : ""}`).join("; ")}`,

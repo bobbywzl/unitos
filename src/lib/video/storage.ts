@@ -1,14 +1,21 @@
 import { db } from "@/lib/db";
 
-// Server-side video storage (SPEC.md §11): bytes live in VideoChunk rows of one
-// uniform chunkSize (the upload staging slice size), so a byte range maps
-// straight to chunk indices and streams without assembling the file in memory.
+// Server-side video and audio storage (SPEC.md §11): bytes live in VideoChunk
+// rows of one uniform chunkSize (the upload staging slice size), so a byte
+// range maps straight to chunk indices and streams without assembling the file
+// in memory.
 
-// Sniff the container by magic bytes. The client's MIME type is never trusted.
-export function sniffVideo(bytes: Uint8Array): string | null {
+// Sniff the container by magic bytes — video and audio alike. The client's
+// MIME type is never trusted. An audio/* result makes the document an audio
+// document: same storage, same transcript machinery, audio player.
+export function sniffMedia(bytes: Uint8Array): string | null {
   const ascii = (from: number, to: number) => String.fromCharCode(...bytes.subarray(from, to));
   if (bytes.length >= 12 && ascii(4, 8) === "ftyp") {
-    return ascii(8, 10) === "qt" ? "video/quicktime" : "video/mp4";
+    const brand = ascii(8, 12);
+    if (brand.startsWith("qt")) return "video/quicktime";
+    // M4A/M4B brands mark an audio-only MPEG-4 container.
+    if (brand.startsWith("M4A") || brand.startsWith("M4B")) return "audio/mp4";
+    return "video/mp4";
   }
   if (
     bytes.length >= 4 &&
@@ -20,8 +27,22 @@ export function sniffVideo(bytes: Uint8Array): string | null {
     return "video/webm";
   }
   if (bytes.length >= 4 && ascii(0, 4) === "OggS") {
+    // The first Ogg page names the codec: Theora is video; Vorbis, Opus, and
+    // FLAC are audio. An unrecognized codec keeps the old video answer.
+    const head = ascii(0, Math.min(bytes.length, 512));
+    if (head.includes("theora")) return "video/ogg";
+    if (head.includes("vorbis") || head.includes("OpusHead") || head.includes("FLAC")) {
+      return "audio/ogg";
+    }
     return "video/ogg";
   }
+  if (bytes.length >= 3 && ascii(0, 3) === "ID3") return "audio/mpeg";
+  if (bytes.length >= 2 && bytes[0] === 0xff && (bytes[1] & 0xe0) === 0xe0) {
+    // MPEG audio frame sync. Layer bits 00 mean ADTS AAC; anything else is MP3.
+    return ((bytes[1] >> 1) & 0x03) === 0 ? "audio/aac" : "audio/mpeg";
+  }
+  if (bytes.length >= 12 && ascii(0, 4) === "RIFF" && ascii(8, 12) === "WAVE") return "audio/wav";
+  if (bytes.length >= 4 && ascii(0, 4) === "fLaC") return "audio/flac";
   return null;
 }
 

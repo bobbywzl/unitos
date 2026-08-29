@@ -7,7 +7,8 @@
 //   accepted 已接受 · distill/distillation 提炼 · quote 引文 · caption 说明 ·
 //   extract/extraction 提取 · summary 摘要 · digest 汇编 · annotation 批注 ·
 //   highlight 高亮 · comment 评论 · explain 解释 · simplify 简化 ·
-//   assistant 助手 · document 文档 · video 视频 · transcript 逐字稿 ·
+//   assistant 助手 · document 文档 · video 视频 · audio 音频 ·
+//   transcript 逐字稿 · formalize 整理 · article (formalized) 文章 ·
 //   salient 要点 · link 链接 · edit 编辑 · reader 阅读器 · glossary 术语表 ·
 //   sign in 登录 · sign out 退出登录 · settings 设置 · admin 管理 ·
 //   feedback 反馈 · depths: insights 行家洞见 / layman 通俗 / intermediate 进阶 /

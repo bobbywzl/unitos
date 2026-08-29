@@ -17,6 +17,7 @@ import { formatTimeRange, type VideoFindMatch } from "@/lib/video/types";
 export function FindPanel({
   notebookId,
   documentId,
+  audio,
   hasTranscript,
   sectionChoices,
   onSeek,
@@ -25,6 +26,7 @@ export function FindPanel({
 }: {
   notebookId: string;
   documentId: string;
+  audio: boolean;
   hasTranscript: boolean;
   sectionChoices: { id: string; label: string }[];
   onSeek: (startTime: number, endTime: number) => void;
@@ -102,10 +104,14 @@ export function FindPanel({
             onChange={(e) => setQuery(e.target.value)}
             placeholder={
               hasTranscript
-                ? t("video.findPlaceholder")
-                : t("video.findPlaceholderNeedsTranscript")
+                ? t(audio ? "video.findPlaceholderAudio" : "video.findPlaceholder")
+                : t(
+                    audio
+                      ? "video.findPlaceholderNeedsTranscriptAudio"
+                      : "video.findPlaceholderNeedsTranscript",
+                  )
             }
-            aria-label={t("video.findAria")}
+            aria-label={t(audio ? "video.findAriaAudio" : "video.findAria")}
             disabled={!hasTranscript}
             className="min-w-0 flex-1 bg-transparent text-[13px] outline-none placeholder:text-sand-500 disabled:opacity-60"
           />
@@ -116,7 +122,9 @@ export function FindPanel({
 
       {error && <p className="mt-2 px-1 text-xs text-red-500">{error}</p>}
       {matches !== null && matches.length === 0 && (
-        <p className="mt-2 px-1 text-xs text-sand-600">{t("video.findEmpty")}</p>
+        <p className="mt-2 px-1 text-xs text-sand-600">
+          {t(audio ? "video.findEmptyAudio" : "video.findEmpty")}
+        </p>
       )}
       {matches !== null && matches.length > 0 && (
         <div className="mt-2.5 flex flex-col gap-2">

@@ -114,6 +114,30 @@ export function corpusDistillationList(value: unknown): CorpusDistillation[] {
   return Array.isArray(value) ? (value as CorpusDistillation[]) : [];
 }
 
+// ── FORMALIZE: transcript → formal article / bullet-point notes ────────────
+
+export const FORMALIZE_FORMATS = ["article", "notes"] as const;
+export type FormalizeFormat = (typeof FORMALIZE_FORMATS)[number];
+
+/** Stored on NotebookDocument.formalized as {article}: the transcript
+    rewritten as a formal article. Regenerate overwrites. The notes format
+    lands PENDING notes instead and stores nothing here. */
+export type FormalizedArticle = {
+  title: string;
+  markdown: string;
+  createdAt: string; // ISO
+  createdById?: string;
+};
+
+/** Tolerant read of the Json column; anything malformed reads as null. */
+export function formalizedArticle(value: unknown): FormalizedArticle | null {
+  if (typeof value !== "object" || value === null) return null;
+  const article = (value as { article?: unknown }).article;
+  if (typeof article !== "object" || article === null) return null;
+  const a = article as FormalizedArticle;
+  return typeof a.title === "string" && typeof a.markdown === "string" ? a : null;
+}
+
 // ── EXTRACT: origin phrase → the passages that reveal its topic ────────────
 
 /** One anchored span of an extraction (same dual anchor as Source, SPEC.md §5). */

@@ -91,6 +91,13 @@ export type VideoAnnotationItem = {
 
 export type TranscriptStatusName = "NONE" | "PENDING" | "READY" | "FAILED";
 
+/** Audio document: a VideoAsset whose sniffed mimeType is audio/*. The pane
+    renders the audio player — no frame, no circling — and everything else
+    (transcript, Find, assistant, time anchors) works unchanged. */
+export function isAudioMime(mimeType: string | null): boolean {
+  return mimeType?.startsWith("audio/") ?? false;
+}
+
 /** What the video pane needs to know about the video. kind UPLOAD streams
     from /api/video/[documentId]; kind YOUTUBE plays through the IFrame player. */
 export type VideoInfo = {

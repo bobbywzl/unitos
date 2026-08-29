@@ -1,4 +1,4 @@
-import type { SummaryDepth } from "@/lib/types";
+import type { FormalizeFormat, SummaryDepth } from "@/lib/types";
 
 // Context passed to every prompt template. Templates are one file per DerivationType,
 // each exporting a single function (ctx) => string (CLAUDE.md).
@@ -27,12 +27,13 @@ export type PromptCtx = {
   // kind image: the image is attached to the message. kind svg: the chart's SVG
   // source is in svgSource. kind video: the model only has caption and context.
   figure?: { kind: "image" | "svg" | "video" | "figure"; caption: string; svgSource?: string };
-  // Set when EXPLAIN targets a moment of a video document (SPEC.md §11).
-  // hasFrame: the paused frame is attached to the message; hasRegion: the
-  // reader circled a spot and the frame is cropped toward it.
+  // Set when EXPLAIN targets a moment of a video or audio document (SPEC.md
+  // §11). hasFrame: the paused frame is attached to the message; hasRegion:
+  // the reader circled a spot and the frame is cropped toward it.
   // previewFrame: the attached frame is a small storyboard preview, not a
   // full-resolution capture. frameDescription: a vision model watched the same
-  // clip at full resolution and this is what it saw.
+  // clip at full resolution and this is what it saw. audio: an audio document
+  // — no frame exists; the transcript is everything.
   video?: {
     timeRange: string; // "0:12–0:31"
     transcriptExcerpt: string; // transcript at that range; "" = none
@@ -40,9 +41,13 @@ export type PromptCtx = {
     hasRegion: boolean;
     previewFrame?: boolean;
     frameDescription?: string;
+    audio?: boolean;
   };
   // The search, for FIND.
   query?: string;
+  // The destination shape, for FORMALIZE: a formal article for publishing, or
+  // personal bullet-point notes.
+  format?: FormalizeFormat;
 };
 
 export function profileLines(profile: ReaderProfileCtx): string {

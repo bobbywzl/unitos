@@ -10,12 +10,14 @@ import { serverT } from "@/lib/i18n/server";
 import type { TFunc } from "@/lib/i18n/dictionaries";
 import { progressResponse } from "@/lib/ingest-response";
 import { attachDocument } from "@/lib/parse/attach";
-import { sniffVideo } from "@/lib/video/storage";
+import { sniffMedia } from "@/lib/video/storage";
 import { runTranscription } from "@/lib/video/transcription-job";
 import { MAX_VIDEO_BYTES, UPLOAD_CHUNK_BYTES } from "@/lib/video/types";
 import { parseBody } from "@/lib/validate";
 
-export const maxDuration = 120;
+// Media uploads kick off transcription in after(); a long audio's chunked run
+// plus the cleanup pass needs the headroom.
+export const maxDuration = 300;
 
 const MAX_PDF_BYTES = 50 * 1024 * 1024;
 
@@ -30,9 +32,10 @@ type Body = z.infer<typeof bodySchema>;
 
 // Assembles the chunks of a large upload and ingests the result. PDFs run the
 // same parse, save, attach path as a direct upload to /api/documents. Videos
-// become a video document (SPEC.md §11): Document + VIDEO block + VideoAsset,
-// with the staged chunks copied to VideoChunk rows inside Postgres — the file
-// never assembles in server memory.
+// and audio become a media document (SPEC.md §11): Document + VIDEO block +
+// VideoAsset (an audio/* sniff marks it audio), with the staged chunks copied
+// to VideoChunk rows inside Postgres — the file never assembles in server
+// memory.
 export async function POST(req: Request) {
   const user = await currentUser();
   const t = await serverT();
@@ -139,10 +142,10 @@ async function completeVideo(data: Body, userId: string | null, t: TFunc) {
       return NextResponse.json({ error: t("api.uploadMissingChunks") }, { status: 400 });
     }
     if (index === 0) {
-      mimeType = sniffVideo(chunk.data);
+      mimeType = sniffMedia(chunk.data);
       if (!mimeType) {
         await db.uploadChunk.deleteMany({ where: { uploadId: data.uploadId } });
-        return NextResponse.json({ error: t("api.notVideo") }, { status: 400 });
+        return NextResponse.json({ error: t("api.notMedia") }, { status: 400 });
       }
     }
     hash.update(chunk.data);

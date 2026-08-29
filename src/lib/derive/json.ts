@@ -66,6 +66,27 @@ export const findOutputSchema = z.object({
     .max(10),
 });
 
+// FORMALIZE (SPEC.md §11): the transcript rewritten. format article returns
+// the piece whole; format notes returns topics that cite transcript blocks,
+// which the route resolves to time ranges for the notes' sources.
+export const formalizeArticleSchema = z.object({
+  title: z.string().min(1).max(300),
+  markdown: z.string().min(1).max(120_000),
+});
+
+export const formalizeNotesSchema = z.object({
+  topics: z
+    .array(
+      z.object({
+        heading: z.string().min(1).max(200),
+        bullets: z.array(z.string().min(1).max(600)).min(1).max(15),
+        blockIds: z.array(z.string().min(1)).max(200),
+      }),
+    )
+    .min(1)
+    .max(24),
+});
+
 export type Span = z.infer<typeof spanSchema>;
 
 // Clamp a span to its block text; drop it when it does not resolve to non-empty text.

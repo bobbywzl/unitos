@@ -3,9 +3,10 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api";
-import { SearchIcon, SpinnerIcon } from "@/components/icons";
+import { SearchIcon, SparkleIcon, SpinnerIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { Markdown } from "@/components/markdown";
+import { ArticleSection, MediaAssistant } from "@/components/video/assistant-card";
 import { Visual } from "@/components/video/visual";
 import type { ThumbnailSource } from "@/components/video/use-thumbnails";
 import { useCollab } from "@/components/collab/collab-context";
@@ -17,10 +18,12 @@ import {
   type VideoSource,
 } from "@/components/video/video-player";
 import { splitStreamError, splitStreamNote } from "@/lib/derive/config";
+import type { FormalizedArticle } from "@/lib/types";
 import { captureStoryboardFrame } from "@/lib/video/frame-client";
 import {
   formatTime,
   formatTimeRange,
+  isAudioMime,
   parseTimeInput,
   type Region,
   type TranscriptLine,
@@ -54,6 +57,7 @@ export function VideoPane({
   title,
   video,
   transcript,
+  formalized,
   annotations,
   seekBySource,
   sectionChoices,
@@ -63,6 +67,8 @@ export function VideoPane({
   title: string;
   video: VideoInfo;
   transcript: TranscriptLine[];
+  /** The formalized article on this corpus's attachment; null = none yet. */
+  formalized: FormalizedArticle | null;
   annotations: VideoAnnotationItem[];
   /** startTime per source id, for every time anchor in this document — note
       chips and annotation cards jump through ?src=. */
@@ -88,6 +94,8 @@ export function VideoPane({
   const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // The tool caption floats over the player for a few seconds on open.
   const [hint, setHint] = useState(true);
+  // The assistant chat card under the tool bar (SPEC.md §11).
+  const [assistantOpen, setAssistantOpen] = useState(false);
 
   // Optimistic annotations and deletes, reconciled when the server props land.
   const [added, setAdded] = useState<VideoAnnotationItem[]>([]);
@@ -105,6 +113,9 @@ export function VideoPane({
       .sort((a, b) => a.startTime - b.startTime || a.endTime - b.endTime);
   }, [annotations, added, removed]);
 
+  // Audio document: no frame, so no circling, no Visual thumbnails, no frame
+  // capture on Explain. Everything else is the same surface (SPEC.md §11).
+  const audio = video.kind === "UPLOAD" && isAudioMime(video.mimeType);
   const source: VideoSource =
     video.kind === "YOUTUBE" && video.youtubeId
       ? { kind: "youtube", youtubeId: video.youtubeId }
@@ -229,7 +240,9 @@ export function VideoPane({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [drawing]);
 
-  // ── Annotate: circle a spot or take the whole frame, then comment or explain ─
+  // ── Annotate: circle a spot or take the whole frame, then comment or explain.
+  // Audio has no frame to circle: the button opens the composer on the current
+  // moment directly.
   function toggleAnnotate() {
     if (!canEdit) return;
     if (drawing || composer || explaining) {
@@ -239,7 +252,8 @@ export function VideoPane({
       return;
     }
     playerRef.current?.pause();
-    setDrawing(true);
+    if (audio) onDrawn(null);
+    else setDrawing(true);
   }
 
   function onDrawn(region: Region | null) {
@@ -318,7 +332,9 @@ export function VideoPane({
 
   // The frame at a moment, cropped to what was circled: drawn from the file
   // for an upload, pulled from the storyboard sheets for a YouTube video.
+  // Audio has no frame; Explain works from the transcript alone.
   async function captureFrame(region: Region | null, time: number) {
+    if (audio) return undefined;
     if (source.kind === "upload") {
       return (await playerRef.current?.captureAt(time, region)) ?? undefined;
     }
@@ -415,10 +431,10 @@ export function VideoPane({
           widens it — capped so the frame stays fully on screen. */}
       <article
         className="reader-prose mx-auto w-full px-8 py-11"
-        style={{ maxWidth: `max(640px, calc((100vh - 320px) * ${aspect}))` }}
+        style={{ maxWidth: audio ? "760px" : `max(640px, calc((100vh - 320px) * ${aspect}))` }}
       >
         <p className="mb-2.5 text-[11px] font-bold tracking-[0.09em] text-clay-700 uppercase">
-          {video.kind === "YOUTUBE" ? "YouTube" : t("video.kindVideo")}
+          {video.kind === "YOUTUBE" ? "YouTube" : audio ? t("video.kindAudio") : t("video.kindVideo")}
           {video.duration !== null ? ` · ${formatTime(video.duration)}` : ""}
         </p>
         <h2 className="mb-[26px] text-[33px]">{title}</h2>
@@ -427,6 +443,7 @@ export function VideoPane({
           <VideoPlayer
             ref={playerRef}
             source={source}
+            audio={audio}
             aspect={aspect}
             storedDuration={video.duration}
             annotations={all}
@@ -452,7 +469,7 @@ export function VideoPane({
                 onAnimationEnd={() => setHint(false)}
                 className="hint-fade rounded-full bg-black/75 px-5 py-2.5 text-[12.5px] font-medium whitespace-nowrap text-[#f5ead8] backdrop-blur-sm"
               >
-                {t("video.hintCaption")}
+                {audio ? t("video.hintCaptionAudio") : t("video.hintCaption")}
               </div>
             </div>
           )}
@@ -463,6 +480,7 @@ export function VideoPane({
           <FindPanel
             notebookId={notebookId}
             documentId={documentId}
+            audio={audio}
             hasTranscript={transcript.length > 0}
             sectionChoices={sectionChoices}
             onSeek={(startTime) => {
@@ -470,9 +488,10 @@ export function VideoPane({
             }}
             leading={
               !canEdit ? null : (
+              <>
               <button
                 onClick={toggleAnnotate}
-                title={t("video.circleCommentTitle")}
+                title={audio ? t("video.audioCommentTitle") : t("video.circleCommentTitle")}
                 className={
                   annotateOn
                     ? "flex shrink-0 items-center gap-1.5 rounded-full bg-clay px-3.5 py-2 text-xs font-semibold text-clay-fg"
@@ -480,8 +499,21 @@ export function VideoPane({
                 }
               >
                 <SearchIcon size={13} />
-                {t("video.circleComment")}
+                {audio ? t("video.comment") : t("video.circleComment")}
               </button>
+              <button
+                onClick={() => setAssistantOpen((open) => !open)}
+                title={t("video.assistantButtonTitle")}
+                className={
+                  assistantOpen
+                    ? "flex shrink-0 items-center gap-1.5 rounded-full bg-clay px-3.5 py-2 text-xs font-semibold text-clay-fg"
+                    : "flex shrink-0 items-center gap-1.5 rounded-full border border-line px-3.5 py-2 text-xs font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800"
+                }
+              >
+                <SparkleIcon size={13} />
+                {t("video.assistant")}
+              </button>
+              </>
               )
             }
             trailing={
@@ -502,6 +534,16 @@ export function VideoPane({
             }
           />
         </div>
+
+        {assistantOpen && canEdit && (
+          <MediaAssistant
+            notebookId={notebookId}
+            documentId={documentId}
+            hasTranscript={transcript.length > 0}
+            sectionChoices={sectionChoices}
+            onClose={() => setAssistantOpen(false)}
+          />
+        )}
 
         {drawing && (
           <p className="mt-3 text-[13px] text-sand-600">{t("video.drawHelp")}</p>
@@ -576,7 +618,11 @@ export function VideoPane({
                 className="w-16 rounded-full bg-sand-100 px-2.5 py-1 text-center text-xs tabular-nums outline-none"
               />
               <span className="text-xs text-sand-500">
-                {composer.region ? t("video.regionShows") : t("video.wholeFrameShows")}
+                {composer.region
+                  ? t("video.regionShows")
+                  : audio
+                    ? t("video.audioRangeShows")
+                    : t("video.wholeFrameShows")}
               </span>
               <button
                 onClick={() => setComposer(null)}
@@ -614,7 +660,7 @@ export function VideoPane({
               <button
                 onClick={() => void explainComposer()}
                 disabled={composer.busy}
-                title={t("video.explainButtonTitle")}
+                title={audio ? t("video.audioExplainButtonTitle") : t("video.explainButtonTitle")}
                 className="rounded-full border border-line px-3.5 py-1.5 text-xs font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40"
               >
                 {composer.region ? t("video.explainCircled") : t("video.explainThisMoment")}
@@ -631,6 +677,7 @@ export function VideoPane({
 
         <Visual
           source={thumbnailSource}
+          audio={audio}
           annotations={all}
           onOpen={(a) => {
             playerRef.current?.seek(a.startTime);
@@ -643,6 +690,7 @@ export function VideoPane({
 
         <Transcript
           transcript={transcript}
+          audio={audio}
           activeLineId={activeLineId}
           annotations={all}
           pending={transcriptPending}
@@ -660,6 +708,13 @@ export function VideoPane({
             setOpenNote(a);
           }}
           onTranscribe={() => void transcribe()}
+        />
+
+        <ArticleSection
+          notebookId={notebookId}
+          documentId={documentId}
+          article={formalized}
+          canEdit={canEdit}
         />
       </article>
     </div>

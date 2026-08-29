@@ -12,6 +12,7 @@ import {
   corpusDistillationList,
   distillationList,
   extractionList,
+  formalizedArticle,
   type AnnotationItem,
   type CorpusDistillationView,
   type DistillationView,
@@ -213,9 +214,11 @@ export default async function NotebookPage(props: {
       anchorHighlights[r.blockId] = list;
     }
 
-    // Stored summaries, distillations, and extractions live on the attachment (SPEC.md §4).
+    // Stored summaries, distillations, extractions, and the formalized article
+    // live on the attachment (SPEC.md §4).
     const attachment = notebook!.documents.find((d) => d.documentId === document.id);
     const summaries = (attachment?.summaries as SummaryLevels | null) ?? {};
+    const formalized = formalizedArticle(attachment?.formalized ?? null);
 
     // Stored distillation quotes and extraction spans heal at render with the
     // anchor ladder (SPEC.md §5): exact offsets, the quote matcher within the
@@ -710,6 +713,7 @@ export default async function NotebookPage(props: {
       references,
       video,
       transcript,
+      formalized,
       videoAnnotations,
       videoSeekBySource,
     };
@@ -972,6 +976,7 @@ export default async function NotebookPage(props: {
           title={pane.document.title}
           video={pane.video}
           transcript={pane.transcript}
+          formalized={pane.formalized}
           annotations={pane.videoAnnotations}
           seekBySource={pane.videoSeekBySource}
           sectionChoices={sectionChoices}
