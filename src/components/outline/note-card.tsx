@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import { isImeKey } from "@/lib/ime";
 import type { NoteView, SourceChip } from "@/lib/types";
 import { useCollab } from "@/components/collab/collab-context";
 import { AuthorChip } from "@/components/collab/person-badge";
@@ -119,6 +120,7 @@ export function NoteCard({
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => {
+            if (isImeKey(e)) return;
             if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void save();
             if (e.key === "Escape") {
               setDraft(note.content);

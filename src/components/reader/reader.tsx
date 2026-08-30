@@ -9,7 +9,9 @@ const TEXT_TYPES = new Set(["PARAGRAPH", "HEADING", "LIST", "CODE", "EQUATION"])
 
 const FONT_STACK: Record<string, string | undefined> = {
   default: undefined,
-  serif: "Georgia, 'Times New Roman', serif",
+  // CJK serif fallbacks: without them Windows falls back to SimSun for
+  // Chinese glyphs, a poor long-form reading face.
+  serif: "Georgia, 'Times New Roman', 'Songti SC', 'Noto Serif CJK SC', 'Source Han Serif SC', serif",
   mono: "ui-monospace, SFMono-Regular, Menlo, monospace",
 };
 

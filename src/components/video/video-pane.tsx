@@ -3,6 +3,7 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api";
+import { isImeKey } from "@/lib/ime";
 import { SearchIcon, SparkleIcon, SpinnerIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { Markdown } from "@/components/markdown";
@@ -171,10 +172,19 @@ export function VideoPane({
 
   const transcriptPending =
     transcribing || (video.transcriptStatus === "PENDING" && !video.transcriptStale);
+  // Stored transcription errors are language-neutral English diagnostics; the
+  // known classes render in the UI language, the rest as stored.
+  const describeTranscriptError = (message: string): string => {
+    if (/no speech found/i.test(message)) return t("video.errNoSpeech");
+    if (/transcription cap/i.test(message)) return t("video.errTooLarge");
+    if (/caption/i.test(message)) return t("video.errCaptions");
+    if (/is not set/i.test(message)) return t("video.errNotConfigured");
+    return message;
+  };
   const transcriptFailedMessage =
     transcribeError ??
     (video.transcriptStatus === "FAILED"
-      ? video.transcriptError
+      ? video.transcriptError && describeTranscriptError(video.transcriptError)
       : video.transcriptStale
         ? t("video.lastRunUnfinished")
         : null);
@@ -637,6 +647,7 @@ export function VideoPane({
               value={composer.text}
               onChange={(e) => setComposer({ ...composer, text: e.target.value })}
               onKeyDown={(e) => {
+                if (isImeKey(e)) return;
                 if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void saveComposer();
                 if (e.key === "Escape") setComposer(null);
               }}

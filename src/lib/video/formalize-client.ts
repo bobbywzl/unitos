@@ -1,5 +1,14 @@
 import { splitStreamError } from "@/lib/derive/config";
+import { DEFAULT_LANG, isLang, LANG_COOKIE } from "@/lib/i18n/config";
+import { translate, type TKey, type TParams } from "@/lib/i18n/dictionaries";
 import type { FormalizedArticle, FormalizeFormat } from "@/lib/types";
+
+// The language on the client, outside React: the same cookie lib/api.ts reads.
+function clientT(key: TKey, params?: TParams): string {
+  if (typeof document === "undefined") return translate(DEFAULT_LANG, key, params);
+  const value = document.cookie.match(new RegExp(`(?:^|; )${LANG_COOKIE}=([^;]+)`))?.[1];
+  return translate(isLang(value) ? value : DEFAULT_LANG, key, params);
+}
 
 // Run FORMALIZE and read its heartbeat stream (the DISTILL pattern): spaces
 // while the model works, then the payload JSON or the in-band error token.
@@ -24,7 +33,9 @@ export async function runFormalize(input: {
   });
   if (!res.ok || !res.body) {
     const detail = (await res.json().catch(() => null)) as { error?: string } | null;
-    throw new Error(detail?.error ?? `request failed (${res.status})`);
+    throw new Error(
+      detail?.error ?? clientT("common.requestFailedStatus", { status: res.status }),
+    );
   }
   const raw = await new Response(res.body).text();
   const { text, error } = splitStreamError(raw);
@@ -34,6 +45,6 @@ export async function runFormalize(input: {
     if (!payload.ok) throw new Error();
     return payload;
   } catch {
-    throw new Error("The answer did not arrive whole. Try again.");
+    throw new Error(clientT("common.streamIncomplete"));
   }
 }

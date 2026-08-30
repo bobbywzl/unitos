@@ -14,9 +14,9 @@ import {
 } from "@/lib/derive/context";
 import { fetchFigureImage, figureContent, type FigureImage } from "@/lib/derive/figure";
 import { callForJson, modelErrorMessage } from "@/lib/derive/json-call";
-import { serverT } from "@/lib/i18n/server";
+import { currentLang, serverT } from "@/lib/i18n/server";
 import type { TFunc } from "@/lib/i18n/dictionaries";
-import { profileLines } from "@/lib/prompts/types";
+import { languageName, profileLines } from "@/lib/prompts/types";
 import { parseBody } from "@/lib/validate";
 import type { AssistantAction, AssistantAnchor, AssistantPlan } from "@/lib/types";
 
@@ -275,6 +275,7 @@ async function handle(req: Request, t: TFunc) {
     "4. description: one plain sentence of what the action does, for the reader's approval list.",
     "5. TABLE and FIGURE blocks cannot be edited or removed.",
     "6. In reply, cite blocks as [block <id>] when you point at specific parts of the document — the tags render as links the reader can click.",
+    `7. Write reply and every description in ${languageName(await currentLang())}.`,
     "",
     ...(data.history && data.history.length > 0
       ? [

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useImeGuard } from "@/lib/ime";
+import { isImeKey, useImeGuard } from "@/lib/ime";
 import type { DistillationView } from "@/lib/types";
 import { useCollab } from "@/components/collab/collab-context";
 import { AuthorChip } from "@/components/collab/person-badge";
@@ -61,6 +61,8 @@ export function DistillPage({
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
+      // Escape that dismisses a pinyin candidate list stays the IME's.
+      if (isImeKey(e)) return;
       e.stopPropagation();
       onClose();
     };

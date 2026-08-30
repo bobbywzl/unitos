@@ -53,7 +53,15 @@ export async function POST(_req: Request, ctx: { params: Promise<{ documentId: s
         }
       } catch (err) {
         console.error("Re-parse failed:", err);
-        send({ error: err instanceof Error ? err.message : t("api.reparseFailed") });
+        const message = err instanceof Error ? err.message : null;
+        send({
+          error:
+            message === "Could not extract readable content"
+              ? t("api.unreadableContent")
+              : message
+                ? t("api.reparseFailedReason", { reason: message })
+                : t("api.reparseFailed"),
+        });
       } finally {
         controller.close();
       }

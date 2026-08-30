@@ -30,7 +30,7 @@ import {
   salienceOutputSchema,
 } from "@/lib/derive/json";
 import { callForJson, modelErrorMessage } from "@/lib/derive/json-call";
-import { serverT } from "@/lib/i18n/server";
+import { currentLang, serverT } from "@/lib/i18n/server";
 import { promptTemplates } from "@/lib/prompts";
 import { corpusDistillPrompt } from "@/lib/prompts/distill";
 import type { PromptCtx } from "@/lib/prompts/types";
@@ -207,7 +207,14 @@ export async function POST(req: Request) {
         content: corpusText,
         providerOptions: { anthropic: { cacheControl: { type: "ephemeral" } } },
       },
-      { role: "user", content: corpusDistillPrompt({ profile, question: data.question!.trim() }) },
+      {
+        role: "user",
+        content: corpusDistillPrompt({
+          profile,
+          lang: await currentLang(),
+          question: data.question!.trim(),
+        }),
+      },
     ];
     const corpusBlockById = new Map(
       corpusDocs.flatMap((d) => d.blocks.map((b) => [b.id, { id: b.id, text: b.text }] as const)),
@@ -361,6 +368,7 @@ export async function POST(req: Request) {
   const depth = data.depth ?? "layman";
   const ctx: PromptCtx = {
     profile,
+    lang: await currentLang(),
     documentTitle: document.title,
     anchoredText: anchored?.anchoredText ?? "",
     contextBefore: anchored?.contextBefore ?? "",

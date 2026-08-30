@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { isImeKey } from "@/lib/ime";
 import type { NotebookView } from "@/lib/types";
 import { useCollab } from "@/components/collab/collab-context";
 import { useT } from "@/components/lang-provider";
@@ -36,7 +37,7 @@ export function Outline({ notebook }: { notebook: NotebookView }) {
       <input
         value={query}
         onChange={(e) => setQuery(e.target.value)}
-        onKeyDown={(e) => e.key === "Escape" && setQuery("")}
+        onKeyDown={(e) => e.key === "Escape" && !isImeKey(e) && setQuery("")}
         placeholder={t("outline.searchNotes")}
         aria-label={t("outline.searchNotes")}
         className="mt-2 w-72 rounded-full bg-card px-4 py-2 text-[13px] shadow-soft outline-none placeholder:text-sand-500"

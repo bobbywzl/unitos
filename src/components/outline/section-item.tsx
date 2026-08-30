@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useImeGuard } from "@/lib/ime";
+import { isImeKey, useImeGuard } from "@/lib/ime";
 import type { SectionView } from "@/lib/types";
 import { useCollab } from "@/components/collab/collab-context";
 import { useT } from "@/components/lang-provider";
@@ -53,7 +53,7 @@ export function SectionItem({
             onBlur={() => void saveTitle()}
             {...ime.props}
             onKeyDown={(e) => {
-              if (ime.isImeEnter(e)) return;
+              if (ime.isImeEnter(e) || isImeKey(e)) return;
               if (e.key === "Enter") void saveTitle();
               if (e.key === "Escape") {
                 setTitle(section.title);
@@ -124,6 +124,7 @@ export function SectionItem({
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
               onKeyDown={(e) => {
+                if (isImeKey(e)) return;
                 if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) e.currentTarget.form?.requestSubmit();
                 if (e.key === "Escape") setComposing(false);
               }}

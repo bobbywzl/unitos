@@ -7,13 +7,18 @@ export type SentenceSpan = { text: string; start: number; end: number };
 export function splitSentences(text: string): SentenceSpan[] {
   // A boundary is sentence punctuation (plus closing quotes or brackets), then
   // whitespace, then something that starts a sentence. Decimal points and
-  // mid-word periods never match — no whitespace follows them.
+  // mid-word periods never match — no whitespace follows them. CJK terminators
+  // (。！？；…) end a sentence with no whitespace, and any character starts the
+  // next one.
   const boundaries: number[] = [];
-  const rx = /[.!?]+["'”’)\]]*\s+/g;
+  const rx = /[.!?]+["'”’)\]]*\s+|[。！？；…]+[”’」』）】》〕\]]*\s*/g;
   let m: RegExpExecArray | null;
   while ((m = rx.exec(text))) {
-    const after = text[m.index + m[0].length];
-    if (after && /[A-Z0-9"'“‘([]/.test(after)) boundaries.push(m.index + m[0].length);
+    const at = m.index + m[0].length;
+    const after = text[at];
+    if (!after) continue;
+    const cjkBoundary = /[。！？；…]/.test(m[0]);
+    if (cjkBoundary || /[A-Z0-9"'“‘([]/.test(after)) boundaries.push(at);
   }
   const spans: SentenceSpan[] = [];
   let start = 0;

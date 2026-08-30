@@ -1,4 +1,4 @@
-import { profileLines, type PromptCtx } from "@/lib/prompts/types";
+import { languageName, profileLines, type PromptCtx } from "@/lib/prompts/types";
 
 // DISTILL: the reader asks one question; the model scans the whole document and
 // returns the quotes that answer it, each with a caption (SPEC.md §4). Output
@@ -19,7 +19,7 @@ export function distillPrompt(ctx: PromptCtx): string {
     "2. Each span is one contiguous character range inside one block: a full sentence up to a full paragraph.",
     "3. start and end are character offsets into that block's text as given above. Use block ids exactly as they appear in [block <id>] markers.",
     "4. Order quotes as they appear in the document.",
-    "5. caption: 1 to 2 sentences per quote. State how the quote answers the question and how it sits in the context of the whole document. A caption must stand on its own: name the subject, never write \"the question\" or \"this quote\".",
+    `5. caption: 1 to 2 sentences per quote, in ${languageName(ctx.lang)}. State how the quote answers the question and how it sits in the context of the whole document. A caption must stand on its own: name the subject, never write "the question" or "this quote".`,
     "6. Fewer, stronger quotes beat many weak ones. Skip anything that does not bear on the question.",
     "",
     'Return ONLY JSON: {"quotes": [{"blockId": "<id>", "start": 0, "end": 42, "caption": "<text>"}, ...]}',
@@ -32,6 +32,7 @@ export function distillPrompt(ctx: PromptCtx): string {
 // rendered like the connect scan: [document <id>] "title" then block lines.
 export function corpusDistillPrompt(ctx: {
   profile: PromptCtx["profile"];
+  lang: PromptCtx["lang"];
   question: string;
 }): string {
   return [
@@ -47,7 +48,7 @@ export function corpusDistillPrompt(ctx: {
     "3. start and end are character offsets into that block's text as given above. Use block ids exactly as they appear in [block <id>] markers — block ids are unique across all documents.",
     "4. Where documents answer together — agree, disagree, extend each other — pull from each, so the answer spans the corpus, not one document.",
     "5. Order quotes by document as listed, then by position.",
-    '6. caption: 1 to 2 sentences per quote. State how the quote answers the question and how it sits against the other documents. A caption must stand on its own: name the subject, never write "the question" or "this quote".',
+    `6. caption: 1 to 2 sentences per quote, in ${languageName(ctx.lang)}. State how the quote answers the question and how it sits against the other documents. A caption must stand on its own: name the subject, never write "the question" or "this quote".`,
     "7. Fewer, stronger quotes beat many weak ones. Skip documents with nothing to say.",
     "",
     'Return ONLY JSON: {"quotes": [{"blockId": "<id>", "start": 0, "end": 42, "caption": "<text>"}, ...]}',

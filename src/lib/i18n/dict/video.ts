@@ -103,6 +103,11 @@ const en = {
   transcriptFailedBody: "The transcript did not land. It powers read-along, click-to-seek, and Find.",
   transcriptionFailed: "Transcription failed",
   lastRunUnfinished: "The last run did not finish.",
+  // Known transcription failure classes; unknown ones show the raw diagnostic.
+  errNoSpeech: "No speech was found in the recording.",
+  errTooLarge: "The file is larger than the transcription cap. Try a smaller file.",
+  errCaptions: "The video's captions could not be read.",
+  errNotConfigured: "Transcription is not configured on the server.",
 
   // Visual
   visual: "Visual",
@@ -233,6 +238,10 @@ const zh: Record<keyof typeof en, string> = {
   transcriptFailedBody: "逐字稿没有生成。跟读、点击跳转和查找都依赖它。",
   transcriptionFailed: "转写失败",
   lastRunUnfinished: "上一次转写没有完成。",
+  errNoSpeech: "录音中没有检测到语音。",
+  errTooLarge: "文件超过转写上限。请试试更小的文件。",
+  errCaptions: "无法读取这个视频的字幕。",
+  errNotConfigured: "服务器未配置转写。",
 
   // Visual
   visual: "画面批注",

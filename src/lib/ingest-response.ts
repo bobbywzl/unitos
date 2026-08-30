@@ -1,3 +1,4 @@
+import { serverT } from "@/lib/i18n/server";
 import { ndjsonWriter } from "@/lib/ndjson";
 import type { OnIngestProgress } from "@/lib/parse/ingest";
 
@@ -15,7 +16,8 @@ export function progressResponse(
         const result = await run((stage, detail) => send({ stage, detail }));
         send(result);
       } catch (err) {
-        send({ error: err instanceof Error ? err.message : "Request failed" });
+        const t = await serverT();
+        send({ error: err instanceof Error ? err.message : t("common.requestFailed") });
       } finally {
         controller.close();
       }

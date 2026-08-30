@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { useT } from "@/components/lang-provider";
+import { useLang, useT } from "@/components/lang-provider";
 import type { TFunc, TKey } from "@/lib/i18n/dictionaries";
 
 export type FeedbackItem = {
@@ -37,6 +37,9 @@ function valueLabel(t: TFunc, value: string): string {
 export function FeedbackInbox({ items }: { items: FeedbackItem[] }) {
   const router = useRouter();
   const t = useT();
+  const lang = useLang();
+  // Dates follow the app language; English keeps the browser default.
+  const dateLocale = lang === "zh" ? "zh-CN" : undefined;
   const [filter, setFilter] = useState<Filter>("new");
   const newCount = items.filter((f) => f.status === "new").length;
   const visible = filter === "all" ? items : items.filter((f) => f.status === filter);
@@ -94,7 +97,7 @@ export function FeedbackInbox({ items }: { items: FeedbackItem[] }) {
                 >
                   {valueLabel(t, f.category)}
                 </span>
-                <span>{new Date(f.createdAt).toLocaleString()}</span>
+                <span>{new Date(f.createdAt).toLocaleString(dateLocale)}</span>
                 {f.page && <span className="truncate">· {f.page}</span>}
                 <span className="ml-auto">{valueLabel(t, f.status)}</span>
               </div>

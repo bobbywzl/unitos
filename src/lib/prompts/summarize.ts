@@ -1,5 +1,5 @@
 import type { SummaryDepth } from "@/lib/types";
-import { profileLines, type PromptCtx } from "@/lib/prompts/types";
+import { answerLanguage, profileLines, type PromptCtx } from "@/lib/prompts/types";
 
 // SUMMARIZE: document-level output for the Assistant panel's Recommended
 // section. One output per depth, persisted on NotebookDocument.summaries
@@ -43,5 +43,6 @@ export function summarizePrompt(ctx: PromptCtx): string {
     "",
     "Keep every number that carries a finding. State what the document claims; do not add claims of your own.",
     "Use markdown. Start with the content, no preamble.",
+    answerLanguage(ctx.lang),
   ].join("\n");
 }

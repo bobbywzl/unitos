@@ -1,4 +1,4 @@
-import { profileLines, type PromptCtx } from "@/lib/prompts/types";
+import { answerLanguage, profileLines, type PromptCtx } from "@/lib/prompts/types";
 
 // EXPLAIN: annotation bubble in the reader rail. Persisted as a note in the hidden
 // Annotations section (SPEC.md §4).
@@ -20,6 +20,7 @@ export function explainPrompt(ctx: PromptCtx): string {
       "2. Then place it: what the recording is arguing here and how this moment fits what came before and after, using the timed transcript.",
       "3. Connect it to the reader's purpose when the connection is real.",
       "Keep it under 200 words, in flowing prose — no headings, no numbered sections. Start with the explanation, no preamble.",
+      answerLanguage(ctx.lang),
     ].join("\n");
   }
   if (ctx.video) {
@@ -58,6 +59,7 @@ export function explainPrompt(ctx: PromptCtx): string {
       "3. Never state anything about the image you cannot actually see. Where the frame is too small or unclear to be sure, say so plainly instead of guessing. If the image and the description disagree, trust the image and say what you see.",
       "4. Connect it to the reader's purpose when the connection is real.",
       "Keep it under 200 words, in flowing prose — no headings, no numbered sections. Start with the explanation, no preamble.",
+      answerLanguage(ctx.lang),
     ].join("\n");
   }
   if (ctx.figure) {
@@ -80,6 +82,7 @@ export function explainPrompt(ctx: PromptCtx): string {
       "3. State the takeaway the document draws from it, tied to their purpose when the connection is real.",
       "When corpus context follows the document — other documents' passages, the reader's notes, highlights, comments — reference what clarifies this figure by name and draw the analogy explicitly.",
       "Keep it under 200 words. Use markdown. Start with the explanation, no preamble.",
+      answerLanguage(ctx.lang),
     ].join("\n");
   }
   return [
@@ -103,5 +106,6 @@ export function explainPrompt(ctx: PromptCtx): string {
     "When you point at another part of the document, cite its block tag exactly as written above ([block <id>]) — the tag renders as a link the reader can click.",
     "When corpus context follows the document — other documents' passages, the reader's notes, highlights, comments — reference what clarifies the passage by name and draw the analogy explicitly.",
     "Keep it under 200 words. Use markdown. Start with the explanation, no preamble.",
+    answerLanguage(ctx.lang),
   ].join("\n");
 }

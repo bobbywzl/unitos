@@ -29,7 +29,7 @@ function glossaryPrompt(): string {
     "Build a glossary for this document: technical terms, acronyms, and symbols a reader",
     "may need defined.",
     "1. Only include terms the document actually uses. 5 to 60 terms for a typical document.",
-    "2. definition: 1-2 sentences, grounded in how the document uses the term.",
+    "2. definition: 1-2 sentences, grounded in how the document uses the term. Write definitions in the document's language.",
     "3. blockIds: blocks where the term is defined or used centrally. Use ids exactly as",
     "   they appear in [block <id>] markers.",
     "",

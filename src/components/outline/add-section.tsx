@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useImeGuard } from "@/lib/ime";
+import { isImeKey, useImeGuard } from "@/lib/ime";
 import { PlusIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 
@@ -57,7 +57,11 @@ export function AddSection({
         onChange={(e) => setTitle(e.target.value)}
         {...ime.props}
         onKeyDown={(e) => {
-          if (ime.isImeEnter(e)) e.preventDefault();
+          if (ime.isImeEnter(e)) {
+            e.preventDefault();
+            return;
+          }
+          if (isImeKey(e)) return;
           if (e.key === "Escape") setOpen(false);
         }}
         placeholder={t("outline.sectionTitle")}

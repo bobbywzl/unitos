@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { api } from "@/lib/api";
-import { useImeGuard } from "@/lib/ime";
+import { isImeKey, useImeGuard } from "@/lib/ime";
 import { useT } from "@/components/lang-provider";
 
 export function NotebookTitle({ id, title }: { id: string; title: string }) {
@@ -33,7 +33,7 @@ export function NotebookTitle({ id, title }: { id: string; title: string }) {
         onBlur={() => void save()}
         {...ime.props}
         onKeyDown={(e) => {
-          if (ime.isImeEnter(e)) return;
+          if (ime.isImeEnter(e) || isImeKey(e)) return;
           if (e.key === "Enter") void save();
           if (e.key === "Escape") {
             setDraft(title);

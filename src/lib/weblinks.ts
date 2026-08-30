@@ -17,12 +17,16 @@ const TLDS =
 
 // Start boundary: not preceded by a word char, @ (emails), dot, or hyphen —
 // so user@example.com and sub-label tails never match on their own.
+// URL characters: no whitespace, quotes, angle brackets — and no CJK. Chinese
+// prose puts no space after a URL, so a CJK character ends the token.
+const URL_CHAR = "[^\\s<>\"'\\u2e80-\\u9fff\\uf900-\\ufaff\\ufe30-\\ufe4f\\uff00-\\uffef]";
+
 const WEBLINK_RX = new RegExp(
   "(?<![\\w@.-])(?:" +
-    "https?://[^\\s<>\"']+" +
+    `https?://${URL_CHAR}+` +
     "|(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+(?:" +
     TLDS +
-    ")\\b(?:/[^\\s<>\"']*)?" +
+    `)\\b(?:/${URL_CHAR}*)?` +
     ")",
   "gi",
 );
@@ -35,7 +39,7 @@ function trimToken(raw: string): string {
   let token = raw;
   while (token.length > 0) {
     const last = token[token.length - 1];
-    if (/[.,;:!?…"'»\]}]/.test(last)) {
+    if (/[.,;:!?…"'»\]}。，、；：！？》」』】）”’]/.test(last)) {
       token = token.slice(0, -1);
       continue;
     }

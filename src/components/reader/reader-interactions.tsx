@@ -23,9 +23,9 @@ import type {
 import type { DocumentReference } from "@/lib/parse/types";
 import { splitStreamError, splitStreamNote } from "@/lib/derive/config";
 import { findWeblinks } from "@/lib/weblinks";
-import { useImeGuard } from "@/lib/ime";
+import { isImeKey, useImeGuard } from "@/lib/ime";
 import type { TFunc, TKey } from "@/lib/i18n/dictionaries";
-import { useT } from "@/components/lang-provider";
+import { useLang, useT } from "@/components/lang-provider";
 import { MicIcon, SparkleIcon, SpinnerIcon, StopIcon, VolumeIcon } from "@/components/icons";
 import { Markdown } from "@/components/markdown";
 import type { BlockData, Highlight } from "@/components/reader/block-view";
@@ -419,6 +419,10 @@ export function ReaderInteractions({
   const tRef = useRef(tCtx);
   tRef.current = tCtx;
   const t: TFunc = useCallback((key, params) => tRef.current(key, params), []);
+  // The app language, read through a ref by mount-time closures (voice input).
+  const langCtx = useLang();
+  const langRef = useRef(langCtx);
+  langRef.current = langCtx;
   const ime = useImeGuard();
   const containerRef = useRef<HTMLDivElement>(null);
   const [popover, setPopover] = useState<Popover | null>(null);
@@ -854,6 +858,8 @@ export function ReaderInteractions({
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
+      // Escape that dismisses a pinyin candidate list stays the IME's.
+      if (isImeKey(e)) return;
       if (overlayOpenRef.current) {
         setPopover(null);
         setSubmenu(null);
@@ -2491,7 +2497,9 @@ export function ReaderInteractions({
       return;
     }
     const rec = new Ctor();
-    rec.lang = navigator.language || "en-US";
+    // Spoken commands come in the app language; the browser locale only
+    // decides the English variant.
+    rec.lang = langRef.current === "zh" ? "zh-CN" : navigator.language || "en-US";
     rec.interimResults = true;
     rec.continuous = false;
     rec.onresult = (e) => {
@@ -2981,6 +2989,7 @@ export function ReaderInteractions({
               setAnnotationCard((c) => (c ? { ...c, draft: e.target.value } : c))
             }
             onKeyDown={(e) => {
+              if (isImeKey(e)) return;
               if (e.key === "Escape") setAnnotationCard(null);
             }}
             placeholder={t("reader.addCommentPlaceholder")}
@@ -3133,7 +3142,7 @@ export function ReaderInteractions({
                 onChange={(e) => setAiCommand(e.target.value)}
                 {...ime.props}
                 onKeyDown={(e) => {
-                  if (ime.isImeEnter(e)) return;
+                  if (ime.isImeEnter(e) || isImeKey(e)) return;
                   if (e.key === "Enter" && !e.shiftKey) {
                     e.preventDefault();
                     void runAssistant();
@@ -3279,7 +3288,7 @@ export function ReaderInteractions({
                 onChange={(e) => setCommentDraft(e.target.value)}
                 {...ime.props}
                 onKeyDown={(e) => {
-                  if (ime.isImeEnter(e)) return;
+                  if (ime.isImeEnter(e) || isImeKey(e)) return;
                   if (e.key === "Enter" && !e.shiftKey && commentDraft.trim()) {
                     e.preventDefault();
                     void annotate({ comment: commentDraft });
@@ -3526,6 +3535,7 @@ export function ReaderInteractions({
                   setCommentCard((c) => (c ? { ...c, draft: e.target.value } : c))
                 }
                 onKeyDown={(e) => {
+                  if (isImeKey(e)) return;
                   if (e.key === "Escape") setCommentCard(null);
                 }}
                 rows={4}

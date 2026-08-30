@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
+import { isImeKey } from "@/lib/ime";
 import { useT } from "@/components/lang-provider";
 
 export type ContextValues = { background: string; purpose: string; application: string };
@@ -57,7 +58,7 @@ export function ContextTab({
       if (!panelRef.current?.contains(e.target as Node)) setOpen(false);
     };
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
+      if (e.key === "Escape" && !isImeKey(e)) setOpen(false);
     };
     window.addEventListener("pointerdown", onPointerDown);
     window.addEventListener("keydown", onKeyDown);

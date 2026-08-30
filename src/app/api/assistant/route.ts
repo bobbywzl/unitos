@@ -10,7 +10,7 @@ import { loadProfile } from "@/lib/derive/context";
 import { callForJson, modelErrorMessage } from "@/lib/derive/json-call";
 import { ensureAllDigests, ensureDigest } from "@/lib/digest/ensure";
 import { corporaSystem, corpusSystem } from "@/lib/digest/render";
-import { serverT } from "@/lib/i18n/server";
+import { currentLang, serverT } from "@/lib/i18n/server";
 import { recordUsage, sdkTokens } from "@/lib/usage";
 import type { TFunc } from "@/lib/i18n/dictionaries";
 import { synthesisAskPrompt, synthesisTaskPrompt } from "@/lib/prompts/synthesis";
@@ -110,8 +110,13 @@ async function handle(req: Request, t: TFunc) {
       role: "user",
       content:
         data.task === "ask"
-          ? synthesisAskPrompt({ profile, scopeLabel, question: data.question! })
-          : synthesisTaskPrompt({ profile, task: data.task }),
+          ? synthesisAskPrompt({
+              profile,
+              lang: await currentLang(),
+              scopeLabel,
+              question: data.question!,
+            })
+          : synthesisTaskPrompt({ profile, lang: await currentLang(), task: data.task }),
     },
   ];
 

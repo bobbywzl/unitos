@@ -2,6 +2,15 @@
 
 import { useCallback, useMemo, useRef } from "react";
 
+/** True while the pressed key belongs to the IME (isComposing / keyCode 229).
+    Guard Escape handlers with it: Escape that dismisses a pinyin candidate
+    list must not also close the overlay or revert the draft. Works for window
+    KeyboardEvents and React synthetic events alike. */
+export function isImeKey(e: KeyboardEvent | React.KeyboardEvent): boolean {
+  const native = "nativeEvent" in e ? e.nativeEvent : e;
+  return native.isComposing || native.keyCode === 229;
+}
+
 /** Guard for Enter-submit inputs while an IME composes (pinyin, kana, hangul).
     The Enter that picks a candidate must never send or submit. Chrome and
     Firefox flag that keydown with isComposing (keyCode 229); Safari fires

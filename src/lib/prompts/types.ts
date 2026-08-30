@@ -1,3 +1,4 @@
+import type { Lang } from "@/lib/i18n/config";
 import type { FormalizeFormat, SummaryDepth } from "@/lib/types";
 
 // Context passed to every prompt template. Templates are one file per DerivationType,
@@ -12,6 +13,10 @@ export type ReaderProfileCtx = {
 
 export type PromptCtx = {
   profile: ReaderProfileCtx;
+  // The reader's UI language. Assistant-voice output (explanations, captions,
+  // summaries, answers) is written in it; content rewrites (SIMPLIFY,
+  // FORMALIZE) keep the content's language instead.
+  lang: Lang;
   documentTitle: string;
   // Anchored selection with surrounding context (±2 blocks), for selection-level derivations.
   anchoredText: string;
@@ -49,6 +54,17 @@ export type PromptCtx = {
   // personal bullet-point notes.
   format?: FormalizeFormat;
 };
+
+// The one language line appended to assistant-voice templates. Repeated exact
+// wording across templates (CLAUDE.md rule 3).
+export function answerLanguage(lang: Lang): string {
+  return lang === "zh" ? "Answer in Chinese (简体中文)." : "Answer in English.";
+}
+
+// The language name for JSON-field instructions ("Write captions in …").
+export function languageName(lang: Lang): string {
+  return lang === "zh" ? "Chinese (简体中文)" : "English";
+}
 
 export function profileLines(profile: ReaderProfileCtx): string {
   const fields = profile

@@ -62,7 +62,10 @@ async function loadExport(notebookId: string) {
   return { title: notebook.title, sections };
 }
 
-function toMarkdown(data: { title: string; sections: ExportSection[] }): string {
+function toMarkdown(
+  data: { title: string; sections: ExportSection[] },
+  cite: (documentTitle: string, blockId: string) => string,
+): string {
   const lines: string[] = [`# ${data.title}`, ""];
   const footnotes: string[] = [];
   let n = 0;
@@ -71,7 +74,7 @@ function toMarkdown(data: { title: string; sections: ExportSection[] }): string 
     for (const note of section.notes) {
       const refs = note.citations.map((c) => {
         n++;
-        footnotes.push(`[^${n}]: ${c.documentTitle}, block ${c.blockId}`);
+        footnotes.push(`[^${n}]: ${cite(c.documentTitle, c.blockId)}`);
         return `[^${n}]`;
       });
       lines.push(`${note.content}${refs.length > 0 ? " " + refs.join(" ") : ""}`, "");
@@ -81,7 +84,10 @@ function toMarkdown(data: { title: string; sections: ExportSection[] }): string 
   return lines.join("\n");
 }
 
-async function toDocx(data: { title: string; sections: ExportSection[] }): Promise<Buffer> {
+async function toDocx(
+  data: { title: string; sections: ExportSection[] },
+  cite: (documentTitle: string, blockId: string) => string,
+): Promise<Buffer> {
   const children: Paragraph[] = [new Paragraph({ text: data.title, heading: HeadingLevel.TITLE })];
   const footnotes: Record<number, { children: Paragraph[] }> = {};
   let n = 0;
@@ -100,7 +106,7 @@ async function toDocx(data: { title: string; sections: ExportSection[] }): Promi
           for (const citation of note.citations) {
             n++;
             footnotes[n] = {
-              children: [new Paragraph(`${citation.documentTitle}, block ${citation.blockId}`)],
+              children: [new Paragraph(cite(citation.documentTitle, citation.blockId))],
             };
             runs.push(new FootnoteReferenceRun(n));
           }
@@ -113,8 +119,15 @@ async function toDocx(data: { title: string; sections: ExportSection[] }): Promi
   return Packer.toBuffer(doc);
 }
 
-function slug(title: string): string {
-  return title.replace(/[^\w\d]+/g, "-").replace(/^-+|-+$/g, "").toLowerCase() || "corpus";
+// Download name: keep the title (CJK included), swap filesystem-hostile
+// characters. The header carries the UTF-8 name per RFC 5987 with an ASCII
+// fallback for old agents.
+function downloadName(title: string, ext: string): string {
+  const name =
+    title.replace(/[\\/:*?"<>|\s]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 120) || "corpus";
+  const ascii =
+    name.replace(/[^\x20-\x7e]+/g, "-").replace(/^-+|-+$/g, "").toLowerCase() || "corpus";
+  return `attachment; filename="${ascii}.${ext}"; filename*=UTF-8''${encodeURIComponent(name)}.${ext}`;
 }
 
 export async function GET(req: Request, ctx: { params: Promise<{ notebookId: string }> }) {
@@ -130,19 +143,21 @@ export async function GET(req: Request, ctx: { params: Promise<{ notebookId: str
   const data = await loadExport(notebookId);
   if (!data) return NextResponse.json({ error: t("api.corpusNotFound") }, { status: 404 });
 
+  const cite = (documentTitle: string, blockId: string) =>
+    t("api.exportCitation", { title: documentTitle, blockId });
   if (format === "md") {
-    return new NextResponse(toMarkdown(data), {
+    return new NextResponse(toMarkdown(data, cite), {
       headers: {
         "Content-Type": "text/markdown; charset=utf-8",
-        "Content-Disposition": `attachment; filename="${slug(data.title)}.md"`,
+        "Content-Disposition": downloadName(data.title, "md"),
       },
     });
   }
-  const buffer = await toDocx(data);
+  const buffer = await toDocx(data, cite);
   return new NextResponse(new Uint8Array(buffer), {
     headers: {
       "Content-Type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-      "Content-Disposition": `attachment; filename="${slug(data.title)}.docx"`,
+      "Content-Disposition": downloadName(data.title, "docx"),
     },
   });
 }
