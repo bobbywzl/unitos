@@ -163,7 +163,7 @@ const zh: Record<keyof typeof en, string> = {
   pCollectContent:
     "你放进去的内容：你上传的文档和视频、你通过网址添加的页面及其解析出的文字，以及你做的每一个文集、章节、笔记、批注、高亮、评论、提炼、提取和摘要。",
   pCollectContext:
-    "你的上下文：你在上下文页签中选填的背景、目的和应用，它们决定助手如何作答。",
+    "你的背景：你在“背景”页签中选填的背景、目的和用途，它们决定助手如何作答。",
   pCollectPrefs: "你的偏好：界面语言和主题。",
   pCollectFeedback: "你发送的反馈：内容本身、发送时所在的页面，以及浏览器的 user-agent 字符串。",
   pCollectLogs: "托管服务商保留的常规服务器日志，例如 IP 地址和请求时间。",
@@ -176,7 +176,7 @@ const zh: Record<keyof typeof en, string> = {
   pAiIntro:
     "Unitos 是 AI 阅读工具，因此你存储的部分内容会发送给 AI 服务商以响应你的请求。这只在你主动发起时发生——后台不发送任何内容：",
   pAiAnthropic:
-    "当你使用解释、简化、提炼、提取、摘要或助手时，Anthropic（Claude）会收到文档文字、你的笔记和批注，以及你的上下文。",
+    "当你使用解释、简化、提炼、提取、摘要或助手时，Anthropic（Claude）会收到文档文字、你的笔记和批注，以及你的背景。",
   pAiOpenAI: "OpenAI 会收到你要求朗读的文字，以及你上传的视频的音频，用于转写。",
   pAiGoogle:
     "Google（Gemini）会收到你上传的视频，或你添加的 YouTube 视频链接，用于转写以及描述你所询问的画面。",
@@ -190,7 +190,7 @@ const zh: Record<keyof typeof en, string> = {
 
   pRetentionHeading: "保留多久",
   pRetention:
-    "你的材料一直保留，直到你删除它。删除文集会同时删除其笔记和批注。被拒绝的笔记保留七天以便撤销，随后由每日任务永久删除。要删除你的账户及其中的一切，请发邮件至 robertwzl311@gmail.com，我们会照办。",
+    "你的材料一直保留，直到你删除它。删除文集会同时删除其笔记和批注。被拒绝的笔记保留七天以便撤销，随后由每日任务永久删除。要删除你的账户及其中的一切，请发邮件至 robertwzl311@gmail.com，即可办妥。",
 
   pRightsHeading: "你的选择",
   pRightsIntro: "这是你的材料，你可以：",
@@ -202,7 +202,7 @@ const zh: Record<keyof typeof en, string> = {
 
   pChildrenHeading: "儿童",
   pChildren:
-    "Unitos 不面向 13 岁以下儿童，也不会在知情的情况下被他们使用。如果儿童的数据出现在这里，请发邮件告知，我们会删除。",
+    "Unitos 不面向 13 岁以下儿童，也不会在知情的情况下被他们使用。如果儿童的数据出现在这里，请发邮件告知，数据会立即删除。",
 
   pSecurityHeading: "安全",
   pSecurity:

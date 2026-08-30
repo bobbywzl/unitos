@@ -60,9 +60,9 @@ const zh: Record<keyof typeof en, string> = {
 
   searchNotes: "搜索笔记",
   noNotesMatch: "没有匹配“{query}”的笔记。",
-  emptySections: "还没有章节。添加一个开始记笔记。",
+  emptySections: "还没有章节。添加一个，开始记笔记。",
   emptyTrayPrefix: "还没有章节。到",
-  notesFullPage: "笔记整页",
+  notesFullPage: "整页笔记",
   emptyTraySuffix: "添加一个。",
 
   addSection: "添加章节",
@@ -85,8 +85,8 @@ const zh: Record<keyof typeof en, string> = {
   moveTo: "移到…",
   moveNoteAria: "把此笔记移到其他章节",
   confirmDeleteNote: "删除此笔记？",
-  anchorUnresolvedTitle: "锚点未解析。引文：{quote}",
-  unresolvedLabel: "未解析：",
+  anchorUnresolvedTitle: "锚点无法定位。引文：{quote}",
+  unresolvedLabel: "无法定位：",
 
   pendingHeader: "待定 · {n}",
   trayKeyHint: "⏎ 接受 · ⌫ 拒绝",

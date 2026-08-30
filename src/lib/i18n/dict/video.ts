@@ -129,10 +129,10 @@ const en = {
     "Rewrite the transcript as a formal article; it becomes a document in this corpus, with every reader tool",
   skillNotes: "Formalize into bullet-point notes",
   skillNotesTitle:
-    "Distill the transcript into bullet-point notes; they land pending in the notes drawer",
+    "Distill the transcript into bullet-point notes; they land pending in the notes tray",
   skillNeedsTranscript: "Needs the transcript",
   articleReady: "The article is ready — opening it as a document.",
-  notesReady: "{n} notes are pending in {section}. Accept them in the notes drawer.",
+  notesReady: "{n} notes are pending in {section}. Accept them in the notes tray.",
 
   // The formalized article under the transcript
   article: "Article",
@@ -228,7 +228,7 @@ const zh: Record<keyof typeof en, string> = {
   transcribeAgain: "重新转写",
   transcribeAgainTitle: "重新转写视频；逐字稿行会被替换",
   transcribeAgainTitleAudio: "重新转写音频；逐字稿行会被替换",
-  jumpHere: "跳到这里",
+  jumpHere: "跳转到这里",
   commentOnLineTitle: "评论这一行",
   explain: "解释",
   openNote: "打开笔记",
@@ -246,7 +246,7 @@ const zh: Record<keyof typeof en, string> = {
   // Visual
   visual: "画面批注",
   visualAudio: "时刻批注",
-  jumpOpenNote: "跳到这里并打开笔记",
+  jumpOpenNote: "跳转到这里并打开笔记",
   deleteAnnotation: "删除批注",
 
   // Assistant on the media pane, with the two formalize skills
@@ -259,11 +259,11 @@ const zh: Record<keyof typeof en, string> = {
   assistantActionsUnsupported: "此对话中的文档操作暂不支持视频和音频。",
   skillArticle: "整理成文章",
   skillArticleTitle: "把逐字稿改写成正式文章；文章会成为本文集中的文档，阅读器的全部工具都可用",
-  skillNotes: "整理成要点笔记",
-  skillNotesTitle: "把逐字稿提炼成要点笔记；笔记会以待定状态进入笔记栏",
+  skillNotes: "整理成分条笔记",
+  skillNotesTitle: "把逐字稿提炼成分条笔记；笔记会以待定状态进入笔记栏",
   skillNeedsTranscript: "需要逐字稿",
   articleReady: "文章已生成——正在以文档形式打开。",
-  notesReady: "{n} 条笔记待定于 {section}。请在笔记栏接受。",
+  notesReady: "{section} 中有 {n} 条待定笔记。请在笔记栏接受。",
 
   // The formalized article under the transcript
   article: "文章",

@@ -15,7 +15,13 @@
 //   professional 专业 · share 共享 · collaborator 协作者 · role 角色 ·
 //   owner 所有者 · editor 编辑者 · viewer 查看者 · profile 个人资料 ·
 //   symbol 符号 · background 背景 · reply 回复 · resolve 解决 ·
-//   recommended link 推荐链接 · graph 图谱 · history 历史
+//   recommended link 推荐链接 · graph 图谱 · history 历史 ·
+//   attach(加入文集) 加入 · detach 移出 · figure 插图 · passage 片段 ·
+//   key term 关键术语 · Edits(页签) 编辑记录 · notes tray 笔记栏 ·
+//   Ask/Auto(模式) 询问/自动 · command 指令 · key takeaways 主要收获 ·
+//   selection 选中内容 · bullet-point notes 分条笔记 · gaps(检查) 疏漏 ·
+//   anchor unresolved 无法定位 · app tab 页签 · browser tab 标签页
+// highlight 高亮 仅指高亮功能；表示选取文字一律用 选中。
 
 const en = {
   appName: "Unitos",
@@ -99,7 +105,7 @@ const zh: Record<keyof typeof en, string> = {
   unauthorized: "未授权",
   modelCallFailed: "模型调用失败。",
   accountChanged: "此标签页原先属于其他账户。请刷新页面。",
-  accountChangedTitle: "账户已切换",
+  accountChangedTitle: "账户已变更",
   accountSwitchedBody: "你在另一个标签页登录了 {name}。此标签页原先属于其他账户。",
   accountSignedOutBody: "你在另一个标签页退出了登录。",
   accountContinue: "继续",

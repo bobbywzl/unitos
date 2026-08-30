@@ -108,7 +108,7 @@ const en = {
 const zh: Record<keyof typeof en, string> = {
   heroA: "你的全能笔记本",
   heroAccent: "你的理解，你的节奏。",
-  ctaTitle: "新来的？装订你的第一个文集",
+  ctaTitle: "第一次来？装订你的第一个文集",
   signinTitle: "欢迎回来",
   forgotTitle: "重置密码",
   unitos: "使用 Unitos 账户继续",
@@ -118,7 +118,7 @@ const zh: Record<keyof typeof en, string> = {
   confirmPasswordLabel: "确认密码",
   forgot: "忘记密码？",
   toSignin: "已有账户？登录",
-  toSignup: "新来的？创建一个",
+  toSignup: "第一次来？创建账户",
   sendReset: "发送重置链接",
   or: "或",
   google: "使用 Google 继续",
@@ -126,7 +126,7 @@ const zh: Record<keyof typeof en, string> = {
   accountNote: "登录会创建你的账户，你的文集只属于你。",
 
   // Check-your-email state (/signin?sent=<email>; mode=forgot after a reset)
-  sentTitle: "查收你的邮件",
+  sentTitle: "请查收邮件",
   sentTo: "确认链接已发送至",
   sentRest: "点击链接即可创建账户。链接 30 分钟内有效。",
   resetSentTo: "如果已有账户，重置链接将发往",
@@ -159,10 +159,10 @@ const zh: Record<keyof typeof en, string> = {
 
   // The reader, as it is — callouts point from the text
   showcaseTitle: "阅读器，原样呈现",
-  showcaseCaption: "阅读器中的一篇真实论文——展示的功能都是真的。",
+  showcaseCaption: "阅读器中的一篇真实论文——展示的功能全部真实可用。",
   chipAccepted: "✓ 笔记已接受 · 已锚定",
   screenshotAlt: "Unitos 阅读器中的 Attention Is All You Need：高亮、笔记、批注和链接一应俱全。",
-  calloutAssistant: "助手：摘要、解释、提问、提炼",
+  calloutAssistant: "助手：总结、解释、提问、提炼",
   calloutHighlight: "高亮、评论、跨文本链接",
   calloutComment: "页边评论",
   calloutExtract: "提取：同一主题的每个片段",
@@ -172,7 +172,7 @@ const zh: Record<keyof typeof en, string> = {
   // Only functions you need
   functionsTitle: "只有你需要的功能",
   fnAssistant: "智能助手",
-  fnAssistantSub: "摘要、解释、提问、提炼——基于整个文集。",
+  fnAssistantSub: "总结、解释、提问、提炼——基于整个文集。",
   fnNotes: "锚定笔记",
   fnNotesSub: "每条笔记都能点回文档中的出处。",
   fnHighlight: "高亮与评论",
