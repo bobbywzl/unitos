@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { api } from "@/lib/api";
+import { useImeGuard } from "@/lib/ime";
 import type { ReplyView } from "@/lib/types";
 import { useCollab } from "@/components/collab/collab-context";
 import { PersonBadge } from "@/components/collab/person-badge";
@@ -22,6 +23,7 @@ export function ReplyThread({
   const router = useRouter();
   const t = useT();
   const lang = useLang();
+  const ime = useImeGuard();
   const { authOn, canEdit, myId, role, shared, people } = useCollab();
   const [composing, setComposing] = useState(false);
   const [showResolved, setShowResolved] = useState(false);
@@ -154,7 +156,9 @@ export function ReplyThread({
             autoFocus
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
+            {...ime.props}
             onKeyDown={(e) => {
+              if (ime.isImeEnter(e)) return;
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
                 send();

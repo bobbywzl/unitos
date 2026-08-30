@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useImeGuard } from "@/lib/ime";
 import type { SectionView } from "@/lib/types";
 import { useCollab } from "@/components/collab/collab-context";
 import { useT } from "@/components/lang-provider";
@@ -22,6 +23,7 @@ export function SectionItem({
 }) {
   const t = useT();
   const { canEdit } = useCollab();
+  const ime = useImeGuard();
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState(section.title);
   const [composing, setComposing] = useState(false);
@@ -49,7 +51,9 @@ export function SectionItem({
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             onBlur={() => void saveTitle()}
+            {...ime.props}
             onKeyDown={(e) => {
+              if (ime.isImeEnter(e)) return;
               if (e.key === "Enter") void saveTitle();
               if (e.key === "Escape") {
                 setTitle(section.title);

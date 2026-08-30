@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useImeGuard } from "@/lib/ime";
 import { PlusIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 
@@ -12,6 +13,7 @@ export function AddSection({
   small?: boolean;
 }) {
   const t = useT();
+  const ime = useImeGuard();
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState("");
 
@@ -53,7 +55,11 @@ export function AddSection({
         autoFocus
         value={title}
         onChange={(e) => setTitle(e.target.value)}
-        onKeyDown={(e) => e.key === "Escape" && setOpen(false)}
+        {...ime.props}
+        onKeyDown={(e) => {
+          if (ime.isImeEnter(e)) e.preventDefault();
+          if (e.key === "Escape") setOpen(false);
+        }}
         placeholder={t("outline.sectionTitle")}
         aria-label={t("outline.sectionTitle")}
         className="w-64 rounded-full bg-card px-4 py-2 text-sm shadow-soft outline-none placeholder:text-sand-500"

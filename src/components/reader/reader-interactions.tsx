@@ -4,6 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import type { SourceInput } from "@/lib/anchors/input";
+import { anchorableOffset, anchorableText } from "@/lib/anchors/dom";
 import {
   parseSimplified,
   splitSentences,
@@ -22,6 +23,7 @@ import type {
 import type { DocumentReference } from "@/lib/parse/types";
 import { splitStreamError, splitStreamNote } from "@/lib/derive/config";
 import { findWeblinks } from "@/lib/weblinks";
+import { useImeGuard } from "@/lib/ime";
 import type { TFunc, TKey } from "@/lib/i18n/dictionaries";
 import { useT } from "@/components/lang-provider";
 import { MicIcon, SparkleIcon, SpinnerIcon, StopIcon, VolumeIcon } from "@/components/icons";
@@ -417,6 +419,7 @@ export function ReaderInteractions({
   const tRef = useRef(tCtx);
   tRef.current = tCtx;
   const t: TFunc = useCallback((key, params) => tRef.current(key, params), []);
+  const ime = useImeGuard();
   const containerRef = useRef<HTMLDivElement>(null);
   const [popover, setPopover] = useState<Popover | null>(null);
   // The popover's submenus (section list, link targets) are custom lists, not
@@ -797,23 +800,21 @@ export function ReaderInteractions({
     // anchor to the wrong characters. No selection tools on math blocks.
     if (startBlock.hasAttribute("data-math-block")) return null;
 
-    const preRange = document.createRange();
-    preRange.selectNodeContents(startBlock);
-    preRange.setEnd(range.startContainer, range.startOffset);
-    const startOffset = preRange.toString().length;
-
-    const inBlockRange = document.createRange();
-    inBlockRange.selectNodeContents(startBlock);
-    inBlockRange.setStart(range.startContainer, range.startOffset);
+    // Offsets over the block's anchorable text, never Range.toString(): inline
+    // controls ([data-anchor-skip], e.g. extract chips) render text the stored
+    // block text does not have, and counting it would shift every offset after
+    // it. The quote is sliced from the same walked text, so the anchor is
+    // exactly the selected text.
+    const blockText = anchorableText(startBlock);
+    const startOffset = anchorableOffset(startBlock, range.startContainer, range.startOffset);
     const truncated = !startBlock.contains(range.endContainer);
-    if (!truncated) {
-      inBlockRange.setEnd(range.endContainer, range.endOffset);
-    }
-    const quotedText = inBlockRange.toString();
+    const endOffset = truncated
+      ? blockText.length
+      : anchorableOffset(startBlock, range.endContainer, range.endOffset);
+    if (endOffset <= startOffset) return null;
+    const quotedText = blockText.slice(startOffset, endOffset);
     if (!quotedText.trim()) return null;
-    const endOffset = startOffset + quotedText.length;
 
-    const blockText = startBlock.textContent ?? "";
     const prefix = blockText.slice(Math.max(0, startOffset - 32), startOffset);
     const suffix = blockText.slice(endOffset, endOffset + 32);
 
@@ -3130,7 +3131,9 @@ export function ReaderInteractions({
                 autoFocus
                 value={aiCommand}
                 onChange={(e) => setAiCommand(e.target.value)}
+                {...ime.props}
                 onKeyDown={(e) => {
+                  if (ime.isImeEnter(e)) return;
                   if (e.key === "Enter" && !e.shiftKey) {
                     e.preventDefault();
                     void runAssistant();
@@ -3274,7 +3277,9 @@ export function ReaderInteractions({
                 autoFocus
                 value={commentDraft}
                 onChange={(e) => setCommentDraft(e.target.value)}
+                {...ime.props}
                 onKeyDown={(e) => {
+                  if (ime.isImeEnter(e)) return;
                   if (e.key === "Enter" && !e.shiftKey && commentDraft.trim()) {
                     e.preventDefault();
                     void annotate({ comment: commentDraft });
@@ -3645,7 +3650,9 @@ export function ReaderInteractions({
               onChange={(e) =>
                 setAssistantChat((c) => (c ? { ...c, input: e.target.value } : c))
               }
+              {...ime.props}
               onKeyDown={(e) => {
+                if (ime.isImeEnter(e)) return;
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
                   void sendChatMessage();

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useImeGuard } from "@/lib/ime";
 import type { DistillationView } from "@/lib/types";
 import { useCollab } from "@/components/collab/collab-context";
 import { AuthorChip } from "@/components/collab/person-badge";
@@ -49,6 +50,7 @@ export function DistillPage({
   const t = useT();
   const { canEdit } = useCollab();
   const lang = useLang();
+  const ime = useImeGuard();
   // Dates follow the app language; English keeps the browser default.
   const dateLocale = lang === "zh" ? "zh-CN" : undefined;
   const [question, setQuestion] = useState("");
@@ -200,7 +202,9 @@ export function DistillPage({
                 autoFocus
                 value={question}
                 onChange={(e) => setQuestion(e.target.value)}
+                {...ime.props}
                 onKeyDown={(e) => {
+                  if (ime.isImeEnter(e)) return;
                   if (e.key === "Enter" && !e.shiftKey && question.trim()) {
                     e.preventDefault();
                     onRun(question);

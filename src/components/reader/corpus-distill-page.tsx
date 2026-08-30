@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { splitStreamError } from "@/lib/derive/config";
+import { useImeGuard } from "@/lib/ime";
 import type { CorpusDistillation, CorpusDistillationView } from "@/lib/types";
 import { useCollab } from "@/components/collab/collab-context";
 import { AuthorChip } from "@/components/collab/person-badge";
@@ -35,6 +36,7 @@ export function CorpusDistillPage({
   const router = useRouter();
   const t = useT();
   const lang = useLang();
+  const ime = useImeGuard();
   const { canEdit } = useCollab();
   const dateLocale = lang === "zh" ? "zh-CN" : undefined;
   const [question, setQuestion] = useState("");
@@ -296,7 +298,9 @@ export function CorpusDistillPage({
                 autoFocus
                 value={question}
                 onChange={(e) => setQuestion(e.target.value)}
+                {...ime.props}
                 onKeyDown={(e) => {
+                  if (ime.isImeEnter(e)) return;
                   if (e.key === "Enter" && !e.shiftKey && question.trim()) {
                     e.preventDefault();
                     void run(question);

@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { api } from "@/lib/api";
+import { useImeGuard } from "@/lib/ime";
 import { SearchIcon, SpinnerIcon } from "@/components/icons";
 import { useCollab } from "@/components/collab/collab-context";
 import { useT } from "@/components/lang-provider";
@@ -34,6 +35,7 @@ export function FindPanel({
   const router = useRouter();
   const { canEdit } = useCollab();
   const t = useT();
+  const ime = useImeGuard();
   const [query, setQuery] = useState("");
   const [busy, setBusy] = useState(false);
   const [matches, setMatches] = useState<VideoFindMatch[] | null>(null);
@@ -100,6 +102,10 @@ export function FindPanel({
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
+            {...ime.props}
+            onKeyDown={(e) => {
+              if (ime.isImeEnter(e)) e.preventDefault();
+            }}
             placeholder={
               hasTranscript
                 ? t("video.findPlaceholder")

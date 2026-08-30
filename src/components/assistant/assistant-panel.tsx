@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { splitStreamError } from "@/lib/derive/config";
+import { useImeGuard } from "@/lib/ime";
 import type { SummaryDepth, SummaryLevels } from "@/lib/types";
 import { useT } from "@/components/lang-provider";
 import type { TKey } from "@/lib/i18n/dictionaries";
@@ -56,6 +57,7 @@ export function AssistantPanel({
 }) {
   const router = useRouter();
   const t = useT();
+  const ime = useImeGuard();
   const [scope, setScope] = useState<Scope>("notebook");
   const [question, setQuestion] = useState("");
   const [answer, setAnswer] = useState("");
@@ -283,6 +285,10 @@ export function AssistantPanel({
         <input
           value={question}
           onChange={(e) => setQuestion(e.target.value)}
+          {...ime.props}
+          onKeyDown={(e) => {
+            if (ime.isImeEnter(e)) e.preventDefault();
+          }}
           placeholder={t(
             scope === "corpus" ? "assistant.askPlaceholderCorpora" : "assistant.askPlaceholderCorpus",
           )}
