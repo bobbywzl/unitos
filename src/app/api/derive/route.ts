@@ -39,6 +39,7 @@ import {
   distillationList,
   extractionList,
   FORMALIZE_FORMATS,
+  formalizedArticle,
   SUMMARY_DEPTHS,
   type CorpusDistillation,
   type Distillation,
@@ -46,6 +47,7 @@ import {
   type FormalizedArticle,
   type SummaryLevels,
 } from "@/lib/types";
+import { materializeArticle } from "@/lib/video/article-document";
 import { videoAnchorFor } from "@/lib/video/anchor";
 import { describeYouTubeClip } from "@/lib/video/gemini";
 import {
@@ -822,6 +824,21 @@ export async function POST(req: Request) {
               createdAt: new Date().toISOString(),
               createdById: user.id,
             };
+            // The article becomes a document in the corpus (SPEC.md §11):
+            // parsed into blocks so every reader tool works on it. Regenerate
+            // rewrites the same document — its id carries over from the stored
+            // article.
+            const attachment = await db.notebookDocument.findUnique({
+              where: {
+                notebookId_documentId: { notebookId: data.notebookId, documentId: documentId },
+              },
+              select: { formalized: true },
+            });
+            const previous = formalizedArticle(attachment?.formalized ?? null);
+            article.documentId = await materializeArticle(data.notebookId, {
+              ...article,
+              documentId: previous?.documentId,
+            });
             await db.notebookDocument.update({
               where: {
                 notebookId_documentId: { notebookId: data.notebookId, documentId: documentId },

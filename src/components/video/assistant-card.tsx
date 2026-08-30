@@ -2,6 +2,8 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { api } from "@/lib/api";
+import { useImeGuard } from "@/lib/ime";
 import { SparkleIcon, SpinnerIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { Markdown } from "@/components/markdown";
@@ -32,6 +34,7 @@ export function MediaAssistant({
 }) {
   const t = useT();
   const router = useRouter();
+  const ime = useImeGuard();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
@@ -74,6 +77,10 @@ export function MediaAssistant({
               }),
       });
       router.refresh();
+      // The article is a document now (SPEC.md §11) — open it, ready to work on.
+      if (format === "article" && result.article?.documentId) {
+        router.push(`/n/${notebookId}?doc=${result.article.documentId}`);
+      }
     } catch (err) {
       push({
         role: "assistant",
@@ -194,6 +201,10 @@ export function MediaAssistant({
           autoFocus
           value={input}
           onChange={(e) => setInput(e.target.value)}
+          {...ime.props}
+          onKeyDown={(e) => {
+            if (ime.isImeEnter(e)) e.preventDefault();
+          }}
           placeholder={t("video.assistantPlaceholder")}
           aria-label={t("video.assistant")}
           className="min-w-0 flex-1 rounded-full bg-sand-100 px-4 py-2 text-[13px] outline-none placeholder:text-sand-500"
@@ -210,8 +221,10 @@ export function MediaAssistant({
   );
 }
 
-// The formalized article, under the transcript (SPEC.md §11). Copy takes the
-// markdown out for publishing; Regenerate overwrites, like summaries.
+// The formalized article, under the transcript (SPEC.md §11). Open as
+// document is the lead action: the article lives as a document in the corpus,
+// with every reader tool. Copy takes the markdown out for publishing;
+// Regenerate overwrites, like summaries — the same document's blocks rewrite.
 export function ArticleSection({
   notebookId,
   documentId,
@@ -226,6 +239,7 @@ export function ArticleSection({
   const t = useT();
   const router = useRouter();
   const [busy, setBusy] = useState(false);
+  const [opening, setOpening] = useState(false);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -242,6 +256,30 @@ export function ArticleSection({
       setError(err instanceof Error ? err.message : t("video.assistantFailed"));
     } finally {
       setBusy(false);
+    }
+  }
+
+  // Articles stored before they became documents get one on first open —
+  // parsed from the stored markdown, no model call.
+  async function open() {
+    if (!article || opening) return;
+    if (article.documentId) {
+      router.push(`/n/${notebookId}?doc=${article.documentId}`);
+      return;
+    }
+    setOpening(true);
+    setError(null);
+    try {
+      const result = await api<{ articleDocumentId: string }>(
+        `/api/documents/${documentId}/article`,
+        "POST",
+        { notebookId },
+      );
+      router.push(`/n/${notebookId}?doc=${result.articleDocumentId}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t("common.requestFailed"));
+    } finally {
+      setOpening(false);
     }
   }
 
@@ -266,6 +304,16 @@ export function ArticleSection({
           {t("video.article")}
         </span>
         <div className="ml-auto flex items-center gap-1">
+          {(article.documentId || canEdit) && (
+            <button
+              onClick={() => void open()}
+              disabled={opening}
+              className="rounded-full px-2 py-0.5 text-[11px] font-bold text-clay-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40"
+              title={t("video.openArticleTitle")}
+            >
+              {opening ? t("common.working") : t("video.openArticle")}
+            </button>
+          )}
           <button onClick={() => void copy()} className={action} title={t("video.copyMarkdownTitle")}>
             {copied ? t("video.copied") : t("video.copyMarkdown")}
           </button>

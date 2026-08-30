@@ -127,6 +127,9 @@ export type FormalizedArticle = {
   markdown: string;
   createdAt: string; // ISO
   createdById?: string;
+  // The article as a document in the corpus: parsed into blocks so every
+  // reader tool works on it. Regenerate rewrites the same document's blocks.
+  documentId?: string;
 };
 
 /** Tolerant read of the Json column; anything malformed reads as null. */
