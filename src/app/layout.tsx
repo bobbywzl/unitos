@@ -4,7 +4,7 @@ import "./globals.css";
 import { FeedbackButton } from "@/components/feedback-button";
 import { LangProvider } from "@/components/lang-provider";
 import { htmlLangOf } from "@/lib/i18n/config";
-import { currentLang } from "@/lib/i18n/server";
+import { currentLang, serverT } from "@/lib/i18n/server";
 
 // Caprasimo sets every heading; Figtree carries body text and UI.
 const caprasimo = Caprasimo({
@@ -21,10 +21,10 @@ const figtree = Figtree({
   display: "swap",
 });
 
-export const metadata: Metadata = {
-  title: "Unitos",
-  description: "Notes-centric app for deep reading",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await serverT();
+  return { title: "Unitos", description: t("common.appDescription") };
+}
 
 // Applies the stored theme before paint; follows the system while theme is "system".
 const themeScript = `(function(){try{var m=window.matchMedia("(prefers-color-scheme: dark)");function a(){var t=localStorage.getItem("theme");document.documentElement.classList.toggle("dark",t==="dark"||(t!=="light"&&m.matches));}a();m.addEventListener("change",a);}catch(e){}})();`;

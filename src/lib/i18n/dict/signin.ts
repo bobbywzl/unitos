@@ -204,7 +204,7 @@ const zh: Record<keyof typeof en, string> = {
   errEmailSend: "确认邮件发送失败——请重试",
   errEmailToken: "确认链接已过期或已使用——请重新申请",
   errBadLogin: "邮箱或密码不正确",
-  errNoPassword: "该账户还没有密码——请用「忘记密码」设置一个",
+  errNoPassword: "该账户还没有密码——请用“忘记密码”设置一个",
   errPasswordShort: "密码至少 8 个字符",
   errPasswordMatch: "两次输入的密码不一致",
 };

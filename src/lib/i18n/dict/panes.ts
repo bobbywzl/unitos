@@ -206,7 +206,7 @@ const zh: Record<keyof typeof en, string> = {
   pendingCount: "{n} 条待定",
   guide: "指南",
   guideTitle: "每个工具的用途",
-  noteRejected: "已拒绝笔记",
+  noteRejected: "笔记已拒绝",
   undo: "撤销",
   notesFullPage: "整页笔记",
   notesFullPageTitle: "整理、编辑并导出你的笔记",

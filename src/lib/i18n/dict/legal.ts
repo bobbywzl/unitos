@@ -127,6 +127,7 @@ const en = {
   tEnd:
     "You can stop at any time, and email robertwzl311@gmail.com to have your account and material deleted. Unitos may end or restrict access if these terms are broken, or if running the service is no longer possible.",
 
+  jurisdiction: "the State of California, United States",
   tLawHeading: "Governing law",
   tLaw:
     "These terms are governed by the laws of {jurisdiction}, and disputes belong to the courts there.",
@@ -259,6 +260,7 @@ const zh: Record<keyof typeof en, string> = {
   tEnd:
     "你可以随时停止使用，并发邮件至 robertwzl311@gmail.com 删除你的账户和材料。若违反本条款，或服务无法继续运营，Unitos 可终止或限制访问。",
 
+  jurisdiction: "美国加利福尼亚州",
   tLawHeading: "适用法律",
   tLaw: "本条款受 {jurisdiction} 法律管辖，争议由该地法院管辖。",
 

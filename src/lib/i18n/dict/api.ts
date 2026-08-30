@@ -159,7 +159,7 @@ const en = {
 
 const zh: Record<keyof typeof en, string> = {
   signInRequired: "请登录后继续。",
-  corpusNotFound: "未找到文集",
+  corpusNotFound: "未找到该文集",
   documentNotFound: "未找到文档",
   documentNotFoundOrEmpty: "未找到文档或文档为空",
   sectionNotFound: "未找到章节",
@@ -213,7 +213,7 @@ const zh: Record<keyof typeof en, string> = {
   warnOnlyTextEdited: "已跳过：只有文本块可以编辑。（{description}）",
   warnLinkTargetNotAttached: "已跳过：链接目标不是此文集中的另一个文档。（{description}）",
 
-  deriveNeedsKey: "未设置 ANTHROPIC_API_KEY。派生需要它。",
+  deriveNeedsKey: "未设置 ANTHROPIC_API_KEY。AI 生成需要它。",
   typeNotBuilt: "{type} 尚未实现",
   typeRequiresAnchor: "{type} 需要锚点",
   findRequiresQuery: "FIND 需要查询词",

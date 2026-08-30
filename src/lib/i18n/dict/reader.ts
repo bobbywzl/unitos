@@ -309,7 +309,7 @@ const zh: Record<keyof typeof en, string> = {
   distilledToast: "提炼完成——打开“提炼”查看",
   addSectionFirstDot: "请先添加章节。",
   addSectionFirst: "请先添加章节",
-  addPendingNote: "作为待定笔记添加到{section}",
+  addPendingNote: "添加为 {section} 中的待定笔记",
   extracting: "提取中…",
   extractDone: "提取 {label}：已高亮 {n} 个片段",
   extractFailed: "提取失败",

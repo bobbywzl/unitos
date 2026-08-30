@@ -25,6 +25,7 @@
 
 const en = {
   appName: "Unitos",
+  appDescription: "Notes-centric app for deep reading",
   works: "Works",
   settings: "Settings",
   signOut: "Sign out",
@@ -74,6 +75,7 @@ const en = {
 
 const zh: Record<keyof typeof en, string> = {
   appName: "Unitos",
+  appDescription: "以笔记为中心的深度阅读应用",
   works: "书架",
   settings: "设置",
   signOut: "退出登录",
