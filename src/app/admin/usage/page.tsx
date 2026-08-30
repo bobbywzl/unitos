@@ -116,7 +116,7 @@ export default async function AdminUsagePage() {
   const since90 = new Date(now - 90 * 86_400_000);
   const since30 = new Date(now - 30 * 86_400_000);
 
-  const [totals, cost30, byFeature, byModel, byUser, byDayRaw, users] = await Promise.all([
+  const [totals, cost30, byProvider, byFeature, byModel, byUser, byDayRaw, users] = await Promise.all([
     db.usageEvent.aggregate({
       where: { createdAt: { gte: since90 } },
       _count: true,
@@ -125,6 +125,15 @@ export default async function AdminUsagePage() {
     db.usageEvent.aggregate({
       where: { createdAt: { gte: since30 } },
       _sum: { costUsd: true },
+    }),
+    // Every model call stamps its provider (anthropic, google, groq, openai),
+    // so the cost of each API account is one row here.
+    db.usageEvent.groupBy({
+      by: ["provider"],
+      where: { createdAt: { gte: since90 } },
+      _count: true,
+      _sum: { inputTokens: true, outputTokens: true, costUsd: true },
+      orderBy: { _sum: { costUsd: "desc" } },
     }),
     db.usageEvent.groupBy({
       by: ["feature"],
@@ -197,7 +206,12 @@ export default async function AdminUsagePage() {
 
           <DailyChart title={t("admin.usageDaily")} days={days} />
 
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <BarList
+              t={t}
+              title={t("admin.usageByProvider")}
+              rows={rowsOf(byProvider.map((r) => ({ ...r, label: r.provider })))}
+            />
             <BarList
               t={t}
               title={t("admin.usageByFunction")}
