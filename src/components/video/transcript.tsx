@@ -91,7 +91,10 @@ export function Transcript({
     if (!activeLineId || !list || hoveredRef.current) return;
     const el = list.querySelector<HTMLElement>(`[data-line-id="${activeLineId}"]`);
     if (!el) return;
-    const target = el.offsetTop - list.clientHeight / 2 + el.clientHeight / 2;
+    // Measure against the scroll box, not offsetTop: the line's positioned
+    // wrapper would otherwise be its offsetParent and read ~0 for every line.
+    const elTop = el.getBoundingClientRect().top - list.getBoundingClientRect().top + list.scrollTop;
+    const target = elTop - list.clientHeight / 2 + el.clientHeight / 2;
     list.scrollTo({ top: Math.max(0, target), behavior: "smooth" });
   }, [activeLineId]);
 

@@ -60,7 +60,9 @@ import {
 import { recordUsage, sdkTokens } from "@/lib/usage";
 import { parseBody } from "@/lib/validate";
 
-export const maxDuration = 120;
+// FORMALIZE holds the connection for minutes on a long transcript (heartbeat
+// stream); 120 s would kill it mid-call.
+export const maxDuration = 300;
 
 // The one derivation pipeline (SPEC.md §4). Never fork per feature: new derivation =
 // new prompt template + destination handler below.
@@ -887,7 +889,7 @@ export async function POST(req: Request) {
           }
           if (!section) {
             section = await db.section.create({
-              data: { notebookId: data.notebookId, title: "Notes", order: 0 },
+              data: { notebookId: data.notebookId, title: t("api.defaultNotesSection"), order: 0 },
             });
           }
           // Every note cites its span of the recording: the topic's blocks

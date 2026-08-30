@@ -12,12 +12,14 @@ function escapeHtml(s: string): string {
 
 // Inline markdown → plain text + style and link spans over that text. Bold,
 // italic, code, and [label](url) links; unmatched markers stay literal.
+// Underscore emphasis needs non-word context on both sides (snake_case stays
+// literal); link URLs may carry one level of balanced parentheses.
 function parseInline(raw: string): { text: string; styles: StyleSpan[]; links: LinkSpan[] } {
   let text = "";
   const styles: StyleSpan[] = [];
   const links: LinkSpan[] = [];
   const rx =
-    /\*\*((?:[^*]|\*(?!\*))+)\*\*|\*([^*\s](?:[^*]*[^*\s])?)\*|_([^_\s](?:[^_]*[^_\s])?)_|`([^`]+)`|\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g;
+    /\*\*((?:[^*]|\*(?!\*))+)\*\*|\*([^*\s](?:[^*]*[^*\s])?)\*|(?<!\w)_([^_\s](?:[^_]*[^_\s])?)_(?!\w)|`([^`]+)`|\[([^\]]+)\]\((https?:\/\/(?:\([^)\s]*\)|[^)\s])+)\)/g;
   let last = 0;
   for (let m = rx.exec(raw); m; m = rx.exec(raw)) {
     text += raw.slice(last, m.index);
