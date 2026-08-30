@@ -12,6 +12,7 @@ export const DERIVATION_MODEL: Record<DerivationType, string> = {
   SYNTHESIS: "claude-opus-5",
   FIND: "claude-opus-5",
   DISTILL: "claude-opus-5",
+  FORMALIZE: "claude-opus-5",
 };
 
 // Reasoning tokens count against this ceiling on current models, so every
@@ -26,6 +27,7 @@ export const MAX_OUTPUT_TOKENS: Record<DerivationType, number> = {
   SYNTHESIS: 16384,
   FIND: 8192,
   DISTILL: 8192,
+  FORMALIZE: 32768, // a long transcript's article is long
 };
 
 // The ingest-time corpus scan for recommended links (SPEC.md §13). Not a

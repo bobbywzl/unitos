@@ -17,18 +17,25 @@ import {
 // The video itself is never modified; this is the visual note layer.
 export function Visual({
   source,
+  audio,
   annotations,
   onOpen,
   onDelete,
 }: {
   source: ThumbnailSource;
+  /** Audio document: no frames to draw — cards carry the time range and the
+      note only. */
+  audio?: boolean;
   annotations: VideoAnnotationItem[];
   onOpen: (annotation: VideoAnnotationItem) => void;
   onDelete: (noteId: string) => Promise<void>;
 }) {
   const t = useT();
   const [busyId, setBusyId] = useState<string | null>(null);
-  const times = useMemo(() => annotations.map((a) => a.startTime), [annotations]);
+  const times = useMemo(
+    () => (audio ? [] : annotations.map((a) => a.startTime)),
+    [audio, annotations],
+  );
   const thumbs = useVideoThumbnails(source, times);
 
   if (annotations.length === 0) return null;
@@ -47,7 +54,7 @@ export function Visual({
     <section className="mt-6">
       <div className="mb-2.5 flex items-center gap-2">
         <span className="text-[11px] font-bold tracking-[0.08em] text-sand-600 uppercase">
-          {t("video.visual")}
+          {t(audio ? "video.visualAudio" : "video.visual")}
         </span>
         <span className="text-[13px] text-sand-600">{annotations.length}</span>
       </div>
@@ -62,7 +69,7 @@ export function Visual({
               <button
                 onClick={() => onOpen(a)}
                 title={t("video.jumpOpenNote")}
-                className="relative block aspect-video w-full bg-[#12100e]"
+                className={`relative block w-full bg-[#12100e] ${audio ? "h-9" : "aspect-video"}`}
               >
                 {thumb && (
                   // eslint-disable-next-line @next/next/no-img-element

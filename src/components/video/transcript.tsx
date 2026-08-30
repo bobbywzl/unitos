@@ -5,13 +5,46 @@ import { SpinnerIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { formatTime, type TranscriptLine, type VideoAnnotationItem } from "@/lib/video/types";
 
-// The transcript under the player (SPEC.md §11): click a line to seek; the
-// current line highlights and follows playback inside its own scroll box, so
-// the player never moves. Every line is also an anchor — hovering one offers
-// the same tools the player's frame does, and a line already covered by an
-// annotation is tinted and opens it.
+// The transcript under the player (SPEC.md §11), shaped like an article:
+// lines flow into indented paragraphs, split at speech gaps. Every line is
+// still an anchor — click to seek, hover for the same tools the player's
+// frame has — and the current line highlights and follows playback inside its
+// own scroll box, so the player never moves. A paragraph opens with its time;
+// a line covered by an annotation is underlined and opens it.
+
+// A paragraph closes at a clear speech gap, or once it is long enough and the
+// line before it finished a sentence. The hard cap keeps a gapless monologue
+// from becoming one wall.
+const PARAGRAPH_GAP_SECONDS = 2.5;
+const PARAGRAPH_BREAK_CHARS = 700;
+const PARAGRAPH_MAX_CHARS = 1400;
+
+function paragraphsOf(transcript: TranscriptLine[]): TranscriptLine[][] {
+  const paragraphs: TranscriptLine[][] = [];
+  let open: TranscriptLine[] = [];
+  let chars = 0;
+  for (const line of transcript) {
+    const last = open[open.length - 1];
+    const breaks =
+      last !== undefined &&
+      (line.startTime - last.endTime > PARAGRAPH_GAP_SECONDS ||
+        chars > PARAGRAPH_MAX_CHARS ||
+        (chars > PARAGRAPH_BREAK_CHARS && /[.!?。！？…”"]$/.test(last.text)));
+    if (breaks) {
+      paragraphs.push(open);
+      open = [];
+      chars = 0;
+    }
+    open.push(line);
+    chars += line.text.length;
+  }
+  if (open.length > 0) paragraphs.push(open);
+  return paragraphs;
+}
+
 export function Transcript({
   transcript,
+  audio,
   activeLineId,
   annotations,
   pending,
@@ -23,6 +56,7 @@ export function Transcript({
   onTranscribe,
 }: {
   transcript: TranscriptLine[];
+  audio: boolean;
   activeLineId: string | null;
   annotations: VideoAnnotationItem[];
   pending: boolean;
@@ -36,6 +70,8 @@ export function Transcript({
   const t = useT();
   const listRef = useRef<HTMLDivElement>(null);
   const hoveredRef = useRef(false);
+
+  const paragraphs = useMemo(() => paragraphsOf(transcript), [transcript]);
 
   // The first annotation covering each line, so a line reads as annotated the
   // way a highlighted span does in the reader.
@@ -75,7 +111,7 @@ export function Transcript({
           <button
             onClick={onTranscribe}
             className="ml-auto rounded-full px-2 py-0.5 text-[11px] font-semibold text-sand-600 hover:bg-clay-100 hover:text-clay-800"
-            title={t("video.transcribeAgainTitle")}
+            title={t(audio ? "video.transcribeAgainTitleAudio" : "video.transcribeAgainTitle")}
           >
             {t("video.transcribeAgain")}
           </button>
@@ -87,70 +123,90 @@ export function Transcript({
           ref={listRef}
           onPointerEnter={() => (hoveredRef.current = true)}
           onPointerLeave={() => (hoveredRef.current = false)}
-          className="max-h-[380px] overflow-y-auto rounded-2xl bg-card p-2 shadow-soft"
+          className="max-h-[420px] overflow-y-auto rounded-2xl bg-card px-6 py-5 shadow-soft"
         >
-          {transcript.map((line) => {
-            const annotated = annotationByLine.get(line.id);
-            return (
-              <div
-                key={line.id}
-                data-line-id={line.id}
-                className={`group/line flex gap-3 rounded-xl px-3 py-1.5 ${
-                  line.id === activeLineId ? "bg-clay-100" : "hover:bg-sand-100"
-                }`}
+          {paragraphs.map((paragraph, pi) => (
+            <p
+              key={paragraph[0].id}
+              className={`indent-7 text-[14px] leading-[1.9] text-sand-800 ${
+                pi === 0 ? "" : "mt-4"
+              }`}
+            >
+              <button
+                onClick={() => onSeek(paragraph[0])}
+                title={t("video.jumpHere")}
+                className="mr-2 -translate-y-[1px] rounded-full bg-sand-100 px-2 py-[1px] align-middle text-[10.5px] font-semibold tabular-nums text-sand-500 hover:bg-clay-100 hover:text-clay-800"
               >
-                <button
-                  onClick={() => onSeek(line)}
-                  title={t("video.jumpHere")}
-                  className="w-10 shrink-0 pt-[2px] text-left text-[11px] tabular-nums text-sand-500 hover:text-clay-800"
-                >
-                  {formatTime(line.startTime)}
-                </button>
-                <div className="min-w-0 flex-1">
-                  <button
-                    onClick={() => onSeek(line)}
-                    className={`w-full text-left text-[13px] leading-relaxed ${
-                      line.id === activeLineId ? "text-clay-900" : "text-sand-700"
-                    } ${annotated ? "decoration-clay-400 underline decoration-2 underline-offset-4" : ""}`}
-                  >
-                    {line.text}
-                  </button>
-                  <div className="mt-0.5 flex items-center gap-1 opacity-0 transition-opacity group-hover/line:opacity-100">
-                    <button
-                      onClick={() => onComment(line)}
-                      className={action}
-                      title={t("video.commentOnLineTitle")}
+                {formatTime(paragraph[0].startTime)}
+              </button>
+              {paragraph.map((line) => {
+                const annotated = annotationByLine.get(line.id);
+                return (
+                  <span key={line.id} className="group/line relative">
+                    <span
+                      data-line-id={line.id}
+                      onClick={() => onSeek(line)}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          onSeek(line);
+                        }
+                      }}
+                      title={t("video.jumpHere")}
+                      className={`cursor-pointer rounded-[4px] box-decoration-clone px-0.5 py-[1px] ${
+                        line.id === activeLineId
+                          ? "bg-clay-100 text-clay-900"
+                          : "hover:bg-sand-100"
+                      } ${
+                        annotated
+                          ? "decoration-clay-400 underline decoration-2 underline-offset-4"
+                          : ""
+                      }`}
                     >
-                      {t("video.comment")}
-                    </button>
-                    <button
-                      onClick={() => onExplain(line)}
-                      className={action}
-                      title={t("video.explainThisMoment")}
-                    >
-                      {t("video.explain")}
-                    </button>
-                    {annotated && (
-                      <button
-                        onClick={() => onOpenAnnotation(annotated)}
-                        className={action}
-                        title={t("video.openNoteTitle")}
-                      >
-                        {t("video.openNote")}
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
+                      {line.text}
+                    </span>{" "}
+                    {/* The line's tools, floating over the text on hover. */}
+                    <span className="pointer-events-none absolute bottom-full left-0 z-10 hidden pb-1 group-hover/line:inline-flex">
+                      <span className="pointer-events-auto flex items-center gap-0.5 rounded-full bg-card px-1 py-0.5 whitespace-nowrap shadow-float">
+                        <button
+                          onClick={() => onComment(line)}
+                          className={action}
+                          title={t("video.commentOnLineTitle")}
+                        >
+                          {t("video.comment")}
+                        </button>
+                        <button
+                          onClick={() => onExplain(line)}
+                          className={action}
+                          title={t("video.explainThisMoment")}
+                        >
+                          {t("video.explain")}
+                        </button>
+                        {annotated && (
+                          <button
+                            onClick={() => onOpenAnnotation(annotated)}
+                            className={action}
+                            title={t("video.openNoteTitle")}
+                          >
+                            {t("video.openNote")}
+                          </button>
+                        )}
+                      </span>
+                    </span>
+                  </span>
+                );
+              })}
+            </p>
+          ))}
         </div>
       ) : (
         <div className="rounded-2xl bg-card px-4 py-4 shadow-soft">
           {pending ? (
             <p className="flex items-center gap-2 text-[13px] text-sand-600">
               <SpinnerIcon size={14} className="shrink-0 text-clay motion-safe:animate-spin" />
-              {t("video.transcribingLong")}
+              {t(audio ? "video.transcribingLongAudio" : "video.transcribingLong")}
             </p>
           ) : (
             <div className="flex flex-col gap-2.5">

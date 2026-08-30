@@ -4,6 +4,7 @@ import { outboundFetch } from "@/lib/outbound-fetch";
 import { recordUsage } from "@/lib/usage";
 import { geminiCall, geminiCountTokens } from "@/lib/video/gemini";
 import { fetchPlayerResponse } from "@/lib/video/innertube";
+import { splitMp3 } from "@/lib/video/mp3";
 import { parseTimeInput } from "@/lib/video/types";
 import { youtubeWatchUrl } from "@/lib/video/youtube";
 
@@ -11,12 +12,17 @@ import { youtubeWatchUrl } from "@/lib/video/youtube";
 //   YouTube video:  Gemini reads the video by URL → caption tracks from the
 //                   player API (ANDROID, then IOS client) → caption tracks
 //                   scraped from the watch page.
-//   Uploaded video: Whisper → Gemini with the bytes inline.
+//   Uploaded video or audio: Groq Whisper (best quality per dollar; free tier)
+//                   → OpenAI Whisper → Gemini with the bytes inline.
 // Each rung throws a plain reason; the ladder tries the next and reports every
 // reason when all fail. Segments group into transcript lines at the end; the
 // route writes them as TRANSCRIPT blocks.
 
-export const TRANSCRIBE_MAX_BYTES = 25 * 1024 * 1024; // Whisper's upload cap
+export const TRANSCRIBE_MAX_BYTES = 25 * 1024 * 1024; // Whisper-family upload cap
+// An MP3 past the cap splits at frame boundaries and transcribes in chunks
+// (lib/video/mp3.ts); other containers cannot be cut safely and keep the cap.
+const MP3_CHUNK_BYTES = 24 * 1024 * 1024;
+const MP3_CHUNK_CONCURRENCY = 3;
 // Inline bytes reach Gemini base64-encoded inside a 20 MB request.
 const GEMINI_INLINE_MAX_BYTES = 14 * 1024 * 1024;
 
@@ -48,7 +54,8 @@ export async function transcribe(
           ["YouTube captions (page)", () => youtubeCaptionsPage(source.youtubeId)],
         ]
       : [
-          ["Whisper", () => whisper(source.bytes, source.mimeType ?? "video/mp4")],
+          ["Groq Whisper", () => whisperFamily(GROQ_WHISPER, source.bytes, source.mimeType ?? "video/mp4")],
+          ["OpenAI Whisper", () => whisperFamily(OPENAI_WHISPER, source.bytes, source.mimeType ?? "video/mp4")],
           ["Gemini", () => geminiUpload(source.bytes, source.mimeType ?? "video/mp4")],
         ];
   const failures: string[] = [];
@@ -64,7 +71,7 @@ export async function transcribe(
   throw new Error(failures.join(" · "));
 }
 
-// ── Whisper ─────────────────────────────────────────────────────────────────
+// ── Whisper family: Groq and OpenAI, one endpoint shape ─────────────────────
 
 const whisperResponseSchema = z.object({
   segments: z
@@ -83,26 +90,59 @@ const EXTENSION: Record<string, string> = {
   "video/quicktime": "mov",
   "video/webm": "webm",
   "video/ogg": "ogg",
+  "audio/mpeg": "mp3",
+  "audio/mp4": "m4a",
+  "audio/aac": "aac",
+  "audio/wav": "wav",
+  "audio/flac": "flac",
+  "audio/ogg": "ogg",
 };
 
-async function whisper(
-  bytes: Uint8Array<ArrayBuffer>,
+// Groq and OpenAI take the same multipart request; only the endpoint, key,
+// model, and per-minute price differ. Groq serves whisper-large-v3-turbo at
+// $0.04 per hour with a free tier — the best transcription quality per
+// dollar, so it goes first.
+type WhisperProvider = {
+  keyEnv: "GROQ_API_KEY" | "OPENAI_API_KEY";
+  endpoint: string;
+  model: string;
+  usdPerMinute: number;
+};
+
+const GROQ_WHISPER: WhisperProvider = {
+  keyEnv: "GROQ_API_KEY",
+  endpoint: "https://api.groq.com/openai/v1/audio/transcriptions",
+  model: "whisper-large-v3-turbo",
+  usdPerMinute: 0.04 / 60,
+};
+
+const OPENAI_WHISPER: WhisperProvider = {
+  keyEnv: "OPENAI_API_KEY",
+  endpoint: "https://api.openai.com/v1/audio/transcriptions",
+  model: "whisper-1",
+  usdPerMinute: 0.006,
+};
+
+// One OpenAI-compatible transcription call.
+async function whisperCall(
+  opts: { endpoint: string; key: string; model: string; usdPerMinute: number },
+  bytes: Uint8Array,
   mimeType: string,
 ): Promise<TranscriptSegment[]> {
-  const key = process.env.OPENAI_API_KEY;
-  if (!key) throw new Error("OPENAI_API_KEY is not set");
-  if (bytes.length > TRANSCRIBE_MAX_BYTES) throw new Error("video is larger than the 25 MB cap");
-
   const form = new FormData();
-  form.set("file", new Blob([bytes], { type: mimeType }), `video.${EXTENSION[mimeType] ?? "mp4"}`);
-  form.set("model", "whisper-1");
+  form.set(
+    "file",
+    new Blob([bytes as BlobPart], { type: mimeType }),
+    `media.${EXTENSION[mimeType] ?? "mp4"}`,
+  );
+  form.set("model", opts.model);
   form.set("response_format", "verbose_json");
   form.append("timestamp_granularities[]", "segment");
 
   // Plain fetch: multipart bodies do not fit outboundFetch's string body.
-  const res = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+  const res = await fetch(opts.endpoint, {
     method: "POST",
-    headers: { Authorization: `Bearer ${key}` },
+    headers: { Authorization: `Bearer ${opts.key}` },
     body: form,
   });
   if (!res.ok) {
@@ -112,13 +152,63 @@ async function whisper(
   const parsed = whisperResponseSchema.safeParse(await res.json());
   if (!parsed.success) throw new Error("no timed segments returned");
   const segments = normalizeSegments(parsed.data.segments);
-  // whisper-1 bills per minute ($0.006/min); tokens do not apply.
+  // Whisper bills per minute; tokens do not apply.
   const minutes = (segments.at(-1)?.end ?? 0) / 60;
   recordUsage(
-    { userId: null, feature: "transcribe", model: "whisper-1" },
+    { userId: null, feature: "transcribe", model: opts.model },
     { inputTokens: Math.ceil(minutes * 60) },
-    minutes * 0.006,
+    minutes * opts.usdPerMinute,
   );
+  return segments;
+}
+
+// A file under the cap goes in one call. A bigger MP3 splits at frame
+// boundaries (chunks decode cleanly), each chunk transcribes on its own clock,
+// and the segments shift back onto the audio's. Chunks run a few at a time; a
+// chunk that fails twice leaves a gap rather than losing the transcript, like
+// the YouTube windows.
+async function whisperFamily(
+  provider: WhisperProvider,
+  bytes: Uint8Array,
+  mimeType: string,
+): Promise<TranscriptSegment[]> {
+  const key = process.env[provider.keyEnv];
+  if (!key) throw new Error(`${provider.keyEnv} is not set`);
+  const opts = { ...provider, key };
+  if (bytes.length <= TRANSCRIBE_MAX_BYTES) return whisperCall(opts, bytes, mimeType);
+  if (mimeType !== "audio/mpeg") {
+    throw new Error("file is larger than the 25 MB transcription cap for this format");
+  }
+  const chunks = splitMp3(bytes, MP3_CHUNK_BYTES);
+  if (!chunks) throw new Error("MP3 frames did not parse; the file cannot be split");
+  console.log(`[transcribe] ${bytes.length} bytes → ${chunks.length} MP3 chunks`);
+
+  const results: TranscriptSegment[][] = new Array(chunks.length).fill([]);
+  for (let i = 0; i < chunks.length; i += MP3_CHUNK_CONCURRENCY) {
+    const batch = chunks.slice(i, i + MP3_CHUNK_CONCURRENCY);
+    await Promise.all(
+      batch.map(async (chunk, j) => {
+        for (let attempt = 0; attempt < 2; attempt++) {
+          try {
+            const segments = await whisperCall(opts, chunk.bytes, mimeType);
+            results[i + j] = segments.map((s) => ({
+              start: s.start + chunk.startTime,
+              end: s.end + chunk.startTime,
+              text: s.text,
+            }));
+            return;
+          } catch (err) {
+            console.warn(
+              `[transcribe] MP3 chunk ${i + j} attempt ${attempt + 1} failed:`,
+              err instanceof Error ? err.message : err,
+            );
+          }
+        }
+      }),
+    );
+  }
+  const segments = normalizeSegments(results.flat());
+  if (segments.length === 0) throw new Error("every MP3 chunk failed to transcribe");
   return segments;
 }
 
@@ -317,7 +407,7 @@ function geminiUpload(
   mimeType: string,
 ): Promise<TranscriptSegment[]> {
   if (bytes.length > GEMINI_INLINE_MAX_BYTES) {
-    return Promise.reject(new Error("video is larger than the 14 MB inline cap"));
+    return Promise.reject(new Error("file is larger than the 14 MB inline cap"));
   }
   return geminiSegments([
     { inlineData: { mimeType, data: Buffer.from(bytes).toString("base64") } },

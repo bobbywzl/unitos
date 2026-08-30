@@ -195,12 +195,14 @@ Single server route: `POST /api/derive`
 
 ```typescript
 type DeriveRequest = {
-  type: 'EXPLAIN' | 'SIMPLIFY' | 'SALIENCE' | 'EXTRACT' | 'DISTILL' | 'SUMMARIZE';
+  type: 'EXPLAIN' | 'SIMPLIFY' | 'SALIENCE' | 'EXTRACT' | 'DISTILL' | 'SUMMARIZE' | 'FORMALIZE';
   documentId: string;
   notebookId: string;
   anchor?: AnchorInput;        // required for EXPLAIN/SIMPLIFY/EXTRACT; optional focus for DISTILL
   question?: string;           // DISTILL only: the question the quotes must answer
   depth?: 'layman' | 'intermediate' | 'professional'; // SUMMARIZE only; default layman
+  format?: 'article' | 'notes'; // FORMALIZE only: the destination shape
+  sectionId?: string;          // FORMALIZE notes only: where the notes land
 };
 ```
 
@@ -215,6 +217,7 @@ Flow:
    - `EXTRACT` → extraction on `NotebookDocument.extractions`, painted as a labeled highlight layer: the origin phrase plus the passages across the document that reveal its topic; each passage's label chip jumps back to the origin
    - `DISTILL` → distillation on `NotebookDocument.distillations`, rendered as the distilled page; a quote reaches notes only through the page's "Add to notes", which lands a `Note` with `status: PENDING`
    - `SUMMARIZE` → Summary tab in the side panel (persisted on `NotebookDocument.summaries`, one summary per depth; Regenerate overwrites)
+   - `FORMALIZE` → the transcript rewritten (§11). format `article`: `{title, markdown}` on `NotebookDocument.formalized`, rendered under the transcript; Regenerate overwrites. format `notes`: one `PENDING` note per topic, each with a time source resolved from the topic's transcript blocks
 
 Prompt templates always receive: reader context, document title, section skeleton, and the anchored text with surrounding context (±2 blocks).
 
@@ -353,9 +356,11 @@ Each phase must be fully working end-to-end before starting the next.
 
 ---
 
-## 11. Video
+## 11. Video and audio
 
 A video is a document. Its transcript is its blocks; a video anchor is a time range instead of a text span. Everything downstream — notes, source chips, pending/accept, the derivation pipeline — is unchanged. The video file is never modified; annotations are a layer on top of the player.
+
+An audio file is the same document with no frame. Upload takes mp3, m4a, aac, wav, flac, or ogg (sniffed by magic bytes like video; `VideoAsset.mimeType` audio/* marks the document audio); the pane renders the audio player — a compact stage with a waveform decoration, timed comments fading in over it, no fullscreen — and drops everything frame-bound: no circling (the annotate button opens the composer on the current moment), no Visual thumbnails (cards carry time and text), no frame capture on Explain. Transcript, Find, the assistant, time anchors, and the derivation pipeline are identical.
 
 ### Data model additions
 
@@ -392,7 +397,7 @@ enum TranscriptStatus { NONE PENDING READY FAILED }
 ```
 
 - `Document` ↔ `VideoAsset` is one-to-one. A document with a VideoAsset is a video document; the reader renders the video pane for it instead of the text reader.
-- Upload video takes an mp4/webm/ogg/mov file or a YouTube link. A file becomes kind `UPLOAD`; a YouTube link becomes kind `YOUTUBE` (title from oEmbed, deduped by `youtubeId`, no bytes stored). A YouTube link pasted into Add URL lands in the same path.
+- Upload video or audio takes an mp4/webm/ogg/mov or mp3/m4a/aac/wav/flac/ogg file, or a YouTube link. A file becomes kind `UPLOAD` (an audio/* sniff makes it an audio document); a YouTube link becomes kind `YOUTUBE` (title from oEmbed, deduped by `youtubeId`, no bytes stored). A YouTube link pasted into Add URL lands in the same path.
 - Every video document has exactly one `VIDEO` block at order 0. Video anchors point at it when no transcript block fits.
 - Transcript lines are `TRANSCRIPT` blocks with `Block.startTime`/`Block.endTime` (seconds). Same text machinery as every other block.
 - Upload bytes live in `VideoChunk` rows, streamed by `GET /api/video/[documentId]` with HTTP Range support so the scrubber seeks without downloading the file. 200 MB cap per video. Postgres holds the bytes for the same reason it holds PDF bytes: zero-config deploys. Blob storage is the upgrade path, not a v1 requirement.
@@ -419,22 +424,31 @@ enum TranscriptStatus { NONE PENDING READY FAILED }
 
 ### Transcription
 
-Transcription starts on its own the moment a video is added — the transcript is the point. The pane never shows a Transcribe button: it shows Transcribing…, then the lines; Retry appears only when every rung failed, and Transcribe again redoes a finished transcript. The job runs a provider ladder ordered by source, writes the timed segments as TRANSCRIPT blocks, and stores which rung succeeded (`POST /api/documents/[documentId]/transcribe` runs the same job for retries):
+Transcription starts on its own the moment a video or audio is added — the transcript is the point. The pane never shows a Transcribe button: it shows Transcribing…, then the lines; Retry appears only when every rung failed, and Transcribe again redoes a finished transcript. The job runs a provider ladder ordered by source, cleans the lines, writes them as TRANSCRIPT blocks, and stores which rung succeeded (`POST /api/documents/[documentId]/transcribe` runs the same job for retries):
 
 - **YouTube video:** Gemini reads the video by URL (`GEMINI_API_KEY`; `gemini-3.7-flash`, then the `gemini-flash-latest` alias, so a retired model can never take the feature down) → caption tracks from the player API, keyless (ANDROID_VR client first — embedded-device clients answer datacenter IPs where the phone and web clients now demand a bot check — then ANDROID, then IOS) → caption tracks scraped from the watch page. Most YouTube videos carry transcripts Gemini reads directly.
 
 A video costs Gemini about 100 tokens per second, so anything past roughly two hours overruns the 1M context window in one call. Past 700k tokens the video transcribes in 30-minute windows: `countTokens` on the whole video and on one known minute gives the video's own token rate, and the two divide into a duration. Windows run together (six at a time, four hours maximum) so the wall clock is about one window rather than their sum, timestamps inside a window are clip-relative and get shifted back onto the video's clock, and one dead window leaves a gap instead of losing the transcript.
-- **Uploaded video:** OpenAI Whisper (`OPENAI_API_KEY`; 25 MB cap for now) → Gemini with the bytes inline (≤14 MB).
+- **Uploaded video or audio:** Groq Whisper (`GROQ_API_KEY`; whisper-large-v3-turbo, $0.04/hour with a free tier — the best transcription quality per dollar, so it goes first) → OpenAI Whisper (`OPENAI_API_KEY`) → Gemini with the bytes inline (≤14 MB). The Whisper rungs cap an upload at 25 MB; an MP3 past the cap splits at frame boundaries (lib/video/mp3.ts) into under-cap chunks that transcribe a few at a time and shift back onto the audio's clock — hour-plus podcasts work; other containers cannot be cut safely and keep the cap.
 
 Transcription runs at low media resolution throughout — it needs the audio, not the pixels.
 
+**Cleanup:** before the blocks are written, every transcript (all sources) is cleaned line by line — filler words (um, uh, er), stutters, immediate word repeats, and false starts removed; punctuation and casing fixed — so the transcript reads like written prose. Gemini cleans when a key is set (lib/video/tidy.ts; batch calls, same line count in and out, never a paraphrase); a deterministic rules pass is the keyless fallback. Time ranges never change; a line cleaned down to nothing drops.
+
 Each rung fails with a plain reason; the ladder tries the next and reports every reason when all fail. `VideoAsset.transcriptStatus`: NONE → PENDING → READY | FAILED with the reason stored. Upload and playback work without any key; the transcript pane offers Transcribe and states plainly what is missing.
+
+**The transcript pane is article-shaped:** lines flow into first-line-indented paragraphs, split at speech gaps (or at length once a sentence ends), each paragraph opening with a seekable time chip. A line is still the unit: click to seek, hover for Comment / Explain / Open note, follow-along highlight during playback.
 
 ### Video derivations (same pipeline, §4)
 
 - The cached document prefix tags timed blocks: `[block <id>] (TRANSCRIPT 12.4s–18.2s)`. One cache entry per video document, like every document.
 - `FIND` — the video content reader. `{type: FIND, query}` → JSON `{matches: [{blockIds, explanation}]}`; the server resolves each match's blocks to a time range. Renders as cards with seek chips. "Add to notes" lands a `PENDING` note with a time source — never persisted without the user.
-- `EXPLAIN` with a video anchor `{startTime, endTime, region?}`: the client captures the frame at that moment — from the file for an upload, from the storyboard sheets for a YouTube video — cropped to the drawn loop, and attaches it; the model reads the frame plus the timed transcript. A storyboard frame is small, so Gemini also watches the same clip at full resolution and its description rides along: two independent looks that corroborate each other, with the prompt telling the model to trust the image, never claim what it cannot see, and say so when the frame is too small to be sure. Output persists as an annotation with the same time source, so explained moments join Visual.
+- `EXPLAIN` with a video anchor `{startTime, endTime, region?}`: the client captures the frame at that moment — from the file for an upload, from the storyboard sheets for a YouTube video — cropped to the drawn loop, and attaches it; the model reads the frame plus the timed transcript. A storyboard frame is small, so Gemini also watches the same clip at full resolution and its description rides along: two independent looks that corroborate each other, with the prompt telling the model to trust the image, never claim what it cannot see, and say so when the frame is too small to be sure. Output persists as an annotation with the same time source, so explained moments join Visual. Audio has no frame; Explain works from the transcript alone.
+- `FORMALIZE` — the transcript rewritten, the media pane's two assistant skills. format `article`: a formal article for publishing the ideas — title, section headings, clean written prose, nothing invented — stored as `{title, markdown}` on `NotebookDocument.formalized` and rendered under the transcript with Copy markdown and Regenerate (overwrites, like summaries). format `notes`: personal bullet-point notes — topics in transcript order, each `{heading, bullets, blockIds}` — landing as one `PENDING` note per topic with a time source resolved from its blocks (§1: nothing enters notes without the user). Runs behind the DISTILL heartbeat stream; needs the transcript.
+
+### The assistant on the media pane
+
+An Assistant button in the tool bar opens a chat card under it (editor-gated, document scope — the model reads the whole timed transcript through `/api/assistant/act`). Facing video and audio content the card carries the two FORMALIZE skills as suggestion chips — "Formalize into an article" and "Formalize into bullet-point notes" — disabled until the transcript lands; typed questions answer in the chat. The chat executes no plan actions on media documents yet and says so when a plan proposes any.
 
 ### Build phases (continue §8 order)
 
