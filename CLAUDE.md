@@ -40,7 +40,8 @@ Concretely:
 - Then stop. Do not merge.
 
 ### Orchestrator session (branch `integration`)
+- Only consider branches that have commits not on `origin/main` AND have a file under `.integration/`. Ignore everything else regardless of name.
 - Never write application code except to resolve a conflict.
 - Report findings first. Wait for explicit approval before merging or editing anything.
-- Merge branches one at a time, running the test suite after each individual merge.
+- Merge branches one at a time. Run tests after each merge. Once a branch's tests pass, delete that branch immediately — local and remote — before merging the next one.
 - Never send a conflict back to the worker that wrote the code.
