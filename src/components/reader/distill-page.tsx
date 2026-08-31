@@ -7,6 +7,7 @@ import { useCollab } from "@/components/collab/collab-context";
 import { AuthorChip } from "@/components/collab/person-badge";
 import { ChevronLeftIcon } from "@/components/icons";
 import { useLang, useT } from "@/components/lang-provider";
+import { ThinkingIndicator } from "@/components/thinking";
 
 type DistillQuoteView = DistillationView["quotes"][number];
 
@@ -118,13 +119,8 @@ export function DistillPage({
         {running ? (
           <div>
             <h1 className="font-display text-[26px] leading-snug text-ink">{running.question}</h1>
-            <p className="mt-5 flex items-center gap-2 text-sm text-sand-600">
-              {t("panes.scanningArticle")}
-              <span className="inline-flex items-center gap-1">
-                <span className="loading-dot" />
-                <span className="loading-dot" />
-                <span className="loading-dot" />
-              </span>
+            <p className="mt-5 text-sm">
+              <ThinkingIndicator label={t("panes.scanningArticle")} />
             </p>
             <button
               onClick={onCancel}

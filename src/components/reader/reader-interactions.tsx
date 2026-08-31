@@ -30,6 +30,7 @@ import type { TFunc, TKey } from "@/lib/i18n/dictionaries";
 import { useLang, useT } from "@/components/lang-provider";
 import { MicIcon, SparkleIcon, SpinnerIcon, StopIcon, VolumeIcon } from "@/components/icons";
 import { Markdown } from "@/components/markdown";
+import { LoadingDots, ThinkingIndicator } from "@/components/thinking";
 import type { BlockData, Highlight } from "@/components/reader/block-view";
 import { Bibliography } from "@/components/reader/bibliography";
 import { useCollab } from "@/components/collab/collab-context";
@@ -293,18 +294,6 @@ const HUE_KEY: Record<(typeof HIGHLIGHT_HUES)[number], TKey> = {
 // English plural suffix for count phrases ({s} in reader.* keys); zh templates
 // omit {s}.
 const plural = (n: number) => (n === 1 ? "" : "s");
-
-// Three dots that take turns jumping: a tool block is waiting on the model.
-function LoadingDots() {
-  const t = useT();
-  return (
-    <span aria-label={t("reader.loading")} className="inline-flex items-center gap-1 py-1">
-      <span className="loading-dot" />
-      <span className="loading-dot" />
-      <span className="loading-dot" />
-    </span>
-  );
-}
 
 /** Horizontal dock for a side card: right next to the article on its side. */
 function dockSideCard(
@@ -3160,7 +3149,7 @@ export function ReaderInteractions({
       {annotationCard && (
         <div
           data-selection-popover
-          className="absolute z-30 w-[300px] rounded-2xl bg-card p-3 shadow-float"
+          className="pop-in absolute z-30 w-[300px] rounded-2xl bg-card p-3 shadow-float"
           style={{ top: annotationCard.top, left: annotationCard.left }}
         >
           <div className="mb-2 flex items-center justify-between">
@@ -3231,7 +3220,7 @@ export function ReaderInteractions({
           return (
             <div
               data-selection-popover
-              className="absolute z-30 w-[280px] rounded-2xl bg-card p-3 shadow-float"
+              className="pop-in absolute z-30 w-[280px] rounded-2xl bg-card p-3 shadow-float"
               style={{ top: extractCard.top, left: extractCard.left }}
             >
               <div className="mb-2 flex items-center justify-between">
@@ -3294,7 +3283,7 @@ export function ReaderInteractions({
             if (target.closest("textarea, input")) return;
             e.preventDefault();
           }}
-          className="absolute z-20 flex flex-col gap-0.5 rounded-2xl bg-card p-1.5 shadow-float"
+          className="pop-in absolute z-20 flex flex-col gap-0.5 rounded-2xl bg-card p-1.5 shadow-float"
           style={(() => {
             const w = submenu === "ai" || submenu === "comment" ? 248 : 116;
             if (popover.side === "right") {
@@ -3404,7 +3393,13 @@ export function ReaderInteractions({
                   onClick={() => void runAssistant()}
                   className="ml-auto rounded-full bg-clay px-3 py-1 text-[11px] font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
                 >
-                  {aiBusy ? t("common.working") : t("reader.run")}
+                  {aiBusy ? (
+                    <span className="flex h-[16px] items-center px-1">
+                      <LoadingDots label={t("common.working")} />
+                    </span>
+                  ) : (
+                    t("reader.run")
+                  )}
                 </button>
               </div>
             </div>
@@ -3631,9 +3626,7 @@ export function ReaderInteractions({
               <Markdown>{bubble.text}</Markdown>
             </div>
           ) : (
-            <p className="text-sm text-sand-500">
-              <LoadingDots />
-            </p>
+            <ThinkingIndicator className="py-1 text-[12.5px]" />
           )}
         </div>
       )}
@@ -3707,7 +3700,9 @@ export function ReaderInteractions({
             </p>
           ) : (
             <p className="max-h-96 overflow-y-auto text-[13.5px] leading-relaxed whitespace-pre-wrap">
-              {stripSimplifyMarkers(simplifyCard.text) || <LoadingDots />}
+              {stripSimplifyMarkers(simplifyCard.text) || (
+                <ThinkingIndicator className="py-1 text-[12.5px]" />
+              )}
             </p>
           )}
         </div>
@@ -3853,12 +3848,7 @@ export function ReaderInteractions({
                 </div>
               ),
             )}
-            {assistantChat.busy && (
-              <p className="flex items-center gap-1.5 text-[12px] text-sand-500">
-                {t("reader.thinking")}
-                <LoadingDots />
-              </p>
-            )}
+            {assistantChat.busy && <ThinkingIndicator className="py-0.5 text-[12px]" />}
           </div>
           <form
             className="flex items-end gap-1.5 px-3 pb-3"

@@ -8,6 +8,7 @@ import type { SummaryDepth, SummaryLevels } from "@/lib/types";
 import { useT } from "@/components/lang-provider";
 import type { TKey } from "@/lib/i18n/dictionaries";
 import { Markdown } from "@/components/markdown";
+import { LoadingDots, ThinkingIndicator } from "@/components/thinking";
 
 type Scope = "notebook" | "corpus";
 type Task = "contradictions" | "gaps" | "unsourced";
@@ -228,13 +229,7 @@ export function AssistantPanel({
               >
                 <span className="flex items-center gap-2 text-[13px] font-semibold">
                   {t(r.labelKey)}
-                  {recBusy === r.depth && (
-                    <span className="inline-flex items-center gap-1">
-                      <span className="loading-dot" />
-                      <span className="loading-dot" />
-                      <span className="loading-dot" />
-                    </span>
-                  )}
+                  {recBusy === r.depth && <LoadingDots />}
                 </span>
                 <span className="mt-0.5 block text-xs text-sand-500">{t(r.hintKey)}</span>
               </button>
@@ -327,7 +322,7 @@ export function AssistantPanel({
         </div>
       )}
 
-      {busy && !answer && <p className="text-xs text-sand-500">{t("common.working")}</p>}
+      {busy && !answer && <ThinkingIndicator className="text-xs" />}
       {error && <p className="text-sm text-red-600">{error}</p>}
 
       {answer && (
