@@ -151,12 +151,21 @@ export function AssistantPanel({
       }
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
+      let streamed = "";
       for (;;) {
         const { done, value } = await reader.read();
         if (done) break;
         const chunk = decoder.decode(value, { stream: true });
+        streamed += chunk;
         setAnswer((a) => a + chunk);
       }
+      // A failure mid-stream arrives in-band; an empty stream is a failure too.
+      const { text, error: streamError } = splitStreamError(streamed);
+      if (streamError || !text.trim()) {
+        setAnswer("");
+        throw new Error(streamError ?? t("assistant.emptyResponse"));
+      }
+      setAnswer(text);
     } catch (err) {
       setError(err instanceof Error ? err.message : t("assistant.assistantFailed"));
     } finally {

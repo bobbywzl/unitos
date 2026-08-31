@@ -889,7 +889,7 @@ export async function POST(req: Request) {
           }
           if (!section) {
             section = await db.section.create({
-              data: { notebookId: data.notebookId, title: t("api.defaultNotesSection"), order: 0 },
+              data: { notebookId: data.notebookId, title: t("reader.defaultSectionTitle"), order: 0 },
             });
           }
           // Every note cites its span of the recording: the topic's blocks

@@ -5,7 +5,7 @@ import { z } from "zod";
 import { authEnabled } from "@/lib/auth";
 import { notebookAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
-import { DERIVATION_MODEL, MAX_OUTPUT_TOKENS } from "@/lib/derive/config";
+import { DERIVATION_MODEL, MAX_OUTPUT_TOKENS, STREAM_ERROR_TOKEN } from "@/lib/derive/config";
 import { loadProfile } from "@/lib/derive/context";
 import { callForJson, modelErrorMessage } from "@/lib/derive/json-call";
 import { ensureAllDigests, ensureDigest } from "@/lib/digest/ensure";
@@ -133,9 +133,30 @@ async function handle(req: Request, t: TFunc) {
         );
         recordUsage(usageMeta, sdkTokens(usage));
       },
-      onError: (err) => console.error("[assistant] stream error:", err),
     });
-    return result.toTextStreamResponse();
+    // A model failure must reach the reader: the stream ends with
+    // STREAM_ERROR_TOKEN + the reason, never a silent empty 200 (the derive
+    // route's pattern).
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream<Uint8Array>({
+      async start(controller) {
+        try {
+          for await (const chunk of result.textStream) {
+            controller.enqueue(encoder.encode(chunk));
+          }
+        } catch (err) {
+          console.error("[assistant] stream error:", err);
+          controller.enqueue(
+            encoder.encode(
+              `${STREAM_ERROR_TOKEN}${t("api.assistantFailed", { reason: modelErrorMessage(err) })}`,
+            ),
+          );
+        } finally {
+          controller.close();
+        }
+      },
+    });
+    return new Response(stream, { headers: { "Content-Type": "text/plain; charset=utf-8" } });
   }
 
   const result = await callForJson({

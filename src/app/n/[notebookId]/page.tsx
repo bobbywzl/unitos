@@ -1,6 +1,7 @@
 import { Logo } from "@/components/logo";
 import { notFound, redirect } from "next/navigation";
 import { authEnabled, currentUser } from "@/lib/auth";
+import { serverT } from "@/lib/i18n/server";
 import { peopleByIds, roleOf } from "@/lib/collab";
 import { matchInText } from "@/lib/anchors/match";
 import { hasContext } from "@/lib/derive/context";
@@ -1081,7 +1082,7 @@ export default async function NotebookPage(props: {
           <div className="flex h-full flex-col items-center justify-center gap-5">
             <Logo size={140} className="text-sand-400" />
             <p className="max-w-sm text-center text-sm text-sand-600">
-              No document open. Upload a PDF, drop one here, or add a URL to start reading.
+              {(await serverT())("panes.noDocumentOpen")}
             </p>
           </div>
         )

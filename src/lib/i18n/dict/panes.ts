@@ -111,6 +111,8 @@ const en = {
   stepSaving: "Saving",
   stepFetchingPage: "Fetching the page",
   stepReadingPage: "Reading the page",
+  noDocumentOpen: "No document open. Upload a PDF, drop one here, or add a URL to start reading.",
+  historyYou: "You",
   // Count details on the progress card's extract step
   detailBlocks: "{n} blocks",
   detailFigures: "{n} figures",
@@ -298,6 +300,8 @@ const zh: Record<keyof typeof en, string> = {
   stepSaving: "保存",
   stepFetchingPage: "获取页面",
   stepReadingPage: "读取页面",
+  noDocumentOpen: "尚未打开文档。上传 PDF、拖入文件，或添加 URL 开始阅读。",
+  historyYou: "你",
   detailBlocks: "{n} 个块",
   detailFigures: "{n} 张插图",
   detailEquations: "{n} 个公式",

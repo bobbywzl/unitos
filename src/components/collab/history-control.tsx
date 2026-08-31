@@ -35,7 +35,7 @@ const REMOVALS = new Set<HistoryEntry["kind"]>([
 export function HistoryControl({ history }: { history: HistoryEntry[] }) {
   const t = useT();
   const lang = useLang();
-  const { people } = useCollab();
+  const { authOn, people } = useCollab();
   const panelRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [personFilter, setPersonFilter] = useState<string | null>(null);
@@ -114,7 +114,10 @@ export function HistoryControl({ history }: { history: HistoryEntry[] }) {
                   <div className="min-w-0 flex-1">
                     <div className="flex items-baseline gap-2">
                       <span className="truncate text-[12px]">
-                        <span className="font-semibold">{person?.name ?? "?"}</span>{" "}
+                        {/* Without sign-in every entry is the local reader's. */}
+                        <span className="font-semibold">
+                          {person?.name ?? (authOn ? "?" : t("panes.historyYou"))}
+                        </span>{" "}
                         <span className="text-sand-600">{t(KIND_KEY[entry.kind])}</span>
                       </span>
                       <span

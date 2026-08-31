@@ -32,7 +32,7 @@ export async function POST(req: Request) {
   if (error) return error;
   // Every corpus starts with a default Notes section.
   const notebook = await db.notebook.create({
-    data: { title: data.title, userId: user.id, sections: { create: { title: "Notes", order: 0 } } },
+    data: { title: data.title, userId: user.id, sections: { create: { title: t("reader.defaultSectionTitle"), order: 0 } } },
   });
   return NextResponse.json(notebook, { status: 201 });
 }

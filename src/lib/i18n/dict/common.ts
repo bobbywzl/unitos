@@ -64,6 +64,10 @@ const en = {
   accountSignedOutBody: "You signed out in another tab.",
   accountContinue: "Continue",
   accountSignIn: "Sign in",
+  // The app-wide 404
+  notFoundTitle: "Page not found",
+  notFoundBody: "This page does not exist, or its link is stale.",
+  notFoundHome: "Back to the shelf",
   // Replies: the discussion under a note, an edit, or a link.
   reply: "Reply",
   replyPlaceholder: "Reply…",
@@ -112,6 +116,9 @@ const zh: Record<keyof typeof en, string> = {
   accountSignedOutBody: "你在另一个标签页退出了登录。",
   accountContinue: "继续",
   accountSignIn: "登录",
+  notFoundTitle: "页面不存在",
+  notFoundBody: "此页面不存在，或链接已失效。",
+  notFoundHome: "返回书架",
   reply: "回复",
   replyPlaceholder: "回复…",
   resolve: "解决",
