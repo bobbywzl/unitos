@@ -176,8 +176,9 @@ const en = {
   // Graph (graph-overlay.tsx, graph-view.tsx)
   graph: "Graph",
   graphTitle: "The project as a graph: documents and the links between them",
-  graphHint: "Each node is a document. A thicker line means more links between two documents; dashed means recommended links awaiting acceptance. Drag to arrange; click a node to open it.",
+  graphHint: "Each node is a document; hover to spotlight its links. A thicker line means more links between two documents; dashed means recommended links awaiting acceptance. Drag to arrange; click a node to open it.",
   graphEmpty: "Attach at least two documents — the graph draws the links between them.",
+  graphCounts: "{docs} documents · {links} link(s)",
 
   // Recommended links (annotations-panel.tsx)
   recommendedLinks: "Recommended links",
@@ -361,8 +362,9 @@ const zh: Record<keyof typeof en, string> = {
 
   graph: "图谱",
   graphTitle: "项目图谱：文档与它们之间的链接",
-  graphHint: "每个节点是一个文档。线越粗表示两个文档之间的链接越多；虚线是待接受的推荐链接。拖动可调整位置；点击节点打开文档。",
+  graphHint: "每个节点是一个文档，悬停可聚焦它的链接。线越粗表示两个文档之间的链接越多；虚线是待接受的推荐链接。拖动可调整位置；点击节点打开文档。",
   graphEmpty: "至少添加两个文档——图谱会画出它们之间的链接。",
+  graphCounts: "{docs} 个文档 · {links} 条链接",
 
   recommendedLinks: "推荐链接",
   recommendedLinksDesc: "AI 已将此文档与项目比对。接受即成为正式链接；不成立的可忽略。",

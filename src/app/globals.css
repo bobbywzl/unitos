@@ -774,3 +774,76 @@ mark,
 .tour-ripple {
   animation: tour-ripple 0.7s ease-out both;
 }
+
+/* ── Graph (SPEC.md §13; release-edu canvas patterns) ───────────────────── */
+
+/* The overlay fades in over the workspace. */
+@keyframes graph-overlay-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.graph-overlay-in {
+  animation: graph-overlay-in 0.25s ease-out both;
+}
+
+/* First open: nodes scatter, then glide into place; edges wait offstage and
+   fade in once the nodes land. */
+.graph-settling .react-flow__node {
+  transition: transform 900ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.corpus-graph .react-flow__edge {
+  transition: opacity 500ms ease;
+}
+.graph-settling .react-flow__edge {
+  opacity: 0;
+}
+
+/* Documents whose recommended links await acceptance breathe on their own
+   rhythm — the living tips of the graph still calling for review. */
+@keyframes graph-node-breathe {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.12);
+  }
+}
+.graph-breathe {
+  animation: graph-node-breathe 4s ease-in-out infinite;
+}
+
+/* Recommended links march their dashes while awaiting acceptance. */
+@keyframes graph-dash-march {
+  to {
+    stroke-dashoffset: -24;
+  }
+}
+.graph-dash-march {
+  animation: graph-dash-march 1.4s linear infinite;
+}
+
+/* reactflow's zoom controls, in the app's palette in both themes. The
+   .corpus-graph prefix outranks reactflow's own stylesheet, which loads
+   after this file. */
+.corpus-graph .react-flow__controls {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: var(--elev-sm);
+}
+.corpus-graph .react-flow__controls-button {
+  background: var(--card);
+  border-bottom: 1px solid var(--line);
+  color: var(--ink);
+}
+.corpus-graph .react-flow__controls-button:hover {
+  background: var(--sand-200);
+}
+.corpus-graph .react-flow__controls-button svg {
+  fill: currentColor;
+}
