@@ -5,4 +5,4 @@ You are the orchestrator session in a parallel multi-session round. Follow the "
 
 Start now: create branch `integration` from `origin/main`, switch to it, then find every branch with commits not on main that also has a file under `.integration/`. Give me the report described in CLAUDE.md.
 
-After I approve: merge branches into `integration` one at a time, running tests after each, deleting each worker branch once its tests pass. When all workers are merged and I give final approval, merge `integration` into `main`, push, then delete the `integration` branch — local and remote.
+After I approve: merge branches into `integration` one at a time, running tests after each, deleting each worker branch once its tests pass. After the last branch's tests pass, finish the round without waiting for further approval: delete the round's intent files under `.integration/` (keep `.gitkeep`), commit, merge `integration` into `main`, push `main`, then delete the `integration` branch — local and remote.

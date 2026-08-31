@@ -45,3 +45,4 @@ Concretely:
 - Report findings first. Wait for explicit approval before merging or editing anything.
 - Merge branches one at a time. Run tests after each merge. Once a branch's tests pass, delete that branch immediately — local and remote — before merging the next one.
 - Never send a conflict back to the worker that wrote the code.
+- After the last branch's tests pass, finish the round without waiting for further approval: delete the round's intent files under `.integration/` (keep `.gitkeep`), commit, merge `integration` into `main`, push `main`, then delete `integration` — local and remote.
