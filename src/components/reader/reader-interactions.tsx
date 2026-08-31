@@ -1226,7 +1226,11 @@ export function ReaderInteractions({
           quotedText: summary.quotedText,
           draft: comment,
           saved: comment,
-          top: markRect.bottom - containerRect.top + container.scrollTop + 8,
+          // Clamped so the action row never lands under the mobile bottom bar.
+          top: Math.min(
+            markRect.bottom - containerRect.top + container.scrollTop + 8,
+            container.scrollTop + container.clientHeight - 240,
+          ),
           left: Math.max(
             12,
             Math.min(
@@ -1456,7 +1460,10 @@ export function ReaderInteractions({
         const width = 280;
         setExtractCard({
           id: extractId,
-          top: rect.bottom - containerRect.top + container.scrollTop + 8,
+          top: Math.min(
+            rect.bottom - containerRect.top + container.scrollTop + 8,
+            container.scrollTop + container.clientHeight - 210,
+          ),
           left: Math.max(
             12,
             Math.min(
@@ -2980,7 +2987,7 @@ export function ReaderInteractions({
       {editHint && !editMode && (
         <div
           onAnimationEnd={() => setEditHint(false)}
-          className="hint-fade pointer-events-none absolute top-16 right-5 z-10 max-w-64 rounded-2xl bg-card px-4 py-2.5 text-[12px] leading-relaxed text-sand-700 shadow-lift"
+          className="hint-fade pointer-events-none absolute top-16 right-5 z-10 max-w-64 rounded-2xl bg-card px-4 py-2.5 text-[12px] leading-relaxed text-sand-700 shadow-lift print:hidden"
         >
           {t("reader.editHint")}
         </div>

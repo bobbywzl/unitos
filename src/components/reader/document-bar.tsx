@@ -471,10 +471,24 @@ export function DocumentBar({
   const menuItem =
     "px-4 py-2 text-left text-sm text-sand-700 hover:bg-clay-100 hover:text-clay-800";
 
+  // On a narrow header the bar scrolls; the open document's pill must be the
+  // visible one. Once per document switch, never while the user scrolls.
+  const barRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    barRef.current
+      ?.querySelector<HTMLElement>("[data-active-pill]")
+      ?.scrollIntoView({ inline: "nearest", block: "nearest" });
+  }, [activeId]);
+
   return (
-    <div className="flex min-w-0 items-center gap-2">
+    <div ref={barRef} className="flex min-w-0 items-center gap-2">
       {documents.map((d) => (
-        <div key={d.id} data-pill-menu className="relative flex shrink-0 items-center">
+        <div
+          key={d.id}
+          data-pill-menu
+          data-active-pill={d.id === activeId || undefined}
+          className="relative flex shrink-0 items-center"
+        >
           <button
             onClick={() => open(d.id)}
             className={`max-w-56 truncate rounded-full pr-8 text-[13px] ${

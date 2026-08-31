@@ -240,7 +240,8 @@ export function ReaderPanes({
         <>
           <div aria-hidden className={view === "stack" ? "h-px shrink-0 bg-line" : "w-px shrink-0 bg-line"} />
           <div ref={paneTwoRef} className="relative min-h-0 min-w-0 flex-1">
-            <div className="absolute top-4 left-4 z-30 max-w-[45%] print:hidden">
+            {/* Below the pane's assistant pill (top-4 left-4), never over it. */}
+            <div className="absolute top-14 left-4 z-30 max-w-[45%] print:hidden">
               <select
                 value={paneTwoId ?? ""}
                 onChange={(e) => go(view, e.target.value)}

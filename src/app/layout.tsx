@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import Script from "next/script";
 import { Caprasimo, Figtree } from "next/font/google";
 import "./globals.css";
 import { FeedbackButton } from "@/components/feedback-button";
@@ -57,7 +58,11 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
       className={`${caprasimo.variable} ${figtree.variable} h-full antialiased`}
     >
       <head>
-        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
+        {/* next/script also runs when a boundary (the 404) client-renders;
+            a raw script tag would be skipped there and logs a React error. */}
+        <Script id="theme-boot" strategy="beforeInteractive">
+          {themeScript}
+        </Script>
       </head>
       <body className="min-h-full flex flex-col">
         <LangProvider lang={lang}>
