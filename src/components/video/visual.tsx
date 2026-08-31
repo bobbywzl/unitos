@@ -1,7 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { api } from "@/lib/api";
+import { useMemo } from "react";
 import { useT } from "@/components/lang-provider";
 import { markdownPreview } from "@/components/markdown";
 import { useVideoThumbnails, type ThumbnailSource } from "@/components/video/use-thumbnails";
@@ -15,6 +14,8 @@ import {
 // the moment it was made, the loop drawn on it, the time range, the note.
 // Clicking a card seeks there and opens what the AI wrote at that moment.
 // The video itself is never modified; this is the visual note layer.
+// Deleting is refused — video content cannot be edited or annotated — so the
+// ✕ only surfaces the pane's notice; saved annotations keep displaying.
 export function Visual({
   source,
   annotations,
@@ -27,20 +28,15 @@ export function Visual({
   onDelete: (noteId: string) => Promise<void>;
 }) {
   const t = useT();
-  const [busyId, setBusyId] = useState<string | null>(null);
   const times = useMemo(() => annotations.map((a) => a.startTime), [annotations]);
   const thumbs = useVideoThumbnails(source, times);
 
   if (annotations.length === 0) return null;
 
+  // Refused: nothing is deleted — onDelete lands on the pane's guard, which
+  // shows the notice.
   async function remove(noteId: string) {
-    setBusyId(noteId);
-    try {
-      await api(`/api/notes/${noteId}`, "DELETE");
-      await onDelete(noteId);
-    } finally {
-      setBusyId(null);
-    }
+    await onDelete(noteId);
   }
 
   return (
@@ -111,10 +107,10 @@ export function Visual({
                 </button>
                 <button
                   onClick={() => void remove(a.noteId)}
-                  disabled={busyId === a.noteId}
+                  aria-disabled
                   aria-label={t("video.deleteAnnotation")}
-                  title={t("video.deleteAnnotation")}
-                  className="rounded-full px-1 text-xs text-sand-400 opacity-0 group-hover/card:opacity-100 hover:text-red-500 disabled:opacity-40"
+                  title={t("video.noEditAnnotate")}
+                  className="cursor-not-allowed rounded-full px-1 text-xs text-sand-400 opacity-0 group-hover/card:opacity-100"
                 >
                   ✕
                 </button>

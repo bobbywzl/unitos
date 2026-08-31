@@ -187,7 +187,7 @@ export const VideoPlayer = forwardRef<
     pendingRegion: Region | null;
     onMetadata: (m: { duration: number; width?: number; height?: number }) => void;
     onTime: (t: number) => void; // ~4 Hz, for the transcript follow-along
-    onAnnotate: () => void; // the pencil button; pane opens the composer
+    onAnnotate: () => void; // the annotate button; the pane refuses and shows its notice
     canAnnotate: boolean; // viewers on a shared corpus: false hides the button
   }
 >(function VideoPlayer(
@@ -794,13 +794,10 @@ export const VideoPlayer = forwardRef<
         {canAnnotate && (
         <button
           onClick={onAnnotate}
+          aria-disabled
           aria-label={t("video.annotate")}
-          title={t("video.annotateTitle")}
-          className={
-            drawing
-              ? "flex size-8 shrink-0 items-center justify-center rounded-full bg-clay text-clay-fg"
-              : CONTROL_BUTTON
-          }
+          title={t("video.noEditAnnotate")}
+          className="flex size-8 shrink-0 cursor-not-allowed items-center justify-center rounded-full text-[color:var(--player-text)] opacity-50"
         >
           <SearchIcon size={17} />
         </button>

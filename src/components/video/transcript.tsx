@@ -7,9 +7,9 @@ import { formatTime, type TranscriptLine, type VideoAnnotationItem } from "@/lib
 
 // The transcript under the player (SPEC.md §11): click a line to seek; the
 // current line highlights and follows playback inside its own scroll box, so
-// the player never moves. Every line is also an anchor — hovering one offers
-// the same tools the player's frame does, and a line already covered by an
-// annotation is tinted and opens it.
+// the player never moves. A line already covered by an annotation is tinted
+// and opens it. The hover tools that would annotate (Comment, Explain) are
+// refused: video content cannot be edited or annotated.
 export function Transcript({
   transcript,
   activeLineId,
@@ -61,6 +61,10 @@ export function Transcript({
 
   const action =
     "rounded-full px-2 py-0.5 text-[11px] font-semibold text-sand-600 hover:bg-clay-100 hover:text-clay-800";
+  // Comment and Explain would annotate, so they read as disabled; clicking
+  // lands on the pane's guard, which shows the notice.
+  const refusedAction =
+    "cursor-not-allowed rounded-full px-2 py-0.5 text-[11px] font-semibold text-sand-400";
 
   return (
     <section className="mt-6">
@@ -118,15 +122,17 @@ export function Transcript({
                   <div className="mt-0.5 flex items-center gap-1 opacity-0 transition-opacity group-hover/line:opacity-100">
                     <button
                       onClick={() => onComment(line)}
-                      className={action}
-                      title={t("video.commentOnLineTitle")}
+                      aria-disabled
+                      className={refusedAction}
+                      title={t("video.noEditAnnotate")}
                     >
                       {t("video.comment")}
                     </button>
                     <button
                       onClick={() => onExplain(line)}
-                      className={action}
-                      title={t("video.explainThisMoment")}
+                      aria-disabled
+                      className={refusedAction}
+                      title={t("video.noEditAnnotate")}
                     >
                       {t("video.explain")}
                     </button>
