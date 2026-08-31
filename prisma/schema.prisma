@@ -173,6 +173,7 @@ model Note {
   status         NoteStatus      @default(ACCEPTED) // manual notes are ACCEPTED on create
   derivationType DerivationType? // null = manually written
   color          String? // manual highlight hue: "clay" | "sage" | "gold"
+  pinned         Boolean         @default(false) // pinning also moves the note to the top of its section
   order          Int
   // Account that wrote the note (or ran the derivation that produced it).
   // Soft reference like Notebook.userId; null = before attribution existed.

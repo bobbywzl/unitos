@@ -98,6 +98,13 @@ export function SectionItem({
           id={`notes-${section.id}`}
           ids={section.notes.map((n) => n.id)}
           onMove={(id, to) => actions.reorderNote(section.id, id, to)}
+          // Dropping a note on the middle of another merges the two.
+          onCombine={canEdit ? (id, intoId) => void actions.mergeNotes(intoId, [id]) : undefined}
+          canCombine={(id, intoId) => {
+            const a = section.notes.find((n) => n.id === id);
+            const b = section.notes.find((n) => n.id === intoId);
+            return a?.status === "ACCEPTED" && b?.status === "ACCEPTED";
+          }}
         >
           {section.notes.map((note) => (
             <SortableItem key={note.id} id={note.id}>

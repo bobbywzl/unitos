@@ -8,6 +8,7 @@ import { ChevronDownIcon, ChevronRightIcon } from "@/components/icons";
 import { useCollab } from "@/components/collab/collab-context";
 import { useT } from "@/components/lang-provider";
 import { NoteCard } from "@/components/outline/note-card";
+import { SelectionBar } from "@/components/outline/selection-bar";
 import { filterSections, type OutlineActions } from "@/components/outline/use-outline";
 
 // The tray is for triage, not reorganizing: pending notes hoist to the top as one
@@ -75,6 +76,8 @@ export function NotesTray({
           {t("outline.emptyTraySuffix")}
         </p>
       )}
+
+      <SelectionBar tree={tree} actions={actions} />
     </div>
   );
 }

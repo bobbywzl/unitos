@@ -22,6 +22,7 @@ export type NoteView = {
   content: string;
   status: NoteStatus;
   derivationType: DerivationType | null;
+  pinned: boolean;
   order: number;
   // Account that wrote the note; null = before attribution existed. The author
   // label renders from this when the corpus is shared.

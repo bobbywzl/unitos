@@ -9,6 +9,7 @@ import { SortableItem, SortableList } from "@/components/sortable";
 import { AddSection } from "@/components/outline/add-section";
 import { NoteCard } from "@/components/outline/note-card";
 import { SectionItem } from "@/components/outline/section-item";
+import { SelectionBar } from "@/components/outline/selection-bar";
 import { filterSections, useOutline } from "@/components/outline/use-outline";
 
 // The notes full page (design 2b): the reorganizing view. Sections carry drag
@@ -98,6 +99,8 @@ export function Outline({ notebook }: { notebook: NotebookView }) {
           </>
         )}
       </div>
+
+      <SelectionBar tree={tree} actions={actions} />
 
       {lastRejected && (
         <div className="fixed bottom-6 left-1/2 z-30 flex -translate-x-1/2 items-center gap-3 rounded-full bg-card px-5 py-2.5 shadow-float">

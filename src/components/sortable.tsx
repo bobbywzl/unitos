@@ -1,5 +1,6 @@
 "use client";
 
+import { createContext, useContext, useRef, useState } from "react";
 import {
   DndContext,
   PointerSensor,
@@ -7,6 +8,7 @@ import {
   useSensor,
   useSensors,
   type DragEndEvent,
+  type DragMoveEvent,
 } from "@dnd-kit/core";
 import {
   SortableContext,
@@ -21,33 +23,90 @@ export type HandleProps = {
   listeners: SortableHook["listeners"];
 };
 
+// The id of the item the dragged item would combine into on drop, or null.
+// Cards read it to draw the combine ring.
+const CombineTargetContext = createContext<string | null>(null);
+export function useCombineTarget() {
+  return useContext(CombineTargetContext);
+}
+
 // One vertical drag-reorder list. Nested lists each get their own SortableList.
 // `id` keeps DndContext aria ids stable across server and client renders.
+// With `onCombine`, dropping an item on the middle band of another combines the
+// two instead of reordering; the edges still reorder. `canCombine` gates pairs.
 export function SortableList({
   id,
   ids,
   onMove,
+  onCombine,
+  canCombine,
   children,
 }: {
   id: string;
   ids: string[];
   onMove: (id: string, toIndex: number) => void;
+  onCombine?: (id: string, intoId: string) => void;
+  canCombine?: (id: string, intoId: string) => boolean;
   children: React.ReactNode;
 }) {
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
+  const [combineTarget, setCombineTarget] = useState<string | null>(null);
+  // The ring must match the drop: handleDragEnd reads the ref, not the state.
+  const combineRef = useRef<string | null>(null);
+
+  function setCombine(target: string | null) {
+    combineRef.current = target;
+    setCombineTarget((prev) => (prev === target ? prev : target));
+  }
+
+  function handleDragMove({ active, over }: DragMoveEvent) {
+    if (!onCombine || !over || over.id === active.id) {
+      setCombine(null);
+      return;
+    }
+    const activeId = String(active.id);
+    const overId = String(over.id);
+    if (canCombine && !canCombine(activeId, overId)) {
+      setCombine(null);
+      return;
+    }
+    const rect = active.rect.current.translated;
+    if (!rect) {
+      setCombine(null);
+      return;
+    }
+    // Middle band of the target: 30% margins top and bottom.
+    const centerY = rect.top + rect.height / 2;
+    const margin = over.rect.height * 0.3;
+    const inBand = centerY > over.rect.top + margin && centerY < over.rect.top + over.rect.height - margin;
+    setCombine(inBand ? overId : null);
+  }
 
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
+    const target = combineRef.current;
+    setCombine(null);
     if (!over || active.id === over.id) return;
+    if (onCombine && target && target !== String(active.id)) {
+      onCombine(String(active.id), target);
+      return;
+    }
     const to = ids.indexOf(String(over.id));
     if (to === -1) return;
     onMove(String(active.id), to);
   }
 
   return (
-    <DndContext id={id} sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+    <DndContext
+      id={id}
+      sensors={sensors}
+      collisionDetection={closestCenter}
+      onDragMove={onCombine ? handleDragMove : undefined}
+      onDragEnd={handleDragEnd}
+      onDragCancel={() => setCombine(null)}
+    >
       <SortableContext items={ids} strategy={verticalListSortingStrategy}>
-        {children}
+        <CombineTargetContext.Provider value={combineTarget}>{children}</CombineTargetContext.Provider>
       </SortableContext>
     </DndContext>
   );

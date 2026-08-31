@@ -9,11 +9,28 @@ import { AuthorChip } from "@/components/collab/person-badge";
 import { ReplyThread } from "@/components/collab/reply-thread";
 import { useT } from "@/components/lang-provider";
 import { Markdown } from "@/components/markdown";
-import { DragHandle, type HandleProps } from "@/components/sortable";
+import { DragHandle, useCombineTarget, type HandleProps } from "@/components/sortable";
 import type { OutlineActions } from "@/components/outline/use-outline";
 
 /** Tray cards sit in the 352px drawer (design 1a); page cards in the 760px column (design 2b). */
 type Variant = "tray" | "page";
+
+function PinIcon({ size = 12 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 17v5" fill="none" strokeWidth="2" />
+      <path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1z" />
+    </svg>
+  );
+}
+
+function TickIcon({ size = 10 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M20 6 9 17l-5-5" />
+    </svg>
+  );
+}
 
 function AnchorIcon({ size = 11 }: { size?: number }) {
   return (
@@ -86,9 +103,14 @@ export function NoteCard({
   const [copied, setCopied] = useState(false);
   const [handledEdit, setHandledEdit] = useState<{ id: string } | null>(null);
   const cardRef = useRef<HTMLDivElement>(null);
+  const combineTarget = useCombineTarget();
   const pending = note.status === "PENDING";
   const focused = pending && actions.focusedPendingId === note.id;
   const tray = variant === "tray";
+  // The ticker: accepted notes can be selected for bulk delete, merge, and pin.
+  const selectable = note.status === "ACCEPTED" && canEdit;
+  const isSelected = actions.selected.has(note.id);
+  const isCombineTarget = combineTarget === note.id && note.status === "ACCEPTED";
 
   // Keyboard queue: `e` on the focused pending note opens the editor.
   // Adjust-during-render; each keypress creates a new request object.
@@ -154,17 +176,49 @@ export function NoteCard({
   // Pending notes are outlined when focused and dimmed when they are further down
   // the queue, so the one the keyboard acts on is unmistakable (design 1a).
   const surface = [
-    "group/note rounded-2xl bg-card shadow-soft",
+    "group/note relative rounded-2xl bg-card shadow-soft",
     tray ? "p-3.5" : "px-[18px] py-4",
     focused ? "outline-2 outline-clay-400" : "",
     pending && !focused ? (tray ? "opacity-82" : "opacity-85") : "",
+    isCombineTarget ? "outline-2 outline-sage-500" : isSelected ? "outline-2 outline-clay-300" : "",
   ]
     .filter(Boolean)
     .join(" ");
 
   return (
-    <div ref={cardRef} data-note-id={note.id} className={surface}>
-      <div className="flex items-start gap-1.5">
+    <div
+      ref={cardRef}
+      data-note-id={note.id}
+      className={surface}
+      title={isCombineTarget ? t("outline.dropToMerge") : undefined}
+    >
+      {note.pinned && (
+        <button
+          onClick={() => canEdit && void actions.setPinned(note.id, false)}
+          title={canEdit ? t("outline.unpin") : t("outline.pinnedLabel")}
+          aria-label={canEdit ? t("outline.unpin") : t("outline.pinnedLabel")}
+          className={`absolute top-2.5 z-10 text-clay hover:text-clay-600 ${selectable ? "right-9" : "right-2.5"}`}
+        >
+          <PinIcon />
+        </button>
+      )}
+      {selectable && (
+        <button
+          onClick={() => actions.toggleSelect(note.id)}
+          role="checkbox"
+          aria-checked={isSelected}
+          aria-label={t("outline.selectNote")}
+          title={t("outline.selectNote")}
+          className={`absolute top-2.5 right-2.5 z-10 flex h-[18px] w-[18px] items-center justify-center rounded-full border transition-colors ${
+            isSelected
+              ? "border-clay bg-clay text-clay-fg opacity-100"
+              : "border-sand-400 bg-card text-transparent opacity-50 hover:border-clay-500 hover:opacity-100"
+          }`}
+        >
+          <TickIcon />
+        </button>
+      )}
+      <div className={`flex items-start gap-1.5 ${selectable || note.pinned ? "pr-6" : ""}`}>
         {handle && (
           <div className="pt-0.5 opacity-0 transition-opacity group-hover/note:opacity-100">
             <DragHandle handle={handle} label={t("outline.reorderNote")} />

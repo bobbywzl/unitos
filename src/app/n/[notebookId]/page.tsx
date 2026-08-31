@@ -734,6 +734,7 @@ export default async function NotebookPage(props: {
       content: n.content,
       status: n.status,
       derivationType: n.derivationType,
+      pinned: n.pinned,
       order: n.order,
       createdById: n.createdById,
       sources: n.sources.map((src) => ({
