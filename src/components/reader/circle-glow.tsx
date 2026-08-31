@@ -37,6 +37,11 @@ export function CircleGlow() {
     function fit() {
       if (!canvas || !ctx) return;
       const dpr = window.devicePixelRatio || 1;
+      // A canvas is a replaced element: inset-0 does not stretch it, so the
+      // attribute size below would become its CSS size and every stroke would
+      // land at dpr times the pointer position. Pin the CSS box to the viewport.
+      canvas.style.width = `${window.innerWidth}px`;
+      canvas.style.height = `${window.innerHeight}px`;
       canvas.width = Math.round(window.innerWidth * dpr);
       canvas.height = Math.round(window.innerHeight * dpr);
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
