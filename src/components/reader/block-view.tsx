@@ -39,6 +39,8 @@ export type Highlight = {
   extractId?: string;
   extractLabel?: string;
   extractOrigin?: boolean;
+  fresh?: boolean; // made in this session: the mark sweeps in left to right
+  freshDelay?: number; // ms before the sweep starts; staggers a layer's spans
 };
 
 function anchorClass(color: string | null | undefined): string {
@@ -193,6 +195,9 @@ function markedText(text: string, highlights: Highlight[], t: TFunc) {
               ? "extract-origin-mark"
               : "extract-mark"
             : "salience-mark";
+      // The highlight that gave the segment its class also decides the sweep:
+      // fresh marks sweep in left to right (globals.css .mark-sweep).
+      const painted = simplify ?? anchor ?? extract ?? salience;
       parts.push(
         <mark
           key={from}
@@ -210,7 +215,12 @@ function markedText(text: string, highlights: Highlight[], t: TFunc) {
                 }
               : undefined
           }
-          className={`${markClass}${anchors.length > 1 ? " hl-stacked" : ""} rounded-[4px] ${focusable ? "annotation-mark" : ""}${editedClass}`}
+          className={`${markClass}${anchors.length > 1 ? " hl-stacked" : ""}${painted?.fresh ? " mark-sweep" : ""} rounded-[4px] ${focusable ? "annotation-mark" : ""}${editedClass}`}
+          style={
+            painted?.fresh && painted.freshDelay
+              ? { animationDelay: `${painted.freshDelay}ms` }
+              : undefined
+          }
         >
           {segment}
         </mark>,

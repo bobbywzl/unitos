@@ -4,9 +4,10 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { useImeGuard } from "@/lib/ime";
-import { SparkleIcon, SpinnerIcon } from "@/components/icons";
+import { SparkleIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { Markdown } from "@/components/markdown";
+import { ThinkingIndicator } from "@/components/thinking";
 import { runFormalize } from "@/lib/video/formalize-client";
 import type { AssistantPlan, FormalizedArticle, FormalizeFormat } from "@/lib/types";
 
@@ -180,12 +181,7 @@ export function MediaAssistant({
               </div>
             ),
           )}
-          {busy && (
-            <p className="flex items-center gap-2 text-xs text-sand-500">
-              <SpinnerIcon size={13} className="text-clay motion-safe:animate-spin" />
-              {t("common.working")}
-            </p>
-          )}
+          {busy && <ThinkingIndicator className="text-xs" />}
         </div>
       )}
 
