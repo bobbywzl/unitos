@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { PlusIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { BlockView, type BlockData, type Highlight } from "@/components/reader/block-view";
+import { CircleGlow } from "@/components/reader/circle-glow";
 
 const TEXT_TYPES = new Set(["PARAGRAPH", "HEADING", "LIST", "CODE", "EQUATION"]);
 
@@ -136,6 +137,7 @@ export function Reader({
   font,
   stylesByBlock,
   editedByBlock,
+  documentId,
   onSaveText,
   onFormatBlock,
   onToggleStyle,
@@ -149,6 +151,7 @@ export function Reader({
   font: string | null;
   stylesByBlock: Record<string, StyleSpan[]>;
   editedByBlock: Record<string, { start: number; end: number }[]>;
+  documentId?: string; // PDF figure blocks render their page via the figure image route
   onSaveText: (blockId: string, text: string) => Promise<void>;
   onFormatBlock: (blockId: string, kind: Kind, text?: string) => Promise<void>;
   onToggleStyle: (blockId: string, start: number, end: number, style: ToggleStyleKind) => Promise<void>;
@@ -310,6 +313,7 @@ export function Reader({
 
   return (
     <div className="relative">
+      <CircleGlow />
       {mode === "edit" && (
         <div className="sticky top-3 z-30 mx-auto flex w-fit items-center gap-0.5 rounded-full bg-card px-2 py-1.5 shadow-float print:hidden">
           {(
@@ -394,7 +398,7 @@ export function Reader({
                   onFocusBlock={setFocusedBlockId}
                 />
               ) : (
-                <BlockView block={block} highlights={[]} />
+                <BlockView block={block} highlights={[]} documentId={documentId} />
               )}
               <div className="relative -my-1.5 h-3">
                 <button
@@ -418,6 +422,7 @@ export function Reader({
               key={block.id}
               block={block}
               highlights={highlightsByBlock[block.id]}
+              documentId={documentId}
             />
           ),
         )}

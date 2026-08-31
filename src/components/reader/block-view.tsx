@@ -1,6 +1,7 @@
 "use client";
 
 import type { BlockType } from "@prisma/client";
+import { useState } from "react";
 import { LinkIcon, UnlinkIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { Equation } from "@/components/reader/equation";
@@ -387,14 +388,34 @@ function HighlightLabel({ anchors }: { anchors: Highlight[] }) {
   );
 }
 
+// A PDF figure's visual: its page rendered by the figure image route. alt is
+// empty and the image hides on error (page null, old document), so the block's
+// DOM text stays exactly the caption (SPEC.md §5).
+function FigureImage({ documentId, blockId }: { documentId: string; blockId: string }) {
+  const [failed, setFailed] = useState(false);
+  if (failed) return null;
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={`/api/documents/${documentId}/figure/${blockId}`}
+      alt=""
+      loading="lazy"
+      onError={() => setFailed(true)}
+      className="mb-3 max-h-[28rem] object-contain"
+    />
+  );
+}
+
 // Text blocks render block.text verbatim so DOM text content matches stored text
 // (anchor offsets depend on this, SPEC.md §5). Tables and figures render sanitized html.
 export function BlockView({
   block,
   highlights = [],
+  documentId,
 }: {
   block: BlockData;
   highlights?: Highlight[];
+  documentId?: string;
 }) {
   const t = useT();
   const shared = "reader-block";
@@ -505,6 +526,24 @@ export function BlockView({
               className={`${shared} reader-figure my-4 ${htmlHighlighted}`}
               dangerouslySetInnerHTML={{ __html: block.html }}
             />
+            {figureAnchors.length > 0 && <HighlightLabel anchors={figureAnchors} />}
+          </div>
+        );
+      }
+      // A PDF figure: the image route renders its page; the caption stays the
+      // block's only DOM text (SPEC.md §5). Without a documentId, or when the
+      // route 404s (page null), only the caption renders.
+      if (documentId) {
+        return (
+          <div className="relative">
+            <div
+              data-block-id={block.id}
+              data-source-id={firstSourceId}
+              className={`${shared} reader-figure my-4 ${htmlHighlighted}`}
+            >
+              <FigureImage documentId={documentId} blockId={block.id} />
+              <p className="text-sm text-sand-600 italic">{content}</p>
+            </div>
             {figureAnchors.length > 0 && <HighlightLabel anchors={figureAnchors} />}
           </div>
         );

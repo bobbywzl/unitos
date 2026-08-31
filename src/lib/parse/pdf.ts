@@ -1433,6 +1433,8 @@ export async function parsePdf(
     });
     const block: ParsedBlock = { type: s.type, text: s.text };
     if (s.html) block.html = s.html;
+    // FIGURE blocks keep their page (1-based) for the figure image route.
+    if (s.type === "FIGURE") block.page = s.page + 1;
     const allLinks = [...(s.links ?? []), ...links];
     if (styles.length > 0) block.styles = styles;
     if (allLinks.length > 0) block.links = allLinks;
