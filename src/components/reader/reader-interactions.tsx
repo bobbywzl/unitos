@@ -28,7 +28,7 @@ import { readNdjson } from "@/lib/ndjson";
 import { parseYouTubeId, youtubeWatchUrl } from "@/lib/video/youtube";
 import type { TFunc, TKey } from "@/lib/i18n/dictionaries";
 import { useLang, useT } from "@/components/lang-provider";
-import { MicIcon, SparkleIcon, SpinnerIcon, StopIcon, VolumeIcon } from "@/components/icons";
+import { LinkIcon, MicIcon, SparkleIcon, SpinnerIcon, StopIcon, VolumeIcon } from "@/components/icons";
 import { Markdown } from "@/components/markdown";
 import { LoadingDots, ThinkingIndicator } from "@/components/thinking";
 import type { BlockData, Highlight } from "@/components/reader/block-view";
@@ -45,6 +45,9 @@ type Popover = {
   y: number;
   yTop: number;
   textLeft: number;
+  // Container coords of the end of the selection: the Close link chip sits there.
+  endLeft: number;
+  endTop: number;
   truncated: boolean; // selection crossed into another paragraph; anchor covers the first
   figure?: boolean; // opened by the hold-and-circle gesture on a figure; no Simplify or Distill
   term?: boolean; // opened by clicking a key term; Extract leads, recommended
@@ -54,6 +57,40 @@ type Popover = {
   rightBase: number;
   cw: number;
 };
+
+type PendingLink = { fromDocumentId: string; anchor: Anchor };
+
+// Opening another document is a navigation that remounts the reader, so a
+// pending link held only in state died there — links could close only inside
+// one article or an already-open split view. sessionStorage keeps the pending
+// link per tab across that remount; scoped to one project, so another
+// project's leftover never restores.
+const PENDING_LINK_STORE = "unitos-pending-link";
+
+function readStoredPendingLink(notebookId: string): PendingLink | null {
+  try {
+    const raw = sessionStorage.getItem(PENDING_LINK_STORE);
+    if (!raw) return null;
+    const stored = JSON.parse(raw) as Partial<PendingLink> & { notebookId?: string };
+    if (stored.notebookId !== notebookId) return null;
+    if (!stored.fromDocumentId || !stored.anchor?.blockId || !stored.anchor.quotedText) return null;
+    return { fromDocumentId: stored.fromDocumentId, anchor: stored.anchor as Anchor };
+  } catch {
+    return null;
+  }
+}
+
+function storePendingLink(notebookId: string, pending: PendingLink | null) {
+  try {
+    if (pending) {
+      sessionStorage.setItem(PENDING_LINK_STORE, JSON.stringify({ notebookId, ...pending }));
+    } else {
+      sessionStorage.removeItem(PENDING_LINK_STORE);
+    }
+  } catch {
+    // Storage can be unavailable (private mode); the link then lives in memory only.
+  }
+}
 
 // Hold the pointer on a figure and draw a small circle: the figure's tools open.
 // Total turning angle ≥ 300° reads as a circle; a straight drag never does.
@@ -518,29 +555,49 @@ export function ReaderInteractions({
 
   // Two-ended linking: the first selection waits here while the reader finds
   // the other end — in this document, another attached document, or the other
-  // pane in a split view. Panes share the pending link through a window event.
-  const [pendingLink, setPendingLink] = useState<{
-    fromDocumentId: string;
-    anchor: Anchor;
-  } | null>(null);
-  const pendingLinkRef = useRef<{ fromDocumentId: string; anchor: Anchor } | null>(null);
+  // pane in a split view. Panes share the pending link through a window event;
+  // sessionStorage carries it across the remount a document switch causes.
+  const [pendingLink, setPendingLink] = useState<PendingLink | null>(null);
+  const pendingLinkRef = useRef<PendingLink | null>(null);
   pendingLinkRef.current = pendingLink;
   const documentIdRef = useRef(documentId);
   documentIdRef.current = documentId;
+  // With a link pending, highlighting text shows this chip at the end of the
+  // highlight; pressing it closes the link there.
+  const [closeLink, setCloseLink] = useState<{
+    anchor: Anchor;
+    left: number;
+    top: number;
+  } | null>(null);
 
-  function broadcastPendingLink(next: { fromDocumentId: string; anchor: Anchor } | null) {
+  function broadcastPendingLink(next: PendingLink | null) {
     setPendingLink(next);
     pendingLinkRef.current = next;
+    storePendingLink(notebookId, next);
     window.dispatchEvent(new CustomEvent("dissect:pending-link", { detail: next }));
   }
   useEffect(() => {
     const onPending = (e: Event) => {
-      const next = (e as CustomEvent<{ fromDocumentId: string; anchor: Anchor } | null>).detail;
+      const next = (e as CustomEvent<PendingLink | null>).detail;
       setPendingLink(next ?? null);
       pendingLinkRef.current = next ?? null;
+      if (!next) setCloseLink(null);
     };
     window.addEventListener("dissect:pending-link", onPending);
     return () => window.removeEventListener("dissect:pending-link", onPending);
+  }, []);
+  // Restore a pending link this tab holds — the reader started it, opened this
+  // document, and still has to close it here. Post-hydration restore on
+  // purpose: sessionStorage is client-only, so the SSR pass must render
+  // without the pending link.
+  useEffect(() => {
+    if (pendingLinkRef.current) return;
+    const stored = readStoredPendingLink(notebookId);
+    if (!stored) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setPendingLink(stored);
+    pendingLinkRef.current = stored;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // A highlight's broken chain starts a link from that highlight. Only the
@@ -569,6 +626,7 @@ export function ReaderInteractions({
         };
         setPendingLink(next);
         pendingLinkRef.current = next;
+        storePendingLink(notebookId, next);
         window.dispatchEvent(new CustomEvent("dissect:pending-link", { detail: next }));
         showToast(t("reader.completeLinkToast"));
         return;
@@ -576,7 +634,7 @@ export function ReaderInteractions({
     };
     window.addEventListener("dissect:start-link", onStartLink);
     return () => window.removeEventListener("dissect:start-link", onStartLink);
-  }, [t]);
+  }, [t, notebookId]);
 
   // The assistant as an actor: a command becomes a plan; the plan runs after
   // approval, or immediately when the reader toggled auto.
@@ -628,7 +686,8 @@ export function ReaderInteractions({
     assistantChat !== null ||
     annotationCard !== null ||
     commentCard !== null ||
-    extractCard !== null;
+    extractCard !== null ||
+    closeLink !== null;
   // The mouseup that ends a hold-and-circle gesture must not run selection
   // capture — it would replace the figure popover it just opened.
   const suppressNextMouseUp = useRef(false);
@@ -761,6 +820,7 @@ export function ReaderInteractions({
     setPrevDocumentId(documentId);
     setPopover(null);
     setSubmenu(null);
+    setCloseLink(null);
     setBubble(null);
     setSimplifyCard(null);
     setAssistantChat(null);
@@ -829,6 +889,15 @@ export function ReaderInteractions({
 
     const rect = range.getBoundingClientRect();
     const containerRect = container.getBoundingClientRect();
+    // The end of the selection is the last drawn line's right edge — the
+    // bounding rect's right is the widest line, not the end.
+    const lineRects = Array.from(range.getClientRects()).filter((r) => r.width > 0 && r.height > 0);
+    const endRect = lineRects[lineRects.length - 1] ?? rect;
+    const endLeft = Math.max(
+      8,
+      Math.min(endRect.right - containerRect.left + 6, containerRect.width - 110),
+    );
+    const endTop = endRect.top + endRect.height / 2 - containerRect.top + container.scrollTop;
     const rawX = rect.left + rect.width / 2 - containerRect.left;
     const margin = Math.min(240, containerRect.width / 2);
     const articleRect = container.querySelector("article")?.getBoundingClientRect();
@@ -851,6 +920,8 @@ export function ReaderInteractions({
       y: rect.bottom - containerRect.top + container.scrollTop + 6,
       yTop,
       textLeft,
+      endLeft,
+      endTop,
       truncated,
       side,
       rightBase: articleRight + 10,
@@ -874,6 +945,7 @@ export function ReaderInteractions({
         setCommentCard(null);
         setAnnotationCard(null);
         setExtractCard(null);
+        setCloseLink(null);
         window.getSelection()?.removeAllRanges();
         return;
       }
@@ -923,11 +995,13 @@ export function ReaderInteractions({
             return;
           }
         }
-        // A pending link closes on the next highlighted text — no menu step.
+        // A pending link waits on the next highlighted text: the Close link
+        // chip shows at the end of the highlight, and pressing it closes the
+        // link there. No auto-close — an accidental selection creates nothing.
         if (captured && pendingLinkRef.current) {
           setPopover(null);
           setSubmenu(null);
-          void completeLinkTo(captured.anchor);
+          setCloseLink({ anchor: captured.anchor, left: captured.endLeft, top: captured.endTop });
           return;
         }
         // captureSelection bails on math blocks — the rendered KaTeX text is
@@ -952,6 +1026,7 @@ export function ReaderInteractions({
         }
         setPopover(captured);
         setSubmenu(null);
+        setCloseLink(null);
         setCommentDraft("");
       });
     };
@@ -974,7 +1049,7 @@ export function ReaderInteractions({
         if (captured && pendingLinkRef.current) {
           setPopover(null);
           setSubmenu(null);
-          void completeLinkTo(captured.anchor);
+          setCloseLink({ anchor: captured.anchor, left: captured.endLeft, top: captured.endTop });
           return;
         }
         setPopover(captured);
@@ -1505,6 +1580,8 @@ export function ReaderInteractions({
         y: rect.bottom - containerRect.top + container.scrollTop + 6,
         yTop,
         textLeft: articleRect ? articleRect.left - containerRect.left + 24 : 24,
+        endLeft: Math.max(8, Math.min(rect.right - containerRect.left + 6, containerRect.width - 110)),
+        endTop: rect.top + rect.height / 2 - containerRect.top + container.scrollTop,
         truncated: false,
         term: true,
         side,
@@ -1708,6 +1785,8 @@ export function ReaderInteractions({
       y: y + 8,
       yTop: Math.max(8, y - 8),
       textLeft: Math.min(clientX - containerRect.left + 130, containerRect.width - 20),
+      endLeft: Math.max(8, Math.min(clientX - containerRect.left + 6, containerRect.width - 110)),
+      endTop: y,
       truncated: false,
       side: "left",
       rightBase: containerRect.width - 130,
@@ -2415,6 +2494,7 @@ export function ReaderInteractions({
         toAnchor: to,
       });
       broadcastPendingLink(null);
+      setCloseLink(null);
       window.getSelection()?.removeAllRanges();
       router.refresh();
       showToast(t("reader.linkCreated"));
@@ -2434,6 +2514,13 @@ export function ReaderInteractions({
       setPopover(null);
       setSubmenu(null);
     }
+  }
+
+  // The Close link chip's press: the chip's highlight is the other end. On
+  // failure the chip stays for another try; the banner's ✕ still cancels.
+  async function completeCloseLink() {
+    if (!closeLink) return;
+    await completeLinkTo(closeLink.anchor);
   }
 
   // The assistant engine: command → server-validated plan → approval → the
@@ -3354,9 +3441,10 @@ export function ReaderInteractions({
             <button
               disabled={busy}
               onClick={() => void completeLink()}
-              className="flex w-full items-center rounded-full bg-sage-600 px-2.5 py-[5px] text-left text-[12px] font-semibold text-sage-fg hover:bg-sage-700 disabled:opacity-40"
+              className="flex w-full items-center gap-1.5 rounded-full bg-sage-600 px-2.5 py-[5px] text-left text-[12px] font-semibold text-sage-fg hover:bg-sage-700 disabled:opacity-40"
             >
-              {t("reader.linkHere")}
+              <LinkIcon size={11} />
+              {t("reader.closeLink")}
             </button>
           )}
 
@@ -3615,6 +3703,24 @@ export function ReaderInteractions({
             </button>
           </div>
         </div>
+      )}
+
+      {closeLink && (
+        <button
+          data-selection-popover
+          disabled={busy}
+          onMouseDown={(e) => e.preventDefault()} // keep the highlight alive under the press
+          onClick={() => void completeCloseLink()}
+          className="absolute z-20 flex -translate-y-1/2 items-center gap-1.5 rounded-full bg-sage-600 px-2.5 py-1 text-[11.5px] font-semibold text-sage-fg shadow-float hover:bg-sage-700 disabled:opacity-40"
+          style={{ left: closeLink.left, top: closeLink.top }}
+        >
+          {busy ? (
+            <SpinnerIcon size={10} className="motion-safe:animate-spin" />
+          ) : (
+            <LinkIcon size={10} />
+          )}
+          {t("reader.closeLink")}
+        </button>
       )}
 
       {bubble && (
