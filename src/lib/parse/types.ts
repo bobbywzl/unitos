@@ -45,6 +45,7 @@ export type ParsedBlock = {
   type: BlockType;
   text: string;
   html?: string;
+  page?: number; // FIGURE blocks from a PDF: 1-based page, for the figure image route
   citations?: CitationSpan[];
   styles?: StyleSpan[];
   links?: LinkSpan[];

@@ -348,6 +348,7 @@ model Block {
   startTime    Float?
   endTime      Float?
   links        Json? // link spans: [{start, end, quotedText, targetOrder?, href?}] — Contents entries and PDF hyperlinks
+  page         Int? // FIGURE blocks from a PDF: 1-based page, for the figure image route
 }
 
 enum BlockType {

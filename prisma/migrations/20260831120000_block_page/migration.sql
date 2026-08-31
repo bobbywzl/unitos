@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "Block" ADD COLUMN IF NOT EXISTS "page" INTEGER;
