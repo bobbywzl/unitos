@@ -34,6 +34,7 @@ const MODEL_PRICING: Record<string, Price> = {
   // Groq: per-hour transcription — its caller passes costUsd directly.
   "whisper-large-v3-turbo": price(0, 0),
   "gpt-4o-mini-tts": price(0.6, 12),
+  "text-embedding-3-small": price(0.02, 0),
 };
 
 /** Family fallbacks for ids not priced exactly; first match wins. */

@@ -1183,6 +1183,28 @@ export function ReaderInteractions({
     tryScroll();
   }, [linkParam]);
 
+  // Search result navigation: ?block=<blockId> scrolls to the block and flashes it.
+  const blockParam = searchParams.get("block");
+  useEffect(() => {
+    if (!blockParam) return;
+    const container = containerRef.current;
+    if (!container) return;
+    let attempts = 0;
+    const tryScroll = () => {
+      const el = container.querySelector<HTMLElement>(
+        `[data-block-id="${blockParam}"], [data-edit-block="${blockParam}"]`,
+      );
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        el.classList.add("anchor-flash");
+        setTimeout(() => el.classList.remove("anchor-flash"), 2000);
+      } else if (attempts++ < 10) {
+        setTimeout(tryScroll, 200);
+      }
+    };
+    tryScroll();
+  }, [blockParam]);
+
   // Jump from the Annotations panel: works even when ?src is already this anchor.
   useEffect(() => {
     const onFlash = (e: Event) => {

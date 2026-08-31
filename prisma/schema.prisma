@@ -351,6 +351,9 @@ model Block {
   startTime    Float?
   endTime      Float?
   links        Json? // link spans: [{start, end, quotedText, targetOrder?, href?}] — Contents entries and PDF hyperlinks
+  // Semantic search vector (text-embedding-3-small, 1024 dims). Null = not
+  // embedded yet; the search route backfills lazily, a text edit clears it.
+  embedding    Unsupported("vector(1024)")?
 }
 
 enum BlockType {

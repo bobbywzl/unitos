@@ -189,6 +189,10 @@ const en = {
   recommendLinksDone: "{n} recommended link(s) found",
   recommendLinksNone: "No new connections found",
 
+  // Project search (project-search.tsx)
+  searchProject: "Search the project",
+  searchProjectTitle: "Search every document in the project by meaning",
+  searchNoMatches: "No passages match \u201c{query}\u201d.",
   // Project distillation (corpus-distill-page.tsx)
   distillCorpus: "Distill the project",
   corpusAskPlaceholder: "What should this project answer?",
@@ -369,6 +373,9 @@ const zh: Record<keyof typeof en, string> = {
   recommendLinksDone: "找到 {n} 条推荐链接",
   recommendLinksNone: "没有发现新的链接",
 
+  searchProject: "搜索项目",
+  searchProjectTitle: "按语义搜索项目中的每篇文档",
+  searchNoMatches: "没有匹配“{query}”的片段。",
   distillCorpus: "提炼项目",
   corpusAskPlaceholder: "这个项目应该回答什么？",
   corpusAskHint: "一个问题。AI 扫描项目中的每个文档，找出回答它的引文，每条引文注明所在文档。",

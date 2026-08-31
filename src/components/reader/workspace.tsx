@@ -23,6 +23,7 @@ import { ShareControl } from "@/components/collab/share-control";
 import { useNotebookSync } from "@/components/collab/use-sync";
 import { GraphOverlay } from "@/components/graph/graph-overlay";
 import { CorpusDistillPage } from "@/components/reader/corpus-distill-page";
+import { ProjectSearch } from "@/components/reader/project-search";
 import { ContextTab, type ContextValues } from "@/components/context-tab";
 import { GuideDialog } from "@/components/guide-dialog";
 import { useT } from "@/components/lang-provider";
@@ -205,6 +206,7 @@ export function Workspace({
             activeId={activeDocumentId}
           />
         </div>
+        <ProjectSearch notebookId={notebook.id} />
         <ShareControl notebookId={notebook.id} presence={presence} />
         <div className="hidden md:block">
           <HistoryControl history={history} />
