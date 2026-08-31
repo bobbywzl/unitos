@@ -2972,6 +2972,7 @@ export function ReaderInteractions({
       <Reader
         title={title}
         blocks={blocks}
+        documentId={documentId}
         highlightsByBlock={highlightsByBlock}
         mode={editMode ? "edit" : "read"}
         font={font}
