@@ -899,12 +899,44 @@ export function ReaderInteractions({
       if (document.activeElement?.closest("[data-selection-popover]")) return;
       requestAnimationFrame(() => {
         const captured = captureSelection();
+        // Video documents' blocks refuse annotation outright: a selection over
+        // one shows the refusal instead of tools.
+        if (captured) {
+          const block = blocksRef.current.find((b) => b.id === captured.anchor.blockId);
+          if (block && (block.type === "VIDEO" || block.type === "TRANSCRIPT")) {
+            window.getSelection()?.removeAllRanges();
+            setPopover(null);
+            setSubmenu(null);
+            showToast(t("reader.videoNoEditAnnotate"));
+            return;
+          }
+        }
         // A pending link closes on the next highlighted text — no menu step.
         if (captured && pendingLinkRef.current) {
           setPopover(null);
           setSubmenu(null);
           void completeLinkTo(captured.anchor);
           return;
+        }
+        // captureSelection bails on math blocks — the rendered KaTeX text is
+        // not the stored TeX — which left equations mute under a selection
+        // attempt. Detect that case and open the whole-equation tools instead.
+        if (!captured && event.detail < 2) {
+          const selection = window.getSelection();
+          const startNode =
+            selection && selection.rangeCount > 0 ? selection.getRangeAt(0).startContainer : null;
+          const startEl = startNode instanceof Element ? startNode : (startNode?.parentElement ?? null);
+          const targetEl = event.target instanceof Element ? event.target : null;
+          const mathId = (startEl?.closest<HTMLElement>("[data-math-block]") ??
+            targetEl?.closest<HTMLElement>("[data-math-block]"))?.dataset.blockId;
+          const mathBlock = mathId ? blocksRef.current.find((b) => b.id === mathId) : undefined;
+          if (mathId && mathBlock?.type === "EQUATION") {
+            openFigureTools(mathId, event.clientX, event.clientY);
+            // openFigureTools arms the gesture path's mouseup suppression; this
+            // call already is the mouseup, so disarm it.
+            suppressNextMouseUp.current = false;
+            return;
+          }
         }
         setPopover(captured);
         setSubmenu(null);
@@ -932,6 +964,11 @@ export function ReaderInteractions({
       const block = blocksRef.current.find((b) => b.id === blockId);
       if (!block || block.type === "FIGURE" || block.type === "TABLE" || block.type === "SEPARATOR")
         return;
+      // Video documents' blocks refuse edits outright.
+      if (block.type === "VIDEO" || block.type === "TRANSCRIPT") {
+        showToast(t("reader.videoNoEditAnnotate"));
+        return;
+      }
       window.getSelection()?.removeAllRanges();
       setPopover(null);
       setSubmenu(null);
@@ -961,7 +998,7 @@ export function ReaderInteractions({
     };
     container.addEventListener("dblclick", onDblClick);
     return () => container.removeEventListener("dblclick", onDblClick);
-  }, []);
+  }, [t]);
 
   // Connector lines: each open tool block gets a faint line from the edge of
   // its highlighted text to the card, so the correspondence is visible even
@@ -1046,6 +1083,11 @@ export function ReaderInteractions({
       const block = blocksRef.current.find((b) => b.id === blockId);
       return block && (block.type === "FIGURE" || block.type === "EQUATION") ? blockId : null;
     };
+    // Glow seam: a sibling layer renders the visual effect from these events.
+    // Emitted only while a figure/equation block is tracked, in viewport coords.
+    const emitGlow = (phase: "start" | "move" | "end", x: number, y: number, blockId: string) => {
+      window.dispatchEvent(new CustomEvent("dissect:circle-glow", { detail: { phase, x, y, blockId } }));
+    };
     const onDown = (e: PointerEvent) => {
       if (e.button !== 0) return;
       const blockId = figureAt(e.target as Element);
@@ -1059,6 +1101,7 @@ export function ReaderInteractions({
         minY: e.clientY,
         maxY: e.clientY,
       };
+      emitGlow("start", e.clientX, e.clientY, blockId);
     };
     const onMove = (e: PointerEvent) => {
       if (!tracking || e.pointerId !== tracking.pointerId) return;
@@ -1067,18 +1110,22 @@ export function ReaderInteractions({
       tracking.maxX = Math.max(tracking.maxX, e.clientX);
       tracking.minY = Math.min(tracking.minY, e.clientY);
       tracking.maxY = Math.max(tracking.maxY, e.clientY);
+      emitGlow("move", e.clientX, e.clientY, tracking.blockId);
       // Spread out past a hand-sized area = a drag or a scroll, not a circle.
       if (tracking.maxX - tracking.minX > 320 || tracking.maxY - tracking.minY > 320) {
+        emitGlow("end", e.clientX, e.clientY, tracking.blockId);
         tracking = null;
         return;
       }
       if (tracking.points.length >= 12 && circleSweepDegrees(tracking.points) >= 300) {
         const { blockId } = tracking;
         tracking = null;
+        emitGlow("end", e.clientX, e.clientY, blockId);
         openFigureTools(blockId, e.clientX, e.clientY);
       }
     };
-    const onUp = () => {
+    const onUp = (e: PointerEvent) => {
+      if (tracking) emitGlow("end", e.clientX, e.clientY, tracking.blockId);
       tracking = null;
     };
     const onDragStart = (e: DragEvent) => {
@@ -3094,7 +3141,11 @@ export function ReaderInteractions({
           )}
           {popover.figure && (
             <p className="px-2.5 py-1 text-[10.5px] leading-snug text-sand-500">
-              {t("reader.figureTools")}
+              {t(
+                blocks.find((b) => b.id === popover.anchor.blockId)?.type === "EQUATION"
+                  ? "reader.equationTools"
+                  : "reader.figureTools",
+              )}
             </p>
           )}
           {popover.term && (
