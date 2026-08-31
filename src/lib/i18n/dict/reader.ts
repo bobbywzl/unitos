@@ -14,7 +14,7 @@ const en = {
   highlight: "Highlight",
   addTo: "Add to ▾",
   linkAcrossTexts: "Link across texts",
-  linkHere: "Link here",
+  closeLink: "Close link",
   recommended: "Recommended",
   keyTerm: "Key term",
   figureTools: "Figure tools",
@@ -114,13 +114,13 @@ const en = {
   kindH3: "h3",
 
   // Pending link banner
-  linkingBanner: "Linking “{quote}” from {source} — select the other end, then press Link here",
+  linkingBanner: "Linking “{quote}” from {source} — select the other end, then press Close link",
   thisDocument: "this document",
   anotherDocument: "another document",
   cancelLink: "Cancel the link",
 
   // Toasts and errors
-  completeLinkToast: "Highlight the other end to complete the link.",
+  completeLinkToast: "Select the other end — in this or another document — then press Close link.",
   linkCreated: "Link created",
   linkFailed: "Link failed",
   samePassage: "Select a different passage for the other end.",
@@ -187,7 +187,7 @@ const zh: Record<keyof typeof en, string> = {
   highlight: "高亮",
   addTo: "添加到 ▾",
   linkAcrossTexts: "跨文本链接",
-  linkHere: "链接到此",
+  closeLink: "闭合链接",
   recommended: "推荐",
   keyTerm: "关键术语",
   figureTools: "插图工具",
@@ -284,13 +284,13 @@ const zh: Record<keyof typeof en, string> = {
   kindH3: "三级标题",
 
   // Pending link banner
-  linkingBanner: "正在链接来自{source}的“{quote}”——选中另一端，再按“链接到此”",
+  linkingBanner: "正在链接来自{source}的“{quote}”——选中另一端，再按“闭合链接”",
   thisDocument: "本文档",
   anotherDocument: "另一文档",
   cancelLink: "取消链接",
 
   // Toasts and errors
-  completeLinkToast: "选中另一端即可完成链接。",
+  completeLinkToast: "在本文档或其他文档中选中另一端，再按“闭合链接”。",
   linkCreated: "链接已创建",
   linkFailed: "链接失败",
   samePassage: "另一端请选择不同的片段。",
