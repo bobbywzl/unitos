@@ -81,6 +81,7 @@ const en = {
   noStoredArticle: "This document has no article yet. Formalize the transcript first.",
   youtubeUnavailable:
     "This YouTube video did not load. It may be private, removed, or embedding-disabled.",
+  mediaUnavailable: "This media link did not load. The file may be private, removed, or blocked.",
   unreadableContent: "No readable content was found on this page.",
   reparseFailedReason: "Re-parse failed. {reason}",
   exportCitation: "{title}, block {blockId}",
@@ -229,6 +230,7 @@ const zh: Record<keyof typeof en, string> = {
   formalizeNeedsTranscript: "请先生成逐字稿——整理改写的是逐字稿",
   noStoredArticle: "该文档还没有文章。请先整理逐字稿。",
   youtubeUnavailable: "这个 YouTube 视频无法加载。它可能已设为私密、被删除或禁止嵌入。",
+  mediaUnavailable: "这个媒体链接无法加载。文件可能已设为私密、被删除或被拦截。",
   unreadableContent: "此页面上没有找到可读取的内容。",
   reparseFailedReason: "重新解析失败。{reason}",
   exportCitation: "{title}，块 {blockId}",

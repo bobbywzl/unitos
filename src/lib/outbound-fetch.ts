@@ -14,6 +14,7 @@ export type OutboundResponse = {
   ok: boolean;
   status: number;
   headers: { get(name: string): string | null };
+  body: ReadableStream<Uint8Array> | null;
   text(): Promise<string>;
   json(): Promise<unknown>;
   arrayBuffer(): Promise<ArrayBuffer>;
@@ -31,7 +32,7 @@ export async function outboundFetch(
   if (!proxied) {
     const { fetch: undiciFetch, EnvHttpProxyAgent } = await import("undici");
     const dispatcher = new EnvHttpProxyAgent();
-    proxied = (u, i) => undiciFetch(u, { ...i, dispatcher });
+    proxied = (u, i) => undiciFetch(u, { ...i, dispatcher }) as Promise<OutboundResponse>;
   }
   return proxied(url, init);
 }

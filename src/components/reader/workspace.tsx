@@ -199,7 +199,9 @@ export function Workspace({
         </Link>
         <NotebookTitle id={notebook.id} title={notebook.title} />
         <span aria-hidden className="hidden size-[5px] shrink-0 rounded-full bg-sand-400 sm:block" />
-        <div className="mr-auto flex min-w-0 overflow-x-auto">
+        {/* No overflow clipping here: the document list and the + menu drop
+            below the header. The one pill truncates instead of scrolling. */}
+        <div className="mr-auto flex min-w-0">
           <DocumentBar
             notebookId={notebook.id}
             documents={documents}

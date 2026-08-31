@@ -8,8 +8,10 @@ import { buildGlossary } from "@/lib/glossary";
 import { currentLang, serverT } from "@/lib/i18n/server";
 import { progressResponse } from "@/lib/ingest-response";
 import { attachDocument } from "@/lib/parse/attach";
+import { ingestMediaUrl } from "@/lib/video/ingest-media-url";
 import { ingestYouTube } from "@/lib/video/ingest-youtube";
 import { runTranscription } from "@/lib/video/transcription-job";
+import { isMediaUrl } from "@/lib/video/types";
 import { parseYouTubeId } from "@/lib/video/youtube";
 import { parseBody } from "@/lib/validate";
 
@@ -154,6 +156,37 @@ export async function POST(req: Request) {
       // after() keeps it alive past the response on serverless; the pane
       // polls the status in. Recommended links scan once the transcript is
       // there — the transcript is the text the scan reads.
+      if (!deduped) {
+        after(() =>
+          runTranscription(document.id)
+            .then(() => buildConnections(data.notebookId, document.id, user?.id ?? null, lang))
+            .catch(() => {}),
+        );
+      } else {
+        after(() =>
+          buildConnections(data.notebookId, document.id, user?.id ?? null, lang).catch(() => {}),
+        );
+      }
+      return { id: document.id, title: document.title, deduped };
+    });
+  }
+
+  // A direct video or audio file link is a media document too (SPEC.md §11):
+  // the bytes download and store like an uploaded file, transcription starts.
+  if (isMediaUrl(data.url)) {
+    return progressResponse(async (onProgress) => {
+      let ingested: Awaited<ReturnType<typeof ingestMediaUrl>>;
+      try {
+        ingested = await ingestMediaUrl(data.url, t, onProgress);
+      } catch (err) {
+        console.error("Media URL ingest failed:", err);
+        throw err instanceof Error ? err : new Error(t("api.mediaUnavailable"));
+      }
+      const { document, deduped } = ingested;
+      await attachDocument(data.notebookId, document.id);
+      await bumpNotebook(data.notebookId);
+      // Transcription starts on its own — the transcript is the point. The
+      // recommended-links scan follows it, so it reads the transcript.
       if (!deduped) {
         after(() =>
           runTranscription(document.id)

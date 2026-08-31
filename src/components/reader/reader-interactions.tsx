@@ -24,7 +24,6 @@ import type { DocumentReference } from "@/lib/parse/types";
 import { splitStreamError, splitStreamNote } from "@/lib/derive/config";
 import { findWeblinks } from "@/lib/weblinks";
 import { isImeKey, useImeGuard } from "@/lib/ime";
-import { readNdjson } from "@/lib/ndjson";
 import { parseYouTubeId, youtubeWatchUrl } from "@/lib/video/youtube";
 import type { TFunc, TKey } from "@/lib/i18n/dictionaries";
 import { useLang, useT } from "@/components/lang-provider";
@@ -1678,9 +1677,7 @@ export function ReaderInteractions({
         ) {
           return;
         }
-        setToast(t("reader.blockNotOpen"));
-        if (toastTimer.current) clearTimeout(toastTimer.current);
-        toastTimer.current = setTimeout(() => setToast(null), 5000);
+        showToast(t("reader.blockNotOpen"));
         return;
       }
       el.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -1691,67 +1688,43 @@ export function ReaderInteractions({
     return () => window.removeEventListener("dissect:flash-block", onFlashBlock);
   }, [t]);
 
-  function showToast(message: string) {
+  // Every toast fades after 5 seconds, action or not.
+  function showToast(message: string, action: { label: string; run: () => void } | null = null) {
     setToast(message);
-    setToastAction(null);
+    setToastAction(action);
     if (toastTimer.current) clearTimeout(toastTimer.current);
-    toastTimer.current = setTimeout(() => setToast(null), 5000);
+    toastTimer.current = setTimeout(() => {
+      setToast(null);
+      setToastAction(null);
+    }, 5000);
   }
 
   // A media figure (video/audio/embedded player inside an article) refuses
   // tools; the toast offers to open it as a video document, where the video
-  // tools apply. YouTube embeds ingest by URL; direct file sources likewise.
+  // tools apply. The link goes to the document bar's ingest path — progress
+  // card, then the new document opens. YouTube embeds ingest by URL; direct
+  // file sources likewise.
   function refuseMediaFigure(block: { html: string | null }) {
     const html = block.html ?? "";
     const src =
       html.match(/<iframe[^>]*\ssrc="([^"]+)"/i)?.[1]?.replace(/&amp;/g, "&") ??
-      html.match(/<(?:video|audio)[^>]*\ssrc="([^"]+)"/i)?.[1]?.replace(/&amp;/g, "&");
-    setToast(t("reader.videoNoEditAnnotate"));
-    if (toastTimer.current) clearTimeout(toastTimer.current);
+      html.match(/<(?:video|audio)[^>]*\ssrc="([^"]+)"/i)?.[1]?.replace(/&amp;/g, "&") ??
+      html.match(/<source[^>]*\ssrc="([^"]+)"/i)?.[1]?.replace(/&amp;/g, "&");
     const youtubeId = src ? parseYouTubeId(src) : null;
     const url = youtubeId ? youtubeWatchUrl(youtubeId) : src && /^https?:\/\//.test(src) ? src : null;
     if (!url || !canEditRef.current) {
-      setToastAction(null);
-      toastTimer.current = setTimeout(() => setToast(null), 5000);
+      showToast(t("reader.videoNoEditAnnotate"));
       return;
     }
-    setToastAction({
+    showToast(t("reader.videoNoEditAnnotate"), {
       label: t("reader.openAsVideoDoc"),
       run: () => {
+        if (toastTimer.current) clearTimeout(toastTimer.current);
         setToast(null);
         setToastAction(null);
-        void (async () => {
-          try {
-            const res = await fetch("/api/documents", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ url, notebookId }),
-            });
-            if (!res.ok) {
-              const detail = (await res.json().catch(() => null)) as { error?: string } | null;
-              throw new Error(detail?.error ?? t("reader.addFailed"));
-            }
-            let result: { id: string } | { error: string } | null = null;
-            for await (const event of readNdjson<
-              { stage: string; detail?: string } | { id: string } | { error: string }
-            >(res)) {
-              if (!("stage" in event)) result = event;
-            }
-            if (!result || "error" in result) {
-              throw new Error(result && "error" in result ? result.error : t("reader.addFailed"));
-            }
-            router.push(`/n/${notebookId}?doc=${result.id}`);
-            router.refresh();
-          } catch (err) {
-            showToast(err instanceof Error ? err.message : t("reader.addFailed"));
-          }
-        })();
+        window.dispatchEvent(new CustomEvent("dissect:add-document-url", { detail: { url } }));
       },
     });
-    toastTimer.current = setTimeout(() => {
-      setToast(null);
-      setToastAction(null);
-    }, 10000);
   }
 
   // The figure popover: anchored to the whole caption (offsets 0..length), so
@@ -3122,7 +3095,11 @@ export function ReaderInteractions({
     <div
       ref={containerRef}
       data-reader-root
-      className="relative min-h-0 flex-1 overflow-y-auto print:overflow-visible"
+      // While the distilled page is open it scrolls itself; the article
+      // underneath must not scroll away, so the pane clips instead.
+      className={`relative min-h-0 flex-1 print:overflow-visible ${
+        distillOpen ? "overflow-hidden" : "overflow-y-auto"
+      }`}
     >
       {/* The article menu floats open at the top of the page: frequent asks
           go to the assistant at document scope; Distill opens the distilled

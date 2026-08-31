@@ -5,12 +5,18 @@ import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { isImeKey } from "@/lib/ime";
 import { useCollab } from "@/components/collab/collab-context";
+import { ChevronDownIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { Logo } from "@/components/logo";
 import type { TFunc } from "@/lib/i18n/dictionaries";
 import { readNdjson } from "@/lib/ndjson";
 import { PARSER_VERSION } from "@/lib/parse/types";
-import { MAX_VIDEO_BYTES, UPLOAD_CHUNK_BYTES } from "@/lib/video/types";
+import {
+  MAX_VIDEO_BYTES,
+  MEDIA_EXTENSIONS,
+  UPLOAD_CHUNK_BYTES,
+  isMediaUrl,
+} from "@/lib/video/types";
 import { parseYouTubeId } from "@/lib/video/youtube";
 import {
   IngestProgress,
@@ -59,8 +65,6 @@ const MAX_PDF_BYTES = 50 * 1024 * 1024;
 const SINGLE_REQUEST_BYTES = 4 * 1024 * 1024;
 const CHUNK_BYTES = UPLOAD_CHUNK_BYTES;
 
-const MEDIA_EXTENSIONS = /\.(mp4|m4v|webm|ogv|ogg|mov|mp3|m4a|m4b|aac|wav|flac|oga|opus)$/i;
-
 // Video and audio files share one path: chunked upload, sniffed server-side,
 // stored as a media document with the transcript machinery (SPEC.md §11).
 function isMediaFile(file: File): boolean {
@@ -75,8 +79,9 @@ function megabytes(bytes: number): string {
   return (bytes / 1024 / 1024).toFixed(1);
 }
 
-// Documents in the header (design 1a): a pill per attached document, everything
-// that adds or removes one folded behind the dashed +.
+// Documents in the header: one pill showing the open document, expanding a
+// vertical document list on hover or click. Everything that adds or removes
+// one stays folded behind the dashed +.
 export function DocumentBar({
   notebookId,
   documents,
@@ -95,7 +100,12 @@ export function DocumentBar({
   const menuRef = useRef<HTMLDivElement>(null);
   const [phase, setPhase] = useState<IngestPhase | null>(null);
   const [menu, setMenu] = useState<null | "root" | "url" | "video" | "library">(null);
-  // Per-pill menu: document-specific actions live on the document's own pill.
+  // The document list: opens on hover or click, closes on leave (after a
+  // grace period), outside click, Escape, or opening a document.
+  const listRef = useRef<HTMLDivElement>(null);
+  const listCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [listOpen, setListOpen] = useState(false);
+  // Per-document actions, expanded inline under the document's row.
   const [pillMenu, setPillMenu] = useState<string | null>(null);
   const [url, setUrl] = useState("");
   const [videoUrl, setVideoUrl] = useState("");
@@ -118,13 +128,38 @@ export function DocumentBar({
     };
   }, [menu]);
 
+  // Hover keeps the list open across the gap between pill and list; leaving
+  // both closes it after a grace period.
+  function openList() {
+    if (listCloseTimer.current) {
+      clearTimeout(listCloseTimer.current);
+      listCloseTimer.current = null;
+    }
+    setListOpen(true);
+  }
+  function closeList() {
+    if (listCloseTimer.current) {
+      clearTimeout(listCloseTimer.current);
+      listCloseTimer.current = null;
+    }
+    setListOpen(false);
+    setPillMenu(null);
+  }
+  function scheduleCloseList() {
+    if (listCloseTimer.current) clearTimeout(listCloseTimer.current);
+    listCloseTimer.current = setTimeout(closeList, 220);
+  }
+  useEffect(() => () => {
+    if (listCloseTimer.current) clearTimeout(listCloseTimer.current);
+  }, []);
+
   useEffect(() => {
-    if (pillMenu === null) return;
+    if (!listOpen) return;
     const onPointerDown = (e: PointerEvent) => {
-      if (!(e.target as Element).closest("[data-pill-menu]")) setPillMenu(null);
+      if (!listRef.current?.contains(e.target as Node)) closeList();
     };
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setPillMenu(null);
+      if (e.key === "Escape" && !isImeKey(e)) closeList();
     };
     window.addEventListener("pointerdown", onPointerDown);
     window.addEventListener("keydown", onKeyDown);
@@ -132,7 +167,15 @@ export function DocumentBar({
       window.removeEventListener("pointerdown", onPointerDown);
       window.removeEventListener("keydown", onKeyDown);
     };
-  }, [pillMenu]);
+  }, [listOpen]);
+
+  // The open document's row is the visible one when the list opens.
+  useEffect(() => {
+    if (!listOpen) return;
+    listRef.current
+      ?.querySelector<HTMLElement>("[data-active-row]")
+      ?.scrollIntoView({ block: "nearest" });
+  }, [listOpen]);
 
   // Opening a document keeps the reader view: view and doc2 ride along.
   function open(docId: string) {
@@ -230,7 +273,7 @@ export function DocumentBar({
   // server response starts streaming.
   async function runIngest(
     fileLabel: string,
-    kind: "pdf" | "url" | "video" | "youtube",
+    kind: "pdf" | "url" | "video" | "youtube" | "media",
     send: (emit: (stage: string, detail?: string) => void) => Promise<Response>,
   ): Promise<{ id: string; title: string; deduped: boolean }> {
     setPhase({ fileLabel, steps: initialIngestSteps(kind) });
@@ -377,57 +420,65 @@ export function DocumentBar({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [notebookId]);
 
-  async function addUrl() {
-    const trimmed = url.trim();
-    if (!trimmed) return;
+  // One ingest path for every link: the server routes YouTube links and
+  // direct media file links to video documents, everything else to the
+  // article parse; this only picks the matching progress steps. Returns
+  // whether the document was added and opened.
+  async function ingestFromUrl(raw: string): Promise<boolean> {
+    const trimmed = raw.trim();
+    if (!trimmed) return false;
     setError(null);
     try {
-      // A pasted YouTube link is a video document; the server routes it the
-      // same way, this only picks the matching progress steps.
-      const result = await runIngest(trimmed, parseYouTubeId(trimmed) ? "youtube" : "url", () =>
+      const kind = parseYouTubeId(trimmed) ? "youtube" : isMediaUrl(trimmed) ? "media" : "url";
+      const result = await runIngest(trimmed, kind, () =>
         fetch("/api/documents", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ url: trimmed, notebookId }),
         }),
       );
-      setUrl("");
-      setMenu(null);
       open(result.id);
       router.refresh();
+      return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : t("panes.ingestFailed"));
+      return false;
     } finally {
       setPhase(null);
     }
   }
 
-  // The Upload video menu takes a YouTube link. Other video links are not
-  // supported yet; files go through the file picker beside it.
+  // The reader's media-figure toast sends its player link here: same ingest
+  // path, same progress card, wherever the link comes from.
+  useEffect(() => {
+    const onAddUrl = (e: Event) => {
+      const { url: raw } = (e as CustomEvent<{ url: string }>).detail;
+      if (typeof raw === "string" && phase === null) void ingestFromUrl(raw);
+    };
+    window.addEventListener("dissect:add-document-url", onAddUrl);
+    return () => window.removeEventListener("dissect:add-document-url", onAddUrl);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [notebookId, phase]);
+
+  async function addUrl() {
+    if (await ingestFromUrl(url)) {
+      setUrl("");
+      setMenu(null);
+    }
+  }
+
+  // The Upload video menu takes a YouTube link or a direct video or audio
+  // file link; files go through the file picker beside it.
   async function addYouTube() {
     const trimmed = videoUrl.trim();
     if (!trimmed) return;
-    if (!parseYouTubeId(trimmed)) {
-      setError(t("panes.onlyYouTube"));
+    if (!parseYouTubeId(trimmed) && !isMediaUrl(trimmed)) {
+      setError(t("panes.notVideoLink"));
       return;
     }
-    setError(null);
-    try {
-      const result = await runIngest(trimmed, "youtube", () =>
-        fetch("/api/documents", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ url: trimmed, notebookId }),
-        }),
-      );
+    if (await ingestFromUrl(trimmed)) {
       setVideoUrl("");
       setMenu(null);
-      open(result.id);
-      router.refresh();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t("panes.ingestFailed"));
-    } finally {
-      setPhase(null);
     }
   }
 
@@ -450,7 +501,7 @@ export function DocumentBar({
 
   async function detach(documentId: string) {
     setMenu(null);
-    setPillMenu(null);
+    closeList();
     await api(`/api/notebooks/${notebookId}/documents/${documentId}`, "DELETE");
     if (documentId === activeId) router.push(`/n/${notebookId}`);
     router.refresh();
@@ -470,109 +521,137 @@ export function DocumentBar({
   const attachedIds = new Set(documents.map((d) => d.id));
   const menuItem =
     "px-4 py-2 text-left text-sm text-sand-700 hover:bg-clay-100 hover:text-clay-800";
-
-  // On a narrow header the bar scrolls; the open document's pill must be the
-  // visible one. Once per document switch, never while the user scrolls.
-  const barRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    barRef.current
-      ?.querySelector<HTMLElement>("[data-active-pill]")
-      ?.scrollIntoView({ inline: "nearest", block: "nearest" });
-  }, [activeId]);
+  const rowAction =
+    "px-4 py-1.5 text-left text-[12.5px] text-sand-600 hover:bg-clay-100 hover:text-clay-800";
 
   return (
-    <div ref={barRef} className="flex min-w-0 items-center gap-2">
-      {documents.map((d) => (
+    <div className="flex min-w-0 items-center gap-2">
+      {documents.length > 0 && (
         <div
-          key={d.id}
-          data-pill-menu
-          data-active-pill={d.id === activeId || undefined}
-          className="relative flex shrink-0 items-center"
+          ref={listRef}
+          className="relative min-w-0"
+          onMouseEnter={openList}
+          onMouseLeave={scheduleCloseList}
         >
           <button
-            onClick={() => open(d.id)}
-            className={`max-w-56 truncate rounded-full pr-8 text-[13px] ${
-              d.id === activeId
-                ? "bg-ink py-[7px] pl-[15px] font-semibold text-paper"
-                : "border border-line py-1.5 pl-3.5 text-sand-700 hover:bg-clay-100 hover:text-clay-800"
-            }`}
-            title={d.title}
+            onClick={openList}
+            aria-expanded={listOpen}
+            aria-label={t("panes.documentList")}
+            title={active?.title ?? t("panes.documentList")}
+            className="flex max-w-72 min-w-0 items-center gap-1.5 rounded-full bg-ink py-[7px] pr-3 pl-[15px] text-[13px] font-semibold text-paper"
           >
-            {d.title}
+            <span className="truncate">{active ? active.title : t("panes.documentList")}</span>
+            <span className="shrink-0 rounded-full bg-paper/20 px-1.5 text-[11px] tabular-nums">
+              {documents.length}
+            </span>
+            <ChevronDownIcon
+              size={13}
+              className={`shrink-0 text-sand-400 transition-transform duration-150 ${
+                listOpen ? "rotate-180" : ""
+              }`}
+            />
           </button>
-          <button
-            onClick={() => setPillMenu(pillMenu === d.id ? null : d.id)}
-            aria-label={t("panes.documentActionsFor", { title: d.title })}
-            aria-expanded={pillMenu === d.id}
-            title={t("panes.documentActions")}
-            className={`absolute right-2 flex size-5 items-center justify-center rounded-full ${
-              d.id === activeId
-                ? "text-sand-400 hover:bg-sand-800 hover:text-paper"
-                : "text-sand-500 hover:bg-clay-100 hover:text-clay-800"
-            }`}
-          >
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-              <circle cx="12" cy="5" r="2" />
-              <circle cx="12" cy="12" r="2" />
-              <circle cx="12" cy="19" r="2" />
-            </svg>
-          </button>
-          {pillMenu === d.id && (
-            <div className="absolute top-full left-0 z-30 mt-2 flex w-56 flex-col overflow-hidden rounded-2xl bg-card py-1 shadow-float">
-              {canEdit && !d.hasVideo && (d.sourceUrl !== null || d.hasFile) && (
-                <button
-                  onClick={() => {
-                    setPillMenu(null);
-                    void reparse(d);
-                  }}
-                  disabled={phase !== null}
-                  className={`${menuItem} disabled:opacity-40`}
-                  title={t("panes.reparseDocumentTitle")}
-                >
-                  {t("panes.reparseDocument")}
-                </button>
-              )}
-              {canEdit && (
-                <button
-                  onClick={() => {
-                    setPillMenu(null);
-                    void recommendLinks(d);
-                  }}
-                  disabled={connecting !== null}
-                  className={`${menuItem} disabled:opacity-40`}
-                  title={t("panes.recommendLinksTitle")}
-                >
-                  {connecting === d.id ? t("common.working") : t("panes.recommendLinks")}
-                </button>
-              )}
-              <button
-                onClick={() => {
-                  setPillMenu(null);
-                  window.print();
-                }}
-                disabled={d.id !== activeId}
-                className={`${menuItem} disabled:opacity-40`}
-                title={
-                  d.id === activeId
-                    ? t("panes.printDocumentTitle")
-                    : t("panes.printDocumentOpenFirst")
-                }
-              >
-                {t("panes.printDocument")}
-              </button>
-              {canEdit && (
-                <button
-                  onClick={() => void detach(d.id)}
-                  className="px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-950"
-                  title={t("panes.detachDocumentTitle")}
-                >
-                  {t("panes.detachDocument")}
-                </button>
-              )}
+
+          {listOpen && (
+            <div className="absolute top-full left-0 z-30 mt-2 flex max-h-[min(60vh,480px)] w-80 max-w-[calc(100vw-96px)] flex-col overflow-y-auto overscroll-contain rounded-2xl bg-card py-1.5 shadow-float">
+              {documents.map((d) => (
+                <div key={d.id} className="flex flex-col">
+                  <div className="flex items-center">
+                    <button
+                      onClick={() => {
+                        closeList();
+                        open(d.id);
+                      }}
+                      data-active-row={d.id === activeId || undefined}
+                      className={`min-w-0 flex-1 truncate px-4 py-2 text-left text-[13px] ${
+                        d.id === activeId
+                          ? "font-semibold text-ink"
+                          : "text-sand-700 hover:bg-clay-100 hover:text-clay-800"
+                      }`}
+                      title={d.title}
+                    >
+                      {d.title}
+                    </button>
+                    <button
+                      onClick={() => setPillMenu(pillMenu === d.id ? null : d.id)}
+                      aria-label={t("panes.documentActionsFor", { title: d.title })}
+                      aria-expanded={pillMenu === d.id}
+                      title={t("panes.documentActions")}
+                      className="mr-2 flex size-6 shrink-0 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-800"
+                    >
+                      <svg
+                        width="13"
+                        height="13"
+                        viewBox="0 0 24 24"
+                        fill="currentColor"
+                        aria-hidden
+                      >
+                        <circle cx="12" cy="5" r="2" />
+                        <circle cx="12" cy="12" r="2" />
+                        <circle cx="12" cy="19" r="2" />
+                      </svg>
+                    </button>
+                  </div>
+                  {pillMenu === d.id && (
+                    <div className="mx-2 mb-1.5 flex flex-col rounded-xl bg-sand-100 py-1">
+                      {canEdit && !d.hasVideo && (d.sourceUrl !== null || d.hasFile) && (
+                        <button
+                          onClick={() => {
+                            closeList();
+                            void reparse(d);
+                          }}
+                          disabled={phase !== null}
+                          className={`${rowAction} disabled:opacity-40`}
+                          title={t("panes.reparseDocumentTitle")}
+                        >
+                          {t("panes.reparseDocument")}
+                        </button>
+                      )}
+                      {canEdit && (
+                        <button
+                          onClick={() => {
+                            closeList();
+                            void recommendLinks(d);
+                          }}
+                          disabled={connecting !== null}
+                          className={`${rowAction} disabled:opacity-40`}
+                          title={t("panes.recommendLinksTitle")}
+                        >
+                          {connecting === d.id ? t("common.working") : t("panes.recommendLinks")}
+                        </button>
+                      )}
+                      <button
+                        onClick={() => {
+                          closeList();
+                          window.print();
+                        }}
+                        disabled={d.id !== activeId}
+                        className={`${rowAction} disabled:opacity-40`}
+                        title={
+                          d.id === activeId
+                            ? t("panes.printDocumentTitle")
+                            : t("panes.printDocumentOpenFirst")
+                        }
+                      >
+                        {t("panes.printDocument")}
+                      </button>
+                      {canEdit && (
+                        <button
+                          onClick={() => void detach(d.id)}
+                          className="px-4 py-1.5 text-left text-[12.5px] text-red-600 hover:bg-red-50 dark:hover:bg-red-950"
+                          title={t("panes.detachDocumentTitle")}
+                        >
+                          {t("panes.detachDocument")}
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
           )}
         </div>
-      ))}
+      )}
 
       <div ref={menuRef} className={`relative shrink-0 ${canEdit ? "" : "hidden"}`}>
         <button

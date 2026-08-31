@@ -82,7 +82,14 @@ export function DistillPage({
   }
 
   return (
-    <div data-selection-popover className="absolute inset-0 z-30 bg-paper print:hidden">
+    // The page scrolls itself: the pane's scroll stays where the article left
+    // it, and content taller than the pane never spills past the background
+    // onto the article. overscroll-contain keeps the wheel from chaining into
+    // the article scroll at the ends.
+    <div
+      data-selection-popover
+      className="absolute inset-0 z-30 overflow-y-auto overscroll-contain bg-paper print:hidden"
+    >
       <div className="mx-auto max-w-2xl px-8 py-8">
         <div className="mb-6 flex items-center gap-2">
           {shown && !running ? (
