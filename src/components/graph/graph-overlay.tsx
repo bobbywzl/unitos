@@ -38,11 +38,14 @@ export function GraphOverlay({
   }, [onClose]);
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-paper">
+    <div className="graph-overlay-in fixed inset-0 z-50 flex flex-col bg-paper">
       <div className="flex items-center gap-3 border-b border-line px-5 py-3">
         <span className="font-display text-[18px]">{t("panes.graph")}</span>
         <span className="text-[13px] text-sand-600">
-          {nodes.length} · {edges.reduce((sum, e) => sum + e.accepted + e.recommended, 0)}
+          {t("panes.graphCounts", {
+            docs: nodes.length,
+            links: edges.reduce((sum, e) => sum + e.accepted + e.recommended, 0),
+          })}
         </span>
         <button
           onClick={onClose}
