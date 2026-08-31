@@ -18,7 +18,7 @@ const en = {
   // Distill tab
   distillNoDoc: "Open a text document to distill it.",
   distillArticle: "Distill the article",
-  distillCorpusTitle: "One question; the AI scans every document in the corpus",
+  distillCorpusTitle: "One question; the AI scans every document in the project",
   distillButtonTitle: "Ask the article one question; the AI pulls the quotes that answer it",
   distillEmpty:
     "No distillations yet. Ask the article one question; the quotes that answer it list here.",
@@ -65,7 +65,7 @@ const en = {
   fieldBackground: "Background",
   fieldBackgroundPh: "e.g. Stanford student, stochastic calc + stats + quantum. Reading for due diligence.",
   scopeEverywhere: "Everywhere",
-  scopeThisCorpus: "This corpus only",
+  scopeThisCorpus: "This project only",
   saveFailed: "Save failed",
   // Markdown block chips
   jumpToBlock: "Jump to this block in the document",
@@ -83,10 +83,10 @@ const zh: Record<keyof typeof en, string> = {
   anchorUnresolved: "锚点无法定位",
   otherEndUnresolved: "另一端无法定位",
   wasAnchoredTo: "原锚定于：{text}",
-  notAttached: "不在此文集",
+  notAttached: "不在此项目",
   distillNoDoc: "打开一篇文本文档即可提炼。",
   distillArticle: "提炼文章",
-  distillCorpusTitle: "一个问题；AI 扫描文集中的每个文档",
+  distillCorpusTitle: "一个问题；AI 扫描项目中的每个文档",
   distillButtonTitle: "向文章提一个问题，AI 会找出回答它的引文",
   distillEmpty: "还没有提炼。向文章提一个问题，回答它的引文会列在这里。",
   openDistillation: "打开此提炼",
@@ -130,7 +130,7 @@ const zh: Record<keyof typeof en, string> = {
   fieldBackground: "背景",
   fieldBackgroundPh: "如：斯坦福学生，修过随机微积分、统计和量子力学。为尽职调查而读。",
   scopeEverywhere: "全局",
-  scopeThisCorpus: "仅此文集",
+  scopeThisCorpus: "仅此项目",
   saveFailed: "保存失败",
   jumpToBlock: "跳转到文档中的此块",
 };

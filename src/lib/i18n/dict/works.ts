@@ -6,13 +6,13 @@
 
 const en = {
   // Works shelf
-  corpora: "Corpora",
-  newCorpusTitle: "New corpus title",
+  corpora: "Projects",
+  newCorpusTitle: "New project title",
   create: "Create",
-  newWork: "New work",
-  deleteCorpusConfirm: "Delete this corpus and all its notes?",
-  corpusTitle: "Corpus title",
-  renameCorpus: "Rename corpus",
+  newWork: "New project",
+  deleteCorpusConfirm: "Delete this project and all its notes?",
+  corpusTitle: "Project title",
+  renameCorpus: "Rename project",
   // Work card
   sectionCountOne: "{n} section",
   sectionCountOther: "{n} sections",
@@ -62,7 +62,7 @@ const en = {
     " (top left) — the Assistant pill at the top of the page opens it: Summarize article, Key takeaways, and Explain simply send the question to the assistant, which reads the whole document and answers in a chat beside the article; Ask the assistant opens the same chat for your own question; Distill opens the distilled page. The pill hides while you scroll and returns when you are back at the top.",
   guideContext: "Context",
   guideContextBody:
-    " (top bar) — who you are, why you read, what the notes feed. Injected into every AI prompt: notes, distillation, analysis. Every field is optional; edit any time. Save it everywhere or for this corpus only.",
+    " (top bar) — who you are, why you read, what the notes feed. Injected into every AI prompt: notes, distillation, analysis. Every field is optional; edit any time. Save it everywhere or for this project only.",
   guideKeyTerms: "Key terms",
   guideKeyTermsBody:
     " — dotted underlines mark the document's key terms. Hover for the definition; click for the toolbar on the term, with Extract first — recommended.",
@@ -93,7 +93,7 @@ const en = {
   guidePanelHeader: "Side panel",
   guidePanelNotesBody: " — your sections and the pending queue. ",
   guidePanelAssistantBody:
-    " — ask questions at document, corpus, or corpora scope, and run checks (contradictions, gaps). ",
+    " — ask questions at document, project, or projects scope, and run checks (contradictions, gaps). ",
   guidePanelDistillBody: " — every distillation of the open document; open one to read its quotes. ",
   guidePanelSummary: "Summary",
   guidePanelSummaryBody:
@@ -122,13 +122,13 @@ const en = {
 
 const zh: Record<keyof typeof en, string> = {
   // Works shelf
-  corpora: "全部文集",
-  newCorpusTitle: "新文集标题",
+  corpora: "全部项目",
+  newCorpusTitle: "新项目标题",
   create: "创建",
-  newWork: "新建文集",
-  deleteCorpusConfirm: "删除该文集及其全部笔记？",
-  corpusTitle: "文集标题",
-  renameCorpus: "重命名文集",
+  newWork: "新建项目",
+  deleteCorpusConfirm: "删除该项目及其全部笔记？",
+  corpusTitle: "项目标题",
+  renameCorpus: "重命名项目",
   // Work card
   sectionCountOne: "{n} 个章节",
   sectionCountOther: "{n} 个章节",
@@ -176,7 +176,7 @@ const zh: Record<keyof typeof en, string> = {
     "（左上）——点击页面顶部的“助手”按钮展开菜单：“总结文章”“主要收获”“通俗解释”把问题发给助手，助手通读整篇文档，在文章旁的聊天中作答；“询问助手”打开同一个聊天，供你提自己的问题；“提炼”打开提炼页。滚动时按钮隐藏，回到顶部时再出现。",
   guideContext: "背景",
   guideContextBody:
-    "（顶栏）——你是谁、为什么而读、笔记的用途。注入到每个 AI 提示词中：笔记、提炼、分析。每个字段都可留空；随时可改。可保存为全局，或仅用于本文集。",
+    "（顶栏）——你是谁、为什么而读、笔记的用途。注入到每个 AI 提示词中：笔记、提炼、分析。每个字段都可留空；随时可改。可保存为全局，或仅用于本项目。",
   guideKeyTerms: "关键术语",
   guideKeyTermsBody:
     "——点状下划线标出文档的关键术语。悬停查看定义；点击关键术语打开工具栏，“提取”排在最前——推荐使用。",
@@ -205,7 +205,7 @@ const zh: Record<keyof typeof en, string> = {
     "高亮、评论和链接会随你的编辑移动。如果它们指向的文字已不在，会显示“锚点无法定位”——绝不指向错误的文字。",
   guidePanelHeader: "侧栏",
   guidePanelNotesBody: "——你的章节与待定队列。",
-  guidePanelAssistantBody: "——在文档、文集或全部文集范围提问，并运行检查（矛盾、疏漏）。",
+  guidePanelAssistantBody: "——在文档、项目或全部项目范围提问，并运行检查（矛盾、疏漏）。",
   guidePanelDistillBody: "——当前文档的每次提炼；打开一条即可读它的引文。",
   guidePanelSummary: "摘要",
   guidePanelSummaryBody: "——整篇文档按你选的深度摘要：通俗、进阶或专业。每个深度生成后即保留。",

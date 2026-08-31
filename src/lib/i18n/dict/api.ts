@@ -6,7 +6,7 @@
 const en = {
   // Guards and lookups
   signInRequired: "Sign in to continue.",
-  corpusNotFound: "Corpus not found",
+  corpusNotFound: "Project not found",
   documentNotFound: "Document not found",
   documentNotFoundOrEmpty: "Document not found or empty",
   sectionNotFound: "Section not found",
@@ -20,7 +20,7 @@ const en = {
   uploadNotFound: "Upload not found",
   feedbackNotFound: "Feedback not found",
   documentNotAttached: "Document is not attached",
-  documentNotAttachedToCorpus: "Document is not attached to this corpus",
+  documentNotAttachedToCorpus: "Document is not attached to this project",
   validationFailed: "Validation failed",
   bodyNotJson: "Body is not valid JSON",
 
@@ -55,7 +55,7 @@ const en = {
   // Assistant
   assistantNeedsKey: "ANTHROPIC_API_KEY is not set. The assistant needs it.",
   assistantFailed: "The assistant failed. {reason}",
-  taskCorpusScope: "This task runs at Corpus scope",
+  taskCorpusScope: "This task runs at Project scope",
   questionRequired: "Question is required",
   taskFailed: "Task failed. {reason}",
   planFailed: "The assistant could not form a plan. {reason}",
@@ -136,20 +136,20 @@ const en = {
   invalidPassword: "Invalid password",
 
   // Sharing
-  viewingOnly: "You can view this corpus, not change it.",
+  viewingOnly: "You can view this project, not change it.",
   ownerOnly: "Only the owner can do this.",
   sharingNeedsSignIn: "Sharing needs sign-in. This instance runs as a single reader.",
   invalidEmail: "Enter a valid email address.",
   cannotShareWithOwner: "The owner already has access.",
-  collaboratorLimit: "A corpus can have at most 30 collaborators.",
+  collaboratorLimit: "A project can have at most 30 collaborators.",
   collaboratorNotFound: "Collaborator not found",
 
   // Profile
   profileNeedsSignIn: "Profile editing needs sign-in. This instance runs as a single reader.",
   pictureInvalid: "Picture must be a JPEG, PNG, or WebP data URL under 300 KB.",
 
-  // Corpus distillation
-  corpusDistillNeedsDocuments: "Attach a document first — the corpus is empty.",
+  // Project distillation
+  corpusDistillNeedsDocuments: "Attach a document first — the project is empty.",
 
   // Replies
   editNotFound: "Edit not found",
@@ -159,7 +159,7 @@ const en = {
 
 const zh: Record<keyof typeof en, string> = {
   signInRequired: "请登录后继续。",
-  corpusNotFound: "未找到该文集",
+  corpusNotFound: "未找到该项目",
   documentNotFound: "未找到文档",
   documentNotFoundOrEmpty: "未找到文档或文档为空",
   sectionNotFound: "未找到章节",
@@ -172,8 +172,8 @@ const zh: Record<keyof typeof en, string> = {
   videoNotFound: "未找到视频",
   uploadNotFound: "未找到该次上传",
   feedbackNotFound: "未找到反馈",
-  documentNotAttached: "文档未加入文集",
-  documentNotAttachedToCorpus: "文档未加入此文集",
+  documentNotAttached: "文档未加入项目",
+  documentNotAttachedToCorpus: "文档未加入此项目",
   validationFailed: "校验失败",
   bodyNotJson: "请求体不是有效的 JSON",
 
@@ -202,7 +202,7 @@ const zh: Record<keyof typeof en, string> = {
 
   assistantNeedsKey: "未设置 ANTHROPIC_API_KEY。助手需要它。",
   assistantFailed: "助手请求失败。{reason}",
-  taskCorpusScope: "此任务在文集范围运行",
+  taskCorpusScope: "此任务在项目范围运行",
   questionRequired: "请输入问题",
   taskFailed: "任务失败。{reason}",
   planFailed: "助手无法生成计划。{reason}",
@@ -211,7 +211,7 @@ const zh: Record<keyof typeof en, string> = {
   warnQuoteNotFound: "已跳过：块中未找到该引文。（{description}）",
   warnBlockNotFound: "已跳过：未找到块。（{description}）",
   warnOnlyTextEdited: "已跳过：只有文本块可以编辑。（{description}）",
-  warnLinkTargetNotAttached: "已跳过：链接目标不是此文集中的另一个文档。（{description}）",
+  warnLinkTargetNotAttached: "已跳过：链接目标不是此项目中的另一个文档。（{description}）",
 
   deriveNeedsKey: "未设置 ANTHROPIC_API_KEY。AI 生成需要它。",
   typeNotBuilt: "{type} 尚未实现",
@@ -273,18 +273,18 @@ const zh: Record<keyof typeof en, string> = {
   adminNotConfigured: "管理登录未配置（未设置 ADMIN_PASSWORD）。",
   invalidPassword: "密码错误",
 
-  viewingOnly: "你可以查看此文集，但不能修改。",
+  viewingOnly: "你可以查看此项目，但不能修改。",
   ownerOnly: "只有所有者可以执行此操作。",
   sharingNeedsSignIn: "共享需要登录。此实例以单人阅读器模式运行。",
   invalidEmail: "请输入有效的邮箱地址。",
   cannotShareWithOwner: "所有者已经拥有访问权限。",
-  collaboratorLimit: "一个文集最多可有 30 位协作者。",
+  collaboratorLimit: "一个项目最多可有 30 位协作者。",
   collaboratorNotFound: "未找到协作者",
 
   profileNeedsSignIn: "编辑个人资料需要登录。此实例以单人阅读器模式运行。",
   pictureInvalid: "头像必须是 300 KB 以内的 JPEG、PNG 或 WebP data URL。",
 
-  corpusDistillNeedsDocuments: "请先添加文档——文集为空。",
+  corpusDistillNeedsDocuments: "请先添加文档——项目为空。",
 
   editNotFound: "未找到该编辑",
   replyNotFound: "未找到该回复",

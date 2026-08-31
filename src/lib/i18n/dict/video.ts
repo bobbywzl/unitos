@@ -126,7 +126,7 @@ const en = {
     "Document actions from this chat are not available on video and audio yet.",
   skillArticle: "Formalize into an article",
   skillArticleTitle:
-    "Rewrite the transcript as a formal article; it becomes a document in this corpus, with every reader tool",
+    "Rewrite the transcript as a formal article; it becomes a document in this project, with every reader tool",
   skillNotes: "Formalize into bullet-point notes",
   skillNotesTitle:
     "Distill the transcript into bullet-point notes; they land pending in the notes tray",
@@ -138,7 +138,7 @@ const en = {
   article: "Article",
   openArticle: "Open as document",
   openArticleTitle:
-    "Open the article as a document in this corpus — highlight, comment, edit, and distill it like any document",
+    "Open the article as a document in this project — highlight, comment, edit, and distill it like any document",
   copyMarkdown: "Copy markdown",
   copyMarkdownTitle: "Copy the article as markdown, for publishing",
   copied: "Copied",
@@ -258,7 +258,7 @@ const zh: Record<keyof typeof en, string> = {
   assistantNoReply: "没有收到回答。请重试。",
   assistantActionsUnsupported: "此对话中的文档操作暂不支持视频和音频。",
   skillArticle: "整理成文章",
-  skillArticleTitle: "把逐字稿改写成正式文章；文章会成为本文集中的文档，阅读器的全部工具都可用",
+  skillArticleTitle: "把逐字稿改写成正式文章；文章会成为本项目中的文档，阅读器的全部工具都可用",
   skillNotes: "整理成分条笔记",
   skillNotesTitle: "把逐字稿提炼成分条笔记；笔记会以待定状态进入笔记栏",
   skillNeedsTranscript: "需要逐字稿",
@@ -268,7 +268,7 @@ const zh: Record<keyof typeof en, string> = {
   // The formalized article under the transcript
   article: "文章",
   openArticle: "以文档形式打开",
-  openArticleTitle: "把文章作为本文集中的文档打开——像任何文档一样高亮、评论、编辑、提炼",
+  openArticleTitle: "把文章作为本项目中的文档打开——像任何文档一样高亮、评论、编辑、提炼",
   copyMarkdown: "复制 Markdown",
   copyMarkdownTitle: "把文章复制为 Markdown，便于发表",
   copied: "已复制",

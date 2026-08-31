@@ -2,7 +2,7 @@
 //
 // zh terminology glossary — every namespace keeps to these exact terms
 // (CLAUDE.md rule 2 holds in Chinese too: one term per concept, everywhere):
-//   corpus 文集 · Corpora(全部) 全部文集 · works shelf 书架 · section 章节 ·
+//   project 项目 · Projects(全部) 全部项目 · section 章节 ·
 //   note 笔记 · source 出处 · anchor 锚点 · block 块 · pending 待定 ·
 //   accepted 已接受 · distill/distillation 提炼 · quote 引文 · caption 说明 ·
 //   extract/extraction 提取 · summary 摘要 · digest 汇编 · annotation 批注 ·
@@ -16,7 +16,7 @@
 //   owner 所有者 · editor 编辑者 · viewer 查看者 · profile 个人资料 ·
 //   symbol 符号 · background 背景 · reply 回复 · resolve 解决 ·
 //   recommended link 推荐链接 · graph 图谱 · history 历史 ·
-//   attach(加入文集) 加入 · detach 移出 · figure 插图 · passage 片段 ·
+//   attach(加入项目) 加入 · detach 移出 · figure 插图 · passage 片段 ·
 //   key term 关键术语 · Edits(页签) 编辑记录 · notes tray 笔记栏 ·
 //   Ask/Auto(模式) 询问/自动 · command 指令 · key takeaways 主要收获 ·
 //   selection 选中内容 · bullet-point notes 分条笔记 · gaps(检查) 疏漏 ·
@@ -26,7 +26,7 @@
 const en = {
   appName: "Unitos",
   appDescription: "Notes-centric app for deep reading",
-  works: "Works",
+  works: "Projects",
   settings: "Settings",
   signOut: "Sign out",
   cancel: "Cancel",
@@ -53,7 +53,7 @@ const en = {
   requestFailedStatus: "Request failed ({status})",
   streamIncomplete: "The answer did not arrive whole. Try again.",
   signInToContinue: "Sign in to continue.",
-  corpusNotFound: "Corpus not found",
+  corpusNotFound: "Project not found",
   unauthorized: "Unauthorized",
   modelCallFailed: "The model call failed.",
   // Stale tab: the browser signed out or switched accounts in another tab.
@@ -67,7 +67,7 @@ const en = {
   // The app-wide 404
   notFoundTitle: "Page not found",
   notFoundBody: "This page does not exist, or its link is stale.",
-  notFoundHome: "Back to the shelf",
+  notFoundHome: "Back to Projects",
   // Replies: the discussion under a note, an edit, or a link.
   reply: "Reply",
   replyPlaceholder: "Reply…",
@@ -80,7 +80,7 @@ const en = {
 const zh: Record<keyof typeof en, string> = {
   appName: "Unitos",
   appDescription: "以笔记为中心的深度阅读应用",
-  works: "书架",
+  works: "全部项目",
   settings: "设置",
   signOut: "退出登录",
   cancel: "取消",
@@ -107,7 +107,7 @@ const zh: Record<keyof typeof en, string> = {
   requestFailedStatus: "请求失败（{status}）",
   streamIncomplete: "回答没有完整送达。请重试。",
   signInToContinue: "请登录后继续。",
-  corpusNotFound: "未找到该文集",
+  corpusNotFound: "未找到该项目",
   unauthorized: "未授权",
   modelCallFailed: "模型调用失败。",
   accountChanged: "此标签页原先属于其他账户。请刷新页面。",
@@ -118,7 +118,7 @@ const zh: Record<keyof typeof en, string> = {
   accountSignIn: "登录",
   notFoundTitle: "页面不存在",
   notFoundBody: "此页面不存在，或链接已失效。",
-  notFoundHome: "返回书架",
+  notFoundHome: "返回全部项目",
   reply: "回复",
   replyPlaceholder: "回复…",
   resolve: "解决",

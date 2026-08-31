@@ -124,9 +124,9 @@ async function toDocx(
 // fallback for old agents.
 function downloadName(title: string, ext: string): string {
   const name =
-    title.replace(/[\\/:*?"<>|\s]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 120) || "corpus";
+    title.replace(/[\\/:*?"<>|\s]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 120) || "project";
   const ascii =
-    name.replace(/[^\x20-\x7e]+/g, "-").replace(/^-+|-+$/g, "").toLowerCase() || "corpus";
+    name.replace(/[^\x20-\x7e]+/g, "-").replace(/^-+|-+$/g, "").toLowerCase() || "project";
   return `attachment; filename="${ascii}.${ext}"; filename*=UTF-8''${encodeURIComponent(name)}.${ext}`;
 }
 

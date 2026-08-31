@@ -4,7 +4,7 @@
 const en = {
   heroA: "Your All-Powerful Notebook",
   heroAccent: "Your Understanding, Your Pace.",
-  ctaTitle: "New here? Bind your first corpus",
+  ctaTitle: "New here? Start your first project",
   signinTitle: "Welcome back",
   forgotTitle: "Reset your password",
   unitos: "Continue with a Unitos account",
@@ -19,7 +19,7 @@ const en = {
   or: "or",
   google: "Continue with Google",
   apple: "Continue with Apple",
-  accountNote: "Sign-in creates your account and keeps your corpora yours.",
+  accountNote: "Sign-in creates your account and keeps your projects yours.",
 
   // Check-your-email state (/signin?sent=<email>; mode=forgot after a reset)
   sentTitle: "Check your email",
@@ -48,7 +48,7 @@ const en = {
   welcomeDesc: "Your account {email} is confirmed. Set a password to sign in next time.",
   setPassword: "Set password",
   welcomeSkip: "Set it later",
-  welcomeNext: "Next: bind your first corpus — upload a PDF or paste a link.",
+  welcomeNext: "Next: start your first project — upload a PDF or paste a link.",
 
   // The reset page (/reset)
   resetTitle: "Set a new password",
@@ -68,7 +68,7 @@ const en = {
   // Only functions you need
   functionsTitle: "Only functions you need",
   fnAssistant: "Smart assistant",
-  fnAssistantSub: "Summarize, explain, ask, distill — grounded in the whole corpus.",
+  fnAssistantSub: "Summarize, explain, ask, distill — grounded in the whole project.",
   fnNotes: "Anchored notes",
   fnNotesSub: "Every note clicks back to its source in the document.",
   fnHighlight: "Highlight and comment",
@@ -82,7 +82,7 @@ const en = {
   fnExtract: "Extract",
   fnExtractSub: "One origin phrase; every passage on its topic.",
 
-  tagline: "One corpus · every note anchored · accepted by you",
+  tagline: "One project · every note anchored · accepted by you",
 
   // Single-reader mode
   singleTitle: "Sign-in is off on this instance.",
@@ -108,7 +108,7 @@ const en = {
 const zh: Record<keyof typeof en, string> = {
   heroA: "你的全能笔记本",
   heroAccent: "你的理解，你的节奏。",
-  ctaTitle: "第一次来？装订你的第一个文集",
+  ctaTitle: "第一次来？创建你的第一个项目",
   signinTitle: "欢迎回来",
   forgotTitle: "重置密码",
   unitos: "使用 Unitos 账户继续",
@@ -123,7 +123,7 @@ const zh: Record<keyof typeof en, string> = {
   or: "或",
   google: "使用 Google 继续",
   apple: "使用 Apple 继续",
-  accountNote: "登录会创建你的账户，你的文集只属于你。",
+  accountNote: "登录会创建你的账户，你的项目只属于你。",
 
   // Check-your-email state (/signin?sent=<email>; mode=forgot after a reset)
   sentTitle: "请查收邮件",
@@ -152,7 +152,7 @@ const zh: Record<keyof typeof en, string> = {
   welcomeDesc: "你的账户 {email} 已确认。设置密码，下次即可登录。",
   setPassword: "设置密码",
   welcomeSkip: "以后再设",
-  welcomeNext: "下一步：装订你的第一个文集——上传 PDF 或粘贴链接。",
+  welcomeNext: "下一步：创建你的第一个项目——上传 PDF 或粘贴链接。",
 
   // The reset page (/reset)
   resetTitle: "设置新密码",
@@ -172,7 +172,7 @@ const zh: Record<keyof typeof en, string> = {
   // Only functions you need
   functionsTitle: "只有你需要的功能",
   fnAssistant: "智能助手",
-  fnAssistantSub: "总结、解释、提问、提炼——基于整个文集。",
+  fnAssistantSub: "总结、解释、提问、提炼——基于整个项目。",
   fnNotes: "锚定笔记",
   fnNotesSub: "每条笔记都能点回文档中的出处。",
   fnHighlight: "高亮与评论",
@@ -186,7 +186,7 @@ const zh: Record<keyof typeof en, string> = {
   fnExtract: "提取",
   fnExtractSub: "一个起点短语，同一主题的每个片段。",
 
-  tagline: "一个文集 · 每条笔记有锚点 · 由你接受",
+  tagline: "一个项目 · 每条笔记有锚点 · 由你接受",
 
   // Single-reader mode
   singleTitle: "此实例未开启登录。",

@@ -48,7 +48,7 @@ export function synthesisTaskPrompt(params: {
   return [
     profileLines(params.profile),
     "",
-    "The corpus is above: its documents, its notes (pending ones marked), and every annotation and layer on them.",
+    "The project is above: its documents, its notes (pending ones marked), and every annotation and layer on them.",
     "",
     TASK_INSTRUCTIONS[params.task],
     "",

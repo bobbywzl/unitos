@@ -15,13 +15,13 @@ export type ConnectCtx = {
 
 export function connectPrompt(ctx: ConnectCtx): string {
   return [
-    "A reader just added a document to their corpus. Find where it connects to the documents already there: the same concept, the same claim or its contradiction, a shared quote, a shared keyword used in the same sense. Video transcripts count like any text.",
+    "A reader just added a document to their project. Find where it connects to the documents already there: the same concept, the same claim or its contradiction, a shared quote, a shared keyword used in the same sense. Video transcripts count like any text.",
     "",
     `The new document: "${ctx.documentTitle}". Each block starts with its id as [block <id>].`,
     "",
     ctx.documentBlocks,
     "",
-    "The corpus's other documents. Each starts with its id as [document <id>], then its blocks:",
+    "The project's other documents. Each starts with its id as [document <id>], then its blocks:",
     "",
     ctx.others,
     "",

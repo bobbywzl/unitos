@@ -80,7 +80,7 @@ export function explainPrompt(ctx: PromptCtx): string {
       "1. Say what kind of visual it is and what it depicts, in one sentence.",
       "2. Read out the concrete content: axes, series, numbers, trends, comparisons — whatever is actually visible. Never invent values you cannot see.",
       "3. State the takeaway the document draws from it, tied to their purpose when the connection is real.",
-      "When corpus context follows the document — other documents' passages, the reader's notes, highlights, comments — reference what clarifies this figure by name and draw the analogy explicitly.",
+      "When project context follows the document — other documents' passages, the reader's notes, highlights, comments — reference what clarifies this figure by name and draw the analogy explicitly.",
       "Keep it under 200 words. Use markdown. Start with the explanation, no preamble.",
       answerLanguage(ctx.lang),
     ].join("\n");
@@ -104,7 +104,7 @@ export function explainPrompt(ctx: PromptCtx): string {
     "2. Explain the parts the reader is least likely to know, given their background.",
     "3. Connect the passage to their purpose when the connection is real. Skip forced connections.",
     "When you point at another part of the document, cite its block tag exactly as written above ([block <id>]) — the tag renders as a link the reader can click.",
-    "When corpus context follows the document — other documents' passages, the reader's notes, highlights, comments — reference what clarifies the passage by name and draw the analogy explicitly.",
+    "When project context follows the document — other documents' passages, the reader's notes, highlights, comments — reference what clarifies the passage by name and draw the analogy explicitly.",
     "Keep it under 200 words. Use markdown. Start with the explanation, no preamble.",
     answerLanguage(ctx.lang),
   ].join("\n");

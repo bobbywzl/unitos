@@ -10,7 +10,7 @@ const en = {
   annotations: "Annotations",
   edits: "Edits",
   editHistory: "Edit history",
-  allCorpora: "All corpora",
+  allCorpora: "All projects",
   pendingCount: "{n} pending",
   guide: "Guide",
   guideTitle: "What every tool does",
@@ -86,7 +86,7 @@ const en = {
   printDocumentTitle: "Print this document, article only",
   printDocumentOpenFirst: "Open the document to print it",
   detachDocument: "Detach document",
-  detachDocumentTitle: "Detach this document from this corpus",
+  detachDocumentTitle: "Detach this document from this project",
   addDocument: "Add a document",
   uploadPdf: "Upload PDF",
   uploadVideo: "Upload video or audio",
@@ -143,9 +143,9 @@ const en = {
   referencesCount: "References ({n})",
   // Sharing (share-control.tsx)
   share: "Share",
-  shareTitle: "Share this corpus",
+  shareTitle: "Share this project",
   shareDesc:
-    "Collaborators open this corpus from their own account. Editors change it like you do; viewers read only.",
+    "Collaborators open this project from their own account. Editors change it like you do; viewers read only.",
   shareEmailPh: "email@example.com",
   role: "Role",
   roleOwner: "Owner",
@@ -155,12 +155,12 @@ const en = {
   alsoHere: "Also here",
   viewingOnly: "Viewing only",
   leave: "Leave",
-  leaveConfirm: "Leave this corpus? You lose access until the owner shares it again.",
+  leaveConfirm: "Leave this project? You lose access until the owner shares it again.",
 
   // History panel (history-control.tsx)
   history: "History",
-  historyTitle: "Every edit and deletion in this corpus, by person",
-  historyDesc: "Every edit and deletion in this corpus, newest first. Press a person to see theirs.",
+  historyTitle: "Every edit and deletion in this project, by person",
+  historyDesc: "Every edit and deletion in this project, newest first. Press a person to see theirs.",
   historyEmpty: "No edits or deletions yet.",
   historyTextEdit: "edited a paragraph",
   historyBlockAdd: "added a paragraph",
@@ -175,26 +175,26 @@ const en = {
 
   // Graph (graph-overlay.tsx, graph-view.tsx)
   graph: "Graph",
-  graphTitle: "The corpus as a graph: documents and the links between them",
+  graphTitle: "The project as a graph: documents and the links between them",
   graphHint: "Each node is a document. A thicker line means more links between two documents; dashed means recommended links awaiting acceptance. Drag to arrange; click a node to open it.",
   graphEmpty: "Attach at least two documents — the graph draws the links between them.",
 
   // Recommended links (annotations-panel.tsx)
   recommendedLinks: "Recommended links",
-  recommendedLinksDesc: "The AI scanned this document against the corpus. Accept a link to make it real; dismiss what does not hold.",
+  recommendedLinksDesc: "The AI scanned this document against the project. Accept a link to make it real; dismiss what does not hold.",
   acceptLink: "Accept",
   dismissLink: "Dismiss",
   recommendLinks: "Recommend links",
-  recommendLinksTitle: "Scan this document against the corpus for recommended links",
+  recommendLinksTitle: "Scan this document against the project for recommended links",
   recommendLinksDone: "{n} recommended link(s) found",
   recommendLinksNone: "No new connections found",
 
-  // Corpus distillation (corpus-distill-page.tsx)
-  distillCorpus: "Distill the corpus",
-  corpusAskPlaceholder: "What should this corpus answer?",
+  // Project distillation (corpus-distill-page.tsx)
+  distillCorpus: "Distill the project",
+  corpusAskPlaceholder: "What should this project answer?",
   corpusAskHint:
-    "One question. The AI scans every document in the corpus and pulls the quotes that answer it, each cited to its document.",
-  scanningCorpus: "Scanning the corpus",
+    "One question. The AI scans every document in the project and pulls the quotes that answer it, each cited to its document.",
+  scanningCorpus: "Scanning the project",
 };
 
 const zh: Record<keyof typeof en, string> = {
@@ -204,7 +204,7 @@ const zh: Record<keyof typeof en, string> = {
   annotations: "批注",
   edits: "编辑记录",
   editHistory: "编辑记录",
-  allCorpora: "全部文集",
+  allCorpora: "全部项目",
   pendingCount: "{n} 条待定",
   guide: "指南",
   guideTitle: "每个工具的用途",
@@ -276,7 +276,7 @@ const zh: Record<keyof typeof en, string> = {
   printDocumentTitle: "打印此文档，仅正文",
   printDocumentOpenFirst: "先打开文档再打印",
   detachDocument: "移出文档",
-  detachDocumentTitle: "把此文档移出此文集",
+  detachDocumentTitle: "把此文档移出此项目",
   addDocument: "添加文档",
   uploadPdf: "上传 PDF",
   uploadVideo: "上传视频或音频",
@@ -293,7 +293,7 @@ const zh: Record<keyof typeof en, string> = {
   blockCount: "（{n} 个块）",
   deleteFromLibrary: "从文档库删除",
   uploadProgress: "{sent}/{total} MB",
-  dropToAdd: "拖放 PDF 或视频，添加到此文集",
+  dropToAdd: "拖放 PDF 或视频，添加到此项目",
 
   stepUploading: "上传",
   stepParsing: "解析",
@@ -327,8 +327,8 @@ const zh: Record<keyof typeof en, string> = {
 
   referencesCount: "参考文献（{n}）",
   share: "共享",
-  shareTitle: "共享此文集",
-  shareDesc: "协作者用自己的账户打开此文集。编辑者可以像你一样修改；查看者只能阅读。",
+  shareTitle: "共享此项目",
+  shareDesc: "协作者用自己的账户打开此项目。编辑者可以像你一样修改；查看者只能阅读。",
   shareEmailPh: "email@example.com",
   role: "角色",
   roleOwner: "所有者",
@@ -338,11 +338,11 @@ const zh: Record<keyof typeof en, string> = {
   alsoHere: "也在这里",
   viewingOnly: "仅查看",
   leave: "退出共享",
-  leaveConfirm: "退出此文集共享？在所有者再次共享前你将失去访问权限。",
+  leaveConfirm: "退出此项目共享？在所有者再次共享前你将失去访问权限。",
 
   history: "历史",
-  historyTitle: "此文集中每个人的所有编辑与删除",
-  historyDesc: "此文集中的所有编辑与删除，最新在前。点击一个人可只看其操作。",
+  historyTitle: "此项目中每个人的所有编辑与删除",
+  historyDesc: "此项目中的所有编辑与删除，最新在前。点击一个人可只看其操作。",
   historyEmpty: "还没有编辑或删除。",
   historyTextEdit: "编辑了一个段落",
   historyBlockAdd: "添加了一个段落",
@@ -356,23 +356,23 @@ const zh: Record<keyof typeof en, string> = {
   historyDocumentDetach: "移出了一个文档",
 
   graph: "图谱",
-  graphTitle: "文集图谱：文档与它们之间的链接",
+  graphTitle: "项目图谱：文档与它们之间的链接",
   graphHint: "每个节点是一个文档。线越粗表示两个文档之间的链接越多；虚线是待接受的推荐链接。拖动可调整位置；点击节点打开文档。",
   graphEmpty: "至少添加两个文档——图谱会画出它们之间的链接。",
 
   recommendedLinks: "推荐链接",
-  recommendedLinksDesc: "AI 已将此文档与文集比对。接受即成为正式链接；不成立的可忽略。",
+  recommendedLinksDesc: "AI 已将此文档与项目比对。接受即成为正式链接；不成立的可忽略。",
   acceptLink: "接受",
   dismissLink: "忽略",
   recommendLinks: "扫描推荐链接",
-  recommendLinksTitle: "将此文档与文集比对，寻找推荐链接",
+  recommendLinksTitle: "将此文档与项目比对，寻找推荐链接",
   recommendLinksDone: "找到 {n} 条推荐链接",
   recommendLinksNone: "没有发现新的链接",
 
-  distillCorpus: "提炼文集",
-  corpusAskPlaceholder: "这个文集应该回答什么？",
-  corpusAskHint: "一个问题。AI 扫描文集中的每个文档，找出回答它的引文，每条引文注明所在文档。",
-  scanningCorpus: "正在扫描文集",
+  distillCorpus: "提炼项目",
+  corpusAskPlaceholder: "这个项目应该回答什么？",
+  corpusAskHint: "一个问题。AI 扫描项目中的每个文档，找出回答它的引文，每条引文注明所在文档。",
+  scanningCorpus: "正在扫描项目",
 };
 
 export const panes = { en, zh } as const;
