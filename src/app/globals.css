@@ -701,6 +701,22 @@ mark,
   }
 }
 
+/* The fan springs above its work's top edge, into the row above. Covers are z-1,
+   so in one shared stacking context every cover paints over every fan (z-0) —
+   the sprung fan slides under the work and text above it. Each work is its own
+   stacking context (z-index needs an integer, not auto, to transition), and the
+   hovered or focused work rises above its siblings. The drop back waits out the
+   0.5s retraction so the fan is not clipped mid-flight on mouse-out. */
+.work {
+  z-index: 0;
+  transition: z-index 0s 0.5s;
+}
+.work:hover,
+.work:focus-within {
+  z-index: 5;
+  transition-delay: 0s;
+}
+
 /* Sign-in hero: rise in once on load. CSS only — no motion library. */
 @keyframes rise-in {
   from {
