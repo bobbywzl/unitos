@@ -1,10 +1,12 @@
-import { profileLines, type ReaderProfileCtx } from "@/lib/prompts/types";
+import type { Lang } from "@/lib/i18n/config";
+import { answerLanguage, languageName, profileLines, type ReaderProfileCtx } from "@/lib/prompts/types";
 
 // SYNTHESIS: notebook-scope assistant output (SPEC.md §7). Free questions stream text;
 // contradiction/gap/unsourced tasks return JSON issue cards.
 
 export function synthesisAskPrompt(params: {
   profile: ReaderProfileCtx;
+  lang: Lang;
   scopeLabel: string;
   question: string;
 }): string {
@@ -18,6 +20,7 @@ export function synthesisAskPrompt(params: {
     "Answer from the material above. Reference notes by their [note <id>] markers and",
     "blocks by their [block <id>] markers when they ground a claim. Say plainly when the",
     "material does not answer the question. Use markdown. No preamble.",
+    answerLanguage(params.lang),
   ].join("\n");
 }
 
@@ -39,18 +42,19 @@ const TASK_INSTRUCTIONS: Record<"contradictions" | "gaps" | "unsourced", string>
 
 export function synthesisTaskPrompt(params: {
   profile: ReaderProfileCtx;
+  lang: Lang;
   task: "contradictions" | "gaps" | "unsourced";
 }): string {
   return [
     profileLines(params.profile),
     "",
-    "The corpus is above: its documents, its notes (pending ones marked), and every annotation and layer on them.",
+    "The project is above: its documents, its notes (pending ones marked), and every annotation and layer on them.",
     "",
     TASK_INSTRUCTIONS[params.task],
     "",
     "Rules:",
     "1. Only report real issues. An empty list is a valid answer.",
-    "2. issue: one sentence naming the problem. explanation: 1-3 sentences with the evidence.",
+    `2. issue: one sentence naming the problem. explanation: 1-3 sentences with the evidence. Write both in ${languageName(params.lang)}.`,
     "3. Use note ids exactly as they appear in [note <id>] markers.",
     "",
     'Return ONLY JSON: {"issues": [{"noteIds": ["<id>"], "issue": "<sentence>", "explanation": "<sentences>"}]}',

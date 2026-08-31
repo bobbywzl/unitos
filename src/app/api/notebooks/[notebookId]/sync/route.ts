@@ -22,7 +22,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ notebookId: str
     where: { id: notebookId },
     select: { rev: true },
   });
-  if (!notebook) return NextResponse.json({ error: "Corpus not found" }, { status: 404 });
+  if (!notebook) return NextResponse.json({ error: "Project not found" }, { status: 404 });
 
   // Single-reader mode has no accounts to be present as.
   if (!authEnabled()) return NextResponse.json({ rev: notebook.rev, people: [] });

@@ -154,6 +154,15 @@ function layerItems(doc: DigestDocument): string[] {
       ...doc.summaries.map((s) => `(${s.depth}) ${s.text}`),
     );
   }
+  if (doc.formalized) {
+    // The transcript already rides in full above; the article's title and
+    // opening say it exists without paying for the whole rewrite.
+    const opening =
+      doc.formalized.markdown.length > 600
+        ? `${doc.formalized.markdown.slice(0, 599)}…`
+        : doc.formalized.markdown;
+    items.push(`Formalized article of this transcript: "${doc.formalized.title}" — ${opening}`);
+  }
   if (doc.salience.length > 0) {
     items.push(
       `Salient passages: ${doc.salience.map((q) => `"${q.quote}"${q.orphaned ? " (orphaned)" : ""}`).join("; ")}`,
@@ -194,7 +203,7 @@ function renderDocument(
   const chunks: string[] = [`## Document: ${doc.title} [document ${doc.id}]${documentMeta(doc)}`];
   const shownUnder = seenDocuments.get(doc.id);
   if (shownUnder) {
-    chunks.push(`Text shown under corpus "${shownUnder}" above.`);
+    chunks.push(`Text shown under project "${shownUnder}" above.`);
   } else {
     chunks.push(documentText(doc, budget));
     seenDocuments.set(doc.id, corpusTitle);
@@ -214,7 +223,7 @@ export function renderCorpusDigest(
 ): string {
   const chunks: string[] = [
     [
-      `# Corpus: ${parts.corpusTitle} [corpus ${parts.corpusId}]`,
+      `# Project: ${parts.corpusTitle} [project ${parts.corpusId}]`,
       `Sections: ${parts.sections.join("; ") || "(none)"}`,
     ].join("\n"),
   ];
@@ -226,7 +235,7 @@ export function renderCorpusDigest(
   }
   const notes = spend(parts.notes.map(noteBlock), budget, "notes");
   chunks.push(
-    ["## Notes in this corpus", notes.length > 0 ? notes.join("\n\n") : "(no notes)"].join("\n\n"),
+    ["## Notes in this project", notes.length > 0 ? notes.join("\n\n") : "(no notes)"].join("\n\n"),
   );
   if (parts.looseAnnotations.length > 0) {
     const loose = spend(parts.looseAnnotations.map(annotationBlock), budget, "annotations");
@@ -242,9 +251,9 @@ export function renderCorporaDigest(
   budget: RenderBudget = unlimitedBudget(),
 ): string {
   const seenDocuments = new Map<string, string>();
-  const list = all.map((p) => `"${p.corpusTitle}" [corpus ${p.corpusId}]`).join("; ");
+  const list = all.map((p) => `"${p.corpusTitle}" [project ${p.corpusId}]`).join("; ");
   return [
-    [`# All corpora (${all.length})`, `The corpora, most recently updated first: ${list || "(none)"}`].join("\n"),
+    [`# All projects (${all.length})`, `The projects, most recently updated first: ${list || "(none)"}`].join("\n"),
     ...all.map((parts) => renderCorpusDigest(parts, budget, seenDocuments)),
   ].join("\n\n---\n\n");
 }
@@ -258,7 +267,7 @@ const SHARED_INSTRUCTIONS = [
 // The assistant's system prefix at Corpus scope: instructions + the digest.
 export function corpusSystem(parts: DigestParts, budget: RenderBudget = corpusBudget()): string {
   return [
-    "You assist a reader working through their corpus: every document in full, and every note, annotation, distillation, extraction, and summary they made on it. All of it follows.",
+    "You assist a reader working through their project: every document in full, and every note, annotation, distillation, extraction, and summary they made on it. All of it follows.",
     ...SHARED_INSTRUCTIONS,
     "",
     renderCorpusDigest(parts, budget),
@@ -268,8 +277,8 @@ export function corpusSystem(parts: DigestParts, budget: RenderBudget = corpusBu
 // The assistant's system prefix at Corpora scope: instructions + every digest.
 export function corporaSystem(all: DigestParts[], budget: RenderBudget = corporaBudget()): string {
   return [
-    "You assist a reader across all their corpora: every corpus follows in full — its documents, notes, annotations, distillations, extractions, and summaries.",
-    "A document attached to several corpora shows its text once; later corpora point back to it. Its notes and layers stay with their own corpus.",
+    "You assist a reader across all their projects: every project follows in full — its documents, notes, annotations, distillations, extractions, and summaries.",
+    "A document attached to several projects shows its text once; later projects point back to it. Its notes and layers stay with their own project.",
     ...SHARED_INSTRUCTIONS,
     "",
     renderCorporaDigest(all, budget),

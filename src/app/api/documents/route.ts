@@ -5,7 +5,7 @@ import { authEnabled, currentUser } from "@/lib/auth";
 import { bumpNotebook, notebookAccess } from "@/lib/collab";
 import { buildConnections } from "@/lib/connect";
 import { buildGlossary } from "@/lib/glossary";
-import { serverT } from "@/lib/i18n/server";
+import { currentLang, serverT } from "@/lib/i18n/server";
 import { progressResponse } from "@/lib/ingest-response";
 import { attachDocument } from "@/lib/parse/attach";
 import { ingestYouTube } from "@/lib/video/ingest-youtube";
@@ -63,6 +63,8 @@ const fileFieldsSchema = z.object({
 export async function POST(req: Request) {
   const user = await currentUser();
   const t = await serverT();
+  // Captured now: the after() scans below outlive the request and its cookies.
+  const lang = await currentLang();
   // The parse chain (jsdom, unpdf) loads per request. Loading it with the route module
   // broke every response on Vercel; loading it here keeps GET working and turns a load
   // failure into a readable error.
@@ -115,7 +117,9 @@ export async function POST(req: Request) {
         if (!deduped) after(() => buildGlossary(document.id, user?.id ?? null).catch(() => {}));
         // Recommended links (SPEC.md §13): scan the document against the corpus.
         after(() =>
-          buildConnections(fields.data.notebookId, document.id, user?.id ?? null).catch(() => {}),
+          buildConnections(fields.data.notebookId, document.id, user?.id ?? null, lang).catch(
+            () => {},
+          ),
         );
         return { id: document.id, title: document.title, deduped };
       } catch (err) {
@@ -136,7 +140,14 @@ export async function POST(req: Request) {
   const youtubeId = parseYouTubeId(data.url);
   if (youtubeId) {
     return progressResponse(async (onProgress) => {
-      const { document, deduped } = await ingestYouTube(youtubeId, onProgress);
+      let ingested: Awaited<ReturnType<typeof ingestYouTube>>;
+      try {
+        ingested = await ingestYouTube(youtubeId, onProgress);
+      } catch (err) {
+        console.error("YouTube ingest failed:", err);
+        throw new Error(t("api.youtubeUnavailable"));
+      }
+      const { document, deduped } = ingested;
       await attachDocument(data.notebookId, document.id);
       await bumpNotebook(data.notebookId);
       // Transcription starts on its own — the transcript is the point.
@@ -146,11 +157,13 @@ export async function POST(req: Request) {
       if (!deduped) {
         after(() =>
           runTranscription(document.id)
-            .then(() => buildConnections(data.notebookId, document.id, user?.id ?? null))
+            .then(() => buildConnections(data.notebookId, document.id, user?.id ?? null, lang))
             .catch(() => {}),
         );
       } else {
-        after(() => buildConnections(data.notebookId, document.id, user?.id ?? null).catch(() => {}));
+        after(() =>
+          buildConnections(data.notebookId, document.id, user?.id ?? null, lang).catch(() => {}),
+        );
       }
       return { id: document.id, title: document.title, deduped };
     });
@@ -162,7 +175,9 @@ export async function POST(req: Request) {
       await attachDocument(data.notebookId, document.id);
       await bumpNotebook(data.notebookId);
       if (!deduped) after(() => buildGlossary(document.id, user?.id ?? null).catch(() => {}));
-      after(() => buildConnections(data.notebookId, document.id, user?.id ?? null).catch(() => {}));
+      after(() =>
+        buildConnections(data.notebookId, document.id, user?.id ?? null, lang).catch(() => {}),
+      );
       return { id: document.id, title: document.title, deduped };
     } catch (err) {
       console.error("URL ingest failed:", err);

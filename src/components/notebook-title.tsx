@@ -3,11 +3,13 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { api } from "@/lib/api";
+import { isImeKey, useImeGuard } from "@/lib/ime";
 import { useT } from "@/components/lang-provider";
 
 export function NotebookTitle({ id, title }: { id: string; title: string }) {
   const router = useRouter();
   const t = useT();
+  const ime = useImeGuard();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(title);
 
@@ -29,7 +31,9 @@ export function NotebookTitle({ id, title }: { id: string; title: string }) {
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
         onBlur={() => void save()}
+        {...ime.props}
         onKeyDown={(e) => {
+          if (ime.isImeEnter(e) || isImeKey(e)) return;
           if (e.key === "Enter") void save();
           if (e.key === "Escape") {
             setDraft(title);
@@ -45,7 +49,7 @@ export function NotebookTitle({ id, title }: { id: string; title: string }) {
   return (
     <button
       onClick={() => setEditing(true)}
-      className="max-w-64 shrink-0 truncate font-display text-xl"
+      className="max-w-[120px] shrink-0 truncate font-display text-lg sm:max-w-64 sm:text-xl"
       title={t("works.renameCorpus")}
     >
       {title}

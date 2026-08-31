@@ -24,11 +24,13 @@ import {
   distillOutputSchema,
   extractOutputSchema,
   findOutputSchema,
+  formalizeArticleSchema,
+  formalizeNotesSchema,
   resolveSpan,
   salienceOutputSchema,
 } from "@/lib/derive/json";
 import { callForJson, modelErrorMessage } from "@/lib/derive/json-call";
-import { serverT } from "@/lib/i18n/server";
+import { currentLang, serverT } from "@/lib/i18n/server";
 import { promptTemplates } from "@/lib/prompts";
 import { corpusDistillPrompt } from "@/lib/prompts/distill";
 import type { PromptCtx } from "@/lib/prompts/types";
@@ -36,16 +38,21 @@ import {
   corpusDistillationList,
   distillationList,
   extractionList,
+  FORMALIZE_FORMATS,
+  formalizedArticle,
   SUMMARY_DEPTHS,
   type CorpusDistillation,
   type Distillation,
   type Extraction,
+  type FormalizedArticle,
   type SummaryLevels,
 } from "@/lib/types";
+import { materializeArticle } from "@/lib/video/article-document";
 import { videoAnchorFor } from "@/lib/video/anchor";
 import { describeYouTubeClip } from "@/lib/video/gemini";
 import {
   formatTimeRange,
+  isAudioMime,
   regionSchema,
   timeRangeSchema,
   type VideoFindMatch,
@@ -53,13 +60,15 @@ import {
 import { recordUsage, sdkTokens } from "@/lib/usage";
 import { parseBody } from "@/lib/validate";
 
-export const maxDuration = 120;
+// FORMALIZE holds the connection for minutes on a long transcript (heartbeat
+// stream); 120 s would kill it mid-call.
+export const maxDuration = 300;
 
 // The one derivation pipeline (SPEC.md §4). Never fork per feature: new derivation =
 // new prompt template + destination handler below.
 const deriveSchema = z
   .object({
-  type: z.enum(["EXPLAIN", "SIMPLIFY", "SALIENCE", "EXTRACT", "DISTILL", "SUMMARIZE", "FIND"]),
+  type: z.enum(["EXPLAIN", "SIMPLIFY", "SALIENCE", "EXTRACT", "DISTILL", "SUMMARIZE", "FIND", "FORMALIZE"]),
   // Absent only for corpus-scope DISTILL, which reads every document.
   documentId: z.string().min(1).optional(),
   // DISTILL only: "corpus" scans every document in the corpus (SPEC.md §13).
@@ -75,6 +84,8 @@ const deriveSchema = z
   depth: z.enum(SUMMARY_DEPTHS).optional(), // SUMMARIZE only
   query: z.string().min(1).max(500).optional(), // FIND only
   question: z.string().min(1).max(500).optional(), // DISTILL only; anchor is optional focus
+  format: z.enum(FORMALIZE_FORMATS).optional(), // FORMALIZE only
+  sectionId: z.string().min(1).optional(), // FORMALIZE notes: where the notes land
   // EXPLAIN on a video moment (SPEC.md §11): the time range, the drawn region,
   // and the paused frame as a JPEG data URL when the client could capture it.
   video: z
@@ -131,6 +142,9 @@ export async function POST(req: Request) {
   }
   if (data.type === "DISTILL" && !data.question?.trim()) {
     return NextResponse.json({ error: t("api.distillRequiresQuestion") }, { status: 400 });
+  }
+  if (data.type === "FORMALIZE" && !data.format) {
+    return NextResponse.json({ error: t("api.formalizeRequiresFormat") }, { status: 400 });
   }
   if (data.video && !timeRangeSchema.safeParse(data.video).success) {
     return NextResponse.json({ error: t("api.endBeforeStart") }, { status: 400 });
@@ -195,7 +209,14 @@ export async function POST(req: Request) {
         content: corpusText,
         providerOptions: { anthropic: { cacheControl: { type: "ephemeral" } } },
       },
-      { role: "user", content: corpusDistillPrompt({ profile, question: data.question!.trim() }) },
+      {
+        role: "user",
+        content: corpusDistillPrompt({
+          profile,
+          lang: await currentLang(),
+          question: data.question!.trim(),
+        }),
+      },
     ];
     const corpusBlockById = new Map(
       corpusDocs.flatMap((d) => d.blocks.map((b) => [b.id, { id: b.id, text: b.text }] as const)),
@@ -349,6 +370,7 @@ export async function POST(req: Request) {
   const depth = data.depth ?? "layman";
   const ctx: PromptCtx = {
     profile,
+    lang: await currentLang(),
     documentTitle: document.title,
     anchoredText: anchored?.anchoredText ?? "",
     contextBefore: anchored?.contextBefore ?? "",
@@ -357,6 +379,7 @@ export async function POST(req: Request) {
     depth,
     query: data.query,
     question: data.question?.trim(),
+    format: data.format,
   };
 
   // FIND searches the transcript; without one there is nothing to search.
@@ -365,6 +388,10 @@ export async function POST(req: Request) {
   );
   if (data.type === "FIND" && timedBlocks.length === 0) {
     return NextResponse.json({ error: t("api.findNeedsTranscript") }, { status: 400 });
+  }
+  // FORMALIZE rewrites the transcript; without one there is nothing to rewrite.
+  if (data.type === "FORMALIZE" && timedBlocks.length === 0) {
+    return NextResponse.json({ error: t("api.formalizeNeedsTranscript") }, { status: 400 });
   }
 
   // EXPLAIN on a video moment: the anchor is the time range; the frame rides
@@ -390,7 +417,7 @@ export async function POST(req: Request) {
     // description of it. They corroborate each other.
     const asset = await db.videoAsset.findUnique({
       where: { documentId: document.id },
-      select: { kind: true, youtubeId: true },
+      select: { kind: true, youtubeId: true, mimeType: true },
     });
     const previewFrame = asset?.kind === "YOUTUBE";
     let frameDescription: string | undefined;
@@ -417,6 +444,7 @@ export async function POST(req: Request) {
       hasRegion: Boolean(data.video.region),
       previewFrame: previewFrame && frameImage !== null,
       frameDescription,
+      audio: isAudioMime(asset?.mimeType ?? null),
     };
   }
 
@@ -762,6 +790,178 @@ export async function POST(req: Request) {
     });
     await bumpNotebook(data.notebookId);
     return NextResponse.json({ ok: true, extraction }, { status: 201 });
+  }
+
+  // FORMALIZE: the transcript rewritten (SPEC.md §11). format article stores
+  // {title, markdown} on the attachment and renders under the transcript —
+  // Regenerate overwrites, like summaries. format notes lands one PENDING note
+  // per topic, each with a time source resolved from the topic's transcript
+  // blocks — nothing enters notes without the user (SPEC.md §1). The model
+  // call holds the connection for minutes on a long transcript, so the
+  // response streams heartbeat spaces and ends with the payload JSON or
+  // STREAM_ERROR_TOKEN + the reason, the DISTILL pattern.
+  if (data.type === "FORMALIZE") {
+    const format = data.format!;
+    const formalizeEncoder = new TextEncoder();
+    let formalizeCancelled = false;
+    let formalizeHeartbeat: ReturnType<typeof setInterval> | null = null;
+    const formalizeStream = new ReadableStream<Uint8Array>({
+      async start(controller) {
+        const send = (text: string) => {
+          if (!formalizeCancelled) controller.enqueue(formalizeEncoder.encode(text));
+        };
+        formalizeHeartbeat = setInterval(() => send(" "), 5_000);
+        const fail = (message: string) => send(`${STREAM_ERROR_TOKEN}${message}`);
+        try {
+          if (format === "article") {
+            const result = await callForJson({
+              model,
+              messages,
+              maxOutputTokens,
+              schema: formalizeArticleSchema,
+              label: "FORMALIZE:article",
+              usage: usageMeta,
+              abortSignal: req.signal,
+            });
+            if (formalizeCancelled || req.signal.aborted) return;
+            if (!result.ok) {
+              fail(t("api.formalizeFailed", { reason: result.error }));
+              return;
+            }
+            const article: FormalizedArticle = {
+              title: result.data.title.trim(),
+              markdown: result.data.markdown.trim(),
+              createdAt: new Date().toISOString(),
+              createdById: user.id,
+            };
+            // The article becomes a document in the corpus (SPEC.md §11):
+            // parsed into blocks so every reader tool works on it. Regenerate
+            // rewrites the same document — its id carries over from the stored
+            // article.
+            const attachment = await db.notebookDocument.findUnique({
+              where: {
+                notebookId_documentId: { notebookId: data.notebookId, documentId: documentId },
+              },
+              select: { formalized: true },
+            });
+            const previous = formalizedArticle(attachment?.formalized ?? null);
+            article.documentId = await materializeArticle(data.notebookId, {
+              ...article,
+              documentId: previous?.documentId,
+            });
+            await db.notebookDocument.update({
+              where: {
+                notebookId_documentId: { notebookId: data.notebookId, documentId: documentId },
+              },
+              data: { formalized: { article } },
+            });
+            await bumpNotebook(data.notebookId);
+            send(JSON.stringify({ ok: true, article }));
+            return;
+          }
+
+          const result = await callForJson({
+            model,
+            messages,
+            maxOutputTokens,
+            schema: formalizeNotesSchema,
+            label: "FORMALIZE:notes",
+            usage: usageMeta,
+            abortSignal: req.signal,
+          });
+          if (formalizeCancelled || req.signal.aborted) return;
+          if (!result.ok) {
+            fail(t("api.formalizeFailed", { reason: result.error }));
+            return;
+          }
+          // Where the notes land: the requested section, else the first
+          // visible section, else a new "Notes" section.
+          let section = data.sectionId
+            ? await db.section.findFirst({
+                where: { id: data.sectionId, notebookId: data.notebookId, hidden: false },
+              })
+            : null;
+          if (!section) {
+            section = await db.section.findFirst({
+              where: { notebookId: data.notebookId, hidden: false },
+              orderBy: { order: "asc" },
+            });
+          }
+          if (!section) {
+            section = await db.section.create({
+              data: { notebookId: data.notebookId, title: t("reader.defaultSectionTitle"), order: 0 },
+            });
+          }
+          // Every note cites its span of the recording: the topic's blocks
+          // give the time range; a topic with no resolvable blocks anchors to
+          // the whole recording on the VIDEO block.
+          const timedById = new Map(timedBlocks.map((b) => [b.id, b]));
+          const videoBlock = document.blocks.find((b) => b.type === "VIDEO") ?? null;
+          const lastEnd = Math.max(...timedBlocks.map((b) => b.endTime!));
+          let order = await db.note.count({ where: { sectionId: section.id } });
+          let noteCount = 0;
+          for (const topic of result.data.topics) {
+            const blocks = topic.blockIds
+              .map((id) => timedById.get(id))
+              .filter((b) => b !== undefined);
+            const anchorBlock = blocks[0] ?? videoBlock;
+            if (!anchorBlock) continue;
+            const startTime = blocks.length > 0 ? Math.min(...blocks.map((b) => b.startTime!)) : 0;
+            const endTime = blocks.length > 0 ? Math.max(...blocks.map((b) => b.endTime!)) : lastEnd;
+            const excerpt = blocks.map((b) => b.text).join(" ").trim();
+            const quotedText =
+              excerpt.length > 240
+                ? `${excerpt.slice(0, 239)}…`
+                : excerpt || formatTimeRange(startTime, endTime);
+            await db.note.create({
+              data: {
+                sectionId: section.id,
+                content: `**${topic.heading.trim()}**\n\n${topic.bullets.map((b) => `- ${b.trim()}`).join("\n")}`,
+                status: "PENDING",
+                derivationType: "FORMALIZE",
+                createdById: user.id,
+                order: order++,
+                sources: {
+                  create: {
+                    documentId: documentId,
+                    blockId: anchorBlock.id,
+                    startOffset: 0,
+                    endOffset: 0,
+                    quotedText,
+                    prefix: "",
+                    suffix: "",
+                    startTime,
+                    endTime,
+                  },
+                },
+              },
+            });
+            noteCount++;
+          }
+          if (noteCount === 0) {
+            fail(t("api.formalizeNoTopics"));
+            return;
+          }
+          await bumpNotebook(data.notebookId);
+          send(JSON.stringify({ ok: true, noteCount, sectionTitle: section.title }));
+        } catch (err) {
+          if (!formalizeCancelled && !req.signal.aborted) {
+            console.error("[derive] FORMALIZE failed:", err);
+            fail(t("api.formalizeFailed", { reason: modelErrorMessage(err) }));
+          }
+        } finally {
+          if (formalizeHeartbeat) clearInterval(formalizeHeartbeat);
+          if (!formalizeCancelled) controller.close();
+        }
+      },
+      cancel() {
+        formalizeCancelled = true;
+        if (formalizeHeartbeat) clearInterval(formalizeHeartbeat);
+      },
+    });
+    return new Response(formalizeStream, {
+      headers: { "Content-Type": "text/plain; charset=utf-8" },
+    });
   }
 
   // DISTILL: question → the quotes that answer it. Every span resolves against

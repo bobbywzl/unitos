@@ -2,11 +2,13 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { isImeKey } from "@/lib/ime";
 import type { NoteView, SectionView } from "@/lib/types";
 import { ChevronDownIcon, ChevronRightIcon } from "@/components/icons";
 import { useCollab } from "@/components/collab/collab-context";
 import { useT } from "@/components/lang-provider";
 import { NoteCard } from "@/components/outline/note-card";
+import { SelectionBar } from "@/components/outline/selection-bar";
 import { filterSections, type OutlineActions } from "@/components/outline/use-outline";
 
 // The tray is for triage, not reorganizing: pending notes hoist to the top as one
@@ -35,7 +37,7 @@ export function NotesTray({
       <input
         value={query}
         onChange={(e) => setQuery(e.target.value)}
-        onKeyDown={(e) => e.key === "Escape" && setQuery("")}
+        onKeyDown={(e) => e.key === "Escape" && !isImeKey(e) && setQuery("")}
         placeholder={t("outline.searchNotes")}
         aria-label={t("outline.searchNotes")}
         className="w-full rounded-full bg-card px-4 py-2 text-[13px] shadow-soft outline-none placeholder:text-sand-500"
@@ -74,6 +76,8 @@ export function NotesTray({
           {t("outline.emptyTraySuffix")}
         </p>
       )}
+
+      <SelectionBar tree={tree} actions={actions} />
     </div>
   );
 }
@@ -142,6 +146,7 @@ function TraySection({
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
                 onKeyDown={(e) => {
+                  if (isImeKey(e)) return;
                   if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) e.currentTarget.form?.requestSubmit();
                   if (e.key === "Escape") setComposing(false);
                 }}

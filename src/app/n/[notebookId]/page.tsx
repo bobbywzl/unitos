@@ -1,6 +1,7 @@
 import { Logo } from "@/components/logo";
 import { notFound, redirect } from "next/navigation";
 import { authEnabled, currentUser } from "@/lib/auth";
+import { serverT } from "@/lib/i18n/server";
 import { peopleByIds, roleOf } from "@/lib/collab";
 import { matchInText } from "@/lib/anchors/match";
 import { hasContext } from "@/lib/derive/context";
@@ -12,6 +13,7 @@ import {
   corpusDistillationList,
   distillationList,
   extractionList,
+  formalizedArticle,
   type AnnotationItem,
   type CorpusDistillationView,
   type DistillationView,
@@ -213,9 +215,11 @@ export default async function NotebookPage(props: {
       anchorHighlights[r.blockId] = list;
     }
 
-    // Stored summaries, distillations, and extractions live on the attachment (SPEC.md §4).
+    // Stored summaries, distillations, extractions, and the formalized article
+    // live on the attachment (SPEC.md §4).
     const attachment = notebook!.documents.find((d) => d.documentId === document.id);
     const summaries = (attachment?.summaries as SummaryLevels | null) ?? {};
+    const formalized = formalizedArticle(attachment?.formalized ?? null);
 
     // Stored distillation quotes and extraction spans heal at render with the
     // anchor ladder (SPEC.md §5): exact offsets, the quote matcher within the
@@ -710,6 +714,7 @@ export default async function NotebookPage(props: {
       references,
       video,
       transcript,
+      formalized,
       videoAnnotations,
       videoSeekBySource,
     };
@@ -729,6 +734,7 @@ export default async function NotebookPage(props: {
       content: n.content,
       status: n.status,
       derivationType: n.derivationType,
+      pinned: n.pinned,
       order: n.order,
       createdById: n.createdById,
       sources: n.sources.map((src) => ({
@@ -972,6 +978,7 @@ export default async function NotebookPage(props: {
           title={pane.document.title}
           video={pane.video}
           transcript={pane.transcript}
+          formalized={pane.formalized}
           annotations={pane.videoAnnotations}
           seekBySource={pane.videoSeekBySource}
           sectionChoices={sectionChoices}
@@ -1076,7 +1083,7 @@ export default async function NotebookPage(props: {
           <div className="flex h-full flex-col items-center justify-center gap-5">
             <Logo size={140} className="text-sand-400" />
             <p className="max-w-sm text-center text-sm text-sand-600">
-              No document open. Upload a PDF, drop one here, or add a URL to start reading.
+              {(await serverT())("panes.noDocumentOpen")}
             </p>
           </div>
         )

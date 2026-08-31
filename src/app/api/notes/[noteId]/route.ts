@@ -12,6 +12,7 @@ const patchSchema = z.object({
   order: z.number().int().min(0).optional(),
   sectionId: z.string().min(1).optional(),
   status: z.enum(["PENDING", "ACCEPTED", "REJECTED"]).optional(),
+  pinned: z.boolean().optional(),
 });
 
 export async function PATCH(req: Request, ctx: { params: Promise<{ noteId: string }> }) {
@@ -37,18 +38,26 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ noteId: strin
     });
   }
 
-  if (data.content !== undefined || data.status !== undefined || data.color !== undefined) {
+  if (
+    data.content !== undefined ||
+    data.status !== undefined ||
+    data.color !== undefined ||
+    data.pinned !== undefined
+  ) {
     await db.note.update({
       where: { id: noteId },
       data: {
         ...(data.content !== undefined ? { content: data.content } : {}),
         ...(data.status !== undefined ? { status: data.status } : {}),
         ...(data.color !== undefined ? { color: data.color } : {}),
+        ...(data.pinned !== undefined ? { pinned: data.pinned } : {}),
       },
     });
   }
 
-  if (data.order !== undefined) {
+  // Pinning moves the note to the top of its section; unpinning leaves it in place.
+  const targetOrder = data.order ?? (data.pinned === true ? 0 : undefined);
+  if (targetOrder !== undefined) {
     const current = await db.note.findUnique({ where: { id: noteId } });
     if (current) {
       const siblings = await db.note.findMany({
@@ -56,7 +65,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ noteId: strin
         orderBy: { order: "asc" },
         select: { id: true },
       });
-      const ids = movedOrder(siblings.map((n) => n.id), noteId, data.order);
+      const ids = movedOrder(siblings.map((n) => n.id), noteId, targetOrder);
       await db.$transaction(
         ids.map((id, i) => db.note.update({ where: { id }, data: { order: i } })),
       );

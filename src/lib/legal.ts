@@ -5,7 +5,6 @@ import type { TFunc, TKey } from "@/lib/i18n/dictionaries";
 
 // The place whose law governs the terms, named in the Governing law section.
 // Set this to where you actually live before telling people to sign up.
-export const JURISDICTION = "the State of California, United States";
 
 type Block = { p: TKey } | { ul: TKey[] };
 export type LegalSection = { heading: TKey; blocks: Block[] };
@@ -76,5 +75,5 @@ export const TERMS_SECTIONS: LegalSection[] = [
 
 // Governing law names the jurisdiction; every other line takes no parameters.
 export function legalText(t: TFunc, key: TKey): string {
-  return key === "legal.tLaw" ? t(key, { jurisdiction: JURISDICTION }) : t(key);
+  return key === "legal.tLaw" ? t(key, { jurisdiction: t("legal.jurisdiction") }) : t(key);
 }

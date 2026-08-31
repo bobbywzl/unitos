@@ -4,7 +4,7 @@
 const en = {
   heroA: "Your All-Powerful Notebook",
   heroAccent: "Your Understanding, Your Pace.",
-  ctaTitle: "New here? Bind your first corpus",
+  ctaTitle: "New here? Start your first project",
   signinTitle: "Welcome back",
   forgotTitle: "Reset your password",
   unitos: "Continue with a Unitos account",
@@ -19,7 +19,7 @@ const en = {
   or: "or",
   google: "Continue with Google",
   apple: "Continue with Apple",
-  accountNote: "Sign-in creates your account and keeps your corpora yours.",
+  accountNote: "Sign-in creates your account and keeps your projects yours.",
 
   // Check-your-email state (/signin?sent=<email>; mode=forgot after a reset)
   sentTitle: "Check your email",
@@ -48,7 +48,7 @@ const en = {
   welcomeDesc: "Your account {email} is confirmed. Set a password to sign in next time.",
   setPassword: "Set password",
   welcomeSkip: "Set it later",
-  welcomeNext: "Next: bind your first corpus — upload a PDF or paste a link.",
+  welcomeNext: "Next: start your first project — upload a PDF or paste a link.",
 
   // The reset page (/reset)
   resetTitle: "Set a new password",
@@ -68,7 +68,7 @@ const en = {
   // Only functions you need
   functionsTitle: "Only functions you need",
   fnAssistant: "Smart assistant",
-  fnAssistantSub: "Summarize, explain, ask, distill — grounded in the whole corpus.",
+  fnAssistantSub: "Summarize, explain, ask, distill — grounded in the whole project.",
   fnNotes: "Anchored notes",
   fnNotesSub: "Every note clicks back to its source in the document.",
   fnHighlight: "Highlight and comment",
@@ -82,7 +82,7 @@ const en = {
   fnExtract: "Extract",
   fnExtractSub: "One origin phrase; every passage on its topic.",
 
-  tagline: "One corpus · every note anchored · accepted by you",
+  tagline: "One project · every note anchored · accepted by you",
 
   // Single-reader mode
   singleTitle: "Sign-in is off on this instance.",
@@ -108,7 +108,7 @@ const en = {
 const zh: Record<keyof typeof en, string> = {
   heroA: "你的全能笔记本",
   heroAccent: "你的理解，你的节奏。",
-  ctaTitle: "新来的？装订你的第一个文集",
+  ctaTitle: "第一次来？创建你的第一个项目",
   signinTitle: "欢迎回来",
   forgotTitle: "重置密码",
   unitos: "使用 Unitos 账户继续",
@@ -118,15 +118,15 @@ const zh: Record<keyof typeof en, string> = {
   confirmPasswordLabel: "确认密码",
   forgot: "忘记密码？",
   toSignin: "已有账户？登录",
-  toSignup: "新来的？创建一个",
+  toSignup: "第一次来？创建账户",
   sendReset: "发送重置链接",
   or: "或",
   google: "使用 Google 继续",
   apple: "使用 Apple 继续",
-  accountNote: "登录会创建你的账户，你的文集只属于你。",
+  accountNote: "登录会创建你的账户，你的项目只属于你。",
 
   // Check-your-email state (/signin?sent=<email>; mode=forgot after a reset)
-  sentTitle: "查收你的邮件",
+  sentTitle: "请查收邮件",
   sentTo: "确认链接已发送至",
   sentRest: "点击链接即可创建账户。链接 30 分钟内有效。",
   resetSentTo: "如果已有账户，重置链接将发往",
@@ -152,17 +152,17 @@ const zh: Record<keyof typeof en, string> = {
   welcomeDesc: "你的账户 {email} 已确认。设置密码，下次即可登录。",
   setPassword: "设置密码",
   welcomeSkip: "以后再设",
-  welcomeNext: "下一步：装订你的第一个文集——上传 PDF 或粘贴链接。",
+  welcomeNext: "下一步：创建你的第一个项目——上传 PDF 或粘贴链接。",
 
   // The reset page (/reset)
   resetTitle: "设置新密码",
 
   // The reader, as it is — callouts point from the text
   showcaseTitle: "阅读器，原样呈现",
-  showcaseCaption: "阅读器中的一篇真实论文——展示的功能都是真的。",
+  showcaseCaption: "阅读器中的一篇真实论文——展示的功能全部真实可用。",
   chipAccepted: "✓ 笔记已接受 · 已锚定",
   screenshotAlt: "Unitos 阅读器中的 Attention Is All You Need：高亮、笔记、批注和链接一应俱全。",
-  calloutAssistant: "助手：摘要、解释、提问、提炼",
+  calloutAssistant: "助手：总结、解释、提问、提炼",
   calloutHighlight: "高亮、评论、跨文本链接",
   calloutComment: "页边评论",
   calloutExtract: "提取：同一主题的每个片段",
@@ -172,7 +172,7 @@ const zh: Record<keyof typeof en, string> = {
   // Only functions you need
   functionsTitle: "只有你需要的功能",
   fnAssistant: "智能助手",
-  fnAssistantSub: "摘要、解释、提问、提炼——基于整个文集。",
+  fnAssistantSub: "总结、解释、提问、提炼——基于整个项目。",
   fnNotes: "锚定笔记",
   fnNotesSub: "每条笔记都能点回文档中的出处。",
   fnHighlight: "高亮与评论",
@@ -186,7 +186,7 @@ const zh: Record<keyof typeof en, string> = {
   fnExtract: "提取",
   fnExtractSub: "一个起点短语，同一主题的每个片段。",
 
-  tagline: "一个文集 · 每条笔记有锚点 · 由你接受",
+  tagline: "一个项目 · 每条笔记有锚点 · 由你接受",
 
   // Single-reader mode
   singleTitle: "此实例未开启登录。",
@@ -204,7 +204,7 @@ const zh: Record<keyof typeof en, string> = {
   errEmailSend: "确认邮件发送失败——请重试",
   errEmailToken: "确认链接已过期或已使用——请重新申请",
   errBadLogin: "邮箱或密码不正确",
-  errNoPassword: "该账户还没有密码——请用「忘记密码」设置一个",
+  errNoPassword: "该账户还没有密码——请用“忘记密码”设置一个",
   errPasswordShort: "密码至少 8 个字符",
   errPasswordMatch: "两次输入的密码不一致",
 };

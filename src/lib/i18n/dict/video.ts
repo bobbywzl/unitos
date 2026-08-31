@@ -16,7 +16,7 @@ const en = {
   unmute: "Unmute",
   annotate: "Annotate",
   annotateTitle: "Circle a spot on the frame and comment on it",
-  noEditAnnotate: "Video content cannot be edited or annotated.",
+  audioAnnotateTitle: "Pause and comment on this moment",
   fullscreen: "Fullscreen",
   exitFullscreen: "Exit fullscreen",
   fullscreenF: "Fullscreen (f)",
@@ -25,13 +25,17 @@ const en = {
   useWholeFrame: "Use the whole frame",
   youtubeError: "This YouTube video did not play. It may be private or embedding-disabled.",
   videoError: "This video did not play in this browser.",
+  audioError: "This audio did not play in this browser.",
 
   // Pane: header, tool caption, tool bar
   kindVideo: "Video",
+  kindAudio: "Audio",
   hintCaption: "Circle a spot to comment · Search the video · Click a transcript line to seek",
+  hintCaptionAudio: "Comment on a moment · Search the audio · Click a transcript line to seek",
   circleComment: "Circle & comment",
   circleCommentTitle:
     "Pause and circle a spot on the frame — or take the whole frame — then comment or explain",
+  audioCommentTitle: "Pause on this moment, then comment or explain",
   linesCount: "{n} lines",
   transcriptFailedChip: "Transcript failed",
   transcribing: "Transcribing…",
@@ -40,9 +44,13 @@ const en = {
 
   // Find
   findPlaceholder: "Find in this video…",
+  findPlaceholderAudio: "Find in this audio…",
   findPlaceholderNeedsTranscript: "Find in this video (needs the transcript)…",
+  findPlaceholderNeedsTranscriptAudio: "Find in this audio (needs the transcript)…",
   findAria: "Find in this video",
+  findAriaAudio: "Find in this audio",
   findEmpty: "Nothing in the video answers that.",
+  findEmptyAudio: "Nothing in the audio answers that.",
   findFailed: "Find failed",
   jumpToPart: "Jump the player to this part",
   addedPending: "Added — pending in Notes",
@@ -59,6 +67,7 @@ const en = {
   to: "to",
   regionShows: "The annotation shows whenever playback is inside this range.",
   wholeFrameShows: "Whole frame: the comment shows over the video in this range.",
+  audioRangeShows: "The comment shows over the player in this range.",
   commentCircledPlaceholder: "Comment on the circled spot",
   commentMomentPlaceholder: "Comment on this moment",
   timesInvalid: "Times are m:ss, and the end must be after the start.",
@@ -68,6 +77,8 @@ const en = {
   explainThisMoment: "Explain this moment",
   explainButtonTitle:
     "The model reads the frame and the transcript; the explanation saves as an annotation here",
+  audioExplainButtonTitle:
+    "The model reads the transcript at this range; the explanation saves as an annotation here",
   explanation: "Explanation",
   comment: "Comment",
   streaming: "streaming…",
@@ -79,6 +90,7 @@ const en = {
   transcript: "Transcript",
   transcribeAgain: "Transcribe again",
   transcribeAgainTitle: "Transcribe the video again; the lines are replaced",
+  transcribeAgainTitleAudio: "Transcribe the audio again; the lines are replaced",
   jumpHere: "Jump here",
   commentOnLineTitle: "Comment on this line",
   explain: "Explain",
@@ -86,14 +98,52 @@ const en = {
   openNoteTitle: "Open the note on this moment",
   transcribingLong:
     "Transcribing… takes a minute or two. Read along, click a line to seek, and search the video once it lands.",
+  transcribingLongAudio:
+    "Transcribing… takes a minute or two. Read along, click a line to seek, and search the audio once it lands.",
   transcriptFailedBody: "The transcript did not land. It powers read-along, click-to-seek, and Find.",
   transcriptionFailed: "Transcription failed",
   lastRunUnfinished: "The last run did not finish.",
+  // Known transcription failure classes; unknown ones show the raw diagnostic.
+  errNoSpeech: "No speech was found in the recording.",
+  errTooLarge: "The file is larger than the transcription cap. Try a smaller file.",
+  errCaptions: "The video's captions could not be read.",
+  errNotConfigured: "Transcription is not configured on the server.",
 
   // Visual
   visual: "Visual",
+  visualAudio: "Moments",
   jumpOpenNote: "Jump here and open the note",
   deleteAnnotation: "Delete the annotation",
+
+  // Assistant on the media pane, with the two formalize skills
+  assistant: "Assistant",
+  assistantButtonTitle: "Ask the assistant; it reads the whole transcript",
+  assistantPlaceholder: "Ask the assistant…",
+  assistantSend: "Send",
+  assistantFailed: "Assistant failed",
+  assistantNoReply: "No answer came back. Try again.",
+  assistantActionsUnsupported:
+    "Document actions from this chat are not available on video and audio yet.",
+  skillArticle: "Formalize into an article",
+  skillArticleTitle:
+    "Rewrite the transcript as a formal article; it becomes a document in this project, with every reader tool",
+  skillNotes: "Formalize into bullet-point notes",
+  skillNotesTitle:
+    "Distill the transcript into bullet-point notes; they land pending in the notes tray",
+  skillNeedsTranscript: "Needs the transcript",
+  articleReady: "The article is ready — opening it as a document.",
+  notesReady: "{n} notes are pending in {section}. Accept them in the notes tray.",
+
+  // The formalized article under the transcript
+  article: "Article",
+  openArticle: "Open as document",
+  openArticleTitle:
+    "Open the article as a document in this project — highlight, comment, edit, and distill it like any document",
+  copyMarkdown: "Copy markdown",
+  copyMarkdownTitle: "Copy the article as markdown, for publishing",
+  copied: "Copied",
+  copyFailed: "Copy failed",
+  regenerateArticleTitle: "Formalize the transcript into an article again; this one is replaced",
 };
 
 const zh: Record<keyof typeof en, string> = {
@@ -107,7 +157,7 @@ const zh: Record<keyof typeof en, string> = {
   unmute: "取消静音",
   annotate: "批注",
   annotateTitle: "在画面上圈选一处并评论",
-  noEditAnnotate: "视频内容无法编辑或批注。",
+  audioAnnotateTitle: "暂停并评论这个时刻",
   fullscreen: "全屏",
   exitFullscreen: "退出全屏",
   fullscreenF: "全屏（f）",
@@ -116,12 +166,16 @@ const zh: Record<keyof typeof en, string> = {
   useWholeFrame: "使用整个画面",
   youtubeError: "这个 YouTube 视频无法播放。它可能已设为私密或禁止嵌入。",
   videoError: "这个视频在此浏览器中无法播放。",
+  audioError: "这个音频在此浏览器中无法播放。",
 
   // Pane: header, tool caption, tool bar
   kindVideo: "视频",
+  kindAudio: "音频",
   hintCaption: "圈选一处来评论 · 查找视频内容 · 点击逐字稿行跳转",
+  hintCaptionAudio: "评论一个时刻 · 查找音频内容 · 点击逐字稿行跳转",
   circleComment: "圈选并评论",
   circleCommentTitle: "暂停并在画面上圈选一处——或使用整个画面——然后评论或解释",
+  audioCommentTitle: "暂停在这个时刻，然后评论或解释",
   linesCount: "{n} 行",
   transcriptFailedChip: "转写失败",
   transcribing: "转写中…",
@@ -129,9 +183,13 @@ const zh: Record<keyof typeof en, string> = {
 
   // Find
   findPlaceholder: "在视频中查找…",
+  findPlaceholderAudio: "在音频中查找…",
   findPlaceholderNeedsTranscript: "在视频中查找（需要逐字稿）…",
+  findPlaceholderNeedsTranscriptAudio: "在音频中查找（需要逐字稿）…",
   findAria: "在视频中查找",
+  findAriaAudio: "在音频中查找",
   findEmpty: "视频中没有能回答这个问题的内容。",
+  findEmptyAudio: "音频中没有能回答这个问题的内容。",
   findFailed: "查找失败",
   jumpToPart: "让播放器跳到这一段",
   addedPending: "已添加——在笔记中待定",
@@ -148,6 +206,7 @@ const zh: Record<keyof typeof en, string> = {
   to: "至",
   regionShows: "播放进入此区间时，批注就会显示。",
   wholeFrameShows: "整个画面：评论会在此区间内显示在视频上。",
+  audioRangeShows: "评论会在此区间内显示在播放器上。",
   commentCircledPlaceholder: "评论圈选的位置",
   commentMomentPlaceholder: "评论这个时刻",
   timesInvalid: "时间格式为 m:ss，结束须晚于开始。",
@@ -156,6 +215,7 @@ const zh: Record<keyof typeof en, string> = {
   explainCircled: "解释圈选的位置",
   explainThisMoment: "解释这个时刻",
   explainButtonTitle: "模型会读取画面和逐字稿；解释会在这里保存为批注",
+  audioExplainButtonTitle: "模型会读取此区间的逐字稿；解释会在这里保存为批注",
   explanation: "解释",
   comment: "评论",
   streaming: "生成中…",
@@ -167,20 +227,53 @@ const zh: Record<keyof typeof en, string> = {
   transcript: "逐字稿",
   transcribeAgain: "重新转写",
   transcribeAgainTitle: "重新转写视频；逐字稿行会被替换",
-  jumpHere: "跳到这里",
+  transcribeAgainTitleAudio: "重新转写音频；逐字稿行会被替换",
+  jumpHere: "跳转到这里",
   commentOnLineTitle: "评论这一行",
   explain: "解释",
   openNote: "打开笔记",
   openNoteTitle: "打开这个时刻的笔记",
   transcribingLong: "转写中…需要一两分钟。完成后可以跟读、点击行跳转、查找视频内容。",
+  transcribingLongAudio: "转写中…需要一两分钟。完成后可以跟读、点击行跳转、查找音频内容。",
   transcriptFailedBody: "逐字稿没有生成。跟读、点击跳转和查找都依赖它。",
   transcriptionFailed: "转写失败",
   lastRunUnfinished: "上一次转写没有完成。",
+  errNoSpeech: "录音中没有检测到语音。",
+  errTooLarge: "文件超过转写上限。请试试更小的文件。",
+  errCaptions: "无法读取这个视频的字幕。",
+  errNotConfigured: "服务器未配置转写。",
 
   // Visual
   visual: "画面批注",
-  jumpOpenNote: "跳到这里并打开笔记",
+  visualAudio: "时刻批注",
+  jumpOpenNote: "跳转到这里并打开笔记",
   deleteAnnotation: "删除批注",
+
+  // Assistant on the media pane, with the two formalize skills
+  assistant: "助手",
+  assistantButtonTitle: "向助手提问；它会读取整份逐字稿",
+  assistantPlaceholder: "向助手提问…",
+  assistantSend: "发送",
+  assistantFailed: "助手请求失败",
+  assistantNoReply: "没有收到回答。请重试。",
+  assistantActionsUnsupported: "此对话中的文档操作暂不支持视频和音频。",
+  skillArticle: "整理成文章",
+  skillArticleTitle: "把逐字稿改写成正式文章；文章会成为本项目中的文档，阅读器的全部工具都可用",
+  skillNotes: "整理成分条笔记",
+  skillNotesTitle: "把逐字稿提炼成分条笔记；笔记会以待定状态进入笔记栏",
+  skillNeedsTranscript: "需要逐字稿",
+  articleReady: "文章已生成——正在以文档形式打开。",
+  notesReady: "{section} 中有 {n} 条待定笔记。请在笔记栏接受。",
+
+  // The formalized article under the transcript
+  article: "文章",
+  openArticle: "以文档形式打开",
+  openArticleTitle: "把文章作为本项目中的文档打开——像任何文档一样高亮、评论、编辑、提炼",
+  copyMarkdown: "复制 Markdown",
+  copyMarkdownTitle: "把文章复制为 Markdown，便于发表",
+  copied: "已复制",
+  copyFailed: "复制失败",
+  regenerateArticleTitle: "重新把逐字稿整理成文章；当前这篇会被替换",
 };
 
 export const video = { en, zh } as const;

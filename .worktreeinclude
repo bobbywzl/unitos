@@ -1,0 +1,6 @@
+# Gitignored files copied into each new worktree (gitignore syntax).
+# .env is the runtime config both README setup paths create: DATABASE_URL,
+# DIRECT_URL, and the API keys. Next.js and Prisma read it.
+.env
+# Next.js also loads .env.local when a developer keeps overrides there.
+.env.local

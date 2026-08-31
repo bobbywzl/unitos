@@ -173,6 +173,7 @@ model Note {
   status         NoteStatus      @default(ACCEPTED) // manual notes are ACCEPTED on create
   derivationType DerivationType? // null = manually written
   color          String? // manual highlight hue: "clay" | "sage" | "gold"
+  pinned         Boolean         @default(false) // pinning also moves the note to the top of its section
   order          Int
   // Account that wrote the note (or ran the derivation that produced it).
   // Soft reference like Notebook.userId; null = before attribution existed.
@@ -220,6 +221,7 @@ enum DerivationType {
   SYNTHESIS // notebook-scope assistant output
   FIND // video content reader: query → time ranges + explanations (SPEC.md §11)
   DISTILL // question → the quotes that answer it, stored on the attachment (SPEC.md §4)
+  FORMALIZE // transcript → formal article on the attachment, or bullet-point notes (PENDING)
 }
 
 model Source {
@@ -329,6 +331,7 @@ model NotebookDocument {
   summaries     Json? // SUMMARIZE output: {layman?, intermediate?, professional?}, per notebook per document (SPEC.md §4)
   distillations Json? // DISTILL output: [{id, question, createdAt, quotes}], newest first, per notebook per document (SPEC.md §4)
   extractions   Json? // EXTRACT output: [{id, createdAt, origin, spans}], oldest first — the index gives the label (SPEC.md §4)
+  formalized    Json? // FORMALIZE output: {article: {title, markdown, createdAt, createdById}}; Regenerate overwrites
 
   @@id([notebookId, documentId])
 }
@@ -349,6 +352,9 @@ model Block {
   endTime      Float?
   links        Json? // link spans: [{start, end, quotedText, targetOrder?, href?}] — Contents entries and PDF hyperlinks
   page         Int? // FIGURE blocks from a PDF: 1-based page, for the figure image route
+  // Semantic search vector (text-embedding-3-small, 1024 dims). Null = not
+  // embedded yet; the search route backfills lazily, a text edit clears it.
+  embedding    Unsupported("vector(1024)")?
 }
 
 enum BlockType {

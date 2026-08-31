@@ -23,6 +23,7 @@ import { ShareControl } from "@/components/collab/share-control";
 import { useNotebookSync } from "@/components/collab/use-sync";
 import { GraphOverlay } from "@/components/graph/graph-overlay";
 import { CorpusDistillPage } from "@/components/reader/corpus-distill-page";
+import { ProjectSearch } from "@/components/reader/project-search";
 import { ContextTab, type ContextValues } from "@/components/context-tab";
 import { GuideDialog } from "@/components/guide-dialog";
 import { useT } from "@/components/lang-provider";
@@ -97,6 +98,10 @@ export function Workspace({
     accountId: collab.authOn ? collab.myId : null,
   });
   const [collapsed, setCollapsed] = useState(false);
+  // Below md the tray is a bottom sheet over the reader, opened from the
+  // bottom bar; mobileTray tracks it. On md+ the md: overrides put the same
+  // aside back in the side column, so the flag is inert there.
+  const [mobileTray, setMobileTray] = useState(false);
   const [tab, setTab] = useState<Tab>("notes");
   const [menuOpen, setMenuOpen] = useState(false);
   const [guideOpen, setGuideOpen] = useState(false);
@@ -170,8 +175,13 @@ export function Workspace({
   }, [menuOpen]);
 
   function show(next: Tab) {
+    if (mobileTray && tab === next) {
+      setMobileTray(false);
+      return;
+    }
     setTab(next);
     setCollapsed(false);
+    setMobileTray(true);
   }
 
   return (
@@ -179,7 +189,7 @@ export function Workspace({
     // not one screen of the scroll pane; chrome and trays hide.
     <CollabProvider value={collab}>
     <div className="grid h-screen grid-rows-[68px_1fr] bg-paper print:block print:h-auto">
-      <header className="flex min-w-0 items-center gap-3.5 border-b border-line px-5 print:hidden">
+      <header className="flex min-w-0 items-center gap-2 border-b border-line px-3 sm:gap-3.5 sm:px-5 print:hidden">
         <Link
           href="/"
           aria-label={t("panes.allCorpora")}
@@ -188,16 +198,19 @@ export function Workspace({
           <ArrowLeftIcon size={18} />
         </Link>
         <NotebookTitle id={notebook.id} title={notebook.title} />
-        <span aria-hidden className="size-[5px] shrink-0 rounded-full bg-sand-400" />
-        <div className="mr-auto flex min-w-0">
+        <span aria-hidden className="hidden size-[5px] shrink-0 rounded-full bg-sand-400 sm:block" />
+        <div className="mr-auto flex min-w-0 overflow-x-auto">
           <DocumentBar
             notebookId={notebook.id}
             documents={documents}
             activeId={activeDocumentId}
           />
         </div>
+        <ProjectSearch notebookId={notebook.id} />
         <ShareControl notebookId={notebook.id} presence={presence} />
-        <HistoryControl history={history} />
+        <div className="hidden md:block">
+          <HistoryControl history={history} />
+        </div>
         {canEdit && (
           <ContextTab
             notebookId={notebook.id}
@@ -207,7 +220,7 @@ export function Workspace({
           />
         )}
         {pending.length > 0 && (
-          <span className="shrink-0 rounded-full bg-clay-200 px-3.5 py-1.5 text-xs font-semibold text-clay-800">
+          <span className="hidden shrink-0 rounded-full bg-clay-200 px-3.5 py-1.5 text-xs font-semibold text-clay-800 lg:inline">
             {t("panes.pendingCount", { n: pending.length })}
           </span>
         )}
@@ -215,13 +228,13 @@ export function Workspace({
           onClick={() => setGuideOpen(true)}
           aria-label={t("panes.guide")}
           title={t("panes.guideTitle")}
-          className="flex size-[38px] shrink-0 items-center justify-center rounded-full text-sand-600 hover:bg-clay-100 hover:text-clay-800"
+          className="hidden size-[38px] shrink-0 items-center justify-center rounded-full text-sand-600 hover:bg-clay-100 hover:text-clay-800 md:flex"
         >
           <QuestionIcon size={18} />
         </button>
       </header>
 
-      <div className="flex min-h-0 print:block">
+      <div className="flex min-h-0 pb-[calc(54px+env(safe-area-inset-bottom))] md:pb-0 print:block">
         <div className="relative min-w-0 flex-1 overflow-hidden print:overflow-visible">
           {reader}
           <div
@@ -230,8 +243,14 @@ export function Workspace({
           />
         </div>
 
-        {!collapsed && (
-          <aside className="flex min-h-0 w-[352px] shrink-0 flex-col gap-3.5 border-l border-line bg-sand-100 p-[18px] pb-4 print:hidden">
+        {(!collapsed || mobileTray) && (
+          <aside
+            className={`${
+              mobileTray
+                ? "fixed inset-x-0 bottom-[calc(54px+env(safe-area-inset-bottom))] z-30 flex max-h-[70dvh] rounded-t-[24px] border-t shadow-float md:static md:z-auto md:max-h-none md:rounded-none md:border-t-0 md:shadow-none"
+                : "hidden md:flex"
+            } min-h-0 w-full min-w-0 shrink flex-col gap-3.5 border-line bg-sand-100 p-[18px] pb-4 md:w-[352px] md:shrink-0 md:border-l print:hidden`}
+          >
             {/* The rail's chevron collapses the tray; the header stays clean. */}
             <div className="flex items-center gap-2.5">
               <span className="font-display text-[18px]">{t(TAB_TITLES[tab])}</span>
@@ -242,6 +261,13 @@ export function Workspace({
               {tab === "annotations" && annotationCount > 0 && (
                 <span className="text-[13px] text-sand-600">{annotationCount}</span>
               )}
+              <button
+                onClick={() => setMobileTray(false)}
+                aria-label={t("common.close")}
+                className="ml-auto rounded-full px-2 text-sand-500 hover:text-clay-800 md:hidden"
+              >
+                ✕
+              </button>
             </div>
 
             <div className="min-h-0 flex-1 overflow-y-auto">
@@ -279,12 +305,15 @@ export function Workspace({
 
         <nav
           aria-label={t("panes.workspace")}
-          className="flex w-[52px] shrink-0 flex-col items-center gap-1.5 border-l border-line bg-sand-100 py-2.5 print:hidden"
+          className="fixed inset-x-0 bottom-0 z-30 flex h-[calc(54px+env(safe-area-inset-bottom))] flex-row items-center justify-around border-t border-line bg-sand-100 px-3 pt-1 pb-[env(safe-area-inset-bottom)] md:static md:z-auto md:h-auto md:w-[52px] md:shrink-0 md:flex-col md:justify-start md:gap-1.5 md:border-t-0 md:border-l md:px-0 md:pt-2.5 md:pb-2.5 print:hidden"
         >
           <button
-            onClick={() => setCollapsed(!collapsed)}
+            onClick={() => {
+              setCollapsed(!collapsed);
+              setMobileTray(false);
+            }}
             aria-label={collapsed ? t("panes.expandTray") : t("panes.collapseTray")}
-            className={RAIL_BUTTON}
+            className={`max-md:hidden ${RAIL_BUTTON}`}
           >
             {collapsed ? <ChevronLeftIcon /> : <ChevronRightIcon />}
           </button>
@@ -350,7 +379,7 @@ export function Workspace({
             <EditsIcon />
           </button>
 
-          <div ref={menuRef} className="relative mt-auto">
+          <div ref={menuRef} className="relative md:mt-auto">
             <button
               onClick={() => setMenuOpen(!menuOpen)}
               aria-label={t("panes.more")}

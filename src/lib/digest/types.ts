@@ -87,6 +87,9 @@ export type DigestDocument = {
   extractions: DigestExtraction[];
   summaries: DigestSummary[];
   salience: DigestQuote[];
+  // The formalized article (FORMALIZE, SPEC.md §11). Optional: digests built
+  // before it existed read as none.
+  formalized?: { title: string; markdown: string } | null;
   links: DigestLink[];
   edits: DigestEdit[]; // newest first, capped
 };

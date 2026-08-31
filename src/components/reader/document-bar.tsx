@@ -3,6 +3,7 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
+import { isImeKey } from "@/lib/ime";
 import { useCollab } from "@/components/collab/collab-context";
 import { useT } from "@/components/lang-provider";
 import { Logo } from "@/components/logo";
@@ -58,10 +59,16 @@ const MAX_PDF_BYTES = 50 * 1024 * 1024;
 const SINGLE_REQUEST_BYTES = 4 * 1024 * 1024;
 const CHUNK_BYTES = UPLOAD_CHUNK_BYTES;
 
-const VIDEO_EXTENSIONS = /\.(mp4|m4v|webm|ogv|ogg|mov)$/i;
+const MEDIA_EXTENSIONS = /\.(mp4|m4v|webm|ogv|ogg|mov|mp3|m4a|m4b|aac|wav|flac|oga|opus)$/i;
 
-function isVideoFile(file: File): boolean {
-  return file.type.startsWith("video/") || VIDEO_EXTENSIONS.test(file.name);
+// Video and audio files share one path: chunked upload, sniffed server-side,
+// stored as a media document with the transcript machinery (SPEC.md §11).
+function isMediaFile(file: File): boolean {
+  return (
+    file.type.startsWith("video/") ||
+    file.type.startsWith("audio/") ||
+    MEDIA_EXTENSIONS.test(file.name)
+  );
 }
 
 function megabytes(bytes: number): string {
@@ -101,7 +108,7 @@ export function DocumentBar({
       if (!menuRef.current?.contains(e.target as Node)) setMenu(null);
     };
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setMenu(null);
+      if (e.key === "Escape" && !isImeKey(e)) setMenu(null);
     };
     window.addEventListener("pointerdown", onPointerDown);
     window.addEventListener("keydown", onKeyDown);
@@ -292,16 +299,16 @@ export function DocumentBar({
     try {
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
-        const video = isVideoFile(file);
-        if (video && file.size > MAX_VIDEO_BYTES) {
+        const media = isMediaFile(file);
+        if (media && file.size > MAX_VIDEO_BYTES) {
           throw new Error(t("panes.fileTooLarge", { name: file.name, mb: 200 }));
         }
-        if (!video && file.size > MAX_PDF_BYTES) {
+        if (!media && file.size > MAX_PDF_BYTES) {
           throw new Error(t("panes.fileTooLarge", { name: file.name, mb: 50 }));
         }
         const label = files.length > 1 ? `${file.name} (${i + 1}/${files.length})` : file.name;
-        const result = await runIngest(label, video ? "video" : "pdf", (emit) => {
-          if (video) return uploadChunked(file, "video", emit);
+        const result = await runIngest(label, media ? "video" : "pdf", (emit) => {
+          if (media) return uploadChunked(file, "video", emit);
           if (file.size > SINGLE_REQUEST_BYTES) return uploadChunked(file, "pdf", emit);
           const form = new FormData();
           form.set("file", file);
@@ -349,7 +356,7 @@ export function DocumentBar({
       setDragging(false);
       const files = [...(e.dataTransfer?.files ?? [])];
       const accepted = files.filter(
-        (f) => f.type === "application/pdf" || f.name.toLowerCase().endsWith(".pdf") || isVideoFile(f),
+        (f) => f.type === "application/pdf" || f.name.toLowerCase().endsWith(".pdf") || isMediaFile(f),
       );
       if (accepted.length === 0) {
         setError(t("panes.dropPdfOrVideo"));
@@ -464,10 +471,24 @@ export function DocumentBar({
   const menuItem =
     "px-4 py-2 text-left text-sm text-sand-700 hover:bg-clay-100 hover:text-clay-800";
 
+  // On a narrow header the bar scrolls; the open document's pill must be the
+  // visible one. Once per document switch, never while the user scrolls.
+  const barRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    barRef.current
+      ?.querySelector<HTMLElement>("[data-active-pill]")
+      ?.scrollIntoView({ inline: "nearest", block: "nearest" });
+  }, [activeId]);
+
   return (
-    <div className="flex min-w-0 items-center gap-2">
+    <div ref={barRef} className="flex min-w-0 items-center gap-2">
       {documents.map((d) => (
-        <div key={d.id} data-pill-menu className="relative flex shrink-0 items-center">
+        <div
+          key={d.id}
+          data-pill-menu
+          data-active-pill={d.id === activeId || undefined}
+          className="relative flex shrink-0 items-center"
+        >
           <button
             onClick={() => open(d.id)}
             className={`max-w-56 truncate rounded-full pr-8 text-[13px] ${
@@ -746,7 +767,7 @@ export function DocumentBar({
       <input
         ref={videoFileRef}
         type="file"
-        accept="video/mp4,video/webm,video/ogg,video/quicktime,.mp4,.m4v,.webm,.ogv,.ogg,.mov"
+        accept="video/mp4,video/webm,video/ogg,video/quicktime,audio/mpeg,audio/mp4,audio/aac,audio/wav,audio/flac,audio/ogg,.mp4,.m4v,.webm,.ogv,.ogg,.mov,.mp3,.m4a,.m4b,.aac,.wav,.flac,.oga,.opus"
         multiple
         className="hidden"
         onChange={(e) => {

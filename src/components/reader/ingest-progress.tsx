@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { CheckIcon, SpinnerIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
-import type { TKey } from "@/lib/i18n/dictionaries";
+import type { TFunc, TKey } from "@/lib/i18n/dictionaries";
 
 export type IngestStepStatus = "pending" | "active" | "done";
 // labelKey is translated at render; key stays the wire stage id.
@@ -60,6 +60,24 @@ export function advanceIngestSteps(
 
 export function completeIngestSteps(steps: IngestStep[]): IngestStep[] {
   return steps.map((s) => ({ ...s, status: "done" }));
+}
+
+// Count details travel as JSON ({blocks, figures, equations, references}) and
+// render in the UI language; any other detail renders as sent.
+function detailText(t: TFunc, detail: string): string {
+  if (!detail.startsWith("{")) return detail;
+  try {
+    const counts = JSON.parse(detail) as Record<string, number>;
+    const parts = [
+      ...(counts.blocks > 0 ? [t("panes.detailBlocks", { n: counts.blocks })] : []),
+      ...(counts.figures > 0 ? [t("panes.detailFigures", { n: counts.figures })] : []),
+      ...(counts.equations > 0 ? [t("panes.detailEquations", { n: counts.equations })] : []),
+      ...(counts.references > 0 ? [t("panes.detailReferences", { n: counts.references })] : []),
+    ];
+    return parts.join(" · ") || detail;
+  } catch {
+    return detail;
+  }
 }
 
 // A small line-art cat that dances while the pipeline works. Same 24-grid and
@@ -163,7 +181,7 @@ export function IngestProgress({ fileLabel, steps }: { fileLabel: string; steps:
               {t(s.labelKey)}
             </span>
             {s.detail && s.status !== "pending" && (
-              <span className="min-w-0 truncate text-sand-500">· {s.detail}</span>
+              <span className="min-w-0 truncate text-sand-500">· {detailText(t, s.detail)}</span>
             )}
           </li>
         ))}

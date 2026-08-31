@@ -3,9 +3,11 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api";
-import { SearchIcon, SpinnerIcon } from "@/components/icons";
+import { isImeKey } from "@/lib/ime";
+import { SearchIcon, SparkleIcon, SpinnerIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { Markdown } from "@/components/markdown";
+import { ArticleSection, MediaAssistant } from "@/components/video/assistant-card";
 import { Visual } from "@/components/video/visual";
 import type { ThumbnailSource } from "@/components/video/use-thumbnails";
 import { useCollab } from "@/components/collab/collab-context";
@@ -17,10 +19,12 @@ import {
   type VideoSource,
 } from "@/components/video/video-player";
 import { splitStreamError, splitStreamNote } from "@/lib/derive/config";
+import type { FormalizedArticle } from "@/lib/types";
 import { captureStoryboardFrame } from "@/lib/video/frame-client";
 import {
   formatTime,
   formatTimeRange,
+  isAudioMime,
   parseTimeInput,
   type Region,
   type TranscriptLine,
@@ -29,10 +33,10 @@ import {
 } from "@/lib/video/types";
 
 // The video pane (SPEC.md §11): the player with everything for dissecting the
-// video in one surface under it — Find, the transcript, saved annotations.
-// Editing and annotating video content is refused: every edit path shows
-// video.noEditAnnotate instead, and a floating caption says so for a few
-// seconds on open. Source chips seek here instead of scrolling.
+// video in one surface under it — circle and comment, Find, the transcript.
+// Transcription starts on its own when the video is added; a floating caption
+// teaches the tools for a few seconds. Source chips seek here instead of
+// scrolling.
 
 type Composer = {
   region: Region | null;
@@ -54,6 +58,7 @@ export function VideoPane({
   title,
   video,
   transcript,
+  formalized,
   annotations,
   seekBySource,
   sectionChoices,
@@ -63,6 +68,8 @@ export function VideoPane({
   title: string;
   video: VideoInfo;
   transcript: TranscriptLine[];
+  /** The formalized article on this corpus's attachment; null = none yet. */
+  formalized: FormalizedArticle | null;
   annotations: VideoAnnotationItem[];
   /** startTime per source id, for every time anchor in this document — note
       chips and annotation cards jump through ?src=. */
@@ -86,20 +93,10 @@ export function VideoPane({
   const [openNote, setOpenNote] = useState<VideoAnnotationItem | null>(null);
   const [flashSourceId, setFlashSourceId] = useState<string | null>(null);
   const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // The guard caption floats over the player for a few seconds on open.
+  // The tool caption floats over the player for a few seconds on open.
   const [hint, setHint] = useState(true);
-
-  // The hard guard: video content cannot be edited or annotated. Every edit
-  // or annotate path calls refuseEdit() and stops — the notice bar under the
-  // tool bar shows for a few seconds, on top of the always-visible one-liner.
-  const [notice, setNotice] = useState(false);
-  const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  function refuseEdit(): boolean {
-    if (noticeTimer.current) clearTimeout(noticeTimer.current);
-    setNotice(true);
-    noticeTimer.current = setTimeout(() => setNotice(false), 5000);
-    return true; // always refused; guards read `if (refuseEdit()) return`
-  }
+  // The assistant chat card under the tool bar (SPEC.md §11).
+  const [assistantOpen, setAssistantOpen] = useState(false);
 
   // Optimistic annotations and deletes, reconciled when the server props land.
   const [added, setAdded] = useState<VideoAnnotationItem[]>([]);
@@ -117,6 +114,9 @@ export function VideoPane({
       .sort((a, b) => a.startTime - b.startTime || a.endTime - b.endTime);
   }, [annotations, added, removed]);
 
+  // Audio document: no frame, so no circling, no Visual thumbnails, no frame
+  // capture on Explain. Everything else is the same surface (SPEC.md §11).
+  const audio = video.kind === "UPLOAD" && isAudioMime(video.mimeType);
   const source: VideoSource =
     video.kind === "YOUTUBE" && video.youtubeId
       ? { kind: "youtube", youtubeId: video.youtubeId }
@@ -172,10 +172,19 @@ export function VideoPane({
 
   const transcriptPending =
     transcribing || (video.transcriptStatus === "PENDING" && !video.transcriptStale);
+  // Stored transcription errors are language-neutral English diagnostics; the
+  // known classes render in the UI language, the rest as stored.
+  const describeTranscriptError = (message: string): string => {
+    if (/no speech found/i.test(message)) return t("video.errNoSpeech");
+    if (/transcription cap/i.test(message)) return t("video.errTooLarge");
+    if (/caption/i.test(message)) return t("video.errCaptions");
+    if (/is not set/i.test(message)) return t("video.errNotConfigured");
+    return message;
+  };
   const transcriptFailedMessage =
     transcribeError ??
     (video.transcriptStatus === "FAILED"
-      ? video.transcriptError
+      ? video.transcriptError && describeTranscriptError(video.transcriptError)
       : video.transcriptStale
         ? t("video.lastRunUnfinished")
         : null);
@@ -241,9 +250,10 @@ export function VideoPane({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [drawing]);
 
-  // ── Annotate: refused — video content cannot be edited or annotated ─────────
+  // ── Annotate: circle a spot or take the whole frame, then comment or explain.
+  // Audio has no frame to circle: the button opens the composer on the current
+  // moment directly.
   function toggleAnnotate() {
-    if (refuseEdit()) return;
     if (!canEdit) return;
     if (drawing || composer || explaining) {
       setDrawing(false);
@@ -252,12 +262,12 @@ export function VideoPane({
       return;
     }
     playerRef.current?.pause();
-    setDrawing(true);
+    if (audio) onDrawn(null);
+    else setDrawing(true);
   }
 
   function onDrawn(region: Region | null) {
     setDrawing(false);
-    if (refuseEdit()) return; // the composer never opens for new annotations
     const t = Math.floor(playerRef.current?.time() ?? 0);
     setComposer({
       region,
@@ -270,7 +280,6 @@ export function VideoPane({
   }
 
   async function saveComposer() {
-    if (refuseEdit()) return;
     if (!composer || composer.busy) return;
     const startTime = parseTimeInput(composer.startTime);
     const endTime = parseTimeInput(composer.endTime);
@@ -320,7 +329,6 @@ export function VideoPane({
   // toward the loop, stream EXPLAIN with the time anchor. The server persists
   // the output as an annotation at that range, so it joins Visual.
   async function explainComposer() {
-    if (refuseEdit()) return;
     if (!composer || composer.busy) return;
     const startTime = parseTimeInput(composer.startTime);
     const endTime = parseTimeInput(composer.endTime);
@@ -334,7 +342,9 @@ export function VideoPane({
 
   // The frame at a moment, cropped to what was circled: drawn from the file
   // for an upload, pulled from the storyboard sheets for a YouTube video.
+  // Audio has no frame; Explain works from the transcript alone.
   async function captureFrame(region: Region | null, time: number) {
+    if (audio) return undefined;
     if (source.kind === "upload") {
       return (await playerRef.current?.captureAt(time, region)) ?? undefined;
     }
@@ -342,7 +352,6 @@ export function VideoPane({
   }
 
   async function runExplain(anchor: { startTime: number; endTime: number; region: Region | null }) {
-    if (refuseEdit()) return;
     const { startTime, endTime, region } = anchor;
     setOpenNote(null);
     setExplaining({ content: "", done: false, error: null });
@@ -390,7 +399,6 @@ export function VideoPane({
   // A transcript line is an anchor like a circled spot: same tools, same time
   // range, no drawn region (SPEC.md §11).
   function commentOnLine(line: TranscriptLine) {
-    if (refuseEdit()) return;
     if (!canEdit) return;
     playerRef.current?.seek(line.startTime);
     setActiveLineId(line.id);
@@ -408,7 +416,6 @@ export function VideoPane({
   }
 
   function explainLine(line: TranscriptLine) {
-    if (refuseEdit()) return;
     if (!canEdit) return;
     playerRef.current?.seek(line.startTime);
     setActiveLineId(line.id);
@@ -422,10 +429,11 @@ export function VideoPane({
   }
 
   async function onVisualDelete(noteId: string) {
-    if (refuseEdit()) return; // annotations stay: display is untouched
     setRemoved((prev) => new Set(prev).add(noteId));
     router.refresh();
   }
+
+  const annotateOn = drawing || composer !== null || explaining !== null;
 
   return (
     <div className="relative min-h-0 flex-1 overflow-y-auto">
@@ -433,10 +441,10 @@ export function VideoPane({
           widens it — capped so the frame stays fully on screen. */}
       <article
         className="reader-prose mx-auto w-full px-8 py-11"
-        style={{ maxWidth: `max(640px, calc((100vh - 320px) * ${aspect}))` }}
+        style={{ maxWidth: audio ? "760px" : `max(640px, calc((100vh - 320px) * ${aspect}))` }}
       >
         <p className="mb-2.5 text-[11px] font-bold tracking-[0.09em] text-clay-700 uppercase">
-          {video.kind === "YOUTUBE" ? "YouTube" : t("video.kindVideo")}
+          {video.kind === "YOUTUBE" ? "YouTube" : audio ? t("video.kindAudio") : t("video.kindVideo")}
           {video.duration !== null ? ` · ${formatTime(video.duration)}` : ""}
         </p>
         <h2 className="mb-[26px] text-[33px]">{title}</h2>
@@ -445,6 +453,7 @@ export function VideoPane({
           <VideoPlayer
             ref={playerRef}
             source={source}
+            audio={audio}
             aspect={aspect}
             storedDuration={video.duration}
             annotations={all}
@@ -463,27 +472,25 @@ export function VideoPane({
             onAnnotate={toggleAnnotate}
             canAnnotate={canEdit}
           />
-          {/* The guard caption: floats up for a few seconds, then fades. */}
+          {/* The tool caption: floats up for a few seconds, then fades. */}
           {hint && (
             <div className="pointer-events-none absolute bottom-20 left-1/2 z-10 -translate-x-1/2">
               <div
                 onAnimationEnd={() => setHint(false)}
                 className="hint-fade rounded-full bg-black/75 px-5 py-2.5 text-[12.5px] font-medium whitespace-nowrap text-[#f5ead8] backdrop-blur-sm"
               >
-                {t("video.noEditAnnotate")}
+                {audio ? t("video.hintCaptionAudio") : t("video.hintCaption")}
               </div>
             </div>
           )}
         </div>
-
-        {/* The hard guard, always in view: no editing, no annotating. */}
-        <p className="mt-3 px-1 text-xs text-sand-600">{t("video.noEditAnnotate")}</p>
 
         {/* The tool bar: everything for dissecting the video, one surface. */}
         <div className="mt-4">
           <FindPanel
             notebookId={notebookId}
             documentId={documentId}
+            audio={audio}
             hasTranscript={transcript.length > 0}
             sectionChoices={sectionChoices}
             onSeek={(startTime) => {
@@ -491,15 +498,32 @@ export function VideoPane({
             }}
             leading={
               !canEdit ? null : (
+              <>
               <button
                 onClick={toggleAnnotate}
-                aria-disabled
-                title={t("video.noEditAnnotate")}
-                className="flex shrink-0 cursor-not-allowed items-center gap-1.5 rounded-full border border-line px-3.5 py-2 text-xs font-semibold text-sand-700 opacity-50"
+                title={audio ? t("video.audioCommentTitle") : t("video.circleCommentTitle")}
+                className={
+                  annotateOn
+                    ? "flex shrink-0 items-center gap-1.5 rounded-full bg-clay px-3.5 py-2 text-xs font-semibold text-clay-fg"
+                    : "flex shrink-0 items-center gap-1.5 rounded-full border border-line px-3.5 py-2 text-xs font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800"
+                }
               >
                 <SearchIcon size={13} />
-                {t("video.circleComment")}
+                {audio ? t("video.comment") : t("video.circleComment")}
               </button>
+              <button
+                onClick={() => setAssistantOpen((open) => !open)}
+                title={t("video.assistantButtonTitle")}
+                className={
+                  assistantOpen
+                    ? "flex shrink-0 items-center gap-1.5 rounded-full bg-clay px-3.5 py-2 text-xs font-semibold text-clay-fg"
+                    : "flex shrink-0 items-center gap-1.5 rounded-full border border-line px-3.5 py-2 text-xs font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800"
+                }
+              >
+                <SparkleIcon size={13} />
+                {t("video.assistant")}
+              </button>
+              </>
               )
             }
             trailing={
@@ -521,18 +545,14 @@ export function VideoPane({
           />
         </div>
 
-        {/* The refusal toast: an edit or annotate attempt was just refused. */}
-        {notice && (
-          <div className="mt-3 flex items-center gap-2 rounded-2xl bg-card p-3.5 shadow-float">
-            <p className="text-[13px] font-semibold text-red-500">{t("video.noEditAnnotate")}</p>
-            <button
-              onClick={() => setNotice(false)}
-              aria-label={t("common.close")}
-              className="ml-auto rounded-full px-1.5 text-sand-500 hover:text-clay-800"
-            >
-              ✕
-            </button>
-          </div>
+        {assistantOpen && canEdit && (
+          <MediaAssistant
+            notebookId={notebookId}
+            documentId={documentId}
+            hasTranscript={transcript.length > 0}
+            sectionChoices={sectionChoices}
+            onClose={() => setAssistantOpen(false)}
+          />
         )}
 
         {drawing && (
@@ -608,7 +628,11 @@ export function VideoPane({
                 className="w-16 rounded-full bg-sand-100 px-2.5 py-1 text-center text-xs tabular-nums outline-none"
               />
               <span className="text-xs text-sand-500">
-                {composer.region ? t("video.regionShows") : t("video.wholeFrameShows")}
+                {composer.region
+                  ? t("video.regionShows")
+                  : audio
+                    ? t("video.audioRangeShows")
+                    : t("video.wholeFrameShows")}
               </span>
               <button
                 onClick={() => setComposer(null)}
@@ -623,6 +647,7 @@ export function VideoPane({
               value={composer.text}
               onChange={(e) => setComposer({ ...composer, text: e.target.value })}
               onKeyDown={(e) => {
+                if (isImeKey(e)) return;
                 if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void saveComposer();
                 if (e.key === "Escape") setComposer(null);
               }}
@@ -646,7 +671,7 @@ export function VideoPane({
               <button
                 onClick={() => void explainComposer()}
                 disabled={composer.busy}
-                title={t("video.explainButtonTitle")}
+                title={audio ? t("video.audioExplainButtonTitle") : t("video.explainButtonTitle")}
                 className="rounded-full border border-line px-3.5 py-1.5 text-xs font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40"
               >
                 {composer.region ? t("video.explainCircled") : t("video.explainThisMoment")}
@@ -663,6 +688,7 @@ export function VideoPane({
 
         <Visual
           source={thumbnailSource}
+          audio={audio}
           annotations={all}
           onOpen={(a) => {
             playerRef.current?.seek(a.startTime);
@@ -675,6 +701,7 @@ export function VideoPane({
 
         <Transcript
           transcript={transcript}
+          audio={audio}
           activeLineId={activeLineId}
           annotations={all}
           pending={transcriptPending}
@@ -692,6 +719,13 @@ export function VideoPane({
             setOpenNote(a);
           }}
           onTranscribe={() => void transcribe()}
+        />
+
+        <ArticleSection
+          notebookId={notebookId}
+          documentId={documentId}
+          article={formalized}
+          canEdit={canEdit}
         />
       </article>
     </div>

@@ -7,7 +7,7 @@ import { api } from "@/lib/api";
 import { useCollab } from "@/components/collab/collab-context";
 import { AuthorChip } from "@/components/collab/person-badge";
 import { ReplyThread } from "@/components/collab/reply-thread";
-import { useT } from "@/components/lang-provider";
+import { useLang, useT } from "@/components/lang-provider";
 import type { TFunc, TKey } from "@/lib/i18n/dictionaries";
 
 const KIND_KEY: Record<EditItem["kind"], TKey> = {
@@ -101,6 +101,9 @@ function EditCard({
 }) {
   const router = useRouter();
   const t = useT();
+  const lang = useLang();
+  // Dates follow the app language; English keeps the browser default.
+  const dateLocale = lang === "zh" ? "zh-CN" : undefined;
   const { canEdit } = useCollab();
   const [working, setWorking] = useState(false);
   const [errorText, setErrorText] = useState<string | null>(null);
@@ -140,7 +143,7 @@ function EditCard({
         <span className="ml-auto flex items-center gap-2">
           <AuthorChip createdById={edit.userId} nameless />
           <span suppressHydrationWarning className="text-[11px] text-sand-500">
-            {new Date(edit.createdAt).toLocaleString()}
+            {new Date(edit.createdAt).toLocaleString(dateLocale)}
           </span>
         </span>
       </div>

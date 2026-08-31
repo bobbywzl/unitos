@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { tidyTranscript } from "@/lib/video/tidy";
 import {
   groupSegments,
   transcribe,
@@ -6,10 +7,11 @@ import {
   type TranscribeSource,
 } from "@/lib/video/transcribe";
 
-// The transcription job (SPEC.md §11): guards, the provider ladder, and the
-// TRANSCRIPT block writes. Transcription starts on its own when a video is
-// added — the transcript is the point — and /api/documents/[documentId]/transcribe
-// runs the same job for Retry and Transcribe again.
+// The transcription job (SPEC.md §11): guards, the provider ladder, the
+// cleanup pass, and the TRANSCRIPT block writes. Transcription starts on its
+// own when a video or audio is added — the transcript is the point — and
+// /api/documents/[documentId]/transcribe runs the same job for Retry and
+// Transcribe again.
 export type TranscriptionResult =
   | { ok: true; lines: number; provider: string }
   | { ok: false; status: number; error: string };
@@ -27,7 +29,7 @@ export async function runTranscription(documentId: string): Promise<Transcriptio
       transcriptStartedAt: true,
     },
   });
-  if (!asset) return { ok: false, status: 404, error: "This document has no video" };
+  if (!asset) return { ok: false, status: 404, error: "This document has no video or audio" };
 
   if (asset.kind === "YOUTUBE") {
     if (!asset.youtubeId) {
@@ -35,18 +37,21 @@ export async function runTranscription(documentId: string): Promise<Transcriptio
     }
   } else {
     // Uploads need a provider key; the YouTube ladder has a keyless rung.
-    if (!process.env.OPENAI_API_KEY && !process.env.GEMINI_API_KEY) {
+    if (!process.env.GROQ_API_KEY && !process.env.OPENAI_API_KEY && !process.env.GEMINI_API_KEY) {
       return {
         ok: false,
         status: 503,
-        error: "Set OPENAI_API_KEY or GEMINI_API_KEY. Transcription needs one.",
+        error: "Set GROQ_API_KEY, OPENAI_API_KEY, or GEMINI_API_KEY. Transcription needs one.",
       };
     }
-    if (asset.size === null || asset.size > TRANSCRIBE_MAX_BYTES) {
+    // An MP3 past the cap transcribes in frame-boundary chunks; other
+    // containers cannot be cut safely and keep the cap.
+    const chunkable = asset.mimeType === "audio/mpeg";
+    if (asset.size === null || (!chunkable && asset.size > TRANSCRIBE_MAX_BYTES)) {
       return {
         ok: false,
         status: 413,
-        error: "Video is larger than 25 MB, the transcription cap for now",
+        error: "File is larger than 25 MB, the transcription cap for this format",
       };
     }
   }
@@ -85,8 +90,15 @@ export async function runTranscription(documentId: string): Promise<Transcriptio
     }
 
     const { segments, provider } = await transcribe(source);
-    const lines = groupSegments(segments);
-    console.log(`[transcribe] ${asset.kind} via ${provider}: ${lines.length} lines`);
+    // Cleanup before anything stores: fillers, stutters, and false starts out,
+    // punctuation and casing fixed — the transcript reads like an article.
+    // Cleanup emptying every line means it misfired; the raw lines stand.
+    const grouped = groupSegments(segments);
+    const tidied = await tidyTranscript(grouped);
+    const lines = tidied.lines.length > 0 ? tidied.lines : grouped;
+    console.log(
+      `[transcribe] ${asset.kind} via ${provider}, cleaned by ${tidied.provider}: ${lines.length} lines`,
+    );
     await db.$transaction(async (tx) => {
       await tx.block.deleteMany({ where: { documentId, type: "TRANSCRIPT" } });
       await tx.block.createMany({

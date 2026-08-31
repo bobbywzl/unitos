@@ -4,6 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import type { SourceInput } from "@/lib/anchors/input";
+import { anchorableOffset, anchorableText } from "@/lib/anchors/dom";
 import {
   parseSimplified,
   splitSentences,
@@ -22,8 +23,9 @@ import type {
 import type { DocumentReference } from "@/lib/parse/types";
 import { splitStreamError, splitStreamNote } from "@/lib/derive/config";
 import { findWeblinks } from "@/lib/weblinks";
+import { isImeKey, useImeGuard } from "@/lib/ime";
 import type { TFunc, TKey } from "@/lib/i18n/dictionaries";
-import { useT } from "@/components/lang-provider";
+import { useLang, useT } from "@/components/lang-provider";
 import { MicIcon, SparkleIcon, SpinnerIcon, StopIcon, VolumeIcon } from "@/components/icons";
 import { Markdown } from "@/components/markdown";
 import type { BlockData, Highlight } from "@/components/reader/block-view";
@@ -417,6 +419,11 @@ export function ReaderInteractions({
   const tRef = useRef(tCtx);
   tRef.current = tCtx;
   const t: TFunc = useCallback((key, params) => tRef.current(key, params), []);
+  // The app language, read through a ref by mount-time closures (voice input).
+  const langCtx = useLang();
+  const langRef = useRef(langCtx);
+  langRef.current = langCtx;
+  const ime = useImeGuard();
   const containerRef = useRef<HTMLDivElement>(null);
   const [popover, setPopover] = useState<Popover | null>(null);
   // The popover's submenus (section list, link targets) are custom lists, not
@@ -797,23 +804,21 @@ export function ReaderInteractions({
     // anchor to the wrong characters. No selection tools on math blocks.
     if (startBlock.hasAttribute("data-math-block")) return null;
 
-    const preRange = document.createRange();
-    preRange.selectNodeContents(startBlock);
-    preRange.setEnd(range.startContainer, range.startOffset);
-    const startOffset = preRange.toString().length;
-
-    const inBlockRange = document.createRange();
-    inBlockRange.selectNodeContents(startBlock);
-    inBlockRange.setStart(range.startContainer, range.startOffset);
+    // Offsets over the block's anchorable text, never Range.toString(): inline
+    // controls ([data-anchor-skip], e.g. extract chips) render text the stored
+    // block text does not have, and counting it would shift every offset after
+    // it. The quote is sliced from the same walked text, so the anchor is
+    // exactly the selected text.
+    const blockText = anchorableText(startBlock);
+    const startOffset = anchorableOffset(startBlock, range.startContainer, range.startOffset);
     const truncated = !startBlock.contains(range.endContainer);
-    if (!truncated) {
-      inBlockRange.setEnd(range.endContainer, range.endOffset);
-    }
-    const quotedText = inBlockRange.toString();
+    const endOffset = truncated
+      ? blockText.length
+      : anchorableOffset(startBlock, range.endContainer, range.endOffset);
+    if (endOffset <= startOffset) return null;
+    const quotedText = blockText.slice(startOffset, endOffset);
     if (!quotedText.trim()) return null;
-    const endOffset = startOffset + quotedText.length;
 
-    const blockText = startBlock.textContent ?? "";
     const prefix = blockText.slice(Math.max(0, startOffset - 32), startOffset);
     const suffix = blockText.slice(endOffset, endOffset + 32);
 
@@ -853,6 +858,8 @@ export function ReaderInteractions({
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
+      // Escape that dismisses a pinyin candidate list stays the IME's.
+      if (isImeKey(e)) return;
       if (overlayOpenRef.current) {
         setPopover(null);
         setSubmenu(null);
@@ -943,8 +950,41 @@ export function ReaderInteractions({
         setCommentDraft("");
       });
     };
+    // Touch: mouseup is unreliable after long-press selection, and adjusting
+    // the selection handles fires no mouseup at all. pointerup covers the
+    // lift; a debounced selectionchange covers handle drags. Opening only —
+    // a collapsed selection never closes the popover from here.
+    const onPointerUp = (event: PointerEvent) => {
+      if (event.pointerType !== "touch" && event.pointerType !== "pen") return;
+      onMouseUp(event as unknown as MouseEvent);
+    };
+    const coarse = window.matchMedia("(pointer: coarse)").matches;
+    let selectionTimer: ReturnType<typeof setTimeout> | null = null;
+    const onSelectionChange = () => {
+      if (!coarse || !canEditRef.current) return;
+      if (selectionTimer) clearTimeout(selectionTimer);
+      selectionTimer = setTimeout(() => {
+        const captured = captureSelection();
+        if (!captured) return;
+        if (captured && pendingLinkRef.current) {
+          setPopover(null);
+          setSubmenu(null);
+          void completeLinkTo(captured.anchor);
+          return;
+        }
+        setPopover(captured);
+        setSubmenu(null);
+      }, 500);
+    };
     container.addEventListener("mouseup", onMouseUp);
-    return () => container.removeEventListener("mouseup", onMouseUp);
+    container.addEventListener("pointerup", onPointerUp);
+    document.addEventListener("selectionchange", onSelectionChange);
+    return () => {
+      container.removeEventListener("mouseup", onMouseUp);
+      container.removeEventListener("pointerup", onPointerUp);
+      document.removeEventListener("selectionchange", onSelectionChange);
+      if (selectionTimer) clearTimeout(selectionTimer);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [captureSelection, documentId]);
 
@@ -1190,6 +1230,28 @@ export function ReaderInteractions({
     tryScroll();
   }, [linkParam]);
 
+  // Search result navigation: ?block=<blockId> scrolls to the block and flashes it.
+  const blockParam = searchParams.get("block");
+  useEffect(() => {
+    if (!blockParam) return;
+    const container = containerRef.current;
+    if (!container) return;
+    let attempts = 0;
+    const tryScroll = () => {
+      const el = container.querySelector<HTMLElement>(
+        `[data-block-id="${blockParam}"], [data-edit-block="${blockParam}"]`,
+      );
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        el.classList.add("anchor-flash");
+        setTimeout(() => el.classList.remove("anchor-flash"), 2000);
+      } else if (attempts++ < 10) {
+        setTimeout(tryScroll, 200);
+      }
+    };
+    tryScroll();
+  }, [blockParam]);
+
   // Jump from the Annotations panel: works even when ?src is already this anchor.
   useEffect(() => {
     const onFlash = (e: Event) => {
@@ -1233,7 +1295,11 @@ export function ReaderInteractions({
           quotedText: summary.quotedText,
           draft: comment,
           saved: comment,
-          top: markRect.bottom - containerRect.top + container.scrollTop + 8,
+          // Clamped so the action row never lands under the mobile bottom bar.
+          top: Math.min(
+            markRect.bottom - containerRect.top + container.scrollTop + 8,
+            container.scrollTop + container.clientHeight - 240,
+          ),
           left: Math.max(
             12,
             Math.min(
@@ -1372,6 +1438,9 @@ export function ReaderInteractions({
     return () => window.removeEventListener("mousedown", onMouseDown);
   }, [annotationCard]);
 
+  // Below xl the article menu collapses to a pill; the card would sit over
+  // the article text there. The pill toggles it; an action closes it.
+  const [menuExpanded, setMenuExpanded] = useState(false);
   // The article menu tracks the scroll position: visible only at the top.
   useEffect(() => {
     const container = containerRef.current;
@@ -1460,7 +1529,10 @@ export function ReaderInteractions({
         const width = 280;
         setExtractCard({
           id: extractId,
-          top: rect.bottom - containerRect.top + container.scrollTop + 8,
+          top: Math.min(
+            rect.bottom - containerRect.top + container.scrollTop + 8,
+            container.scrollTop + container.clientHeight - 210,
+          ),
           left: Math.max(
             12,
             Math.min(
@@ -2537,7 +2609,9 @@ export function ReaderInteractions({
       return;
     }
     const rec = new Ctor();
-    rec.lang = navigator.language || "en-US";
+    // Spoken commands come in the app language; the browser locale only
+    // decides the English variant.
+    rec.lang = langRef.current === "zh" ? "zh-CN" : navigator.language || "en-US";
     rec.interimResults = true;
     rec.continuous = false;
     rec.onresult = (e) => {
@@ -2880,7 +2954,17 @@ export function ReaderInteractions({
           atTop ? "opacity-100" : "-translate-y-2 opacity-0"
         }`}
       >
-        <div className="flex w-56 flex-col overflow-hidden rounded-2xl bg-card py-1.5 shadow-float">
+        <button
+          onClick={() => setMenuExpanded((v) => !v)}
+          aria-expanded={menuExpanded}
+          className="mb-1.5 flex items-center gap-1.5 rounded-full bg-card px-3 py-2 text-[12px] font-semibold text-clay-800 shadow-float"
+        >
+          <SparkleIcon size={13} />
+          {t("reader.assistant")}
+        </button>
+        <div
+          className={`${menuExpanded ? "flex" : "hidden"} w-56 flex-col overflow-hidden rounded-2xl bg-card py-1.5 shadow-float`}
+        >
           {canEdit && (
             <>
               <span className="flex items-center gap-1.5 px-4 pt-1.5 pb-1 text-[11px] font-bold tracking-[0.08em] text-clay-800 uppercase">
@@ -2890,14 +2974,20 @@ export function ReaderInteractions({
               {FREQUENT_ASKS.map((ask) => (
                 <button
                   key={ask.labelKey}
-                  onClick={() => openArticleChat(t(ask.questionKey))}
+                  onClick={() => {
+                    setMenuExpanded(false);
+                    openArticleChat(t(ask.questionKey));
+                  }}
                   className="px-4 py-2 text-left text-[12.5px] text-sand-800 hover:bg-clay-100 hover:text-clay-800"
                 >
                   {t(ask.labelKey)}
                 </button>
               ))}
               <button
-                onClick={() => openArticleChat(null)}
+                onClick={() => {
+                  setMenuExpanded(false);
+                  openArticleChat(null);
+                }}
                 className="px-4 py-2 text-left text-[12.5px] text-sand-800 hover:bg-clay-100 hover:text-clay-800"
               >
                 {t("reader.askAssistant")}
@@ -2906,7 +2996,10 @@ export function ReaderInteractions({
             </>
           )}
           <button
-            onClick={() => openDistillPage(null)}
+            onClick={() => {
+              setMenuExpanded(false);
+              openDistillPage(null);
+            }}
             title={t("reader.distillMenuTitle")}
             className="px-4 py-2 text-left text-[12.5px] text-sand-800 hover:bg-clay-100 hover:text-clay-800"
           >
@@ -2963,7 +3056,7 @@ export function ReaderInteractions({
       {editHint && !editMode && (
         <div
           onAnimationEnd={() => setEditHint(false)}
-          className="hint-fade pointer-events-none absolute top-16 right-5 z-10 max-w-64 rounded-2xl bg-card px-4 py-2.5 text-[12px] leading-relaxed text-sand-700 shadow-lift"
+          className="hint-fade pointer-events-none absolute top-16 right-5 z-10 max-w-64 rounded-2xl bg-card px-4 py-2.5 text-[12px] leading-relaxed text-sand-700 shadow-lift print:hidden"
         >
           {t("reader.editHint")}
         </div>
@@ -3028,6 +3121,7 @@ export function ReaderInteractions({
               setAnnotationCard((c) => (c ? { ...c, draft: e.target.value } : c))
             }
             onKeyDown={(e) => {
+              if (isImeKey(e)) return;
               if (e.key === "Escape") setAnnotationCard(null);
             }}
             placeholder={t("reader.addCommentPlaceholder")}
@@ -3182,7 +3276,9 @@ export function ReaderInteractions({
                 autoFocus
                 value={aiCommand}
                 onChange={(e) => setAiCommand(e.target.value)}
+                {...ime.props}
                 onKeyDown={(e) => {
+                  if (ime.isImeEnter(e) || isImeKey(e)) return;
                   if (e.key === "Enter" && !e.shiftKey) {
                     e.preventDefault();
                     void runAssistant();
@@ -3326,7 +3422,9 @@ export function ReaderInteractions({
                 autoFocus
                 value={commentDraft}
                 onChange={(e) => setCommentDraft(e.target.value)}
+                {...ime.props}
                 onKeyDown={(e) => {
+                  if (ime.isImeEnter(e) || isImeKey(e)) return;
                   if (e.key === "Enter" && !e.shiftKey && commentDraft.trim()) {
                     e.preventDefault();
                     void annotate({ comment: commentDraft });
@@ -3573,6 +3671,7 @@ export function ReaderInteractions({
                   setCommentCard((c) => (c ? { ...c, draft: e.target.value } : c))
                 }
                 onKeyDown={(e) => {
+                  if (isImeKey(e)) return;
                   if (e.key === "Escape") setCommentCard(null);
                 }}
                 rows={4}
@@ -3697,7 +3796,9 @@ export function ReaderInteractions({
               onChange={(e) =>
                 setAssistantChat((c) => (c ? { ...c, input: e.target.value } : c))
               }
+              {...ime.props}
               onKeyDown={(e) => {
+                if (ime.isImeEnter(e)) return;
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
                   void sendChatMessage();

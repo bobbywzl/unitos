@@ -44,7 +44,8 @@ export async function contentFingerprints(notebookIds?: string[]): Promise<Map<s
                  || ':' || md5(coalesce(salience::text, ''))
                  || ':' || md5(coalesce(summaries::text, ''))
                  || ':' || md5(coalesce(distillations::text, ''))
-                 || ':' || md5(coalesce(extractions::text, '')), '|' ORDER BY "documentId")) AS agg
+                 || ':' || md5(coalesce(extractions::text, ''))
+                 || ':' || md5(coalesce(formalized::text, '')), '|' ORDER BY "documentId")) AS agg
         FROM "NotebookDocument"
         ${ids ? Prisma.sql`WHERE "notebookId" IN (${Prisma.join(ids)})` : Prisma.empty}
         GROUP BY 1`),

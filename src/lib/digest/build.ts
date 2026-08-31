@@ -1,7 +1,13 @@
 import type { DerivationType } from "@prisma/client";
 import { db } from "@/lib/db";
 import { renderBlockLines, renderReferenceLines } from "@/lib/derive/context";
-import { distillationList, extractionList, type SummaryLevels, SUMMARY_DEPTHS } from "@/lib/types";
+import {
+  distillationList,
+  extractionList,
+  formalizedArticle,
+  type SummaryLevels,
+  SUMMARY_DEPTHS,
+} from "@/lib/types";
 import type {
   DigestCounts,
   DigestDocument,
@@ -207,6 +213,7 @@ export async function buildDigest(
       text: summaryLevels[depth]!,
     }));
     const salience = salienceSpans(attachment.salience).map((span) => resolveQuote(span, blockText));
+    const formalized = formalizedArticle(attachment.formalized);
 
     const documentLinks: DigestLink[] = links
       .filter((l) => l.fromDocumentId === d.id)
@@ -247,6 +254,7 @@ export async function buildDigest(
       extractions,
       summaries,
       salience,
+      formalized: formalized ? { title: formalized.title, markdown: formalized.markdown } : null,
       links: documentLinks,
       edits: documentEdits,
     };

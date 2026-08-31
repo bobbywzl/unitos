@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { api } from "@/lib/api";
+import { useImeGuard } from "@/lib/ime";
 import { useT } from "@/components/lang-provider";
 import { WorkCard, type WorkItem } from "@/components/works/work-card";
 
@@ -21,6 +22,7 @@ export function WorksShelf({
 }) {
   const router = useRouter();
   const t = useT();
+  const ime = useImeGuard();
   const inputRef = useRef<HTMLInputElement>(null);
   const [title, setTitle] = useState("");
   const [busy, setBusy] = useState(false);
@@ -59,7 +61,7 @@ export function WorksShelf({
 
   return (
     <>
-      <h1 className="mb-7 text-[46px]">{t("works.corpora")}</h1>
+      <h1 className="mb-7 text-[34px] sm:text-[46px]">{t("works.corpora")}</h1>
 
       <form
         className="mb-11 flex gap-2.5"
@@ -72,9 +74,13 @@ export function WorksShelf({
           ref={inputRef}
           value={title}
           onChange={(e) => setTitle(e.target.value)}
+          {...ime.props}
+          onKeyDown={(e) => {
+            if (ime.isImeEnter(e)) e.preventDefault();
+          }}
           placeholder={t("works.newCorpusTitle")}
           aria-label={t("works.newCorpusTitle")}
-          className="w-[340px] rounded-full bg-card px-5 py-3 text-sm shadow-soft outline-none placeholder:text-sand-500"
+          className="w-full max-w-[340px] rounded-full bg-card px-5 py-3 text-sm shadow-soft outline-none placeholder:text-sand-500"
         />
         <button
           type="submit"

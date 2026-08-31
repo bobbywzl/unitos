@@ -7,7 +7,7 @@ Do not use different phrases and sentence structures for the sake of using diffe
 Concretely:
 
 1. **Repetition of the right word beats variation.** If "note" is the correct term, write "note" every time. Never rotate through synonyms (annotation, entry, item, snippet) to avoid repeating a word. Synonym rotation forces the reader to check whether two words mean two things.
-2. **One term per concept, everywhere.** The vocabulary is fixed: corpus (one binding of documents; the dashboard collection is Corpora; code identifiers keep `notebook`), section, note, source, anchor, block, derivation, pending, accepted, distillation (one question and its quotes), quote, caption, extraction (one origin phrase and its revealing passages), digest (the stored corpus context the assistant reads: one row per corpus per user), share, collaborator (a person a corpus is shared with), role (owner / editor / viewer), person (the badge: name, symbol, color, picture), profile (the account's own settings page section), background (the one context field injected into prompts), reply (one entry in the discussion under a note, an edit, or a link; resolve closes one), account (the signed-in identity), recommended link (an AI-proposed link awaiting Accept), graph (the corpus's documents and links drawn as nodes and curves), history (the corpus's record of edits and deletions). Use these exact words in UI, code, prompts, and docs. Never introduce a second name for an existing concept. The same rule holds in Chinese: the zh glossary at the top of `src/lib/i18n/dict/common.ts` fixes one Chinese term per concept — every namespace keeps to it.
+2. **One term per concept, everywhere.** The vocabulary is fixed: project (one binding of documents; the dashboard collection is Projects; code identifiers keep `notebook`/`corpus`), section, note, source, anchor, block, derivation, pending, accepted, distillation (one question and its quotes), quote, caption, extraction (one origin phrase and its revealing passages), digest (the stored project context the assistant reads: one row per project per user), share, collaborator (a person a project is shared with), role (owner / editor / viewer), person (the badge: name, symbol, color, picture), profile (the account's own settings page section), background (the one context field injected into prompts), reply (one entry in the discussion under a note, an edit, or a link; resolve closes one), account (the signed-in identity), recommended link (an AI-proposed link awaiting Accept), graph (the project's documents and links drawn as nodes and curves), history (the project's record of edits and deletions). Use these exact words in UI, code, prompts, and docs. Never introduce a second name for an existing concept. The same rule holds in Chinese: the zh glossary at the top of `src/lib/i18n/dict/common.ts` fixes one Chinese term per concept — every namespace keeps to it.
 3. **Default to the same sentence structure for parallel content.** Error messages, empty states, tooltips, and prompt instructions that do parallel jobs should have parallel structure. Uniformity is a feature, not a flaw.
 4. **Cut preamble and postamble.** No "Let's dive in", no "In summary", no restating what was just said. Start with the point.
 5. **Short sentences. Concrete words.** Prefer "Click a source chip to jump to the highlight" over "Selecting the associated source indicator will navigate the user to the corresponding highlighted region."
@@ -26,3 +26,21 @@ Concretely:
 - Keep components small; server components by default, client components only where interaction requires it.
 - After each phase, run the app and verify the "Done when" criteria manually before moving on. State plainly which criteria pass and which do not.
 - Deploys: Vercel builds `main`. After the user accepts a change, push it to `main` — the user has standing instructions to auto-deploy accepted work.
+
+## Parallel round rules
+
+### Worker sessions
+- Work only in your own worktree. Never checkout, merge, or push another branch.
+- Never touch `main` or `integration`.
+- Commit after each logical unit of work.
+- Before finishing, write and commit `.integration/<your-branch-slug>.md` containing:
+  - **Intent:** one sentence on what you were asked to do
+  - **Files:** each path you changed, and why
+  - **Decisions:** any choice a reasonable person could have made differently
+- Then stop. Do not merge.
+
+### Orchestrator session (branch `integration`)
+- Never write application code except to resolve a conflict.
+- Report findings first. Wait for explicit approval before merging or editing anything.
+- Merge branches one at a time, running the test suite after each individual merge.
+- Never send a conflict back to the worker that wrote the code.

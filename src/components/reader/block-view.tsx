@@ -110,6 +110,7 @@ function markedText(text: string, highlights: Highlight[], t: TFunc) {
           <a
             key={`chain-${from}`}
             href={link.href}
+            data-anchor-skip
             aria-label={link.linkTitle ? t("panes.linkedTo", { title: link.linkTitle }) : t("panes.linked")}
             title={link.linkTitle ? t("panes.linkedTo", { title: link.linkTitle }) : t("panes.linked")}
             className={CHAIN_BUTTON}
@@ -216,8 +217,9 @@ function markedText(text: string, highlights: Highlight[], t: TFunc) {
       );
       // An extract span carries its label chip right after the span: a
       // passage's chip jumps back to the origin phrase; the origin's chip
-      // opens the extract card. SVG-free inline button, so the block's DOM
-      // text stays exactly the stored text (SPEC.md §5).
+      // opens the extract card. The chip's label is DOM text the stored block
+      // text does not have — data-anchor-skip keeps it out of anchor offsets
+      // (SPEC.md §5).
       const extractEnding = covering.find(
         (h) => h.kind === "extract" && h.end === to && h.extractLabel,
       );
@@ -226,6 +228,7 @@ function markedText(text: string, highlights: Highlight[], t: TFunc) {
           <button
             key={`extract-${from}`}
             type="button"
+            data-anchor-skip
             aria-label={
               extractEnding.extractOrigin
                 ? t("panes.extractStartedHere", { label: extractEnding.extractLabel ?? "" })
@@ -259,6 +262,7 @@ function markedText(text: string, highlights: Highlight[], t: TFunc) {
           <button
             key={`comment-${from}`}
             type="button"
+            data-anchor-skip
             aria-label={t("panes.openComment")}
             title={t("panes.openComment")}
             onClick={(e) => {
@@ -287,6 +291,7 @@ function markedText(text: string, highlights: Highlight[], t: TFunc) {
           <button
             key={`link-start-${from}`}
             type="button"
+            data-anchor-skip
             aria-label={t("panes.linkToOtherTexts")}
             title={t("panes.linkToOtherTexts")}
             onClick={(e) => {

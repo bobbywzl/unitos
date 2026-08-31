@@ -129,6 +129,12 @@ const CONTROL_BUTTON =
 // The freehand loop being drawn: pointer positions in percent coordinates.
 type DrawState = { points: { x: number; y: number }[] } | null;
 
+// The audio stage decoration: a fixed pseudo-waveform. Deterministic heights,
+// tinted up to the playback position.
+const AUDIO_BARS = Array.from({ length: 64 }, (_, i) =>
+  Math.round(24 + 58 * Math.abs(Math.sin(i * 1.7) * 0.6 + Math.sin(i * 0.53) * 0.4)),
+);
+
 // An ellipse as a path, so the dashed pending outline renders one way.
 function ellipsePathD(r: { cx: number; cy: number; rx: number; ry: number }): string {
   return `M ${r.cx - r.rx} ${r.cy} a ${r.rx} ${r.ry} 0 1 0 ${2 * r.rx} 0 a ${r.rx} ${r.ry} 0 1 0 ${-2 * r.rx} 0`;
@@ -174,6 +180,9 @@ export const VideoPlayer = forwardRef<
   VideoPlayerHandle,
   {
     source: VideoSource;
+    /** Audio document: a compact stage with no frame — no fullscreen, no
+        drawing, no capture. Timed comments still fade in over the stage. */
+    audio?: boolean;
     aspect: number; // width / height; stored value until metadata loads
     storedDuration: number | null;
     annotations: VideoAnnotationItem[];
@@ -187,12 +196,13 @@ export const VideoPlayer = forwardRef<
     pendingRegion: Region | null;
     onMetadata: (m: { duration: number; width?: number; height?: number }) => void;
     onTime: (t: number) => void; // ~4 Hz, for the transcript follow-along
-    onAnnotate: () => void; // the annotate button; the pane refuses and shows its notice
+    onAnnotate: () => void; // the pencil button; pane opens the composer
     canAnnotate: boolean; // viewers on a shared corpus: false hides the button
   }
 >(function VideoPlayer(
   {
     source,
+    audio = false,
     aspect,
     storedDuration,
     annotations,
@@ -222,7 +232,7 @@ export const VideoPlayer = forwardRef<
   const [waiting, setWaiting] = useState(false);
   // The dictionary key, not the text: the message stays right if the language
   // changes after the error.
-  const [error, setError] = useState<"youtubeError" | "videoError" | null>(null);
+  const [error, setError] = useState<"youtubeError" | "videoError" | "audioError" | null>(null);
   const [fullscreen, setFullscreen] = useState(false);
   // The frame's content box inside the stage (letterbox math); the overlay and
   // the frame both size to it, so percent coordinates always mean the frame.
@@ -391,8 +401,10 @@ export const VideoPlayer = forwardRef<
     return () => cancelAnimationFrame(raf);
   }, [playing]);
 
-  // Letterbox math: the frame's content box inside the stage.
+  // Letterbox math: the frame's content box inside the stage. Audio has no
+  // frame; its stage is a fixed-height bar and the overlay fills it.
   useEffect(() => {
+    if (audio) return;
     const stage = stageRef.current;
     if (!stage) return;
     const measure = () => {
@@ -405,7 +417,7 @@ export const VideoPlayer = forwardRef<
     const observer = new ResizeObserver(measure);
     observer.observe(stage);
     return () => observer.disconnect();
-  }, [videoAspect]);
+  }, [videoAspect, audio]);
 
   useEffect(() => {
     const onChange = () => setFullscreen(document.fullscreenElement === containerRef.current);
@@ -524,7 +536,7 @@ export const VideoPlayer = forwardRef<
     } else if (e.key === "ArrowRight") {
       e.preventDefault();
       seek(Math.min(duration, time + 5));
-    } else if (e.key === "f") {
+    } else if (e.key === "f" && !audio) {
       e.preventDefault();
       toggleFullscreen();
     }
@@ -540,16 +552,38 @@ export const VideoPlayer = forwardRef<
       className="flex flex-col overflow-hidden rounded-[24px] shadow-float outline-none"
       style={{ background: STAGE, "--player-text": STAGE_TEXT } as React.CSSProperties}
     >
-      {/* Stage: the frame's content box centers inside; overlay matches it exactly. */}
+      {/* Stage: the frame's content box centers inside; overlay matches it
+          exactly. The audio stage is a fixed-height bar with the waveform
+          decoration — timed comments still fade in over it. */}
       <div
         ref={stageRef}
         className={`relative flex items-center justify-center ${fullscreen ? "min-h-0 flex-1" : ""}`}
-        style={fullscreen ? undefined : { aspectRatio: videoAspect }}
+        style={fullscreen ? undefined : audio ? { height: 132 } : { aspectRatio: videoAspect }}
       >
         <div
-          className={box ? "relative" : "relative h-full w-full"}
-          style={box ? { width: box.w, height: box.h } : undefined}
+          className={box && !audio ? "relative" : "relative h-full w-full"}
+          style={box && !audio ? { width: box.w, height: box.h } : undefined}
         >
+          {audio && (
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-0 flex items-center justify-center gap-[3px] px-10"
+            >
+              {AUDIO_BARS.map((h, i) => (
+                <span
+                  key={i}
+                  className="w-[3px] rounded-full transition-colors duration-300"
+                  style={{
+                    height: `${h * 0.6}%`,
+                    background:
+                      duration > 0 && (i / AUDIO_BARS.length) * 100 <= progress
+                        ? "var(--clay-400)"
+                        : "rgba(245, 234, 216, 0.22)",
+                  }}
+                />
+              ))}
+            </div>
+          )}
           {source.kind === "upload" ? (
             <video
               ref={videoRef}
@@ -573,10 +607,13 @@ export const VideoPlayer = forwardRef<
                     width: video.videoWidth,
                     height: video.videoHeight,
                   });
+                } else {
+                  // Audio reports no frame size; the duration still matters.
+                  onMetadataRef.current({ duration: video.duration });
                 }
               }}
-              onError={() => setError("videoError")}
-              className="h-full w-full"
+              onError={() => setError(audio ? "audioError" : "videoError")}
+              className={audio ? "h-full w-full opacity-0" : "h-full w-full"}
             />
           ) : (
             <div className="absolute inset-0">
@@ -718,7 +755,7 @@ export const VideoPlayer = forwardRef<
             className="absolute inset-0 flex items-center justify-center px-8 text-center text-sm"
             style={{ color: STAGE_MUTED }}
           >
-            {t(error === "youtubeError" ? "video.youtubeError" : "video.videoError")}
+            {t(`video.${error}`)}
           </div>
         )}
       </div>
@@ -794,15 +831,19 @@ export const VideoPlayer = forwardRef<
         {canAnnotate && (
         <button
           onClick={onAnnotate}
-          aria-disabled
           aria-label={t("video.annotate")}
-          title={t("video.noEditAnnotate")}
-          className="flex size-8 shrink-0 cursor-not-allowed items-center justify-center rounded-full text-[color:var(--player-text)] opacity-50"
+          title={audio ? t("video.audioAnnotateTitle") : t("video.annotateTitle")}
+          className={
+            drawing
+              ? "flex size-8 shrink-0 items-center justify-center rounded-full bg-clay text-clay-fg"
+              : CONTROL_BUTTON
+          }
         >
           <SearchIcon size={17} />
         </button>
         )}
 
+        {!audio && (
         <button
           onClick={toggleFullscreen}
           aria-label={fullscreen ? t("video.exitFullscreen") : t("video.fullscreen")}
@@ -811,6 +852,7 @@ export const VideoPlayer = forwardRef<
         >
           <FullscreenIcon size={17} />
         </button>
+        )}
       </div>
     </div>
   );

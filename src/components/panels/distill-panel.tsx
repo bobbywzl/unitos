@@ -3,7 +3,7 @@
 import type { CorpusDistillationView, DistillationView } from "@/lib/types";
 import { useCollab } from "@/components/collab/collab-context";
 import { AuthorChip } from "@/components/collab/person-badge";
-import { useT } from "@/components/lang-provider";
+import { useLang, useT } from "@/components/lang-provider";
 
 // The Distill tab: every distillation of the open document, for reference.
 // A row opens the distilled page on that distillation; the button opens it on
@@ -20,6 +20,9 @@ export function DistillPanel({
   hasDocuments: boolean;
 }) {
   const t = useT();
+  const lang = useLang();
+  // Dates follow the app language; English keeps the browser default.
+  const dateLocale = lang === "zh" ? "zh-CN" : undefined;
   const { canEdit } = useCollab();
 
   function open(distillationId: string | null) {
@@ -63,7 +66,7 @@ export function DistillPanel({
                 {t(d.quotes.length === 1 ? "panels.quoteCountOne" : "panels.quoteCountMany", {
                   n: d.quotes.length,
                 })}{" "}
-                · {new Date(d.createdAt).toLocaleDateString()}
+                · {new Date(d.createdAt).toLocaleDateString(dateLocale)}
                 <AuthorChip createdById={d.createdById} nameless size={13} />
               </span>
             </button>
@@ -113,7 +116,7 @@ export function DistillPanel({
                 {t(d.quotes.length === 1 ? "panels.quoteCountOne" : "panels.quoteCountMany", {
                   n: d.quotes.length,
                 })}{" "}
-                · {new Date(d.createdAt).toLocaleDateString()}
+                · {new Date(d.createdAt).toLocaleDateString(dateLocale)}
                 <AuthorChip createdById={d.createdById} nameless size={13} />
               </span>
             </button>

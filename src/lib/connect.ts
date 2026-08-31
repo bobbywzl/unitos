@@ -7,6 +7,8 @@ import { db } from "@/lib/db";
 import { CONNECT_MODEL } from "@/lib/derive/config";
 import { renderBlockLines } from "@/lib/derive/context";
 import { callForJson } from "@/lib/derive/json-call";
+import type { Lang } from "@/lib/i18n/config";
+import { currentLang } from "@/lib/i18n/server";
 import { connectPrompt } from "@/lib/prompts/connect";
 
 // Recommended links (SPEC.md §13): when a document joins a corpus, scan it
@@ -56,13 +58,16 @@ function resolveQuote(block: BlockRow | undefined, quote: string) {
 }
 
 /** Scan one document against its corpus. Returns how many recommended links
-    were stored. */
+    were stored. lang steers the link reasons; when the caller runs in after()
+    where the request is gone, pass the language captured at request time. */
 export async function buildConnections(
   notebookId: string,
   documentId: string,
   userId: string | null,
+  lang?: Lang,
 ): Promise<number> {
   if (!process.env.ANTHROPIC_API_KEY) return 0;
+  const reasonLang = lang ?? (await currentLang());
 
   const [document, attachments] = await Promise.all([
     db.document.findUnique({
@@ -107,6 +112,7 @@ export async function buildConnections(
     {
       role: "user",
       content: connectPrompt({
+        lang: reasonLang,
         documentTitle: document.title,
         documentBlocks: cap(renderBlockLines(document.blocks), NEW_DOCUMENT_BUDGET),
         others: otherSections.join("\n\n"),

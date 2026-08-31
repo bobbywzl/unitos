@@ -1,8 +1,12 @@
 import type { Metadata } from "next";
 import { LegalPage } from "@/components/legal-page";
+import { serverT } from "@/lib/i18n/server";
 import { PRIVACY_SECTIONS } from "@/lib/legal";
 
-export const metadata: Metadata = { title: "Privacy Policy — Unitos" };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await serverT();
+  return { title: `${t("legal.privacyTitle")} — Unitos` };
+}
 
 export default function PrivacyPage() {
   return (

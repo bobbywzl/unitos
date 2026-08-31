@@ -31,7 +31,10 @@ const MODEL_PRICING: Record<string, Price> = {
   // OpenAI: whisper-1 is per-minute — its callers pass costUsd directly.
   // gpt-4o-mini-tts: text in ($0.60/1M), audio out (≈$12/1M audio tokens).
   "whisper-1": price(0, 0),
+  // Groq: per-hour transcription — its caller passes costUsd directly.
+  "whisper-large-v3-turbo": price(0, 0),
   "gpt-4o-mini-tts": price(0.6, 12),
+  "text-embedding-3-small": price(0.02, 0),
 };
 
 /** Family fallbacks for ids not priced exactly; first match wins. */
@@ -92,6 +95,7 @@ export type UsageMeta = {
 function providerOf(model: string): string {
   if (model.startsWith("claude")) return "anthropic";
   if (model.startsWith("gemini")) return "google";
+  if (model.startsWith("whisper-large") || model.startsWith("distil-whisper")) return "groq";
   return "openai";
 }
 

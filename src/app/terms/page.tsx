@@ -1,8 +1,12 @@
 import type { Metadata } from "next";
 import { LegalPage } from "@/components/legal-page";
+import { serverT } from "@/lib/i18n/server";
 import { TERMS_SECTIONS } from "@/lib/legal";
 
-export const metadata: Metadata = { title: "Terms of Service — Unitos" };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await serverT();
+  return { title: `${t("legal.termsTitle")} — Unitos` };
+}
 
 export default function TermsPage() {
   return (

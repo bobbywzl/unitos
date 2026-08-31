@@ -24,7 +24,7 @@ const en = {
   pCollectAccount:
     "Your account: the email address, name, and profile picture on the Google account you sign in with. Unitos asks Google for those three things and nothing more — it cannot read your Gmail, Drive, or Calendar.",
   pCollectContent:
-    "What you put in: the documents and videos you upload, the pages you add by URL and the text parsed from them, and every corpus, section, note, annotation, highlight, comment, distillation, extraction, and summary you make.",
+    "What you put in: the documents and videos you upload, the pages you add by URL and the text parsed from them, and every project, section, note, annotation, highlight, comment, distillation, extraction, and summary you make.",
   pCollectContext:
     "Your context: the background, purpose, and application you optionally write in the Context tab, which conditions what the assistant says.",
   pCollectPrefs: "Your preferences: interface language and theme.",
@@ -57,11 +57,11 @@ const en = {
 
   pRetentionHeading: "How long it is kept",
   pRetention:
-    "Your material stays until you delete it. Deleting a corpus deletes its notes and annotations. Rejected notes are kept seven days so you can undo, then permanently deleted by a daily job. To delete your account and everything in it, email robertwzl311@gmail.com and it will be done.",
+    "Your material stays until you delete it. Deleting a project deletes its notes and annotations. Rejected notes are kept seven days so you can undo, then permanently deleted by a daily job. To delete your account and everything in it, email robertwzl311@gmail.com and it will be done.",
 
   pRightsHeading: "Your choices",
   pRightsIntro: "It is your material, and you can:",
-  pRightsExport: "Export any corpus to Markdown or Word from the app, at any time.",
+  pRightsExport: "Export any project to Markdown or Word from the app, at any time.",
   pRightsEdit: "Edit or delete any document, note, or annotation yourself.",
   pRightsDelete: "Ask for a copy of your data, a correction, or full deletion, by email.",
   pRightsLaw:
@@ -73,7 +73,7 @@ const en = {
 
   pSecurityHeading: "Security",
   pSecurity:
-    "Traffic is encrypted over HTTPS, the sign-in cookie cannot be read by scripts, and each account can only reach its own corpora. No service can promise perfect security, so please do not store anything you could not bear to lose or to see exposed.",
+    "Traffic is encrypted over HTTPS, the sign-in cookie cannot be read by scripts, and each account can only reach its own projects. No service can promise perfect security, so please do not store anything you could not bear to lose or to see exposed.",
 
   pChangesHeading: "Changes to this policy",
   pChanges:
@@ -127,6 +127,7 @@ const en = {
   tEnd:
     "You can stop at any time, and email robertwzl311@gmail.com to have your account and material deleted. Unitos may end or restrict access if these terms are broken, or if running the service is no longer possible.",
 
+  jurisdiction: "the State of California, United States",
   tLawHeading: "Governing law",
   tLaw:
     "These terms are governed by the laws of {jurisdiction}, and disputes belong to the courts there.",
@@ -161,9 +162,9 @@ const zh: Record<keyof typeof en, string> = {
   pCollectAccount:
     "你的账户：你用于登录的 Google 账户上的邮箱地址、姓名和头像。Unitos 只向 Google 请求这三项，不请求更多——它无法读取你的 Gmail、云端硬盘或日历。",
   pCollectContent:
-    "你放进去的内容：你上传的文档和视频、你通过网址添加的页面及其解析出的文字，以及你做的每一个文集、章节、笔记、批注、高亮、评论、提炼、提取和摘要。",
+    "你放进去的内容：你上传的文档和视频、你通过网址添加的页面及其解析出的文字，以及你做的每一个项目、章节、笔记、批注、高亮、评论、提炼、提取和摘要。",
   pCollectContext:
-    "你的上下文：你在上下文页签中选填的背景、目的和应用，它们决定助手如何作答。",
+    "你的背景：你在“背景”页签中选填的背景、目的和用途，它们决定助手如何作答。",
   pCollectPrefs: "你的偏好：界面语言和主题。",
   pCollectFeedback: "你发送的反馈：内容本身、发送时所在的页面，以及浏览器的 user-agent 字符串。",
   pCollectLogs: "托管服务商保留的常规服务器日志，例如 IP 地址和请求时间。",
@@ -176,7 +177,7 @@ const zh: Record<keyof typeof en, string> = {
   pAiIntro:
     "Unitos 是 AI 阅读工具，因此你存储的部分内容会发送给 AI 服务商以响应你的请求。这只在你主动发起时发生——后台不发送任何内容：",
   pAiAnthropic:
-    "当你使用解释、简化、提炼、提取、摘要或助手时，Anthropic（Claude）会收到文档文字、你的笔记和批注，以及你的上下文。",
+    "当你使用解释、简化、提炼、提取、摘要或助手时，Anthropic（Claude）会收到文档文字、你的笔记和批注，以及你的背景。",
   pAiOpenAI: "OpenAI 会收到你要求朗读的文字，以及你上传的视频的音频，用于转写。",
   pAiGoogle:
     "Google（Gemini）会收到你上传的视频，或你添加的 YouTube 视频链接，用于转写以及描述你所询问的画面。",
@@ -190,11 +191,11 @@ const zh: Record<keyof typeof en, string> = {
 
   pRetentionHeading: "保留多久",
   pRetention:
-    "你的材料一直保留，直到你删除它。删除文集会同时删除其笔记和批注。被拒绝的笔记保留七天以便撤销，随后由每日任务永久删除。要删除你的账户及其中的一切，请发邮件至 robertwzl311@gmail.com，我们会照办。",
+    "你的材料一直保留，直到你删除它。删除项目会同时删除其笔记和批注。被拒绝的笔记保留七天以便撤销，随后由每日任务永久删除。要删除你的账户及其中的一切，请发邮件至 robertwzl311@gmail.com，即可办妥。",
 
   pRightsHeading: "你的选择",
   pRightsIntro: "这是你的材料，你可以：",
-  pRightsExport: "随时在应用中把任何文集导出为 Markdown 或 Word。",
+  pRightsExport: "随时在应用中把任何项目导出为 Markdown 或 Word。",
   pRightsEdit: "自行编辑或删除任何文档、笔记或批注。",
   pRightsDelete: "通过邮件索取你的数据副本、要求更正或彻底删除。",
   pRightsLaw:
@@ -202,11 +203,11 @@ const zh: Record<keyof typeof en, string> = {
 
   pChildrenHeading: "儿童",
   pChildren:
-    "Unitos 不面向 13 岁以下儿童，也不会在知情的情况下被他们使用。如果儿童的数据出现在这里，请发邮件告知，我们会删除。",
+    "Unitos 不面向 13 岁以下儿童，也不会在知情的情况下被他们使用。如果儿童的数据出现在这里，请发邮件告知，数据会立即删除。",
 
   pSecurityHeading: "安全",
   pSecurity:
-    "流量经 HTTPS 加密，登录 Cookie 无法被脚本读取，每个账户只能访问自己的文集。没有任何服务能承诺绝对安全，因此请不要存储你无法承受丢失或泄露的内容。",
+    "流量经 HTTPS 加密，登录 Cookie 无法被脚本读取，每个账户只能访问自己的项目。没有任何服务能承诺绝对安全，因此请不要存储你无法承受丢失或泄露的内容。",
 
   pChangesHeading: "本政策的变更",
   pChanges:
@@ -259,6 +260,7 @@ const zh: Record<keyof typeof en, string> = {
   tEnd:
     "你可以随时停止使用，并发邮件至 robertwzl311@gmail.com 删除你的账户和材料。若违反本条款，或服务无法继续运营，Unitos 可终止或限制访问。",
 
+  jurisdiction: "美国加利福尼亚州",
   tLawHeading: "适用法律",
   tLaw: "本条款受 {jurisdiction} 法律管辖，争议由该地法院管辖。",
 

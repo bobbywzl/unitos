@@ -21,6 +21,7 @@ export function simplifyPrompt(ctx: PromptCtx): string {
     "2. Keep every claim and number. Do not drop content or add content.",
     "3. Word it intuitively: say what happens before you say why it matters. A short analogy is fine when it makes the meaning clearer.",
     "4. After each rewritten sentence, append a source marker naming the numbered original sentences it restates: [[1]] or [[2,3]]. Every rewritten sentence gets exactly one marker with at least one number. Use only the numbers above.",
+    "5. Write in the passage's language.",
     "Return only the rewritten passage as plain text with the markers. No preamble, no markdown headings.",
   ].join("\n");
 }

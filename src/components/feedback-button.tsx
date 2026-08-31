@@ -1,7 +1,8 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { isImeKey } from "@/lib/ime";
 import { useT } from "@/components/lang-provider";
 
 // Floating feedback button, mounted app-wide (release-edu pattern).
@@ -12,6 +13,16 @@ export function FeedbackButton() {
   const [category, setCategory] = useState<"bug" | "idea" | "other">("bug");
   const [message, setMessage] = useState("");
   const [state, setState] = useState<"idle" | "busy" | "sent" | "error">("idle");
+
+  // Escape closes the dialog, like every popover.
+  useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !isImeKey(e)) setOpen(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [open]);
 
   if (pathname.startsWith("/admin")) return null;
 
@@ -50,7 +61,7 @@ export function FeedbackButton() {
       <button
         onClick={() => setOpen(!open)}
         aria-label={t("works.sendFeedback")}
-        className="fixed right-4 bottom-4 z-30 rounded-full bg-card px-4 py-2 text-sm text-sand-700 shadow-lift hover:bg-clay-100 hover:text-clay-800 print:hidden"
+        className="fixed right-4 bottom-[calc(64px+env(safe-area-inset-bottom))] z-20 rounded-full bg-card px-4 py-2 text-sm text-sand-700 shadow-lift hover:bg-clay-100 hover:text-clay-800 md:bottom-4 print:hidden"
       >
         {t("works.feedback")}
       </button>

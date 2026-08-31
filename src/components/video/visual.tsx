@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
+import { api } from "@/lib/api";
 import { useT } from "@/components/lang-provider";
 import { markdownPreview } from "@/components/markdown";
 import { useVideoThumbnails, type ThumbnailSource } from "@/components/video/use-thumbnails";
@@ -14,36 +15,46 @@ import {
 // the moment it was made, the loop drawn on it, the time range, the note.
 // Clicking a card seeks there and opens what the AI wrote at that moment.
 // The video itself is never modified; this is the visual note layer.
-// Deleting is refused — video content cannot be edited or annotated — so the
-// ✕ only surfaces the pane's notice; saved annotations keep displaying.
 export function Visual({
   source,
+  audio,
   annotations,
   onOpen,
   onDelete,
 }: {
   source: ThumbnailSource;
+  /** Audio document: no frames to draw — cards carry the time range and the
+      note only. */
+  audio?: boolean;
   annotations: VideoAnnotationItem[];
   onOpen: (annotation: VideoAnnotationItem) => void;
   onDelete: (noteId: string) => Promise<void>;
 }) {
   const t = useT();
-  const times = useMemo(() => annotations.map((a) => a.startTime), [annotations]);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const times = useMemo(
+    () => (audio ? [] : annotations.map((a) => a.startTime)),
+    [audio, annotations],
+  );
   const thumbs = useVideoThumbnails(source, times);
 
   if (annotations.length === 0) return null;
 
-  // Refused: nothing is deleted — onDelete lands on the pane's guard, which
-  // shows the notice.
   async function remove(noteId: string) {
-    await onDelete(noteId);
+    setBusyId(noteId);
+    try {
+      await api(`/api/notes/${noteId}`, "DELETE");
+      await onDelete(noteId);
+    } finally {
+      setBusyId(null);
+    }
   }
 
   return (
     <section className="mt-6">
       <div className="mb-2.5 flex items-center gap-2">
         <span className="text-[11px] font-bold tracking-[0.08em] text-sand-600 uppercase">
-          {t("video.visual")}
+          {t(audio ? "video.visualAudio" : "video.visual")}
         </span>
         <span className="text-[13px] text-sand-600">{annotations.length}</span>
       </div>
@@ -58,7 +69,7 @@ export function Visual({
               <button
                 onClick={() => onOpen(a)}
                 title={t("video.jumpOpenNote")}
-                className="relative block aspect-video w-full bg-[#12100e]"
+                className={`relative block w-full bg-[#12100e] ${audio ? "h-9" : "aspect-video"}`}
               >
                 {thumb && (
                   // eslint-disable-next-line @next/next/no-img-element
@@ -107,10 +118,10 @@ export function Visual({
                 </button>
                 <button
                   onClick={() => void remove(a.noteId)}
-                  aria-disabled
+                  disabled={busyId === a.noteId}
                   aria-label={t("video.deleteAnnotation")}
-                  title={t("video.noEditAnnotate")}
-                  className="cursor-not-allowed rounded-full px-1 text-xs text-sand-400 opacity-0 group-hover/card:opacity-100"
+                  title={t("video.deleteAnnotation")}
+                  className="rounded-full px-1 text-xs text-sand-400 opacity-0 group-hover/card:opacity-100 hover:text-red-500 disabled:opacity-40"
                 >
                   ✕
                 </button>

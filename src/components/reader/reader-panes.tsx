@@ -202,7 +202,9 @@ export function ReaderPanes({
       ref={containerRef}
       className={`relative flex h-full min-h-0 min-w-0 ${view === "stack" ? "flex-col" : "flex-row"}`}
     >
-      <div ref={menuRef} className="absolute top-4 left-4 z-30 print:hidden">
+      {/* Bottom-left: clear of the article menu (top-left) and the sticky
+          Distill controls (top-right). */}
+      <div ref={menuRef} className="absolute bottom-4 left-4 z-30 print:hidden">
         <button
           onClick={() => setMenu((v) => !v)}
           aria-label={t("panes.readerView")}
@@ -212,7 +214,7 @@ export function ReaderPanes({
           <ViewGlyph kind={view} />
         </button>
         {menu && (
-          <div className="mt-1.5 flex w-44 flex-col rounded-2xl bg-card p-1.5 shadow-float">
+          <div className="absolute bottom-full left-0 mb-1.5 flex w-44 flex-col rounded-2xl bg-card p-1.5 shadow-float">
             {(["normal", "side", "stack"] as const).map((kind) => (
               <button
                 key={kind}
@@ -238,7 +240,8 @@ export function ReaderPanes({
         <>
           <div aria-hidden className={view === "stack" ? "h-px shrink-0 bg-line" : "w-px shrink-0 bg-line"} />
           <div ref={paneTwoRef} className="relative min-h-0 min-w-0 flex-1">
-            <div className="absolute top-4 left-4 z-30 max-w-[45%] print:hidden">
+            {/* Below the pane's assistant pill (top-4 left-4), never over it. */}
+            <div className="absolute top-14 left-4 z-30 max-w-[45%] print:hidden">
               <select
                 value={paneTwoId ?? ""}
                 onChange={(e) => go(view, e.target.value)}

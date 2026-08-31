@@ -17,11 +17,17 @@ export type OutlineActions = {
   deleteNote: (id: string) => Promise<void>;
   reorderNote: (sectionId: string, id: string, toIndex: number) => void;
   moveNoteToSection: (id: string, sectionId: string) => Promise<void>;
+  mergeNotes: (targetId: string, sourceIds: string[]) => Promise<void>;
+  setPinned: (id: string, pinned: boolean) => Promise<void>;
   acceptNote: (id: string) => Promise<void>;
   rejectNote: (id: string) => Promise<void>;
   sectionChoices: { id: string; label: string }[];
   focusedPendingId: string | null;
   editRequest: { id: string } | null;
+  // The ticker: accepted notes selected for a bulk delete, merge, or pin.
+  selected: ReadonlySet<string>;
+  toggleSelect: (id: string) => void;
+  clearSelection: () => void;
 };
 
 function updateSection(
@@ -34,7 +40,7 @@ function updateSection(
   );
 }
 
-function flattenNotes(sections: SectionView[]): NoteView[] {
+export function flattenNotes(sections: SectionView[]): NoteView[] {
   return sections.flatMap((s) => [...s.notes, ...flattenNotes(s.children)]);
 }
 
@@ -66,6 +72,29 @@ export function useOutline(notebook: NotebookView, canEdit = true) {
   }
 
   const refresh = useCallback(() => router.refresh(), [router]);
+
+  // Ticker selection, pruned against the tree so deleted or merged notes drop out.
+  const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(new Set());
+  const selected = useMemo(() => {
+    const accepted = new Set(
+      flattenNotes(tree)
+        .filter((n) => n.status === "ACCEPTED")
+        .map((n) => n.id),
+    );
+    const pruned = new Set([...selectedIds].filter((id) => accepted.has(id)));
+    return pruned.size === selectedIds.size ? selectedIds : pruned;
+  }, [tree, selectedIds]);
+
+  useEffect(() => {
+    if (selected.size === 0) return;
+    function onKeyDown(e: KeyboardEvent) {
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) return;
+      if (e.key === "Escape") setSelectedIds(new Set());
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [selected.size]);
 
   // Pending queue in outline order (SPEC.md §6 keyboard flow).
   const pending = useMemo(() => flattenNotes(tree).filter((n) => n.status === "PENDING"), [tree]);
@@ -227,6 +256,54 @@ export function useOutline(notebook: NotebookView, canEdit = true) {
       await api(`/api/notes/${id}`, "PATCH", { sectionId });
       refresh();
     },
+    async mergeNotes(targetId, sourceIds) {
+      const byId = new Map(flattenNotes(tree).map((n) => [n.id, n]));
+      const target = byId.get(targetId);
+      const sources = sourceIds.map((id) => byId.get(id)).filter((n): n is NoteView => n !== undefined);
+      if (!target || sources.length === 0) return;
+      // Accepted notes only — pending notes go through Accept/Reject first.
+      if (target.status !== "ACCEPTED" || sources.some((n) => n.status !== "ACCEPTED")) return;
+      const content = [target.content, ...sources.map((n) => n.content)]
+        .map((c) => c.trim())
+        .filter(Boolean)
+        .join("\n\n");
+      const gone = new Set(sources.map((n) => n.id));
+      // Optimistic: the sources fold into the target instantly.
+      setTree((prev) =>
+        prev.map(function walk(s): SectionView {
+          return {
+            ...s,
+            notes: s.notes
+              .filter((n) => !gone.has(n.id))
+              .map((n) =>
+                n.id === targetId
+                  ? { ...n, content, sources: [...n.sources, ...sources.flatMap((x) => x.sources)] }
+                  : n,
+              ),
+            children: s.children.map(walk),
+          };
+        }),
+      );
+      setSelectedIds(new Set());
+      await api("/api/notes/merge", "POST", { targetId, sourceIds: sources.map((n) => n.id) });
+      refresh();
+    },
+    async setPinned(id, pinned) {
+      // Optimistic: pinning also moves the note to the top of its section.
+      setTree((prev) =>
+        prev.map(function walk(s): SectionView {
+          const index = s.notes.findIndex((n) => n.id === id);
+          let notes = s.notes;
+          if (index !== -1) {
+            notes = s.notes.map((n) => (n.id === id ? { ...n, pinned } : n));
+            if (pinned) notes = arrayMove(notes, index, 0);
+          }
+          return { ...s, notes, children: s.children.map(walk) };
+        }),
+      );
+      await api(`/api/notes/${id}`, "PATCH", { pinned });
+      refresh();
+    },
     acceptNote,
     rejectNote,
     sectionChoices: tree.flatMap((s) => [
@@ -235,6 +312,18 @@ export function useOutline(notebook: NotebookView, canEdit = true) {
     ]),
     focusedPendingId: focused?.id ?? null,
     editRequest,
+    selected,
+    toggleSelect(id) {
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        if (next.has(id)) next.delete(id);
+        else next.add(id);
+        return next;
+      });
+    },
+    clearSelection() {
+      setSelectedIds(new Set());
+    },
   };
 
   return { tree, pending, focused, actions, lastRejected, undoReject };

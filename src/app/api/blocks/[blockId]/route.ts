@@ -125,6 +125,8 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ blockId: stri
         ...(block.originalText === null ? { originalText: block.text } : {}),
       },
     });
+    // The search vector no longer matches the text; the next search re-embeds.
+    await tx.$executeRaw`UPDATE "Block" SET "embedding" = NULL WHERE "id" = ${blockId}`;
     await tx.blockEdit.create({
       data: {
         documentId: block.documentId,

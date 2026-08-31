@@ -43,6 +43,18 @@ const en = {
   anchorUnresolvedTitle: "Anchor unresolved. Quoted text: {quote}",
   unresolvedLabel: "unresolved:",
 
+  // Ticker selection (upper-right of every accepted note)
+  selectNote: "Select note",
+  selectedCount: "{n} selected",
+  merge: "Merge",
+  mergeTitle: "Merge the selected notes into the first one",
+  pin: "Pin",
+  unpin: "Unpin",
+  pinnedLabel: "Pinned",
+  confirmDeleteSelected: "Delete {n} notes?",
+  clearSelection: "Clear selection",
+  dropToMerge: "Drop to merge into this note",
+
   // Pending queue
   pendingHeader: "Pending · {n}",
   trayKeyHint: "⏎ accept · ⌫ reject",
@@ -60,9 +72,9 @@ const zh: Record<keyof typeof en, string> = {
 
   searchNotes: "搜索笔记",
   noNotesMatch: "没有匹配“{query}”的笔记。",
-  emptySections: "还没有章节。添加一个开始记笔记。",
+  emptySections: "还没有章节。添加一个，开始记笔记。",
   emptyTrayPrefix: "还没有章节。到",
-  notesFullPage: "笔记整页",
+  notesFullPage: "整页笔记",
   emptyTraySuffix: "添加一个。",
 
   addSection: "添加章节",
@@ -85,8 +97,19 @@ const zh: Record<keyof typeof en, string> = {
   moveTo: "移到…",
   moveNoteAria: "把此笔记移到其他章节",
   confirmDeleteNote: "删除此笔记？",
-  anchorUnresolvedTitle: "锚点未解析。引文：{quote}",
-  unresolvedLabel: "未解析：",
+  anchorUnresolvedTitle: "锚点无法定位。引文：{quote}",
+  unresolvedLabel: "无法定位：",
+
+  selectNote: "选择笔记",
+  selectedCount: "已选 {n} 条",
+  merge: "合并",
+  mergeTitle: "把选中的笔记合并进第一条",
+  pin: "置顶",
+  unpin: "取消置顶",
+  pinnedLabel: "已置顶",
+  confirmDeleteSelected: "删除这 {n} 条笔记？",
+  clearSelection: "清除选择",
+  dropToMerge: "松开即合并进这条笔记",
 
   pendingHeader: "待定 · {n}",
   trayKeyHint: "⏎ 接受 · ⌫ 拒绝",

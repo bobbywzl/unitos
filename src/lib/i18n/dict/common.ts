@@ -2,23 +2,31 @@
 //
 // zh terminology glossary — every namespace keeps to these exact terms
 // (CLAUDE.md rule 2 holds in Chinese too: one term per concept, everywhere):
-//   corpus 文集 · Corpora(全部) 全部文集 · works shelf 书架 · section 章节 ·
+//   project 项目 · Projects(全部) 全部项目 · section 章节 ·
 //   note 笔记 · source 出处 · anchor 锚点 · block 块 · pending 待定 ·
 //   accepted 已接受 · distill/distillation 提炼 · quote 引文 · caption 说明 ·
 //   extract/extraction 提取 · summary 摘要 · digest 汇编 · annotation 批注 ·
 //   highlight 高亮 · comment 评论 · explain 解释 · simplify 简化 ·
-//   assistant 助手 · document 文档 · video 视频 · transcript 逐字稿 ·
+//   assistant 助手 · document 文档 · video 视频 · audio 音频 ·
+//   transcript 逐字稿 · formalize 整理 · article (formalized) 文章 ·
 //   salient 要点 · link 链接 · edit 编辑 · reader 阅读器 · glossary 术语表 ·
 //   sign in 登录 · sign out 退出登录 · settings 设置 · admin 管理 ·
 //   feedback 反馈 · depths: insights 行家洞见 / layman 通俗 / intermediate 进阶 /
 //   professional 专业 · share 共享 · collaborator 协作者 · role 角色 ·
 //   owner 所有者 · editor 编辑者 · viewer 查看者 · profile 个人资料 ·
 //   symbol 符号 · background 背景 · reply 回复 · resolve 解决 ·
-//   recommended link 推荐链接 · graph 图谱 · history 历史
+//   recommended link 推荐链接 · graph 图谱 · history 历史 ·
+//   attach(加入项目) 加入 · detach 移出 · figure 插图 · passage 片段 ·
+//   key term 关键术语 · Edits(页签) 编辑记录 · notes tray 笔记栏 ·
+//   Ask/Auto(模式) 询问/自动 · command 指令 · key takeaways 主要收获 ·
+//   selection 选中内容 · bullet-point notes 分条笔记 · gaps(检查) 疏漏 ·
+//   anchor unresolved 无法定位 · app tab 页签 · browser tab 标签页
+// highlight 高亮 仅指高亮功能；表示选取文字一律用 选中。
 
 const en = {
   appName: "Unitos",
-  works: "Works",
+  appDescription: "Notes-centric app for deep reading",
+  works: "Projects",
   settings: "Settings",
   signOut: "Sign out",
   cancel: "Cancel",
@@ -43,8 +51,9 @@ const en = {
   open: "Open",
   requestFailed: "Request failed",
   requestFailedStatus: "Request failed ({status})",
+  streamIncomplete: "The answer did not arrive whole. Try again.",
   signInToContinue: "Sign in to continue.",
-  corpusNotFound: "Corpus not found",
+  corpusNotFound: "Project not found",
   unauthorized: "Unauthorized",
   modelCallFailed: "The model call failed.",
   // Stale tab: the browser signed out or switched accounts in another tab.
@@ -55,6 +64,10 @@ const en = {
   accountSignedOutBody: "You signed out in another tab.",
   accountContinue: "Continue",
   accountSignIn: "Sign in",
+  // The app-wide 404
+  notFoundTitle: "Page not found",
+  notFoundBody: "This page does not exist, or its link is stale.",
+  notFoundHome: "Back to Projects",
   // Replies: the discussion under a note, an edit, or a link.
   reply: "Reply",
   replyPlaceholder: "Reply…",
@@ -66,7 +79,8 @@ const en = {
 
 const zh: Record<keyof typeof en, string> = {
   appName: "Unitos",
-  works: "书架",
+  appDescription: "以笔记为中心的深度阅读应用",
+  works: "全部项目",
   settings: "设置",
   signOut: "退出登录",
   cancel: "取消",
@@ -91,16 +105,20 @@ const zh: Record<keyof typeof en, string> = {
   open: "打开",
   requestFailed: "请求失败",
   requestFailedStatus: "请求失败（{status}）",
-  signInToContinue: "登录后继续。",
-  corpusNotFound: "未找到该文集",
+  streamIncomplete: "回答没有完整送达。请重试。",
+  signInToContinue: "请登录后继续。",
+  corpusNotFound: "未找到该项目",
   unauthorized: "未授权",
   modelCallFailed: "模型调用失败。",
   accountChanged: "此标签页原先属于其他账户。请刷新页面。",
-  accountChangedTitle: "账户已切换",
+  accountChangedTitle: "账户已变更",
   accountSwitchedBody: "你在另一个标签页登录了 {name}。此标签页原先属于其他账户。",
   accountSignedOutBody: "你在另一个标签页退出了登录。",
   accountContinue: "继续",
   accountSignIn: "登录",
+  notFoundTitle: "页面不存在",
+  notFoundBody: "此页面不存在，或链接已失效。",
+  notFoundHome: "返回全部项目",
   reply: "回复",
   replyPlaceholder: "回复…",
   resolve: "解决",

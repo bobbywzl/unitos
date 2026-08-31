@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { isImeKey, useImeGuard } from "@/lib/ime";
 import type { SectionView } from "@/lib/types";
 import { useCollab } from "@/components/collab/collab-context";
 import { useT } from "@/components/lang-provider";
@@ -22,6 +23,7 @@ export function SectionItem({
 }) {
   const t = useT();
   const { canEdit } = useCollab();
+  const ime = useImeGuard();
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState(section.title);
   const [composing, setComposing] = useState(false);
@@ -49,7 +51,9 @@ export function SectionItem({
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             onBlur={() => void saveTitle()}
+            {...ime.props}
             onKeyDown={(e) => {
+              if (ime.isImeEnter(e) || isImeKey(e)) return;
               if (e.key === "Enter") void saveTitle();
               if (e.key === "Escape") {
                 setTitle(section.title);
@@ -94,6 +98,13 @@ export function SectionItem({
           id={`notes-${section.id}`}
           ids={section.notes.map((n) => n.id)}
           onMove={(id, to) => actions.reorderNote(section.id, id, to)}
+          // Dropping a note on the middle of another merges the two.
+          onCombine={canEdit ? (id, intoId) => void actions.mergeNotes(intoId, [id]) : undefined}
+          canCombine={(id, intoId) => {
+            const a = section.notes.find((n) => n.id === id);
+            const b = section.notes.find((n) => n.id === intoId);
+            return a?.status === "ACCEPTED" && b?.status === "ACCEPTED";
+          }}
         >
           {section.notes.map((note) => (
             <SortableItem key={note.id} id={note.id}>
@@ -120,6 +131,7 @@ export function SectionItem({
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
               onKeyDown={(e) => {
+                if (isImeKey(e)) return;
                 if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) e.currentTarget.form?.requestSubmit();
                 if (e.key === "Escape") setComposing(false);
               }}

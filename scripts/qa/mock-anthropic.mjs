@@ -112,6 +112,19 @@ function buildResponse(all) {
   }
 
   // Salience: spans over the first paragraphs.
+  // EXTRACT (current contract): {"spans": [...]} revealing the highlighted
+  // passage's topic — spans from other paragraphs, skipping the highlight.
+  if (all.includes('"spans"') && all.includes("highlighted passage")) {
+    const spans = paragraphs.slice(0, 3).map((b) => ({
+      blockId: b.id,
+      start: 0,
+      end: Math.min(80, b.text.length),
+    }));
+    return JSON.stringify({
+      spans: spans.length > 0 ? spans : [{ blockId: blocks[0]?.id ?? "x", start: 0, end: 10 }],
+    });
+  }
+
   if (all.includes('"spans"') && all.includes("salient")) {
     const spans = paragraphs.slice(0, 5).map((b) => ({
       blockId: b.id,
