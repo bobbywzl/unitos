@@ -26,3 +26,21 @@ Concretely:
 - Keep components small; server components by default, client components only where interaction requires it.
 - After each phase, run the app and verify the "Done when" criteria manually before moving on. State plainly which criteria pass and which do not.
 - Deploys: Vercel builds `main`. After the user accepts a change, push it to `main` — the user has standing instructions to auto-deploy accepted work.
+
+## Parallel round rules
+
+### Worker sessions
+- Work only in your own worktree. Never checkout, merge, or push another branch.
+- Never touch `main` or `integration`.
+- Commit after each logical unit of work.
+- Before finishing, write and commit `.integration/<your-branch-slug>.md` containing:
+  - **Intent:** one sentence on what you were asked to do
+  - **Files:** each path you changed, and why
+  - **Decisions:** any choice a reasonable person could have made differently
+- Then stop. Do not merge.
+
+### Orchestrator session (branch `integration`)
+- Never write application code except to resolve a conflict.
+- Report findings first. Wait for explicit approval before merging or editing anything.
+- Merge branches one at a time, running the test suite after each individual merge.
+- Never send a conflict back to the worker that wrote the code.
