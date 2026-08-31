@@ -49,7 +49,7 @@ export function NotebookTitle({ id, title }: { id: string; title: string }) {
   return (
     <button
       onClick={() => setEditing(true)}
-      className="max-w-64 shrink-0 truncate font-display text-xl"
+      className="max-w-[120px] shrink-0 truncate font-display text-lg sm:max-w-64 sm:text-xl"
       title={t("works.renameCorpus")}
     >
       {title}

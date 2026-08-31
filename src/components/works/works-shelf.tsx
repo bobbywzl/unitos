@@ -61,7 +61,7 @@ export function WorksShelf({
 
   return (
     <>
-      <h1 className="mb-7 text-[46px]">{t("works.corpora")}</h1>
+      <h1 className="mb-7 text-[34px] sm:text-[46px]">{t("works.corpora")}</h1>
 
       <form
         className="mb-11 flex gap-2.5"
@@ -80,7 +80,7 @@ export function WorksShelf({
           }}
           placeholder={t("works.newCorpusTitle")}
           aria-label={t("works.newCorpusTitle")}
-          className="w-[340px] rounded-full bg-card px-5 py-3 text-sm shadow-soft outline-none placeholder:text-sand-500"
+          className="w-full max-w-[340px] rounded-full bg-card px-5 py-3 text-sm shadow-soft outline-none placeholder:text-sand-500"
         />
         <button
           type="submit"

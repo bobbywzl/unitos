@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Caprasimo, Figtree } from "next/font/google";
 import "./globals.css";
 import { FeedbackButton } from "@/components/feedback-button";
@@ -23,8 +23,27 @@ const figtree = Figtree({
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await serverT();
-  return { title: "Unitos", description: t("common.appDescription") };
+  return {
+    title: "Unitos",
+    description: t("common.appDescription"),
+    // Installable to the home screen — the first step toward the iOS app.
+    manifest: "/manifest.webmanifest",
+    appleWebApp: { capable: true, title: "Unitos", statusBarStyle: "default" },
+    icons: { apple: "/icon.png" },
+  };
 }
+
+// viewportFit cover lets the mobile bottom bar pad into the home-indicator
+// area with env(safe-area-inset-bottom).
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: [
+    { media: "(prefers-color-scheme: dark)", color: "#1a1714" },
+    { color: "#f5ead8" },
+  ],
+};
 
 // Applies the stored theme before paint; follows the system while theme is "system".
 const themeScript = `(function(){try{var m=window.matchMedia("(prefers-color-scheme: dark)");function a(){var t=localStorage.getItem("theme");document.documentElement.classList.toggle("dark",t==="dark"||(t!=="light"&&m.matches));}a();m.addEventListener("change",a);}catch(e){}})();`;

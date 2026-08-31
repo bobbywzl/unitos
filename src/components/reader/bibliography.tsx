@@ -56,7 +56,7 @@ export function Bibliography({ references }: { references: DocumentReference[] }
   if (references.length === 0) return null;
 
   return (
-    <section ref={sectionRef} className="mx-auto w-[720px] max-w-full px-6 pb-14 print:pb-0">
+    <section ref={sectionRef} className="mx-auto w-full max-w-[720px] px-6 pb-14 print:pb-0">
       <div className="border-t border-line pt-5">
         <button
           onClick={() => setOpen((v) => !v)}

@@ -918,8 +918,41 @@ export function ReaderInteractions({
         setCommentDraft("");
       });
     };
+    // Touch: mouseup is unreliable after long-press selection, and adjusting
+    // the selection handles fires no mouseup at all. pointerup covers the
+    // lift; a debounced selectionchange covers handle drags. Opening only —
+    // a collapsed selection never closes the popover from here.
+    const onPointerUp = (event: PointerEvent) => {
+      if (event.pointerType !== "touch" && event.pointerType !== "pen") return;
+      onMouseUp(event as unknown as MouseEvent);
+    };
+    const coarse = window.matchMedia("(pointer: coarse)").matches;
+    let selectionTimer: ReturnType<typeof setTimeout> | null = null;
+    const onSelectionChange = () => {
+      if (!coarse || !canEditRef.current) return;
+      if (selectionTimer) clearTimeout(selectionTimer);
+      selectionTimer = setTimeout(() => {
+        const captured = captureSelection();
+        if (!captured) return;
+        if (captured && pendingLinkRef.current) {
+          setPopover(null);
+          setSubmenu(null);
+          void completeLinkTo(captured.anchor);
+          return;
+        }
+        setPopover(captured);
+        setSubmenu(null);
+      }, 500);
+    };
     container.addEventListener("mouseup", onMouseUp);
-    return () => container.removeEventListener("mouseup", onMouseUp);
+    container.addEventListener("pointerup", onPointerUp);
+    document.addEventListener("selectionchange", onSelectionChange);
+    return () => {
+      container.removeEventListener("mouseup", onMouseUp);
+      container.removeEventListener("pointerup", onPointerUp);
+      document.removeEventListener("selectionchange", onSelectionChange);
+      if (selectionTimer) clearTimeout(selectionTimer);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [captureSelection, documentId]);
 
@@ -1332,6 +1365,9 @@ export function ReaderInteractions({
     return () => window.removeEventListener("mousedown", onMouseDown);
   }, [annotationCard]);
 
+  // Below xl the article menu collapses to a pill; the card would sit over
+  // the article text there. The pill toggles it; an action closes it.
+  const [menuExpanded, setMenuExpanded] = useState(false);
   // The article menu tracks the scroll position: visible only at the top.
   useEffect(() => {
     const container = containerRef.current;
@@ -2842,7 +2878,17 @@ export function ReaderInteractions({
           atTop ? "opacity-100" : "-translate-y-2 opacity-0"
         }`}
       >
-        <div className="flex w-56 flex-col overflow-hidden rounded-2xl bg-card py-1.5 shadow-float">
+        <button
+          onClick={() => setMenuExpanded((v) => !v)}
+          aria-expanded={menuExpanded}
+          className="mb-1.5 flex items-center gap-1.5 rounded-full bg-card px-3 py-2 text-[12px] font-semibold text-clay-800 shadow-float xl:hidden"
+        >
+          <SparkleIcon size={13} />
+          {t("reader.assistant")}
+        </button>
+        <div
+          className={`${menuExpanded ? "flex" : "hidden"} w-56 flex-col overflow-hidden rounded-2xl bg-card py-1.5 shadow-float xl:flex`}
+        >
           {canEdit && (
             <>
               <span className="flex items-center gap-1.5 px-4 pt-1.5 pb-1 text-[11px] font-bold tracking-[0.08em] text-clay-800 uppercase">
@@ -2852,14 +2898,20 @@ export function ReaderInteractions({
               {FREQUENT_ASKS.map((ask) => (
                 <button
                   key={ask.labelKey}
-                  onClick={() => openArticleChat(t(ask.questionKey))}
+                  onClick={() => {
+                    setMenuExpanded(false);
+                    openArticleChat(t(ask.questionKey));
+                  }}
                   className="px-4 py-2 text-left text-[12.5px] text-sand-800 hover:bg-clay-100 hover:text-clay-800"
                 >
                   {t(ask.labelKey)}
                 </button>
               ))}
               <button
-                onClick={() => openArticleChat(null)}
+                onClick={() => {
+                  setMenuExpanded(false);
+                  openArticleChat(null);
+                }}
                 className="px-4 py-2 text-left text-[12.5px] text-sand-800 hover:bg-clay-100 hover:text-clay-800"
               >
                 {t("reader.askAssistant")}
@@ -2868,7 +2920,10 @@ export function ReaderInteractions({
             </>
           )}
           <button
-            onClick={() => openDistillPage(null)}
+            onClick={() => {
+              setMenuExpanded(false);
+              openDistillPage(null);
+            }}
             title={t("reader.distillMenuTitle")}
             className="px-4 py-2 text-left text-[12.5px] text-sand-800 hover:bg-clay-100 hover:text-clay-800"
           >

@@ -102,7 +102,7 @@ export default async function NotesPage(props: { params: Promise<{ notebookId: s
   };
 
   return (
-    <main className="mx-auto w-[760px] max-w-full px-6 pt-[26px] pb-24">
+    <main className="mx-auto w-full max-w-[760px] px-6 pt-[26px] pb-24">
       <AccountGuard userId={user.id} enabled={authEnabled()} />
       <header className="mb-[34px] flex items-center gap-2">
         <Link

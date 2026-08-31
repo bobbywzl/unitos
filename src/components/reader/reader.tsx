@@ -372,7 +372,7 @@ export function Reader({
         </div>
       )}
 
-      <article className="reader-prose mx-auto w-[720px] max-w-full px-6 py-11 print:py-0" style={{ fontFamily }}>
+      <article className="reader-prose mx-auto w-full max-w-[720px] px-6 py-11 print:py-0" style={{ fontFamily }}>
         <p className="mb-2.5 text-[11px] font-bold tracking-[0.09em] text-clay-700 uppercase print:hidden">
           {t(mode === "edit" ? "panes.documentBlocksEditing" : "panes.documentBlocks", {
             n: blocks.length,

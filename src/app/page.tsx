@@ -64,7 +64,7 @@ export default async function Home() {
   });
 
   return (
-    <main className="mx-auto w-full max-w-[1080px] px-16 pb-16">
+    <main className="mx-auto w-full max-w-[1080px] px-6 pb-16 sm:px-16">
       <AccountGuard userId={user.id} enabled={authEnabled()} />
       <header className="flex items-center gap-3 pt-[26px]">
         <Logo size={38} className="text-clay" />
