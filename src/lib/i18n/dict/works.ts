@@ -59,7 +59,7 @@ const en = {
     " (+ in the header) — rebuilds the page in the reader: headings, lists, tables, figures, images, videos, charts, and equations, all editable. A progress card shows each step while the cat dances.",
   guideAssistantMenu: "Assistant menu",
   guideAssistantMenuBody:
-    " (top left) — floats open at the top of the page: Summarize article, Key takeaways, and Explain simply send the question to the assistant, which reads the whole document and answers in a chat beside the article; Ask the assistant opens the same chat for your own question; Distill opens the distilled page. The menu hides while you scroll and returns when you are back at the top.",
+    " (top left) — the Assistant pill at the top of the page opens it: Summarize article, Key takeaways, and Explain simply send the question to the assistant, which reads the whole document and answers in a chat beside the article; Ask the assistant opens the same chat for your own question; Distill opens the distilled page. The pill hides while you scroll and returns when you are back at the top.",
   guideContext: "Context",
   guideContextBody:
     " (top bar) — who you are, why you read, what the notes feed. Injected into every AI prompt: notes, distillation, analysis. Every field is optional; edit any time. Save it everywhere or for this corpus only.",
@@ -173,7 +173,7 @@ const zh: Record<keyof typeof en, string> = {
     "（顶栏中的 +）——在阅读器中重建页面：标题、列表、表格、插图、图片、视频、图表和公式，全部可编辑。进度卡片显示每一步，小猫在一旁跳舞。",
   guideAssistantMenu: "助手菜单",
   guideAssistantMenuBody:
-    "（左上）——悬浮展开在页面顶部：“总结文章”“主要收获”“通俗解释”把问题发给助手，助手通读整篇文档，在文章旁的聊天中作答；“询问助手”打开同一个聊天，供你提自己的问题；“提炼”打开提炼页。滚动时菜单隐藏，回到顶部时再出现。",
+    "（左上）——点击页面顶部的“助手”按钮展开菜单：“总结文章”“主要收获”“通俗解释”把问题发给助手，助手通读整篇文档，在文章旁的聊天中作答；“询问助手”打开同一个聊天，供你提自己的问题；“提炼”打开提炼页。滚动时按钮隐藏，回到顶部时再出现。",
   guideContext: "背景",
   guideContextBody:
     "（顶栏）——你是谁、为什么而读、笔记的用途。注入到每个 AI 提示词中：笔记、提炼、分析。每个字段都可留空；随时可改。可保存为全局，或仅用于本文集。",

@@ -2881,13 +2881,13 @@ export function ReaderInteractions({
         <button
           onClick={() => setMenuExpanded((v) => !v)}
           aria-expanded={menuExpanded}
-          className="mb-1.5 flex items-center gap-1.5 rounded-full bg-card px-3 py-2 text-[12px] font-semibold text-clay-800 shadow-float xl:hidden"
+          className="mb-1.5 flex items-center gap-1.5 rounded-full bg-card px-3 py-2 text-[12px] font-semibold text-clay-800 shadow-float"
         >
           <SparkleIcon size={13} />
           {t("reader.assistant")}
         </button>
         <div
-          className={`${menuExpanded ? "flex" : "hidden"} w-56 flex-col overflow-hidden rounded-2xl bg-card py-1.5 shadow-float xl:flex`}
+          className={`${menuExpanded ? "flex" : "hidden"} w-56 flex-col overflow-hidden rounded-2xl bg-card py-1.5 shadow-float`}
         >
           {canEdit && (
             <>
