@@ -24,6 +24,8 @@ import type { DocumentReference } from "@/lib/parse/types";
 import { splitStreamError, splitStreamNote } from "@/lib/derive/config";
 import { findWeblinks } from "@/lib/weblinks";
 import { isImeKey, useImeGuard } from "@/lib/ime";
+import { readNdjson } from "@/lib/ndjson";
+import { parseYouTubeId, youtubeWatchUrl } from "@/lib/video/youtube";
 import type { TFunc, TKey } from "@/lib/i18n/dictionaries";
 import { useLang, useT } from "@/components/lang-provider";
 import { MicIcon, SparkleIcon, SpinnerIcon, StopIcon, VolumeIcon } from "@/components/icons";
@@ -500,6 +502,8 @@ export function ReaderInteractions({
   }
   const [toast, setToast] = useState<string | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The toast's optional action: "Open as a video document" on a media figure.
+  const [toastAction, setToastAction] = useState<{ label: string; run: () => void } | null>(null);
 
   // Weblinks: URL-shaped text renders as a hyperlink. Render-time only, so
   // every document gets them without a re-parse. CODE keeps its text plain.
@@ -1611,8 +1615,65 @@ export function ReaderInteractions({
 
   function showToast(message: string) {
     setToast(message);
+    setToastAction(null);
     if (toastTimer.current) clearTimeout(toastTimer.current);
     toastTimer.current = setTimeout(() => setToast(null), 5000);
+  }
+
+  // A media figure (video/audio/embedded player inside an article) refuses
+  // tools; the toast offers to open it as a video document, where the video
+  // tools apply. YouTube embeds ingest by URL; direct file sources likewise.
+  function refuseMediaFigure(block: { html: string | null }) {
+    const html = block.html ?? "";
+    const src =
+      html.match(/<iframe[^>]*\ssrc="([^"]+)"/i)?.[1]?.replace(/&amp;/g, "&") ??
+      html.match(/<(?:video|audio)[^>]*\ssrc="([^"]+)"/i)?.[1]?.replace(/&amp;/g, "&");
+    setToast(t("reader.videoNoEditAnnotate"));
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    const youtubeId = src ? parseYouTubeId(src) : null;
+    const url = youtubeId ? youtubeWatchUrl(youtubeId) : src && /^https?:\/\//.test(src) ? src : null;
+    if (!url || !canEditRef.current) {
+      setToastAction(null);
+      toastTimer.current = setTimeout(() => setToast(null), 5000);
+      return;
+    }
+    setToastAction({
+      label: t("reader.openAsVideoDoc"),
+      run: () => {
+        setToast(null);
+        setToastAction(null);
+        void (async () => {
+          try {
+            const res = await fetch("/api/documents", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ url, notebookId }),
+            });
+            if (!res.ok) {
+              const detail = (await res.json().catch(() => null)) as { error?: string } | null;
+              throw new Error(detail?.error ?? t("reader.addFailed"));
+            }
+            let result: { id: string } | { error: string } | null = null;
+            for await (const event of readNdjson<
+              { stage: string; detail?: string } | { id: string } | { error: string }
+            >(res)) {
+              if (!("stage" in event)) result = event;
+            }
+            if (!result || "error" in result) {
+              throw new Error(result && "error" in result ? result.error : t("reader.addFailed"));
+            }
+            router.push(`/n/${notebookId}?doc=${result.id}`);
+            router.refresh();
+          } catch (err) {
+            showToast(err instanceof Error ? err.message : t("reader.addFailed"));
+          }
+        })();
+      },
+    });
+    toastTimer.current = setTimeout(() => {
+      setToast(null);
+      setToastAction(null);
+    }, 10000);
   }
 
   // The figure popover: anchored to the whole caption (offsets 0..length), so
@@ -1621,6 +1682,12 @@ export function ReaderInteractions({
     const container = containerRef.current;
     const block = blocksRef.current.find((b) => b.id === blockId);
     if (!container || !block) return;
+    // A figure whose content is a player is video or audio content: refused,
+    // with the way out — open it as a video document.
+    if (block.type === "FIGURE" && /<(?:video|audio|iframe)[\s>]/i.test(block.html ?? "")) {
+      refuseMediaFigure(block);
+      return;
+    }
     const text = block.text;
     if (!text.trim()) {
       showToast(t("reader.figureNoCaption"));
@@ -3011,7 +3078,17 @@ export function ReaderInteractions({
 
       <div className="sticky top-4 z-10 float-right mr-4 flex items-center gap-2 print:hidden">
         {toast && (
-          <span className="rounded-full bg-ink/90 px-3 py-1.5 text-xs text-paper">{toast}</span>
+          <span className="flex items-center gap-2 rounded-full bg-ink/90 px-3 py-1.5 text-xs text-paper">
+            {toast}
+            {toastAction && (
+              <button
+                onClick={toastAction.run}
+                className="rounded-full bg-paper/20 px-2.5 py-0.5 font-semibold hover:bg-paper/30"
+              >
+                {toastAction.label}
+              </button>
+            )}
+          </span>
         )}
         {editMode && (
           <select
