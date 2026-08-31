@@ -471,6 +471,16 @@ export function ReaderInteractions({
   const [localAnchors, setLocalAnchors] = useState<
     Record<string, { start: number; end: number; color: string | null }[]>
   >({});
+  // Spans made in this session: their marks sweep in left to right the first
+  // time they paint (block-view.tsx mark-sweep). Keyed `${blockId}:${start}:${end}`,
+  // so the server's copy of a span matches the optimistic one and the class
+  // survives the refresh swap without restarting. Extractions sweep whole,
+  // their spans staggered, tracked by extraction id.
+  const freshSpansRef = useRef(new Set<string>());
+  const freshExtractIdsRef = useRef(new Set<string>());
+  function markFreshSpan(blockId: string, start: number, end: number) {
+    freshSpansRef.current.add(`${blockId}:${start}:${end}`);
+  }
   const [prevAnchorsProp, setPrevAnchorsProp] = useState(anchorHighlights);
   if (prevAnchorsProp !== anchorHighlights) {
     setPrevAnchorsProp(anchorHighlights);
@@ -759,6 +769,8 @@ export function ReaderInteractions({
     setEditMode(false);
     setCommentDraft("");
     setLocalAnchors({});
+    freshSpansRef.current = new Set();
+    freshExtractIdsRef.current = new Set();
     setDistillOpen(false);
     setDistillShownId(null);
     setDistillRun(null);
@@ -1729,6 +1741,7 @@ export function ReaderInteractions({
         content: popover.anchor.quotedText,
         source: { documentId, ...popover.anchor },
       });
+      markFreshSpan(popover.anchor.blockId, popover.anchor.startOffset, popover.anchor.endOffset);
       setPopover(null);
       window.getSelection()?.removeAllRanges();
       router.refresh();
@@ -1759,6 +1772,7 @@ export function ReaderInteractions({
     await flushLiveBlock(anchor.blockId);
     setPopover(null);
     window.getSelection()?.removeAllRanges();
+    markFreshSpan(anchor.blockId, anchor.startOffset, anchor.endOffset);
     const slot = claimSideSlot("explain", yTop);
     setBubble({ ...slot, text: "", streaming: true, error: null, anchor, noteId: null });
     try {
@@ -1809,6 +1823,7 @@ export function ReaderInteractions({
     await flushLiveBlock(anchor.blockId);
     setPopover(null);
     window.getSelection()?.removeAllRanges();
+    markFreshSpan(anchor.blockId, anchor.startOffset, anchor.endOffset);
     const slot = claimSideSlot("simplify", yTop);
     setSimplifyCard({
       anchor,
@@ -2101,6 +2116,7 @@ export function ReaderInteractions({
         },
         origin: "distill",
       });
+      markFreshSpan(quote.blockId, quote.start, quote.end);
       router.refresh();
       return true;
     } catch (err) {
@@ -2167,6 +2183,7 @@ export function ReaderInteractions({
         origin: { ...json.extraction.origin, orphaned: false },
         spans: json.extraction.spans.map((s) => ({ ...s, orphaned: false })),
       };
+      freshExtractIdsRef.current.add(fresh.id);
       setLocalExtractions((prev) => [...prev, fresh]);
       showToast(
         t("reader.extractDone", { label, n: fresh.spans.length, s: plural(fresh.spans.length) }),
@@ -2324,6 +2341,7 @@ export function ReaderInteractions({
     if (input.comment !== undefined && !input.comment.trim()) return;
     const { anchor } = popover;
     await flushLiveBlock(anchor.blockId);
+    markFreshSpan(anchor.blockId, anchor.startOffset, anchor.endOffset);
     const optimistic = { start: anchor.startOffset, end: anchor.endOffset, color: input.color ?? null };
     setLocalAnchors((prev) => ({
       ...prev,
@@ -2433,6 +2451,7 @@ export function ReaderInteractions({
       setAiCommand("");
       window.getSelection()?.removeAllRanges();
       // The conversation continues in a chat card docked beside the article.
+      markFreshSpan(anchor.blockId, anchor.startOffset, anchor.endOffset);
       const slot = claimSideSlot("assistant", yTop);
       setAssistantChat({
         anchor,
@@ -2931,12 +2950,15 @@ export function ReaderInteractions({
   }
   // Extraction layers: the origin phrase and its revealing passages, each
   // carrying the extraction's label chip. Unresolvable spans stay unpainted.
+  // A fresh extraction sweeps in staggered: the origin first, then its
+  // passages down the document, one after the other.
   for (const extraction of allExtractions) {
+    const freshExtract = freshExtractIdsRef.current.has(extraction.id);
     const entries = [
       ...(!extraction.origin.orphaned ? [{ span: extraction.origin, isOrigin: true }] : []),
       ...extraction.spans.filter((s) => !s.orphaned).map((span) => ({ span, isOrigin: false })),
     ];
-    for (const { span, isOrigin } of entries) {
+    entries.forEach(({ span, isOrigin }, i) => {
       const existing = highlightsByBlock[span.blockId] ?? [];
       highlightsByBlock[span.blockId] = [
         ...existing,
@@ -2948,9 +2970,11 @@ export function ReaderInteractions({
           extractId: extraction.id,
           extractLabel: extraction.label,
           extractOrigin: isOrigin,
+          fresh: freshExtract,
+          freshDelay: freshExtract && i > 0 ? i * 90 : undefined,
         },
       ];
-    }
+    });
   }
   // A span jumped to (a distilled quote, an extract origin) keeps its exact
   // range tinted while the reader lands on it.
@@ -2993,6 +3017,18 @@ export function ReaderInteractions({
         definition: h.definition,
       })),
     ];
+  }
+  // Marks made in this session sweep in left to right the first time they
+  // paint (block-view.tsx mark-sweep); everything painted on load rests still.
+  for (const [blockId, list] of Object.entries(highlightsByBlock)) {
+    for (const h of list) {
+      if (
+        (h.kind === "anchor" || h.kind === "simplify") &&
+        freshSpansRef.current.has(`${blockId}:${h.start}:${h.end}`)
+      ) {
+        h.fresh = true;
+      }
+    }
   }
 
   return (
