@@ -30,7 +30,7 @@ import type { TFunc, TKey } from "@/lib/i18n/dictionaries";
 import { useLang, useT } from "@/components/lang-provider";
 import { LinkIcon, MicIcon, NotesIcon, SearchIcon, SparkleIcon, SpinnerIcon, StopIcon, VolumeIcon } from "@/components/icons";
 import { Markdown } from "@/components/markdown";
-import { LoadingDots, ThinkingIndicator } from "@/components/thinking";
+import { ThinkingIndicator } from "@/components/thinking";
 import type { BlockData, Highlight } from "@/components/reader/block-view";
 import { Bibliography } from "@/components/reader/bibliography";
 import type { ConversionInfo } from "@/components/reader/conversion-strip";
@@ -670,6 +670,10 @@ export function ReaderInteractions({
   const [planChecked, setPlanChecked] = useState<Set<number>>(new Set());
   const aiCommandRef = useRef("");
   aiCommandRef.current = aiCommand;
+  // The running assistant turn, so Stop can abort it — the popover's Run
+  // button before the chat card exists, or the chat card's Send button once
+  // it does; only one is ever in flight at a time.
+  const chatAbortRef = useRef<AbortController | null>(null);
   const recognitionRef = useRef<SpeechRec | null>(null);
   const editModeRef = useRef(false);
   editModeRef.current = editMode;
@@ -785,6 +789,10 @@ export function ReaderInteractions({
     }
   }
   function closeAssistantChat() {
+    // A turn still in flight aborts too — closing the card means nobody will
+    // read the reply, so there is nothing left for it to finish for.
+    chatAbortRef.current?.abort();
+    chatAbortRef.current = null;
     setAssistantChat(null);
   }
   async function deleteAssistantConversation() {
@@ -969,6 +977,8 @@ export function ReaderInteractions({
         setSubmenu(null);
         setBubble(null);
         setSimplifyCard(null);
+        chatAbortRef.current?.abort();
+        chatAbortRef.current = null;
         setAssistantChat(null);
         setCommentCard(null);
         setAnnotationCard(null);
@@ -2447,9 +2457,11 @@ export function ReaderInteractions({
       input: "",
       busy: true,
     });
+    const controller = new AbortController();
+    chatAbortRef.current = controller;
     void (async () => {
       try {
-        const turn = await assistantTurn(question, null, [], null);
+        const turn = await assistantTurn(question, null, [], null, controller.signal);
         setAssistantChat((c) =>
           c
             ? {
@@ -2461,14 +2473,32 @@ export function ReaderInteractions({
             : c,
         );
       } catch (err) {
+        // Stopped, not failed: the question stays, no reply lands.
+        if (controller.signal.aborted) {
+          setAssistantChat((c) => (c ? { ...c, busy: false } : c));
+          return;
+        }
         const message = err instanceof Error ? err.message : t("reader.assistantFailed");
         setAssistantChat((c) =>
           c
             ? { ...c, busy: false, messages: [...c.messages, { role: "assistant", content: message }] }
             : c,
         );
+      } finally {
+        if (chatAbortRef.current === controller) chatAbortRef.current = null;
       }
     })();
+  }
+
+  // Stop the assistant chat's running turn — the popover's Run button before
+  // the chat card exists, or the chat card's Send button once it does. The
+  // request aborts and nothing it would have produced lands; the pending
+  // user message (already shown) simply gets no reply.
+  function stopAssistantChat() {
+    chatAbortRef.current?.abort();
+    chatAbortRef.current = null;
+    setAiBusy(false);
+    setAssistantChat((c) => (c ? { ...c, busy: false } : c));
   }
 
   // Manual annotation: highlight (color, content = quote) or comment (user text).
@@ -2603,9 +2633,11 @@ export function ReaderInteractions({
     if (!command || aiBusy || !popover) return;
     const { anchor, yTop } = popover;
     setAiBusy(true);
+    const controller = new AbortController();
+    chatAbortRef.current = controller;
     try {
       await flushLiveBlock(anchor.blockId);
-      const turn = await assistantTurn(command, anchor, [], null);
+      const turn = await assistantTurn(command, anchor, [], null, controller.signal);
       setPopover(null);
       setSubmenu(null);
       setAiCommand("");
@@ -2625,8 +2657,11 @@ export function ReaderInteractions({
         busy: false,
       });
     } catch (err) {
+      // Stopped, not failed: the command stays in the box to edit or resend.
+      if (controller.signal.aborted) return;
       showToast(err instanceof Error ? err.message : t("reader.assistantFailed"));
     } finally {
+      if (chatAbortRef.current === controller) chatAbortRef.current = null;
       setAiBusy(false);
     }
   }
@@ -2638,10 +2673,12 @@ export function ReaderInteractions({
     anchor: Anchor | null,
     history: ChatMessage[],
     conversationNoteId: string | null,
+    signal?: AbortSignal,
   ): Promise<{ reply: string; noteId: string | null }> {
     const res = await fetch("/api/assistant/act", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      signal,
       body: JSON.stringify({
         notebookId,
         documentId,
@@ -2687,8 +2724,10 @@ export function ReaderInteractions({
         ? { ...c, input: "", busy: true, messages: [...c.messages, { role: "user", content: text }] }
         : c,
     );
+    const controller = new AbortController();
+    chatAbortRef.current = controller;
     try {
-      const turn = await assistantTurn(text, chat.anchor, history, chat.noteId);
+      const turn = await assistantTurn(text, chat.anchor, history, chat.noteId, controller.signal);
       setAssistantChat((c) =>
         c
           ? {
@@ -2700,12 +2739,19 @@ export function ReaderInteractions({
           : c,
       );
     } catch (err) {
+      // Stopped, not failed: the sent message stays, no reply lands.
+      if (controller.signal.aborted) {
+        setAssistantChat((c) => (c ? { ...c, busy: false } : c));
+        return;
+      }
       const message = err instanceof Error ? err.message : t("reader.assistantFailed");
       setAssistantChat((c) =>
         c
           ? { ...c, busy: false, messages: [...c.messages, { role: "assistant", content: message }] }
           : c,
       );
+    } finally {
+      if (chatAbortRef.current === controller) chatAbortRef.current = null;
     }
   }
 
@@ -3630,17 +3676,13 @@ export function ReaderInteractions({
                   <MicIcon size={13} />
                 </button>
                 <button
-                  disabled={aiBusy || !aiCommand.trim()}
-                  onClick={() => void runAssistant()}
+                  disabled={!aiBusy && !aiCommand.trim()}
+                  onClick={() => (aiBusy ? stopAssistantChat() : void runAssistant())}
+                  title={aiBusy ? t("reader.stopAssistant") : undefined}
+                  aria-label={aiBusy ? t("reader.stopAssistant") : undefined}
                   className="ml-auto rounded-full bg-clay px-3 py-1 text-[11px] font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
                 >
-                  {aiBusy ? (
-                    <span className="flex h-[16px] items-center px-1">
-                      <LoadingDots label={t("common.working")} />
-                    </span>
-                  ) : (
-                    t("reader.run")
-                  )}
+                  {aiBusy ? <StopIcon size={11} /> : t("reader.run")}
                 </button>
               </div>
             </div>
@@ -4146,10 +4188,17 @@ export function ReaderInteractions({
             />
             <button
               type="submit"
-              disabled={assistantChat.busy || !assistantChat.input.trim()}
+              onClick={(e) => {
+                if (!assistantChat.busy) return;
+                e.preventDefault();
+                stopAssistantChat();
+              }}
+              disabled={!assistantChat.busy && !assistantChat.input.trim()}
+              title={assistantChat.busy ? t("reader.stopAssistant") : undefined}
+              aria-label={assistantChat.busy ? t("reader.stopAssistant") : undefined}
               className="rounded-full bg-clay px-3 py-1.5 text-[11px] font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
             >
-              {t("reader.send")}
+              {assistantChat.busy ? <StopIcon size={11} /> : t("reader.send")}
             </button>
           </form>
         </div>

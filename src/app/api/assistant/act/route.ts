@@ -370,6 +370,9 @@ async function handle(req: Request, t: TFunc) {
     schema: planSchema,
     label: "assistant:act",
     usage: { userId: user.id, feature: "act", model: DERIVATION_MODEL.SYNTHESIS },
+    // Stop aborts here too (SPEC.md §6): the client disconnecting stops the
+    // model call, not just the response the client would have read.
+    abortSignal: req.signal,
   });
   if (!result.ok) {
     return NextResponse.json({ error: t("api.planFailed", { reason: result.error }) }, { status: 422 });

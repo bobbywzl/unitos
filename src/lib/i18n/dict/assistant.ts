@@ -21,6 +21,7 @@ const en = {
   askPlaceholderCorpus: "Ask about this project",
   askPlaceholderCorpora: "Ask across your projects",
   ask: "Ask",
+  stopAsk: "Stop. Whatever answered so far stays on screen.",
   // Tasks: button labels, then the noun inside noTaskFound
   taskContradictions: "Contradictions",
   taskGaps: "Gaps",
@@ -54,6 +55,7 @@ const zh: Record<keyof typeof en, string> = {
   askPlaceholderCorpus: "就此项目提问",
   askPlaceholderCorpora: "跨全部项目提问",
   ask: "提问",
+  stopAsk: "停止。已作答的部分保留在屏幕上。",
   taskContradictions: "矛盾",
   taskGaps: "疏漏",
   taskUnsourced: "无出处",
