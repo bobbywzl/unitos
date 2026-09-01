@@ -132,7 +132,17 @@ function DancingCat({ done }: { done: boolean }) {
 // Driven entirely by real backend stage events (see /api/documents), never a
 // simulated timer. The cat runs laps around the card border to ease the wait —
 // gait randomized per run, paused when done or when reduced motion is set.
-export function IngestProgress({ fileLabel, steps }: { fileLabel: string; steps: IngestStep[] }) {
+// Floats fixed at top center by default; inline renders it in flow (the
+// add-document dialog shows it inside its upload space).
+export function IngestProgress({
+  fileLabel,
+  steps,
+  inline = false,
+}: {
+  fileLabel: string;
+  steps: IngestStep[];
+  inline?: boolean;
+}) {
   const t = useT();
   const activeIndex = steps.findIndex((s) => s.status === "active");
   const doneCount = steps.filter((s) => s.status === "done").length;
@@ -148,7 +158,13 @@ export function IngestProgress({ fileLabel, steps }: { fileLabel: string; steps:
   }));
 
   return (
-    <div className="fixed top-24 left-1/2 z-50 w-[380px] max-w-[92vw] -translate-x-1/2 rounded-[24px] bg-card p-4 shadow-float">
+    <div
+      className={`${
+        inline
+          ? "relative w-[380px] max-w-full"
+          : "fixed top-24 left-1/2 z-50 w-[380px] max-w-[92vw] -translate-x-1/2"
+      } rounded-[24px] bg-card p-4 shadow-float`}
+    >
       <span
         aria-hidden
         className={`cat-runner${complete ? " cat-runner-done" : ""}`}
