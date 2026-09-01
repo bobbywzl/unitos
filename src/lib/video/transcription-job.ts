@@ -1,3 +1,4 @@
+import { bumpDocument } from "@/lib/collab";
 import { db } from "@/lib/db";
 import { tidyTranscript } from "@/lib/video/tidy";
 import {
@@ -69,6 +70,9 @@ export async function runTranscription(documentId: string): Promise<Transcriptio
     where: { id: asset.id },
     data: { transcriptStatus: "PENDING", transcriptError: null, transcriptStartedAt: new Date() },
   });
+  // Every status change bumps: open workspaces see the run start, the
+  // transcript land, or the failure — whoever started it.
+  await bumpDocument(documentId);
 
   try {
     let source: TranscribeSource;
@@ -116,6 +120,7 @@ export async function runTranscription(documentId: string): Promise<Transcriptio
         data: { transcriptStatus: "READY", transcriptError: null },
       });
     });
+    await bumpDocument(documentId);
     return { ok: true, lines: lines.length, provider };
   } catch (err) {
     const message = err instanceof Error ? err.message : "Transcription failed";
@@ -124,6 +129,7 @@ export async function runTranscription(documentId: string): Promise<Transcriptio
       where: { id: asset.id },
       data: { transcriptStatus: "FAILED", transcriptError: message },
     });
+    await bumpDocument(documentId);
     return { ok: false, status: 502, error: message };
   }
 }

@@ -1,6 +1,7 @@
 import { anthropic } from "@ai-sdk/anthropic";
 import type { ModelMessage } from "ai";
 import { z } from "zod";
+import { bumpDocument } from "@/lib/collab";
 import { db } from "@/lib/db";
 import { documentPrefix } from "@/lib/derive/context";
 import { callForJson } from "@/lib/derive/json-call";
@@ -69,5 +70,7 @@ export async function buildGlossary(documentId: string, userId: string | null = 
     blockIds: t.blockIds.filter((id) => validBlockIds.has(id)),
   }));
   await db.document.update({ where: { id: documentId }, data: { glossary: terms } });
+  // The glossary lands after ingest returns; open workspaces see it arrive.
+  await bumpDocument(documentId);
   return terms.length;
 }
