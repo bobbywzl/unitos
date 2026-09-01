@@ -643,13 +643,6 @@ export function ReaderInteractions({
   const [aiListening, setAiListening] = useState(false);
   const [aiPlan, setAiPlan] = useState<AssistantPlan | null>(null);
   const [planChecked, setPlanChecked] = useState<Set<number>>(new Set());
-  // Lazy init: the toggle only ever renders after user interaction, so the
-  // SSR pass never shows it and the localStorage read cannot mismatch.
-  const [autoRun, setAutoRun] = useState(
-    () => typeof window !== "undefined" && localStorage.getItem("unitos-assistant-auto") === "1",
-  );
-  const autoRunRef = useRef(false);
-  autoRunRef.current = autoRun;
   const aiCommandRef = useRef("");
   aiCommandRef.current = aiCommand;
   const recognitionRef = useRef<SpeechRec | null>(null);
@@ -805,11 +798,6 @@ export function ReaderInteractions({
   // The fading hint that replaces the Edit button. Shows on document open until
   // the reader double-clicks into edit mode once.
   const [editHint, setEditHint] = useState(false);
-  function setAssistantMode(auto: boolean) {
-    setAutoRun(auto);
-    autoRunRef.current = auto;
-    localStorage.setItem("unitos-assistant-auto", auto ? "1" : "0");
-  }
 
   // Switching documents client-side keeps this component mounted. Every piece
   // of selection-scoped state references the old document's blocks — drop it,
@@ -2573,14 +2561,10 @@ export function ReaderInteractions({
     if (plan.reply) parts.push(plan.reply);
     if (plan.actions.length > 0) {
       const n = plan.actions.length;
-      if (autoRunRef.current) {
-        await executePlan(plan.actions, plan.warnings);
-        parts.push(t("reader.appliedActions", { n, s: plural(n) }));
-      } else {
-        setAiPlan(plan);
-        setPlanChecked(new Set(plan.actions.map((_, i) => i)));
-        parts.push(t("reader.proposedActions", { n, s: plural(n) }));
-      }
+      // Every plan waits for approval (SPEC.md §1: nothing applies unaccepted).
+      setAiPlan(plan);
+      setPlanChecked(new Set(plan.actions.map((_, i) => i)));
+      parts.push(t("reader.proposedActions", { n, s: plural(n) }));
     }
     if (parts.length === 0) parts.push(plan.warnings[0] ?? t("reader.noActions"));
     // The anchored conversation persisted server-side; refresh paints its mark.
@@ -2684,14 +2668,14 @@ export function ReaderInteractions({
               sectionId = created.id;
               sectionIdByTitle.set(title.toLowerCase(), created.id);
             }
-            // Assistant notes carry their authorship. In Auto mode nobody
-            // approved this note, so it lands pending for triage (SPEC.md §1).
+            // Assistant notes carry their authorship. The plan was approved,
+            // so the note lands accepted (SPEC.md §1).
             await api("/api/notes", "POST", {
               sectionId,
               content: action.content,
               source: action.source,
               origin: "assistant",
-              pending: autoRunRef.current,
+              pending: false,
             });
             break;
           }
@@ -2767,9 +2751,6 @@ export function ReaderInteractions({
     rec.onend = () => {
       setAiListening(false);
       recognitionRef.current = null;
-      if (autoRunRef.current && aiCommandRef.current.trim()) {
-        void runAssistant(aiCommandRef.current);
-      }
     };
     rec.onerror = () => {
       setAiListening(false);
@@ -3479,23 +3460,6 @@ export function ReaderInteractions({
                 >
                   <MicIcon size={13} />
                 </button>
-                <div
-                  className="flex overflow-hidden rounded-full border border-line text-[10px] font-semibold"
-                  title={t("reader.askAutoTitle")}
-                >
-                  <button
-                    onClick={() => setAssistantMode(false)}
-                    className={autoRun ? "px-2 py-0.5 text-sand-600" : "bg-ink px-2 py-0.5 text-paper"}
-                  >
-                    {t("reader.ask")}
-                  </button>
-                  <button
-                    onClick={() => setAssistantMode(true)}
-                    className={autoRun ? "bg-ink px-2 py-0.5 text-paper" : "px-2 py-0.5 text-sand-600"}
-                  >
-                    {t("reader.auto")}
-                  </button>
-                </div>
                 <button
                   disabled={aiBusy || !aiCommand.trim()}
                   onClick={() => void runAssistant()}
