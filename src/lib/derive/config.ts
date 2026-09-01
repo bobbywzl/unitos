@@ -34,6 +34,11 @@ export const MAX_OUTPUT_TOKENS: Record<DerivationType, number> = {
 // DerivationType — it runs as a background job, not through /api/derive.
 export const CONNECT_MODEL = "claude-opus-5";
 
+// Handwritten documents (SPEC.md §14). Not DerivationTypes: classification
+// runs inside Import PDF, conversion as a background job.
+export const CLASSIFY_MODEL = "claude-opus-5";
+export const CONVERT_MODEL = "claude-opus-5";
+
 export const ANNOTATIONS_SECTION_TITLE = "Annotations";
 
 // A streaming derivation commits HTTP 200 the moment the stream opens, so a

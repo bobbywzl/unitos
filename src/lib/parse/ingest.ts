@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
 import { db } from "@/lib/db";
+import { classifyPdf } from "@/lib/handwritten/classify";
+import { pageBlockText, pdfPageCount } from "@/lib/handwritten/pages";
 import { parsePdf } from "@/lib/parse/pdf";
 import { pruneReferences } from "@/lib/parse/references";
 import { selectCoreBlocks, structureBlocks } from "@/lib/parse/structure";
@@ -71,11 +73,48 @@ async function createDocumentWithBlocks(data: {
   });
 }
 
+// A handwritten document: no text blocks — one PAGE block per PDF page, the
+// bytes kept for the page image route, Circle & ask, and conversion (SPEC.md §14).
+async function createHandwrittenDocument(data: {
+  title: string;
+  fileHash: string;
+  fileData: Uint8Array<ArrayBuffer>;
+  pageCount: number;
+}) {
+  return db.$transaction(async (tx) => {
+    const document = await tx.document.create({
+      data: {
+        title: data.title,
+        fileHash: data.fileHash,
+        fileData: data.fileData,
+        parserVersion: PARSER_VERSION,
+        handwritten: true,
+      },
+    });
+    await tx.block.createMany({ data: pageBlockRows(document.id, data.pageCount) });
+    return document;
+  });
+}
+
+function pageBlockRows(documentId: string, pageCount: number) {
+  return Array.from({ length: pageCount }, (_, i) => ({
+    documentId,
+    order: i,
+    type: "PAGE" as const,
+    text: pageBlockText(i + 1),
+    page: i + 1,
+  }));
+}
+
 // Upload path. Dedupe by fileHash: a re-upload returns the existing document, no re-parse.
+// Import PDF judges each PDF (SPEC.md §14): a computer-text article parses to
+// text blocks; rough handwritten notes and drawings become a handwritten
+// document. The caller starts conversion for a handwritten document.
 export async function ingestPdf(
   bytes: Uint8Array<ArrayBuffer>,
   filename: string,
   onProgress?: OnIngestProgress,
+  userId: string | null = null,
 ) {
   const fileHash = createHash("sha256").update(bytes).digest("hex");
   const existing = await db.document.findUnique({ where: { fileHash } });
@@ -83,6 +122,18 @@ export async function ingestPdf(
 
   onProgress?.("parse");
   const parsed = await parsePdf(bytes);
+  const pageCount = await pdfPageCount(bytes);
+  const kind = await classifyPdf(bytes, parsed.blocks, pageCount, userId);
+  if (kind === "handwritten") {
+    onProgress?.("save");
+    const document = await createHandwrittenDocument({
+      title: filename.replace(/\.pdf$/i, ""),
+      fileHash,
+      fileData: bytes,
+      pageCount,
+    });
+    return { document, deduped: false };
+  }
   const title = parsed.title ?? filename.replace(/\.pdf$/i, "");
   onProgress?.("save");
   const document = await createDocumentWithBlocks({
@@ -120,13 +171,43 @@ export async function ingestUrl(url: string, onProgress?: OnIngestProgress) {
 
 // Re-parse from stored bytes or source URL. Block ids change; anchors re-resolve by quote (SPEC.md §5).
 // Video documents never re-parse: their blocks are the player and the transcript (SPEC.md §11).
-export async function reparseDocument(documentId: string, onProgress?: OnIngestProgress) {
+// `as` flips a PDF between the two shapes (SPEC.md §14) — the escape hatch when
+// Import PDF judged it wrong: "article" parses the stored bytes to text blocks;
+// "handwritten" rebuilds the PAGE blocks (the caller starts conversion).
+// Without `as`, a document keeps its shape.
+export async function reparseDocument(
+  documentId: string,
+  onProgress?: OnIngestProgress,
+  as?: "article" | "handwritten",
+) {
   const document = await db.document.findUnique({
     where: { id: documentId },
     include: { video: { select: { id: true } } },
   });
   if (!document) return null;
   if (document.video) throw new Error("Video documents do not re-parse");
+
+  const target = as ?? (document.handwritten ? "handwritten" : "article");
+  if (target === "handwritten") {
+    if (!document.fileData) throw new Error("Document has no stored file");
+    onProgress?.("save");
+    const pageCount = await pdfPageCount(new Uint8Array(document.fileData));
+    await db.$transaction(async (tx) => {
+      await tx.block.deleteMany({ where: { documentId } });
+      await tx.block.createMany({ data: pageBlockRows(documentId, pageCount) });
+      await tx.document.update({
+        where: { id: documentId },
+        data: {
+          handwritten: true,
+          parserVersion: PARSER_VERSION,
+          conversionStatus: "NONE",
+          conversionError: null,
+          conversionStartedAt: null,
+        },
+      });
+    });
+    return db.document.findUnique({ where: { id: documentId } });
+  }
 
   let blocks: ParsedBlock[];
   let references: DocumentReference[] | undefined;
@@ -158,7 +239,14 @@ export async function reparseDocument(documentId: string, onProgress?: OnIngestP
     });
     await tx.document.update({
       where: { id: documentId },
-      data: { parserVersion: PARSER_VERSION, references },
+      data: {
+        parserVersion: PARSER_VERSION,
+        references,
+        handwritten: false,
+        conversionStatus: "NONE",
+        conversionError: null,
+        conversionStartedAt: null,
+      },
     });
   });
   return db.document.findUnique({ where: { id: documentId } });

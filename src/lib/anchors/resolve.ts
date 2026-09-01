@@ -23,7 +23,7 @@ export async function resolveDocumentSources(documentId: string): Promise<Resolv
     db.block.findMany({
       where: { documentId },
       orderBy: { order: "asc" },
-      select: { id: true, text: true },
+      select: { id: true, type: true, text: true },
     }),
   ]);
   const blockById = new Map(blocks.map((b) => [b.id, b]));
@@ -43,6 +43,26 @@ export async function resolveDocumentSources(documentId: string): Promise<Resolv
         end: source.endOffset,
         orphaned: false,
       });
+      continue;
+    }
+    // Page anchor (SPEC.md §14): a drawn region on a PAGE block, not a text
+    // span. It skips the text ladder — pages never change — and orphans only
+    // when the PAGE block is gone (the document switched to a text article).
+    if (source.region !== null) {
+      const orphaned = blockById.get(source.blockId)?.type !== "PAGE";
+      resolved.push({
+        id: source.id,
+        noteId: source.noteId,
+        blockId: source.blockId,
+        start: source.startOffset,
+        end: source.endOffset,
+        orphaned,
+      });
+      if (orphaned !== source.orphaned) {
+        writes.push(
+          db.source.update({ where: { id: source.id }, data: { orphaned } }),
+        );
+      }
       continue;
     }
     const r = resolveOne(source, blockById, blocks);

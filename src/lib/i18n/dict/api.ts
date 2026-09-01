@@ -107,6 +107,8 @@ const en = {
   glossaryNeedsKey: "ANTHROPIC_API_KEY is not set. Glossary extraction needs it.",
   glossaryFailed: "Glossary extraction failed",
   videoNoReparse: "Video documents do not re-parse",
+  shapeSwitchNeedsPdf: "This document has no stored PDF to switch from",
+  noStoredPdf: "This document has no stored PDF",
   reparseFailed: "Re-parse failed",
 
   // Uploads
@@ -255,6 +257,8 @@ const zh: Record<keyof typeof en, string> = {
   glossaryNeedsKey: "未设置 ANTHROPIC_API_KEY。术语表生成需要它。",
   glossaryFailed: "术语表生成失败",
   videoNoReparse: "视频文档不能重新解析",
+  shapeSwitchNeedsPdf: "此文档没有存储的 PDF，无法切换",
+  noStoredPdf: "此文档没有存储的 PDF",
   reparseFailed: "重新解析失败",
 
   emptyChunk: "分块为空",

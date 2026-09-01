@@ -6,6 +6,7 @@ import { currentUser } from "@/lib/auth";
 import { bumpNotebook, notebookAccess } from "@/lib/collab";
 import { buildConnections } from "@/lib/connect";
 import { buildGlossary } from "@/lib/glossary";
+import { runConversion } from "@/lib/handwritten/convert";
 import { serverT } from "@/lib/i18n/server";
 import type { TFunc } from "@/lib/i18n/dictionaries";
 import { progressResponse } from "@/lib/ingest-response";
@@ -92,13 +93,32 @@ export async function POST(req: Request) {
 
   return progressResponse(async (onProgress) => {
     try {
-      const { document, deduped } = await parse.ingestPdf(bytes, data.filename, onProgress);
+      const { document, deduped } = await parse.ingestPdf(
+        bytes,
+        data.filename,
+        onProgress,
+        user?.id ?? null,
+      );
       await attachDocument(data.notebookId, document.id);
       await bumpNotebook(data.notebookId);
-      // On-ingest glossary extraction (SPEC.md §8 Phase 7). Best-effort; after() keeps it
-      // alive past the response on serverless.
-      if (!deduped) after(() => buildGlossary(document.id, user?.id ?? null).catch(() => {}));
-      after(() => buildConnections(data.notebookId, document.id, user?.id ?? null).catch(() => {}));
+      if (!deduped && document.handwritten) {
+        // A handwritten document (SPEC.md §14): conversion starts on its own —
+        // the text is the point. Glossary and the recommended-links scan
+        // follow it, so they read the converted text.
+        after(() =>
+          runConversion(document.id, user?.id ?? null)
+            .then((r) =>
+              r.ok ? buildGlossary(document.id, user?.id ?? null).catch(() => {}) : undefined,
+            )
+            .then(() => buildConnections(data.notebookId, document.id, user?.id ?? null))
+            .catch(() => {}),
+        );
+      } else {
+        // On-ingest glossary extraction (SPEC.md §8 Phase 7). Best-effort; after() keeps it
+        // alive past the response on serverless.
+        if (!deduped) after(() => buildGlossary(document.id, user?.id ?? null).catch(() => {}));
+        after(() => buildConnections(data.notebookId, document.id, user?.id ?? null).catch(() => {}));
+      }
       return { id: document.id, title: document.title, deduped };
     } catch (err) {
       console.error("PDF ingest failed:", err);
