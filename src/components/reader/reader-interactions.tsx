@@ -347,6 +347,19 @@ function dockSideCard(
   return { left, width };
 }
 
+// Narrow reader: the gutter beside the article is under this, so a docked
+// side card would cover the text (cards are 260-320 wide). Tool cards dock
+// below the highlighted text instead, and stored AI annotations rest as tool
+// icons next to their text (block-view.tsx) rather than open cards.
+const NARROW_GUTTER = 140;
+
+/** Horizontal dock for a narrow reader: over the article, at article width. */
+function dockBelowCard(articleLeft: number, articleRight: number, cw: number) {
+  const width = Math.min(Math.max(280, articleRight - articleLeft), cw - 16);
+  const left = Math.max(8, Math.min(articleLeft, cw - width - 8));
+  return { left, width };
+}
+
 // Client layer over the reader: selection capture, popover, EXPLAIN bubble,
 // SIMPLIFY bubble, SALIENCE overlay toggle, DISTILL page, the article menu,
 // jump-to-anchor.
@@ -669,6 +682,10 @@ export function ReaderInteractions({
   const [annotationCard, setAnnotationCard] = useState<AnnotationCard | null>(null);
   const anchorHighlightsRef = useRef(anchorHighlights);
   anchorHighlightsRef.current = anchorHighlights;
+  // Narrow reader (see NARROW_GUTTER): stored AI annotations rest as tool
+  // icons next to their text, and open cards dock below the highlight.
+  const [narrow, setNarrow] = useState(false);
+  const narrowRef = useRef(false);
   const [assistantChat, setAssistantChat] = useState<AssistantChat | null>(null);
   // A stored comment, opened from its icon beside the text — editable in place.
   const [commentCard, setCommentCard] = useState<{
@@ -708,6 +725,14 @@ export function ReaderInteractions({
     preferredTop: number,
   ) {
     const { rects, articleLeft, articleRight, cw } = measureSideCards(containerRef.current, kind);
+    // Narrow reader: no room beside the article — dock below the highlight.
+    if (narrowRef.current) {
+      return {
+        ...dockBelowCard(articleLeft, articleRight, cw),
+        top: Math.max(8, preferredTop) + 34,
+        side: "right" as const,
+      };
+    }
     const articleMid = (articleLeft + articleRight) / 2;
     let top = Math.max(8, preferredTop);
     let side: "right" | "left" = "right";
@@ -1474,29 +1499,47 @@ export function ReaderInteractions({
      
   }, []);
 
-  // Side cards dock to the article's edge; the notes tray collapsing or the
-  // window resizing moves that edge. Re-dock every open card so they stay
-  // right next to the content body. Position popovers close instead — their
-  // coordinates are stale the moment the layout shifts.
+  // Side cards dock to the article's edge; the notes tray resizing or
+  // collapsing, or the window resizing, moves that edge. Re-dock every open
+  // card so they stay right next to the content body, and track whether the
+  // reader is now too narrow for side cards at all. On turning narrow, cards
+  // with a stored annotation collapse to their tool icons next to the text;
+  // a streaming or unsaved card stays open, re-docked below the highlight.
+  // Position popovers close instead — their coordinates are stale the moment
+  // the layout shifts.
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
+    const applyNarrow = () => {
+      const measured = measureSideCards(container);
+      const isNarrow = measured.cw - measured.articleRight < NARROW_GUTTER;
+      if (isNarrow !== narrowRef.current) {
+        narrowRef.current = isNarrow;
+        setNarrow(isNarrow);
+        if (isNarrow) {
+          setBubble((b) => (b && !b.streaming && b.noteId ? null : b));
+          setSimplifyCard((c) => (c && !c.streaming && c.noteId ? null : c));
+          setAssistantChat((c) => (c && !c.busy && c.noteId ? null : c));
+          setCommentCard((c) => (c && !c.busy && c.noteId && c.draft === c.saved ? null : c));
+        }
+      }
+      return measured;
+    };
+    applyNarrow();
     let lastWidth = container.clientWidth;
     const observer = new ResizeObserver(() => {
       const width = container.clientWidth;
       if (width === lastWidth) return;
       lastWidth = width;
-      const { articleLeft, articleRight, cw } = measureSideCards(container);
-      setBubble((b) => (b ? { ...b, ...dockSideCard(b.side, articleLeft, articleRight, cw) } : b));
-      setSimplifyCard((c) =>
-        c ? { ...c, ...dockSideCard(c.side, articleLeft, articleRight, cw) } : c,
-      );
-      setAssistantChat((c) =>
-        c ? { ...c, ...dockSideCard(c.side, articleLeft, articleRight, cw) } : c,
-      );
-      setCommentCard((c) =>
-        c ? { ...c, ...dockSideCard(c.side, articleLeft, articleRight, cw) } : c,
-      );
+      const { articleLeft, articleRight, cw } = applyNarrow();
+      const redock = (side: "right" | "left") =>
+        narrowRef.current
+          ? dockBelowCard(articleLeft, articleRight, cw)
+          : dockSideCard(side, articleLeft, articleRight, cw);
+      setBubble((b) => (b ? { ...b, ...redock(b.side) } : b));
+      setSimplifyCard((c) => (c ? { ...c, ...redock(c.side) } : c));
+      setAssistantChat((c) => (c ? { ...c, ...redock(c.side) } : c));
+      setCommentCard((c) => (c ? { ...c, ...redock(c.side) } : c));
       setAnnotationCard(null);
       setPopover(null);
       setSubmenu(null);
@@ -2877,7 +2920,14 @@ export function ReaderInteractions({
   // Merge anchor, extraction, term, and link layers per block.
   const highlightsByBlock: Record<string, Highlight[]> = {};
   for (const [blockId, list] of Object.entries(anchorHighlights)) {
-    highlightsByBlock[blockId] = list.map((h) => ({ ...h, kind: "anchor" as const }));
+    highlightsByBlock[blockId] = list.map((h) => {
+      // Narrow reader: a stored AI annotation rests as its tool icon next to
+      // the highlighted text; the icon opens the card. Comments keep their
+      // always-on icon.
+      const stored = narrow ? annotationBubbles[h.sourceId] : undefined;
+      const tool = stored && stored.kind !== "comment" ? stored.kind : undefined;
+      return { ...h, kind: "anchor" as const, tool };
+    });
   }
   for (const [blockId, list] of Object.entries(localAnchors)) {
     const existing = highlightsByBlock[blockId] ?? [];
