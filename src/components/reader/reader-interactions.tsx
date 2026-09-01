@@ -876,6 +876,9 @@ export function ReaderInteractions({
     // A rendered equation's DOM text is not the stored TeX; offsets there would
     // anchor to the wrong characters. No selection tools on math blocks.
     if (startBlock.hasAttribute("data-math-block")) return null;
+    // A page's DOM text is its label and the Circle & ask card, not stored
+    // text. Page anchors are drawn regions (SPEC.md §14), never selections.
+    if (blocksRef.current.find((b) => b.id === blockId)?.type === "PAGE") return null;
 
     // Offsets over the block's anchorable text, never Range.toString(): inline
     // controls ([data-anchor-skip], e.g. extract chips) render text the stored

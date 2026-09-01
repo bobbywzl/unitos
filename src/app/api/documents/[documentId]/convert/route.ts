@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { documentAccess } from "@/lib/collab";
 import { buildGlossary } from "@/lib/glossary";
 import { runConversion } from "@/lib/handwritten/convert";
@@ -17,6 +17,7 @@ export async function POST(_req: Request, ctx: { params: Promise<{ documentId: s
     return NextResponse.json({ error: result.error }, { status: result.status });
   }
   // The converted text is new document text: rebuild the glossary from it.
-  await buildGlossary(documentId, access.user.id).catch(() => {});
+  // after() keeps it alive past the response on serverless.
+  after(() => buildGlossary(documentId, access.user.id).catch(() => {}));
   return NextResponse.json({ ok: true, blocks: result.blocks });
 }

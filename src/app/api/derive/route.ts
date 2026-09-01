@@ -121,6 +121,9 @@ const deriveSchema = z
   .refine((d) => !(d.video && d.page), {
     message: "Provide video or page, not both",
   })
+  .refine((d) => !(d.anchor && d.page), {
+    message: "Provide anchor or page, not both",
+  })
   .refine((d) => !d.page || d.type === "EXPLAIN", {
     message: "page is EXPLAIN only",
   });

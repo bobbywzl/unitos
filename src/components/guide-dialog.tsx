@@ -126,6 +126,10 @@ export function GuideDialog({ open, onClose }: { open: boolean; onClose: () => v
               {t("works.guideFigureToolsBody")}
             </li>
             <li>
+              <span className={term}>{t("works.guideHandwritten")}</span>
+              {t("works.guideHandwrittenBody")}
+            </li>
+            <li>
               <span className={term}>{t("works.guidePrint")}</span>
               {t("works.guidePrintBody")}
             </li>
