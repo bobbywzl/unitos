@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
 import type { Document } from "@prisma/client";
 import { db } from "@/lib/db";
+import { classifyPdf } from "@/lib/handwritten/classify";
+import { pageBlockText, pdfPageCount } from "@/lib/handwritten/pages";
 import { parsePdf } from "@/lib/parse/pdf";
 import { pruneReferences } from "@/lib/parse/references";
 import { splitBlocks, splitPartCount } from "@/lib/parse/split";
@@ -108,14 +110,52 @@ async function createDocumentWithBlocks(data: {
   });
 }
 
+// A handwritten document: no text blocks — one PAGE block per PDF page, the
+// bytes kept for the page image route, Circle & ask, and conversion (SPEC.md §16).
+async function createHandwrittenDocument(data: {
+  title: string;
+  fileHash: string;
+  fileData: Uint8Array<ArrayBuffer>;
+  pageCount: number;
+}) {
+  return db.$transaction(async (tx) => {
+    const document = await tx.document.create({
+      data: {
+        title: data.title,
+        fileHash: data.fileHash,
+        fileData: data.fileData,
+        parserVersion: PARSER_VERSION,
+        handwritten: true,
+      },
+    });
+    await tx.block.createMany({ data: pageBlockRows(document.id, data.pageCount) });
+    return document;
+  });
+}
+
+function pageBlockRows(documentId: string, pageCount: number) {
+  return Array.from({ length: pageCount }, (_, i) => ({
+    documentId,
+    order: i,
+    type: "PAGE" as const,
+    text: pageBlockText(i + 1),
+    page: i + 1,
+  }));
+}
+
 // Upload path. Dedupe by fileHash: a re-upload returns the existing document, no re-parse.
-// With instructions, the structure pass runs over the parsed blocks — the one
-// lever paste instructions have on a PDF.
+// Import PDF judges each PDF (SPEC.md §16): a computer-text article parses to
+// text blocks; rough handwritten notes and drawings become a handwritten
+// document. The caller starts conversion for a handwritten document. With
+// instructions, the structure pass runs over the parsed blocks — the one
+// lever paste instructions have on a PDF (§15); userId is who the
+// classification records usage under.
 export async function ingestPdf(
   bytes: Uint8Array<ArrayBuffer>,
   filename: string,
   onProgress?: OnIngestProgress,
   opts: IngestOptions = {},
+  userId: string | null = null,
 ) {
   const fileHash = createHash("sha256").update(bytes).digest("hex");
   const existing = await db.document.findUnique({ where: { fileHash } });
@@ -123,6 +163,18 @@ export async function ingestPdf(
 
   onProgress?.("parse");
   const parsed = await parsePdf(bytes);
+  const pageCount = await pdfPageCount(bytes);
+  const kind = await classifyPdf(bytes, parsed.blocks, pageCount, userId);
+  if (kind === "handwritten") {
+    onProgress?.("save");
+    const document = await createHandwrittenDocument({
+      title: filename.replace(/\.pdf$/i, ""),
+      fileHash,
+      fileData: bytes,
+      pageCount,
+    });
+    return { document, deduped: false };
+  }
   const title = parsed.title ?? filename.replace(/\.pdf$/i, "");
   const blocks = opts.instructions?.trim()
     ? await structureBlocks(parsed.blocks, title, opts.instructions)
@@ -199,7 +251,15 @@ export async function ingestUrl(
 
 // Re-parse from stored bytes or source URL. Block ids change; anchors re-resolve by quote (SPEC.md §5).
 // Video documents never re-parse: their blocks are the player and the transcript (SPEC.md §11).
-export async function reparseDocument(documentId: string, onProgress?: OnIngestProgress) {
+// `as` flips a PDF between the two shapes (SPEC.md §16) — the escape hatch when
+// Import PDF judged it wrong: "article" parses the stored bytes to text blocks;
+// "handwritten" rebuilds the PAGE blocks (the caller starts conversion).
+// Without `as`, a document keeps its shape.
+export async function reparseDocument(
+  documentId: string,
+  onProgress?: OnIngestProgress,
+  as?: "article" | "handwritten",
+) {
   const document = await db.document.findUnique({
     where: { id: documentId },
     include: { video: { select: { id: true } } },
@@ -210,6 +270,28 @@ export async function reparseDocument(documentId: string, onProgress?: OnIngestP
   // page over it (SPEC.md §15).
   if (document.sourceUrl?.includes(SPLIT_URL_MARKER)) {
     throw new Error("Split documents do not re-parse");
+  }
+
+  const target = as ?? (document.handwritten ? "handwritten" : "article");
+  if (target === "handwritten") {
+    if (!document.fileData) throw new Error("Document has no stored file");
+    onProgress?.("save");
+    const pageCount = await pdfPageCount(new Uint8Array(document.fileData));
+    await db.$transaction(async (tx) => {
+      await tx.block.deleteMany({ where: { documentId } });
+      await tx.block.createMany({ data: pageBlockRows(documentId, pageCount) });
+      await tx.document.update({
+        where: { id: documentId },
+        data: {
+          handwritten: true,
+          parserVersion: PARSER_VERSION,
+          conversionStatus: "NONE",
+          conversionError: null,
+          conversionStartedAt: null,
+        },
+      });
+    });
+    return db.document.findUnique({ where: { id: documentId } });
   }
 
   let blocks: ParsedBlock[];
@@ -242,7 +324,14 @@ export async function reparseDocument(documentId: string, onProgress?: OnIngestP
     });
     await tx.document.update({
       where: { id: documentId },
-      data: { parserVersion: PARSER_VERSION, references },
+      data: {
+        parserVersion: PARSER_VERSION,
+        references,
+        handwritten: false,
+        conversionStatus: "NONE",
+        conversionError: null,
+        conversionStartedAt: null,
+      },
     });
   });
   return db.document.findUnique({ where: { id: documentId } });

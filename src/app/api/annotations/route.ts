@@ -3,6 +3,7 @@ import { z } from "zod";
 import { bumpNotebook, notebookAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
 import { annotationsSection } from "@/lib/derive/context";
+import { pageBlockText } from "@/lib/handwritten/pages";
 import { serverT } from "@/lib/i18n/server";
 import type { TFunc } from "@/lib/i18n/dictionaries";
 import { regionSchema, timeRangeSchema } from "@/lib/video/types";
@@ -27,6 +28,14 @@ const videoSchema = z.object({
   comment: z.string().min(1).max(10_000),
 });
 
+// A page annotation (SPEC.md §16): a drawn region on a PAGE block and the
+// comment. The server picks the quoted text.
+const pageSchema = z.object({
+  blockId: z.string().min(1),
+  region: regionSchema,
+  comment: z.string().min(1).max(10_000),
+});
+
 const createSchema = z
   .object({
     notebookId: z.string().min(1),
@@ -35,15 +44,17 @@ const createSchema = z
     color: z.enum(["clay", "sage", "gold", "plum"]).optional(),
     comment: z.string().max(10_000).optional(),
     video: videoSchema.optional(),
+    page: pageSchema.optional(),
   })
-  .refine((d) => Boolean(d.anchor) !== Boolean(d.video), {
-    message: "Provide anchor or video, not both",
+  .refine((d) => [d.anchor, d.video, d.page].filter(Boolean).length === 1, {
+    message: "Provide exactly one of anchor, video, and page",
   });
 
 // Highlights and comments are notes in the hidden Annotations section.
 // A highlight has a color and content = quotedText; a comment has color null and
 // content = the comment text. A video annotation is a comment whose source is a
-// time range instead of a text span.
+// time range instead of a text span; a page annotation is a comment whose
+// source is a drawn region on a PAGE block.
 export async function POST(req: Request) {
   const t = await serverT();
   const { data, error } = await parseBody(req, createSchema);
@@ -67,6 +78,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: t("api.documentNotAttachedToCorpus") }, { status: 404 });
   }
 
+  if (data.page) return createPageAnnotation(data.notebookId, data.documentId, data.page, access.user.id, t);
   if (data.video) return createVideoAnnotation(data.notebookId, data.documentId, data.video, access.user.id, t);
   if (!data.anchor) return NextResponse.json({ error: t("api.anchorMissing") }, { status: 400 });
   if (data.anchor.endOffset <= data.anchor.startOffset) {
@@ -138,6 +150,51 @@ export async function POST(req: Request) {
     include: { sources: true },
   });
   await bumpNotebook(data.notebookId);
+  return NextResponse.json(note, { status: 201 });
+}
+
+// A page annotation: a comment note whose source carries the drawn region on
+// a PAGE block (SPEC.md §16). The server picks the quoted text.
+async function createPageAnnotation(
+  notebookId: string,
+  documentId: string,
+  page: z.infer<typeof pageSchema>,
+  createdById: string,
+  t: TFunc,
+) {
+  const block = await db.block.findUnique({
+    where: { id: page.blockId },
+    select: { documentId: true, type: true, page: true },
+  });
+  if (!block || block.documentId !== documentId || block.type !== "PAGE" || block.page === null) {
+    return NextResponse.json({ error: t("api.blockNotInDocument") }, { status: 404 });
+  }
+
+  const section = await annotationsSection(notebookId);
+  const order = await db.note.count({ where: { sectionId: section.id } });
+  const note = await db.note.create({
+    data: {
+      sectionId: section.id,
+      content: page.comment.trim(),
+      status: "ACCEPTED",
+      createdById,
+      order,
+      sources: {
+        create: {
+          documentId,
+          blockId: page.blockId,
+          startOffset: 0,
+          endOffset: 0,
+          quotedText: pageBlockText(block.page),
+          prefix: "",
+          suffix: "",
+          region: page.region,
+        },
+      },
+    },
+    include: { sources: true },
+  });
+  await bumpNotebook(notebookId);
   return NextResponse.json(note, { status: 201 });
 }
 

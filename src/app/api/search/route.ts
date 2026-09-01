@@ -48,7 +48,7 @@ export async function POST(req: Request) {
     where: {
       documentId: { in: documentIds },
       text: { contains: data.query.trim(), mode: "insensitive" },
-      type: { notIn: ["VIDEO", "SEPARATOR"] },
+      type: { notIn: ["VIDEO", "SEPARATOR", "PAGE"] },
     },
     take: 8,
     select: { id: true, documentId: true, text: true, document: { select: { title: true } } },

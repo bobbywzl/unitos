@@ -5,6 +5,7 @@ import { authEnabled, currentUser } from "@/lib/auth";
 import { bumpNotebook, notebookAccess } from "@/lib/collab";
 import { buildConnections } from "@/lib/connect";
 import { buildGlossary } from "@/lib/glossary";
+import { runConversion } from "@/lib/handwritten/convert";
 import { currentLang, serverT } from "@/lib/i18n/server";
 import { progressResponse } from "@/lib/ingest-response";
 import { attachDocument } from "@/lib/parse/attach";
@@ -121,20 +122,40 @@ export async function POST(req: Request) {
     }
     return progressResponse(async (onProgress) => {
       try {
-        const { document, deduped } = await parse.ingestPdf(bytes, fields.data.filename, onProgress, {
-          instructions: fields.data.instructions.trim() || undefined,
-        });
+        const { document, deduped } = await parse.ingestPdf(
+          bytes,
+          fields.data.filename,
+          onProgress,
+          { instructions: fields.data.instructions.trim() || undefined },
+          user?.id ?? null,
+        );
         await attachDocument(fields.data.notebookId, document.id);
         await bumpNotebook(fields.data.notebookId);
-        // On-ingest glossary extraction (SPEC.md §8 Phase 7). Best-effort; after() keeps it
-        // alive past the response on serverless.
-        if (!deduped) after(() => buildGlossary(document.id, user?.id ?? null).catch(() => {}));
-        // Recommended links (SPEC.md §13): scan the document against the corpus.
-        after(() =>
-          buildConnections(fields.data.notebookId, document.id, user?.id ?? null, lang).catch(
-            () => {},
-          ),
-        );
+        if (!deduped && document.handwritten) {
+          // A handwritten document (SPEC.md §16): conversion starts on its own
+          // — the text is the point. Glossary and the recommended-links scan
+          // follow it, so they read the converted text.
+          after(() =>
+            runConversion(document.id, user?.id ?? null)
+              .then((r) =>
+                r.ok ? buildGlossary(document.id, user?.id ?? null).catch(() => {}) : undefined,
+              )
+              .then(() =>
+                buildConnections(fields.data.notebookId, document.id, user?.id ?? null, lang),
+              )
+              .catch(() => {}),
+          );
+        } else {
+          // On-ingest glossary extraction (SPEC.md §8 Phase 7). Best-effort; after() keeps it
+          // alive past the response on serverless.
+          if (!deduped) after(() => buildGlossary(document.id, user?.id ?? null).catch(() => {}));
+          // Recommended links (SPEC.md §13): scan the document against the corpus.
+          after(() =>
+            buildConnections(fields.data.notebookId, document.id, user?.id ?? null, lang).catch(
+              () => {},
+            ),
+          );
+        }
         return { id: document.id, title: document.title, deduped };
       } catch (err) {
         console.error("PDF ingest failed:", err);

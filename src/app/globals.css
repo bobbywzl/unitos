@@ -676,6 +676,12 @@ mark,
 .video-flash {
   animation: video-flash 1.8s ease-out;
 }
+/* Page marks are SVG loops: the generic anchor-flash lands on a path, whose
+   background cannot animate, so flash the stroke instead. */
+path.anchor-flash,
+ellipse.anchor-flash {
+  animation: video-flash 1.8s ease-out;
+}
 
 /* Sanitized ingest html: tables and figures in the reader. */
 .reader-table table {

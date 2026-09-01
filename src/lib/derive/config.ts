@@ -38,6 +38,11 @@ export const CONNECT_MODEL = "claude-opus-5";
 // DerivationType — it runs before ingest, not through /api/derive.
 export const UPLOAD_MODEL = "claude-opus-5";
 
+// Handwritten documents (SPEC.md §16). Not DerivationTypes: classification
+// runs inside Import PDF, conversion as a background job.
+export const CLASSIFY_MODEL = "claude-opus-5";
+export const CONVERT_MODEL = "claude-opus-5";
+
 export const ANNOTATIONS_SECTION_TITLE = "Annotations";
 
 // A streaming derivation commits HTTP 200 the moment the stream opens, so a

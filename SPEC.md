@@ -594,3 +594,33 @@ Every add — the add-document dialog's Upload PDF, Upload video or audio, and A
 **Instructions.** The instructions field rides along with every add. Before anything is saved, the assistant answers each instruction (`/api/uploads/review` with kind alone; one model call): willFollow plus one plain reply — what it will do, or honestly that the upload cannot do it (rewrite, translate, OCR, sign in, run scripts, edit figures or the file). An unfollowable instruction stops the first Add so the replies are read; the reader edits or presses Add again. Only the feasible part travels to ingest as blunt imperatives, threaded into the URL core and structure passes and, for a PDF, a structure pass over the parsed blocks — instructions steer selection, typing, and merging, never write text. Instructed adds raise the structure pass's drop ceiling (0.4 → 0.9): "keep only the appendix" is a big drop the reader asked for. Video and audio adds have no lever: the assistant says so deterministically, no model call.
 
 Nothing in the box writes before Add; the review and the check are advisory and ingest never depends on them. Model calls use `UPLOAD_MODEL` and record usage under `upload`.
+
+---
+
+## 16. Handwritten documents
+
+Import PDF judges each PDF (AI judgment, not a file-type rule): a computer-text article parses to text blocks as before; rough handwritten notes and drawings become a **handwritten document** — the pages themselves render in the reader, with two tools on them: conversion to text and Circle & ask. This amends §9's "no scanned-PDF OCR": image-only PDFs now land usefully as handwritten documents instead of empty articles.
+
+### Classification (in `ingestPdf`, both upload paths)
+
+1. Parse the text layer as always. Article-scale yield (≥250 chars/page) = article, no model call.
+2. Below that, render sample pages (first, middle, last) and ask a vision model (`CLASSIFY_MODEL`, prompt in `/lib/prompts/classify.ts`): typeset computer text → article; handwritten notes, drawings, sketches, or scanned pages whose content the text layer missed → handwritten.
+3. No key or a failed call: yield decides alone (<40 chars/page = handwritten).
+
+The judgment can be wrong, so the document menu carries the escape hatch: "Parse as text article" on a handwritten document, "Open as handwritten pages" on a PDF article (`POST /api/documents/[documentId]/reparse` with `{as}`). Anchors on replaced blocks re-resolve by quote or orphan visibly (§5).
+
+### Data model
+
+- `Document.handwritten Boolean` plus `conversionStatus ConversionStatus` (NONE → PENDING → READY | FAILED, the transcript pattern), `conversionError`, `conversionStartedAt`. The PDF bytes stay in `Document.fileData`.
+- `BlockType` gains `PAGE`: one block per PDF page at orders 0…n−1, `Block.page` the 1-based page, `Block.text` "Page N" (so chips, search, and the digest read well). `GET /api/documents/[documentId]/page/[blockId]` renders the page to PNG from the stored bytes — the figure image route's twin.
+- A **page anchor** is a `Source` with `region` set (the §11 percent-coordinate shape) on a PAGE block, offsets 0/0, `quotedText` "Page N". It skips the text ladder — pages never change — and orphans only when the PAGE block is gone (shape switch).
+
+### Conversion (pages → text blocks)
+
+Conversion starts on its own when a handwritten document is added — the text is the point — and `POST /api/documents/[documentId]/convert` runs the same job for Retry and Convert again (`lib/handwritten/convert.ts`, prompt in `/lib/prompts/convert.ts`, model `CONVERT_MODEL`). Pages render to images and transcribe in batches that run together, so the wall clock is about one batch. The model transcribes the author's wording verbatim and imitates the notes' formatting: headings by prominence, lists with the reader's own markers, tables with the invisible cell separators (§5 holds inside converted tables), standalone math as EQUATION TeX, drawings as one-sentence bracketed descriptions, illegible words as "[illegible]" — never a guess. Converted blocks land after the PAGE blocks, each stamped with the page it came from; the reader shows pages first, then the converted text as a normal article — anchors, the selection popover, and every derivation work on it. Convert again deletes only the non-PAGE blocks, so page anchors never move. One failed batch fails the run with its reason — a partial text never lands silently; past 60 pages the cut is declared in a final paragraph. Glossary and the recommended-links scan run after conversion, reading the converted text.
+
+The strip under the pages shows the status: Converting…, the failure reason with Retry, or the Converted text header with Convert again. A PENDING older than 10 minutes is a dead run and may start again.
+
+### Circle & ask
+
+On a page, holding the mouse and dragging draws a freehand loop (the §11 draw, on a page instead of a frame). Releasing opens the Circle & ask card under the loop: a question box and three actions — **Ask** (the typed question), **Explain** (no question), **Comment**. Ask and Explain run through the one pipeline (§4): `POST /api/derive` `type: EXPLAIN` with `page: {blockId, region, question?}`; the server renders the page and the circled part from the stored bytes, attaches both (the page carries context, the crop carries the spot, enlarged), and the prompt's page variant answers — transcribe what is there, never guess at illegible handwriting. The answer streams into the card and persists as an annotation with a page anchor; Comment posts to `/api/annotations` `{page}`. Marks paint on the page as SVG loops carrying `data-source-id`, so source chips jump to them and flash them like text marks, and clicking a mark opens its annotation. Viewers see marks, draw nothing.

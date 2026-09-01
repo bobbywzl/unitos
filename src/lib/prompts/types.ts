@@ -54,6 +54,10 @@ export type PromptCtx = {
     frameDescription?: string;
     audio?: boolean;
   };
+  // Set when EXPLAIN targets a circled spot on a handwritten page (SPEC.md
+  // §16): Circle & ask. The page image is attached; hasCrop: the circled part
+  // is attached too, enlarged. question: what the reader typed; absent = explain.
+  page?: { number: number; hasCrop: boolean; question?: string };
   // The search, for FIND.
   query?: string;
   // The destination shape, for FORMALIZE: a formal article for publishing, or

@@ -25,6 +25,32 @@ function buildResponse(all) {
   const blocks = parseBlocks(all);
   const paragraphs = blocks.filter((b) => b.type === "PARAGRAPH" && b.text.length > 40);
 
+  // Import PDF classification: article or handwritten, by the yield the prompt
+  // reports — the mock cannot see the page images.
+  if (all.includes('"kind"') && all.includes("handwritten")) {
+    const pages = Number(all.match(/\((\d+) pages\)/)?.[1] ?? 1);
+    const chars = Number(all.match(/yielded (\d+) characters/)?.[1] ?? 0);
+    return JSON.stringify({ kind: chars / Math.max(1, pages) < 100 ? "handwritten" : "article" });
+  }
+
+  // Conversion: handwritten pages → text blocks imitating the notes' formatting.
+  if (all.includes('"blocks"') && all.includes("Transcribe them into text blocks")) {
+    const first = Number(all.match(/pages? (\d+)/i)?.[1] ?? 1);
+    return JSON.stringify({
+      blocks: [
+        { type: "HEADING", level: 1, page: first, text: "Mock heading from the notes" },
+        {
+          type: "PARAGRAPH",
+          page: first,
+          text: "Mock transcription of the handwritten page, kept word for word.",
+        },
+        { type: "LIST", page: first, text: "- first point\n- second point" },
+        { type: "TABLE", page: first, text: "Item\tCount\nPages\t2" },
+        { type: "EQUATION", page: first, text: "E = mc^2" },
+      ],
+    });
+  }
+
   // DISTILL (document and corpus): quotes with captions from real blocks. The
   // corpus prompt carries [document <id>] "title" headers; pull one quote from
   // each of the first two documents so the answer spans the corpus.
