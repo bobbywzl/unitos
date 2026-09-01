@@ -125,7 +125,7 @@ const en = {
   frameFetchFailed: "Frame fetch failed ({status})",
 
   // Voice
-  speechNeedsKey: "OPENAI_API_KEY is not set",
+  speechNeedsKey: "Voice failed; OPENAI_API_KEY is not set",
   voiceFailedRetry: "Voice failed. Try again.",
   voiceFailedStatus: "Voice failed ({status})",
 
@@ -270,7 +270,7 @@ const zh: Record<keyof typeof en, string> = {
   frameUnavailable: "画面不可用",
   frameFetchFailed: "画面获取失败（{status}）",
 
-  speechNeedsKey: "未设置 OPENAI_API_KEY",
+  speechNeedsKey: "朗读失败，且未设置 OPENAI_API_KEY",
   voiceFailedRetry: "朗读失败。请重试。",
   voiceFailedStatus: "朗读失败（{status}）",
 
