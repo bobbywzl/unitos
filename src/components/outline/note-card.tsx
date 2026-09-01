@@ -11,7 +11,16 @@ import { ReplyThread } from "@/components/collab/reply-thread";
 import { useT } from "@/components/lang-provider";
 import { Markdown } from "@/components/markdown";
 import { DragHandle, useCombineTarget, type HandleProps } from "@/components/sortable";
+import { NoteEditor } from "@/components/outline/note-editor";
 import type { OutlineActions } from "@/components/outline/use-outline";
+
+// Opening the editor on a quote note (only "> " lines) adds a fresh line, so
+// the caret starts underneath the quote and additions land there.
+function editDraft(content: string): string {
+  const lines = content.split("\n");
+  const quoteOnly = lines.length > 0 && lines.every((l) => l.trim() === "" || l.startsWith(">"));
+  return quoteOnly ? `${content}\n\n` : content;
+}
 
 /** Tray cards sit in the 352px drawer (design 1a); page cards in the 760px column (design 2b). */
 type Variant = "tray" | "page";
@@ -118,7 +127,7 @@ export function NoteCard({
   // Adjust-during-render; each keypress creates a new request object.
   if (actions.editRequest && actions.editRequest.id === note.id && handledEdit !== actions.editRequest) {
     setHandledEdit(actions.editRequest);
-    setDraft(note.content);
+    setDraft(editDraft(note.content));
     setEditing(true);
   }
 
@@ -139,10 +148,9 @@ export function NoteCard({
   if (editing) {
     return (
       <div className="rounded-2xl bg-card p-3 shadow-soft outline-2 outline-clay-400">
-        <textarea
-          autoFocus
+        <NoteEditor
           value={draft}
-          onChange={(e) => setDraft(e.target.value)}
+          onChange={setDraft}
           onKeyDown={(e) => {
             if (isImeKey(e)) return;
             if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void save();
@@ -151,8 +159,6 @@ export function NoteCard({
               setEditing(false);
             }
           }}
-          rows={Math.min(12, Math.max(3, draft.split("\n").length + 1))}
-          className="w-full resize-y bg-transparent text-sm outline-none"
         />
         <div className="mt-2 flex items-center gap-2">
           <button
@@ -278,7 +284,7 @@ export function NoteCard({
           </button>
           <button
             onClick={() => {
-              setDraft(note.content);
+              setDraft(editDraft(note.content));
               setEditing(true);
             }}
             className={`text-xs text-sand-600 hover:text-clay-700 ${tray ? "ml-auto" : ""}`}
@@ -294,7 +300,7 @@ export function NoteCard({
           {canEdit && (
             <button
               onClick={() => {
-                setDraft(note.content);
+                setDraft(editDraft(note.content));
                 setEditing(true);
               }}
               className="text-xs text-sand-600 hover:text-clay-700"
