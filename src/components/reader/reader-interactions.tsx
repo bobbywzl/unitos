@@ -24,6 +24,7 @@ import type { DocumentReference } from "@/lib/parse/types";
 import { splitStreamError, splitStreamNote } from "@/lib/derive/config";
 import { findWeblinks } from "@/lib/weblinks";
 import { isImeKey, useImeGuard } from "@/lib/ime";
+import { isOffline, offlinePremium, queueWrite } from "@/lib/offline/queue";
 import { parseYouTubeId, youtubeWatchUrl } from "@/lib/video/youtube";
 import type { TFunc, TKey } from "@/lib/i18n/dictionaries";
 import { useLang, useT } from "@/components/lang-provider";
@@ -2519,6 +2520,20 @@ export function ReaderInteractions({
       }
       router.refresh();
     } catch (err) {
+      // Offline (SPEC.md §17, Unitos Premium): a highlight or comment is a
+      // non-AI annotation — queue it, keep the optimistic paint, sync later.
+      if (isOffline() && offlinePremium()) {
+        await queueWrite("/api/annotations", "POST", {
+          notebookId,
+          documentId,
+          anchor,
+          color: input.color,
+          comment: input.comment,
+        });
+        showToast(t("reader.annotationQueuedOffline"));
+        setBusy(false);
+        return;
+      }
       setLocalAnchors((prev) => ({
         ...prev,
         [anchor.blockId]: (prev[anchor.blockId] ?? []).filter((h) => h !== optimistic),

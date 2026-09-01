@@ -20,6 +20,7 @@ import {
 import { CollabProvider, type CollabState } from "@/components/collab/collab-context";
 import { HistoryControl } from "@/components/collab/history-control";
 import { ShareControl } from "@/components/collab/share-control";
+import { OfflineStatus } from "@/components/offline-status";
 import { useNotebookSync } from "@/components/collab/use-sync";
 import { GraphOverlay } from "@/components/graph/graph-overlay";
 import { CorpusDistillPage } from "@/components/reader/corpus-distill-page";
@@ -273,6 +274,7 @@ export function Workspace({
             drive={drive}
           />
         </div>
+        <OfflineStatus />
         <ShareControl notebookId={notebook.id} presence={presence} />
         <div className="hidden md:block">
           <HistoryControl history={history} />

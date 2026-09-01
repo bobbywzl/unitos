@@ -3,7 +3,10 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { api } from "@/lib/api";
+import { ACCOUNT_HEADER } from "@/lib/constants";
 import { isImeKey } from "@/lib/ime";
+import { tabAccount } from "@/lib/tab-account";
 import type { NoteView, SourceChip } from "@/lib/types";
 import { useCollab } from "@/components/collab/collab-context";
 import { AuthorChip } from "@/components/collab/person-badge";
@@ -135,13 +138,80 @@ export function NoteCard({
     if (focused) cardRef.current?.scrollIntoView({ block: "nearest" });
   }, [focused]);
 
+  // Auto-save: while the editor is open, every edit saves on its own — a
+  // debounced PATCH after the last keystroke, and a keepalive flush when the
+  // window closes or the editor unmounts — so nothing typed is lost. Cancel
+  // still restores the content from before this edit: the flush sees the
+  // reverted draft and writes it back over the auto-saved state.
+  const draftRef = useRef(draft);
+  const lastSavedRef = useRef(note.content);
+
+  useEffect(() => {
+    if (!editing) return;
+    lastSavedRef.current = note.content;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editing]);
+
+  useEffect(() => {
+    draftRef.current = draft;
+    if (!editing || !canEdit) return;
+    const trimmed = draft.trim();
+    if (!trimmed || trimmed === lastSavedRef.current) return;
+    const timer = setTimeout(() => {
+      const before = lastSavedRef.current;
+      lastSavedRef.current = trimmed;
+      void api(`/api/notes/${note.id}`, "PATCH", { content: trimmed }).catch(() => {
+        // Failed quiet save: the next keystroke or the flush retries.
+        if (lastSavedRef.current === trimmed) lastSavedRef.current = before;
+      });
+    }, 900);
+    return () => clearTimeout(timer);
+  }, [draft, editing, canEdit, note.id]);
+
+  useEffect(() => {
+    if (!editing || !canEdit) return;
+    const flush = () => {
+      const trimmed = draftRef.current.trim();
+      if (!trimmed || trimmed === lastSavedRef.current) return;
+      lastSavedRef.current = trimmed;
+      const account = tabAccount();
+      void fetch(`/api/notes/${note.id}`, {
+        method: "PATCH",
+        keepalive: true,
+        headers: {
+          "Content-Type": "application/json",
+          ...(account ? { [ACCOUNT_HEADER]: account } : {}),
+        },
+        body: JSON.stringify({ content: trimmed }),
+      }).catch(() => {});
+    };
+    window.addEventListener("pagehide", flush);
+    window.addEventListener("beforeunload", flush);
+    return () => {
+      window.removeEventListener("pagehide", flush);
+      window.removeEventListener("beforeunload", flush);
+      flush();
+    };
+  }, [editing, canEdit, note.id]);
+
+  // Cancel and Esc restore the content from before this edit: the flush in
+  // the cleanup above sees the reverted draft and writes it back over any
+  // auto-saved state.
+  function cancel() {
+    draftRef.current = note.content;
+    setDraft(note.content);
+    setEditing(false);
+  }
+
   async function save() {
     const trimmed = draft.trim();
-    setEditing(false);
     if (!trimmed || trimmed === note.content) {
-      setDraft(note.content);
+      cancel();
       return;
     }
+    draftRef.current = draft;
+    lastSavedRef.current = trimmed;
+    setEditing(false);
     await actions.saveNote(note.id, trimmed);
   }
 
@@ -154,10 +224,7 @@ export function NoteCard({
           onKeyDown={(e) => {
             if (isImeKey(e)) return;
             if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void save();
-            if (e.key === "Escape") {
-              setDraft(note.content);
-              setEditing(false);
-            }
+            if (e.key === "Escape") cancel();
           }}
         />
         <div className="mt-2 flex items-center gap-2">
@@ -168,10 +235,7 @@ export function NoteCard({
             {t("common.save")}
           </button>
           <button
-            onClick={() => {
-              setDraft(note.content);
-              setEditing(false);
-            }}
+            onClick={cancel}
             className="rounded-full border border-line px-3 py-1 text-xs text-sand-700 hover:bg-clay-100 hover:text-clay-800"
           >
             {t("common.cancel")}

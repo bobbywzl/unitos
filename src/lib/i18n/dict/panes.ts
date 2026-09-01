@@ -147,6 +147,7 @@ const en = {
   deleteFromLibrary: "Delete from the library",
   uploadProgress: "{sent} of {total} MB",
   dropToAdd: "Drop PDFs or videos to add them to this work",
+  uploadQueuedOffline: "Offline · {n} saved for upload on sync · Unitos Premium",
 
   // Ingest progress steps (ingest-progress.tsx); keys map the wire stage ids
   stepUploading: "Uploading",
@@ -414,6 +415,7 @@ const zh: Record<keyof typeof en, string> = {
   deleteFromLibrary: "从文档库删除",
   uploadProgress: "{sent}/{total} MB",
   dropToAdd: "拖放 PDF 或视频，添加到此项目",
+  uploadQueuedOffline: "离线 · 已保存 {n} 项，恢复联网后上传 · Unitos Premium",
 
   stepUploading: "上传",
   stepParsing: "解析",

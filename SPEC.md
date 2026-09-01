@@ -245,6 +245,7 @@ DOM ranges are never the source of truth. Convert selection → block-relative o
 - **Left:** document reader. Blocks rendered from DB, selection popover on highlight with four buttons: Explain / Simplify / Extract / Add manually.
 - **Right:** docked notes drawer showing the section skeleton of the current notebook. Pending notes render with amber left-border + Accept (`Enter`) / Reject (`Backspace`) / Edit (`e`). Accepting must be exactly one keystroke when a pending note is focused.
 - Notes full-page view exists only for reorganizing/editing/export.
+- Note edits auto-save: while a note's editor is open, every edit saves on its own — a debounced PATCH after the last keystroke, a keepalive flush when the window closes — so nothing typed is lost. Save closes the editor; Cancel and Esc restore the content from before this edit, auto-saves included.
 
 **Other UX rules:**
 - Clicking a source chip on any note scrolls the reader to that anchor and flashes the highlight. If the document isn't open, open it.
@@ -624,3 +625,15 @@ The strip under the pages shows the status: Converting…, the failure reason wi
 ### Circle & ask
 
 On a page, holding the mouse and dragging draws a freehand loop (the §11 draw, on a page instead of a frame). Releasing opens the Circle & ask card under the loop: a question box and three actions — **Ask** (the typed question), **Explain** (no question), **Comment**. Ask and Explain run through the one pipeline (§4): `POST /api/derive` `type: EXPLAIN` with `page: {blockId, region, question?}`; the server renders the page and the circled part from the stored bytes, attaches both (the page carries context, the crop carries the spot, enlarged), and the prompt's page variant answers — transcribe what is there, never guess at illegible handwriting. The answer streams into the card and persists as an annotation with a page anchor; Comment posts to `/api/annotations` `{page}`. Marks paint on the page as SVG loops carrying `data-source-id`, so source chips jump to them and flash them like text marks, and clicking a mark opens its annotation. Viewers see marks, draw nothing.
+
+---
+
+## 17. Unitos Premium: offline work
+
+Offline, the open tab keeps working — reading what is loaded, and for a premium account, the non-AI writes. Writes made offline queue in IndexedDB (`lib/offline/queue.ts`) and sync in order when the browser is back online. AI features (derivations, the assistant, the upload review, conversion) need the server and stay unavailable offline for everyone.
+
+- **The flag:** `User.premium`, default false. No billing yet — the operator sets it on the account. The single local reader (sign-in off) always has it: there is no account to gate. Settings shows the state under Unitos Premium.
+- **What queues:** note edits (auto-save included), note create and delete, section renames and reorders, replies, block text edits and deletes, highlights and comments (`/api/annotations`; the optimistic paint stays), and content uploads — a file's bytes queue whole (single-request or chunked replay, same caps as online), a URL queues as the plain ingest request. The upload assistant's review needs the server, so an offline add skips the box and says so.
+- **What does not queue:** any write whose response the caller reads (a created section's id, the style route's healed spans), everything AI, and every write on a non-premium account — those fail with the plain offline message.
+- **Sync:** at-least-once, oldest first, writes before uploads. A record leaves the queue when the server answers; a 4xx drops it with a console warning (stale by then); a network failure stops the drain until the next online event. The workspace header shows the pill: offline with the queued count, then the sync until the queue drains.
+- **The boundary:** offline work lives in the open tab. There is no service worker yet — a reload while offline does not load the app; queued records survive the reload and sync on the next online visit.

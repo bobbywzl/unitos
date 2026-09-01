@@ -13,6 +13,9 @@ export type CollabState = {
   shared: boolean; // the corpus has collaborators; author labels render
   myId: string;
   people: Record<string, Person>;
+  // Unitos Premium (SPEC.md §17): offline work syncs when back online. The
+  // local reader always has it — there is no account to gate.
+  premium: boolean;
 };
 
 export const SOLO_COLLAB: CollabState = {
@@ -22,6 +25,7 @@ export const SOLO_COLLAB: CollabState = {
   shared: false,
   myId: "",
   people: {},
+  premium: true,
 };
 
 const CollabContext = createContext<CollabState>(SOLO_COLLAB);

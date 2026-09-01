@@ -21,6 +21,9 @@ const en = {
   backgroundPh: "e.g. Stanford student, stochastic calc + stats + quantum. Reading for due diligence.",
   singleReader:
     "Sign-in is off — this instance runs as a single reader. Set GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, and SESSION_SECRET to open Google sign-in at /signin.",
+  premium: "Unitos Premium",
+  premiumOn: "Active. Offline work — notes, non-AI annotations, edits, uploads — saves on this device and syncs when you are back online.",
+  premiumOff: "Not active on this account. Offline changes do not save.",
   language: "Language",
   theme: "Theme",
   themeLight: "Light",
@@ -50,6 +53,9 @@ const zh: Record<keyof typeof en, string> = {
   backgroundPh: "如：斯坦福学生，修过随机微积分、统计和量子力学。为尽职调查而读。",
   singleReader:
     "此实例未开启登录——当前以单人阅读器模式运行。设置 GOOGLE_CLIENT_ID、GOOGLE_CLIENT_SECRET 和 SESSION_SECRET 即可在 /signin 开启 Google 登录。",
+  premium: "Unitos Premium",
+  premiumOn: "已开通。离线工作——笔记、非 AI 批注、编辑、上传——会保存在本设备，恢复联网后同步。",
+  premiumOff: "此账号未开通。离线更改不会保存。",
   language: "语言",
   theme: "主题",
   themeLight: "浅色",
