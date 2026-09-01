@@ -245,6 +245,7 @@ DOM ranges are never the source of truth. Convert selection → block-relative o
 - **Left:** document reader. Blocks rendered from DB, selection popover on highlight with four buttons: Explain / Simplify / Extract / Add manually.
 - **Right:** docked notes drawer showing the section skeleton of the current notebook. Pending notes render with amber left-border + Accept (`Enter`) / Reject (`Backspace`) / Edit (`e`). Accepting must be exactly one keystroke when a pending note is focused.
 - Notes full-page view exists only for reorganizing/editing/export.
+- Note edits auto-save: while a note's editor is open, every edit saves on its own — a debounced PATCH after the last keystroke, a keepalive flush when the window closes — so nothing typed is lost. Save closes the editor; Cancel and Esc restore the content from before this edit, auto-saves included.
 
 **Other UX rules:**
 - Clicking a source chip on any note scrolls the reader to that anchor and flashes the highlight. If the document isn't open, open it.
