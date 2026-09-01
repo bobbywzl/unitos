@@ -11,15 +11,23 @@ import { MAX_VIDEO_BYTES, UPLOAD_CHUNK_BYTES } from "@/lib/video/types";
 // VideoChunk rows. The download streams into staged UploadChunk rows — one
 // chunk resident at a time, never the whole file — then the staged rows copy
 // to VideoChunk rows with one INSERT … SELECT, like /api/uploads/complete.
-// Dedupe: by sourceUrl before downloading, by fileHash after.
-export async function ingestMediaUrl(url: string, t: TFunc, onProgress?: OnIngestProgress) {
+// Dedupe: by sourceUrl before downloading, by fileHash after. opts.headers
+// carries an Authorization bearer token for a Google Drive download (SPEC.md
+// §14; a plain media link needs none); opts.title overrides the title the URL
+// itself would give — a Drive download URL's path is the file id, not a name.
+export async function ingestMediaUrl(
+  url: string,
+  t: TFunc,
+  onProgress?: OnIngestProgress,
+  opts?: { headers?: Record<string, string>; title?: string },
+) {
   const existing = await db.document.findFirst({
     where: { sourceUrl: url, video: { isNot: null } },
   });
   if (existing) return { document: existing, deduped: true };
 
   onProgress?.("fetch");
-  const res = await outboundFetch(url, {});
+  const res = await outboundFetch(url, { headers: opts?.headers });
   if (!res.ok || !res.body) throw new Error(t("api.mediaUnavailable"));
   const declared = Number(res.headers.get("content-length") ?? "0");
   if (declared > MAX_VIDEO_BYTES) throw new Error(t("api.videoTooLarge"));
@@ -78,7 +86,7 @@ export async function ingestMediaUrl(url: string, t: TFunc, onProgress?: OnInges
     }
 
     onProgress?.("save");
-    const title = mediaUrlTitle(url);
+    const title = opts?.title ?? mediaUrlTitle(url);
     const document = await db.$transaction(async (tx) => {
       const doc = await tx.document.create({
         data: { title, sourceUrl: url, fileHash },

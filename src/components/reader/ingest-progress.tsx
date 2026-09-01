@@ -13,11 +13,18 @@ export type IngestStep = { key: string; labelKey: TKey; detail?: string; status:
 // sends (see /api/documents); the first step is active from the moment the
 // request leaves, before any event arrives.
 const STEP_TEMPLATES: Record<
-  "pdf" | "url" | "video" | "youtube" | "media",
+  "pdf" | "url" | "video" | "youtube" | "media" | "drive",
   { key: string; labelKey: TKey }[]
 > = {
   pdf: [
     { key: "receive", labelKey: "panes.stepUploading" },
+    { key: "parse", labelKey: "panes.stepParsing" },
+    { key: "save", labelKey: "panes.stepSaving" },
+  ],
+  // Google Drive PDF, or a Google Doc/Sheet/Slide exported to PDF (SPEC.md
+  // §14): the server fetches the bytes instead of receiving an upload.
+  drive: [
+    { key: "fetch", labelKey: "panes.stepFetchingDrive" },
     { key: "parse", labelKey: "panes.stepParsing" },
     { key: "save", labelKey: "panes.stepSaving" },
   ],
@@ -44,7 +51,7 @@ const STEP_TEMPLATES: Record<
 };
 
 export function initialIngestSteps(
-  kind: "pdf" | "url" | "video" | "youtube" | "media",
+  kind: "pdf" | "url" | "video" | "youtube" | "media" | "drive",
 ): IngestStep[] {
   return STEP_TEMPLATES[kind].map((s, i) => ({
     ...s,
