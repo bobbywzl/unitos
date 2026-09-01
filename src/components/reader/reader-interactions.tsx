@@ -27,7 +27,7 @@ import { isImeKey, useImeGuard } from "@/lib/ime";
 import { parseYouTubeId, youtubeWatchUrl } from "@/lib/video/youtube";
 import type { TFunc, TKey } from "@/lib/i18n/dictionaries";
 import { useLang, useT } from "@/components/lang-provider";
-import { LinkIcon, MicIcon, SparkleIcon, SpinnerIcon, StopIcon, VolumeIcon } from "@/components/icons";
+import { LinkIcon, MicIcon, NotesIcon, SparkleIcon, SpinnerIcon, StopIcon, VolumeIcon } from "@/components/icons";
 import { Markdown } from "@/components/markdown";
 import { LoadingDots, ThinkingIndicator } from "@/components/thinking";
 import type { BlockData, Highlight } from "@/components/reader/block-view";
@@ -3592,34 +3592,6 @@ export function ReaderInteractions({
             </form>
           )}
 
-          {sectionChoices.length > 0 && (
-            <button
-              onClick={() => setSubmenu(submenu === "add" ? null : "add")}
-              aria-expanded={submenu === "add"}
-              className={`flex w-full items-center rounded-full px-2.5 py-[5px] text-left text-[12px] ${
-                submenu === "add"
-                  ? "bg-clay-100 text-clay-800"
-                  : "text-sand-800 hover:bg-clay-100 hover:text-clay-800"
-              }`}
-            >
-              {t("reader.addTo")}
-            </button>
-          )}
-          {submenu === "add" && (
-            <div className="flex max-h-44 flex-col overflow-y-auto">
-              {sectionChoices.map((choice) => (
-                <button
-                  key={choice.id}
-                  disabled={busy}
-                  onClick={() => void addToSection(choice.id)}
-                  className="truncate rounded-full px-2.5 py-[5px] text-left text-[12px] text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40"
-                >
-                  {choice.label}
-                </button>
-              ))}
-            </div>
-          )}
-
           <button
             onClick={beginLink}
             title={t("reader.linkTitle")}
@@ -3627,6 +3599,36 @@ export function ReaderInteractions({
           >
             {t("reader.linkAcrossTexts")}
           </button>
+
+          {/* Add to notes: a separate bubble above the toolbar. Press it,
+              pick a section, and the highlighted text lands there as a quote. */}
+          {sectionChoices.length > 0 && (
+            <div className="absolute bottom-full left-0 mb-2 flex w-44 flex-col gap-0.5 rounded-2xl bg-card p-1.5 shadow-float">
+              <button
+                onClick={() => setSubmenu(submenu === "add" ? null : "add")}
+                aria-expanded={submenu === "add"}
+                title={t("reader.addToNotesTitle")}
+                className="flex w-full items-center gap-1.5 rounded-full bg-clay px-2.5 py-[5px] text-left text-[12px] font-semibold text-clay-fg hover:bg-clay-600"
+              >
+                <NotesIcon size={12} />
+                {t("reader.addToNotes")}
+              </button>
+              {submenu === "add" && (
+                <div className="flex max-h-44 flex-col overflow-y-auto">
+                  {sectionChoices.map((choice) => (
+                    <button
+                      key={choice.id}
+                      disabled={busy}
+                      onClick={() => void addToSection(choice.id)}
+                      className="truncate rounded-full px-2.5 py-[5px] text-left text-[12px] text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40"
+                    >
+                      {choice.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Voice: a separate bubble under the toolbar reads the highlighted
               text aloud. Press again to stop. */}
