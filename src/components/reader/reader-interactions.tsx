@@ -3138,7 +3138,7 @@ export function ReaderInteractions({
             aria-label={t("panes.searchProject")}
             aria-expanded={searchOpen}
             title={t("panes.searchProjectTitle")}
-            className={`pointer-events-auto flex aspect-square items-center justify-center rounded-full bg-card shadow-float ${
+            className={`pointer-events-auto flex w-[34px] items-center justify-center rounded-full bg-card shadow-float ${
               searchOpen ? "text-clay-800" : "text-sand-600 hover:text-clay-800"
             }`}
           >
