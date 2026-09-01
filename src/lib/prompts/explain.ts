@@ -71,7 +71,14 @@ export function explainPrompt(ctx: PromptCtx): string {
       "Figure caption:",
       ctx.figure.caption || "(no caption)",
       "",
-      ...(ctx.figure.kind === "image" ? ["The figure's image is attached.", ""] : []),
+      ...(ctx.figure.kind === "image"
+        ? [
+            ctx.figure.page
+              ? "The PDF page the figure sits on is attached. Find the figure on it by its caption; read only that figure."
+              : "The figure's image is attached.",
+            "",
+          ]
+        : []),
       ...(ctx.figure.svgSource ? ["The figure is this SVG chart:", ctx.figure.svgSource, ""] : []),
       ...(ctx.figure.kind === "video"
         ? ["The figure is a video you cannot watch. Work from the caption and the document.", ""]

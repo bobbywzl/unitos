@@ -12,12 +12,13 @@ import {
   loadProfile,
   sectionSkeleton,
 } from "@/lib/derive/context";
-import { fetchFigureImage, figureContent, type FigureImage } from "@/lib/derive/figure";
+import { figureContent, figureVisual, type FigureImage } from "@/lib/derive/figure";
 import { callForJson, modelErrorMessage } from "@/lib/derive/json-call";
 import { currentLang, serverT } from "@/lib/i18n/server";
 import type { TFunc } from "@/lib/i18n/dictionaries";
 import { languageName, profileLines } from "@/lib/prompts/types";
 import { parseBody } from "@/lib/validate";
+import { formatTimeRange, regionSchema } from "@/lib/video/types";
 import type { AssistantAction, AssistantAnchor, AssistantPlan } from "@/lib/types";
 
 export const maxDuration = 120;
@@ -35,6 +36,21 @@ const requestSchema = z.object({
       blockId: z.string().min(1),
       startOffset: z.number().int().min(0),
       endOffset: z.number().int().min(0),
+    })
+    .optional(),
+  // A circled spot of a video document (SPEC.md §11): the time range, the
+  // drawn region, and the paused frame as a JPEG data URL when the client
+  // could capture it — the same shape EXPLAIN takes.
+  video: z
+    .object({
+      startTime: z.number().min(0),
+      endTime: z.number().min(0),
+      region: regionSchema.optional(),
+      frame: z
+        .string()
+        .startsWith("data:image/jpeg;base64,")
+        .max(2_000_000)
+        .optional(),
     })
     .optional(),
   // The assistant chat sends the turns so far; the command continues them.
@@ -197,10 +213,10 @@ async function handle(req: Request, t: TFunc) {
   ]);
 
   // A selection on a FIGURE block carries the figure itself: image bytes when
-  // they can be fetched, SVG source for charts — same treatment as EXPLAIN
-  // (SPEC.md §4: one pipeline).
+  // they can be produced (fetched, decoded, or the PDF page rendered), SVG
+  // source for charts — same treatment as EXPLAIN (SPEC.md §4: one pipeline).
   let selectionBlock = "";
-  let figureImage: FigureImage | null = null;
+  let attachedImage: FigureImage | null = null;
   if (data.anchor) {
     const anchored = anchorContext(
       document.blocks,
@@ -213,14 +229,21 @@ async function handle(req: Request, t: TFunc) {
     }
     const anchoredBlock = await db.block.findUnique({
       where: { id: data.anchor.blockId },
-      select: { type: true, html: true, text: true },
+      select: { type: true, html: true, text: true, page: true },
     });
     const figure = figureContent(anchoredBlock);
-    if (figure) {
-      if (figure.imageUrl) figureImage = await fetchFigureImage(figure.imageUrl, document.sourceUrl);
+    if (figure && anchoredBlock) {
+      const visual = await figureVisual(figure, anchoredBlock, document.id, document.sourceUrl);
+      attachedImage = visual?.image ?? null;
       selectionBlock = [
         `The reader has selected the figure in block ${data.anchor.blockId}. Its caption: "${figure.caption.slice(0, 500) || "(no caption)"}".`,
-        ...(figureImage ? ["The figure's image is attached."] : []),
+        ...(visual
+          ? [
+              visual.page
+                ? "The PDF page the figure sits on is attached. Find the figure on it by its caption; read only that figure."
+                : "The figure's image is attached.",
+            ]
+          : []),
         ...(figure.svgSource ? ["The figure is this SVG chart:", figure.svgSource] : []),
         ...(figure.kind === "video"
           ? ["The figure is a video you cannot watch. Work from the caption and the document."]
@@ -230,6 +253,40 @@ async function handle(req: Request, t: TFunc) {
     } else {
       selectionBlock = `The reader has selected this text in block ${data.anchor.blockId}:\n"${anchored.anchoredText.slice(0, 2000)}"\nThe command applies to this selection unless it says otherwise.`;
     }
+  } else if (data.video) {
+    // A circled spot of a video document: the frame is attached when the
+    // client could capture it; the transcript for the range grounds the words.
+    if (data.video.frame) {
+      const bytes = new Uint8Array(
+        Buffer.from(data.video.frame.slice("data:image/jpeg;base64,".length), "base64"),
+      );
+      if (bytes.length > 0) attachedImage = { bytes, mediaType: "image/jpeg" };
+    }
+    const excerpt = document.blocks
+      .filter(
+        (b) =>
+          b.type === "TRANSCRIPT" &&
+          b.startTime !== null &&
+          b.endTime !== null &&
+          b.startTime < data.video!.endTime &&
+          b.endTime > data.video!.startTime,
+      )
+      .map((b) => b.text)
+      .join(" ");
+    selectionBlock = [
+      `The reader has circled a spot of the video at ${formatTimeRange(data.video.startTime, data.video.endTime)}.`,
+      ...(attachedImage
+        ? [
+            data.video.region
+              ? "The attached image IS the video frame at this moment, cropped to the shape they drew."
+              : "The attached image IS the video frame at this moment.",
+          ]
+        : ["No frame could be captured; work from the transcript and the document."]),
+      ...(excerpt
+        ? [`The transcript over this range: "${excerpt.length > 1500 ? `${excerpt.slice(0, 1499)}…` : excerpt}"`]
+        : []),
+      "The command applies to this spot unless it says otherwise.",
+    ].join("\n");
   }
 
   const otherDocs = attachedDocs
@@ -295,12 +352,12 @@ async function handle(req: Request, t: TFunc) {
       content: documentPrefix(document.title, document.blocks, document.references),
       providerOptions: { anthropic: { cacheControl: { type: "ephemeral" } } },
     },
-    figureImage
+    attachedImage
       ? {
           role: "user",
           content: [
             { type: "text", text: userPrompt },
-            { type: "image", image: figureImage.bytes, mediaType: figureImage.mediaType },
+            { type: "image", image: attachedImage.bytes, mediaType: attachedImage.mediaType },
           ],
         }
       : { role: "user", content: userPrompt },
