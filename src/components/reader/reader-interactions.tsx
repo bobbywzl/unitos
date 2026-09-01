@@ -493,9 +493,10 @@ export function ReaderInteractions({
     null,
   );
   // Voice: the bubble under the toolbar reads the highlighted text aloud.
-  // OpenAI TTS through /api/speech; without the key, the browser voice reads
-  // instead — Chinese and English alike. The reading outlives the toolbar; a
-  // floating Stop reading control shows while it plays without a selection.
+  // The Edge voice through /api/speech — free neural voices, Chinese and
+  // English alike; when the route fails, the most natural browser voice reads
+  // instead. The reading outlives the toolbar; a floating Stop reading
+  // control shows while it plays without a selection.
   const [voice, setVoice] = useState<"idle" | "loading" | "playing">("idle");
   const voiceAudioRef = useRef<HTMLAudioElement | null>(null);
   const voiceRunRef = useRef(0);
@@ -2275,8 +2276,27 @@ export function ReaderInteractions({
     setVoice("idle");
   }
 
-  // The browser voice reads when the server has no OPENAI_API_KEY. The
-  // utterance language follows the text: Chinese characters → zh-CN, else en-US.
+  // The most natural voice the browser has for the language. The default is
+  // often robotic; neural voices ("Natural", Edge) rank first, then Google's,
+  // then premium local ones, then any voice matching the language.
+  function pickBrowserVoice(lang: string): SpeechSynthesisVoice | null {
+    const prefix = lang.split("-")[0];
+    const candidates = (window.speechSynthesis?.getVoices() ?? []).filter((v) =>
+      v.lang.replace("_", "-").toLowerCase().startsWith(prefix),
+    );
+    const score = (v: SpeechSynthesisVoice) => {
+      const name = v.name.toLowerCase();
+      if (name.includes("natural") || name.includes("online")) return 4;
+      if (name.includes("google")) return 3;
+      if (name.includes("premium") || name.includes("enhanced") || name.includes("siri")) return 2;
+      if (v.lang.replace("_", "-").toLowerCase() === lang.toLowerCase()) return 1;
+      return 0;
+    };
+    return candidates.sort((a, b) => score(b) - score(a))[0] ?? null;
+  }
+
+  // The browser voice reads when /api/speech fails. The utterance language
+  // follows the text: Chinese characters → zh-CN, else en-US.
   function browserSpeak(text: string, run: number) {
     const synth = window.speechSynthesis;
     if (!synth) {
@@ -2285,7 +2305,10 @@ export function ReaderInteractions({
       return;
     }
     const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = /[一-鿿]/.test(text) ? "zh-CN" : "en-US";
+    const lang = /[一-鿿]/.test(text) ? "zh-CN" : "en-US";
+    utterance.lang = lang;
+    const voice = pickBrowserVoice(lang);
+    if (voice) utterance.voice = voice;
     utterance.onend = () => {
       if (voiceRunRef.current === run) setVoice("idle");
     };
@@ -2307,6 +2330,8 @@ export function ReaderInteractions({
     if (!text.trim()) return;
     const run = ++voiceRunRef.current;
     setVoice("loading");
+    // Warm the voice list: if the route fails, browserSpeak needs it loaded.
+    window.speechSynthesis?.getVoices();
     try {
       const res = await fetch("/api/speech", {
         method: "POST",
@@ -3546,32 +3571,6 @@ export function ReaderInteractions({
             </button>
           )}
 
-          <div className="flex items-center gap-1.5 px-2.5 py-1">
-            {(["clay", "sage", "gold", "plum"] as const).map((color) => (
-              <button
-                key={color}
-                disabled={busy}
-                onClick={() => void annotate({ color, comment: commentDraft.trim() || undefined })}
-                aria-label={t("reader.highlightIn", { color: t(HUE_KEY[color]) })}
-                title={t(
-                  commentDraft.trim() ? "reader.highlightInWithNote" : "reader.highlightIn",
-                  { color: t(HUE_KEY[color]) },
-                )}
-                className="size-[18px] rounded-full transition-transform hover:scale-110 disabled:opacity-40"
-                style={{
-                  background:
-                    color === "clay"
-                      ? "var(--clay-400)"
-                      : color === "sage"
-                        ? "var(--sage-500)"
-                        : color === "gold"
-                          ? "#d9a54a"
-                          : "#a78bfa",
-                }}
-              />
-            ))}
-          </div>
-
           <button
             onClick={() => setSubmenu(submenu === "comment" ? null : "comment")}
             aria-expanded={submenu === "comment"}
@@ -3656,6 +3655,30 @@ export function ReaderInteractions({
           >
             {t("reader.linkAcrossTexts")}
           </button>
+
+          {/* Highlight: a separate bubble right above the toolbox holds the
+              color dots. Near the top of the page it drops below instead,
+              beside the voice bubble, so it never lands out of reach. */}
+          <div
+            className={`absolute flex items-center gap-2 rounded-full bg-card px-3 py-2 shadow-float ${
+              popover.yTop < 54 ? "top-full left-11 mt-2" : "bottom-full left-0 mb-2"
+            }`}
+          >
+            {HIGHLIGHT_HUES.map((color) => (
+              <button
+                key={color}
+                disabled={busy}
+                onClick={() => void annotate({ color, comment: commentDraft.trim() || undefined })}
+                aria-label={t("reader.highlightIn", { color: t(HUE_KEY[color]) })}
+                title={t(
+                  commentDraft.trim() ? "reader.highlightInWithNote" : "reader.highlightIn",
+                  { color: t(HUE_KEY[color]) },
+                )}
+                className="size-5 rounded-full transition-transform hover:scale-110 disabled:opacity-40"
+                style={{ background: HUE_DOT[color] }}
+              />
+            ))}
+          </div>
 
           {/* Voice: a separate bubble under the toolbar reads the highlighted
               text aloud. Press again to stop. */}
