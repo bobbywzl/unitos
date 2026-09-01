@@ -20,6 +20,8 @@ const en = {
   notesFullPageTitle: "Reorganize, edit, and export your notes",
   expandTray: "Expand the notes tray",
   collapseTray: "Collapse the notes tray",
+  resizeTray: "Resize the notes tray",
+  resizeTrayTitle: "Drag to resize the notes tray. Double-click to reset.",
   more: "More",
   workspace: "Workspace",
 
@@ -222,6 +224,8 @@ const zh: Record<keyof typeof en, string> = {
   notesFullPageTitle: "整理、编辑并导出你的笔记",
   expandTray: "展开笔记栏",
   collapseTray: "收起笔记栏",
+  resizeTray: "调整笔记栏宽度",
+  resizeTrayTitle: "拖动调整笔记栏宽度。双击恢复默认。",
   more: "更多",
   workspace: "工作区",
 
