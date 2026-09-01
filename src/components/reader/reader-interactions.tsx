@@ -3670,9 +3670,11 @@ export function ReaderInteractions({
           </button>
 
           {/* Add to notes: a separate bubble above the toolbar. Press it,
-              pick a section, and the highlighted text lands there as a quote. */}
+              pick a section, and the highlighted text lands there as a quote.
+              Right-anchored: the toolbar's right edge is always inside the
+              pane, so the wider bubble never clips there. */}
           {sectionChoices.length > 0 && (
-            <div className="absolute bottom-full left-0 mb-2 flex w-44 flex-col gap-0.5 rounded-2xl bg-card p-1.5 shadow-float">
+            <div className="absolute right-0 bottom-full mb-2 flex w-44 flex-col gap-0.5 rounded-2xl bg-card p-1.5 shadow-float">
               <button
                 onClick={() => setSubmenu(submenu === "add" ? null : "add")}
                 aria-expanded={submenu === "add"}

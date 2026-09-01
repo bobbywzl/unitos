@@ -194,6 +194,9 @@ export function Reader({
   const restoreSelectionRef = useRef<{ blockId: string; start: number; end: number } | null>(null);
   // Focus a just-inserted paragraph the moment it renders.
   const pendingFocusRef = useRef<string | null>(null);
+  // Style syncs serialize: the route rewrites the block's whole styles array,
+  // so two in-flight toggles would clobber each other's span.
+  const styleSyncRef = useRef<Promise<unknown>>(Promise.resolve());
 
   const fontFamily = FONT_STACK[font ?? "default"];
   const focusedBlock = blocks.find((b) => b.id === focusedBlockId) ?? null;
@@ -256,8 +259,9 @@ export function Reader({
     });
     restoreSelectionRef.current = { blockId, start, end };
     // Unsaved typing saves first — the style offsets refer to the saved text.
-    if (flush) void flush.then(() => onToggleStyle(blockId, start, end, style));
-    else void onToggleStyle(blockId, start, end, style);
+    styleSyncRef.current = styleSyncRef.current
+      .then(() => flush)
+      .then(() => onToggleStyle(blockId, start, end, style));
   }
 
   function applyFormat(kind: Kind) {
