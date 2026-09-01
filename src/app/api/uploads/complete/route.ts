@@ -26,6 +26,10 @@ const bodySchema = z.object({
   filename: z.string().min(1),
   notebookId: z.string().min(1),
   kind: z.enum(["pdf", "video"]).default("pdf"),
+  // Feasible upload instructions from the upload assistant's check (SPEC.md
+  // §14). PDFs thread them into the structure pass; video ingest has no lever
+  // for them and ignores them.
+  instructions: z.string().max(2_000).default(""),
 });
 
 type Body = z.infer<typeof bodySchema>;
@@ -92,7 +96,9 @@ export async function POST(req: Request) {
 
   return progressResponse(async (onProgress) => {
     try {
-      const { document, deduped } = await parse.ingestPdf(bytes, data.filename, onProgress);
+      const { document, deduped } = await parse.ingestPdf(bytes, data.filename, onProgress, {
+        instructions: data.instructions.trim() || undefined,
+      });
       await attachDocument(data.notebookId, document.id);
       await bumpNotebook(data.notebookId);
       // On-ingest glossary extraction (SPEC.md §8 Phase 7). Best-effort; after() keeps it
