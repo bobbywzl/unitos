@@ -27,7 +27,7 @@ import { isImeKey, useImeGuard } from "@/lib/ime";
 import { parseYouTubeId, youtubeWatchUrl } from "@/lib/video/youtube";
 import type { TFunc, TKey } from "@/lib/i18n/dictionaries";
 import { useLang, useT } from "@/components/lang-provider";
-import { LinkIcon, MicIcon, SparkleIcon, SpinnerIcon, StopIcon, VolumeIcon } from "@/components/icons";
+import { LinkIcon, MicIcon, SearchIcon, SparkleIcon, SpinnerIcon, StopIcon, VolumeIcon } from "@/components/icons";
 import { Markdown } from "@/components/markdown";
 import { LoadingDots, ThinkingIndicator } from "@/components/thinking";
 import type { BlockData, Highlight } from "@/components/reader/block-view";
@@ -35,6 +35,7 @@ import { Bibliography } from "@/components/reader/bibliography";
 import { useCollab } from "@/components/collab/collab-context";
 import { AuthorChip } from "@/components/collab/person-badge";
 import { DistillPage } from "@/components/reader/distill-page";
+import { ProjectSearch } from "@/components/reader/project-search";
 import { Reader } from "@/components/reader/reader";
 
 type Anchor = Omit<SourceInput, "documentId">;
@@ -1520,6 +1521,9 @@ export function ReaderInteractions({
   // Below xl the article menu collapses to a pill; the card would sit over
   // the article text there. The pill toggles it; an action closes it.
   const [menuExpanded, setMenuExpanded] = useState(false);
+  // The project search bubble, opened from the search icon beside the
+  // assistant button. Opening one closes the other.
+  const [searchOpen, setSearchOpen] = useState(false);
   // The article menu tracks the scroll position: visible only at the top.
   useEffect(() => {
     const container = containerRef.current;
@@ -3103,23 +3107,46 @@ export function ReaderInteractions({
     >
       {/* The article menu floats open at the top of the page: frequent asks
           go to the assistant at document scope; Distill opens the distilled
-          page. It hides once the reader scrolls and returns at the top. */}
+          page; the search icon beside the assistant button expands the
+          project search bubble. It hides once the reader scrolls and returns
+          at the top. The strip spans the pane so the bubble can size to it;
+          only the controls take pointer events. */}
       <div
         inert={!atTop}
-        className={`absolute top-4 left-4 z-10 transition duration-200 print:hidden ${
+        className={`pointer-events-none absolute inset-x-4 top-4 z-30 transition duration-200 print:hidden ${
           atTop ? "opacity-100" : "-translate-y-2 opacity-0"
         }`}
       >
-        <button
-          onClick={() => setMenuExpanded((v) => !v)}
-          aria-expanded={menuExpanded}
-          className="mb-1.5 flex items-center gap-1.5 rounded-full bg-card px-3 py-2 text-[12px] font-semibold text-clay-800 shadow-float"
-        >
-          <SparkleIcon size={13} />
-          {t("reader.assistant")}
-        </button>
+        <div className="mb-1.5 flex w-max gap-1.5">
+          <button
+            onClick={() => {
+              setMenuExpanded((v) => !v);
+              setSearchOpen(false);
+            }}
+            aria-expanded={menuExpanded}
+            className="pointer-events-auto flex items-center gap-1.5 rounded-full bg-card px-3 py-2 text-[12px] font-semibold text-clay-800 shadow-float"
+          >
+            <SparkleIcon size={13} />
+            {t("reader.assistant")}
+          </button>
+          <button
+            data-project-search
+            onClick={() => {
+              setSearchOpen((v) => !v);
+              setMenuExpanded(false);
+            }}
+            aria-label={t("panes.searchProject")}
+            aria-expanded={searchOpen}
+            title={t("panes.searchProjectTitle")}
+            className={`pointer-events-auto flex aspect-square items-center justify-center rounded-full bg-card shadow-float ${
+              searchOpen ? "text-clay-800" : "text-sand-600 hover:text-clay-800"
+            }`}
+          >
+            <SearchIcon size={15} />
+          </button>
+        </div>
         <div
-          className={`${menuExpanded ? "flex" : "hidden"} w-56 flex-col overflow-hidden rounded-2xl bg-card py-1.5 shadow-float`}
+          className={`${menuExpanded ? "flex" : "hidden"} pointer-events-auto w-56 flex-col overflow-hidden rounded-2xl bg-card py-1.5 shadow-float`}
         >
           {canEdit && (
             <>
@@ -3163,6 +3190,11 @@ export function ReaderInteractions({
             {allDistillations.length > 0 ? ` (${allDistillations.length})` : ""}
           </button>
         </div>
+        <ProjectSearch
+          notebookId={notebookId}
+          open={searchOpen}
+          onClose={() => setSearchOpen(false)}
+        />
       </div>
 
       <div className="sticky top-4 z-10 float-right mr-4 flex items-center gap-2 print:hidden">
