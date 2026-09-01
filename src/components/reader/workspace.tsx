@@ -30,6 +30,7 @@ import { NotebookTitle } from "@/components/notebook-title";
 import { NotesTray } from "@/components/outline/notes-tray";
 import { useOutline } from "@/components/outline/use-outline";
 import { DocumentBar, type AttachedDocument } from "@/components/reader/document-bar";
+import type { DriveConfig } from "@/lib/drive/config";
 import type { TKey } from "@/lib/i18n/dictionaries";
 
 type Tab = "notes" | "assistant" | "distill" | "annotations" | "edits";
@@ -53,6 +54,7 @@ export function Workspace({
   notebook,
   documents,
   activeDocumentId,
+  drive,
   reader,
   assistant,
   distillPanel,
@@ -70,6 +72,7 @@ export function Workspace({
   notebook: NotebookView;
   documents: AttachedDocument[];
   activeDocumentId: string | null;
+  drive: DriveConfig | null;
   reader: React.ReactNode;
   assistant: React.ReactNode;
   distillPanel: React.ReactNode;
@@ -205,6 +208,7 @@ export function Workspace({
             notebookId={notebook.id}
             documents={documents}
             activeId={activeDocumentId}
+            drive={drive}
           />
         </div>
         <ShareControl notebookId={notebook.id} presence={presence} />

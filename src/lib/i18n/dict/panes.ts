@@ -77,6 +77,8 @@ const en = {
   notVideoLink:
     "This is not a video link. Paste a YouTube link (watch, shorts, or youtu.be) or a direct video or audio file link.",
   dropPdfOrVideo: "Drop PDF, video, or audio files.",
+  driveAuthFailed: "Could not connect to Google Drive. Try again.",
+  driveUnsupportedFile: "{name} isn't a file type this app can read yet.",
   confirmDeleteFromLibrary: "Delete this document from the library?",
   deleteFailed: "Delete failed",
   documentActions: "Document actions",
@@ -92,6 +94,8 @@ const en = {
   addDocument: "Add a document",
   uploadPdf: "Upload PDF",
   uploadVideo: "Upload video or audio",
+  addFromDrive: "Add from Google Drive",
+  driveHint: "pdf · Google Docs, Sheets, Slides (as pdf) · video and audio",
   addUrl: "Add URL",
   library: "Library",
   choosePdf: "Choose PDF files",
@@ -129,6 +133,7 @@ const en = {
   stepStructuring: "Structuring",
   stepFetchingVideoInfo: "Fetching video info",
   stepFetchingMedia: "Fetching the media file",
+  stepFetchingDrive: "Fetching from Google Drive",
 
   // Distilled page (distill-page.tsx)
   deleteDistillation: "Delete this distillation",
@@ -279,6 +284,8 @@ const zh: Record<keyof typeof en, string> = {
   ingestFailed: "导入失败",
   notVideoLink: "这不是视频链接。请粘贴 YouTube 链接（watch、shorts 或 youtu.be），或视频/音频文件的直链。",
   dropPdfOrVideo: "请拖放 PDF、视频或音频文件。",
+  driveAuthFailed: "无法连接 Google Drive。请重试。",
+  driveUnsupportedFile: "{name} 的文件类型暂不支持。",
   confirmDeleteFromLibrary: "从文档库删除此文档？",
   deleteFailed: "删除失败",
   documentActions: "文档操作",
@@ -294,6 +301,8 @@ const zh: Record<keyof typeof en, string> = {
   addDocument: "添加文档",
   uploadPdf: "上传 PDF",
   uploadVideo: "上传视频或音频",
+  addFromDrive: "从 Google Drive 添加",
+  driveHint: "pdf · Google 文档、表格、幻灯片（转为 pdf）· 视频与音频",
   addUrl: "添加 URL",
   library: "文档库",
   choosePdf: "选择 PDF 文件",
@@ -328,6 +337,7 @@ const zh: Record<keyof typeof en, string> = {
   stepStructuring: "整理结构",
   stepFetchingVideoInfo: "获取视频信息",
   stepFetchingMedia: "获取媒体文件",
+  stepFetchingDrive: "从 Google Drive 获取",
 
   deleteDistillation: "删除此提炼",
   scanningArticle: "正在扫描文章，找出回答它的引文",

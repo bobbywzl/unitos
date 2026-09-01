@@ -118,6 +118,14 @@ const en = {
   videoCopyIncomplete: "Video bytes did not copy completely. Try again.",
   videoSaveFailed: "Could not save this video",
 
+  // Google Drive upload (SPEC.md §14)
+  driveTokenMissing: "Missing Google Drive authorization",
+  driveTokenExpired: "Your Google Drive access expired. Try again.",
+  driveUnsupportedType:
+    "This Drive file type isn't supported. Pick a PDF, Google Doc, Sheet, Slide, video, or audio file.",
+  driveExportTooLarge: "This Google Doc, Sheet, or Slide is larger than Drive's 10 MB export limit",
+  driveFetchFailed: "This Drive file did not load. It may be private, removed, or no longer accessible.",
+
   // Video playback and frames
   videoPlaysFromYouTube: "This video plays from YouTube",
   noStoryboard: "This video has no storyboard",
@@ -264,6 +272,12 @@ const zh: Record<keyof typeof en, string> = {
   notMedia: "文件不是支持的视频格式（mp4、webm、mov、ogg）或音频格式（mp3、m4a、wav、flac、ogg）",
   videoCopyIncomplete: "视频数据未完整复制。请重试。",
   videoSaveFailed: "无法保存此视频",
+
+  driveTokenMissing: "缺少 Google Drive 授权",
+  driveTokenExpired: "Google Drive 访问已过期。请重试。",
+  driveUnsupportedType: "此 Drive 文件类型暂不支持。请选择 PDF、Google 文档、表格、幻灯片、视频或音频文件。",
+  driveExportTooLarge: "此 Google 文档/表格/幻灯片超过 Drive 10 MB 的导出限制",
+  driveFetchFailed: "这个 Drive 文件无法加载。文件可能已设为私密、被删除，或已无法访问。",
 
   videoPlaysFromYouTube: "此视频从 YouTube 播放",
   noStoryboard: "此视频没有预览画面",

@@ -563,3 +563,18 @@ Distill's second scope: the reader asks the whole corpus one question (`POST /ap
 ### Graph
 
 The Graph (rail button; full-screen overlay; `reactflow`, the release-edu tree pattern) draws the corpus as a connected whole: every attached document a node, every linked pair one curve. The more links between two documents, the thicker and bolder the curve; a pair held together only by recommended links draws dashed until one is accepted. Nodes drag; click one to open the document; pan and zoom Obsidian-style. Node and edge data come from the workspace page (`GraphNode`, `GraphEdge` in `lib/types.ts`); reactflow lazy-loads when the overlay opens.
+
+---
+
+## 14. Google Drive upload
+
+A new way to add a document: pick it from Google Drive instead of the local disk. The reader's Google account is already the common case (§2's auth), so Drive access rides the same OAuth client — no separate "connect Google Drive" step, no stored Drive token.
+
+- **Grant:** the client asks for a Drive token with Google Identity Services (`drive.file` scope — the app only ever sees files the reader explicitly picks, never the rest of their Drive) and opens the Google Picker with it. The token lives in the browser only, for one picking session; nothing about the grant is written to the database. `GOOGLE_CLIENT_ID` (§2) is reused; the deployer additionally lists this app's origin under that client's "Authorized JavaScript origins" in the Google Cloud console. `GOOGLE_PICKER_API_KEY` (optional, a Picker-only API key) improves file previews in the picker; the feature works with `GOOGLE_CLIENT_ID` alone. `GOOGLE_CLIENT_ID` unset = the option stays hidden, the same DUAL MODE as sign-in (§2).
+- **One ingest path, three sources:** a picked file is sniffed by mime type (`lib/drive/types.ts`) into the same handlers a local upload already uses — Drive is a new source, never a new parser (§4's discipline extended to ingest):
+  - Google Docs, Sheets, and Slides export to PDF through Drive's own conversion (`files.export`, capped at 10 MB by Drive), then ingest exactly like an uploaded PDF.
+  - A PDF already in Drive downloads (`files.get?alt=media`) and ingests exactly like an uploaded PDF.
+  - A video or audio file downloads the same way and ingests exactly like a direct video/audio upload (§11) — same chunked storage, same transcription.
+  - Anything else (images, Forms, Drawings, raw .docx/.xlsx/.pptx, …) is declined with a plain reason; the picker's own mime filter keeps most of these from being selected at all.
+- **Provenance and dedupe:** a picked video or audio file's Drive download URL (no token in it) becomes the document's `sourceUrl`, so re-picking the same file dedupes like a re-added web link (§11's own dedupe). A picked PDF, Doc, Sheet, or Slide dedupes by the downloaded bytes' hash instead, the same as any other PDF upload — Drive gives no stable pre-download key for those.
+- **Surface:** "Add from Google Drive" in the document bar's `+` menu, beside Upload PDF and Upload video — same progress card, same one-at-a-time ingest for multiple picks.

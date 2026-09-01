@@ -3,6 +3,9 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
+import type { DriveConfig } from "@/lib/drive/config";
+import { pickDriveFiles } from "@/lib/drive/picker-client";
+import { classifyDriveFile, type DrivePickedFile } from "@/lib/drive/types";
 import { isImeKey } from "@/lib/ime";
 import { useCollab } from "@/components/collab/collab-context";
 import { ChevronDownIcon } from "@/components/icons";
@@ -89,10 +92,12 @@ export function DocumentBar({
   notebookId,
   documents,
   activeId,
+  drive,
 }: {
   notebookId: string;
   documents: AttachedDocument[];
   activeId: string | null;
+  drive: DriveConfig | null;
 }) {
   const { canEdit } = useCollab();
   const t = useT();
@@ -258,7 +263,7 @@ export function DocumentBar({
   // server response starts streaming.
   async function runIngest(
     fileLabel: string,
-    kind: "pdf" | "url" | "video" | "youtube" | "media",
+    kind: "pdf" | "url" | "video" | "youtube" | "media" | "drive",
     send: (emit: (stage: string, detail?: string) => void) => Promise<Response>,
   ): Promise<{ id: string; title: string; deduped: boolean }> {
     setPhase({ fileLabel, steps: initialIngestSteps(kind) });
@@ -351,6 +356,66 @@ export function DocumentBar({
       setPhase(null);
       if (fileRef.current) fileRef.current.value = "";
       if (videoFileRef.current) videoFileRef.current.value = "";
+    }
+    if (lastId) {
+      setDialog(false);
+      open(lastId);
+      router.refresh();
+    }
+  }
+
+  // Google Drive upload (SPEC.md §14): get a token and open the picker
+  // (client-only, no server round trip for either), then import what was
+  // picked through the same progress card as every other source. Multiple
+  // picks import one at a time, like multiple local files.
+  async function importFromDrive() {
+    if (!drive) return;
+    setError(null);
+    let token: string;
+    let picked: DrivePickedFile[];
+    try {
+      const result = await pickDriveFiles({ clientId: drive.clientId, apiKey: drive.apiKey });
+      token = result.token;
+      picked = result.files;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t("panes.driveAuthFailed"));
+      return;
+    }
+    if (picked.length === 0) return; // closed the picker without choosing a file
+
+    let lastId: string | null = null;
+    try {
+      for (let i = 0; i < picked.length; i++) {
+        const file = picked[i];
+        const kind = classifyDriveFile(file.mimeType, file.name);
+        if (kind === "unsupported") {
+          throw new Error(t("panes.driveUnsupportedFile", { name: file.name }));
+        }
+        if (kind === "media" && file.sizeBytes !== null && file.sizeBytes > MAX_VIDEO_BYTES) {
+          throw new Error(t("panes.fileTooLarge", { name: file.name, mb: 200 }));
+        }
+        if (kind === "pdf" && file.sizeBytes !== null && file.sizeBytes > MAX_PDF_BYTES) {
+          throw new Error(t("panes.fileTooLarge", { name: file.name, mb: 50 }));
+        }
+        const label = picked.length > 1 ? `${file.name} (${i + 1}/${picked.length})` : file.name;
+        const result = await runIngest(label, kind === "media" ? "media" : "drive", () =>
+          fetch("/api/drive/import", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+            body: JSON.stringify({
+              notebookId,
+              fileId: file.id,
+              name: file.name,
+              mimeType: file.mimeType,
+            }),
+          }),
+        );
+        lastId = result.id;
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t("panes.uploadFailed"));
+    } finally {
+      setPhase(null);
     }
     if (lastId) {
       setDialog(false);
@@ -650,6 +715,7 @@ export function DocumentBar({
         onError={setError}
         onChoosePdf={() => fileRef.current?.click()}
         onChooseVideo={() => videoFileRef.current?.click()}
+        onImportDrive={drive ? () => void importFromDrive() : null}
         onIngestUrl={ingestFromUrl}
         library={library}
         attachedIds={attachedIds}

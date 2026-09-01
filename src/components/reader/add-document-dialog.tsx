@@ -12,7 +12,7 @@ import { parseYouTubeId } from "@/lib/video/youtube";
 
 export type LibraryDocument = { id: string; title: string; _count: { blocks: number } };
 
-type AddTab = "pdf" | "video" | "url" | "library";
+type AddTab = "pdf" | "video" | "drive" | "url" | "library";
 
 // The add-document dialog: one centered window for everything that adds a
 // document, opened by the dashed +. The upload types span the top panel as
@@ -29,6 +29,7 @@ export function AddDocumentDialog({
   onError,
   onChoosePdf,
   onChooseVideo,
+  onImportDrive,
   onIngestUrl,
   library,
   attachedIds,
@@ -44,6 +45,7 @@ export function AddDocumentDialog({
   onError: (message: string | null) => void;
   onChoosePdf: () => void;
   onChooseVideo: () => void;
+  onImportDrive: (() => void) | null; // null: Google Drive is not configured, no tab
   onIngestUrl: (url: string) => Promise<boolean>; // true: document added and opened
   library: LibraryDocument[] | null;
   attachedIds: Set<string>;
@@ -97,6 +99,9 @@ export function AddDocumentDialog({
   const tabs: { key: AddTab; label: string }[] = [
     { key: "pdf", label: t("panes.uploadPdf") },
     { key: "video", label: t("panes.uploadVideo") },
+    ...(onImportDrive
+      ? [{ key: "drive" as const, label: t("panes.addFromDrive") }]
+      : []),
     { key: "url", label: t("panes.addUrl") },
     { key: "library", label: t("panes.library") },
   ];
@@ -184,6 +189,13 @@ export function AddDocumentDialog({
                   {t("panes.addVideo")}
                 </button>
               </form>
+            </div>
+          ) : tab === "drive" ? (
+            <div className="flex flex-1 flex-col gap-2">
+              <button onClick={onImportDrive ?? undefined} disabled={busy} className={chooseArea}>
+                {t("panes.addFromDrive")}
+              </button>
+              <span className="text-center text-[11px] text-sand-500">{t("panes.driveHint")}</span>
             </div>
           ) : tab === "url" ? (
             <form className="flex flex-1 flex-col gap-2" onSubmit={(e) => void addUrl(e)}>

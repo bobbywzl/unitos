@@ -1,6 +1,7 @@
 import { Logo } from "@/components/logo";
 import { notFound, redirect } from "next/navigation";
 import { authEnabled, currentUser } from "@/lib/auth";
+import { driveConfig } from "@/lib/drive/config";
 import { serverT } from "@/lib/i18n/server";
 import { peopleByIds, roleOf } from "@/lib/collab";
 import { matchInText } from "@/lib/anchors/match";
@@ -1021,6 +1022,7 @@ export default async function NotebookPage(props: {
       notebook={view}
       documents={attached}
       activeDocumentId={paneOne?.document.id ?? null}
+      drive={driveConfig()}
       collab={collab}
       rev={notebook.rev}
       graph={{ nodes: graphNodes, edges: graphEdges }}
