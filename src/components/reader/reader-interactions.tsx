@@ -32,6 +32,8 @@ import { Markdown } from "@/components/markdown";
 import { LoadingDots, ThinkingIndicator } from "@/components/thinking";
 import type { BlockData, Highlight } from "@/components/reader/block-view";
 import { Bibliography } from "@/components/reader/bibliography";
+import type { ConversionInfo } from "@/components/reader/conversion-strip";
+import type { PageMark } from "@/components/reader/page-block";
 import { useCollab } from "@/components/collab/collab-context";
 import { AuthorChip } from "@/components/collab/person-badge";
 import { DistillPage } from "@/components/reader/distill-page";
@@ -369,6 +371,8 @@ export function ReaderInteractions({
   contentsLinksByBlock,
   citationsByBlock,
   references,
+  pageMarksByBlock,
+  conversion,
   font,
 }: {
   documentId: string;
@@ -431,6 +435,11 @@ export function ReaderInteractions({
   >;
   citationsByBlock: Record<string, { start: number; end: number; referenceId: string }[]>;
   references: DocumentReference[];
+  // Handwritten document (SPEC.md §14): stored marks per PAGE block, and the
+  // conversion status for the strip under the pages. conversion null = not a
+  // handwritten document.
+  pageMarksByBlock: Record<string, PageMark[]>;
+  conversion: ConversionInfo | null;
   font: string | null;
 }) {
   const router = useRouter();
@@ -1081,7 +1090,13 @@ export function ReaderInteractions({
       const blockId = blockEl?.dataset.blockId;
       if (!blockId) return;
       const block = blocksRef.current.find((b) => b.id === blockId);
-      if (!block || block.type === "FIGURE" || block.type === "TABLE" || block.type === "SEPARATOR")
+      if (
+        !block ||
+        block.type === "FIGURE" ||
+        block.type === "TABLE" ||
+        block.type === "SEPARATOR" ||
+        block.type === "PAGE"
+      )
         return;
       // Video documents' blocks refuse edits outright.
       if (block.type === "VIDEO" || block.type === "TRANSCRIPT") {
@@ -3237,6 +3252,11 @@ export function ReaderInteractions({
         font={font}
         stylesByBlock={stylesByBlock}
         editedByBlock={editedByBlock}
+        pages={
+          conversion
+            ? { notebookId, canEdit, marksByBlock: pageMarksByBlock, conversion }
+            : null
+        }
         onSaveText={saveBlockEdit}
         onFormatBlock={formatBlock}
         onToggleStyle={toggleStyleSpan}

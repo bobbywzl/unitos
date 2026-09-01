@@ -20,7 +20,9 @@
 //   key term 关键术语 · Edits(页签) 编辑记录 · notes tray 笔记栏 ·
 //   Ask/Auto(模式) 询问/自动 · command 指令 · key takeaways 主要收获 ·
 //   selection 选中内容 · bullet-point notes 分条笔记 · gaps(检查) 疏漏 ·
-//   anchor unresolved 无法定位 · app tab 页签 · browser tab 标签页
+//   anchor unresolved 无法定位 · app tab 页签 · browser tab 标签页 ·
+//   handwritten 手写 · page(手写页) 页面 · conversion(手写转文本) 转换 ·
+//   Circle & ask 圈选并提问
 // highlight 高亮 仅指高亮功能；表示选取文字一律用 选中。
 
 const en = {

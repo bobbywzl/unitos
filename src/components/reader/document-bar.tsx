@@ -33,6 +33,7 @@ export type AttachedDocument = {
   parserVersion: number;
   hasFile: boolean;
   hasVideo: boolean; // video documents never re-parse (SPEC.md §11)
+  handwritten: boolean; // pages, not text blocks; the menu flips the shape (SPEC.md §14)
 };
 type LibraryDocument = { id: string; title: string; _count: { blocks: number } };
 type IngestPhase = { fileLabel: string; steps: IngestStep[] };
@@ -195,6 +196,7 @@ export function DocumentBar({
   const activeStale =
     active !== null &&
     !active.hasVideo &&
+    !active.handwritten &&
     (active.sourceUrl !== null || active.hasFile) &&
     active.parserVersion < PARSER_VERSION;
 
@@ -226,11 +228,17 @@ export function DocumentBar({
     }
   }
 
-  async function reparse(doc: AttachedDocument) {
+  // `as` flips a PDF between article and handwritten pages (SPEC.md §14) —
+  // the escape hatch when Import PDF judged it wrong. Absent = plain re-parse.
+  async function reparse(doc: AttachedDocument, as?: "article" | "handwritten") {
     setError(null);
     try {
-      await runIngest(doc.title, doc.sourceUrl ? "url" : "pdf", () =>
-        fetch(`/api/documents/${doc.id}/reparse`, { method: "POST" }),
+      await runIngest(doc.title, doc.sourceUrl && !as ? "url" : "pdf", () =>
+        fetch(`/api/documents/${doc.id}/reparse`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(as ? { as } : {}),
+        }),
       );
       router.refresh();
     } catch (err) {
@@ -594,7 +602,7 @@ export function DocumentBar({
                   </div>
                   {pillMenu === d.id && (
                     <div className="mx-2 mb-1.5 flex flex-col rounded-xl bg-sand-100 py-1">
-                      {canEdit && !d.hasVideo && (d.sourceUrl !== null || d.hasFile) && (
+                      {canEdit && !d.hasVideo && !d.handwritten && (d.sourceUrl !== null || d.hasFile) && (
                         <button
                           onClick={() => {
                             closeList();
@@ -605,6 +613,34 @@ export function DocumentBar({
                           title={t("panes.reparseDocumentTitle")}
                         >
                           {t("panes.reparseDocument")}
+                        </button>
+                      )}
+                      {/* The shape switch (SPEC.md §14): the escape hatch when
+                          Import PDF judged this PDF wrong. */}
+                      {canEdit && d.handwritten && (
+                        <button
+                          onClick={() => {
+                            closeList();
+                            void reparse(d, "article");
+                          }}
+                          disabled={phase !== null}
+                          className={`${rowAction} disabled:opacity-40`}
+                          title={t("panes.parseAsArticleTitle")}
+                        >
+                          {t("panes.parseAsArticle")}
+                        </button>
+                      )}
+                      {canEdit && !d.hasVideo && !d.handwritten && d.hasFile && (
+                        <button
+                          onClick={() => {
+                            closeList();
+                            void reparse(d, "handwritten");
+                          }}
+                          disabled={phase !== null}
+                          className={`${rowAction} disabled:opacity-40`}
+                          title={t("panes.openAsHandwrittenTitle")}
+                        >
+                          {t("panes.openAsHandwritten")}
                         </button>
                       )}
                       {canEdit && (

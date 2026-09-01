@@ -5,6 +5,8 @@ import { PlusIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { BlockView, type BlockData, type Highlight } from "@/components/reader/block-view";
 import { CircleGlow } from "@/components/reader/circle-glow";
+import { ConversionStrip, type ConversionInfo } from "@/components/reader/conversion-strip";
+import { PageBlock, type PageMark } from "@/components/reader/page-block";
 
 const TEXT_TYPES = new Set(["PARAGRAPH", "HEADING", "LIST", "CODE", "EQUATION"]);
 
@@ -140,6 +142,7 @@ export function Reader({
   stylesByBlock,
   editedByBlock,
   documentId,
+  pages,
   onSaveText,
   onFormatBlock,
   onToggleStyle,
@@ -154,6 +157,14 @@ export function Reader({
   stylesByBlock: Record<string, StyleSpan[]>;
   editedByBlock: Record<string, { start: number; end: number }[]>;
   documentId?: string; // PDF figure blocks render their page via the figure image route
+  // Handwritten document (SPEC.md §14): PAGE blocks render with Circle & ask
+  // and their stored marks; the conversion strip sits after the last page.
+  pages?: {
+    notebookId: string;
+    canEdit: boolean;
+    marksByBlock: Record<string, PageMark[]>;
+    conversion: ConversionInfo;
+  } | null;
   onSaveText: (blockId: string, text: string) => Promise<void>;
   onFormatBlock: (blockId: string, kind: Kind, text?: string) => Promise<void>;
   onToggleStyle: (blockId: string, start: number, end: number, style: ToggleStyleKind) => Promise<void>;
@@ -179,6 +190,11 @@ export function Reader({
   const pendingFocusRef = useRef<string | null>(null);
 
   const fontFamily = FONT_STACK[font ?? "default"];
+  // Handwritten document: the Circle & ask hint rides the first page; the
+  // conversion strip renders after the last page (SPEC.md §14).
+  const firstPageIndex = blocks.findIndex((b) => b.type === "PAGE");
+  const lastPageIndex = blocks.reduce((last, b, i) => (b.type === "PAGE" ? i : last), -1);
+  const hasTextBlocks = blocks.some((b) => b.type !== "PAGE");
   const focusedBlock = blocks.find((b) => b.id === focusedBlockId) ?? null;
   const effectiveKind = (block: BlockData): Kind => localKinds[block.id] ?? blockKind(block);
   const effectiveStyles = (block: BlockData): StyleSpan[] =>
@@ -384,8 +400,28 @@ export function Reader({
         </p>
         <h2 className="mb-[26px] text-[33px]">{title}</h2>
 
-        {blocks.map((block) =>
-          mode === "edit" ? (
+        {blocks.map((block, i) =>
+          block.type === "PAGE" && pages && documentId ? (
+            <div key={block.id}>
+              <PageBlock
+                documentId={documentId}
+                notebookId={pages.notebookId}
+                blockId={block.id}
+                text={block.text}
+                marks={pages.marksByBlock[block.id] ?? []}
+                canEdit={pages.canEdit && mode === "read"}
+                hint={i === firstPageIndex}
+              />
+              {i === lastPageIndex && (
+                <ConversionStrip
+                  documentId={documentId}
+                  conversion={pages.conversion}
+                  hasText={hasTextBlocks}
+                  canEdit={pages.canEdit}
+                />
+              )}
+            </div>
+          ) : mode === "edit" ? (
             <div key={block.id} className="group/block">
               {TEXT_TYPES.has(block.type) ? (
                 <EditableBlock

@@ -46,21 +46,30 @@ export async function resolveDocumentSources(documentId: string): Promise<Resolv
       continue;
     }
     // Page anchor (SPEC.md §14): a drawn region on a PAGE block, not a text
-    // span. It skips the text ladder — pages never change — and orphans only
-    // when the PAGE block is gone (the document switched to a text article).
+    // span. It skips the text ladder — pages never change. When the PAGE
+    // blocks were rebuilt (shape switch), the quoted text "Page N" re-finds
+    // the page under its new id; only a document with no such page orphans.
     if (source.region !== null) {
-      const orphaned = blockById.get(source.blockId)?.type !== "PAGE";
+      let blockId = source.blockId;
+      let orphaned = blockById.get(source.blockId)?.type !== "PAGE";
+      if (orphaned) {
+        const match = blocks.find((b) => b.type === "PAGE" && b.text === source.quotedText);
+        if (match) {
+          blockId = match.id;
+          orphaned = false;
+        }
+      }
       resolved.push({
         id: source.id,
         noteId: source.noteId,
-        blockId: source.blockId,
+        blockId,
         start: source.startOffset,
         end: source.endOffset,
         orphaned,
       });
-      if (orphaned !== source.orphaned) {
+      if (orphaned !== source.orphaned || blockId !== source.blockId) {
         writes.push(
-          db.source.update({ where: { id: source.id }, data: { orphaned } }),
+          db.source.update({ where: { id: source.id }, data: { blockId, orphaned } }),
         );
       }
       continue;

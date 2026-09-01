@@ -509,6 +509,29 @@ export function BlockView({
           {t("panes.videoBlock", { text: block.text })}
         </p>
       );
+    // Handwritten pages render through PageBlock in the reader (SPEC.md §14);
+    // this case keeps the switch total for the odd place a PAGE block meets
+    // the plain block renderer.
+    case "PAGE":
+      if (documentId) {
+        return (
+          <div data-block-id={block.id} className={`${shared} my-6`}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={`/api/documents/${documentId}/page/${block.id}`}
+              alt=""
+              loading="lazy"
+              draggable={false}
+              className="w-full rounded-xl shadow-soft"
+            />
+          </div>
+        );
+      }
+      return (
+        <p data-block-id={block.id} className={`${shared} my-4 text-sm text-sand-600 italic`}>
+          {content}
+        </p>
+      );
     case "TABLE":
       if (block.html) {
         return (
