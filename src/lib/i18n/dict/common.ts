@@ -23,7 +23,8 @@
 //   anchor unresolved 无法定位 · app tab 页签 · browser tab 标签页 ·
 //   upload assistant 上传助手 · review(上传审阅) 审阅 · page 页面 ·
 //   split 拆分 · upload instructions 上传要求 · handwritten 手写 ·
-//   conversion(手写转文本) 转换 · Circle & ask 圈选并提问
+//   conversion(手写转文本) 转换 · Circle & ask 圈选并提问 ·
+//   offline 离线 · sync(离线同步) 同步 · Unitos Premium 不翻译
 // highlight 高亮 仅指高亮功能；表示选取文字一律用 选中。
 
 const en = {
@@ -54,6 +55,12 @@ const en = {
   open: "Open",
   requestFailed: "Request failed",
   requestFailedStatus: "Request failed ({status})",
+  // Offline work (SPEC.md §17, Unitos Premium)
+  offline: "Offline. This change did not save.",
+  offlineQueued: "Offline · {n} saved for sync · Unitos Premium",
+  offlinePremium: "Offline · edits save and sync later · Unitos Premium",
+  offlineReadOnly: "Offline · changes do not save. Unitos Premium saves offline work.",
+  offlineSyncing: "Syncing {n} offline changes…",
   streamIncomplete: "The answer did not arrive whole. Try again.",
   signInToContinue: "Sign in to continue.",
   corpusNotFound: "Project not found",
@@ -108,6 +115,12 @@ const zh: Record<keyof typeof en, string> = {
   open: "打开",
   requestFailed: "请求失败",
   requestFailedStatus: "请求失败（{status}）",
+  // Offline work (SPEC.md §17, Unitos Premium)
+  offline: "已离线。此更改未保存。",
+  offlineQueued: "离线 · 已保存 {n} 项待同步 · Unitos Premium",
+  offlinePremium: "离线 · 编辑会保存并稍后同步 · Unitos Premium",
+  offlineReadOnly: "离线 · 更改不会保存。Unitos Premium 可保存离线工作。",
+  offlineSyncing: "正在同步 {n} 项离线更改…",
   streamIncomplete: "回答没有完整送达。请重试。",
   signInToContinue: "请登录后继续。",
   corpusNotFound: "未找到该项目",

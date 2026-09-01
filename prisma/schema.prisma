@@ -24,6 +24,9 @@ model User {
   symbol       String    @default("")
   color        String    @default("")
   passwordHash String    @default("") // "" = no password (OAuth or link-only); scrypt "s1$salt$hash"
+  // Unitos Premium (SPEC.md §17): offline work syncs when the reader is back
+  // online. No billing yet — the operator sets the flag on the account.
+  premium      Boolean   @default(false)
   createdAt    DateTime  @default(now())
   lastSeenAt   DateTime  @default(now())
   sessions     Session[]

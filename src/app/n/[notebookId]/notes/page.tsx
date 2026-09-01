@@ -100,6 +100,7 @@ export default async function NotesPage(props: { params: Promise<{ notebookId: s
     shared: authEnabled() && notebook.collaborators.length > 0,
     myId: user.id,
     people: await peopleByIds(authorIds),
+    premium: authEnabled() ? user.premium : true,
   };
 
   return (

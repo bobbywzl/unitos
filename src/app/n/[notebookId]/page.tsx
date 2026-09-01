@@ -1034,6 +1034,7 @@ export default async function NotebookPage(props: {
     shared: authEnabled() && notebook.collaborators.length > 0,
     myId: user.id,
     people: await peopleByIds(authorIds),
+    premium: authEnabled() ? user.premium : true,
   };
 
   const paneNode = (pane: NonNullable<typeof paneOne>, key: string) => (

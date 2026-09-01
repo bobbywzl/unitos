@@ -77,10 +77,12 @@ const fieldLabel = "text-xs text-sand-700";
 export function SettingsForm({
   account,
   background,
+  premium,
 }: {
   // The signed-in account; null = sign-in off (single-reader mode).
   account: (Person & { email: string; storedSymbol: string; storedColor: string }) | null;
   background: string;
+  premium: boolean;
 }) {
   const t = useT();
   const theme = useSyncExternalStore(subscribeTheme, readTheme, () => "system");
@@ -296,6 +298,13 @@ export function SettingsForm({
             </p>
           </div>
         )}
+      </section>
+
+      <section className="space-y-3">
+        <h2 className={sectionTitle}>{t("settings.premium")}</h2>
+        <p className="text-xs text-sand-600">
+          {premium ? t("settings.premiumOn") : t("settings.premiumOff")}
+        </p>
       </section>
 
       <section className="space-y-3">

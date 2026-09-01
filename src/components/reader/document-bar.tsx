@@ -13,6 +13,7 @@ import { useT } from "@/components/lang-provider";
 import { Logo } from "@/components/logo";
 import type { TFunc } from "@/lib/i18n/dictionaries";
 import { readNdjson } from "@/lib/ndjson";
+import { isOffline, offlinePremium, queueUpload, queueWrite } from "@/lib/offline/queue";
 import { PARSER_VERSION } from "@/lib/parse/types";
 import { MAX_VIDEO_BYTES, MEDIA_EXTENSIONS, isMediaUrl } from "@/lib/video/types";
 import { parseYouTubeId } from "@/lib/video/youtube";
@@ -293,6 +294,29 @@ export function DocumentBar({
 
   function openAssistant(request: UploadRequest) {
     setError(null);
+    // Offline (SPEC.md §17, Unitos Premium): the box's review needs the
+    // server, so the add queues instead — files by their bytes, URLs as the
+    // plain ingest request — and syncs when the browser is back online.
+    if (isOffline()) {
+      if (!offlinePremium()) {
+        setError(t("common.offlineReadOnly"));
+        return;
+      }
+      const queued =
+        request.kind === "files"
+          ? Promise.all(request.files.map((f) => queueUpload(f, notebookId))).then(
+              () => request.files.length,
+            )
+          : queueWrite("/api/documents", "POST", { url: request.url, notebookId }).then(() => 1);
+      void queued.then((n) => {
+        setConnectNotice(t("panes.uploadQueuedOffline", { n }));
+        setTimeout(() => setConnectNotice(null), 4000);
+      });
+      if (fileRef.current) fileRef.current.value = "";
+      if (videoFileRef.current) videoFileRef.current.value = "";
+      setDialog(false);
+      return;
+    }
     setAssistant(request);
     setDialog(false);
     if (fileRef.current) fileRef.current.value = "";

@@ -46,7 +46,11 @@ export default async function SettingsPage() {
         </Link>
         <h1 className="text-[28px]">{t("common.settings")}</h1>
       </header>
-      <SettingsForm account={account} background={background} />
+      <SettingsForm
+        account={account}
+        background={background}
+        premium={authEnabled() ? user.premium : true}
+      />
     </main>
   );
 }
