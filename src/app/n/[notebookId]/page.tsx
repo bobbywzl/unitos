@@ -168,6 +168,9 @@ export default async function NotebookPage(props: {
         annotation: boolean;
         comment: boolean;
         figureLabel: string | null;
+        // The owning note. On a regular note's mark, click jumps to the note
+        // in the tray — the link between quote and note works both ways.
+        noteId: string;
       }[]
     > = {};
     const resolved = await resolveDocumentSources(document.id);
@@ -212,6 +215,7 @@ export default async function NotebookPage(props: {
         comment:
           annotationNoteIds.has(r.noteId) && note?.derivationType == null && note?.color == null,
         figureLabel: figureLabelBySource.get(r.id) ?? null,
+        noteId: r.noteId,
       });
       anchorHighlights[r.blockId] = list;
     }
@@ -557,13 +561,29 @@ export default async function NotebookPage(props: {
       if (ranges.length > 0) editedByBlock[b.id] = ranges;
     }
 
-    // Inline styles (bold/italic/underline/code): decoration spans healed like salience.
+    // Inline styles (bold/italic/underline/code/text color): decoration spans
+    // healed like salience.
     type StyleSpan = { start: number; end: number; style: string; quotedText: string };
-    const STYLE_KINDS = new Set(["bold", "italic", "underline", "code"]);
-    const stylesByBlock: Record<
-      string,
-      { start: number; end: number; style: "bold" | "italic" | "underline" | "code" }[]
-    > = {};
+    type StyleKind =
+      | "bold"
+      | "italic"
+      | "underline"
+      | "code"
+      | "color-clay"
+      | "color-sage"
+      | "color-gold"
+      | "color-plum";
+    const STYLE_KINDS = new Set([
+      "bold",
+      "italic",
+      "underline",
+      "code",
+      "color-clay",
+      "color-sage",
+      "color-gold",
+      "color-plum",
+    ]);
+    const stylesByBlock: Record<string, { start: number; end: number; style: StyleKind }[]> = {};
     for (const b of document.blocks) {
       const spans = (Array.isArray(b.styles) ? b.styles : []) as unknown as StyleSpan[];
       for (const span of spans) {
@@ -579,7 +599,7 @@ export default async function NotebookPage(props: {
         list.push({
           start: hit.start,
           end: hit.end,
-          style: span.style as "bold" | "italic" | "underline" | "code",
+          style: span.style as StyleKind,
         });
         stylesByBlock[b.id] = list;
       }

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { isImeKey } from "@/lib/ime";
 import type { NoteView, SourceChip } from "@/lib/types";
@@ -10,7 +11,16 @@ import { ReplyThread } from "@/components/collab/reply-thread";
 import { useT } from "@/components/lang-provider";
 import { Markdown } from "@/components/markdown";
 import { DragHandle, useCombineTarget, type HandleProps } from "@/components/sortable";
+import { NoteEditor } from "@/components/outline/note-editor";
 import type { OutlineActions } from "@/components/outline/use-outline";
+
+// Opening the editor on a quote note (only "> " lines) adds a fresh line, so
+// the caret starts underneath the quote and additions land there.
+function editDraft(content: string): string {
+  const lines = content.split("\n");
+  const quoteOnly = lines.length > 0 && lines.every((l) => l.trim() === "" || l.startsWith(">"));
+  return quoteOnly ? `${content}\n\n` : content;
+}
 
 /** Tray cards sit in the 352px drawer (design 1a); page cards in the 760px column (design 2b). */
 type Variant = "tray" | "page";
@@ -97,6 +107,7 @@ export function NoteCard({
   variant?: Variant;
 }) {
   const t = useT();
+  const router = useRouter();
   const { canEdit } = useCollab();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(note.content);
@@ -116,7 +127,7 @@ export function NoteCard({
   // Adjust-during-render; each keypress creates a new request object.
   if (actions.editRequest && actions.editRequest.id === note.id && handledEdit !== actions.editRequest) {
     setHandledEdit(actions.editRequest);
-    setDraft(note.content);
+    setDraft(editDraft(note.content));
     setEditing(true);
   }
 
@@ -137,10 +148,9 @@ export function NoteCard({
   if (editing) {
     return (
       <div className="rounded-2xl bg-card p-3 shadow-soft outline-2 outline-clay-400">
-        <textarea
-          autoFocus
+        <NoteEditor
           value={draft}
-          onChange={(e) => setDraft(e.target.value)}
+          onChange={setDraft}
           onKeyDown={(e) => {
             if (isImeKey(e)) return;
             if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void save();
@@ -149,8 +159,6 @@ export function NoteCard({
               setEditing(false);
             }
           }}
-          rows={Math.min(12, Math.max(3, draft.split("\n").length + 1))}
-          className="w-full resize-y bg-transparent text-sm outline-none"
         />
         <div className="mt-2 flex items-center gap-2">
           <button
@@ -185,10 +193,27 @@ export function NoteCard({
     .filter(Boolean)
     .join(" ");
 
+  // Double-click the card to jump to the source: the reader opens on the
+  // document and flashes the quote — the link between note and quote works
+  // both ways. Clicks on controls and text selection inside fields stay theirs.
+  function jumpToSource(e: React.MouseEvent) {
+    if ((e.target as Element).closest("button, a, textarea, input, select")) return;
+    const source = note.sources.find((s) => !s.orphaned);
+    if (!source) return;
+    window.getSelection()?.removeAllRanges();
+    router.push(`/n/${actions.notebookId}?doc=${source.documentId}&src=${source.id}`);
+    // Already on that document with ?src set: the push changes nothing, so
+    // flash the mark directly.
+    window.dispatchEvent(
+      new CustomEvent("dissect:flash-source", { detail: { sourceId: source.id } }),
+    );
+  }
+
   return (
     <div
       ref={cardRef}
       data-note-id={note.id}
+      onDoubleClick={jumpToSource}
       className={surface}
       title={isCombineTarget ? t("outline.dropToMerge") : undefined}
     >
@@ -259,7 +284,7 @@ export function NoteCard({
           </button>
           <button
             onClick={() => {
-              setDraft(note.content);
+              setDraft(editDraft(note.content));
               setEditing(true);
             }}
             className={`text-xs text-sand-600 hover:text-clay-700 ${tray ? "ml-auto" : ""}`}
@@ -275,7 +300,7 @@ export function NoteCard({
           {canEdit && (
             <button
               onClick={() => {
-                setDraft(note.content);
+                setDraft(editDraft(note.content));
                 setEditing(true);
               }}
               className="text-xs text-sand-600 hover:text-clay-700"

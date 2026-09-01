@@ -8,7 +8,15 @@ import { parseBody } from "@/lib/validate";
 const styleSchema = z.object({
   startOffset: z.number().int().min(0),
   endOffset: z.number().int().min(0),
-  style: z.enum(["bold", "italic", "underline"]),
+  style: z.enum([
+    "bold",
+    "italic",
+    "underline",
+    "color-clay",
+    "color-sage",
+    "color-gold",
+    "color-plum",
+  ]),
 });
 
 type StyleSpan = { start: number; end: number; style: string; quotedText: string };
@@ -36,11 +44,21 @@ export async function POST(req: Request, ctx: { params: Promise<{ blockId: strin
   const existing = spans.findIndex(
     (s) => s.style === data.style && s.start === data.startOffset && s.end === data.endOffset,
   );
+  // One color per span: a new color replaces another color on the same range.
+  const isColor = data.style.startsWith("color-");
   const next =
     existing >= 0
       ? spans.filter((_, i) => i !== existing)
       : [
-          ...spans,
+          ...spans.filter(
+            (s) =>
+              !(
+                isColor &&
+                s.style.startsWith("color-") &&
+                s.start === data.startOffset &&
+                s.end === data.endOffset
+              ),
+          ),
           {
             start: data.startOffset,
             end: data.endOffset,
