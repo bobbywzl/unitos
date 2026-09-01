@@ -17,6 +17,7 @@ import type {
 import { MAX_VIDEO_BYTES, MEDIA_EXTENSIONS, UPLOAD_CHUNK_BYTES } from "@/lib/video/types";
 import { parseYouTubeId } from "@/lib/video/youtube";
 import {
+  IngestProgress,
   advanceIngestSteps,
   completeIngestSteps,
   initialIngestSteps,
@@ -772,8 +773,7 @@ export function UploadAssistant({
 
         {phase === "adding" && (
           <div className="flex flex-col gap-2.5">
-            {headline && <p className="text-[13px] font-semibold text-sand-800">{headline}</p>}
-            {steps && <StepList steps={steps} />}
+            {steps && <IngestProgress inline fileLabel={headline ?? subject} steps={steps} />}
             {check && <ReplyList replies={check.replies} />}
             {failures.length > 0 && (
               <ul className="flex flex-col gap-1 text-xs text-red-500">
