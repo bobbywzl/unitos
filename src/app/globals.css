@@ -422,6 +422,21 @@ mark,
   --tw-prose-td-borders: var(--sand-200);
 }
 
+/* A quote in a note (a highlight added to notes): a boxed quotation, not the
+   typography default's bare italic bar. Edits and replies sit underneath it. */
+.prose blockquote {
+  margin: 0.5em 0;
+  border-left: 3px solid var(--clay-400);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--clay-400) 10%, transparent);
+  padding: 0.5em 0.85em;
+  font-style: normal;
+}
+.prose blockquote p:first-of-type::before,
+.prose blockquote p:last-of-type::after {
+  content: none;
+}
+
 /* Ingest card: the cat dances while the pipeline works. */
 @keyframes cat-bop {
   0%,

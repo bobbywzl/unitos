@@ -1789,9 +1789,15 @@ export function ReaderInteractions({
     setBusy(true);
     try {
       await flushLiveBlock(popover.anchor.blockId);
+      // The highlighted text lands as a quote: blockquote lines render as the
+      // boxed quotation on the note card. Edits and replies go underneath.
+      const quote = popover.anchor.quotedText
+        .split("\n")
+        .map((line) => `> ${line}`)
+        .join("\n");
       await api("/api/notes", "POST", {
         sectionId,
-        content: popover.anchor.quotedText,
+        content: quote,
         source: { documentId, ...popover.anchor },
       });
       markFreshSpan(popover.anchor.blockId, popover.anchor.startOffset, popover.anchor.endOffset);

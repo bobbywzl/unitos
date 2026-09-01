@@ -20,6 +20,8 @@ export function markdownPreview(text: string): string {
     .replace(/```[\s\S]*?```/g, " ")
     .replace(BLOCK_TAG, "")
     .replace(/^#{1,6}\s+/gm, "")
+    .replace(/^>\s?/gm, "")
+    .replace(/<\/?(?:u|clay|sage|gold|plum)>/g, "")
     .replace(/\*\*([^*]+)\*\*/g, "$1")
     .replace(/\*([^*]+)\*/g, "$1")
     .replace(/`([^`]+)`/g, "$1")
