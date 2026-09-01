@@ -4,20 +4,23 @@ import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { useT } from "@/components/lang-provider";
 import { Markdown } from "@/components/markdown";
+import { HIGHLIGHT_HUES, HUE_DOT, HUE_KEY, type HighlightHue } from "@/components/reader/hues";
 import { splitStreamError, splitStreamNote } from "@/lib/derive/config";
 import { regionBounds, regionPathD, type Region } from "@/lib/video/types";
 
 // One page of a handwritten document (SPEC.md §16): the PDF page rendered by
 // the page image route, the stored marks drawn over it, and Circle & ask —
-// drag a loop on the page, then ask, explain, or comment on the circled spot.
-// Ask and Explain stream through /api/derive (EXPLAIN with a page payload) and
-// persist as annotations with a region source; Comment posts to
-// /api/annotations. Clicking a mark opens its annotation like a text mark.
+// drag a loop on the page, then ask, explain, comment, or pick a color to
+// lasso highlight the circled spot. Ask and Explain stream through
+// /api/derive (EXPLAIN with a page payload) and persist as annotations with a
+// region source; Comment and the lasso highlight post to /api/annotations.
+// Clicking a mark opens its annotation like a text mark.
 
 export type PageMark = {
   sourceId: string;
   noteId: string;
-  kind: "explain" | "comment";
+  kind: "explain" | "comment" | "highlight";
+  color: string | null; // highlight only: the loop paints in this color
   region: Region;
 };
 
@@ -177,10 +180,10 @@ export function PageBlock({
     }
   }
 
-  async function comment() {
+  // Comment saves the typed text alone; a color dot saves the lasso highlight
+  // (SPEC.md §16) — the loop paints in that color, and typed text rides on it.
+  async function annotate(payload: { comment?: string; color?: HighlightHue }) {
     if (!pending || busy !== null) return;
-    const content = question.trim();
-    if (!content) return;
     setBusy("comment");
     setError(null);
     try {
@@ -190,7 +193,7 @@ export function PageBlock({
         body: JSON.stringify({
           notebookId,
           documentId,
-          page: { blockId, region: pending.region, comment: content },
+          page: { blockId, region: pending.region, ...payload },
         }),
       });
       if (!res.ok) {
@@ -204,6 +207,17 @@ export function PageBlock({
     } finally {
       setBusy(null);
     }
+  }
+
+  async function comment() {
+    const content = question.trim();
+    if (!content) return;
+    await annotate({ comment: content });
+  }
+
+  async function highlight(color: HighlightHue) {
+    const content = question.trim();
+    await annotate({ color, ...(content ? { comment: content } : {}) });
   }
 
   // The card sits under the loop, clamped inside the page.
@@ -259,14 +273,20 @@ export function PageBlock({
           className="pointer-events-none absolute inset-0 h-full w-full"
         >
           {marks.map((m) => {
+            // A lasso highlight paints solid in its color; other marks keep
+            // the clay glow.
+            const hue =
+              m.kind === "highlight" && m.color && m.color in HUE_DOT
+                ? HUE_DOT[m.color as HighlightHue]
+                : null;
             const shared = {
               "data-source-id": m.sourceId,
-              fill: "rgba(246, 160, 107, 0.07)",
-              stroke: "var(--clay-400)",
+              fill: hue ? `color-mix(in srgb, ${hue} 22%, transparent)` : "rgba(246, 160, 107, 0.07)",
+              stroke: hue ?? "var(--clay-400)",
               strokeWidth: 2.5,
               strokeLinejoin: "round" as const,
               vectorEffect: "non-scaling-stroke" as const,
-              style: { filter: "drop-shadow(0 0 5px rgba(246, 160, 107, 0.45))" },
+              style: hue ? undefined : { filter: "drop-shadow(0 0 5px rgba(246, 160, 107, 0.45))" },
             };
             return m.region.kind === "ellipse" ? (
               <ellipse key={m.sourceId} cx={m.region.cx} cy={m.region.cy} rx={m.region.rx} ry={m.region.ry} {...shared} />
@@ -379,6 +399,21 @@ export function PageBlock({
                 >
                   {busy === "comment" ? t("common.saving") : t("panes.pageComment")}
                 </button>
+                <span
+                  className="ml-auto flex items-center gap-1.5"
+                  title={t("panes.pageHighlightTitle")}
+                >
+                  {HIGHLIGHT_HUES.map((color) => (
+                    <button
+                      key={color}
+                      onClick={() => void highlight(color)}
+                      disabled={busy !== null}
+                      aria-label={t(HUE_KEY[color])}
+                      className="size-4 rounded-full transition-transform hover:scale-110 disabled:opacity-40"
+                      style={{ background: HUE_DOT[color] }}
+                    />
+                  ))}
+                </span>
               </div>
             ) : (
               answer.done && (

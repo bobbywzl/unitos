@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { authEnabled, currentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { driveConfig } from "@/lib/drive/config";
 import { serverT } from "@/lib/i18n/server";
 import { personOf } from "@/lib/person";
 import { Logo } from "@/components/logo";
@@ -50,6 +51,12 @@ export default async function SettingsPage() {
         account={account}
         background={background}
         premium={authEnabled() ? user.premium : true}
+        drive={(() => {
+          const config = driveConfig(user);
+          return config && (config.canLink || config.linked)
+            ? { linked: config.linked, canLink: config.canLink }
+            : null;
+        })()}
       />
     </main>
   );

@@ -30,6 +30,7 @@ export function AddDocumentDialog({
   onChoosePdf,
   onChooseVideo,
   onImportDrive,
+  driveLink,
   onIngestUrl,
   library,
   attachedIds,
@@ -46,6 +47,9 @@ export function AddDocumentDialog({
   onChoosePdf: () => void;
   onChooseVideo: () => void;
   onImportDrive: (() => void) | null; // null: Google Drive is not configured, no tab
+  // Link Google Drive (SPEC.md §14): linked shows the state; canLink offers
+  // the link flow. null when Drive is not configured.
+  driveLink: { linked: boolean; canLink: boolean } | null;
   onIngestUrl: (url: string) => Promise<boolean>; // true: document added and opened
   library: LibraryDocument[] | null;
   attachedIds: Set<string>;
@@ -76,6 +80,12 @@ export function AddDocumentDialog({
     setTabState(next);
     onError(null);
     if (next === "library") onOpenLibrary();
+  }
+
+  // Where the Link Google Drive callback returns to: this workspace.
+  function currentPath(): string {
+    if (typeof window === "undefined") return "/";
+    return window.location.pathname + window.location.search;
   }
 
   async function addUrl(e: React.FormEvent) {
@@ -196,6 +206,18 @@ export function AddDocumentDialog({
                 {t("panes.addFromDrive")}
               </button>
               <span className="text-center text-[11px] text-sand-500">{t("panes.driveHint")}</span>
+              {driveLink?.linked ? (
+                <span className="text-center text-[11px] text-sand-500">
+                  {t("panes.driveLinked")}
+                </span>
+              ) : driveLink?.canLink ? (
+                <a
+                  href={`/api/drive/link?next=${encodeURIComponent(currentPath())}`}
+                  className="self-center rounded-full border border-line px-3.5 py-1.5 text-xs font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800"
+                >
+                  {t("panes.driveLink")}
+                </a>
+              ) : null}
             </div>
           ) : tab === "url" ? (
             <form className="flex flex-1 flex-col gap-2" onSubmit={(e) => void addUrl(e)}>

@@ -29,8 +29,11 @@ const bodySchema = z.object({
   kind: z.enum(["pdf", "video"]).default("pdf"),
   // Feasible upload instructions from the upload assistant's check (SPEC.md
   // §15). PDFs thread them into the structure pass; video ingest has no lever
-  // for them and ignores them.
+  // for them and ignores them. pages and convert are the PDF directives
+  // (SPEC.md §16).
   instructions: z.string().max(2_000).default(""),
+  pages: z.boolean().default(false),
+  convert: z.boolean().default(true),
 });
 
 type Body = z.infer<typeof bodySchema>;
@@ -101,15 +104,20 @@ export async function POST(req: Request) {
         bytes,
         data.filename,
         onProgress,
-        { instructions: data.instructions.trim() || undefined },
+        {
+          instructions: data.instructions.trim() || undefined,
+          pages: data.pages,
+          convert: data.convert,
+        },
         user?.id ?? null,
       );
       await attachDocument(data.notebookId, document.id);
       await bumpNotebook(data.notebookId);
-      if (!deduped && document.handwritten) {
+      if (!deduped && document.handwritten && document.conversionStatus === "NONE") {
         // A handwritten document (SPEC.md §16): conversion starts on its own —
         // the text is the point. Glossary and the recommended-links scan
-        // follow it, so they read the converted text.
+        // follow it, so they read the converted text. conversionStatus OFF =
+        // the reader said not to convert; nothing starts.
         after(() =>
           runConversion(document.id, user?.id ?? null)
             .then((r) =>
@@ -118,9 +126,10 @@ export async function POST(req: Request) {
             .then(() => buildConnections(data.notebookId, document.id, user?.id ?? null))
             .catch(() => {}),
         );
-      } else {
+      } else if (!document.handwritten || document.conversionStatus === "READY") {
         // On-ingest glossary extraction (SPEC.md §8 Phase 7). Best-effort; after() keeps it
-        // alive past the response on serverless.
+        // alive past the response on serverless. A handwritten document
+        // without converted text has nothing to read — both scans skip.
         if (!deduped) after(() => buildGlossary(document.id, user?.id ?? null).catch(() => {}));
         after(() => buildConnections(data.notebookId, document.id, user?.id ?? null).catch(() => {}));
       }

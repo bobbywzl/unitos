@@ -28,6 +28,12 @@ const SPLIT_MODEL_FLOOR_PAGES = 15;
 
 export type InstructionReply = { instruction: string; willFollow: boolean; reply: string };
 
+// PDF directives read out of the instructions (SPEC.md §16): pages imports the
+// PDF as handwritten pages without judging it; convert false keeps conversion
+// off. The defaults leave Import PDF judging as always.
+export type PdfDirectives = { pages: boolean; convert: boolean };
+export const PDF_DIRECTIVE_DEFAULTS: PdfDirectives = { pages: false, convert: true };
+
 export type UploadReview = {
   title: string | null;
   kind: "article" | "index" | "other";
@@ -47,7 +53,11 @@ export type UploadReview = {
   feasible: string;
 };
 
-export type InstructionCheck = { replies: InstructionReply[]; feasible: string };
+export type InstructionCheck = {
+  replies: InstructionReply[];
+  feasible: string;
+  pdf?: PdfDirectives; // present for PDF checks; absent for url and video
+};
 
 const replySchema = z.object({
   instruction: z.string().min(1).max(600),
@@ -77,6 +87,7 @@ const reviewSchema = z.object({
 const checkSchema = z.object({
   replies: z.array(replySchema).max(16),
   feasible: z.string().max(2_000),
+  pdf: z.object({ pages: z.boolean(), convert: z.boolean() }).optional(),
 });
 
 type LinkCandidate = { url: string; text: string };
@@ -253,13 +264,16 @@ export async function reviewUpload(
 
 /** Answer upload instructions without a page review — the check before a PDF
     or a re-stated URL upload. Video is deterministic: nothing in a media
-    ingest can follow upload instructions, and the assistant says so. */
+    ingest can follow upload instructions, and the assistant says so. PDF
+    checks also read the PDF directives out of the instructions (SPEC.md §16);
+    every fallback answers the defaults, so ingest never guesses. */
 export async function checkInstructions(
   kind: "url" | "pdf" | "video",
   instructions: string,
   userId: string | null,
 ): Promise<InstructionCheck> {
-  if (!instructions) return { replies: [], feasible: "" };
+  const pdf = kind === "pdf" ? { pdf: PDF_DIRECTIVE_DEFAULTS } : {};
+  if (!instructions) return { replies: [], feasible: "", ...pdf };
   const t = await serverT();
   if (kind === "video") {
     return {
@@ -273,6 +287,7 @@ export async function checkInstructions(
         { instruction: instructions, willFollow: false, reply: t("api.instructionsUnchecked") },
       ],
       feasible: "",
+      ...pdf,
     };
   }
   const lang = await currentLang();
@@ -294,7 +309,13 @@ export async function checkInstructions(
         { instruction: instructions, willFollow: false, reply: t("api.instructionsUnchecked") },
       ],
       feasible: "",
+      ...pdf,
     };
   }
-  return result.data;
+  if (kind !== "pdf") return { replies: result.data.replies, feasible: result.data.feasible };
+  return {
+    replies: result.data.replies,
+    feasible: result.data.feasible,
+    pdf: result.data.pdf ?? PDF_DIRECTIVE_DEFAULTS,
+  };
 }

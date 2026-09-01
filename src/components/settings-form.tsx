@@ -78,11 +78,14 @@ export function SettingsForm({
   account,
   background,
   premium,
+  drive,
 }: {
   // The signed-in account; null = sign-in off (single-reader mode).
   account: (Person & { email: string; storedSymbol: string; storedColor: string }) | null;
   background: string;
   premium: boolean;
+  // Link Google Drive (SPEC.md §14); null = Drive linking not available.
+  drive: { linked: boolean; canLink: boolean } | null;
 }) {
   const t = useT();
   const theme = useSyncExternalStore(subscribeTheme, readTheme, () => "system");
@@ -95,6 +98,8 @@ export function SettingsForm({
   const [backgroundText, setBackgroundText] = useState(background);
   const [status, setStatus] = useState<"idle" | "saving" | "saved">("idle");
   const [error, setError] = useState<string | null>(null);
+  const [driveLinked, setDriveLinked] = useState(drive?.linked ?? false);
+  const [driveBusy, setDriveBusy] = useState(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSaved = useRef(
     JSON.stringify({
@@ -161,6 +166,20 @@ export function SettingsForm({
       setPicture("");
     } catch (err) {
       setError(err instanceof Error ? err.message : t("common.requestFailed"));
+    }
+  }
+
+  // Unlink Google Drive: revoke at Google, clear the stored grant (SPEC.md §14).
+  async function unlinkDrive() {
+    setError(null);
+    setDriveBusy(true);
+    try {
+      await api("/api/drive/link", "DELETE");
+      setDriveLinked(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t("common.requestFailed"));
+    } finally {
+      setDriveBusy(false);
     }
   }
 
@@ -306,6 +325,33 @@ export function SettingsForm({
           {premium ? t("settings.premiumOn") : t("settings.premiumOff")}
         </p>
       </section>
+
+      {drive && (
+        <section className="space-y-3">
+          <h2 className={sectionTitle}>{t("settings.drive")}</h2>
+          <div className="flex items-center gap-3 rounded-2xl bg-card p-5 shadow-soft">
+            <p className="text-xs text-sand-600">
+              {driveLinked ? t("settings.driveLinkedDesc") : t("settings.driveDesc")}
+            </p>
+            {driveLinked ? (
+              <button
+                onClick={() => void unlinkDrive()}
+                disabled={driveBusy}
+                className="ml-auto shrink-0 rounded-full border border-line px-4 py-1.5 text-xs font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40"
+              >
+                {t("settings.driveUnlink")}
+              </button>
+            ) : drive.canLink ? (
+              <a
+                href="/api/drive/link?next=/settings"
+                className="ml-auto shrink-0 rounded-full bg-clay px-4 py-1.5 text-xs font-semibold text-clay-fg hover:bg-clay-600"
+              >
+                {t("settings.driveLink")}
+              </a>
+            ) : null}
+          </div>
+        </section>
+      )}
 
       <section className="space-y-3">
         <h2 className={sectionTitle}>{t("settings.language")}</h2>

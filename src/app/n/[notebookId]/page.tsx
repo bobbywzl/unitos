@@ -745,7 +745,13 @@ export default async function NotebookPage(props: {
         list.push({
           sourceId: r.id,
           noteId: r.noteId,
-          kind: note.derivationType === "EXPLAIN" ? "explain" : "comment",
+          kind:
+            note.derivationType === "EXPLAIN"
+              ? "explain"
+              : note.color !== null
+                ? "highlight"
+                : "comment",
+          color: note.color,
           region,
         });
         pageMarksByBlock[r.blockId] = list;
@@ -1091,7 +1097,7 @@ export default async function NotebookPage(props: {
       notebook={view}
       documents={attached}
       activeDocumentId={paneOne?.document.id ?? null}
-      drive={driveConfig()}
+      drive={driveConfig(user)}
       collab={collab}
       rev={notebook.rev}
       graph={{ nodes: graphNodes, edges: graphEdges }}

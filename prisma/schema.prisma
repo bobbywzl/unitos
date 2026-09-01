@@ -27,6 +27,9 @@ model User {
   // Unitos Premium (SPEC.md §17): offline work syncs when the reader is back
   // online. No billing yet — the operator sets the flag on the account.
   premium      Boolean   @default(false)
+  // Linked Google Drive (SPEC.md §14): the refresh token from the drive.file
+  // code flow. "" = not linked; the picker then asks per visit.
+  driveRefreshToken String @default("")
   createdAt    DateTime  @default(now())
   lastSeenAt   DateTime  @default(now())
   sessions     Session[]
@@ -394,6 +397,7 @@ enum ConversionStatus {
   PENDING
   READY
   FAILED
+  OFF // the reader said not to convert; the strip offers Convert to text, nothing auto-starts
 }
 
 // The video of a video document (SPEC.md §11). kind UPLOAD: bytes in

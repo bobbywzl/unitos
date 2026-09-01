@@ -85,6 +85,22 @@ function loadPicker(): Promise<void> {
 // the same visit does not re-prompt. A fresh page load always asks again.
 let cachedToken: { token: string; expiresAt: number } | null = null;
 
+// A linked account gets its token from the server, minted from the stored
+// refresh token (SPEC.md §14) — no popup. null = not linked after all (grant
+// revoked, sign-in off); the caller falls back to the per-visit grant.
+async function requestLinkedToken(): Promise<string | null> {
+  try {
+    const res = await fetch("/api/drive/token", { method: "POST" });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { token?: string };
+    if (!data.token) return null;
+    cachedToken = { token: data.token, expiresAt: Date.now() + 55 * 60_000 };
+    return data.token;
+  } catch {
+    return null;
+  }
+}
+
 async function requestAccessToken(clientId: string): Promise<string> {
   await loadGsi();
   if (cachedToken && cachedToken.expiresAt > Date.now() + 30_000) return cachedToken.token;
@@ -110,13 +126,20 @@ async function requestAccessToken(clientId: string): Promise<string> {
 
 // Get a Drive token, open the picker, resolve with whatever the reader picked
 // (empty = closed the picker without picking — not an error) plus the token
-// to import with. Must run from a click handler: the token request opens a
-// popup, which browsers block outside a user gesture.
+// to import with. A linked account's token comes from the server; otherwise
+// the per-visit grant runs, which must start from a click handler: the token
+// request opens a popup, which browsers block outside a user gesture.
 export async function pickDriveFiles(opts: {
   clientId: string;
   apiKey: string | null;
+  linked: boolean;
 }): Promise<{ token: string; files: DrivePickedFile[] }> {
-  const [token] = await Promise.all([requestAccessToken(opts.clientId), loadPicker()]);
+  const [token] = await Promise.all([
+    (async () =>
+      (opts.linked ? await requestLinkedToken() : null) ??
+      (await requestAccessToken(opts.clientId)))(),
+    loadPicker(),
+  ]);
   const picker = window.google!.picker!;
   const view = new picker.DocsView(picker.ViewId.DOCS)
     .setIncludeFolders(true)

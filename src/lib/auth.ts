@@ -66,6 +66,7 @@ export const LOCAL_USER: User = {
   color: "",
   passwordHash: "",
   premium: true, // the local reader owns the instance; offline work is not gated
+  driveRefreshToken: "", // linking needs an account row; the local reader uses the per-visit grant
   createdAt: new Date(0),
   lastSeenAt: new Date(0),
 };

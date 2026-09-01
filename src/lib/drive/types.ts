@@ -12,13 +12,14 @@ import { MEDIA_EXTENSIONS } from "@/lib/video/types";
 // (lib/drive/picker-client.ts) and is never written to the database.
 export const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.file";
 
-// Google Docs, Sheets, and Slides have no reader of their own here; Drive
-// exports them to PDF first (lib/drive/fetch.ts), then they ingest exactly
-// like an uploaded PDF.
+// Google Docs, Sheets, Slides, and Drawings have no reader of their own here;
+// Drive exports them to PDF first (lib/drive/fetch.ts), then they ingest
+// exactly like an uploaded PDF.
 const EXPORTABLE_MIME_TYPES = new Set([
   "application/vnd.google-apps.document",
   "application/vnd.google-apps.spreadsheet",
   "application/vnd.google-apps.presentation",
+  "application/vnd.google-apps.drawing",
 ]);
 
 const MEDIA_MIME_RX = /^(?:video|audio)\//i;
@@ -62,3 +63,27 @@ export type DrivePickedFile = {
   mimeType: string;
   sizeBytes: number | null;
 };
+
+// The file id inside a pasted Google Drive or Google Docs link, so Add URL can
+// route it to the Drive import instead of failing the article parse. Covers
+// drive.google.com/file/d/{id}, open?id={id}, uc?id={id}, and the
+// docs.google.com/{document|spreadsheets|presentation|drawings}/d/{id} forms.
+export function parseDriveFileId(raw: string): string | null {
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    return null;
+  }
+  const host = url.host.replace(/^www\./, "");
+  if (host !== "drive.google.com" && host !== "docs.google.com") return null;
+  const byPath = /\/(?:file|document|spreadsheets|presentation|drawings)\/d\/([\w-]{10,})/.exec(
+    url.pathname,
+  );
+  if (byPath) return byPath[1];
+  const byQuery = url.searchParams.get("id");
+  if ((url.pathname === "/open" || url.pathname === "/uc") && byQuery && /^[\w-]{10,}$/.test(byQuery)) {
+    return byQuery;
+  }
+  return null;
+}

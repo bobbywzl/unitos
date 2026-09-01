@@ -207,9 +207,12 @@ export default async function SignInPage({
 
   return (
     <div className="dark relative flex min-h-screen flex-col overflow-hidden bg-[#14110d] text-ink">
-      {/* Backdrop: clay glow + dot lattice, behind everything */}
+      {/* Backdrop: clay glow + dot lattice + the mark covering the whole page, behind everything */}
       <div aria-hidden className="signin-glow pointer-events-none absolute inset-0" />
       <div aria-hidden className="signin-dots pointer-events-none absolute inset-0" />
+      <div aria-hidden className="pointer-events-none absolute inset-0 opacity-[0.07]">
+        <Logo size="100%" fit="cover" className="text-clay" />
+      </div>
 
       <header className="relative z-10 mx-auto flex w-full max-w-[1560px] items-center justify-between px-6 pt-6 sm:px-10">
         <div className="flex items-center gap-2.5">
@@ -223,15 +226,8 @@ export default async function SignInPage({
 
       <main className="relative z-10 mx-auto w-full max-w-[1560px] flex-1 px-6 pt-10 pb-16 sm:px-10 lg:pt-4">
         <div className="grid items-center gap-12 lg:grid-cols-[1.1fr_0.9fr] lg:gap-14">
-          {/* The pitch: the hero, the CTA card, the mark as a dimmed backdrop */}
+          {/* The pitch: the hero and the CTA card; the mark covers the page backdrop above */}
           <div className="rise-in relative">
-            <div
-              aria-hidden
-              className="pointer-events-none absolute -left-10 top-56 hidden opacity-[0.07] lg:block"
-            >
-              <Logo size={460} className="text-clay" />
-            </div>
-
             <h1 className="font-display text-balance text-ink">
               <span className="block text-[2.6rem] leading-[1.04] [-webkit-text-stroke:1px_currentColor] sm:text-[3.4rem] xl:text-[4.15rem]">
                 {t("signin.heroA")}

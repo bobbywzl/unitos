@@ -33,9 +33,24 @@ async function driveErrorMessage(t: TFunc, res: OutboundResponse): Promise<strin
   return t("api.driveFetchFailed");
 }
 
-// Google Docs, Sheets, and Slides export to PDF — Drive's own conversion —
-// then ingest exactly like an uploaded PDF; the app has no other reader for
-// the native formats. Drive caps an export at 10 MB.
+// The picked file's facts, for imports that arrive as a bare file id — a
+// pasted Drive link (SPEC.md §14). The picker sends name and mimeType itself.
+export async function fetchDriveMetadata(
+  fileId: string,
+  token: string,
+  t: TFunc,
+): Promise<{ name: string; mimeType: string }> {
+  const url = `${DRIVE_FILES_URL}/${encodeURIComponent(fileId)}?fields=${encodeURIComponent("name,mimeType")}`;
+  const res = await outboundFetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  if (!res.ok) throw new Error(await driveErrorMessage(t, res));
+  const data = (await res.json()) as { name?: string; mimeType?: string };
+  if (!data.name || !data.mimeType) throw new Error(t("api.driveFetchFailed"));
+  return { name: data.name, mimeType: data.mimeType };
+}
+
+// Google Docs, Sheets, Slides, and Drawings export to PDF — Drive's own
+// conversion — then ingest exactly like an uploaded PDF; the app has no other
+// reader for the native formats. Drive caps an export at 10 MB.
 export async function fetchExportedPdf(
   fileId: string,
   token: string,

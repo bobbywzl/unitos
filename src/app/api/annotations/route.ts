@@ -28,13 +28,20 @@ const videoSchema = z.object({
   comment: z.string().min(1).max(10_000),
 });
 
-// A page annotation (SPEC.md §16): a drawn region on a PAGE block and the
-// comment. The server picks the quoted text.
-const pageSchema = z.object({
-  blockId: z.string().min(1),
-  region: regionSchema,
-  comment: z.string().min(1).max(10_000),
-});
+// A page annotation (SPEC.md §16): a drawn region on a PAGE block, and the
+// comment, the highlight color (the lasso highlight), or both — a color with
+// a comment is a highlight the note rides on, like a text highlight. The
+// server picks the quoted text.
+const pageSchema = z
+  .object({
+    blockId: z.string().min(1),
+    region: regionSchema,
+    comment: z.string().min(1).max(10_000).optional(),
+    color: z.enum(["clay", "sage", "gold", "plum"]).optional(),
+  })
+  .refine((d) => d.comment !== undefined || d.color !== undefined, {
+    message: "Provide a comment, a color, or both",
+  });
 
 const createSchema = z
   .object({
@@ -153,8 +160,10 @@ export async function POST(req: Request) {
   return NextResponse.json(note, { status: 201 });
 }
 
-// A page annotation: a comment note whose source carries the drawn region on
-// a PAGE block (SPEC.md §16). The server picks the quoted text.
+// A page annotation: a note whose source carries the drawn region on a PAGE
+// block (SPEC.md §16). With a color it is a lasso highlight — the loop paints
+// in that color, and a typed comment rides on it; without one it is a plain
+// comment. The server picks the quoted text.
 async function createPageAnnotation(
   notebookId: string,
   documentId: string,
@@ -175,7 +184,8 @@ async function createPageAnnotation(
   const note = await db.note.create({
     data: {
       sectionId: section.id,
-      content: page.comment.trim(),
+      content: page.comment?.trim() || pageBlockText(block.page),
+      color: page.color ?? null,
       status: "ACCEPTED",
       createdById,
       order,

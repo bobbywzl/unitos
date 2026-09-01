@@ -7,7 +7,13 @@ import { useT } from "@/components/lang-provider";
 import { CheckIcon, SparkleIcon, SpinnerIcon } from "@/components/icons";
 import type { TFunc } from "@/lib/i18n/dictionaries";
 import { readNdjson } from "@/lib/ndjson";
-import type { InstructionCheck, InstructionReply, UploadReview } from "@/lib/upload-assistant";
+import { classifyDriveFile, type DrivePickedFile } from "@/lib/drive/types";
+import type {
+  InstructionCheck,
+  InstructionReply,
+  PdfDirectives,
+  UploadReview,
+} from "@/lib/upload-assistant";
 import { MAX_VIDEO_BYTES, MEDIA_EXTENSIONS, UPLOAD_CHUNK_BYTES } from "@/lib/video/types";
 import { parseYouTubeId } from "@/lib/video/youtube";
 import {
@@ -27,7 +33,10 @@ import {
 export type UploadRequest =
   | { kind: "url"; url: string }
   | { kind: "video-url"; url: string }
-  | { kind: "files"; files: File[] };
+  | { kind: "files"; files: File[] }
+  // Files picked in the Google Drive picker (SPEC.md §14): the box takes
+  // instructions like every add, then imports each pick with the token.
+  | { kind: "drive"; token: string; files: DrivePickedFile[] };
 
 type Phase = "review" | "ready" | "adding" | "done";
 type Added = { id: string; title: string };
@@ -150,8 +159,17 @@ export function UploadAssistant({
   const [error, setError] = useState<string | null>(null);
 
   const files = request.kind === "files" ? request.files : [];
-  const hasPdf = files.some((f) => !isMediaFile(f));
-  const hasMedia = request.kind === "video-url" || files.some(isMediaFile);
+  const driveFiles = request.kind === "drive" ? request.files : [];
+  const driveKindOf = (f: DrivePickedFile) => classifyDriveFile(f.mimeType, f.name);
+  // A Drive pick that ends up as PDF bytes (a PDF, or a Doc/Sheet/Slide/Drawing
+  // exported to PDF) takes the same instructions a PDF upload takes.
+  const hasPdf =
+    files.some((f) => !isMediaFile(f)) ||
+    driveFiles.some((f) => driveKindOf(f) === "pdf" || driveKindOf(f) === "export");
+  const hasMedia =
+    request.kind === "video-url" ||
+    files.some(isMediaFile) ||
+    driveFiles.some((f) => driveKindOf(f) === "media");
   const busy = phase === "adding" || checking;
 
   // ── Review (url kind): the sandbox read, on open and on Review again ──────
@@ -260,7 +278,12 @@ export function UploadAssistant({
     return result;
   }
 
-  async function uploadChunked(file: File, kind: "pdf" | "video", instructionsText: string) {
+  async function uploadChunked(
+    file: File,
+    kind: "pdf" | "video",
+    instructionsText: string,
+    pdf: PdfDirectives,
+  ) {
     const uploadId = crypto.randomUUID();
     const totalLabel = megabytes(file.size);
     for (let sent = 0; sent < file.size; sent += CHUNK_BYTES) {
@@ -295,6 +318,7 @@ export function UploadAssistant({
         notebookId,
         kind,
         instructions: kind === "pdf" ? instructionsText : "",
+        ...(kind === "pdf" ? { pages: pdf.pages, convert: pdf.convert } : {}),
       }),
     });
   }
@@ -303,6 +327,8 @@ export function UploadAssistant({
     setError(null);
     const checked = await ensureCheck();
     const feasible = checked?.feasible ?? "";
+    // The PDF directives the check read out of the instructions (SPEC.md §16).
+    const pdfDirectives: PdfDirectives = checked?.pdf ?? { pages: false, convert: true };
     // An instruction the assistant cannot follow stops the first Add: the
     // honest replies show before anything is added, and the reader decides —
     // edit the instructions, or press Add again to proceed without them.
@@ -358,6 +384,61 @@ export function UploadAssistant({
           );
         }
       }
+    } else if (request.kind === "drive") {
+      // One import per pick, like multiple local files (SPEC.md §14). The
+      // token rides each request; instructions and the PDF directives travel
+      // like every PDF add.
+      setPhase("adding");
+      for (let i = 0; i < driveFiles.length; i++) {
+        const file = driveFiles[i];
+        const kind = driveKindOf(file);
+        setHeadline(
+          driveFiles.length > 1
+            ? t("panes.uploadFileProgress", { i: i + 1, total: driveFiles.length, title: file.name })
+            : null,
+        );
+        if (kind === "unsupported") {
+          failed.push(t("panes.driveUnsupportedFile", { name: file.name }));
+          continue;
+        }
+        if (kind === "media" && file.sizeBytes !== null && file.sizeBytes > MAX_VIDEO_BYTES) {
+          failed.push(t("panes.fileTooLarge", { name: file.name, mb: 200 }));
+          continue;
+        }
+        if (kind === "pdf" && file.sizeBytes !== null && file.sizeBytes > MAX_PDF_BYTES) {
+          failed.push(t("panes.fileTooLarge", { name: file.name, mb: 50 }));
+          continue;
+        }
+        setSteps(initialIngestSteps(kind === "media" ? "media" : "drive"));
+        try {
+          const result = await streamIngest(
+            await fetch("/api/drive/import", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${request.token}`,
+              },
+              body: JSON.stringify({
+                notebookId,
+                fileId: file.id,
+                name: file.name,
+                mimeType: file.mimeType,
+                instructions: feasible,
+                pages: pdfDirectives.pages,
+                convert: pdfDirectives.convert,
+              }),
+            }),
+          );
+          collected.push({ id: result.id, title: result.title });
+        } catch (err) {
+          failed.push(
+            t("panes.uploadPageFailed", {
+              title: file.name,
+              reason: err instanceof Error ? err.message : t("panes.uploadFailed"),
+            }),
+          );
+        }
+      }
     } else if (request.kind === "video-url") {
       setPhase("adding");
       setSteps(initialIngestSteps(parseYouTubeId(request.url) ? "youtube" : "media"));
@@ -400,14 +481,16 @@ export function UploadAssistant({
         try {
           const result = await streamIngest(
             media
-              ? await uploadChunked(file, "video", feasible)
+              ? await uploadChunked(file, "video", feasible, pdfDirectives)
               : file.size > SINGLE_REQUEST_BYTES
-                ? await uploadChunked(file, "pdf", feasible)
+                ? await uploadChunked(file, "pdf", feasible, pdfDirectives)
                 : await (() => {
                     const form = new FormData();
                     form.set("file", file);
                     form.set("notebookId", notebookId);
                     form.set("instructions", feasible);
+                    form.set("pages", pdfDirectives.pages ? "1" : "0");
+                    form.set("convert", pdfDirectives.convert ? "1" : "0");
                     return fetch("/api/documents", { method: "POST", body: form });
                   })(),
           );
@@ -456,14 +539,18 @@ export function UploadAssistant({
     request.kind === "url"
       ? (selected.has(SELF) ? 1 : 0) +
         (review?.pages ?? []).filter((p) => selected.has(p.url)).length
-      : Math.max(1, files.length);
+      : request.kind === "drive"
+        ? Math.max(1, driveFiles.length)
+        : Math.max(1, files.length);
   const splitEligible =
     request.kind === "url" && review !== null && review.splitProposed && selectedCount === 1 && selected.has(SELF);
   const addCount = splitEligible && split ? review.splitParts : selectedCount;
   const subject =
     request.kind === "files"
       ? files.map((f) => f.name).join(" · ")
-      : request.url;
+      : request.kind === "drive"
+        ? driveFiles.map((f) => f.name).join(" · ")
+        : request.url;
 
   const sectionLabel = "text-[12px] font-semibold text-sand-600";
   const pill = "rounded-full px-3.5 py-1.5 text-xs font-semibold";
@@ -616,8 +703,11 @@ export function UploadAssistant({
               </div>
             )}
 
-            {request.kind === "files" && (
+            {(request.kind === "files" || request.kind === "drive") && (
               <div className="flex flex-col gap-1.5">
+                {request.kind === "drive" && (
+                  <p className="text-[13px] text-sand-700">{t("panes.uploadNuanceDrive")}</p>
+                )}
                 {hasPdf && <p className="text-[13px] text-sand-700">{t("panes.uploadNuancePdf")}</p>}
                 {hasMedia && (
                   <p className="text-[13px] text-sand-700">{t("panes.uploadNuanceVideoFile")}</p>

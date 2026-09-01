@@ -6,6 +6,7 @@ import { bumpNotebook, notebookAccess } from "@/lib/collab";
 import { buildConnections } from "@/lib/connect";
 import { buildGlossary } from "@/lib/glossary";
 import { runConversion } from "@/lib/handwritten/convert";
+import { parseDriveFileId } from "@/lib/drive/types";
 import { currentLang, serverT } from "@/lib/i18n/server";
 import { progressResponse } from "@/lib/ingest-response";
 import { attachDocument } from "@/lib/parse/attach";
@@ -65,10 +66,14 @@ const urlSchema = z.object({
   split: z.boolean().default(false),
 });
 
+// pages and convert are the PDF directives from the instruction check
+// (SPEC.md §16), "1"/"0" as form fields.
 const fileFieldsSchema = z.object({
   notebookId: z.string().min(1),
   filename: z.string().min(1),
   instructions: z.string().max(2_000),
+  pages: z.enum(["0", "1"]).default("0"),
+  convert: z.enum(["0", "1"]).default("1"),
 });
 
 // PDF upload (multipart) or URL ingestion (JSON). Both attach to the notebook.
@@ -104,6 +109,8 @@ export async function POST(req: Request) {
       notebookId: form.get("notebookId"),
       filename: file instanceof File ? file.name : "document.pdf",
       instructions: form.get("instructions") ?? "",
+      pages: form.get("pages") ?? "0",
+      convert: form.get("convert") ?? "1",
     });
     if (!fields.success) {
       return NextResponse.json({ error: t("api.validationFailed"), issues: fields.error.issues }, { status: 400 });
@@ -126,15 +133,20 @@ export async function POST(req: Request) {
           bytes,
           fields.data.filename,
           onProgress,
-          { instructions: fields.data.instructions.trim() || undefined },
+          {
+            instructions: fields.data.instructions.trim() || undefined,
+            pages: fields.data.pages === "1",
+            convert: fields.data.convert === "1",
+          },
           user?.id ?? null,
         );
         await attachDocument(fields.data.notebookId, document.id);
         await bumpNotebook(fields.data.notebookId);
-        if (!deduped && document.handwritten) {
+        if (!deduped && document.handwritten && document.conversionStatus === "NONE") {
           // A handwritten document (SPEC.md §16): conversion starts on its own
           // — the text is the point. Glossary and the recommended-links scan
-          // follow it, so they read the converted text.
+          // follow it, so they read the converted text. conversionStatus OFF =
+          // the reader said not to convert; nothing starts.
           after(() =>
             runConversion(document.id, user?.id ?? null)
               .then((r) =>
@@ -145,9 +157,10 @@ export async function POST(req: Request) {
               )
               .catch(() => {}),
           );
-        } else {
+        } else if (!document.handwritten || document.conversionStatus === "READY") {
           // On-ingest glossary extraction (SPEC.md §8 Phase 7). Best-effort; after() keeps it
-          // alive past the response on serverless.
+          // alive past the response on serverless. A handwritten document
+          // without converted text has nothing to read — both scans skip.
           if (!deduped) after(() => buildGlossary(document.id, user?.id ?? null).catch(() => {}));
           // Recommended links (SPEC.md §13): scan the document against the corpus.
           after(() =>
@@ -170,6 +183,14 @@ export async function POST(req: Request) {
   if (!notebook) return NextResponse.json({ error: t("api.corpusNotFound") }, { status: 404 });
   const access = await notebookAccess(data.notebookId, "editor");
   if (access instanceof NextResponse) return access;
+
+  // A Google Drive link is not a readable page (sign-in wall); the Drive
+  // import is the path for it (SPEC.md §14). The client routes these itself —
+  // this answers direct calls with the same direction instead of a parse
+  // failure.
+  if (parseDriveFileId(data.url)) {
+    return NextResponse.json({ error: t("api.driveLinkUseDrive") }, { status: 400 });
+  }
 
   // A YouTube link is a video document, wherever it was pasted (SPEC.md §11).
   const youtubeId = parseYouTubeId(data.url);

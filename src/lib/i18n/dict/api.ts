@@ -131,9 +131,13 @@ const en = {
   driveTokenMissing: "Missing Google Drive authorization",
   driveTokenExpired: "Your Google Drive access expired. Try again.",
   driveUnsupportedType:
-    "This Drive file type isn't supported. Pick a PDF, Google Doc, Sheet, Slide, video, or audio file.",
-  driveExportTooLarge: "This Google Doc, Sheet, or Slide is larger than Drive's 10 MB export limit",
+    "This Drive file type isn't supported. Pick a PDF, Google Doc, Sheet, Slide, Drawing, video, or audio file.",
+  driveExportTooLarge:
+    "This Google Doc, Sheet, Slide, or Drawing is larger than Drive's 10 MB export limit",
   driveFetchFailed: "This Drive file did not load. It may be private, removed, or no longer accessible.",
+  driveNotLinked: "Google Drive is not linked",
+  driveTokenMintFailed: "Google Drive did not issue a token. Try again.",
+  driveLinkUseDrive: "This is a Google Drive link. Use Add from Google Drive.",
 
   // Video playback and frames
   videoPlaysFromYouTube: "This video plays from YouTube",
@@ -290,9 +294,13 @@ const zh: Record<keyof typeof en, string> = {
 
   driveTokenMissing: "缺少 Google Drive 授权",
   driveTokenExpired: "Google Drive 访问已过期。请重试。",
-  driveUnsupportedType: "此 Drive 文件类型暂不支持。请选择 PDF、Google 文档、表格、幻灯片、视频或音频文件。",
-  driveExportTooLarge: "此 Google 文档/表格/幻灯片超过 Drive 10 MB 的导出限制",
+  driveUnsupportedType:
+    "此 Drive 文件类型暂不支持。请选择 PDF、Google 文档、表格、幻灯片、绘图、视频或音频文件。",
+  driveExportTooLarge: "此 Google 文档/表格/幻灯片/绘图超过 Drive 10 MB 的导出限制",
   driveFetchFailed: "这个 Drive 文件无法加载。文件可能已设为私密、被删除，或已无法访问。",
+  driveNotLinked: "Google Drive 未关联",
+  driveTokenMintFailed: "Google Drive 未签发访问令牌。请重试。",
+  driveLinkUseDrive: "这是 Google Drive 链接。请使用“从 Google Drive 添加”。",
 
   videoPlaysFromYouTube: "此视频从 YouTube 播放",
   noStoryboard: "此视频没有预览画面",

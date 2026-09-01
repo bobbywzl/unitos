@@ -30,12 +30,17 @@ export type IngestStage =
   | "review";
 export type OnIngestProgress = (stage: IngestStage, detail?: string) => void;
 
-// Upload instructions and the split choice from the upload assistant (SPEC.md §15).
+// Upload instructions and the choices from the upload assistant (SPEC.md §15).
 // instructions is the feasible text the assistant agreed to follow; it steers
-// the AI passes and never writes content.
+// the AI passes and never writes content. pages and convert are the PDF
+// directives the instruction check reads out of the instructions (SPEC.md
+// §16): pages imports the PDF as handwritten pages without judging it;
+// convert false keeps conversion off — the pages stay as they are.
 export type IngestOptions = {
   instructions?: string;
   split?: boolean;
+  pages?: boolean;
+  convert?: boolean;
 };
 
 // A split part's sourceUrl carries this marker plus its part number, so parts
@@ -117,6 +122,7 @@ async function createHandwrittenDocument(data: {
   fileHash: string;
   fileData: Uint8Array<ArrayBuffer>;
   pageCount: number;
+  convert: boolean;
 }) {
   return db.$transaction(async (tx) => {
     const document = await tx.document.create({
@@ -126,6 +132,9 @@ async function createHandwrittenDocument(data: {
         fileData: data.fileData,
         parserVersion: PARSER_VERSION,
         handwritten: true,
+        // OFF records the reader's "do not convert": nothing auto-starts, the
+        // strip offers Convert to text (SPEC.md §16).
+        conversionStatus: data.convert ? "NONE" : "OFF",
       },
     });
     await tx.block.createMany({ data: pageBlockRows(document.id, data.pageCount) });
@@ -146,10 +155,12 @@ function pageBlockRows(documentId: string, pageCount: number) {
 // Upload path. Dedupe by fileHash: a re-upload returns the existing document, no re-parse.
 // Import PDF judges each PDF (SPEC.md §16): a computer-text article parses to
 // text blocks; rough handwritten notes and drawings become a handwritten
-// document. The caller starts conversion for a handwritten document. With
-// instructions, the structure pass runs over the parsed blocks — the one
-// lever paste instructions have on a PDF (§15); userId is who the
-// classification records usage under.
+// document. opts.pages skips the judgment — the PDF imports as handwritten
+// pages because the instructions said so; opts.convert false marks conversion
+// OFF, so the caller starts nothing. The caller starts conversion for a
+// handwritten document with conversionStatus NONE. With instructions, the
+// structure pass runs over the parsed blocks — the other lever instructions
+// have on a PDF (§15); userId is who the classification records usage under.
 export async function ingestPdf(
   bytes: Uint8Array<ArrayBuffer>,
   filename: string,
@@ -164,7 +175,9 @@ export async function ingestPdf(
   onProgress?.("parse");
   const parsed = await parsePdf(bytes);
   const pageCount = await pdfPageCount(bytes);
-  const kind = await classifyPdf(bytes, parsed.blocks, pageCount, userId);
+  const kind = opts.pages
+    ? "handwritten"
+    : await classifyPdf(bytes, parsed.blocks, pageCount, userId);
   if (kind === "handwritten") {
     onProgress?.("save");
     const document = await createHandwrittenDocument({
@@ -172,6 +185,7 @@ export async function ingestPdf(
       fileHash,
       fileData: bytes,
       pageCount,
+      convert: opts.convert !== false,
     });
     return { document, deduped: false };
   }

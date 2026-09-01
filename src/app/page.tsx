@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { serverT } from "@/lib/i18n/server";
 import { Logo } from "@/components/logo";
 import { AccountGuard } from "@/components/account-guard";
+import { WelcomeFlow } from "@/components/works/welcome-flow";
 import { WorksShelf, type WorkItem } from "@/components/works/works-shelf";
 
 export const dynamic = "force-dynamic";
@@ -104,6 +105,7 @@ export default async function Home() {
       </header>
 
       <div className="pt-16">
+        <WelcomeFlow firstWork={works.length === 0 && collabRows.length === 0} />
         <WorksShelf
           works={works.map((w) => toItem(w))}
           sharedWorks={collabRows.map((r) =>

@@ -1,12 +1,19 @@
 import { after, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { currentUser } from "@/lib/auth";
+import { authEnabled, currentUser } from "@/lib/auth";
 import { bumpNotebook, notebookAccess } from "@/lib/collab";
 import { buildConnections } from "@/lib/connect";
 import { classifyDriveFile } from "@/lib/drive/types";
-import { driveDownloadUrl, fetchDrivePdf, fetchExportedPdf } from "@/lib/drive/fetch";
+import {
+  driveDownloadUrl,
+  fetchDriveMetadata,
+  fetchDrivePdf,
+  fetchExportedPdf,
+} from "@/lib/drive/fetch";
+import { mintDriveAccessToken } from "@/lib/drive/link";
 import { buildGlossary } from "@/lib/glossary";
+import { runConversion } from "@/lib/handwritten/convert";
 import { currentLang, serverT } from "@/lib/i18n/server";
 import { progressResponse } from "@/lib/ingest-response";
 import { attachDocument } from "@/lib/parse/attach";
@@ -14,18 +21,26 @@ import { ingestMediaUrl } from "@/lib/video/ingest-media-url";
 import { runTranscription } from "@/lib/video/transcription-job";
 import { parseBody } from "@/lib/validate";
 
-// Google Drive upload (SPEC.md §14): the client already holds a short-lived
-// Drive OAuth token (Google Identity Services, requested in the browser) and
-// the file the reader picked; this route spends that token once, immediately,
-// and never stores it. Same budget as /api/documents, which downloads media
-// URLs under the same ceiling.
+// Google Drive upload (SPEC.md §14): the client holds a short-lived Drive
+// OAuth token (per-visit grant, or minted from the linked account's refresh
+// token) and the file the reader picked; this route spends the token once,
+// immediately, and never stores it. A request without a bearer token mints one
+// from the linked grant — the pasted-Drive-link path. Same budget as
+// /api/documents, which downloads media URLs under the same ceiling.
 export const maxDuration = 120;
 
+// name and mimeType come from the picker; a pasted link sends the fileId
+// alone and the facts come from Drive metadata. instructions, pages, and
+// convert are the upload assistant's check output (SPEC.md §15, §16), same as
+// every other PDF add path.
 const bodySchema = z.object({
   notebookId: z.string().min(1),
   fileId: z.string().min(1),
-  name: z.string().min(1),
-  mimeType: z.string().min(1),
+  name: z.string().min(1).optional(),
+  mimeType: z.string().min(1).optional(),
+  instructions: z.string().max(2_000).default(""),
+  pages: z.boolean().default(false),
+  convert: z.boolean().default(true),
 });
 
 export async function POST(req: Request) {
@@ -42,10 +57,34 @@ export async function POST(req: Request) {
   if (access instanceof NextResponse) return access;
 
   const authHeader = req.headers.get("authorization") ?? "";
-  const token = authHeader.startsWith("Bearer ") ? authHeader.slice("Bearer ".length) : "";
+  let token = authHeader.startsWith("Bearer ") ? authHeader.slice("Bearer ".length) : "";
+  if (!token && authEnabled() && user) {
+    // No per-visit grant on the request: mint from the linked account
+    // (SPEC.md §14). A revoked grant clears itself on the token route; here it
+    // just fails the mint.
+    const row = await db.user.findUnique({
+      where: { id: user.id },
+      select: { driveRefreshToken: true },
+    });
+    if (row?.driveRefreshToken) {
+      const minted = await mintDriveAccessToken(row.driveRefreshToken);
+      if (minted !== null && minted !== "revoked") token = minted.token;
+    }
+  }
   if (!token) return NextResponse.json({ error: t("api.driveTokenMissing") }, { status: 401 });
 
-  const kind = classifyDriveFile(data.mimeType, data.name);
+  let name = data.name;
+  let mimeType = data.mimeType;
+  if (!name || !mimeType) {
+    try {
+      ({ name, mimeType } = await fetchDriveMetadata(data.fileId, token, t));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : t("api.driveFetchFailed");
+      return NextResponse.json({ error: message }, { status: 400 });
+    }
+  }
+
+  const kind = classifyDriveFile(mimeType, name);
   if (kind === "unsupported") {
     return NextResponse.json({ error: t("api.driveUnsupportedType") }, { status: 400 });
   }
@@ -53,13 +92,14 @@ export async function POST(req: Request) {
   // Video and audio: the same download-and-store path a direct media link
   // uses (SPEC.md §11), just with a bearer token on the request.
   if (kind === "media") {
+    const mediaName = name;
     return progressResponse(async (onProgress) => {
       const { document, deduped } = await ingestMediaUrl(driveDownloadUrl(data.fileId), t, onProgress, {
         headers: { Authorization: `Bearer ${token}` },
         // The download URL's own path is the Drive file id, not a name —
         // pass the picked file's real name, extension stripped like the
         // chunked video upload path titles a document (/api/uploads/complete).
-        title: data.name.replace(/\.[a-z0-9]+$/i, ""),
+        title: mediaName.replace(/\.[a-z0-9]+$/i, ""),
       });
       await attachDocument(data.notebookId, document.id);
       await bumpNotebook(data.notebookId);
@@ -92,16 +132,27 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: t("api.parsingUnavailable", { message }) }, { status: 500 });
   }
 
+  const pdfName = name;
   return progressResponse(async (onProgress) => {
     onProgress("fetch");
     const bytes =
       kind === "export"
         ? await fetchExportedPdf(data.fileId, token, t)
         : await fetchDrivePdf(data.fileId, token, t);
-    const filename = kind === "export" ? `${data.name}.pdf` : data.name;
+    const filename = kind === "export" ? `${pdfName}.pdf` : pdfName;
     let ingested: Awaited<ReturnType<typeof parse.ingestPdf>>;
     try {
-      ingested = await parse.ingestPdf(bytes, filename, onProgress);
+      ingested = await parse.ingestPdf(
+        bytes,
+        filename,
+        onProgress,
+        {
+          instructions: data.instructions.trim() || undefined,
+          pages: data.pages,
+          convert: data.convert,
+        },
+        user?.id ?? null,
+      );
     } catch (err) {
       console.error("Drive PDF ingest failed:", err);
       throw new Error(t("api.pdfParseFailed"));
@@ -109,10 +160,27 @@ export async function POST(req: Request) {
     const { document, deduped } = ingested;
     await attachDocument(data.notebookId, document.id);
     await bumpNotebook(data.notebookId);
-    if (!deduped) after(() => buildGlossary(document.id, user?.id ?? null).catch(() => {}));
-    after(() =>
-      buildConnections(data.notebookId, document.id, user?.id ?? null, lang).catch(() => {}),
-    );
+    if (!deduped && document.handwritten && document.conversionStatus === "NONE") {
+      // A handwritten document (SPEC.md §16): conversion starts on its own —
+      // the text is the point. Glossary and the recommended-links scan follow
+      // it, so they read the converted text. conversionStatus OFF = the
+      // reader said not to convert; nothing starts.
+      after(() =>
+        runConversion(document.id, user?.id ?? null)
+          .then((r) =>
+            r.ok ? buildGlossary(document.id, user?.id ?? null).catch(() => {}) : undefined,
+          )
+          .then(() => buildConnections(data.notebookId, document.id, user?.id ?? null, lang))
+          .catch(() => {}),
+      );
+    } else if (!document.handwritten || document.conversionStatus === "READY") {
+      // A handwritten document without converted text has nothing to read —
+      // both scans skip.
+      if (!deduped) after(() => buildGlossary(document.id, user?.id ?? null).catch(() => {}));
+      after(() =>
+        buildConnections(data.notebookId, document.id, user?.id ?? null, lang).catch(() => {}),
+      );
+    }
     return { id: document.id, title: document.title, deduped };
   });
 }

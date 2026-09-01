@@ -22,9 +22,26 @@ const en = {
   moreActionsFor: "More actions for {title}",
   notes: "Notes",
   rename: "Rename",
+  // Welcome flow (first visit)
+  welcomeTitle: "Welcome to your all-powerful notebook.",
+  firstStepsTitle: "First steps",
+  firstStepsProject:
+    "Start a new project below — one project binds the documents you read and the notes you keep.",
+  firstStepsAdd:
+    "Add documents with the + in the project header: PDFs, web pages, videos, Google Drive. Rough handwritten PDFs import as pages.",
+  firstStepsTools:
+    "Select text, or circle a spot on a figure or a handwritten page, and the AI tools appear.",
+  firstStepsGuide:
+    "The ? at the top right of a project explains every function — Circle & ask first.",
+  firstStepsDone: "Got it",
   // Guide dialog
   guideLabel: "Guide",
   guideTitle: "How to dissect a document",
+  guideCircleHeader: "Circle & ask — draw on anything",
+  guideCircleBody:
+    "Hold the mouse and circle any part of a figure or equation: Explain deciphers the visual, a highlight color marks it, Comment and Link work like on text.",
+  guideCirclePagesBody:
+    "A PDF of rough handwritten notes imports as its pages, and every page is a figure: circle any part — a formula, a sketch, a margin note — then Ask a question about it in the context of the whole document, Explain it, Comment, or pick a color for a lasso highlight.",
   guideSelectHeader: "Select text — the tools appear on the left",
   guideAssistant: "Assistant",
   guideAssistantBody:
@@ -79,7 +96,7 @@ const en = {
     " — hold and draw a small circle on a figure or equation: Explain deciphers the visual, a highlight color adds a side label that jumps to Annotations, Comment and Link work like on text.",
   guideHandwritten: "Handwritten notes",
   guideHandwrittenBody:
-    " — a PDF of rough handwritten notes imports as its pages; AI converts them to text blocks below, keeping the notes' formatting. Circle a spot on a page to ask about it, explain it, or comment on it.",
+    " — a PDF of rough handwritten notes imports as its pages; AI converts them to text blocks below, keeping the notes' formatting. Say “do not convert” in the upload instructions to keep the pages as they are. Circle a spot on a page to ask about it, explain it, comment on it, or lasso highlight it.",
   guidePrint: "Print document",
   guidePrintBody:
     " (+ in the header) — prints the open document, article only: no app chrome, full length, highlights kept.",
@@ -148,8 +165,21 @@ const zh: Record<keyof typeof en, string> = {
   notes: "笔记",
   rename: "重命名",
   // Guide dialog
+  welcomeTitle: "欢迎来到你的全能笔记本。",
+  firstStepsTitle: "开始使用",
+  firstStepsProject: "在下方新建项目——一个项目绑定你阅读的文档和记下的笔记。",
+  firstStepsAdd:
+    "用项目页顶部的 + 添加文档：PDF、网页、视频、Google Drive。粗略手写 PDF 按页面导入。",
+  firstStepsTools: "选中文本，或在插图、手写页面上圈选一处，AI 工具随即出现。",
+  firstStepsGuide: "项目右上角的 ? 介绍全部功能——圈选并提问排在最前。",
+  firstStepsDone: "知道了",
   guideLabel: "指南",
   guideTitle: "如何拆解一篇文档",
+  guideCircleHeader: "圈选并提问——在任何内容上画圈",
+  guideCircleBody:
+    "按住鼠标，在插图或公式的任意部分画圈：“解释”解读图像，高亮颜色标记它，“评论”和“链接”与文本上的用法相同。",
+  guideCirclePagesBody:
+    "粗略手写笔记的 PDF 按页面导入，每一页都是一张插图：圈出任意部分——一个公式、一幅草图、一条旁注——即可结合整篇文档提问、解释、评论，或选颜色圈选高亮。",
   guideSelectHeader: "选中文本——工具出现在左侧",
   guideAssistant: "助手",
   guideAssistantBody:
@@ -202,7 +232,7 @@ const zh: Record<keyof typeof en, string> = {
     "——在插图或公式上按住并画一个小圈：“解释”解读图像，高亮颜色加一个跳到批注的侧边标签，“评论”和“链接”与文本上的用法相同。",
   guideHandwritten: "手写笔记",
   guideHandwrittenBody:
-    "——粗糙手写笔记的 PDF 导入后显示页面；AI 将其转换为下方的文本块，保留笔记的格式。在页面上圈选一处即可提问、解释或评论。",
+    "——粗糙手写笔记的 PDF 导入后显示页面；AI 将其转换为下方的文本块，保留笔记的格式。在上传要求中写明“不要转换”即可保持页面原样。在页面上圈选一处即可提问、解释、评论或圈选高亮。",
   guidePrint: "打印文档",
   guidePrintBody:
     "（顶栏中的 +）——打印当前打开的文档，只含文章：无应用界面，完整长度，保留高亮。",

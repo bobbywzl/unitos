@@ -127,6 +127,29 @@ export function Workspace({
   const [tab, setTab] = useState<Tab>("notes");
   const [menuOpen, setMenuOpen] = useState(false);
   const [guideOpen, setGuideOpen] = useState(false);
+  // The ? nudge for a new reader (the welcome flow points here): a pulsing
+  // dot on the guide button until the guide is opened once on this browser.
+  // Revealed a frame after hydration, so server and client render alike.
+  const [guideNudge, setGuideNudge] = useState(false);
+  useEffect(() => {
+    const id = requestAnimationFrame(() => {
+      try {
+        setGuideNudge(localStorage.getItem("unitos-guide-seen") === null);
+      } catch {
+        // storage unavailable: no nudge
+      }
+    });
+    return () => cancelAnimationFrame(id);
+  }, []);
+  function openGuide() {
+    setGuideOpen(true);
+    setGuideNudge(false);
+    try {
+      localStorage.setItem("unitos-guide-seen", "1");
+    } catch {
+      // storage unavailable: the nudge returns next visit
+    }
+  }
   const [graphOpen, setGraphOpen] = useState(false);
   // The corpus distilled page: null = closed; { shownId } open (null = ask view).
   const [corpusDistill, setCorpusDistill] = useState<{ shownId: string | null } | null>(null);
@@ -293,12 +316,17 @@ export function Workspace({
           </span>
         )}
         <button
-          onClick={() => setGuideOpen(true)}
+          onClick={openGuide}
           aria-label={t("panes.guide")}
           title={t("panes.guideTitle")}
-          className="hidden size-[38px] shrink-0 items-center justify-center rounded-full text-sand-600 hover:bg-clay-100 hover:text-clay-800 md:flex"
+          className="relative hidden size-[38px] shrink-0 items-center justify-center rounded-full text-sand-600 hover:bg-clay-100 hover:text-clay-800 md:flex"
         >
           <QuestionIcon size={18} />
+          {guideNudge && (
+            <span aria-hidden className="absolute top-1 right-1 size-2 rounded-full bg-clay">
+              <span className="absolute inset-0 motion-safe:animate-ping rounded-full bg-clay" />
+            </span>
+          )}
         </button>
       </header>
 

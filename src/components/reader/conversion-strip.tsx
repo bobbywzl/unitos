@@ -7,10 +7,11 @@ import { useT } from "@/components/lang-provider";
 // Conversion status under the pages of a handwritten document (SPEC.md §16).
 // Conversion starts on its own at import; this strip shows Converting…, the
 // failure reason with Retry, or the Converted text header with Convert again.
-// The auto-fire covers documents whose import-time kick-off died.
+// The auto-fire covers documents whose import-time kick-off died. OFF = the
+// reader said not to convert: no auto-fire, the strip offers Convert to text.
 
 export type ConversionInfo = {
-  status: "NONE" | "PENDING" | "READY" | "FAILED";
+  status: "NONE" | "PENDING" | "READY" | "FAILED" | "OFF";
   error: string | null;
   stale: boolean; // PENDING older than 10 minutes: a dead run
 };

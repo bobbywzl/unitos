@@ -8,9 +8,10 @@ import type { ParsedBlock } from "@/lib/parse/types";
 import { classifyPrompt } from "@/lib/prompts/classify";
 
 // Import PDF classification (SPEC.md §16): article or handwritten. A PDF whose
-// text layer yielded article-scale text is an article without a model call.
-// Below that, the model reads sample page images and judges. Without a key or
-// on failure, the character yield decides alone.
+// text layer yielded article-scale text that reads like language is an article
+// without a model call. Below that — or when the text layer is junk — the
+// model reads sample page images and judges. Without a key or on failure, the
+// character yield and the junk check decide alone.
 export type PdfKind = "article" | "handwritten";
 
 // A typeset page carries thousands of characters; slides still carry hundreds.
@@ -18,6 +19,27 @@ const ARTICLE_CHARS_PER_PAGE = 250;
 // Keyless fallback: almost no text layer reads as handwritten.
 const FALLBACK_HANDWRITTEN_CHARS_PER_PAGE = 40;
 const SAMPLE_PAGES = 3;
+
+// Junk detection: handwriting apps embed garbled recognition output as the
+// text layer ("rightrightfracleftleft…"), which passes the character yield
+// while carrying no readable text. Real prose almost never runs 25+ ASCII
+// letters and digits without a break; URLs and paths carry separators, and
+// CJK text carries no spaces at all — neither counts. Past the share
+// threshold the text layer is junk.
+const JUNK_TOKEN_CHARS = 25;
+const JUNK_SHARE = 0.15;
+
+export function junkTextLayer(blocks: ParsedBlock[]): boolean {
+  let total = 0;
+  let junk = 0;
+  for (const block of blocks) {
+    total += block.text.length;
+    for (const run of block.text.match(/[A-Za-z0-9]+/g) ?? []) {
+      if (run.length >= JUNK_TOKEN_CHARS) junk += run.length;
+    }
+  }
+  return total > 0 && junk / total >= JUNK_SHARE;
+}
 
 const classifyOutputSchema = z.object({ kind: z.enum(["article", "handwritten"]) });
 
@@ -29,10 +51,11 @@ export async function classifyPdf(
 ): Promise<PdfKind> {
   const textChars = blocks.reduce((n, b) => n + b.text.length, 0);
   const perPage = textChars / Math.max(1, pageCount);
-  if (perPage >= ARTICLE_CHARS_PER_PAGE) return "article";
+  const junk = junkTextLayer(blocks);
+  if (perPage >= ARTICLE_CHARS_PER_PAGE && !junk) return "article";
 
   const fallback: PdfKind =
-    perPage < FALLBACK_HANDWRITTEN_CHARS_PER_PAGE ? "handwritten" : "article";
+    junk || perPage < FALLBACK_HANDWRITTEN_CHARS_PER_PAGE ? "handwritten" : "article";
   if (!process.env.ANTHROPIC_API_KEY) return fallback;
 
   // Sample pages: first, middle, last.
@@ -54,7 +77,7 @@ export async function classifyPdf(
     {
       role: "user",
       content: [
-        { type: "text", text: classifyPrompt({ pageCount, textChars }) },
+        { type: "text", text: classifyPrompt({ pageCount, textChars, junk }) },
         ...images.map((image) => ({ type: "image" as const, image, mediaType: "image/png" })),
       ],
     },

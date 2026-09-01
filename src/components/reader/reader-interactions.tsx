@@ -34,6 +34,7 @@ import { LoadingDots, ThinkingIndicator } from "@/components/thinking";
 import type { BlockData, Highlight } from "@/components/reader/block-view";
 import { Bibliography } from "@/components/reader/bibliography";
 import type { ConversionInfo } from "@/components/reader/conversion-strip";
+import { HIGHLIGHT_HUES, HUE_DOT, HUE_KEY } from "@/components/reader/hues";
 import type { PageMark } from "@/components/reader/page-block";
 import { useCollab } from "@/components/collab/collab-context";
 import { AuthorChip } from "@/components/collab/person-badge";
@@ -317,19 +318,6 @@ const FREQUENT_ASKS: { labelKey: TKey; questionKey: TKey }[] = [
   { labelKey: "reader.explainSimplyLabel", questionKey: "reader.explainSimplyQuestion" },
 ];
 
-const HIGHLIGHT_HUES = ["clay", "sage", "gold", "plum"] as const;
-const HUE_DOT: Record<(typeof HIGHLIGHT_HUES)[number], string> = {
-  clay: "var(--clay-400)",
-  sage: "var(--sage-500)",
-  gold: "#d9a54a",
-  plum: "#a78bfa",
-};
-const HUE_KEY: Record<(typeof HIGHLIGHT_HUES)[number], TKey> = {
-  clay: "reader.colorClay",
-  sage: "reader.colorSage",
-  gold: "reader.colorGold",
-  plum: "reader.colorPlum",
-};
 
 // English plural suffix for count phrases ({s} in reader.* keys); zh templates
 // omit {s}.

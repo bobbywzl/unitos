@@ -9,6 +9,11 @@ export const STATE_COOKIE = "dissect-oauth-state";
 // Apple posts the callback cross-site (response_mode form_post), so its state
 // cookie needs SameSite=None and its own name.
 export const APPLE_STATE_COOKIE = "dissect-apple-state";
+// The Link Google Drive code flow (SPEC.md §14): its own state cookie so a
+// concurrent sign-in cannot clobber it, plus the path to return to after the
+// callback.
+export const DRIVE_STATE_COOKIE = "dissect-drive-state";
+export const DRIVE_RETURN_COOKIE = "dissect-drive-return";
 // The signed-in account's id, readable by the client (not httpOnly; grants
 // nothing — every request is authorized by the session cookie alone). Tabs
 // compare it against the account they were rendered for, so signing out or

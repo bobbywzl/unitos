@@ -86,6 +86,12 @@ const en = {
   dropPdfOrVideo: "Drop PDF, video, or audio files.",
   driveAuthFailed: "Could not connect to Google Drive. Try again.",
   driveUnsupportedFile: "{name} isn't a file type this app can read yet.",
+  pageHighlightTitle: "Highlight the circled spot in this color. Typed text rides on the highlight.",
+  driveLink: "Link Google Drive",
+  driveLinked: "Google Drive is linked.",
+  driveOffline: "Offline. Google Drive adds need the server.",
+  driveLinkUseDrive:
+    "This is a Google Drive link. Add it from the Add from Google Drive tab, or link Google Drive in Settings to add links directly.",
   confirmDeleteFromLibrary: "Delete this document from the library?",
   deleteFailed: "Delete failed",
   documentActions: "Document actions",
@@ -102,7 +108,8 @@ const en = {
   openAsHandwrittenTitle:
     "Treat this PDF as handwritten notes: show its pages, convert to text, Circle & ask",
   circleAsk: "Circle & ask",
-  pageDrawHint: "Hold the mouse and circle a spot on the page — then ask, explain, or comment",
+  pageDrawHint:
+    "Hold the mouse and circle a spot on the page — then ask, explain, comment, or pick a color to highlight",
   pageAskPlaceholder: "Ask about the circled spot",
   pageAsk: "Ask",
   pageAskTitle: "Ask the question about the circled spot",
@@ -128,7 +135,7 @@ const en = {
   uploadPdf: "Upload PDF",
   uploadVideo: "Upload video or audio",
   addFromDrive: "Add from Google Drive",
-  driveHint: "pdf · Google Docs, Sheets, Slides (as pdf) · video and audio",
+  driveHint: "pdf · Google Docs, Sheets, Slides, Drawings (as pdf) · video and audio",
   addUrl: "Add URL",
   library: "Library",
   choosePdf: "Choose PDF files",
@@ -177,7 +184,9 @@ const en = {
   uploadNuanceUrl:
     "A web page parses into blocks — text, headings, figures, tables, equations. A page behind a sign-in or built by scripts may come out thin.",
   uploadNuancePdf:
-    "PDF up to 50 MB. Text extracts in reading order; a scanned PDF without a text layer does not read.",
+    "PDF up to 50 MB. Computer text parses to blocks in reading order; rough handwritten notes import as pages, and conversion writes the text after them. Say “do not convert” in the instructions to keep the pages as they are.",
+  uploadNuanceDrive:
+    "Google Docs, Sheets, Slides, and Drawings import as PDF through Drive's own conversion; PDFs, video, and audio import as they are.",
   uploadNuanceVideoFile:
     "Video or audio up to 200 MB. The file is stored and transcribed; the transcript arrives shortly after the add.",
   uploadNuanceVideoUrl:
@@ -358,6 +367,12 @@ const zh: Record<keyof typeof en, string> = {
   dropPdfOrVideo: "请拖放 PDF、视频或音频文件。",
   driveAuthFailed: "无法连接 Google Drive。请重试。",
   driveUnsupportedFile: "{name} 的文件类型暂不支持。",
+  pageHighlightTitle: "以此颜色圈选高亮圈出的部分。输入的文字会附在高亮上。",
+  driveLink: "关联 Google Drive",
+  driveLinked: "Google Drive 已关联。",
+  driveOffline: "离线。从 Google Drive 添加需要连接服务器。",
+  driveLinkUseDrive:
+    "这是 Google Drive 链接。请从“从 Google Drive 添加”页签添加；或在设置中关联 Google Drive 后直接粘贴链接添加。",
   confirmDeleteFromLibrary: "从文档库删除此文档？",
   deleteFailed: "删除失败",
   documentActions: "文档操作",
@@ -371,7 +386,7 @@ const zh: Record<keyof typeof en, string> = {
   openAsHandwritten: "作为手写页面打开",
   openAsHandwrittenTitle: "将此 PDF 作为手写笔记：显示页面、转换为文本、圈选并提问",
   circleAsk: "圈选并提问",
-  pageDrawHint: "按住鼠标在页面上圈选一处——即可提问、解释或评论",
+  pageDrawHint: "按住鼠标在页面上圈选一处——即可提问、解释、评论，或选颜色圈选高亮",
   pageAskPlaceholder: "询问圈选的内容",
   pageAsk: "提问",
   pageAskTitle: "就圈选的内容提问",
@@ -397,7 +412,7 @@ const zh: Record<keyof typeof en, string> = {
   uploadPdf: "上传 PDF",
   uploadVideo: "上传视频或音频",
   addFromDrive: "从 Google Drive 添加",
-  driveHint: "pdf · Google 文档、表格、幻灯片（转为 pdf）· 视频与音频",
+  driveHint: "pdf · Google 文档、表格、幻灯片、绘图（转为 pdf）· 视频与音频",
   addUrl: "添加 URL",
   library: "文档库",
   choosePdf: "选择 PDF 文件",
@@ -441,7 +456,10 @@ const zh: Record<keyof typeof en, string> = {
   uploadPageFacts: "约 {pages} 页文字 · {blocks} 个块",
   uploadNuanceUrl:
     "网页解析为块——文字、标题、插图、表格、公式。需要登录或由脚本生成的页面可能解析出很少内容。",
-  uploadNuancePdf: "PDF 最大 50 MB。文字按阅读顺序提取；无文字层的扫描版 PDF 无法读取。",
+  uploadNuancePdf:
+    "PDF 最大 50 MB。电脑文字按阅读顺序解析为块；粗略手写笔记按页面导入，随后转换写出文本。在上传要求中写明“不要转换”即可保持页面原样。",
+  uploadNuanceDrive:
+    "Google 文档、表格、幻灯片、绘图经 Drive 自带转换以 PDF 导入；PDF、视频与音频按原样导入。",
   uploadNuanceVideoFile: "视频或音频最大 200 MB。文件存储后生成逐字稿；添加后稍等即到。",
   uploadNuanceVideoUrl: "YouTube 链接或媒体文件直链存储为视频文档。添加后稍等即有逐字稿。",
   uploadPagesFound: "此页面链接到 {n} 个页面，看起来是同一作品的组成部分。选择要添加的页面：",

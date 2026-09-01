@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import type { DriveConfig } from "@/lib/drive/config";
 import { pickDriveFiles } from "@/lib/drive/picker-client";
-import { classifyDriveFile, type DrivePickedFile } from "@/lib/drive/types";
+import { parseDriveFileId, type DrivePickedFile } from "@/lib/drive/types";
 import { isImeKey } from "@/lib/ime";
 import { useCollab } from "@/components/collab/collab-context";
 import { ChevronDownIcon } from "@/components/icons";
@@ -15,7 +15,7 @@ import type { TFunc } from "@/lib/i18n/dictionaries";
 import { readNdjson } from "@/lib/ndjson";
 import { isOffline, offlinePremium, queueUpload, queueWrite } from "@/lib/offline/queue";
 import { PARSER_VERSION } from "@/lib/parse/types";
-import { MAX_VIDEO_BYTES, MEDIA_EXTENSIONS, isMediaUrl } from "@/lib/video/types";
+import { MEDIA_EXTENSIONS, isMediaUrl } from "@/lib/video/types";
 import { parseYouTubeId } from "@/lib/video/youtube";
 import {
   AddDocumentDialog,
@@ -59,10 +59,6 @@ function statusMessage(t: TFunc, status: number): string {
   if (status === 413) return t("panes.uploadTooLarge");
   return t("panes.requestFailedStatus", { status });
 }
-
-// The Drive import's client-side size pre-checks; the box and the server
-// enforce the same caps on the other paths.
-const MAX_PDF_BYTES = 50 * 1024 * 1024;
 
 // Video and audio files share one path: chunked upload, sniffed server-side,
 // stored as a media document with the transcript machinery (SPEC.md §11).
@@ -287,9 +283,9 @@ export function DocumentBar({
   }
 
   // Every add opens the upload assistant (SPEC.md §15): the box reviews a URL
-  // in a private sandbox, takes upload instructions, and drives the add itself.
-  // The one exception is Google Drive below — the server fetches those files
-  // at import time, so there is nothing for the sandbox review to read.
+  // in a private sandbox, takes upload instructions, and drives the add
+  // itself. Google Drive picks open it too — the server fetches those files
+  // at import time, so only the sandbox review has nothing to read.
   const [assistant, setAssistant] = useState<UploadRequest | null>(null);
 
   function openAssistant(request: UploadRequest) {
@@ -298,6 +294,11 @@ export function DocumentBar({
     // server, so the add queues instead — files by their bytes, URLs as the
     // plain ingest request — and syncs when the browser is back online.
     if (isOffline()) {
+      // A Drive pick cannot queue: its token expires before any sync.
+      if (request.kind === "drive") {
+        setError(t("panes.driveOffline"));
+        return;
+      }
       if (!offlinePremium()) {
         setError(t("common.offlineReadOnly"));
         return;
@@ -325,9 +326,18 @@ export function DocumentBar({
 
   // The dialog's URL and video forms route through the assistant, like every
   // other add path. The media-figure toast keeps the direct ingest path.
+  // A pasted Google Drive link is not a readable page: with Drive linked it
+  // imports server-side through the linked grant; otherwise the reader is
+  // pointed at Add from Google Drive (SPEC.md §14).
   async function assistantFromUrl(raw: string): Promise<boolean> {
     const trimmed = raw.trim();
     if (!trimmed) return false;
+    const driveFileId = parseDriveFileId(trimmed);
+    if (driveFileId) {
+      if (drive?.linked) return importDriveLink(driveFileId);
+      setError(t("panes.driveLinkUseDrive"));
+      return false;
+    }
     openAssistant(
       parseYouTubeId(trimmed) || isMediaUrl(trimmed)
         ? { kind: "video-url", url: trimmed }
@@ -336,17 +346,52 @@ export function DocumentBar({
     return true;
   }
 
+  // A pasted Drive link on a linked account: no picker, no token in the
+  // browser — the server mints one from the stored grant and reads the file's
+  // facts from Drive metadata. drive.file scope only reaches files this app
+  // has touched; anything else fails with Drive's plain reason.
+  async function importDriveLink(fileId: string): Promise<boolean> {
+    setError(null);
+    try {
+      const result = await runIngest(t("panes.addFromDrive"), "drive", () =>
+        fetch("/api/drive/import", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ notebookId, fileId }),
+        }),
+      );
+      setDialog(false);
+      open(result.id);
+      router.refresh();
+      return true;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t("panes.uploadFailed"));
+      return false;
+    } finally {
+      setPhase(null);
+    }
+  }
+
   // Google Drive upload (SPEC.md §14): get a token and open the picker
-  // (client-only, no server round trip for either), then import what was
-  // picked through the same progress card as every other source. Multiple
-  // picks import one at a time, like multiple local files.
+  // (client-only; a linked account's token comes from the server, no consent
+  // popup), then hand the picks to the upload assistant box — instructions
+  // and the PDF directives ride along like every add (SPEC.md §15).
   async function importFromDrive() {
     if (!drive) return;
     setError(null);
+    // The picker and the imports need the server; Drive adds do not queue.
+    if (isOffline()) {
+      setError(t("panes.driveOffline"));
+      return;
+    }
     let token: string;
     let picked: DrivePickedFile[];
     try {
-      const result = await pickDriveFiles({ clientId: drive.clientId, apiKey: drive.apiKey });
+      const result = await pickDriveFiles({
+        clientId: drive.clientId,
+        apiKey: drive.apiKey,
+        linked: drive.linked,
+      });
       token = result.token;
       picked = result.files;
     } catch (err) {
@@ -354,46 +399,8 @@ export function DocumentBar({
       return;
     }
     if (picked.length === 0) return; // closed the picker without choosing a file
-
-    let lastId: string | null = null;
-    try {
-      for (let i = 0; i < picked.length; i++) {
-        const file = picked[i];
-        const kind = classifyDriveFile(file.mimeType, file.name);
-        if (kind === "unsupported") {
-          throw new Error(t("panes.driveUnsupportedFile", { name: file.name }));
-        }
-        if (kind === "media" && file.sizeBytes !== null && file.sizeBytes > MAX_VIDEO_BYTES) {
-          throw new Error(t("panes.fileTooLarge", { name: file.name, mb: 200 }));
-        }
-        if (kind === "pdf" && file.sizeBytes !== null && file.sizeBytes > MAX_PDF_BYTES) {
-          throw new Error(t("panes.fileTooLarge", { name: file.name, mb: 50 }));
-        }
-        const label = picked.length > 1 ? `${file.name} (${i + 1}/${picked.length})` : file.name;
-        const result = await runIngest(label, kind === "media" ? "media" : "drive", () =>
-          fetch("/api/drive/import", {
-            method: "POST",
-            headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-            body: JSON.stringify({
-              notebookId,
-              fileId: file.id,
-              name: file.name,
-              mimeType: file.mimeType,
-            }),
-          }),
-        );
-        lastId = result.id;
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t("panes.uploadFailed"));
-    } finally {
-      setPhase(null);
-    }
-    if (lastId) {
-      setDialog(false);
-      open(lastId);
-      router.refresh();
-    }
+    setAssistant({ kind: "drive", token, files: picked });
+    setDialog(false);
   }
 
   // Drag-and-drop PDF upload: dropping anywhere on the page adds to this work.
@@ -716,6 +723,7 @@ export function DocumentBar({
         onChoosePdf={() => fileRef.current?.click()}
         onChooseVideo={() => videoFileRef.current?.click()}
         onImportDrive={drive ? () => void importFromDrive() : null}
+        driveLink={drive ? { linked: drive.linked, canLink: drive.canLink } : null}
         onIngestUrl={assistantFromUrl}
         library={library}
         attachedIds={attachedIds}

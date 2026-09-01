@@ -50,6 +50,15 @@ export function GuideDialog({ open, onClose }: { open: boolean; onClose: () => v
           </button>
         </div>
 
+        {/* Circle & ask leads the guide (the signature move), emphasized. */}
+        <section className="flex flex-col gap-1.5 rounded-2xl bg-clay-100/70 p-4">
+          <span className={h}>{t("works.guideCircleHeader")}</span>
+          <p className="text-[13px] leading-relaxed text-sand-800">{t("works.guideCircleBody")}</p>
+          <p className="text-[13px] leading-relaxed text-sand-800">
+            {t("works.guideCirclePagesBody")}
+          </p>
+        </section>
+
         <section className="flex flex-col gap-1.5">
           <span className={h}>{t("works.guideSelectHeader")}</span>
           <ul className="flex flex-col gap-1.5 text-[13px] leading-relaxed text-sand-800">
