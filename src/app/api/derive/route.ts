@@ -19,7 +19,7 @@ import {
   renderBlockLines,
   sectionSkeleton,
 } from "@/lib/derive/context";
-import { fetchFigureImage, figureContent, type FigureImage } from "@/lib/derive/figure";
+import { figureContent, figureVisual, type FigureImage } from "@/lib/derive/figure";
 import {
   distillOutputSchema,
   extractOutputSchema,
@@ -451,22 +451,26 @@ export async function POST(req: Request) {
   // EXPLAIN on a figure block: the model deciphers the visual. An image figure
   // attaches its image bytes (fetched here — a failed fetch degrades to
   // caption and context, never fails the request); an SVG chart attaches its
-  // source; a video figure explains from caption and context only.
+  // source; a PDF figure attaches its rendered page; a video figure explains
+  // from caption and context only.
   let figureImage: FigureImage | null = null;
   if (data.type === "EXPLAIN" && data.anchor) {
     const anchoredBlock = await db.block.findUnique({
       where: { id: data.anchor.blockId },
-      select: { type: true, html: true, text: true },
+      select: { type: true, html: true, text: true, page: true },
     });
     const figure = figureContent(anchoredBlock);
-    if (figure) {
-      if (figure.imageUrl) figureImage = await fetchFigureImage(figure.imageUrl, document.sourceUrl);
+    if (figure && anchoredBlock) {
+      const visual = await figureVisual(figure, anchoredBlock, document.id, document.sourceUrl);
+      figureImage = visual?.image ?? null;
       ctx.figure = {
-        // An image figure whose image could not be fetched is a plain figure:
-        // the prompt must never claim an attachment that is not there.
-        kind: figure.kind === "image" && !figureImage ? "figure" : figure.kind,
+        // The prompt must never claim an attachment that is not there: a
+        // figure with an attached visual is an image figure; one without
+        // degrades to a plain figure (unless it is SVG or video).
+        kind: visual ? "image" : figure.kind === "image" ? "figure" : figure.kind,
         caption: figure.caption,
         svgSource: figure.svgSource,
+        page: visual?.page ?? false,
       };
     }
   }

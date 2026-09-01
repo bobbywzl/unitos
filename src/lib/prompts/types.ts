@@ -31,7 +31,13 @@ export type PromptCtx = {
   // Set when EXPLAIN targets a figure block: the model deciphers the visual.
   // kind image: the image is attached to the message. kind svg: the chart's SVG
   // source is in svgSource. kind video: the model only has caption and context.
-  figure?: { kind: "image" | "svg" | "video" | "figure"; caption: string; svgSource?: string };
+  figure?: {
+    kind: "image" | "svg" | "video" | "figure";
+    caption: string;
+    svgSource?: string;
+    // The attached image is the PDF page the figure sits on, not the figure alone.
+    page?: boolean;
+  };
   // Set when EXPLAIN targets a moment of a video or audio document (SPEC.md
   // §11). hasFrame: the paused frame is attached to the message; hasRegion:
   // the reader circled a spot and the frame is cropped toward it.

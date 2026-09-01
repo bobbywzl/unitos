@@ -120,6 +120,8 @@ const en = {
   assistantButtonTitle: "Ask the assistant; it reads the whole transcript",
   assistantPlaceholder: "Ask the assistant…",
   assistantSend: "Send",
+  assistantSpotChip: "Circled spot · {range}",
+  assistantSpotClear: "Ask without the circled spot",
   assistantFailed: "Assistant failed",
   assistantNoReply: "No answer came back. Try again.",
   assistantActionsUnsupported:
@@ -254,6 +256,8 @@ const zh: Record<keyof typeof en, string> = {
   assistantButtonTitle: "向助手提问；它会读取整份逐字稿",
   assistantPlaceholder: "向助手提问…",
   assistantSend: "发送",
+  assistantSpotChip: "圈选时刻 · {range}",
+  assistantSpotClear: "提问时不带圈选内容",
   assistantFailed: "助手请求失败",
   assistantNoReply: "没有收到回答。请重试。",
   assistantActionsUnsupported: "此对话中的文档操作暂不支持视频和音频。",
