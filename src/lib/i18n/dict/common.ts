@@ -20,7 +20,9 @@
 //   key term 关键术语 · Edits(页签) 编辑记录 · notes tray 笔记栏 ·
 //   Ask/Auto(模式) 询问/自动 · command 指令 · key takeaways 主要收获 ·
 //   selection 选中内容 · bullet-point notes 分条笔记 · gaps(检查) 疏漏 ·
-//   anchor unresolved 无法定位 · app tab 页签 · browser tab 标签页
+//   anchor unresolved 无法定位 · app tab 页签 · browser tab 标签页 ·
+//   upload assistant 上传助手 · review(上传审阅) 审阅 · page(链接页面) 页面 ·
+//   split 拆分 · upload instructions 上传要求
 // highlight 高亮 仅指高亮功能；表示选取文字一律用 选中。
 
 const en = {

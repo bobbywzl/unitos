@@ -17,8 +17,7 @@ import {
 // updates the detail line ("148 figures · 152 equations"). Dedupe hits report
 // nothing — there is no parse or save to do, the caller treats "no events" as instant.
 // PDF stages: parse, save. URL stages: fetch, extract, select, structure, save.
-// The upload assistant's review streams fetch, extract, review; multi-page
-// ingest streams page between pages.
+// The upload assistant's review streams fetch, extract, review.
 export type IngestStage =
   | "parse"
   | "save"
@@ -26,8 +25,7 @@ export type IngestStage =
   | "extract"
   | "select"
   | "structure"
-  | "review"
-  | "page";
+  | "review";
 export type OnIngestProgress = (stage: IngestStage, detail?: string) => void;
 
 // Upload instructions and the split choice from the upload assistant (SPEC.md §14).
