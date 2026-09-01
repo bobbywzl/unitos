@@ -207,10 +207,10 @@ export default async function SignInPage({
 
   return (
     <div className="dark relative flex min-h-screen flex-col overflow-hidden bg-[#14110d] text-ink">
-      {/* Backdrop: clay glow + dot lattice + the mark covering the whole page, behind everything */}
+      {/* Backdrop: clay glow + dot lattice + the mark covering the top-left quadrant, behind everything */}
       <div aria-hidden className="signin-glow pointer-events-none absolute inset-0" />
       <div aria-hidden className="signin-dots pointer-events-none absolute inset-0" />
-      <div aria-hidden className="pointer-events-none absolute inset-0 opacity-[0.07]">
+      <div aria-hidden className="pointer-events-none absolute top-0 left-0 h-1/2 w-1/2 opacity-[0.07]">
         <Logo size="100%" fit="cover" className="text-clay" />
       </div>
 

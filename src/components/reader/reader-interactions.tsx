@@ -3198,6 +3198,32 @@ export function ReaderInteractions({
     }
   }
 
+  // The toolbox's own box (top/left/width), in pane coordinates. Every
+  // floating bubble anchored to it (highlight colors, Add to notes, voice)
+  // shares this left edge, so the stack lines up — a wider bubble (Add to
+  // notes, 176px = w-44) pulls back only as much as it must to stay inside
+  // the pane; it never sticks out to the left of everything else.
+  const popoverBox = popover
+    ? (() => {
+        const w = submenu === "ai" || submenu === "comment" ? 248 : 116;
+        if (popover.side === "right") {
+          return { top: popover.yTop, left: Math.min(popover.rightBase, popover.cw - w - 6), width: w };
+        }
+        if (popover.side === "below") {
+          return {
+            top: popover.y,
+            left: Math.max(6, Math.min(popover.x - w / 2, popover.cw - w - 6)),
+            width: w,
+          };
+        }
+        return { top: popover.yTop, left: Math.max(6, popover.textLeft - w - 10), width: w };
+      })()
+    : { top: 0, left: 0, width: 0 };
+  const ADD_TO_NOTES_WIDTH = 176; // w-44
+  const addToNotesLeft = popover
+    ? Math.min(0, popover.cw - 6 - (popoverBox.left + ADD_TO_NOTES_WIDTH))
+    : 0;
+
   return (
     <div
       ref={containerRef}
@@ -3524,16 +3550,7 @@ export function ReaderInteractions({
             e.preventDefault();
           }}
           className="pop-in absolute z-20 flex flex-col gap-0.5 rounded-2xl bg-card p-1.5 shadow-float"
-          style={(() => {
-            const w = submenu === "ai" || submenu === "comment" ? 248 : 116;
-            if (popover.side === "right") {
-              return { top: popover.yTop, left: Math.min(popover.rightBase, popover.cw - w - 6), width: w };
-            }
-            if (popover.side === "below") {
-              return { top: popover.y, left: Math.max(6, Math.min(popover.x - w / 2, popover.cw - w - 6)), width: w };
-            }
-            return { top: popover.yTop, left: Math.max(6, popover.textLeft - w - 10), width: w };
-          })()}
+          style={popoverBox}
         >
           {popover.truncated && (
             <p className="px-2.5 py-1 text-[10.5px] leading-snug text-sand-500">
@@ -3752,13 +3769,15 @@ export function ReaderInteractions({
 
           {/* Add to notes: a separate bubble above the toolbar. Press it,
               pick a section, and the highlighted text lands there as a quote.
-              Right-anchored: the toolbar's right edge is always inside the
-              pane, so the wider bubble never clips there. It sits one slot
+              Left-anchored like every other floating bubble (addToNotesLeft);
+              it pulls back from the toolbox's left edge only as much as it
+              must to keep its right edge inside the pane. It sits one slot
               higher than the highlight bubble; when the highlight bubble
               drops below near the page top, it takes the near slot. */}
           {sectionChoices.length > 0 && (
             <div
-              className={`absolute right-0 bottom-full flex w-44 flex-col gap-0.5 rounded-2xl bg-card p-1.5 shadow-float ${
+              style={{ left: addToNotesLeft }}
+              className={`absolute bottom-full flex w-44 flex-col gap-0.5 rounded-2xl bg-card p-1.5 shadow-float ${
                 popover.yTop < 54 ? "mb-2" : "mb-[52px]"
               }`}
             >
