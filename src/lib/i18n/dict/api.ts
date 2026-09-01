@@ -109,6 +109,13 @@ const en = {
   videoNoReparse: "Video documents do not re-parse",
   reparseFailed: "Re-parse failed",
 
+  // Upload assistant (SPEC.md §14)
+  reviewFailed: "Could not review this URL",
+  instructionsVideo:
+    "A video or audio add stores the file and transcribes it. Upload instructions cannot steer it.",
+  instructionsUnchecked:
+    "The instructions could not be checked. The content adds without them.",
+
   // Uploads
   emptyChunk: "Empty chunk",
   chunkTooLarge: "Chunk is larger than 4 MB",
@@ -256,6 +263,10 @@ const zh: Record<keyof typeof en, string> = {
   glossaryFailed: "术语表生成失败",
   videoNoReparse: "视频文档不能重新解析",
   reparseFailed: "重新解析失败",
+
+  reviewFailed: "无法审阅此 URL",
+  instructionsVideo: "添加视频或音频时只存储文件并生成逐字稿。上传要求无法改变这一过程。",
+  instructionsUnchecked: "上传要求未能检查。内容将不按要求添加。",
 
   emptyChunk: "分块为空",
   chunkTooLarge: "分块超过 4 MB",
