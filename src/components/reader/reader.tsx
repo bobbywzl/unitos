@@ -5,6 +5,7 @@ import { PlusIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { BlockView, type BlockData, type Highlight } from "@/components/reader/block-view";
 import { CircleGlow } from "@/components/reader/circle-glow";
+import type { TKey } from "@/lib/i18n/dictionaries";
 
 const TEXT_TYPES = new Set(["PARAGRAPH", "HEADING", "LIST", "CODE", "EQUATION"]);
 
@@ -17,10 +18,25 @@ const FONT_STACK: Record<string, string | undefined> = {
 };
 
 type Kind = "paragraph" | "h1" | "h2" | "h3" | "list" | "numbered";
-// "code" spans come from the parser (monospace runs); the toolbar toggles the other three.
-type StyleKind = "bold" | "italic" | "underline" | "code";
-type ToggleStyleKind = "bold" | "italic" | "underline";
+// The text colors, one class each in globals.css (text-color-*).
+export type TextColor = "color-clay" | "color-sage" | "color-gold" | "color-plum";
+export const TEXT_COLORS: { style: TextColor; dot: string }[] = [
+  { style: "color-clay", dot: "var(--clay-500)" },
+  { style: "color-sage", dot: "var(--sage-600)" },
+  { style: "color-gold", dot: "#d9a54a" },
+  { style: "color-plum", dot: "#a78bfa" },
+];
+// "code" spans come from the parser (monospace runs); the toolbar toggles the rest.
+type StyleKind = "bold" | "italic" | "underline" | "code" | TextColor;
+type ToggleStyleKind = "bold" | "italic" | "underline" | TextColor;
 type StyleSpan = { start: number; end: number; style: StyleKind };
+
+const COLOR_NAME_KEY: Record<TextColor, TKey> = {
+  "color-clay": "reader.colorClay",
+  "color-sage": "reader.colorSage",
+  "color-gold": "reader.colorGold",
+  "color-plum": "reader.colorPlum",
+};
 
 function headingLevel(html: string | null): 1 | 2 | 3 {
   const m = html?.match(/^<h([1-3])/);
@@ -90,8 +106,9 @@ function decoratedHtml(text: string, spans: StyleSpan[], edited: { start: number
     const italic = spans.some((s) => s.style === "italic" && s.start <= from && s.end >= to);
     const underline = spans.some((s) => s.style === "underline" && s.start <= from && s.end >= to);
     const code = spans.some((s) => s.style === "code" && s.start <= from && s.end >= to);
+    const color = spans.find((s) => s.style.startsWith("color-") && s.start <= from && s.end >= to);
     const isEdited = edited.some((r) => r.start <= from && r.end >= to);
-    const cls = `${isEdited ? "edited-text " : ""}${bold ? "font-bold " : ""}${italic ? "italic " : ""}${underline ? "underline " : ""}${code ? "code-mark" : ""}`.trim();
+    const cls = `${isEdited ? "edited-text " : ""}${bold ? "font-bold " : ""}${italic ? "italic " : ""}${underline ? "underline " : ""}${color ? `text-${color.style} ` : ""}${code ? "code-mark" : ""}`.trim();
     html += cls ? `<span class="${cls}">${segment}</span>` : segment;
   }
   return html;
@@ -222,10 +239,19 @@ export function Reader({
       const existing = current.findIndex(
         (s) => s.style === style && s.start === start && s.end === end,
       );
+      // One color per span: a new color replaces another color on the same
+      // range — mirroring the style route.
+      const isColor = style.startsWith("color-");
       const next =
         existing >= 0
           ? current.filter((_, i) => i !== existing)
-          : [...current, { start, end, style }];
+          : [
+              ...current.filter(
+                (s) =>
+                  !(isColor && s.style.startsWith("color-") && s.start === start && s.end === end),
+              ),
+              { start, end, style },
+            ];
       return { ...prev, [blockId]: next };
     });
     restoreSelectionRef.current = { blockId, start, end };
@@ -353,6 +379,19 @@ export function Reader({
           <button onMouseDown={keep} disabled={!focusedBlock} onClick={() => applyStyle("underline")} title={t("panes.underline")} className={`${barButton} underline`}>
             U
           </button>
+          <span aria-hidden className="mx-1 h-4 w-px bg-line" />
+          {TEXT_COLORS.map(({ style, dot }) => (
+            <button
+              key={style}
+              onMouseDown={keep}
+              disabled={!focusedBlock}
+              onClick={() => applyStyle(style)}
+              aria-label={t("panes.textColorIn", { color: t(COLOR_NAME_KEY[style]) })}
+              title={t("panes.textColorIn", { color: t(COLOR_NAME_KEY[style]) })}
+              className="mx-0.5 size-[14px] rounded-full transition-transform hover:scale-110 disabled:opacity-40"
+              style={{ background: dot }}
+            />
+          ))}
           <span aria-hidden className="mx-1 h-4 w-px bg-line" />
           <button onMouseDown={keep} disabled={!focusedBlock} onClick={() => applyIndent(-1)} title={t("panes.outdentLine")} className={barButton}>
             ⇤

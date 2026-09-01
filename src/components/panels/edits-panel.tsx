@@ -34,6 +34,10 @@ const STYLE_KEY: Record<string, TKey> = {
   bold: "panels.styleBold",
   italic: "panels.styleItalic",
   underline: "panels.styleUnderline",
+  "color-clay": "panels.styleColorClay",
+  "color-sage": "panels.styleColorSage",
+  "color-gold": "panels.styleColorGold",
+  "color-plum": "panels.styleColorPlum",
 };
 
 function formatLabel(t: TFunc, kind: string | undefined): string {

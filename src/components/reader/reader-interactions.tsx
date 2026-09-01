@@ -422,7 +422,19 @@ export function ReaderInteractions({
   editedByBlock: Record<string, { start: number; end: number }[]>;
   stylesByBlock: Record<
     string,
-    { start: number; end: number; style: "bold" | "italic" | "underline" | "code" }[]
+    {
+      start: number;
+      end: number;
+      style:
+        | "bold"
+        | "italic"
+        | "underline"
+        | "code"
+        | "color-clay"
+        | "color-sage"
+        | "color-gold"
+        | "color-plum";
+    }[]
   >;
   // Contents links (targetBlockId: click scrolls the reader to that block) and
   // PDF hyperlinks (href: a plain hyperlink out of the app).
@@ -2792,7 +2804,14 @@ export function ReaderInteractions({
     blockId: string,
     start: number,
     end: number,
-    style: "bold" | "italic" | "underline",
+    style:
+      | "bold"
+      | "italic"
+      | "underline"
+      | "color-clay"
+      | "color-sage"
+      | "color-gold"
+      | "color-plum",
   ) {
     try {
       await api(`/api/blocks/${blockId}/style`, "POST", {

@@ -22,7 +22,16 @@ export type Highlight = {
   start: number;
   end: number;
   kind: "anchor" | "salience" | "simplify" | "term" | "link" | "citation" | "weblink" | "edited" | "style" | "toc" | "extract";
-  styleKind?: "bold" | "italic" | "underline" | "code"; // kind "style" only
+  // kind "style" only
+  styleKind?:
+    | "bold"
+    | "italic"
+    | "underline"
+    | "code"
+    | "color-clay"
+    | "color-sage"
+    | "color-gold"
+    | "color-plum";
   definition?: string; // glossary hover text, kind "term" only
   color?: string | null; // highlight hue ("clay" | "sage" | "gold" | "plum"), kind "anchor" only
   annotation?: boolean; // anchor belongs to an annotation; click focuses its card
@@ -84,7 +93,8 @@ function markedText(text: string, highlights: Highlight[], t: TFunc) {
     const italic = covering.some((h) => h.kind === "style" && h.styleKind === "italic");
     const underlined = covering.some((h) => h.kind === "style" && h.styleKind === "underline");
     const code = covering.some((h) => h.kind === "style" && h.styleKind === "code");
-    const editedClass = `${edited ? " edited-text" : ""}${bold ? " font-bold" : ""}${italic ? " italic" : ""}${underlined ? " underline" : ""}${code ? " code-mark" : ""}`;
+    const colored = covering.find((h) => h.kind === "style" && h.styleKind?.startsWith("color-"));
+    const editedClass = `${edited ? " edited-text" : ""}${bold ? " font-bold" : ""}${italic ? " italic" : ""}${underlined ? " underline" : ""}${colored ? ` text-${colored.styleKind}` : ""}${code ? " code-mark" : ""}`;
     const anchors = covering.filter((h) => h.kind === "anchor");
     const anchor =
       anchors.length > 1
