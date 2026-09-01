@@ -6,6 +6,7 @@ import { currentUser } from "@/lib/auth";
 import { bumpNotebook, notebookAccess } from "@/lib/collab";
 import { buildConnections } from "@/lib/connect";
 import { buildGlossary } from "@/lib/glossary";
+import { runConversion } from "@/lib/handwritten/convert";
 import { serverT } from "@/lib/i18n/server";
 import type { TFunc } from "@/lib/i18n/dictionaries";
 import { progressResponse } from "@/lib/ingest-response";
@@ -26,6 +27,10 @@ const bodySchema = z.object({
   filename: z.string().min(1),
   notebookId: z.string().min(1),
   kind: z.enum(["pdf", "video"]).default("pdf"),
+  // Feasible upload instructions from the upload assistant's check (SPEC.md
+  // §15). PDFs thread them into the structure pass; video ingest has no lever
+  // for them and ignores them.
+  instructions: z.string().max(2_000).default(""),
 });
 
 type Body = z.infer<typeof bodySchema>;
@@ -92,13 +97,33 @@ export async function POST(req: Request) {
 
   return progressResponse(async (onProgress) => {
     try {
-      const { document, deduped } = await parse.ingestPdf(bytes, data.filename, onProgress);
+      const { document, deduped } = await parse.ingestPdf(
+        bytes,
+        data.filename,
+        onProgress,
+        { instructions: data.instructions.trim() || undefined },
+        user?.id ?? null,
+      );
       await attachDocument(data.notebookId, document.id);
       await bumpNotebook(data.notebookId);
-      // On-ingest glossary extraction (SPEC.md §8 Phase 7). Best-effort; after() keeps it
-      // alive past the response on serverless.
-      if (!deduped) after(() => buildGlossary(document.id, user?.id ?? null).catch(() => {}));
-      after(() => buildConnections(data.notebookId, document.id, user?.id ?? null).catch(() => {}));
+      if (!deduped && document.handwritten) {
+        // A handwritten document (SPEC.md §16): conversion starts on its own —
+        // the text is the point. Glossary and the recommended-links scan
+        // follow it, so they read the converted text.
+        after(() =>
+          runConversion(document.id, user?.id ?? null)
+            .then((r) =>
+              r.ok ? buildGlossary(document.id, user?.id ?? null).catch(() => {}) : undefined,
+            )
+            .then(() => buildConnections(data.notebookId, document.id, user?.id ?? null))
+            .catch(() => {}),
+        );
+      } else {
+        // On-ingest glossary extraction (SPEC.md §8 Phase 7). Best-effort; after() keeps it
+        // alive past the response on serverless.
+        if (!deduped) after(() => buildGlossary(document.id, user?.id ?? null).catch(() => {}));
+        after(() => buildConnections(data.notebookId, document.id, user?.id ?? null).catch(() => {}));
+      }
       return { id: document.id, title: document.title, deduped };
     } catch (err) {
       console.error("PDF ingest failed:", err);

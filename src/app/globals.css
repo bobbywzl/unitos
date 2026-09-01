@@ -323,6 +323,21 @@ mark,
 .edited-text {
   color: var(--clay-600);
 }
+/* Text color spans (the style layer's coloring options, and the same hues in
+   notes). Mixed with ink so every hue reads on both themes. After
+   .edited-text, so a chosen color wins over the edited tint. */
+.text-color-clay {
+  color: color-mix(in srgb, var(--clay-500) 82%, var(--ink));
+}
+.text-color-sage {
+  color: color-mix(in srgb, var(--sage-600) 85%, var(--ink));
+}
+.text-color-gold {
+  color: color-mix(in srgb, #d9a54a 75%, var(--ink));
+}
+.text-color-plum {
+  color: color-mix(in srgb, #a78bfa 75%, var(--ink));
+}
 .link-mark {
   background: color-mix(in srgb, var(--clay-400) 14%, transparent);
   border-bottom: 2px solid var(--clay-500);
@@ -420,6 +435,21 @@ mark,
   --tw-prose-pre-bg: var(--sand-200);
   --tw-prose-th-borders: var(--sand-300);
   --tw-prose-td-borders: var(--sand-200);
+}
+
+/* A quote in a note (a highlight added to notes): a boxed quotation, not the
+   typography default's bare italic bar. Edits and replies sit underneath it. */
+.prose blockquote {
+  margin: 0.5em 0;
+  border-left: 3px solid var(--clay-400);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--clay-400) 10%, transparent);
+  padding: 0.5em 0.85em;
+  font-style: normal;
+}
+.prose blockquote p:first-of-type::before,
+.prose blockquote p:last-of-type::after {
+  content: none;
 }
 
 /* Ingest card: the cat dances while the pipeline works. */
@@ -644,6 +674,12 @@ mark,
   }
 }
 .video-flash {
+  animation: video-flash 1.8s ease-out;
+}
+/* Page marks are SVG loops: the generic anchor-flash lands on a path, whose
+   background cannot animate, so flash the stroke instead. */
+path.anchor-flash,
+ellipse.anchor-flash {
   animation: video-flash 1.8s ease-out;
 }
 

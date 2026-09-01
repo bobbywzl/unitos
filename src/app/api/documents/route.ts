@@ -5,6 +5,7 @@ import { authEnabled, currentUser } from "@/lib/auth";
 import { bumpNotebook, notebookAccess } from "@/lib/collab";
 import { buildConnections } from "@/lib/connect";
 import { buildGlossary } from "@/lib/glossary";
+import { runConversion } from "@/lib/handwritten/convert";
 import { currentLang, serverT } from "@/lib/i18n/server";
 import { progressResponse } from "@/lib/ingest-response";
 import { attachDocument } from "@/lib/parse/attach";
@@ -15,7 +16,9 @@ import { isMediaUrl } from "@/lib/video/types";
 import { parseYouTubeId } from "@/lib/video/youtube";
 import { parseBody } from "@/lib/validate";
 
-export const maxDuration = 120;
+// A split add parses one very long page and saves several documents; the AI
+// passes on such a page need the headroom.
+export const maxDuration = 300;
 
 const MAX_PDF_BYTES = 50 * 1024 * 1024;
 
@@ -51,14 +54,21 @@ export async function GET() {
   return NextResponse.json(documents);
 }
 
+// instructions: the feasible upload instructions from the upload assistant's
+// check, threaded into the AI passes. split: save one very long page as
+// multiple documents (SPEC.md §15). The upload assistant's box sends both; a
+// multi-page add sends one request per page.
 const urlSchema = z.object({
   url: z.url(),
   notebookId: z.string().min(1),
+  instructions: z.string().max(2_000).default(""),
+  split: z.boolean().default(false),
 });
 
 const fileFieldsSchema = z.object({
   notebookId: z.string().min(1),
   filename: z.string().min(1),
+  instructions: z.string().max(2_000),
 });
 
 // PDF upload (multipart) or URL ingestion (JSON). Both attach to the notebook.
@@ -93,6 +103,7 @@ export async function POST(req: Request) {
     const fields = fileFieldsSchema.safeParse({
       notebookId: form.get("notebookId"),
       filename: file instanceof File ? file.name : "document.pdf",
+      instructions: form.get("instructions") ?? "",
     });
     if (!fields.success) {
       return NextResponse.json({ error: t("api.validationFailed"), issues: fields.error.issues }, { status: 400 });
@@ -111,18 +122,40 @@ export async function POST(req: Request) {
     }
     return progressResponse(async (onProgress) => {
       try {
-        const { document, deduped } = await parse.ingestPdf(bytes, fields.data.filename, onProgress);
+        const { document, deduped } = await parse.ingestPdf(
+          bytes,
+          fields.data.filename,
+          onProgress,
+          { instructions: fields.data.instructions.trim() || undefined },
+          user?.id ?? null,
+        );
         await attachDocument(fields.data.notebookId, document.id);
         await bumpNotebook(fields.data.notebookId);
-        // On-ingest glossary extraction (SPEC.md §8 Phase 7). Best-effort; after() keeps it
-        // alive past the response on serverless.
-        if (!deduped) after(() => buildGlossary(document.id, user?.id ?? null).catch(() => {}));
-        // Recommended links (SPEC.md §13): scan the document against the corpus.
-        after(() =>
-          buildConnections(fields.data.notebookId, document.id, user?.id ?? null, lang).catch(
-            () => {},
-          ),
-        );
+        if (!deduped && document.handwritten) {
+          // A handwritten document (SPEC.md §16): conversion starts on its own
+          // — the text is the point. Glossary and the recommended-links scan
+          // follow it, so they read the converted text.
+          after(() =>
+            runConversion(document.id, user?.id ?? null)
+              .then((r) =>
+                r.ok ? buildGlossary(document.id, user?.id ?? null).catch(() => {}) : undefined,
+              )
+              .then(() =>
+                buildConnections(fields.data.notebookId, document.id, user?.id ?? null, lang),
+              )
+              .catch(() => {}),
+          );
+        } else {
+          // On-ingest glossary extraction (SPEC.md §8 Phase 7). Best-effort; after() keeps it
+          // alive past the response on serverless.
+          if (!deduped) after(() => buildGlossary(document.id, user?.id ?? null).catch(() => {}));
+          // Recommended links (SPEC.md §13): scan the document against the corpus.
+          after(() =>
+            buildConnections(fields.data.notebookId, document.id, user?.id ?? null, lang).catch(
+              () => {},
+            ),
+          );
+        }
         return { id: document.id, title: document.title, deduped };
       } catch (err) {
         console.error("PDF ingest failed:", err);
@@ -204,14 +237,29 @@ export async function POST(req: Request) {
 
   return progressResponse(async (onProgress) => {
     try {
-      const { document, deduped } = await parse.ingestUrl(data.url, onProgress);
-      await attachDocument(data.notebookId, document.id);
+      const { document, extra, deduped } = await parse.ingestUrl(data.url, onProgress, {
+        instructions: data.instructions.trim() || undefined,
+        split: data.split,
+      });
+      // A split add saves several documents; every one attaches, gets its
+      // glossary, and gets its recommended-links scan, like any document.
+      const documents = [document, ...(extra ?? [])];
+      for (const doc of documents) {
+        await attachDocument(data.notebookId, doc.id);
+        if (!deduped) after(() => buildGlossary(doc.id, user?.id ?? null).catch(() => {}));
+        after(() =>
+          buildConnections(data.notebookId, doc.id, user?.id ?? null, lang).catch(() => {}),
+        );
+      }
       await bumpNotebook(data.notebookId);
-      if (!deduped) after(() => buildGlossary(document.id, user?.id ?? null).catch(() => {}));
-      after(() =>
-        buildConnections(data.notebookId, document.id, user?.id ?? null, lang).catch(() => {}),
-      );
-      return { id: document.id, title: document.title, deduped };
+      return {
+        id: document.id,
+        title: document.title,
+        deduped,
+        ...(documents.length > 1
+          ? { documents: documents.map((d) => ({ id: d.id, title: d.title })) }
+          : {}),
+      };
     } catch (err) {
       console.error("URL ingest failed:", err);
       throw new Error(t("api.urlIngestFailed"));

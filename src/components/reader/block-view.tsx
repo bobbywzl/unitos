@@ -2,10 +2,10 @@
 
 import type { BlockType } from "@prisma/client";
 import { useState } from "react";
-import { LinkIcon, UnlinkIcon } from "@/components/icons";
+import { LinkIcon, QuestionIcon, SparkleIcon, SummaryIcon, UnlinkIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { Equation } from "@/components/reader/equation";
-import type { TFunc } from "@/lib/i18n/dictionaries";
+import type { TFunc, TKey } from "@/lib/i18n/dictionaries";
 
 const CHAIN_BUTTON =
   "link-chain mx-0.5 inline-flex size-[16px] items-center justify-center rounded-full bg-clay-100 align-text-top text-clay-700 hover:bg-clay-200 hover:text-clay-800";
@@ -22,11 +22,24 @@ export type Highlight = {
   start: number;
   end: number;
   kind: "anchor" | "salience" | "simplify" | "term" | "link" | "citation" | "weblink" | "edited" | "style" | "toc" | "extract";
-  styleKind?: "bold" | "italic" | "underline" | "code"; // kind "style" only
+  // kind "style" only
+  styleKind?:
+    | "bold"
+    | "italic"
+    | "underline"
+    | "code"
+    | "color-clay"
+    | "color-sage"
+    | "color-gold"
+    | "color-plum";
   definition?: string; // glossary hover text, kind "term" only
   color?: string | null; // highlight hue ("clay" | "sage" | "gold" | "plum"), kind "anchor" only
   annotation?: boolean; // anchor belongs to an annotation; click focuses its card
   comment?: boolean; // comment annotation: a comment icon renders after the span
+  noteId?: string; // owning note; on a regular note's mark, click jumps to the note in the tray
+  // Narrow reader: the stored AI annotation's tool icon renders after the
+  // span; the icon opens the card. Kind "anchor" only.
+  tool?: "explain" | "simplify" | "assistant";
   href?: string; // navigation target, kinds "link" and "weblink"
   linkTitle?: string; // the other end's document title, kind "link" only
   linkId?: string; // for arrival flashing via ?link=, kind "link" only
@@ -49,6 +62,21 @@ function anchorClass(color: string | null | undefined): string {
   if (color === "plum") return "hl-plum";
   return "anchor-mark";
 }
+
+// Narrow reader: each AI tool's icon next to its highlighted text.
+const TOOL_ICON: Record<
+  "explain" | "simplify" | "assistant",
+  (props: { size?: number }) => React.ReactNode
+> = {
+  explain: QuestionIcon,
+  simplify: SummaryIcon,
+  assistant: SparkleIcon,
+};
+const TOOL_KEY: Record<"explain" | "simplify" | "assistant", TKey> = {
+  explain: "panes.openExplanation",
+  simplify: "panes.openSimplified",
+  assistant: "panes.openConversation",
+};
 
 function headingLevel(html: string | null): 1 | 2 | 3 {
   const m = html?.match(/^<h([1-3])/);
@@ -83,7 +111,8 @@ function markedText(text: string, highlights: Highlight[], t: TFunc) {
     const italic = covering.some((h) => h.kind === "style" && h.styleKind === "italic");
     const underlined = covering.some((h) => h.kind === "style" && h.styleKind === "underline");
     const code = covering.some((h) => h.kind === "style" && h.styleKind === "code");
-    const editedClass = `${edited ? " edited-text" : ""}${bold ? " font-bold" : ""}${italic ? " italic" : ""}${underlined ? " underline" : ""}${code ? " code-mark" : ""}`;
+    const colored = covering.find((h) => h.kind === "style" && h.styleKind?.startsWith("color-"));
+    const editedClass = `${edited ? " edited-text" : ""}${bold ? " font-bold" : ""}${italic ? " italic" : ""}${underlined ? " underline" : ""}${colored ? ` text-${colored.styleKind}` : ""}${code ? " code-mark" : ""}`;
     const anchors = covering.filter((h) => h.kind === "anchor");
     const anchor =
       anchors.length > 1
@@ -181,6 +210,9 @@ function markedText(text: string, highlights: Highlight[], t: TFunc) {
       );
     } else if (anchor || salience || simplify || extract) {
       const focusable = anchor?.annotation && anchor.sourceId;
+      // A regular note's mark: click jumps to the note in the tray — the
+      // link between quote and note works both ways.
+      const noteMark = !anchor?.annotation && anchor?.noteId ? anchor.noteId : null;
       // A comment's icon sits right after its span; SVG only, so the block's
       // DOM text stays exactly the stored text (SPEC.md §5).
       const commentEnding = covering.find(
@@ -202,7 +234,7 @@ function markedText(text: string, highlights: Highlight[], t: TFunc) {
         <mark
           key={from}
           data-source-id={anchor?.sourceId ?? undefined}
-          title={focusable ? t("panes.viewAnnotation") : undefined}
+          title={focusable ? t("panes.viewAnnotation") : noteMark ? t("panes.viewNote") : undefined}
           onClick={
             focusable
               ? (e) => {
@@ -213,9 +245,16 @@ function markedText(text: string, highlights: Highlight[], t: TFunc) {
                     }),
                   );
                 }
-              : undefined
+              : noteMark
+                ? (e) => {
+                    e.stopPropagation();
+                    window.dispatchEvent(
+                      new CustomEvent("dissect:show-note", { detail: { noteId: noteMark } }),
+                    );
+                  }
+                : undefined
           }
-          className={`${markClass}${anchors.length > 1 ? " hl-stacked" : ""}${painted?.fresh ? " mark-sweep" : ""} rounded-[4px] ${focusable ? "annotation-mark" : ""}${editedClass}`}
+          className={`${markClass}${anchors.length > 1 ? " hl-stacked" : ""}${painted?.fresh ? " mark-sweep" : ""} rounded-[4px] ${focusable || noteMark ? "annotation-mark" : ""}${editedClass}`}
           style={
             painted?.fresh && painted.freshDelay
               ? { animationDelay: `${painted.freshDelay}ms` }
@@ -264,6 +303,35 @@ function markedText(text: string, highlights: Highlight[], t: TFunc) {
             className="mx-0.5 inline-flex h-4 items-center rounded-full bg-clay-100 px-1.5 align-text-top text-[9.5px] font-bold text-clay-700 hover:bg-clay-200 hover:text-clay-800"
           >
             {extractEnding.extractLabel}
+          </button>,
+        );
+      }
+      // Narrow reader: a stored AI annotation's tool icon sits right after its
+      // span — explain, simplify, or assistant — and opens the card. SVG only,
+      // so the block's DOM text stays exactly the stored text (SPEC.md §5).
+      const toolEnding = covering.find(
+        (h) => h.kind === "anchor" && h.tool && h.sourceId && h.end === to,
+      );
+      if (toolEnding?.tool) {
+        const ToolIcon = TOOL_ICON[toolEnding.tool];
+        parts.push(
+          <button
+            key={`tool-${from}`}
+            type="button"
+            data-anchor-skip
+            aria-label={t(TOOL_KEY[toolEnding.tool])}
+            title={t(TOOL_KEY[toolEnding.tool])}
+            onClick={(e) => {
+              e.stopPropagation();
+              window.dispatchEvent(
+                new CustomEvent("dissect:open-annotation", {
+                  detail: { sourceId: toolEnding.sourceId },
+                }),
+              );
+            }}
+            className="mx-0.5 inline-flex size-[16px] items-center justify-center rounded-full bg-clay-100 align-text-top text-clay-700 hover:bg-clay-200 hover:text-clay-800"
+          >
+            <ToolIcon size={10} />
           </button>,
         );
       }
@@ -375,6 +443,7 @@ const LABEL_DOT: Record<string, string> = {
 function HighlightLabel({ anchors }: { anchors: Highlight[] }) {
   const t = useT();
   const focusable = anchors.find((h) => h.annotation && h.sourceId);
+  const noteMark = anchors.find((h) => !h.annotation && h.noteId);
   const color = anchors.find((h) => h.color)?.color ?? "clay";
   const labels = anchors.map((h) => h.figureLabel).filter((l): l is string => Boolean(l));
   const text = labels.length > 0 ? labels.join(" · ") : t("panes.highlighted");
@@ -388,7 +457,14 @@ function HighlightLabel({ anchors }: { anchors: Highlight[] }) {
                   detail: { sourceId: focusable.sourceId },
                 }),
               )
-          : undefined
+          : noteMark?.noteId
+            ? () =>
+                window.dispatchEvent(
+                  new CustomEvent("dissect:show-note", {
+                    detail: { noteId: noteMark.noteId },
+                  }),
+                )
+            : undefined
       }
       title={
         focusable
@@ -507,6 +583,29 @@ export function BlockView({
       return (
         <p data-block-id={block.id} className={`${shared} my-4 text-sm text-sand-600 italic`}>
           {t("panes.videoBlock", { text: block.text })}
+        </p>
+      );
+    // Handwritten pages render through PageBlock in the reader (SPEC.md §16);
+    // this case keeps the switch total for the odd place a PAGE block meets
+    // the plain block renderer.
+    case "PAGE":
+      if (documentId) {
+        return (
+          <div data-block-id={block.id} className={`${shared} my-6`}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={`/api/documents/${documentId}/page/${block.id}`}
+              alt=""
+              loading="lazy"
+              draggable={false}
+              className="w-full rounded-xl shadow-soft"
+            />
+          </div>
+        );
+      }
+      return (
+        <p data-block-id={block.id} className={`${shared} my-4 text-sm text-sand-600 italic`}>
+          {content}
         </p>
       );
     case "TABLE":

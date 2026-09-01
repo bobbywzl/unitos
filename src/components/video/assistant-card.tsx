@@ -9,6 +9,7 @@ import { useT } from "@/components/lang-provider";
 import { Markdown } from "@/components/markdown";
 import { ThinkingIndicator } from "@/components/thinking";
 import { runFormalize } from "@/lib/video/formalize-client";
+import { formatTimeRange, type Region } from "@/lib/video/types";
 import type { AssistantPlan, FormalizedArticle, FormalizeFormat } from "@/lib/types";
 
 // The assistant on the media pane (SPEC.md §11): a chat card under the tool
@@ -25,12 +26,19 @@ export function MediaAssistant({
   documentId,
   hasTranscript,
   sectionChoices,
+  spot,
+  captureFrame,
   onClose,
 }: {
   notebookId: string;
   documentId: string;
   hasTranscript: boolean;
   sectionChoices: { id: string; label: string }[];
+  // The circled spot on the player, if one is open: commands carry it — the
+  // frame, the time range, the drawn region — so the model sees what the
+  // reader circled. The chip's ✕ sends commands without it.
+  spot: { startTime: number; endTime: number; region: Region | null } | null;
+  captureFrame: (region: Region | null, time: number) => Promise<string | undefined>;
   onClose: () => void;
 }) {
   const t = useT();
@@ -41,6 +49,15 @@ export function MediaAssistant({
   const [busy, setBusy] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  // A cleared chip stays cleared until a new spot is circled.
+  const [spotCleared, setSpotCleared] = useState(false);
+  const spotKey = spot ? `${spot.startTime}-${spot.endTime}` : null;
+  const [prevSpotKey, setPrevSpotKey] = useState(spotKey);
+  if (prevSpotKey !== spotKey) {
+    setPrevSpotKey(spotKey);
+    setSpotCleared(false);
+  }
+  const activeSpot = spot && !spotCleared ? spot : null;
 
   useEffect(() => {
     const box = scrollRef.current;
@@ -100,10 +117,21 @@ export function MediaAssistant({
     push({ role: "user", content: command });
     setBusy(true);
     try {
+      // The circled spot rides along: frame captured now, at the spot's start.
+      let video: { startTime: number; endTime: number; region?: Region; frame?: string } | undefined;
+      if (activeSpot) {
+        const frame = await captureFrame(activeSpot.region, activeSpot.startTime);
+        video = {
+          startTime: activeSpot.startTime,
+          endTime: activeSpot.endTime,
+          region: activeSpot.region ?? undefined,
+          frame,
+        };
+      }
       const res = await fetch("/api/assistant/act", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ notebookId, documentId, command, history }),
+        body: JSON.stringify({ notebookId, documentId, command, history, video }),
       });
       const plan = (await res.json().catch(() => null)) as
         | (AssistantPlan & { error?: string })
@@ -164,6 +192,24 @@ export function MediaAssistant({
           {t("video.skillNotes")}
         </button>
       </div>
+
+      {activeSpot && (
+        <div className="mb-2.5 flex items-center">
+          <span className="flex items-center gap-1.5 rounded-full bg-clay-100 px-3 py-1 text-[11.5px] font-semibold text-clay-800">
+            {t("video.assistantSpotChip", {
+              range: formatTimeRange(activeSpot.startTime, activeSpot.endTime),
+            })}
+            <button
+              onClick={() => setSpotCleared(true)}
+              aria-label={t("video.assistantSpotClear")}
+              title={t("video.assistantSpotClear")}
+              className="rounded-full px-0.5 text-clay-700 hover:text-clay-900"
+            >
+              ✕
+            </button>
+          </span>
+        </div>
+      )}
 
       {messages.length > 0 && (
         <div ref={scrollRef} className="mb-2.5 flex max-h-72 flex-col gap-2.5 overflow-y-auto">

@@ -435,6 +435,15 @@ export function VideoPane({
 
   const annotateOn = drawing || composer !== null || explaining !== null;
 
+  // The circled spot the assistant reads (SPEC.md §11): the open composer's
+  // range and region, once the times parse. Null while nothing is circled.
+  const composerStart = composer ? parseTimeInput(composer.startTime) : null;
+  const composerEnd = composer ? parseTimeInput(composer.endTime) : null;
+  const assistantSpot =
+    composer && composerStart !== null && composerEnd !== null && composerEnd > composerStart
+      ? { startTime: composerStart, endTime: composerEnd, region: composer.region }
+      : null;
+
   return (
     <div className="relative min-h-0 flex-1 overflow-y-auto">
       {/* Fluid column: the player grows with the pane — collapsing the tray
@@ -551,6 +560,8 @@ export function VideoPane({
             documentId={documentId}
             hasTranscript={transcript.length > 0}
             sectionChoices={sectionChoices}
+            spot={assistantSpot}
+            captureFrame={captureFrame}
             onClose={() => setAssistantOpen(false)}
           />
         )}

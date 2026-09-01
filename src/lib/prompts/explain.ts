@@ -5,6 +5,9 @@ import { answerLanguage, profileLines, type PromptCtx } from "@/lib/prompts/type
 // Figure variant: the reader circled a figure; the model deciphers the visual.
 // Video variant: the reader marked a moment of a video document (SPEC.md §11);
 // the paused frame is attached when the client could capture it.
+// Page variant: the reader circled a spot on a handwritten page (SPEC.md §16);
+// the page and the circled part are attached, with the reader's question when
+// one was typed (Circle & ask).
 export function explainPrompt(ctx: PromptCtx): string {
   if (ctx.video?.audio) {
     return [
@@ -62,6 +65,27 @@ export function explainPrompt(ctx: PromptCtx): string {
       answerLanguage(ctx.lang),
     ].join("\n");
   }
+  if (ctx.page) {
+    return [
+      profileLines(ctx.profile),
+      "",
+      `The reader circled a spot on page ${ctx.page.number} of the handwritten document "${ctx.documentTitle}". The document's converted text, when it has any, is above.`,
+      "",
+      ctx.page.hasCrop
+        ? "The first attached image is the whole page. The second is the circled part, enlarged."
+        : "The attached image is the whole page; find the circled spot on it.",
+      "",
+      ...(ctx.page.question
+        ? ["The reader asks:", ctx.page.question, "", "Answer the question from the circled spot and the page."]
+        : ["Explain the circled spot for this reader."]),
+      "1. Start with what is written or drawn there: transcribe the words, name the shapes, read the numbers.",
+      "2. Then place it: how the spot fits the rest of the page and the document.",
+      "3. Never state anything about the image you cannot actually see. Where the handwriting is illegible, say so plainly instead of guessing.",
+      "4. Connect it to the reader's purpose when the connection is real.",
+      "Keep it under 200 words. Use markdown. Start with the answer, no preamble.",
+      answerLanguage(ctx.lang),
+    ].join("\n");
+  }
   if (ctx.figure) {
     return [
       profileLines(ctx.profile),
@@ -71,7 +95,14 @@ export function explainPrompt(ctx: PromptCtx): string {
       "Figure caption:",
       ctx.figure.caption || "(no caption)",
       "",
-      ...(ctx.figure.kind === "image" ? ["The figure's image is attached.", ""] : []),
+      ...(ctx.figure.kind === "image"
+        ? [
+            ctx.figure.page
+              ? "The PDF page the figure sits on is attached. Find the figure on it by its caption; read only that figure."
+              : "The figure's image is attached.",
+            "",
+          ]
+        : []),
       ...(ctx.figure.svgSource ? ["The figure is this SVG chart:", ctx.figure.svgSource, ""] : []),
       ...(ctx.figure.kind === "video"
         ? ["The figure is a video you cannot watch. Work from the caption and the document.", ""]

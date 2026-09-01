@@ -1,11 +1,13 @@
 import { Logo } from "@/components/logo";
 import { notFound, redirect } from "next/navigation";
 import { authEnabled, currentUser } from "@/lib/auth";
+import { driveConfig } from "@/lib/drive/config";
 import { serverT } from "@/lib/i18n/server";
 import { peopleByIds, roleOf } from "@/lib/collab";
 import { matchInText } from "@/lib/anchors/match";
 import { hasContext } from "@/lib/derive/context";
 import { editedRanges } from "@/lib/diff";
+import { conversionIsStale } from "@/lib/handwritten/convert";
 import { documentReferences } from "@/lib/parse/types";
 import { resolveDocumentSources } from "@/lib/anchors/resolve";
 import { db } from "@/lib/db";
@@ -35,6 +37,8 @@ import type { CollabState } from "@/components/collab/collab-context";
 import { AnnotationsPanel } from "@/components/panels/annotations-panel";
 import { DistillPanel } from "@/components/panels/distill-panel";
 import { EditsPanel } from "@/components/panels/edits-panel";
+import type { ConversionInfo } from "@/components/reader/conversion-strip";
+import type { PageMark } from "@/components/reader/page-block";
 import { ReaderInteractions } from "@/components/reader/reader-interactions";
 import { ReaderPanes, type ReaderViewKind } from "@/components/reader/reader-panes";
 import { Workspace } from "@/components/reader/workspace";
@@ -75,6 +79,7 @@ export default async function NotebookPage(props: {
               sourceUrl: true,
               parserVersion: true,
               fileHash: true,
+              handwritten: true,
               video: { select: { id: true } },
             },
           },
@@ -108,6 +113,7 @@ export default async function NotebookPage(props: {
     parserVersion: nd.document.parserVersion,
     hasFile: nd.document.fileHash !== null,
     hasVideo: nd.document.video !== null,
+    handwritten: nd.document.handwritten,
   }));
   const activeId = doc && attached.some((d) => d.id === doc) ? doc : (attached[0]?.id ?? null);
   // The reader view is a per-visit choice carried in the URL; a fresh open is Normal.
@@ -167,6 +173,9 @@ export default async function NotebookPage(props: {
         annotation: boolean;
         comment: boolean;
         figureLabel: string | null;
+        // The owning note. On a regular note's mark, click jumps to the note
+        // in the tray — the link between quote and note works both ways.
+        noteId: string;
       }[]
     > = {};
     const resolved = await resolveDocumentSources(document.id);
@@ -199,6 +208,13 @@ export default async function NotebookPage(props: {
       resolutionById.set(r.id, { orphaned: r.orphaned });
       if (r.orphaned || !noteById.has(r.noteId)) continue;
       if (sourceById.get(r.id)?.startTime != null) continue;
+      // Page anchors are drawn regions, not text spans: they paint on the
+      // page through pageMarksByBlock, never as text highlights (SPEC.md §16).
+      if (
+        sourceById.get(r.id)?.region != null &&
+        blockById.get(r.blockId)?.type === "PAGE"
+      )
+        continue;
       const list = anchorHighlights[r.blockId] ?? [];
       const note = noteById.get(r.noteId);
       list.push({
@@ -211,6 +227,7 @@ export default async function NotebookPage(props: {
         comment:
           annotationNoteIds.has(r.noteId) && note?.derivationType == null && note?.color == null,
         figureLabel: figureLabelBySource.get(r.id) ?? null,
+        noteId: r.noteId,
       });
       anchorHighlights[r.blockId] = list;
     }
@@ -556,13 +573,29 @@ export default async function NotebookPage(props: {
       if (ranges.length > 0) editedByBlock[b.id] = ranges;
     }
 
-    // Inline styles (bold/italic/underline/code): decoration spans healed like salience.
+    // Inline styles (bold/italic/underline/code/text color): decoration spans
+    // healed like salience.
     type StyleSpan = { start: number; end: number; style: string; quotedText: string };
-    const STYLE_KINDS = new Set(["bold", "italic", "underline", "code"]);
-    const stylesByBlock: Record<
-      string,
-      { start: number; end: number; style: "bold" | "italic" | "underline" | "code" }[]
-    > = {};
+    type StyleKind =
+      | "bold"
+      | "italic"
+      | "underline"
+      | "code"
+      | "color-clay"
+      | "color-sage"
+      | "color-gold"
+      | "color-plum";
+    const STYLE_KINDS = new Set([
+      "bold",
+      "italic",
+      "underline",
+      "code",
+      "color-clay",
+      "color-sage",
+      "color-gold",
+      "color-plum",
+    ]);
+    const stylesByBlock: Record<string, { start: number; end: number; style: StyleKind }[]> = {};
     for (const b of document.blocks) {
       const spans = (Array.isArray(b.styles) ? b.styles : []) as unknown as StyleSpan[];
       for (const span of spans) {
@@ -578,7 +611,7 @@ export default async function NotebookPage(props: {
         list.push({
           start: hit.start,
           end: hit.end,
-          style: span.style as "bold" | "italic" | "underline" | "code",
+          style: span.style as StyleKind,
         });
         stylesByBlock[b.id] = list;
       }
@@ -694,6 +727,38 @@ export default async function NotebookPage(props: {
       }
     }
 
+    // ── Handwritten documents (SPEC.md §16) ─────────────────────────────────
+    // The stored marks per PAGE block — Circle & ask answers and page comments
+    // — and the conversion status for the strip under the pages. Built from
+    // the resolved sources, so a mark healed onto a rebuilt page paints in the
+    // same render.
+    const pageMarksByBlock: Record<string, PageMark[]> = {};
+    if (document.handwritten) {
+      for (const r of resolved) {
+        if (r.orphaned || !annotationNoteIds.has(r.noteId)) continue;
+        const src = sourceById.get(r.id);
+        const note = noteById.get(r.noteId);
+        if (!src || !note || src.startTime !== null) continue;
+        const region = parseRegion(src.region);
+        if (!region || blockById.get(r.blockId)?.type !== "PAGE") continue;
+        const list = pageMarksByBlock[r.blockId] ?? [];
+        list.push({
+          sourceId: r.id,
+          noteId: r.noteId,
+          kind: note.derivationType === "EXPLAIN" ? "explain" : "comment",
+          region,
+        });
+        pageMarksByBlock[r.blockId] = list;
+      }
+    }
+    const conversion: ConversionInfo | null = document.handwritten
+      ? {
+          status: document.conversionStatus,
+          error: document.conversionError,
+          stale: conversionIsStale(document.conversionStatus, document.conversionStartedAt),
+        }
+      : null;
+
     return {
       document,
       summaries,
@@ -717,6 +782,8 @@ export default async function NotebookPage(props: {
       formalized,
       videoAnnotations,
       videoSeekBySource,
+      pageMarksByBlock,
+      conversion,
     };
   }
 
@@ -1008,6 +1075,8 @@ export default async function NotebookPage(props: {
           contentsLinksByBlock={pane.contentsLinksByBlock}
           citationsByBlock={pane.citationsByBlock}
           references={pane.references}
+          pageMarksByBlock={pane.pageMarksByBlock}
+          conversion={pane.conversion}
           font={pane.document.font}
         />
       )}
@@ -1021,6 +1090,7 @@ export default async function NotebookPage(props: {
       notebook={view}
       documents={attached}
       activeDocumentId={paneOne?.document.id ?? null}
+      drive={driveConfig()}
       collab={collab}
       rev={notebook.rev}
       graph={{ nodes: graphNodes, edges: graphEdges }}

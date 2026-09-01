@@ -23,7 +23,6 @@ import { ShareControl } from "@/components/collab/share-control";
 import { useNotebookSync } from "@/components/collab/use-sync";
 import { GraphOverlay } from "@/components/graph/graph-overlay";
 import { CorpusDistillPage } from "@/components/reader/corpus-distill-page";
-import { ProjectSearch } from "@/components/reader/project-search";
 import { ContextTab, type ContextValues } from "@/components/context-tab";
 import { GuideDialog } from "@/components/guide-dialog";
 import { useT } from "@/components/lang-provider";
@@ -31,6 +30,7 @@ import { NotebookTitle } from "@/components/notebook-title";
 import { NotesTray } from "@/components/outline/notes-tray";
 import { useOutline } from "@/components/outline/use-outline";
 import { DocumentBar, type AttachedDocument } from "@/components/reader/document-bar";
+import type { DriveConfig } from "@/lib/drive/config";
 import type { TKey } from "@/lib/i18n/dictionaries";
 
 type Tab = "notes" | "assistant" | "distill" | "annotations" | "edits";
@@ -47,6 +47,22 @@ const RAIL_BUTTON =
   "relative flex size-[38px] items-center justify-center rounded-full text-sand-600 hover:bg-clay-100 hover:text-clay-800";
 const RAIL_BUTTON_ON = "relative flex size-[38px] items-center justify-center rounded-full bg-clay-200 text-clay-800";
 
+// Tray width bounds: the bar between the reader and the tray drags within
+// these, so it can never overextend — the tray keeps a readable minimum and
+// the reader keeps room for the article column.
+const TRAY_DEFAULT = 352;
+const TRAY_MIN = 280;
+const TRAY_MAX = 640;
+const READER_MIN = 420;
+const RAIL_WIDTH = 52;
+const TRAY_WIDTH_STORE = "unitos-tray-width";
+
+function clampTrayWidth(width: number): number {
+  const window_ = typeof window !== "undefined" ? window.innerWidth : 1440;
+  const max = Math.max(TRAY_MIN, Math.min(TRAY_MAX, window_ - READER_MIN - RAIL_WIDTH));
+  return Math.round(Math.max(TRAY_MIN, Math.min(width, max)));
+}
+
 // The tray (design 1a): the document owns the page, notes live in a drawer on the
 // right, and the drawer folds down to the icon strip. The strip never leaves, so
 // notes and the assistant are always one click away.
@@ -54,6 +70,7 @@ export function Workspace({
   notebook,
   documents,
   activeDocumentId,
+  drive,
   reader,
   assistant,
   distillPanel,
@@ -71,6 +88,7 @@ export function Workspace({
   notebook: NotebookView;
   documents: AttachedDocument[];
   activeDocumentId: string | null;
+  drive: DriveConfig | null;
   reader: React.ReactNode;
   assistant: React.ReactNode;
   distillPanel: React.ReactNode;
@@ -102,6 +120,9 @@ export function Workspace({
   // bottom bar; mobileTray tracks it. On md+ the md: overrides put the same
   // aside back in the side column, so the flag is inert there.
   const [mobileTray, setMobileTray] = useState(false);
+  // The tray's width on md+: dragged by the bar between the reader and the
+  // tray, clamped by clampTrayWidth, remembered per browser.
+  const [trayWidth, setTrayWidth] = useState(TRAY_DEFAULT);
   const [tab, setTab] = useState<Tab>("notes");
   const [menuOpen, setMenuOpen] = useState(false);
   const [guideOpen, setGuideOpen] = useState(false);
@@ -158,6 +179,49 @@ export function Workspace({
     };
   }, []);
 
+  // Post-hydration restore on purpose: localStorage is client-only, so the
+  // SSR pass must render the default width. Window resizes re-clamp, so the
+  // bar never rests past its bounds.
+  useEffect(() => {
+    const stored = Number(localStorage.getItem(TRAY_WIDTH_STORE));
+    if (Number.isFinite(stored) && stored > 0) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setTrayWidth(clampTrayWidth(stored));
+    }
+    const onResize = () => setTrayWidth((w) => clampTrayWidth(w));
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
+  function applyTrayWidth(width: number) {
+    const next = clampTrayWidth(width);
+    setTrayWidth(next);
+    localStorage.setItem(TRAY_WIDTH_STORE, String(next));
+  }
+
+  function startTrayResize(e: React.PointerEvent<HTMLDivElement>) {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    const fromX = e.clientX;
+    const fromWidth = trayWidth;
+    let latest = fromWidth;
+    document.body.style.userSelect = "none";
+    document.body.style.cursor = "col-resize";
+    const onMove = (ev: PointerEvent) => {
+      latest = clampTrayWidth(fromWidth + (fromX - ev.clientX));
+      setTrayWidth(latest);
+    };
+    const onUp = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      document.body.style.userSelect = "";
+      document.body.style.cursor = "";
+      localStorage.setItem(TRAY_WIDTH_STORE, String(latest));
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  }
+
   useEffect(() => {
     if (!menuOpen) return;
     const onPointerDown = (e: PointerEvent) => {
@@ -206,9 +270,9 @@ export function Workspace({
             notebookId={notebook.id}
             documents={documents}
             activeId={activeDocumentId}
+            drive={drive}
           />
         </div>
-        <ProjectSearch notebookId={notebook.id} />
         <ShareControl notebookId={notebook.id} presence={presence} />
         <div className="hidden md:block">
           <HistoryControl history={history} />
@@ -246,12 +310,42 @@ export function Workspace({
         </div>
 
         {(!collapsed || mobileTray) && (
+          <>
+          {/* The bar between the reader and the tray: drag to resize, arrow
+              keys nudge, double-click resets. It floats over the tray's left
+              border, so the layout gains no width. */}
+          <div
+            role="separator"
+            aria-orientation="vertical"
+            aria-label={t("panes.resizeTray")}
+            title={t("panes.resizeTrayTitle")}
+            tabIndex={0}
+            onPointerDown={startTrayResize}
+            onDoubleClick={() => applyTrayWidth(TRAY_DEFAULT)}
+            onKeyDown={(e) => {
+              if (e.key === "ArrowLeft") {
+                e.preventDefault();
+                applyTrayWidth(trayWidth + 16);
+              }
+              if (e.key === "ArrowRight") {
+                e.preventDefault();
+                applyTrayWidth(trayWidth - 16);
+              }
+            }}
+            className="group relative z-10 -mr-[10px] hidden w-[10px] shrink-0 cursor-col-resize outline-none md:block print:hidden"
+          >
+            <span
+              aria-hidden
+              className="absolute inset-y-0 left-0 w-[3px] rounded-full bg-transparent transition-colors group-hover:bg-clay-300 group-focus-visible:bg-clay-400"
+            />
+          </div>
           <aside
+            style={{ "--tray-w": `${trayWidth}px` } as React.CSSProperties}
             className={`${
               mobileTray
                 ? "fixed inset-x-0 bottom-[calc(54px+env(safe-area-inset-bottom))] z-30 flex max-h-[70dvh] rounded-t-[24px] border-t shadow-float md:static md:z-auto md:max-h-none md:rounded-none md:border-t-0 md:shadow-none"
                 : "hidden md:flex"
-            } min-h-0 w-full min-w-0 shrink flex-col gap-3.5 border-line bg-sand-100 p-[18px] pb-4 md:w-[352px] md:shrink-0 md:border-l print:hidden`}
+            } min-h-0 w-full min-w-0 shrink flex-col gap-3.5 border-line bg-sand-100 p-[18px] pb-4 md:w-[var(--tray-w)] md:shrink-0 md:border-l print:hidden`}
           >
             {/* The rail's chevron collapses the tray; the header stays clean. */}
             <div className="flex items-center gap-2.5">
@@ -303,6 +397,7 @@ export function Workspace({
               </Link>
             )}
           </aside>
+          </>
         )}
 
         <nav

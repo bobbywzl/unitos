@@ -13,11 +13,18 @@ export type IngestStep = { key: string; labelKey: TKey; detail?: string; status:
 // sends (see /api/documents); the first step is active from the moment the
 // request leaves, before any event arrives.
 const STEP_TEMPLATES: Record<
-  "pdf" | "url" | "video" | "youtube" | "media",
+  "pdf" | "url" | "video" | "youtube" | "media" | "drive",
   { key: string; labelKey: TKey }[]
 > = {
   pdf: [
     { key: "receive", labelKey: "panes.stepUploading" },
+    { key: "parse", labelKey: "panes.stepParsing" },
+    { key: "save", labelKey: "panes.stepSaving" },
+  ],
+  // Google Drive PDF, or a Google Doc/Sheet/Slide exported to PDF (SPEC.md
+  // §14): the server fetches the bytes instead of receiving an upload.
+  drive: [
+    { key: "fetch", labelKey: "panes.stepFetchingDrive" },
     { key: "parse", labelKey: "panes.stepParsing" },
     { key: "save", labelKey: "panes.stepSaving" },
   ],
@@ -44,7 +51,7 @@ const STEP_TEMPLATES: Record<
 };
 
 export function initialIngestSteps(
-  kind: "pdf" | "url" | "video" | "youtube" | "media",
+  kind: "pdf" | "url" | "video" | "youtube" | "media" | "drive",
 ): IngestStep[] {
   return STEP_TEMPLATES[kind].map((s, i) => ({
     ...s,
@@ -132,7 +139,17 @@ function DancingCat({ done }: { done: boolean }) {
 // Driven entirely by real backend stage events (see /api/documents), never a
 // simulated timer. The cat runs laps around the card border to ease the wait —
 // gait randomized per run, paused when done or when reduced motion is set.
-export function IngestProgress({ fileLabel, steps }: { fileLabel: string; steps: IngestStep[] }) {
+// Floats fixed at top center by default; inline renders it in flow (the
+// add-document dialog shows it inside its upload space).
+export function IngestProgress({
+  fileLabel,
+  steps,
+  inline = false,
+}: {
+  fileLabel: string;
+  steps: IngestStep[];
+  inline?: boolean;
+}) {
   const t = useT();
   const activeIndex = steps.findIndex((s) => s.status === "active");
   const doneCount = steps.filter((s) => s.status === "done").length;
@@ -148,7 +165,13 @@ export function IngestProgress({ fileLabel, steps }: { fileLabel: string; steps:
   }));
 
   return (
-    <div className="fixed top-24 left-1/2 z-50 w-[380px] max-w-[92vw] -translate-x-1/2 rounded-[24px] bg-card p-4 shadow-float">
+    <div
+      className={`${
+        inline
+          ? "relative w-[380px] max-w-full"
+          : "fixed top-24 left-1/2 z-50 w-[380px] max-w-[92vw] -translate-x-1/2"
+      } rounded-[24px] bg-card p-4 shadow-float`}
+    >
       <span
         aria-hidden
         className={`cat-runner${complete ? " cat-runner-done" : ""}`}

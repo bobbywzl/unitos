@@ -19,7 +19,7 @@ import {
   renderBlockLines,
   sectionSkeleton,
 } from "@/lib/derive/context";
-import { fetchFigureImage, figureContent, type FigureImage } from "@/lib/derive/figure";
+import { figureContent, figureVisual, type FigureImage } from "@/lib/derive/figure";
 import {
   distillOutputSchema,
   extractOutputSchema,
@@ -30,6 +30,7 @@ import {
   salienceOutputSchema,
 } from "@/lib/derive/json";
 import { callForJson, modelErrorMessage } from "@/lib/derive/json-call";
+import { cropPageRegion, pageBlockText, renderPdfPage } from "@/lib/handwritten/pages";
 import { currentLang, serverT } from "@/lib/i18n/server";
 import { promptTemplates } from "@/lib/prompts";
 import { corpusDistillPrompt } from "@/lib/prompts/distill";
@@ -100,12 +101,31 @@ const deriveSchema = z
         .optional(),
     })
     .optional(),
+  // EXPLAIN on a handwritten page (SPEC.md §16): Circle & ask. The PAGE block,
+  // the drawn region, and the reader's question when one was typed. The server
+  // renders the page and the circled part from the stored PDF.
+  page: z
+    .object({
+      blockId: z.string().min(1),
+      region: regionSchema,
+      question: z.string().min(1).max(500).optional(),
+    })
+    .optional(),
   })
   .refine((d) => d.documentId || (d.type === "DISTILL" && d.scope === "corpus"), {
     message: "documentId is required",
   })
   .refine((d) => d.scope !== "corpus" || d.type === "DISTILL", {
     message: "scope corpus is DISTILL only",
+  })
+  .refine((d) => !(d.video && d.page), {
+    message: "Provide video or page, not both",
+  })
+  .refine((d) => !(d.anchor && d.page), {
+    message: "Provide anchor or page, not both",
+  })
+  .refine((d) => !d.page || d.type === "EXPLAIN", {
+    message: "page is EXPLAIN only",
   });
 
 const ANCHOR_REQUIRED = new Set(["EXPLAIN", "SIMPLIFY", "EXTRACT"]);
@@ -133,8 +153,12 @@ export async function POST(req: Request) {
   if (!template) {
     return NextResponse.json({ error: t("api.typeNotBuilt", { type: data.type }) }, { status: 501 });
   }
-  // A video anchor stands in for a text anchor on EXPLAIN (SPEC.md §11).
-  if (ANCHOR_REQUIRED.has(data.type) && !data.anchor && !(data.type === "EXPLAIN" && data.video)) {
+  // A video or page anchor stands in for a text anchor on EXPLAIN (SPEC.md §11, §16).
+  if (
+    ANCHOR_REQUIRED.has(data.type) &&
+    !data.anchor &&
+    !(data.type === "EXPLAIN" && (data.video || data.page))
+  ) {
     return NextResponse.json({ error: t("api.typeRequiresAnchor", { type: data.type }) }, { status: 400 });
   }
   if (data.type === "FIND" && !data.query) {
@@ -451,24 +475,65 @@ export async function POST(req: Request) {
   // EXPLAIN on a figure block: the model deciphers the visual. An image figure
   // attaches its image bytes (fetched here — a failed fetch degrades to
   // caption and context, never fails the request); an SVG chart attaches its
-  // source; a video figure explains from caption and context only.
+  // source; a PDF figure attaches its rendered page; a video figure explains
+  // from caption and context only.
   let figureImage: FigureImage | null = null;
   if (data.type === "EXPLAIN" && data.anchor) {
     const anchoredBlock = await db.block.findUnique({
       where: { id: data.anchor.blockId },
-      select: { type: true, html: true, text: true },
+      select: { type: true, html: true, text: true, page: true },
     });
     const figure = figureContent(anchoredBlock);
-    if (figure) {
-      if (figure.imageUrl) figureImage = await fetchFigureImage(figure.imageUrl, document.sourceUrl);
+    if (figure && anchoredBlock) {
+      const visual = await figureVisual(figure, anchoredBlock, document.id, document.sourceUrl);
+      figureImage = visual?.image ?? null;
       ctx.figure = {
-        // An image figure whose image could not be fetched is a plain figure:
-        // the prompt must never claim an attachment that is not there.
-        kind: figure.kind === "image" && !figureImage ? "figure" : figure.kind,
+        // The prompt must never claim an attachment that is not there: a
+        // figure with an attached visual is an image figure; one without
+        // degrades to a plain figure (unless it is SVG or video).
+        kind: visual ? "image" : figure.kind === "image" ? "figure" : figure.kind,
         caption: figure.caption,
         svgSource: figure.svgSource,
+        page: visual?.page ?? false,
       };
     }
+  }
+
+  // EXPLAIN on a handwritten page (SPEC.md §16): Circle & ask. The server
+  // renders the page and the circled part from the stored PDF and attaches
+  // both — the page carries the context, the crop carries the circled spot.
+  let pageAnchor: { blockId: string; quotedText: string; region: unknown } | null = null;
+  const pageImages: Uint8Array[] = [];
+  if (data.type === "EXPLAIN" && data.page) {
+    const pageBlock = await db.block.findUnique({
+      where: { id: data.page.blockId },
+      select: { documentId: true, type: true, page: true },
+    });
+    if (
+      !pageBlock ||
+      pageBlock.documentId !== documentId ||
+      pageBlock.type !== "PAGE" ||
+      pageBlock.page === null
+    ) {
+      return NextResponse.json({ error: t("api.blockNotInDocument") }, { status: 404 });
+    }
+    if (!document.fileData) {
+      return NextResponse.json({ error: t("api.noStoredPdf") }, { status: 400 });
+    }
+    const pageImage = await renderPdfPage(new Uint8Array(document.fileData), pageBlock.page);
+    pageImages.push(pageImage);
+    const crop = await cropPageRegion(pageImage, data.page.region);
+    if (crop) pageImages.push(crop);
+    pageAnchor = {
+      blockId: data.page.blockId,
+      quotedText: pageBlockText(pageBlock.page),
+      region: data.page.region,
+    };
+    ctx.page = {
+      number: pageBlock.page,
+      hasCrop: crop !== null,
+      question: data.page.question,
+    };
   }
 
   // EXPLAIN answers confusions, so it also sees the corpus: related passages
@@ -481,11 +546,11 @@ export async function POST(req: Request) {
 
   // 2. Template by type. The document is the cached prefix, byte-identical for every
   // derivation on this document (SPEC.md §2).
-  const attachedImage = figureImage
-    ? { bytes: figureImage.bytes, mediaType: figureImage.mediaType }
+  const attachedImages: { bytes: Uint8Array; mediaType: string }[] = figureImage
+    ? [{ bytes: figureImage.bytes, mediaType: figureImage.mediaType }]
     : frameImage
-      ? { bytes: frameImage, mediaType: "image/jpeg" }
-      : null;
+      ? [{ bytes: frameImage, mediaType: "image/jpeg" }]
+      : pageImages.map((bytes) => ({ bytes, mediaType: "image/png" }));
   const messages: ModelMessage[] = [
     {
       role: "system",
@@ -501,12 +566,16 @@ export async function POST(req: Request) {
           },
         ]
       : []),
-    attachedImage
+    attachedImages.length > 0
       ? {
           role: "user",
           content: [
             { type: "text", text: template(ctx) },
-            { type: "image", image: attachedImage.bytes, mediaType: attachedImage.mediaType },
+            ...attachedImages.map((i) => ({
+              type: "image" as const,
+              image: i.bytes,
+              mediaType: i.mediaType,
+            })),
           ],
         }
       : { role: "user", content: template(ctx) },
@@ -602,6 +671,43 @@ export async function POST(req: Request) {
               await bumpNotebook(data.notebookId);
               controller.enqueue(encoder.encode(`${STREAM_NOTE_TOKEN}${note.id}`));
             }
+          } catch (err) {
+            console.error("[derive] annotation save failed:", err);
+            controller.enqueue(
+              encoder.encode(`${STREAM_ERROR_TOKEN}${t("api.annotationNotSaved")}`),
+            );
+          }
+        }
+        // A page EXPLAIN persists with its page anchor, so the circled spot
+        // stays marked on the page (SPEC.md §16).
+        if (data.type === "EXPLAIN" && data.page && pageAnchor && text.trim()) {
+          try {
+            const section = await annotationsSection(data.notebookId);
+            const count = await db.note.count({ where: { sectionId: section.id } });
+            const note = await db.note.create({
+              data: {
+                sectionId: section.id,
+                content: text,
+                status: "ACCEPTED",
+                derivationType: "EXPLAIN",
+                createdById: user.id,
+                order: count,
+                sources: {
+                  create: {
+                    documentId: documentId,
+                    blockId: pageAnchor.blockId,
+                    startOffset: 0,
+                    endOffset: 0,
+                    quotedText: pageAnchor.quotedText,
+                    prefix: "",
+                    suffix: "",
+                    region: pageAnchor.region as object,
+                  },
+                },
+              },
+            });
+            await bumpNotebook(data.notebookId);
+            controller.enqueue(encoder.encode(`${STREAM_NOTE_TOKEN}${note.id}`));
           } catch (err) {
             console.error("[derive] annotation save failed:", err);
             controller.enqueue(

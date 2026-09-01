@@ -243,7 +243,11 @@ model Source {
   // the video file never changes.
   startTime   Float?
   endTime     Float?
-  region      Json? // drawn shape in percent coordinates: {kind: "ellipse", cx, cy, rx, ry}
+  // Drawn shape in percent coordinates: {kind: "path", points} or
+  // {kind: "ellipse", cx, cy, rx, ry}. On a video anchor it marks a spot on
+  // the frame; on a PAGE block it is a page anchor (SPEC.md §16) — offsets
+  // 0/0, the text ladder skipped, orphaned only if the PAGE block is gone.
+  region      Json?
 }
 
 model Document {
@@ -254,6 +258,15 @@ model Document {
   sourceUrl     String?
   fileHash      String?            @unique // dedupe re-uploads
   fileData      Bytes? // original PDF bytes, kept for forced re-parse (SPEC.md §8 Phase 3)
+  // Handwritten document (SPEC.md §16): the PDF is rough handwritten notes or
+  // drawings. PAGE blocks render its pages; conversion writes text blocks
+  // after them. Import PDF sets it by AI judgment; the document menu flips it.
+  handwritten         Boolean          @default(false)
+  conversionStatus    ConversionStatus @default(NONE)
+  conversionError     String? // FAILED only: the reason, shown under the pages
+  // When the running conversion started. A PENDING older than 10 minutes is
+  // a dead run and may start again.
+  conversionStartedAt DateTime?
   blocks        Block[]
   notebooks     NotebookDocument[]
   sources       Source[]
@@ -351,7 +364,9 @@ model Block {
   startTime    Float?
   endTime      Float?
   links        Json? // link spans: [{start, end, quotedText, targetOrder?, href?}] — Contents entries and PDF hyperlinks
-  page         Int? // FIGURE blocks from a PDF: 1-based page, for the figure image route
+  // 1-based PDF page. FIGURE blocks: for the figure image route. PAGE blocks:
+  // the page the block renders. Converted text blocks: the page it came from.
+  page         Int?
   // Semantic search vector (text-embedding-3-small, 1024 dims). Null = not
   // embedded yet; the search route backfills lazily, a text edit clears it.
   embedding    Unsupported("vector(1024)")?
@@ -368,6 +383,14 @@ enum BlockType {
   SEPARATOR
   VIDEO // the video document's player block, exactly one per video document
   TRANSCRIPT // one transcript line, timed with startTime/endTime
+  PAGE // one PDF page of a handwritten document; page holds the 1-based number
+}
+
+enum ConversionStatus {
+  NONE
+  PENDING
+  READY
+  FAILED
 }
 
 // The video of a video document (SPEC.md §11). kind UPLOAD: bytes in

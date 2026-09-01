@@ -13,6 +13,29 @@ function linkifyBlockTags(text: string): string {
   return text.replace(BLOCK_TAG, "[¶](#dissect-block-$1)");
 }
 
+// Note style tags: <u> underlines, <clay>/<sage>/<gold>/<plum> color the text
+// (the note editor writes them). react-markdown drops raw HTML, so they
+// become links the a component override styles. Innermost tags convert first,
+// so markdown inside a tag still renders; a tag spanning lines stays raw.
+const STYLE_TAG = /<(u|clay|sage|gold|plum)>((?:(?!<\/?(?:u|clay|sage|gold|plum)>)[^\n])+?)<\/\1>/g;
+const STYLE_HREF = "#dissect-style-";
+const STYLE_CLASS: Record<string, string> = {
+  clay: "text-color-clay",
+  sage: "text-color-sage",
+  gold: "text-color-gold",
+  plum: "text-color-plum",
+};
+
+function linkifyStyleTags(text: string): string {
+  let out = text;
+  for (let pass = 0; pass < 3; pass++) {
+    const next = out.replace(STYLE_TAG, (_, tag: string, inner: string) => `[${inner}](${STYLE_HREF}${tag})`);
+    if (next === out) break;
+    out = next;
+  }
+  return out;
+}
+
 // Markdown as one plain line, for small previews (Visual cards, overlay
 // captions) where rendered markdown has no room.
 export function markdownPreview(text: string): string {
@@ -20,6 +43,8 @@ export function markdownPreview(text: string): string {
     .replace(/```[\s\S]*?```/g, " ")
     .replace(BLOCK_TAG, "")
     .replace(/^#{1,6}\s+/gm, "")
+    .replace(/^>\s?/gm, "")
+    .replace(/<\/?(?:u|clay|sage|gold|plum)>/g, "")
     .replace(/\*\*([^*]+)\*\*/g, "$1")
     .replace(/\*([^*]+)\*/g, "$1")
     .replace(/`([^`]+)`/g, "$1")
@@ -35,6 +60,11 @@ export function Markdown({ children }: { children: string }) {
         remarkPlugins={[remarkGfm]}
         components={{
           a: ({ href, children: linkChildren, ...props }) => {
+            const styleTag = href?.startsWith(STYLE_HREF) ? href.slice(STYLE_HREF.length) : null;
+            if (styleTag === "u") return <u>{linkChildren}</u>;
+            if (styleTag && STYLE_CLASS[styleTag]) {
+              return <span className={STYLE_CLASS[styleTag]}>{linkChildren}</span>;
+            }
             const blockId = href?.startsWith("#dissect-block-")
               ? href.slice("#dissect-block-".length)
               : null;
@@ -62,7 +92,7 @@ export function Markdown({ children }: { children: string }) {
           },
         }}
       >
-        {linkifyBlockTags(children)}
+        {linkifyStyleTags(linkifyBlockTags(children))}
       </ReactMarkdown>
     </div>
   );

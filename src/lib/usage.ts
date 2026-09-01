@@ -34,6 +34,8 @@ const MODEL_PRICING: Record<string, Price> = {
   // Groq: per-hour transcription — its caller passes costUsd directly.
   "whisper-large-v3-turbo": price(0, 0),
   "gpt-4o-mini-tts": price(0.6, 12),
+  // Microsoft Edge read-aloud voice: free, no key.
+  "edge-tts": price(0, 0),
   "text-embedding-3-small": price(0.02, 0),
 };
 
@@ -96,6 +98,7 @@ function providerOf(model: string): string {
   if (model.startsWith("claude")) return "anthropic";
   if (model.startsWith("gemini")) return "google";
   if (model.startsWith("whisper-large") || model.startsWith("distil-whisper")) return "groq";
+  if (model === "edge-tts") return "microsoft";
   return "openai";
 }
 

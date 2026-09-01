@@ -107,7 +107,16 @@ const en = {
   glossaryNeedsKey: "ANTHROPIC_API_KEY is not set. Glossary extraction needs it.",
   glossaryFailed: "Glossary extraction failed",
   videoNoReparse: "Video documents do not re-parse",
+  shapeSwitchNeedsPdf: "This document has no stored PDF to switch from",
+  noStoredPdf: "This document has no stored PDF",
   reparseFailed: "Re-parse failed",
+
+  // Upload assistant (SPEC.md §15)
+  reviewFailed: "Could not review this URL",
+  instructionsVideo:
+    "A video or audio add stores the file and transcribes it. Upload instructions cannot steer it.",
+  instructionsUnchecked:
+    "The instructions could not be checked. The content adds without them.",
 
   // Uploads
   emptyChunk: "Empty chunk",
@@ -118,6 +127,14 @@ const en = {
   videoCopyIncomplete: "Video bytes did not copy completely. Try again.",
   videoSaveFailed: "Could not save this video",
 
+  // Google Drive upload (SPEC.md §14)
+  driveTokenMissing: "Missing Google Drive authorization",
+  driveTokenExpired: "Your Google Drive access expired. Try again.",
+  driveUnsupportedType:
+    "This Drive file type isn't supported. Pick a PDF, Google Doc, Sheet, Slide, video, or audio file.",
+  driveExportTooLarge: "This Google Doc, Sheet, or Slide is larger than Drive's 10 MB export limit",
+  driveFetchFailed: "This Drive file did not load. It may be private, removed, or no longer accessible.",
+
   // Video playback and frames
   videoPlaysFromYouTube: "This video plays from YouTube",
   noStoryboard: "This video has no storyboard",
@@ -125,7 +142,7 @@ const en = {
   frameFetchFailed: "Frame fetch failed ({status})",
 
   // Voice
-  speechNeedsKey: "OPENAI_API_KEY is not set",
+  speechNeedsKey: "Voice failed; OPENAI_API_KEY is not set",
   voiceFailedRetry: "Voice failed. Try again.",
   voiceFailedStatus: "Voice failed ({status})",
 
@@ -255,7 +272,13 @@ const zh: Record<keyof typeof en, string> = {
   glossaryNeedsKey: "未设置 ANTHROPIC_API_KEY。术语表生成需要它。",
   glossaryFailed: "术语表生成失败",
   videoNoReparse: "视频文档不能重新解析",
+  shapeSwitchNeedsPdf: "此文档没有存储的 PDF，无法切换",
+  noStoredPdf: "此文档没有存储的 PDF",
   reparseFailed: "重新解析失败",
+
+  reviewFailed: "无法审阅此 URL",
+  instructionsVideo: "添加视频或音频时只存储文件并生成逐字稿。上传要求无法改变这一过程。",
+  instructionsUnchecked: "上传要求未能检查。内容将不按要求添加。",
 
   emptyChunk: "分块为空",
   chunkTooLarge: "分块超过 4 MB",
@@ -265,12 +288,18 @@ const zh: Record<keyof typeof en, string> = {
   videoCopyIncomplete: "视频数据未完整复制。请重试。",
   videoSaveFailed: "无法保存此视频",
 
+  driveTokenMissing: "缺少 Google Drive 授权",
+  driveTokenExpired: "Google Drive 访问已过期。请重试。",
+  driveUnsupportedType: "此 Drive 文件类型暂不支持。请选择 PDF、Google 文档、表格、幻灯片、视频或音频文件。",
+  driveExportTooLarge: "此 Google 文档/表格/幻灯片超过 Drive 10 MB 的导出限制",
+  driveFetchFailed: "这个 Drive 文件无法加载。文件可能已设为私密、被删除，或已无法访问。",
+
   videoPlaysFromYouTube: "此视频从 YouTube 播放",
   noStoryboard: "此视频没有预览画面",
   frameUnavailable: "画面不可用",
   frameFetchFailed: "画面获取失败（{status}）",
 
-  speechNeedsKey: "未设置 OPENAI_API_KEY",
+  speechNeedsKey: "朗读失败，且未设置 OPENAI_API_KEY",
   voiceFailedRetry: "朗读失败。请重试。",
   voiceFailedStatus: "朗读失败（{status}）",
 

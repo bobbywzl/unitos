@@ -99,7 +99,11 @@ async function toDocx(
       }),
     );
     for (const note of section.notes) {
-      const noteLines = note.content.split("\n").filter((l) => l.trim().length > 0);
+      // docx has no markdown: drop quote markers and note style tags.
+      const noteLines = note.content
+        .split("\n")
+        .map((l) => l.replace(/^>\s?/, "").replace(/<\/?(?:u|clay|sage|gold|plum)>/g, ""))
+        .filter((l) => l.trim().length > 0);
       noteLines.forEach((line, i) => {
         const runs: (TextRun | FootnoteReferenceRun)[] = [new TextRun(line)];
         if (i === noteLines.length - 1) {

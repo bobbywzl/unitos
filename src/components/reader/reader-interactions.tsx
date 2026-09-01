@@ -27,14 +27,17 @@ import { isImeKey, useImeGuard } from "@/lib/ime";
 import { parseYouTubeId, youtubeWatchUrl } from "@/lib/video/youtube";
 import type { TFunc, TKey } from "@/lib/i18n/dictionaries";
 import { useLang, useT } from "@/components/lang-provider";
-import { LinkIcon, MicIcon, SparkleIcon, SpinnerIcon, StopIcon, VolumeIcon } from "@/components/icons";
+import { LinkIcon, MicIcon, NotesIcon, SearchIcon, SparkleIcon, SpinnerIcon, StopIcon, VolumeIcon } from "@/components/icons";
 import { Markdown } from "@/components/markdown";
 import { LoadingDots, ThinkingIndicator } from "@/components/thinking";
 import type { BlockData, Highlight } from "@/components/reader/block-view";
 import { Bibliography } from "@/components/reader/bibliography";
+import type { ConversionInfo } from "@/components/reader/conversion-strip";
+import type { PageMark } from "@/components/reader/page-block";
 import { useCollab } from "@/components/collab/collab-context";
 import { AuthorChip } from "@/components/collab/person-badge";
 import { DistillPage } from "@/components/reader/distill-page";
+import { ProjectSearch } from "@/components/reader/project-search";
 import { Reader } from "@/components/reader/reader";
 
 type Anchor = Omit<SourceInput, "documentId">;
@@ -347,6 +350,19 @@ function dockSideCard(
   return { left, width };
 }
 
+// Narrow reader: the gutter beside the article is under this, so a docked
+// side card would cover the text (cards are 260-320 wide). Tool cards dock
+// below the highlighted text instead, and stored AI annotations rest as tool
+// icons next to their text (block-view.tsx) rather than open cards.
+const NARROW_GUTTER = 140;
+
+/** Horizontal dock for a narrow reader: over the article, at article width. */
+function dockBelowCard(articleLeft: number, articleRight: number, cw: number) {
+  const width = Math.min(Math.max(280, articleRight - articleLeft), cw - 16);
+  const left = Math.max(8, Math.min(articleLeft, cw - width - 8));
+  return { left, width };
+}
+
 // Client layer over the reader: selection capture, popover, EXPLAIN bubble,
 // SIMPLIFY bubble, SALIENCE overlay toggle, DISTILL page, the article menu,
 // jump-to-anchor.
@@ -369,6 +385,8 @@ export function ReaderInteractions({
   contentsLinksByBlock,
   citationsByBlock,
   references,
+  pageMarksByBlock,
+  conversion,
   font,
 }: {
   documentId: string;
@@ -387,6 +405,7 @@ export function ReaderInteractions({
       annotation: boolean;
       comment: boolean;
       figureLabel: string | null;
+      noteId: string;
     }[]
   >;
   // Highlights and comments by source id: their marks open on-page edit
@@ -421,7 +440,19 @@ export function ReaderInteractions({
   editedByBlock: Record<string, { start: number; end: number }[]>;
   stylesByBlock: Record<
     string,
-    { start: number; end: number; style: "bold" | "italic" | "underline" | "code" }[]
+    {
+      start: number;
+      end: number;
+      style:
+        | "bold"
+        | "italic"
+        | "underline"
+        | "code"
+        | "color-clay"
+        | "color-sage"
+        | "color-gold"
+        | "color-plum";
+    }[]
   >;
   // Contents links (targetBlockId: click scrolls the reader to that block) and
   // PDF hyperlinks (href: a plain hyperlink out of the app).
@@ -431,6 +462,11 @@ export function ReaderInteractions({
   >;
   citationsByBlock: Record<string, { start: number; end: number; referenceId: string }[]>;
   references: DocumentReference[];
+  // Handwritten document (SPEC.md §16): stored marks per PAGE block, and the
+  // conversion status for the strip under the pages. conversion null = not a
+  // handwritten document.
+  pageMarksByBlock: Record<string, PageMark[]>;
+  conversion: ConversionInfo | null;
   font: string | null;
 }) {
   const router = useRouter();
@@ -493,9 +529,10 @@ export function ReaderInteractions({
     null,
   );
   // Voice: the bubble under the toolbar reads the highlighted text aloud.
-  // OpenAI TTS through /api/speech; without the key, the browser voice reads
-  // instead — Chinese and English alike. The reading outlives the toolbar; a
-  // floating Stop reading control shows while it plays without a selection.
+  // The Edge voice through /api/speech — free neural voices, Chinese and
+  // English alike; when the route fails, the most natural browser voice reads
+  // instead. The reading outlives the toolbar; a floating Stop reading
+  // control shows while it plays without a selection.
   const [voice, setVoice] = useState<"idle" | "loading" | "playing">("idle");
   const voiceAudioRef = useRef<HTMLAudioElement | null>(null);
   const voiceRunRef = useRef(0);
@@ -642,13 +679,6 @@ export function ReaderInteractions({
   const [aiListening, setAiListening] = useState(false);
   const [aiPlan, setAiPlan] = useState<AssistantPlan | null>(null);
   const [planChecked, setPlanChecked] = useState<Set<number>>(new Set());
-  // Lazy init: the toggle only ever renders after user interaction, so the
-  // SSR pass never shows it and the localStorage read cannot mismatch.
-  const [autoRun, setAutoRun] = useState(
-    () => typeof window !== "undefined" && localStorage.getItem("unitos-assistant-auto") === "1",
-  );
-  const autoRunRef = useRef(false);
-  autoRunRef.current = autoRun;
   const aiCommandRef = useRef("");
   aiCommandRef.current = aiCommand;
   const recognitionRef = useRef<SpeechRec | null>(null);
@@ -663,6 +693,10 @@ export function ReaderInteractions({
   const [annotationCard, setAnnotationCard] = useState<AnnotationCard | null>(null);
   const anchorHighlightsRef = useRef(anchorHighlights);
   anchorHighlightsRef.current = anchorHighlights;
+  // Narrow reader (see NARROW_GUTTER): stored AI annotations rest as tool
+  // icons next to their text, and open cards dock below the highlight.
+  const [narrow, setNarrow] = useState(false);
+  const narrowRef = useRef(false);
   const [assistantChat, setAssistantChat] = useState<AssistantChat | null>(null);
   // A stored comment, opened from its icon beside the text — editable in place.
   const [commentCard, setCommentCard] = useState<{
@@ -702,6 +736,14 @@ export function ReaderInteractions({
     preferredTop: number,
   ) {
     const { rects, articleLeft, articleRight, cw } = measureSideCards(containerRef.current, kind);
+    // Narrow reader: no room beside the article — dock below the highlight.
+    if (narrowRef.current) {
+      return {
+        ...dockBelowCard(articleLeft, articleRight, cw),
+        top: Math.max(8, preferredTop) + 34,
+        side: "right" as const,
+      };
+    }
     const articleMid = (articleLeft + articleRight) / 2;
     let top = Math.max(8, preferredTop);
     let side: "right" | "left" = "right";
@@ -804,11 +846,6 @@ export function ReaderInteractions({
   // The fading hint that replaces the Edit button. Shows on document open until
   // the reader double-clicks into edit mode once.
   const [editHint, setEditHint] = useState(false);
-  function setAssistantMode(auto: boolean) {
-    setAutoRun(auto);
-    autoRunRef.current = auto;
-    localStorage.setItem("unitos-assistant-auto", auto ? "1" : "0");
-  }
 
   // Switching documents client-side keeps this component mounted. Every piece
   // of selection-scoped state references the old document's blocks — drop it,
@@ -867,6 +904,9 @@ export function ReaderInteractions({
     // A rendered equation's DOM text is not the stored TeX; offsets there would
     // anchor to the wrong characters. No selection tools on math blocks.
     if (startBlock.hasAttribute("data-math-block")) return null;
+    // A page's DOM text is its label and the Circle & ask card, not stored
+    // text. Page anchors are drawn regions (SPEC.md §16), never selections.
+    if (blocksRef.current.find((b) => b.id === blockId)?.type === "PAGE") return null;
 
     // Offsets over the block's anchorable text, never Range.toString(): inline
     // controls ([data-anchor-skip], e.g. extract chips) render text the stored
@@ -1081,7 +1121,13 @@ export function ReaderInteractions({
       const blockId = blockEl?.dataset.blockId;
       if (!blockId) return;
       const block = blocksRef.current.find((b) => b.id === blockId);
-      if (!block || block.type === "FIGURE" || block.type === "TABLE" || block.type === "SEPARATOR")
+      if (
+        !block ||
+        block.type === "FIGURE" ||
+        block.type === "TABLE" ||
+        block.type === "SEPARATOR" ||
+        block.type === "PAGE"
+      )
         return;
       // Video documents' blocks refuse edits outright.
       if (block.type === "VIDEO" || block.type === "TRANSCRIPT") {
@@ -1473,29 +1519,47 @@ export function ReaderInteractions({
      
   }, []);
 
-  // Side cards dock to the article's edge; the notes tray collapsing or the
-  // window resizing moves that edge. Re-dock every open card so they stay
-  // right next to the content body. Position popovers close instead — their
-  // coordinates are stale the moment the layout shifts.
+  // Side cards dock to the article's edge; the notes tray resizing or
+  // collapsing, or the window resizing, moves that edge. Re-dock every open
+  // card so they stay right next to the content body, and track whether the
+  // reader is now too narrow for side cards at all. On turning narrow, cards
+  // with a stored annotation collapse to their tool icons next to the text;
+  // a streaming or unsaved card stays open, re-docked below the highlight.
+  // Position popovers close instead — their coordinates are stale the moment
+  // the layout shifts.
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
+    const applyNarrow = () => {
+      const measured = measureSideCards(container);
+      const isNarrow = measured.cw - measured.articleRight < NARROW_GUTTER;
+      if (isNarrow !== narrowRef.current) {
+        narrowRef.current = isNarrow;
+        setNarrow(isNarrow);
+        if (isNarrow) {
+          setBubble((b) => (b && !b.streaming && b.noteId ? null : b));
+          setSimplifyCard((c) => (c && !c.streaming && c.noteId ? null : c));
+          setAssistantChat((c) => (c && !c.busy && c.noteId ? null : c));
+          setCommentCard((c) => (c && !c.busy && c.noteId && c.draft === c.saved ? null : c));
+        }
+      }
+      return measured;
+    };
+    applyNarrow();
     let lastWidth = container.clientWidth;
     const observer = new ResizeObserver(() => {
       const width = container.clientWidth;
       if (width === lastWidth) return;
       lastWidth = width;
-      const { articleLeft, articleRight, cw } = measureSideCards(container);
-      setBubble((b) => (b ? { ...b, ...dockSideCard(b.side, articleLeft, articleRight, cw) } : b));
-      setSimplifyCard((c) =>
-        c ? { ...c, ...dockSideCard(c.side, articleLeft, articleRight, cw) } : c,
-      );
-      setAssistantChat((c) =>
-        c ? { ...c, ...dockSideCard(c.side, articleLeft, articleRight, cw) } : c,
-      );
-      setCommentCard((c) =>
-        c ? { ...c, ...dockSideCard(c.side, articleLeft, articleRight, cw) } : c,
-      );
+      const { articleLeft, articleRight, cw } = applyNarrow();
+      const redock = (side: "right" | "left") =>
+        narrowRef.current
+          ? dockBelowCard(articleLeft, articleRight, cw)
+          : dockSideCard(side, articleLeft, articleRight, cw);
+      setBubble((b) => (b ? { ...b, ...redock(b.side) } : b));
+      setSimplifyCard((c) => (c ? { ...c, ...redock(c.side) } : c));
+      setAssistantChat((c) => (c ? { ...c, ...redock(c.side) } : c));
+      setCommentCard((c) => (c ? { ...c, ...redock(c.side) } : c));
       setAnnotationCard(null);
       setPopover(null);
       setSubmenu(null);
@@ -1520,6 +1584,9 @@ export function ReaderInteractions({
   // Below xl the article menu collapses to a pill; the card would sit over
   // the article text there. The pill toggles it; an action closes it.
   const [menuExpanded, setMenuExpanded] = useState(false);
+  // The project search bubble, opened from the search icon beside the
+  // assistant button. Opening one closes the other.
+  const [searchOpen, setSearchOpen] = useState(false);
   // The article menu tracks the scroll position: visible only at the top.
   useEffect(() => {
     const container = containerRef.current;
@@ -1788,9 +1855,15 @@ export function ReaderInteractions({
     setBusy(true);
     try {
       await flushLiveBlock(popover.anchor.blockId);
+      // The highlighted text lands as a quote: blockquote lines render as the
+      // boxed quotation on the note card. Edits and replies go underneath.
+      const quote = popover.anchor.quotedText
+        .split("\n")
+        .map((line) => `> ${line}`)
+        .join("\n");
       await api("/api/notes", "POST", {
         sectionId,
-        content: popover.anchor.quotedText,
+        content: quote,
         source: { documentId, ...popover.anchor },
       });
       markFreshSpan(popover.anchor.blockId, popover.anchor.startOffset, popover.anchor.endOffset);
@@ -2275,8 +2348,27 @@ export function ReaderInteractions({
     setVoice("idle");
   }
 
-  // The browser voice reads when the server has no OPENAI_API_KEY. The
-  // utterance language follows the text: Chinese characters → zh-CN, else en-US.
+  // The most natural voice the browser has for the language. The default is
+  // often robotic; neural voices ("Natural", Edge) rank first, then Google's,
+  // then premium local ones, then any voice matching the language.
+  function pickBrowserVoice(lang: string): SpeechSynthesisVoice | null {
+    const prefix = lang.split("-")[0];
+    const candidates = (window.speechSynthesis?.getVoices() ?? []).filter((v) =>
+      v.lang.replace("_", "-").toLowerCase().startsWith(prefix),
+    );
+    const score = (v: SpeechSynthesisVoice) => {
+      const name = v.name.toLowerCase();
+      if (name.includes("natural") || name.includes("online")) return 4;
+      if (name.includes("google")) return 3;
+      if (name.includes("premium") || name.includes("enhanced") || name.includes("siri")) return 2;
+      if (v.lang.replace("_", "-").toLowerCase() === lang.toLowerCase()) return 1;
+      return 0;
+    };
+    return candidates.sort((a, b) => score(b) - score(a))[0] ?? null;
+  }
+
+  // The browser voice reads when /api/speech fails. The utterance language
+  // follows the text: Chinese characters → zh-CN, else en-US.
   function browserSpeak(text: string, run: number) {
     const synth = window.speechSynthesis;
     if (!synth) {
@@ -2285,7 +2377,10 @@ export function ReaderInteractions({
       return;
     }
     const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = /[一-鿿]/.test(text) ? "zh-CN" : "en-US";
+    const lang = /[一-鿿]/.test(text) ? "zh-CN" : "en-US";
+    utterance.lang = lang;
+    const voice = pickBrowserVoice(lang);
+    if (voice) utterance.voice = voice;
     utterance.onend = () => {
       if (voiceRunRef.current === run) setVoice("idle");
     };
@@ -2307,6 +2402,8 @@ export function ReaderInteractions({
     if (!text.trim()) return;
     const run = ++voiceRunRef.current;
     setVoice("loading");
+    // Warm the voice list: if the route fails, browserSpeak needs it loaded.
+    window.speechSynthesis?.getVoices();
     try {
       const res = await fetch("/api/speech", {
         method: "POST",
@@ -2566,14 +2663,10 @@ export function ReaderInteractions({
     if (plan.reply) parts.push(plan.reply);
     if (plan.actions.length > 0) {
       const n = plan.actions.length;
-      if (autoRunRef.current) {
-        await executePlan(plan.actions, plan.warnings);
-        parts.push(t("reader.appliedActions", { n, s: plural(n) }));
-      } else {
-        setAiPlan(plan);
-        setPlanChecked(new Set(plan.actions.map((_, i) => i)));
-        parts.push(t("reader.proposedActions", { n, s: plural(n) }));
-      }
+      // Every plan waits for approval (SPEC.md §1: nothing applies unaccepted).
+      setAiPlan(plan);
+      setPlanChecked(new Set(plan.actions.map((_, i) => i)));
+      parts.push(t("reader.proposedActions", { n, s: plural(n) }));
     }
     if (parts.length === 0) parts.push(plan.warnings[0] ?? t("reader.noActions"));
     // The anchored conversation persisted server-side; refresh paints its mark.
@@ -2677,14 +2770,14 @@ export function ReaderInteractions({
               sectionId = created.id;
               sectionIdByTitle.set(title.toLowerCase(), created.id);
             }
-            // Assistant notes carry their authorship. In Auto mode nobody
-            // approved this note, so it lands pending for triage (SPEC.md §1).
+            // Assistant notes carry their authorship. The plan was approved,
+            // so the note lands accepted (SPEC.md §1).
             await api("/api/notes", "POST", {
               sectionId,
               content: action.content,
               source: action.source,
               origin: "assistant",
-              pending: autoRunRef.current,
+              pending: false,
             });
             break;
           }
@@ -2760,9 +2853,6 @@ export function ReaderInteractions({
     rec.onend = () => {
       setAiListening(false);
       recognitionRef.current = null;
-      if (autoRunRef.current && aiCommandRef.current.trim()) {
-        void runAssistant(aiCommandRef.current);
-      }
     };
     rec.onerror = () => {
       setAiListening(false);
@@ -2804,7 +2894,14 @@ export function ReaderInteractions({
     blockId: string,
     start: number,
     end: number,
-    style: "bold" | "italic" | "underline",
+    style:
+      | "bold"
+      | "italic"
+      | "underline"
+      | "color-clay"
+      | "color-sage"
+      | "color-gold"
+      | "color-plum",
   ) {
     try {
       await api(`/api/blocks/${blockId}/style`, "POST", {
@@ -2870,7 +2967,14 @@ export function ReaderInteractions({
   // Merge anchor, extraction, term, and link layers per block.
   const highlightsByBlock: Record<string, Highlight[]> = {};
   for (const [blockId, list] of Object.entries(anchorHighlights)) {
-    highlightsByBlock[blockId] = list.map((h) => ({ ...h, kind: "anchor" as const }));
+    highlightsByBlock[blockId] = list.map((h) => {
+      // Narrow reader: a stored AI annotation rests as its tool icon next to
+      // the highlighted text; the icon opens the card. Comments keep their
+      // always-on icon.
+      const stored = narrow ? annotationBubbles[h.sourceId] : undefined;
+      const tool = stored && stored.kind !== "comment" ? stored.kind : undefined;
+      return { ...h, kind: "anchor" as const, tool };
+    });
   }
   for (const [blockId, list] of Object.entries(localAnchors)) {
     const existing = highlightsByBlock[blockId] ?? [];
@@ -3103,23 +3207,46 @@ export function ReaderInteractions({
     >
       {/* The article menu floats open at the top of the page: frequent asks
           go to the assistant at document scope; Distill opens the distilled
-          page. It hides once the reader scrolls and returns at the top. */}
+          page; the search icon beside the assistant button expands the
+          project search bubble. It hides once the reader scrolls and returns
+          at the top. The strip spans the pane so the bubble can size to it;
+          only the controls take pointer events. */}
       <div
         inert={!atTop}
-        className={`absolute top-4 left-4 z-10 transition duration-200 print:hidden ${
+        className={`pointer-events-none absolute inset-x-4 top-4 z-30 transition duration-200 print:hidden ${
           atTop ? "opacity-100" : "-translate-y-2 opacity-0"
         }`}
       >
-        <button
-          onClick={() => setMenuExpanded((v) => !v)}
-          aria-expanded={menuExpanded}
-          className="mb-1.5 flex items-center gap-1.5 rounded-full bg-card px-3 py-2 text-[12px] font-semibold text-clay-800 shadow-float"
-        >
-          <SparkleIcon size={13} />
-          {t("reader.assistant")}
-        </button>
+        <div className="mb-1.5 flex w-max gap-1.5">
+          <button
+            onClick={() => {
+              setMenuExpanded((v) => !v);
+              setSearchOpen(false);
+            }}
+            aria-expanded={menuExpanded}
+            className="pointer-events-auto flex items-center gap-1.5 rounded-full bg-card px-3 py-2 text-[12px] font-semibold text-clay-800 shadow-float"
+          >
+            <SparkleIcon size={13} />
+            {t("reader.assistant")}
+          </button>
+          <button
+            data-project-search
+            onClick={() => {
+              setSearchOpen((v) => !v);
+              setMenuExpanded(false);
+            }}
+            aria-label={t("panes.searchProject")}
+            aria-expanded={searchOpen}
+            title={t("panes.searchProjectTitle")}
+            className={`pointer-events-auto flex w-[34px] items-center justify-center rounded-full bg-card shadow-float ${
+              searchOpen ? "text-clay-800" : "text-sand-600 hover:text-clay-800"
+            }`}
+          >
+            <SearchIcon size={15} />
+          </button>
+        </div>
         <div
-          className={`${menuExpanded ? "flex" : "hidden"} w-56 flex-col overflow-hidden rounded-2xl bg-card py-1.5 shadow-float`}
+          className={`${menuExpanded ? "flex" : "hidden"} pointer-events-auto w-56 flex-col overflow-hidden rounded-2xl bg-card py-1.5 shadow-float`}
         >
           {canEdit && (
             <>
@@ -3163,6 +3290,11 @@ export function ReaderInteractions({
             {allDistillations.length > 0 ? ` (${allDistillations.length})` : ""}
           </button>
         </div>
+        <ProjectSearch
+          notebookId={notebookId}
+          open={searchOpen}
+          onClose={() => setSearchOpen(false)}
+        />
       </div>
 
       <div className="sticky top-4 z-10 float-right mr-4 flex items-center gap-2 print:hidden">
@@ -3237,6 +3369,11 @@ export function ReaderInteractions({
         font={font}
         stylesByBlock={stylesByBlock}
         editedByBlock={editedByBlock}
+        pages={
+          conversion
+            ? { notebookId, canEdit, marksByBlock: pageMarksByBlock, conversion }
+            : null
+        }
         onSaveText={saveBlockEdit}
         onFormatBlock={formatBlock}
         onToggleStyle={toggleStyleSpan}
@@ -3472,23 +3609,6 @@ export function ReaderInteractions({
                 >
                   <MicIcon size={13} />
                 </button>
-                <div
-                  className="flex overflow-hidden rounded-full border border-line text-[10px] font-semibold"
-                  title={t("reader.askAutoTitle")}
-                >
-                  <button
-                    onClick={() => setAssistantMode(false)}
-                    className={autoRun ? "px-2 py-0.5 text-sand-600" : "bg-ink px-2 py-0.5 text-paper"}
-                  >
-                    {t("reader.ask")}
-                  </button>
-                  <button
-                    onClick={() => setAssistantMode(true)}
-                    className={autoRun ? "bg-ink px-2 py-0.5 text-paper" : "px-2 py-0.5 text-sand-600"}
-                  >
-                    {t("reader.auto")}
-                  </button>
-                </div>
                 <button
                   disabled={aiBusy || !aiCommand.trim()}
                   onClick={() => void runAssistant()}
@@ -3546,32 +3666,6 @@ export function ReaderInteractions({
             </button>
           )}
 
-          <div className="flex items-center gap-1.5 px-2.5 py-1">
-            {(["clay", "sage", "gold", "plum"] as const).map((color) => (
-              <button
-                key={color}
-                disabled={busy}
-                onClick={() => void annotate({ color, comment: commentDraft.trim() || undefined })}
-                aria-label={t("reader.highlightIn", { color: t(HUE_KEY[color]) })}
-                title={t(
-                  commentDraft.trim() ? "reader.highlightInWithNote" : "reader.highlightIn",
-                  { color: t(HUE_KEY[color]) },
-                )}
-                className="size-[18px] rounded-full transition-transform hover:scale-110 disabled:opacity-40"
-                style={{
-                  background:
-                    color === "clay"
-                      ? "var(--clay-400)"
-                      : color === "sage"
-                        ? "var(--sage-500)"
-                        : color === "gold"
-                          ? "#d9a54a"
-                          : "#a78bfa",
-                }}
-              />
-            ))}
-          </div>
-
           <button
             onClick={() => setSubmenu(submenu === "comment" ? null : "comment")}
             aria-expanded={submenu === "comment"}
@@ -3621,34 +3715,6 @@ export function ReaderInteractions({
             </form>
           )}
 
-          {sectionChoices.length > 0 && (
-            <button
-              onClick={() => setSubmenu(submenu === "add" ? null : "add")}
-              aria-expanded={submenu === "add"}
-              className={`flex w-full items-center rounded-full px-2.5 py-[5px] text-left text-[12px] ${
-                submenu === "add"
-                  ? "bg-clay-100 text-clay-800"
-                  : "text-sand-800 hover:bg-clay-100 hover:text-clay-800"
-              }`}
-            >
-              {t("reader.addTo")}
-            </button>
-          )}
-          {submenu === "add" && (
-            <div className="flex max-h-44 flex-col overflow-y-auto">
-              {sectionChoices.map((choice) => (
-                <button
-                  key={choice.id}
-                  disabled={busy}
-                  onClick={() => void addToSection(choice.id)}
-                  className="truncate rounded-full px-2.5 py-[5px] text-left text-[12px] text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40"
-                >
-                  {choice.label}
-                </button>
-              ))}
-            </div>
-          )}
-
           <button
             onClick={beginLink}
             title={t("reader.linkTitle")}
@@ -3656,6 +3722,68 @@ export function ReaderInteractions({
           >
             {t("reader.linkAcrossTexts")}
           </button>
+
+          {/* Highlight: a separate bubble right above the toolbox holds the
+              color dots. Near the top of the page it drops below instead,
+              beside the voice bubble, so it never lands out of reach. */}
+          <div
+            className={`absolute flex items-center gap-2 rounded-full bg-card px-3 py-2 shadow-float ${
+              popover.yTop < 54 ? "top-full left-11 mt-2" : "bottom-full left-0 mb-2"
+            }`}
+          >
+            {HIGHLIGHT_HUES.map((color) => (
+              <button
+                key={color}
+                disabled={busy}
+                onClick={() => void annotate({ color, comment: commentDraft.trim() || undefined })}
+                aria-label={t("reader.highlightIn", { color: t(HUE_KEY[color]) })}
+                title={t(
+                  commentDraft.trim() ? "reader.highlightInWithNote" : "reader.highlightIn",
+                  { color: t(HUE_KEY[color]) },
+                )}
+                className="size-5 rounded-full transition-transform hover:scale-110 disabled:opacity-40"
+                style={{ background: HUE_DOT[color] }}
+              />
+            ))}
+          </div>
+
+          {/* Add to notes: a separate bubble above the toolbar. Press it,
+              pick a section, and the highlighted text lands there as a quote.
+              Right-anchored: the toolbar's right edge is always inside the
+              pane, so the wider bubble never clips there. It sits one slot
+              higher than the highlight bubble; when the highlight bubble
+              drops below near the page top, it takes the near slot. */}
+          {sectionChoices.length > 0 && (
+            <div
+              className={`absolute right-0 bottom-full flex w-44 flex-col gap-0.5 rounded-2xl bg-card p-1.5 shadow-float ${
+                popover.yTop < 54 ? "mb-2" : "mb-[52px]"
+              }`}
+            >
+              <button
+                onClick={() => setSubmenu(submenu === "add" ? null : "add")}
+                aria-expanded={submenu === "add"}
+                title={t("reader.addToNotesTitle")}
+                className="flex w-full items-center gap-1.5 rounded-full bg-clay px-2.5 py-[5px] text-left text-[12px] font-semibold text-clay-fg hover:bg-clay-600"
+              >
+                <NotesIcon size={12} />
+                {t("reader.addToNotes")}
+              </button>
+              {submenu === "add" && (
+                <div className="flex max-h-44 flex-col overflow-y-auto">
+                  {sectionChoices.map((choice) => (
+                    <button
+                      key={choice.id}
+                      disabled={busy}
+                      onClick={() => void addToSection(choice.id)}
+                      className="truncate rounded-full px-2.5 py-[5px] text-left text-[12px] text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40"
+                    >
+                      {choice.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Voice: a separate bubble under the toolbar reads the highlighted
               text aloud. Press again to stop. */}
