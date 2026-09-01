@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { isImeKey } from "@/lib/ime";
 import type { NoteView, SourceChip } from "@/lib/types";
@@ -97,6 +98,7 @@ export function NoteCard({
   variant?: Variant;
 }) {
   const t = useT();
+  const router = useRouter();
   const { canEdit } = useCollab();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(note.content);
@@ -185,10 +187,27 @@ export function NoteCard({
     .filter(Boolean)
     .join(" ");
 
+  // Double-click the card to jump to the source: the reader opens on the
+  // document and flashes the quote — the link between note and quote works
+  // both ways. Clicks on controls and text selection inside fields stay theirs.
+  function jumpToSource(e: React.MouseEvent) {
+    if ((e.target as Element).closest("button, a, textarea, input, select")) return;
+    const source = note.sources.find((s) => !s.orphaned);
+    if (!source) return;
+    window.getSelection()?.removeAllRanges();
+    router.push(`/n/${actions.notebookId}?doc=${source.documentId}&src=${source.id}`);
+    // Already on that document with ?src set: the push changes nothing, so
+    // flash the mark directly.
+    window.dispatchEvent(
+      new CustomEvent("dissect:flash-source", { detail: { sourceId: source.id } }),
+    );
+  }
+
   return (
     <div
       ref={cardRef}
       data-note-id={note.id}
+      onDoubleClick={jumpToSource}
       className={surface}
       title={isCombineTarget ? t("outline.dropToMerge") : undefined}
     >

@@ -27,6 +27,7 @@ export type Highlight = {
   color?: string | null; // highlight hue ("clay" | "sage" | "gold" | "plum"), kind "anchor" only
   annotation?: boolean; // anchor belongs to an annotation; click focuses its card
   comment?: boolean; // comment annotation: a comment icon renders after the span
+  noteId?: string; // owning note; on a regular note's mark, click jumps to the note in the tray
   href?: string; // navigation target, kinds "link" and "weblink"
   linkTitle?: string; // the other end's document title, kind "link" only
   linkId?: string; // for arrival flashing via ?link=, kind "link" only
@@ -181,6 +182,9 @@ function markedText(text: string, highlights: Highlight[], t: TFunc) {
       );
     } else if (anchor || salience || simplify || extract) {
       const focusable = anchor?.annotation && anchor.sourceId;
+      // A regular note's mark: click jumps to the note in the tray — the
+      // link between quote and note works both ways.
+      const noteMark = !anchor?.annotation && anchor?.noteId ? anchor.noteId : null;
       // A comment's icon sits right after its span; SVG only, so the block's
       // DOM text stays exactly the stored text (SPEC.md §5).
       const commentEnding = covering.find(
@@ -202,7 +206,7 @@ function markedText(text: string, highlights: Highlight[], t: TFunc) {
         <mark
           key={from}
           data-source-id={anchor?.sourceId ?? undefined}
-          title={focusable ? t("panes.viewAnnotation") : undefined}
+          title={focusable ? t("panes.viewAnnotation") : noteMark ? t("panes.viewNote") : undefined}
           onClick={
             focusable
               ? (e) => {
@@ -213,9 +217,16 @@ function markedText(text: string, highlights: Highlight[], t: TFunc) {
                     }),
                   );
                 }
-              : undefined
+              : noteMark
+                ? (e) => {
+                    e.stopPropagation();
+                    window.dispatchEvent(
+                      new CustomEvent("dissect:show-note", { detail: { noteId: noteMark } }),
+                    );
+                  }
+                : undefined
           }
-          className={`${markClass}${anchors.length > 1 ? " hl-stacked" : ""}${painted?.fresh ? " mark-sweep" : ""} rounded-[4px] ${focusable ? "annotation-mark" : ""}${editedClass}`}
+          className={`${markClass}${anchors.length > 1 ? " hl-stacked" : ""}${painted?.fresh ? " mark-sweep" : ""} rounded-[4px] ${focusable || noteMark ? "annotation-mark" : ""}${editedClass}`}
           style={
             painted?.fresh && painted.freshDelay
               ? { animationDelay: `${painted.freshDelay}ms` }
@@ -375,6 +386,7 @@ const LABEL_DOT: Record<string, string> = {
 function HighlightLabel({ anchors }: { anchors: Highlight[] }) {
   const t = useT();
   const focusable = anchors.find((h) => h.annotation && h.sourceId);
+  const noteMark = anchors.find((h) => !h.annotation && h.noteId);
   const color = anchors.find((h) => h.color)?.color ?? "clay";
   const labels = anchors.map((h) => h.figureLabel).filter((l): l is string => Boolean(l));
   const text = labels.length > 0 ? labels.join(" · ") : t("panes.highlighted");
@@ -388,7 +400,14 @@ function HighlightLabel({ anchors }: { anchors: Highlight[] }) {
                   detail: { sourceId: focusable.sourceId },
                 }),
               )
-          : undefined
+          : noteMark?.noteId
+            ? () =>
+                window.dispatchEvent(
+                  new CustomEvent("dissect:show-note", {
+                    detail: { noteId: noteMark.noteId },
+                  }),
+                )
+            : undefined
       }
       title={
         focusable

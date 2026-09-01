@@ -387,6 +387,7 @@ export function ReaderInteractions({
       annotation: boolean;
       comment: boolean;
       figureLabel: string | null;
+      noteId: string;
     }[]
   >;
   // Highlights and comments by source id: their marks open on-page edit

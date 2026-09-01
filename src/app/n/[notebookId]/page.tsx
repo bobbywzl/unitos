@@ -167,6 +167,9 @@ export default async function NotebookPage(props: {
         annotation: boolean;
         comment: boolean;
         figureLabel: string | null;
+        // The owning note. On a regular note's mark, click jumps to the note
+        // in the tray — the link between quote and note works both ways.
+        noteId: string;
       }[]
     > = {};
     const resolved = await resolveDocumentSources(document.id);
@@ -211,6 +214,7 @@ export default async function NotebookPage(props: {
         comment:
           annotationNoteIds.has(r.noteId) && note?.derivationType == null && note?.color == null,
         figureLabel: figureLabelBySource.get(r.id) ?? null,
+        noteId: r.noteId,
       });
       anchorHighlights[r.blockId] = list;
     }
