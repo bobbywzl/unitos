@@ -103,7 +103,6 @@ const en = {
   urlHint:
     "The page becomes a readable document. A YouTube link or a direct video or audio file link becomes a video document.",
   uploadAssistantHint: "Talk with the assistant about the documents you add.",
-  uploadAssistantSoon: "Coming soon",
   chooseVideoFile: "Choose a video or audio file",
   videoHint: "mp4, webm, ogg, mov · mp3, m4a, wav, flac · up to 200 MB · or a YouTube link:",
   youtubeLink: "YouTube link",
@@ -134,6 +133,38 @@ const en = {
   stepFetchingVideoInfo: "Fetching video info",
   stepFetchingMedia: "Fetching the media file",
   stepFetchingDrive: "Fetching from Google Drive",
+
+  // Upload assistant (upload-assistant.tsx; SPEC.md §15)
+  uploadAssistant: "Upload assistant",
+  uploadSandboxNote: "The assistant reads the page in a private sandbox before anything is saved.",
+  stepReviewing: "Reviewing the content",
+  uploadReviewFailed: "The review failed: {reason} You can still add the content.",
+  uploadPageFacts: "about {pages} pages of text · {blocks} blocks",
+  uploadNuanceUrl:
+    "A web page parses into blocks — text, headings, figures, tables, equations. A page behind a sign-in or built by scripts may come out thin.",
+  uploadNuancePdf:
+    "PDF up to 50 MB. Text extracts in reading order; a scanned PDF without a text layer does not read.",
+  uploadNuanceVideoFile:
+    "Video or audio up to 200 MB. The file is stored and transcribed; the transcript arrives shortly after the add.",
+  uploadNuanceVideoUrl:
+    "A YouTube link or a direct media file link stores as a video document. The transcript arrives shortly after the add.",
+  uploadPagesFound:
+    "This page links to {n} pages that look like parts of the same work. Pick the pages to add:",
+  uploadThisPage: "This page",
+  uploadNoPagesPicked: "Pick at least one page.",
+  uploadSplitQuestion:
+    "About {pages} pages of text. Split it into {parts} documents at its headings for easier parsing?",
+  uploadSplitYes: "Split into {parts} documents",
+  uploadSplitNo: "Keep one document",
+  uploadInstructionsLabel: "Upload instructions",
+  uploadInstructionsPlaceholder: "Content type, formatting problems, what to keep or drop…",
+  uploadInstructionsChecking: "Checking the instructions…",
+  uploadReviewAgain: "Review again",
+  uploadAddCount: "Add {n} documents",
+  uploadPageProgress: "Page {i} of {total} · {title}",
+  uploadFileProgress: "File {i} of {total} · {title}",
+  uploadPageFailed: "{title} — {reason}",
+  uploadAddedCount: "Added {n} documents.",
 
   // Distilled page (distill-page.tsx)
   deleteDistillation: "Delete this distillation",
@@ -309,7 +340,6 @@ const zh: Record<keyof typeof en, string> = {
   pdfHint: "pdf · 最大 50 MB · 或拖放到页面任意位置",
   urlHint: "网页会成为可阅读的文档；YouTube 链接和视频/音频文件的直链会成为视频文档。",
   uploadAssistantHint: "与助手讨论你添加的文档。",
-  uploadAssistantSoon: "即将推出",
   chooseVideoFile: "选择视频或音频文件",
   videoHint: "mp4、webm、ogg、mov · mp3、m4a、wav、flac · 最大 200 MB · 或 YouTube 链接：",
   youtubeLink: "YouTube 链接",
@@ -338,6 +368,32 @@ const zh: Record<keyof typeof en, string> = {
   stepFetchingVideoInfo: "获取视频信息",
   stepFetchingMedia: "获取媒体文件",
   stepFetchingDrive: "从 Google Drive 获取",
+
+  uploadAssistant: "上传助手",
+  uploadSandboxNote: "助手在私有沙箱中读取页面，保存之前不写入任何内容。",
+  stepReviewing: "审阅内容",
+  uploadReviewFailed: "审阅失败：{reason} 仍可添加内容。",
+  uploadPageFacts: "约 {pages} 页文字 · {blocks} 个块",
+  uploadNuanceUrl:
+    "网页解析为块——文字、标题、插图、表格、公式。需要登录或由脚本生成的页面可能解析出很少内容。",
+  uploadNuancePdf: "PDF 最大 50 MB。文字按阅读顺序提取；无文字层的扫描版 PDF 无法读取。",
+  uploadNuanceVideoFile: "视频或音频最大 200 MB。文件存储后生成逐字稿；添加后稍等即到。",
+  uploadNuanceVideoUrl: "YouTube 链接或媒体文件直链存储为视频文档。添加后稍等即有逐字稿。",
+  uploadPagesFound: "此页面链接到 {n} 个页面，看起来是同一作品的组成部分。选择要添加的页面：",
+  uploadThisPage: "此页面",
+  uploadNoPagesPicked: "至少选择一个页面。",
+  uploadSplitQuestion: "约 {pages} 页文字。按标题拆分为 {parts} 个文档，便于解析？",
+  uploadSplitYes: "拆分为 {parts} 个文档",
+  uploadSplitNo: "保持一个文档",
+  uploadInstructionsLabel: "上传要求",
+  uploadInstructionsPlaceholder: "内容类型、格式问题、要保留或去掉什么……",
+  uploadInstructionsChecking: "正在检查上传要求…",
+  uploadReviewAgain: "重新审阅",
+  uploadAddCount: "添加 {n} 个文档",
+  uploadPageProgress: "第 {i}/{total} 个页面 · {title}",
+  uploadFileProgress: "第 {i}/{total} 个文件 · {title}",
+  uploadPageFailed: "{title} —— {reason}",
+  uploadAddedCount: "已添加 {n} 个文档。",
 
   deleteDistillation: "删除此提炼",
   scanningArticle: "正在扫描文章，找出回答它的引文",

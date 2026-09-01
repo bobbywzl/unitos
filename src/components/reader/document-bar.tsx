@@ -14,12 +14,7 @@ import { Logo } from "@/components/logo";
 import type { TFunc } from "@/lib/i18n/dictionaries";
 import { readNdjson } from "@/lib/ndjson";
 import { PARSER_VERSION } from "@/lib/parse/types";
-import {
-  MAX_VIDEO_BYTES,
-  MEDIA_EXTENSIONS,
-  UPLOAD_CHUNK_BYTES,
-  isMediaUrl,
-} from "@/lib/video/types";
+import { MAX_VIDEO_BYTES, MEDIA_EXTENSIONS, isMediaUrl } from "@/lib/video/types";
 import { parseYouTubeId } from "@/lib/video/youtube";
 import {
   AddDocumentDialog,
@@ -32,6 +27,7 @@ import {
   initialIngestSteps,
   type IngestStep,
 } from "@/components/reader/ingest-progress";
+import { UploadAssistant, type UploadRequest } from "@/components/reader/upload-assistant";
 
 export type AttachedDocument = {
   id: string;
@@ -62,14 +58,9 @@ function statusMessage(t: TFunc, status: number): string {
   return t("panes.requestFailedStatus", { status });
 }
 
-// Vercel caps a request body at about 4.5 MB, so bigger files upload in chunks
-// (/api/uploads) and /api/uploads/complete assembles them. The server caps
-// assembled PDFs at 50 MB and videos at 200 MB. Videos always take the chunked
-// path — one code path, and the server keeps the staged chunks as the stored
-// video bytes.
+// The Drive import's client-side size pre-checks; the box and the server
+// enforce the same caps on the other paths.
 const MAX_PDF_BYTES = 50 * 1024 * 1024;
-const SINGLE_REQUEST_BYTES = 4 * 1024 * 1024;
-const CHUNK_BYTES = UPLOAD_CHUNK_BYTES;
 
 // Video and audio files share one path: chunked upload, sniffed server-side,
 // stored as a media document with the transcript machinery (SPEC.md §11).
@@ -79,10 +70,6 @@ function isMediaFile(file: File): boolean {
     file.type.startsWith("audio/") ||
     MEDIA_EXTENSIONS.test(file.name)
   );
-}
-
-function megabytes(bytes: number): string {
-  return (bytes / 1024 / 1024).toFixed(1);
 }
 
 // Documents in the header: one pill showing the open document, expanding a
@@ -290,78 +277,31 @@ export function DocumentBar({
     return result;
   }
 
-  // Chunked upload for files past the single-request cap. Sends slices to
-  // /api/uploads, reports progress on the receive step, then asks
-  // /api/uploads/complete to assemble and ingest — its response streams the
-  // same stage events as /api/documents.
-  async function uploadChunked(
-    file: File,
-    kind: "pdf" | "video",
-    emit: (stage: string, detail?: string) => void,
-  ) {
-    const uploadId = crypto.randomUUID();
-    const totalLabel = megabytes(file.size);
-    for (let sent = 0; sent < file.size; sent += CHUNK_BYTES) {
-      const index = Math.floor(sent / CHUNK_BYTES);
-      const res = await fetch(`/api/uploads?uploadId=${uploadId}&index=${index}`, {
-        method: "POST",
-        body: file.slice(sent, sent + CHUNK_BYTES),
-      });
-      if (!res.ok) {
-        const detail = await readJson<{ error?: string }>(res);
-        throw new Error(detail?.error ?? statusMessage(t, res.status));
-      }
-      emit(
-        "receive",
-        t("panes.uploadProgress", {
-          sent: megabytes(Math.min(sent + CHUNK_BYTES, file.size)),
-          total: totalLabel,
-        }),
-      );
-    }
-    return fetch("/api/uploads/complete", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ uploadId, filename: file.name, notebookId, kind }),
-    });
+  // Every add opens the upload assistant (SPEC.md §15): the box reviews a URL
+  // in a private sandbox, takes upload instructions, and drives the add itself.
+  // The one exception is Google Drive below — the server fetches those files
+  // at import time, so there is nothing for the sandbox review to read.
+  const [assistant, setAssistant] = useState<UploadRequest | null>(null);
+
+  function openAssistant(request: UploadRequest) {
+    setError(null);
+    setAssistant(request);
+    setDialog(false);
+    if (fileRef.current) fileRef.current.value = "";
+    if (videoFileRef.current) videoFileRef.current.value = "";
   }
 
-  async function uploadFiles(files: File[]) {
-    setError(null);
-    let lastId: string | null = null;
-    try {
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i];
-        const media = isMediaFile(file);
-        if (media && file.size > MAX_VIDEO_BYTES) {
-          throw new Error(t("panes.fileTooLarge", { name: file.name, mb: 200 }));
-        }
-        if (!media && file.size > MAX_PDF_BYTES) {
-          throw new Error(t("panes.fileTooLarge", { name: file.name, mb: 50 }));
-        }
-        const label = files.length > 1 ? `${file.name} (${i + 1}/${files.length})` : file.name;
-        const result = await runIngest(label, media ? "video" : "pdf", (emit) => {
-          if (media) return uploadChunked(file, "video", emit);
-          if (file.size > SINGLE_REQUEST_BYTES) return uploadChunked(file, "pdf", emit);
-          const form = new FormData();
-          form.set("file", file);
-          form.set("notebookId", notebookId);
-          return fetch("/api/documents", { method: "POST", body: form });
-        });
-        lastId = result.id;
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t("panes.uploadFailed"));
-    } finally {
-      setPhase(null);
-      if (fileRef.current) fileRef.current.value = "";
-      if (videoFileRef.current) videoFileRef.current.value = "";
-    }
-    if (lastId) {
-      setDialog(false);
-      open(lastId);
-      router.refresh();
-    }
+  // The dialog's URL and video forms route through the assistant, like every
+  // other add path. The media-figure toast keeps the direct ingest path.
+  async function assistantFromUrl(raw: string): Promise<boolean> {
+    const trimmed = raw.trim();
+    if (!trimmed) return false;
+    openAssistant(
+      parseYouTubeId(trimmed) || isMediaUrl(trimmed)
+        ? { kind: "video-url", url: trimmed }
+        : { kind: "url", url: trimmed },
+    );
+    return true;
   }
 
   // Google Drive upload (SPEC.md §14): get a token and open the picker
@@ -456,7 +396,7 @@ export function DocumentBar({
         setError(t("panes.dropPdfOrVideo"));
         return;
       }
-      void uploadFiles(accepted);
+      openAssistant({ kind: "files", files: accepted });
     };
     window.addEventListener("dragenter", onEnter);
     window.addEventListener("dragover", onOver);
@@ -716,7 +656,7 @@ export function DocumentBar({
         onChoosePdf={() => fileRef.current?.click()}
         onChooseVideo={() => videoFileRef.current?.click()}
         onImportDrive={drive ? () => void importFromDrive() : null}
-        onIngestUrl={ingestFromUrl}
+        onIngestUrl={assistantFromUrl}
         library={library}
         attachedIds={attachedIds}
         onOpenLibrary={() => void openLibrary()}
@@ -741,7 +681,7 @@ export function DocumentBar({
         className="hidden"
         onChange={(e) => {
           const files = [...(e.target.files ?? [])];
-          if (files.length > 0) void uploadFiles(files);
+          if (files.length > 0) openAssistant({ kind: "files", files });
         }}
       />
       <input
@@ -752,9 +692,23 @@ export function DocumentBar({
         className="hidden"
         onChange={(e) => {
           const files = [...(e.target.files ?? [])];
-          if (files.length > 0) void uploadFiles(files);
+          if (files.length > 0) openAssistant({ kind: "files", files });
         }}
       />
+
+      {assistant && (
+        <UploadAssistant
+          notebookId={notebookId}
+          request={assistant}
+          onClose={(docId) => {
+            setAssistant(null);
+            if (docId) {
+              open(docId);
+              router.refresh();
+            }
+          }}
+        />
+      )}
 
       {dragging && (
         <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center bg-paper/90 backdrop-blur-sm">

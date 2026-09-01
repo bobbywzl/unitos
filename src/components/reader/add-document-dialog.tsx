@@ -17,9 +17,9 @@ type AddTab = "pdf" | "video" | "drive" | "url" | "library";
 // The add-document dialog: one centered window for everything that adds a
 // document, opened by the dashed +. The upload types span the top panel as
 // tabs; under them sits the upload space for the chosen type — replaced by
-// the progress card while an ingest runs — then the assistant conversation
-// option. The assistant's job ships in a later update; until then its
-// composer stays disabled.
+// the progress card while an ingest runs — then the upload assistant note.
+// Choosing content hands off to the upload assistant box (SPEC.md §15),
+// which reviews it and drives the add; Google Drive and Library skip the box.
 export function AddDocumentDialog({
   open,
   onClose,
@@ -254,19 +254,10 @@ export function AddDocumentDialog({
         {error && <p className="text-xs text-red-500">{error}</p>}
 
         <div className="flex flex-col gap-2 border-t border-line pt-4">
-          <span className="text-[13px] font-semibold text-sand-800">{t("panes.assistant")}</span>
+          <span className="text-[13px] font-semibold text-sand-800">
+            {t("panes.uploadAssistant")}
+          </span>
           <p className="text-xs text-sand-500">{t("panes.uploadAssistantHint")}</p>
-          <div className="flex items-center gap-2">
-            <input
-              disabled
-              placeholder={t("panes.uploadAssistantSoon")}
-              aria-label={t("panes.assistant")}
-              className="min-w-0 flex-1 rounded-full bg-sand-100 px-4 py-2 text-sm outline-none placeholder:text-sand-400"
-            />
-            <button disabled className={submit}>
-              {t("reader.send")}
-            </button>
-          </div>
         </div>
       </div>
     </div>
