@@ -72,13 +72,30 @@ export function splitBlocks(title: string, blocks: ParsedBlock[], parts: number)
   }
   if (current.length > 0) groups.push(current);
 
-  // A tiny trailing part reads better merged into the one before it.
-  if (groups.length >= 2) {
-    const last = groups[groups.length - 1];
-    const lastChars = last.reduce((n, b) => n + b.text.length, 0);
-    if (lastChars < budget * 0.25) {
-      groups[groups.length - 2].push(...groups.pop()!);
+  // Boundaries land on headings, so the walk can overshoot the target count.
+  // Merge the smallest part into its smaller neighbor until the count holds —
+  // the button said how many documents, and the add delivers that many.
+  const charsOf = (group: ParsedBlock[]) => group.reduce((n, b) => n + b.text.length, 0);
+  while (groups.length > parts) {
+    let smallest = 0;
+    for (let i = 1; i < groups.length; i++) {
+      if (charsOf(groups[i]) < charsOf(groups[smallest])) smallest = i;
     }
+    const neighbor =
+      smallest === 0
+        ? 1
+        : smallest === groups.length - 1
+          ? smallest - 1
+          : charsOf(groups[smallest - 1]) <= charsOf(groups[smallest + 1])
+            ? smallest - 1
+            : smallest + 1;
+    const [low, high] = smallest < neighbor ? [smallest, neighbor] : [neighbor, smallest];
+    groups.splice(low, 2, [...groups[low], ...groups[high]]);
+  }
+  // A tiny trailing part reads better merged into the one before it, even one
+  // document short of the target count.
+  if (groups.length >= 2 && charsOf(groups[groups.length - 1]) < budget * 0.25) {
+    groups[groups.length - 2].push(...groups.pop()!);
   }
   if (groups.length < 2) return [{ title, blocks }];
 

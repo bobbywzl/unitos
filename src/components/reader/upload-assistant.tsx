@@ -141,6 +141,8 @@ export function UploadAssistant({
   const [instructions, setInstructions] = useState("");
   const [check, setCheck] = useState<CheckState | null>(null);
   const [checking, setChecking] = useState(false);
+  // The instructions text whose replies the reader has already seen.
+  const [acknowledged, setAcknowledged] = useState("");
   const [steps, setSteps] = useState<IngestStep[] | null>(null);
   const [headline, setHeadline] = useState<string | null>(null);
   const [added, setAdded] = useState<Added[]>([]);
@@ -190,7 +192,9 @@ export function UploadAssistant({
       setSelected(sel);
       setSplit(next.splitProposed);
       if (withInstructions) {
+        // The replies render with the review, so the reader has seen them.
         setCheck({ text: withInstructions, replies: next.replies, feasible: next.feasible });
+        setAcknowledged(withInstructions);
       }
     } catch (err) {
       setReviewError(err instanceof Error ? err.message : t("api.reviewFailed"));
@@ -209,10 +213,10 @@ export function UploadAssistant({
 
   // ── Instructions check: before any content is added, each instruction gets
   // an honest answer; only the feasible part travels to ingest ──────────────
-  async function ensureCheck(): Promise<string> {
+  async function ensureCheck(): Promise<CheckState | null> {
     const text = instructions.trim();
-    if (!text) return "";
-    if (check && check.text === text) return check.feasible;
+    if (!text) return null;
+    if (check && check.text === text) return check;
     setChecking(true);
     try {
       const kind =
@@ -222,8 +226,9 @@ export function UploadAssistant({
         kind,
         instructions: text,
       });
-      setCheck({ text, ...result.check });
-      return result.check.feasible;
+      const next: CheckState = { text, ...result.check };
+      setCheck(next);
+      return next;
     } catch {
       const fallback: CheckState = {
         text,
@@ -231,7 +236,7 @@ export function UploadAssistant({
         feasible: "",
       };
       setCheck(fallback);
-      return "";
+      return fallback;
     } finally {
       setChecking(false);
     }
@@ -296,7 +301,15 @@ export function UploadAssistant({
 
   async function add() {
     setError(null);
-    const feasible = await ensureCheck();
+    const checked = await ensureCheck();
+    const feasible = checked?.feasible ?? "";
+    // An instruction the assistant cannot follow stops the first Add: the
+    // honest replies show before anything is added, and the reader decides —
+    // edit the instructions, or press Add again to proceed without them.
+    if (checked && checked.replies.some((r) => !r.willFollow) && acknowledged !== checked.text) {
+      setAcknowledged(checked.text);
+      return;
+    }
     const collected: Added[] = [];
     const failed: string[] = [];
 
@@ -505,10 +518,12 @@ export function UploadAssistant({
                   <p className="text-[13px] font-semibold text-sand-800">{review.title}</p>
                 )}
                 <p className="text-xs text-sand-500">
-                  {t("panes.uploadPageFacts", {
-                    pages: review.pageEstimate,
-                    blocks: review.blockCount,
-                  })}
+                  {review.pageEstimate > 1
+                    ? t("panes.uploadPageFacts", {
+                        pages: review.pageEstimate,
+                        blocks: review.blockCount,
+                      })
+                    : t("panes.detailBlocks", { n: review.blockCount })}
                 </p>
                 {review.summary && (
                   <p className="text-[13px] leading-relaxed text-sand-700">{review.summary}</p>
