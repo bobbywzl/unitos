@@ -844,6 +844,18 @@ export function ReaderInteractions({
   // the reader double-clicks into edit mode once.
   const [editHint, setEditHint] = useState(false);
 
+  // Coarse pointer (tablet, phone): the selection tools dock under the
+  // selection, the rows are tap-sized, and the colors and Add to notes sit
+  // inside the same box instead of floating beside it.
+  const [coarse, setCoarse] = useState(false);
+  useEffect(() => {
+    const query = window.matchMedia("(pointer: coarse)");
+    const apply = () => setCoarse(query.matches);
+    apply();
+    query.addEventListener("change", apply);
+    return () => query.removeEventListener("change", apply);
+  }, []);
+
   // Switching documents client-side keeps this component mounted. Every piece
   // of selection-scoped state references the old document's blocks — drop it,
   // or a stale anchor writes an annotation into the wrong document.
@@ -944,8 +956,9 @@ export function ReaderInteractions({
     const { rects, articleLeft, articleRight, cw } = measureSideCards(container);
     const articleMid = (articleLeft + articleRight) / 2;
     const POPOVER_ESTIMATE = 280;
-    const side =
-      blocksOnSide(rects, articleMid, "right", yTop, POPOVER_ESTIMATE).length === 0
+    const side = window.matchMedia("(pointer: coarse)").matches
+      ? ("below" as const)
+      : blocksOnSide(rects, articleMid, "right", yTop, POPOVER_ESTIMATE).length === 0
         ? ("right" as const)
         : blocksOnSide(rects, articleMid, "left", yTop, POPOVER_ESTIMATE).length === 0
           ? ("left" as const)
@@ -953,7 +966,7 @@ export function ReaderInteractions({
     return {
       anchor: { blockId, startOffset, endOffset, quotedText, prefix, suffix },
       x: Math.max(margin, Math.min(rawX, containerRect.width - margin)),
-      y: rect.bottom - containerRect.top + container.scrollTop + 6,
+      y: rect.bottom - containerRect.top + container.scrollTop + (side === "below" ? 14 : 6),
       yTop,
       textLeft,
       endLeft,
@@ -1623,8 +1636,9 @@ export function ReaderInteractions({
       const { rects, articleLeft, articleRight, cw } = measureSideCards(container);
       const articleMid = (articleLeft + articleRight) / 2;
       const POPOVER_ESTIMATE = 280;
-      const side =
-        blocksOnSide(rects, articleMid, "right", yTop, POPOVER_ESTIMATE).length === 0
+      const side = window.matchMedia("(pointer: coarse)").matches
+        ? ("below" as const)
+        : blocksOnSide(rects, articleMid, "right", yTop, POPOVER_ESTIMATE).length === 0
           ? ("right" as const)
           : blocksOnSide(rects, articleMid, "left", yTop, POPOVER_ESTIMATE).length === 0
             ? ("left" as const)
@@ -1642,7 +1656,7 @@ export function ReaderInteractions({
           suffix: block.text.slice(end, end + 32),
         },
         x: Math.max(margin, Math.min(rawX, containerRect.width - margin)),
-        y: rect.bottom - containerRect.top + container.scrollTop + 6,
+        y: rect.bottom - containerRect.top + container.scrollTop + (side === "below" ? 14 : 6),
         yTop,
         textLeft: articleRect ? articleRect.left - containerRect.left + 24 : 24,
         endLeft: Math.max(8, Math.min(rect.right - containerRect.left + 6, containerRect.width - 110)),
@@ -3244,14 +3258,14 @@ export function ReaderInteractions({
     }
   }
 
-  // The toolbox's own box (top/left/width), in pane coordinates. Every
-  // floating bubble anchored to it (highlight colors, Add to notes, voice)
-  // shares this left edge, so the stack lines up — a wider bubble (Add to
-  // notes, 176px = w-44) pulls back only as much as it must to stay inside
-  // the pane; it never sticks out to the left of everything else.
+  // The toolbox's own box (top/left/width), in pane coordinates. The bubbles
+  // anchored to it (highlight colors, Add to notes) are w-full, so the stack
+  // shares one left edge and one width. Coarse pointers get wider boxes to
+  // fit the tap-sized rows.
   const popoverBox = popover
     ? (() => {
-        const w = submenu === "ai" || submenu === "comment" ? 248 : 116;
+        const w =
+          submenu === "ai" || submenu === "comment" ? (coarse ? 300 : 248) : coarse ? 220 : 176;
         if (popover.side === "right") {
           return { top: popover.yTop, left: Math.min(popover.rightBase, popover.cw - w - 6), width: w };
         }
@@ -3265,10 +3279,8 @@ export function ReaderInteractions({
         return { top: popover.yTop, left: Math.max(6, popover.textLeft - w - 10), width: w };
       })()
     : { top: 0, left: 0, width: 0 };
-  const ADD_TO_NOTES_WIDTH = 176; // w-44
-  const addToNotesLeft = popover
-    ? Math.min(0, popover.cw - 6 - (popoverBox.left + ADD_TO_NOTES_WIDTH))
-    : 0;
+  // One row of the toolbox. Coarse pointers get 44px-tall rows.
+  const toolRow = coarse ? "px-3.5 py-2.5 text-[14px]" : "px-2.5 py-[5px] text-[12px]";
 
   return (
     <div
@@ -3429,9 +3441,11 @@ export function ReaderInteractions({
       {editHint && !editMode && (
         <div
           onAnimationEnd={() => setEditHint(false)}
-          className="hint-fade pointer-events-none absolute top-16 right-5 z-10 max-w-64 rounded-2xl bg-card px-4 py-2.5 text-[12px] leading-relaxed text-sand-700 shadow-lift print:hidden"
+          className={`hint-fade pointer-events-none absolute top-16 right-5 z-10 rounded-2xl bg-card px-4 py-2.5 leading-relaxed text-sand-700 shadow-lift print:hidden ${
+            coarse ? "max-w-80 text-[13px]" : "max-w-64 text-[12px]"
+          }`}
         >
-          {t("reader.editHint")}
+          {t(coarse ? "reader.touchHint" : "reader.editHint")}
         </div>
       )}
 
@@ -3621,7 +3635,7 @@ export function ReaderInteractions({
             <button
               disabled={busy}
               onClick={() => void completeLink()}
-              className="flex w-full items-center gap-1.5 rounded-full bg-sage-600 px-2.5 py-[5px] text-left text-[12px] font-semibold text-sage-fg hover:bg-sage-700 disabled:opacity-40"
+              className={`flex w-full items-center gap-1.5 rounded-full bg-sage-600 ${toolRow} text-left font-semibold text-sage-fg hover:bg-sage-700 disabled:opacity-40`}
             >
               <LinkIcon size={11} />
               {t("reader.closeLink")}
@@ -3631,13 +3645,13 @@ export function ReaderInteractions({
           <button
             onClick={() => setSubmenu(submenu === "ai" ? null : "ai")}
             aria-expanded={submenu === "ai"}
-            className={`flex w-full items-center gap-1.5 rounded-full px-2.5 py-[5px] text-left text-[12px] font-semibold ${
+            className={`flex w-full items-center gap-1.5 rounded-full ${toolRow} text-left font-semibold ${
               submenu === "ai"
                 ? "bg-clay-100 text-clay-800"
                 : "text-clay-700 hover:bg-clay-100 hover:text-clay-800"
             }`}
           >
-            <SparkleIcon size={12} />
+            <SparkleIcon size={coarse ? 14 : 12} />
             {t("reader.assistant")}
           </button>
           {submenu === "ai" && (
@@ -3693,7 +3707,7 @@ export function ReaderInteractions({
               onClick={() => void extract()}
               disabled={extractBusy}
               title={t("reader.extractTermTitle")}
-              className="flex w-full items-center justify-between gap-2 rounded-full bg-clay-100 px-2.5 py-[5px] text-left text-[12px] font-semibold text-clay-800 hover:bg-clay-200 disabled:opacity-40"
+              className={`flex w-full items-center justify-between gap-2 rounded-full bg-clay-100 ${toolRow} text-left font-semibold text-clay-800 hover:bg-clay-200 disabled:opacity-40`}
             >
               {t("reader.extract")}
               <span className="text-[9px] font-bold tracking-[0.06em] text-clay-700 uppercase">
@@ -3705,14 +3719,14 @@ export function ReaderInteractions({
           <button
             onClick={() => void explain()}
             title={popover.figure ? t("reader.explainFigureTitle") : undefined}
-            className="flex w-full items-center rounded-full px-2.5 py-[5px] text-left text-[12px] text-sand-800 hover:bg-clay-100 hover:text-clay-800"
+            className={`flex w-full items-center rounded-full ${toolRow} text-left text-sand-800 hover:bg-clay-100 hover:text-clay-800`}
           >
             {t("reader.explain")}
           </button>
           {!popover.figure && (
             <button
               onClick={() => void simplify()}
-              className="flex w-full items-center rounded-full px-2.5 py-[5px] text-left text-[12px] text-sand-800 hover:bg-clay-100 hover:text-clay-800"
+              className={`flex w-full items-center rounded-full ${toolRow} text-left text-sand-800 hover:bg-clay-100 hover:text-clay-800`}
             >
               {t("reader.simplify")}
             </button>
@@ -3722,7 +3736,7 @@ export function ReaderInteractions({
               onClick={() => void extract()}
               disabled={extractBusy}
               title={t("reader.extractTitle")}
-              className="flex w-full items-center rounded-full px-2.5 py-[5px] text-left text-[12px] text-sand-800 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40"
+              className={`flex w-full items-center rounded-full ${toolRow} text-left text-sand-800 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40`}
             >
               {t("reader.extract")}
             </button>
@@ -3731,7 +3745,7 @@ export function ReaderInteractions({
           <button
             onClick={() => setSubmenu(submenu === "comment" ? null : "comment")}
             aria-expanded={submenu === "comment"}
-            className={`flex w-full items-center rounded-full px-2.5 py-[5px] text-left text-[12px] ${
+            className={`flex w-full items-center rounded-full ${toolRow} text-left ${
               submenu === "comment"
                 ? "bg-clay-100 text-clay-800"
                 : "text-sand-800 hover:bg-clay-100 hover:text-clay-800"
@@ -3780,18 +3794,23 @@ export function ReaderInteractions({
           <button
             onClick={beginLink}
             title={t("reader.linkTitle")}
-            className="flex w-full items-center rounded-full px-2.5 py-[5px] text-left text-[12px] text-sand-800 hover:bg-clay-100 hover:text-clay-800"
+            className={`flex w-full items-center rounded-full ${toolRow} text-left text-sand-800 hover:bg-clay-100 hover:text-clay-800`}
           >
             {t("reader.linkAcrossTexts")}
           </button>
 
           {/* Highlight: a separate bubble right above the toolbox holds the
-              color dots. Near the top of the page it drops below instead,
-              beside the voice bubble, so it never lands out of reach. */}
+              color dots, as wide as the toolbox. Near the top of the page it
+              drops below instead, under the voice bubble, so it never lands
+              out of reach. On a coarse pointer it is the toolbox's first row. */}
           <div
-            className={`absolute flex items-center gap-2 rounded-full bg-card px-3 py-2 shadow-float ${
-              popover.yTop < 54 ? "top-full left-11 mt-2" : "bottom-full left-0 mb-2"
-            }`}
+            className={
+              coarse
+                ? "order-first flex items-center justify-around px-2 py-2"
+                : `absolute left-0 flex w-full items-center justify-around rounded-full bg-card px-3 py-2 shadow-float ${
+                    popover.yTop < 54 ? "top-full mt-[50px]" : "bottom-full mb-2"
+                  }`
+            }
           >
             {HIGHLIGHT_HUES.map((color) => (
               <button
@@ -3803,33 +3822,35 @@ export function ReaderInteractions({
                   commentDraft.trim() ? "reader.highlightInWithNote" : "reader.highlightIn",
                   { color: t(HUE_KEY[color]) },
                 )}
-                className="size-5 rounded-full transition-transform hover:scale-110 disabled:opacity-40"
+                className={`${coarse ? "size-7" : "size-5"} rounded-full transition-transform hover:scale-110 disabled:opacity-40`}
                 style={{ background: HUE_DOT[color] }}
               />
             ))}
           </div>
 
-          {/* Add to notes: a separate bubble above the toolbar. Press it,
-              pick a section, and the highlighted text lands there as a quote.
-              Left-anchored like every other floating bubble (addToNotesLeft);
-              it pulls back from the toolbox's left edge only as much as it
-              must to keep its right edge inside the pane. It sits one slot
-              higher than the highlight bubble; when the highlight bubble
-              drops below near the page top, it takes the near slot. */}
+          {/* Add to notes: a separate bubble above the toolbar, as wide as the
+              toolbox. Press it, pick a section, and the highlighted text lands
+              there as a quote. It sits one slot higher than the highlight
+              bubble; when the highlight bubble drops below near the page top,
+              it takes the near slot. On a coarse pointer it is the toolbox's
+              second row. */}
           {sectionChoices.length > 0 && (
             <div
-              style={{ left: addToNotesLeft }}
-              className={`absolute bottom-full flex w-44 flex-col gap-0.5 rounded-2xl bg-card p-1.5 shadow-float ${
-                popover.yTop < 54 ? "mb-2" : "mb-[52px]"
-              }`}
+              className={
+                coarse
+                  ? "-order-1 flex flex-col gap-0.5"
+                  : `absolute bottom-full left-0 flex w-full flex-col gap-0.5 rounded-2xl bg-card p-1.5 shadow-float ${
+                      popover.yTop < 54 ? "mb-2" : "mb-[52px]"
+                    }`
+              }
             >
               <button
                 onClick={() => setSubmenu(submenu === "add" ? null : "add")}
                 aria-expanded={submenu === "add"}
                 title={t("reader.addToNotesTitle")}
-                className="flex w-full items-center gap-1.5 rounded-full bg-clay px-2.5 py-[5px] text-left text-[12px] font-semibold text-clay-fg hover:bg-clay-600"
+                className={`flex w-full items-center gap-1.5 rounded-full bg-clay ${toolRow} text-left font-semibold text-clay-fg hover:bg-clay-600`}
               >
-                <NotesIcon size={12} />
+                <NotesIcon size={coarse ? 14 : 12} />
                 {t("reader.addToNotes")}
               </button>
               {submenu === "add" && (
@@ -3839,7 +3860,7 @@ export function ReaderInteractions({
                       key={choice.id}
                       disabled={busy}
                       onClick={() => void addToSection(choice.id)}
-                      className="truncate rounded-full px-2.5 py-[5px] text-left text-[12px] text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40"
+                      className={`truncate rounded-full ${toolRow} text-left text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40`}
                     >
                       {choice.label}
                     </button>
@@ -3856,7 +3877,7 @@ export function ReaderInteractions({
               onClick={() => void speakSelection()}
               aria-label={voice === "idle" ? t("reader.readAloud") : t("reader.stopReading")}
               title={voice === "idle" ? t("reader.readAloud") : t("reader.stopReading")}
-              className={`flex size-[34px] items-center justify-center rounded-full shadow-float ${
+              className={`flex ${coarse ? "size-11" : "size-[34px]"} items-center justify-center rounded-full shadow-float ${
                 voice === "idle"
                   ? "bg-card text-sand-700 hover:text-clay-800"
                   : "bg-clay text-clay-fg hover:bg-clay-600"

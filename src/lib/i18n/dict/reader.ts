@@ -66,6 +66,8 @@ const en = {
   backToReading: "Back to reading (Esc)",
   editHint:
     "Double-click any paragraph to edit it. Hold and draw a small circle on a figure for its tools.",
+  touchHint:
+    "Hold a word and drag the handles to select text. The tools open under the selection. Double-tap any paragraph to edit it. Hold and draw a small circle on a figure for its tools.",
 
   // Side cards
   explaining: "Explaining…",
@@ -237,6 +239,8 @@ const zh: Record<keyof typeof en, string> = {
   fontMono: "等宽",
   backToReading: "返回阅读（Esc）",
   editHint: "双击任意段落即可编辑。在插图上按住并画一个小圈，可打开它的工具。",
+  touchHint:
+    "长按一个词并拖动选择柄以选中文本，工具出现在选中内容下方。双击任意段落即可编辑。在插图上按住并画一个小圈，可打开它的工具。",
 
   // Side cards
   explaining: "解释中…",

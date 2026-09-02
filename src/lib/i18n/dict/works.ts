@@ -43,6 +43,8 @@ const en = {
   guideCirclePagesBody:
     "A PDF of rough handwritten notes imports as its pages, and every page is a figure: circle any part — a formula, a sketch, a margin note — then Ask a question about it in the context of the whole document, Explain it, Comment, or pick a color for a lasso highlight.",
   guideSelectHeader: "Select text — the tools appear on the left",
+  guideSelectTouch:
+    "On a tablet: hold a word and drag the handles to select text. The tools open under the selection, with the colors and Add to notes in the same box.",
   guideAssistant: "Assistant",
   guideAssistantBody:
     " — type or speak a command about the selection (“highlight the key claim and add a note to Thesis”). It proposes a plan; in Ask mode you approve each action before it runs, in Auto mode it runs immediately. Auto-mode notes still land pending for your review. The reply opens a small chat beside the article — keep talking in it; every turn still applies to your selection. Drag its corner to resize it freely.",
@@ -181,6 +183,8 @@ const zh: Record<keyof typeof en, string> = {
   guideCirclePagesBody:
     "粗略手写笔记的 PDF 按页面导入，每一页都是一张插图：圈出任意部分——一个公式、一幅草图、一条旁注——即可结合整篇文档提问、解释、评论，或选颜色圈选高亮。",
   guideSelectHeader: "选中文本——工具出现在左侧",
+  guideSelectTouch:
+    "平板上：长按一个词并拖动选择柄以选中文本。工具出现在选中内容下方，颜色和添加到笔记在同一个框内。",
   guideAssistant: "助手",
   guideAssistantBody:
     "——对选中内容输入或说出一条指令（“高亮关键论断，把笔记加到论点章节”）。它会先提出计划；“询问”模式下每个动作都由你批准后执行，“自动”模式下立即执行。“自动”模式产生的笔记仍为待定，等你审阅。回复会在文章旁打开一个小聊天——继续在里面对话即可；每一轮仍作用于你的选中内容。拖动它的一角可自由调整大小。",

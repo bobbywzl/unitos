@@ -61,6 +61,7 @@ export function GuideDialog({ open, onClose }: { open: boolean; onClose: () => v
 
         <section className="flex flex-col gap-1.5">
           <span className={h}>{t("works.guideSelectHeader")}</span>
+          <p className="text-[13px] leading-relaxed text-sand-800">{t("works.guideSelectTouch")}</p>
           <ul className="flex flex-col gap-1.5 text-[13px] leading-relaxed text-sand-800">
             <li>
               <span className={term}>{t("works.guideAssistant")}</span>
