@@ -105,9 +105,12 @@ export default async function Home() {
       </header>
 
       <div className="pt-16">
+        {/* welcomeKey is the account's birth: an admin reset stamps createdAt
+            anew, and the splash shows again. */}
         <WelcomeFlow
           firstWork={works.length === 0 && collabRows.length === 0}
           firstName={user.name.trim().split(/\s+/)[0] || user.name}
+          welcomeKey={`${user.id}:${user.createdAt.toISOString()}`}
         />
         <WorksShelf
           works={works.map((w) => toItem(w))}

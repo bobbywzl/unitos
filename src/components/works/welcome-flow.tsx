@@ -10,19 +10,30 @@ import { startNudges } from "@/components/nudges";
 // and the tagline, then fades out into the dashboard. It starts the nudges
 // (components/nudges.tsx): small floating captions, one at a time, that
 // point at the next thing to try. localStorage keeps the splash to one
-// showing; firstWork gates it to accounts with no project yet.
+// showing per account: the stored value is welcomeKey — the account's id and
+// createdAt — so a second account on this browser is welcomed too, and so is
+// an account an admin reset (the reset stamps createdAt anew). firstWork gates
+// the splash to accounts with no project yet.
 
 const WELCOMED_KEY = "unitos-welcomed";
 
-function welcomed(): boolean {
+function welcomed(key: string): boolean {
   try {
-    return localStorage.getItem(WELCOMED_KEY) !== null;
+    return localStorage.getItem(WELCOMED_KEY) === key;
   } catch {
     return true; // storage unavailable: never loop the welcome
   }
 }
 
-export function WelcomeFlow({ firstWork, firstName }: { firstWork: boolean; firstName: string }) {
+export function WelcomeFlow({
+  firstWork,
+  firstName,
+  welcomeKey,
+}: {
+  firstWork: boolean;
+  firstName: string;
+  welcomeKey: string;
+}) {
   const t = useT();
   const [splash, setSplash] = useState(false);
 
@@ -31,9 +42,9 @@ export function WelcomeFlow({ firstWork, firstName }: { firstWork: boolean; firs
   useEffect(() => {
     if (!firstWork) return;
     const id = requestAnimationFrame(() => {
-      if (welcomed()) return;
+      if (welcomed(welcomeKey)) return;
       try {
-        localStorage.setItem(WELCOMED_KEY, "1");
+        localStorage.setItem(WELCOMED_KEY, welcomeKey);
       } catch {
         // storage unavailable: showing twice is the worst case
       }
@@ -41,7 +52,7 @@ export function WelcomeFlow({ firstWork, firstName }: { firstWork: boolean; firs
       setSplash(true);
     });
     return () => cancelAnimationFrame(id);
-  }, [firstWork]);
+  }, [firstWork, welcomeKey]);
 
   if (!splash) return null;
   return (
