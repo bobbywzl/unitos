@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { useImeGuard } from "@/lib/ime";
-import { SparkleIcon } from "@/components/icons";
+import { SparkleIcon, StopIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { Markdown } from "@/components/markdown";
 import { ThinkingIndicator } from "@/components/thinking";
@@ -49,6 +49,14 @@ export function MediaAssistant({
   const [busy, setBusy] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  // The running send(), so Stop can abort it — the reply never lands, but the
+  // sent message stays in the transcript.
+  const sendAbortRef = useRef<AbortController | null>(null);
+  function stopSend() {
+    sendAbortRef.current?.abort();
+    sendAbortRef.current = null;
+    setBusy(false);
+  }
   // A cleared chip stays cleared until a new spot is circled.
   const [spotCleared, setSpotCleared] = useState(false);
   const spotKey = spot ? `${spot.startTime}-${spot.endTime}` : null;
@@ -116,6 +124,8 @@ export function MediaAssistant({
     setInput("");
     push({ role: "user", content: command });
     setBusy(true);
+    const controller = new AbortController();
+    sendAbortRef.current = controller;
     try {
       // The circled spot rides along: frame captured now, at the spot's start.
       let video: { startTime: number; endTime: number; region?: Region; frame?: string } | undefined;
@@ -131,6 +141,7 @@ export function MediaAssistant({
       const res = await fetch("/api/assistant/act", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
         body: JSON.stringify({ notebookId, documentId, command, history, video }),
       });
       const plan = (await res.json().catch(() => null)) as
@@ -144,11 +155,14 @@ export function MediaAssistant({
       const notice = plan.actions.length > 0 ? `\n\n${t("video.assistantActionsUnsupported")}` : "";
       push({ role: "assistant", content: reply + notice });
     } catch (err) {
+      // Stopped, not failed: the sent message stays, no reply lands.
+      if (controller.signal.aborted) return;
       push({
         role: "assistant",
         content: err instanceof Error ? err.message : t("video.assistantFailed"),
       });
     } finally {
+      if (sendAbortRef.current === controller) sendAbortRef.current = null;
       setBusy(false);
       inputRef.current?.focus();
     }
@@ -165,7 +179,14 @@ export function MediaAssistant({
           {t("video.assistant")}
         </span>
         <button
-          onClick={onClose}
+          onClick={() => {
+            // A turn still in flight aborts too — closing the card means
+            // nobody will read the reply, so there is nothing left for it to
+            // finish for.
+            sendAbortRef.current?.abort();
+            sendAbortRef.current = null;
+            onClose();
+          }}
           aria-label={t("common.close")}
           className="ml-auto rounded-full px-1.5 text-sand-500 hover:text-clay-800"
         >
@@ -253,10 +274,17 @@ export function MediaAssistant({
         />
         <button
           type="submit"
-          disabled={busy || input.trim() === ""}
+          onClick={(e) => {
+            if (!busy) return;
+            e.preventDefault();
+            stopSend();
+          }}
+          disabled={!busy && input.trim() === ""}
+          title={busy ? t("video.stopAssistant") : undefined}
+          aria-label={busy ? t("video.stopAssistant") : undefined}
           className="rounded-full bg-clay px-4 py-2 text-xs font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
         >
-          {t("video.assistantSend")}
+          {busy ? <StopIcon size={12} /> : t("video.assistantSend")}
         </button>
       </form>
     </div>

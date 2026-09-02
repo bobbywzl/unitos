@@ -126,6 +126,9 @@ async function handle(req: Request, t: TFunc) {
       maxOutputTokens,
       allowSystemInMessages: true,
       messages,
+      // Stop aborts here too (SPEC.md §6): the client disconnecting stops the
+      // model call, not just the response the client would have read.
+      abortSignal: req.signal,
       onEnd: ({ usage }) => {
         console.log(
           `[assistant] ask scope=${data.scope} chars=${system.length} cacheRead=${usage.inputTokenDetails.cacheReadTokens ?? 0} ` +

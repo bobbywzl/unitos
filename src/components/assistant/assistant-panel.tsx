@@ -1,11 +1,12 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { splitStreamError } from "@/lib/derive/config";
 import { useImeGuard } from "@/lib/ime";
 import type { SummaryDepth, SummaryLevels } from "@/lib/types";
 import { useT } from "@/components/lang-provider";
+import { StopIcon } from "@/components/icons";
 import type { TKey } from "@/lib/i18n/dictionaries";
 import { Markdown } from "@/components/markdown";
 import { LoadingDots, ThinkingIndicator } from "@/components/thinking";
@@ -71,6 +72,14 @@ export function AssistantPanel({
   const [recTexts, setRecTexts] = useState<SummaryLevels>({});
   const [recBusy, setRecBusy] = useState<SummaryDepth | null>(null);
   const [recError, setRecError] = useState<string | null>(null);
+  // The running ask(), so Stop can abort it — whatever streamed in already
+  // stays on screen, the read just stops.
+  const askAbortRef = useRef<AbortController | null>(null);
+  function stopAsk() {
+    askAbortRef.current?.abort();
+    askAbortRef.current = null;
+    setBusy(false);
+  }
 
   function reset() {
     setAnswer("");
@@ -137,11 +146,14 @@ export function AssistantPanel({
     if (!q || busy) return;
     reset();
     setBusy(true);
+    const controller = new AbortController();
+    askAbortRef.current = controller;
     try {
       const body = { notebookId, scope, task: "ask", question: q };
       const res = await fetch("/api/assistant", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
         body: JSON.stringify(body),
       });
       if (!res.ok || !res.body) {
@@ -168,8 +180,11 @@ export function AssistantPanel({
       }
       setAnswer(text);
     } catch (err) {
+      // Stopped, not failed: whatever streamed in already stays on screen.
+      if (controller.signal.aborted) return;
       setError(err instanceof Error ? err.message : t("assistant.assistantFailed"));
     } finally {
+      if (askAbortRef.current === controller) askAbortRef.current = null;
       setBusy(false);
     }
   }
@@ -300,10 +315,17 @@ export function AssistantPanel({
         />
         <button
           type="submit"
-          disabled={busy || !question.trim()}
+          onClick={(e) => {
+            if (!busy) return;
+            e.preventDefault();
+            stopAsk();
+          }}
+          disabled={!busy && !question.trim()}
+          title={busy ? t("assistant.stopAsk") : undefined}
+          aria-label={busy ? t("assistant.stopAsk") : undefined}
           className="rounded-full bg-clay px-4 py-2 text-sm font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
         >
-          {t("assistant.ask")}
+          {busy ? <StopIcon size={13} /> : t("assistant.ask")}
         </button>
       </form>
 
