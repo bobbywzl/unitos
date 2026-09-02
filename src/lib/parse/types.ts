@@ -125,4 +125,26 @@ export type UrlParseProgress = (stage: "extract", detail?: string) => void;
 //     around one container of several text blocks descends into it; a
 //     media-less <figure> is its text; a marker list needs visible markers;
 //     an opening heading that repeats the title drops.
-export const PARSER_VERSION = 13;
+// 14: import compare loop round 3 — PDF: a line's baseline is the median of
+//     its full-size glyphs; superscripts, limits and accents join their line;
+//     math-glyph lines never start or join a table run; a one-column table is
+//     a paragraph; monospace runs are one CODE block with their indentation;
+//     the math extension font's codes map to operators and delimiters; an
+//     equation crop leaves room for big delimiters; a label-like bold lead
+//     on an isolated line is a heading; a title is set larger than the body;
+//     framed boxes are not list indents; a bold label after a ragged line
+//     opens a paragraph; a numeric marker splits only after a ragged line;
+//     an outdented marker or a display equation ends an item; an unfinished
+//     paragraph continues across the page whatever the next word's case;
+//     floats lift off a list break; an acronym keeps its wrap hyphen; an
+//     accent split across items composes. URL: a figure the sanitizer emptied
+//     is its caption; a run of inline elements is one paragraph; a container
+//     with two paragraphs is not a composite figure; screen-reader text under
+//     any class name drops; an image's inline or attribute width caps its
+//     display width; block boundaries and adjacent inline elements space
+//     their text; duplicate responsive siblings drop; icons up to 48px are not
+//     figure media; a heading that wraps an image emits the figure; a kicker
+//     heading before a headline stays; a promo label and its rail drop; the
+//     page title loses its site suffix and the banner heading anywhere in the
+//     opening blocks drops.
+export const PARSER_VERSION = 14;
