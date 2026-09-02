@@ -7,7 +7,9 @@ import { DigestRebuild } from "@/components/admin/digest-rebuild";
 // The digest store, per user: every corpus → every document → its annotations,
 // distillations, extractions, summaries — plus the corpus's notes. Document
 // text stays out of the page; the "Exact text" link serves it as the assistant
-// reads it. Server-rendered; <details> does the folding.
+// reads it. Server-rendered; <details> does the folding. Each account is one
+// scroller: its header stays pinned while its corpora scroll under it, and the
+// page scrolls from account to account.
 
 function fmtChars(n: number): string {
   return n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)}M` : n >= 1_000 ? `${(n / 1_000).toFixed(1)}k` : String(n);
@@ -282,8 +284,11 @@ export async function DigestStore({
         );
         const account = accounts[userId];
         return (
-          <section key={userId}>
-            <div className="mb-3 flex flex-wrap items-center gap-2">
+          <section
+            key={userId}
+            className="max-h-[75vh] overflow-y-auto overscroll-y-contain rounded-2xl border border-line"
+          >
+            <div className="sticky top-0 z-10 flex flex-wrap items-center gap-2 border-b border-line bg-paper px-4 py-3">
               {account?.picture ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={account.picture} alt="" className="size-7 rounded-full" />
@@ -303,10 +308,13 @@ export async function DigestStore({
               <Chip>{t("admin.countDistillations", { n: totals.distillations })}</Chip>
               <Chip>{t("admin.countCharsStored", { n: fmtChars(totals.chars) })}</Chip>
             </div>
-            <div className="space-y-3">
+            <div className="space-y-3 p-4">
               {userRows.map((row) => (
                 <CorpusCard key={row.notebookId} row={row} t={t} />
               ))}
+              {userRows.length === 0 && (
+                <p className="text-sm text-sand-600">{t("admin.noCorpora")}</p>
+              )}
             </div>
           </section>
         );
