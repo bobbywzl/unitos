@@ -109,6 +109,26 @@ const en = {
   svcNotSet: "Not set",
   envHint:
     "Set these in your host's environment variables and redeploy. On Vercel: Settings → Environment Variables.",
+  // Notifications page (SPEC.md §18)
+  notifications: "Notifications",
+  notificationsDesc:
+    "Send a notification to accounts: an update to Unitos, or a change made to an account. Accounts are listed by name and email to pick recipients — this page cannot open or change one.",
+  notificationTitlePh: "Title",
+  notificationBodyPh: "What changed, and what it means for the reader. Markdown works.",
+  recipients: "Recipients",
+  recipientsAll: "Every account",
+  recipientsChosen: "Chosen accounts",
+  recipientsFilterPh: "Filter by name or email",
+  recipientsNone: "No accounts yet.",
+  send: "Send",
+  sending: "Sending…",
+  sentTo: "Sent to {n} accounts",
+  sendFailed: "Send failed",
+  sentList: "Sent",
+  sentEmpty: "No notifications sent yet.",
+  sentRecipients: "to {n} accounts",
+  sentDismissed: "{n} dismissed",
+  deleteNotificationConfirm: "Delete this notification for every recipient?",
 };
 
 const zh: Record<keyof typeof en, string> = {
@@ -205,6 +225,26 @@ const zh: Record<keyof typeof en, string> = {
   svcSet: "已设置",
   svcNotSet: "未设置",
   envHint: "在托管平台的环境变量中设置这些值并重新部署。Vercel 上：Settings → Environment Variables。",
+  // Notifications page (SPEC.md §18)
+  notifications: "通知",
+  notificationsDesc:
+    "向账户发送通知：Unitos 的更新，或对账户所做的变更。账户按名字和邮箱列出，只用于选择收件人——此页面不能打开或修改任何账户。",
+  notificationTitlePh: "标题",
+  notificationBodyPh: "改了什么，对读者意味着什么。支持 Markdown。",
+  recipients: "收件人",
+  recipientsAll: "全部账户",
+  recipientsChosen: "选定账户",
+  recipientsFilterPh: "按名字或邮箱筛选",
+  recipientsNone: "还没有账户。",
+  send: "发送",
+  sending: "发送中…",
+  sentTo: "已发送给 {n} 个账户",
+  sendFailed: "发送失败",
+  sentList: "已发送",
+  sentEmpty: "还没有发送过通知。",
+  sentRecipients: "发给 {n} 个账户",
+  sentDismissed: "{n} 位已关闭",
+  deleteNotificationConfirm: "为所有收件人删除这条通知？",
 };
 
 export const admin = { en, zh } as const;

@@ -105,6 +105,9 @@ const en = {
   sharedWithYou: "Shared with you",
   byOwner: "by {name}",
   sharedBadge: "Shared · {n}",
+  // Notifications from the admin (SPEC.md §18), above the shelf
+  notifications: "Notifications",
+  dismiss: "Dismiss",
 };
 
 const zh: Record<keyof typeof en, string> = {
@@ -197,6 +200,9 @@ const zh: Record<keyof typeof en, string> = {
   sharedWithYou: "与你共享",
   byOwner: "来自 {name}",
   sharedBadge: "已共享 · {n}",
+  // Notifications from the admin (SPEC.md §18), above the shelf
+  notifications: "通知",
+  dismiss: "关闭",
 };
 
 export const works = { en, zh } as const;

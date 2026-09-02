@@ -26,7 +26,9 @@
 //   conversion(手写转文本) 转换 · Circle & ask 圈选并提问 ·
 //   offline 离线 · sync(离线同步) 同步 · Unitos Premium 不翻译 ·
 //   link Google Drive(账号关联) 关联 · pages(手写页面) 页面 ·
-//   lasso highlight(页面圈选高亮) 圈选高亮
+//   lasso highlight(页面圈选高亮) 圈选高亮 ·
+//   account 账户 · notification 通知 · recipient 收件人 ·
+//   dismiss(通知) 关闭 · update(通知类型) 更新 · account change 账户变更
 // highlight 高亮 仅指高亮功能；表示选取文字一律用 选中。
 
 const en = {
@@ -87,6 +89,9 @@ const en = {
   reopen: "Reopen",
   resolvedCountOne: "1 resolved",
   resolvedCountMany: "{n} resolved",
+  // Notifications (SPEC.md §18): the kind chip, on the admin page and the dashboard.
+  notificationUpdate: "Update",
+  notificationAccount: "Account change",
 };
 
 const zh: Record<keyof typeof en, string> = {
@@ -143,6 +148,9 @@ const zh: Record<keyof typeof en, string> = {
   reopen: "重新打开",
   resolvedCountOne: "1 条已解决",
   resolvedCountMany: "{n} 条已解决",
+  // Notifications (SPEC.md §18): the kind chip, on the admin page and the dashboard.
+  notificationUpdate: "更新",
+  notificationAccount: "账户变更",
 };
 
 export const common = { en, zh } as const;
