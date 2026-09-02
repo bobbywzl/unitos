@@ -5,13 +5,14 @@ import { db } from "@/lib/db";
 import { serverT } from "@/lib/i18n/server";
 import { parseBody } from "@/lib/validate";
 
-// Delete a document from the library. Refused while notes cite it. Detaches from all
-// notebooks; blocks cascade.
-const patchSchema = z.object({
-  font: z.enum(["default", "serif", "mono"]),
-});
+// Reader body font and title for this document. Either field, or both.
+const patchSchema = z
+  .object({
+    font: z.enum(["default", "serif", "mono"]).optional(),
+    title: z.string().trim().min(1).max(200).optional(),
+  })
+  .refine((d) => d.font !== undefined || d.title !== undefined);
 
-// Reader body font for this document.
 export async function PATCH(req: Request, ctx: { params: Promise<{ documentId: string }> }) {
   const t = await serverT();
   const { documentId } = await ctx.params;
@@ -23,12 +24,17 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ documentId: s
   if (access instanceof NextResponse) return access;
   const updated = await db.document.update({
     where: { id: documentId },
-    data: { font: data.font === "default" ? null : data.font },
+    data: {
+      ...(data.font !== undefined ? { font: data.font === "default" ? null : data.font } : {}),
+      ...(data.title !== undefined ? { title: data.title } : {}),
+    },
   });
   await bumpDocument(documentId);
   return NextResponse.json(updated);
 }
 
+// Delete a document from the library. Refused while notes cite it. Detaches from all
+// notebooks; blocks cascade.
 export async function DELETE(_req: Request, ctx: { params: Promise<{ documentId: string }> }) {
   const t = await serverT();
   const { documentId } = await ctx.params;

@@ -8,6 +8,7 @@ import { CircleGlow } from "@/components/reader/circle-glow";
 import type { TKey } from "@/lib/i18n/dictionaries";
 import { ConversionStrip, type ConversionInfo } from "@/components/reader/conversion-strip";
 import { PageBlock, type PageMark } from "@/components/reader/page-block";
+import { DocumentTitle } from "@/components/reader/document-title";
 
 const TEXT_TYPES = new Set(["PARAGRAPH", "HEADING", "LIST", "CODE", "EQUATION"]);
 
@@ -441,7 +442,11 @@ export function Reader({
             n: blocks.length,
           })}
         </p>
-        <h2 className="mb-[26px] text-[33px]">{title}</h2>
+        {documentId ? (
+          <DocumentTitle documentId={documentId} title={title} />
+        ) : (
+          <h2 className="mb-[26px] text-[33px]">{title}</h2>
+        )}
 
         {blocks.map((block, i) =>
           block.type === "PAGE" && pages && documentId ? (

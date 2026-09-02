@@ -65,9 +65,11 @@ const en = {
   fontMono: "Mono",
   backToReading: "Back to reading (Esc)",
   editHint:
-    "Double-click any paragraph to edit it. Hold and draw a small circle on a figure for its tools.",
+    "Double-click any paragraph to edit it. Click the title to edit it. Hold and draw a small circle on a figure for its tools.",
   touchHint:
-    "Hold a word and drag the handles to select text. The tools open under the selection. Double-tap any paragraph to edit it. Hold and draw a small circle on a figure for its tools.",
+    "Hold a word and drag the handles to select text. The tools open under the selection. Double-tap any paragraph to edit it. Tap the title to edit it. Hold and draw a small circle on a figure for its tools.",
+  documentTitle: "Document title",
+  renameDocumentTitle: "Click to edit the title",
 
   // Side cards
   explaining: "Explaining…",
@@ -238,9 +240,12 @@ const zh: Record<keyof typeof en, string> = {
   fontSerif: "衬线",
   fontMono: "等宽",
   backToReading: "返回阅读（Esc）",
-  editHint: "双击任意段落即可编辑。在插图上按住并画一个小圈，可打开它的工具。",
+  editHint:
+    "双击任意段落即可编辑。点击标题即可编辑。在插图上按住并画一个小圈，可打开它的工具。",
   touchHint:
-    "长按一个词并拖动选择柄以选中文本，工具出现在选中内容下方。双击任意段落即可编辑。在插图上按住并画一个小圈，可打开它的工具。",
+    "长按一个词并拖动选择柄以选中文本，工具出现在选中内容下方。双击任意段落即可编辑。点击标题即可编辑。在插图上按住并画一个小圈，可打开它的工具。",
+  documentTitle: "文档标题",
+  renameDocumentTitle: "点击编辑标题",
 
   // Side cards
   explaining: "解释中…",

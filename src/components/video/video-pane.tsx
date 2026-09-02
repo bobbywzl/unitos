@@ -11,6 +11,7 @@ import { ArticleSection, MediaAssistant } from "@/components/video/assistant-car
 import { Visual } from "@/components/video/visual";
 import type { ThumbnailSource } from "@/components/video/use-thumbnails";
 import { useCollab } from "@/components/collab/collab-context";
+import { DocumentTitle } from "@/components/reader/document-title";
 import { FindPanel } from "@/components/video/find-panel";
 import { Transcript } from "@/components/video/transcript";
 import {
@@ -456,7 +457,7 @@ export function VideoPane({
           {video.kind === "YOUTUBE" ? "YouTube" : audio ? t("video.kindAudio") : t("video.kindVideo")}
           {video.duration !== null ? ` · ${formatTime(video.duration)}` : ""}
         </p>
-        <h2 className="mb-[26px] text-[33px]">{title}</h2>
+        <DocumentTitle documentId={documentId} title={title} />
 
         <div className="relative">
           <VideoPlayer
