@@ -89,6 +89,7 @@ export function ReplyThread({
               {canEdit && (
                 <button
                   onClick={() => setResolved(reply.id, !isResolved)}
+                  data-track="reply-resolve"
                   className="text-[10px] font-semibold text-sand-500 hover:text-sage-700"
                 >
                   {isResolved ? t("common.reopen") : t("common.resolve")}
@@ -97,6 +98,7 @@ export function ReplyThread({
               {(reply.userId === myId || role === "owner") && (
                 <button
                   onClick={() => remove(reply.id)}
+                  data-track="reply-delete"
                   aria-label={t("common.delete")}
                   title={t("common.delete")}
                   className="text-[11px] text-sand-400 hover:text-red-600"
@@ -127,6 +129,7 @@ export function ReplyThread({
       {resolvedReplies.length > 0 && (
         <button
           onClick={() => setShowResolved(!showResolved)}
+          data-track="reply-show-resolved"
           className="self-start text-[10px] font-semibold text-sand-500 hover:text-clay-700"
         >
           {resolvedReplies.length === 1
@@ -139,6 +142,7 @@ export function ReplyThread({
       {canEdit && !composing && (
         <button
           onClick={() => setComposing(true)}
+          data-track="reply"
           className="self-start text-[11px] font-semibold text-sand-600 hover:text-clay-700"
         >
           {t("common.reply")}
@@ -171,6 +175,7 @@ export function ReplyThread({
           />
           <button
             type="submit"
+            data-track="reply-send"
             disabled={!draft.trim() || busy}
             className="rounded-full bg-clay px-3 py-1.5 text-[11px] font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
           >

@@ -482,6 +482,26 @@ model UsageEvent {
   @@index([userId, createdAt])
 }
 
+// Click telemetry (SPEC.md §7): one row per click on a reader control.
+// surface is where the control lives (topbar | sidebar | ai-toolbar |
+// article-menu | reader | tray, src/lib/clicks.ts); control is the control's
+// id (its data-track attribute). The client batches clicks and posts them
+// fire-and-forget — telemetry never breaks or slows the reader. The admin
+// clicks page (/admin/clicks) aggregates per day, surface, control, and
+// account; the daily cron deletes rows older than 180 days.
+model ClickEvent {
+  id         String   @id @default(cuid())
+  userId     String? // null = no signed-in reader
+  notebookId String? // the open project
+  surface    String
+  control    String
+  createdAt  DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([surface, control, createdAt])
+  @@index([userId, createdAt])
+}
+
 model Feedback {
   id        String   @id @default(cuid())
   category  String // "bug" | "idea" | "other"
@@ -492,6 +512,37 @@ model Feedback {
   createdAt DateTime @default(now())
 
   @@index([status, createdAt])
+}
+
+// One notification the admin sends to accounts (SPEC.md §18): kind, title,
+// body, and one NotificationRecipient row per account it went to. The admin
+// composes it on /admin/notifications; each recipient's dashboard shows it
+// until they dismiss it. This is the admin's only write toward an account:
+// nothing here reads a session or changes a User row.
+model Notification {
+  id         String                  @id @default(cuid())
+  kind       String                  @default("update") // "update" (an update to Unitos) | "account" (a change made to the account)
+  title      String
+  body       String // markdown
+  recipients NotificationRecipient[]
+  createdAt  DateTime                @default(now())
+
+  @@index([createdAt])
+}
+
+// One recipient of one notification. userId is a soft reference like
+// Notebook.userId ("user-1" = the local reader when sign-in is off).
+// dismissedAt null = open on the recipient's dashboard; Dismiss stamps it and
+// the row stays, so the admin's dismissed count holds.
+model NotificationRecipient {
+  id             String       @id @default(cuid())
+  notificationId String
+  notification   Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  userId         String
+  dismissedAt    DateTime?
+
+  @@unique([notificationId, userId])
+  @@index([userId, dismissedAt])
 }
 
 model ReaderProfile {

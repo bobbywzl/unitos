@@ -72,13 +72,19 @@ export function AssistantPanel({
   const [recTexts, setRecTexts] = useState<SummaryLevels>({});
   const [recBusy, setRecBusy] = useState<SummaryDepth | null>(null);
   const [recError, setRecError] = useState<string | null>(null);
-  // The running ask(), so Stop can abort it — whatever streamed in already
-  // stays on screen, the read just stops.
-  const askAbortRef = useRef<AbortController | null>(null);
-  function stopAsk() {
-    askAbortRef.current?.abort();
-    askAbortRef.current = null;
+  // The running ask() or task, so Stop can abort it — whatever streamed in
+  // already stays on screen, the read just stops.
+  const runAbortRef = useRef<AbortController | null>(null);
+  function stopRun() {
+    runAbortRef.current?.abort();
+    runAbortRef.current = null;
     setBusy(false);
+  }
+  // The running Recommended generation; a stopped one leaves the stored
+  // summary, if any, in place.
+  const recAbortRef = useRef<AbortController | null>(null);
+  function stopRecommended() {
+    recAbortRef.current?.abort();
   }
 
   function reset() {
@@ -102,10 +108,13 @@ export function AssistantPanel({
     setRecDepth(depth);
     setRecError(null);
     setRecTexts((t) => ({ ...t, [depth]: "" }));
+    const controller = new AbortController();
+    recAbortRef.current = controller;
     try {
       const res = await fetch("/api/derive", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
         body: JSON.stringify({ type: "SUMMARIZE", documentId, notebookId, depth }),
       });
       if (!res.ok || !res.body) {
@@ -135,8 +144,11 @@ export function AssistantPanel({
         delete next[depth];
         return next;
       });
+      // Stopped, not failed: the card goes back to the stored summary, if any.
+      if (controller.signal.aborted) return;
       setRecError(err instanceof Error ? err.message : t("common.requestFailed"));
     } finally {
+      if (recAbortRef.current === controller) recAbortRef.current = null;
       setRecBusy(null);
     }
   }
@@ -147,7 +159,7 @@ export function AssistantPanel({
     reset();
     setBusy(true);
     const controller = new AbortController();
-    askAbortRef.current = controller;
+    runAbortRef.current = controller;
     try {
       const body = { notebookId, scope, task: "ask", question: q };
       const res = await fetch("/api/assistant", {
@@ -184,7 +196,7 @@ export function AssistantPanel({
       if (controller.signal.aborted) return;
       setError(err instanceof Error ? err.message : t("assistant.assistantFailed"));
     } finally {
-      if (askAbortRef.current === controller) askAbortRef.current = null;
+      if (runAbortRef.current === controller) runAbortRef.current = null;
       setBusy(false);
     }
   }
@@ -194,10 +206,13 @@ export function AssistantPanel({
     reset();
     setBusy(true);
     setTaskRun(task);
+    const controller = new AbortController();
+    runAbortRef.current = controller;
     try {
       const res = await fetch("/api/assistant", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
         body: JSON.stringify({ notebookId, scope: "notebook", task }),
       });
       const json = (await res.json().catch(() => null)) as
@@ -207,8 +222,11 @@ export function AssistantPanel({
         throw new Error(json?.error ?? t("assistant.taskFailedStatus", { status: res.status }));
       setIssues(json?.issues ?? []);
     } catch (err) {
+      // Stopped, not failed: no cards, no error.
+      if (controller.signal.aborted) return;
       setError(err instanceof Error ? err.message : t("assistant.taskFailed"));
     } finally {
+      if (runAbortRef.current === controller) runAbortRef.current = null;
       setBusy(false);
     }
   }
@@ -234,6 +252,7 @@ export function AssistantPanel({
               <button
                 key={r.depth}
                 onClick={() => openRecommended(r.depth)}
+                data-track={`assistant-recommended:${r.depth}`}
                 disabled={recBusy !== null}
                 aria-pressed={recDepth === r.depth}
                 className={`rounded-2xl px-3.5 py-2 text-left shadow-soft disabled:opacity-60 ${
@@ -250,7 +269,7 @@ export function AssistantPanel({
               </button>
             ))}
           </div>
-          {recDepth && (recommendedShown || recError) && (
+          {recDepth && (recommendedShown || recError || recBusy === recDepth) && (
             <div className="rounded-2xl bg-card p-4 shadow-soft">
               <div className="mb-2 flex items-center justify-between">
                 <span className="text-[11px] font-bold tracking-[0.08em] text-clay-800 uppercase">
@@ -258,6 +277,7 @@ export function AssistantPanel({
                 </span>
                 <button
                   onClick={() => void generateRecommended(recDepth)}
+                  data-track="assistant-regenerate"
                   disabled={recBusy !== null}
                   className="text-xs text-sand-500 hover:text-clay-700 disabled:opacity-40"
                 >
@@ -266,10 +286,12 @@ export function AssistantPanel({
               </div>
               {recError ? (
                 <p className="text-sm text-red-600">{recError}</p>
-              ) : (
+              ) : recommendedShown ? (
                 <div className="text-sm">
                   <Markdown>{recommendedShown}</Markdown>
                 </div>
+              ) : (
+                <ThinkingIndicator className="text-xs" onStop={stopRecommended} />
               )}
             </div>
           )}
@@ -281,6 +303,7 @@ export function AssistantPanel({
           <button
             key={s.id}
             onClick={() => setScope(s.id)}
+            data-track={`assistant-scope:${s.id}`}
             title={t(s.hintKey)}
             className={`rounded-full px-3 py-1 text-xs font-semibold disabled:opacity-40 ${
               scope === s.id
@@ -315,10 +338,11 @@ export function AssistantPanel({
         />
         <button
           type="submit"
+          data-track="assistant-ask"
           onClick={(e) => {
             if (!busy) return;
             e.preventDefault();
-            stopAsk();
+            stopRun();
           }}
           disabled={!busy && !question.trim()}
           title={busy ? t("assistant.stopAsk") : undefined}
@@ -335,6 +359,7 @@ export function AssistantPanel({
             <button
               key={task}
               onClick={() => void runTask(task)}
+              data-track={`assistant-task:${task}`}
               disabled={busy}
               className="rounded-full border border-line px-3 py-1 text-xs text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40"
             >
@@ -344,7 +369,9 @@ export function AssistantPanel({
         </div>
       )}
 
-      {busy && !answer && <ThinkingIndicator className="text-xs" />}
+      {busy && !answer && (
+        <ThinkingIndicator className="text-xs" onStop={taskRun ? stopRun : undefined} />
+      )}
       {error && <p className="text-sm text-red-600">{error}</p>}
 
       {answer && (
@@ -373,6 +400,7 @@ export function AssistantPanel({
                     <button
                       key={id}
                       onClick={() => showNote(id)}
+                      data-track="assistant-note-chip"
                       className="rounded-full bg-clay-100 px-2.5 py-0.5 text-xs font-semibold text-clay-800 hover:bg-clay-200"
                     >
                       {t("assistant.noteChip", { id: id.slice(-6) })}

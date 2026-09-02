@@ -60,6 +60,7 @@ export function Bibliography({ references }: { references: DocumentReference[] }
       <div className="border-t border-line pt-5">
         <button
           onClick={() => setOpen((v) => !v)}
+          data-track="references"
           aria-expanded={open}
           className="flex items-center gap-1.5 text-[12px] font-bold tracking-[0.09em] text-clay-700 uppercase hover:text-clay-800 print:hidden"
         >

@@ -278,6 +278,7 @@ function markedText(text: string, highlights: Highlight[], t: TFunc) {
             key={`extract-${from}`}
             type="button"
             data-anchor-skip
+            data-track="extract-chip"
             aria-label={
               extractEnding.extractOrigin
                 ? t("panes.extractStartedHere", { label: extractEnding.extractLabel ?? "" })
@@ -319,6 +320,7 @@ function markedText(text: string, highlights: Highlight[], t: TFunc) {
             key={`tool-${from}`}
             type="button"
             data-anchor-skip
+            data-track="tool-chip"
             aria-label={t(TOOL_KEY[toolEnding.tool])}
             title={t(TOOL_KEY[toolEnding.tool])}
             onClick={(e) => {
@@ -341,6 +343,7 @@ function markedText(text: string, highlights: Highlight[], t: TFunc) {
             key={`comment-${from}`}
             type="button"
             data-anchor-skip
+            data-track="comment-icon"
             aria-label={t("panes.openComment")}
             title={t("panes.openComment")}
             onClick={(e) => {
@@ -370,6 +373,7 @@ function markedText(text: string, highlights: Highlight[], t: TFunc) {
             key={`link-start-${from}`}
             type="button"
             data-anchor-skip
+            data-track="link-chip"
             aria-label={t("panes.linkToOtherTexts")}
             title={t("panes.linkToOtherTexts")}
             onClick={(e) => {
@@ -449,6 +453,7 @@ function HighlightLabel({ anchors }: { anchors: Highlight[] }) {
   const text = labels.length > 0 ? labels.join(" · ") : t("panes.highlighted");
   return (
     <button
+      data-track="figure-label"
       onClick={
         focusable?.sourceId
           ? () =>

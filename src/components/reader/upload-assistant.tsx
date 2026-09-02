@@ -193,16 +193,25 @@ export function UploadAssistant({
   const busy = phase === "adding" || checking;
 
   // ── Review (url kind): the sandbox read, on open and on Review again ──────
+  // The running review, so Cancel can abort it: the box goes to ready with
+  // the page itself selected, and Add still works.
+  const reviewAbortRef = useRef<AbortController | null>(null);
+  function stopReview() {
+    reviewAbortRef.current?.abort();
+  }
   async function runReview(withInstructions: string) {
     if (request.kind !== "url") return;
     setPhase("review");
     setReviewError(null);
     setError(null);
     setReviewSteps(REVIEW_STEPS);
+    const controller = new AbortController();
+    reviewAbortRef.current = controller;
     try {
       const res = await fetch("/api/uploads/review", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
         body: JSON.stringify({
           notebookId,
           url: request.url,
@@ -221,7 +230,7 @@ export function UploadAssistant({
           result = event;
         }
       }
-      if (!result?.review) throw new Error(result?.error ?? t("api.reviewFailed"));
+      if (!result?.review) throw new Error(result?.error ?? t("panes.uploadCutOff"));
       const next = result.review;
       setReview(next);
       const sel = new Set<string>();
@@ -235,8 +244,13 @@ export function UploadAssistant({
         setAcknowledged(withInstructions);
       }
     } catch (err) {
-      setReviewError(err instanceof Error ? err.message : t("api.reviewFailed"));
+      // Cancelled, not failed: no review, the page itself stays selected.
+      if (!controller.signal.aborted) {
+        setReviewError(err instanceof Error ? err.message : t("api.reviewFailed"));
+      }
       setSelected(new Set([SELF]));
+    } finally {
+      if (reviewAbortRef.current === controller) reviewAbortRef.current = null;
     }
     setPhase("ready");
   }
@@ -292,7 +306,7 @@ export function UploadAssistant({
       else result = event;
     }
     if (!result || "error" in result) {
-      throw new Error(result && "error" in result ? result.error : t("panes.uploadFailed"));
+      throw new Error(result && "error" in result ? result.error : t("panes.uploadCutOff"));
     }
     setSteps((s) => (s ? completeIngestSteps(s) : s));
     return result;
@@ -599,7 +613,11 @@ export function UploadAssistant({
           <span className="font-display text-[17px]">{t("panes.uploadAssistant")}</span>
           {phase !== "adding" && (
             <button
-              onClick={() => onClose(null)}
+              onClick={() => {
+                reviewAbortRef.current?.abort();
+                onClose(null);
+              }}
+              data-track="upload-close"
               aria-label={t("common.close")}
               className="ml-auto flex size-8 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-700"
             >
@@ -615,6 +633,12 @@ export function UploadAssistant({
           <div className="flex flex-col gap-2.5">
             <p className="text-[13px] text-sand-700">{t("panes.uploadSandboxNote")}</p>
             <StepList steps={reviewSteps} />
+            <button
+              onClick={stopReview}
+              className="self-start rounded-full border border-line px-3.5 py-1 text-xs font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800"
+            >
+              {t("common.cancel")}
+            </button>
           </div>
         )}
 
@@ -716,12 +740,14 @@ export function UploadAssistant({
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => setSplit(true)}
+                    data-track="upload-split-yes"
                     className={`${pill} ${split ? "bg-clay text-clay-fg" : "bg-sand-100 text-sand-700 hover:bg-clay-100"}`}
                   >
                     {t("panes.uploadSplitYes", { parts: review.splitParts })}
                   </button>
                   <button
                     onClick={() => setSplit(false)}
+                    data-track="upload-split-no"
                     className={`${pill} ${split ? "bg-sand-100 text-sand-700 hover:bg-clay-100" : "bg-clay text-clay-fg"}`}
                   >
                     {t("panes.uploadSplitNo")}
@@ -751,6 +777,7 @@ export function UploadAssistant({
                       key={format}
                       type="button"
                       onClick={() => setPdfFormat(format)}
+                      data-track={`upload-format:${format}`}
                       aria-pressed={pdfFormat === format}
                       className={`${pill} ${pdfFormat === format ? "bg-clay text-clay-fg" : "bg-sand-100 text-sand-700 hover:bg-clay-100"}`}
                     >
@@ -788,6 +815,7 @@ export function UploadAssistant({
             <div className="flex items-center gap-2">
               <button
                 onClick={() => void add()}
+                data-track="upload-add"
                 disabled={busy}
                 className="rounded-full bg-clay px-5 py-2 text-xs font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
               >
@@ -800,6 +828,7 @@ export function UploadAssistant({
               {request.kind === "url" && (
                 <button
                   onClick={() => void runReview(instructions.trim())}
+                  data-track="upload-review-again"
                   disabled={busy}
                   className="rounded-full border border-line px-3.5 py-1.5 text-xs text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40"
                 >
@@ -808,6 +837,7 @@ export function UploadAssistant({
               )}
               <button
                 onClick={() => onClose(null)}
+                data-track="upload-cancel"
                 disabled={busy}
                 className="ml-auto rounded-full px-3.5 py-1.5 text-xs text-sand-600 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40"
               >
@@ -848,6 +878,7 @@ export function UploadAssistant({
                 </ul>
                 <button
                   onClick={() => onClose(added[0]?.id ?? null)}
+                  data-track="upload-done"
                   className="self-start rounded-full bg-clay px-5 py-2 text-xs font-semibold text-clay-fg hover:bg-clay-600"
                 >
                   {t("common.close")}

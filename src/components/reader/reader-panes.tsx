@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { useT } from "@/components/lang-provider";
+import { Presence } from "@/components/presence";
 import type { TKey } from "@/lib/i18n/dictionaries";
 
 // Reader views: Normal shows one document; Side by Side and Top and Bottom
@@ -200,6 +201,7 @@ export function ReaderPanes({
   return (
     <div
       ref={containerRef}
+      data-track-surface="reader"
       className={`relative flex h-full min-h-0 min-w-0 ${view === "stack" ? "flex-col" : "flex-row"}`}
     >
       {/* Bottom-left: clear of the article menu (top-left) and the sticky
@@ -207,18 +209,21 @@ export function ReaderPanes({
       <div ref={menuRef} className="absolute bottom-4 left-4 z-30 print:hidden">
         <button
           onClick={() => setMenu((v) => !v)}
+          data-track="view"
           aria-label={t("panes.readerView")}
           title={t("panes.readerView")}
           className="flex items-center justify-center rounded-full bg-sand-100 p-2 text-sand-600 shadow-soft hover:text-clay-800"
         >
           <ViewGlyph kind={view} />
         </button>
+        <Presence show={menu} exit="menu">
         {menu && (
-          <div className="absolute bottom-full left-0 mb-1.5 flex w-44 flex-col rounded-2xl bg-card p-1.5 shadow-float">
+          <div className="menu-in absolute bottom-full left-0 mb-1.5 flex w-44 flex-col rounded-2xl bg-card p-1.5 shadow-float">
             {(["normal", "side", "stack"] as const).map((kind) => (
               <button
                 key={kind}
                 onClick={() => go(kind)}
+                data-track={`view:${kind}`}
                 className={`flex items-center gap-2.5 rounded-full px-2.5 py-1.5 text-left text-[12px] ${
                   view === kind
                     ? "bg-clay-100 font-semibold text-clay-800"
@@ -231,6 +236,7 @@ export function ReaderPanes({
             ))}
           </div>
         )}
+        </Presence>
       </div>
 
       <div ref={paneOneRef} className="relative min-h-0 min-w-0 flex-1">

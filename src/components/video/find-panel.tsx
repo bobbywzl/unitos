@@ -1,12 +1,13 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { useImeGuard } from "@/lib/ime";
 import { SearchIcon, SpinnerIcon } from "@/components/icons";
 import { useCollab } from "@/components/collab/collab-context";
 import { useT } from "@/components/lang-provider";
+import { ThinkingIndicator } from "@/components/thinking";
 import { formatTimeRange, type VideoFindMatch } from "@/lib/video/types";
 
 // Find (SPEC.md §11): the video content reader, front and center in the tool
@@ -44,6 +45,11 @@ export function FindPanel({
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState<Set<number>>(new Set());
   const [saving, setSaving] = useState<number | null>(null);
+  // The running find, so Stop can abort it.
+  const findAbortRef = useRef<AbortController | null>(null);
+  function stopFind() {
+    findAbortRef.current?.abort();
+  }
 
   async function find() {
     const q = query.trim();
@@ -52,17 +58,22 @@ export function FindPanel({
     setError(null);
     setMatches(null);
     setSaved(new Set());
+    const controller = new AbortController();
+    findAbortRef.current = controller;
     try {
-      const res = await api<{ matches: VideoFindMatch[] }>("/api/derive", "POST", {
-        type: "FIND",
-        documentId,
-        notebookId,
-        query: q,
-      });
+      const res = await api<{ matches: VideoFindMatch[] }>(
+        "/api/derive",
+        "POST",
+        { type: "FIND", documentId, notebookId, query: q },
+        { signal: controller.signal },
+      );
       setMatches(res.matches);
     } catch (err) {
+      // Stopped, not failed: no matches, no error.
+      if (controller.signal.aborted) return;
       setError(err instanceof Error ? err.message : t("video.findFailed"));
     } finally {
+      if (findAbortRef.current === controller) findAbortRef.current = null;
       setBusy(false);
     }
   }
@@ -126,6 +137,11 @@ export function FindPanel({
         {trailing}
       </div>
 
+      {busy && (
+        <p className="mt-2 px-1 text-xs">
+          <ThinkingIndicator onStop={stopFind} />
+        </p>
+      )}
       {error && <p className="mt-2 px-1 text-xs text-red-500">{error}</p>}
       {matches !== null && matches.length === 0 && (
         <p className="mt-2 px-1 text-xs text-sand-600">
@@ -138,6 +154,7 @@ export function FindPanel({
             <div key={i} className="rounded-2xl bg-card p-3.5 shadow-soft">
               <button
                 onClick={() => onSeek(match.startTime, match.endTime)}
+                data-track="video-find-seek"
                 className="rounded-full bg-clay-100 px-2.5 py-0.5 text-[11px] font-semibold tabular-nums text-clay-800 hover:bg-clay-200"
                 title={t("video.jumpToPart")}
               >
@@ -153,6 +170,7 @@ export function FindPanel({
                 ) : (
                   <button
                     onClick={() => void save(i, match)}
+                    data-track="video-find-add-note"
                     disabled={saving !== null || sectionChoices.length === 0}
                     title={
                       sectionChoices.length === 0

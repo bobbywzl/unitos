@@ -8,6 +8,7 @@ import { ChevronDownIcon, ChevronRightIcon } from "@/components/icons";
 import { useCollab } from "@/components/collab/collab-context";
 import { useT } from "@/components/lang-provider";
 import { NoteCard } from "@/components/outline/note-card";
+import { Collapse } from "@/components/presence";
 import { SelectionBar } from "@/components/outline/selection-bar";
 import { filterSections, type OutlineActions } from "@/components/outline/use-outline";
 
@@ -70,7 +71,7 @@ export function NotesTray({
       {tree.length === 0 && (
         <p className="text-[13px] text-sand-600">
           {t("outline.emptyTrayPrefix")}
-          <Link href={`/n/${actions.notebookId}/notes`} className="text-clay hover:text-clay-600">
+          <Link href={`/n/${actions.notebookId}/notes`} data-track="notes-full-page" className="text-clay hover:text-clay-600">
             {t("outline.notesFullPage")}
           </Link>
           {t("outline.emptyTraySuffix")}
@@ -105,6 +106,7 @@ function TraySection({
       <div className="flex items-baseline gap-2">
         <button
           onClick={() => setCollapsed(!collapsed)}
+          data-track="section-collapse"
           aria-expanded={!collapsed}
           className={`flex items-center gap-1 ${labelClass} text-sand-600 hover:text-clay-700`}
         >
@@ -117,6 +119,7 @@ function TraySection({
         {!collapsed && canEdit && (
           <button
             onClick={() => setComposing(true)}
+            data-track="section-add-note"
             className="ml-auto text-[11px] text-sand-600 opacity-0 transition-opacity group-hover/section:opacity-100 focus-visible:opacity-100 hover:text-clay-700"
           >
             {t("outline.addNoteBtn")}
@@ -124,8 +127,9 @@ function TraySection({
         )}
       </div>
 
+      <Collapse open={!collapsed}>
       {!collapsed && (
-        <>
+        <div className="flex flex-col gap-2">
           {accepted.map((note) => (
             <NoteCard key={note.id} note={note} actions={actions} variant="tray" />
           ))}
@@ -157,6 +161,7 @@ function TraySection({
               <div className="mt-2 flex gap-2">
                 <button
                   type="submit"
+                  data-track="note-compose-save"
                   className="rounded-full bg-sage-600 px-3.5 py-1 text-xs font-semibold text-sage-fg hover:bg-sage-700"
                 >
                   {t("common.save")}
@@ -164,6 +169,7 @@ function TraySection({
                 <button
                   type="button"
                   onClick={() => setComposing(false)}
+                  data-track="note-compose-cancel"
                   className="rounded-full border border-line px-3 py-1 text-xs text-sand-700 hover:bg-clay-100 hover:text-clay-800"
                 >
                   {t("common.cancel")}
@@ -181,8 +187,9 @@ function TraySection({
               nested
             />
           ))}
-        </>
+        </div>
       )}
+      </Collapse>
     </div>
   );
 }

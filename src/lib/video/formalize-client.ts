@@ -20,15 +20,19 @@ export type FormalizeResult = {
   sectionTitle?: string;
 };
 
-export async function runFormalize(input: {
-  documentId: string;
-  notebookId: string;
-  format: FormalizeFormat;
-  sectionId?: string;
-}): Promise<FormalizeResult> {
+export async function runFormalize(
+  input: {
+    documentId: string;
+    notebookId: string;
+    format: FormalizeFormat;
+    sectionId?: string;
+  },
+  signal?: AbortSignal,
+): Promise<FormalizeResult> {
   const res = await fetch("/api/derive", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
+    signal,
     body: JSON.stringify({ type: "FORMALIZE", ...input }),
   });
   if (!res.ok || !res.body) {

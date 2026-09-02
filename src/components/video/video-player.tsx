@@ -733,6 +733,7 @@ export const VideoPlayer = forwardRef<
           {drawing && !draw && (
             <button
               onClick={() => onDrawn(null)}
+              data-track="video-use-whole-frame"
               className="absolute top-3 left-1/2 z-10 -translate-x-1/2 rounded-full bg-black/70 px-4 py-1.5 text-xs font-semibold backdrop-blur-sm hover:bg-black/85"
               style={{ color: STAGE_TEXT }}
             >
@@ -764,6 +765,7 @@ export const VideoPlayer = forwardRef<
       <div className="flex items-center gap-2 px-3 py-2.5">
         <button
           onClick={togglePlay}
+          data-track="video-play"
           aria-label={playing ? t("video.pause") : t("video.play")}
           title={playing ? t("video.pauseSpace") : t("video.playSpace")}
           className={CONTROL_BUTTON}
@@ -811,6 +813,7 @@ export const VideoPlayer = forwardRef<
                   e.stopPropagation();
                   seek(a.startTime, { play: false });
                 }}
+                data-track="video-marker"
                 aria-label={t("video.annotationAt", { time: formatTime(a.startTime) })}
                 title={`${formatTimeRange(a.startTime, a.endTime)} · ${markdownPreview(a.content).slice(0, 80)}`}
                 className="absolute top-1/2 size-[9px] -translate-x-1/2 -translate-y-1/2 rounded-full border border-black/40 bg-clay-300 hover:scale-125"
@@ -821,6 +824,7 @@ export const VideoPlayer = forwardRef<
 
         <button
           onClick={() => setMuted((m) => !m)}
+          data-track="video-mute"
           aria-label={muted ? t("video.unmute") : t("video.mute")}
           title={muted ? t("video.unmute") : t("video.mute")}
           className={CONTROL_BUTTON}
@@ -831,6 +835,7 @@ export const VideoPlayer = forwardRef<
         {canAnnotate && (
         <button
           onClick={onAnnotate}
+          data-track="video-annotate"
           aria-label={t("video.annotate")}
           title={audio ? t("video.audioAnnotateTitle") : t("video.annotateTitle")}
           className={
@@ -846,6 +851,7 @@ export const VideoPlayer = forwardRef<
         {!audio && (
         <button
           onClick={toggleFullscreen}
+          data-track="video-fullscreen"
           aria-label={fullscreen ? t("video.exitFullscreen") : t("video.fullscreen")}
           title={fullscreen ? t("video.exitFullscreenF") : t("video.fullscreenF")}
           className={CONTROL_BUTTON}

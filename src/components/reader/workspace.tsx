@@ -17,6 +17,7 @@ import {
   QuestionIcon,
   SparkleIcon,
 } from "@/components/icons";
+import { ClickTracker } from "@/components/click-tracker";
 import { CollabProvider, type CollabState } from "@/components/collab/collab-context";
 import { HistoryControl } from "@/components/collab/history-control";
 import { ShareControl } from "@/components/collab/share-control";
@@ -29,6 +30,7 @@ import { GuideDialog } from "@/components/guide-dialog";
 import { useT } from "@/components/lang-provider";
 import { NotebookTitle } from "@/components/notebook-title";
 import { NotesTray } from "@/components/outline/notes-tray";
+import { Presence } from "@/components/presence";
 import { useOutline } from "@/components/outline/use-outline";
 import { DocumentBar, type AttachedDocument } from "@/components/reader/document-bar";
 import type { DriveConfig } from "@/lib/drive/config";
@@ -124,6 +126,9 @@ export function Workspace({
   // The tray's width on md+: dragged by the bar between the reader and the
   // tray, clamped by clampTrayWidth, remembered per browser.
   const [trayWidth, setTrayWidth] = useState(TRAY_DEFAULT);
+  // While the bar is dragged the tray column follows the pointer with no
+  // transition; the slide is for collapse and expand.
+  const [resizing, setResizing] = useState(false);
   const [tab, setTab] = useState<Tab>("notes");
   const [menuOpen, setMenuOpen] = useState(false);
   const [guideOpen, setGuideOpen] = useState(false);
@@ -229,6 +234,7 @@ export function Workspace({
     const fromX = e.clientX;
     const fromWidth = trayWidth;
     let latest = fromWidth;
+    setResizing(true);
     document.body.style.userSelect = "none";
     document.body.style.cursor = "col-resize";
     const onMove = (ev: PointerEvent) => {
@@ -240,6 +246,7 @@ export function Workspace({
       window.removeEventListener("pointerup", onUp);
       document.body.style.userSelect = "";
       document.body.style.cursor = "";
+      setResizing(false);
       localStorage.setItem(TRAY_WIDTH_STORE, String(latest));
     };
     window.addEventListener("pointermove", onMove);
@@ -276,10 +283,18 @@ export function Workspace({
     // print: the shell flattens to plain flow so the whole document prints,
     // not one screen of the scroll pane; chrome and trays hide.
     <CollabProvider value={collab}>
-    <div className="grid h-screen grid-rows-[68px_1fr] bg-paper print:block print:h-auto">
-      <header className="flex min-w-0 items-center gap-2 border-b border-line px-3 sm:gap-3.5 sm:px-5 print:hidden">
+    {/* Click telemetry (SPEC.md §7): the header, the rail, and the tray are
+        the surfaces; every control in them carries data-track. */}
+    <ClickTracker notebookId={notebook.id} />
+    <div className="content-in grid h-screen grid-rows-[68px_1fr] bg-paper print:block print:h-auto">
+      <header
+        data-track-surface="topbar"
+        className="flex min-w-0 items-center gap-2 border-b border-line px-3 sm:gap-3.5 sm:px-5 print:hidden"
+      >
+
         <Link
           href="/"
+          data-track="back"
           aria-label={t("panes.allCorpora")}
           className="flex size-[38px] shrink-0 items-center justify-center rounded-full text-sand-700 hover:bg-clay-100 hover:text-clay-800"
         >
@@ -317,6 +332,7 @@ export function Workspace({
         )}
         <button
           onClick={openGuide}
+          data-track="guide"
           data-nudge="guide"
           aria-label={t("panes.guide")}
           title={t("panes.guideTitle")}
@@ -340,8 +356,16 @@ export function Workspace({
           />
         </div>
 
-        {(!collapsed || mobileTray) && (
-          <>
+        {/* The tray column: on md+ it slides shut to zero width when collapsed
+            and the reader takes the room; below md the aside inside is a
+            bottom sheet, shown while mobileTray is set. */}
+        <div
+          style={{ "--tray-w": `${trayWidth}px` } as React.CSSProperties}
+          inert={(collapsed && !mobileTray) || undefined}
+          className={`tray-column flex min-h-0 shrink-0 md:overflow-hidden ${
+            resizing ? "tray-column-resizing" : ""
+          } ${collapsed ? "md:w-0" : "md:w-[var(--tray-w)]"}`}
+        >
           {/* The bar between the reader and the tray: drag to resize, arrow
               keys nudge, double-click resets. It floats over the tray's left
               border, so the layout gains no width. */}
@@ -371,10 +395,10 @@ export function Workspace({
             />
           </div>
           <aside
-            style={{ "--tray-w": `${trayWidth}px` } as React.CSSProperties}
+            data-track-surface="tray"
             className={`${
               mobileTray
-                ? "fixed inset-x-0 bottom-[calc(54px+env(safe-area-inset-bottom))] z-30 flex max-h-[70dvh] rounded-t-[24px] border-t shadow-float md:static md:z-auto md:max-h-none md:rounded-none md:border-t-0 md:shadow-none"
+                ? "sheet-in fixed inset-x-0 bottom-[calc(54px+env(safe-area-inset-bottom))] z-30 flex max-h-[70dvh] rounded-t-[24px] border-t shadow-float md:static md:z-auto md:max-h-none md:rounded-none md:border-t-0 md:shadow-none"
                 : "hidden md:flex"
             } min-h-0 w-full min-w-0 shrink flex-col gap-3.5 border-line bg-sand-100 p-[18px] pb-4 md:w-[var(--tray-w)] md:shrink-0 md:border-l print:hidden`}
           >
@@ -390,6 +414,7 @@ export function Workspace({
               )}
               <button
                 onClick={() => setMobileTray(false)}
+                data-track="close"
                 aria-label={t("common.close")}
                 className="ml-auto rounded-full px-2 text-sand-500 hover:text-clay-800 md:hidden"
               >
@@ -397,7 +422,8 @@ export function Workspace({
               </button>
             </div>
 
-            <div className="min-h-0 flex-1 overflow-y-auto">
+            {/* Keyed by tab: switching remounts the panel, and it rises in. */}
+            <div key={tab} className="panel-in min-h-0 flex-1 overflow-y-auto">
               {tab === "notes" && <NotesTray tree={tree} pending={pending} actions={actions} />}
               {tab === "assistant" && assistant}
               {tab === "distill" && distillPanel}
@@ -410,6 +436,7 @@ export function Workspace({
                 <span className="text-[13px] text-sand-600">{t("panes.noteRejected")}</span>
                 <button
                   onClick={() => void undoReject()}
+                  data-track="undo-reject"
                   className="ml-auto rounded-full bg-clay px-3.5 py-1 text-xs font-semibold text-clay-fg hover:bg-clay-600"
                 >
                   {t("panes.undo")}
@@ -420,6 +447,7 @@ export function Workspace({
             {tab === "notes" && (
               <Link
                 href={`/n/${notebook.id}/notes`}
+                data-track="notes-full-page"
                 title={t("panes.notesFullPageTitle")}
                 className="flex shrink-0 items-center justify-center gap-2 rounded-full bg-card px-4 py-2.5 text-[13px] font-semibold text-sand-700 shadow-soft hover:bg-clay-100 hover:text-clay-800"
               >
@@ -428,10 +456,10 @@ export function Workspace({
               </Link>
             )}
           </aside>
-          </>
-        )}
+        </div>
 
         <nav
+          data-track-surface="sidebar"
           data-nudge="rail"
           aria-label={t("panes.workspace")}
           className="fixed inset-x-0 bottom-0 z-30 flex h-[calc(54px+env(safe-area-inset-bottom))] flex-row items-center justify-around border-t border-line bg-sand-100 px-3 pt-1 pb-[env(safe-area-inset-bottom)] md:static md:z-auto md:h-auto md:w-[52px] md:shrink-0 md:flex-col md:justify-start md:gap-1.5 md:border-t-0 md:border-l md:px-0 md:pt-2.5 md:pb-2.5 print:hidden"
@@ -441,6 +469,7 @@ export function Workspace({
               setCollapsed(!collapsed);
               setMobileTray(false);
             }}
+            data-track="collapse-tray"
             aria-label={collapsed ? t("panes.expandTray") : t("panes.collapseTray")}
             className={`max-md:hidden ${RAIL_BUTTON}`}
           >
@@ -450,6 +479,7 @@ export function Workspace({
           {canEdit && (
             <button
               onClick={() => show("assistant")}
+              data-track="assistant"
               aria-label={t("panes.assistant")}
               aria-current={!collapsed && tab === "assistant"}
               className={!collapsed && tab === "assistant" ? RAIL_BUTTON_ON : RAIL_BUTTON}
@@ -460,6 +490,7 @@ export function Workspace({
 
           <button
             onClick={() => show("notes")}
+            data-track="notes"
             aria-label={t("panes.notes")}
             aria-current={!collapsed && tab === "notes"}
             className={!collapsed && tab === "notes" ? RAIL_BUTTON_ON : RAIL_BUTTON}
@@ -474,6 +505,7 @@ export function Workspace({
 
           <button
             onClick={() => show("distill")}
+            data-track="distill"
             aria-label={t("panes.distill")}
             aria-current={!collapsed && tab === "distill"}
             className={!collapsed && tab === "distill" ? RAIL_BUTTON_ON : RAIL_BUTTON}
@@ -483,6 +515,7 @@ export function Workspace({
 
           <button
             onClick={() => setGraphOpen(true)}
+            data-track="graph"
             aria-label={t("panes.graph")}
             title={t("panes.graphTitle")}
             className={RAIL_BUTTON}
@@ -492,6 +525,7 @@ export function Workspace({
 
           <button
             onClick={() => show("annotations")}
+            data-track="annotations"
             aria-label={t("panes.annotations")}
             aria-current={!collapsed && tab === "annotations"}
             className={!collapsed && tab === "annotations" ? RAIL_BUTTON_ON : RAIL_BUTTON}
@@ -501,6 +535,7 @@ export function Workspace({
 
           <button
             onClick={() => show("edits")}
+            data-track="edits"
             aria-label={t("panes.editHistory")}
             aria-current={!collapsed && tab === "edits"}
             className={!collapsed && tab === "edits" ? RAIL_BUTTON_ON : RAIL_BUTTON}
@@ -511,33 +546,39 @@ export function Workspace({
           <div ref={menuRef} className="relative md:mt-auto">
             <button
               onClick={() => setMenuOpen(!menuOpen)}
+              data-track="more"
               aria-label={t("panes.more")}
               aria-expanded={menuOpen}
               className={RAIL_BUTTON}
             >
               <MoreIcon />
             </button>
+            <Presence show={menuOpen} exit="menu">
             {menuOpen && (
-              <div className="absolute right-0 bottom-full mb-2 flex w-44 flex-col overflow-hidden rounded-2xl bg-card py-1 shadow-float">
+              <div className="menu-in absolute right-0 bottom-full mb-2 flex w-44 flex-col overflow-hidden rounded-2xl bg-card py-1 shadow-float">
                 <Link
                   href={`/n/${notebook.id}/notes`}
+                  data-track="more-notes-full-page"
                   className="px-4 py-2 text-sm text-sand-700 hover:bg-clay-100 hover:text-clay-800"
                 >
                   {t("panes.notesFullPage")}
                 </Link>
                 <Link
                   href="/settings"
+                  data-track="more-settings"
                   className="px-4 py-2 text-sm text-sand-700 hover:bg-clay-100 hover:text-clay-800"
                 >
                   {t("common.settings")}
                 </Link>
               </div>
             )}
+            </Presence>
           </div>
         </nav>
       </div>
 
       <GuideDialog open={guideOpen} onClose={() => setGuideOpen(false)} />
+      <Presence show={corpusDistill !== null} exit="fade">
       {corpusDistill && (
         <CorpusDistillPage
           notebookId={notebook.id}
@@ -548,6 +589,8 @@ export function Workspace({
           onClose={() => setCorpusDistill(null)}
         />
       )}
+      </Presence>
+      <Presence show={graphOpen} exit="fade">
       {graphOpen && (
         <GraphOverlay
           notebookId={notebook.id}
@@ -557,6 +600,7 @@ export function Workspace({
           onClose={() => setGraphOpen(false)}
         />
       )}
+      </Presence>
     </div>
     </CollabProvider>
   );

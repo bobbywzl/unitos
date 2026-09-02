@@ -7,6 +7,7 @@ import { isImeKey } from "@/lib/ime";
 import { SearchIcon, SparkleIcon, SpinnerIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { Markdown } from "@/components/markdown";
+import { ThinkingIndicator } from "@/components/thinking";
 import { ArticleSection, MediaAssistant } from "@/components/video/assistant-card";
 import { Visual } from "@/components/video/visual";
 import type { ThumbnailSource } from "@/components/video/use-thumbnails";
@@ -352,15 +353,26 @@ export function VideoPane({
     return (await captureStoryboardFrame(documentId, time, region)) ?? undefined;
   }
 
+  // The running Explain, so Stop can abort it: what streamed in stays, an
+  // empty card closes, nothing persists.
+  const explainAbortRef = useRef<AbortController | null>(null);
+  function stopExplain() {
+    explainAbortRef.current?.abort();
+  }
+
   async function runExplain(anchor: { startTime: number; endTime: number; region: Region | null }) {
     const { startTime, endTime, region } = anchor;
     setOpenNote(null);
     setExplaining({ content: "", done: false, error: null });
+    explainAbortRef.current?.abort();
+    const controller = new AbortController();
+    explainAbortRef.current = controller;
     try {
       const frame = await captureFrame(region, startTime);
       const res = await fetch("/api/derive", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
         body: JSON.stringify({
           type: "EXPLAIN",
           documentId,
@@ -387,12 +399,17 @@ export function VideoPane({
       setExplaining({ content: text, done: true, error: streamError });
       if (!streamError) router.refresh();
     } catch (err) {
+      if (controller.signal.aborted) {
+        setExplaining((e) => (e && e.content.trim() ? { ...e, done: true } : null));
+        return;
+      }
       setExplaining({
         content: "",
         done: true,
         error: err instanceof Error ? err.message : t("video.explainFailed"),
       });
     } finally {
+      if (explainAbortRef.current === controller) explainAbortRef.current = null;
       setComposer((c) => (c ? { ...c, busy: false } : c));
     }
   }
@@ -511,6 +528,7 @@ export function VideoPane({
               <>
               <button
                 onClick={toggleAnnotate}
+                data-track="video-circle-comment"
                 title={audio ? t("video.audioCommentTitle") : t("video.circleCommentTitle")}
                 className={
                   annotateOn
@@ -523,6 +541,7 @@ export function VideoPane({
               </button>
               <button
                 onClick={() => setAssistantOpen((open) => !open)}
+                data-track="video-assistant"
                 title={t("video.assistantButtonTitle")}
                 className={
                   assistantOpen
@@ -582,6 +601,7 @@ export function VideoPane({
               </span>
               <button
                 onClick={() => setOpenNote(null)}
+                data-track="video-note-close"
                 aria-label={t("common.close")}
                 className="ml-auto rounded-full px-1.5 text-sand-500 hover:text-clay-800"
               >
@@ -599,16 +619,18 @@ export function VideoPane({
                 {t("video.explanation")}
               </span>
               {!explaining.done && (
-                <span className="text-xs text-sand-500">{t("video.streaming")}</span>
+                <ThinkingIndicator className="text-xs" onStop={stopExplain} />
               )}
               {explaining.done && !explaining.error && (
                 <span className="text-xs text-sand-500">{t("video.savedAsAnnotation")}</span>
               )}
               <button
                 onClick={() => {
+                  explainAbortRef.current?.abort();
                   setExplaining(null);
                   setComposer(null);
                 }}
+                data-track="video-explain-close"
                 aria-label={t("common.close")}
                 className="ml-auto rounded-full px-1.5 text-sand-500 hover:text-clay-800"
               >
@@ -648,6 +670,7 @@ export function VideoPane({
               </span>
               <button
                 onClick={() => setComposer(null)}
+                data-track="video-composer-close"
                 aria-label={t("common.close")}
                 className="ml-auto rounded-full px-1.5 text-sand-500 hover:text-clay-800"
               >
@@ -675,6 +698,7 @@ export function VideoPane({
             <div className="mt-2.5 flex items-center gap-2">
               <button
                 onClick={() => void saveComposer()}
+                data-track="video-save-annotation"
                 disabled={composer.busy}
                 className="rounded-full bg-clay px-4 py-1.5 text-xs font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
               >
@@ -682,6 +706,7 @@ export function VideoPane({
               </button>
               <button
                 onClick={() => void explainComposer()}
+                data-track="video-explain"
                 disabled={composer.busy}
                 title={audio ? t("video.audioExplainButtonTitle") : t("video.explainButtonTitle")}
                 className="rounded-full border border-line px-3.5 py-1.5 text-xs font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40"
@@ -690,6 +715,7 @@ export function VideoPane({
               </button>
               <button
                 onClick={() => setComposer(null)}
+                data-track="video-composer-cancel"
                 className="rounded-full border border-line px-3.5 py-1.5 text-xs text-sand-700 hover:bg-clay-100 hover:text-clay-800"
               >
                 {t("common.cancel")}

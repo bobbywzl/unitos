@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { isImeKey } from "@/lib/ime";
 import { useT } from "@/components/lang-provider";
+import { Presence } from "@/components/presence";
 
 export type ContextValues = { background: string; purpose: string; application: string };
 
@@ -93,6 +94,7 @@ export function ContextTab({
     <div ref={panelRef} className="relative shrink-0">
       <button
         onClick={toggle}
+        data-track="context"
         aria-expanded={open}
         title={t("panels.contextHint")}
         className={`rounded-full px-3.5 py-1.5 text-[13px] hover:bg-clay-100 hover:text-clay-800 ${
@@ -104,8 +106,9 @@ export function ContextTab({
         {isSet ? t("panels.context") : t("panels.addContext")}
       </button>
 
+      <Presence show={open} exit="menu">
       {open && (
-        <div className="absolute right-0 z-30 mt-2 w-[340px] rounded-2xl bg-card p-4 shadow-float">
+        <div className="menu-in absolute right-0 z-30 mt-2 w-[340px] rounded-2xl bg-card p-4 shadow-float">
           <p className="text-xs text-sand-600">{t("panels.contextDesc")}</p>
           <label className="mt-3 block">
             <span className="text-xs text-sand-700">{t("panels.fieldBackground")}</span>
@@ -141,6 +144,7 @@ export function ContextTab({
           <div className="mt-3 flex justify-end">
             <button
               onClick={() => void save()}
+              data-track="context-save"
               disabled={busy}
               className="rounded-full bg-clay px-5 py-2 text-sm font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
             >
@@ -149,6 +153,7 @@ export function ContextTab({
           </div>
         </div>
       )}
+      </Presence>
     </div>
   );
 }

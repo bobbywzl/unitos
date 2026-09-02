@@ -44,6 +44,7 @@ export function DistillPanel({
       {canEdit && (
         <button
           onClick={() => openCorpus(null)}
+          data-track="distill-corpus"
           className="flex w-full items-center justify-center rounded-full bg-card px-4 py-2.5 text-[13px] font-semibold text-sand-700 shadow-soft hover:bg-clay-100 hover:text-clay-800"
           title={t("panels.distillCorpusTitle")}
         >
@@ -56,6 +57,7 @@ export function DistillPanel({
             <button
               key={d.id}
               onClick={() => openCorpus(d.id)}
+              data-track="distill-corpus-open"
               className="rounded-2xl bg-card px-4 py-2.5 text-left shadow-soft hover:bg-clay-100"
               title={t("panels.openDistillation")}
             >
@@ -91,6 +93,7 @@ export function DistillPanel({
       {canEdit && (
         <button
           onClick={() => open(null)}
+          data-track="distill-article"
           className="flex w-full items-center justify-center rounded-full bg-card px-4 py-2.5 text-[13px] font-semibold text-sand-700 shadow-soft hover:bg-clay-100 hover:text-clay-800"
           title={t("panels.distillButtonTitle")}
         >
@@ -106,6 +109,7 @@ export function DistillPanel({
             <button
               key={d.id}
               onClick={() => open(d.id)}
+              data-track="distill-open"
               className="rounded-2xl bg-card px-4 py-2.5 text-left shadow-soft hover:bg-clay-100"
               title={t("panels.openDistillation")}
             >

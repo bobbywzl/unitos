@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { useT } from "@/components/lang-provider";
 import { Markdown } from "@/components/markdown";
+import { ThinkingIndicator } from "@/components/thinking";
 import { HIGHLIGHT_HUES, HUE_DOT, HUE_KEY, type HighlightHue } from "@/components/reader/hues";
 import { splitStreamError, splitStreamNote } from "@/lib/derive/config";
 import { regionBounds, regionPathD, type Region } from "@/lib/video/types";
@@ -55,6 +56,12 @@ export function PageBlock({
   const [error, setError] = useState<string | null>(null);
   const [hintDone, setHintDone] = useState(false);
   const overlayRef = useRef<HTMLDivElement | null>(null);
+  // The running Ask or Explain, so Stop can abort it: the card returns to
+  // the question, nothing persists.
+  const askAbortRef = useRef<AbortController | null>(null);
+  function stopAsk() {
+    askAbortRef.current?.abort();
+  }
 
   function percentAt(e: { clientX: number; clientY: number }): { x: number; y: number } | null {
     const el = overlayRef.current;
@@ -125,7 +132,8 @@ export function PageBlock({
   }
 
   function close() {
-    if (busy !== null) return;
+    if (busy === "comment") return;
+    askAbortRef.current?.abort();
     setPending(null);
     setAnswer(null);
     setError(null);
@@ -139,10 +147,13 @@ export function PageBlock({
     setBusy("ask");
     setError(null);
     setAnswer({ content: "", done: false, error: null });
+    const controller = new AbortController();
+    askAbortRef.current = controller;
     try {
       const res = await fetch("/api/derive", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
         body: JSON.stringify({
           type: "EXPLAIN",
           documentId,
@@ -174,8 +185,11 @@ export function PageBlock({
       if (!streamError) router.refresh();
     } catch (err) {
       setAnswer(null);
+      // Stopped, not failed: back to the question.
+      if (controller.signal.aborted) return;
       setError(err instanceof Error ? err.message : t("common.requestFailed"));
     } finally {
+      if (askAbortRef.current === controller) askAbortRef.current = null;
       setBusy(null);
     }
   }
@@ -339,7 +353,8 @@ export function PageBlock({
               </span>
               <button
                 onClick={close}
-                disabled={busy !== null}
+                data-track="page-close"
+                disabled={busy === "comment"}
                 aria-label={t("common.close")}
                 className="rounded-full px-1.5 text-sand-500 hover:text-clay-800 disabled:opacity-40"
               >
@@ -367,7 +382,7 @@ export function PageBlock({
                 {answer.content ? (
                   <Markdown>{answer.content}</Markdown>
                 ) : (
-                  <span className="text-sand-500">{t("common.working")}</span>
+                  <ThinkingIndicator onStop={stopAsk} />
                 )}
                 {answer.error && <p className="mt-1.5 text-[12px] text-red-600">{answer.error}</p>}
               </div>
@@ -377,6 +392,7 @@ export function PageBlock({
               <div className="flex items-center gap-1.5">
                 <button
                   onClick={() => void ask(true)}
+                  data-track="page-ask"
                   disabled={busy !== null || question.trim().length === 0}
                   title={t("panes.pageAskTitle")}
                   className={buttonClass}
@@ -385,6 +401,7 @@ export function PageBlock({
                 </button>
                 <button
                   onClick={() => void ask(false)}
+                  data-track="page-explain"
                   disabled={busy !== null}
                   title={t("panes.pageExplainTitle")}
                   className={quietButtonClass}
@@ -393,6 +410,7 @@ export function PageBlock({
                 </button>
                 <button
                   onClick={() => void comment()}
+                  data-track="page-comment"
                   disabled={busy !== null || question.trim().length === 0}
                   title={t("panes.pageCommentTitle")}
                   className={quietButtonClass}
@@ -407,6 +425,7 @@ export function PageBlock({
                     <button
                       key={color}
                       onClick={() => void highlight(color)}
+                      data-track="page-highlight"
                       disabled={busy !== null}
                       aria-label={t(HUE_KEY[color])}
                       className="size-4 rounded-full transition-transform hover:scale-110 disabled:opacity-40"
@@ -418,7 +437,7 @@ export function PageBlock({
             ) : (
               answer.done && (
                 <div className="flex items-center gap-1.5">
-                  <button onClick={close} className={quietButtonClass}>
+                  <button onClick={close} data-track="page-answer-close" className={quietButtonClass}>
                     {t("common.close")}
                   </button>
                 </div>

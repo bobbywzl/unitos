@@ -49,8 +49,8 @@ export function MediaAssistant({
   const [busy, setBusy] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  // The running send(), so Stop can abort it — the reply never lands, but the
-  // sent message stays in the transcript.
+  // The running send() or skill, so Stop can abort it — the reply never
+  // lands, but the sent message stays in the transcript.
   const sendAbortRef = useRef<AbortController | null>(null);
   function stopSend() {
     sendAbortRef.current?.abort();
@@ -85,13 +85,18 @@ export function MediaAssistant({
       content: t(format === "article" ? "video.skillArticle" : "video.skillNotes"),
     });
     setBusy(true);
+    const controller = new AbortController();
+    sendAbortRef.current = controller;
     try {
-      const result = await runFormalize({
-        documentId,
-        notebookId,
-        format,
-        sectionId: format === "notes" ? sectionChoices[0]?.id : undefined,
-      });
+      const result = await runFormalize(
+        {
+          documentId,
+          notebookId,
+          format,
+          sectionId: format === "notes" ? sectionChoices[0]?.id : undefined,
+        },
+        controller.signal,
+      );
       push({
         role: "assistant",
         content:
@@ -108,11 +113,14 @@ export function MediaAssistant({
         router.push(`/n/${notebookId}?doc=${result.article.documentId}`);
       }
     } catch (err) {
+      // Stopped, not failed: the skill line stays, no outcome lands.
+      if (controller.signal.aborted) return;
       push({
         role: "assistant",
         content: err instanceof Error ? err.message : t("video.assistantFailed"),
       });
     } finally {
+      if (sendAbortRef.current === controller) sendAbortRef.current = null;
       setBusy(false);
     }
   }
@@ -179,6 +187,7 @@ export function MediaAssistant({
           {t("video.assistant")}
         </span>
         <button
+          data-track="video-assistant-close"
           onClick={() => {
             // A turn still in flight aborts too — closing the card means
             // nobody will read the reply, so there is nothing left for it to
@@ -198,6 +207,7 @@ export function MediaAssistant({
       <div className="mb-2.5 flex flex-wrap items-center gap-2">
         <button
           onClick={() => void runSkill("article")}
+          data-track="video-skill-article"
           disabled={busy || !hasTranscript}
           title={hasTranscript ? t("video.skillArticleTitle") : t("video.skillNeedsTranscript")}
           className={chip}
@@ -206,6 +216,7 @@ export function MediaAssistant({
         </button>
         <button
           onClick={() => void runSkill("notes")}
+          data-track="video-skill-notes"
           disabled={busy || !hasTranscript}
           title={hasTranscript ? t("video.skillNotesTitle") : t("video.skillNeedsTranscript")}
           className={chip}
@@ -222,6 +233,7 @@ export function MediaAssistant({
             })}
             <button
               onClick={() => setSpotCleared(true)}
+              data-track="video-spot-clear"
               aria-label={t("video.assistantSpotClear")}
               title={t("video.assistantSpotClear")}
               className="rounded-full px-0.5 text-clay-700 hover:text-clay-900"
@@ -274,6 +286,7 @@ export function MediaAssistant({
         />
         <button
           type="submit"
+          data-track="video-assistant-send"
           onClick={(e) => {
             if (!busy) return;
             e.preventDefault();
@@ -377,6 +390,7 @@ export function ArticleSection({
           {(article.documentId || canEdit) && (
             <button
               onClick={() => void open()}
+              data-track="video-article-open"
               disabled={opening}
               className="rounded-full px-2 py-0.5 text-[11px] font-bold text-clay-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40"
               title={t("video.openArticleTitle")}
@@ -384,12 +398,13 @@ export function ArticleSection({
               {opening ? t("common.working") : t("video.openArticle")}
             </button>
           )}
-          <button onClick={() => void copy()} className={action} title={t("video.copyMarkdownTitle")}>
+          <button onClick={() => void copy()} data-track="video-article-copy" className={action} title={t("video.copyMarkdownTitle")}>
             {copied ? t("video.copied") : t("video.copyMarkdown")}
           </button>
           {canEdit && (
             <button
               onClick={() => void regenerate()}
+              data-track="video-article-regenerate"
               disabled={busy}
               className={action}
               title={t("video.regenerateArticleTitle")}

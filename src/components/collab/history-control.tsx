@@ -6,6 +6,7 @@ import { useCollab } from "@/components/collab/collab-context";
 import { PersonBadge } from "@/components/collab/person-badge";
 import { HistoryIcon } from "@/components/icons";
 import { useLang, useT } from "@/components/lang-provider";
+import { Presence } from "@/components/presence";
 import type { TKey } from "@/lib/i18n/dictionaries";
 
 const KIND_KEY: Record<HistoryEntry["kind"], TKey> = {
@@ -66,6 +67,7 @@ export function HistoryControl({ history }: { history: HistoryEntry[] }) {
     <div ref={panelRef} className="relative shrink-0">
       <button
         onClick={() => setOpen(!open)}
+        data-track="history"
         aria-expanded={open}
         aria-label={t("panes.history")}
         title={t("panes.historyTitle")}
@@ -74,8 +76,9 @@ export function HistoryControl({ history }: { history: HistoryEntry[] }) {
         <HistoryIcon size={16} />
       </button>
 
+      <Presence show={open} exit="menu">
       {open && (
-        <div className="absolute top-full right-0 z-30 mt-2 w-[420px] rounded-2xl bg-card p-4 shadow-float">
+        <div className="menu-in absolute top-full right-0 z-30 mt-2 w-[420px] rounded-2xl bg-card p-4 shadow-float">
           <div className="flex items-center gap-2">
             <span className="text-[11px] font-bold tracking-[0.08em] text-sand-600 uppercase">
               {t("panes.history")}
@@ -86,6 +89,7 @@ export function HistoryControl({ history }: { history: HistoryEntry[] }) {
                   <button
                     key={p.id}
                     onClick={() => setPersonFilter(personFilter === p.id ? null : p.id)}
+                    data-track="history-person"
                     aria-pressed={personFilter === p.id}
                     title={p.name}
                     className={`rounded-full ${personFilter === p.id ? "ring-2 ring-clay-500" : "opacity-70 hover:opacity-100"}`}
@@ -151,6 +155,7 @@ export function HistoryControl({ history }: { history: HistoryEntry[] }) {
           </div>
         </div>
       )}
+      </Presence>
     </div>
   );
 }

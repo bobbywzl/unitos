@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { isImeKey } from "@/lib/ime";
 import { useT } from "@/components/lang-provider";
+import { Presence } from "@/components/presence";
 import {
   IngestProgress,
   type IngestStep,
@@ -74,8 +75,6 @@ export function AddDocumentDialog({
     return () => window.removeEventListener("keydown", onKey, true);
   }, [open, onClose]);
 
-  if (!open) return null;
-
   function setTab(next: AddTab) {
     setTabState(next);
     onError(null);
@@ -123,8 +122,10 @@ export function AddDocumentDialog({
     "min-w-0 flex-1 rounded-full bg-sand-100 px-4 py-2 text-sm outline-none placeholder:text-sand-500";
 
   return (
+    <Presence show={open} exit="dialog">
+    {open && (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-ink/30 p-4"
+      className="dialog-in fixed inset-0 z-50 flex items-center justify-center bg-ink/30 p-4"
       onClick={onClose}
       role="dialog"
       aria-modal
@@ -138,6 +139,7 @@ export function AddDocumentDialog({
           <span className="font-display text-[20px]">{t("panes.addDocument")}</span>
           <button
             onClick={onClose}
+            data-track="add-dialog-close"
             aria-label={t("common.close")}
             className="ml-auto flex size-8 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-700"
           >
@@ -156,6 +158,7 @@ export function AddDocumentDialog({
               role="tab"
               aria-selected={tab === key}
               onClick={() => setTab(key)}
+              data-track={`add-tab:${key}`}
               title={label}
               className={`min-w-0 flex-auto truncate rounded-full px-2 py-1.5 text-[12.5px] ${
                 tab === key
@@ -175,14 +178,14 @@ export function AddDocumentDialog({
             </div>
           ) : tab === "pdf" ? (
             <div className="flex flex-1 flex-col gap-2">
-              <button onClick={onChoosePdf} disabled={busy} className={chooseArea}>
+              <button onClick={onChoosePdf} data-track="add-choose-pdf" disabled={busy} className={chooseArea}>
                 {t("panes.choosePdf")}
               </button>
               <span className="text-center text-[11px] text-sand-500">{t("panes.pdfHint")}</span>
             </div>
           ) : tab === "video" ? (
             <div className="flex flex-1 flex-col gap-2">
-              <button onClick={onChooseVideo} disabled={busy} className={chooseArea}>
+              <button onClick={onChooseVideo} data-track="add-choose-video" disabled={busy} className={chooseArea}>
                 {t("panes.chooseVideoFile")}
               </button>
               <span className="text-center text-[11px] text-sand-500">{t("panes.videoHint")}</span>
@@ -195,14 +198,14 @@ export function AddDocumentDialog({
                   aria-label={t("panes.youtubeLink")}
                   className={urlInput}
                 />
-                <button type="submit" disabled={busy} className={submit}>
+                <button type="submit" data-track="add-video-url" disabled={busy} className={submit}>
                   {t("panes.addVideo")}
                 </button>
               </form>
             </div>
           ) : tab === "drive" ? (
             <div className="flex flex-1 flex-col gap-2">
-              <button onClick={onImportDrive ?? undefined} disabled={busy} className={chooseArea}>
+              <button onClick={onImportDrive ?? undefined} data-track="add-drive" disabled={busy} className={chooseArea}>
                 {t("panes.addFromDrive")}
               </button>
               <span className="text-center text-[11px] text-sand-500">{t("panes.driveHint")}</span>
@@ -230,7 +233,7 @@ export function AddDocumentDialog({
                   aria-label={t("panes.documentUrl")}
                   className={urlInput}
                 />
-                <button type="submit" disabled={busy} className={submit}>
+                <button type="submit" data-track="add-url" disabled={busy} className={submit}>
                   {t("panes.ingest")}
                 </button>
               </div>
@@ -253,6 +256,7 @@ export function AddDocumentDialog({
                   <li key={d.id} className="flex items-center gap-1">
                     <button
                       onClick={() => onAttach(d.id)}
+                      data-track="add-library-attach"
                       className="min-w-0 flex-1 truncate rounded-full px-3 py-2 text-left text-sm text-sand-700 hover:bg-clay-100 hover:text-clay-800"
                     >
                       {d.title}{" "}
@@ -262,6 +266,7 @@ export function AddDocumentDialog({
                     </button>
                     <button
                       onClick={() => onRemoveFromLibrary(d.id)}
+                      data-track="add-library-delete"
                       className="rounded-full px-2 py-1 text-xs text-sand-400 hover:text-red-500"
                       title={t("panes.deleteFromLibrary")}
                     >
@@ -283,5 +288,7 @@ export function AddDocumentDialog({
         </div>
       </div>
     </div>
+    )}
+    </Presence>
   );
 }

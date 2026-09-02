@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { CLICK_RETENTION_DAYS } from "@/lib/clicks";
 import { db } from "@/lib/db";
 
 // Rejected notes keep for 7 days for undo, then hard-delete (SPEC.md §3).
@@ -18,6 +19,10 @@ export async function GET(req: Request) {
   // Presence rows read as gone after 25 seconds; rows older than a day are litter.
   await db.notebookPresence.deleteMany({
     where: { lastSeenAt: { lt: new Date(Date.now() - 24 * 60 * 60 * 1000) } },
+  });
+  // Click telemetry keeps 180 days (SPEC.md §7).
+  await db.clickEvent.deleteMany({
+    where: { createdAt: { lt: new Date(Date.now() - CLICK_RETENTION_DAYS * 24 * 60 * 60 * 1000) } },
   });
   return NextResponse.json({ ok: true, deleted: deleted.count });
 }

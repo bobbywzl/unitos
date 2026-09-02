@@ -172,12 +172,13 @@ export function CorpusDistillPage({
   }
 
   return (
-    <div data-selection-popover className="fixed inset-0 z-50 overflow-y-auto bg-paper">
+    <div data-selection-popover data-track-surface="tray" className="content-in fixed inset-0 z-50 overflow-y-auto bg-paper">
       <div className="mx-auto max-w-2xl px-8 py-8">
         <div className="mb-6 flex items-center gap-2">
           {shown && !running ? (
             <button
               onClick={() => setCurrentId(null)}
+              data-track="distill-corpus-back"
               className="flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold text-sand-600 hover:bg-clay-100 hover:text-clay-800"
             >
               <ChevronLeftIcon size={14} />
@@ -190,6 +191,7 @@ export function CorpusDistillPage({
             {shown && !running && canEdit && (
               <button
                 onClick={() => void remove(shown.id)}
+                data-track="distill-corpus-delete"
                 className="text-xs font-semibold text-red-500 hover:text-red-700"
                 title={t("panes.deleteDistillation")}
               >
@@ -198,6 +200,7 @@ export function CorpusDistillPage({
             )}
             <button
               onClick={onClose}
+              data-track="distill-corpus-close"
               aria-label={t("common.close")}
               className="flex size-8 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-700"
             >
@@ -210,15 +213,13 @@ export function CorpusDistillPage({
           <div>
             <h1 className="font-display text-[26px] leading-snug text-ink">{running.question}</h1>
             <p className="mt-5 text-sm">
-              <ThinkingIndicator label={t("panes.scanningCorpus")} />
+              <ThinkingIndicator
+                label={t("panes.scanningCorpus")}
+                onStop={() => abortRef.current?.abort()}
+                stopLabel={t("common.cancel")}
+                stopTitle={t("panes.stopScan")}
+              />
             </p>
-            <button
-              onClick={() => abortRef.current?.abort()}
-              title={t("panes.stopScan")}
-              className="mt-4 rounded-full border border-line px-3.5 py-1 text-xs font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800"
-            >
-              {t("common.cancel")}
-            </button>
           </div>
         ) : shown ? (
           <div>
@@ -247,6 +248,7 @@ export function CorpusDistillPage({
                     ) : (
                       <button
                         onClick={() => jump(quote)}
+                        data-track="distill-corpus-jump"
                         title={t("panes.jumpToPassage")}
                         className="group block w-full text-left"
                       >
@@ -270,6 +272,7 @@ export function CorpusDistillPage({
                         canEdit && (
                           <button
                             onClick={() => void addNote(shown, quote, key)}
+                            data-track="distill-corpus-add-to-notes"
                             disabled={savingKey !== null || sectionChoices.length === 0}
                             className="rounded-full border border-line px-3 py-1 text-[11.5px] font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40"
                           >
@@ -312,6 +315,7 @@ export function CorpusDistillPage({
               {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
               <button
                 type="submit"
+                data-track="distill-corpus-run"
                 disabled={!question.trim()}
                 className="mt-3 rounded-full bg-clay px-4 py-1.5 text-xs font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
               >
@@ -332,6 +336,7 @@ export function CorpusDistillPage({
                     >
                       <button
                         onClick={() => setCurrentId(d.id)}
+                        data-track="distill-corpus-open"
                         className="min-w-0 flex-1 text-left"
                         title={t("panes.openDistillation")}
                       >
@@ -349,6 +354,7 @@ export function CorpusDistillPage({
                       {canEdit && (
                         <button
                           onClick={() => void remove(d.id)}
+                          data-track="distill-corpus-delete-item"
                           aria-label={t("panes.deleteDistillation")}
                           title={t("panes.deleteDistillation")}
                           className="shrink-0 rounded-full px-1.5 text-sand-400 hover:text-red-600"

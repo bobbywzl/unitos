@@ -94,43 +94,50 @@ function setLinePrefix(lines: string[], prefix: (i: number) => string, active: R
   });
 }
 
-const FORMATS: { label: string; titleKey: TKey; map: (lines: string[]) => string[] }[] = [
+// track names the format in click telemetry (SPEC.md §7).
+const FORMATS: { label: string; titleKey: TKey; track: string; map: (lines: string[]) => string[] }[] = [
   {
     label: "¶",
     titleKey: "panes.formatParagraph",
+    track: "paragraph",
     map: (ls) => ls.map((l) => l.replace(LINE_MARKER, "$1")),
   },
   {
     label: "H1",
     titleKey: "panes.formatHeading1",
+    track: "h1",
     map: (ls) => setLinePrefix(ls, () => "# ", /^\s*#\s/),
   },
   {
     label: "H2",
     titleKey: "panes.formatHeading2",
+    track: "h2",
     map: (ls) => setLinePrefix(ls, () => "## ", /^\s*##\s/),
   },
   {
     label: "H3",
     titleKey: "panes.formatHeading3",
+    track: "h3",
     map: (ls) => setLinePrefix(ls, () => "### ", /^\s*###\s/),
   },
   {
     label: "•",
     titleKey: "panes.formatBulletedList",
+    track: "list",
     map: (ls) => setLinePrefix(ls, () => "- ", /^\s*-\s/),
   },
   {
     label: "1.",
     titleKey: "panes.formatNumberedList",
+    track: "numbered",
     map: (ls) => setLinePrefix(ls, (i) => `${i + 1}. `, /^\s*\d{1,3}[.)]\s/),
   },
 ];
 
-const WRAPS: { label: string; titleKey: TKey; before: string; after: string; cls: string }[] = [
-  { label: "B", titleKey: "panes.bold", before: "**", after: "**", cls: "font-bold" },
-  { label: "I", titleKey: "panes.italic", before: "*", after: "*", cls: "italic" },
-  { label: "U", titleKey: "panes.underline", before: "<u>", after: "</u>", cls: "underline" },
+const WRAPS: { label: string; titleKey: TKey; track: string; before: string; after: string; cls: string }[] = [
+  { label: "B", titleKey: "panes.bold", track: "bold", before: "**", after: "**", cls: "font-bold" },
+  { label: "I", titleKey: "panes.italic", track: "italic", before: "*", after: "*", cls: "italic" },
+  { label: "U", titleKey: "panes.underline", track: "underline", before: "<u>", after: "</u>", cls: "underline" },
 ];
 
 const indentLines = (ls: string[]) => ls.map((l) => `  ${l}`);
@@ -177,10 +184,11 @@ export function NoteEditor({
   return (
     <div className="flex flex-col gap-1.5">
       <div className="flex flex-wrap items-center gap-0.5">
-        {FORMATS.map(({ label, titleKey, map }) => (
+        {FORMATS.map(({ label, titleKey, track, map }) => (
           <button
             key={label}
             type="button"
+            data-track={`note-format:${track}`}
             onMouseDown={keep}
             onClick={() => apply((v, s, e) => mapSelectedLines(v, s, e, map))}
             title={t(titleKey)}
@@ -190,10 +198,11 @@ export function NoteEditor({
           </button>
         ))}
         <span aria-hidden className="mx-1 h-4 w-px bg-line" />
-        {WRAPS.map(({ label, titleKey, before, after, cls }) => (
+        {WRAPS.map(({ label, titleKey, track, before, after, cls }) => (
           <button
             key={label}
             type="button"
+            data-track={`note-style:${track}`}
             onMouseDown={keep}
             onClick={() => apply((v, s, e) => wrapSelection(v, s, e, before, after))}
             title={t(titleKey)}
@@ -209,6 +218,7 @@ export function NoteEditor({
             type="button"
             onMouseDown={keep}
             onClick={() => apply((v, s, e) => colorSelection(v, s, e, tag))}
+            data-track="note-text-color"
             aria-label={t("panes.textColorIn", { color: t(nameKey) })}
             title={t("panes.textColorIn", { color: t(nameKey) })}
             className="mx-0.5 size-[13px] rounded-full transition-transform hover:scale-110"
@@ -220,6 +230,7 @@ export function NoteEditor({
           type="button"
           onMouseDown={keep}
           onClick={() => apply((v, s, e) => mapSelectedLines(v, s, e, outdentLines))}
+          data-track="note-outdent"
           title={t("panes.outdentLine")}
           className={barButton}
         >
@@ -229,6 +240,7 @@ export function NoteEditor({
           type="button"
           onMouseDown={keep}
           onClick={() => apply((v, s, e) => mapSelectedLines(v, s, e, indentLines))}
+          data-track="note-indent"
           title={t("panes.indentLine")}
           className={barButton}
         >

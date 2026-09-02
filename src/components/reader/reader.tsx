@@ -380,6 +380,7 @@ export function Reader({
               onMouseDown={keep}
               disabled={!focusedBlock}
               onClick={() => applyFormat(kind)}
+              data-track={`format:${kind}`}
               title={t(titleKey)}
               className={
                 focusedBlock && effectiveKind(focusedBlock) === kind
@@ -391,13 +392,13 @@ export function Reader({
             </button>
           ))}
           <span aria-hidden className="mx-1 h-4 w-px bg-line" />
-          <button onMouseDown={keep} disabled={!focusedBlock} onClick={() => applyStyle("bold")} title={t("panes.bold")} className={`${barButton} font-bold`}>
+          <button onMouseDown={keep} disabled={!focusedBlock} data-track="style:bold" onClick={() => applyStyle("bold")} title={t("panes.bold")} className={`${barButton} font-bold`}>
             B
           </button>
-          <button onMouseDown={keep} disabled={!focusedBlock} onClick={() => applyStyle("italic")} title={t("panes.italic")} className={`${barButton} italic`}>
+          <button onMouseDown={keep} disabled={!focusedBlock} data-track="style:italic" onClick={() => applyStyle("italic")} title={t("panes.italic")} className={`${barButton} italic`}>
             I
           </button>
-          <button onMouseDown={keep} disabled={!focusedBlock} onClick={() => applyStyle("underline")} title={t("panes.underline")} className={`${barButton} underline`}>
+          <button onMouseDown={keep} disabled={!focusedBlock} data-track="style:underline" onClick={() => applyStyle("underline")} title={t("panes.underline")} className={`${barButton} underline`}>
             U
           </button>
           <span aria-hidden className="mx-1 h-4 w-px bg-line" />
@@ -407,6 +408,7 @@ export function Reader({
               onMouseDown={keep}
               disabled={!focusedBlock}
               onClick={() => applyStyle(style)}
+              data-track="text-color"
               aria-label={t("panes.textColorIn", { color: t(COLOR_NAME_KEY[style]) })}
               title={t("panes.textColorIn", { color: t(COLOR_NAME_KEY[style]) })}
               className="mx-0.5 size-[14px] rounded-full transition-transform hover:scale-110 disabled:opacity-40"
@@ -414,16 +416,17 @@ export function Reader({
             />
           ))}
           <span aria-hidden className="mx-1 h-4 w-px bg-line" />
-          <button onMouseDown={keep} disabled={!focusedBlock} onClick={() => applyIndent(-1)} title={t("panes.outdentLine")} className={barButton}>
+          <button onMouseDown={keep} disabled={!focusedBlock} data-track="outdent" onClick={() => applyIndent(-1)} title={t("panes.outdentLine")} className={barButton}>
             ⇤
           </button>
-          <button onMouseDown={keep} disabled={!focusedBlock} onClick={() => applyIndent(1)} title={t("panes.indentLine")} className={barButton}>
+          <button onMouseDown={keep} disabled={!focusedBlock} data-track="indent" onClick={() => applyIndent(1)} title={t("panes.indentLine")} className={barButton}>
             ⇥
           </button>
           <span aria-hidden className="mx-1 h-4 w-px bg-line" />
           <button
             onMouseDown={keep}
             disabled={!focusedBlock}
+            data-track="remove-paragraph"
             onClick={() => {
               if (focusedBlockId && confirm(t("panes.confirmRemoveParagraph"))) {
                 void onDeleteBlock(focusedBlockId);
@@ -489,6 +492,7 @@ export function Reader({
               <div className="relative -my-1.5 h-3">
                 <button
                   onMouseDown={keep}
+                  data-track="insert-paragraph"
                   onClick={() =>
                     void onInsertBlock(block.id).then((id) => {
                       if (id) pendingFocusRef.current = id;

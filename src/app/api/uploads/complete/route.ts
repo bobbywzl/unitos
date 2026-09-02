@@ -10,6 +10,7 @@ import { runConversion } from "@/lib/handwritten/convert";
 import { serverT } from "@/lib/i18n/server";
 import type { TFunc } from "@/lib/i18n/dictionaries";
 import { progressResponse } from "@/lib/ingest-response";
+import { describeIngestError } from "@/lib/parse/ingest-error";
 import { attachDocument } from "@/lib/parse/attach";
 import { sniffMedia } from "@/lib/video/storage";
 import { runTranscription } from "@/lib/video/transcription-job";
@@ -136,7 +137,7 @@ export async function POST(req: Request) {
       return { id: document.id, title: document.title, deduped };
     } catch (err) {
       console.error("PDF ingest failed:", err);
-      throw new Error(t("api.pdfParseFailed"));
+      throw new Error(describeIngestError(err, t, "pdf"));
     }
   });
 }

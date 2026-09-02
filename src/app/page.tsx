@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { serverT } from "@/lib/i18n/server";
 import { Logo } from "@/components/logo";
 import { AccountGuard } from "@/components/account-guard";
+import { Notifications } from "@/components/works/notifications";
 import { WelcomeFlow } from "@/components/works/welcome-flow";
 import { WorksShelf, type WorkItem } from "@/components/works/works-shelf";
 
@@ -49,6 +50,15 @@ export default async function Home() {
     select: { id: true, name: true },
   });
   const ownerById = new Map(owners.map((o) => [o.id, o.name]));
+
+  // The account's open notifications from the admin (SPEC.md §18), newest first.
+  const notifications = await db.notificationRecipient.findMany({
+    where: { userId: user.id, dismissedAt: null },
+    orderBy: { notification: { createdAt: "desc" } },
+    select: {
+      notification: { select: { id: true, kind: true, title: true, body: true, createdAt: true } },
+    },
+  });
 
   const toItem = (
     w: (typeof works)[number],
@@ -105,9 +115,21 @@ export default async function Home() {
       </header>
 
       <div className="pt-16">
+        {/* welcomeKey is the account's birth: an admin reset stamps createdAt
+            anew, and the splash shows again. */}
         <WelcomeFlow
           firstWork={works.length === 0 && collabRows.length === 0}
           firstName={user.name.trim().split(/\s+/)[0] || user.name}
+          welcomeKey={`${user.id}:${user.createdAt.toISOString()}`}
+        />
+        <Notifications
+          items={notifications.map(({ notification: n }) => ({
+            id: n.id,
+            kind: n.kind,
+            title: n.title,
+            body: n.body,
+            createdAt: n.createdAt.toISOString(),
+          }))}
         />
         <WorksShelf
           works={works.map((w) => toItem(w))}

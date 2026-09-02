@@ -86,6 +86,7 @@ function SourceChips({ sources, notebookId }: { sources: SourceChip[]; notebookI
           <Link
             key={source.id}
             href={`/n/${notebookId}?doc=${source.documentId}&src=${source.id}`}
+            data-track="note-source"
             title={source.quotedText}
             className="inline-flex max-w-52 items-center gap-1.5 truncate rounded-full bg-clay-100 px-2.5 py-0.5 text-[11px] font-semibold text-clay-800 hover:bg-clay-200"
           >
@@ -230,12 +231,14 @@ export function NoteCard({
         <div className="mt-2 flex items-center gap-2">
           <button
             onClick={() => void save()}
+            data-track="note-save"
             className="rounded-full bg-sage-600 px-3.5 py-1 text-xs font-semibold text-sage-fg hover:bg-sage-700"
           >
             {t("common.save")}
           </button>
           <button
             onClick={cancel}
+            data-track="note-cancel"
             className="rounded-full border border-line px-3 py-1 text-xs text-sand-700 hover:bg-clay-100 hover:text-clay-800"
           >
             {t("common.cancel")}
@@ -284,6 +287,7 @@ export function NoteCard({
       {note.pinned && (
         <button
           onClick={() => canEdit && void actions.setPinned(note.id, false)}
+          data-track="note-unpin"
           title={canEdit ? t("outline.unpin") : t("outline.pinnedLabel")}
           aria-label={canEdit ? t("outline.unpin") : t("outline.pinnedLabel")}
           className={`absolute top-2.5 z-10 text-clay hover:text-clay-600 ${selectable ? "right-9" : "right-2.5"}`}
@@ -294,6 +298,7 @@ export function NoteCard({
       {selectable && (
         <button
           onClick={() => actions.toggleSelect(note.id)}
+          data-track="note-select"
           role="checkbox"
           aria-checked={isSelected}
           aria-label={t("outline.selectNote")}
@@ -334,6 +339,7 @@ export function NoteCard({
           {!tray && <SourceChips sources={note.sources} notebookId={actions.notebookId} />}
           <button
             onClick={() => void actions.acceptNote(note.id)}
+            data-track="note-accept"
             className={`rounded-full bg-sage-600 px-3.5 py-1.5 text-xs font-semibold text-sage-fg hover:bg-sage-700 ${tray ? "" : "ml-auto"}`}
             title={t("outline.acceptTitle")}
           >
@@ -341,6 +347,7 @@ export function NoteCard({
           </button>
           <button
             onClick={() => void actions.rejectNote(note.id)}
+            data-track="note-reject"
             className="rounded-full border border-line px-3 py-1 text-xs text-sand-700 hover:bg-clay-100 hover:text-clay-800"
             title={t("outline.rejectTitle")}
           >
@@ -351,6 +358,7 @@ export function NoteCard({
               setDraft(editDraft(note.content));
               setEditing(true);
             }}
+            data-track="note-edit"
             className={`text-xs text-sand-600 hover:text-clay-700 ${tray ? "ml-auto" : ""}`}
             title={t("outline.editTitle")}
           >
@@ -367,6 +375,7 @@ export function NoteCard({
                 setDraft(editDraft(note.content));
                 setEditing(true);
               }}
+              data-track="note-edit"
               className="text-xs text-sand-600 hover:text-clay-700"
             >
               {t("common.edit")}
@@ -378,6 +387,7 @@ export function NoteCard({
               setCopied(true);
               setTimeout(() => setCopied(false), 1500);
             }}
+            data-track="note-copy"
             className="text-xs text-sand-600 hover:text-clay-700"
             title={t("outline.copyTitle")}
           >
@@ -407,6 +417,7 @@ export function NoteCard({
               onClick={() => {
                 if (confirm(t("outline.confirmDeleteNote"))) void actions.deleteNote(note.id);
               }}
+              data-track="note-delete"
               className="text-xs text-red-500 hover:text-red-700"
             >
               {t("common.delete")}

@@ -30,6 +30,7 @@ import type { TFunc, TKey } from "@/lib/i18n/dictionaries";
 import { useLang, useT } from "@/components/lang-provider";
 import { LinkIcon, MicIcon, NotesIcon, SearchIcon, SparkleIcon, SpinnerIcon, StopIcon, VolumeIcon } from "@/components/icons";
 import { Markdown } from "@/components/markdown";
+import { Collapse, Presence } from "@/components/presence";
 import { ThinkingIndicator } from "@/components/thinking";
 import type { BlockData, Highlight } from "@/components/reader/block-view";
 import { Bibliography } from "@/components/reader/bibliography";
@@ -312,10 +313,11 @@ type AnnotationCard = {
 // assistant, which reads the whole document and answers in the chat card.
 // Keys, not strings — the menu translates at render, and the question goes to
 // the assistant in the reader's language.
-const FREQUENT_ASKS: { labelKey: TKey; questionKey: TKey }[] = [
-  { labelKey: "reader.summarizeLabel", questionKey: "reader.summarizeQuestion" },
-  { labelKey: "reader.takeawaysLabel", questionKey: "reader.takeawaysQuestion" },
-  { labelKey: "reader.explainSimplyLabel", questionKey: "reader.explainSimplyQuestion" },
+// track names the ask in click telemetry (SPEC.md §7).
+const FREQUENT_ASKS: { labelKey: TKey; questionKey: TKey; track: string }[] = [
+  { labelKey: "reader.summarizeLabel", questionKey: "reader.summarizeQuestion", track: "summarize" },
+  { labelKey: "reader.takeawaysLabel", questionKey: "reader.takeawaysQuestion", track: "key-takeaways" },
+  { labelKey: "reader.explainSimplyLabel", questionKey: "reader.explainSimplyQuestion", track: "explain-simply" },
 ];
 
 
@@ -501,6 +503,11 @@ export function ReaderInteractions({
   // the ask view for editing; nothing persists from an aborted run.
   const distillAbortRef = useRef<AbortController | null>(null);
   const distillReturnScroll = useRef<number | null>(null);
+  // The running Explain, Simplify, and Extract, so Stop can abort them. A
+  // stopped stream keeps what arrived; nothing persists (SPEC.md §6).
+  const explainAbortRef = useRef<AbortController | null>(null);
+  const simplifyAbortRef = useRef<AbortController | null>(null);
+  const extractAbortRef = useRef<AbortController | null>(null);
   // The span a jump landed on (a distilled quote, an extract origin): tinted
   // while the reader arrives.
   const [spanFlash, setSpanFlash] = useState<{
@@ -758,8 +765,14 @@ export function ReaderInteractions({
     }
     return { ...dockSideCard(side, articleLeft, articleRight, cw), top, side };
   }
+  // Closing a card mid-stream stops its run: nobody will read the rest.
   function closeExplain() {
+    explainAbortRef.current?.abort();
+    explainAbortRef.current = null;
     setBubble(null);
+  }
+  function stopExplain() {
+    explainAbortRef.current?.abort();
   }
   async function deleteExplain() {
     const card = bubble;
@@ -774,7 +787,15 @@ export function ReaderInteractions({
     }
   }
   function closeSimplify() {
+    simplifyAbortRef.current?.abort();
+    simplifyAbortRef.current = null;
     setSimplifyCard(null);
+  }
+  function stopSimplify() {
+    simplifyAbortRef.current?.abort();
+  }
+  function stopExtract() {
+    extractAbortRef.current?.abort();
   }
   async function deleteSimplify() {
     const card = simplifyCard;
@@ -885,6 +906,10 @@ export function ReaderInteractions({
     setLocalExtractions([]);
     setExtractCard(null);
     distillAbortRef.current?.abort();
+    explainAbortRef.current?.abort();
+    simplifyAbortRef.current?.abort();
+    extractAbortRef.current?.abort();
+    setExtractBusy(false);
     distillReturnScroll.current = null;
     voiceRunRef.current += 1;
     voiceAudioRef.current?.pause();
@@ -1890,17 +1915,22 @@ export function ReaderInteractions({
     }
   }
 
+  // The anchor travels whole (SPEC.md §5): the block id and offsets, plus the
+  // quote selectors, so the server re-finds the selection when the blocks
+  // changed under the reader (a re-parse, an edit).
+  function anchorBody(anchor: Anchor) {
+    return {
+      blockId: anchor.blockId,
+      startOffset: anchor.startOffset,
+      endOffset: anchor.endOffset,
+      quotedText: anchor.quotedText,
+      prefix: anchor.prefix,
+      suffix: anchor.suffix,
+    };
+  }
+
   function deriveBody(type: string, anchor: Anchor) {
-    return JSON.stringify({
-      type,
-      documentId,
-      notebookId,
-      anchor: {
-        blockId: anchor.blockId,
-        startOffset: anchor.startOffset,
-        endOffset: anchor.endOffset,
-      },
-    });
+    return JSON.stringify({ type, documentId, notebookId, anchor: anchorBody(anchor) });
   }
 
   // EXPLAIN: stream into a bubble docked beside the article (SPEC.md §4, §6).
@@ -1913,10 +1943,14 @@ export function ReaderInteractions({
     markFreshSpan(anchor.blockId, anchor.startOffset, anchor.endOffset);
     const slot = claimSideSlot("explain", yTop);
     setBubble({ ...slot, text: "", streaming: true, error: null, anchor, noteId: null });
+    explainAbortRef.current?.abort();
+    const controller = new AbortController();
+    explainAbortRef.current = controller;
     try {
       const res = await fetch("/api/derive", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
         body: deriveBody("EXPLAIN", anchor),
       });
       if (!res.ok || !res.body) {
@@ -1948,8 +1982,15 @@ export function ReaderInteractions({
       });
       router.refresh();
     } catch (err) {
+      // Stopped, not failed: what streamed in stays; an empty card closes.
+      if (controller.signal.aborted) {
+        setBubble((b) => (b && b.text.trim() ? { ...b, streaming: false } : null));
+        return;
+      }
       const message = err instanceof Error ? err.message : t("reader.deriveFailed");
       setBubble((b) => (b ? { ...b, streaming: false, error: message } : b));
+    } finally {
+      if (explainAbortRef.current === controller) explainAbortRef.current = null;
     }
   }
 
@@ -1973,10 +2014,14 @@ export function ReaderInteractions({
       sentences: null,
       active: null,
     });
+    simplifyAbortRef.current?.abort();
+    const controller = new AbortController();
+    simplifyAbortRef.current = controller;
     try {
       const res = await fetch("/api/derive", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
         body: deriveBody("SIMPLIFY", anchor),
       });
       if (!res.ok || !res.body) {
@@ -2010,8 +2055,15 @@ export function ReaderInteractions({
       });
       router.refresh();
     } catch (err) {
+      // Stopped, not failed: what streamed in stays; an empty card closes.
+      if (controller.signal.aborted) {
+        setSimplifyCard((c) => (c && c.text.trim() ? { ...c, streaming: false } : null));
+        return;
+      }
       const message = err instanceof Error ? err.message : t("reader.simplifyFailed");
       setSimplifyCard((c) => (c ? { ...c, streaming: false, error: message } : c));
+    } finally {
+      if (simplifyAbortRef.current === controller) simplifyAbortRef.current = null;
     }
   }
 
@@ -2299,11 +2351,13 @@ export function ReaderInteractions({
     setSubmenu(null);
     window.getSelection()?.removeAllRanges();
     setExtractBusy(true);
-    showToast(t("reader.extracting"));
+    const controller = new AbortController();
+    extractAbortRef.current = controller;
     try {
       const res = await fetch("/api/derive", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
         body: deriveBody("EXTRACT", anchor),
       });
       const json = (await res.json().catch(() => null)) as {
@@ -2328,8 +2382,11 @@ export function ReaderInteractions({
       );
       router.refresh();
     } catch (err) {
+      // Stopped, not failed: nothing was extracted, nothing to say.
+      if (controller.signal.aborted) return;
       showToast(err instanceof Error ? err.message : t("reader.extractFailed"));
     } finally {
+      if (extractAbortRef.current === controller) extractAbortRef.current = null;
       setExtractBusy(false);
     }
   }
@@ -2697,13 +2754,7 @@ export function ReaderInteractions({
         notebookId,
         documentId,
         command,
-        anchor: anchor
-          ? {
-              blockId: anchor.blockId,
-              startOffset: anchor.startOffset,
-              endOffset: anchor.endOffset,
-            }
-          : undefined,
+        anchor: anchor ? anchorBody(anchor) : undefined,
         history: history.slice(-12),
         conversationNoteId: conversationNoteId ?? undefined,
       }),
@@ -3299,6 +3350,7 @@ export function ReaderInteractions({
           at the top. The strip spans the pane so the bubble can size to it;
           only the controls take pointer events. */}
       <div
+      data-track-surface="article-menu"
         inert={!atTop}
         className={`pointer-events-none absolute inset-x-4 top-4 z-30 transition duration-200 print:hidden ${
           atTop ? "opacity-100" : "-translate-y-2 opacity-0"
@@ -3310,6 +3362,7 @@ export function ReaderInteractions({
               setMenuExpanded((v) => !v);
               setSearchOpen(false);
             }}
+            data-track="assistant"
             aria-expanded={menuExpanded}
             className="pointer-events-auto flex items-center gap-1.5 rounded-full bg-card px-3 py-2 text-[12px] font-semibold text-clay-800 shadow-float"
           >
@@ -3318,6 +3371,7 @@ export function ReaderInteractions({
           </button>
           <button
             data-project-search
+            data-track="search"
             onClick={() => {
               setSearchOpen((v) => !v);
               setMenuExpanded(false);
@@ -3332,9 +3386,8 @@ export function ReaderInteractions({
             <SearchIcon size={15} />
           </button>
         </div>
-        <div
-          className={`${menuExpanded ? "flex" : "hidden"} pointer-events-auto w-56 flex-col overflow-hidden rounded-2xl bg-card py-1.5 shadow-float`}
-        >
+        <Collapse open={menuExpanded}>
+        <div className="pointer-events-auto flex w-56 flex-col overflow-hidden rounded-2xl bg-card py-1.5 shadow-float">
           {canEdit && (
             <>
               <span className="flex items-center gap-1.5 px-4 pt-1.5 pb-1 text-[11px] font-bold tracking-[0.08em] text-clay-800 uppercase">
@@ -3344,6 +3397,7 @@ export function ReaderInteractions({
               {FREQUENT_ASKS.map((ask) => (
                 <button
                   key={ask.labelKey}
+                  data-track={`ask:${ask.track}`}
                   onClick={() => {
                     setMenuExpanded(false);
                     openArticleChat(t(ask.questionKey));
@@ -3358,6 +3412,7 @@ export function ReaderInteractions({
                   setMenuExpanded(false);
                   openArticleChat(null);
                 }}
+                data-track="ask-assistant"
                 className="px-4 py-2 text-left text-[12.5px] text-sand-800 hover:bg-clay-100 hover:text-clay-800"
               >
                 {t("reader.askAssistant")}
@@ -3370,6 +3425,7 @@ export function ReaderInteractions({
               setMenuExpanded(false);
               openDistillPage(null);
             }}
+            data-track="distill"
             title={t("reader.distillMenuTitle")}
             className="px-4 py-2 text-left text-[12.5px] text-sand-800 hover:bg-clay-100 hover:text-clay-800"
           >
@@ -3377,6 +3433,7 @@ export function ReaderInteractions({
             {allDistillations.length > 0 ? ` (${allDistillations.length})` : ""}
           </button>
         </div>
+        </Collapse>
         <ProjectSearch
           notebookId={notebookId}
           open={searchOpen}
@@ -3385,12 +3442,19 @@ export function ReaderInteractions({
       </div>
 
       <div className="sticky top-4 z-10 float-right mr-4 flex items-center gap-2 print:hidden">
+        {extractBusy && (
+          <span className="rounded-full bg-card px-3 py-1.5 text-xs shadow-soft">
+            <ThinkingIndicator label={t("reader.extracting")} onStop={stopExtract} />
+          </span>
+        )}
+      <Presence show={toast !== null} exit="fade">
         {toast && (
           <span className="flex items-center gap-2 rounded-full bg-ink/90 px-3 py-1.5 text-xs text-paper">
             {toast}
             {toastAction && (
               <button
                 onClick={toastAction.run}
+                data-track="toast-action"
                 className="rounded-full bg-paper/20 px-2.5 py-0.5 font-semibold hover:bg-paper/30"
               >
                 {toastAction.label}
@@ -3398,6 +3462,7 @@ export function ReaderInteractions({
             )}
           </span>
         )}
+      </Presence>
         {editMode && (
           <select
             value={font ?? "default"}
@@ -3413,6 +3478,7 @@ export function ReaderInteractions({
         {editMode && (
           <button
             onClick={toggleEditMode}
+            data-track="done"
             className="rounded-full bg-clay px-3.5 py-1.5 text-xs font-semibold text-clay-fg shadow-soft hover:bg-clay-600"
             title={t("reader.backToReading")}
           >
@@ -3424,6 +3490,7 @@ export function ReaderInteractions({
         <div className="relative">
           <button
             onClick={() => openDistillPage(distillShownId)}
+            data-track="distill"
             className="rounded-full bg-sand-100 px-3.5 py-1.5 text-xs font-semibold text-sand-600 shadow-soft hover:text-clay-800"
             title={t("reader.distillButtonTitle")}
           >
@@ -3472,6 +3539,7 @@ export function ReaderInteractions({
 
       <Bibliography references={references} />
 
+      <Presence show={annotationCard !== null} exit="pop">
       {annotationCard && (
         <div
           data-selection-popover
@@ -3484,6 +3552,7 @@ export function ReaderInteractions({
             </span>
             <button
               onClick={() => setAnnotationCard(null)}
+              data-track="annotation-close"
               aria-label={t("common.close")}
               className="rounded-full px-1.5 text-sand-500 hover:text-clay-800"
             >
@@ -3496,6 +3565,7 @@ export function ReaderInteractions({
                 <button
                   key={color}
                   onClick={() => void recolorAnnotation(color)}
+                  data-track="annotation-recolor"
                   disabled={annotationCard.busy}
                   aria-label={t("reader.recolor", { color: t(HUE_KEY[color]) })}
                   title={t("reader.recolor", { color: t(HUE_KEY[color]) })}
@@ -3523,6 +3593,7 @@ export function ReaderInteractions({
           <div className="mt-2 flex items-center justify-between">
             <button
               onClick={() => void deleteAnnotation()}
+              data-track="annotation-delete"
               disabled={annotationCard.busy}
               className="text-xs font-semibold text-red-500 hover:text-red-700 disabled:opacity-40"
             >
@@ -3530,6 +3601,7 @@ export function ReaderInteractions({
             </button>
             <button
               onClick={() => void saveAnnotation()}
+              data-track="annotation-save"
               disabled={annotationCard.busy || annotationCard.draft.trim() === annotationCard.saved.trim()}
               className="rounded-full bg-clay px-3 py-1 text-[11px] font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
             >
@@ -3538,7 +3610,9 @@ export function ReaderInteractions({
           </div>
         </div>
       )}
+      </Presence>
 
+      <Presence show={extractCard !== null} exit="pop">
       {extractCard &&
         (() => {
           const extraction = allExtractions.find((x) => x.id === extractCard.id);
@@ -3555,6 +3629,7 @@ export function ReaderInteractions({
                 </span>
                 <button
                   onClick={() => setExtractCard(null)}
+                  data-track="extract-card-close"
                   aria-label={t("common.close")}
                   className="rounded-full px-1.5 text-sand-500 hover:text-clay-800"
                 >
@@ -3576,6 +3651,7 @@ export function ReaderInteractions({
                 {canEdit && (
                   <button
                     onClick={() => void deleteExtraction(extraction.id)}
+                    data-track="extract-card-delete"
                     className="text-xs font-semibold text-red-500 hover:text-red-700"
                     title={t("reader.deleteExtractionTitle")}
                   >
@@ -3586,6 +3662,7 @@ export function ReaderInteractions({
             </div>
           );
         })()}
+      </Presence>
 
       {connectors.length > 0 && (
         <svg
@@ -3599,9 +3676,11 @@ export function ReaderInteractions({
         </svg>
       )}
 
+      <Presence show={popover !== null} exit="pop">
       {popover && (
         <div
           data-selection-popover
+          data-track-surface="ai-toolbar"
           onMouseDown={(e) => {
             // Keep the text selection alive under the rail — but let fields
             // take focus, or the inputs could never place a caret.
@@ -3635,6 +3714,7 @@ export function ReaderInteractions({
             <button
               disabled={busy}
               onClick={() => void completeLink()}
+              data-track="close-link"
               className={`flex w-full items-center gap-1.5 rounded-full bg-sage-600 ${toolRow} text-left font-semibold text-sage-fg hover:bg-sage-700 disabled:opacity-40`}
             >
               <LinkIcon size={11} />
@@ -3644,6 +3724,7 @@ export function ReaderInteractions({
 
           <button
             onClick={() => setSubmenu(submenu === "ai" ? null : "ai")}
+            data-track="assistant"
             aria-expanded={submenu === "ai"}
             className={`flex w-full items-center gap-1.5 rounded-full ${toolRow} text-left font-semibold ${
               submenu === "ai"
@@ -3654,6 +3735,7 @@ export function ReaderInteractions({
             <SparkleIcon size={coarse ? 14 : 12} />
             {t("reader.assistant")}
           </button>
+          <Collapse open={submenu === "ai"}>
           {submenu === "ai" && (
             <div className="flex flex-col gap-1.5 p-1">
               <textarea
@@ -3679,6 +3761,7 @@ export function ReaderInteractions({
               <div className="flex items-center gap-1.5">
                 <button
                   onClick={toggleVoice}
+                  data-track="assistant-voice"
                   aria-label={aiListening ? t("reader.stopListening") : t("reader.speakCommand")}
                   title={aiListening ? t("reader.stopListening") : t("reader.speakCommand")}
                   className={`flex size-7 items-center justify-center rounded-full ${
@@ -3692,6 +3775,7 @@ export function ReaderInteractions({
                 <button
                   disabled={!aiBusy && !aiCommand.trim()}
                   onClick={() => (aiBusy ? stopAssistantChat() : void runAssistant())}
+                  data-track="assistant-run"
                   title={aiBusy ? t("reader.stopAssistant") : undefined}
                   aria-label={aiBusy ? t("reader.stopAssistant") : undefined}
                   className="ml-auto rounded-full bg-clay px-3 py-1 text-[11px] font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
@@ -3699,12 +3783,15 @@ export function ReaderInteractions({
                   {aiBusy ? <StopIcon size={11} /> : t("reader.run")}
                 </button>
               </div>
+              {aiBusy && <ThinkingIndicator className="px-1 pb-0.5 text-[11.5px]" />}
             </div>
           )}
+          </Collapse>
 
           {popover.term && (
             <button
               onClick={() => void extract()}
+              data-track="extract-term"
               disabled={extractBusy}
               title={t("reader.extractTermTitle")}
               className={`flex w-full items-center justify-between gap-2 rounded-full bg-clay-100 ${toolRow} text-left font-semibold text-clay-800 hover:bg-clay-200 disabled:opacity-40`}
@@ -3718,6 +3805,7 @@ export function ReaderInteractions({
 
           <button
             onClick={() => void explain()}
+            data-track="explain"
             title={popover.figure ? t("reader.explainFigureTitle") : undefined}
             className={`flex w-full items-center rounded-full ${toolRow} text-left text-sand-800 hover:bg-clay-100 hover:text-clay-800`}
           >
@@ -3726,6 +3814,7 @@ export function ReaderInteractions({
           {!popover.figure && (
             <button
               onClick={() => void simplify()}
+              data-track="simplify"
               className={`flex w-full items-center rounded-full ${toolRow} text-left text-sand-800 hover:bg-clay-100 hover:text-clay-800`}
             >
               {t("reader.simplify")}
@@ -3734,6 +3823,7 @@ export function ReaderInteractions({
           {!popover.figure && !popover.term && (
             <button
               onClick={() => void extract()}
+              data-track="extract"
               disabled={extractBusy}
               title={t("reader.extractTitle")}
               className={`flex w-full items-center rounded-full ${toolRow} text-left text-sand-800 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40`}
@@ -3744,6 +3834,7 @@ export function ReaderInteractions({
 
           <button
             onClick={() => setSubmenu(submenu === "comment" ? null : "comment")}
+            data-track="comment"
             aria-expanded={submenu === "comment"}
             className={`flex w-full items-center rounded-full ${toolRow} text-left ${
               submenu === "comment"
@@ -3753,6 +3844,7 @@ export function ReaderInteractions({
           >
             {t("reader.comment")}
           </button>
+          <Collapse open={submenu === "comment"}>
           {submenu === "comment" && (
             <form
               className="flex flex-col gap-1.5 p-1"
@@ -3783,6 +3875,7 @@ export function ReaderInteractions({
               />
               <button
                 type="submit"
+                data-track="comment-save"
                 disabled={busy || !commentDraft.trim()}
                 className="self-end rounded-full bg-clay px-3 py-1 text-[11px] font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
               >
@@ -3790,9 +3883,11 @@ export function ReaderInteractions({
               </button>
             </form>
           )}
+          </Collapse>
 
           <button
             onClick={beginLink}
+            data-track="link"
             title={t("reader.linkTitle")}
             className={`flex w-full items-center rounded-full ${toolRow} text-left text-sand-800 hover:bg-clay-100 hover:text-clay-800`}
           >
@@ -3817,6 +3912,7 @@ export function ReaderInteractions({
                 key={color}
                 disabled={busy}
                 onClick={() => void annotate({ color, comment: commentDraft.trim() || undefined })}
+                data-track="highlight"
                 aria-label={t("reader.highlightIn", { color: t(HUE_KEY[color]) })}
                 title={t(
                   commentDraft.trim() ? "reader.highlightInWithNote" : "reader.highlightIn",
@@ -3846,6 +3942,7 @@ export function ReaderInteractions({
             >
               <button
                 onClick={() => setSubmenu(submenu === "add" ? null : "add")}
+                data-track="add-to-notes"
                 aria-expanded={submenu === "add"}
                 title={t("reader.addToNotesTitle")}
                 className={`flex w-full items-center gap-1.5 rounded-full bg-clay ${toolRow} text-left font-semibold text-clay-fg hover:bg-clay-600`}
@@ -3853,6 +3950,7 @@ export function ReaderInteractions({
                 <NotesIcon size={coarse ? 14 : 12} />
                 {t("reader.addToNotes")}
               </button>
+          <Collapse open={submenu === "add"}>
               {submenu === "add" && (
                 <div className="flex max-h-44 flex-col overflow-y-auto">
                   {sectionChoices.map((choice) => (
@@ -3860,6 +3958,7 @@ export function ReaderInteractions({
                       key={choice.id}
                       disabled={busy}
                       onClick={() => void addToSection(choice.id)}
+                      data-track="add-to-notes-section"
                       className={`truncate rounded-full ${toolRow} text-left text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40`}
                     >
                       {choice.label}
@@ -3867,6 +3966,7 @@ export function ReaderInteractions({
                   ))}
                 </div>
               )}
+          </Collapse>
             </div>
           )}
 
@@ -3875,6 +3975,7 @@ export function ReaderInteractions({
           <div className="absolute top-full left-0 mt-2">
             <button
               onClick={() => void speakSelection()}
+              data-track="read-aloud"
               aria-label={voice === "idle" ? t("reader.readAloud") : t("reader.stopReading")}
               title={voice === "idle" ? t("reader.readAloud") : t("reader.stopReading")}
               className={`flex ${coarse ? "size-11" : "size-[34px]"} items-center justify-center rounded-full shadow-float ${
@@ -3894,10 +3995,14 @@ export function ReaderInteractions({
           </div>
         </div>
       )}
+      </Presence>
 
+      <Presence show={closeLink !== null} exit="pop">
       {closeLink && (
         <button
           data-selection-popover
+          data-track-surface="ai-toolbar"
+          data-track="close-link"
           disabled={busy}
           onMouseDown={(e) => e.preventDefault()} // keep the highlight alive under the press
           onClick={() => void completeCloseLink()}
@@ -3912,7 +4017,9 @@ export function ReaderInteractions({
           {t("reader.closeLink")}
         </button>
       )}
+      </Presence>
 
+      <Presence show={bubble !== null} exit="bubble">
       {bubble && (
         <div
           data-selection-popover
@@ -3933,9 +4040,19 @@ export function ReaderInteractions({
               {bubble.streaming ? t("reader.explaining") : t("reader.explanation")}
             </span>
             <span className="flex items-center gap-3">
+              {bubble.streaming && (
+                <button
+                  onClick={stopExplain}
+                  className="flex items-center gap-1 rounded-full border border-line px-2 py-0.5 text-[11px] font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800"
+                >
+                  <StopIcon size={9} />
+                  {t("common.stop")}
+                </button>
+              )}
               {bubble.noteId && !bubble.streaming && (
                 <button
                   onClick={() => void deleteExplain()}
+                  data-track="explain-delete"
                   className="text-xs font-semibold text-red-500 hover:text-red-700"
                   title={t("reader.deleteExplainTitle")}
                 >
@@ -3944,6 +4061,7 @@ export function ReaderInteractions({
               )}
               <button
                 onClick={closeExplain}
+                data-track="explain-close"
                 className="text-xs text-sand-500 hover:text-clay-700"
                 aria-label={t("common.close")}
               >
@@ -3962,7 +4080,9 @@ export function ReaderInteractions({
           )}
         </div>
       )}
+      </Presence>
 
+      <Presence show={simplifyCard !== null} exit="bubble">
       {simplifyCard && (
         <div
           key={`${simplifyCard.anchor.blockId}:${simplifyCard.anchor.startOffset}`}
@@ -3984,9 +4104,19 @@ export function ReaderInteractions({
               {simplifyCard.streaming ? t("reader.simplifying") : t("reader.simplified")}
             </span>
             <span className="flex items-center gap-3">
+              {simplifyCard.streaming && (
+                <button
+                  onClick={stopSimplify}
+                  className="flex items-center gap-1 rounded-full border border-line px-2 py-0.5 text-[11px] font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800"
+                >
+                  <StopIcon size={9} />
+                  {t("common.stop")}
+                </button>
+              )}
               {simplifyCard.noteId && !simplifyCard.streaming && (
                 <button
                   onClick={() => void deleteSimplify()}
+                  data-track="simplify-delete"
                   className="text-xs font-semibold text-red-500 hover:text-red-700"
                   title={t("reader.deleteSimplifyTitle")}
                 >
@@ -3995,6 +4125,7 @@ export function ReaderInteractions({
               )}
               <button
                 onClick={closeSimplify}
+                data-track="simplify-close"
                 className="text-xs text-sand-500 hover:text-clay-700"
                 aria-label={t("common.close")}
               >
@@ -4039,7 +4170,9 @@ export function ReaderInteractions({
           )}
         </div>
       )}
+      </Presence>
 
+      <Presence show={commentCard !== null} exit="bubble">
       {commentCard && (
         <div
           data-selection-popover
@@ -4061,6 +4194,7 @@ export function ReaderInteractions({
             </span>
             <button
               onClick={closeCommentCard}
+              data-track="comment-card-close"
               className="text-xs text-sand-500 hover:text-clay-700"
               aria-label={t("common.close")}
             >
@@ -4089,6 +4223,7 @@ export function ReaderInteractions({
               <div className="mt-2 flex items-center justify-between">
                 <button
                   onClick={() => void deleteCommentCard()}
+                  data-track="comment-card-delete"
                   disabled={commentCard.busy}
                   className="text-xs font-semibold text-red-500 hover:text-red-700 disabled:opacity-40"
                 >
@@ -4096,6 +4231,7 @@ export function ReaderInteractions({
                 </button>
                 <button
                   onClick={() => void saveCommentCard()}
+                  data-track="comment-card-save"
                   disabled={commentCard.busy || commentCard.draft.trim() === commentCard.saved.trim()}
                   className="rounded-full bg-clay px-3 py-1 text-[11px] font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
                 >
@@ -4117,7 +4253,9 @@ export function ReaderInteractions({
           )}
         </div>
       )}
+      </Presence>
 
+      <Presence show={assistantChat !== null} exit="bubble">
       {assistantChat && (
         <div
           data-selection-popover
@@ -4150,6 +4288,7 @@ export function ReaderInteractions({
               {assistantChat.noteId && (
                 <button
                   onClick={() => void deleteAssistantConversation()}
+                  data-track="assistant-card-delete"
                   className="text-xs font-semibold text-red-500 hover:text-red-700"
                   title={t("reader.deleteConversationTitle")}
                 >
@@ -4158,6 +4297,7 @@ export function ReaderInteractions({
               )}
               <button
                 onClick={closeAssistantChat}
+                data-track="assistant-card-close"
                 className="text-xs text-sand-500 hover:text-clay-700"
                 aria-label={t("common.close")}
               >
@@ -4209,6 +4349,7 @@ export function ReaderInteractions({
             />
             <button
               type="submit"
+              data-track="assistant-card-send"
               onClick={(e) => {
                 if (!assistantChat.busy) return;
                 e.preventDefault();
@@ -4224,12 +4365,15 @@ export function ReaderInteractions({
           </form>
         </div>
       )}
+      </Presence>
 
       {/* The voice outlives the toolbar: with the selection dismissed while
           reading, this floating control stops it. */}
+      <Presence show={voice !== "idle" && !popover} exit="fade">
       {voice !== "idle" && !popover && (
         <button
           onClick={stopVoice}
+          data-track="stop-reading"
           className="fixed bottom-6 left-1/2 z-40 flex -translate-x-1/2 items-center gap-2 rounded-full bg-card px-4 py-2 text-[12.5px] font-semibold text-sand-700 shadow-float hover:text-clay-800"
         >
           {voice === "loading" ? (
@@ -4240,7 +4384,9 @@ export function ReaderInteractions({
           {t("reader.stopReading")}
         </button>
       )}
+      </Presence>
 
+      <Presence show={pendingLink !== null} exit="fade">
       {pendingLink && (
         <div className="fixed top-24 left-1/2 z-40 flex max-w-[80vw] -translate-x-1/2 items-center gap-3 rounded-full bg-card px-4 py-2 shadow-float">
           <span className="truncate text-[12.5px] text-sand-700">
@@ -4257,6 +4403,7 @@ export function ReaderInteractions({
           </span>
           <button
             onClick={() => broadcastPendingLink(null)}
+            data-track="cancel-link"
             aria-label={t("reader.cancelLink")}
             className="shrink-0 text-xs text-sand-500 hover:text-clay-700"
           >
@@ -4264,7 +4411,9 @@ export function ReaderInteractions({
           </button>
         </div>
       )}
+      </Presence>
 
+      <Presence show={aiPlan !== null} exit="pop">
       {aiPlan && (
         <div className="fixed bottom-6 left-1/2 z-40 w-[440px] max-w-[92vw] -translate-x-1/2 rounded-[24px] bg-card p-4 shadow-float">
           <div className="mb-2 flex items-center gap-2">
@@ -4325,12 +4474,14 @@ export function ReaderInteractions({
             <button
               disabled={planChecked.size === 0}
               onClick={() => void approvePlan()}
+              data-track="plan-apply"
               className="rounded-full bg-clay px-4 py-1.5 text-xs font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
             >
               {t("reader.applyActions", { n: planChecked.size, s: plural(planChecked.size) })}
             </button>
             <button
               onClick={() => setAiPlan(null)}
+              data-track="plan-cancel"
               className="rounded-full border border-line px-3 py-1 text-xs text-sand-700 hover:bg-clay-100 hover:text-clay-800"
             >
               {t("common.cancel")}
@@ -4338,7 +4489,9 @@ export function ReaderInteractions({
           </div>
         </div>
       )}
+      </Presence>
 
+      <Presence show={distillOpen} exit="fade">
       {distillOpen && (
         <DistillPage
           distillations={allDistillations}
@@ -4364,6 +4517,7 @@ export function ReaderInteractions({
           onAddNote={addQuoteNote}
         />
       )}
+      </Presence>
     </div>
   );
 }

@@ -68,6 +68,7 @@ export function Visual({
             >
               <button
                 onClick={() => onOpen(a)}
+                data-track="video-visual-open"
                 title={t("video.jumpOpenNote")}
                 className={`relative block w-full bg-[#12100e] ${audio ? "h-9" : "aspect-video"}`}
               >
@@ -112,12 +113,14 @@ export function Visual({
               <div className="flex items-start gap-1.5 px-3 py-2.5">
                 <button
                   onClick={() => onOpen(a)}
+                  data-track="video-visual-open"
                   className="min-w-0 flex-1 text-left text-[12.5px] leading-snug text-sand-800 [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2] overflow-hidden hover:text-clay-800"
                 >
                   {markdownPreview(a.content)}
                 </button>
                 <button
                   onClick={() => void remove(a.noteId)}
+                  data-track="video-visual-delete"
                   disabled={busyId === a.noteId}
                   aria-label={t("video.deleteAnnotation")}
                   title={t("video.deleteAnnotation")}
