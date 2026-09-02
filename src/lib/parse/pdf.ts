@@ -690,9 +690,12 @@ function tableFromRun(run: Line[], leading: number): Segment {
   let lastFirst = -1;
   run.forEach((line, k) => {
     if (!hasFirst[k]) return;
+    // A wrap: only the first column continues, or the first cell starts
+    // lowercase ("Concealing" / "uncertainty know" — both columns wrapped).
     const firstOnly = cellsOf[k].every((cell, idx) => idx === 0 || cell.text.length === 0);
+    const continues = firstOnly || /^[a-z]/.test(cellsOf[k][0].text);
     const wrap =
-      firstOnly &&
+      continues &&
       lastFirst >= 0 &&
       run[lastFirst].y - line.y <= Math.max(run[lastFirst].size, line.size) * leading * 1.35;
     lastFirst = k;
@@ -1593,7 +1596,9 @@ function attachFigureRegions(
     const group = segments.slice(start, m);
     let box = group[0].box!;
     for (const g of group) box = unionBox(box, g.box!);
-    const pad = ctx.bodySize * 0.4;
+    // The lines' boxes already carry ascent and descent; a small pad keeps
+    // the neighboring prose lines out of the crop.
+    const pad = ctx.bodySize * 0.1;
     box = { x1: box.x1 - pad, y1: box.y1 - pad, x2: box.x2 + pad, y2: box.y2 + pad };
     withMath.push({
       type: "FIGURE",
