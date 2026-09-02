@@ -159,6 +159,8 @@ const en = {
   // Admin
   adminNotConfigured: "Admin login is not configured (ADMIN_PASSWORD unset).",
   invalidPassword: "Invalid password",
+  accountNotFound: "Account not found",
+  accountConfirmMismatch: "The confirmation does not match this account.",
 
   // Sharing
   viewingOnly: "You can view this project, not change it.",
@@ -317,6 +319,8 @@ const zh: Record<keyof typeof en, string> = {
 
   adminNotConfigured: "管理登录未配置（未设置 ADMIN_PASSWORD）。",
   invalidPassword: "密码错误",
+  accountNotFound: "未找到账户",
+  accountConfirmMismatch: "确认内容与该账户不匹配。",
 
   viewingOnly: "你可以查看此项目，但不能修改。",
   ownerOnly: "只有所有者可以执行此操作。",
