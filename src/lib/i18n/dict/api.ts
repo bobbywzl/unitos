@@ -180,6 +180,10 @@ const en = {
   editNotFound: "Edit not found",
   replyNotFound: "Reply not found",
   replyNotYours: "Only the reply's author or the owner can delete it.",
+
+  // Notifications (SPEC.md §18)
+  notificationNotFound: "Notification not found",
+  notificationNoRecipients: "No recipients. Pick at least one account.",
 };
 
 const zh: Record<keyof typeof en, string> = {
@@ -334,6 +338,9 @@ const zh: Record<keyof typeof en, string> = {
   editNotFound: "未找到该编辑",
   replyNotFound: "未找到该回复",
   replyNotYours: "只有回复的作者或所有者可以删除它。",
+
+  notificationNotFound: "未找到通知",
+  notificationNoRecipients: "没有收件人。请至少选择一个账户。",
 };
 
 export const api = { en, zh } as const;
