@@ -26,7 +26,7 @@ if (typeof mathWithSum.sumPrecise !== "function") {
 type Flags = { bold: boolean; italic: boolean; mono: boolean; href: string | null };
 // math: the glyph comes from a math font (Computer Modern math and symbol
 // fonts, AMS fonts, Cambria Math, STIX) — display equations are made of them.
-type Item = Flags & { str: string; x: number; y: number; w: number; size: number; math: boolean };
+type Item = Flags & { str: string; x: number; y: number; w: number; size: number; math: boolean; font?: string };
 type Run = Flags & { start: number; end: number };
 type Cell = { x: number; text: string; runs: Run[] };
 type Line = {
@@ -425,9 +425,16 @@ function buildLines(items: Item[], page: number): Line[] {
   // item, the tolerance half its size: superscripts, subscripts, and sum
   // limits sit within that of their base line and belong to it (they read as
   // lines of their own before — import compare loop finding).
+  // Operator glyphs (∫ ∑ ∏ √) carry their reference point high on the glyph:
+  // grouped by it they land in the line above. They are placed once the
+  // lines exist, by the glyph's center (import compare loop finding: a
+  // display integral appended to the paragraph above it, an inline radical
+  // pulled into the equation above its sentence).
+  const operators = sorted.filter((i) => OPERATOR_GLYPH_RE.test(i.str.trim()));
   const grouped: Item[][] = [];
   const anchors: Item[] = [];
   for (const item of sorted) {
+    if (OPERATOR_GLYPH_RE.test(item.str.trim())) continue;
     const last = grouped[grouped.length - 1];
     const anchor = anchors[anchors.length - 1];
     const tolerance = anchor ? Math.max(2, Math.max(anchor.size, item.size) * 0.5) : 0;
@@ -466,46 +473,81 @@ function buildLines(items: Item[], page: number): Line[] {
   const overlaps = (item: Item, n: number) =>
     item.x < stats[n].x2 + stats[n].size * 2 && item.x + item.w > stats[n].x1 - stats[n].size * 2;
   const gapTo = (item: Item, n: number) => Math.abs(item.y - stats[n].y);
+  // A raised glyph (a superscript, a numerator) belongs to the line under it
+  // far more often than to the line above: the line above pays a small
+  // penalty when the two are about as near.
+  const cost = (item: Item, n: number) => gapTo(item, n) + (stats[n].y > item.y ? stats[n].size * 0.15 : 0);
   // Pass 1: small glyphs and spacing accents join the nearest line within a
-  // text height. An equation's limits and exponents join the equation's own
-  // line when one is near, never the prose beside it.
+  // text height — when that line is nearer than the glyph's own line. An
+  // equation's limits and exponents join the equation's own line when one is
+  // near, never the prose beside it. (A glyph already on the right line
+  // stayed put before only by luck: a footnote mark moved to the line above
+  // and subscripts to the line below — import compare loop finding.)
   for (let k = 0; k < grouped.length; k++) {
     for (const item of grouped[k]) {
       const glyph = item.str.trim();
       const accent = glyph.length === 1 && SPACING_ACCENTS[glyph] !== undefined;
+      // An accent belongs over a letter of about its own size: a line of
+      // subscripts beside it is no candidate (import compare loop finding).
       const candidates = neighbors(k).filter(
         (n) =>
-          (item.size <= stats[n].size * 0.75 || accent) &&
+          (item.size <= stats[n].size * 0.75 || (accent && stats[n].size >= item.size * 0.75)) &&
           gapTo(item, n) <= stats[n].size * 1.05 &&
           overlaps(item, n),
       );
       const mathy = candidates.filter((n) => stats[n].mathy);
       const pool = stats[k].mathy && mathy.length > 0 ? mathy : candidates.filter((n) => stats[n].prose || stats[n].mathy);
       if (pool.length === 0) continue;
-      // A raised glyph (a superscript, a numerator) belongs to the line under
-      // it far more often than to the line above: the line above pays a
-      // small penalty when the two are about as near.
-      const cost = (n: number) => gapTo(item, n) + (stats[n].y > item.y ? stats[n].size * 0.15 : 0);
-      pool.sort((a, b) => cost(a) - cost(b));
+      pool.sort((a, b) => cost(item, a) - cost(item, b));
+      // The own-line check is for a glyph set small against its own line's
+      // base, or an accent grouped with letters of its size. A group of
+      // superscripts alone has no base: its baseline is itself, and it always
+      // joins the nearest line (a heading absorbed the superscripts of the
+      // line below it — import compare loop finding).
+      const hasBase = accent
+        ? grouped[k].some((i) => i !== item && i.size >= stats[k].size * 0.75)
+        : item.size < stats[k].size * 0.75;
+      if (hasBase && cost(item, pool[0]) >= gapTo(item, k)) continue;
       moved[pool[0]].push(item);
       kept[k] = kept[k].filter((i) => i !== item);
     }
   }
-  // Pass 2: a lone operator glyph (a radical, an integral sign) joins the
-  // prose line it sits in; beside an equation it stays, and the equation's
-  // region takes it.
+  // A group whose every glyph left is no line: what moved into it follows
+  // its glyphs (a macron over a letter landed in the emptied group of the
+  // subscripts beside it — import compare loop finding).
   for (let k = 0; k < grouped.length; k++) {
-    if (kept[k].length !== 1 || !OPERATOR_GLYPH_RE.test(kept[k][0].str.trim())) continue;
-    const item = kept[k][0];
-    if (neighbors(k).some((n) => stats[n].mathy && gapTo(item, n) <= stats[n].size * 1.5 && overlaps(item, n))) continue;
-    const pool = neighbors(k)
-      .filter((n) => stats[n].prose && gapTo(item, n) <= stats[n].size * 1.05 && overlaps(item, n))
-      .sort((a, b) => gapTo(item, a) - gapTo(item, b));
-    if (pool.length === 0) continue;
-    moved[pool[0]].push(item);
-    kept[k] = [];
+    if (kept[k].length > 0 || moved[k].length === 0) continue;
+    const target = moved.findIndex((m, n) => n !== k && m.some((i) => grouped[k].includes(i)));
+    if (target < 0) continue;
+    moved[target].push(...moved[k]);
+    moved[k] = [];
   }
-  const regrouped = kept.map((g, k) => [...g, ...moved[k]]).filter((g) => g.length > 0);
+  // Operators: an equation's own line takes its integral or sum sign; a
+  // radical or integral inside prose joins the prose line; anything else
+  // stands alone for the equation region to take.
+  const standalone: Item[][] = [];
+  for (const op of operators) {
+    const center = op.y - op.size * 0.6;
+    const near = (n: number, factor: number) =>
+      Math.abs(center - stats[n].y) <= stats[n].size * factor &&
+      op.x < stats[n].x2 + stats[n].size * 2 &&
+      op.x + op.w > stats[n].x1 - stats[n].size * 2;
+    const byDistance = (a: number, b: number) => Math.abs(center - stats[a].y) - Math.abs(center - stats[b].y);
+    // A group emptied by pass 1 is no line: an inline integral's limit that
+    // moved into its sentence must not draw the integral after it.
+    const all = stats.map((_, n) => n).filter((n) => kept[n].length > 0);
+    const mathy = all.filter((n) => stats[n].mathy && near(n, 1.5)).sort(byDistance);
+    const prose = all.filter((n) => stats[n].prose && near(n, 1.05)).sort(byDistance);
+    const target = mathy[0] ?? prose[0];
+    if (target !== undefined) moved[target].push(op);
+    else standalone.push([op]);
+  }
+  const regrouped = [...kept.map((g, k) => [...g, ...moved[k]]), ...standalone].filter((g) => g.length > 0);
+  const baseline = (g: Item[]) => {
+    const size = Math.max(...g.map((i) => i.size));
+    return median(g.filter((i) => i.size >= size * 0.75).map((i) => i.y));
+  };
+  regrouped.sort((a, b) => baseline(b) - baseline(a));
   return regrouped.map((g) => buildLine(g, page)).filter((l) => l.text.length > 0);
 }
 
@@ -1328,6 +1370,18 @@ function findTableRuns(lines: Line[], ctx: PageContext): number[] {
 // A contents list that runs past the page break continues on the next page.
 let tocCarry = false;
 
+// Two lines pushed apart by tall glyphs: an inline fraction's denominator on
+// the upper line and a sum sign on the lower leave the baselines farther
+// apart than the text leading while the glyphs nearly touch (TeX's lineskip).
+// That gap is no paragraph or item gap (import compare loop finding: an
+// exercise's item split at such a line).
+function pushedApart(prev: Line, next: Line): boolean {
+  const size = Math.max(prev.size, next.size);
+  const deep = prev.yMin < prev.y - size * 0.3;
+  const tall = next.yMax > next.y + size * 0.6;
+  return (deep || tall) && prev.yMin - next.yMax <= size * 0.45;
+}
+
 function segmentPage(lines: Line[], ctx: PageContext): Segment[] {
   const segments: Segment[] = [];
   const body = ctx.bodySize;
@@ -1648,7 +1702,7 @@ function segmentPage(lines: Line[], ctx: PageContext): Segment[] {
       const ragged = shortLines * 2 >= run.length;
       for (let k = 1; k < run.length; k++) {
         const marked = BULLET_RE.test(run[k].text);
-        const spaced = gaps[k - 1] > gapThreshold;
+        const spaced = gaps[k - 1] > gapThreshold && !pushedApart(run[k - 1], run[k]);
         const outdented = run[k].x < run[k - 1].x - line.size * 0.5;
         const ended = ragged && !fillsMargin(run[k - 1], run[k], edge);
         if (marked || spaced || outdented || ended) starts.push(k);
@@ -1756,7 +1810,7 @@ function segmentPage(lines: Line[], ctx: PageContext): Segment[] {
         gap < 0 ||
         gap > next.size * 1.9 ||
         // The paragraph gap: looser than the text leading by a third.
-        gap > next.size * ctx.leading * 1.3 ||
+        (gap > next.size * ctx.leading * 1.3 && !pushedApart(prev, next)) ||
         Math.abs(next.size - prev.size) > 0.6 ||
         (next.x > prev.x + next.size * 1.1 && !hanging) ||
         (next.x < prev.x - next.size * 1.1 && !(group.length === 1 && firstLineIndent)) ||
@@ -1781,7 +1835,13 @@ function segmentPage(lines: Line[], ctx: PageContext): Segment[] {
         // ("Category. mechanism" over "Summary. …" in a boxed entry).
         (startsWithBoldLead(next) &&
           !endsBold(prev) &&
-          (prevTerminal || prev.xEnd < colEdge - prev.size * 2))
+          (prevTerminal || prev.xEnd < colEdge - prev.size * 2)) ||
+        // A wholly bold line that stops short of the column edge is a title
+        // line: the regular text under it is its own block.
+        (boldShare(prev.runs, prev.text.length) > 0.9 &&
+          prev.text.length > 2 &&
+          prev.xEnd < colEdge - prev.size * 2 &&
+          boldShare(next.runs, next.text.length) < 0.5)
       )
         break;
       group.push(next);
@@ -2083,8 +2143,12 @@ function isMathSegment(s: Segment, ctx: PageContext): boolean {
   if (!numbered && (s.mathShare ?? 0) < 0.25) return false;
   // A lone symbol (a footnote marker, a sum limit) is not an equation.
   if (s.text.replace(/\s/g, "").length < 4) return false;
-  // Prose with inline math starts at the column edge and runs long.
-  const prose = s.text.length > 50 && s.box.x1 <= ctx.columnLeft + 2 && (s.mathShare ?? 0) < 0.6;
+  // Prose with inline math starts at the column edge and runs long, or
+  // carries words ("Here χ = 1 if … and zero otherwise." — import compare
+  // loop finding: a short sentence under a display merged into its crop).
+  const words = (s.text.match(/\p{L}{3,}/gu) ?? []).length;
+  const prose =
+    s.box.x1 <= ctx.columnLeft + 2 && (s.mathShare ?? 0) < 0.6 && (s.text.length > 50 || words >= 3);
   return !prose;
 }
 
@@ -2313,6 +2377,13 @@ function attachFigureRegions(
     // A big delimiter at the edge reaches past the last glyph's advance:
     // room for it on both sides.
     box = { x1: box.x1 - size * 0.8, y1: box.y1 - size * 0.45, x2: box.x2 + size * 0.8, y2: box.y2 - size * 0.1 };
+    // The pad never reaches the neighboring text's box: a display set tight
+    // over its paragraph cropped the tops of the next line (import compare
+    // loop finding).
+    const above = withMath[withMath.length - 1];
+    const below = segments[m];
+    if (above?.box && above.page === group[0].page && above.box.y1 > box.y1) box.y2 = Math.min(box.y2, above.box.y1 - 1);
+    if (below?.box && below.page === group[0].page && below.box.y2 < box.y2) box.y1 = Math.max(box.y1, below.box.y2 + 1);
     withMath.push({
       type: "FIGURE",
       text: group
@@ -2496,6 +2567,7 @@ export async function parsePdf(
   const pageWidths: number[] = [];
   const pageDrawings: PageDrawing[] = [];
   const flagsByFont = new Map<string, FontFlags>();
+  const unnamedFonts = new Set<string>();
 
   for (let p = 1; p <= pdf.numPages; p++) {
     const page = await pdf.getPage(p);
@@ -2545,6 +2617,7 @@ export async function parsePdf(
         }
         flags = fontFlags(realName);
         flagsByFont.set(fontName, flags);
+        if (realName === null || /^Type3/i.test(realName)) unnamedFonts.add(fontName);
       }
       // Control characters are not text: a chart glyph mapped to NUL broke the
       // save (Postgres rejects 0x00 in text). The math extension font is the
@@ -2570,7 +2643,26 @@ export async function parsePdf(
         size,
         ...itemFlags,
         href: region?.href ?? null,
+        font: fontName,
       });
+    }
+    // A Type3 (bitmap) font has no name to read weight or shape from. A
+    // fixed advance per glyph across its strings says monospace (import
+    // compare loop finding: a verbatim block in a bitmap typewriter font
+    // read as prose).
+    const advancesByFont = new Map<string, number[]>();
+    for (const it of items) {
+      if (!it.font || unnamedFonts.has(it.font) === false || it.str.length < 4 || it.w <= 0) continue;
+      const list = advancesByFont.get(it.font) ?? [];
+      list.push(it.w / it.str.length);
+      advancesByFont.set(it.font, list);
+    }
+    for (const [font, list] of advancesByFont) {
+      if (list.length < 3) continue;
+      const m = median(list);
+      if (list.every((a) => Math.abs(a - m) <= m * 0.05)) {
+        for (const it of items) if (it.font === font) it.mono = true;
+      }
     }
     pageHeights.push(viewport.height);
     pageWidths.push(viewport.width);

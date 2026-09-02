@@ -137,7 +137,14 @@ export type UrlParseProgress = (stage: "extract", detail?: string) => void;
 //     an outdented marker or a display equation ends an item; an unfinished
 //     paragraph continues across the page whatever the next word's case;
 //     floats lift off a list break; an acronym keeps its wrap hyphen; an
-//     accent split across items composes. URL: a figure the sanitizer emptied
+//     accent split across items composes; an operator sign (∫ ∑ ∏ √) joins
+//     the line under its center; a glyph set stays on its own line when that
+//     is nearer, a group of superscripts alone joins the nearest line; an
+//     accent keeps its base letter's line; an equation crop stops at the text
+//     beside it; a line of words at the column edge is prose, not math; a
+//     wholly bold ragged line closes its block; a bitmap font with a fixed
+//     advance is monospace; lines pushed apart by tall glyphs stay one
+//     paragraph. URL: a figure the sanitizer emptied
 //     is its caption; a run of inline elements is one paragraph; a container
 //     with two paragraphs is not a composite figure; screen-reader text under
 //     any class name drops; an image's inline or attribute width caps its
