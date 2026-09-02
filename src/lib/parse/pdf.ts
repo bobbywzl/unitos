@@ -41,6 +41,8 @@ type Line = {
   page: number;
   firstWordWidth: number;
   mathChars: number; // glyphs from math fonts, for equation detection
+  yMin: number; // lowest and highest glyph baselines in the line (a raised
+  yMax: number; // superscript, a lowered limit): the line's vertical extent
 };
 type UriRegion = { href: string; x1: number; y1: number; x2: number; y2: number };
 // A box in PDF points: y1 the bottom edge, y2 the top edge (y grows upward).
@@ -132,7 +134,7 @@ const CJK_CHAR_RE = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Scr
 
 // ── Font flags ──────────────────────────────────────────────────────────────
 
-type FontFlags = Omit<Flags, "href"> & { math: boolean };
+type FontFlags = Omit<Flags, "href"> & { math: boolean; cmex: boolean };
 
 function fontFlags(name: string | null): FontFlags {
   const n = (name ?? "").replace(/^[A-Z]{6}\+/, ""); // subset prefix "HAAAAA+"
@@ -143,7 +145,31 @@ function fontFlags(name: string | null): FontFlags {
     italic: /italic|oblique|ital$|obli$|^CMTI|^CMSL|^CMBXTI|^CMSSI|^CMITT|^CMSLTT|slanted/i.test(n),
     mono: /mono|courier|consolas|menlo|typewriter|^CMTT|^CMSLTT|^CMITT|cursor/i.test(n),
     math: /^(CMMI|CMSY|CMEX|CMMIB|CMBSY|MSAM|MSBM|rsfs|eufm|eufb|stmary|wasy|LMMathItalic|LMMathSymbols|LMMathExtension)|Math|Symbol/i.test(n),
+    cmex: /^(CMEX|LMMathExtension)/i.test(n),
   };
+}
+
+// Computer Modern's math extension font carries no Unicode map: the text layer
+// gives each glyph its own code — "Z" for a display integral, "P" for a sum,
+// control codes for the big delimiters (import compare loop finding: "Z t"
+// and "Q" in equation text; big parentheses lost, so crops cut them off).
+const CMEX_DELIMITERS = "()[]⌊⌋⌈⌉{}⟨⟩|‖/\\";
+const CMEX_OPERATORS: Record<string, string> = {
+  P: "∑", Q: "∏", R: "∫", S: "⋃", T: "⋂", U: "⊎", V: "⋀", W: "⋁",
+  X: "∑", Y: "∏", Z: "∫", "[": "⋃", "\\": "⋂", "]": "⊎", "^": "⋀", _: "⋁",
+  p: "√", q: "√", r: "√", s: "√", t: "√", u: "√", v: "√",
+};
+const OPERATOR_GLYPH_RE = /^[∫∑∏⋃⋂⊎⋀⋁√]$/;
+function mapCmexGlyphs(str: string): string {
+  let out = "";
+  for (const ch of str) {
+    const code = ch.charCodeAt(0);
+    if (code < 0x20) out += CMEX_DELIMITERS[code % 16];
+    else if (CMEX_OPERATORS[ch] !== undefined) out += CMEX_OPERATORS[ch];
+    else if (/[z{|}]/.test(ch)) continue; // brace and bracket pieces
+    else out += ch;
+  }
+  return out;
 }
 
 function sameFlags(a: Flags, b: Flags): boolean {
@@ -189,28 +215,45 @@ function mergeSpacedItems(items: Item[]): Item[] {
 
 function composeAccents(items: Item[]): Item[] {
   const out: Item[] = [];
-  const composed = (base: Item, mark: string): Item => ({
-    ...base,
-    str: (base.str[0] + mark).normalize("NFC") + base.str.slice(1),
-  });
   for (let k = 0; k < items.length; k++) {
     const item = items[k];
+    // An accent closing one item over the letter opening the next ("…, Kamil˙"
+    // then "e"): composed across the split (import compare loop finding).
+    const trailing = item.str.length > 1 ? SPACING_ACCENTS[item.str[item.str.length - 1]] : undefined;
+    const after = items[k + 1];
+    if (trailing && after && /^\p{L}/u.test(after.str) && after.x <= item.x + item.w + item.size * 0.3) {
+      out.push({ ...item, str: item.str.slice(0, -1) });
+      items[k + 1] = { ...after, str: (after.str[0] + trailing).normalize("NFC") + after.str.slice(1) };
+      continue;
+    }
     const mark = item.str.length === 1 ? SPACING_ACCENTS[item.str] : undefined;
     if (mark) {
-      // The letter under the accent: the neighbor whose first glyph the
-      // accent's center sits over, sorted before or after it.
+      // The letter under the accent: the glyph of a neighbor item that the
+      // accent's center sits over — its first glyph, or with a wider item the
+      // glyph at that offset (an accent over the last letter of "Kamilė" read
+      // as a stray dot: import compare loop finding).
       const cx = item.x + item.w / 2;
-      const over = (it: Item | undefined) =>
-        it !== undefined && /^\p{L}/u.test(it.str) && cx >= it.x - it.size * 0.15 && cx <= it.x + it.size * 0.8;
+      const glyphAt = (it: Item | undefined): number => {
+        if (it === undefined || it.str.length === 0 || it.w <= 0) return -1;
+        const advance = it.w / it.str.length;
+        const idx = Math.floor((cx - it.x + advance * 0.15) / advance);
+        return idx >= 0 && idx < it.str.length && /\p{L}/u.test(it.str[idx]) ? idx : -1;
+      };
+      const composedAt = (base: Item, idx: number): Item => ({
+        ...base,
+        str: base.str.slice(0, idx) + (base.str[idx] + mark).normalize("NFC") + base.str.slice(idx + 1),
+      });
       const next = items[k + 1];
       const prev = out[out.length - 1];
-      if (over(next)) {
-        out.push(composed(next!, mark));
+      const nextIdx = glyphAt(next);
+      if (nextIdx >= 0) {
+        out.push(composedAt(next!, nextIdx));
         k++;
         continue;
       }
-      if (over(prev)) {
-        out[out.length - 1] = composed(prev!, mark);
+      const prevIdx = glyphAt(prev);
+      if (prevIdx >= 0) {
+        out[out.length - 1] = composedAt(prev!, prevIdx);
         continue;
       }
     }
@@ -293,18 +336,27 @@ function buildLine(rawItems: Item[], page: number): Line {
   const firstWordWidth =
     first.str.length > 0 ? first.w * Math.min(1, firstWord.length / first.str.length) : size;
   const last = items[items.length - 1];
+  // The baseline is where the line's text sits: the median baseline of its
+  // full-size glyphs. The highest glyph was the baseline before, so a line
+  // with a superscript sat too high — its gap to the line above shrank and
+  // its gap to the line below grew, splitting paragraphs and fusing others
+  // (import compare loop finding).
+  const large = items.filter((i) => i.size >= size * 0.75);
+  const ys = items.map((i) => i.y);
   return {
     cells,
     text,
     runs,
     items,
     x: first.x,
-    xEnd: last.x + last.w,
-    y: Math.max(...items.map((i) => i.y)),
+    xEnd: Math.max(...items.map((i) => i.x + i.w), last.x + last.w),
+    y: median(large.map((i) => i.y)),
     size,
     page,
     firstWordWidth,
     mathChars: items.reduce((n, i) => n + (i.math ? i.str.replace(/\s/g, "").length : 0), 0),
+    yMin: Math.min(...ys),
+    yMax: Math.max(...ys),
   };
 }
 
@@ -318,8 +370,8 @@ function boxOf(lines: Line[]): Box {
   for (const l of lines) {
     x1 = Math.min(x1, l.x);
     x2 = Math.max(x2, l.xEnd);
-    y1 = Math.min(y1, l.y - l.size * 0.3);
-    y2 = Math.max(y2, l.y + l.size * 0.85);
+    y1 = Math.min(y1, l.yMin - l.size * 0.3);
+    y2 = Math.max(y2, l.yMax + l.size * 0.85);
   }
   return { x1, y1, x2, y2 };
 }
@@ -342,6 +394,12 @@ function geom(lines: Line[]): { box: Box; lineSize: number; mathShare: number } 
     lineSize: median(lines.map((l) => l.size)),
     mathShare: chars > 0 ? math / chars : 0,
   };
+}
+
+// Share of a line's glyphs set in math fonts.
+function lineMathShare(line: Line): number {
+  const chars = line.text.replace(/\s/g, "").length;
+  return chars > 0 ? line.mathChars / chars : 0;
 }
 
 // A box as the §11 percent-coordinate region shape (y measured from the top).
@@ -381,7 +439,74 @@ function buildLines(items: Item[], page: number): Line[] {
       anchors.push(item);
     }
   }
-  return grouped.map((g) => buildLine(g, page)).filter((l) => l.text.length > 0);
+  // Superscripts, subscripts, a sum's limits and footnote marks sit on
+  // baselines of their own: a glyph set at three quarters of a neighboring
+  // line's size or less, within one text height of it, belongs to that line.
+  // On their own they read as an equation of their own and their crop pulled
+  // the neighboring prose in (import compare loop finding). A lone operator
+  // glyph (a radical, an integral sign) inside prose joins the prose line the
+  // same way; beside an equation it stays, and the equation's region takes it.
+  const stats = grouped.map((g) => {
+    const size = Math.max(...g.map((i) => i.size));
+    const large = g.filter((i) => i.size >= size * 0.75);
+    const chars = g.reduce((n, i) => n + i.str.replace(/\s/g, "").length, 0);
+    const mathChars = g.reduce((n, i) => n + (i.math ? i.str.replace(/\s/g, "").length : 0), 0);
+    return {
+      size,
+      y: median(large.map((i) => i.y)),
+      x1: Math.min(...g.map((i) => i.x)),
+      x2: Math.max(...g.map((i) => i.x + i.w)),
+      mathy: chars > 0 && mathChars >= chars * 0.3,
+      prose: chars >= 20 && mathChars < chars * 0.5,
+    };
+  });
+  const moved: Item[][] = grouped.map(() => []);
+  const kept: Item[][] = grouped.map((g) => [...g]);
+  const neighbors = (k: number) => [k - 1, k + 1].filter((n) => n >= 0 && n < grouped.length);
+  const overlaps = (item: Item, n: number) =>
+    item.x < stats[n].x2 + stats[n].size * 2 && item.x + item.w > stats[n].x1 - stats[n].size * 2;
+  const gapTo = (item: Item, n: number) => Math.abs(item.y - stats[n].y);
+  // Pass 1: small glyphs and spacing accents join the nearest line within a
+  // text height. An equation's limits and exponents join the equation's own
+  // line when one is near, never the prose beside it.
+  for (let k = 0; k < grouped.length; k++) {
+    for (const item of grouped[k]) {
+      const glyph = item.str.trim();
+      const accent = glyph.length === 1 && SPACING_ACCENTS[glyph] !== undefined;
+      const candidates = neighbors(k).filter(
+        (n) =>
+          (item.size <= stats[n].size * 0.75 || accent) &&
+          gapTo(item, n) <= stats[n].size * 1.05 &&
+          overlaps(item, n),
+      );
+      const mathy = candidates.filter((n) => stats[n].mathy);
+      const pool = stats[k].mathy && mathy.length > 0 ? mathy : candidates.filter((n) => stats[n].prose || stats[n].mathy);
+      if (pool.length === 0) continue;
+      // A raised glyph (a superscript, a numerator) belongs to the line under
+      // it far more often than to the line above: the line above pays a
+      // small penalty when the two are about as near.
+      const cost = (n: number) => gapTo(item, n) + (stats[n].y > item.y ? stats[n].size * 0.15 : 0);
+      pool.sort((a, b) => cost(a) - cost(b));
+      moved[pool[0]].push(item);
+      kept[k] = kept[k].filter((i) => i !== item);
+    }
+  }
+  // Pass 2: a lone operator glyph (a radical, an integral sign) joins the
+  // prose line it sits in; beside an equation it stays, and the equation's
+  // region takes it.
+  for (let k = 0; k < grouped.length; k++) {
+    if (kept[k].length !== 1 || !OPERATOR_GLYPH_RE.test(kept[k][0].str.trim())) continue;
+    const item = kept[k][0];
+    if (neighbors(k).some((n) => stats[n].mathy && gapTo(item, n) <= stats[n].size * 1.5 && overlaps(item, n))) continue;
+    const pool = neighbors(k)
+      .filter((n) => stats[n].prose && gapTo(item, n) <= stats[n].size * 1.05 && overlaps(item, n))
+      .sort((a, b) => gapTo(item, a) - gapTo(item, b));
+    if (pool.length === 0) continue;
+    moved[pool[0]].push(item);
+    kept[k] = [];
+  }
+  const regrouped = kept.map((g, k) => [...g, ...moved[k]]).filter((g) => g.length > 0);
+  return regrouped.map((g) => buildLine(g, page)).filter((l) => l.text.length > 0);
 }
 
 // Two-column pages: find a middle gutter that almost no text crosses, with two
@@ -566,7 +691,10 @@ function joinGroup(lines: Line[], proseJoin = false): { text: string; runs: Run[
         // the compound with one inside a line.
         const left = /(\p{L}+)-$/u.exec(prevText);
         const right = /^(\p{Ll}+)/u.exec(nextText);
-        if (left && right && !hyphenCompounds.has(`${left[1]}-${right[1]}`.toLowerCase())) {
+        // An acronym before the hyphen ("AAR-" / "generated") is a compound,
+        // never a syllable break.
+        const acronym = left !== null && /^\p{Lu}{2,}$/u.test(left[1]);
+        if (left && right && !acronym && !hyphenCompounds.has(`${left[1]}-${right[1]}`.toLowerCase())) {
           builder.dropTrailingChar();
           sep = "";
         }
@@ -782,6 +910,14 @@ function tableFromRun(run: Line[], leading: number): Segment {
   const separators = columnSeparators(run);
   const columnCount = separators.length + 1;
   const page = run[0].page;
+  // No gutter runs the whole way down when the wide gaps sit at a different
+  // x on every line (an author line's names over an affiliation line). One
+  // column is no table: the lines are a paragraph (import compare loop
+  // finding: a paper's authors read as a two-row table).
+  if (columnCount < 2) {
+    const { text, runs } = joinGroup(run);
+    return { type: "PARAGRAPH", text, page, runs, ...geom(run) };
+  }
 
   const size = median(run.map((l) => l.size));
   const floor = size * 0.75; // below this, same visual band (badge baselines)
@@ -943,7 +1079,52 @@ type PageContext = {
   // (times in a timeline, dates in a résumé) when the page has one.
   pageMinX: number;
   labelColumn: number | null;
+  // Framed boxes drawn on the page (a verbatim prompt, a literature entry):
+  // the text inside sits at the frame's inset, which is not a list indent.
+  frames: Box[];
 };
+
+// Monospace line: a listing's line (import compare loop finding: a python
+// listing shattered into lists, paragraphs and joined lines).
+function isMonoLine(line: Line): boolean {
+  const chars = line.text.replace(/\s/g, "").length;
+  if (chars === 0) return false;
+  let mono = 0;
+  for (const r of line.runs) {
+    if (r.mono) mono += line.text.slice(r.start, r.end).replace(/\s/g, "").length;
+  }
+  return mono / chars >= 0.85;
+}
+
+// The line inside a framed box: the frame's left edge sits within three ems
+// left of the text and the frame spans the line.
+function isBoxedLine(line: Line, ctx: PageContext): boolean {
+  return ctx.frames.some(
+    (f) =>
+      f.x1 < line.x &&
+      f.x1 > line.x - line.size * 3 &&
+      f.x2 > line.xEnd - 1 &&
+      f.y2 >= line.y &&
+      f.y1 <= line.y,
+  );
+}
+
+// One listing line: indentation and internal runs of spaces rebuilt from the
+// glyph advance, so the code reads as typed.
+function codeLineText(line: Line, left: number, advance: number): string {
+  const cols = (px: number) => Math.max(0, Math.round(px / advance));
+  let text = " ".repeat(cols(line.x - left));
+  let prevEnd: number | null = null;
+  for (const item of line.items) {
+    if (prevEnd !== null) {
+      const gap = item.x - prevEnd;
+      if (gap > advance * 0.4) text += " ".repeat(Math.max(1, cols(gap)));
+    }
+    text += item.str;
+    prevEnd = item.x + item.w;
+  }
+  return text.replace(/\s+$/, "");
+}
 
 // A label line: a short label at the page's left edge, then the entry's title
 // at the content column — "18:00  Check in", "2019  Engineer at X". Not a
@@ -1013,7 +1194,16 @@ function findTableRuns(lines: Line[], ctx: PageContext): number[] {
   let runId = 0;
   let i = 0;
   while (i < lines.length) {
-    if (lines[i].cells.length < 2 || runOf[i] !== -1 || isLabelLine(lines[i], ctx)) {
+    // A table row is text or numbers: a line of math glyphs is an equation,
+    // whatever its gaps (import compare loop finding: an equation's wide gaps
+    // read as cells, and the run swept the sentences around it into a table).
+    if (
+      lines[i].cells.length < 2 ||
+      runOf[i] !== -1 ||
+      isLabelLine(lines[i], ctx) ||
+      isMonoLine(lines[i]) ||
+      lineMathShare(lines[i]) >= 0.4
+    ) {
       i++;
       continue;
     }
@@ -1027,7 +1217,7 @@ function findTableRuns(lines: Line[], ctx: PageContext): number[] {
       const last = lines[members[members.length - 1]];
       const gap = last.y - next.y;
       if (gap < 0 || gap > next.size * ctx.leading * 2.2) break;
-      if (isLabelLine(next, ctx)) break;
+      if (isLabelLine(next, ctx) || isMonoLine(next) || lineMathShare(next) >= 0.4) break;
       if (next.cells.length >= 2) {
         members.push(j);
         multi++;
@@ -1055,6 +1245,7 @@ function findTableRuns(lines: Line[], ctx: PageContext): number[] {
         let y = next.y;
         for (let k = j + 1; k <= j + 2 && k < lines.length; k++) {
           if (y - lines[k].y > lines[k].size * ctx.leading * 2.2) break;
+          if (lineMathShare(lines[k]) >= 0.4) break;
           if (
             (lines[k].cells.length >= 2 && !isLabelLine(lines[k], ctx)) ||
             isLeftOnly(lines[k], columns) ||
@@ -1080,6 +1271,18 @@ function findTableRuns(lines: Line[], ctx: PageContext): number[] {
         continue;
       }
       break;
+    }
+    // Display equations read as multi-cell lines: a fraction stacks its
+    // numerator and denominator on lines of their own and leaves a gap in the
+    // main line, and terms sit apart. The sentence between two equations then
+    // resumes the "table". A run whose multi-cell lines are mostly math
+    // glyphs is equations, never a table (import compare loop finding: a
+    // solution set's equations and the sentences between them became tables).
+    const multiCell = members.filter((k) => lines[k].cells.length >= 2);
+    const mathMulti = multiCell.filter((k) => lineMathShare(lines[k]) >= 0.3).length;
+    if (mathMulti * 2 >= multiCell.length) {
+      i++;
+      continue;
     }
     // One multi-cell line alone is a "Label: text" paragraph, unless the
     // lines around it are a table whose labels sit on their own baselines.
@@ -1194,6 +1397,35 @@ function segmentPage(lines: Line[], ctx: PageContext): Segment[] {
     }
     tocMode = false;
 
+    // Code listing: consecutive monospace lines, blank lines included, are
+    // one CODE block with one line per PDF line and the indentation the
+    // glyph offsets give.
+    if (isMonoLine(line)) {
+      const run: Line[] = [line];
+      let j = i + 1;
+      while (j < lines.length) {
+        const next = lines[j];
+        const gap = run[run.length - 1].y - next.y;
+        if (!isMonoLine(next) || runOf[j] !== -1 || gap < 0 || gap > next.size * ctx.leading * 3.4) break;
+        run.push(next);
+        j++;
+      }
+      const advances = run.flatMap((l) => l.items.filter((it) => it.mono && it.str.length > 0).map((it) => it.w / it.str.length));
+      const advance = median(advances) || line.size * 0.6;
+      const left = Math.min(...run.map((l) => l.x));
+      const rows: string[] = [];
+      run.forEach((l, k) => {
+        if (k > 0) {
+          const blank = Math.round((run[k - 1].y - l.y) / (l.size * ctx.leading)) - 1;
+          for (let b = 0; b < Math.min(2, blank); b++) rows.push("");
+        }
+        rows.push(codeLineText(l, left, advance));
+      });
+      segments.push({ type: "CODE", text: rows.join("\n"), page: line.page, runs: [], ...geom(run) });
+      i = j;
+      continue;
+    }
+
     // Label line: the label and the entry's title read as one paragraph; the
     // entry's body follows as its own blocks.
     if (isLabelLine(line, ctx)) {
@@ -1204,7 +1436,9 @@ function segmentPage(lines: Line[], ctx: PageContext): Segment[] {
 
     // Heading run: larger than body. Wrapped heading lines merge; a merged run
     // that reads as prose (ends in a period, runs long) is a lead paragraph.
-    if (single && line.size > body * 1.14) {
+    // A line set large by a math glyph (an integral sign with its limit) is
+    // part of an equation, not a heading.
+    if (single && line.size > body * 1.14 && lineMathShare(line) < 0.5) {
       const run: Line[] = [line];
       let j = i + 1;
       while (j < lines.length) {
@@ -1296,17 +1530,26 @@ function segmentPage(lines: Line[], ctx: PageContext): Segment[] {
         continue;
       }
     }
-    // An unnumbered heading at body size: one wholly bold short line, set
-    // apart by a gap above and below.
+    // An unnumbered heading at body size: one short line, wholly bold or
+    // opening with a bold lead ("Problem 1: Risk-neutral pricing"), set apart
+    // by a gap above and below. A caps title may end with a period.
+    const letters = line.text.replace(/[^\p{L}]/gu, "");
+    const capsShare = letters.length > 0 ? letters.replace(/[^\p{Lu}]/gu, "").length / letters.length : 0;
+    // The lead is a label: it ends with a colon or a period ("Problem 3:").
+    const boldLead =
+      startsWithBoldLead(line) &&
+      /[:.]\s*$/.test(line.text.slice(line.runs[0].start, line.runs[0].end));
     if (
       single &&
-      lineBold &&
-      boldShare(line.runs, line.text.length) > 0.9 &&
+      (lineBold || boldLead) &&
+      (boldShare(line.runs, line.text.length) > 0.9 || boldLead) &&
       line.text.length < 90 &&
       line.text.length > 2 &&
       !BULLET_RE.test(line.text) &&
-      !TOC_TAIL_RE.test(line.text) &&
-      !/[.,;:]$/.test(line.text.trim()) &&
+      // A contents entry ends in leader dots and a page number; a title may
+      // end in a number of its own ("Risk-neutral pricing 1").
+      !/(?:\s*\.){3,}\s*\d{1,4}\s*$/.test(line.text) &&
+      (!/[.,;:]$/.test(line.text.trim()) || (boldLead && capsShare >= 0.6 && /\.$/.test(line.text.trim()))) &&
       line.size >= body * 0.98 &&
       line.size <= body * 1.14
     ) {
@@ -1349,8 +1592,15 @@ function segmentPage(lines: Line[], ctx: PageContext): Segment[] {
       line.y - after.y <= after.size * ctx.leading * 1.3 &&
       Math.abs(after.size - line.size) <= 0.6 &&
       !BULLET_RE.test(after.text);
+    // Text inside a framed box sits at the frame's inset: an indent that is
+    // the box's, not a list's (import compare loop finding: a verbatim
+    // briefing box read as one long list).
     const indentStart =
-      !firstLineIndent && isIndented(line, ctx) && line.size <= body * 1.15 && line.size >= body * 0.8;
+      !firstLineIndent &&
+      isIndented(line, ctx) &&
+      line.size <= body * 1.15 &&
+      line.size >= body * 0.8 &&
+      !isBoxedLine(line, ctx);
     if (bulletStart || indentStart) {
       const run: Line[] = [line];
       let j = i + 1;
@@ -1368,6 +1618,12 @@ function segmentPage(lines: Line[], ctx: PageContext): Segment[] {
           run[run.length - 1].y - next.y < 0
         )
           break;
+        // A display equation under an item (centered, set in math fonts) is
+        // its own block, never the item's next line.
+        if (lineMathShare(next) >= 0.5 && next.x > line.x + next.size * 4) break;
+        // A marked line stepping back left of the run's first line is the
+        // next item of an outer list, not a line of this run.
+        if (BULLET_RE.test(next.text) && next.x < line.x - next.size * 0.5) break;
         const continues = BULLET_RE.test(next.text) || next.x >= line.x - 2;
         if (!continues) break;
         run.push(next);
@@ -1397,25 +1653,28 @@ function segmentPage(lines: Line[], ctx: PageContext): Segment[] {
         const ended = ragged && !fillsMargin(run[k - 1], run[k], edge);
         if (marked || spaced || outdented || ended) starts.push(k);
       }
-      const items: { text: string; runs: Run[] }[] = [];
+      // Each item keeps the geometry of its own lines: with the run's box on
+      // every item, an integral sign split off an equation read as starting
+      // at the column edge and never rejoined it (import compare loop finding).
+      const items: { text: string; runs: Run[]; lines: Line[] }[] = [];
       for (let s = 0; s < starts.length; s++) {
         const slice = run.slice(starts[s], starts[s + 1] ?? run.length);
         const joined = joinGroup(slice);
-        items.push({ text: joined.text.replace(/\n/g, " "), runs: joined.runs });
+        items.push({ text: joined.text.replace(/\n/g, " "), runs: joined.runs, lines: slice });
       }
       // At the top of a page, an unmarked first group before marked items is
       // the tail of the previous page's last item, not an item: emit it as a
       // paragraph so the cross-page merge can finish that item.
       if (i === 0 && items.length >= 2 && !BULLET_RE.test(items[0].text) && BULLET_RE.test(items[1].text)) {
         const tail = items.shift()!;
-        segments.push({ type: "PARAGRAPH", text: tail.text, page: line.page, runs: tail.runs, ...geom(run) });
+        segments.push({ type: "PARAGRAPH", text: tail.text, page: line.page, runs: tail.runs, ...geom(tail.lines) });
       }
       // Numbered lead-ins over flush-left paragraphs are prose, not a list:
       // when unmarked groups sit between marked ones at the column edge, every
       // group is its own paragraph.
       if (bulletStart && !indentStart && !items.every((item) => BULLET_RE.test(item.text))) {
         for (const item of items) {
-          segments.push({ type: "PARAGRAPH", text: item.text, page: line.page, runs: item.runs, ...geom(run) });
+          segments.push({ type: "PARAGRAPH", text: item.text, page: line.page, runs: item.runs, ...geom(item.lines) });
         }
         i = j;
         continue;
@@ -1505,9 +1764,24 @@ function segmentPage(lines: Line[], ctx: PageContext): Segment[] {
         (tocMode && TOC_ENTRY_RE.test(next.text)) ||
         TOC_LABEL_RE.test(next.text.trim()) ||
         (isIndented(next, ctx) && !isIndented(prev, ctx) && !hanging) ||
-        (BULLET_RE.test(next.text) && !BULLET_RE.test(prev.text)) ||
-        // "Setup." after a sentence end opens the next paragraph.
-        (prevTerminal && startsWithBoldLead(next) && !endsBold(prev))
+        // An equation's line and a text line never share a paragraph: the
+        // label under an underbrace joined the formula and diluted its math
+        // share below the equation threshold (import compare loop finding).
+        isDisplayMathLine(prev, ctx) !== isDisplayMathLine(next, ctx) ||
+        // A marker opening the next line starts an item — a glyph bullet
+        // always, a number or a "(7)" only under a line that ended short of
+        // the column edge or with a sentence: "(7) Weight-space…" at a line
+        // start inside a justified paragraph is text (import compare loop
+        // finding).
+        (BULLET_RE.test(next.text) &&
+          !BULLET_RE.test(prev.text) &&
+          (GLYPH_BULLET_RE.test(next.text) || prev.xEnd < colEdge - prev.size * 1.5)) ||
+        // "Setup." after a sentence end opens the next paragraph, and so does a
+        // bold label under a line that stopped short of the column edge
+        // ("Category. mechanism" over "Summary. …" in a boxed entry).
+        (startsWithBoldLead(next) &&
+          !endsBold(prev) &&
+          (prevTerminal || prev.xEnd < colEdge - prev.size * 2))
       )
         break;
       group.push(next);
@@ -1571,12 +1845,17 @@ function liftFloatsOffParagraphBreaks(segments: Segment[]): Segment[] {
     s.type === "FIGURE" || s.type === "TABLE" || (s.type === "PARAGRAPH" && CAPTION_RE.test(s.text));
   for (let b = 1; b < out.length; b++) {
     const prev = out[b - 1];
-    if (out[b].page === prev.page || prev.type !== "PARAGRAPH" || /[.!?:…"”)]$/.test(prev.text.trim())) continue;
+    if (out[b].page === prev.page) continue;
+    // A list cut by the page break continues under the floats too (import
+    // compare loop finding: a rubric list split in two by a figure).
+    const listBreak = prev.type === "LIST" && !prev.tocEntries;
+    if (!listBreak && (prev.type !== "PARAGRAPH" || /[.!?:…"”)]$/.test(prev.text.trim()))) continue;
     let k = b;
     while (k < out.length && out[k].page === out[b].page && isFloat(out[k])) k++;
     if (k === b || k >= out.length) continue;
     const tail = out[k];
-    if (tail.type !== "PARAGRAPH" || tail.page !== out[b].page || !/^[a-z($€£0-9"'“]/.test(tail.text)) continue;
+    if (tail.page !== out[b].page) continue;
+    if (listBreak ? tail.type !== "LIST" || Boolean(tail.tocEntries) : tail.type !== "PARAGRAPH" || !/^[a-z($€£0-9"'“]/.test(tail.text)) continue;
     out.splice(k, 1);
     out.splice(b, 0, tail);
   }
@@ -1598,10 +1877,11 @@ function mergeAcrossPages(input: Segment[]): Segment[] {
       segment.type === "PARAGRAPH" &&
       prev.type === "PARAGRAPH" &&
       !prev.listItem &&
-      /[a-z,;\-–—]$/.test(prev.text) &&
+      /[\p{L}\d,;\-–—]$/u.test(prev.text) &&
       (/^[a-z($€£0-9"'“]/.test(segment.text) ||
-        // "… the" | "AAR only stages": a dangling word joins whatever follows.
-        (/\s\p{Ll}+$/u.test(prev.text) && prev.text.length > 60))
+        // "… the" | "AAR only stages": a paragraph that ends without a stop
+        // is unfinished, whatever the case of the next page's first word.
+        (/\s\p{L}+$/u.test(prev.text) && prev.text.length > 60))
     ) {
       const glue = /[A-Za-z0-9][-–]$/.test(prev.text) && /^[A-Za-z0-9(]/.test(segment.text) ? "" : " ";
       const offset = prev.text.length + glue.length;
@@ -1795,7 +2075,11 @@ function isMathSegment(s: Segment, ctx: PageContext): boolean {
   if (s.type !== "PARAGRAPH" && s.type !== "TABLE" && s.type !== "FIGURE") return false;
   if (s.region || !s.box) return false;
   const numbered =
-    EQUATION_NUMBER_RE.test(s.text) && s.text.length <= 90 && s.box.x1 > ctx.columnLeft + 2;
+    EQUATION_NUMBER_RE.test(s.text) &&
+    s.text.length <= 90 &&
+    s.box.x1 > ctx.columnLeft + 2 &&
+    // A line of nothing but "(1) (2) (3)" is a row of superscripts.
+    !/^(\s*\(\d{1,3}[a-z]?\)\s*)+$/.test(s.text);
   if (!numbered && (s.mathShare ?? 0) < 0.25) return false;
   // A lone symbol (a footnote marker, a sum limit) is not an equation.
   if (s.text.replace(/\s/g, "").length < 4) return false;
@@ -1810,11 +2094,27 @@ function isMathSegment(s: Segment, ctx: PageContext): boolean {
 function isEquationShaped(s: Segment, ctx: PageContext): boolean {
   if (s.type !== "PARAGRAPH" && s.type !== "TABLE" && s.type !== "FIGURE") return false;
   if (s.region || !s.box) return false;
+  const size = s.lineSize ?? ctx.bodySize;
+  // A big operator (an integral or sum sign with its limits) is a math glyph
+  // set larger than the text: still a line of the equation.
+  const bigOperator = (s.mathShare ?? 0) >= 0.5 && size <= ctx.bodySize * 3;
+  // Words at a list indent are an item, not a line of the equation: an
+  // equation line is math, a fragment of a few glyphs (a fraction's
+  // numerator, an equation number, a function name), or a label set deep in
+  // the column (an underbrace's caption).
+  const mathOrFragment = (s.mathShare ?? 0) >= 0.2 || s.text.replace(/\s/g, "").length <= 12;
+  const deep = !BULLET_RE.test(s.text) && s.box.x1 > ctx.columnLeft + size * 6;
   return (
     s.text.length <= 60 &&
     s.box.x1 > ctx.columnLeft + 2 &&
-    (s.lineSize ?? ctx.bodySize) <= ctx.bodySize * 1.1
+    (mathOrFragment || deep) &&
+    (size <= ctx.bodySize * 1.1 || bigOperator)
   );
+}
+
+// A display equation's line: mostly math glyphs, set in from the column edge.
+function isDisplayMathLine(line: Line, ctx: PageContext): boolean {
+  return lineMathShare(line) >= 0.4 && line.x > ctx.columnLeft + line.size * 2;
 }
 
 // Chart text, equation glyphs, ticks: what a figure leaves in the text layer.
@@ -2010,7 +2310,9 @@ function attachFigureRegions(
     // Subscripts and lowered limits hang under the line box: more room
     // below than above.
     const size = group[0].lineSize ?? ctx.bodySize;
-    box = { x1: box.x1 - size * 0.2, y1: box.y1 - size * 0.45, x2: box.x2 + size * 0.2, y2: box.y2 - size * 0.1 };
+    // A big delimiter at the edge reaches past the last glyph's advance:
+    // room for it on both sides.
+    box = { x1: box.x1 - size * 0.8, y1: box.y1 - size * 0.45, x2: box.x2 + size * 0.8, y2: box.y2 - size * 0.1 };
     withMath.push({
       type: "FIGURE",
       text: group
@@ -2231,13 +2533,6 @@ export async function parsePdf(
     const items: Item[] = [];
     for (const raw of content.items) {
       if (!("str" in raw) || typeof raw.str !== "string") continue;
-      // Control characters are not text: a chart glyph mapped to NUL broke the
-      // save (Postgres rejects 0x00 in text).
-      const str = normalizeGlyphs(raw.str.replace(CONTROL_CHARS_RE, ""));
-      if (str.length === 0) continue;
-      const t = raw.transform as number[];
-      const size = Math.hypot(t[0], t[1]) || Math.hypot(t[2], t[3]) || 10;
-      if (Math.abs(t[1]) > size * 0.3) continue; // rotated text (margin watermarks)
       const fontName = String(raw.fontName ?? "");
       let flags = flagsByFont.get(fontName);
       if (!flags) {
@@ -2251,18 +2546,29 @@ export async function parsePdf(
         flags = fontFlags(realName);
         flagsByFont.set(fontName, flags);
       }
+      // Control characters are not text: a chart glyph mapped to NUL broke the
+      // save (Postgres rejects 0x00 in text). The math extension font is the
+      // exception: its codes name big operators and delimiters.
+      const mapped = flags.cmex ? mapCmexGlyphs(raw.str) : raw.str;
+      const str = normalizeGlyphs(mapped.replace(CONTROL_CHARS_RE, ""));
+      if (str.length === 0) continue;
+      const t = raw.transform as number[];
+      const size = Math.hypot(t[0], t[1]) || Math.hypot(t[2], t[3]) || 10;
+      if (Math.abs(t[1]) > size * 0.3) continue; // rotated text (margin watermarks)
       const x = t[4];
       const y = t[5];
       const cx = x + raw.width / 2;
       const cy = y + size * 0.3;
       const region = uriRegions.find((r) => cx >= r.x1 && cx <= r.x2 && cy >= r.y1 && cy <= r.y2);
+      const { cmex: _cmex, ...itemFlags } = flags;
+      void _cmex;
       items.push({
         str,
         x,
         y,
         w: raw.width,
         size,
-        ...flags,
+        ...itemFlags,
         href: region?.href ?? null,
       });
     }
@@ -2357,9 +2663,13 @@ export async function parsePdf(
       labelColumn = median(labelXs);
       columnLeft = labelColumn;
     }
-    const ctx = { bodySize, leading, columnLeft, hasBold, pageMinX, labelColumn };
-    const pageSegments = segmentPage(lines, ctx);
     const p = cleaned.indexOf(lines);
+    // Frames: drawn rectangles wide enough for text and taller than a rule.
+    const frames = pageDrawings[p].paths.filter(
+      (b) => b.x2 - b.x1 >= pageWidths[p] * 0.4 && b.y2 - b.y1 >= bodySize * 3,
+    );
+    const ctx = { bodySize, leading, columnLeft, hasBold, pageMinX, labelColumn, frames };
+    const pageSegments = segmentPage(lines, ctx);
     const withFigures = attachFigureRegions(pageSegments, lines, ctx, pageWidths[p], pageHeights[p], pageDrawings[p]);
     // Text inside a figure's box (a hidden chart title, a stray label) is
     // part of the picture.
@@ -2449,7 +2759,9 @@ export async function parsePdf(
   let titleSize = 0;
   for (const s of segments) {
     if (s.page !== 0 || s.type !== "HEADING" || s.rawSize === undefined) continue;
-    if (s.rawSize > titleSize && s.text.length > 4) {
+    // A title is set larger than the body text; a body-size bold heading on
+    // the first page ("Problem 1: …") is the first section, not the title.
+    if (s.rawSize > titleSize && s.rawSize >= bodySize * 1.14 && s.text.length > 4) {
       title = s.text;
       titleSize = s.rawSize;
     }
