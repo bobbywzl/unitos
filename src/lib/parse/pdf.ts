@@ -1,6 +1,19 @@
 import { getDocumentProxy } from "unpdf";
 import type { LinkSpan, ParsedBlock, StyleSpan } from "@/lib/parse/types";
 
+// pdf.js calls Math.sumPrecise while it rebuilds font programs. Node 22 has no
+// such function, so every TrueType font translation failed with a warning and
+// the fonts it dropped never resolved to a name — no bold or italic flags for
+// their text (import compare loop finding).
+const mathWithSum = Math as Math & { sumPrecise?: (values: Iterable<number>) => number };
+if (typeof mathWithSum.sumPrecise !== "function") {
+  mathWithSum.sumPrecise = (values) => {
+    let sum = 0;
+    for (const v of values) sum += v;
+    return sum;
+  };
+}
+
 // PDF → blocks. Deterministic, no AI passes. Beyond text and reading order, the
 // parse keeps what the PDF's fonts and geometry say: bold/italic/monospace runs
 // become style spans, monospace paragraphs become CODE, indent-and-gap groups
@@ -46,6 +59,7 @@ const HEADING_NUM_STRICT_RE = /^\d{1,2}((\.\d{1,2})+\.?|[.)])?\s+[\p{Lu}\p{Lo}]/
 const TOC_LABEL_RE = /^(contents|table of contents|inside|outline|in this issue)$/i;
 const TOC_ENTRY_RE = /^(\d{1,2})[.)]?\s+\S/;
 const ATTACH_PUNCT_RE = /^[.,;:!?)\]…%]/;
+const CJK_START_RE = /^[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u;
 
 // ── Font flags ──────────────────────────────────────────────────────────────
 
@@ -154,7 +168,10 @@ function buildLine(rawItems: Item[], page: number): Line {
     for (const r of cell.runs) runs.push({ ...r, start: r.start + offset, end: r.end + offset });
   });
   const first = items[0];
-  const firstWord = first.str.split(" ")[0] || first.str;
+  // The unit a wrap moves to the next line: a word, or one glyph in a script
+  // that wraps anywhere (CJK carries no spaces, so the "first word" of a CJK
+  // line was the whole line and every line read as wrapped).
+  const firstWord = CJK_START_RE.test(first.str) ? first.str[0] : first.str.split(" ")[0] || first.str;
   const firstWordWidth =
     first.str.length > 0 ? first.w * Math.min(1, firstWord.length / first.str.length) : size;
   const last = items[items.length - 1];
@@ -297,8 +314,11 @@ class TextBuilder {
   }
 }
 
+// The tab between cells is the TABLE separator; in a paragraph, heading, or
+// list a multi-cell line reads with a space (a lone "20:00<tab>Dinner" line
+// carried the tab into its paragraph — import compare loop finding).
 function lineAsPart(line: Line): { text: string; runs: Run[] } {
-  return { text: line.text, runs: line.runs };
+  return { text: line.text.replace(/\t/g, " "), runs: line.runs };
 }
 
 // Would the next line's first word have fit on this line? If yes, the break
@@ -659,7 +679,43 @@ type PageContext = {
   // Some PDFs expose no bold flags at all (font subsetting); heading rules
   // that require bold would then match nothing.
   hasBold: boolean;
+  // The page's leftmost text x, and the content column beside a label column
+  // (times in a timeline, dates in a résumé) when the page has one.
+  pageMinX: number;
+  labelColumn: number | null;
 };
+
+// A label line: a short label at the page's left edge, then the entry's title
+// at the content column — "18:00  Check in", "2019  Engineer at X". Not a
+// table row: the lines under it are the entry's body (import compare loop
+// finding: a timeline read as tables and indented lists).
+function isLabelLine(line: Line, ctx: PageContext): boolean {
+  if (ctx.labelColumn === null || line.cells.length !== 2) return false;
+  const [label, body] = line.cells;
+  return (
+    line.x <= ctx.pageMinX + 4 &&
+    label.text.length <= 12 &&
+    Math.abs(body.x - ctx.labelColumn) < 3
+  );
+}
+
+// The column's right edge near a band of lines [from, to): the widest prose
+// line (single cell, longer than 40 chars, in the same column) within four
+// lines before or after the band. A band's own longest line always reads as
+// wrapped against itself.
+function proseEdge(lines: Line[], from: number, to: number): number {
+  let edge = 0;
+  const x = lines[from].x;
+  const size = lines[from].size;
+  for (let k = Math.max(0, from - 4); k < Math.min(lines.length, to + 4); k++) {
+    if (k >= from && k < to) continue;
+    const l = lines[k];
+    if (l.cells.length !== 1 || l.text.length <= 40) continue;
+    if (Math.abs(l.x - x) > size * 6) continue;
+    if (l.xEnd > edge) edge = l.xEnd;
+  }
+  return edge;
+}
 
 function isIndented(line: Line, ctx: PageContext): boolean {
   return (
@@ -679,7 +735,7 @@ function findTableRuns(lines: Line[], ctx: PageContext): number[] {
   let runId = 0;
   let i = 0;
   while (i < lines.length) {
-    if (lines[i].cells.length < 2 || runOf[i] !== -1) {
+    if (lines[i].cells.length < 2 || runOf[i] !== -1 || isLabelLine(lines[i], ctx)) {
       i++;
       continue;
     }
@@ -691,6 +747,7 @@ function findTableRuns(lines: Line[], ctx: PageContext): number[] {
       const last = lines[members[members.length - 1]];
       const gap = last.y - next.y;
       if (gap < 0 || gap > next.size * ctx.leading * 2.2) break;
+      if (isLabelLine(next, ctx)) break;
       if (next.cells.length >= 2) {
         members.push(j);
         multi++;
@@ -716,7 +773,7 @@ function findTableRuns(lines: Line[], ctx: PageContext): number[] {
         let y = next.y;
         for (let k = j + 1; k <= j + 2 && k < lines.length; k++) {
           if (y - lines[k].y > lines[k].size * ctx.leading * 2.2) break;
-          if (lines[k].cells.length >= 2) {
+          if (lines[k].cells.length >= 2 && !isLabelLine(lines[k], ctx)) {
             resumes = true;
             break;
           }
@@ -825,6 +882,14 @@ function segmentPage(lines: Line[], ctx: PageContext): Segment[] {
     }
     tocMode = false;
 
+    // Label line: the label and the entry's title read as one paragraph; the
+    // entry's body follows as its own blocks.
+    if (isLabelLine(line, ctx)) {
+      segments.push({ type: "PARAGRAPH", text: lineAsPart(line).text, page: line.page, runs: line.runs });
+      i++;
+      continue;
+    }
+
     // Heading run: larger than body. Wrapped heading lines merge; a merged run
     // that reads as prose (ends in a period, runs long) is a lead paragraph.
     if (single && line.size > body * 1.14) {
@@ -918,14 +983,22 @@ function segmentPage(lines: Line[], ctx: PageContext): Segment[] {
         j++;
       }
       // Item boundaries: bullet markers, or gaps looser than the run's leading.
+      // Items with neither (vector bullets at text leading): in a band of
+      // mostly short lines, a line that stops short of the column's right edge
+      // ends its item (import compare loop finding: a CJK dish list fused into
+      // one paragraph).
       const starts: number[] = [0];
       const gaps = run.slice(1).map((l, k) => run[k].y - l.y);
       const gapThreshold = ctx.leading * line.size * 1.12;
+      const edge = Math.max(...run.map((l) => l.xEnd), proseEdge(lines, i, j));
+      const shortLines = run.filter((l) => l.xEnd < edge - l.size * 3).length;
+      const ragged = shortLines * 2 >= run.length;
       for (let k = 1; k < run.length; k++) {
         const marked = BULLET_RE.test(run[k].text);
         const spaced = gaps[k - 1] > gapThreshold;
         const outdented = run[k].x < run[k - 1].x - line.size * 0.5;
-        if (marked || spaced || outdented) starts.push(k);
+        const ended = ragged && !fillsMargin(run[k - 1], run[k], edge);
+        if (marked || spaced || outdented || ended) starts.push(k);
       }
       const items: { text: string; runs: Run[] }[] = [];
       for (let s = 0; s < starts.length; s++) {
@@ -1361,7 +1434,27 @@ export async function parsePdf(
     if (!Number.isFinite(columnLeft)) {
       columnLeft = lines.length > 0 ? Math.min(...lines.map((l) => l.x)) : 0;
     }
-    segments.push(...segmentPage(lines, { bodySize, leading, columnLeft, hasBold }));
+    // A label column (times, dates, step numbers) beside the content column:
+    // two-cell lines whose short first cell sits at the page's left edge and
+    // whose second cell starts where the page's body lines start, well right
+    // of the edge. Two or more make the content column the column and those
+    // lines label lines.
+    const pageMinX = lines.length > 0 ? Math.min(...lines.map((l) => l.x)) : 0;
+    const prominentXs = new Set([...counts].filter(([, c]) => c >= prominent).map(([x]) => x));
+    const labelXs: number[] = [];
+    for (const l of lines) {
+      if (l.cells.length !== 2 || l.x > pageMinX + 4 || l.cells[0].text.length > 12) continue;
+      const bodyX = Math.round(l.cells[1].x);
+      if (bodyX - pageMinX >= 24 && prominentXs.has(bodyX)) labelXs.push(bodyX);
+    }
+    let labelColumn: number | null = null;
+    if (labelXs.length >= 2) {
+      labelColumn = median(labelXs);
+      columnLeft = labelColumn;
+    }
+    segments.push(
+      ...segmentPage(lines, { bodySize, leading, columnLeft, hasBold, pageMinX, labelColumn }),
+    );
   }
   segments = segments.filter((s) => s.text.trim().length > 0);
   // Vector-figure debris: chart axis ticks read as tiny numeric-only lines.
