@@ -1,22 +1,30 @@
 import { z } from "zod";
 import { extractJson } from "@/lib/derive/json";
-import { outboundFetch } from "@/lib/outbound-fetch";
 import { recordUsage } from "@/lib/usage";
+import { browserCaptions } from "@/lib/video/browser-transcript";
+import { youtubeCaptions } from "@/lib/video/captions";
 import { geminiCall, geminiCountTokens } from "@/lib/video/gemini";
-import { fetchPlayerResponse } from "@/lib/video/innertube";
 import { splitMp3 } from "@/lib/video/mp3";
+import { normalizeSegments, type TranscriptSegment } from "@/lib/video/segments";
 import { parseTimeInput } from "@/lib/video/types";
 import { youtubeWatchUrl } from "@/lib/video/youtube";
+import { youtubeAudio } from "@/lib/video/youtube-audio";
+
+export { groupSegments, normalizeSegments, type TranscriptSegment } from "@/lib/video/segments";
 
 // Transcription (SPEC.md §11) is a provider ladder, ordered by source:
-//   YouTube video:  Gemini reads the video by URL → caption tracks from the
-//                   player API (ANDROID, then IOS client) → caption tracks
-//                   scraped from the watch page.
+//   YouTube video:  caption tracks from YouTube's player API — the transcript
+//                   YouTube itself shows (ANDROID, IOS, then ANDROID_VR
+//                   client, then the watch page) → the same captions read by
+//                   a real browser, where one is configured → Gemini reads
+//                   the video by URL → the audio stream downloads and takes
+//                   the upload ladder.
 //   Uploaded video or audio: Groq Whisper (best quality per dollar; free tier)
 //                   → OpenAI Whisper → Gemini with the bytes inline.
 // Each rung throws a plain reason; the ladder tries the next and reports every
-// reason when all fail. Segments group into transcript lines at the end; the
-// route writes them as TRANSCRIPT blocks.
+// reason when all fail. A rung never starts with under 20 seconds left of the
+// caller's deadline. Segments group into transcript lines at the end; the job
+// writes them as TRANSCRIPT blocks.
 
 export const TRANSCRIBE_MAX_BYTES = 25 * 1024 * 1024; // Whisper-family upload cap
 // An MP3 past the cap splits at frame boundaries and transcribes in chunks
@@ -37,29 +45,53 @@ const MAX_CHUNKS = 16; // 4 hours; past that the run cannot finish inside one re
 // rather than the sum — the request has to finish inside the function timeout.
 const CHUNK_CONCURRENCY = 6;
 
-export type TranscriptSegment = { start: number; end: number; text: string };
-
 export type TranscribeSource =
   | { kind: "upload"; bytes: Uint8Array<ArrayBuffer>; mimeType: string | null }
   | { kind: "youtube"; youtubeId: string };
 
+export type TranscribeOptions = {
+  /** Epoch ms. A rung does not start with under RUNG_MIN_MS left before it. */
+  deadline?: number;
+};
+
+const RUNG_MIN_MS = 20_000;
+
+type Rung = [string, () => Promise<TranscriptSegment[]>];
+
 export async function transcribe(
   source: TranscribeSource,
+  opts: TranscribeOptions = {},
 ): Promise<{ segments: TranscriptSegment[]; provider: string }> {
-  const rungs: [string, () => Promise<TranscriptSegment[]>][] =
+  const rungs: Rung[] =
     source.kind === "youtube"
       ? [
+          ["YouTube captions", () => youtubeCaptions(source.youtubeId)],
+          ["YouTube captions (browser)", () => browserCaptions(source.youtubeId)],
           ["Gemini", () => geminiYouTube(source.youtubeId)],
-          ["YouTube captions (API)", () => youtubeCaptionsApi(source.youtubeId)],
-          ["YouTube captions (page)", () => youtubeCaptionsPage(source.youtubeId)],
+          ["YouTube audio", () => youtubeAudioRung(source.youtubeId, opts)],
         ]
-      : [
-          ["Groq Whisper", () => whisperFamily(GROQ_WHISPER, source.bytes, source.mimeType ?? "video/mp4")],
-          ["OpenAI Whisper", () => whisperFamily(OPENAI_WHISPER, source.bytes, source.mimeType ?? "video/mp4")],
-          ["Gemini", () => geminiUpload(source.bytes, source.mimeType ?? "video/mp4")],
-        ];
+      : uploadRungs(source.bytes, source.mimeType ?? "video/mp4");
+  return runLadder(rungs, opts);
+}
+
+function uploadRungs(bytes: Uint8Array<ArrayBuffer>, mimeType: string): Rung[] {
+  return [
+    ["Groq Whisper", () => whisperFamily(GROQ_WHISPER, bytes, mimeType)],
+    ["OpenAI Whisper", () => whisperFamily(OPENAI_WHISPER, bytes, mimeType)],
+    ["Gemini", () => geminiUpload(bytes, mimeType)],
+  ];
+}
+
+async function runLadder(
+  rungs: Rung[],
+  opts: TranscribeOptions,
+): Promise<{ segments: TranscriptSegment[]; provider: string }> {
   const failures: string[] = [];
   for (const [name, run] of rungs) {
+    if (opts.deadline !== undefined && Date.now() > opts.deadline - RUNG_MIN_MS) {
+      failures.push(`${name}: skipped, out of time`);
+      continue;
+    }
     try {
       return { segments: await run(), provider: name };
     } catch (err) {
@@ -69,6 +101,24 @@ export async function transcribe(
     }
   }
   throw new Error(failures.join(" · "));
+}
+
+// The audio stream takes the upload ladder, so it needs an upload provider
+// and fits that provider's cap: 25 MB for the Whisper rungs, 14 MB inline
+// for Gemini alone.
+function youtubeAudioRung(youtubeId: string, opts: TranscribeOptions): Promise<TranscriptSegment[]> {
+  const whisper = Boolean(process.env.GROQ_API_KEY || process.env.OPENAI_API_KEY);
+  if (!whisper && !process.env.GEMINI_API_KEY) {
+    return Promise.reject(new Error("GROQ_API_KEY, OPENAI_API_KEY, or GEMINI_API_KEY is not set"));
+  }
+  return youtubeAudio(youtubeId, {
+    maxBytes: whisper ? TRANSCRIBE_MAX_BYTES : GEMINI_INLINE_MAX_BYTES,
+    transcribeBytes: (bytes, mimeType) =>
+      runLadder(uploadRungs(bytes, mimeType), opts).then((result) => {
+        console.log(`[transcribe] YouTube audio transcribed by ${result.provider}`);
+        return result.segments;
+      }),
+  });
 }
 
 // ── Whisper family: Groq and OpenAI, one endpoint shape ─────────────────────
@@ -96,6 +146,7 @@ const EXTENSION: Record<string, string> = {
   "audio/wav": "wav",
   "audio/flac": "flac",
   "audio/ogg": "ogg",
+  "audio/webm": "webm",
 };
 
 // Groq and OpenAI take the same multipart request; only the endpoint, key,
@@ -413,150 +464,4 @@ function geminiUpload(
     { inlineData: { mimeType, data: Buffer.from(bytes).toString("base64") } },
     { text: GEMINI_TRANSCRIPT_PROMPT },
   ]);
-}
-
-// ── YouTube caption tracks ──────────────────────────────────────────────────
-// Two independent ways to the same tracks. The player API answers datacenter
-// IPs that the watch page refuses ("confirm you're not a bot"), so it goes
-// first. The watch-page scrape stays as the last resort for networks where
-// the API is the blocked one.
-
-const captionTracksSchema = z
-  .array(
-    z.object({
-      baseUrl: z.string().url(),
-      languageCode: z.string().optional(),
-      kind: z.string().optional(), // "asr" = auto-generated
-    }),
-  )
-  .min(1);
-type CaptionTrack = z.infer<typeof captionTracksSchema>[number];
-
-const timedTextSchema = z.object({
-  events: z.array(
-    z.object({
-      tStartMs: z.number().optional(),
-      dDurationMs: z.number().optional(),
-      segs: z.array(z.object({ utf8: z.string().optional() })).optional(),
-    }),
-  ),
-});
-
-const BROWSER_UA =
-  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36";
-
-// Prefer human English captions, then auto-generated English, then anything.
-function pickTrack(tracks: CaptionTrack[]): CaptionTrack {
-  return (
-    tracks.find((t) => t.languageCode?.startsWith("en") && t.kind !== "asr") ??
-    tracks.find((t) => t.languageCode?.startsWith("en")) ??
-    tracks[0]
-  );
-}
-
-async function fetchTimedText(baseUrl: string, userAgent: string): Promise<TranscriptSegment[]> {
-  const timed = await outboundFetch(`${baseUrl}&fmt=json3`, {
-    headers: { "User-Agent": userAgent },
-  });
-  if (!timed.ok) throw new Error(`caption fetch failed (${timed.status})`);
-  const parsed = timedTextSchema.safeParse(await timed.json());
-  if (!parsed.success) throw new Error("caption track was not readable");
-  const segments = parsed.data.events
-    .map((event) => ({
-      start: (event.tStartMs ?? 0) / 1000,
-      end: ((event.tStartMs ?? 0) + (event.dDurationMs ?? 2000)) / 1000,
-      text: (event.segs ?? [])
-        .map((s) => s.utf8 ?? "")
-        .join("")
-        .replace(/\n/g, " ")
-        .trim(),
-    }))
-    .filter((s) => s.text !== "");
-  if (segments.length === 0) throw new Error("caption track was empty");
-  return normalizeSegments(segments);
-}
-
-async function youtubeCaptionsApi(youtubeId: string): Promise<TranscriptSegment[]> {
-  const { userAgent, data } = await fetchPlayerResponse(youtubeId);
-  const tracks = captionTracksSchema.safeParse(
-    data.captions?.playerCaptionsTracklistRenderer?.captionTracks,
-  );
-  if (!tracks.success) throw new Error("no caption tracks on this video");
-  return fetchTimedText(pickTrack(tracks.data).baseUrl, userAgent);
-}
-
-// The value of `"<key>": [...]` in a script blob, by bracket matching — the
-// array nests objects and strings that a regex cannot bound.
-function extractJsonArray(source: string, key: string): unknown | null {
-  const at = source.indexOf(`"${key}":`);
-  if (at === -1) return null;
-  const start = source.indexOf("[", at);
-  if (start === -1) return null;
-  let depth = 0;
-  let inString = false;
-  let escaped = false;
-  for (let i = start; i < source.length; i++) {
-    const ch = source[i];
-    if (inString) {
-      if (escaped) escaped = false;
-      else if (ch === "\\") escaped = true;
-      else if (ch === '"') inString = false;
-    } else if (ch === '"') inString = true;
-    else if (ch === "[") depth += 1;
-    else if (ch === "]") {
-      depth -= 1;
-      if (depth === 0) {
-        try {
-          return JSON.parse(source.slice(start, i + 1));
-        } catch {
-          return null;
-        }
-      }
-    }
-  }
-  return null;
-}
-
-async function youtubeCaptionsPage(youtubeId: string): Promise<TranscriptSegment[]> {
-  const watch = await outboundFetch(`https://www.youtube.com/watch?v=${youtubeId}&hl=en`, {
-    headers: { "User-Agent": BROWSER_UA, "Accept-Language": "en" },
-  });
-  if (!watch.ok) throw new Error(`watch page fetch failed (${watch.status})`);
-  const tracks = captionTracksSchema.safeParse(
-    extractJsonArray(await watch.text(), "captionTracks"),
-  );
-  if (!tracks.success) throw new Error("no caption tracks on this video");
-  return fetchTimedText(pickTrack(tracks.data).baseUrl, BROWSER_UA);
-}
-
-// ── Shared ──────────────────────────────────────────────────────────────────
-
-function normalizeSegments(segments: TranscriptSegment[]): TranscriptSegment[] {
-  return segments
-    .map((s) => ({ start: s.start, end: Math.max(s.end, s.start), text: s.text.trim() }))
-    .filter((s) => s.text !== "")
-    .sort((a, b) => a.start - b.start);
-}
-
-// Group segments into transcript lines: one line reads like a sentence or two.
-// A line closes at ~280 characters, at a speech gap over 1.5s, or at 30s.
-export function groupSegments(segments: TranscriptSegment[]): TranscriptSegment[] {
-  const lines: TranscriptSegment[] = [];
-  let open: TranscriptSegment | null = null;
-  for (const segment of segments) {
-    if (
-      open &&
-      (open.text.length + segment.text.length > 280 ||
-        segment.start - open.end > 1.5 ||
-        segment.end - open.start > 30)
-    ) {
-      lines.push(open);
-      open = null;
-    }
-    open = open
-      ? { start: open.start, end: segment.end, text: `${open.text} ${segment.text}` }
-      : { ...segment };
-  }
-  if (open) lines.push(open);
-  return lines;
 }
