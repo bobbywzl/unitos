@@ -43,11 +43,11 @@ const en = {
   pAiAnthropic:
     "Anthropic (Claude) receives document text, your notes and annotations, and your context, when you use Explain, Simplify, Distill, Extract, Summarize, or the assistant.",
   pAiOpenAI:
-    "OpenAI receives the text you ask to be read aloud, and the audio of videos you upload, for transcription.",
+    "OpenAI receives the text you ask to be read aloud. OpenAI and Groq receive the audio of videos you upload, or of YouTube videos you add that have no captions, for transcription.",
   pAiGoogle:
     "Google (Gemini) receives videos you upload, or the link to a YouTube video you add, for transcription and for describing a frame you ask about.",
   pAiYouTube:
-    "YouTube receives a request for captions and preview frames when you add a YouTube video.",
+    "YouTube receives a request for captions, preview frames, and — when the video has no captions — its audio, when you add a YouTube video.",
   pAiTraining:
     "These providers process this material to return a result. Unitos does not sell your material and does not use it to train any model. Each provider handles it under its own API terms — Anthropic and OpenAI do not train on API content by default; Google's terms depend on the Gemini plan in use.",
 
@@ -113,7 +113,7 @@ const en = {
 
   tThirdHeading: "Services Unitos relies on",
   tThird:
-    "Signing in uses Google, and the AI features use Anthropic, OpenAI, Google, and YouTube. Their own terms apply to their part of the work, and an outage or change at any of them can affect Unitos.",
+    "Signing in uses Google, and the AI features use Anthropic, OpenAI, Groq, Google, and YouTube. Their own terms apply to their part of the work, and an outage or change at any of them can affect Unitos.",
 
   tAvailabilityHeading: "Availability",
   tAvailability:
@@ -178,10 +178,10 @@ const zh: Record<keyof typeof en, string> = {
     "Unitos 是 AI 阅读工具，因此你存储的部分内容会发送给 AI 服务商以响应你的请求。这只在你主动发起时发生——后台不发送任何内容：",
   pAiAnthropic:
     "当你使用解释、简化、提炼、提取、摘要或助手时，Anthropic（Claude）会收到文档文字、你的笔记和批注，以及你的背景。",
-  pAiOpenAI: "OpenAI 会收到你要求朗读的文字，以及你上传的视频的音频，用于转写。",
+  pAiOpenAI: "OpenAI 会收到你要求朗读的文字。OpenAI 和 Groq 会收到你上传的视频、或你添加的没有字幕的 YouTube 视频的音频，用于转写。",
   pAiGoogle:
     "Google（Gemini）会收到你上传的视频，或你添加的 YouTube 视频链接，用于转写以及描述你所询问的画面。",
-  pAiYouTube: "当你添加 YouTube 视频时，YouTube 会收到获取字幕和预览画面的请求。",
+  pAiYouTube: "当你添加 YouTube 视频时，YouTube 会收到获取字幕和预览画面的请求；视频没有字幕时，还会收到获取音频的请求。",
   pAiTraining:
     "这些服务商处理这些材料以返回结果。Unitos 不出售你的材料，也不用它训练任何模型。各服务商依其自身的 API 条款处理这些材料——Anthropic 和 OpenAI 默认不使用 API 内容训练模型；Google 的条款取决于所用的 Gemini 方案。",
 
@@ -246,7 +246,7 @@ const zh: Record<keyof typeof en, string> = {
 
   tThirdHeading: "Unitos 依赖的服务",
   tThird:
-    "登录使用 Google，AI 功能使用 Anthropic、OpenAI、Google 和 YouTube。它们各自的条款适用于其承担的部分，其中任何一方中断或变更都可能影响 Unitos。",
+    "登录使用 Google，AI 功能使用 Anthropic、OpenAI、Groq、Google 和 YouTube。它们各自的条款适用于其承担的部分，其中任何一方中断或变更都可能影响 Unitos。",
 
   tAvailabilityHeading: "可用性",
   tAvailability:
