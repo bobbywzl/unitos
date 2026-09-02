@@ -25,7 +25,7 @@ A notes-centric web app for completely dissecting complex documents (research pa
 - **Anchoring:** W3C Web Annotation selectors via `apache-annotator` (`@apache-annotator/dom`, `@apache-annotator/selector`).
 - **Digest (Phase 6):** the assistant's stored context — one `NotebookDigest` row per corpus per user, rebuilt on read when a content fingerprint moves (§7). No embeddings: the assistant reads the corpus whole.
 - **Styling:** Tailwind. Split-pane layout via CSS grid, not a heavy library.
-- **Auth:** dual mode (Scalae pattern). With `SESSION_SECRET` plus Google (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`), Apple (`APPLE_CLIENT_ID`, `APPLE_TEAM_ID`, `APPLE_KEY_ID`, `APPLE_PRIVATE_KEY`), or email (`RESEND_API_KEY`, `EMAIL_FROM`) credentials set, sign-in (hand-rolled OIDC code flows, database sessions in an httpOnly cookie, 30 days; accounts key on the email, so every provider lands in one account; Apple's callback is a cross-site form_post with a SameSite=None state cookie and a self-signed ES256 client secret; email sign-in stores a hashed single-use token per `EmailConfirmation` row (`purpose` "signup" | "reset"), 30-minute expiry, and creates the account only when the link is clicked; the link lands on `/welcome` to set a password (scrypt, `User.passwordHash` "s1$salt$hash", "" = none); returning users sign in with email + password at `/signin?mode=in`, and Forgot password emails a reset link to `/reset`, which sets the new password and signs every other session out) gates the app at `/signin`; corpora, profiles, and digests belong to accounts, and the first account to sign in adopts the local reader's data. Unset, the app runs as the single local reader (`user-1`), nothing gated. `/admin` keeps its own `ADMIN_PASSWORD` gate, decoupled from reader sign-in. Corpus routes verify membership (owner or collaborator, §12); object routes resolve their object to its corpus or document and check the same roles. `/api/auth/test-login` is a QA door, sealed unless `TEST_LOGIN_TOKEN` is set.
+- **Auth:** dual mode (Scalae pattern). With `SESSION_SECRET` plus Google (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`), Apple (`APPLE_CLIENT_ID`, `APPLE_TEAM_ID`, `APPLE_KEY_ID`, `APPLE_PRIVATE_KEY`), or email (`RESEND_API_KEY`, `EMAIL_FROM`) credentials set, sign-in (hand-rolled OIDC code flows, database sessions in an httpOnly cookie, 30 days; accounts key on the email, so every provider lands in one account; Apple's callback is a cross-site form_post with a SameSite=None state cookie and a self-signed ES256 client secret; email sign-in stores a hashed single-use token per `EmailConfirmation` row (`purpose` "signup" | "reset"), 30-minute expiry, and creates the account only when the link is clicked; the link lands on `/welcome` to set a password (scrypt, `User.passwordHash` "s1$salt$hash", "" = none); returning users sign in with email + password at `/signin?mode=in`, and Forgot password emails a reset link to `/reset`, which sets the new password and signs every other session out) gates the app at `/signin`; corpora, profiles, and digests belong to accounts, and the first account to sign in adopts the local reader's data. Unset, the app runs as the single local reader (`user-1`), nothing gated. `/admin` keeps its own `ADMIN_PASSWORD` gate, decoupled from reader sign-in; the admin never has access to an account — no session, no impersonation, no edits — and sends notifications into accounts (§18) and nothing else. Corpus routes verify membership (owner or collaborator, §12); object routes resolve their object to its corpus or document and check the same roles. `/api/auth/test-login` is a QA door, sealed unless `TEST_LOGIN_TOKEN` is set.
 - **Language:** English and Chinese, whole-surface. Typed dictionaries in `/lib/i18n/dict` (one namespace per surface; en and zh keys enforced identical by type), `dissect-lang` cookie with Accept-Language first-visit fallback, switcher in Settings and on `/signin`. Every UI surface and API error message translates; prompts, the digest, and stored data stay English (model context and data, not UI).
 
 ---
@@ -641,3 +641,36 @@ Offline, the open tab keeps working — reading what is loaded, and for a premiu
 - **What does not queue:** any write whose response the caller reads (a created section's id, the style route's healed spans), everything AI, and every write on a non-premium account — those fail with the plain offline message.
 - **Sync:** at-least-once, oldest first, writes before uploads. A record leaves the queue when the server answers; a 4xx drops it with a console warning (stale by then); a network failure stops the drain until the next online event. The workspace header shows the pill: offline with the queued count, then the sync until the queue drains.
 - **The boundary:** offline work lives in the open tab. There is no service worker yet — a reload while offline does not load the app; queued records survive the reload and sync on the next online visit.
+
+---
+
+## 18. Notifications
+
+The admin sends notifications to accounts; the admin never has access to an account. `/admin` is the operator's console — feedback, digest, usage, notifications — behind its own password (§2). It holds no session for any account, opens no account, and changes nothing on one: no impersonation, no profile edits, no premium toggle. The notification is the one thing the admin sends into an account, and it flows one way — the recipient reads and dismisses; nothing comes back.
+
+### Data model additions
+
+```prisma
+model Notification {
+  id         String   @id @default(cuid())
+  kind       String   @default("update") // "update" | "account"
+  title      String
+  body       String   // markdown
+  recipients NotificationRecipient[]
+  createdAt  DateTime @default(now())
+}
+
+model NotificationRecipient {
+  id             String       @id @default(cuid())
+  notificationId String
+  notification   Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  userId         String       // soft reference like Notebook.userId; "user-1" = the local reader
+  dismissedAt    DateTime?    // null = open on the dashboard
+  @@unique([notificationId, userId])
+}
+```
+
+- **Kinds:** `update` — an update to Unitos (a new function, a changed behavior); `account` — a change made to the account (Unitos Premium turned on, a limit changed). The kind renders as a chip on both sides.
+- **Sending** (`/admin/notifications`, `POST /api/admin/notifications`): kind, title, body, recipients — every account, or accounts chosen from the list (name and email, nothing else; `lib/notifications.ts` is the admin's whole view of accounts). One `Notification` row and one `NotificationRecipient` row per recipient. With sign-in off the local reader is the one account. The page lists every send, newest first, with its recipient count and how many dismissed it; Delete (`DELETE /api/admin/notifications`) removes a send for every recipient.
+- **Receiving:** the dashboard shows the account's open notifications above Projects — kind, date, title, body (markdown) — until Dismiss (`PATCH /api/notifications/[id]`, the recipient only) stamps `dismissedAt`. Dismissed rows stay, so the admin's count holds; only the admin's Delete removes them.
+- **The boundary, enforced:** the admin routes touch `Notification` and `NotificationRecipient` only; no admin route reads or writes `User`, `Session`, `ReaderProfile`, or a corpus. No email: the notification lives in the app.
