@@ -55,6 +55,7 @@ type Segment = ParsedBlock & {
   tocEntries?: { start: number; end: number; num: number }[];
   headingNum?: number; // leading number of a numbered heading ("3." → 3)
   box?: Box; // the lines' extent on the page, for figure regions
+  captionBox?: Box; // a captioned FIGURE: where its caption sits (outside box)
   lineSize?: number; // the lines' median font size
   mathShare?: number; // share of glyphs from math fonts
 };
@@ -2009,7 +2010,7 @@ function attachFigureRegions(
     // Subscripts and lowered limits hang under the line box: more room
     // below than above.
     const size = group[0].lineSize ?? ctx.bodySize;
-    box = { x1: box.x1 - size * 0.2, y1: box.y1 - size * 0.45, x2: box.x2 + size * 0.2, y2: box.y2 + size * 0.15 };
+    box = { x1: box.x1 - size * 0.2, y1: box.y1 - size * 0.45, x2: box.x2 + size * 0.2, y2: box.y2 - size * 0.1 };
     withMath.push({
       type: "FIGURE",
       text: group
@@ -2067,7 +2068,11 @@ function attachFigureRegions(
       swept.unshift(out.pop()!);
     }
     const above = out[out.length - 1];
-    const top = above?.box ? above.box.y1 - ctx.bodySize * 0.6 : pageTop;
+    // The band ends under the previous segment, its caption included (a
+    // figure's box leaves its caption out).
+    const top = above?.box
+      ? Math.min(above.box.y1, above.captionBox?.y1 ?? Infinity) - ctx.bodySize * 0.6
+      : pageTop;
     let box: Box | null = null;
     const drawnAbove = drawingIn(drawing, cap.box.y2, top);
     if (swept.length > 0 || top - cap.box.y2 > rowGap * 3 || drawnAbove) {
@@ -2101,6 +2106,7 @@ function attachFigureRegions(
     // line below the caption continues it.
     let text = cap.text;
     let runs = cap.runs;
+    let captionBox = cap.box;
     const follow = withMath[c + 1];
     if (
       follow &&
@@ -2121,6 +2127,7 @@ function attachFigureRegions(
         ...(runs ?? []),
         ...(follow.runs ?? []).map((r) => ({ ...r, start: r.start + offset, end: r.end + offset })),
       ];
+      captionBox = unionBox(captionBox, follow.box);
       c++;
     }
     out.push({
@@ -2129,6 +2136,7 @@ function attachFigureRegions(
       page: cap.page,
       runs,
       box,
+      captionBox,
       region: toRegion(box),
       lineSize: cap.lineSize,
       mathShare: 0,
