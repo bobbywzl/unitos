@@ -511,7 +511,31 @@ async function captureUnitos(browser, opts, documentId, blocks, dir) {
   try {
     await gotoSettled(page, result.url);
     await page.locator("[data-block-id]").first().waitFor({ state: "attached", timeout: 30000 });
+    // The reader scrolls inside a container, so a full-page screenshot was
+    // the viewport alone. Let the container and its ancestors grow to their
+    // content, then the page itself scrolls and the shot shows every block.
+    await page.evaluate(() => {
+      const article = document.querySelector("article.reader-prose") || document.querySelector("[data-block-id]");
+      let el = article;
+      while (el && el !== document.documentElement) {
+        el.style.height = "auto";
+        el.style.maxHeight = "none";
+        el.style.minHeight = "0";
+        el.style.overflow = "visible";
+        el = el.parentElement;
+      }
+      document.documentElement.style.height = "auto";
+      document.documentElement.style.overflow = "visible";
+      document.body.style.height = "auto";
+      document.body.style.overflow = "visible";
+    });
+    await page.waitForTimeout(300);
     await autoScroll(page);
+    // Figures load lazily and a PDF figure renders its page on the server:
+    // wait for every image before the shots, or the crops show captions alone.
+    await page
+      .waitForFunction(() => [...document.querySelectorAll("article img")].every((i) => i.complete), null, { timeout: 90000 })
+      .catch(() => {});
     await page.waitForTimeout(1500);
     const shot = await fullPageShot(page, path.join(dir, "unitos.png"));
     result.screenshot = { file: path.join(dir, "unitos.png"), ...shot };

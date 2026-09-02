@@ -1,5 +1,19 @@
 import { getDocumentProxy } from "unpdf";
 import type { LinkSpan, ParsedBlock, StyleSpan } from "@/lib/parse/types";
+import type { Region } from "@/lib/video/types";
+
+// pdf.js calls Math.sumPrecise while it rebuilds font programs. Node 22 has no
+// such function, so every TrueType font translation failed with a warning and
+// the fonts it dropped never resolved to a name — no bold or italic flags for
+// their text (import compare loop finding).
+const mathWithSum = Math as Math & { sumPrecise?: (values: Iterable<number>) => number };
+if (typeof mathWithSum.sumPrecise !== "function") {
+  mathWithSum.sumPrecise = (values) => {
+    let sum = 0;
+    for (const v of values) sum += v;
+    return sum;
+  };
+}
 
 // PDF → blocks. Deterministic, no AI passes. Beyond text and reading order, the
 // parse keeps what the PDF's fonts and geometry say: bold/italic/monospace runs
@@ -10,7 +24,9 @@ import type { LinkSpan, ParsedBlock, StyleSpan } from "@/lib/parse/types";
 // section headings.
 
 type Flags = { bold: boolean; italic: boolean; mono: boolean; href: string | null };
-type Item = Flags & { str: string; x: number; y: number; w: number; size: number };
+// math: the glyph comes from a math font (Computer Modern math and symbol
+// fonts, AMS fonts, Cambria Math, STIX) — display equations are made of them.
+type Item = Flags & { str: string; x: number; y: number; w: number; size: number; math: boolean };
 type Run = Flags & { start: number; end: number };
 type Cell = { x: number; text: string; runs: Run[] };
 type Line = {
@@ -24,8 +40,11 @@ type Line = {
   size: number;
   page: number;
   firstWordWidth: number;
+  mathChars: number; // glyphs from math fonts, for equation detection
 };
 type UriRegion = { href: string; x1: number; y1: number; x2: number; y2: number };
+// A box in PDF points: y1 the bottom edge, y2 the top edge (y grows upward).
+type Box = { x1: number; y1: number; x2: number; y2: number };
 
 // Internal block: ParsedBlock plus what the cross-page passes need.
 type Segment = ParsedBlock & {
@@ -35,6 +54,9 @@ type Segment = ParsedBlock & {
   listItem?: boolean; // lone indented item; may join a LIST across the page break
   tocEntries?: { start: number; end: number; num: number }[];
   headingNum?: number; // leading number of a numbered heading ("3." → 3)
+  box?: Box; // the lines' extent on the page, for figure regions
+  lineSize?: number; // the lines' median font size
+  mathShare?: number; // share of glyphs from math fonts
 };
 
 const BULLET_RE = /^\s*([•▪◦‣●·*-]|\d{1,2}[.)]|\([a-z\d]{1,3}\)|[ivx]{1,4}[.)])\s+/i;
@@ -46,15 +68,21 @@ const HEADING_NUM_STRICT_RE = /^\d{1,2}((\.\d{1,2})+\.?|[.)])?\s+[\p{Lu}\p{Lo}]/
 const TOC_LABEL_RE = /^(contents|table of contents|inside|outline|in this issue)$/i;
 const TOC_ENTRY_RE = /^(\d{1,2})[.)]?\s+\S/;
 const ATTACH_PUNCT_RE = /^[.,;:!?)\]…%]/;
+const CJK_START_RE = /^[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u;
+const NUMERIC_TOKEN_RE = /^[\d.,%$€£+−–-]+$/;
+const CONTROL_CHARS_RE = /[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g;
 
 // ── Font flags ──────────────────────────────────────────────────────────────
 
-function fontFlags(name: string | null): Omit<Flags, "href"> {
+type FontFlags = Omit<Flags, "href"> & { math: boolean };
+
+function fontFlags(name: string | null): FontFlags {
   const n = (name ?? "").replace(/^[A-Z]{6}\+/, ""); // subset prefix "HAAAAA+"
   return {
     bold: /bold|black|heavy|semi ?bold|demi/i.test(n),
     italic: /italic|oblique/i.test(n),
     mono: /mono|courier|consolas|menlo|typewriter/i.test(n),
+    math: /^(CMMI|CMSY|CMEX|CMMIB|CMBSY|MSAM|MSBM|rsfs|eufm|eufb|stmary|wasy|LMMathItalic|LMMathSymbols|LMMathExtension)|Math|Symbol/i.test(n),
   };
 }
 
@@ -108,9 +136,19 @@ function buildLine(rawItems: Item[], page: number): Line {
   const size = Math.max(...items.map((i) => i.size));
   const cells: Cell[] = [];
   let prevEnd: number | null = null;
+  let prevItem: Item | null = null;
   for (const item of items) {
     const gap = prevEnd === null ? 0 : item.x - prevEnd;
-    const wide = prevEnd !== null && gap > Math.max(8, size * 1.6);
+    // A cell boundary: a wide gap, or an em between two numbers — number
+    // columns sit closer than the word gap rule allows (a table of Brier
+    // scores read as one cell per row: import compare loop finding).
+    const numeric =
+      prevItem !== null &&
+      NUMERIC_TOKEN_RE.test(prevItem.str.trim()) &&
+      NUMERIC_TOKEN_RE.test(item.str.trim());
+    const wide =
+      prevEnd !== null && (gap > Math.max(8, size * 1.6) || (numeric && gap > size * 1.0));
+    prevItem = item;
     let cell = cells[cells.length - 1];
     if (!cell || wide) {
       cell = { x: item.x, text: "", runs: [] };
@@ -154,7 +192,10 @@ function buildLine(rawItems: Item[], page: number): Line {
     for (const r of cell.runs) runs.push({ ...r, start: r.start + offset, end: r.end + offset });
   });
   const first = items[0];
-  const firstWord = first.str.split(" ")[0] || first.str;
+  // The unit a wrap moves to the next line: a word, or one glyph in a script
+  // that wraps anywhere (CJK carries no spaces, so the "first word" of a CJK
+  // line was the whole line and every line read as wrapped).
+  const firstWord = CJK_START_RE.test(first.str) ? first.str[0] : first.str.split(" ")[0] || first.str;
   const firstWordWidth =
     first.str.length > 0 ? first.w * Math.min(1, firstWord.length / first.str.length) : size;
   const last = items[items.length - 1];
@@ -169,18 +210,82 @@ function buildLine(rawItems: Item[], page: number): Line {
     size,
     page,
     firstWordWidth,
+    mathChars: items.reduce((n, i) => n + (i.math ? i.str.replace(/\s/g, "").length : 0), 0),
+  };
+}
+
+// ── Geometry ────────────────────────────────────────────────────────────────
+
+function boxOf(lines: Line[]): Box {
+  let x1 = Infinity;
+  let y1 = Infinity;
+  let x2 = -Infinity;
+  let y2 = -Infinity;
+  for (const l of lines) {
+    x1 = Math.min(x1, l.x);
+    x2 = Math.max(x2, l.xEnd);
+    y1 = Math.min(y1, l.y - l.size * 0.3);
+    y2 = Math.max(y2, l.y + l.size * 0.85);
+  }
+  return { x1, y1, x2, y2 };
+}
+
+function unionBox(a: Box, b: Box): Box {
+  return {
+    x1: Math.min(a.x1, b.x1),
+    y1: Math.min(a.y1, b.y1),
+    x2: Math.max(a.x2, b.x2),
+    y2: Math.max(a.y2, b.y2),
+  };
+}
+
+// What a segment's lines say about it: extent, font size, math share.
+function geom(lines: Line[]): { box: Box; lineSize: number; mathShare: number } {
+  const chars = lines.reduce((n, l) => n + l.text.replace(/\s/g, "").length, 0);
+  const math = lines.reduce((n, l) => n + l.mathChars, 0);
+  return {
+    box: boxOf(lines),
+    lineSize: median(lines.map((l) => l.size)),
+    mathShare: chars > 0 ? math / chars : 0,
+  };
+}
+
+// A box as the §11 percent-coordinate region shape (y measured from the top).
+function regionOf(box: Box, pageWidth: number, pageHeight: number): Region {
+  const px = (x: number) => Math.min(100, Math.max(0, (x / pageWidth) * 100));
+  const py = (y: number) => Math.min(100, Math.max(0, ((pageHeight - y) / pageHeight) * 100));
+  const [l, r, t, b] = [px(box.x1), px(box.x2), py(box.y2), py(box.y1)];
+  return {
+    kind: "path",
+    points: [
+      [l, t],
+      [r, t],
+      [r, b],
+      [l, b],
+    ],
   };
 }
 
 function buildLines(items: Item[], page: number): Line[] {
   const sorted = items.filter((i) => i.str.trim().length > 0);
   sorted.sort((a, b) => b.y - a.y || a.x - b.x);
+  // A line is the items near one baseline. The anchor is the line's largest
+  // item, the tolerance half its size: superscripts, subscripts, and sum
+  // limits sit within that of their base line and belong to it (they read as
+  // lines of their own before — import compare loop finding).
   const grouped: Item[][] = [];
+  const anchors: Item[] = [];
   for (const item of sorted) {
     const last = grouped[grouped.length - 1];
-    const tolerance = Math.max(2, item.size * 0.4);
-    if (last && Math.abs(last[0].y - item.y) < tolerance) last.push(item);
-    else grouped.push([item]);
+    const anchor = anchors[anchors.length - 1];
+    const tolerance = anchor ? Math.max(2, Math.max(anchor.size, item.size) * 0.5) : 0;
+    if (last && Math.abs(anchor.y - item.y) < tolerance) {
+      last.push(item);
+      if (item.size > anchor.size) anchors[anchors.length - 1] = item;
+    } else {
+      grouped.push([item]);
+      anchors.push(item);
+    }
   }
   return grouped.map((g) => buildLine(g, page)).filter((l) => l.text.length > 0);
 }
@@ -297,8 +402,11 @@ class TextBuilder {
   }
 }
 
+// The tab between cells is the TABLE separator; in a paragraph, heading, or
+// list a multi-cell line reads with a space (a lone "20:00<tab>Dinner" line
+// carried the tab into its paragraph — import compare loop finding).
 function lineAsPart(line: Line): { text: string; runs: Run[] } {
-  return { text: line.text, runs: line.runs };
+  return { text: line.text.replace(/\t/g, " "), runs: line.runs };
 }
 
 // Would the next line's first word have fit on this line? If yes, the break
@@ -452,7 +560,9 @@ function columnSeparators(run: Line[]): number[] {
     }
   }
   const allowed = Math.max(0, Math.floor(run.length * 0.08));
-  const need = Math.max(2, Math.ceil(run.length * 0.3));
+  // A column needs text on both sides in a few lines only: a label column
+  // whose labels sit on their own baselines fills one line in four.
+  const need = Math.max(2, Math.ceil(run.length * 0.15));
   const separators: number[] = [];
   let bandStart: number | null = null;
   for (let s = 0; s <= n; s++) {
@@ -568,16 +678,66 @@ function tableFromRun(run: Line[], leading: number): Segment {
         ? wrapCeiling
         : 0; // all gaps at text leading: every line is its own row
 
+  // Row anchors: lines that carry a first-column cell, minus wraps of the
+  // previous first-column cell (a first-column-only line one leading below
+  // it). When some anchor sits right under a line with no first-column cell
+  // — labels vertically centered beside taller cells, a header cell wrapped
+  // beside its column headers — the vertical rhythm misleads: rows then come
+  // from the anchors, split at the widest gap between consecutive anchors.
+  const cellsOf = run.map((line) => cellsBySeparators(line, separators));
+  const hasFirst = cellsOf.map((cells) => cells[0].text.length > 0);
+  const anchors: number[] = [];
+  let lastFirst = -1;
+  run.forEach((line, k) => {
+    if (!hasFirst[k]) return;
+    // A wrap: only the first column continues, or the first cell starts
+    // lowercase ("Concealing" / "uncertainty know" — both columns wrapped).
+    const firstOnly = cellsOf[k].every((cell, idx) => idx === 0 || cell.text.length === 0);
+    const continues = firstOnly || /^[a-z]/.test(cellsOf[k][0].text);
+    const wrap =
+      continues &&
+      lastFirst >= 0 &&
+      run[lastFirst].y - line.y <= Math.max(run[lastFirst].size, line.size) * leading * 1.35;
+    lastFirst = k;
+    if (!wrap) anchors.push(k);
+  });
+  const anchorRows =
+    anchors.length >= 2 && anchors.some((k) => k > 0 && !hasFirst[k - 1]);
+  const gapAt = (m: number) => run[m - 1].y - run[m].y;
+  const rowStarts: number[] = [0];
+  if (anchorRows) {
+    // Lines above the first anchor: their own row when one gap stands out.
+    if (anchors[0] > 1) {
+      let widest = 1;
+      let smallest = Infinity;
+      for (let m = 1; m <= anchors[0]; m++) {
+        if (gapAt(m) >= gapAt(widest)) widest = m;
+        smallest = Math.min(smallest, gapAt(m));
+      }
+      if (gapAt(widest) > smallest * 1.3 && widest <= anchors[0]) rowStarts.push(widest);
+    }
+    for (let a = 0; a + 1 < anchors.length; a++) {
+      let widest = anchors[a] + 1;
+      for (let m = anchors[a] + 1; m <= anchors[a + 1]; m++) {
+        if (gapAt(m) >= gapAt(widest)) widest = m;
+      }
+      rowStarts.push(widest);
+    }
+  } else {
+    run.forEach((line, k) => {
+      if (k === 0) return;
+      const gap = gapAt(k);
+      if (rowGapThreshold > 0 ? gap > rowGapThreshold : gap > floor) rowStarts.push(k);
+    });
+  }
+
   const rows: TableRow[] = [];
-  let prev: Line | null = null;
-  for (const line of run) {
-    const gap = prev ? prev.y - line.y : Infinity;
-    const rowBreak = !prev || (rowGapThreshold > 0 ? gap > rowGapThreshold : gap > floor);
-    if (rowBreak || rows.length === 0) {
+  run.forEach((line, k) => {
+    if (rowStarts.includes(k) || rows.length === 0) {
       rows.push({ cells: Array.from({ length: columnCount }, () => ({ text: "", runs: [] })) });
     }
     const row = rows[rows.length - 1];
-    cellsBySeparators(line, separators).forEach((cell, idx) => {
+    cellsOf[k].forEach((cell, idx) => {
       if (cell.text.length === 0) return;
       const target = row.cells[idx];
       const builder = new TextBuilder();
@@ -586,8 +746,7 @@ function tableFromRun(run: Line[], leading: number): Segment {
       target.text = builder.text;
       target.runs = builder.runs;
     });
-    prev = line;
-  }
+  });
 
   // Fragmented figure text, not a real table: mostly tiny cells.
   const flat = rows.flatMap((r) => r.cells.map((c) => c.text.trim()).filter((t) => t.length > 0));
@@ -595,7 +754,7 @@ function tableFromRun(run: Line[], leading: number): Segment {
   if (flat.length > 0 && shortCells / flat.length > 0.6) {
     const builder = new TextBuilder();
     for (const line of run) builder.append({ text: line.text.replace(/\t/g, " "), runs: line.runs }, " ");
-    return { type: "FIGURE", text: builder.text, page, runs: builder.runs };
+    return { type: "FIGURE", text: builder.text, page, runs: builder.runs, ...geom(run) };
   }
 
   const headerRow =
@@ -628,7 +787,7 @@ function tableFromRun(run: Line[], leading: number): Segment {
     `<tbody>${bodyRows.map((r, i) => rowHtml(r, "td", (headerRow ? 1 : 0) + i)).join("")}</tbody>` +
     "</table>";
   const text = rows.map((r) => r.cells.map((c) => c.text).join("\t")).join("\n");
-  return { type: "TABLE", text, html, page };
+  return { type: "TABLE", text, html, page, ...geom(run) };
 }
 
 // A two-column run of numbered entries is a contents list read column-wise,
@@ -647,7 +806,7 @@ function twoColumnList(run: Line[]): Segment | null {
     const m = TOC_ENTRY_RE.exec(cell.text);
     if (m) entries.push({ start, end: start + cell.text.length, num: Number(m[1]) });
   }
-  return { type: "LIST", text: builder.text, page: run[0].page, runs: builder.runs, tocEntries: entries };
+  return { type: "LIST", text: builder.text, page: run[0].page, runs: builder.runs, tocEntries: entries, ...geom(run) };
 }
 
 // ── Page segmentation ───────────────────────────────────────────────────────
@@ -659,7 +818,43 @@ type PageContext = {
   // Some PDFs expose no bold flags at all (font subsetting); heading rules
   // that require bold would then match nothing.
   hasBold: boolean;
+  // The page's leftmost text x, and the content column beside a label column
+  // (times in a timeline, dates in a résumé) when the page has one.
+  pageMinX: number;
+  labelColumn: number | null;
 };
+
+// A label line: a short label at the page's left edge, then the entry's title
+// at the content column — "18:00  Check in", "2019  Engineer at X". Not a
+// table row: the lines under it are the entry's body (import compare loop
+// finding: a timeline read as tables and indented lists).
+function isLabelLine(line: Line, ctx: PageContext): boolean {
+  if (ctx.labelColumn === null || line.cells.length !== 2) return false;
+  const [label, body] = line.cells;
+  return (
+    line.x <= ctx.pageMinX + 4 &&
+    label.text.length <= 12 &&
+    Math.abs(body.x - ctx.labelColumn) < 3
+  );
+}
+
+// The column's right edge near a band of lines [from, to): the widest prose
+// line (single cell, longer than 40 chars, in the same column) within four
+// lines before or after the band. A band's own longest line always reads as
+// wrapped against itself.
+function proseEdge(lines: Line[], from: number, to: number): number {
+  let edge = 0;
+  const x = lines[from].x;
+  const size = lines[from].size;
+  for (let k = Math.max(0, from - 4); k < Math.min(lines.length, to + 4); k++) {
+    if (k >= from && k < to) continue;
+    const l = lines[k];
+    if (l.cells.length !== 1 || l.text.length <= 40) continue;
+    if (Math.abs(l.x - x) > size * 6) continue;
+    if (l.xEnd > edge) edge = l.xEnd;
+  }
+  return edge;
+}
 
 function isIndented(line: Line, ctx: PageContext): boolean {
   return (
@@ -669,28 +864,49 @@ function isIndented(line: Line, ctx: PageContext): boolean {
   );
 }
 
+// A first-column cell on its own baseline: a single-cell line left of the
+// run's second column — a row label vertically centered beside a taller cell,
+// a header cell wrapped beside its column headers (import compare loop
+// finding: such tables shattered into paragraphs).
+function isLeftOnly(line: Line, columns: number[]): boolean {
+  return (
+    columns.length >= 2 &&
+    line.cells.length === 1 &&
+    line.xEnd < columns[1] - 4 &&
+    line.x <= columns[0] + 8 &&
+    line.text.length < 60
+  );
+}
+
+function isAlignedLine(line: Line, columns: number[]): boolean {
+  return columns.some((c, idx) => idx > 0 && Math.abs(line.x - c) < 12);
+}
+
 // Table runs, computed before segmentation. A run grows forward over
 // multi-cell lines and the single-cell lines that continue a wrapped cell
 // (aligned with a column, or indented past the first column, or a first-column
-// label followed closely by another multi-cell line), and grows backward over
+// line followed closely by more of the table), and grows backward over
 // wrapped header lines just above the first multi-cell line.
 function findTableRuns(lines: Line[], ctx: PageContext): number[] {
   const runOf = new Array<number>(lines.length).fill(-1);
   let runId = 0;
   let i = 0;
   while (i < lines.length) {
-    if (lines[i].cells.length < 2 || runOf[i] !== -1) {
+    if (lines[i].cells.length < 2 || runOf[i] !== -1 || isLabelLine(lines[i], ctx)) {
       i++;
       continue;
     }
     const members: number[] = [i];
     let multi = 1;
+    let leftOnlyCount = 0;
+    let alignedCount = 0;
     let j = i + 1;
     while (j < lines.length) {
       const next = lines[j];
       const last = lines[members[members.length - 1]];
       const gap = last.y - next.y;
       if (gap < 0 || gap > next.size * ctx.leading * 2.2) break;
+      if (isLabelLine(next, ctx)) break;
       if (next.cells.length >= 2) {
         members.push(j);
         multi++;
@@ -699,16 +915,18 @@ function findTableRuns(lines: Line[], ctx: PageContext): number[] {
       }
       if (next.size > ctx.bodySize * 1.15) break;
       const columns = clusterColumns(members.map((k) => lines[k]));
-      const aligned = columns.some((c, idx) => idx > 0 && Math.abs(next.x - c) < 12);
+      const aligned = isAlignedLine(next, columns);
+      const leftOnly = isLeftOnly(next, columns);
       const indentedPastFirst = next.x > columns[0] + 8;
       const tight = gap <= next.size * ctx.leading * 1.35;
-      // A row whose cells fused into one (narrow gaps), or a wrapped row line
-      // at the first column: the table must resume with a multi-cell line
-      // within the next two lines, at row pitch, and the line must not read
-      // as prose.
+      // A row whose cells fused into one (narrow gaps), a wrapped row line at
+      // the first column, a first-column line on its own baseline, or an
+      // aligned line after a row gap: the table must resume within the next
+      // two lines — a multi-cell line, a first-column line, or an aligned
+      // line — at row pitch, and the line must not read as prose.
       let resumes = false;
       if (
-        Math.abs(next.x - columns[0]) < 12 &&
+        (Math.abs(next.x - columns[0]) < 12 || leftOnly || aligned) &&
         gap <= next.size * ctx.leading * 1.9 &&
         next.text.length < 90 &&
         !/[.!?]$/.test(next.text.trim())
@@ -716,7 +934,11 @@ function findTableRuns(lines: Line[], ctx: PageContext): number[] {
         let y = next.y;
         for (let k = j + 1; k <= j + 2 && k < lines.length; k++) {
           if (y - lines[k].y > lines[k].size * ctx.leading * 2.2) break;
-          if (lines[k].cells.length >= 2) {
+          if (
+            (lines[k].cells.length >= 2 && !isLabelLine(lines[k], ctx)) ||
+            isLeftOnly(lines[k], columns) ||
+            (lines[k].cells.length === 1 && isAlignedLine(lines[k], columns))
+          ) {
             resumes = true;
             break;
           }
@@ -731,12 +953,16 @@ function findTableRuns(lines: Line[], ctx: PageContext): number[] {
         next.text.length < 60;
       if (resumes || (tight && (aligned || indentedPastFirst || trailing))) {
         members.push(j);
+        if (leftOnly) leftOnlyCount++;
+        else if (aligned) alignedCount++;
         j++;
         continue;
       }
       break;
     }
-    if (multi < 2) {
+    // One multi-cell line alone is a "Label: text" paragraph, unless the
+    // lines around it are a table whose labels sit on their own baselines.
+    if (multi < 2 && !(leftOnlyCount >= 2 && alignedCount >= 2)) {
       i++;
       continue;
     }
@@ -750,9 +976,20 @@ function findTableRuns(lines: Line[], ctx: PageContext): number[] {
       const gap = prev.y - lines[first].y;
       if (gap < 0 || gap > prev.size * ctx.leading * 1.35) break;
       const columns = clusterColumns(members.map((k) => lines[k]));
-      const aligned = columns.some((c, idx) => idx > 0 && Math.abs(prev.x - c) < 12);
+      const aligned = isAlignedLine(prev, columns);
       const indentedPastFirst = prev.x > columns[0] + 8;
-      if (!aligned && !indentedPastFirst) break;
+      if (!aligned && !indentedPastFirst && !isLeftOnly(prev, columns)) break;
+      // A first-column line that continues the paragraph above it (same x,
+      // one leading below) is that paragraph's last line — a caption's wrap.
+      if (!aligned && !indentedPastFirst && first >= 2) {
+        const above = lines[first - 2];
+        if (
+          above.cells.length === 1 &&
+          Math.abs(above.x - prev.x) < 12 &&
+          above.y - prev.y <= prev.size * ctx.leading * 1.35
+        )
+          break;
+      }
       first--;
       members.unshift(first);
       absorbed++;
@@ -778,7 +1015,7 @@ function segmentPage(lines: Line[], ctx: PageContext): Segment[] {
     // Contents label ("CONTENTS", "INSIDE"): the entries that follow become a
     // linked list, not headings.
     if (single && TOC_LABEL_RE.test(line.text.trim())) {
-      segments.push({ type: "PARAGRAPH", text: line.text.trim(), page: line.page, runs: line.runs });
+      segments.push({ type: "PARAGRAPH", text: line.text.trim(), page: line.page, runs: line.runs, ...geom([line]) });
       tocMode = true;
       i++;
       continue;
@@ -802,6 +1039,7 @@ function segmentPage(lines: Line[], ctx: PageContext): Segment[] {
         page: line.page,
         runs: builder.runs,
         tocEntries: entries,
+        ...geom(lines.slice(i, j)),
       });
       tocMode = false;
       i = j;
@@ -825,6 +1063,14 @@ function segmentPage(lines: Line[], ctx: PageContext): Segment[] {
     }
     tocMode = false;
 
+    // Label line: the label and the entry's title read as one paragraph; the
+    // entry's body follows as its own blocks.
+    if (isLabelLine(line, ctx)) {
+      segments.push({ type: "PARAGRAPH", text: lineAsPart(line).text, page: line.page, runs: line.runs, ...geom([line]) });
+      i++;
+      continue;
+    }
+
     // Heading run: larger than body. Wrapped heading lines merge; a merged run
     // that reads as prose (ends in a period, runs long) is a lead paragraph.
     if (single && line.size > body * 1.14) {
@@ -847,7 +1093,7 @@ function segmentPage(lines: Line[], ctx: PageContext): Segment[] {
       const flat = text.replace(/\n/g, " ");
       const prose = /[.!?]$/.test(flat.trim()) && flat.length > 80;
       if (prose || flat.trim().length <= 1) {
-        segments.push({ type: "PARAGRAPH", text: flat, page: line.page, runs });
+        segments.push({ type: "PARAGRAPH", text: flat, page: line.page, runs, ...geom(run) });
       } else {
         const m = /^(\d{1,2})[.)]\s/.exec(flat);
         segments.push({
@@ -857,6 +1103,7 @@ function segmentPage(lines: Line[], ctx: PageContext): Segment[] {
           rawSize: line.size,
           runs,
           headingNum: m ? Number(m[1]) : undefined,
+          ...geom(run),
         });
       }
       i = j;
@@ -888,6 +1135,7 @@ function segmentPage(lines: Line[], ctx: PageContext): Segment[] {
           rawSize: line.size,
           runs: line.runs,
           headingNum: m ? Number(m[1]) : undefined,
+          ...geom([line]),
         });
         i++;
         continue;
@@ -903,12 +1151,15 @@ function segmentPage(lines: Line[], ctx: PageContext): Segment[] {
       let j = i + 1;
       while (j < lines.length) {
         const next = lines[j];
+        // Marked items sit farther apart than wrapped lines (itemsep); an
+        // unmarked line past 1.6 leading is the next paragraph.
+        const maxGap = BULLET_RE.test(next.text) ? 2.2 : 1.6;
         if (
           runOf[j] !== -1 ||
           next.cells.length !== 1 ||
           next.size > body * 1.15 ||
           Math.abs(next.size - line.size) > 1.2 ||
-          run[run.length - 1].y - next.y > next.size * ctx.leading * 1.6 ||
+          run[run.length - 1].y - next.y > next.size * ctx.leading * maxGap ||
           run[run.length - 1].y - next.y < 0
         )
           break;
@@ -918,14 +1169,22 @@ function segmentPage(lines: Line[], ctx: PageContext): Segment[] {
         j++;
       }
       // Item boundaries: bullet markers, or gaps looser than the run's leading.
+      // Items with neither (vector bullets at text leading): in a band of
+      // mostly short lines, a line that stops short of the column's right edge
+      // ends its item (import compare loop finding: a CJK dish list fused into
+      // one paragraph).
       const starts: number[] = [0];
       const gaps = run.slice(1).map((l, k) => run[k].y - l.y);
       const gapThreshold = ctx.leading * line.size * 1.12;
+      const edge = Math.max(...run.map((l) => l.xEnd), proseEdge(lines, i, j));
+      const shortLines = run.filter((l) => l.xEnd < edge - l.size * 3).length;
+      const ragged = shortLines * 2 >= run.length;
       for (let k = 1; k < run.length; k++) {
         const marked = BULLET_RE.test(run[k].text);
         const spaced = gaps[k - 1] > gapThreshold;
         const outdented = run[k].x < run[k - 1].x - line.size * 0.5;
-        if (marked || spaced || outdented) starts.push(k);
+        const ended = ragged && !fillsMargin(run[k - 1], run[k], edge);
+        if (marked || spaced || outdented || ended) starts.push(k);
       }
       const items: { text: string; runs: Run[] }[] = [];
       for (let s = 0; s < starts.length; s++) {
@@ -938,14 +1197,14 @@ function segmentPage(lines: Line[], ctx: PageContext): Segment[] {
       // paragraph so the cross-page merge can finish that item.
       if (i === 0 && items.length >= 2 && !BULLET_RE.test(items[0].text) && BULLET_RE.test(items[1].text)) {
         const tail = items.shift()!;
-        segments.push({ type: "PARAGRAPH", text: tail.text, page: line.page, runs: tail.runs });
+        segments.push({ type: "PARAGRAPH", text: tail.text, page: line.page, runs: tail.runs, ...geom(run) });
       }
       // Numbered lead-ins over flush-left paragraphs are prose, not a list:
       // when unmarked groups sit between marked ones at the column edge, every
       // group is its own paragraph.
       if (bulletStart && !indentStart && !items.every((item) => BULLET_RE.test(item.text))) {
         for (const item of items) {
-          segments.push({ type: "PARAGRAPH", text: item.text, page: line.page, runs: item.runs });
+          segments.push({ type: "PARAGRAPH", text: item.text, page: line.page, runs: item.runs, ...geom(run) });
         }
         i = j;
         continue;
@@ -966,7 +1225,7 @@ function segmentPage(lines: Line[], ctx: PageContext): Segment[] {
             "\n",
           );
         }
-        segments.push({ type: "LIST", text: builder.text, page: line.page, runs: builder.runs });
+        segments.push({ type: "LIST", text: builder.text, page: line.page, runs: builder.runs, ...geom(run) });
         i = j;
         continue;
       }
@@ -978,30 +1237,42 @@ function segmentPage(lines: Line[], ctx: PageContext): Segment[] {
         page: line.page,
         runs: items[0].runs,
         listItem: run.length <= 6,
+        ...geom(run),
       });
       i = j;
       continue;
     }
 
     // Paragraph group: vertically continuous same-size lines in one column.
+    // A hanging indent (a reference entry, a glossary term) indents every
+    // line after the first: the second line may step in by up to three ems
+    // when the first line breaks mid-sentence.
     const group: Line[] = [line];
     let j = i + 1;
     while (j < lines.length) {
       const next = lines[j];
       const prev = group[group.length - 1];
       const gap = prev.y - next.y;
+      const hanging =
+        group.length === 1 &&
+        !isIndented(prev, ctx) &&
+        next.x > prev.x + next.size * 1.1 &&
+        next.x <= prev.x + next.size * 3 &&
+        !BULLET_RE.test(next.text) &&
+        !/[.!?:]["'”]?$/.test(prev.text.trim()) &&
+        /^[a-z0-9(]/.test(next.text);
       if (
         runOf[j] !== -1 ||
         next.cells.length !== 1 ||
         gap < 0 ||
         gap > next.size * 1.9 ||
         Math.abs(next.size - prev.size) > 0.6 ||
-        next.x > prev.x + next.size * 1.1 ||
+        (next.x > prev.x + next.size * 1.1 && !hanging) ||
         next.x < prev.x - next.size * 1.1 ||
         next.size > body * 1.14 ||
         (tocMode && TOC_ENTRY_RE.test(next.text)) ||
         TOC_LABEL_RE.test(next.text.trim()) ||
-        (isIndented(next, ctx) && !isIndented(prev, ctx)) ||
+        (isIndented(next, ctx) && !isIndented(prev, ctx) && !hanging) ||
         (BULLET_RE.test(next.text) && !BULLET_RE.test(prev.text))
       )
         break;
@@ -1011,7 +1282,7 @@ function segmentPage(lines: Line[], ctx: PageContext): Segment[] {
     const { text, runs } = joinGroup(group, true);
     const monoChars = runs.filter((r) => r.mono).reduce((n, r) => n + (r.end - r.start), 0);
     const type = text.length > 0 && monoChars / text.length > 0.85 ? "CODE" : "PARAGRAPH";
-    segments.push({ type, text, page: line.page, runs });
+    segments.push({ type, text, page: line.page, runs, ...geom(group) });
     i = j;
   }
   return segments;
@@ -1225,6 +1496,198 @@ function resolveContentsLinks(segments: Segment[]) {
   });
 }
 
+// ── Figure regions ──────────────────────────────────────────────────────────
+// A PDF carries no figure objects the text layer can name: a vector chart is
+// its tick labels and legend, a display equation its glyphs, a raster picture
+// nothing at all. What the page shows at that spot is the figure, so the block
+// becomes a FIGURE whose region the figure image route crops (SPEC.md §16):
+// display equations by their math glyphs, captioned figures by the space and
+// the debris above (or below) their "Figure N" caption. Import compare loop
+// finding: charts read as tables of ticks, equations as tables, figures shown
+// as whole pages.
+
+const CAPTION_RE = /^(fig\.|figure|table|tab\.)\s*(\d+|[A-Z]\d+)[a-z]?\s*[.:|–—-]\s*/i;
+const TABLE_CAPTION_RE = /^(table|tab\.)\s*(\d+|[A-Z]\d+)/i;
+
+// A numbered display equation: "… = softmax(QKᵀ/√d)V   (1)". Its words are
+// roman (function names), so the math share alone misses it.
+const EQUATION_NUMBER_RE = /\(\d{1,3}[a-z]?\)\s*$/;
+
+function isMathSegment(s: Segment, ctx: PageContext): boolean {
+  if (s.type !== "PARAGRAPH" && s.type !== "TABLE" && s.type !== "FIGURE") return false;
+  if (s.region || !s.box) return false;
+  const numbered =
+    EQUATION_NUMBER_RE.test(s.text) && s.text.length <= 90 && s.box.x1 > ctx.columnLeft + 2;
+  if (!numbered && (s.mathShare ?? 0) < 0.25) return false;
+  // A lone symbol (a footnote marker, a sum limit) is not an equation.
+  if (s.text.replace(/\s/g, "").length < 4) return false;
+  // Prose with inline math starts at the column edge and runs long.
+  const prose = s.text.length > 50 && s.box.x1 <= ctx.columnLeft + 2 && (s.mathShare ?? 0) < 0.6;
+  return !prose;
+}
+
+// A line of an equation whose glyphs are mostly roman (function names, an
+// equation number, a fraction's denominator): short, off the column edge,
+// body-sized. Joins an equation it sits against.
+function isEquationShaped(s: Segment, ctx: PageContext): boolean {
+  if (s.type !== "PARAGRAPH" && s.type !== "TABLE" && s.type !== "FIGURE") return false;
+  if (s.region || !s.box) return false;
+  return (
+    s.text.length <= 60 &&
+    s.box.x1 > ctx.columnLeft + 2 &&
+    (s.lineSize ?? ctx.bodySize) <= ctx.bodySize * 1.1
+  );
+}
+
+// Chart text, equation glyphs, ticks: what a figure leaves in the text layer.
+function isFigureDebris(s: Segment, ctx: PageContext): boolean {
+  if (s.region || s.type === "HEADING" || s.type === "CODE") return false;
+  if (CAPTION_RE.test(s.text)) return false;
+  if (s.type === "TABLE" || s.type === "FIGURE") return true;
+  if ((s.lineSize ?? ctx.bodySize) < ctx.bodySize * 0.92) return true;
+  const text = s.text.trim();
+  if (text.length <= 12) return true;
+  // A panel title or axis label at body size: short, no sentence end.
+  return (
+    text.length <= 60 &&
+    !/[.!?:;,]$/.test(text) &&
+    (s.lineSize ?? ctx.bodySize) <= ctx.bodySize * 1.05 &&
+    !s.text.includes("\n")
+  );
+}
+
+function attachFigureRegions(
+  segments: Segment[],
+  lines: Line[],
+  ctx: PageContext,
+  pageWidth: number,
+  pageHeight: number,
+): Segment[] {
+  const toRegion = (box: Box) => regionOf(box, pageWidth, pageHeight);
+  const rowGap = ctx.bodySize * ctx.leading;
+
+  // 1. Display equations: a math segment and the equation-shaped segments
+  // against it become one FIGURE.
+  const near = (a: Segment, b: Segment) => a.box!.y1 - b.box!.y2 < rowGap * 1.5;
+  const withMath: Segment[] = [];
+  for (let k = 0; k < segments.length; ) {
+    if (!isMathSegment(segments[k], ctx)) {
+      withMath.push(segments[k]);
+      k++;
+      continue;
+    }
+    // Backward over equation-shaped lines already pushed.
+    let start = k;
+    while (
+      withMath.length > 0 &&
+      isEquationShaped(withMath[withMath.length - 1], ctx) &&
+      near(withMath[withMath.length - 1], segments[start])
+    ) {
+      start = segments.indexOf(withMath.pop()!);
+    }
+    let m = k + 1;
+    while (
+      m < segments.length &&
+      (isMathSegment(segments[m], ctx) || isEquationShaped(segments[m], ctx)) &&
+      near(segments[m - 1], segments[m])
+    ) {
+      m++;
+    }
+    const group = segments.slice(start, m);
+    let box = group[0].box!;
+    for (const g of group) box = unionBox(box, g.box!);
+    // The lines' boxes already carry ascent and descent; a small pad keeps
+    // the neighboring prose lines out of the crop.
+    const pad = ctx.bodySize * 0.1;
+    box = { x1: box.x1 - pad, y1: box.y1 - pad, x2: box.x2 + pad, y2: box.y2 + pad };
+    withMath.push({
+      type: "FIGURE",
+      text: group
+        .map((g) => g.text.replace(/[\t\n]+/g, " "))
+        .join(" ")
+        .replace(/\s+/g, " ")
+        .trim(),
+      page: group[0].page,
+      box,
+      region: toRegion(box),
+      lineSize: group[0].lineSize,
+      mathShare: 1,
+    });
+    k = m;
+  }
+
+  // 2. Captioned figures.
+  const textLeft = lines.length > 0 ? Math.min(...lines.map((l) => l.x)) : 0;
+  const textRight = lines.length > 0 ? Math.max(...lines.map((l) => l.xEnd)) : pageWidth;
+  // The column the caption sits in: the extent of the page's lines that
+  // overlap it horizontally (the whole text width on a one-column page).
+  const columnOf = (cap: Box): [number, number] => {
+    const overlapping = lines.filter((l) => l.x < cap.x2 && l.xEnd > cap.x1);
+    if (overlapping.length === 0) return [textLeft, textRight];
+    return [Math.min(...overlapping.map((l) => l.x)), Math.max(...overlapping.map((l) => l.xEnd))];
+  };
+  const pageTop = pageHeight * 0.94;
+  const pageBottom = pageHeight * 0.06;
+  const out: Segment[] = [];
+  for (let c = 0; c < withMath.length; c++) {
+    const cap = withMath[c];
+    if (
+      cap.type !== "PARAGRAPH" ||
+      !cap.box ||
+      !CAPTION_RE.test(cap.text) ||
+      TABLE_CAPTION_RE.test(cap.text)
+    ) {
+      out.push(cap);
+      continue;
+    }
+    // Above the caption: debris up to the previous body segment. A table
+    // under its own "Table N" caption is data, not debris.
+    const swept: Segment[] = [];
+    while (out.length > 0) {
+      const prev = out[out.length - 1];
+      if (!isFigureDebris(prev, ctx)) break;
+      if (prev.type === "TABLE" && out.length >= 2 && TABLE_CAPTION_RE.test(out[out.length - 2].text)) break;
+      swept.unshift(out.pop()!);
+    }
+    const above = out[out.length - 1];
+    const top = above?.box ? above.box.y1 - ctx.bodySize * 0.6 : pageTop;
+    let box: Box | null = null;
+    if (swept.length > 0 || top - cap.box.y2 > rowGap * 3) {
+      const [x1, x2] = columnOf(cap.box);
+      box = { x1, x2, y1: cap.box.y2 + ctx.bodySize * 0.2, y2: top };
+      for (const s of swept) if (s.box) box = unionBox(box, s.box);
+    } else {
+      out.push(...swept);
+      // Below the caption: debris down to the next body segment.
+      let m = c + 1;
+      while (m < withMath.length && isFigureDebris(withMath[m], ctx)) m++;
+      const below = withMath[m];
+      const bottom = below?.box ? below.box.y2 + ctx.bodySize * 0.6 : pageBottom;
+      if (m > c + 1 || cap.box.y1 - bottom > rowGap * 3) {
+        const [x1, x2] = columnOf(cap.box);
+        box = { x1, x2, y1: bottom, y2: cap.box.y1 - ctx.bodySize * 0.2 };
+        for (const s of withMath.slice(c + 1, m)) if (s.box) box = unionBox(box, s.box);
+        c = m - 1;
+      }
+    }
+    if (!box) {
+      out.push(cap);
+      continue;
+    }
+    out.push({
+      type: "FIGURE",
+      text: cap.text,
+      page: cap.page,
+      runs: cap.runs,
+      box,
+      region: toRegion(box),
+      lineSize: cap.lineSize,
+      mathShare: 0,
+    });
+  }
+  return out;
+}
+
 // ── Main ────────────────────────────────────────────────────────────────────
 
 export async function parsePdf(
@@ -1235,7 +1698,8 @@ export async function parsePdf(
 
   const pages: Line[][] = [];
   const pageHeights: number[] = [];
-  const flagsByFont = new Map<string, Omit<Flags, "href">>();
+  const pageWidths: number[] = [];
+  const flagsByFont = new Map<string, FontFlags>();
 
   for (let p = 1; p <= pdf.numPages; p++) {
     const page = await pdf.getPage(p);
@@ -1270,6 +1734,10 @@ export async function parsePdf(
     const items: Item[] = [];
     for (const raw of content.items) {
       if (!("str" in raw) || typeof raw.str !== "string") continue;
+      // Control characters are not text: a chart glyph mapped to NUL broke the
+      // save (Postgres rejects 0x00 in text).
+      const str = raw.str.replace(CONTROL_CHARS_RE, "");
+      if (str.length === 0) continue;
       const t = raw.transform as number[];
       const size = Math.hypot(t[0], t[1]) || Math.hypot(t[2], t[3]) || 10;
       if (Math.abs(t[1]) > size * 0.3) continue; // rotated text (margin watermarks)
@@ -1292,7 +1760,7 @@ export async function parsePdf(
       const cy = y + size * 0.3;
       const region = uriRegions.find((r) => cx >= r.x1 && cx <= r.x2 && cy >= r.y1 && cy <= r.y2);
       items.push({
-        str: raw.str,
+        str,
         x,
         y,
         w: raw.width,
@@ -1302,6 +1770,7 @@ export async function parsePdf(
       });
     }
     pageHeights.push(viewport.height);
+    pageWidths.push(viewport.width);
     pages.push(
       pageLines(items, viewport.width, p - 1).filter(
         (l) =>
@@ -1361,12 +1830,41 @@ export async function parsePdf(
     if (!Number.isFinite(columnLeft)) {
       columnLeft = lines.length > 0 ? Math.min(...lines.map((l) => l.x)) : 0;
     }
-    segments.push(...segmentPage(lines, { bodySize, leading, columnLeft, hasBold }));
+    // A label column (times, dates, step numbers) beside the content column:
+    // two-cell lines whose short first cell sits at the page's left edge and
+    // whose second cell starts where the page's body lines start, well right
+    // of the edge. Two or more make the content column the column and those
+    // lines label lines.
+    const pageMinX = lines.length > 0 ? Math.min(...lines.map((l) => l.x)) : 0;
+    const prominentXs = new Set([...counts].filter(([, c]) => c >= prominent).map(([x]) => x));
+    const labelXs: number[] = [];
+    for (const l of lines) {
+      if (l.cells.length !== 2 || l.x > pageMinX + 4 || l.cells[0].text.length > 12) continue;
+      const bodyX = Math.round(l.cells[1].x);
+      if (bodyX - pageMinX >= 24 && prominentXs.has(bodyX)) labelXs.push(bodyX);
+    }
+    let labelColumn: number | null = null;
+    if (labelXs.length >= 2) {
+      labelColumn = median(labelXs);
+      columnLeft = labelColumn;
+    }
+    const ctx = { bodySize, leading, columnLeft, hasBold, pageMinX, labelColumn };
+    const pageSegments = segmentPage(lines, ctx);
+    const p = cleaned.indexOf(lines);
+    segments.push(...attachFigureRegions(pageSegments, lines, ctx, pageWidths[p], pageHeights[p]));
   }
   segments = segments.filter((s) => s.text.trim().length > 0);
   // Vector-figure debris: chart axis ticks read as tiny numeric-only lines.
+  // Inline-math debris: a sum limit or exponent too far from its base line
+  // to join it reads as a paragraph of one or two math glyphs.
   segments = segments.filter(
-    (s) => !(s.type === "PARAGRAPH" && s.text.length <= 14 && /^[\d\s.,%−–-]+$/.test(s.text)),
+    (s) =>
+      !(s.type === "PARAGRAPH" && s.text.length <= 14 && /^[\d\s.,%−–-]+$/.test(s.text)) &&
+      !(
+        s.type === "PARAGRAPH" &&
+        s.text.replace(/\s/g, "").length <= 3 &&
+        (s.mathShare ?? 0) >= 0.5
+      ),
   );
 
   // Same-page paragraph fragments that end mid-sentence join the next paragraph.
@@ -1433,8 +1931,11 @@ export async function parsePdf(
     });
     const block: ParsedBlock = { type: s.type, text: s.text };
     if (s.html) block.html = s.html;
-    // FIGURE blocks keep their page (1-based) for the figure image route.
-    if (s.type === "FIGURE") block.page = s.page + 1;
+    // FIGURE blocks keep their page (1-based) and region for the figure image route.
+    if (s.type === "FIGURE") {
+      block.page = s.page + 1;
+      if (s.region) block.region = s.region;
+    }
     const allLinks = [...(s.links ?? []), ...links];
     if (styles.length > 0) block.styles = styles;
     if (allLinks.length > 0) block.links = allLinks;

@@ -1,4 +1,5 @@
 import type { BlockType } from "@prisma/client";
+import type { Region } from "@/lib/video/types";
 
 // One entry in the document's reference list. Formal entries come from the
 // article's own reference list; the rest come from hyperlinks in the article
@@ -46,6 +47,7 @@ export type ParsedBlock = {
   text: string;
   html?: string;
   page?: number; // FIGURE blocks from a PDF: 1-based page, for the figure image route
+  region?: Region; // FIGURE blocks from a PDF: the figure's region on its page (percent coordinates)
   citations?: CitationSpan[];
   styles?: StyleSpan[];
   links?: LinkSpan[];
@@ -103,4 +105,9 @@ export type UrlParseProgress = (stage: "extract", detail?: string) => void;
 //     glyph text instead of raw TeX, display math inside list items, table
 //     cells, headings, and captions keeps its readable text instead of vanishing,
 //     a formula alone on its line (MediaWiki's <dd> indentation) is an EQUATION.
-export const PARSER_VERSION = 11;
+// 12: import compare loop round 2 (PDF) — label columns (timeline times) read as
+//     paragraphs, CJK vector-bullet lists keep their items, tabs stay out of
+//     paragraphs, table rows anchored on first-column lines, number columns
+//     split at one em, captioned figures and display equations become FIGURE
+//     blocks with a region the figure image route crops.
+export const PARSER_VERSION = 12;

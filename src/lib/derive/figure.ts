@@ -1,5 +1,7 @@
 import { db } from "@/lib/db";
+import { cropPageRegion, renderPdfPage } from "@/lib/handwritten/pages";
 import { outboundFetch } from "@/lib/outbound-fetch";
+import { parseRegion, type Region } from "@/lib/video/types";
 
 // Figure content for model calls, shared by every route that anchors on a
 // FIGURE block (SPEC.md §4: one pipeline, never per-feature forks).
@@ -49,7 +51,7 @@ export function figureContent(
     or nothing could be produced. */
 export async function figureVisual(
   figure: FigureContent,
-  block: { page: number | null },
+  block: { page: number | null; region?: unknown },
   documentId: string,
   pageUrl?: string | null,
 ): Promise<FigureVisual | null> {
@@ -58,8 +60,9 @@ export async function figureVisual(
     if (image) return { image, page: false };
   }
   if (block.page !== null && figure.kind !== "video") {
-    const image = await renderFigurePage(documentId, block.page);
-    if (image) return { image, page: true };
+    const region = parseRegion(block.region);
+    const image = await renderFigurePage(documentId, block.page, region);
+    if (image) return { image, page: region === null };
   }
   return null;
 }
@@ -114,13 +117,14 @@ export async function fetchFigureImage(
   }
 }
 
-/** A PDF figure's page rendered to PNG from the document's stored bytes — the
-    same render /api/documents/[documentId]/figure/[blockId] serves the reader.
-    unpdf loads lazily so it stays out of route module graphs (see
-    /api/documents). */
+/** A PDF figure's page rendered to PNG from the document's stored bytes,
+    cropped to the figure's region when the parse found one — the same render
+    /api/documents/[documentId]/figure/[blockId] serves the reader. unpdf
+    loads lazily so it stays out of route module graphs (see /api/documents). */
 export async function renderFigurePage(
   documentId: string,
   page: number,
+  region: Region | null = null,
 ): Promise<FigureImage | null> {
   try {
     const document = await db.document.findUnique({
@@ -128,12 +132,8 @@ export async function renderFigurePage(
       select: { fileData: true },
     });
     if (!document?.fileData) return null;
-    const { renderPageAsImage } = await import("unpdf");
-    // pdf.js transfers (detaches) the buffer it receives — render a copy.
-    const png = await renderPageAsImage(new Uint8Array(document.fileData), page, {
-      canvasImport: () => import("@napi-rs/canvas"),
-      width: 1200,
-    });
+    const rendered = await renderPdfPage(new Uint8Array(document.fileData), page, region ? 2000 : 1200);
+    const png = region ? ((await cropPageRegion(rendered, region, { pad: 0.15, scaleUp: false })) ?? rendered) : rendered;
     const bytes = new Uint8Array(png);
     if (bytes.length === 0 || bytes.length > IMAGE_MAX_BYTES) return null;
     return { bytes, mediaType: "image/png" };
