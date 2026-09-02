@@ -7,7 +7,7 @@ Notes-centric web app for deep reading. Documents attach to notebooks; every AI 
 - Notebooks with sections (one nesting level, drag-reorder) and markdown notes
 - PDF upload and URL ingestion, parsed to blocks (two-column PDFs handled), deduped by file hash
 - Video documents: upload an mp4 (up to 200 MB, custom player with Range streaming) or add a YouTube link (plays through the IFrame player behind the same controls); circle a spot and comment on it — annotations carry a time range and replay on an overlay whenever playback crosses it, with a marker per annotation on the scrubber and a Visual strip of frame cards underneath
-- Video transcription starts on its own when the video is added. Provider ladder — YouTube: Gemini (`GEMINI_API_KEY`), then YouTube captions through the player API, then the watch page; uploads: Whisper (`OPENAI_API_KEY`), then Gemini. A long video splits into windows that transcribe in parallel and stitch back together. The transcript gives read-along highlight and click-to-seek; Find searches it and answers with seekable time ranges; Explain reads the actual frame cropped to the circle plus the transcript (a YouTube frame comes from the storyboard sheets, with Gemini watching the same clip at full resolution as corroboration) and saves the explanation as an annotation at that moment; transcript lines carry the same Comment and Explain tools
+- Video transcription starts on its own when the video is added. Provider ladder — YouTube: YouTube captions through the player API and the watch page, then the same captions read by a browser when one is configured (`BROWSER_WS_ENDPOINT` or `CHROMIUM_PATH`), then Gemini (`GEMINI_API_KEY`), then the audio stream through the upload ladder; when every rung fails, the transcript pane offers Paste transcript, which reads what YouTube's transcript panel copies; uploads: Groq Whisper (`GROQ_API_KEY`), then OpenAI Whisper (`OPENAI_API_KEY`), then Gemini. A long video splits into windows that transcribe in parallel and stitch back together. The transcript gives read-along highlight and click-to-seek; Find searches it and answers with seekable time ranges; Explain reads the actual frame cropped to the circle plus the transcript (a YouTube frame comes from the storyboard sheets, with Gemini watching the same clip at full resolution as corroboration) and saves the explanation as an annotation at that moment; transcript lines carry the same Comment and Explain tools
 - Split view: reader left, notes drawer right; notes full-page view for reorganizing and export
 - Anchoring that survives reload and re-parse: block offsets + quote fallback, orphans render visibly
 - Derivations via one pipeline (`/api/derive`): EXPLAIN (annotation rail), SIMPLIFY (inline swap, revert on click), SALIENCE (toggleable overlay), EXTRACT (pending note with sources)
@@ -45,13 +45,13 @@ npx prisma migrate deploy
 npm run dev                   # → http://localhost:3000
 ```
 
-Reading, notes, anchoring, and export work with no API keys. Add `ANTHROPIC_API_KEY` to `.env` for the AI features, and `OPENAI_API_KEY` and/or `GEMINI_API_KEY` for video transcription.
+Reading, notes, anchoring, and export work with no API keys. Add `ANTHROPIC_API_KEY` to `.env` for the AI features, and `GROQ_API_KEY`, `OPENAI_API_KEY`, or `GEMINI_API_KEY` for video transcription (YouTube captions need no key).
 
 ## Deploy (Vercel)
 
 1. Import this repo on vercel.com.
 2. Storage → Create Database → **Neon** (Postgres) → connect it to the project. Vercel adds the database env vars; the build maps them and runs migrations (the first migration creates the `vector` extension).
-3. Settings → Environment Variables: `ANTHROPIC_API_KEY` (AI features), `OPENAI_API_KEY` and/or `GEMINI_API_KEY` (video transcription), `GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET` + `SESSION_SECRET` (Google sign-in; redirect URI `<origin>/api/auth/callback`), `APPLE_CLIENT_ID` + `APPLE_TEAM_ID` + `APPLE_KEY_ID` + `APPLE_PRIVATE_KEY` (Apple sign-in; return URL `<origin>/api/auth/apple/callback` on the Services ID), `RESEND_API_KEY` + `EMAIL_FROM` (email sign-in; sender on a domain verified in Resend), `ADMIN_PASSWORD` (`/admin`), `CRON_SECRET` (cleanup cron). All optional to boot; add and redeploy any time.
+3. Settings → Environment Variables: `ANTHROPIC_API_KEY` (AI features), `GROQ_API_KEY`, `OPENAI_API_KEY`, or `GEMINI_API_KEY` (video transcription), `BROWSER_WS_ENDPOINT` (a browser service's CDP websocket, for YouTube transcripts when the server's own requests are bot-checked), `GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET` + `SESSION_SECRET` (Google sign-in; redirect URI `<origin>/api/auth/callback`), `APPLE_CLIENT_ID` + `APPLE_TEAM_ID` + `APPLE_KEY_ID` + `APPLE_PRIVATE_KEY` (Apple sign-in; return URL `<origin>/api/auth/apple/callback` on the Services ID), `RESEND_API_KEY` + `EMAIL_FROM` (email sign-in; sender on a domain verified in Resend), `ADMIN_PASSWORD` (`/admin`), `CRON_SECRET` (cleanup cron). All optional to boot; add and redeploy any time.
 4. Deployments → Redeploy the latest.
 
 Vercel caps request bodies at about 4.5 MB, so PDF uploads above that fail there. Self-hosted deployments take PDFs up to 50 MB.
@@ -68,8 +68,10 @@ Supabase instead of Neon works too: enable the `vector` extension, then set `DAT
    - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `SESSION_SECRET` — Google sign-in at `/signin`; unset = single local reader, nothing gated. Redirect URI: `<origin>/api/auth/callback`
    - `APPLE_CLIENT_ID` (Services ID), `APPLE_TEAM_ID`, `APPLE_KEY_ID`, `APPLE_PRIVATE_KEY` (.p8 contents) — Sign in with Apple; return URL: `<origin>/api/auth/apple/callback`
    - `RESEND_API_KEY`, `EMAIL_FROM` — email sign-in with a confirmation link; the account is created only when the link is clicked
-   - `OPENAI_API_KEY` — video transcription for uploads (Whisper first)
-   - `GEMINI_API_KEY` — video transcription for YouTube videos (Gemini first) and the upload fallback
+   - `GROQ_API_KEY` — video transcription for uploads and YouTube audio (Groq Whisper first)
+   - `OPENAI_API_KEY` — video transcription for uploads and YouTube audio (OpenAI Whisper second)
+   - `GEMINI_API_KEY` — video transcription for YouTube videos without readable captions, and the upload fallback
+   - `BROWSER_WS_ENDPOINT` or `CHROMIUM_PATH` — a browser that reads YouTube's transcript panel when the server's own requests are bot-checked: a browser service's CDP websocket on Vercel, a Chromium binary on a self-hosted server (`CHROMIUM_ARGS` adds flags)
    - `ADMIN_PASSWORD` — enables `/admin` (unset = admin off)
    - `CRON_SECRET` — enables `/api/cron/cleanup` (deletes rejected notes older than 7 days; vercel.json schedules it daily)
 3. In Supabase, enable the `vector` extension: Database → Extensions → vector.

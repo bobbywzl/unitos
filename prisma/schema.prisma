@@ -373,6 +373,9 @@ model Block {
   // 1-based PDF page. FIGURE blocks: for the figure image route. PAGE blocks:
   // the page the block renders. Converted text blocks: the page it came from.
   page         Int?
+  // FIGURE blocks from a PDF: the figure's region on its page, the percent-
+  // coordinate shape of SPEC.md §11. Null = the whole page.
+  region       Json?
   // Semantic search vector (text-embedding-3-small, 1024 dims). Null = not
   // embedded yet; the search route backfills lazily, a text edit clears it.
   embedding    Unsupported("vector(1024)")?

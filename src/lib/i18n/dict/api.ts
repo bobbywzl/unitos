@@ -78,6 +78,10 @@ const en = {
   findNeedsTranscript: "Transcribe the video first — Find searches the transcript",
   formalizeNeedsTranscript: "Transcribe first — Formalize rewrites the transcript",
   noStoredArticle: "This document has no article yet. Formalize the transcript first.",
+  pastedTranscriptNoTimes:
+    "The pasted text has no times. Copy the lines from YouTube's transcript panel, each with its time.",
+  pastedTranscriptNoWords: "The pasted text has times but no words under them.",
+  pastedTranscriptTooLong: "The pasted text is too long.",
   youtubeUnavailable:
     "This YouTube video did not load. It may be private, removed, or embedding-disabled.",
   mediaUnavailable: "This media link did not load. The file may be private, removed, or blocked.",
@@ -272,6 +276,9 @@ const zh: Record<keyof typeof en, string> = {
   findNeedsTranscript: "请先生成视频逐字稿——查找搜索的是逐字稿",
   formalizeNeedsTranscript: "请先生成逐字稿——整理改写的是逐字稿",
   noStoredArticle: "该文档还没有文章。请先整理逐字稿。",
+  pastedTranscriptNoTimes: "粘贴的文字没有时间。请从 YouTube 的逐字稿面板复制各行，每行带时间。",
+  pastedTranscriptNoWords: "粘贴的文字有时间，但时间下面没有文字。",
+  pastedTranscriptTooLong: "粘贴的文字太长。",
   youtubeUnavailable: "这个 YouTube 视频无法加载。它可能已设为私密、被删除或禁止嵌入。",
   mediaUnavailable: "这个媒体链接无法加载。文件可能已设为私密、被删除或被拦截。",
   unreadableContent:

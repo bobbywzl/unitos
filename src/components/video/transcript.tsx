@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { SpinnerIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { formatTime, type TranscriptLine, type VideoAnnotationItem } from "@/lib/video/types";
@@ -11,6 +11,10 @@ import { formatTime, type TranscriptLine, type VideoAnnotationItem } from "@/lib
 // frame has — and the current line highlights and follows playback inside its
 // own scroll box, so the player never moves. A paragraph opens with its time;
 // a line covered by an annotation is underlined and opens it.
+
+// When every transcription rung failed, the pane offers Paste transcript
+// beside Retry: the reader copies the transcript YouTube shows them and hands
+// it over — the one rung that never depends on the server's network.
 
 // A paragraph closes at a clear speech gap, or once it is long enough and the
 // line before it finished a sentence. The hard cap keeps a gapless monologue
@@ -54,6 +58,8 @@ export function Transcript({
   onExplain,
   onOpenAnnotation,
   onTranscribe,
+  onPaste,
+  pasteHelp,
 }: {
   transcript: TranscriptLine[];
   audio: boolean;
@@ -66,8 +72,27 @@ export function Transcript({
   onExplain: (line: TranscriptLine) => void;
   onOpenAnnotation: (annotation: VideoAnnotationItem) => void;
   onTranscribe: () => void;
+  /** Stores a pasted transcript; resolves true when it landed. */
+  onPaste: (text: string) => Promise<boolean>;
+  pasteHelp: string;
 }) {
   const t = useT();
+  const [pasting, setPasting] = useState(false);
+  const [pasteText, setPasteText] = useState("");
+  const [savingPaste, setSavingPaste] = useState(false);
+
+  async function savePaste() {
+    if (savingPaste || pasteText.trim() === "") return;
+    setSavingPaste(true);
+    try {
+      if (await onPaste(pasteText)) {
+        setPasting(false);
+        setPasteText("");
+      }
+    } finally {
+      setSavingPaste(false);
+    }
+  }
   const listRef = useRef<HTMLDivElement>(null);
   const hoveredRef = useRef(false);
 
@@ -222,13 +247,55 @@ export function Transcript({
                 {t("video.transcriptFailedBody")}
               </p>
               {failedMessage && <p className="text-xs text-red-500">{failedMessage}</p>}
-              <button
-                onClick={onTranscribe}
-                data-track="video-transcribe-retry"
-                className="self-start rounded-full bg-clay px-4 py-1.5 text-xs font-semibold text-clay-fg hover:bg-clay-600"
-              >
-                {t("common.retry")}
-              </button>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  onClick={onTranscribe}
+                  data-track="video-transcribe-retry"
+                  className="rounded-full bg-clay px-4 py-1.5 text-xs font-semibold text-clay-fg hover:bg-clay-600"
+                >
+                  {t("common.retry")}
+                </button>
+                {!pasting && (
+                  <button
+                    onClick={() => setPasting(true)}
+                    data-track="video-transcript-paste"
+                    title={t("video.pasteTranscriptTitle")}
+                    className="rounded-full px-4 py-1.5 text-xs font-semibold text-sand-600 hover:bg-clay-100 hover:text-clay-800"
+                  >
+                    {t("video.pasteTranscript")}
+                  </button>
+                )}
+              </div>
+              {pasting && (
+                <div className="flex flex-col gap-2">
+                  <p className="text-xs leading-relaxed text-sand-600">{pasteHelp}</p>
+                  <textarea
+                    autoFocus
+                    value={pasteText}
+                    onChange={(e) => setPasteText(e.target.value)}
+                    placeholder={t("video.pastePlaceholder")}
+                    rows={8}
+                    className="w-full resize-y rounded-2xl bg-sand-100 px-3.5 py-2.5 font-mono text-xs outline-none placeholder:text-sand-500"
+                  />
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => void savePaste()}
+                      disabled={savingPaste || pasteText.trim() === ""}
+                      data-track="video-transcript-paste-save"
+                      className="rounded-full bg-clay px-4 py-1.5 text-xs font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-50"
+                    >
+                      {t("video.savePastedTranscript")}
+                    </button>
+                    <button
+                      onClick={() => setPasting(false)}
+                      data-track="video-transcript-paste-cancel"
+                      className="rounded-full px-4 py-1.5 text-xs font-semibold text-sand-600 hover:bg-clay-100 hover:text-clay-800"
+                    >
+                      {t("common.cancel")}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>

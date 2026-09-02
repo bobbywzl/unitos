@@ -156,6 +156,29 @@ export function VideoPane({
     }
   }
 
+  // The pasted transcript (SPEC.md §11): stored through the same cleanup and
+  // writes as a transcribed one. True when it landed; the reason shows in
+  // the pane's failed state otherwise.
+  async function pasteTranscript(text: string): Promise<boolean> {
+    setTranscribeError(null);
+    try {
+      const res = await fetch(`/api/documents/${documentId}/transcript`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      });
+      if (!res.ok) {
+        const detail = (await res.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(detail?.error ?? t("video.requestFailedStatus", { status: res.status }));
+      }
+      router.refresh();
+      return true;
+    } catch (err) {
+      setTranscribeError(err instanceof Error ? err.message : t("video.transcriptionFailed"));
+      return false;
+    }
+  }
+
   // Adding the video already starts transcription server-side; this covers
   // documents from before that, and local runs where the kick-off died.
   useEffect(() => {
@@ -757,6 +780,8 @@ export function VideoPane({
             setOpenNote(a);
           }}
           onTranscribe={() => void transcribe()}
+          onPaste={pasteTranscript}
+          pasteHelp={t(video.kind === "YOUTUBE" ? "video.pasteHelpYoutube" : "video.pasteHelpFile")}
         />
 
         <ArticleSection
