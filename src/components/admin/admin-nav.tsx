@@ -6,7 +6,7 @@ import { useT } from "@/components/lang-provider";
 
 // Shared header of the admin pages (Scalae admin pattern): one tab per page,
 // App link, sign out.
-type Tab = "feedback" | "digest" | "usage" | "notifications";
+type Tab = "feedback" | "digest" | "usage" | "notifications" | "accounts";
 
 export function AdminNav({ active }: { active: Tab }) {
   const router = useRouter();
@@ -34,6 +34,7 @@ export function AdminNav({ active }: { active: Tab }) {
       {tab("/admin/digest", "digest", t("admin.digest"))}
       {tab("/admin/usage", "usage", t("admin.usage"))}
       {tab("/admin/notifications", "notifications", t("admin.notifications"))}
+      {tab("/admin/accounts", "accounts", t("admin.accounts"))}
       <div className="ml-auto flex items-center gap-3 text-sm">
         <Link href="/" className="text-sand-600 hover:text-clay-700">
           {t("common.app")}
