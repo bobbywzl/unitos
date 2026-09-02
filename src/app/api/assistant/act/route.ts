@@ -2,6 +2,7 @@ import { anthropic } from "@ai-sdk/anthropic";
 import type { ModelMessage } from "ai";
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { resolveAnchor } from "@/lib/anchors/resolve";
 import { bumpNotebook, notebookAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
 import { DERIVATION_MODEL, MAX_OUTPUT_TOKENS } from "@/lib/derive/config";
@@ -36,6 +37,12 @@ const requestSchema = z.object({
       blockId: z.string().min(1),
       startOffset: z.number().int().min(0),
       endOffset: z.number().int().min(0),
+      // The quote selectors (SPEC.md §5): when the block id or the offsets no
+      // longer match — a re-parse gave the blocks new ids, an edit moved the
+      // words — the quote re-finds the selection in the document.
+      quotedText: z.string().max(10_000).optional(),
+      prefix: z.string().max(64).optional(),
+      suffix: z.string().max(64).optional(),
     })
     .optional(),
   // A circled spot of a video document (SPEC.md §11): the time range, the
@@ -217,18 +224,20 @@ async function handle(req: Request, t: TFunc) {
   // source for charts — same treatment as EXPLAIN (SPEC.md §4: one pipeline).
   let selectionBlock = "";
   let attachedImage: FigureImage | null = null;
-  if (data.anchor) {
-    const anchored = anchorContext(
-      document.blocks,
-      data.anchor.blockId,
-      data.anchor.startOffset,
-      data.anchor.endOffset,
-    );
-    if (!anchored) {
-      return NextResponse.json({ error: t("api.anchorNotResolved") }, { status: 400 });
-    }
+  // The anchor resolves through the ladder (SPEC.md §5): block id and offsets,
+  // then the quote inside the block, then the quote across the document. A
+  // re-parse gives every block a new id while an open reader still sends the
+  // old ones; the quote carries the selection across.
+  const anchor = data.anchor ? resolveAnchor(document.blocks, data.anchor) : null;
+  const anchored = anchor
+    ? anchorContext(document.blocks, anchor.blockId, anchor.startOffset, anchor.endOffset)
+    : null;
+  if (data.anchor && (!anchor || !anchored)) {
+    return NextResponse.json({ error: t("api.anchorNotResolvedInDocument") }, { status: 400 });
+  }
+  if (anchor && anchored) {
     const anchoredBlock = await db.block.findUnique({
-      where: { id: data.anchor.blockId },
+      where: { id: anchor.blockId },
       select: { type: true, html: true, text: true, page: true },
     });
     const figure = figureContent(anchoredBlock);
@@ -236,7 +245,7 @@ async function handle(req: Request, t: TFunc) {
       const visual = await figureVisual(figure, anchoredBlock, document.id, document.sourceUrl);
       attachedImage = visual?.image ?? null;
       selectionBlock = [
-        `The reader has selected the figure in block ${data.anchor.blockId}. Its caption: "${figure.caption.slice(0, 500) || "(no caption)"}".`,
+        `The reader has selected the figure in block ${anchor.blockId}. Its caption: "${figure.caption.slice(0, 500) || "(no caption)"}".`,
         ...(visual
           ? [
               visual.page
@@ -251,7 +260,7 @@ async function handle(req: Request, t: TFunc) {
         "The command applies to this figure unless it says otherwise.",
       ].join("\n");
     } else {
-      selectionBlock = `The reader has selected this text in block ${data.anchor.blockId}:\n"${anchored.anchoredText.slice(0, 2000)}"\nThe command applies to this selection unless it says otherwise.`;
+      selectionBlock = `The reader has selected this text in block ${anchor.blockId}:\n"${anchored.anchoredText.slice(0, 2000)}"\nThe command applies to this selection unless it says otherwise.`;
     }
   } else if (data.video) {
     // A circled spot of a video document: the frame is attached when the
@@ -470,7 +479,7 @@ async function handle(req: Request, t: TFunc) {
   // hidden Annotations section, anchored to the selection, updated per turn.
   // Clicking the mark reopens the conversation; the Annotations tab deletes it.
   let conversationNoteId: string | null = data.conversationNoteId ?? null;
-  if (data.anchor) {
+  if (anchor) {
     const replyText =
       result.data.reply ??
       (actions.length > 0
@@ -492,7 +501,7 @@ async function handle(req: Request, t: TFunc) {
       }
     }
     if (!conversationNoteId) {
-      const block = document.blocks.find((b) => b.id === data.anchor!.blockId);
+      const block = document.blocks.find((b) => b.id === anchor.blockId);
       if (block) {
         const section = await annotationsSection(data.notebookId);
         const count = await db.note.count({ where: { sectionId: section.id } });
@@ -507,15 +516,12 @@ async function handle(req: Request, t: TFunc) {
             sources: {
               create: {
                 documentId: data.documentId,
-                blockId: data.anchor.blockId,
-                startOffset: data.anchor.startOffset,
-                endOffset: data.anchor.endOffset,
-                quotedText: block.text.slice(data.anchor.startOffset, data.anchor.endOffset),
-                prefix: block.text.slice(
-                  Math.max(0, data.anchor.startOffset - 32),
-                  data.anchor.startOffset,
-                ),
-                suffix: block.text.slice(data.anchor.endOffset, data.anchor.endOffset + 32),
+                blockId: anchor.blockId,
+                startOffset: anchor.startOffset,
+                endOffset: anchor.endOffset,
+                quotedText: anchor.quotedText,
+                prefix: anchor.prefix,
+                suffix: anchor.suffix,
               },
             },
           },

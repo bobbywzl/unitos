@@ -1890,17 +1890,22 @@ export function ReaderInteractions({
     }
   }
 
+  // The anchor travels whole (SPEC.md §5): the block id and offsets, plus the
+  // quote selectors, so the server re-finds the selection when the blocks
+  // changed under the reader (a re-parse, an edit).
+  function anchorBody(anchor: Anchor) {
+    return {
+      blockId: anchor.blockId,
+      startOffset: anchor.startOffset,
+      endOffset: anchor.endOffset,
+      quotedText: anchor.quotedText,
+      prefix: anchor.prefix,
+      suffix: anchor.suffix,
+    };
+  }
+
   function deriveBody(type: string, anchor: Anchor) {
-    return JSON.stringify({
-      type,
-      documentId,
-      notebookId,
-      anchor: {
-        blockId: anchor.blockId,
-        startOffset: anchor.startOffset,
-        endOffset: anchor.endOffset,
-      },
-    });
+    return JSON.stringify({ type, documentId, notebookId, anchor: anchorBody(anchor) });
   }
 
   // EXPLAIN: stream into a bubble docked beside the article (SPEC.md §4, §6).
@@ -2697,13 +2702,7 @@ export function ReaderInteractions({
         notebookId,
         documentId,
         command,
-        anchor: anchor
-          ? {
-              blockId: anchor.blockId,
-              startOffset: anchor.startOffset,
-              endOffset: anchor.endOffset,
-            }
-          : undefined,
+        anchor: anchor ? anchorBody(anchor) : undefined,
         history: history.slice(-12),
         conversationNoteId: conversationNoteId ?? undefined,
       }),

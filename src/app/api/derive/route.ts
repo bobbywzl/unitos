@@ -2,6 +2,7 @@ import { anthropic } from "@ai-sdk/anthropic";
 import { streamText, type ModelMessage } from "ai";
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { resolveAnchor } from "@/lib/anchors/resolve";
 import { bumpNotebook, notebookAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
 import {
@@ -80,6 +81,12 @@ const deriveSchema = z
       blockId: z.string().min(1),
       startOffset: z.number().int().min(0),
       endOffset: z.number().int().min(0),
+      // The quote selectors (SPEC.md §5): when the block id or the offsets no
+      // longer match — a re-parse gave the blocks new ids, an edit moved the
+      // words — the quote re-finds the selection in the document.
+      quotedText: z.string().max(10_000).optional(),
+      prefix: z.string().max(64).optional(),
+      suffix: z.string().max(64).optional(),
     })
     .optional(),
   depth: z.enum(SUMMARY_DEPTHS).optional(), // SUMMARIZE only
@@ -373,14 +380,16 @@ export async function POST(req: Request) {
   if (!document) return NextResponse.json({ error: t("api.documentNotFound") }, { status: 404 });
   const blockById = new Map(document.blocks.map((b) => [b.id, { id: b.id, text: b.text }]));
 
+  // The anchor resolves through the ladder (SPEC.md §5): block id and offsets,
+  // then the quote inside the block, then the quote across the document. A
+  // re-parse gives every block a new id while an open reader still sends the
+  // old ones; the quote carries the selection across.
+  const anchor = data.anchor ? resolveAnchor(document.blocks, data.anchor) : null;
   let anchored: ReturnType<typeof anchorContext> = null;
   if (data.anchor) {
-    anchored = anchorContext(
-      document.blocks,
-      data.anchor.blockId,
-      data.anchor.startOffset,
-      data.anchor.endOffset,
-    );
+    anchored = anchor
+      ? anchorContext(document.blocks, anchor.blockId, anchor.startOffset, anchor.endOffset)
+      : null;
     if (!anchored || !anchored.anchoredText.trim()) {
       return NextResponse.json({ error: t("api.anchorNotResolvedInDocument") }, { status: 400 });
     }
@@ -478,9 +487,9 @@ export async function POST(req: Request) {
   // source; a PDF figure attaches its rendered page; a video figure explains
   // from caption and context only.
   let figureImage: FigureImage | null = null;
-  if (data.type === "EXPLAIN" && data.anchor) {
+  if (data.type === "EXPLAIN" && anchor) {
     const anchoredBlock = await db.block.findUnique({
-      where: { id: data.anchor.blockId },
+      where: { id: anchor.blockId },
       select: { type: true, html: true, text: true, page: true },
     });
     const figure = figureContent(anchoredBlock);
@@ -638,9 +647,9 @@ export async function POST(req: Request) {
           controller.close();
           return;
         }
-        if ((data.type === "EXPLAIN" || data.type === "SIMPLIFY") && data.anchor && text.trim()) {
+        if ((data.type === "EXPLAIN" || data.type === "SIMPLIFY") && anchor && text.trim()) {
           try {
-            const block = blockById.get(data.anchor.blockId);
+            const block = blockById.get(anchor.blockId);
             if (block) {
               const section = await annotationsSection(data.notebookId);
               const count = await db.note.count({ where: { sectionId: section.id } });
@@ -655,15 +664,12 @@ export async function POST(req: Request) {
                   sources: {
                     create: {
                       documentId: documentId,
-                      blockId: data.anchor.blockId,
-                      startOffset: data.anchor.startOffset,
-                      endOffset: data.anchor.endOffset,
-                      quotedText: block.text.slice(data.anchor.startOffset, data.anchor.endOffset),
-                      prefix: block.text.slice(
-                        Math.max(0, data.anchor.startOffset - 32),
-                        data.anchor.startOffset,
-                      ),
-                      suffix: block.text.slice(data.anchor.endOffset, data.anchor.endOffset + 32),
+                      blockId: anchor.blockId,
+                      startOffset: anchor.startOffset,
+                      endOffset: anchor.endOffset,
+                      quotedText: anchor.quotedText,
+                      prefix: anchor.prefix,
+                      suffix: anchor.suffix,
                     },
                   },
                 },
@@ -841,9 +847,9 @@ export async function POST(req: Request) {
     }
     const origin = resolveSpan(
       {
-        blockId: data.anchor!.blockId,
-        start: data.anchor!.startOffset,
-        end: data.anchor!.endOffset,
+        blockId: anchor!.blockId,
+        start: anchor!.startOffset,
+        end: anchor!.endOffset,
       },
       blockById,
     );

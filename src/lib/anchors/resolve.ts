@@ -11,6 +11,83 @@ export type ResolvedSource = {
   orphaned: boolean;
 };
 
+// An anchor as the reader captured it (SPEC.md §5): the position, plus the
+// quote selectors when the caller has them.
+export type AnchorInput = {
+  blockId: string;
+  startOffset: number;
+  endOffset: number;
+  quotedText?: string;
+  prefix?: string;
+  suffix?: string;
+};
+
+// An anchor that resolved: the position in the document as it is now, with
+// the quote and its context re-read from that block, ready to store.
+export type ResolvedAnchor = {
+  blockId: string;
+  startOffset: number;
+  endOffset: number;
+  quotedText: string;
+  prefix: string;
+  suffix: string;
+};
+
+const CONTEXT = 32; // prefix/suffix length (SPEC.md §5)
+
+// Resolve one anchor against a document's blocks. The ladder (SPEC.md §5):
+// 1. blockId + offsets still slice the quote → keep.
+// 2. Re-find the quote inside the stored block (an edit moved the words).
+// 3. Re-find the quote across all blocks (a re-parse gave every block a new
+//    id; an open reader still sends the old ones).
+// 4. Nothing → null. Never a guess.
+// Without a quote, the offsets stand only while they slice non-empty text.
+export function resolveAnchor(
+  blocks: { id: string; text: string }[],
+  anchor: AnchorInput,
+): ResolvedAnchor | null {
+  const stored = blocks.find((b) => b.id === anchor.blockId);
+  const quote = anchor.quotedText ?? "";
+  if (stored) {
+    const sliced = stored.text.slice(anchor.startOffset, anchor.endOffset);
+    if (quote ? sliced === quote : sliced.trim() !== "") {
+      return captured(stored, anchor.startOffset, anchor.endOffset);
+    }
+  }
+  if (!quote) return null;
+  const selector = { quotedText: quote, prefix: anchor.prefix ?? "", suffix: anchor.suffix ?? "" };
+  if (stored) {
+    const hit = matchInText(stored.text, selector);
+    if (hit) return captured(stored, hit.start, hit.end);
+  }
+  for (const block of blocks) {
+    if (stored && block.id === stored.id) continue;
+    const hit = matchInText(block.text, selector);
+    if (hit) return captured(block, hit.start, hit.end);
+  }
+  return null;
+}
+
+function captured(block: { id: string; text: string }, start: number, end: number): ResolvedAnchor {
+  return {
+    blockId: block.id,
+    startOffset: start,
+    endOffset: end,
+    quotedText: block.text.slice(start, end),
+    prefix: block.text.slice(Math.max(0, start - CONTEXT), start),
+    suffix: block.text.slice(end, end + CONTEXT),
+  };
+}
+
+// A document's blocks in reading order, the shape resolveAnchor reads.
+export function documentBlocks(documentId: string): Promise<{ id: string; text: string }[]> {
+  return db.block.findMany({
+    where: { documentId },
+    orderBy: { order: "asc" },
+    select: { id: true, text: true },
+  });
+}
+
 // Resolve every source anchored in a document. Ladder per source (SPEC.md §5):
 // 1. Stored blockId + offsets still match quotedText → keep.
 // 2. Re-find the quote inside the stored block.
@@ -74,7 +151,7 @@ export async function resolveDocumentSources(documentId: string): Promise<Resolv
       }
       continue;
     }
-    const r = resolveOne(source, blockById, blocks);
+    const r = resolveOne(source, blocks);
     resolved.push({ id: source.id, noteId: source.noteId, ...r });
     const changed =
       r.orphaned !== source.orphaned ||
@@ -101,33 +178,10 @@ export async function resolveDocumentSources(documentId: string): Promise<Resolv
 
 function resolveOne(
   source: Source,
-  blockById: Map<string, { id: string; text: string }>,
   blocks: { id: string; text: string }[],
 ): { blockId: string; start: number; end: number; orphaned: boolean } {
-  const selector = {
-    quotedText: source.quotedText,
-    prefix: source.prefix,
-    suffix: source.suffix,
-  };
-  const stored = blockById.get(source.blockId);
-
-  if (stored && stored.text.slice(source.startOffset, source.endOffset) === source.quotedText) {
-    return {
-      blockId: source.blockId,
-      start: source.startOffset,
-      end: source.endOffset,
-      orphaned: false,
-    };
-  }
-  if (stored) {
-    const hit = matchInText(stored.text, selector);
-    if (hit) return { blockId: stored.id, ...hit, orphaned: false };
-  }
-  for (const block of blocks) {
-    if (stored && block.id === stored.id) continue;
-    const hit = matchInText(block.text, selector);
-    if (hit) return { blockId: block.id, ...hit, orphaned: false };
-  }
+  const hit = resolveAnchor(blocks, source);
+  if (hit) return { blockId: hit.blockId, start: hit.startOffset, end: hit.endOffset, orphaned: false };
   return {
     blockId: source.blockId,
     start: source.startOffset,

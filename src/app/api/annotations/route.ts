@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { documentBlocks, resolveAnchor } from "@/lib/anchors/resolve";
 import { bumpNotebook, notebookAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
 import { annotationsSection } from "@/lib/derive/context";
@@ -92,18 +93,14 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: t("api.anchorOffsetsInvalid") }, { status: 400 });
   }
 
-  const block = await db.block.findUnique({ where: { id: data.anchor.blockId } });
-  if (!block || block.documentId !== data.documentId) {
-    return NextResponse.json({ error: t("api.blockNotInDocument") }, { status: 404 });
-  }
-
-  // Provenance is non-negotiable (SPEC.md §1): the quote must be the text at
-  // those offsets, or the anchor is a lie and is rejected.
-  if (
-    data.anchor.endOffset > block.text.length ||
-    block.text.slice(data.anchor.startOffset, data.anchor.endOffset) !== data.anchor.quotedText
-  ) {
-    return NextResponse.json({ error: t("api.anchorMismatch") }, { status: 400 });
+  // The anchor resolves through the ladder (SPEC.md §5): block id and offsets,
+  // then the quote inside the block, then the quote across the document — a
+  // re-parse gives every block a new id while an open reader still sends the
+  // old ones. Provenance is non-negotiable (SPEC.md §1): the stored quote is
+  // the text at the stored offsets, or the anchor is rejected.
+  const anchor = resolveAnchor(await documentBlocks(data.documentId), data.anchor);
+  if (!anchor) {
+    return NextResponse.json({ error: t("api.anchorNotResolvedInDocument") }, { status: 400 });
   }
 
   const section = await annotationsSection(data.notebookId);
@@ -112,7 +109,7 @@ export async function POST(req: Request) {
   // A highlight has a color; its content is the note when one was typed, else
   // the quote. A comment without a color stays a plain comment.
   const comment = data.comment?.trim();
-  const content = comment ? comment : data.anchor.quotedText.slice(0, 5000);
+  const content = comment ? comment : anchor.quotedText.slice(0, 5000);
   const color = data.color ?? (comment ? null : "clay");
 
   // The same highlight twice is one highlight, not two stacked cards.
@@ -123,9 +120,9 @@ export async function POST(req: Request) {
       color,
       sources: {
         some: {
-          blockId: data.anchor.blockId,
-          startOffset: data.anchor.startOffset,
-          endOffset: data.anchor.endOffset,
+          blockId: anchor.blockId,
+          startOffset: anchor.startOffset,
+          endOffset: anchor.endOffset,
           orphaned: false,
         },
       },
@@ -145,12 +142,12 @@ export async function POST(req: Request) {
       sources: {
         create: {
           documentId: data.documentId,
-          blockId: data.anchor.blockId,
-          startOffset: data.anchor.startOffset,
-          endOffset: data.anchor.endOffset,
-          quotedText: data.anchor.quotedText,
-          prefix: data.anchor.prefix,
-          suffix: data.anchor.suffix,
+          blockId: anchor.blockId,
+          startOffset: anchor.startOffset,
+          endOffset: anchor.endOffset,
+          quotedText: anchor.quotedText,
+          prefix: anchor.prefix,
+          suffix: anchor.suffix,
         },
       },
     },

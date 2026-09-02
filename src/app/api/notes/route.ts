@@ -3,6 +3,7 @@ import { z } from "zod";
 import { bumpNotebook, sectionAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
 import { sourceInputSchema } from "@/lib/anchors/input";
+import { documentBlocks, resolveAnchor, type ResolvedAnchor } from "@/lib/anchors/resolve";
 import { serverT } from "@/lib/i18n/server";
 import { videoAnchorFor } from "@/lib/video/anchor";
 import { timeRangeSchema } from "@/lib/video/types";
@@ -41,14 +42,20 @@ export async function POST(req: Request) {
   const access = await sectionAccess(data.sectionId, "editor");
   if (access instanceof NextResponse) return access;
 
+  // The source resolves through the ladder (SPEC.md §5): block id and offsets,
+  // then the quote inside the block, then the quote across the document — a
+  // re-parse gives every block a new id while an open reader still sends the
+  // old ones.
+  let source: (ResolvedAnchor & { documentId: string }) | null = null;
   if (data.source) {
-    const block = await db.block.findUnique({ where: { id: data.source.blockId } });
-    if (!block || block.documentId !== data.source.documentId) {
-      return NextResponse.json({ error: t("api.blockNotFound") }, { status: 404 });
-    }
     if (data.source.endOffset <= data.source.startOffset) {
       return NextResponse.json({ error: t("api.anchorOffsetsInvalid") }, { status: 400 });
     }
+    const resolved = resolveAnchor(await documentBlocks(data.source.documentId), data.source);
+    if (!resolved) {
+      return NextResponse.json({ error: t("api.anchorNotResolvedInDocument") }, { status: 400 });
+    }
+    source = { documentId: data.source.documentId, ...resolved };
   }
 
   let videoSource: {
@@ -93,17 +100,17 @@ export async function POST(req: Request) {
       ...(derivationType ? { derivationType } : {}),
       createdById: access.user.id,
       order: count,
-      ...(data.source
+      ...(source
         ? {
             sources: {
               create: {
-                documentId: data.source.documentId,
-                blockId: data.source.blockId,
-                startOffset: data.source.startOffset,
-                endOffset: data.source.endOffset,
-                quotedText: data.source.quotedText,
-                prefix: data.source.prefix,
-                suffix: data.source.suffix,
+                documentId: source.documentId,
+                blockId: source.blockId,
+                startOffset: source.startOffset,
+                endOffset: source.endOffset,
+                quotedText: source.quotedText,
+                prefix: source.prefix,
+                suffix: source.suffix,
               },
             },
           }
