@@ -4,6 +4,7 @@ import { Caprasimo, Figtree } from "next/font/google";
 import "./globals.css";
 import { FeedbackButton } from "@/components/feedback-button";
 import { LangProvider } from "@/components/lang-provider";
+import { TooltipLayer } from "@/components/tooltip";
 import { htmlLangOf } from "@/lib/i18n/config";
 import { currentLang, serverT } from "@/lib/i18n/server";
 
@@ -68,6 +69,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
         <LangProvider lang={lang}>
           {children}
           <FeedbackButton />
+          <TooltipLayer />
         </LangProvider>
       </body>
     </html>

@@ -76,7 +76,7 @@ export function DocumentTitle({ documentId, title }: { documentId: string; title
           setDraft(shown);
           setEditing(true);
         }}
-        title={t("reader.renameDocumentTitle")}
+        data-tooltip={t("reader.renameDocumentTitle")}
         className={`cursor-text rounded-xl hover:bg-sand-100 ${error ? "mb-1" : "mb-[26px]"}`}
       >
         <span className="text-[33px]">{shown}</span>

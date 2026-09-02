@@ -631,6 +631,24 @@ mark,
   }
 }
 
+/* Tooltips (components/tooltip.tsx): the caption fades in beside its
+   control. Quick, so a sweep along a row of icons never feels slowed down. */
+@keyframes tooltip-in {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .tooltip-in {
+    animation: tooltip-in 0.12s ease-out both;
+  }
+}
+
 /* The selection popover pops in under the pointer: quick, so repeated
    selections never feel slowed down. */
 @keyframes pop-in {

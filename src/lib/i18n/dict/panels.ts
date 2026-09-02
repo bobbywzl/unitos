@@ -64,7 +64,7 @@ const en = {
   // Context tab
   context: "Context",
   addContext: "Add context",
-  contextHint: "Injected into every AI prompt: notes, distillation, analysis.",
+  contextHint: "Your background, injected into every AI prompt: notes, distillation, analysis.",
   contextDesc: "Injected into every AI prompt: notes, distillation, analysis. Optional.",
   fieldBackground: "Background",
   fieldBackgroundPh: "e.g. Stanford student, stochastic calc + stats + quantum. Reading for due diligence.",
@@ -133,7 +133,7 @@ const zh: Record<keyof typeof en, string> = {
   documentFallback: "文档",
   context: "背景",
   addContext: "添加背景",
-  contextHint: "注入到每个 AI 提示词中：笔记、提炼、分析。",
+  contextHint: "你的背景，注入到每个 AI 提示词中：笔记、提炼、分析。",
   contextDesc: "注入到每个 AI 提示词中：笔记、提炼、分析。可选。",
   fieldBackground: "背景",
   fieldBackgroundPh: "如：斯坦福学生，修过随机微积分、统计和量子力学。为尽职调查而读。",

@@ -208,7 +208,8 @@ export function ReaderPanes({
         <button
           onClick={() => setMenu((v) => !v)}
           aria-label={t("panes.readerView")}
-          title={t("panes.readerView")}
+          data-tooltip={t("panes.readerViewTitle")}
+          data-tooltip-side="right"
           className="flex items-center justify-center rounded-full bg-sand-100 p-2 text-sand-600 shadow-soft hover:text-clay-800"
         >
           <ViewGlyph kind={view} />
@@ -246,6 +247,7 @@ export function ReaderPanes({
                 value={paneTwoId ?? ""}
                 onChange={(e) => go(view, e.target.value)}
                 aria-label={t("panes.secondPaneDocument")}
+                data-tooltip={t("panes.secondPaneDocumentTitle")}
                 className="w-full truncate rounded-full bg-sand-100 px-3 py-1.5 text-xs font-semibold text-sand-700 shadow-soft outline-none"
               >
                 {documents.map((d) => (

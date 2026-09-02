@@ -35,6 +35,13 @@ const en = {
   extractTitle: "Highlight the passages across the article that reveal what this focuses on",
   explainFigureTitle: "The AI deciphers what the visualization shows",
   linkTitle: "Connect this passage to a passage in this or another document",
+  assistantToolTitle:
+    "Command the assistant about the selection; it plans, then replies in a chat beside the article",
+  runTitle: "Send the command (Enter)",
+  explainTitle: "A short explanation of the selection, tuned to your background",
+  simplifyTitle: "Rewrite the selection in plain words, beside the article",
+  commentTitle: "Attach a comment to the selection, with or without a highlight",
+  closeLinkTitle: "Make this selection the other end of the link",
   highlightIn: "Highlight in {color}",
   highlightInWithNote: "Highlight in {color} with your note",
   readAloud: "Read the highlighted text aloud",
@@ -49,9 +56,13 @@ const en = {
 
   // Article menu
   askAssistant: "Ask the assistant…",
+  askAssistantTitle: "Open a chat about the whole article",
+  assistantMenuTitle: "Summarize, ask about, or distill the whole article",
+  frequentAskTitle:
+    "Send this question to the assistant; it reads the whole article and answers beside it",
   distill: "Distill",
   distillMenuTitle: "Ask the article a question; the AI pulls the quotes that answer it",
-  distillButtonTitle: "Open the distilled page",
+  distillButtonTitle: "Open the distilled page: one question, the quotes that answer it",
   summarizeLabel: "Summarize article",
   summarizeQuestion: "Summarize this article.",
   takeawaysLabel: "Key takeaways",
@@ -61,6 +72,7 @@ const en = {
 
   // Toolbar and edit mode
   readerFont: "Reader font",
+  readerFontTitle: "Change the reading font of this document",
   fontSerif: "Serif",
   fontMono: "Mono",
   backToReading: "Back to reading (Esc)",
@@ -85,6 +97,7 @@ const en = {
   replyPlaceholder: "Reply…",
   messageAssistant: "Message the assistant",
   send: "Send",
+  sendTitle: "Send the message (Enter)",
   loading: "Loading",
 
   // Extract card
@@ -211,6 +224,12 @@ const zh: Record<keyof typeof en, string> = {
   extractTitle: "高亮全文中揭示此处主题的片段",
   explainFigureTitle: "AI 解读这幅图展示的内容",
   linkTitle: "将此片段与本文档或其他文档中的片段相连",
+  assistantToolTitle: "对选中内容下达指令；助手先给出计划，再在文章旁的聊天中回复",
+  runTitle: "发送指令（Enter）",
+  explainTitle: "对选中内容的简短解释，贴合你的背景",
+  simplifyTitle: "用平实的话改写选中内容，显示在文章旁",
+  commentTitle: "给选中内容附上评论，可带或不带高亮",
+  closeLinkTitle: "把此选中内容作为链接的另一端",
   highlightIn: "以{color}高亮",
   highlightInWithNote: "以{color}高亮并附上评论",
   readAloud: "朗读选中的文本",
@@ -225,9 +244,12 @@ const zh: Record<keyof typeof en, string> = {
 
   // Article menu
   askAssistant: "询问助手…",
+  askAssistantTitle: "打开关于整篇文章的聊天",
+  assistantMenuTitle: "总结、提问或提炼整篇文章",
+  frequentAskTitle: "把这个问题发给助手；它通读全文，在文章旁作答",
   distill: "提炼",
   distillMenuTitle: "向文章提问；AI 会找出回答它的引文",
-  distillButtonTitle: "打开提炼页",
+  distillButtonTitle: "打开提炼页：一个问题，回答它的引文",
   summarizeLabel: "总结文章",
   summarizeQuestion: "总结这篇文章。",
   takeawaysLabel: "主要收获",
@@ -237,6 +259,7 @@ const zh: Record<keyof typeof en, string> = {
 
   // Toolbar and edit mode
   readerFont: "阅读器字体",
+  readerFontTitle: "更改此文档的阅读字体",
   fontSerif: "衬线",
   fontMono: "等宽",
   backToReading: "返回阅读（Esc）",
@@ -261,6 +284,7 @@ const zh: Record<keyof typeof en, string> = {
   replyPlaceholder: "回复…",
   messageAssistant: "给助手发消息",
   send: "发送",
+  sendTitle: "发送消息（Enter）",
   loading: "加载中",
 
   // Extract card

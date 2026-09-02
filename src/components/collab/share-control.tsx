@@ -142,7 +142,7 @@ export function ShareControl({
       <button
         onClick={() => void toggle()}
         aria-expanded={open}
-        title={t("panes.shareTitle")}
+        data-tooltip={t("panes.shareTitle")}
         className={`rounded-full px-3.5 py-1.5 text-[13px] hover:bg-clay-100 hover:text-clay-800 ${
           shared ? "border border-line text-sand-700" : "border border-dashed border-sand-400 text-sand-600"
         }`}
@@ -242,7 +242,7 @@ export function ShareControl({
                           onClick={() => void remove(c.email)}
                           disabled={busy}
                           aria-label={t("common.remove")}
-                          title={t("common.remove")}
+                          data-tooltip={t("common.remove")}
                           className="text-sand-500 hover:text-red-600"
                         >
                           ×

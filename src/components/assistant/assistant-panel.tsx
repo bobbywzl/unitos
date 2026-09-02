@@ -41,6 +41,11 @@ const TASK_LABEL: Record<Task, TKey> = {
   gaps: "assistant.taskGaps",
   unsourced: "assistant.taskUnsourced",
 };
+const TASK_TITLE: Record<Task, TKey> = {
+  contradictions: "assistant.taskContradictionsTitle",
+  gaps: "assistant.taskGapsTitle",
+  unsourced: "assistant.taskUnsourcedTitle",
+};
 const TASK_NOUN: Record<Task, TKey> = {
   contradictions: "assistant.taskNounContradictions",
   gaps: "assistant.taskNounGaps",
@@ -281,7 +286,7 @@ export function AssistantPanel({
           <button
             key={s.id}
             onClick={() => setScope(s.id)}
-            title={t(s.hintKey)}
+            data-tooltip={t(s.hintKey)}
             className={`rounded-full px-3 py-1 text-xs font-semibold disabled:opacity-40 ${
               scope === s.id
                 ? "bg-ink text-paper"
@@ -321,7 +326,7 @@ export function AssistantPanel({
             stopAsk();
           }}
           disabled={!busy && !question.trim()}
-          title={busy ? t("assistant.stopAsk") : undefined}
+          data-tooltip={busy ? t("assistant.stopAsk") : t("assistant.askTitle")}
           aria-label={busy ? t("assistant.stopAsk") : undefined}
           className="rounded-full bg-clay px-4 py-2 text-sm font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
         >
@@ -336,6 +341,7 @@ export function AssistantPanel({
               key={task}
               onClick={() => void runTask(task)}
               disabled={busy}
+              data-tooltip={t(TASK_TITLE[task])}
               className="rounded-full border border-line px-3 py-1 text-xs text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40"
             >
               {t(TASK_LABEL[task])}

@@ -3281,6 +3281,11 @@ export function ReaderInteractions({
     : { top: 0, left: 0, width: 0 };
   // One row of the toolbox. Coarse pointers get 44px-tall rows.
   const toolRow = coarse ? "px-3.5 py-2.5 text-[14px]" : "px-2.5 py-[5px] text-[12px]";
+  // The rows' tooltips open on the toolbox's outer side, away from the text.
+  const toolSide: "left" | "right" = popover?.side === "right" ? "right" : "left";
+  // The highlight dots' tooltips open away from the toolbox: above the bubble,
+  // or below it once the bubble has dropped under the toolbox near the page top.
+  const hueSide: "top" | "bottom" = popover && !coarse && popover.yTop < 54 ? "bottom" : "top";
 
   return (
     <div
@@ -3311,6 +3316,7 @@ export function ReaderInteractions({
               setSearchOpen(false);
             }}
             aria-expanded={menuExpanded}
+            data-tooltip={t("reader.assistantMenuTitle")}
             className="pointer-events-auto flex items-center gap-1.5 rounded-full bg-card px-3 py-2 text-[12px] font-semibold text-clay-800 shadow-float"
           >
             <SparkleIcon size={13} />
@@ -3324,7 +3330,7 @@ export function ReaderInteractions({
             }}
             aria-label={t("panes.searchProject")}
             aria-expanded={searchOpen}
-            title={t("panes.searchProjectTitle")}
+            data-tooltip={t("panes.searchProjectTitle")}
             className={`pointer-events-auto flex w-[34px] items-center justify-center rounded-full bg-card shadow-float ${
               searchOpen ? "text-clay-800" : "text-sand-600 hover:text-clay-800"
             }`}
@@ -3348,6 +3354,8 @@ export function ReaderInteractions({
                     setMenuExpanded(false);
                     openArticleChat(t(ask.questionKey));
                   }}
+                  data-tooltip={t("reader.frequentAskTitle")}
+                  data-tooltip-side="right"
                   className="px-4 py-2 text-left text-[12.5px] text-sand-800 hover:bg-clay-100 hover:text-clay-800"
                 >
                   {t(ask.labelKey)}
@@ -3358,6 +3366,8 @@ export function ReaderInteractions({
                   setMenuExpanded(false);
                   openArticleChat(null);
                 }}
+                data-tooltip={t("reader.askAssistantTitle")}
+                data-tooltip-side="right"
                 className="px-4 py-2 text-left text-[12.5px] text-sand-800 hover:bg-clay-100 hover:text-clay-800"
               >
                 {t("reader.askAssistant")}
@@ -3370,7 +3380,8 @@ export function ReaderInteractions({
               setMenuExpanded(false);
               openDistillPage(null);
             }}
-            title={t("reader.distillMenuTitle")}
+            data-tooltip={t("reader.distillMenuTitle")}
+            data-tooltip-side="right"
             className="px-4 py-2 text-left text-[12.5px] text-sand-800 hover:bg-clay-100 hover:text-clay-800"
           >
             {t("reader.distill")}
@@ -3403,6 +3414,7 @@ export function ReaderInteractions({
             value={font ?? "default"}
             onChange={(e) => void setFont(e.target.value)}
             aria-label={t("reader.readerFont")}
+            data-tooltip={t("reader.readerFontTitle")}
             className="rounded-full bg-sand-100 px-3 py-1.5 text-xs font-semibold text-sand-700 shadow-soft outline-none"
           >
             <option value="default">Figtree</option>
@@ -3414,7 +3426,7 @@ export function ReaderInteractions({
           <button
             onClick={toggleEditMode}
             className="rounded-full bg-clay px-3.5 py-1.5 text-xs font-semibold text-clay-fg shadow-soft hover:bg-clay-600"
-            title={t("reader.backToReading")}
+            data-tooltip={t("reader.backToReading")}
           >
             {t("common.done")}
           </button>
@@ -3425,7 +3437,7 @@ export function ReaderInteractions({
           <button
             onClick={() => openDistillPage(distillShownId)}
             className="rounded-full bg-sand-100 px-3.5 py-1.5 text-xs font-semibold text-sand-600 shadow-soft hover:text-clay-800"
-            title={t("reader.distillButtonTitle")}
+            data-tooltip={t("reader.distillButtonTitle")}
           >
             {t("reader.distill")}
             {allDistillations.length > 0 ? ` (${allDistillations.length})` : ""}
@@ -3498,7 +3510,8 @@ export function ReaderInteractions({
                   onClick={() => void recolorAnnotation(color)}
                   disabled={annotationCard.busy}
                   aria-label={t("reader.recolor", { color: t(HUE_KEY[color]) })}
-                  title={t("reader.recolor", { color: t(HUE_KEY[color]) })}
+                  data-tooltip={t("reader.recolor", { color: t(HUE_KEY[color]) })}
+                  data-tooltip-side="top"
                   className={`size-5 rounded-full disabled:opacity-40 ${
                     annotationCard.color === color ? "ring-2 ring-sand-600 ring-offset-2" : ""
                   }`}
@@ -3577,7 +3590,7 @@ export function ReaderInteractions({
                   <button
                     onClick={() => void deleteExtraction(extraction.id)}
                     className="text-xs font-semibold text-red-500 hover:text-red-700"
-                    title={t("reader.deleteExtractionTitle")}
+                    data-tooltip={t("reader.deleteExtractionTitle")}
                   >
                     {t("common.delete")}
                   </button>
@@ -3635,6 +3648,8 @@ export function ReaderInteractions({
             <button
               disabled={busy}
               onClick={() => void completeLink()}
+              data-tooltip={t("reader.closeLinkTitle")}
+              data-tooltip-side={toolSide}
               className={`flex w-full items-center gap-1.5 rounded-full bg-sage-600 ${toolRow} text-left font-semibold text-sage-fg hover:bg-sage-700 disabled:opacity-40`}
             >
               <LinkIcon size={11} />
@@ -3645,6 +3660,8 @@ export function ReaderInteractions({
           <button
             onClick={() => setSubmenu(submenu === "ai" ? null : "ai")}
             aria-expanded={submenu === "ai"}
+            data-tooltip={t("reader.assistantToolTitle")}
+            data-tooltip-side={toolSide}
             className={`flex w-full items-center gap-1.5 rounded-full ${toolRow} text-left font-semibold ${
               submenu === "ai"
                 ? "bg-clay-100 text-clay-800"
@@ -3680,7 +3697,8 @@ export function ReaderInteractions({
                 <button
                   onClick={toggleVoice}
                   aria-label={aiListening ? t("reader.stopListening") : t("reader.speakCommand")}
-                  title={aiListening ? t("reader.stopListening") : t("reader.speakCommand")}
+                  data-tooltip={aiListening ? t("reader.stopListening") : t("reader.speakCommand")}
+                  data-tooltip-side={toolSide}
                   className={`flex size-7 items-center justify-center rounded-full ${
                     aiListening
                       ? "animate-pulse bg-red-500 text-white"
@@ -3692,7 +3710,8 @@ export function ReaderInteractions({
                 <button
                   disabled={!aiBusy && !aiCommand.trim()}
                   onClick={() => (aiBusy ? stopAssistantChat() : void runAssistant())}
-                  title={aiBusy ? t("reader.stopAssistant") : undefined}
+                  data-tooltip={aiBusy ? t("reader.stopAssistant") : t("reader.runTitle")}
+                  data-tooltip-side={toolSide}
                   aria-label={aiBusy ? t("reader.stopAssistant") : undefined}
                   className="ml-auto rounded-full bg-clay px-3 py-1 text-[11px] font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
                 >
@@ -3706,7 +3725,8 @@ export function ReaderInteractions({
             <button
               onClick={() => void extract()}
               disabled={extractBusy}
-              title={t("reader.extractTermTitle")}
+              data-tooltip={t("reader.extractTermTitle")}
+              data-tooltip-side={toolSide}
               className={`flex w-full items-center justify-between gap-2 rounded-full bg-clay-100 ${toolRow} text-left font-semibold text-clay-800 hover:bg-clay-200 disabled:opacity-40`}
             >
               {t("reader.extract")}
@@ -3718,7 +3738,8 @@ export function ReaderInteractions({
 
           <button
             onClick={() => void explain()}
-            title={popover.figure ? t("reader.explainFigureTitle") : undefined}
+            data-tooltip={t(popover.figure ? "reader.explainFigureTitle" : "reader.explainTitle")}
+            data-tooltip-side={toolSide}
             className={`flex w-full items-center rounded-full ${toolRow} text-left text-sand-800 hover:bg-clay-100 hover:text-clay-800`}
           >
             {t("reader.explain")}
@@ -3726,6 +3747,8 @@ export function ReaderInteractions({
           {!popover.figure && (
             <button
               onClick={() => void simplify()}
+              data-tooltip={t("reader.simplifyTitle")}
+              data-tooltip-side={toolSide}
               className={`flex w-full items-center rounded-full ${toolRow} text-left text-sand-800 hover:bg-clay-100 hover:text-clay-800`}
             >
               {t("reader.simplify")}
@@ -3735,7 +3758,8 @@ export function ReaderInteractions({
             <button
               onClick={() => void extract()}
               disabled={extractBusy}
-              title={t("reader.extractTitle")}
+              data-tooltip={t("reader.extractTitle")}
+              data-tooltip-side={toolSide}
               className={`flex w-full items-center rounded-full ${toolRow} text-left text-sand-800 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40`}
             >
               {t("reader.extract")}
@@ -3745,6 +3769,8 @@ export function ReaderInteractions({
           <button
             onClick={() => setSubmenu(submenu === "comment" ? null : "comment")}
             aria-expanded={submenu === "comment"}
+            data-tooltip={t("reader.commentTitle")}
+            data-tooltip-side={toolSide}
             className={`flex w-full items-center rounded-full ${toolRow} text-left ${
               submenu === "comment"
                 ? "bg-clay-100 text-clay-800"
@@ -3793,7 +3819,8 @@ export function ReaderInteractions({
 
           <button
             onClick={beginLink}
-            title={t("reader.linkTitle")}
+            data-tooltip={t("reader.linkTitle")}
+            data-tooltip-side={toolSide}
             className={`flex w-full items-center rounded-full ${toolRow} text-left text-sand-800 hover:bg-clay-100 hover:text-clay-800`}
           >
             {t("reader.linkAcrossTexts")}
@@ -3818,10 +3845,11 @@ export function ReaderInteractions({
                 disabled={busy}
                 onClick={() => void annotate({ color, comment: commentDraft.trim() || undefined })}
                 aria-label={t("reader.highlightIn", { color: t(HUE_KEY[color]) })}
-                title={t(
+                data-tooltip={t(
                   commentDraft.trim() ? "reader.highlightInWithNote" : "reader.highlightIn",
                   { color: t(HUE_KEY[color]) },
                 )}
+                data-tooltip-side={hueSide}
                 className={`${coarse ? "size-7" : "size-5"} rounded-full transition-transform hover:scale-110 disabled:opacity-40`}
                 style={{ background: HUE_DOT[color] }}
               />
@@ -3847,7 +3875,8 @@ export function ReaderInteractions({
               <button
                 onClick={() => setSubmenu(submenu === "add" ? null : "add")}
                 aria-expanded={submenu === "add"}
-                title={t("reader.addToNotesTitle")}
+                data-tooltip={t("reader.addToNotesTitle")}
+                data-tooltip-side={toolSide}
                 className={`flex w-full items-center gap-1.5 rounded-full bg-clay ${toolRow} text-left font-semibold text-clay-fg hover:bg-clay-600`}
               >
                 <NotesIcon size={coarse ? 14 : 12} />
@@ -3876,7 +3905,8 @@ export function ReaderInteractions({
             <button
               onClick={() => void speakSelection()}
               aria-label={voice === "idle" ? t("reader.readAloud") : t("reader.stopReading")}
-              title={voice === "idle" ? t("reader.readAloud") : t("reader.stopReading")}
+              data-tooltip={voice === "idle" ? t("reader.readAloud") : t("reader.stopReading")}
+              data-tooltip-side={toolSide}
               className={`flex ${coarse ? "size-11" : "size-[34px]"} items-center justify-center rounded-full shadow-float ${
                 voice === "idle"
                   ? "bg-card text-sand-700 hover:text-clay-800"
@@ -3901,6 +3931,7 @@ export function ReaderInteractions({
           disabled={busy}
           onMouseDown={(e) => e.preventDefault()} // keep the highlight alive under the press
           onClick={() => void completeCloseLink()}
+          data-tooltip={t("reader.closeLinkTitle")}
           className="absolute z-20 flex -translate-y-1/2 items-center gap-1.5 rounded-full bg-sage-600 px-2.5 py-1 text-[11.5px] font-semibold text-sage-fg shadow-float hover:bg-sage-700 disabled:opacity-40"
           style={{ left: closeLink.left, top: closeLink.top }}
         >
@@ -3926,7 +3957,7 @@ export function ReaderInteractions({
               (left, top) => setBubble((b) => (b ? { ...b, left, top } : b)),
             )}
             style={{ touchAction: "none" }}
-            title={t("reader.dragToMove")}
+            data-tooltip={t("reader.dragToMove")}
             className="mb-2 flex cursor-move items-center justify-between"
           >
             <span className="text-[11px] font-bold tracking-[0.08em] text-clay-800 uppercase">
@@ -3937,7 +3968,7 @@ export function ReaderInteractions({
                 <button
                   onClick={() => void deleteExplain()}
                   className="text-xs font-semibold text-red-500 hover:text-red-700"
-                  title={t("reader.deleteExplainTitle")}
+                  data-tooltip={t("reader.deleteExplainTitle")}
                 >
                   {t("common.delete")}
                 </button>
@@ -3977,7 +4008,7 @@ export function ReaderInteractions({
               (left, top) => setSimplifyCard((c) => (c ? { ...c, left, top } : c)),
             )}
             style={{ touchAction: "none" }}
-            title={t("reader.dragToMove")}
+            data-tooltip={t("reader.dragToMove")}
             className="mb-2 flex cursor-move items-center justify-between"
           >
             <span className="text-[11px] font-bold tracking-[0.08em] text-sage-800 uppercase">
@@ -3988,7 +4019,7 @@ export function ReaderInteractions({
                 <button
                   onClick={() => void deleteSimplify()}
                   className="text-xs font-semibold text-red-500 hover:text-red-700"
-                  title={t("reader.deleteSimplifyTitle")}
+                  data-tooltip={t("reader.deleteSimplifyTitle")}
                 >
                   {t("common.delete")}
                 </button>
@@ -4017,7 +4048,7 @@ export function ReaderInteractions({
                           c ? { ...c, active: c.active === i ? null : i } : c,
                         )
                       }
-                      title={t("reader.sentenceTitle")}
+                      data-tooltip={t("reader.sentenceTitle")}
                       className={
                         simplifyCard.active === i
                           ? "simplify-sentence simplify-sentence-active"
@@ -4053,7 +4084,7 @@ export function ReaderInteractions({
               (left, top) => setCommentCard((c) => (c ? { ...c, left, top } : c)),
             )}
             style={{ touchAction: "none" }}
-            title={t("reader.dragToMove")}
+            data-tooltip={t("reader.dragToMove")}
             className="mb-2 flex cursor-move items-center justify-between"
           >
             <span className="text-[11px] font-bold tracking-[0.08em] text-clay-800 uppercase">
@@ -4140,7 +4171,7 @@ export function ReaderInteractions({
               (left, top) => setAssistantChat((c) => (c ? { ...c, left, top } : c)),
             )}
             style={{ touchAction: "none" }}
-            title={t("reader.dragToMove")}
+            data-tooltip={t("reader.dragToMove")}
             className="flex cursor-move items-center justify-between px-4 pt-3 pb-1"
           >
             <span className="text-[11px] font-bold tracking-[0.08em] text-clay-800 uppercase">
@@ -4151,7 +4182,7 @@ export function ReaderInteractions({
                 <button
                   onClick={() => void deleteAssistantConversation()}
                   className="text-xs font-semibold text-red-500 hover:text-red-700"
-                  title={t("reader.deleteConversationTitle")}
+                  data-tooltip={t("reader.deleteConversationTitle")}
                 >
                   {t("common.delete")}
                 </button>
@@ -4215,7 +4246,7 @@ export function ReaderInteractions({
                 stopAssistantChat();
               }}
               disabled={!assistantChat.busy && !assistantChat.input.trim()}
-              title={assistantChat.busy ? t("reader.stopAssistant") : undefined}
+              data-tooltip={assistantChat.busy ? t("reader.stopAssistant") : t("reader.sendTitle")}
               aria-label={assistantChat.busy ? t("reader.stopAssistant") : undefined}
               className="rounded-full bg-clay px-3 py-1.5 text-[11px] font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
             >
@@ -4258,6 +4289,7 @@ export function ReaderInteractions({
           <button
             onClick={() => broadcastPendingLink(null)}
             aria-label={t("reader.cancelLink")}
+            data-tooltip={t("reader.cancelLink")}
             className="shrink-0 text-xs text-sand-500 hover:text-clay-700"
           >
             ✕

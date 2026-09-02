@@ -12,7 +12,7 @@ const en = {
   newWork: "New project",
   deleteCorpusConfirm: "Delete this project and all its notes?",
   corpusTitle: "Project title",
-  renameCorpus: "Rename project",
+  renameCorpus: "Click to rename the project",
   // Work card
   sectionCountOne: "{n} section",
   sectionCountOther: "{n} sections",
@@ -153,7 +153,7 @@ const zh: Record<keyof typeof en, string> = {
   newWork: "新建项目",
   deleteCorpusConfirm: "删除该项目及其全部笔记？",
   corpusTitle: "项目标题",
-  renameCorpus: "重命名项目",
+  renameCorpus: "点击重命名项目",
   // Work card
   sectionCountOne: "{n} 个章节",
   sectionCountOther: "{n} 个章节",

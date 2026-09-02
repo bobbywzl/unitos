@@ -50,7 +50,7 @@ export function NotebookTitle({ id, title }: { id: string; title: string }) {
     <button
       onClick={() => setEditing(true)}
       className="max-w-[120px] shrink-0 truncate font-display text-lg sm:max-w-64 sm:text-xl"
-      title={t("works.renameCorpus")}
+      data-tooltip={t("works.renameCorpus")}
     >
       {title}
     </button>

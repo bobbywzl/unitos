@@ -47,6 +47,8 @@ const TAB_TITLES: Record<Tab, TKey> = {
 const RAIL_BUTTON =
   "relative flex size-[38px] items-center justify-center rounded-full text-sand-600 hover:bg-clay-100 hover:text-clay-800";
 const RAIL_BUTTON_ON = "relative flex size-[38px] items-center justify-center rounded-full bg-clay-200 text-clay-800";
+// The rail sits on the right edge, so its tooltips open to the left, over the tray.
+const RAIL_TOOLTIP_SIDE = "left";
 
 // Tray width bounds: the bar between the reader and the tray drags within
 // these, so it can never overextend — the tray keeps a readable minimum and
@@ -281,6 +283,7 @@ export function Workspace({
         <Link
           href="/"
           aria-label={t("panes.allCorpora")}
+          data-tooltip={t("panes.allCorporaTitle")}
           className="flex size-[38px] shrink-0 items-center justify-center rounded-full text-sand-700 hover:bg-clay-100 hover:text-clay-800"
         >
           <ArrowLeftIcon size={18} />
@@ -311,14 +314,17 @@ export function Workspace({
           />
         )}
         {pending.length > 0 && (
-          <span className="hidden shrink-0 rounded-full bg-clay-200 px-3.5 py-1.5 text-xs font-semibold text-clay-800 lg:inline">
+          <span
+            data-tooltip={t("panes.pendingCountTitle")}
+            className="hidden shrink-0 rounded-full bg-clay-200 px-3.5 py-1.5 text-xs font-semibold text-clay-800 lg:inline"
+          >
             {t("panes.pendingCount", { n: pending.length })}
           </span>
         )}
         <button
           onClick={openGuide}
           aria-label={t("panes.guide")}
-          title={t("panes.guideTitle")}
+          data-tooltip={t("panes.guideTitle")}
           className="relative hidden size-[38px] shrink-0 items-center justify-center rounded-full text-sand-600 hover:bg-clay-100 hover:text-clay-800 md:flex"
         >
           <QuestionIcon size={18} />
@@ -348,7 +354,8 @@ export function Workspace({
             role="separator"
             aria-orientation="vertical"
             aria-label={t("panes.resizeTray")}
-            title={t("panes.resizeTrayTitle")}
+            data-tooltip={t("panes.resizeTrayTitle")}
+            data-tooltip-side="left"
             tabIndex={0}
             onPointerDown={startTrayResize}
             onDoubleClick={() => applyTrayWidth(TRAY_DEFAULT)}
@@ -419,7 +426,8 @@ export function Workspace({
             {tab === "notes" && (
               <Link
                 href={`/n/${notebook.id}/notes`}
-                title={t("panes.notesFullPageTitle")}
+                data-tooltip={t("panes.notesFullPageTitle")}
+                data-tooltip-side="top"
                 className="flex shrink-0 items-center justify-center gap-2 rounded-full bg-card px-4 py-2.5 text-[13px] font-semibold text-sand-700 shadow-soft hover:bg-clay-100 hover:text-clay-800"
               >
                 <ExpandIcon size={15} />
@@ -440,6 +448,8 @@ export function Workspace({
               setMobileTray(false);
             }}
             aria-label={collapsed ? t("panes.expandTray") : t("panes.collapseTray")}
+            data-tooltip={collapsed ? t("panes.expandTray") : t("panes.collapseTray")}
+            data-tooltip-side={RAIL_TOOLTIP_SIDE}
             className={`max-md:hidden ${RAIL_BUTTON}`}
           >
             {collapsed ? <ChevronLeftIcon /> : <ChevronRightIcon />}
@@ -449,6 +459,8 @@ export function Workspace({
             <button
               onClick={() => show("assistant")}
               aria-label={t("panes.assistant")}
+              data-tooltip={t("panes.assistantTitle")}
+              data-tooltip-side={RAIL_TOOLTIP_SIDE}
               aria-current={!collapsed && tab === "assistant"}
               className={!collapsed && tab === "assistant" ? RAIL_BUTTON_ON : RAIL_BUTTON}
             >
@@ -459,6 +471,8 @@ export function Workspace({
           <button
             onClick={() => show("notes")}
             aria-label={t("panes.notes")}
+            data-tooltip={t("panes.notesTitle")}
+            data-tooltip-side={RAIL_TOOLTIP_SIDE}
             aria-current={!collapsed && tab === "notes"}
             className={!collapsed && tab === "notes" ? RAIL_BUTTON_ON : RAIL_BUTTON}
           >
@@ -473,6 +487,8 @@ export function Workspace({
           <button
             onClick={() => show("distill")}
             aria-label={t("panes.distill")}
+            data-tooltip={t("panes.distillTitle")}
+            data-tooltip-side={RAIL_TOOLTIP_SIDE}
             aria-current={!collapsed && tab === "distill"}
             className={!collapsed && tab === "distill" ? RAIL_BUTTON_ON : RAIL_BUTTON}
           >
@@ -482,7 +498,8 @@ export function Workspace({
           <button
             onClick={() => setGraphOpen(true)}
             aria-label={t("panes.graph")}
-            title={t("panes.graphTitle")}
+            data-tooltip={t("panes.graphTitle")}
+            data-tooltip-side={RAIL_TOOLTIP_SIDE}
             className={RAIL_BUTTON}
           >
             <GraphIcon />
@@ -491,6 +508,8 @@ export function Workspace({
           <button
             onClick={() => show("annotations")}
             aria-label={t("panes.annotations")}
+            data-tooltip={t("panes.annotationsTitle")}
+            data-tooltip-side={RAIL_TOOLTIP_SIDE}
             aria-current={!collapsed && tab === "annotations"}
             className={!collapsed && tab === "annotations" ? RAIL_BUTTON_ON : RAIL_BUTTON}
           >
@@ -500,6 +519,8 @@ export function Workspace({
           <button
             onClick={() => show("edits")}
             aria-label={t("panes.editHistory")}
+            data-tooltip={t("panes.editHistoryTitle")}
+            data-tooltip-side={RAIL_TOOLTIP_SIDE}
             aria-current={!collapsed && tab === "edits"}
             className={!collapsed && tab === "edits" ? RAIL_BUTTON_ON : RAIL_BUTTON}
           >
@@ -510,6 +531,8 @@ export function Workspace({
             <button
               onClick={() => setMenuOpen(!menuOpen)}
               aria-label={t("panes.more")}
+              data-tooltip={t("panes.moreTitle")}
+              data-tooltip-side={RAIL_TOOLTIP_SIDE}
               aria-expanded={menuOpen}
               className={RAIL_BUTTON}
             >

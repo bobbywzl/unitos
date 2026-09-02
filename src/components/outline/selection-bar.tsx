@@ -33,7 +33,7 @@ export function SelectionBar({ tree, actions }: { tree: SectionView[]; actions: 
         <button
           onClick={() => void actions.mergeNotes(selected[0].id, selected.slice(1).map((n) => n.id))}
           className="rounded-full bg-sage-600 px-3.5 py-1 text-xs font-semibold text-sage-fg hover:bg-sage-700"
-          title={t("outline.mergeTitle")}
+          data-tooltip={t("outline.mergeTitle")}
         >
           {t("outline.merge")}
         </button>
@@ -53,7 +53,7 @@ export function SelectionBar({ tree, actions }: { tree: SectionView[]; actions: 
       <button
         onClick={() => actions.clearSelection()}
         aria-label={t("outline.clearSelection")}
-        title={t("outline.clearSelection")}
+        data-tooltip={t("outline.clearSelection")}
         className="text-sand-500 hover:text-clay-700"
       >
         ✕
