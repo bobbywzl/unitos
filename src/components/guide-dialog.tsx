@@ -5,11 +5,9 @@ import { useT } from "@/components/lang-provider";
 import { Presence } from "@/components/presence";
 import type { TKey } from "@/lib/i18n/dictionaries";
 
-// The reader's guide: Distill, Circle & ask, every selection tool, and the
-// side panel, in one place. Opened from the ? button in the header. In the
-// Side panel section the body strings carry their own leading separator and
-// joining spaces (see dict/works.ts), so bold terms and bodies concatenate
-// with no literal whitespace between them.
+// The reader's guide: Distill, Circle & ask, every selection tool, and every
+// side panel tab, in one place. Opened from the ? button in the header. Each
+// tool and each tab is one card: its name, then what it does.
 
 // The selection tools, in the toolbox's order: name key, body key.
 const TOOLS: [TKey, TKey][] = [
@@ -22,6 +20,16 @@ const TOOLS: [TKey, TKey][] = [
   ["works.guideAddTo", "works.guideAddToBody"],
   ["works.guideLink", "works.guideLinkBody"],
   ["works.guideVoice", "works.guideVoiceBody"],
+];
+
+// The side panel's tabs, in the rail's order: name key, body key.
+const PANELS: [TKey, TKey][] = [
+  ["works.notes", "works.guidePanelNotesBody"],
+  ["works.guideAssistant", "works.guidePanelAssistantBody"],
+  ["works.guideDistill", "works.guidePanelDistillBody"],
+  ["works.guidePanelSummary", "works.guidePanelSummaryBody"],
+  ["works.guidePanelAnnotations", "works.guidePanelAnnotationsBody"],
+  ["works.guidePanelEdits", "works.guidePanelEditsBody"],
 ];
 export function GuideDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const t = useT();
@@ -39,7 +47,13 @@ export function GuideDialog({ open, onClose }: { open: boolean; onClose: () => v
   }, [open, onClose]);
 
   const h = "font-display text-[15px] text-clay-800";
-  const term = "font-semibold";
+  // One card per tool or tab, styled like Circle & ask.
+  const card = ([nameKey, bodyKey]: [TKey, TKey]) => (
+    <div key={nameKey} className="flex flex-col gap-1 rounded-2xl bg-clay-100/70 p-4">
+      <span className={h}>{t(nameKey)}</span>
+      <p className="text-[13px] leading-relaxed text-sand-800">{t(bodyKey)}</p>
+    </div>
+  );
 
   return (
     <Presence show={open} exit="dialog">
@@ -86,33 +100,14 @@ export function GuideDialog({ open, onClose }: { open: boolean; onClose: () => v
           </p>
         </section>
 
-        {/* Every selection tool is its own card, styled like Circle & ask. */}
         <section className="flex flex-col gap-2">
           <span className={h}>{t("works.guideSelectHeader")}</span>
-          {TOOLS.map(([nameKey, bodyKey]) => (
-            <div key={nameKey} className="flex flex-col gap-1 rounded-2xl bg-clay-100/70 p-4">
-              <span className={h}>{t(nameKey)}</span>
-              <p className="text-[13px] leading-relaxed text-sand-800">{t(bodyKey)}</p>
-            </div>
-          ))}
+          {TOOLS.map(card)}
         </section>
 
-        <section className="flex flex-col gap-1.5">
+        <section className="flex flex-col gap-2">
           <span className={h}>{t("works.guidePanelHeader")}</span>
-          <p className="text-[13px] leading-relaxed text-sand-800">
-            <span className={term}>{t("works.notes")}</span>
-            {t("works.guidePanelNotesBody")}
-            <span className={term}>{t("works.guideAssistant")}</span>
-            {t("works.guidePanelAssistantBody")}
-            <span className={term}>{t("works.guideDistill")}</span>
-            {t("works.guidePanelDistillBody")}
-            <span className={term}>{t("works.guidePanelSummary")}</span>
-            {t("works.guidePanelSummaryBody")}
-            <span className={term}>{t("works.guidePanelAnnotations")}</span>
-            {t("works.guidePanelAnnotationsBody")}
-            <span className={term}>{t("works.guidePanelEdits")}</span>
-            {t("works.guidePanelEditsBody")}
-          </p>
+          {PANELS.map(card)}
         </section>
       </div>
     </div>

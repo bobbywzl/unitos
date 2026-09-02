@@ -21,6 +21,15 @@ const en = {
   apple: "Continue with Apple",
   accountNote: "Sign-in creates your account and keeps your projects yours.",
 
+  // The beta notice: opens once per tab when the page loads.
+  betaTitle: "Unitos is in beta",
+  betaThanks:
+    "Thank you for being here this early. Every project you build and every piece of feedback you send shapes what Unitos becomes.",
+  betaFree:
+    "As our thanks, every beta account gets Unitos free and without limits for now: the whole notebook, and the Claude, Gemini, and Groq tokens it uses, at no cost to you.",
+  betaSigned: "— The Unitos team",
+  betaContinue: "Continue",
+
   // Check-your-email state (/signin?sent=<email>; mode=forgot after a reset)
   sentTitle: "Check your email",
   sentTo: "We sent a confirmation link to",
@@ -124,6 +133,14 @@ const zh: Record<keyof typeof en, string> = {
   google: "使用 Google 继续",
   apple: "使用 Apple 继续",
   accountNote: "登录会创建你的账户，你的项目只属于你。",
+
+  // The beta notice: opens once per tab when the page loads.
+  betaTitle: "Unitos 正处于测试阶段",
+  betaThanks: "感谢你这么早就来到这里。你建立的每个项目、发来的每条反馈，都在塑造 Unitos 的未来。",
+  betaFree:
+    "作为感谢，目前每个测试账户都可以免费、不限量地使用 Unitos：整个笔记本，以及它所使用的 Claude、Gemini 和 Groq 的 token，全部免费。",
+  betaSigned: "——Unitos 团队",
+  betaContinue: "继续",
 
   // Check-your-email state (/signin?sent=<email>; mode=forgot after a reset)
   sentTitle: "请查收邮件",

@@ -13,11 +13,16 @@ export type NotificationItem = {
   title: string;
   body: string; // markdown
   createdAt: string;
+  // Kind "feedback": the feedback the reply answers. Null when that feedback
+  // row is gone; the title then carries its message.
+  feedback: { message: string } | null;
 };
 
 // The account's open notifications from the admin (SPEC.md §18), above the
-// Projects shelf: kind, date, title, body. Dismiss takes one off; the card
-// leaves at once and comes back only if the request fails.
+// Projects shelf: kind, date, title, body. A reply to feedback (kind
+// "feedback") reads "Reply to your feedback", the feedback's message, then the
+// reply. Dismiss takes one off; the card leaves at once and comes back only if
+// the request fails.
 export function Notifications({ items }: { items: NotificationItem[] }) {
   const router = useRouter();
   const t = useT();
@@ -65,7 +70,14 @@ export function Notifications({ items }: { items: NotificationItem[] }) {
                 {t("works.dismiss")}
               </button>
             </div>
-            <p className="mt-2 text-sm font-semibold text-sand-800">{n.title}</p>
+            <p className="mt-2 text-sm font-semibold text-sand-800">
+              {n.kind === "feedback" ? t("works.feedbackReplyTitle") : n.title}
+            </p>
+            {n.kind === "feedback" && (
+              <p className="mt-1 border-l-2 border-line pl-3 text-sm whitespace-pre-wrap text-sand-600">
+                {n.feedback?.message ?? n.title}
+              </p>
+            )}
             <div className="mt-1 text-sm text-sand-700">
               <Markdown>{n.body}</Markdown>
             </div>

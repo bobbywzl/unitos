@@ -90,9 +90,11 @@ const en = {
   reopen: "Reopen",
   resolvedCountOne: "1 resolved",
   resolvedCountMany: "{n} resolved",
-  // Notifications (SPEC.md §18): the kind chip, on the admin page and the dashboard.
+  // Notifications (SPEC.md §18): the kind chip, on the admin pages and the
+  // dashboard. "Feedback" marks a reply to feedback the account sent.
   notificationUpdate: "Update",
   notificationAccount: "Account change",
+  notificationFeedback: "Feedback",
 };
 
 const zh: Record<keyof typeof en, string> = {
@@ -153,6 +155,7 @@ const zh: Record<keyof typeof en, string> = {
   // Notifications (SPEC.md §18): the kind chip, on the admin page and the dashboard.
   notificationUpdate: "更新",
   notificationAccount: "账户变更",
+  notificationFeedback: "反馈",
 };
 
 export const common = { en, zh } as const;

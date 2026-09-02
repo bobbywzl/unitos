@@ -338,7 +338,7 @@ export function AssistantPanel({
         />
         <button
           type="submit"
-          data-track="assistant-ask"
+          data-track={`assistant-ask:${scope}`}
           onClick={(e) => {
             if (!busy) return;
             e.preventDefault();

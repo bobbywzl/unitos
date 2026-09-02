@@ -5,6 +5,7 @@ import { Logo } from "@/components/logo";
 import { appleEnabled, authEnabled, currentUser, emailEnabled, googleEnabled } from "@/lib/auth";
 import { serverT } from "@/lib/i18n/server";
 import type { TKey } from "@/lib/i18n/dictionaries";
+import { BetaNotice } from "./beta-notice";
 import { ReaderShowcase } from "./reader-showcase";
 
 export const dynamic = "force-dynamic";
@@ -223,6 +224,10 @@ export default async function SignInPage({
         </div>
         <LangSwitcher />
       </header>
+
+      {/* The beta notice, once per tab: Unitos is in beta, and free and
+          unlimited for beta accounts for now. */}
+      {enabled && <BetaNotice />}
 
       <main className="relative z-10 mx-auto w-full max-w-[1560px] flex-1 px-6 pt-10 pb-16 sm:px-10 lg:pt-4">
         <div className="grid items-center gap-12 lg:grid-cols-[1.1fr_0.9fr] lg:gap-14">

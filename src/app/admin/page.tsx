@@ -3,20 +3,40 @@ import { isAdmin } from "@/lib/admin-auth";
 import { authEnabled } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { serverT } from "@/lib/i18n/server";
+import { recipientAccounts } from "@/lib/notifications";
 import { AdminNav } from "@/components/admin/admin-nav";
 import { FeedbackInbox } from "@/components/admin/feedback-inbox";
 
 export const dynamic = "force-dynamic";
 
-// Admin: feedback inbox with new → seen → resolved triage (release-edu pattern).
+// Admin: feedback inbox with new → seen → resolved triage (release-edu pattern)
+// and Reply, which reaches the account that sent the feedback as a
+// notification (SPEC.md §18).
 export default async function AdminPage() {
   if (!(await isAdmin())) redirect("/admin/login");
   const t = await serverT();
 
-  const feedback = await db.feedback.findMany({
-    orderBy: { createdAt: "desc" },
-    take: 300,
-  });
+  const [feedback, accounts] = await Promise.all([
+    db.feedback.findMany({
+      orderBy: { createdAt: "desc" },
+      take: 300,
+      include: {
+        replies: {
+          orderBy: { createdAt: "asc" },
+          select: {
+            id: true,
+            body: true,
+            createdAt: true,
+            recipients: { select: { dismissedAt: true } },
+          },
+        },
+      },
+    }),
+    recipientAccounts(),
+  ]);
+  // The account that sent each feedback, by name. The admin's view of accounts
+  // is names and emails (lib/notifications.ts) — enough to reply.
+  const nameOf = new Map(accounts.map((a) => [a.id, a.name || t("admin.localReader")]));
 
   // Status only — values never leave the server. Operator concern, so it lives
   // here, not in reader Settings.
@@ -61,6 +81,13 @@ export default async function AdminPage() {
           userAgent: f.userAgent,
           status: f.status,
           createdAt: f.createdAt.toISOString(),
+          account: f.userId ? (nameOf.get(f.userId) ?? null) : null,
+          replies: f.replies.map((r) => ({
+            id: r.id,
+            body: r.body,
+            createdAt: r.createdAt.toISOString(),
+            dismissed: r.recipients.some((x) => x.dismissedAt !== null),
+          })),
         }))}
       />
     </main>

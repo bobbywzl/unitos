@@ -425,7 +425,7 @@ export function PageBlock({
                     <button
                       key={color}
                       onClick={() => void highlight(color)}
-                      data-track="page-highlight"
+                      data-track={`page-highlight:${color}`}
                       disabled={busy !== null}
                       aria-label={t(HUE_KEY[color])}
                       className="size-4 rounded-full transition-transform hover:scale-110 disabled:opacity-40"

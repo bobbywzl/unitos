@@ -4,10 +4,10 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { useLang, useT } from "@/components/lang-provider";
 import {
+  COMPOSED_KINDS,
   NOTIFICATION_KIND_LABEL,
-  NOTIFICATION_KINDS,
   NotificationKindChip,
-  type NotificationKind,
+  type ComposedKind,
 } from "@/components/notification-kind";
 
 export type RecipientOption = { id: string; name: string; email: string };
@@ -27,9 +27,11 @@ const chip = (on: boolean) =>
     on ? "bg-ink text-paper" : "bg-sand-100 text-sand-600 hover:text-clay-800"
   }`;
 
-// Compose and send a notification (SPEC.md §18), then the list of sends. The
-// account list is for picking recipients only — name and email, no link, no
-// edit: the admin cannot open or change an account.
+// Compose and send a notification (SPEC.md §18), then the list of sends —
+// replies to feedback (kind "feedback", made in the feedback inbox) list here
+// too, and Delete removes one like any send. The account list is for picking
+// recipients only — name and email, no link, no edit: the admin cannot open or
+// change an account.
 export function AdminNotifications({
   accounts,
   sent,
@@ -43,7 +45,7 @@ export function AdminNotifications({
   // Dates follow the app language; English keeps the browser default.
   const dateLocale = lang === "zh" ? "zh-CN" : undefined;
 
-  const [kind, setKind] = useState<NotificationKind>("update");
+  const [kind, setKind] = useState<ComposedKind>("update");
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [audience, setAudience] = useState<"all" | "chosen">("all");
@@ -120,7 +122,7 @@ export function AdminNotifications({
     <div className="space-y-8">
       <form onSubmit={send} className="space-y-3 rounded-2xl bg-card p-5 shadow-soft">
         <div className="flex gap-1">
-          {NOTIFICATION_KINDS.map((k) => (
+          {COMPOSED_KINDS.map((k) => (
             <button
               key={k}
               type="button"
