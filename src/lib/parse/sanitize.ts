@@ -195,6 +195,16 @@ export function sanitizeHtml(html: string, baseUrl?: string): string {
           continue;
         }
       }
+      if (tag === "img") {
+        // The width attribute is the page's display width when it is smaller
+        // than the column: cap the image there, so a small floated photo or a
+        // thumbnail is not blown up to the column's width (import compare
+        // loop finding). A width at or past the column changes nothing.
+        const width = Number(child.getAttribute("width"));
+        if (Number.isInteger(width) && width >= 40) {
+          child.setAttribute("style", `max-width:min(100%,${width}px)`);
+        }
+      }
       if (tag === "video") {
         const hasSrc = resolveUrl(child, "src");
         if (child.getAttribute("poster")) resolveUrl(child, "poster");
