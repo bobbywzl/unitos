@@ -102,6 +102,13 @@ const en = {
   transcriptFailedBody: "The transcript did not land. It powers read-along, click-to-seek, and Find.",
   transcriptionFailed: "Transcription failed",
   lastRunUnfinished: "The last run did not finish.",
+  pasteTranscript: "Paste transcript",
+  pasteTranscriptTitle: "Paste the transcript YouTube shows; it becomes this video's transcript",
+  pasteHelpYoutube:
+    "Open the video on YouTube, click ...more under it, click Show transcript, select all the lines, copy, and paste them here.",
+  pasteHelpFile: "Paste a timed transcript: a time on one line and its words on the next, or an SRT or WebVTT file.",
+  pastePlaceholder: "0:33\nfirst line\n0:35\nnext line",
+  savePastedTranscript: "Save transcript",
   // Known transcription failure classes; unknown ones show the raw diagnostic.
   errNoSpeech: "No speech was found in the recording.",
   errTooLarge: "The file is larger than the transcription cap. Try a smaller file.",
@@ -239,6 +246,13 @@ const zh: Record<keyof typeof en, string> = {
   transcriptFailedBody: "逐字稿没有生成。跟读、点击跳转和查找都依赖它。",
   transcriptionFailed: "转写失败",
   lastRunUnfinished: "上一次转写没有完成。",
+  pasteTranscript: "粘贴逐字稿",
+  pasteTranscriptTitle: "粘贴 YouTube 显示的逐字稿；它会成为这个视频的逐字稿",
+  pasteHelpYoutube:
+    "在 YouTube 打开这个视频，点击视频下方的“…更多”，点击“显示转录稿”，全选各行，复制，然后粘贴到这里。",
+  pasteHelpFile: "粘贴带时间的逐字稿：一行时间、下一行文字，或者 SRT、WebVTT 文件。",
+  pastePlaceholder: "0:33\n第一行\n0:35\n下一行",
+  savePastedTranscript: "保存逐字稿",
   errNoSpeech: "录音中没有检测到语音。",
   errTooLarge: "文件超过转写上限。请试试更小的文件。",
   errCaptions: "无法读取这个视频的字幕。",
