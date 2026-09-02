@@ -41,6 +41,7 @@ const MAX_CROPS_PER_KIND = 60;
 const MAX_FULL_PAGE_HEIGHT = 14000;
 const PDF_PAGE_WIDTH = 1200;
 const DEFAULT_PDF_PAGES = 40;
+let pdfPageLimit = DEFAULT_PDF_PAGES;
 
 // ── Arguments ───────────────────────────────────────────────────────────────
 
@@ -470,7 +471,7 @@ async function captureOriginalPdf(source, dir) {
   const pdf = await getDocumentProxy(new Uint8Array(bytes));
   const pageCount = pdf.numPages;
   const pages = [];
-  for (let p = 1; p <= Math.min(pageCount, opts.pages || DEFAULT_PDF_PAGES); p++) {
+  for (let p = 1; p <= Math.min(pageCount, pdfPageLimit); p++) {
     const png = await renderPageAsImage(new Uint8Array(bytes), p, {
       canvasImport: () => import("@napi-rs/canvas"),
       width: PDF_PAGE_WIDTH,
@@ -579,6 +580,9 @@ async function captureUnitos(browser, opts, documentId, blocks, dir) {
         const file = path.join(dir, `unitos.block-${block.order}.png`);
         try {
           await el.scrollIntoViewIfNeeded({ timeout: 5000 });
+          // A lazy figure loads once scrolled into view; a PDF figure renders
+          // its page on the server first.
+          await el.evaluate((node) => Promise.all([...node.querySelectorAll("img")].map((img) => img.complete ? null : new Promise((r) => { img.addEventListener("load", r, { once: true }); img.addEventListener("error", r, { once: true }); })))).catch(() => {});
           await page.waitForTimeout(150);
           await el.screenshot({ path: file, timeout: 15000, animations: "disabled" });
           entry.png = file;
@@ -755,6 +759,7 @@ function reportFor(entry) {
 
 async function main() {
   const opts = parseArgs(process.argv.slice(2));
+  if (opts.pages > 0) pdfPageLimit = opts.pages;
   for (const list of opts.lists) opts.sources.push(...(await readSourceList(list)));
   if (opts.sources.length === 0) throw new Error("Give at least one URL or PDF path, or --list <file>");
   const runId = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
