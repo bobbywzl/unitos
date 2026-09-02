@@ -289,12 +289,18 @@ function buildEntry(
 // ── Citation marking ────────────────────────────────────────────────────────
 
 function wrapCitation(a: Element, refId: string) {
+  // The token and the link's text stay inside one inline element: loose text
+  // nodes would give the link's parent direct text, and the walk flattens a
+  // container with direct text (a card, a section with a button) into one
+  // paragraph.
   const doc = a.ownerDocument;
-  a.replaceWith(
+  const span = doc.createElement("span");
+  span.append(
     doc.createTextNode(`${CITE_OPEN}${refId}${CITE_MID}`),
     ...a.childNodes,
     doc.createTextNode(CITE_CLOSE),
   );
+  a.replaceWith(span);
 }
 
 function withoutHash(url: URL): string {

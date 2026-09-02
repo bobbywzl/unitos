@@ -110,4 +110,19 @@ export type UrlParseProgress = (stage: "extract", detail?: string) => void;
 //     paragraphs, table rows anchored on first-column lines, number columns
 //     split at one em, captioned figures and display equations become FIGURE
 //     blocks with a region the figure image route crops.
-export const PARSER_VERSION = 12;
+// 13: embedded PDF images become FIGURE blocks with a region (a chart or a
+//     drawing with no caption, its in-image text with it); captioned figures
+//     take their extent from the page's vector paths; a first-line indent
+//     starts a paragraph and a paragraph gap ends one; hanging-indent
+//     references stay one entry; line-end hyphens drop unless the document
+//     hyphenates the compound; CJK wraps join without a space; Kangxi
+//     radicals map to ideographs; Computer Modern and Nimbus font names give
+//     bold, italic and mono; letter-numbered and wrapped headings, levels by
+//     numbering depth; contents entries lose leaders and page numbers; bullet
+//     glyphs become list markers; a page-top float no longer splits a
+//     paragraph. URL: a link's citation token stays inline so a card or a
+//     section with a button keeps its heading and paragraphs; a wrapper
+//     around one container of several text blocks descends into it; a
+//     media-less <figure> is its text; a marker list needs visible markers;
+//     an opening heading that repeats the title drops.
+export const PARSER_VERSION = 13;
