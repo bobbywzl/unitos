@@ -164,6 +164,8 @@ model Block {
   type       BlockType
   text       String    // plain text content
   html       String?   // rendered content for figures/tables
+  page       Int?      // 1-based PDF page: FIGURE blocks from a PDF, PAGE blocks, converted text
+  region     Json?     // FIGURE blocks from a PDF: the figure's region on its page (the §11 percent-coordinate shape); null = the whole page
 }
 
 enum BlockType {
@@ -619,6 +621,7 @@ The judgment can be wrong, so the document menu carries the escape hatch: "Parse
 - `Document.handwritten Boolean` plus `conversionStatus ConversionStatus` (NONE → PENDING → READY | FAILED, the transcript pattern; OFF = the reader said not to convert — nothing auto-starts, the strip offers Convert to text), `conversionError`, `conversionStartedAt`. The PDF bytes stay in `Document.fileData`.
 - `BlockType` gains `PAGE`: one block per PDF page at orders 0…n−1, `Block.page` the 1-based page, `Block.text` "Page N" (so chips, search, and the digest read well). `GET /api/documents/[documentId]/page/[blockId]` renders the page to PNG from the stored bytes — the figure image route's twin.
 - A **page anchor** is a `Source` with `region` set (the §11 percent-coordinate shape) on a PAGE block, offsets 0/0, `quotedText` "Page N". It skips the text ladder — pages never change — and orphans only when the PAGE block is gone (shape switch).
+- A **PDF figure** is a FIGURE block with `page` set and, when the parse found the figure's place on the page, `region` (the same shape): the text of a vector chart or a display equation, or the blank area above a "Figure N" caption. `GET /api/documents/[documentId]/figure/[blockId]` renders the page and crops it to the region; without a region it serves the whole page, as before. The caption is the block's text and its only DOM text (§5); Explain attaches the same crop.
 
 ### Conversion (pages → text blocks)
 

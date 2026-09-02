@@ -229,7 +229,7 @@ async function handle(req: Request, t: TFunc) {
     }
     const anchoredBlock = await db.block.findUnique({
       where: { id: data.anchor.blockId },
-      select: { type: true, html: true, text: true, page: true },
+      select: { type: true, html: true, text: true, page: true, region: true },
     });
     const figure = figureContent(anchoredBlock);
     if (figure && anchoredBlock) {

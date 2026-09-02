@@ -1,5 +1,6 @@
 import { getDocumentProxy } from "unpdf";
 import type { LinkSpan, ParsedBlock, StyleSpan } from "@/lib/parse/types";
+import type { Region } from "@/lib/video/types";
 
 // pdf.js calls Math.sumPrecise while it rebuilds font programs. Node 22 has no
 // such function, so every TrueType font translation failed with a warning and
@@ -23,7 +24,9 @@ if (typeof mathWithSum.sumPrecise !== "function") {
 // section headings.
 
 type Flags = { bold: boolean; italic: boolean; mono: boolean; href: string | null };
-type Item = Flags & { str: string; x: number; y: number; w: number; size: number };
+// math: the glyph comes from a math font (Computer Modern math and symbol
+// fonts, AMS fonts, Cambria Math, STIX) — display equations are made of them.
+type Item = Flags & { str: string; x: number; y: number; w: number; size: number; math: boolean };
 type Run = Flags & { start: number; end: number };
 type Cell = { x: number; text: string; runs: Run[] };
 type Line = {
@@ -37,8 +40,11 @@ type Line = {
   size: number;
   page: number;
   firstWordWidth: number;
+  mathChars: number; // glyphs from math fonts, for equation detection
 };
 type UriRegion = { href: string; x1: number; y1: number; x2: number; y2: number };
+// A box in PDF points: y1 the bottom edge, y2 the top edge (y grows upward).
+type Box = { x1: number; y1: number; x2: number; y2: number };
 
 // Internal block: ParsedBlock plus what the cross-page passes need.
 type Segment = ParsedBlock & {
@@ -48,6 +54,9 @@ type Segment = ParsedBlock & {
   listItem?: boolean; // lone indented item; may join a LIST across the page break
   tocEntries?: { start: number; end: number; num: number }[];
   headingNum?: number; // leading number of a numbered heading ("3." → 3)
+  box?: Box; // the lines' extent on the page, for figure regions
+  lineSize?: number; // the lines' median font size
+  mathShare?: number; // share of glyphs from math fonts
 };
 
 const BULLET_RE = /^\s*([•▪◦‣●·*-]|\d{1,2}[.)]|\([a-z\d]{1,3}\)|[ivx]{1,4}[.)])\s+/i;
@@ -64,12 +73,15 @@ const NUMERIC_TOKEN_RE = /^[\d.,%$€£+−–-]+$/;
 
 // ── Font flags ──────────────────────────────────────────────────────────────
 
-function fontFlags(name: string | null): Omit<Flags, "href"> {
+type FontFlags = Omit<Flags, "href"> & { math: boolean };
+
+function fontFlags(name: string | null): FontFlags {
   const n = (name ?? "").replace(/^[A-Z]{6}\+/, ""); // subset prefix "HAAAAA+"
   return {
     bold: /bold|black|heavy|semi ?bold|demi/i.test(n),
     italic: /italic|oblique/i.test(n),
     mono: /mono|courier|consolas|menlo|typewriter/i.test(n),
+    math: /^(CMMI|CMSY|CMEX|CMMIB|CMBSY|MSAM|MSBM|rsfs|eufm|eufb|stmary|wasy|LMMathItalic|LMMathSymbols|LMMathExtension)|Math|Symbol/i.test(n),
   };
 }
 
@@ -197,6 +209,59 @@ function buildLine(rawItems: Item[], page: number): Line {
     size,
     page,
     firstWordWidth,
+    mathChars: items.reduce((n, i) => n + (i.math ? i.str.replace(/\s/g, "").length : 0), 0),
+  };
+}
+
+// ── Geometry ────────────────────────────────────────────────────────────────
+
+function boxOf(lines: Line[]): Box {
+  let x1 = Infinity;
+  let y1 = Infinity;
+  let x2 = -Infinity;
+  let y2 = -Infinity;
+  for (const l of lines) {
+    x1 = Math.min(x1, l.x);
+    x2 = Math.max(x2, l.xEnd);
+    y1 = Math.min(y1, l.y - l.size * 0.3);
+    y2 = Math.max(y2, l.y + l.size * 0.85);
+  }
+  return { x1, y1, x2, y2 };
+}
+
+function unionBox(a: Box, b: Box): Box {
+  return {
+    x1: Math.min(a.x1, b.x1),
+    y1: Math.min(a.y1, b.y1),
+    x2: Math.max(a.x2, b.x2),
+    y2: Math.max(a.y2, b.y2),
+  };
+}
+
+// What a segment's lines say about it: extent, font size, math share.
+function geom(lines: Line[]): { box: Box; lineSize: number; mathShare: number } {
+  const chars = lines.reduce((n, l) => n + l.text.replace(/\s/g, "").length, 0);
+  const math = lines.reduce((n, l) => n + l.mathChars, 0);
+  return {
+    box: boxOf(lines),
+    lineSize: median(lines.map((l) => l.size)),
+    mathShare: chars > 0 ? math / chars : 0,
+  };
+}
+
+// A box as the §11 percent-coordinate region shape (y measured from the top).
+function regionOf(box: Box, pageWidth: number, pageHeight: number): Region {
+  const px = (x: number) => Math.min(100, Math.max(0, (x / pageWidth) * 100));
+  const py = (y: number) => Math.min(100, Math.max(0, ((pageHeight - y) / pageHeight) * 100));
+  const [l, r, t, b] = [px(box.x1), px(box.x2), py(box.y2), py(box.y1)];
+  return {
+    kind: "path",
+    points: [
+      [l, t],
+      [r, t],
+      [r, b],
+      [l, b],
+    ],
   };
 }
 
@@ -674,7 +739,7 @@ function tableFromRun(run: Line[], leading: number): Segment {
   if (flat.length > 0 && shortCells / flat.length > 0.6) {
     const builder = new TextBuilder();
     for (const line of run) builder.append({ text: line.text.replace(/\t/g, " "), runs: line.runs }, " ");
-    return { type: "FIGURE", text: builder.text, page, runs: builder.runs };
+    return { type: "FIGURE", text: builder.text, page, runs: builder.runs, ...geom(run) };
   }
 
   const headerRow =
@@ -707,7 +772,7 @@ function tableFromRun(run: Line[], leading: number): Segment {
     `<tbody>${bodyRows.map((r, i) => rowHtml(r, "td", (headerRow ? 1 : 0) + i)).join("")}</tbody>` +
     "</table>";
   const text = rows.map((r) => r.cells.map((c) => c.text).join("\t")).join("\n");
-  return { type: "TABLE", text, html, page };
+  return { type: "TABLE", text, html, page, ...geom(run) };
 }
 
 // A two-column run of numbered entries is a contents list read column-wise,
@@ -726,7 +791,7 @@ function twoColumnList(run: Line[]): Segment | null {
     const m = TOC_ENTRY_RE.exec(cell.text);
     if (m) entries.push({ start, end: start + cell.text.length, num: Number(m[1]) });
   }
-  return { type: "LIST", text: builder.text, page: run[0].page, runs: builder.runs, tocEntries: entries };
+  return { type: "LIST", text: builder.text, page: run[0].page, runs: builder.runs, tocEntries: entries, ...geom(run) };
 }
 
 // ── Page segmentation ───────────────────────────────────────────────────────
@@ -924,7 +989,7 @@ function segmentPage(lines: Line[], ctx: PageContext): Segment[] {
     // Contents label ("CONTENTS", "INSIDE"): the entries that follow become a
     // linked list, not headings.
     if (single && TOC_LABEL_RE.test(line.text.trim())) {
-      segments.push({ type: "PARAGRAPH", text: line.text.trim(), page: line.page, runs: line.runs });
+      segments.push({ type: "PARAGRAPH", text: line.text.trim(), page: line.page, runs: line.runs, ...geom([line]) });
       tocMode = true;
       i++;
       continue;
@@ -948,6 +1013,7 @@ function segmentPage(lines: Line[], ctx: PageContext): Segment[] {
         page: line.page,
         runs: builder.runs,
         tocEntries: entries,
+        ...geom(lines.slice(i, j)),
       });
       tocMode = false;
       i = j;
@@ -974,7 +1040,7 @@ function segmentPage(lines: Line[], ctx: PageContext): Segment[] {
     // Label line: the label and the entry's title read as one paragraph; the
     // entry's body follows as its own blocks.
     if (isLabelLine(line, ctx)) {
-      segments.push({ type: "PARAGRAPH", text: lineAsPart(line).text, page: line.page, runs: line.runs });
+      segments.push({ type: "PARAGRAPH", text: lineAsPart(line).text, page: line.page, runs: line.runs, ...geom([line]) });
       i++;
       continue;
     }
@@ -1001,7 +1067,7 @@ function segmentPage(lines: Line[], ctx: PageContext): Segment[] {
       const flat = text.replace(/\n/g, " ");
       const prose = /[.!?]$/.test(flat.trim()) && flat.length > 80;
       if (prose || flat.trim().length <= 1) {
-        segments.push({ type: "PARAGRAPH", text: flat, page: line.page, runs });
+        segments.push({ type: "PARAGRAPH", text: flat, page: line.page, runs, ...geom(run) });
       } else {
         const m = /^(\d{1,2})[.)]\s/.exec(flat);
         segments.push({
@@ -1011,6 +1077,7 @@ function segmentPage(lines: Line[], ctx: PageContext): Segment[] {
           rawSize: line.size,
           runs,
           headingNum: m ? Number(m[1]) : undefined,
+          ...geom(run),
         });
       }
       i = j;
@@ -1042,6 +1109,7 @@ function segmentPage(lines: Line[], ctx: PageContext): Segment[] {
           rawSize: line.size,
           runs: line.runs,
           headingNum: m ? Number(m[1]) : undefined,
+          ...geom([line]),
         });
         i++;
         continue;
@@ -1103,14 +1171,14 @@ function segmentPage(lines: Line[], ctx: PageContext): Segment[] {
       // paragraph so the cross-page merge can finish that item.
       if (i === 0 && items.length >= 2 && !BULLET_RE.test(items[0].text) && BULLET_RE.test(items[1].text)) {
         const tail = items.shift()!;
-        segments.push({ type: "PARAGRAPH", text: tail.text, page: line.page, runs: tail.runs });
+        segments.push({ type: "PARAGRAPH", text: tail.text, page: line.page, runs: tail.runs, ...geom(run) });
       }
       // Numbered lead-ins over flush-left paragraphs are prose, not a list:
       // when unmarked groups sit between marked ones at the column edge, every
       // group is its own paragraph.
       if (bulletStart && !indentStart && !items.every((item) => BULLET_RE.test(item.text))) {
         for (const item of items) {
-          segments.push({ type: "PARAGRAPH", text: item.text, page: line.page, runs: item.runs });
+          segments.push({ type: "PARAGRAPH", text: item.text, page: line.page, runs: item.runs, ...geom(run) });
         }
         i = j;
         continue;
@@ -1131,7 +1199,7 @@ function segmentPage(lines: Line[], ctx: PageContext): Segment[] {
             "\n",
           );
         }
-        segments.push({ type: "LIST", text: builder.text, page: line.page, runs: builder.runs });
+        segments.push({ type: "LIST", text: builder.text, page: line.page, runs: builder.runs, ...geom(run) });
         i = j;
         continue;
       }
@@ -1143,6 +1211,7 @@ function segmentPage(lines: Line[], ctx: PageContext): Segment[] {
         page: line.page,
         runs: items[0].runs,
         listItem: run.length <= 6,
+        ...geom(run),
       });
       i = j;
       continue;
@@ -1176,7 +1245,7 @@ function segmentPage(lines: Line[], ctx: PageContext): Segment[] {
     const { text, runs } = joinGroup(group, true);
     const monoChars = runs.filter((r) => r.mono).reduce((n, r) => n + (r.end - r.start), 0);
     const type = text.length > 0 && monoChars / text.length > 0.85 ? "CODE" : "PARAGRAPH";
-    segments.push({ type, text, page: line.page, runs });
+    segments.push({ type, text, page: line.page, runs, ...geom(group) });
     i = j;
   }
   return segments;
@@ -1390,6 +1459,158 @@ function resolveContentsLinks(segments: Segment[]) {
   });
 }
 
+// ── Figure regions ──────────────────────────────────────────────────────────
+// A PDF carries no figure objects the text layer can name: a vector chart is
+// its tick labels and legend, a display equation its glyphs, a raster picture
+// nothing at all. What the page shows at that spot is the figure, so the block
+// becomes a FIGURE whose region the figure image route crops (SPEC.md §16):
+// display equations by their math glyphs, captioned figures by the space and
+// the debris above (or below) their "Figure N" caption. Import compare loop
+// finding: charts read as tables of ticks, equations as tables, figures shown
+// as whole pages.
+
+const CAPTION_RE = /^(fig\.|figure|table|tab\.)\s*(\d+|[A-Z]\d+)[a-z]?\s*[.:|–—-]\s*/i;
+const TABLE_CAPTION_RE = /^(table|tab\.)\s*(\d+|[A-Z]\d+)/i;
+
+function isMathSegment(s: Segment, ctx: PageContext): boolean {
+  if (s.type !== "PARAGRAPH" && s.type !== "TABLE" && s.type !== "FIGURE") return false;
+  if (s.region || !s.box || (s.mathShare ?? 0) < 0.25) return false;
+  // A lone symbol (a footnote marker) is not an equation.
+  if (s.text.replace(/\s/g, "").length < 3) return false;
+  // Prose with inline math starts at the column edge and runs long.
+  const prose = s.text.length > 50 && s.box.x1 <= ctx.columnLeft + 2 && (s.mathShare ?? 0) < 0.6;
+  return !prose;
+}
+
+// Chart text, equation glyphs, ticks: what a figure leaves in the text layer.
+function isFigureDebris(s: Segment, ctx: PageContext): boolean {
+  if (s.region || s.type === "HEADING" || s.type === "CODE") return false;
+  if (CAPTION_RE.test(s.text)) return false;
+  if (s.type === "TABLE" || s.type === "FIGURE") return true;
+  if ((s.lineSize ?? ctx.bodySize) < ctx.bodySize * 0.92) return true;
+  const text = s.text.trim();
+  return text.length <= 12 || (text.length <= 40 && /\d/.test(text) && !/[.!?]$/.test(text));
+}
+
+function attachFigureRegions(
+  segments: Segment[],
+  lines: Line[],
+  ctx: PageContext,
+  pageWidth: number,
+  pageHeight: number,
+): Segment[] {
+  const toRegion = (box: Box) => regionOf(box, pageWidth, pageHeight);
+  const rowGap = ctx.bodySize * ctx.leading;
+
+  // 1. Display equations: consecutive math segments become one FIGURE.
+  const withMath: Segment[] = [];
+  for (let k = 0; k < segments.length; ) {
+    if (!isMathSegment(segments[k], ctx)) {
+      withMath.push(segments[k]);
+      k++;
+      continue;
+    }
+    let m = k + 1;
+    while (
+      m < segments.length &&
+      isMathSegment(segments[m], ctx) &&
+      segments[m - 1].box!.y1 - segments[m].box!.y2 < rowGap * 1.5
+    ) {
+      m++;
+    }
+    const group = segments.slice(k, m);
+    let box = group[0].box!;
+    for (const g of group) box = unionBox(box, g.box!);
+    const pad = ctx.bodySize * 0.4;
+    box = { x1: box.x1 - pad, y1: box.y1 - pad, x2: box.x2 + pad, y2: box.y2 + pad };
+    withMath.push({
+      type: "FIGURE",
+      text: group
+        .map((g) => g.text.replace(/[\t\n]+/g, " "))
+        .join(" ")
+        .replace(/\s+/g, " ")
+        .trim(),
+      page: group[0].page,
+      box,
+      region: toRegion(box),
+      lineSize: group[0].lineSize,
+      mathShare: 1,
+    });
+    k = m;
+  }
+
+  // 2. Captioned figures.
+  const textLeft = lines.length > 0 ? Math.min(...lines.map((l) => l.x)) : 0;
+  const textRight = lines.length > 0 ? Math.max(...lines.map((l) => l.xEnd)) : pageWidth;
+  // The column the caption sits in: the extent of the page's lines that
+  // overlap it horizontally (the whole text width on a one-column page).
+  const columnOf = (cap: Box): [number, number] => {
+    const overlapping = lines.filter((l) => l.x < cap.x2 && l.xEnd > cap.x1);
+    if (overlapping.length === 0) return [textLeft, textRight];
+    return [Math.min(...overlapping.map((l) => l.x)), Math.max(...overlapping.map((l) => l.xEnd))];
+  };
+  const pageTop = pageHeight * 0.94;
+  const pageBottom = pageHeight * 0.06;
+  const out: Segment[] = [];
+  for (let c = 0; c < withMath.length; c++) {
+    const cap = withMath[c];
+    if (
+      cap.type !== "PARAGRAPH" ||
+      !cap.box ||
+      !CAPTION_RE.test(cap.text) ||
+      TABLE_CAPTION_RE.test(cap.text)
+    ) {
+      out.push(cap);
+      continue;
+    }
+    // Above the caption: debris up to the previous body segment. A table
+    // under its own "Table N" caption is data, not debris.
+    const swept: Segment[] = [];
+    while (out.length > 0) {
+      const prev = out[out.length - 1];
+      if (!isFigureDebris(prev, ctx)) break;
+      if (prev.type === "TABLE" && out.length >= 2 && TABLE_CAPTION_RE.test(out[out.length - 2].text)) break;
+      swept.unshift(out.pop()!);
+    }
+    const above = out[out.length - 1];
+    const top = above?.box ? above.box.y1 - ctx.bodySize * 0.6 : pageTop;
+    let box: Box | null = null;
+    if (swept.length > 0 || top - cap.box.y2 > rowGap * 3) {
+      const [x1, x2] = columnOf(cap.box);
+      box = { x1, x2, y1: cap.box.y2 + ctx.bodySize * 0.2, y2: top };
+      for (const s of swept) if (s.box) box = unionBox(box, s.box);
+    } else {
+      out.push(...swept);
+      // Below the caption: debris down to the next body segment.
+      let m = c + 1;
+      while (m < withMath.length && isFigureDebris(withMath[m], ctx)) m++;
+      const below = withMath[m];
+      const bottom = below?.box ? below.box.y2 + ctx.bodySize * 0.6 : pageBottom;
+      if (m > c + 1 || cap.box.y1 - bottom > rowGap * 3) {
+        const [x1, x2] = columnOf(cap.box);
+        box = { x1, x2, y1: bottom, y2: cap.box.y1 - ctx.bodySize * 0.2 };
+        for (const s of withMath.slice(c + 1, m)) if (s.box) box = unionBox(box, s.box);
+        c = m - 1;
+      }
+    }
+    if (!box) {
+      out.push(cap);
+      continue;
+    }
+    out.push({
+      type: "FIGURE",
+      text: cap.text,
+      page: cap.page,
+      runs: cap.runs,
+      box,
+      region: toRegion(box),
+      lineSize: cap.lineSize,
+      mathShare: 0,
+    });
+  }
+  return out;
+}
+
 // ── Main ────────────────────────────────────────────────────────────────────
 
 export async function parsePdf(
@@ -1400,7 +1621,8 @@ export async function parsePdf(
 
   const pages: Line[][] = [];
   const pageHeights: number[] = [];
-  const flagsByFont = new Map<string, Omit<Flags, "href">>();
+  const pageWidths: number[] = [];
+  const flagsByFont = new Map<string, FontFlags>();
 
   for (let p = 1; p <= pdf.numPages; p++) {
     const page = await pdf.getPage(p);
@@ -1467,6 +1689,7 @@ export async function parsePdf(
       });
     }
     pageHeights.push(viewport.height);
+    pageWidths.push(viewport.width);
     pages.push(
       pageLines(items, viewport.width, p - 1).filter(
         (l) =>
@@ -1544,9 +1767,10 @@ export async function parsePdf(
       labelColumn = median(labelXs);
       columnLeft = labelColumn;
     }
-    segments.push(
-      ...segmentPage(lines, { bodySize, leading, columnLeft, hasBold, pageMinX, labelColumn }),
-    );
+    const ctx = { bodySize, leading, columnLeft, hasBold, pageMinX, labelColumn };
+    const pageSegments = segmentPage(lines, ctx);
+    const p = cleaned.indexOf(lines);
+    segments.push(...attachFigureRegions(pageSegments, lines, ctx, pageWidths[p], pageHeights[p]));
   }
   segments = segments.filter((s) => s.text.trim().length > 0);
   // Vector-figure debris: chart axis ticks read as tiny numeric-only lines.
@@ -1618,8 +1842,11 @@ export async function parsePdf(
     });
     const block: ParsedBlock = { type: s.type, text: s.text };
     if (s.html) block.html = s.html;
-    // FIGURE blocks keep their page (1-based) for the figure image route.
-    if (s.type === "FIGURE") block.page = s.page + 1;
+    // FIGURE blocks keep their page (1-based) and region for the figure image route.
+    if (s.type === "FIGURE") {
+      block.page = s.page + 1;
+      if (s.region) block.region = s.region;
+    }
     const allLinks = [...(s.links ?? []), ...links];
     if (styles.length > 0) block.styles = styles;
     if (allLinks.length > 0) block.links = allLinks;

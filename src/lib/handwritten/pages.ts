@@ -36,18 +36,21 @@ export async function renderPdfPage(
   return new Uint8Array(png instanceof Uint8Array ? png : new Uint8Array(png as ArrayBuffer));
 }
 
-/** The circled part of a page image, with a little context around, scaled up
-    so small handwriting reaches the model at legible size. Null when the crop
-    fails — the caller still has the whole page. */
+/** The circled part of a page image, with a little context around (pad, in
+    percent of the page), scaled up so small handwriting reaches the model at
+    legible size unless scaleUp is off. A PDF figure's region crops tight and
+    keeps the render's own pixels. Null when the crop fails — the caller still
+    has the whole page. */
 export async function cropPageRegion(
   pageImage: Uint8Array,
   region: Region,
+  opts: { pad?: number; scaleUp?: boolean } = {},
 ): Promise<Uint8Array | null> {
   try {
     const { createCanvas, loadImage } = await import("@napi-rs/canvas");
     const img = await loadImage(Buffer.from(pageImage));
     const b = regionBounds(region);
-    const pad = 2.5; // percent of the page
+    const pad = opts.pad ?? 2.5; // percent of the page
     const x1 = (Math.max(0, b.x1 - pad) / 100) * img.width;
     const y1 = (Math.max(0, b.y1 - pad) / 100) * img.height;
     const x2 = (Math.min(100, b.x2 + pad) / 100) * img.width;
@@ -55,7 +58,7 @@ export async function cropPageRegion(
     const sw = x2 - x1;
     const sh = y2 - y1;
     if (sw < 8 || sh < 8) return null;
-    const scale = Math.max(1, Math.min(4, 700 / Math.max(sw, sh)));
+    const scale = opts.scaleUp === false ? 1 : Math.max(1, Math.min(4, 700 / Math.max(sw, sh)));
     const canvas = createCanvas(Math.round(sw * scale), Math.round(sh * scale));
     const ctx = canvas.getContext("2d");
     ctx.drawImage(img, x1, y1, sw, sh, 0, 0, canvas.width, canvas.height);
