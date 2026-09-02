@@ -1,8 +1,7 @@
 // UI strings of the works surfaces, the guide dialog, and the feedback
 // button. zh glossary: dict/common.ts. Every key exists in both languages —
-// zh's type enforces it. Body keys that follow a bold term carry their own
-// leading separator (" — " en, "——" zh) and, where segments join, their own
-// trailing space, so en output stays byte-identical to the old copy.
+// zh's type enforces it. In the guide dialog every tool and every side panel
+// tab is one card: a name key and a body key that stands alone.
 
 const en = {
   // Works shelf
@@ -72,18 +71,17 @@ const en = {
     "The round bubble under the tools reads the selection aloud, Chinese and English alike. Press it again to stop.",
   guideDistill: "Distill",
   guidePanelHeader: "Side panel",
-  guidePanelNotesBody: " — your sections and the pending queue. ",
+  guidePanelNotesBody: "Your sections and the pending queue.",
   guidePanelAssistantBody:
-    " — ask questions at document, project, or projects scope, and run checks (contradictions, gaps). ",
-  guidePanelDistillBody: " — every distillation of the open document; open one to read its quotes. ",
+    "Ask questions at document, project, or projects scope, and run checks (contradictions, gaps).",
+  guidePanelDistillBody: "Every distillation of the open document; open one to read its quotes.",
   guidePanelSummary: "Summary",
   guidePanelSummaryBody:
-    " — the whole document summarized at the depth you pick: layman, intermediate, or professional. Each depth is kept once generated. ",
+    "The whole document summarized at the depth you pick: layman, intermediate, or professional. Each depth is kept once generated.",
   guidePanelAnnotations: "Annotations",
-  guidePanelAnnotationsBody:
-    " — highlights, comments, explanations, links; Jump scrolls to the source. ",
+  guidePanelAnnotationsBody: "Highlights, comments, explanations, links; Jump scrolls to the source.",
   guidePanelEdits: "Edits",
-  guidePanelEditsBody: " — the edit history.",
+  guidePanelEditsBody: "The edit history.",
   // Feedback button
   feedback: "Feedback",
   sendFeedback: "Send feedback",
@@ -175,15 +173,15 @@ const zh: Record<keyof typeof en, string> = {
   guideVoiceBody: "工具下方的圆形气泡朗读选中内容，中英文皆可。再按一次即停止。",
   guideDistill: "提炼",
   guidePanelHeader: "侧栏",
-  guidePanelNotesBody: "——你的章节与待定队列。",
-  guidePanelAssistantBody: "——在文档、项目或全部项目范围提问，并运行检查（矛盾、疏漏）。",
-  guidePanelDistillBody: "——当前文档的每次提炼；打开一条即可读它的引文。",
+  guidePanelNotesBody: "你的章节与待定队列。",
+  guidePanelAssistantBody: "在文档、项目或全部项目范围提问，并运行检查（矛盾、疏漏）。",
+  guidePanelDistillBody: "当前文档的每次提炼；打开一条即可读它的引文。",
   guidePanelSummary: "摘要",
-  guidePanelSummaryBody: "——整篇文档按你选的深度摘要：通俗、进阶或专业。每个深度生成后即保留。",
+  guidePanelSummaryBody: "整篇文档按你选的深度摘要：通俗、进阶或专业。每个深度生成后即保留。",
   guidePanelAnnotations: "批注",
-  guidePanelAnnotationsBody: "——高亮、评论、解释、链接；“跳转”滚动到出处。",
+  guidePanelAnnotationsBody: "高亮、评论、解释、链接；“跳转”滚动到出处。",
   guidePanelEdits: "编辑记录",
-  guidePanelEditsBody: "——编辑历史。",
+  guidePanelEditsBody: "编辑历史。",
   // Feedback button
   feedback: "反馈",
   sendFeedback: "发送反馈",
