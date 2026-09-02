@@ -60,17 +60,74 @@ type Segment = ParsedBlock & {
 };
 
 const BULLET_RE = /^\s*([•▪◦‣●·*-]|\d{1,2}[.)]|\([a-z\d]{1,3}\)|[ivx]{1,4}[.)])\s+/i;
+const GLYPH_BULLET_RE = /^\s*[•▪◦‣●·*-]\s+/;
 // Numbered heading: the number must close with "." or ")" or dot into a
 // sub-number — "3.1 Results" and "1. Summary" match, "23 advertisers" does not.
 // "3.1 Results", "2. Background", and the bare "2 Background" (ACL style).
 // The word after the number starts uppercase — a body line rarely does.
-const HEADING_NUM_STRICT_RE = /^\d{1,2}((\.\d{1,2})+\.?|[.)])?\s+[\p{Lu}\p{Lo}]/u;
-const TOC_LABEL_RE = /^(contents|table of contents|inside|outline|in this issue)$/i;
-const TOC_ENTRY_RE = /^(\d{1,2})[.)]?\s+\S/;
+const HEADING_NUM_STRICT_RE = /^(\d{1,2}((\.\d{1,2})+\.?|[.)])?|[A-Z](\.\d{1,2})+\.?)\s+[\p{Lu}\p{Lo}]/u;
+// An appendix section: "A Benchmarks and audits" — a letter alone, bold.
+const LETTER_HEADING_RE = /^[A-Z]\s+[\p{Lu}]/u;
+// The number of a heading and its depth: "3" → 1, "3.2" → 2, "A.1" → 2.
+const HEADING_NUMBER_RE = /^(\d{1,2}|[A-Z])((?:\.\d{1,2})*)\.?[.)]?\s/;
+function headingDepth(text: string): number | null {
+  const m = HEADING_NUMBER_RE.exec(text);
+  if (!m) return null;
+  return 1 + (m[2].match(/\./g)?.length ?? 0);
+}
+const TOC_LABEL_RE = /^((appendix )?contents|table of contents|inside|outline|in this issue)$/i;
+const TOC_ENTRY_RE = /^(\d{1,2}|[A-Z])(?:\.\d{1,2})*[.)]?\s+\S/;
+// Leader dots and the page number at the end of a contents entry: the reader
+// has no pages to turn to.
+const TOC_TAIL_RE = /(?:\s*\.){3,}\s*\d{1,4}\s*$|\s+\d{1,4}\s*$/;
+function tocEntryPart(line: Line): { text: string; runs: Run[] } {
+  const part = lineAsPart(line);
+  const text = part.text.replace(TOC_TAIL_RE, "").trimEnd();
+  return { text, runs: part.runs.map((r) => ({ ...r, end: Math.min(r.end, text.length) })).filter((r) => r.end > r.start) };
+}
 const ATTACH_PUNCT_RE = /^[.,;:!?)\]…%]/;
 const CJK_START_RE = /^[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u;
 const NUMERIC_TOKEN_RE = /^[\d.,%$€£+−–-]+$/;
 const CONTROL_CHARS_RE = /[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g;
+// Some generators map common CJK glyphs to the Kangxi Radicals and CJK
+// Radicals Supplement blocks (⼴州 for 广州): the glyph looks right and a
+// search for the word finds nothing. NFKC folds the Kangxi block; the
+// supplement has no decompositions, so a table covers its common members.
+const RADICAL_RE = /[\u2E80-\u2FDF]/g;
+const RADICAL_MAP: Record<string, string> = {
+  "⺁": "厂", "⺄": "乙", "⺈": "刀", "⺊": "卜", "⺌": "小", "⺍": "小", "⺕": "彐", "⺗": "心",
+  "⺘": "手", "⺙": "攴", "⺛": "无", "⺜": "日", "⺝": "月", "⺟": "母", "⺠": "民", "⺡": "水",
+  "⺢": "水", "⺣": "火", "⺤": "爪", "⺥": "爪", "⺦": "爿", "⺧": "牛", "⺨": "犬", "⺩": "玉",
+  "⺪": "疋", "⺫": "网", "⺬": "示", "⺭": "示", "⺮": "竹", "⺯": "糸", "⺰": "纟", "⺱": "网",
+  "⺲": "网", "⺳": "网", "⺶": "羊", "⺷": "羊", "⺸": "羊", "⺹": "老", "⺺": "耒", "⺻": "聿",
+  "⺼": "肉", "⺽": "臼", "⺾": "艸", "⺿": "艸", "⻀": "艸", "⻁": "虎", "⻂": "衣", "⻃": "西",
+  "⻄": "西", "⻅": "见", "⻆": "角", "⻇": "角", "⻈": "讠", "⻉": "贝", "⻊": "足", "⻋": "车",
+  "⻌": "辶", "⻍": "辶", "⻎": "辶", "⻏": "邑", "⻐": "钅", "⻑": "长", "⻒": "长", "⻓": "长",
+  "⻔": "门", "⻕": "阜", "⻖": "阜", "⻗": "雨", "⻘": "青", "⻙": "韦", "⻚": "页", "⻛": "风",
+  "⻜": "飞", "⻝": "食", "⻞": "食", "⻟": "饣", "⻠": "饣", "⻡": "首", "⻢": "马", "⻣": "骨",
+  "⻤": "鬼", "⻥": "鱼", "⻦": "鸟", "⻧": "卤", "⻨": "麦", "⻩": "黄", "⻪": "黾", "⻫": "斉",
+  "⻬": "齐", "⻭": "齿", "⻮": "齿", "⻯": "竜", "⻰": "龙", "⻱": "龟", "⻲": "龟", "⻳": "龟",
+};
+function normalizeGlyphs(str: string): string {
+  return str
+    .replace(RADICAL_RE, (ch) => RADICAL_MAP[ch] ?? ch.normalize("NFKC"))
+    .replace(/\u2012/g, "\u2013")
+    .replace(/([¨´`ˆ˜ˇ¸˚˝¯˘˙])(\p{L})/gu, (_, accent: string, letter: string) =>
+      (letter + SPACING_ACCENTS[accent]).normalize("NFC"),
+    );
+}
+// A spacing accent drawn as its own glyph before the base letter (LaTeX's
+// \"u): composed with the letter it overlaps.
+const SPACING_ACCENTS: Record<string, string> = {
+  "¨": "\u0308", "´": "\u0301", "`": "\u0300", "ˆ": "\u0302", "^": "\u0302", "˜": "\u0303",
+  "~": "\u0303", "ˇ": "\u030C", "¸": "\u0327", "˚": "\u030A", "˝": "\u030B", "¯": "\u0304",
+  "˘": "\u0306", "˙": "\u0307",
+};
+// Line-end hyphenation: the compounds a document writes with a hyphen inside a
+// line keep the hyphen when they wrap; any other wrapped hyphen was the
+// typesetter's and goes.
+let hyphenCompounds = new Set<string>();
+const CJK_CHAR_RE = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\u3000-\u303F\uFF00-\uFFEF]/u;
 
 // ── Font flags ──────────────────────────────────────────────────────────────
 
@@ -79,9 +136,11 @@ type FontFlags = Omit<Flags, "href"> & { math: boolean };
 function fontFlags(name: string | null): FontFlags {
   const n = (name ?? "").replace(/^[A-Z]{6}\+/, ""); // subset prefix "HAAAAA+"
   return {
-    bold: /bold|black|heavy|semi ?bold|demi/i.test(n),
-    italic: /italic|oblique/i.test(n),
-    mono: /mono|courier|consolas|menlo|typewriter/i.test(n),
+    // Computer Modern (CMBX, CMTI, CMTT), Nimbus (-Medi, -ReguItal) and Latin
+    // Modern names carry weight and shape in abbreviations, not words.
+    bold: /bold|black|heavy|semi ?bold|demi|medi(?:ital|obli)?$|^CMBX|^CMB\d|^CMSSBX|^CMBSY|^LM(?:Roman|Sans|Mono)\d*-Bold/i.test(n),
+    italic: /italic|oblique|ital$|obli$|^CMTI|^CMSL|^CMBXTI|^CMSSI|^CMITT|^CMSLTT|slanted/i.test(n),
+    mono: /mono|courier|consolas|menlo|typewriter|^CMTT|^CMSLTT|^CMITT|cursor/i.test(n),
     math: /^(CMMI|CMSY|CMEX|CMMIB|CMBSY|MSAM|MSBM|rsfs|eufm|eufb|stmary|wasy|LMMathItalic|LMMathSymbols|LMMathExtension)|Math|Symbol/i.test(n),
   };
 }
@@ -127,11 +186,45 @@ function mergeSpacedItems(items: Item[]): Item[] {
 
 // ── Line building ───────────────────────────────────────────────────────────
 
+function composeAccents(items: Item[]): Item[] {
+  const out: Item[] = [];
+  const composed = (base: Item, mark: string): Item => ({
+    ...base,
+    str: (base.str[0] + mark).normalize("NFC") + base.str.slice(1),
+  });
+  for (let k = 0; k < items.length; k++) {
+    const item = items[k];
+    const mark = item.str.length === 1 ? SPACING_ACCENTS[item.str] : undefined;
+    if (mark) {
+      // The letter under the accent: the neighbor whose first glyph the
+      // accent's center sits over, sorted before or after it.
+      const cx = item.x + item.w / 2;
+      const over = (it: Item | undefined) =>
+        it !== undefined && /^\p{L}/u.test(it.str) && cx >= it.x - it.size * 0.15 && cx <= it.x + it.size * 0.8;
+      const next = items[k + 1];
+      const prev = out[out.length - 1];
+      if (over(next)) {
+        out.push(composed(next!, mark));
+        k++;
+        continue;
+      }
+      if (over(prev)) {
+        out[out.length - 1] = composed(prev!, mark);
+        continue;
+      }
+    }
+    out.push(item);
+  }
+  return out;
+}
+
 function buildLine(rawItems: Item[], page: number): Line {
   const items = mergeSpacedItems(
-    rawItems
-      .map((i) => ({ ...i, str: i.mono ? i.str : collapseSpacedStr(i.str) }))
-      .sort((a, b) => a.x - b.x),
+    composeAccents(
+      rawItems
+        .map((i) => ({ ...i, str: i.mono ? i.str : collapseSpacedStr(i.str) }))
+        .sort((a, b) => a.x - b.x),
+    ),
   );
   const size = Math.max(...items.map((i) => i.size));
   const cells: Cell[] = [];
@@ -375,6 +468,13 @@ class TextBuilder {
   text = "";
   runs: Run[] = [];
 
+  dropTrailingChar() {
+    if (this.text.length === 0) return;
+    this.text = this.text.slice(0, -1);
+    const cut = this.text.length;
+    this.runs = this.runs.map((r) => ({ ...r, end: Math.min(r.end, cut) })).filter((r) => r.end > r.start);
+  }
+
   append(part: { text: string; runs: Run[] }, sep: " " | "\n" | "") {
     if (this.text.length === 0) {
       this.text = part.text;
@@ -446,12 +546,32 @@ function joinGroup(lines: Line[], proseJoin = false): { text: string; runs: Run[
   const fieldList = boldLeads >= 2 && boldLeads >= Math.ceil(lines.length * 0.6);
   builder.append(lineAsPart(lines[0]), "");
   for (let i = 1; i < lines.length; i++) {
+    const prevText = lines[i - 1].text.trim();
+    const nextText = lines[i].text;
     const wrapped = fillsMargin(lines[i - 1], lines[i], rightEdge);
     const midSentence =
       proseJoin &&
-      !/[.!?:…]["'”]?$/.test(lines[i - 1].text.trim()) &&
-      /^[a-z0-9($€£"'“]/.test(lines[i].text);
-    builder.append(lineAsPart(lines[i]), fieldList ? "\n" : wrapped || midSentence ? " " : "\n");
+      !/[.!?:…。！？：]["'”]?$/.test(prevText) &&
+      (/^[a-z0-9($€£"'“]/.test(nextText) || CJK_CHAR_RE.test(nextText[0] ?? ""));
+    let sep: " " | "\n" | "" = fieldList ? "\n" : wrapped || midSentence ? " " : "\n";
+    if (sep === " ") {
+      const lastChar = prevText[prevText.length - 1] ?? "";
+      const firstChar = nextText[0] ?? "";
+      // CJK wraps anywhere and carries no space; a URL wraps without one.
+      if (CJK_CHAR_RE.test(lastChar) && CJK_CHAR_RE.test(firstChar)) sep = "";
+      else if (/https?:\/\/\S*$/.test(prevText) || /^\S*(?:\/|\.[a-z]{2,4}\/)\S*$/.test(nextText.split(" ")[0]) && /\/\S*$/.test(prevText)) sep = "";
+      else {
+        // A hyphen at the wrap: the typesetter's unless the document writes
+        // the compound with one inside a line.
+        const left = /(\p{L}+)-$/u.exec(prevText);
+        const right = /^(\p{Ll}+)/u.exec(nextText);
+        if (left && right && !hyphenCompounds.has(`${left[1]}-${right[1]}`.toLowerCase())) {
+          builder.dropTrailingChar();
+          sep = "";
+        }
+      }
+    }
+    builder.append(lineAsPart(lines[i]), sep);
   }
   return builder;
 }
@@ -1001,11 +1121,15 @@ function findTableRuns(lines: Line[], ctx: PageContext): number[] {
   return runOf;
 }
 
+// A contents list that runs past the page break continues on the next page.
+let tocCarry = false;
+
 function segmentPage(lines: Line[], ctx: PageContext): Segment[] {
   const segments: Segment[] = [];
   const body = ctx.bodySize;
   const runOf = findTableRuns(lines, ctx);
-  let tocMode = false;
+  let tocMode = tocCarry && lines.length > 0 && TOC_ENTRY_RE.test(lines[0].text) && TOC_TAIL_RE.test(lines[0].text);
+  tocCarry = false;
   let i = 0;
 
   while (i < lines.length) {
@@ -1021,16 +1145,21 @@ function segmentPage(lines: Line[], ctx: PageContext): Segment[] {
       continue;
     }
 
-    if (tocMode && single && TOC_ENTRY_RE.test(line.text)) {
+    if (tocMode && (line.cells.length <= 2 || TOC_TAIL_RE.test(line.text)) && TOC_ENTRY_RE.test(line.text)) {
       const builder = new TextBuilder();
       const entries: { start: number; end: number; num: number }[] = [];
       let j = i;
-      while (j < lines.length && lines[j].cells.length === 1 && TOC_ENTRY_RE.test(lines[j].text)) {
+      while (
+        j < lines.length &&
+        (lines[j].cells.length <= 2 || TOC_TAIL_RE.test(lines[j].text)) &&
+        TOC_ENTRY_RE.test(lines[j].text)
+      ) {
         const entry = lines[j];
         const start = builder.text.length === 0 ? 0 : builder.text.length + 1;
-        builder.append(lineAsPart(entry), "\n");
+        const part = tocEntryPart(entry);
+        builder.append(part, "\n");
         const m = TOC_ENTRY_RE.exec(entry.text);
-        if (m) entries.push({ start, end: start + entry.text.length, num: Number(m[1]) });
+        if (m && /^\d+$/.test(m[1])) entries.push({ start, end: start + part.text.length, num: Number(m[1]) });
         j++;
       }
       segments.push({
@@ -1042,6 +1171,7 @@ function segmentPage(lines: Line[], ctx: PageContext): Segment[] {
         ...geom(lines.slice(i, j)),
       });
       tocMode = false;
+      tocCarry = j >= lines.length;
       i = j;
       continue;
     }
@@ -1078,12 +1208,14 @@ function segmentPage(lines: Line[], ctx: PageContext): Segment[] {
       let j = i + 1;
       while (j < lines.length) {
         const next = lines[j];
+        const centered =
+          Math.abs((next.x + next.xEnd) / 2 - (line.x + line.xEnd) / 2) <= 12 && next.x > ctx.columnLeft + 12;
         if (
           runOf[j] !== -1 ||
           next.cells.length !== 1 ||
           Math.abs(next.size - line.size) > 0.5 ||
           run[run.length - 1].y - next.y > line.size * 1.7 ||
-          Math.abs(next.x - line.x) > 12
+          (Math.abs(next.x - line.x) > 12 && !centered)
         )
           break;
         run.push(next);
@@ -1112,29 +1244,82 @@ function segmentPage(lines: Line[], ctx: PageContext): Segment[] {
 
     // Numbered heading at body size: "3.1 Results" — short, isolated, and
     // bold, or set larger than body, or in a document with no bold flags at all.
+    const lineBold = boldShare(line.runs, line.text.length) > 0.6;
     if (
       single &&
-      HEADING_NUM_STRICT_RE.test(line.text) &&
+      (HEADING_NUM_STRICT_RE.test(line.text) || (lineBold && LETTER_HEADING_RE.test(line.text))) &&
       !BULLET_RE.test(line.text) &&
+      !TOC_TAIL_RE.test(line.text) &&
       line.text.length < 120 &&
       !/[.,;:]$/.test(line.text) &&
       line.size >= body * 0.98 &&
-      (boldShare(line.runs, line.text.length) > 0.6 ||
+      (lineBold ||
         line.size >= body * 1.05 ||
         !ctx.hasBold ||
-        /^\d{1,2}(\.\d{1,2})+/.test(line.text))
+        /^(\d{1,2}|[A-Z])(\.\d{1,2})+/.test(line.text))
     ) {
-      const below = lines[i + 1];
-      const isolated = !below || line.y - below.y > line.size * ctx.leading * 1.15;
+      // A heading wrapped to a second bold line at the same size and leading.
+      const run: Line[] = [line];
+      let j = i + 1;
+      while (
+        j < lines.length &&
+        run.length < 3 &&
+        lineBold &&
+        runOf[j] === -1 &&
+        lines[j].cells.length === 1 &&
+        Math.abs(lines[j].size - line.size) <= 0.5 &&
+        run[run.length - 1].y - lines[j].y <= line.size * ctx.leading * 1.3 &&
+        boldShare(lines[j].runs, lines[j].text.length) > 0.6 &&
+        !HEADING_NUM_STRICT_RE.test(lines[j].text)
+      ) {
+        run.push(lines[j]);
+        j++;
+      }
+      const last = run[run.length - 1];
+      const below = lines[j];
+      const isolated = !below || last.y - below.y > last.size * ctx.leading * 1.15;
       if (isolated) {
-        const m = /^(\d{1,2})[.)]\s/.exec(line.text);
+        const { text, runs } = joinGroup(run);
+        const flat = text.replace(/\n/g, " ");
+        const m = /^(\d{1,2})[.)]\s/.exec(flat);
+        segments.push({
+          type: "HEADING",
+          text: flat,
+          page: line.page,
+          rawSize: line.size,
+          runs,
+          headingNum: m ? Number(m[1]) : undefined,
+          ...geom(run),
+        });
+        i = j;
+        continue;
+      }
+    }
+    // An unnumbered heading at body size: one wholly bold short line, set
+    // apart by a gap above and below.
+    if (
+      single &&
+      lineBold &&
+      boldShare(line.runs, line.text.length) > 0.9 &&
+      line.text.length < 90 &&
+      line.text.length > 2 &&
+      !BULLET_RE.test(line.text) &&
+      !TOC_TAIL_RE.test(line.text) &&
+      !/[.,;:]$/.test(line.text.trim()) &&
+      line.size >= body * 0.98 &&
+      line.size <= body * 1.14
+    ) {
+      const above = lines[i - 1];
+      const below = lines[i + 1];
+      const gapAbove = !above || above.y - line.y > line.size * ctx.leading * 1.3;
+      const gapBelow = !below || line.y - below.y > line.size * ctx.leading * 1.15;
+      if (gapAbove && gapBelow && below) {
         segments.push({
           type: "HEADING",
           text: line.text,
           page: line.page,
           rawSize: line.size,
           runs: line.runs,
-          headingNum: m ? Number(m[1]) : undefined,
           ...geom([line]),
         });
         i++;
@@ -1145,7 +1330,26 @@ function segmentPage(lines: Line[], ctx: PageContext): Segment[] {
     // List run: bullet-marked lines, or an indented band whose gaps split it
     // into items (bullet glyphs are often vector art, not text).
     const bulletStart = BULLET_RE.test(line.text) && single && line.size <= body * 1.15;
-    const indentStart = isIndented(line, ctx) && line.size <= body * 1.15 && line.size >= body * 0.8;
+    // A first-line indent (LaTeX's parindent): an unmarked indented line whose
+    // next line is back at the column's left edge at text leading is the
+    // first line of that paragraph, not an item (import compare loop finding:
+    // every indented paragraph split after its first line).
+    const after = lines[i + 1];
+    const firstLineIndent =
+      single &&
+      !bulletStart &&
+      isIndented(line, ctx) &&
+      line.x - ctx.columnLeft <= line.size * 3.2 &&
+      after !== undefined &&
+      runOf[i + 1] === -1 &&
+      after.cells.length === 1 &&
+      Math.abs(after.x - ctx.columnLeft) <= 3 &&
+      line.y - after.y > 0 &&
+      line.y - after.y <= after.size * ctx.leading * 1.3 &&
+      Math.abs(after.size - line.size) <= 0.6 &&
+      !BULLET_RE.test(after.text);
+    const indentStart =
+      !firstLineIndent && isIndented(line, ctx) && line.size <= body * 1.15 && line.size >= body * 0.8;
     if (bulletStart || indentStart) {
       const run: Line[] = [line];
       let j = i + 1;
@@ -1176,7 +1380,13 @@ function segmentPage(lines: Line[], ctx: PageContext): Segment[] {
       const starts: number[] = [0];
       const gaps = run.slice(1).map((l, k) => run[k].y - l.y);
       const gapThreshold = ctx.leading * line.size * 1.12;
-      const edge = Math.max(...run.map((l) => l.xEnd), proseEdge(lines, i, j));
+      // A block indented on both sides (an abstract, a quotation) has its own
+      // right edge: most lines end together there and none is short.
+      const runMax = Math.max(...run.map((l) => l.xEnd));
+      const alignedRight = run.filter((l) => l.xEnd > runMax - l.size).length;
+      const wideBlock = runMax - line.x > line.size * 20;
+      const edge =
+        wideBlock && alignedRight * 10 >= run.length * 6 ? runMax : Math.max(runMax, proseEdge(lines, i, j));
       const shortLines = run.filter((l) => l.xEnd < edge - l.size * 3).length;
       const ragged = shortLines * 2 >= run.length;
       for (let k = 1; k < run.length; k++) {
@@ -1209,18 +1419,25 @@ function segmentPage(lines: Line[], ctx: PageContext): Segment[] {
         i = j;
         continue;
       }
-      if (items.length >= 2) {
+      const glyphItem = items.length === 1 && GLYPH_BULLET_RE.test(items[0].text);
+      if (items.length >= 2 || glyphItem) {
         const builder = new TextBuilder();
         for (const item of items) {
-          const marker = BULLET_RE.test(item.text) ? "" : "- ";
+          // A bullet glyph in the text becomes the list's own marker; a
+          // number stays (its value is content).
+          const glyph = GLYPH_BULLET_RE.exec(item.text);
+          const cut = glyph ? glyph[0].length : 0;
+          const marker = BULLET_RE.test(item.text) && !glyph ? "" : "- ";
           builder.append(
             {
-              text: marker + item.text,
-              runs: item.runs.map((r) => ({
-                ...r,
-                start: r.start + marker.length,
-                end: r.end + marker.length,
-              })),
+              text: marker + item.text.slice(cut),
+              runs: item.runs
+                .map((r) => ({
+                  ...r,
+                  start: Math.max(0, r.start - cut) + marker.length,
+                  end: r.end - cut + marker.length,
+                }))
+                .filter((r) => r.end > r.start),
             },
             "\n",
           );
@@ -1248,32 +1465,48 @@ function segmentPage(lines: Line[], ctx: PageContext): Segment[] {
     // line after the first: the second line may step in by up to three ems
     // when the first line breaks mid-sentence.
     const group: Line[] = [line];
+    const colEdge = proseEdge(lines, i, i);
     let j = i + 1;
     while (j < lines.length) {
       const next = lines[j];
       const prev = group[group.length - 1];
       const gap = prev.y - next.y;
+      const prevTerminal = /[.!?:]["'”]?$/.test(prev.text.trim());
+      // A hanging indent (a reference entry, a glossary term): the second
+      // line steps in by one to three ems under a first line that wrapped —
+      // it ran to the margin, or broke mid-sentence.
       const hanging =
         group.length === 1 &&
         !isIndented(prev, ctx) &&
-        next.x > prev.x + next.size * 1.1 &&
-        next.x <= prev.x + next.size * 3 &&
+        next.x > prev.x + next.size * 0.8 &&
+        next.x <= prev.x + next.size * 3.5 &&
         !BULLET_RE.test(next.text) &&
-        !/[.!?:]["'”]?$/.test(prev.text.trim()) &&
-        /^[a-z0-9(]/.test(next.text);
+        gap <= next.size * ctx.leading * 1.3 &&
+        (!prevTerminal || /^[a-z0-9(]/.test(next.text) || prev.xEnd > colEdge - prev.size * 1.5);
+      // A wrapped line whose stretched word gaps read as cells is still one
+      // line of prose when no table run claims it.
+      const stretched =
+        next.cells.length > 1 &&
+        next.cells.length <= 3 &&
+        Math.abs(next.x - prev.x) <= next.size * 0.5 &&
+        next.cells.every((c) => c.text.length > 0);
       if (
         runOf[j] !== -1 ||
-        next.cells.length !== 1 ||
+        (next.cells.length !== 1 && !stretched) ||
         gap < 0 ||
         gap > next.size * 1.9 ||
+        // The paragraph gap: looser than the text leading by a third.
+        gap > next.size * ctx.leading * 1.3 ||
         Math.abs(next.size - prev.size) > 0.6 ||
         (next.x > prev.x + next.size * 1.1 && !hanging) ||
-        next.x < prev.x - next.size * 1.1 ||
+        (next.x < prev.x - next.size * 1.1 && !(group.length === 1 && firstLineIndent)) ||
         next.size > body * 1.14 ||
         (tocMode && TOC_ENTRY_RE.test(next.text)) ||
         TOC_LABEL_RE.test(next.text.trim()) ||
         (isIndented(next, ctx) && !isIndented(prev, ctx) && !hanging) ||
-        (BULLET_RE.test(next.text) && !BULLET_RE.test(prev.text))
+        (BULLET_RE.test(next.text) && !BULLET_RE.test(prev.text)) ||
+        // "Setup." after a sentence end opens the next paragraph.
+        (prevTerminal && startsWithBoldLead(next) && !endsBold(prev))
       )
         break;
       group.push(next);
@@ -1298,6 +1531,9 @@ function furnitureKeys(pages: Line[][], pageHeights: number[]): Set<string> {
     const h = pageHeights[p];
     for (const line of lines) {
       if (line.y > h * 0.085 && line.y < h * 0.915) continue;
+      // A reference's last line ("425–429.") lands in the footer band on
+      // more than one page; a footer never ends a sentence with a number.
+      if (/\d\.$/.test(line.text.trim())) continue;
       const key = normalize(line.text);
       if (key.length === 0) continue;
       const set = seenOn.get(key) ?? new Set<number>();
@@ -1326,7 +1562,28 @@ function lastListNumber(text: string): number | null {
   return matches.length > 0 ? Number(matches[matches.length - 1][1]) : null;
 }
 
-function mergeAcrossPages(segments: Segment[]): Segment[] {
+// A page-top float (figure, table, its caption) between the two halves of a
+// paragraph: the halves join and the float follows the paragraph.
+function liftFloatsOffParagraphBreaks(segments: Segment[]): Segment[] {
+  const out = [...segments];
+  const isFloat = (s: Segment) =>
+    s.type === "FIGURE" || s.type === "TABLE" || (s.type === "PARAGRAPH" && CAPTION_RE.test(s.text));
+  for (let b = 1; b < out.length; b++) {
+    const prev = out[b - 1];
+    if (out[b].page === prev.page || prev.type !== "PARAGRAPH" || /[.!?:…"”)]$/.test(prev.text.trim())) continue;
+    let k = b;
+    while (k < out.length && out[k].page === out[b].page && isFloat(out[k])) k++;
+    if (k === b || k >= out.length) continue;
+    const tail = out[k];
+    if (tail.type !== "PARAGRAPH" || tail.page !== out[b].page || !/^[a-z($€£0-9"'“]/.test(tail.text)) continue;
+    out.splice(k, 1);
+    out.splice(b, 0, tail);
+  }
+  return out;
+}
+
+function mergeAcrossPages(input: Segment[]): Segment[] {
+  const segments = liftFloatsOffParagraphBreaks(input);
   const out: Segment[] = [];
   for (const segment of segments) {
     const prev = out[out.length - 1];
@@ -1341,7 +1598,9 @@ function mergeAcrossPages(segments: Segment[]): Segment[] {
       prev.type === "PARAGRAPH" &&
       !prev.listItem &&
       /[a-z,;\-–—]$/.test(prev.text) &&
-      /^[a-z($€£0-9"'“]/.test(segment.text)
+      (/^[a-z($€£0-9"'“]/.test(segment.text) ||
+        // "… the" | "AAR only stages": a dangling word joins whatever follows.
+        (/\s\p{Ll}+$/u.test(prev.text) && prev.text.length > 60))
     ) {
       const glue = /[A-Za-z0-9][-–]$/.test(prev.text) && /^[A-Za-z0-9(]/.test(segment.text) ? "" : " ";
       const offset = prev.text.length + glue.length;
@@ -1351,10 +1610,20 @@ function mergeAcrossPages(segments: Segment[]): Segment[] {
     }
 
     // List split by the page break: LIST + LIST concatenate.
-    if (segment.type === "LIST" && prev.type === "LIST" && !prev.tocEntries && !segment.tocEntries) {
+    if (
+      segment.type === "LIST" &&
+      prev.type === "LIST" &&
+      Boolean(prev.tocEntries) === Boolean(segment.tocEntries)
+    ) {
       const offset = prev.text.length + 1;
       prev.text = prev.text + "\n" + segment.text;
       shiftSpansInto(prev, segment, offset);
+      if (segment.tocEntries) {
+        prev.tocEntries = [
+          ...(prev.tocEntries ?? []),
+          ...segment.tocEntries.map((e) => ({ ...e, start: e.start + offset, end: e.end + offset })),
+        ];
+      }
       continue;
     }
 
@@ -1462,10 +1731,18 @@ function assignHeadingLevels(segments: Segment[], bodySize: number) {
   sizes.sort((a, b) => b - a);
   const topRatio = sizes.length > 0 ? sizes[0] / bodySize : 1;
   const base = topRatio > 1.5 ? 1 : topRatio > 1.18 ? 2 : 3;
+  // Numbered headings take their level from the numbering's depth ("3" one
+  // step under the title, "3.2" the next), so a 12pt section and a 12pt-bold
+  // subsection do not land in one bucket.
+  const numberedBase = sizes.length > 1 && base === 1 ? 2 : base;
   for (const s of segments) {
     if (s.type !== "HEADING") continue;
     const idx = sizes.findIndex((v) => s.rawSize !== undefined && Math.abs(v - s.rawSize) < v * 0.05);
-    const level = Math.min(3, base + Math.max(0, idx)) as 1 | 2 | 3;
+    const depth = headingDepth(s.text);
+    const level = Math.min(
+      3,
+      depth !== null ? numberedBase + depth - 1 : base + Math.max(0, idx),
+    ) as 1 | 2 | 3;
     s.html = `<h${level}>${escapeHtml(s.text)}</h${level}>`;
   }
 }
@@ -1543,7 +1820,8 @@ function isEquationShaped(s: Segment, ctx: PageContext): boolean {
 function isFigureDebris(s: Segment, ctx: PageContext): boolean {
   if (s.region || s.type === "HEADING" || s.type === "CODE") return false;
   if (CAPTION_RE.test(s.text)) return false;
-  if (s.type === "TABLE" || s.type === "FIGURE") return true;
+  if (s.type === "FIGURE") return !s.region;
+  if (s.type === "TABLE") return true;
   if ((s.lineSize ?? ctx.bodySize) < ctx.bodySize * 0.92) return true;
   const text = s.text.trim();
   if (text.length <= 12) return true;
@@ -1556,13 +1834,143 @@ function isFigureDebris(s: Segment, ctx: PageContext): boolean {
   );
 }
 
+// ── Embedded images ─────────────────────────────────────────────────────────
+// pdf.js operator numbers (pdfjs OPS): the walk tracks the current transform
+// and maps each painted image's unit square onto the page.
+const OP_SAVE = 10;
+const OP_RESTORE = 11;
+const OP_TRANSFORM = 12;
+const OP_FORM_BEGIN = 74;
+const OP_FORM_END = 75;
+const OP_IMAGE_MASK = 83;
+const OP_IMAGE = 85;
+const OP_INLINE_IMAGE = 86;
+const OP_IMAGE_REPEAT = 88;
+
+type Matrix = [number, number, number, number, number, number];
+
+function multiply(m: Matrix, n: Matrix): Matrix {
+  // m then n: the product n × m in PDF's row-vector convention.
+  return [
+    m[0] * n[0] + m[1] * n[2],
+    m[0] * n[1] + m[1] * n[3],
+    m[2] * n[0] + m[3] * n[2],
+    m[2] * n[1] + m[3] * n[3],
+    m[4] * n[0] + m[5] * n[2] + n[4],
+    m[4] * n[1] + m[5] * n[3] + n[5],
+  ];
+}
+
+// The boxes of the images a page paints, in PDF points (y up). Icons and
+// bullet glyphs are too small to be figures; a page-sized image is a scan or
+// a background, whose text layer stays text.
+const OP_PATH = 91;
+
+type PageDrawing = { images: Box[]; paths: Box[] };
+
+function imageBoxes(
+  ops: { fnArray: number[]; argsArray: unknown[] },
+  pageWidth: number,
+  pageHeight: number,
+): PageDrawing {
+  const boxes: Box[] = [];
+  const paths: Box[] = [];
+  const stack: Matrix[] = [];
+  let ctm: Matrix = [1, 0, 0, 1, 0, 0];
+  const formStack: Matrix[] = [];
+  for (let k = 0; k < ops.fnArray.length; k++) {
+    const fn = ops.fnArray[k];
+    const args = ops.argsArray[k];
+    if (fn === OP_SAVE) stack.push(ctm);
+    else if (fn === OP_RESTORE) ctm = stack.pop() ?? ctm;
+    else if (fn === OP_TRANSFORM && Array.isArray(args) && args.length === 6) {
+      ctm = multiply(args as Matrix, ctm);
+    } else if (fn === OP_FORM_BEGIN && Array.isArray(args)) {
+      formStack.push(ctm);
+      const matrix = args[0];
+      if (Array.isArray(matrix) && matrix.length === 6) ctm = multiply(matrix as Matrix, ctm);
+    } else if (fn === OP_FORM_END) {
+      ctm = formStack.pop() ?? ctm;
+    } else if (fn === OP_PATH && Array.isArray(args)) {
+      // A vector path: its local bounds mapped through the transform. Chart
+      // lines, bars, ticks and rules all arrive here.
+      const mm = args[2] as ArrayLike<number> | undefined;
+      if (mm && mm.length === 4 && Number.isFinite(mm[0])) {
+        const pts = [
+          [mm[0], mm[1]],
+          [mm[2], mm[1]],
+          [mm[0], mm[3]],
+          [mm[2], mm[3]],
+        ].map(([u, v]) => [ctm[0] * u + ctm[2] * v + ctm[4], ctm[1] * u + ctm[3] * v + ctm[5]]);
+        const xs = pts.map((c) => c[0]);
+        const ys = pts.map((c) => c[1]);
+        const box = { x1: Math.min(...xs), y1: Math.min(...ys), x2: Math.max(...xs), y2: Math.max(...ys) };
+        if (box.x2 - box.x1 < pageWidth * 0.9 || box.y2 - box.y1 < pageHeight * 0.9) paths.push(box);
+      }
+    } else if (fn === OP_IMAGE || fn === OP_INLINE_IMAGE || fn === OP_IMAGE_MASK || fn === OP_IMAGE_REPEAT) {
+      // The image fills the unit square under the current transform.
+      const corners = [
+        [0, 0],
+        [1, 0],
+        [0, 1],
+        [1, 1],
+      ].map(([u, v]) => [ctm[0] * u + ctm[2] * v + ctm[4], ctm[1] * u + ctm[3] * v + ctm[5]]);
+      const xs = corners.map((c) => c[0]);
+      const ys = corners.map((c) => c[1]);
+      const box = { x1: Math.min(...xs), y1: Math.min(...ys), x2: Math.max(...xs), y2: Math.max(...ys) };
+      const w = box.x2 - box.x1;
+      const h = box.y2 - box.y1;
+      if (w < pageWidth * 0.12 || h < pageHeight * 0.04) continue;
+      if (w * h > pageWidth * pageHeight * 0.85) continue;
+      boxes.push(box);
+    }
+  }
+  // Images on one row (a left and a right chart) are one figure.
+  const merged: Box[] = [];
+  for (const box of boxes.sort((a, b) => b.y2 - a.y2 || a.x1 - b.x1)) {
+    const near = merged.find((m) => {
+      const overlap = Math.min(m.y2, box.y2) - Math.max(m.y1, box.y1);
+      const shorter = Math.min(m.y2 - m.y1, box.y2 - box.y1);
+      const gap = Math.max(box.x1 - m.x2, m.x1 - box.x2);
+      return overlap > shorter * 0.5 && gap < pageWidth * 0.08;
+    });
+    if (near) {
+      near.x1 = Math.min(near.x1, box.x1);
+      near.y1 = Math.min(near.y1, box.y1);
+      near.x2 = Math.max(near.x2, box.x2);
+      near.y2 = Math.max(near.y2, box.y2);
+    } else merged.push({ ...box });
+  }
+  return { images: merged, paths };
+}
+
+// The drawing inside a vertical band: the union of paths and images whose
+// vertical center lies in it.
+function drawingIn(drawing: PageDrawing, y1: number, y2: number): Box | null {
+  let box: Box | null = null;
+  for (const b of [...drawing.paths, ...drawing.images]) {
+    const cy = (b.y1 + b.y2) / 2;
+    if (cy < y1 || cy > y2) continue;
+    box = box ? unionBox(box, b) : { ...b };
+  }
+  return box;
+}
+
+function overlapsDrawing(box: Box, drawing: PageDrawing): boolean {
+  return [...drawing.paths, ...drawing.images].some(
+    (b) => b.x1 < box.x2 && b.x2 > box.x1 && b.y1 < box.y2 && b.y2 > box.y1 && (b.x2 - b.x1 > 2 || b.y2 - b.y1 > 2),
+  );
+}
+
 function attachFigureRegions(
   segments: Segment[],
   lines: Line[],
   ctx: PageContext,
   pageWidth: number,
   pageHeight: number,
+  drawing: PageDrawing = { images: [], paths: [] },
 ): Segment[] {
+  const images = drawing.images;
   const toRegion = (box: Box) => regionOf(box, pageWidth, pageHeight);
   const rowGap = ctx.bodySize * ctx.leading;
 
@@ -1598,8 +2006,10 @@ function attachFigureRegions(
     for (const g of group) box = unionBox(box, g.box!);
     // The lines' boxes already carry ascent and descent; a small pad keeps
     // the neighboring prose lines out of the crop.
-    const pad = ctx.bodySize * 0.1;
-    box = { x1: box.x1 - pad, y1: box.y1 - pad, x2: box.x2 + pad, y2: box.y2 + pad };
+    // Subscripts and lowered limits hang under the line box: more room
+    // below than above.
+    const size = group[0].lineSize ?? ctx.bodySize;
+    box = { x1: box.x1 - size * 0.2, y1: box.y1 - size * 0.45, x2: box.x2 + size * 0.2, y2: box.y2 + size * 0.15 };
     withMath.push({
       type: "FIGURE",
       text: group
@@ -1645,17 +2055,28 @@ function attachFigureRegions(
     const swept: Segment[] = [];
     while (out.length > 0) {
       const prev = out[out.length - 1];
-      if (!isFigureDebris(prev, ctx)) break;
+      // A legend or a hidden title inside the drawing is debris whatever it
+      // read as; an attached figure never is.
+      const inDrawing =
+        prev.box !== undefined &&
+        !(prev.type === "FIGURE" && prev.region) &&
+        prev.text.length < 80 &&
+        overlapsDrawing(prev.box, drawing);
+      if (!isFigureDebris(prev, ctx) && !inDrawing) break;
       if (prev.type === "TABLE" && out.length >= 2 && TABLE_CAPTION_RE.test(out[out.length - 2].text)) break;
       swept.unshift(out.pop()!);
     }
     const above = out[out.length - 1];
     const top = above?.box ? above.box.y1 - ctx.bodySize * 0.6 : pageTop;
     let box: Box | null = null;
-    if (swept.length > 0 || top - cap.box.y2 > rowGap * 3) {
+    const drawnAbove = drawingIn(drawing, cap.box.y2, top);
+    if (swept.length > 0 || top - cap.box.y2 > rowGap * 3 || drawnAbove) {
       const [x1, x2] = columnOf(cap.box);
       box = { x1, x2, y1: cap.box.y2 + ctx.bodySize * 0.2, y2: top };
       for (const s of swept) if (s.box) box = unionBox(box, s.box);
+      // The drawing sets the width: a chart wider than the text column keeps
+      // its axis labels.
+      if (drawnAbove) box = unionBox(box, { ...drawnAbove, y1: Math.max(drawnAbove.y1, box.y1), y2: Math.min(drawnAbove.y2, box.y2) });
     } else {
       out.push(...swept);
       // Below the caption: debris down to the next body segment.
@@ -1663,10 +2084,12 @@ function attachFigureRegions(
       while (m < withMath.length && isFigureDebris(withMath[m], ctx)) m++;
       const below = withMath[m];
       const bottom = below?.box ? below.box.y2 + ctx.bodySize * 0.6 : pageBottom;
-      if (m > c + 1 || cap.box.y1 - bottom > rowGap * 3) {
+      const drawnBelow = drawingIn(drawing, bottom, cap.box.y1);
+      if (m > c + 1 || cap.box.y1 - bottom > rowGap * 3 || drawnBelow) {
         const [x1, x2] = columnOf(cap.box);
         box = { x1, x2, y1: bottom, y2: cap.box.y1 - ctx.bodySize * 0.2 };
         for (const s of withMath.slice(c + 1, m)) if (s.box) box = unionBox(box, s.box);
+        if (drawnBelow) box = unionBox(box, { ...drawnBelow, y1: Math.max(drawnBelow.y1, box.y1), y2: Math.min(drawnBelow.y2, box.y2) });
         c = m - 1;
       }
     }
@@ -1674,18 +2097,80 @@ function attachFigureRegions(
       out.push(cap);
       continue;
     }
+    // A caption wrapped into a second paragraph: the same (smaller) font a
+    // line below the caption continues it.
+    let text = cap.text;
+    let runs = cap.runs;
+    const follow = withMath[c + 1];
+    if (
+      follow &&
+      follow.type === "PARAGRAPH" &&
+      follow.box &&
+      follow.page === cap.page &&
+      follow.lineSize !== undefined &&
+      cap.lineSize !== undefined &&
+      Math.abs(follow.lineSize - cap.lineSize) < 0.6 &&
+      cap.box.y1 - follow.box.y2 <= cap.lineSize * ctx.leading * 0.9 &&
+      (cap.lineSize < ctx.bodySize * 0.98 ||
+        follow.text.length < 240 ||
+        cap.box.y1 - follow.box.y2 <= cap.lineSize * 0.35)
+    ) {
+      const offset = text.length + 1;
+      text = `${text} ${follow.text}`;
+      runs = [
+        ...(runs ?? []),
+        ...(follow.runs ?? []).map((r) => ({ ...r, start: r.start + offset, end: r.end + offset })),
+      ];
+      c++;
+    }
     out.push({
       type: "FIGURE",
-      text: cap.text,
+      text,
       page: cap.page,
-      runs: cap.runs,
+      runs,
       box,
       region: toRegion(box),
       lineSize: cap.lineSize,
       mathShare: 0,
     });
   }
-  return out;
+
+  // 3. Embedded images. An image a captioned figure already covers extends
+  // that figure; any other becomes a FIGURE of its own with no caption. Text
+  // inside the image's box (chart labels, legends) is part of the picture.
+  const inside = (inner: Box, outer: Box) => {
+    const w = Math.max(0, Math.min(inner.x2, outer.x2) - Math.max(inner.x1, outer.x1));
+    const h = Math.max(0, Math.min(inner.y2, outer.y2) - Math.max(inner.y1, outer.y1));
+    const area = (inner.x2 - inner.x1) * (inner.y2 - inner.y1);
+    return area > 0 && (w * h) / area >= 0.7;
+  };
+  let placed = out;
+  for (const img of images) {
+    const covering = placed.find((s) => s.type === "FIGURE" && s.box && inside(img, s.box));
+    if (covering) continue;
+    const overlapping = placed.find((s) => s.type === "FIGURE" && s.box && inside(s.box, img));
+    if (overlapping && overlapping.box) {
+      overlapping.box = unionBox(overlapping.box, img);
+      overlapping.region = toRegion(overlapping.box);
+      placed = placed.filter((s) => s === overlapping || !(s.box && s.type !== "FIGURE" && inside(s.box, img)));
+      continue;
+    }
+    const kept = placed.filter((s) => !(s.box && s.type !== "FIGURE" && inside(s.box, img)));
+    const center = (img.y1 + img.y2) / 2;
+    let at = kept.findIndex((s) => s.box && (s.box.y1 + s.box.y2) / 2 < center);
+    if (at < 0) at = kept.length;
+    kept.splice(at, 0, {
+      type: "FIGURE",
+      text: "",
+      page: placed[0]?.page ?? 0,
+      box: img,
+      region: toRegion(img),
+      lineSize: ctx.bodySize,
+      mathShare: 0,
+    });
+    placed = kept;
+  }
+  return placed;
 }
 
 // ── Main ────────────────────────────────────────────────────────────────────
@@ -1699,6 +2184,7 @@ export async function parsePdf(
   const pages: Line[][] = [];
   const pageHeights: number[] = [];
   const pageWidths: number[] = [];
+  const pageDrawings: PageDrawing[] = [];
   const flagsByFont = new Map<string, FontFlags>();
 
   for (let p = 1; p <= pdf.numPages; p++) {
@@ -1707,11 +2193,14 @@ export async function parsePdf(
     const content = await page.getTextContent();
     // Font programs resolve during operator-list building; afterwards the
     // real font names (Carlito-Bold, DejaVuSansMono, …) are readable.
+    let drawing: PageDrawing = { images: [], paths: [] };
     try {
-      await page.getOperatorList();
+      const ops = (await page.getOperatorList()) as { fnArray: number[]; argsArray: unknown[] };
+      drawing = imageBoxes(ops, viewport.width, viewport.height);
     } catch {
-      // Broken page resources: fall back to no style flags.
+      // Broken page resources: fall back to no style flags and no drawing.
     }
+    pageDrawings.push(drawing);
     let uriRegions: UriRegion[] = [];
     try {
       const annots = (await page.getAnnotations()) as Array<Record<string, unknown>>;
@@ -1736,7 +2225,7 @@ export async function parsePdf(
       if (!("str" in raw) || typeof raw.str !== "string") continue;
       // Control characters are not text: a chart glyph mapped to NUL broke the
       // save (Postgres rejects 0x00 in text).
-      const str = raw.str.replace(CONTROL_CHARS_RE, "");
+      const str = normalizeGlyphs(raw.str.replace(CONTROL_CHARS_RE, ""));
       if (str.length === 0) continue;
       const t = raw.transform as number[];
       const size = Math.hypot(t[0], t[1]) || Math.hypot(t[2], t[3]) || 10;
@@ -1780,6 +2269,18 @@ export async function parsePdf(
           ),
       ),
     );
+  }
+
+  // The compounds the document hyphenates inside a line (for the wrap rule).
+  hyphenCompounds = new Set<string>();
+  for (const lines of pages) {
+    for (const l of lines) {
+      for (const m of l.text.matchAll(/(\p{L}+)-(\p{L}+)/gu)) {
+        if (m.index !== undefined && m.index + m[0].length < l.text.length) {
+          hyphenCompounds.add(`${m[1]}-${m[2]}`.toLowerCase());
+        }
+      }
+    }
   }
 
   // Repeated headers and footers drop before anything is segmented.
@@ -1851,15 +2352,36 @@ export async function parsePdf(
     const ctx = { bodySize, leading, columnLeft, hasBold, pageMinX, labelColumn };
     const pageSegments = segmentPage(lines, ctx);
     const p = cleaned.indexOf(lines);
-    segments.push(...attachFigureRegions(pageSegments, lines, ctx, pageWidths[p], pageHeights[p]));
+    const withFigures = attachFigureRegions(pageSegments, lines, ctx, pageWidths[p], pageHeights[p], pageDrawings[p]);
+    // Text inside a figure's box (a hidden chart title, a stray label) is
+    // part of the picture.
+    const figureBoxes = withFigures.filter((s) => s.type === "FIGURE" && s.region && s.box).map((s) => s.box!);
+    segments.push(
+      ...withFigures.filter((s) => {
+        if ((s.type === "FIGURE" && s.region) || !s.box) return true;
+        const b = s.box;
+        return !figureBoxes.some((f) => {
+          const w = Math.max(0, Math.min(b.x2, f.x2) - Math.max(b.x1, f.x1));
+          const h = Math.max(0, Math.min(b.y2, f.y2) - Math.max(b.y1, f.y1));
+          return (w * h) / Math.max(1, (b.x2 - b.x1) * (b.y2 - b.y1)) >= 0.7;
+        });
+      }),
+    );
   }
-  segments = segments.filter((s) => s.text.trim().length > 0);
+  // A FIGURE with a region and no caption is an embedded image; every other
+  // empty segment drops.
+  segments = segments.filter((s) => s.text.trim().length > 0 || (s.type === "FIGURE" && s.region));
   // Vector-figure debris: chart axis ticks read as tiny numeric-only lines.
   // Inline-math debris: a sum limit or exponent too far from its base line
   // to join it reads as a paragraph of one or two math glyphs.
   segments = segments.filter(
     (s) =>
-      !(s.type === "PARAGRAPH" && s.text.length <= 14 && /^[\d\s.,%−–-]+$/.test(s.text)) &&
+      !(
+        s.type === "PARAGRAPH" &&
+        s.text.length <= 14 &&
+        /^[\d\s.,%−–-]+$/.test(s.text) &&
+        !/\d\.$/.test(s.text.trim())
+      ) &&
       !(
         s.type === "PARAGRAPH" &&
         s.text.replace(/\s/g, "").length <= 3 &&
@@ -1892,7 +2414,6 @@ export async function parsePdf(
   }
 
   segments = mergeAcrossPages(fused);
-  assignHeadingLevels(segments, bodySize);
   resolveContentsLinks(segments);
 
   // A long title wraps across layout lines: consecutive equal-size HEADING
@@ -1913,6 +2434,8 @@ export async function parsePdf(
     segments.splice(1, 1);
   }
 
+  assignHeadingLevels(segments, bodySize);
+
   // Title: the biggest heading on the first page.
   let title: string | null = null;
   let titleSize = 0;
@@ -1923,6 +2446,10 @@ export async function parsePdf(
       titleSize = s.rawSize;
     }
   }
+
+  // The reader shows the title above the blocks; the heading it came from
+  // would show it twice.
+  if (title && segments[0]?.type === "HEADING" && segments[0].text === title) segments = segments.slice(1);
 
   const blocks: ParsedBlock[] = segments.map((s) => {
     const { styles, links } = spansFromRuns(s.text, s.runs, {
@@ -1942,5 +2469,8 @@ export async function parsePdf(
     return block;
   });
 
-  return { title, blocks: blocks.filter((b) => b.text.trim().length > 0) };
+  return {
+    title,
+    blocks: blocks.filter((b) => b.text.trim().length > 0 || (b.type === "FIGURE" && b.region)),
+  };
 }
