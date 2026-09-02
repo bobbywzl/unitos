@@ -1,6 +1,6 @@
 # claude/feedback-replies-notifications-md0rlm
 
-**Intent:** Let the admin reply to feedback and deliver the reply to the account that sent it as a notification; give the admin digest page one scroller per account; make the admin clicks page report the AI tools, notes functions, and annotation types instead of every control; and render the guide's side panel tabs as cards like the tools (the last three added mid-round).
+**Intent:** Let the admin reply to feedback and deliver the reply to the account that sent it as a notification; give the admin digest page one scroller per account; make the admin clicks page report the AI tools, notes functions, and annotation types instead of every control; render the guide's side panel tabs as cards like the tools; and open a beta notice on the sign-in page (the last four added mid-round).
 
 **Files:**
 
@@ -29,6 +29,9 @@ Clicks page (SPEC.md §7)
 Guide dialog
 - `src/components/guide-dialog.tsx`, `src/lib/i18n/dict/works.ts` — the side panel section is one card per tab (Notes, Assistant, Distill, Summary, Annotations, Edits), the same card as the tools; the body strings stand alone.
 
+Sign-in page
+- `src/app/signin/beta-notice.tsx`, `src/app/signin/page.tsx`, `src/lib/i18n/dict/signin.ts` — the beta notice dialog: Unitos is in beta, thanks to every beta user, free and unlimited for beta accounts for now including the AI tokens, signed by the Unitos team; once per tab, with sign-in on. `SPEC.md` §2.
+
 **Decisions:**
 - A reply is a Notification, not a new table: delivery, the dashboard card, Dismiss, the sent list, and Delete come with it, and the reply points back at the feedback through `feedbackId`. The notifications page cannot compose kind `feedback`; only Reply makes one.
 - Feedback filed signed out (or before this change) has no account, so it cannot be replied to; the inbox says so instead of hiding the fact.
@@ -37,3 +40,5 @@ Guide dialog
 - The clicks page filters at display time; every control still records, so the vocabulary can widen later without losing history. Ids that meant navigation (opening a tab, a composer, a dialog) count as general; the saves and runs count as uses. `close-link` is the click that completes a link, so it counts as an annotation.
 - The vocabulary lives in `lib/clicks.ts` next to the surfaces, one place for the client, the route, and the page.
 - Highlight, recolor, page-highlight, and the assistant's Ask now carry the color or scope in the id. Older rows keep the bare id and still fall in their group by prefix match only where the id had a colon; a bare `highlight` row from before this change does not match and stays off the page.
+- The beta notice opens once per browser tab, not on every load: the sign-in flow reloads the page (check your email, a wrong password), and the notice should not stand in front of those. A new tab shows it again. It stays off when sign-in is off, since a single-reader instance has no beta accounts.
+- The notice names Claude, Gemini, and Groq: the providers the code calls (Anthropic for the AI functions, Gemini and Groq for video). The request's "Gemini Cloud and Grok" was read as "Gemini, Claude, and Groq".
