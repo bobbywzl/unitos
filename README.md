@@ -22,6 +22,7 @@ Notes-centric web app for deep reading. Documents attach to notebooks; every AI 
 - Feedback button + admin inbox (`/admin`) with new → seen → resolved triage; admin digest page (`/admin/digest`) showing the store per account — every project → document → annotations, notes, distillations — with forced rebuilds and the exact text each scope sends; admin accounts page (`/admin/accounts`) listing every account with Reset account, which deletes the account's data and puts it back at onboarding like a new account. The admin gate (`ADMIN_PASSWORD`) is separate from reader sign-in
 - AI usage telemetry: every model call records tokens and cost (list prices at call time); the admin usage page (`/admin/usage`) shows totals, daily cost, and cost per function, model, and account
 - Admin notifications (`/admin/notifications`): the admin sends a notification — an update to Unitos, or a change made to an account — to every account or to chosen ones; it shows on each recipient's dashboard until dismissed. The admin picks recipients from names and emails and cannot open or change an account
+- Click telemetry: every click on a reader control records its surface (top bar, sidebar, AI toolbar, article menu, reader, notes tray) and control; the admin clicks page (`/admin/clicks`) shows clicks per day by surface, per surface, per control, and per account
 - Settings (`/settings`): account + sign out, language, light/dark/system theme, context, service status
 
 ## Stack

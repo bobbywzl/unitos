@@ -339,6 +339,7 @@ export function PageBlock({
               </span>
               <button
                 onClick={close}
+                data-track="page-close"
                 disabled={busy !== null}
                 aria-label={t("common.close")}
                 className="rounded-full px-1.5 text-sand-500 hover:text-clay-800 disabled:opacity-40"
@@ -377,6 +378,7 @@ export function PageBlock({
               <div className="flex items-center gap-1.5">
                 <button
                   onClick={() => void ask(true)}
+                  data-track="page-ask"
                   disabled={busy !== null || question.trim().length === 0}
                   title={t("panes.pageAskTitle")}
                   className={buttonClass}
@@ -385,6 +387,7 @@ export function PageBlock({
                 </button>
                 <button
                   onClick={() => void ask(false)}
+                  data-track="page-explain"
                   disabled={busy !== null}
                   title={t("panes.pageExplainTitle")}
                   className={quietButtonClass}
@@ -393,6 +396,7 @@ export function PageBlock({
                 </button>
                 <button
                   onClick={() => void comment()}
+                  data-track="page-comment"
                   disabled={busy !== null || question.trim().length === 0}
                   title={t("panes.pageCommentTitle")}
                   className={quietButtonClass}
@@ -407,6 +411,7 @@ export function PageBlock({
                     <button
                       key={color}
                       onClick={() => void highlight(color)}
+                      data-track="page-highlight"
                       disabled={busy !== null}
                       aria-label={t(HUE_KEY[color])}
                       className="size-4 rounded-full transition-transform hover:scale-110 disabled:opacity-40"
@@ -418,7 +423,7 @@ export function PageBlock({
             ) : (
               answer.done && (
                 <div className="flex items-center gap-1.5">
-                  <button onClick={close} className={quietButtonClass}>
+                  <button onClick={close} data-track="page-answer-close" className={quietButtonClass}>
                     {t("common.close")}
                   </button>
                 </div>

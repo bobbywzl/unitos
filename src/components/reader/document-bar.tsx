@@ -540,6 +540,7 @@ export function DocumentBar({
         >
           <button
             onClick={openList}
+            data-track="document-list"
             aria-expanded={listOpen}
             aria-label={t("panes.documentList")}
             title={active?.title ?? t("panes.documentList")}
@@ -567,6 +568,7 @@ export function DocumentBar({
                         closeList();
                         open(d.id);
                       }}
+                      data-track="document-open"
                       data-active-row={d.id === activeId || undefined}
                       className={`min-w-0 flex-1 truncate px-4 py-2 text-left text-[13px] ${
                         d.id === activeId
@@ -579,6 +581,7 @@ export function DocumentBar({
                     </button>
                     <button
                       onClick={() => setPillMenu(pillMenu === d.id ? null : d.id)}
+                      data-track="document-actions"
                       aria-label={t("panes.documentActionsFor", { title: d.title })}
                       aria-expanded={pillMenu === d.id}
                       title={t("panes.documentActions")}
@@ -605,6 +608,7 @@ export function DocumentBar({
                             closeList();
                             void reparse(d);
                           }}
+                          data-track="document-reparse"
                           disabled={phase !== null}
                           className={`${rowAction} disabled:opacity-40`}
                           title={t("panes.reparseDocumentTitle")}
@@ -620,6 +624,7 @@ export function DocumentBar({
                             closeList();
                             void reparse(d, "article");
                           }}
+                          data-track="document-parse-as-article"
                           disabled={phase !== null}
                           className={`${rowAction} disabled:opacity-40`}
                           title={t("panes.parseAsArticleTitle")}
@@ -633,6 +638,7 @@ export function DocumentBar({
                             closeList();
                             void reparse(d, "handwritten");
                           }}
+                          data-track="document-open-as-handwritten"
                           disabled={phase !== null}
                           className={`${rowAction} disabled:opacity-40`}
                           title={t("panes.openAsHandwrittenTitle")}
@@ -646,6 +652,7 @@ export function DocumentBar({
                             closeList();
                             void recommendLinks(d);
                           }}
+                          data-track="document-recommend-links"
                           disabled={connecting !== null}
                           className={`${rowAction} disabled:opacity-40`}
                           title={t("panes.recommendLinksTitle")}
@@ -658,6 +665,7 @@ export function DocumentBar({
                           closeList();
                           window.print();
                         }}
+                        data-track="document-print"
                         disabled={d.id !== activeId}
                         className={`${rowAction} disabled:opacity-40`}
                         title={
@@ -671,6 +679,7 @@ export function DocumentBar({
                       {canEdit && (
                         <button
                           onClick={() => void detach(d.id)}
+                          data-track="document-detach"
                           className="px-4 py-1.5 text-left text-[12.5px] text-red-600 hover:bg-red-50 dark:hover:bg-red-950"
                           title={t("panes.detachDocumentTitle")}
                         >
@@ -692,6 +701,7 @@ export function DocumentBar({
             setError(null);
             setDialog(true);
           }}
+          data-track="add-document"
           data-nudge="document"
           aria-label={t("panes.addDocument")}
           aria-haspopup="dialog"

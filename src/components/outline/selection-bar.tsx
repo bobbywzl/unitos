@@ -32,6 +32,7 @@ export function SelectionBar({ tree, actions }: { tree: SectionView[]; actions: 
       {selected.length >= 2 && (
         <button
           onClick={() => void actions.mergeNotes(selected[0].id, selected.slice(1).map((n) => n.id))}
+          data-track="notes-merge"
           className="rounded-full bg-sage-600 px-3.5 py-1 text-xs font-semibold text-sage-fg hover:bg-sage-700"
           title={t("outline.mergeTitle")}
         >
@@ -40,18 +41,21 @@ export function SelectionBar({ tree, actions }: { tree: SectionView[]; actions: 
       )}
       <button
         onClick={() => void pinAll()}
+        data-track="notes-pin"
         className="rounded-full border border-line px-3 py-1 text-xs text-sand-700 hover:bg-clay-100 hover:text-clay-800"
       >
         {allPinned ? t("outline.unpin") : t("outline.pin")}
       </button>
       <button
         onClick={() => void deleteAll()}
+        data-track="notes-delete"
         className="rounded-full border border-line px-3 py-1 text-xs text-red-500 hover:bg-red-50 hover:text-red-700"
       >
         {t("common.delete")}
       </button>
       <button
         onClick={() => actions.clearSelection()}
+        data-track="notes-clear-selection"
         aria-label={t("outline.clearSelection")}
         title={t("outline.clearSelection")}
         className="text-sand-500 hover:text-clay-700"

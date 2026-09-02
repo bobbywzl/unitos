@@ -482,6 +482,26 @@ model UsageEvent {
   @@index([userId, createdAt])
 }
 
+// Click telemetry (SPEC.md §7): one row per click on a reader control.
+// surface is where the control lives (topbar | sidebar | ai-toolbar |
+// article-menu | reader | tray, src/lib/clicks.ts); control is the control's
+// id (its data-track attribute). The client batches clicks and posts them
+// fire-and-forget — telemetry never breaks or slows the reader. The admin
+// clicks page (/admin/clicks) aggregates per day, surface, control, and
+// account; the daily cron deletes rows older than 180 days.
+model ClickEvent {
+  id         String   @id @default(cuid())
+  userId     String? // null = no signed-in reader
+  notebookId String? // the open project
+  surface    String
+  control    String
+  createdAt  DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([surface, control, createdAt])
+  @@index([userId, createdAt])
+}
+
 model Feedback {
   id        String   @id @default(cuid())
   category  String // "bug" | "idea" | "other"

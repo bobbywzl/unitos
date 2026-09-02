@@ -66,6 +66,7 @@ export function HistoryControl({ history }: { history: HistoryEntry[] }) {
     <div ref={panelRef} className="relative shrink-0">
       <button
         onClick={() => setOpen(!open)}
+        data-track="history"
         aria-expanded={open}
         aria-label={t("panes.history")}
         title={t("panes.historyTitle")}
@@ -86,6 +87,7 @@ export function HistoryControl({ history }: { history: HistoryEntry[] }) {
                   <button
                     key={p.id}
                     onClick={() => setPersonFilter(personFilter === p.id ? null : p.id)}
+                    data-track="history-person"
                     aria-pressed={personFilter === p.id}
                     title={p.name}
                     className={`rounded-full ${personFilter === p.id ? "ring-2 ring-clay-500" : "opacity-70 hover:opacity-100"}`}

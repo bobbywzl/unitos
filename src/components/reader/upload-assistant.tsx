@@ -600,6 +600,7 @@ export function UploadAssistant({
           {phase !== "adding" && (
             <button
               onClick={() => onClose(null)}
+              data-track="upload-close"
               aria-label={t("common.close")}
               className="ml-auto flex size-8 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-700"
             >
@@ -716,12 +717,14 @@ export function UploadAssistant({
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => setSplit(true)}
+                    data-track="upload-split-yes"
                     className={`${pill} ${split ? "bg-clay text-clay-fg" : "bg-sand-100 text-sand-700 hover:bg-clay-100"}`}
                   >
                     {t("panes.uploadSplitYes", { parts: review.splitParts })}
                   </button>
                   <button
                     onClick={() => setSplit(false)}
+                    data-track="upload-split-no"
                     className={`${pill} ${split ? "bg-sand-100 text-sand-700 hover:bg-clay-100" : "bg-clay text-clay-fg"}`}
                   >
                     {t("panes.uploadSplitNo")}
@@ -751,6 +754,7 @@ export function UploadAssistant({
                       key={format}
                       type="button"
                       onClick={() => setPdfFormat(format)}
+                      data-track={`upload-format:${format}`}
                       aria-pressed={pdfFormat === format}
                       className={`${pill} ${pdfFormat === format ? "bg-clay text-clay-fg" : "bg-sand-100 text-sand-700 hover:bg-clay-100"}`}
                     >
@@ -788,6 +792,7 @@ export function UploadAssistant({
             <div className="flex items-center gap-2">
               <button
                 onClick={() => void add()}
+                data-track="upload-add"
                 disabled={busy}
                 className="rounded-full bg-clay px-5 py-2 text-xs font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
               >
@@ -800,6 +805,7 @@ export function UploadAssistant({
               {request.kind === "url" && (
                 <button
                   onClick={() => void runReview(instructions.trim())}
+                  data-track="upload-review-again"
                   disabled={busy}
                   className="rounded-full border border-line px-3.5 py-1.5 text-xs text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40"
                 >
@@ -808,6 +814,7 @@ export function UploadAssistant({
               )}
               <button
                 onClick={() => onClose(null)}
+                data-track="upload-cancel"
                 disabled={busy}
                 className="ml-auto rounded-full px-3.5 py-1.5 text-xs text-sand-600 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40"
               >
@@ -848,6 +855,7 @@ export function UploadAssistant({
                 </ul>
                 <button
                   onClick={() => onClose(added[0]?.id ?? null)}
+                  data-track="upload-done"
                   className="self-start rounded-full bg-clay px-5 py-2 text-xs font-semibold text-clay-fg hover:bg-clay-600"
                 >
                   {t("common.close")}
