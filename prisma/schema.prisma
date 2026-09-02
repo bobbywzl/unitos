@@ -494,6 +494,37 @@ model Feedback {
   @@index([status, createdAt])
 }
 
+// One notification the admin sends to accounts (SPEC.md §18): kind, title,
+// body, and one NotificationRecipient row per account it went to. The admin
+// composes it on /admin/notifications; each recipient's dashboard shows it
+// until they dismiss it. This is the admin's only write toward an account:
+// nothing here reads a session or changes a User row.
+model Notification {
+  id         String                  @id @default(cuid())
+  kind       String                  @default("update") // "update" (an update to Unitos) | "account" (a change made to the account)
+  title      String
+  body       String // markdown
+  recipients NotificationRecipient[]
+  createdAt  DateTime                @default(now())
+
+  @@index([createdAt])
+}
+
+// One recipient of one notification. userId is a soft reference like
+// Notebook.userId ("user-1" = the local reader when sign-in is off).
+// dismissedAt null = open on the recipient's dashboard; Dismiss stamps it and
+// the row stays, so the admin's dismissed count holds.
+model NotificationRecipient {
+  id             String       @id @default(cuid())
+  notificationId String
+  notification   Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  userId         String
+  dismissedAt    DateTime?
+
+  @@unique([notificationId, userId])
+  @@index([userId, dismissedAt])
+}
+
 model ReaderProfile {
   id          String @id @default(cuid())
   userId      String @unique // constant in v1
