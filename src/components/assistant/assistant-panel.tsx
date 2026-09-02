@@ -234,6 +234,7 @@ export function AssistantPanel({
               <button
                 key={r.depth}
                 onClick={() => openRecommended(r.depth)}
+                data-track={`assistant-recommended:${r.depth}`}
                 disabled={recBusy !== null}
                 aria-pressed={recDepth === r.depth}
                 className={`rounded-2xl px-3.5 py-2 text-left shadow-soft disabled:opacity-60 ${
@@ -258,6 +259,7 @@ export function AssistantPanel({
                 </span>
                 <button
                   onClick={() => void generateRecommended(recDepth)}
+                  data-track="assistant-regenerate"
                   disabled={recBusy !== null}
                   className="text-xs text-sand-500 hover:text-clay-700 disabled:opacity-40"
                 >
@@ -281,6 +283,7 @@ export function AssistantPanel({
           <button
             key={s.id}
             onClick={() => setScope(s.id)}
+            data-track={`assistant-scope:${s.id}`}
             title={t(s.hintKey)}
             className={`rounded-full px-3 py-1 text-xs font-semibold disabled:opacity-40 ${
               scope === s.id
@@ -315,6 +318,7 @@ export function AssistantPanel({
         />
         <button
           type="submit"
+          data-track="assistant-ask"
           onClick={(e) => {
             if (!busy) return;
             e.preventDefault();
@@ -335,6 +339,7 @@ export function AssistantPanel({
             <button
               key={task}
               onClick={() => void runTask(task)}
+              data-track={`assistant-task:${task}`}
               disabled={busy}
               className="rounded-full border border-line px-3 py-1 text-xs text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40"
             >
@@ -373,6 +378,7 @@ export function AssistantPanel({
                     <button
                       key={id}
                       onClick={() => showNote(id)}
+                      data-track="assistant-note-chip"
                       className="rounded-full bg-clay-100 px-2.5 py-0.5 text-xs font-semibold text-clay-800 hover:bg-clay-200"
                     >
                       {t("assistant.noteChip", { id: id.slice(-6) })}

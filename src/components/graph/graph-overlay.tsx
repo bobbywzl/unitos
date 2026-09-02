@@ -38,7 +38,7 @@ export function GraphOverlay({
   }, [onClose]);
 
   return (
-    <div className="graph-overlay-in fixed inset-0 z-50 flex flex-col bg-paper">
+    <div data-track-surface="sidebar" className="graph-overlay-in fixed inset-0 z-50 flex flex-col bg-paper">
       <div className="flex items-center gap-3 border-b border-line px-5 py-3">
         <span className="font-display text-[18px]">{t("panes.graph")}</span>
         <span className="text-[13px] text-sand-600">
@@ -49,6 +49,7 @@ export function GraphOverlay({
         </span>
         <button
           onClick={onClose}
+          data-track="graph-close"
           aria-label={t("common.close")}
           className="ml-auto flex size-8 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-700"
         >

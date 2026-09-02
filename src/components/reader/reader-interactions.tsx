@@ -312,10 +312,11 @@ type AnnotationCard = {
 // assistant, which reads the whole document and answers in the chat card.
 // Keys, not strings — the menu translates at render, and the question goes to
 // the assistant in the reader's language.
-const FREQUENT_ASKS: { labelKey: TKey; questionKey: TKey }[] = [
-  { labelKey: "reader.summarizeLabel", questionKey: "reader.summarizeQuestion" },
-  { labelKey: "reader.takeawaysLabel", questionKey: "reader.takeawaysQuestion" },
-  { labelKey: "reader.explainSimplyLabel", questionKey: "reader.explainSimplyQuestion" },
+// track names the ask in click telemetry (SPEC.md §7).
+const FREQUENT_ASKS: { labelKey: TKey; questionKey: TKey; track: string }[] = [
+  { labelKey: "reader.summarizeLabel", questionKey: "reader.summarizeQuestion", track: "summarize" },
+  { labelKey: "reader.takeawaysLabel", questionKey: "reader.takeawaysQuestion", track: "key-takeaways" },
+  { labelKey: "reader.explainSimplyLabel", questionKey: "reader.explainSimplyQuestion", track: "explain-simply" },
 ];
 
 
@@ -3299,6 +3300,7 @@ export function ReaderInteractions({
           at the top. The strip spans the pane so the bubble can size to it;
           only the controls take pointer events. */}
       <div
+      data-track-surface="article-menu"
         inert={!atTop}
         className={`pointer-events-none absolute inset-x-4 top-4 z-30 transition duration-200 print:hidden ${
           atTop ? "opacity-100" : "-translate-y-2 opacity-0"
@@ -3310,6 +3312,7 @@ export function ReaderInteractions({
               setMenuExpanded((v) => !v);
               setSearchOpen(false);
             }}
+            data-track="assistant"
             aria-expanded={menuExpanded}
             className="pointer-events-auto flex items-center gap-1.5 rounded-full bg-card px-3 py-2 text-[12px] font-semibold text-clay-800 shadow-float"
           >
@@ -3318,6 +3321,7 @@ export function ReaderInteractions({
           </button>
           <button
             data-project-search
+            data-track="search"
             onClick={() => {
               setSearchOpen((v) => !v);
               setMenuExpanded(false);
@@ -3344,6 +3348,7 @@ export function ReaderInteractions({
               {FREQUENT_ASKS.map((ask) => (
                 <button
                   key={ask.labelKey}
+                  data-track={`ask:${ask.track}`}
                   onClick={() => {
                     setMenuExpanded(false);
                     openArticleChat(t(ask.questionKey));
@@ -3358,6 +3363,7 @@ export function ReaderInteractions({
                   setMenuExpanded(false);
                   openArticleChat(null);
                 }}
+                data-track="ask-assistant"
                 className="px-4 py-2 text-left text-[12.5px] text-sand-800 hover:bg-clay-100 hover:text-clay-800"
               >
                 {t("reader.askAssistant")}
@@ -3370,6 +3376,7 @@ export function ReaderInteractions({
               setMenuExpanded(false);
               openDistillPage(null);
             }}
+            data-track="distill"
             title={t("reader.distillMenuTitle")}
             className="px-4 py-2 text-left text-[12.5px] text-sand-800 hover:bg-clay-100 hover:text-clay-800"
           >
@@ -3391,6 +3398,7 @@ export function ReaderInteractions({
             {toastAction && (
               <button
                 onClick={toastAction.run}
+                data-track="toast-action"
                 className="rounded-full bg-paper/20 px-2.5 py-0.5 font-semibold hover:bg-paper/30"
               >
                 {toastAction.label}
@@ -3413,6 +3421,7 @@ export function ReaderInteractions({
         {editMode && (
           <button
             onClick={toggleEditMode}
+            data-track="done"
             className="rounded-full bg-clay px-3.5 py-1.5 text-xs font-semibold text-clay-fg shadow-soft hover:bg-clay-600"
             title={t("reader.backToReading")}
           >
@@ -3424,6 +3433,7 @@ export function ReaderInteractions({
         <div className="relative">
           <button
             onClick={() => openDistillPage(distillShownId)}
+            data-track="distill"
             className="rounded-full bg-sand-100 px-3.5 py-1.5 text-xs font-semibold text-sand-600 shadow-soft hover:text-clay-800"
             title={t("reader.distillButtonTitle")}
           >
@@ -3484,6 +3494,7 @@ export function ReaderInteractions({
             </span>
             <button
               onClick={() => setAnnotationCard(null)}
+              data-track="annotation-close"
               aria-label={t("common.close")}
               className="rounded-full px-1.5 text-sand-500 hover:text-clay-800"
             >
@@ -3496,6 +3507,7 @@ export function ReaderInteractions({
                 <button
                   key={color}
                   onClick={() => void recolorAnnotation(color)}
+                  data-track="annotation-recolor"
                   disabled={annotationCard.busy}
                   aria-label={t("reader.recolor", { color: t(HUE_KEY[color]) })}
                   title={t("reader.recolor", { color: t(HUE_KEY[color]) })}
@@ -3523,6 +3535,7 @@ export function ReaderInteractions({
           <div className="mt-2 flex items-center justify-between">
             <button
               onClick={() => void deleteAnnotation()}
+              data-track="annotation-delete"
               disabled={annotationCard.busy}
               className="text-xs font-semibold text-red-500 hover:text-red-700 disabled:opacity-40"
             >
@@ -3530,6 +3543,7 @@ export function ReaderInteractions({
             </button>
             <button
               onClick={() => void saveAnnotation()}
+              data-track="annotation-save"
               disabled={annotationCard.busy || annotationCard.draft.trim() === annotationCard.saved.trim()}
               className="rounded-full bg-clay px-3 py-1 text-[11px] font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
             >
@@ -3555,6 +3569,7 @@ export function ReaderInteractions({
                 </span>
                 <button
                   onClick={() => setExtractCard(null)}
+                  data-track="extract-card-close"
                   aria-label={t("common.close")}
                   className="rounded-full px-1.5 text-sand-500 hover:text-clay-800"
                 >
@@ -3576,6 +3591,7 @@ export function ReaderInteractions({
                 {canEdit && (
                   <button
                     onClick={() => void deleteExtraction(extraction.id)}
+                    data-track="extract-card-delete"
                     className="text-xs font-semibold text-red-500 hover:text-red-700"
                     title={t("reader.deleteExtractionTitle")}
                   >
@@ -3602,6 +3618,7 @@ export function ReaderInteractions({
       {popover && (
         <div
           data-selection-popover
+          data-track-surface="ai-toolbar"
           onMouseDown={(e) => {
             // Keep the text selection alive under the rail — but let fields
             // take focus, or the inputs could never place a caret.
@@ -3635,6 +3652,7 @@ export function ReaderInteractions({
             <button
               disabled={busy}
               onClick={() => void completeLink()}
+              data-track="close-link"
               className={`flex w-full items-center gap-1.5 rounded-full bg-sage-600 ${toolRow} text-left font-semibold text-sage-fg hover:bg-sage-700 disabled:opacity-40`}
             >
               <LinkIcon size={11} />
@@ -3644,6 +3662,7 @@ export function ReaderInteractions({
 
           <button
             onClick={() => setSubmenu(submenu === "ai" ? null : "ai")}
+            data-track="assistant"
             aria-expanded={submenu === "ai"}
             className={`flex w-full items-center gap-1.5 rounded-full ${toolRow} text-left font-semibold ${
               submenu === "ai"
@@ -3679,6 +3698,7 @@ export function ReaderInteractions({
               <div className="flex items-center gap-1.5">
                 <button
                   onClick={toggleVoice}
+                  data-track="assistant-voice"
                   aria-label={aiListening ? t("reader.stopListening") : t("reader.speakCommand")}
                   title={aiListening ? t("reader.stopListening") : t("reader.speakCommand")}
                   className={`flex size-7 items-center justify-center rounded-full ${
@@ -3692,6 +3712,7 @@ export function ReaderInteractions({
                 <button
                   disabled={!aiBusy && !aiCommand.trim()}
                   onClick={() => (aiBusy ? stopAssistantChat() : void runAssistant())}
+                  data-track="assistant-run"
                   title={aiBusy ? t("reader.stopAssistant") : undefined}
                   aria-label={aiBusy ? t("reader.stopAssistant") : undefined}
                   className="ml-auto rounded-full bg-clay px-3 py-1 text-[11px] font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
@@ -3705,6 +3726,7 @@ export function ReaderInteractions({
           {popover.term && (
             <button
               onClick={() => void extract()}
+              data-track="extract-term"
               disabled={extractBusy}
               title={t("reader.extractTermTitle")}
               className={`flex w-full items-center justify-between gap-2 rounded-full bg-clay-100 ${toolRow} text-left font-semibold text-clay-800 hover:bg-clay-200 disabled:opacity-40`}
@@ -3718,6 +3740,7 @@ export function ReaderInteractions({
 
           <button
             onClick={() => void explain()}
+            data-track="explain"
             title={popover.figure ? t("reader.explainFigureTitle") : undefined}
             className={`flex w-full items-center rounded-full ${toolRow} text-left text-sand-800 hover:bg-clay-100 hover:text-clay-800`}
           >
@@ -3726,6 +3749,7 @@ export function ReaderInteractions({
           {!popover.figure && (
             <button
               onClick={() => void simplify()}
+              data-track="simplify"
               className={`flex w-full items-center rounded-full ${toolRow} text-left text-sand-800 hover:bg-clay-100 hover:text-clay-800`}
             >
               {t("reader.simplify")}
@@ -3734,6 +3758,7 @@ export function ReaderInteractions({
           {!popover.figure && !popover.term && (
             <button
               onClick={() => void extract()}
+              data-track="extract"
               disabled={extractBusy}
               title={t("reader.extractTitle")}
               className={`flex w-full items-center rounded-full ${toolRow} text-left text-sand-800 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40`}
@@ -3744,6 +3769,7 @@ export function ReaderInteractions({
 
           <button
             onClick={() => setSubmenu(submenu === "comment" ? null : "comment")}
+            data-track="comment"
             aria-expanded={submenu === "comment"}
             className={`flex w-full items-center rounded-full ${toolRow} text-left ${
               submenu === "comment"
@@ -3783,6 +3809,7 @@ export function ReaderInteractions({
               />
               <button
                 type="submit"
+                data-track="comment-save"
                 disabled={busy || !commentDraft.trim()}
                 className="self-end rounded-full bg-clay px-3 py-1 text-[11px] font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
               >
@@ -3793,6 +3820,7 @@ export function ReaderInteractions({
 
           <button
             onClick={beginLink}
+            data-track="link"
             title={t("reader.linkTitle")}
             className={`flex w-full items-center rounded-full ${toolRow} text-left text-sand-800 hover:bg-clay-100 hover:text-clay-800`}
           >
@@ -3817,6 +3845,7 @@ export function ReaderInteractions({
                 key={color}
                 disabled={busy}
                 onClick={() => void annotate({ color, comment: commentDraft.trim() || undefined })}
+                data-track="highlight"
                 aria-label={t("reader.highlightIn", { color: t(HUE_KEY[color]) })}
                 title={t(
                   commentDraft.trim() ? "reader.highlightInWithNote" : "reader.highlightIn",
@@ -3846,6 +3875,7 @@ export function ReaderInteractions({
             >
               <button
                 onClick={() => setSubmenu(submenu === "add" ? null : "add")}
+                data-track="add-to-notes"
                 aria-expanded={submenu === "add"}
                 title={t("reader.addToNotesTitle")}
                 className={`flex w-full items-center gap-1.5 rounded-full bg-clay ${toolRow} text-left font-semibold text-clay-fg hover:bg-clay-600`}
@@ -3860,6 +3890,7 @@ export function ReaderInteractions({
                       key={choice.id}
                       disabled={busy}
                       onClick={() => void addToSection(choice.id)}
+                      data-track="add-to-notes-section"
                       className={`truncate rounded-full ${toolRow} text-left text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40`}
                     >
                       {choice.label}
@@ -3875,6 +3906,7 @@ export function ReaderInteractions({
           <div className="absolute top-full left-0 mt-2">
             <button
               onClick={() => void speakSelection()}
+              data-track="read-aloud"
               aria-label={voice === "idle" ? t("reader.readAloud") : t("reader.stopReading")}
               title={voice === "idle" ? t("reader.readAloud") : t("reader.stopReading")}
               className={`flex ${coarse ? "size-11" : "size-[34px]"} items-center justify-center rounded-full shadow-float ${
@@ -3898,6 +3930,8 @@ export function ReaderInteractions({
       {closeLink && (
         <button
           data-selection-popover
+          data-track-surface="ai-toolbar"
+          data-track="close-link"
           disabled={busy}
           onMouseDown={(e) => e.preventDefault()} // keep the highlight alive under the press
           onClick={() => void completeCloseLink()}
@@ -3936,6 +3970,7 @@ export function ReaderInteractions({
               {bubble.noteId && !bubble.streaming && (
                 <button
                   onClick={() => void deleteExplain()}
+                  data-track="explain-delete"
                   className="text-xs font-semibold text-red-500 hover:text-red-700"
                   title={t("reader.deleteExplainTitle")}
                 >
@@ -3944,6 +3979,7 @@ export function ReaderInteractions({
               )}
               <button
                 onClick={closeExplain}
+                data-track="explain-close"
                 className="text-xs text-sand-500 hover:text-clay-700"
                 aria-label={t("common.close")}
               >
@@ -3987,6 +4023,7 @@ export function ReaderInteractions({
               {simplifyCard.noteId && !simplifyCard.streaming && (
                 <button
                   onClick={() => void deleteSimplify()}
+                  data-track="simplify-delete"
                   className="text-xs font-semibold text-red-500 hover:text-red-700"
                   title={t("reader.deleteSimplifyTitle")}
                 >
@@ -3995,6 +4032,7 @@ export function ReaderInteractions({
               )}
               <button
                 onClick={closeSimplify}
+                data-track="simplify-close"
                 className="text-xs text-sand-500 hover:text-clay-700"
                 aria-label={t("common.close")}
               >
@@ -4061,6 +4099,7 @@ export function ReaderInteractions({
             </span>
             <button
               onClick={closeCommentCard}
+              data-track="comment-card-close"
               className="text-xs text-sand-500 hover:text-clay-700"
               aria-label={t("common.close")}
             >
@@ -4089,6 +4128,7 @@ export function ReaderInteractions({
               <div className="mt-2 flex items-center justify-between">
                 <button
                   onClick={() => void deleteCommentCard()}
+                  data-track="comment-card-delete"
                   disabled={commentCard.busy}
                   className="text-xs font-semibold text-red-500 hover:text-red-700 disabled:opacity-40"
                 >
@@ -4096,6 +4136,7 @@ export function ReaderInteractions({
                 </button>
                 <button
                   onClick={() => void saveCommentCard()}
+                  data-track="comment-card-save"
                   disabled={commentCard.busy || commentCard.draft.trim() === commentCard.saved.trim()}
                   className="rounded-full bg-clay px-3 py-1 text-[11px] font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
                 >
@@ -4150,6 +4191,7 @@ export function ReaderInteractions({
               {assistantChat.noteId && (
                 <button
                   onClick={() => void deleteAssistantConversation()}
+                  data-track="assistant-card-delete"
                   className="text-xs font-semibold text-red-500 hover:text-red-700"
                   title={t("reader.deleteConversationTitle")}
                 >
@@ -4158,6 +4200,7 @@ export function ReaderInteractions({
               )}
               <button
                 onClick={closeAssistantChat}
+                data-track="assistant-card-close"
                 className="text-xs text-sand-500 hover:text-clay-700"
                 aria-label={t("common.close")}
               >
@@ -4209,6 +4252,7 @@ export function ReaderInteractions({
             />
             <button
               type="submit"
+              data-track="assistant-card-send"
               onClick={(e) => {
                 if (!assistantChat.busy) return;
                 e.preventDefault();
@@ -4230,6 +4274,7 @@ export function ReaderInteractions({
       {voice !== "idle" && !popover && (
         <button
           onClick={stopVoice}
+          data-track="stop-reading"
           className="fixed bottom-6 left-1/2 z-40 flex -translate-x-1/2 items-center gap-2 rounded-full bg-card px-4 py-2 text-[12.5px] font-semibold text-sand-700 shadow-float hover:text-clay-800"
         >
           {voice === "loading" ? (
@@ -4257,6 +4302,7 @@ export function ReaderInteractions({
           </span>
           <button
             onClick={() => broadcastPendingLink(null)}
+            data-track="cancel-link"
             aria-label={t("reader.cancelLink")}
             className="shrink-0 text-xs text-sand-500 hover:text-clay-700"
           >
@@ -4325,12 +4371,14 @@ export function ReaderInteractions({
             <button
               disabled={planChecked.size === 0}
               onClick={() => void approvePlan()}
+              data-track="plan-apply"
               className="rounded-full bg-clay px-4 py-1.5 text-xs font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
             >
               {t("reader.applyActions", { n: planChecked.size, s: plural(planChecked.size) })}
             </button>
             <button
               onClick={() => setAiPlan(null)}
+              data-track="plan-cancel"
               className="rounded-full border border-line px-3 py-1 text-xs text-sand-700 hover:bg-clay-100 hover:text-clay-800"
             >
               {t("common.cancel")}

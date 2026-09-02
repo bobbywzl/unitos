@@ -113,6 +113,7 @@ export function Transcript({
         {transcript.length > 0 && !pending && (
           <button
             onClick={onTranscribe}
+            data-track="video-transcribe-again"
             className="ml-auto rounded-full px-2 py-0.5 text-[11px] font-semibold text-sand-600 hover:bg-clay-100 hover:text-clay-800"
             title={t(audio ? "video.transcribeAgainTitleAudio" : "video.transcribeAgainTitle")}
           >
@@ -137,6 +138,7 @@ export function Transcript({
             >
               <button
                 onClick={() => onSeek(paragraph[0])}
+                data-track="video-seek"
                 title={t("video.jumpHere")}
                 className="mr-2 -translate-y-[1px] rounded-full bg-sand-100 px-2 py-[1px] align-middle text-[10.5px] font-semibold tabular-nums text-sand-500 hover:bg-clay-100 hover:text-clay-800"
               >
@@ -175,6 +177,7 @@ export function Transcript({
                       <span className="pointer-events-auto flex items-center gap-0.5 rounded-full bg-card px-1 py-0.5 whitespace-nowrap shadow-float">
                         <button
                           onClick={() => onComment(line)}
+                          data-track="video-line-comment"
                           className={action}
                           title={t("video.commentOnLineTitle")}
                         >
@@ -182,6 +185,7 @@ export function Transcript({
                         </button>
                         <button
                           onClick={() => onExplain(line)}
+                          data-track="video-line-explain"
                           className={action}
                           title={t("video.explainThisMoment")}
                         >
@@ -190,6 +194,7 @@ export function Transcript({
                         {annotated && (
                           <button
                             onClick={() => onOpenAnnotation(annotated)}
+                            data-track="video-line-open-note"
                             className={action}
                             title={t("video.openNoteTitle")}
                           >
@@ -219,6 +224,7 @@ export function Transcript({
               {failedMessage && <p className="text-xs text-red-500">{failedMessage}</p>}
               <button
                 onClick={onTranscribe}
+                data-track="video-transcribe-retry"
                 className="self-start rounded-full bg-clay px-4 py-1.5 text-xs font-semibold text-clay-fg hover:bg-clay-600"
               >
                 {t("common.retry")}

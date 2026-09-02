@@ -179,6 +179,7 @@ export function MediaAssistant({
           {t("video.assistant")}
         </span>
         <button
+          data-track="video-assistant-close"
           onClick={() => {
             // A turn still in flight aborts too — closing the card means
             // nobody will read the reply, so there is nothing left for it to
@@ -198,6 +199,7 @@ export function MediaAssistant({
       <div className="mb-2.5 flex flex-wrap items-center gap-2">
         <button
           onClick={() => void runSkill("article")}
+          data-track="video-skill-article"
           disabled={busy || !hasTranscript}
           title={hasTranscript ? t("video.skillArticleTitle") : t("video.skillNeedsTranscript")}
           className={chip}
@@ -206,6 +208,7 @@ export function MediaAssistant({
         </button>
         <button
           onClick={() => void runSkill("notes")}
+          data-track="video-skill-notes"
           disabled={busy || !hasTranscript}
           title={hasTranscript ? t("video.skillNotesTitle") : t("video.skillNeedsTranscript")}
           className={chip}
@@ -222,6 +225,7 @@ export function MediaAssistant({
             })}
             <button
               onClick={() => setSpotCleared(true)}
+              data-track="video-spot-clear"
               aria-label={t("video.assistantSpotClear")}
               title={t("video.assistantSpotClear")}
               className="rounded-full px-0.5 text-clay-700 hover:text-clay-900"
@@ -274,6 +278,7 @@ export function MediaAssistant({
         />
         <button
           type="submit"
+          data-track="video-assistant-send"
           onClick={(e) => {
             if (!busy) return;
             e.preventDefault();
@@ -377,6 +382,7 @@ export function ArticleSection({
           {(article.documentId || canEdit) && (
             <button
               onClick={() => void open()}
+              data-track="video-article-open"
               disabled={opening}
               className="rounded-full px-2 py-0.5 text-[11px] font-bold text-clay-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40"
               title={t("video.openArticleTitle")}
@@ -384,12 +390,13 @@ export function ArticleSection({
               {opening ? t("common.working") : t("video.openArticle")}
             </button>
           )}
-          <button onClick={() => void copy()} className={action} title={t("video.copyMarkdownTitle")}>
+          <button onClick={() => void copy()} data-track="video-article-copy" className={action} title={t("video.copyMarkdownTitle")}>
             {copied ? t("video.copied") : t("video.copyMarkdown")}
           </button>
           {canEdit && (
             <button
               onClick={() => void regenerate()}
+              data-track="video-article-regenerate"
               disabled={busy}
               className={action}
               title={t("video.regenerateArticleTitle")}

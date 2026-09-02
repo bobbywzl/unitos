@@ -83,7 +83,7 @@ export function ConversionStrip({
             {t("panes.convertFailed", { reason: failed ?? t("panes.convertStalled") })}
           </p>
           {retryable && (
-            <button onClick={() => void convert()} className={buttonClass}>
+            <button onClick={() => void convert()} data-track="convert-retry" className={buttonClass}>
               {t("common.retry")}
             </button>
           )}
@@ -94,13 +94,13 @@ export function ConversionStrip({
             {t("panes.convertedText")}
           </span>
           {canEdit && (
-            <button onClick={() => void convert()} title={t("panes.convertAgainTitle")} className={buttonClass}>
+            <button onClick={() => void convert()} data-track="convert-again" title={t("panes.convertAgainTitle")} className={buttonClass}>
               {t("panes.convertAgain")}
             </button>
           )}
         </div>
       ) : canEdit ? (
-        <button onClick={() => void convert()} title={t("panes.convertToTextTitle")} className={buttonClass}>
+        <button onClick={() => void convert()} data-track="convert-to-text" title={t("panes.convertToTextTitle")} className={buttonClass}>
           {t("panes.convertToText")}
         </button>
       ) : null}

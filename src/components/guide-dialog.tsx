@@ -44,6 +44,7 @@ export function GuideDialog({ open, onClose }: { open: boolean; onClose: () => v
 
   return (
     <div
+      data-track-surface="topbar"
       className="fixed inset-0 z-50 flex items-center justify-center bg-ink/30 p-4"
       onClick={onClose}
       role="dialog"
@@ -58,6 +59,7 @@ export function GuideDialog({ open, onClose }: { open: boolean; onClose: () => v
           <span className="font-display text-[20px]">{t("works.guideTitle")}</span>
           <button
             onClick={onClose}
+            data-track="guide-close"
             aria-label={t("common.close")}
             className="ml-auto flex size-8 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-700"
           >

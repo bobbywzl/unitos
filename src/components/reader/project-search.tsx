@@ -107,6 +107,7 @@ export function ProjectSearch({
           {hits.map((hit) => (
             <button
               key={hit.blockId}
+              data-track="search-result"
               onClick={() => {
                 onClose();
                 router.push(`/n/${notebookId}?doc=${hit.documentId}&block=${hit.blockId}`);

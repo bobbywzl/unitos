@@ -141,6 +141,7 @@ export function ShareControl({
       )}
       <button
         onClick={() => void toggle()}
+        data-track="share"
         aria-expanded={open}
         title={t("panes.shareTitle")}
         className={`rounded-full px-3.5 py-1.5 text-[13px] hover:bg-clay-100 hover:text-clay-800 ${
@@ -185,6 +186,7 @@ export function ShareControl({
               </select>
               <button
                 type="submit"
+                data-track="share-add"
                 disabled={!email.trim() || busy}
                 className="rounded-full bg-clay px-3.5 py-1.5 text-[13px] font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
               >
@@ -240,6 +242,7 @@ export function ShareControl({
                         </select>
                         <button
                           onClick={() => void remove(c.email)}
+                          data-track="share-remove"
                           disabled={busy}
                           aria-label={t("common.remove")}
                           title={t("common.remove")}
@@ -256,6 +259,7 @@ export function ShareControl({
                 {role !== "owner" && (
                   <button
                     onClick={() => void leave()}
+                    data-track="share-leave"
                     disabled={busy}
                     className="self-start text-xs text-red-500 hover:text-red-700 disabled:opacity-50"
                   >

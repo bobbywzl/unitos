@@ -17,6 +17,7 @@ import {
   QuestionIcon,
   SparkleIcon,
 } from "@/components/icons";
+import { ClickTracker } from "@/components/click-tracker";
 import { CollabProvider, type CollabState } from "@/components/collab/collab-context";
 import { HistoryControl } from "@/components/collab/history-control";
 import { ShareControl } from "@/components/collab/share-control";
@@ -276,10 +277,17 @@ export function Workspace({
     // print: the shell flattens to plain flow so the whole document prints,
     // not one screen of the scroll pane; chrome and trays hide.
     <CollabProvider value={collab}>
+    {/* Click telemetry (SPEC.md §7): the header, the rail, and the tray are
+        the surfaces; every control in them carries data-track. */}
+    <ClickTracker notebookId={notebook.id} />
     <div className="grid h-screen grid-rows-[68px_1fr] bg-paper print:block print:h-auto">
-      <header className="flex min-w-0 items-center gap-2 border-b border-line px-3 sm:gap-3.5 sm:px-5 print:hidden">
+      <header
+        data-track-surface="topbar"
+        className="flex min-w-0 items-center gap-2 border-b border-line px-3 sm:gap-3.5 sm:px-5 print:hidden"
+      >
         <Link
           href="/"
+          data-track="back"
           aria-label={t("panes.allCorpora")}
           className="flex size-[38px] shrink-0 items-center justify-center rounded-full text-sand-700 hover:bg-clay-100 hover:text-clay-800"
         >
@@ -317,6 +325,7 @@ export function Workspace({
         )}
         <button
           onClick={openGuide}
+          data-track="guide"
           data-nudge="guide"
           aria-label={t("panes.guide")}
           title={t("panes.guideTitle")}
@@ -371,6 +380,7 @@ export function Workspace({
             />
           </div>
           <aside
+            data-track-surface="tray"
             style={{ "--tray-w": `${trayWidth}px` } as React.CSSProperties}
             className={`${
               mobileTray
@@ -390,6 +400,7 @@ export function Workspace({
               )}
               <button
                 onClick={() => setMobileTray(false)}
+                data-track="close"
                 aria-label={t("common.close")}
                 className="ml-auto rounded-full px-2 text-sand-500 hover:text-clay-800 md:hidden"
               >
@@ -410,6 +421,7 @@ export function Workspace({
                 <span className="text-[13px] text-sand-600">{t("panes.noteRejected")}</span>
                 <button
                   onClick={() => void undoReject()}
+                  data-track="undo-reject"
                   className="ml-auto rounded-full bg-clay px-3.5 py-1 text-xs font-semibold text-clay-fg hover:bg-clay-600"
                 >
                   {t("panes.undo")}
@@ -420,6 +432,7 @@ export function Workspace({
             {tab === "notes" && (
               <Link
                 href={`/n/${notebook.id}/notes`}
+                data-track="notes-full-page"
                 title={t("panes.notesFullPageTitle")}
                 className="flex shrink-0 items-center justify-center gap-2 rounded-full bg-card px-4 py-2.5 text-[13px] font-semibold text-sand-700 shadow-soft hover:bg-clay-100 hover:text-clay-800"
               >
@@ -432,6 +445,7 @@ export function Workspace({
         )}
 
         <nav
+          data-track-surface="sidebar"
           data-nudge="rail"
           aria-label={t("panes.workspace")}
           className="fixed inset-x-0 bottom-0 z-30 flex h-[calc(54px+env(safe-area-inset-bottom))] flex-row items-center justify-around border-t border-line bg-sand-100 px-3 pt-1 pb-[env(safe-area-inset-bottom)] md:static md:z-auto md:h-auto md:w-[52px] md:shrink-0 md:flex-col md:justify-start md:gap-1.5 md:border-t-0 md:border-l md:px-0 md:pt-2.5 md:pb-2.5 print:hidden"
@@ -441,6 +455,7 @@ export function Workspace({
               setCollapsed(!collapsed);
               setMobileTray(false);
             }}
+            data-track="collapse-tray"
             aria-label={collapsed ? t("panes.expandTray") : t("panes.collapseTray")}
             className={`max-md:hidden ${RAIL_BUTTON}`}
           >
@@ -450,6 +465,7 @@ export function Workspace({
           {canEdit && (
             <button
               onClick={() => show("assistant")}
+              data-track="assistant"
               aria-label={t("panes.assistant")}
               aria-current={!collapsed && tab === "assistant"}
               className={!collapsed && tab === "assistant" ? RAIL_BUTTON_ON : RAIL_BUTTON}
@@ -460,6 +476,7 @@ export function Workspace({
 
           <button
             onClick={() => show("notes")}
+            data-track="notes"
             aria-label={t("panes.notes")}
             aria-current={!collapsed && tab === "notes"}
             className={!collapsed && tab === "notes" ? RAIL_BUTTON_ON : RAIL_BUTTON}
@@ -474,6 +491,7 @@ export function Workspace({
 
           <button
             onClick={() => show("distill")}
+            data-track="distill"
             aria-label={t("panes.distill")}
             aria-current={!collapsed && tab === "distill"}
             className={!collapsed && tab === "distill" ? RAIL_BUTTON_ON : RAIL_BUTTON}
@@ -483,6 +501,7 @@ export function Workspace({
 
           <button
             onClick={() => setGraphOpen(true)}
+            data-track="graph"
             aria-label={t("panes.graph")}
             title={t("panes.graphTitle")}
             className={RAIL_BUTTON}
@@ -492,6 +511,7 @@ export function Workspace({
 
           <button
             onClick={() => show("annotations")}
+            data-track="annotations"
             aria-label={t("panes.annotations")}
             aria-current={!collapsed && tab === "annotations"}
             className={!collapsed && tab === "annotations" ? RAIL_BUTTON_ON : RAIL_BUTTON}
@@ -501,6 +521,7 @@ export function Workspace({
 
           <button
             onClick={() => show("edits")}
+            data-track="edits"
             aria-label={t("panes.editHistory")}
             aria-current={!collapsed && tab === "edits"}
             className={!collapsed && tab === "edits" ? RAIL_BUTTON_ON : RAIL_BUTTON}
@@ -511,6 +532,7 @@ export function Workspace({
           <div ref={menuRef} className="relative md:mt-auto">
             <button
               onClick={() => setMenuOpen(!menuOpen)}
+              data-track="more"
               aria-label={t("panes.more")}
               aria-expanded={menuOpen}
               className={RAIL_BUTTON}
@@ -521,12 +543,14 @@ export function Workspace({
               <div className="absolute right-0 bottom-full mb-2 flex w-44 flex-col overflow-hidden rounded-2xl bg-card py-1 shadow-float">
                 <Link
                   href={`/n/${notebook.id}/notes`}
+                  data-track="more-notes-full-page"
                   className="px-4 py-2 text-sm text-sand-700 hover:bg-clay-100 hover:text-clay-800"
                 >
                   {t("panes.notesFullPage")}
                 </Link>
                 <Link
                   href="/settings"
+                  data-track="more-settings"
                   className="px-4 py-2 text-sm text-sand-700 hover:bg-clay-100 hover:text-clay-800"
                 >
                   {t("common.settings")}
