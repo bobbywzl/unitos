@@ -1,0 +1,5 @@
+# Sources for /importcompare: one per line — a web page URL, a PDF URL, or a
+# PDF path relative to the repo root. Lines starting with # are comments.
+# /importcompare with no arguments runs every source in this file.
+https://en.wikipedia.org/wiki/Matrix_(mathematics)
+https://arxiv.org/pdf/1706.03762

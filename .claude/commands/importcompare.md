@@ -1,7 +1,7 @@
 ---
 description: Import compare loop — ingest real web pages and PDFs into a local Unitos, screenshot the original and the import in headless Chromium, compare every complex element (tables, math, figures, gifs, videos, embeds, code, lists) with your own vision, fix the general parse pattern, re-verify, repeat until a round is clean.
 ---
-You are the fixer in the import compare loop. The goal: an import in Unitos looks like the original — the same tables, equations, figures, gifs, videos, embeds, code, lists, headings, in the same order, nothing missing, no page chrome — for every future article and PDF, never for one site. Sources for this round: $ARGUMENTS (URLs, PDF paths, or one category word: papers, news, blogs, docs, pdfs, all; empty = all).
+You are the fixer in the import compare loop. The goal: an import in Unitos looks like the original — the same tables, equations, figures, gifs, videos, embeds, code, lists, headings, in the same order, nothing missing, no page chrome — for every future article and PDF, never for one site. Sources for this round come from the reader, never from your own search: $ARGUMENTS
 
 Read `scripts/qa/import-compare.mjs` before the first run. It is the capture tool: it ingests each source through the app's own API, screenshots the original page (full page, then one crop per complex element) and the Unitos reader (full page, then one crop per TABLE, EQUATION, FIGURE, CODE, LIST block), counts both sides, pairs them, and writes `report.md` + `manifest.json` per source under `.qa/import-compare/<run>/`. It never judges and never edits code. You judge; you fix.
 
@@ -12,16 +12,23 @@ Read `scripts/qa/import-compare.mjs` before the first run. It is the capture too
 3. Leave `ANTHROPIC_API_KEY` unset. Without a key the URL ingest skips the core and structure passes and the PDF judgment falls back to the text-layer yield, so the loop tests the mechanical parser — the layer fixes land in. Set the key only for a round about page chrome, which those passes remove.
 4. Create the round's project once: `curl -s -X POST http://127.0.0.1:3111/api/notebooks -H 'Content-Type: application/json' -d '{"title":"ImportCompare"}'` → `id` is the notebookId every capture uses.
 
-## 2. Pick sources
+## 2. Your sources
 
-- URLs and PDF paths in the arguments are the round. A category word means: find 3–5 real, reachable pages of that kind (web search; verify with `curl -sS -o /dev/null -w "%{http_code}" -A "Mozilla/5.0 (compatible; Unitos/1.0)" <url>` first, since the parser fetches with that UA and no scripts). `all` = one collector per category.
-- Prefer pages with complex elements: research papers (arxiv HTML, journals: equations, figures, tables), news (Datawrapper and Flourish charts in iframes, galleries, videos), blogs and essays (Medium, Substack, personal sites: gifs, YouTube embeds, code, nested lists), docs (Wikipedia tables and math, MDN and developer docs with code), PDFs (arxiv papers, two-column papers, slide decks, scanned notes).
-- Known torture tests: wallstreetcn articles (SSR only for non-browser UAs; transcript inside `<blockquote>` of `<p>`s), paulgraham.com essays (`<br><br>` paragraphs), Wikipedia (tables, references, MediaWiki math), arxiv HTML papers (LaTeXML math, figures, `ltx_equation` tables).
+The reader feeds the loop. Take the sources in this order and stop at the first one that yields any:
+
+1. The arguments: web page URLs, PDF URLs, PDF paths, or the path of a list file (one source per line, `#` comments).
+2. The standing list `scripts/qa/import-compare-sources.txt`, when the arguments are empty. The reader curates it; the capture tool reads it with `--list`.
+3. Neither: ask the reader for the sources and stop. Never search the web for pages on your own. Only when the reader writes `find <category>` (papers, news, blogs, docs, pdfs) do collectors look for 3–5 real, reachable pages of that kind.
+
+Before a run, check each URL with `curl -sS -o /dev/null -w "%{http_code}" -A "Mozilla/5.0 (compatible; Unitos/1.0)" <url>` — the parser fetches with that UA and no scripts, so a 403 here is ORIGINAL_BLOCKED before anything else. A PDF URL (arxiv.org/pdf/…, a .pdf link) downloads and runs as a PDF.
+
+Worth having in the list: research papers (arxiv HTML and PDF, journals: equations, figures, tables), news (Datawrapper and Flourish charts in iframes, galleries, videos), blogs and essays (Medium, Substack, personal sites: gifs, YouTube embeds, code, nested lists), docs (Wikipedia tables and math, MDN and developer docs with code), PDFs (two-column papers, slide decks, scanned notes). Known torture tests: wallstreetcn articles (SSR only for non-browser UAs; transcript inside `<blockquote>` of `<p>`s), paulgraham.com essays (`<br><br>` paragraphs), Wikipedia (tables, references, MediaWiki math), arxiv HTML papers (LaTeXML math, figures, `ltx_equation` tables).
 
 ## 3. Capture
 
 ```
-node scripts/qa/import-compare.mjs --notebook <id> --app http://127.0.0.1:3111 [--fresh] <url | file.pdf> ...
+node scripts/qa/import-compare.mjs --notebook <id> --app http://127.0.0.1:3111 [--fresh] <url | pdf-url | file.pdf> ...
+node scripts/qa/import-compare.mjs --notebook <id> --app http://127.0.0.1:3111 [--fresh] --list scripts/qa/import-compare-sources.txt
 ```
 
 - `--fresh` deletes the stored document for the source first. Always pass it when re-checking after a fix — dedupe by sourceUrl or fileHash returns the old parse otherwise.
@@ -81,4 +88,4 @@ findings:
 
 ## Collectors (subagents)
 
-Fan out one general-purpose subagent per category with this file's sections 2–4 and the notebookId. A collector picks sources, runs the capture, reads the PNGs, and returns the report in the exact shape above. Collectors never edit the repo, never commit, never restart the server. Run at most 4 at once — each launches its own Chromium.
+Fan out one general-purpose subagent per group of sources (or per `find <category>` request) with this file's sections 3–4, the notebookId, and its share of the reader's list. A collector runs the capture on the sources it was given, reads the PNGs, and returns the report in the exact shape above. Collectors never edit the repo, never commit, never restart the server. Run at most 4 at once — each launches its own Chromium.

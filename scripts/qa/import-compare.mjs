@@ -15,7 +15,10 @@
 //
 // Usage:
 //   node scripts/qa/import-compare.mjs --notebook <id> [--app http://localhost:3111]
-//        [--out .qa/import-compare] [--fresh] [--skip-original] <url | file.pdf> ...
+//        [--out .qa/import-compare] [--fresh] [--skip-original]
+//        [--list sources.txt] <url | pdf-url | file.pdf> ...
+// Sources come from the reader: the arguments, or a list file with one source
+// per line (# comments). A URL that serves a PDF downloads and runs as a PDF.
 // Env: DATABASE_URL (default postgresql://postgres:postgres@127.0.0.1:5432/dissect),
 //      IMPORT_COMPARE_CHROMIUM (default /opt/pw-browsers/chromium when present,
 //      else the installed Chrome), HTTPS_PROXY (used for the original side).
@@ -49,6 +52,7 @@ function parseArgs(argv) {
     fresh: false,
     skipOriginal: false,
     sources: [],
+    lists: [],
   };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -57,12 +61,21 @@ function parseArgs(argv) {
     else if (a === "--out") opts.out = argv[++i];
     else if (a === "--fresh") opts.fresh = true;
     else if (a === "--skip-original") opts.skipOriginal = true;
+    else if (a === "--list") opts.lists.push(argv[++i]);
     else if (a.startsWith("--")) throw new Error(`Unknown option ${a}`);
     else opts.sources.push(a);
   }
   if (!opts.notebook) throw new Error("--notebook <id> is required (POST /api/notebooks creates one)");
-  if (opts.sources.length === 0) throw new Error("Give at least one URL or PDF path");
   return opts;
+}
+
+// A list file: one source per line, blank lines and # comments skipped.
+async function readSourceList(file) {
+  const text = await readFile(file, "utf8");
+  return text
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line && !line.startsWith("#"));
 }
 
 function slugOf(source) {
@@ -346,15 +359,20 @@ const ORIGINAL_CENSUS_SCRIPT = `
 })()
 `;
 
-async function fetchRawHtml(url) {
+// The fetch the parser makes: the parser's UA, no scripts. Returns the bytes
+// and the content type, so a URL that serves a PDF is recognized before ingest.
+async function fetchRaw(url) {
   const { fetch: undiciFetch, EnvHttpProxyAgent } = await import("undici");
   const proxied = Boolean(process.env.HTTPS_PROXY ?? process.env.https_proxy);
   const res = await undiciFetch(url, {
     headers: { "User-Agent": PARSER_UA },
-    signal: AbortSignal.timeout(30000),
+    signal: AbortSignal.timeout(60000),
     ...(proxied ? { dispatcher: new EnvHttpProxyAgent() } : {}),
   });
-  return { status: res.status, html: res.ok ? await res.text() : "" };
+  const bytes = res.ok ? Buffer.from(await res.arrayBuffer()) : Buffer.alloc(0);
+  const contentType = res.headers.get("content-type") ?? "";
+  const pdf = /application\/pdf/i.test(contentType) || bytes.subarray(0, 5).toString() === "%PDF-";
+  return { status: res.status, contentType, bytes, pdf, html: pdf ? "" : bytes.toString("utf8") };
 }
 
 function decodeEntities(s) {
@@ -386,7 +404,7 @@ function keyInRaw(item, views) {
   return false;
 }
 
-async function captureOriginalPage(browser, url, dir) {
+async function captureOriginalPage(browser, url, dir, raw) {
   const ctx = await browser.newContext({ viewport: VIEWPORT, userAgent: undefined });
   const page = await ctx.newPage();
   const consoleErrors = [];
@@ -432,7 +450,6 @@ async function captureOriginalPage(browser, url, dir) {
     await ctx.close();
   }
   try {
-    const raw = await fetchRawHtml(url);
     result.rawStatus = raw.status;
     result.raw = path.join(dir, "original.raw.html");
     await writeFile(result.raw, raw.html);
@@ -713,6 +730,8 @@ function reportFor(entry) {
 
 async function main() {
   const opts = parseArgs(process.argv.slice(2));
+  for (const list of opts.lists) opts.sources.push(...(await readSourceList(list)));
+  if (opts.sources.length === 0) throw new Error("Give at least one URL or PDF path, or --list <file>");
   const runId = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
   const runDir = path.resolve(opts.out, runId);
   await mkdir(runDir, { recursive: true });
@@ -721,21 +740,35 @@ async function main() {
   const getBrowser = async () => (browser ??= await launchForOriginals());
 
   for (const source of opts.sources) {
-    const kind = isPdfSource(source) ? "pdf" : "url";
+    let kind = isPdfSource(source) ? "pdf" : "url";
+    // The ingest input: the PDF path, or the URL. A URL that serves a PDF
+    // downloads into the run and runs as a PDF; entry.source stays the URL.
+    let input = source;
+    let raw = null;
     const dir = path.join(runDir, slugOf(source));
     await mkdir(dir, { recursive: true });
-    console.log(`\n[${kind}] ${source}`);
     const entry = { source, kind, dir, ingest: null, document: null, blocks: [], original: null, unitos: null, pairing: { pairs: [], unpairedOriginal: [], unpairedUnitos: [] } };
     entries.push(entry);
     try {
+      if (kind === "url") {
+        raw = await fetchRaw(source);
+        if (raw.pdf) {
+          kind = "pdf";
+          input = path.join(dir, "original.pdf");
+          await writeFile(input, raw.bytes);
+          entry.kind = kind;
+          entry.file = input;
+        }
+      }
+      console.log(`\n[${kind}] ${source}${input !== source ? ` (downloaded ${raw.bytes.length} bytes)` : ""}`);
       if (opts.fresh) {
         const where = kind === "pdf"
-          ? { fileHash: createHash("sha256").update(await readFile(source)).digest("hex") }
+          ? { fileHash: createHash("sha256").update(await readFile(input)).digest("hex") }
           : { sourceUrl: source };
         const n = await deleteStored(where);
         if (n > 0) console.log(`[fresh] deleted ${n} stored document(s)`);
       }
-      entry.ingest = await ingest(opts, source);
+      entry.ingest = await ingest(opts, input);
       console.log(`[ingest] ${entry.ingest.ok ? `${entry.ingest.id} (${entry.ingest.deduped ? "deduped" : "parsed"}, ${entry.ingest.ms} ms)` : `FAILED: ${entry.ingest.error}`}`);
       if (entry.ingest.ok) {
         const stored = await storedBlocks(entry.ingest.id);
@@ -744,10 +777,10 @@ async function main() {
         console.log(`[blocks] ${stored.blocks.length}: ${Object.entries(count(stored.blocks, (b) => b.type)).map(([k, v]) => `${k} ${v}`).join(", ")}`);
       }
       if (kind === "pdf") {
-        entry.original = await captureOriginalPdf(source, dir);
+        entry.original = await captureOriginalPdf(input, dir);
         console.log(`[original] ${entry.original.rendered}/${entry.original.pageCount} pages rendered`);
       } else if (!opts.skipOriginal) {
-        entry.original = await captureOriginalPage(await getBrowser(), source, dir);
+        entry.original = await captureOriginalPage(await getBrowser(), source, dir, raw);
         console.log(`[original] status ${entry.original.status}${entry.original.blocked ? " BLOCKED" : ""} · ${entry.original.items.length} elements · raw ${entry.original.rawStatus}${entry.original.error ? ` · error ${entry.original.error}` : ""}`);
       }
       if (entry.ingest.ok) {
