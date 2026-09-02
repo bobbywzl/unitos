@@ -9,6 +9,7 @@ import { useCollab } from "@/components/collab/collab-context";
 import { PersonBadge } from "@/components/collab/person-badge";
 import type { SyncPresence } from "@/components/collab/use-sync";
 import { useT } from "@/components/lang-provider";
+import { Presence } from "@/components/presence";
 
 type CollaboratorRow = {
   email: string;
@@ -155,8 +156,9 @@ export function ShareControl({
         </span>
       )}
 
+      <Presence show={open} exit="menu">
       {open && (
-        <div className="absolute top-full right-0 z-30 mt-2 w-[380px] rounded-2xl bg-card p-4 shadow-float">
+        <div className="menu-in absolute top-full right-0 z-30 mt-2 w-[380px] rounded-2xl bg-card p-4 shadow-float">
           <p className="text-xs text-sand-600">{t("panes.shareDesc")}</p>
 
           {role === "owner" && (
@@ -267,6 +269,7 @@ export function ShareControl({
           </div>
         </div>
       )}
+      </Presence>
     </div>
   );
 }

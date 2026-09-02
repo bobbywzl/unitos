@@ -88,7 +88,7 @@ export function DistillPage({
     // the article scroll at the ends.
     <div
       data-selection-popover
-      className="absolute inset-0 z-30 overflow-y-auto overscroll-contain bg-paper print:hidden"
+      className="content-in absolute inset-0 z-30 overflow-y-auto overscroll-contain bg-paper print:hidden"
     >
       <div className="mx-auto max-w-2xl px-8 py-8">
         <div className="mb-6 flex items-center gap-2">

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { isImeKey } from "@/lib/ime";
 import { useT } from "@/components/lang-provider";
+import { Presence } from "@/components/presence";
 import {
   IngestProgress,
   type IngestStep,
@@ -74,8 +75,6 @@ export function AddDocumentDialog({
     return () => window.removeEventListener("keydown", onKey, true);
   }, [open, onClose]);
 
-  if (!open) return null;
-
   function setTab(next: AddTab) {
     setTabState(next);
     onError(null);
@@ -123,8 +122,10 @@ export function AddDocumentDialog({
     "min-w-0 flex-1 rounded-full bg-sand-100 px-4 py-2 text-sm outline-none placeholder:text-sand-500";
 
   return (
+    <Presence show={open} exit="dialog">
+    {open && (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-ink/30 p-4"
+      className="dialog-in fixed inset-0 z-50 flex items-center justify-center bg-ink/30 p-4"
       onClick={onClose}
       role="dialog"
       aria-modal
@@ -283,5 +284,7 @@ export function AddDocumentDialog({
         </div>
       </div>
     </div>
+    )}
+    </Presence>
   );
 }

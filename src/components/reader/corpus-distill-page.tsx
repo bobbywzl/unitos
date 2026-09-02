@@ -172,7 +172,7 @@ export function CorpusDistillPage({
   }
 
   return (
-    <div data-selection-popover className="fixed inset-0 z-50 overflow-y-auto bg-paper">
+    <div data-selection-popover className="content-in fixed inset-0 z-50 overflow-y-auto bg-paper">
       <div className="mx-auto max-w-2xl px-8 py-8">
         <div className="mb-6 flex items-center gap-2">
           {shown && !running ? (

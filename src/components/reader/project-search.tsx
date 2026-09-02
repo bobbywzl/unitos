@@ -7,6 +7,7 @@ import { isImeKey } from "@/lib/ime";
 import type { SearchHit } from "@/lib/embeddings";
 import { SpinnerIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
+import { Presence } from "@/components/presence";
 
 // The project search bubble: it expands under the search icon beside the
 // assistant button, half transparent over the article. Type a question or a
@@ -73,9 +74,9 @@ export function ProjectSearch({
     return () => clearTimeout(timer);
   }, [query, notebookId]);
 
-  if (!open) return null;
-
   return (
+    <Presence show={open} exit="pop">
+    {open && (
     <div
       data-project-search
       className="pop-in pointer-events-auto flex w-full max-w-[400px] origin-top-left flex-col gap-2 rounded-[24px] bg-card/55 p-3 shadow-float backdrop-blur-md"
@@ -122,5 +123,7 @@ export function ProjectSearch({
         </div>
       )}
     </div>
+    )}
+    </Presence>
   );
 }

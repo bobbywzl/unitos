@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { useT } from "@/components/lang-provider";
+import { Presence } from "@/components/presence";
 import type { TKey } from "@/lib/i18n/dictionaries";
 
 // The reader's guide: Distill, Circle & ask, every selection tool, and the
@@ -37,14 +38,14 @@ export function GuideDialog({ open, onClose }: { open: boolean; onClose: () => v
     return () => window.removeEventListener("keydown", onKey, true);
   }, [open, onClose]);
 
-  if (!open) return null;
-
   const h = "font-display text-[15px] text-clay-800";
   const term = "font-semibold";
 
   return (
+    <Presence show={open} exit="dialog">
+    {open && (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-ink/30 p-4"
+      className="dialog-in fixed inset-0 z-50 flex items-center justify-center bg-ink/30 p-4"
       onClick={onClose}
       role="dialog"
       aria-modal
@@ -113,5 +114,7 @@ export function GuideDialog({ open, onClose }: { open: boolean; onClose: () => v
         </section>
       </div>
     </div>
+    )}
+    </Presence>
   );
 }
