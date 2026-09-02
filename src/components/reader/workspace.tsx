@@ -317,6 +317,7 @@ export function Workspace({
         )}
         <button
           onClick={openGuide}
+          data-nudge="guide"
           aria-label={t("panes.guide")}
           title={t("panes.guideTitle")}
           className="relative hidden size-[38px] shrink-0 items-center justify-center rounded-full text-sand-600 hover:bg-clay-100 hover:text-clay-800 md:flex"
@@ -431,6 +432,7 @@ export function Workspace({
         )}
 
         <nav
+          data-nudge="rail"
           aria-label={t("panes.workspace")}
           className="fixed inset-x-0 bottom-0 z-30 flex h-[calc(54px+env(safe-area-inset-bottom))] flex-row items-center justify-around border-t border-line bg-sand-100 px-3 pt-1 pb-[env(safe-area-inset-bottom)] md:static md:z-auto md:h-auto md:w-[52px] md:shrink-0 md:flex-col md:justify-start md:gap-1.5 md:border-t-0 md:border-l md:px-0 md:pt-2.5 md:pb-2.5 print:hidden"
         >

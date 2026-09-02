@@ -64,6 +64,7 @@ export function WorksShelf({
       <h1 className="mb-7 text-[34px] sm:text-[46px]">{t("works.corpora")}</h1>
 
       <form
+        data-nudge="project"
         className="mb-11 flex gap-2.5"
         onSubmit={(e) => {
           e.preventDefault();

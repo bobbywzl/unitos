@@ -105,7 +105,10 @@ export default async function Home() {
       </header>
 
       <div className="pt-16">
-        <WelcomeFlow firstWork={works.length === 0 && collabRows.length === 0} />
+        <WelcomeFlow
+          firstWork={works.length === 0 && collabRows.length === 0}
+          firstName={user.name.trim().split(/\s+/)[0] || user.name}
+        />
         <WorksShelf
           works={works.map((w) => toItem(w))}
           sharedWorks={collabRows.map((r) =>
