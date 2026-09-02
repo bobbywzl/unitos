@@ -393,8 +393,11 @@ function basenameOf(src) {
 // decoded (entities resolved, for TeX and URLs) and text (tags stripped, for
 // element text). An element is "in raw" when one of its keys appears there.
 function rawViews(raw) {
-  const decoded = decodeEntities(raw);
-  const text = decoded.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/gi, " ").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+  // Script bodies (RSC payloads, JSON-LD) carry image URLs and text the parser
+  // never sees: an element found only there is client-rendered.
+  const markup = raw.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/gi, " ");
+  const decoded = decodeEntities(markup);
+  const text = decoded.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
   return { decoded, text, decodedCompact: decoded.replace(/\s+/g, ""), textCompact: text.replace(/\s+/g, "") };
 }
 
