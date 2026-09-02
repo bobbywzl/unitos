@@ -4,9 +4,9 @@ import { useEffect } from "react";
 import { useT } from "@/components/lang-provider";
 import type { TKey } from "@/lib/i18n/dictionaries";
 
-// The reader's guide: every selection tool and feature, in one place.
-// Opened from the ? button in the header. In the Reading, Editing, and Side
-// panel sections the body strings carry their own leading separator and
+// The reader's guide: Distill, Circle & ask, every selection tool, and the
+// side panel, in one place. Opened from the ? button in the header. In the
+// Side panel section the body strings carry their own leading separator and
 // joining spaces (see dict/works.ts), so bold terms and bodies concatenate
 // with no literal whitespace between them.
 
@@ -65,7 +65,16 @@ export function GuideDialog({ open, onClose }: { open: boolean; onClose: () => v
           </button>
         </div>
 
-        {/* Circle & ask leads the guide (the signature move), emphasized. */}
+        {/* Distill leads the guide, emphasized. */}
+        <section className="flex flex-col gap-1.5 rounded-2xl bg-clay-100/70 p-4">
+          <span className={h}>{t("works.guideDistillHeader")}</span>
+          <p className="text-[13px] leading-relaxed text-sand-800">{t("works.guideDistillBody")}</p>
+          <p className="text-[13px] leading-relaxed text-sand-800">
+            {t("works.guideDistillNotesBody")}
+          </p>
+        </section>
+
+        {/* Circle & ask (the signature move), emphasized. */}
         <section className="flex flex-col gap-1.5 rounded-2xl bg-clay-100/70 p-4">
           <span className={h}>{t("works.guideCircleHeader")}</span>
           <p className="text-[13px] leading-relaxed text-sand-800">{t("works.guideCircleBody")}</p>
@@ -77,73 +86,12 @@ export function GuideDialog({ open, onClose }: { open: boolean; onClose: () => v
         {/* Every selection tool is its own card, styled like Circle & ask. */}
         <section className="flex flex-col gap-2">
           <span className={h}>{t("works.guideSelectHeader")}</span>
-          <p className="text-[13px] leading-relaxed text-sand-800">{t("works.guideSelectTouch")}</p>
           {TOOLS.map(([nameKey, bodyKey]) => (
             <div key={nameKey} className="flex flex-col gap-1 rounded-2xl bg-clay-100/70 p-4">
               <span className={h}>{t(nameKey)}</span>
               <p className="text-[13px] leading-relaxed text-sand-800">{t(bodyKey)}</p>
             </div>
           ))}
-        </section>
-
-        <section className="flex flex-col gap-1.5">
-          <span className={h}>{t("works.guideReadingHeader")}</span>
-          <ul className="flex flex-col gap-1.5 text-[13px] leading-relaxed text-sand-800">
-            <li>
-              <span className={term}>{t("works.guideAddUrl")}</span>
-              {t("works.guideAddUrlBody")}
-            </li>
-            <li>
-              <span className={term}>{t("works.guideAssistantMenu")}</span>
-              {t("works.guideAssistantMenuBody")}
-            </li>
-            <li>
-              <span className={term}>{t("works.guideContext")}</span>
-              {t("works.guideContextBody")}
-            </li>
-            <li>
-              <span className={term}>{t("works.guideKeyTerms")}</span>
-              {t("works.guideKeyTermsBody")}
-            </li>
-            <li>
-              <span className={term}>{t("works.guideDistill")}</span>
-              {t("works.guideDistillBody1")}
-              <span className={term}>{t("common.pending")}</span>
-              {t("works.guideDistillBody2")}
-            </li>
-            <li>
-              <span className={term}>{t("works.guideNotesTray")}</span>
-              {t("works.guideNotesTrayBody")}
-            </li>
-            <li>
-              <span className={term}>{t("works.guideFigureTools")}</span>
-              {t("works.guideFigureToolsBody")}
-            </li>
-            <li>
-              <span className={term}>{t("works.guideHandwritten")}</span>
-              {t("works.guideHandwrittenBody")}
-            </li>
-            <li>
-              <span className={term}>{t("works.guidePrint")}</span>
-              {t("works.guidePrintBody")}
-            </li>
-          </ul>
-        </section>
-
-        <section className="flex flex-col gap-1.5">
-          <span className={h}>{t("works.guideEditingHeader")}</span>
-          <ul className="flex flex-col gap-1.5 text-[13px] leading-relaxed text-sand-800">
-            <li>
-              <span className={term}>{t("works.guideDoubleClick")}</span>
-              {t("works.guideDoubleClickBody")}
-            </li>
-            <li>{t("works.guideEditSelect")}</li>
-            <li>
-              <span className={term}>{t("works.guideEditsTab")}</span>
-              {t("works.guideEditsTabBody")}
-            </li>
-            <li>{t("works.guideAnchors")}</li>
-          </ul>
         </section>
 
         <section className="flex flex-col gap-1.5">
