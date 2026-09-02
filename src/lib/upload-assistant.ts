@@ -7,7 +7,8 @@ import { callForJson } from "@/lib/derive/json-call";
 import { currentLang, serverT } from "@/lib/i18n/server";
 import type { OnIngestProgress } from "@/lib/parse/ingest";
 import { pageEstimate, SPLIT_ASK_PAGES, splitPartCount } from "@/lib/parse/split";
-import { fetchPageHtml, parseHtmlContent } from "@/lib/parse/url";
+import { fetchPage } from "@/lib/parse/fetch-page";
+import { parseFetchedPage } from "@/lib/parse/url";
 import { uploadInstructionsPrompt } from "@/lib/prompts/upload-instructions";
 import { uploadReviewPrompt } from "@/lib/prompts/upload-review";
 
@@ -174,10 +175,10 @@ export async function reviewUpload(
   const t = await serverT();
 
   onProgress?.("fetch");
-  const rawHtml = await fetchPageHtml(url);
+  const page = await fetchPage(url, onProgress);
   onProgress?.("extract");
-  const parsed = await parseHtmlContent(rawHtml, url);
-  const links = harvestLinks(rawHtml, url);
+  const parsed = await parseFetchedPage(page, url);
+  const links = page.kind === "html" ? harvestLinks(page.html, url) : [];
 
   const chars = parsed.blocks.reduce((n, b) => n + b.text.length, 0);
   const pages = pageEstimate(chars);

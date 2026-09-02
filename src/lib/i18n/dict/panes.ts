@@ -179,7 +179,9 @@ const en = {
   uploadAssistant: "Upload assistant",
   uploadSandboxNote: "The assistant reads the page in a private sandbox before anything is saved.",
   stepReviewing: "Reviewing the content",
-  uploadReviewFailed: "The review failed: {reason} You can still add the content.",
+  uploadReviewFailed: "The review failed: {reason}",
+  uploadCutOff:
+    "The add stopped before it finished. The server ran out of time, or the connection dropped. Try again; a large PDF may need splitting.",
   uploadPageFacts: "about {pages} pages of text · {blocks} blocks",
   uploadNuanceUrl:
     "A web page parses into blocks — text, headings, figures, tables, equations. A page behind a sign-in or built by scripts may come out thin.",
@@ -462,7 +464,8 @@ const zh: Record<keyof typeof en, string> = {
   uploadAssistant: "上传助手",
   uploadSandboxNote: "助手在私有沙箱中读取页面，保存之前不写入任何内容。",
   stepReviewing: "审阅内容",
-  uploadReviewFailed: "审阅失败：{reason} 仍可添加内容。",
+  uploadReviewFailed: "审阅失败：{reason}",
+  uploadCutOff: "添加中途停止。服务器超时，或连接断开。请重试；很大的 PDF 可能需要拆分。",
   uploadPageFacts: "约 {pages} 页文字 · {blocks} 个块",
   uploadNuanceUrl:
     "网页解析为块——文字、标题、插图、表格、公式。需要登录或由脚本生成的页面可能解析出很少内容。",

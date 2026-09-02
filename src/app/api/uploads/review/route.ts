@@ -5,6 +5,7 @@ import { currentUser } from "@/lib/auth";
 import { notebookAccess } from "@/lib/collab";
 import { serverT } from "@/lib/i18n/server";
 import { progressResponse } from "@/lib/ingest-response";
+import { describeIngestError } from "@/lib/parse/ingest-error";
 import { parseBody } from "@/lib/validate";
 
 export const maxDuration = 120;
@@ -60,7 +61,7 @@ export async function POST(req: Request) {
       return { review };
     } catch (err) {
       console.error("Upload review failed:", err);
-      throw new Error(t("api.reviewFailed"));
+      throw new Error(describeIngestError(err, t, "url"));
     }
   });
 }

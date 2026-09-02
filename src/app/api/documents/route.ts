@@ -10,6 +10,7 @@ import { parseDriveFileId } from "@/lib/drive/types";
 import { currentLang, serverT } from "@/lib/i18n/server";
 import { progressResponse } from "@/lib/ingest-response";
 import { attachDocument } from "@/lib/parse/attach";
+import { describeIngestError } from "@/lib/parse/ingest-error";
 import { ingestMediaUrl } from "@/lib/video/ingest-media-url";
 import { ingestYouTube } from "@/lib/video/ingest-youtube";
 import { runTranscription } from "@/lib/video/transcription-job";
@@ -172,7 +173,7 @@ export async function POST(req: Request) {
         return { id: document.id, title: document.title, deduped };
       } catch (err) {
         console.error("PDF ingest failed:", err);
-        throw new Error(t("api.pdfParseFailed"));
+        throw new Error(describeIngestError(err, t, "pdf"));
       }
     });
   }
@@ -258,10 +259,12 @@ export async function POST(req: Request) {
 
   return progressResponse(async (onProgress) => {
     try {
-      const { document, extra, deduped } = await parse.ingestUrl(data.url, onProgress, {
-        instructions: data.instructions.trim() || undefined,
-        split: data.split,
-      });
+      const { document, extra, deduped } = await parse.ingestUrl(
+        data.url,
+        onProgress,
+        { instructions: data.instructions.trim() || undefined, split: data.split },
+        user?.id ?? null,
+      );
       // A split add saves several documents; every one attaches, gets its
       // glossary, and gets its recommended-links scan, like any document.
       const documents = [document, ...(extra ?? [])];
@@ -283,7 +286,7 @@ export async function POST(req: Request) {
       };
     } catch (err) {
       console.error("URL ingest failed:", err);
-      throw new Error(t("api.urlIngestFailed"));
+      throw new Error(describeIngestError(err, t, "url"));
     }
   });
 }

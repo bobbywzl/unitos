@@ -6,6 +6,7 @@ import { buildGlossary } from "@/lib/glossary";
 import { runConversion } from "@/lib/handwritten/convert";
 import { serverT } from "@/lib/i18n/server";
 import { ndjsonWriter } from "@/lib/ndjson";
+import { describeIngestError } from "@/lib/parse/ingest-error";
 
 export const maxDuration = 120;
 
@@ -83,15 +84,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ documentId: st
         }
       } catch (err) {
         console.error("Re-parse failed:", err);
-        const message = err instanceof Error ? err.message : null;
-        send({
-          error:
-            message === "Could not extract readable content"
-              ? t("api.unreadableContent")
-              : message
-                ? t("api.reparseFailedReason", { reason: message })
-                : t("api.reparseFailed"),
-        });
+        send({ error: describeIngestError(err, t, "reparse") });
       } finally {
         controller.close();
       }

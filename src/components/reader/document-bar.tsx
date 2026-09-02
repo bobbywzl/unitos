@@ -275,7 +275,7 @@ export function DocumentBar({
       }
     }
     if (!result || "error" in result) {
-      throw new Error(result && "error" in result ? result.error : t("panes.uploadFailed"));
+      throw new Error(result && "error" in result ? result.error : t("panes.uploadCutOff"));
     }
     setPhase((p) => (p ? { ...p, steps: completeIngestSteps(p.steps) } : p));
     await sleep(250); // let the last checkmark register before the pill clears

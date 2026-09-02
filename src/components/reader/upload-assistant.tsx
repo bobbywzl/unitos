@@ -221,7 +221,7 @@ export function UploadAssistant({
           result = event;
         }
       }
-      if (!result?.review) throw new Error(result?.error ?? t("api.reviewFailed"));
+      if (!result?.review) throw new Error(result?.error ?? t("panes.uploadCutOff"));
       const next = result.review;
       setReview(next);
       const sel = new Set<string>();
@@ -292,7 +292,7 @@ export function UploadAssistant({
       else result = event;
     }
     if (!result || "error" in result) {
-      throw new Error(result && "error" in result ? result.error : t("panes.uploadFailed"));
+      throw new Error(result && "error" in result ? result.error : t("panes.uploadCutOff"));
     }
     setSteps((s) => (s ? completeIngestSteps(s) : s));
     return result;
