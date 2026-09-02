@@ -109,6 +109,22 @@ const en = {
   svcNotSet: "Not set",
   envHint:
     "Set these in your host's environment variables and redeploy. On Vercel: Settings → Environment Variables.",
+  // Accounts page
+  accounts: "Accounts",
+  accountsDesc:
+    "Every account and what it holds. Reset account deletes the account's projects, documents, notes, and profile, signs it out everywhere, and puts it back at onboarding, like a new account. The account keeps its email, name, and password.",
+  noAccounts: "No accounts yet.",
+  accountCreated: "created {date}",
+  accountLastSeen: "last seen {date}",
+  accountPremium: "Unitos Premium",
+  accountDrive: "Google Drive linked",
+  resetAccount: "Reset account",
+  resetConfirmDesc:
+    "Deletes every project, document, note, and setting of this account and signs it out everywhere. Type {confirm} to confirm.",
+  resetting: "Resetting…",
+  resetDone: "Reset. {projects} projects, {documents} documents, {notes} notes deleted.",
+  resetFailed: "Reset failed",
+  resetFailedStatus: "Reset failed ({status})",
 };
 
 const zh: Record<keyof typeof en, string> = {
@@ -205,6 +221,21 @@ const zh: Record<keyof typeof en, string> = {
   svcSet: "已设置",
   svcNotSet: "未设置",
   envHint: "在托管平台的环境变量中设置这些值并重新部署。Vercel 上：Settings → Environment Variables。",
+  // Accounts page
+  accounts: "账户",
+  accountsDesc:
+    "全部账户及其持有的内容。“重置账户”删除该账户的项目、文档、笔记和个人资料，在所有设备上退出登录，并使其回到新手引导，如同新账户。账户保留邮箱、名字和密码。",
+  noAccounts: "还没有账户。",
+  accountCreated: "创建于 {date}",
+  accountLastSeen: "最近活动 {date}",
+  accountPremium: "Unitos Premium",
+  accountDrive: "已关联 Google Drive",
+  resetAccount: "重置账户",
+  resetConfirmDesc: "删除该账户的全部项目、文档、笔记和设置，并在所有设备上退出登录。输入 {confirm} 以确认。",
+  resetting: "重置中…",
+  resetDone: "已重置。删除了 {projects} 个项目、{documents} 份文档、{notes} 条笔记。",
+  resetFailed: "重置失败",
+  resetFailedStatus: "重置失败（{status}）",
 };
 
 export const admin = { en, zh } as const;
