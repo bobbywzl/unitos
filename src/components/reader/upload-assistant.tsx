@@ -5,7 +5,7 @@ import { api } from "@/lib/api";
 import { isImeKey } from "@/lib/ime";
 import { useT } from "@/components/lang-provider";
 import { CheckIcon, SparkleIcon, SpinnerIcon } from "@/components/icons";
-import type { TFunc } from "@/lib/i18n/dictionaries";
+import type { TFunc, TKey } from "@/lib/i18n/dictionaries";
 import { readNdjson } from "@/lib/ndjson";
 import { classifyDriveFile, type DrivePickedFile } from "@/lib/drive/types";
 import type {
@@ -53,6 +53,24 @@ const SINGLE_REQUEST_BYTES = 4 * 1024 * 1024;
 const CHUNK_BYTES = UPLOAD_CHUNK_BYTES;
 // The sentinel for "this page" in the selected set — never a real URL.
 const SELF = "this-page";
+
+// The PDF import, picked in the box (SPEC.md §16). judge: Import PDF decides —
+// computer text parses to blocks, rough handwriting imports as pages and
+// converts. pages: the whole PDF imports as its pages, exactly as they look,
+// no text added. convert: the pages import as they are, then conversion
+// writes the handwriting as text after them.
+type PdfFormat = "judge" | "pages" | "convert";
+const PDF_FORMATS: PdfFormat[] = ["judge", "pages", "convert"];
+const PDF_FORMAT_LABEL: Record<PdfFormat, TKey> = {
+  judge: "panes.uploadPdfJudge",
+  pages: "panes.uploadPdfPages",
+  convert: "panes.uploadPdfConvert",
+};
+const PDF_FORMAT_NOTE: Record<PdfFormat, TKey> = {
+  judge: "panes.uploadPdfJudgeNote",
+  pages: "panes.uploadPdfPagesNote",
+  convert: "panes.uploadPdfConvertNote",
+};
 
 function isMediaFile(file: File): boolean {
   return (
@@ -148,6 +166,7 @@ export function UploadAssistant({
   const [reviewError, setReviewError] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set([SELF]));
   const [split, setSplit] = useState(false);
+  const [pdfFormat, setPdfFormat] = useState<PdfFormat>("judge");
   const [instructions, setInstructions] = useState("");
   const [check, setCheck] = useState<CheckState | null>(null);
   const [checking, setChecking] = useState(false);
@@ -328,8 +347,15 @@ export function UploadAssistant({
     setError(null);
     const checked = await ensureCheck();
     const feasible = checked?.feasible ?? "";
-    // The PDF directives the check read out of the instructions (SPEC.md §16).
-    const pdfDirectives: PdfDirectives = checked?.pdf ?? { pages: false, convert: true };
+    // The PDF directives (SPEC.md §16): an explicit pick in the box sets them
+    // outright, no model call; judge leaves the instruction check's reading in
+    // force, and the defaults when there was nothing to check.
+    const pdfDirectives: PdfDirectives =
+      pdfFormat === "pages"
+        ? { pages: true, convert: false }
+        : pdfFormat === "convert"
+          ? { pages: true, convert: true }
+          : (checked?.pdf ?? { pages: false, convert: true });
     // An instruction the assistant cannot follow stops the first Add: the
     // honest replies show before anything is added, and the reader decides —
     // edit the instructions, or press Add again to proceed without them.
@@ -713,6 +739,26 @@ export function UploadAssistant({
                 {hasMedia && (
                   <p className="text-[13px] text-sand-700">{t("panes.uploadNuanceVideoFile")}</p>
                 )}
+              </div>
+            )}
+
+            {hasPdf && (
+              <div className="flex flex-col gap-1.5">
+                <span className={sectionLabel}>{t("panes.uploadPdfFormat")}</span>
+                <div className="flex flex-wrap items-center gap-2">
+                  {PDF_FORMATS.map((format) => (
+                    <button
+                      key={format}
+                      type="button"
+                      onClick={() => setPdfFormat(format)}
+                      aria-pressed={pdfFormat === format}
+                      className={`${pill} ${pdfFormat === format ? "bg-clay text-clay-fg" : "bg-sand-100 text-sand-700 hover:bg-clay-100"}`}
+                    >
+                      {t(PDF_FORMAT_LABEL[format])}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-xs text-sand-500">{t(PDF_FORMAT_NOTE[pdfFormat])}</p>
               </div>
             )}
             {request.kind === "video-url" && (

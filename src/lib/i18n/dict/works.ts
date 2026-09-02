@@ -95,7 +95,7 @@ const en = {
     " — hold and draw a small circle on a figure or equation: Explain deciphers the visual, a highlight color adds a side label that jumps to Annotations, Comment and Link work like on text.",
   guideHandwritten: "Handwritten notes",
   guideHandwrittenBody:
-    " — a PDF of rough handwritten notes imports as its pages; AI converts them to text blocks below, keeping the notes' formatting. Say “do not convert” in the upload instructions to keep the pages as they are. Circle a spot on a page to ask about it, explain it, comment on it, or lasso highlight it.",
+    " — a PDF of rough handwritten notes imports as its pages; AI converts them to text blocks below, keeping the notes' formatting. Pick the import in the upload assistant: judge automatically, pages as they are, or pages + convert to text. Circle a spot on a page to ask about it, explain it, comment on it, or lasso highlight it.",
   guidePrint: "Print document",
   guidePrintBody:
     " (+ in the header) — prints the open document, article only: no app chrome, full length, highlights kept.",
@@ -228,7 +228,7 @@ const zh: Record<keyof typeof en, string> = {
     "——在插图或公式上按住并画一个小圈：“解释”解读图像，高亮颜色加一个跳到批注的侧边标签，“评论”和“链接”与文本上的用法相同。",
   guideHandwritten: "手写笔记",
   guideHandwrittenBody:
-    "——粗糙手写笔记的 PDF 导入后显示页面；AI 将其转换为下方的文本块，保留笔记的格式。在上传要求中写明“不要转换”即可保持页面原样。在页面上圈选一处即可提问、解释、评论或圈选高亮。",
+    "——粗糙手写笔记的 PDF 导入后显示页面；AI 将其转换为下方的文本块，保留笔记的格式。在上传助手中选择导入方式：自动判断、页面原样，或页面 + 转换为文本。在页面上圈选一处即可提问、解释、评论或圈选高亮。",
   guidePrint: "打印文档",
   guidePrintBody:
     "（顶栏中的 +）——打印当前打开的文档，只含文章：无应用界面，完整长度，保留高亮。",

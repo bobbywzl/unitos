@@ -3,6 +3,7 @@
 import katex from "katex";
 import "katex/dist/katex.min.css";
 import { useMemo } from "react";
+import { KATEX_MACROS } from "@/lib/katex";
 
 // EQUATION block: block.text is raw TeX; render it with KaTeX. Rendered DOM text
 // differs from stored text, so selection anchoring is off for these blocks
@@ -15,6 +16,7 @@ export function Equation({ tex }: { tex: string }) {
         displayMode: true,
         throwOnError: false,
         output: "htmlAndMathml",
+        macros: { ...KATEX_MACROS },
       });
     } catch {
       return null;

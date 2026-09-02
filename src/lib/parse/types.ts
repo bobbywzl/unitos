@@ -98,4 +98,9 @@ export type UrlParseProgress = (stage: "extract", detail?: string) => void;
 //    markers kept inline, promo rails and comment sections dropped, collapsed
 //    accordion content kept, PDF columns split by shape alone, PDF titles
 //    merge across wrapped lines.
-export const PARSER_VERSION = 10;
+// 11: import compare loop round 1 — MediaWiki TeX unwrapped as whole brace
+//     groups (unbalanced braces broke KaTeX), inline MediaWiki math reads as
+//     glyph text instead of raw TeX, display math inside list items, table
+//     cells, headings, and captions keeps its readable text instead of vanishing,
+//     a formula alone on its line (MediaWiki's <dd> indentation) is an EQUATION.
+export const PARSER_VERSION = 11;

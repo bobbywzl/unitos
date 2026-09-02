@@ -184,7 +184,7 @@ const en = {
   uploadNuanceUrl:
     "A web page parses into blocks — text, headings, figures, tables, equations. A page behind a sign-in or built by scripts may come out thin.",
   uploadNuancePdf:
-    "PDF up to 50 MB. Computer text parses to blocks in reading order; rough handwritten notes import as pages, and conversion writes the text after them. Say “do not convert” in the instructions to keep the pages as they are.",
+    "PDF up to 50 MB. Computer text parses to blocks in reading order; rough handwritten notes import as pages, and conversion writes the text after them. Pick the import below.",
   uploadNuanceDrive:
     "Google Docs, Sheets, Slides, and Drawings import as PDF through Drive's own conversion; PDFs, video, and audio import as they are.",
   uploadNuanceVideoFile:
@@ -208,6 +208,16 @@ const en = {
   uploadFileProgress: "File {i} of {total} · {title}",
   uploadPageFailed: "{title} — {reason}",
   uploadAddedCount: "Added {n} documents.",
+  // The PDF import pick (SPEC.md §16): three pills, one note line per pick.
+  uploadPdfFormat: "PDF import",
+  uploadPdfJudge: "Judge automatically",
+  uploadPdfJudgeNote:
+    "Computer text parses to blocks; rough handwritten notes import as pages and convert to text.",
+  uploadPdfPages: "Pages as they are",
+  uploadPdfPagesNote: "The whole PDF imports as its pages, exactly as they look. No text is added.",
+  uploadPdfConvert: "Pages + convert to text",
+  uploadPdfConvertNote:
+    "The pages import as they are, then AI reads them and writes the text after them in the notes' formatting, math as LaTeX.",
 
   // Distilled page (distill-page.tsx)
   deleteDistillation: "Delete this distillation",
@@ -457,7 +467,7 @@ const zh: Record<keyof typeof en, string> = {
   uploadNuanceUrl:
     "网页解析为块——文字、标题、插图、表格、公式。需要登录或由脚本生成的页面可能解析出很少内容。",
   uploadNuancePdf:
-    "PDF 最大 50 MB。电脑文字按阅读顺序解析为块；粗略手写笔记按页面导入，随后转换写出文本。在上传要求中写明“不要转换”即可保持页面原样。",
+    "PDF 最大 50 MB。电脑文字按阅读顺序解析为块；粗略手写笔记按页面导入，随后转换写出文本。在下方选择导入方式。",
   uploadNuanceDrive:
     "Google 文档、表格、幻灯片、绘图经 Drive 自带转换以 PDF 导入；PDF、视频与音频按原样导入。",
   uploadNuanceVideoFile: "视频或音频最大 200 MB。文件存储后生成逐字稿；添加后稍等即到。",
@@ -477,6 +487,13 @@ const zh: Record<keyof typeof en, string> = {
   uploadFileProgress: "第 {i}/{total} 个文件 · {title}",
   uploadPageFailed: "{title} —— {reason}",
   uploadAddedCount: "已添加 {n} 个文档。",
+  uploadPdfFormat: "PDF 导入方式",
+  uploadPdfJudge: "自动判断",
+  uploadPdfJudgeNote: "电脑文字解析为块；粗略手写笔记按页面导入并转换为文本。",
+  uploadPdfPages: "页面原样",
+  uploadPdfPagesNote: "整个 PDF 按页面导入，原样呈现，不添加任何文本。",
+  uploadPdfConvert: "页面 + 转换为文本",
+  uploadPdfConvertNote: "页面原样导入，随后 AI 阅读页面，按笔记的格式在其后写出文本，公式为 LaTeX。",
 
   deleteDistillation: "删除此提炼",
   scanningArticle: "正在扫描文章，找出回答它的引文",

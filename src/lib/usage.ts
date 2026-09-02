@@ -18,6 +18,7 @@ const price = (input: number, output: number): Price => ({
 
 /** Exact-match list prices, USD per 1M tokens. */
 const MODEL_PRICING: Record<string, Price> = {
+  "claude-fable-5-1": price(10, 50),
   "claude-fable-5": price(10, 50),
   "claude-opus-5": price(5, 25),
   "claude-opus-4-8": price(5, 25),
