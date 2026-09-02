@@ -39,39 +39,36 @@ const en = {
   guideTitle: "How to dissect a document",
   guideCircleHeader: "Circle & ask — draw on anything",
   guideCircleBody:
-    "Hold the mouse and circle any part of a figure or equation: Explain deciphers the visual, a highlight color marks it, Comment and Link work like on text.",
+    "Hold and circle any part of a figure or equation. Explain reads the visual; a color marks it; Comment and Link work as on text.",
   guideCirclePagesBody:
-    "A PDF of rough handwritten notes imports as its pages, and every page is a figure: circle any part — a formula, a sketch, a margin note — then Ask a question about it in the context of the whole document, Explain it, Comment, or pick a color for a lasso highlight.",
+    "Handwritten PDFs import as pages, and every page is a figure: circle a formula, a sketch, or a margin note, then Ask, Explain, Comment, or pick a color.",
   guideSelectHeader: "Select text — the tools appear on the left",
-  guideSelectTouch:
-    "On a tablet: hold a word and drag the handles to select text. The tools open under the selection, with the colors and Add to notes in the same box.",
+  guideSelectTouch: "On a tablet: hold a word and drag the handles. The tools open under the selection.",
   guideAssistant: "Assistant",
   guideAssistantBody:
-    " — type or speak a command about the selection (“highlight the key claim and add a note to Thesis”). It proposes a plan; in Ask mode you approve each action before it runs, in Auto mode it runs immediately. Auto-mode notes still land pending for your review. The reply opens a small chat beside the article — keep talking in it; every turn still applies to your selection. Drag its corner to resize it freely.",
+    "Type or speak a command about the selection. It proposes a plan: Ask mode waits for your approval, Auto mode runs it. The reply opens a chat beside the article; every turn applies to the selection.",
   guideExplain: "Explain",
   guideExplainBody:
-    " — a short explanation of the selection, tuned to your context. Saved under Annotations; click the highlighted text any time to reopen the bubble. When the AI cites a block, the tag renders as a ¶ chip — click it to jump there.",
+    "A short explanation of the selection, tuned to your background. Saved under Annotations; click the highlight to reopen it.",
   guideSimplify: "Simplify",
   guideSimplifyBody:
-    " — rewrites the selection in plain words, in a bubble beside the article. Each sentence in the bubble is lightly tinted: press one and it goes solid while the original sentences it restates light up in the text. The rewrite is saved under Simplified in the Annotations tab; click the highlighted text any time to reopen the bubble. Drag any bubble by its header to move it; a faint line ties each bubble to the text it came from.",
+    "Rewrites the selection in plain words in a bubble beside the article. Press a sentence to light up the original it restates. Saved under Annotations.",
   guideExtract: "Extract",
   guideExtractBody:
-    " — highlights the passages across the article that reveal what the selection focuses on. The selection keeps a solid underline; every found passage gets a dashed one plus a label chip (E1, E2, …) that jumps back to the selection. Click the selection's own chip for the extract card: the passage count and Delete.",
+    "Highlights every passage in the article that reveals what the selection focuses on. Each gets a label chip (E1, E2, …) that jumps back to the selection.",
   guideColors: "Colors",
-  guideColorsBody:
-    " — highlight the selection. Type a comment first, then pick a color, and the note rides on the highlight.",
+  guideColorsBody: "Highlight the selection. Type a comment first and it rides on the highlight.",
   guideComment: "Comment",
   guideCommentBody:
-    " — attach a comment to the selection without a highlight. A small comment icon sits beside the text; click it to open the comment in a card.",
+    "Attach a comment to the selection without a highlight. Click the comment icon beside the text to open it.",
   guideAddTo: "Add to",
-  guideAddToBody:
-    " — file the selection verbatim as a note in a section you pick. No AI involved.",
+  guideAddToBody: "File the selection verbatim as a note in a section you pick. No AI.",
   guideLink: "Link across texts",
   guideLinkBody:
-    " — connect this passage to a passage in this or another document. Select the other end and press Link here. Both ends become clickable and are listed under Annotations.",
+    "Connect this passage to one in this or another document. Select the other end and press Link here.",
   guideVoice: "Voice",
   guideVoiceBody:
-    " — the round bubble under the tools reads the highlighted text aloud, Chinese and English alike. The reading continues if you dismiss the selection; press the bubble again or the floating Stop reading control to stop.",
+    "The round bubble under the tools reads the selection aloud, Chinese and English alike. Press it again to stop.",
   guideReadingHeader: "Reading",
   guideAddUrl: "Add URL",
   guideAddUrlBody:
@@ -179,37 +176,32 @@ const zh: Record<keyof typeof en, string> = {
   guideTitle: "如何拆解一篇文档",
   guideCircleHeader: "圈选并提问——在任何内容上画圈",
   guideCircleBody:
-    "按住鼠标，在插图或公式的任意部分画圈：“解释”解读图像，高亮颜色标记它，“评论”和“链接”与文本上的用法相同。",
+    "按住并在插图或公式的任意部分画圈。“解释”解读图像；颜色标记它；“评论”和“链接”与文本上相同。",
   guideCirclePagesBody:
-    "粗略手写笔记的 PDF 按页面导入，每一页都是一张插图：圈出任意部分——一个公式、一幅草图、一条旁注——即可结合整篇文档提问、解释、评论，或选颜色圈选高亮。",
+    "手写 PDF 按页面导入，每一页都是一张插图：圈出公式、草图或旁注，然后提问、解释、评论，或选颜色。",
   guideSelectHeader: "选中文本——工具出现在左侧",
-  guideSelectTouch:
-    "平板上：长按一个词并拖动选择柄以选中文本。工具出现在选中内容下方，颜色和添加到笔记在同一个框内。",
+  guideSelectTouch: "平板上：长按一个词并拖动选择柄。工具出现在选中内容下方。",
   guideAssistant: "助手",
   guideAssistantBody:
-    "——对选中内容输入或说出一条指令（“高亮关键论断，把笔记加到论点章节”）。它会先提出计划；“询问”模式下每个动作都由你批准后执行，“自动”模式下立即执行。“自动”模式产生的笔记仍为待定，等你审阅。回复会在文章旁打开一个小聊天——继续在里面对话即可；每一轮仍作用于你的选中内容。拖动它的一角可自由调整大小。",
+    "对选中内容输入或说出一条指令。它会提出计划：“询问”模式等你批准，“自动”模式直接执行。回复在文章旁打开聊天；每一轮都作用于选中内容。",
   guideExplain: "解释",
-  guideExplainBody:
-    "——对选中内容的简短解释，贴合你的背景。保存在批注下；随时点击高亮文本可重新打开气泡。当 AI 引用某个块时，标记会显示为 ¶ 标签——点击即可跳转。",
+  guideExplainBody: "对选中内容的简短解释，贴合你的背景。保存在批注下；点击高亮可重新打开。",
   guideSimplify: "简化",
   guideSimplifyBody:
-    "——用平实的话改写选中内容，显示在文章旁的气泡里。气泡里每个句子都有浅浅的底色：点击其中一句会变为实色，它复述的原文句子同时在文中亮起。改写保存在批注页签的“简化”下；随时点击高亮文本可重新打开气泡。按住气泡顶部可拖动它；一条淡线把每个气泡连到它来自的文本。",
+    "用平实的话改写选中内容，显示在文章旁的气泡里。点击一句，它复述的原文就会亮起。保存在批注下。",
   guideExtract: "提取",
   guideExtractBody:
-    "——在全文中高亮揭示选中内容主旨的片段。选中内容保留实线下划线；每处找到的片段获得虚线下划线，外加一个跳回选中内容的标签（E1、E2……）。点击选中内容自己的标签可打开提取卡片：片段数与“删除”。",
+    "在全文中高亮揭示选中内容主旨的每处片段。每处都有一个标签（E1、E2……），点击跳回选中内容。",
   guideColors: "颜色",
-  guideColorsBody: "——高亮选中内容。先输入评论，再选颜色，评论就附在高亮上。",
+  guideColorsBody: "高亮选中内容。先输入评论，评论就附在高亮上。",
   guideComment: "评论",
-  guideCommentBody:
-    "——不加高亮，给选中内容附上评论。文本旁会出现一个小评论图标；点击它在卡片中打开评论。",
+  guideCommentBody: "不加高亮，给选中内容附上评论。点击文本旁的评论图标即可打开。",
   guideAddTo: "添加到",
-  guideAddToBody: "——把选中内容原样存为笔记，放进你选的章节。不涉及 AI。",
+  guideAddToBody: "把选中内容原样存为笔记，放进你选的章节。不涉及 AI。",
   guideLink: "跨文本链接",
-  guideLinkBody:
-    "——把这段文字与本文档或另一份文档中的片段连起来。选中另一端并按“链接到此”。两端都变为可点击，并列在批注下。",
+  guideLinkBody: "把这段文字与本文档或另一份文档中的片段连起来。选中另一端并按“链接到此”。",
   guideVoice: "语音",
-  guideVoiceBody:
-    "——工具下方的圆形气泡朗读选中的文本，中英文皆可。取消选中后朗读继续；再按一次气泡，或按悬浮的“停止朗读”控件即可停止。",
+  guideVoiceBody: "工具下方的圆形气泡朗读选中内容，中英文皆可。再按一次即停止。",
   guideReadingHeader: "阅读",
   guideAddUrl: "添加 URL",
   guideAddUrlBody:

@@ -2,11 +2,26 @@
 
 import { useEffect } from "react";
 import { useT } from "@/components/lang-provider";
+import type { TKey } from "@/lib/i18n/dictionaries";
 
 // The reader's guide: every selection tool and feature, in one place.
-// Opened from the ? button in the header. Body strings carry their own
-// leading separator and joining spaces (see dict/works.ts), so bold terms
-// and bodies concatenate with no literal whitespace between them.
+// Opened from the ? button in the header. In the Reading, Editing, and Side
+// panel sections the body strings carry their own leading separator and
+// joining spaces (see dict/works.ts), so bold terms and bodies concatenate
+// with no literal whitespace between them.
+
+// The selection tools, in the toolbox's order: name key, body key.
+const TOOLS: [TKey, TKey][] = [
+  ["works.guideAssistant", "works.guideAssistantBody"],
+  ["works.guideExplain", "works.guideExplainBody"],
+  ["works.guideSimplify", "works.guideSimplifyBody"],
+  ["works.guideExtract", "works.guideExtractBody"],
+  ["works.guideColors", "works.guideColorsBody"],
+  ["works.guideComment", "works.guideCommentBody"],
+  ["works.guideAddTo", "works.guideAddToBody"],
+  ["works.guideLink", "works.guideLinkBody"],
+  ["works.guideVoice", "works.guideVoiceBody"],
+];
 export function GuideDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const t = useT();
 
@@ -59,47 +74,16 @@ export function GuideDialog({ open, onClose }: { open: boolean; onClose: () => v
           </p>
         </section>
 
-        <section className="flex flex-col gap-1.5">
+        {/* Every selection tool is its own card, styled like Circle & ask. */}
+        <section className="flex flex-col gap-2">
           <span className={h}>{t("works.guideSelectHeader")}</span>
           <p className="text-[13px] leading-relaxed text-sand-800">{t("works.guideSelectTouch")}</p>
-          <ul className="flex flex-col gap-1.5 text-[13px] leading-relaxed text-sand-800">
-            <li>
-              <span className={term}>{t("works.guideAssistant")}</span>
-              {t("works.guideAssistantBody")}
-            </li>
-            <li>
-              <span className={term}>{t("works.guideExplain")}</span>
-              {t("works.guideExplainBody")}
-            </li>
-            <li>
-              <span className={term}>{t("works.guideSimplify")}</span>
-              {t("works.guideSimplifyBody")}
-            </li>
-            <li>
-              <span className={term}>{t("works.guideExtract")}</span>
-              {t("works.guideExtractBody")}
-            </li>
-            <li>
-              <span className={term}>{t("works.guideColors")}</span>
-              {t("works.guideColorsBody")}
-            </li>
-            <li>
-              <span className={term}>{t("works.guideComment")}</span>
-              {t("works.guideCommentBody")}
-            </li>
-            <li>
-              <span className={term}>{t("works.guideAddTo")}</span>
-              {t("works.guideAddToBody")}
-            </li>
-            <li>
-              <span className={term}>{t("works.guideLink")}</span>
-              {t("works.guideLinkBody")}
-            </li>
-            <li>
-              <span className={term}>{t("works.guideVoice")}</span>
-              {t("works.guideVoiceBody")}
-            </li>
-          </ul>
+          {TOOLS.map(([nameKey, bodyKey]) => (
+            <div key={nameKey} className="flex flex-col gap-1 rounded-2xl bg-clay-100/70 p-4">
+              <span className={h}>{t(nameKey)}</span>
+              <p className="text-[13px] leading-relaxed text-sand-800">{t(bodyKey)}</p>
+            </div>
+          ))}
         </section>
 
         <section className="flex flex-col gap-1.5">
