@@ -810,7 +810,7 @@ ellipse.anchor-flash {
   }
 }
 .welcome-fade {
-  animation: welcome-fade 3.6s ease forwards;
+  animation: welcome-fade 4.6s ease forwards;
 }
 @keyframes welcome-rise {
   from {
@@ -824,6 +824,9 @@ ellipse.anchor-flash {
 }
 .welcome-rise {
   animation: welcome-rise 0.7s ease 0.25s both;
+}
+.welcome-rise-late {
+  animation: welcome-rise 0.7s ease 0.75s both;
 }
 
 /* Print: the open document only. The app shell flattens and chrome hides via

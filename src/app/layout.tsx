@@ -4,6 +4,7 @@ import { Caprasimo, Figtree } from "next/font/google";
 import "./globals.css";
 import { FeedbackButton } from "@/components/feedback-button";
 import { LangProvider } from "@/components/lang-provider";
+import { Nudges } from "@/components/nudges";
 import { htmlLangOf } from "@/lib/i18n/config";
 import { currentLang, serverT } from "@/lib/i18n/server";
 
@@ -67,6 +68,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
       <body className="min-h-full flex flex-col">
         <LangProvider lang={lang}>
           {children}
+          <Nudges />
           <FeedbackButton />
         </LangProvider>
       </body>

@@ -692,6 +692,7 @@ export function DocumentBar({
             setError(null);
             setDialog(true);
           }}
+          data-nudge="document"
           aria-label={t("panes.addDocument")}
           aria-haspopup="dialog"
           aria-expanded={dialog}

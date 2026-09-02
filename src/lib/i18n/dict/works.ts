@@ -22,18 +22,15 @@ const en = {
   moreActionsFor: "More actions for {title}",
   notes: "Notes",
   rename: "Rename",
-  // Welcome flow (first visit)
-  welcomeTitle: "Welcome to your all-powerful notebook.",
-  firstStepsTitle: "First steps",
-  firstStepsProject:
-    "Start a new project below — one project binds the documents you read and the notes you keep.",
-  firstStepsAdd:
-    "Add documents with the + in the project header: PDFs, web pages, videos, Google Drive. Rough handwritten PDFs import as pages.",
-  firstStepsTools:
-    "Select text, or circle a spot on a figure or a handwritten page, and the AI tools appear.",
-  firstStepsGuide:
-    "The ? at the top right of a project explains every function — Circle & ask first.",
-  firstStepsDone: "Got it",
+  // Welcome flow (first visit): the splash, then the nudges, one bubble at a time
+  welcomeName: "Welcome {name}",
+  welcomeTagline: "Unitos Notebook, your all-powerful notemaker",
+  nudgeProject: "Start here: name a project and press Create. A project binds documents and notes.",
+  nudgeDocument: "Add an article with +: a PDF, a web page, a video, or Google Drive.",
+  nudgeGuide: "Press ? any time. It explains every function, Circle & ask first.",
+  nudgeRail:
+    "The sidebar: Assistant, Notes, Distill, Graph, Annotations, Edit history. Open one and explore.",
+  nudgeDone: "Got it",
   // Guide dialog
   guideLabel: "Guide",
   guideTitle: "How to dissect a document",
@@ -164,14 +161,13 @@ const zh: Record<keyof typeof en, string> = {
   notes: "笔记",
   rename: "重命名",
   // Guide dialog
-  welcomeTitle: "欢迎来到你的全能笔记本。",
-  firstStepsTitle: "开始使用",
-  firstStepsProject: "在下方新建项目——一个项目绑定你阅读的文档和记下的笔记。",
-  firstStepsAdd:
-    "用项目页顶部的 + 添加文档：PDF、网页、视频、Google Drive。粗略手写 PDF 按页面导入。",
-  firstStepsTools: "选中文本，或在插图、手写页面上圈选一处，AI 工具随即出现。",
-  firstStepsGuide: "项目右上角的 ? 介绍全部功能——圈选并提问排在最前。",
-  firstStepsDone: "知道了",
+  welcomeName: "欢迎，{name}",
+  welcomeTagline: "Unitos Notebook，你的全能笔记本",
+  nudgeProject: "从这里开始：给项目起名并按“创建”。一个项目绑定文档和笔记。",
+  nudgeDocument: "用 + 添加文章：PDF、网页、视频或 Google Drive。",
+  nudgeGuide: "随时按 ?。它介绍全部功能，圈选并提问排在最前。",
+  nudgeRail: "侧栏：助手、笔记、提炼、图谱、批注、编辑记录。打开一个，开始探索。",
+  nudgeDone: "知道了",
   guideLabel: "指南",
   guideTitle: "如何拆解一篇文档",
   guideCircleHeader: "圈选并提问——在任何内容上画圈",
