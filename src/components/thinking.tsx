@@ -1,11 +1,13 @@
 "use client";
 
+import { StopIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 
 // The model is working. Two shared pieces so every tool shows the same state
 // the same way: ThinkingIndicator — a spark that breathes beside a label a
-// sheen sweeps left to right — where a word fits; LoadingDots — three dots
-// that swell in turn — for tight spots like buttons and chips.
+// sheen sweeps left to right, with a Stop pill when the caller can abort the
+// run — where a word fits; LoadingDots — three dots that swell in turn — for
+// tight spots like buttons and chips.
 
 // Filled version of the workspace sparkle: solid reads better than a 2.75
 // stroke at this size while it pulses.
@@ -24,12 +26,41 @@ function Spark({ size = 12 }: { size?: number }) {
   );
 }
 
-export function ThinkingIndicator({ label, className }: { label?: string; className?: string }) {
+export function ThinkingIndicator({
+  label,
+  className,
+  onStop,
+  stopLabel,
+  stopTitle,
+}: {
+  label?: string;
+  className?: string;
+  // Abort the run. Every AI tool passes it where no other Stop control sits,
+  // so a reader can always stop a run mid-way (SPEC.md §6).
+  onStop?: () => void;
+  stopLabel?: string;
+  stopTitle?: string;
+}) {
   const t = useT();
   return (
-    <span role="status" className={`inline-flex items-center gap-1.5 ${className ?? ""}`}>
+    <span
+      role="status"
+      aria-live="polite"
+      className={`inline-flex flex-wrap items-center gap-1.5 ${className ?? ""}`}
+    >
       <Spark />
       <span className="thinking-label font-medium">{label ?? t("reader.thinking")}</span>
+      {onStop && (
+        <button
+          type="button"
+          onClick={onStop}
+          title={stopTitle}
+          className="ml-1 inline-flex items-center gap-1 rounded-full border border-line px-2 py-0.5 text-[11px] font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800"
+        >
+          <StopIcon size={9} />
+          {stopLabel ?? t("common.stop")}
+        </button>
+      )}
     </span>
   );
 }

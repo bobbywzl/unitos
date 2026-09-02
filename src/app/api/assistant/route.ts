@@ -169,6 +169,7 @@ async function handle(req: Request, t: TFunc) {
     schema: issuesSchema,
     label: `assistant:${data.task}`,
     usage: usageMeta,
+    abortSignal: req.signal,
   });
   if (!result.ok) {
     return NextResponse.json({ error: t("api.taskFailed", { reason: result.error }) }, { status: 422 });

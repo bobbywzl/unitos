@@ -501,6 +501,11 @@ export function ReaderInteractions({
   // the ask view for editing; nothing persists from an aborted run.
   const distillAbortRef = useRef<AbortController | null>(null);
   const distillReturnScroll = useRef<number | null>(null);
+  // The running Explain, Simplify, and Extract, so Stop can abort them. A
+  // stopped stream keeps what arrived; nothing persists (SPEC.md §6).
+  const explainAbortRef = useRef<AbortController | null>(null);
+  const simplifyAbortRef = useRef<AbortController | null>(null);
+  const extractAbortRef = useRef<AbortController | null>(null);
   // The span a jump landed on (a distilled quote, an extract origin): tinted
   // while the reader arrives.
   const [spanFlash, setSpanFlash] = useState<{
@@ -758,8 +763,14 @@ export function ReaderInteractions({
     }
     return { ...dockSideCard(side, articleLeft, articleRight, cw), top, side };
   }
+  // Closing a card mid-stream stops its run: nobody will read the rest.
   function closeExplain() {
+    explainAbortRef.current?.abort();
+    explainAbortRef.current = null;
     setBubble(null);
+  }
+  function stopExplain() {
+    explainAbortRef.current?.abort();
   }
   async function deleteExplain() {
     const card = bubble;
@@ -774,7 +785,15 @@ export function ReaderInteractions({
     }
   }
   function closeSimplify() {
+    simplifyAbortRef.current?.abort();
+    simplifyAbortRef.current = null;
     setSimplifyCard(null);
+  }
+  function stopSimplify() {
+    simplifyAbortRef.current?.abort();
+  }
+  function stopExtract() {
+    extractAbortRef.current?.abort();
   }
   async function deleteSimplify() {
     const card = simplifyCard;
@@ -885,6 +904,10 @@ export function ReaderInteractions({
     setLocalExtractions([]);
     setExtractCard(null);
     distillAbortRef.current?.abort();
+    explainAbortRef.current?.abort();
+    simplifyAbortRef.current?.abort();
+    extractAbortRef.current?.abort();
+    setExtractBusy(false);
     distillReturnScroll.current = null;
     voiceRunRef.current += 1;
     voiceAudioRef.current?.pause();
@@ -1918,10 +1941,14 @@ export function ReaderInteractions({
     markFreshSpan(anchor.blockId, anchor.startOffset, anchor.endOffset);
     const slot = claimSideSlot("explain", yTop);
     setBubble({ ...slot, text: "", streaming: true, error: null, anchor, noteId: null });
+    explainAbortRef.current?.abort();
+    const controller = new AbortController();
+    explainAbortRef.current = controller;
     try {
       const res = await fetch("/api/derive", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
         body: deriveBody("EXPLAIN", anchor),
       });
       if (!res.ok || !res.body) {
@@ -1953,8 +1980,15 @@ export function ReaderInteractions({
       });
       router.refresh();
     } catch (err) {
+      // Stopped, not failed: what streamed in stays; an empty card closes.
+      if (controller.signal.aborted) {
+        setBubble((b) => (b && b.text.trim() ? { ...b, streaming: false } : null));
+        return;
+      }
       const message = err instanceof Error ? err.message : t("reader.deriveFailed");
       setBubble((b) => (b ? { ...b, streaming: false, error: message } : b));
+    } finally {
+      if (explainAbortRef.current === controller) explainAbortRef.current = null;
     }
   }
 
@@ -1978,10 +2012,14 @@ export function ReaderInteractions({
       sentences: null,
       active: null,
     });
+    simplifyAbortRef.current?.abort();
+    const controller = new AbortController();
+    simplifyAbortRef.current = controller;
     try {
       const res = await fetch("/api/derive", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
         body: deriveBody("SIMPLIFY", anchor),
       });
       if (!res.ok || !res.body) {
@@ -2015,8 +2053,15 @@ export function ReaderInteractions({
       });
       router.refresh();
     } catch (err) {
+      // Stopped, not failed: what streamed in stays; an empty card closes.
+      if (controller.signal.aborted) {
+        setSimplifyCard((c) => (c && c.text.trim() ? { ...c, streaming: false } : null));
+        return;
+      }
       const message = err instanceof Error ? err.message : t("reader.simplifyFailed");
       setSimplifyCard((c) => (c ? { ...c, streaming: false, error: message } : c));
+    } finally {
+      if (simplifyAbortRef.current === controller) simplifyAbortRef.current = null;
     }
   }
 
@@ -2304,11 +2349,13 @@ export function ReaderInteractions({
     setSubmenu(null);
     window.getSelection()?.removeAllRanges();
     setExtractBusy(true);
-    showToast(t("reader.extracting"));
+    const controller = new AbortController();
+    extractAbortRef.current = controller;
     try {
       const res = await fetch("/api/derive", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
         body: deriveBody("EXTRACT", anchor),
       });
       const json = (await res.json().catch(() => null)) as {
@@ -2333,8 +2380,11 @@ export function ReaderInteractions({
       );
       router.refresh();
     } catch (err) {
+      // Stopped, not failed: nothing was extracted, nothing to say.
+      if (controller.signal.aborted) return;
       showToast(err instanceof Error ? err.message : t("reader.extractFailed"));
     } finally {
+      if (extractAbortRef.current === controller) extractAbortRef.current = null;
       setExtractBusy(false);
     }
   }
@@ -3384,6 +3434,11 @@ export function ReaderInteractions({
       </div>
 
       <div className="sticky top-4 z-10 float-right mr-4 flex items-center gap-2 print:hidden">
+        {extractBusy && (
+          <span className="rounded-full bg-card px-3 py-1.5 text-xs shadow-soft">
+            <ThinkingIndicator label={t("reader.extracting")} onStop={stopExtract} />
+          </span>
+        )}
         {toast && (
           <span className="flex items-center gap-2 rounded-full bg-ink/90 px-3 py-1.5 text-xs text-paper">
             {toast}
@@ -3698,6 +3753,7 @@ export function ReaderInteractions({
                   {aiBusy ? <StopIcon size={11} /> : t("reader.run")}
                 </button>
               </div>
+              {aiBusy && <ThinkingIndicator className="px-1 pb-0.5 text-[11.5px]" />}
             </div>
           )}
 
@@ -3932,6 +3988,15 @@ export function ReaderInteractions({
               {bubble.streaming ? t("reader.explaining") : t("reader.explanation")}
             </span>
             <span className="flex items-center gap-3">
+              {bubble.streaming && (
+                <button
+                  onClick={stopExplain}
+                  className="flex items-center gap-1 rounded-full border border-line px-2 py-0.5 text-[11px] font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800"
+                >
+                  <StopIcon size={9} />
+                  {t("common.stop")}
+                </button>
+              )}
               {bubble.noteId && !bubble.streaming && (
                 <button
                   onClick={() => void deleteExplain()}
@@ -3983,6 +4048,15 @@ export function ReaderInteractions({
               {simplifyCard.streaming ? t("reader.simplifying") : t("reader.simplified")}
             </span>
             <span className="flex items-center gap-3">
+              {simplifyCard.streaming && (
+                <button
+                  onClick={stopSimplify}
+                  className="flex items-center gap-1 rounded-full border border-line px-2 py-0.5 text-[11px] font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800"
+                >
+                  <StopIcon size={9} />
+                  {t("common.stop")}
+                </button>
+              )}
               {simplifyCard.noteId && !simplifyCard.streaming && (
                 <button
                   onClick={() => void deleteSimplify()}

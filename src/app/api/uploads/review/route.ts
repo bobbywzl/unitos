@@ -57,7 +57,13 @@ export async function POST(req: Request) {
   const url = data.url;
   return progressResponse(async (onProgress) => {
     try {
-      const review = await assistant.reviewUpload(url, instructions, user?.id ?? null, onProgress);
+      const review = await assistant.reviewUpload(
+        url,
+        instructions,
+        user?.id ?? null,
+        onProgress,
+        req.signal,
+      );
       return { review };
     } catch (err) {
       console.error("Upload review failed:", err);

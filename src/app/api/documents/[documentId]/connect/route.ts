@@ -28,6 +28,12 @@ export async function POST(req: Request, ctx: { params: Promise<{ documentId: st
   if (!attachment) {
     return NextResponse.json({ error: t("api.documentNotAttachedToCorpus") }, { status: 404 });
   }
-  const linkCount = await buildConnections(data.notebookId, documentId, access.user.id);
+  const linkCount = await buildConnections(
+    data.notebookId,
+    documentId,
+    access.user.id,
+    undefined,
+    req.signal,
+  );
   return NextResponse.json({ ok: true, linkCount });
 }

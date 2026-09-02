@@ -600,6 +600,8 @@ export async function POST(req: Request) {
       maxOutputTokens,
       allowSystemInMessages: true,
       messages,
+      // Stop aborts the model call too (SPEC.md §6), not just the response.
+      abortSignal: req.signal,
       onEnd: async ({ text, usage }) => {
         console.log(
           `[derive] ${data.type} cacheRead=${usage.inputTokenDetails.cacheReadTokens ?? 0} ` +
@@ -643,8 +645,14 @@ export async function POST(req: Request) {
             controller.enqueue(encoder.encode(chunk));
           }
         } catch (err) {
-          controller.enqueue(encoder.encode(`${STREAM_ERROR_TOKEN}${modelErrorMessage(err)}`));
-          controller.close();
+          // Stopped by the reader: nobody is listening, and nothing persists.
+          if (req.signal.aborted) return;
+          try {
+            controller.enqueue(encoder.encode(`${STREAM_ERROR_TOKEN}${modelErrorMessage(err)}`));
+            controller.close();
+          } catch {
+            // The reader left before the reason could be sent.
+          }
           return;
         }
         if ((data.type === "EXPLAIN" || data.type === "SIMPLIFY") && anchor && text.trim()) {
@@ -778,6 +786,7 @@ export async function POST(req: Request) {
       schema: findOutputSchema,
       label: "FIND",
       usage: usageMeta,
+      abortSignal: req.signal,
     });
     if (!result.ok) {
       return NextResponse.json({ error: t("api.findFailed", { reason: result.error }) }, { status: 422 });
@@ -809,6 +818,7 @@ export async function POST(req: Request) {
       schema: salienceOutputSchema,
       label: "SALIENCE",
       usage: usageMeta,
+      abortSignal: req.signal,
     });
     if (!result.ok) {
       return NextResponse.json({ error: t("api.salienceFailed", { reason: result.error }) }, { status: 422 });
@@ -841,6 +851,7 @@ export async function POST(req: Request) {
       schema: extractOutputSchema,
       label: "EXTRACT",
       usage: usageMeta,
+      abortSignal: req.signal,
     });
     if (!result.ok) {
       return NextResponse.json({ error: t("api.extractFailed", { reason: result.error }) }, { status: 422 });

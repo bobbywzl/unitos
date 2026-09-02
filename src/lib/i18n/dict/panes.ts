@@ -286,6 +286,7 @@ const en = {
   dismissLink: "Dismiss",
   recommendLinks: "Recommend links",
   recommendLinksTitle: "Scan this document against the project for recommended links",
+  recommendLinksRunning: "Finding links…",
   recommendLinksDone: "{n} recommended link(s) found",
   recommendLinksNone: "No new connections found",
 
@@ -555,6 +556,7 @@ const zh: Record<keyof typeof en, string> = {
   dismissLink: "忽略",
   recommendLinks: "扫描推荐链接",
   recommendLinksTitle: "将此文档与项目比对，寻找推荐链接",
+  recommendLinksRunning: "正在查找链接……",
   recommendLinksDone: "找到 {n} 条推荐链接",
   recommendLinksNone: "没有发现新的链接",
 

@@ -193,16 +193,25 @@ export function UploadAssistant({
   const busy = phase === "adding" || checking;
 
   // ── Review (url kind): the sandbox read, on open and on Review again ──────
+  // The running review, so Cancel can abort it: the box goes to ready with
+  // the page itself selected, and Add still works.
+  const reviewAbortRef = useRef<AbortController | null>(null);
+  function stopReview() {
+    reviewAbortRef.current?.abort();
+  }
   async function runReview(withInstructions: string) {
     if (request.kind !== "url") return;
     setPhase("review");
     setReviewError(null);
     setError(null);
     setReviewSteps(REVIEW_STEPS);
+    const controller = new AbortController();
+    reviewAbortRef.current = controller;
     try {
       const res = await fetch("/api/uploads/review", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
         body: JSON.stringify({
           notebookId,
           url: request.url,
@@ -235,8 +244,13 @@ export function UploadAssistant({
         setAcknowledged(withInstructions);
       }
     } catch (err) {
-      setReviewError(err instanceof Error ? err.message : t("api.reviewFailed"));
+      // Cancelled, not failed: no review, the page itself stays selected.
+      if (!controller.signal.aborted) {
+        setReviewError(err instanceof Error ? err.message : t("api.reviewFailed"));
+      }
       setSelected(new Set([SELF]));
+    } finally {
+      if (reviewAbortRef.current === controller) reviewAbortRef.current = null;
     }
     setPhase("ready");
   }
@@ -599,7 +613,10 @@ export function UploadAssistant({
           <span className="font-display text-[17px]">{t("panes.uploadAssistant")}</span>
           {phase !== "adding" && (
             <button
-              onClick={() => onClose(null)}
+              onClick={() => {
+                reviewAbortRef.current?.abort();
+                onClose(null);
+              }}
               aria-label={t("common.close")}
               className="ml-auto flex size-8 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-700"
             >
@@ -615,6 +632,12 @@ export function UploadAssistant({
           <div className="flex flex-col gap-2.5">
             <p className="text-[13px] text-sand-700">{t("panes.uploadSandboxNote")}</p>
             <StepList steps={reviewSteps} />
+            <button
+              onClick={stopReview}
+              className="self-start rounded-full border border-line px-3.5 py-1 text-xs font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800"
+            >
+              {t("common.cancel")}
+            </button>
           </div>
         )}
 

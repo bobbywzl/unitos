@@ -170,6 +170,7 @@ export async function reviewUpload(
   instructions: string,
   userId: string | null,
   onProgress?: OnIngestProgress,
+  signal?: AbortSignal,
 ): Promise<UploadReview> {
   const lang = await currentLang();
   const t = await serverT();
@@ -230,6 +231,7 @@ export async function reviewUpload(
     schema: reviewSchema,
     label: "UPLOAD_REVIEW",
     usage: { userId, feature: "upload", model: UPLOAD_MODEL },
+    abortSignal: signal,
   });
   if (!result.ok) {
     console.warn("[upload] review model call failed:", result.error);

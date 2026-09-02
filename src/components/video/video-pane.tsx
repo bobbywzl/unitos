@@ -7,6 +7,7 @@ import { isImeKey } from "@/lib/ime";
 import { SearchIcon, SparkleIcon, SpinnerIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { Markdown } from "@/components/markdown";
+import { ThinkingIndicator } from "@/components/thinking";
 import { ArticleSection, MediaAssistant } from "@/components/video/assistant-card";
 import { Visual } from "@/components/video/visual";
 import type { ThumbnailSource } from "@/components/video/use-thumbnails";
@@ -352,15 +353,26 @@ export function VideoPane({
     return (await captureStoryboardFrame(documentId, time, region)) ?? undefined;
   }
 
+  // The running Explain, so Stop can abort it: what streamed in stays, an
+  // empty card closes, nothing persists.
+  const explainAbortRef = useRef<AbortController | null>(null);
+  function stopExplain() {
+    explainAbortRef.current?.abort();
+  }
+
   async function runExplain(anchor: { startTime: number; endTime: number; region: Region | null }) {
     const { startTime, endTime, region } = anchor;
     setOpenNote(null);
     setExplaining({ content: "", done: false, error: null });
+    explainAbortRef.current?.abort();
+    const controller = new AbortController();
+    explainAbortRef.current = controller;
     try {
       const frame = await captureFrame(region, startTime);
       const res = await fetch("/api/derive", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
         body: JSON.stringify({
           type: "EXPLAIN",
           documentId,
@@ -387,12 +399,17 @@ export function VideoPane({
       setExplaining({ content: text, done: true, error: streamError });
       if (!streamError) router.refresh();
     } catch (err) {
+      if (controller.signal.aborted) {
+        setExplaining((e) => (e && e.content.trim() ? { ...e, done: true } : null));
+        return;
+      }
       setExplaining({
         content: "",
         done: true,
         error: err instanceof Error ? err.message : t("video.explainFailed"),
       });
     } finally {
+      if (explainAbortRef.current === controller) explainAbortRef.current = null;
       setComposer((c) => (c ? { ...c, busy: false } : c));
     }
   }
@@ -599,13 +616,14 @@ export function VideoPane({
                 {t("video.explanation")}
               </span>
               {!explaining.done && (
-                <span className="text-xs text-sand-500">{t("video.streaming")}</span>
+                <ThinkingIndicator className="text-xs" onStop={stopExplain} />
               )}
               {explaining.done && !explaining.error && (
                 <span className="text-xs text-sand-500">{t("video.savedAsAnnotation")}</span>
               )}
               <button
                 onClick={() => {
+                  explainAbortRef.current?.abort();
                   setExplaining(null);
                   setComposer(null);
                 }}

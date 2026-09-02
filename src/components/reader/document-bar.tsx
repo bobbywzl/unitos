@@ -11,6 +11,7 @@ import { useCollab } from "@/components/collab/collab-context";
 import { ChevronDownIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { Logo } from "@/components/logo";
+import { ThinkingIndicator } from "@/components/thinking";
 import type { TFunc } from "@/lib/i18n/dictionaries";
 import { readNdjson } from "@/lib/ndjson";
 import { isOffline, offlinePremium, queueUpload, queueWrite } from "@/lib/offline/queue";
@@ -177,6 +178,11 @@ export function DocumentBar({
   // Manual re-parse: the progress card shows, errors show.
   const [connecting, setConnecting] = useState<string | null>(null);
   const [connectNotice, setConnectNotice] = useState<string | null>(null);
+  // The running scan, so Stop can abort it.
+  const connectAbortRef = useRef<AbortController | null>(null);
+  function stopConnect() {
+    connectAbortRef.current?.abort();
+  }
   // The recommended-links scan, on demand — for documents added before the
   // scan existed (SPEC.md §13).
   async function recommendLinks(doc: AttachedDocument) {
@@ -184,10 +190,15 @@ export function DocumentBar({
     setConnecting(doc.id);
     setConnectNotice(null);
     setError(null);
+    const controller = new AbortController();
+    connectAbortRef.current = controller;
     try {
-      const result = await api<{ linkCount: number }>(`/api/documents/${doc.id}/connect`, "POST", {
-        notebookId,
-      });
+      const result = await api<{ linkCount: number }>(
+        `/api/documents/${doc.id}/connect`,
+        "POST",
+        { notebookId },
+        { signal: controller.signal },
+      );
       setConnectNotice(
         result.linkCount > 0
           ? t("panes.recommendLinksDone", { n: result.linkCount })
@@ -196,8 +207,11 @@ export function DocumentBar({
       setTimeout(() => setConnectNotice(null), 4000);
       router.refresh();
     } catch (err) {
+      // Stopped, not failed: no links, no notice.
+      if (controller.signal.aborted) return;
       setError(err instanceof Error ? err.message : t("common.requestFailed"));
     } finally {
+      if (connectAbortRef.current === controller) connectAbortRef.current = null;
       setConnecting(null);
     }
   }
@@ -735,6 +749,11 @@ export function DocumentBar({
 
       {/* While the dialog is open it shows the progress and the error itself. */}
       {phase && !dialog && <IngestProgress fileLabel={phase.fileLabel} steps={phase.steps} />}
+      {connecting && (
+        <span className="shrink-0 rounded-full bg-card px-3 py-1 text-xs shadow-soft">
+          <ThinkingIndicator label={t("panes.recommendLinksRunning")} onStop={stopConnect} />
+        </span>
+      )}
       {connectNotice && (
         <span className="shrink-0 rounded-full bg-sage-200 px-3 py-1 text-xs font-semibold text-sage-800">
           {connectNotice}
