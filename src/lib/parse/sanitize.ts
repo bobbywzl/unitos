@@ -154,7 +154,10 @@ export function sanitizeHtml(html: string, baseUrl?: string): string {
             }
             child.setAttribute("src", parsed.toString());
             child.setAttribute("loading", "lazy");
-            child.setAttribute("referrerpolicy", "no-referrer");
+            // YouTube refuses to play without a referrer ("Video player
+            // configuration error", error 153 — import compare loop finding).
+            // "origin" sends the reader's origin and nothing of the page.
+            child.setAttribute("referrerpolicy", "origin");
           }
         } catch {
           keep = false;
