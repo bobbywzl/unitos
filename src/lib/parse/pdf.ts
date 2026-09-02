@@ -70,6 +70,7 @@ const TOC_ENTRY_RE = /^(\d{1,2})[.)]?\s+\S/;
 const ATTACH_PUNCT_RE = /^[.,;:!?)\]…%]/;
 const CJK_START_RE = /^[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u;
 const NUMERIC_TOKEN_RE = /^[\d.,%$€£+−–-]+$/;
+const CONTROL_CHARS_RE = /[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g;
 
 // ── Font flags ──────────────────────────────────────────────────────────────
 
@@ -268,12 +269,23 @@ function regionOf(box: Box, pageWidth: number, pageHeight: number): Region {
 function buildLines(items: Item[], page: number): Line[] {
   const sorted = items.filter((i) => i.str.trim().length > 0);
   sorted.sort((a, b) => b.y - a.y || a.x - b.x);
+  // A line is the items near one baseline. The anchor is the line's largest
+  // item, the tolerance half its size: superscripts, subscripts, and sum
+  // limits sit within that of their base line and belong to it (they read as
+  // lines of their own before — import compare loop finding).
   const grouped: Item[][] = [];
+  const anchors: Item[] = [];
   for (const item of sorted) {
     const last = grouped[grouped.length - 1];
-    const tolerance = Math.max(2, item.size * 0.4);
-    if (last && Math.abs(last[0].y - item.y) < tolerance) last.push(item);
-    else grouped.push([item]);
+    const anchor = anchors[anchors.length - 1];
+    const tolerance = anchor ? Math.max(2, Math.max(anchor.size, item.size) * 0.5) : 0;
+    if (last && Math.abs(anchor.y - item.y) < tolerance) {
+      last.push(item);
+      if (item.size > anchor.size) anchors[anchors.length - 1] = item;
+    } else {
+      grouped.push([item]);
+      anchors.push(item);
+    }
   }
   return grouped.map((g) => buildLine(g, page)).filter((l) => l.text.length > 0);
 }
@@ -964,6 +976,17 @@ function findTableRuns(lines: Line[], ctx: PageContext): number[] {
       const aligned = isAlignedLine(prev, columns);
       const indentedPastFirst = prev.x > columns[0] + 8;
       if (!aligned && !indentedPastFirst && !isLeftOnly(prev, columns)) break;
+      // A first-column line that continues the paragraph above it (same x,
+      // one leading below) is that paragraph's last line — a caption's wrap.
+      if (!aligned && !indentedPastFirst && first >= 2) {
+        const above = lines[first - 2];
+        if (
+          above.cells.length === 1 &&
+          Math.abs(above.x - prev.x) < 12 &&
+          above.y - prev.y <= prev.size * ctx.leading * 1.35
+        )
+          break;
+      }
       first--;
       members.unshift(first);
       absorbed++;
@@ -1218,24 +1241,35 @@ function segmentPage(lines: Line[], ctx: PageContext): Segment[] {
     }
 
     // Paragraph group: vertically continuous same-size lines in one column.
+    // A hanging indent (a reference entry, a glossary term) indents every
+    // line after the first: the second line may step in by up to three ems
+    // when the first line breaks mid-sentence.
     const group: Line[] = [line];
     let j = i + 1;
     while (j < lines.length) {
       const next = lines[j];
       const prev = group[group.length - 1];
       const gap = prev.y - next.y;
+      const hanging =
+        group.length === 1 &&
+        !isIndented(prev, ctx) &&
+        next.x > prev.x + next.size * 1.1 &&
+        next.x <= prev.x + next.size * 3 &&
+        !BULLET_RE.test(next.text) &&
+        !/[.!?:]["'”]?$/.test(prev.text.trim()) &&
+        /^[a-z0-9(]/.test(next.text);
       if (
         runOf[j] !== -1 ||
         next.cells.length !== 1 ||
         gap < 0 ||
         gap > next.size * 1.9 ||
         Math.abs(next.size - prev.size) > 0.6 ||
-        next.x > prev.x + next.size * 1.1 ||
+        (next.x > prev.x + next.size * 1.1 && !hanging) ||
         next.x < prev.x - next.size * 1.1 ||
         next.size > body * 1.14 ||
         (tocMode && TOC_ENTRY_RE.test(next.text)) ||
         TOC_LABEL_RE.test(next.text.trim()) ||
-        (isIndented(next, ctx) && !isIndented(prev, ctx)) ||
+        (isIndented(next, ctx) && !isIndented(prev, ctx) && !hanging) ||
         (BULLET_RE.test(next.text) && !BULLET_RE.test(prev.text))
       )
         break;
@@ -1472,14 +1506,34 @@ function resolveContentsLinks(segments: Segment[]) {
 const CAPTION_RE = /^(fig\.|figure|table|tab\.)\s*(\d+|[A-Z]\d+)[a-z]?\s*[.:|–—-]\s*/i;
 const TABLE_CAPTION_RE = /^(table|tab\.)\s*(\d+|[A-Z]\d+)/i;
 
+// A numbered display equation: "… = softmax(QKᵀ/√d)V   (1)". Its words are
+// roman (function names), so the math share alone misses it.
+const EQUATION_NUMBER_RE = /\(\d{1,3}[a-z]?\)\s*$/;
+
 function isMathSegment(s: Segment, ctx: PageContext): boolean {
   if (s.type !== "PARAGRAPH" && s.type !== "TABLE" && s.type !== "FIGURE") return false;
-  if (s.region || !s.box || (s.mathShare ?? 0) < 0.25) return false;
-  // A lone symbol (a footnote marker) is not an equation.
-  if (s.text.replace(/\s/g, "").length < 3) return false;
+  if (s.region || !s.box) return false;
+  const numbered =
+    EQUATION_NUMBER_RE.test(s.text) && s.text.length <= 90 && s.box.x1 > ctx.columnLeft + 2;
+  if (!numbered && (s.mathShare ?? 0) < 0.25) return false;
+  // A lone symbol (a footnote marker, a sum limit) is not an equation.
+  if (s.text.replace(/\s/g, "").length < 4) return false;
   // Prose with inline math starts at the column edge and runs long.
   const prose = s.text.length > 50 && s.box.x1 <= ctx.columnLeft + 2 && (s.mathShare ?? 0) < 0.6;
   return !prose;
+}
+
+// A line of an equation whose glyphs are mostly roman (function names, an
+// equation number, a fraction's denominator): short, off the column edge,
+// body-sized. Joins an equation it sits against.
+function isEquationShaped(s: Segment, ctx: PageContext): boolean {
+  if (s.type !== "PARAGRAPH" && s.type !== "TABLE" && s.type !== "FIGURE") return false;
+  if (s.region || !s.box) return false;
+  return (
+    s.text.length <= 60 &&
+    s.box.x1 > ctx.columnLeft + 2 &&
+    (s.lineSize ?? ctx.bodySize) <= ctx.bodySize * 1.1
+  );
 }
 
 // Chart text, equation glyphs, ticks: what a figure leaves in the text layer.
@@ -1489,7 +1543,14 @@ function isFigureDebris(s: Segment, ctx: PageContext): boolean {
   if (s.type === "TABLE" || s.type === "FIGURE") return true;
   if ((s.lineSize ?? ctx.bodySize) < ctx.bodySize * 0.92) return true;
   const text = s.text.trim();
-  return text.length <= 12 || (text.length <= 40 && /\d/.test(text) && !/[.!?]$/.test(text));
+  if (text.length <= 12) return true;
+  // A panel title or axis label at body size: short, no sentence end.
+  return (
+    text.length <= 60 &&
+    !/[.!?:;,]$/.test(text) &&
+    (s.lineSize ?? ctx.bodySize) <= ctx.bodySize * 1.05 &&
+    !s.text.includes("\n")
+  );
 }
 
 function attachFigureRegions(
@@ -1502,7 +1563,9 @@ function attachFigureRegions(
   const toRegion = (box: Box) => regionOf(box, pageWidth, pageHeight);
   const rowGap = ctx.bodySize * ctx.leading;
 
-  // 1. Display equations: consecutive math segments become one FIGURE.
+  // 1. Display equations: a math segment and the equation-shaped segments
+  // against it become one FIGURE.
+  const near = (a: Segment, b: Segment) => a.box!.y1 - b.box!.y2 < rowGap * 1.5;
   const withMath: Segment[] = [];
   for (let k = 0; k < segments.length; ) {
     if (!isMathSegment(segments[k], ctx)) {
@@ -1510,15 +1573,24 @@ function attachFigureRegions(
       k++;
       continue;
     }
+    // Backward over equation-shaped lines already pushed.
+    let start = k;
+    while (
+      withMath.length > 0 &&
+      isEquationShaped(withMath[withMath.length - 1], ctx) &&
+      near(withMath[withMath.length - 1], segments[start])
+    ) {
+      start = segments.indexOf(withMath.pop()!);
+    }
     let m = k + 1;
     while (
       m < segments.length &&
-      isMathSegment(segments[m], ctx) &&
-      segments[m - 1].box!.y1 - segments[m].box!.y2 < rowGap * 1.5
+      (isMathSegment(segments[m], ctx) || isEquationShaped(segments[m], ctx)) &&
+      near(segments[m - 1], segments[m])
     ) {
       m++;
     }
-    const group = segments.slice(k, m);
+    const group = segments.slice(start, m);
     let box = group[0].box!;
     for (const g of group) box = unionBox(box, g.box!);
     const pad = ctx.bodySize * 0.4;
@@ -1657,6 +1729,10 @@ export async function parsePdf(
     const items: Item[] = [];
     for (const raw of content.items) {
       if (!("str" in raw) || typeof raw.str !== "string") continue;
+      // Control characters are not text: a chart glyph mapped to NUL broke the
+      // save (Postgres rejects 0x00 in text).
+      const str = raw.str.replace(CONTROL_CHARS_RE, "");
+      if (str.length === 0) continue;
       const t = raw.transform as number[];
       const size = Math.hypot(t[0], t[1]) || Math.hypot(t[2], t[3]) || 10;
       if (Math.abs(t[1]) > size * 0.3) continue; // rotated text (margin watermarks)
@@ -1679,7 +1755,7 @@ export async function parsePdf(
       const cy = y + size * 0.3;
       const region = uriRegions.find((r) => cx >= r.x1 && cx <= r.x2 && cy >= r.y1 && cy <= r.y2);
       items.push({
-        str: raw.str,
+        str,
         x,
         y,
         w: raw.width,
@@ -1774,8 +1850,16 @@ export async function parsePdf(
   }
   segments = segments.filter((s) => s.text.trim().length > 0);
   // Vector-figure debris: chart axis ticks read as tiny numeric-only lines.
+  // Inline-math debris: a sum limit or exponent too far from its base line
+  // to join it reads as a paragraph of one or two math glyphs.
   segments = segments.filter(
-    (s) => !(s.type === "PARAGRAPH" && s.text.length <= 14 && /^[\d\s.,%−–-]+$/.test(s.text)),
+    (s) =>
+      !(s.type === "PARAGRAPH" && s.text.length <= 14 && /^[\d\s.,%−–-]+$/.test(s.text)) &&
+      !(
+        s.type === "PARAGRAPH" &&
+        s.text.replace(/\s/g, "").length <= 3 &&
+        (s.mathShare ?? 0) >= 0.5
+      ),
   );
 
   // Same-page paragraph fragments that end mid-sentence join the next paragraph.

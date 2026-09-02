@@ -133,7 +133,7 @@ export async function renderFigurePage(
     });
     if (!document?.fileData) return null;
     const rendered = await renderPdfPage(new Uint8Array(document.fileData), page, region ? 2000 : 1200);
-    const png = region ? ((await cropPageRegion(rendered, region, { pad: 0.6, scaleUp: false })) ?? rendered) : rendered;
+    const png = region ? ((await cropPageRegion(rendered, region, { pad: 0.3, scaleUp: false })) ?? rendered) : rendered;
     const bytes = new Uint8Array(png);
     if (bytes.length === 0 || bytes.length > IMAGE_MAX_BYTES) return null;
     return { bytes, mediaType: "image/png" };

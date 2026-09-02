@@ -58,7 +58,7 @@ export async function GET(
     block.page,
     region ? REGION_PAGE_WIDTH : PAGE_WIDTH,
   );
-  const png = region ? ((await cropPageRegion(page, region, { pad: 0.6, scaleUp: false })) ?? page) : page;
+  const png = region ? ((await cropPageRegion(page, region, { pad: 0.3, scaleUp: false })) ?? page) : page;
   // Response wants an ArrayBuffer-backed array; the crop comes off a canvas buffer.
   const body = new Uint8Array(png.byteLength);
   body.set(png);
