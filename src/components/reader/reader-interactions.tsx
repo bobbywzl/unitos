@@ -3565,7 +3565,7 @@ export function ReaderInteractions({
                 <button
                   key={color}
                   onClick={() => void recolorAnnotation(color)}
-                  data-track="annotation-recolor"
+                  data-track={`annotation-recolor:${color}`}
                   disabled={annotationCard.busy}
                   aria-label={t("reader.recolor", { color: t(HUE_KEY[color]) })}
                   title={t("reader.recolor", { color: t(HUE_KEY[color]) })}
@@ -3912,7 +3912,7 @@ export function ReaderInteractions({
                 key={color}
                 disabled={busy}
                 onClick={() => void annotate({ color, comment: commentDraft.trim() || undefined })}
-                data-track="highlight"
+                data-track={`highlight:${color}`}
                 aria-label={t("reader.highlightIn", { color: t(HUE_KEY[color]) })}
                 title={t(
                   commentDraft.trim() ? "reader.highlightInWithNote" : "reader.highlightIn",

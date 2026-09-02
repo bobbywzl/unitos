@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
 import { Prisma } from "@prisma/client";
 import { isAdmin } from "@/lib/admin-auth";
-import { CLICK_SURFACES, isClickSurface, type ClickSurface } from "@/lib/clicks";
+import { CLICK_GROUPS, clickGroupOf, type ClickGroup } from "@/lib/clicks";
 import { db } from "@/lib/db";
 import { serverT } from "@/lib/i18n/server";
 import type { TFunc, TKey } from "@/lib/i18n/dictionaries";
@@ -10,44 +10,37 @@ import { AdminNav } from "@/components/admin/admin-nav";
 
 export const dynamic = "force-dynamic";
 
-// Admin: click frequency per reader control (SPEC.md §7) — where readers
-// click (surface) and which controls they use (control). Server-rendered like
-// the usage page; every figure is the last 90 days unless a column says
+// Admin: how often readers use each function (SPEC.md §7): the AI tools, the
+// notes functions, and the annotations they make. Every other control
+// (navigation, dialogs, video playback, the article edit toolbar) records but
+// stays off this page — lib/clicks.ts holds the vocabulary. Server-rendered
+// like the usage page; every figure is the last 90 days unless a column says
 // otherwise. The table under the charts carries every value the charts show.
 
 const DAY = 86_400_000;
 
-const SURFACE_LABEL: Record<ClickSurface, TKey> = {
-  topbar: "admin.surfaceTopbar",
-  sidebar: "admin.surfaceSidebar",
-  "ai-toolbar": "admin.surfaceAiToolbar",
-  "article-menu": "admin.surfaceArticleMenu",
-  reader: "admin.surfaceReader",
-  tray: "admin.surfaceTray",
+const GROUP_LABEL: Record<ClickGroup, TKey> = {
+  ai: "admin.clicksGroupAi",
+  notes: "admin.clicksGroupNotes",
+  annotations: "admin.clicksGroupAnnotations",
 };
 
-// One hue per surface, in this fixed order (the dataviz reference palette,
-// validated on the card surface in both themes). Marks wear these; text never
-// does — the swatch beside a label carries the identity.
-const SURFACE_COLOR: Record<ClickSurface, { light: string; dark: string }> = {
-  topbar: { light: "#2a78d6", dark: "#3987e5" },
-  sidebar: { light: "#eb6834", dark: "#d95926" },
-  "ai-toolbar": { light: "#1baf7a", dark: "#199e70" },
-  "article-menu": { light: "#eda100", dark: "#c98500" },
-  reader: { light: "#e87ba4", dark: "#d55181" },
-  tray: { light: "#008300", dark: "#008300" },
+// One hue per group (the dataviz reference palette, validated on the card
+// surface in both themes). Marks wear these; text never does — the swatch
+// beside a label carries the identity.
+const GROUP_COLOR: Record<ClickGroup, { light: string; dark: string }> = {
+  ai: { light: "#1baf7a", dark: "#199e70" },
+  notes: { light: "#2a78d6", dark: "#3987e5" },
+  annotations: { light: "#eb6834", dark: "#d95926" },
 };
-
-// The three surfaces the page breaks down control by control.
-const FOCUS_SURFACES: ClickSurface[] = ["topbar", "sidebar", "ai-toolbar"];
 
 const seriesCss = [
-  `.click-charts{${CLICK_SURFACES.map((s) => `--click-${s}:${SURFACE_COLOR[s].light};`).join("")}}`,
-  `.dark .click-charts{${CLICK_SURFACES.map((s) => `--click-${s}:${SURFACE_COLOR[s].dark};`).join("")}}`,
+  `.click-charts{${CLICK_GROUPS.map((g) => `--click-${g}:${GROUP_COLOR[g].light};`).join("")}}`,
+  `.dark .click-charts{${CLICK_GROUPS.map((g) => `--click-${g}:${GROUP_COLOR[g].dark};`).join("")}}`,
 ].join(" ");
 
-function colorOf(surface: ClickSurface): string {
-  return `var(--click-${surface})`;
+function colorOf(group: ClickGroup): string {
+  return `var(--click-${group})`;
 }
 
 function fmt(n: number): string {
@@ -72,12 +65,12 @@ function ago(t: TFunc, now: number, then: Date | null): string {
   return t("admin.agoDays", { n: Math.floor(hours / 24) });
 }
 
-function Swatch({ surface }: { surface: ClickSurface }) {
+function Swatch({ group }: { group: ClickGroup }) {
   return (
     <span
       aria-hidden
       className="inline-block size-2.5 shrink-0 rounded-full"
-      style={{ background: colorOf(surface) }}
+      style={{ background: colorOf(group) }}
     />
   );
 }
@@ -91,9 +84,9 @@ function Tile({ label, value }: { label: string; value: string }) {
   );
 }
 
-type BarRow = { key: string; label: ReactNode; count: number; color: string; detail?: string };
+type BarRow = { key: string; label: ReactNode; count: number; color: string };
 
-// Horizontal magnitude bars: label left, count at the tip, detail under.
+// Horizontal magnitude bars: label left, count at the tip.
 function BarList({ title, empty, rows }: { title: string; empty: string; rows: BarRow[] }) {
   const max = Math.max(...rows.map((r) => r.count), 1);
   return (
@@ -115,7 +108,6 @@ function BarList({ title, empty, rows }: { title: string; empty: string; rows: B
                   style={{ width: `${Math.max(2, (r.count / max) * 100)}%`, background: r.color }}
                 />
               </div>
-              {r.detail && <p className="mt-0.5 text-[10px] text-sand-500">{r.detail}</p>}
             </div>
           ))}
         </div>
@@ -124,7 +116,7 @@ function BarList({ title, empty, rows }: { title: string; empty: string; rows: B
   );
 }
 
-type Day = { day: string; total: number; bySurface: Record<ClickSurface, number> };
+type Day = { day: string; total: number; byGroup: Record<ClickGroup, number> };
 
 // A column with a 4px rounded top and a square base.
 function columnPath(x: number, y: number, w: number, h: number): string {
@@ -132,8 +124,8 @@ function columnPath(x: number, y: number, w: number, h: number): string {
   return `M${x},${y + r} Q${x},${y} ${x + r},${y} H${x + w - r} Q${x + w},${y} ${x + w},${y + r} V${y + h} H${x} Z`;
 }
 
-// Daily columns, last 30 days, stacked by surface, server-rendered SVG. A 2px
-// surface gap separates the segments; the legend under the chart names them.
+// Daily columns, last 30 days, stacked by group, server-rendered SVG. A 2px
+// gap separates the segments; the legend under the chart names them.
 function DailyChart({ t, title, days }: { t: TFunc; title: string; days: Day[] }) {
   const W = 600;
   const H = 100;
@@ -157,12 +149,12 @@ function DailyChart({ t, title, days }: { t: TFunc; title: string; days: Day[] }
         ))}
         {days.map((d, i) => {
           const x = PAD_L + i * slot + (slot - barW) / 2;
-          const stacked = CLICK_SURFACES.filter((s) => d.bySurface[s] > 0);
+          const stacked = CLICK_GROUPS.filter((g) => d.byGroup[g] > 0);
           let base = PAD_T + H;
           return (
             <g key={d.day}>
-              {stacked.map((s, j) => {
-                const h = (d.bySurface[s] / top) * H;
+              {stacked.map((g, j) => {
+                const h = (d.byGroup[g] / top) * H;
                 const yTop = base - h;
                 const gap = j === 0 || h <= 3 ? 0 : 2;
                 const shape =
@@ -171,12 +163,12 @@ function DailyChart({ t, title, days }: { t: TFunc; title: string; days: Day[] }
                     : `M${x},${yTop} H${x + barW} V${base - gap} H${x} Z`;
                 base = yTop;
                 return (
-                  <path key={s} d={shape} style={{ fill: colorOf(s) }}>
+                  <path key={g} d={shape} style={{ fill: colorOf(g) }}>
                     <title>
                       {t("admin.clicksSegment", {
                         day: d.day.slice(5),
-                        surface: t(SURFACE_LABEL[s]),
-                        n: fmt(d.bySurface[s]),
+                        group: t(GROUP_LABEL[g]),
+                        n: fmt(d.byGroup[g]),
                         total: fmt(d.total),
                       })}
                     </title>
@@ -195,10 +187,10 @@ function DailyChart({ t, title, days }: { t: TFunc; title: string; days: Day[] }
         </text>
       </svg>
       <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
-        {CLICK_SURFACES.map((s) => (
-          <span key={s} className="flex items-center gap-1.5 text-[11px] text-sand-700">
-            <Swatch surface={s} />
-            {t(SURFACE_LABEL[s])}
+        {CLICK_GROUPS.map((g) => (
+          <span key={g} className="flex items-center gap-1.5 text-[11px] text-sand-700">
+            <Swatch group={g} />
+            {t(GROUP_LABEL[g])}
           </span>
         ))}
       </div>
@@ -206,8 +198,8 @@ function DailyChart({ t, title, days }: { t: TFunc; title: string; days: Day[] }
   );
 }
 
-type ControlRow = {
-  surface: ClickSurface;
+type FunctionRow = {
+  group: ClickGroup;
   control: string;
   count90: number;
   count30: number;
@@ -215,6 +207,16 @@ type ControlRow = {
   accounts: number;
   last: Date | null;
 };
+
+type AccountRow = {
+  userId: string | null;
+  byGroup: Record<ClickGroup, number>;
+  total: number;
+  last: Date | null;
+};
+
+const zeroGroups = () =>
+  Object.fromEntries(CLICK_GROUPS.map((g) => [g, 0])) as Record<ClickGroup, number>;
 
 export default async function AdminClicksPage() {
   if (!(await isAdmin())) redirect("/admin/login");
@@ -227,108 +229,105 @@ export default async function AdminClicksPage() {
   const since30 = new Date(now - 30 * DAY);
   const since7 = new Date(now - 7 * DAY);
 
-  const [rows90, rows30, rows7, rowsByUser, byUser, byDayRaw, users] = await Promise.all([
+  const [rows90, rows30, rows7, rowsByUser, byDayRaw, users] = await Promise.all([
     db.clickEvent.groupBy({
-      by: ["surface", "control"],
+      by: ["control"],
       where: { createdAt: { gte: since90 } },
       _count: true,
       _max: { createdAt: true },
     }),
     db.clickEvent.groupBy({
-      by: ["surface", "control"],
+      by: ["control"],
       where: { createdAt: { gte: since30 } },
       _count: true,
     }),
     db.clickEvent.groupBy({
-      by: ["surface", "control"],
+      by: ["control"],
       where: { createdAt: { gte: since7 } },
       _count: true,
     }),
     db.clickEvent.groupBy({
-      by: ["surface", "control", "userId"],
-      where: { createdAt: { gte: since90 } },
-      _count: true,
-    }),
-    db.clickEvent.groupBy({
-      by: ["userId"],
+      by: ["control", "userId"],
       where: { createdAt: { gte: since90 } },
       _count: true,
       _max: { createdAt: true },
     }),
-    db.$queryRaw<{ day: Date; surface: string; n: number }[]>(Prisma.sql`
-      SELECT date_trunc('day', "createdAt") AS day, "surface", count(*)::int AS n
+    db.$queryRaw<{ day: Date; control: string; n: number }[]>(Prisma.sql`
+      SELECT date_trunc('day', "createdAt") AS day, "control", count(*)::int AS n
       FROM "ClickEvent" WHERE "createdAt" >= ${since30}
       GROUP BY 1, 2 ORDER BY 1`),
     db.user.findMany({ select: { id: true, email: true } }),
   ]);
 
   const emailOf = new Map(users.map((u) => [u.id, u.email]));
-  const keyOf = (surface: string, control: string) => `${surface} ${control}`;
-  const count30 = new Map(rows30.map((r) => [keyOf(r.surface, r.control), r._count]));
-  const count7 = new Map(rows7.map((r) => [keyOf(r.surface, r.control), r._count]));
+  const count30 = new Map(rows30.map((r) => [r.control, r._count]));
+  const count7 = new Map(rows7.map((r) => [r.control, r._count]));
   const accountsOf = new Map<string, number>();
-  for (const r of rowsByUser) {
-    const key = keyOf(r.surface, r.control);
-    accountsOf.set(key, (accountsOf.get(key) ?? 0) + 1);
-  }
-  const surfaceOrder = new Map<string, number>(CLICK_SURFACES.map((s, i) => [s, i]));
+  for (const r of rowsByUser) accountsOf.set(r.control, (accountsOf.get(r.control) ?? 0) + 1);
+  const groupOrder = new Map<string, number>(CLICK_GROUPS.map((g, i) => [g, i]));
 
-  const controls: ControlRow[] = rows90
-    .flatMap((r) =>
-      isClickSurface(r.surface)
+  // The functions; general controls drop here.
+  const functions: FunctionRow[] = rows90
+    .flatMap((r) => {
+      const group = clickGroupOf(r.control);
+      return group
         ? [
             {
-              surface: r.surface,
+              group,
               control: r.control,
               count90: r._count,
-              count30: count30.get(keyOf(r.surface, r.control)) ?? 0,
-              count7: count7.get(keyOf(r.surface, r.control)) ?? 0,
-              accounts: accountsOf.get(keyOf(r.surface, r.control)) ?? 0,
+              count30: count30.get(r.control) ?? 0,
+              count7: count7.get(r.control) ?? 0,
+              accounts: accountsOf.get(r.control) ?? 0,
               last: r._max.createdAt,
             },
           ]
-        : [],
-    )
+        : [];
+    })
     .sort(
       (a, b) =>
         b.count90 - a.count90 ||
-        (surfaceOrder.get(a.surface) ?? 0) - (surfaceOrder.get(b.surface) ?? 0) ||
+        (groupOrder.get(a.group) ?? 0) - (groupOrder.get(b.group) ?? 0) ||
         a.control.localeCompare(b.control),
     );
 
-  const total90 = controls.reduce((sum, r) => sum + r.count90, 0);
-  const total30 = controls.reduce((sum, r) => sum + r.count30, 0);
-  const total7 = controls.reduce((sum, r) => sum + r.count7, 0);
-  const bySurface = CLICK_SURFACES.map((surface) => ({
-    surface,
-    count: controls.filter((r) => r.surface === surface).reduce((sum, r) => sum + r.count90, 0),
-  }));
-  const accounts = byUser.filter((r) => r.userId !== null).length;
+  const totals = zeroGroups();
+  for (const r of functions) totals[r.group] += r.count90;
+  const total90 = functions.reduce((sum, r) => sum + r.count90, 0);
+
+  // Uses per account, the groups side by side.
+  const accountMap = new Map<string | null, AccountRow>();
+  for (const r of rowsByUser) {
+    const group = clickGroupOf(r.control);
+    if (!group) continue;
+    const row = accountMap.get(r.userId) ?? {
+      userId: r.userId,
+      byGroup: zeroGroups(),
+      total: 0,
+      last: null,
+    };
+    row.byGroup[group] += r._count;
+    row.total += r._count;
+    if (r._max.createdAt && (!row.last || r._max.createdAt > row.last)) row.last = r._max.createdAt;
+    accountMap.set(r.userId, row);
+  }
+  const accountRows = [...accountMap.values()].sort((a, b) => b.total - a.total).slice(0, 20);
+  const accounts = [...accountMap.keys()].filter((id) => id !== null).length;
 
   // Fill the trailing 30 calendar days so quiet days render as gaps.
   const dayMap = new Map<string, Day>();
   for (let i = 0; i < 30; i++) {
     const day = new Date(now - (29 - i) * DAY).toISOString().slice(0, 10);
-    dayMap.set(day, {
-      day,
-      total: 0,
-      bySurface: Object.fromEntries(CLICK_SURFACES.map((s) => [s, 0])) as Record<ClickSurface, number>,
-    });
+    dayMap.set(day, { day, total: 0, byGroup: zeroGroups() });
   }
   for (const r of byDayRaw) {
+    const group = clickGroupOf(r.control);
     const entry = dayMap.get(r.day.toISOString().slice(0, 10));
-    if (!entry || !isClickSurface(r.surface)) continue;
-    entry.bySurface[r.surface] += r.n;
+    if (!entry || !group) continue;
+    entry.byGroup[group] += r.n;
     entry.total += r.n;
   }
   const days = [...dayMap.values()];
-
-  const controlLabel = (r: ControlRow) => (
-    <>
-      <Swatch surface={r.surface} />
-      <span className="truncate font-mono">{r.control}</span>
-    </>
-  );
 
   const accountLabel = (userId: string | null) =>
     userId === null
@@ -348,62 +347,32 @@ export default async function AdminClicksPage() {
         <p className="text-sm text-sand-600">{t("admin.clicksEmpty")}</p>
       ) : (
         <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-            <Tile label={t("admin.clicks90")} value={fmt(total90)} />
-            <Tile label={t("admin.clicks30")} value={fmt(total30)} />
-            <Tile label={t("admin.clicks7")} value={fmt(total7)} />
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {CLICK_GROUPS.map((g) => (
+              <Tile
+                key={g}
+                label={t("admin.clicksGroup90", { group: t(GROUP_LABEL[g]) })}
+                value={fmt(totals[g])}
+              />
+            ))}
             <Tile label={t("admin.clicksAccounts")} value={fmt(accounts)} />
-            <Tile label={t("admin.clicksControls")} value={fmt(controls.length)} />
           </div>
 
           <DailyChart t={t} title={t("admin.clicksDaily")} days={days} />
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            <BarList
-              title={t("admin.clicksBySurface")}
-              empty={t("admin.clicksNone")}
-              rows={bySurface.map((r) => ({
-                key: r.surface,
-                label: (
-                  <>
-                    <Swatch surface={r.surface} />
-                    {t(SURFACE_LABEL[r.surface])}
-                  </>
-                ),
-                count: r.count,
-                color: colorOf(r.surface),
-                detail: t("admin.clicksShare", {
-                  pct: total90 > 0 ? Math.round((r.count / total90) * 100) : 0,
-                }),
-              }))}
-            />
-            <BarList
-              title={t("admin.clicksTopControls")}
-              empty={t("admin.clicksNone")}
-              rows={controls.slice(0, 8).map((r) => ({
-                key: keyOf(r.surface, r.control),
-                label: controlLabel(r),
-                count: r.count90,
-                color: colorOf(r.surface),
-                detail: t(SURFACE_LABEL[r.surface]),
-              }))}
-            />
-          </div>
-
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {FOCUS_SURFACES.map((surface) => (
+            {CLICK_GROUPS.map((group) => (
               <BarList
-                key={surface}
-                title={t("admin.clicksBySurfaceControls", { surface: t(SURFACE_LABEL[surface]) })}
+                key={group}
+                title={t("admin.clicksGroup90", { group: t(GROUP_LABEL[group]) })}
                 empty={t("admin.clicksNone")}
-                rows={controls
-                  .filter((r) => r.surface === surface)
-                  .slice(0, 8)
+                rows={functions
+                  .filter((r) => r.group === group)
                   .map((r) => ({
                     key: r.control,
                     label: <span className="truncate font-mono">{r.control}</span>,
                     count: r.count90,
-                    color: colorOf(surface),
+                    color: colorOf(group),
                   }))}
               />
             ))}
@@ -416,7 +385,7 @@ export default async function AdminClicksPage() {
             <table className="w-full text-xs">
               <thead>
                 <tr className="border-b border-line text-left text-[10px] tracking-wider text-sand-500 uppercase">
-                  <th className="py-2 font-semibold">{t("admin.clicksColSurface")}</th>
+                  <th className="py-2 font-semibold">{t("admin.clicksColGroup")}</th>
                   <th className="px-3 py-2 font-semibold">{t("admin.clicksColControl")}</th>
                   <th className="px-3 py-2 text-right font-semibold">{t("admin.clicksCol90")}</th>
                   <th className="px-3 py-2 text-right font-semibold">{t("admin.clicksCol30")}</th>
@@ -426,12 +395,12 @@ export default async function AdminClicksPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-line">
-                {controls.map((r) => (
-                  <tr key={keyOf(r.surface, r.control)}>
+                {functions.map((r) => (
+                  <tr key={r.control}>
                     <td className="py-2 whitespace-nowrap text-sand-800">
                       <span className="flex items-center gap-1.5">
-                        <Swatch surface={r.surface} />
-                        {t(SURFACE_LABEL[r.surface])}
+                        <Swatch group={r.group} />
+                        {t(GROUP_LABEL[r.group])}
                       </span>
                     </td>
                     <td className="px-3 py-2 font-mono text-sand-800">{r.control}</td>
@@ -454,23 +423,26 @@ export default async function AdminClicksPage() {
               <thead>
                 <tr className="border-b border-line text-left text-[10px] tracking-wider text-sand-500 uppercase">
                   <th className="py-2 font-semibold">{t("admin.clicksColAccount")}</th>
-                  <th className="px-3 py-2 text-right font-semibold">{t("admin.clicksColClicks")}</th>
+                  {CLICK_GROUPS.map((g) => (
+                    <th key={g} className="px-3 py-2 text-right font-semibold">
+                      {t(GROUP_LABEL[g])}
+                    </th>
+                  ))}
                   <th className="py-2 text-right font-semibold">{t("admin.clicksColLast")}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-line">
-                {[...byUser]
-                  .sort((a, b) => b._count - a._count)
-                  .slice(0, 20)
-                  .map((r) => (
-                    <tr key={r.userId ?? "-"}>
-                      <td className="max-w-[240px] truncate py-2 text-sand-800">{accountLabel(r.userId)}</td>
-                      <td className="px-3 py-2 text-right font-semibold tabular-nums">{fmt(r._count)}</td>
-                      <td className="py-2 text-right whitespace-nowrap text-sand-600">
-                        {ago(t, now, r._max.createdAt)}
+                {accountRows.map((r) => (
+                  <tr key={r.userId ?? "-"}>
+                    <td className="max-w-[240px] truncate py-2 text-sand-800">{accountLabel(r.userId)}</td>
+                    {CLICK_GROUPS.map((g) => (
+                      <td key={g} className="px-3 py-2 text-right font-semibold tabular-nums">
+                        {fmt(r.byGroup[g])}
                       </td>
-                    </tr>
-                  ))}
+                    ))}
+                    <td className="py-2 text-right whitespace-nowrap text-sand-600">{ago(t, now, r.last)}</td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
