@@ -1,6 +1,7 @@
 import { anthropic } from "@ai-sdk/anthropic";
 import type { ModelMessage } from "ai";
 import { z } from "zod";
+import { PARSE_MODEL } from "@/lib/derive/config";
 import { callForJson } from "@/lib/derive/json-call";
 import type { UsageMeta } from "@/lib/usage";
 import type { ParsedBlock } from "@/lib/parse/types";
@@ -9,7 +10,6 @@ import type { ParsedBlock } from "@/lib/parse/types";
 // the block list — drop residual junk, fix a wrong type, merge a split fragment.
 // It references blocks by index only and never writes text, so it cannot invent
 // content. On any failure the mechanical blocks stand (SPEC.md §2 quality bar).
-const INGEST_STRUCTURE_MODEL = "claude-opus-5";
 const MAX_LISTED_BLOCKS = 500;
 
 const RETYPABLE = new Set(["PARAGRAPH", "HEADING", "LIST", "CODE"]);
@@ -114,12 +114,12 @@ export async function selectCoreBlocks(
     { role: "user", content: corePrompt(title, listed, instructions) },
   ];
   const result = await callForJson({
-    model: anthropic(INGEST_STRUCTURE_MODEL),
+    model: anthropic(PARSE_MODEL),
     messages,
     maxOutputTokens: 4096,
     schema: coreSchema,
     label: "INGEST_CORE",
-    usage: { userId: null, feature: "parse", model: INGEST_STRUCTURE_MODEL } satisfies UsageMeta,
+    usage: { userId: null, feature: "parse", model: PARSE_MODEL } satisfies UsageMeta,
   });
   if (!result.ok) {
     console.warn(`[ingest] core pass failed, keeping all blocks: ${result.error}`);
@@ -157,12 +157,12 @@ export async function structureBlocks(
     { role: "user", content: structurePrompt(title, listed, instructions) },
   ];
   const result = await callForJson({
-    model: anthropic(INGEST_STRUCTURE_MODEL),
+    model: anthropic(PARSE_MODEL),
     messages,
     maxOutputTokens: 8192,
     schema: structureSchema,
     label: "INGEST_STRUCTURE",
-    usage: { userId: null, feature: "parse", model: INGEST_STRUCTURE_MODEL } satisfies UsageMeta,
+    usage: { userId: null, feature: "parse", model: PARSE_MODEL } satisfies UsageMeta,
   });
   if (!result.ok) {
     console.warn(`[ingest] structure pass failed, keeping mechanical blocks: ${result.error}`);

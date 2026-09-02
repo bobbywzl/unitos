@@ -7,7 +7,9 @@ import { db } from "@/lib/db";
 import { CONVERT_MODEL } from "@/lib/derive/config";
 import { callForJson } from "@/lib/derive/json-call";
 import { PAGE_IMAGE_WIDTH, renderPdfPage } from "@/lib/handwritten/pages";
+import { texError } from "@/lib/katex";
 import { convertPrompt } from "@/lib/prompts/convert";
+import { fixTexPrompt } from "@/lib/prompts/fix-tex";
 
 // The conversion job (SPEC.md §16): guards, page rendering, the model batches,
 // and the text block writes. Conversion starts on its own when a handwritten
@@ -40,6 +42,11 @@ const convertedBlockSchema = z.object({
 });
 const convertOutputSchema = z.object({ blocks: z.array(convertedBlockSchema).max(150) });
 type ConvertedBlock = z.infer<typeof convertedBlockSchema>;
+
+const MAX_TEX_REPAIRS = 60;
+const fixTexOutputSchema = z.object({
+  fixes: z.array(z.object({ index: z.number().int().min(0), text: z.string().min(1).max(8000) })).max(MAX_TEX_REPAIRS),
+});
 
 function escapeHtml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -98,6 +105,53 @@ function toBlockRow(b: ConvertedBlock): {
   if (b.type === "LIST") return { type: b.type, text: normalizeList(b.text), html: null, page: b.page };
   if (b.type === "TABLE") return { type: b.type, text: b.text, html: tableHtml(b.text), page: b.page };
   return { type: b.type, text: b.text, html: null, page: b.page };
+}
+
+type BlockRow = ReturnType<typeof toBlockRow>;
+
+// TeX verification (SPEC.md §16): every EQUATION block must render in KaTeX
+// before it lands. The failures go back to the model once with the parser's
+// error; a fix that parses replaces the text, anything else stays as written —
+// the reader shows raw TeX, never invented content. Best effort: a failed
+// repair call never fails the conversion.
+async function repairEquations(
+  rows: BlockRow[],
+  userId: string | null,
+): Promise<{ failed: number; fixed: number }> {
+  const broken = rows
+    .map((row, index) => ({ row, index, error: row.type === "EQUATION" ? texError(row.text) : null }))
+    .filter((e): e is { row: BlockRow; index: number; error: string } => e.error !== null)
+    .slice(0, MAX_TEX_REPAIRS);
+  if (broken.length === 0) return { failed: 0, fixed: 0 };
+  const messages: ModelMessage[] = [
+    {
+      role: "user",
+      content: fixTexPrompt({
+        equations: broken.map((b, i) => ({ index: i, tex: b.row.text, error: b.error })),
+      }),
+    },
+  ];
+  const result = await callForJson({
+    model: anthropic(CONVERT_MODEL),
+    messages,
+    maxOutputTokens: 16384,
+    schema: fixTexOutputSchema,
+    label: "CONVERT_FIX_TEX",
+    usage: { userId, feature: "convert", model: CONVERT_MODEL },
+  });
+  if (!result.ok) {
+    console.warn(`[convert] TeX repair failed, keeping raw TeX: ${result.error}`);
+    return { failed: broken.length, fixed: 0 };
+  }
+  let fixed = 0;
+  for (const fix of result.data.fixes) {
+    const target = broken[fix.index];
+    const text = fix.text.trim();
+    if (!target || texError(text) !== null) continue;
+    rows[target.index] = { ...target.row, text };
+    fixed++;
+  }
+  return { failed: broken.length, fixed };
 }
 
 export async function runConversion(
@@ -218,6 +272,10 @@ export async function runConversion(
 
     const rows = results.flat().map(toBlockRow).filter((b) => b.text.trim().length > 0);
     if (rows.length === 0) throw new Error("No text found on the pages");
+    const repair = await repairEquations(rows, userId);
+    if (repair.failed > 0) {
+      console.log(`[convert] ${documentId}: ${repair.fixed}/${repair.failed} equations repaired`);
+    }
     // Past the page cap, the cut is declared, never silent (SPEC.md §7 discipline).
     if (pageCount > MAX_PAGES) {
       rows.push({

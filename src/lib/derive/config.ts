@@ -34,14 +34,20 @@ export const MAX_OUTPUT_TOKENS: Record<DerivationType, number> = {
 // DerivationType — it runs as a background job, not through /api/derive.
 export const CONNECT_MODEL = "claude-opus-5";
 
+// Upload and parse run on the most capable model: what the parse gets wrong,
+// every later tool inherits. One constant for the upload assistant's review
+// and instruction check (SPEC.md §15), the URL core and structure passes
+// (SPEC.md §2), Import PDF's judgment, and conversion (SPEC.md §16).
+export const PARSE_MODEL = "claude-fable-5-1";
+
 // The upload assistant's review and instruction check (SPEC.md §15). Not a
 // DerivationType — it runs before ingest, not through /api/derive.
-export const UPLOAD_MODEL = "claude-opus-5";
+export const UPLOAD_MODEL = PARSE_MODEL;
 
 // Handwritten documents (SPEC.md §16). Not DerivationTypes: classification
 // runs inside Import PDF, conversion as a background job.
-export const CLASSIFY_MODEL = "claude-opus-5";
-export const CONVERT_MODEL = "claude-opus-5";
+export const CLASSIFY_MODEL = PARSE_MODEL;
+export const CONVERT_MODEL = PARSE_MODEL;
 
 export const ANNOTATIONS_SECTION_TITLE = "Annotations";
 

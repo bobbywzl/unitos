@@ -22,3 +22,5 @@ One loop iteration:
 5. **Iterate.** Re-run the failing URLs plus a fresh batch. Stop when a round reports no new mismatch class. Lint, build, ship.
 
 Known torture tests: wallstreetcn articles (SSR only for non-browser UAs; transcript inside `<blockquote>` of `<p>`s), paulgraham.com essays (`<br><br>` paragraphs), Wikipedia (tables, references), arxiv HTML papers (math, figures).
+
+Visual round: `/importcompare` renders both sides in headless Chromium and compares tables, math, figures, gifs, videos, embeds, code, lists, and layout element by element (`scripts/qa/import-compare.mjs`). Run it after this loop's text census is clean.
