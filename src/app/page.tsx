@@ -56,7 +56,17 @@ export default async function Home() {
     where: { userId: user.id, dismissedAt: null },
     orderBy: { notification: { createdAt: "desc" } },
     select: {
-      notification: { select: { id: true, kind: true, title: true, body: true, createdAt: true } },
+      notification: {
+        select: {
+          id: true,
+          kind: true,
+          title: true,
+          body: true,
+          createdAt: true,
+          // Kind "feedback": the feedback the reply answers, shown above it.
+          feedback: { select: { message: true } },
+        },
+      },
     },
   });
 
@@ -129,6 +139,7 @@ export default async function Home() {
             title: n.title,
             body: n.body,
             createdAt: n.createdAt.toISOString(),
+            feedback: n.feedback,
           }))}
         />
         <WorksShelf

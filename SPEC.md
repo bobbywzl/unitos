@@ -648,19 +648,25 @@ Offline, the open tab keeps working — reading what is loaded, and for a premiu
 
 ## 18. Notifications
 
-The admin sends notifications to accounts; the admin never has access to an account. `/admin` is the operator's console — feedback, digest, usage, notifications — behind its own password (§2). It holds no session for any account, opens no account, and changes nothing on one: no impersonation, no profile edits, no premium toggle. The notification is the one thing the admin sends into an account, and it flows one way — the recipient reads and dismisses; nothing comes back.
+The admin sends notifications to accounts; the admin never has access to an account. `/admin` is the operator's console — feedback, digest, usage, notifications — behind its own password (§2). It holds no session for any account, opens no account, and changes nothing on one: no impersonation, no profile edits, no premium toggle. The notification is the one thing the admin sends into an account, and it flows one way — the recipient reads and dismisses; nothing comes back. Feedback is the reader's one message to the admin, and the admin's reply to it is a notification too (kind `feedback`).
 
 ### Data model additions
 
 ```prisma
 model Notification {
   id         String   @id @default(cuid())
-  kind       String   @default("update") // "update" | "account"
+  kind       String   @default("update") // "update" | "account" | "feedback"
   title      String
   body       String   // markdown
+  feedbackId String?  // kind "feedback": the feedback this replies to; SetNull when that feedback goes
+  feedback   Feedback? @relation(fields: [feedbackId], references: [id], onDelete: SetNull)
   recipients NotificationRecipient[]
   createdAt  DateTime @default(now())
 }
+
+// Feedback gains the account that sent it:
+//   userId  String?  // soft reference like Notebook.userId; null = sent signed out, no reply possible
+//   replies Notification[]
 
 model NotificationRecipient {
   id             String       @id @default(cuid())
@@ -672,7 +678,8 @@ model NotificationRecipient {
 }
 ```
 
-- **Kinds:** `update` — an update to Unitos (a new function, a changed behavior); `account` — a change made to the account (Unitos Premium turned on, a limit changed). The kind renders as a chip on both sides.
+- **Kinds:** `update` — an update to Unitos (a new function, a changed behavior); `account` — a change made to the account (Unitos Premium turned on, a limit changed); `feedback` — a reply to feedback the account sent (made only by Reply in the feedback inbox, never composed on the notifications page). The kind renders as a chip on both sides.
 - **Sending** (`/admin/notifications`, `POST /api/admin/notifications`): kind, title, body, recipients — every account, or accounts chosen from the list (name and email, nothing else; `lib/notifications.ts` is the admin's whole view of accounts). One `Notification` row and one `NotificationRecipient` row per recipient. With sign-in off the local reader is the one account. The page lists every send, newest first, with its recipient count and how many dismissed it; Delete (`DELETE /api/admin/notifications`) removes a send for every recipient.
 - **Receiving:** the dashboard shows the account's open notifications above Projects — kind, date, title, body (markdown) — until Dismiss (`PATCH /api/notifications/[id]`, the recipient only) stamps `dismissedAt`. Dismissed rows stay, so the admin's count holds; only the admin's Delete removes them.
-- **The boundary, enforced:** the admin routes touch `Notification` and `NotificationRecipient` only; no admin route reads or writes `User`, `Session`, `ReaderProfile`, or a corpus. No email: the notification lives in the app.
+- **Replying to feedback** (`/admin`, `POST /api/admin/feedback`): `POST /api/feedback` records `Feedback.userId`, the account that sent it (signed out: null). Reply writes one `Notification` of kind `feedback` — title the feedback's message on one line, body the reply (markdown), `feedbackId` the feedback — with one `NotificationRecipient`, the account that sent it; new feedback turns seen. The inbox names the account under each feedback and lists its replies with whether the account dismissed each; the dashboard card reads "Reply to your feedback", the feedback's message, then the reply. Feedback with no account, or an account the recipient list does not know, cannot be replied to (400). Delete on the notifications page removes a reply like any send. The first account to sign in adopts the local reader's feedback and notifications with the rest of its data (§2).
+- **The boundary, enforced:** the admin routes touch `Notification`, `NotificationRecipient`, and `Feedback` only; no admin route reads or writes `User`, `Session`, `ReaderProfile`, or a corpus. No email: the notification lives in the app.

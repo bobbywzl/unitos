@@ -26,6 +26,14 @@ const en = {
   reopen: "Reopen",
   feedbackEmpty: "No feedback.",
   feedbackEmptyFiltered: "No {filter} feedback.",
+  // Reply to feedback (SPEC.md §18): the reply reaches the account as a
+  // notification. A reply's state is whether the account dismissed it.
+  feedbackFrom: "from {name}",
+  reply: "Reply",
+  replyPh: "Write a reply. It reaches the account as a notification. Markdown works.",
+  replyNoAccount: "No account to notify.",
+  replyOpen: "not dismissed yet",
+  replyDismissed: "dismissed",
   // Digest page.
   digestDesc:
     "The stored context the assistant reads. Stale digests rebuild on read; Rebuild forces one.",
@@ -206,6 +214,12 @@ const zh: Record<keyof typeof en, string> = {
   reopen: "重新打开",
   feedbackEmpty: "没有反馈。",
   feedbackEmptyFiltered: "没有{filter}的反馈。",
+  feedbackFrom: "来自 {name}",
+  reply: "回复",
+  replyPh: "写回复。它会作为通知发送给该账户。支持 Markdown。",
+  replyNoAccount: "没有可通知的账户。",
+  replyOpen: "尚未关闭",
+  replyDismissed: "已关闭",
   digestDesc: "助手读取的已存储上下文。过期的汇编在读取时重建；“重建”可强制重建。",
   exactTextCorpus: "逐字文本（项目范围）",
   exactTextCorpora: "逐字文本（全部项目范围）",

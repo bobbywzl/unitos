@@ -3,7 +3,7 @@ import { z } from "zod";
 import { adminApiGuard } from "@/lib/admin-auth";
 import { db } from "@/lib/db";
 import { serverT } from "@/lib/i18n/server";
-import { recipientAccounts } from "@/lib/notifications";
+import { recipientAccounts, TITLE_MAX } from "@/lib/notifications";
 import { parseBody } from "@/lib/validate";
 
 // Admin notifications (SPEC.md §18). Send writes Notification and
@@ -13,8 +13,10 @@ import { parseBody } from "@/lib/validate";
 const MAX_CHOSEN = 1000;
 
 const sendSchema = z.object({
+  // The composed kinds. "feedback" comes only from Reply in the feedback inbox
+  // (POST /api/admin/feedback), which fills the recipient itself.
   kind: z.enum(["update", "account"]),
-  title: z.string().trim().min(1).max(200),
+  title: z.string().trim().min(1).max(TITLE_MAX),
   body: z.string().trim().min(1).max(4000),
   // "all" = every account; else the chosen account ids.
   recipients: z.union([z.literal("all"), z.array(z.string().min(1)).min(1).max(MAX_CHOSEN)]),

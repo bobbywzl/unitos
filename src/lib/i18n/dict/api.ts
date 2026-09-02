@@ -168,6 +168,7 @@ const en = {
 
   // Feedback
   feedbackLimit: "Feedback limit reached. Try again tomorrow.",
+  feedbackNoAccount: "This feedback has no account to notify.",
 
   // Export
   exportFormatInvalid: "format must be md or docx",
@@ -348,6 +349,7 @@ const zh: Record<keyof typeof en, string> = {
   voiceFailedStatus: "朗读失败（{status}）",
 
   feedbackLimit: "反馈已达上限。请明天再试。",
+  feedbackNoAccount: "这条反馈没有可通知的账户。",
 
   exportFormatInvalid: "format 必须是 md 或 docx",
 

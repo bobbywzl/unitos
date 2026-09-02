@@ -95,6 +95,9 @@ const en = {
   feedbackSent: "Sent ✓",
   feedbackSending: "Sending…",
   feedbackSend: "Send",
+  // A reply to feedback: a notification on the dashboard (SPEC.md §18). The
+  // card reads this title, the feedback's message, then the reply.
+  feedbackReplyTitle: "Reply to your feedback",
   // Share target: /share, where a shared URL or file lands
   shareAddTitle: "Add to a project",
   shareAddChoose: "Choose a project",
@@ -192,6 +195,7 @@ const zh: Record<keyof typeof en, string> = {
   feedbackSent: "已发送 ✓",
   feedbackSending: "发送中…",
   feedbackSend: "发送",
+  feedbackReplyTitle: "对你反馈的回复",
   shareAddTitle: "添加到项目",
   shareAddChoose: "选择一个项目",
   shareAddNothing: "没有可添加的内容。从其他应用把链接或 PDF 分享给 Unitos。",

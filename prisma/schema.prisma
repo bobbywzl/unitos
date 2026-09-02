@@ -503,31 +503,45 @@ model ClickEvent {
 }
 
 model Feedback {
-  id        String   @id @default(cuid())
+  id        String         @id @default(cuid())
   category  String // "bug" | "idea" | "other"
   message   String
   page      String? // pathname where it was filed
   userAgent String?
-  status    String   @default("new") // "new" | "seen" | "resolved"
-  createdAt DateTime @default(now())
+  // The account that filed it: a soft reference like Notebook.userId ("user-1"
+  // = the local reader). Null = filed signed out, or before this column
+  // existed; the admin cannot reply to those.
+  userId    String?
+  status    String         @default("new") // "new" | "seen" | "resolved"
+  // The admin's replies (SPEC.md §18): each one a Notification of kind
+  // "feedback" sent to the account that filed it.
+  replies   Notification[]
+  createdAt DateTime       @default(now())
 
   @@index([status, createdAt])
 }
 
 // One notification the admin sends to accounts (SPEC.md §18): kind, title,
 // body, and one NotificationRecipient row per account it went to. The admin
-// composes it on /admin/notifications; each recipient's dashboard shows it
-// until they dismiss it. This is the admin's only write toward an account:
-// nothing here reads a session or changes a User row.
+// composes it on /admin/notifications, or Reply in the feedback inbox makes
+// one (kind "feedback"); each recipient's dashboard shows it until they
+// dismiss it. This is the admin's only write toward an account: nothing here
+// reads a session or changes a User row.
 model Notification {
   id         String                  @id @default(cuid())
-  kind       String                  @default("update") // "update" (an update to Unitos) | "account" (a change made to the account)
+  kind       String                  @default("update") // "update" (an update to Unitos) | "account" (a change made to the account) | "feedback" (a reply to feedback the account sent)
   title      String
   body       String // markdown
+  // Kind "feedback" only: the feedback this notification replies to. The
+  // feedback inbox lists a feedback's replies through it; the dashboard shows
+  // the feedback's message above the reply.
+  feedbackId String?
+  feedback   Feedback?               @relation(fields: [feedbackId], references: [id], onDelete: SetNull)
   recipients NotificationRecipient[]
   createdAt  DateTime                @default(now())
 
   @@index([createdAt])
+  @@index([feedbackId])
 }
 
 // One recipient of one notification. userId is a soft reference like

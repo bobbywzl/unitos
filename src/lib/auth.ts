@@ -449,7 +449,8 @@ export function setAccountCookie(res: NextResponse, userId: string): void {
 }
 
 // Upsert the account. The first account ever adopts the local reader's data
-// (corpora, profile, digests), so turning sign-in on never strands the work.
+// (corpora, profile, digests, feedback, notifications), so turning sign-in on
+// never strands the work.
 export async function upsertUser(profile: {
   email: string;
   name: string;
@@ -478,6 +479,8 @@ export async function upsertUser(profile: {
       db.notebook.updateMany({ where: { userId: USER_ID }, data: { userId: user.id } }),
       db.notebookDigest.updateMany({ where: { userId: USER_ID }, data: { userId: user.id } }),
       db.readerProfile.updateMany({ where: { userId: USER_ID }, data: { userId: user.id } }),
+      db.feedback.updateMany({ where: { userId: USER_ID }, data: { userId: user.id } }),
+      db.notificationRecipient.updateMany({ where: { userId: USER_ID }, data: { userId: user.id } }),
     ]);
   }
   return user;
