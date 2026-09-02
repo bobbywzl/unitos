@@ -60,6 +60,7 @@ const TOC_LABEL_RE = /^(contents|table of contents|inside|outline|in this issue)
 const TOC_ENTRY_RE = /^(\d{1,2})[.)]?\s+\S/;
 const ATTACH_PUNCT_RE = /^[.,;:!?)\]…%]/;
 const CJK_START_RE = /^[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u;
+const NUMERIC_TOKEN_RE = /^[\d.,%$€£+−–-]+$/;
 
 // ── Font flags ──────────────────────────────────────────────────────────────
 
@@ -122,9 +123,19 @@ function buildLine(rawItems: Item[], page: number): Line {
   const size = Math.max(...items.map((i) => i.size));
   const cells: Cell[] = [];
   let prevEnd: number | null = null;
+  let prevItem: Item | null = null;
   for (const item of items) {
     const gap = prevEnd === null ? 0 : item.x - prevEnd;
-    const wide = prevEnd !== null && gap > Math.max(8, size * 1.6);
+    // A cell boundary: a wide gap, or an em between two numbers — number
+    // columns sit closer than the word gap rule allows (a table of Brier
+    // scores read as one cell per row: import compare loop finding).
+    const numeric =
+      prevItem !== null &&
+      NUMERIC_TOKEN_RE.test(prevItem.str.trim()) &&
+      NUMERIC_TOKEN_RE.test(item.str.trim());
+    const wide =
+      prevEnd !== null && (gap > Math.max(8, size * 1.6) || (numeric && gap > size * 1.0));
+    prevItem = item;
     let cell = cells[cells.length - 1];
     if (!cell || wide) {
       cell = { x: item.x, text: "", runs: [] };
@@ -472,7 +483,9 @@ function columnSeparators(run: Line[]): number[] {
     }
   }
   const allowed = Math.max(0, Math.floor(run.length * 0.08));
-  const need = Math.max(2, Math.ceil(run.length * 0.3));
+  // A column needs text on both sides in a few lines only: a label column
+  // whose labels sit on their own baselines fills one line in four.
+  const need = Math.max(2, Math.ceil(run.length * 0.15));
   const separators: number[] = [];
   let bandStart: number | null = null;
   for (let s = 0; s <= n; s++) {
@@ -588,16 +601,63 @@ function tableFromRun(run: Line[], leading: number): Segment {
         ? wrapCeiling
         : 0; // all gaps at text leading: every line is its own row
 
+  // Row anchors: lines that carry a first-column cell, minus wraps of the
+  // previous first-column cell (a first-column-only line one leading below
+  // it). When some anchor sits right under a line with no first-column cell
+  // — labels vertically centered beside taller cells, a header cell wrapped
+  // beside its column headers — the vertical rhythm misleads: rows then come
+  // from the anchors, split at the widest gap between consecutive anchors.
+  const cellsOf = run.map((line) => cellsBySeparators(line, separators));
+  const hasFirst = cellsOf.map((cells) => cells[0].text.length > 0);
+  const anchors: number[] = [];
+  let lastFirst = -1;
+  run.forEach((line, k) => {
+    if (!hasFirst[k]) return;
+    const firstOnly = cellsOf[k].every((cell, idx) => idx === 0 || cell.text.length === 0);
+    const wrap =
+      firstOnly &&
+      lastFirst >= 0 &&
+      run[lastFirst].y - line.y <= Math.max(run[lastFirst].size, line.size) * leading * 1.35;
+    lastFirst = k;
+    if (!wrap) anchors.push(k);
+  });
+  const anchorRows =
+    anchors.length >= 2 && anchors.some((k) => k > 0 && !hasFirst[k - 1]);
+  const gapAt = (m: number) => run[m - 1].y - run[m].y;
+  const rowStarts: number[] = [0];
+  if (anchorRows) {
+    // Lines above the first anchor: their own row when one gap stands out.
+    if (anchors[0] > 1) {
+      let widest = 1;
+      let smallest = Infinity;
+      for (let m = 1; m <= anchors[0]; m++) {
+        if (gapAt(m) >= gapAt(widest)) widest = m;
+        smallest = Math.min(smallest, gapAt(m));
+      }
+      if (gapAt(widest) > smallest * 1.3 && widest <= anchors[0]) rowStarts.push(widest);
+    }
+    for (let a = 0; a + 1 < anchors.length; a++) {
+      let widest = anchors[a] + 1;
+      for (let m = anchors[a] + 1; m <= anchors[a + 1]; m++) {
+        if (gapAt(m) >= gapAt(widest)) widest = m;
+      }
+      rowStarts.push(widest);
+    }
+  } else {
+    run.forEach((line, k) => {
+      if (k === 0) return;
+      const gap = gapAt(k);
+      if (rowGapThreshold > 0 ? gap > rowGapThreshold : gap > floor) rowStarts.push(k);
+    });
+  }
+
   const rows: TableRow[] = [];
-  let prev: Line | null = null;
-  for (const line of run) {
-    const gap = prev ? prev.y - line.y : Infinity;
-    const rowBreak = !prev || (rowGapThreshold > 0 ? gap > rowGapThreshold : gap > floor);
-    if (rowBreak || rows.length === 0) {
+  run.forEach((line, k) => {
+    if (rowStarts.includes(k) || rows.length === 0) {
       rows.push({ cells: Array.from({ length: columnCount }, () => ({ text: "", runs: [] })) });
     }
     const row = rows[rows.length - 1];
-    cellsBySeparators(line, separators).forEach((cell, idx) => {
+    cellsOf[k].forEach((cell, idx) => {
       if (cell.text.length === 0) return;
       const target = row.cells[idx];
       const builder = new TextBuilder();
@@ -606,8 +666,7 @@ function tableFromRun(run: Line[], leading: number): Segment {
       target.text = builder.text;
       target.runs = builder.runs;
     });
-    prev = line;
-  }
+  });
 
   // Fragmented figure text, not a real table: mostly tiny cells.
   const flat = rows.flatMap((r) => r.cells.map((c) => c.text.trim()).filter((t) => t.length > 0));
@@ -725,10 +784,28 @@ function isIndented(line: Line, ctx: PageContext): boolean {
   );
 }
 
+// A first-column cell on its own baseline: a single-cell line left of the
+// run's second column — a row label vertically centered beside a taller cell,
+// a header cell wrapped beside its column headers (import compare loop
+// finding: such tables shattered into paragraphs).
+function isLeftOnly(line: Line, columns: number[]): boolean {
+  return (
+    columns.length >= 2 &&
+    line.cells.length === 1 &&
+    line.xEnd < columns[1] - 4 &&
+    line.x <= columns[0] + 8 &&
+    line.text.length < 60
+  );
+}
+
+function isAlignedLine(line: Line, columns: number[]): boolean {
+  return columns.some((c, idx) => idx > 0 && Math.abs(line.x - c) < 12);
+}
+
 // Table runs, computed before segmentation. A run grows forward over
 // multi-cell lines and the single-cell lines that continue a wrapped cell
 // (aligned with a column, or indented past the first column, or a first-column
-// label followed closely by another multi-cell line), and grows backward over
+// line followed closely by more of the table), and grows backward over
 // wrapped header lines just above the first multi-cell line.
 function findTableRuns(lines: Line[], ctx: PageContext): number[] {
   const runOf = new Array<number>(lines.length).fill(-1);
@@ -741,6 +818,8 @@ function findTableRuns(lines: Line[], ctx: PageContext): number[] {
     }
     const members: number[] = [i];
     let multi = 1;
+    let leftOnlyCount = 0;
+    let alignedCount = 0;
     let j = i + 1;
     while (j < lines.length) {
       const next = lines[j];
@@ -756,16 +835,18 @@ function findTableRuns(lines: Line[], ctx: PageContext): number[] {
       }
       if (next.size > ctx.bodySize * 1.15) break;
       const columns = clusterColumns(members.map((k) => lines[k]));
-      const aligned = columns.some((c, idx) => idx > 0 && Math.abs(next.x - c) < 12);
+      const aligned = isAlignedLine(next, columns);
+      const leftOnly = isLeftOnly(next, columns);
       const indentedPastFirst = next.x > columns[0] + 8;
       const tight = gap <= next.size * ctx.leading * 1.35;
-      // A row whose cells fused into one (narrow gaps), or a wrapped row line
-      // at the first column: the table must resume with a multi-cell line
-      // within the next two lines, at row pitch, and the line must not read
-      // as prose.
+      // A row whose cells fused into one (narrow gaps), a wrapped row line at
+      // the first column, a first-column line on its own baseline, or an
+      // aligned line after a row gap: the table must resume within the next
+      // two lines — a multi-cell line, a first-column line, or an aligned
+      // line — at row pitch, and the line must not read as prose.
       let resumes = false;
       if (
-        Math.abs(next.x - columns[0]) < 12 &&
+        (Math.abs(next.x - columns[0]) < 12 || leftOnly || aligned) &&
         gap <= next.size * ctx.leading * 1.9 &&
         next.text.length < 90 &&
         !/[.!?]$/.test(next.text.trim())
@@ -773,7 +854,11 @@ function findTableRuns(lines: Line[], ctx: PageContext): number[] {
         let y = next.y;
         for (let k = j + 1; k <= j + 2 && k < lines.length; k++) {
           if (y - lines[k].y > lines[k].size * ctx.leading * 2.2) break;
-          if (lines[k].cells.length >= 2 && !isLabelLine(lines[k], ctx)) {
+          if (
+            (lines[k].cells.length >= 2 && !isLabelLine(lines[k], ctx)) ||
+            isLeftOnly(lines[k], columns) ||
+            (lines[k].cells.length === 1 && isAlignedLine(lines[k], columns))
+          ) {
             resumes = true;
             break;
           }
@@ -788,12 +873,16 @@ function findTableRuns(lines: Line[], ctx: PageContext): number[] {
         next.text.length < 60;
       if (resumes || (tight && (aligned || indentedPastFirst || trailing))) {
         members.push(j);
+        if (leftOnly) leftOnlyCount++;
+        else if (aligned) alignedCount++;
         j++;
         continue;
       }
       break;
     }
-    if (multi < 2) {
+    // One multi-cell line alone is a "Label: text" paragraph, unless the
+    // lines around it are a table whose labels sit on their own baselines.
+    if (multi < 2 && !(leftOnlyCount >= 2 && alignedCount >= 2)) {
       i++;
       continue;
     }
@@ -807,9 +896,9 @@ function findTableRuns(lines: Line[], ctx: PageContext): number[] {
       const gap = prev.y - lines[first].y;
       if (gap < 0 || gap > prev.size * ctx.leading * 1.35) break;
       const columns = clusterColumns(members.map((k) => lines[k]));
-      const aligned = columns.some((c, idx) => idx > 0 && Math.abs(prev.x - c) < 12);
+      const aligned = isAlignedLine(prev, columns);
       const indentedPastFirst = prev.x > columns[0] + 8;
-      if (!aligned && !indentedPastFirst) break;
+      if (!aligned && !indentedPastFirst && !isLeftOnly(prev, columns)) break;
       first--;
       members.unshift(first);
       absorbed++;
@@ -968,12 +1057,15 @@ function segmentPage(lines: Line[], ctx: PageContext): Segment[] {
       let j = i + 1;
       while (j < lines.length) {
         const next = lines[j];
+        // Marked items sit farther apart than wrapped lines (itemsep); an
+        // unmarked line past 1.6 leading is the next paragraph.
+        const maxGap = BULLET_RE.test(next.text) ? 2.2 : 1.6;
         if (
           runOf[j] !== -1 ||
           next.cells.length !== 1 ||
           next.size > body * 1.15 ||
           Math.abs(next.size - line.size) > 1.2 ||
-          run[run.length - 1].y - next.y > next.size * ctx.leading * 1.6 ||
+          run[run.length - 1].y - next.y > next.size * ctx.leading * maxGap ||
           run[run.length - 1].y - next.y < 0
         )
           break;
