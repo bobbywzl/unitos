@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { documentBlocks, resolveAnchor, type ResolvedAnchor } from "@/lib/anchors/resolve";
 import { bumpDocument, documentAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
 import { serverT } from "@/lib/i18n/server";
@@ -41,33 +42,24 @@ export async function POST(req: Request) {
   const access = await documentAccess(data.fromDocumentId, "editor");
   if (access instanceof NextResponse) return access;
 
-  const block = await db.block.findUnique({ where: { id: data.anchor.blockId } });
-  if (!block || block.documentId !== data.fromDocumentId) {
-    return NextResponse.json({ error: t("api.blockNotInDocument") }, { status: 404 });
-  }
-  // Provenance is non-negotiable (SPEC.md §1): the quote must be the text at
-  // those offsets, or the anchor is a lie and is rejected.
-  if (
-    data.anchor.endOffset > block.text.length ||
-    block.text.slice(data.anchor.startOffset, data.anchor.endOffset) !== data.anchor.quotedText
-  ) {
-    return NextResponse.json({ error: t("api.anchorMismatch") }, { status: 400 });
+  // Both ends resolve through the ladder (SPEC.md §5): block id and offsets,
+  // then the quote inside the block, then the quote across the document — a
+  // re-parse gives every block a new id while an open reader still sends the
+  // old ones. Provenance is non-negotiable (SPEC.md §1): the stored quote is
+  // the text at the stored offsets, or the anchor is rejected.
+  const anchor = resolveAnchor(await documentBlocks(data.fromDocumentId), data.anchor);
+  if (!anchor) {
+    return NextResponse.json({ error: t("api.anchorNotResolvedInDocument") }, { status: 400 });
   }
 
+  let toAnchor: ResolvedAnchor | null = null;
   if (data.toAnchor) {
     if (data.toAnchor.endOffset <= data.toAnchor.startOffset) {
       return NextResponse.json({ error: t("api.anchorOffsetsInvalid") }, { status: 400 });
     }
-    const toBlock = await db.block.findUnique({ where: { id: data.toAnchor.blockId } });
-    if (!toBlock || toBlock.documentId !== data.toDocumentId) {
-      return NextResponse.json({ error: t("api.blockNotInTargetDocument") }, { status: 404 });
-    }
-    if (
-      data.toAnchor.endOffset > toBlock.text.length ||
-      toBlock.text.slice(data.toAnchor.startOffset, data.toAnchor.endOffset) !==
-        data.toAnchor.quotedText
-    ) {
-      return NextResponse.json({ error: t("api.anchorMismatch") }, { status: 400 });
+    toAnchor = resolveAnchor(await documentBlocks(data.toDocumentId), data.toAnchor);
+    if (!toAnchor) {
+      return NextResponse.json({ error: t("api.anchorNotResolvedInDocument") }, { status: 400 });
     }
   }
 
@@ -79,21 +71,21 @@ export async function POST(req: Request) {
       data: {
         createdById: access.user.id,
         fromDocumentId: data.fromDocumentId,
-        fromBlockId: data.anchor.blockId,
-        startOffset: data.anchor.startOffset,
-        endOffset: data.anchor.endOffset,
-        quotedText: data.anchor.quotedText,
-        prefix: data.anchor.prefix,
-        suffix: data.anchor.suffix,
+        fromBlockId: anchor.blockId,
+        startOffset: anchor.startOffset,
+        endOffset: anchor.endOffset,
+        quotedText: anchor.quotedText,
+        prefix: anchor.prefix,
+        suffix: anchor.suffix,
         toDocumentId: data.toDocumentId,
-        ...(data.toAnchor
+        ...(toAnchor
           ? {
-              toBlockId: data.toAnchor.blockId,
-              toStartOffset: data.toAnchor.startOffset,
-              toEndOffset: data.toAnchor.endOffset,
-              toQuotedText: data.toAnchor.quotedText,
-              toPrefix: data.toAnchor.prefix,
-              toSuffix: data.toAnchor.suffix,
+              toBlockId: toAnchor.blockId,
+              toStartOffset: toAnchor.startOffset,
+              toEndOffset: toAnchor.endOffset,
+              toQuotedText: toAnchor.quotedText,
+              toPrefix: toAnchor.prefix,
+              toSuffix: toAnchor.suffix,
             }
           : {}),
       },
@@ -101,13 +93,13 @@ export async function POST(req: Request) {
     await tx.blockEdit.create({
       data: {
         documentId: data.fromDocumentId,
-        blockId: data.anchor.blockId,
+        blockId: anchor.blockId,
         kind: "LINK_ADD",
         meta: {
           linkId: created.id,
           toDocumentId: data.toDocumentId,
           toTitle: toDocument.title,
-          quotedText: data.anchor.quotedText,
+          quotedText: anchor.quotedText,
         },
         userId: access.user.id,
       },

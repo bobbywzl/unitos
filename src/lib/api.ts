@@ -36,6 +36,8 @@ export async function api<T = unknown>(
   path: string,
   method: "POST" | "PUT" | "PATCH" | "DELETE",
   body?: unknown,
+  // signal: Stop aborts the request; the caller checks signal.aborted.
+  init?: { signal?: AbortSignal },
 ): Promise<T> {
   // The tab's rendered account rides along; the middleware rejects the call
   // when the browser has since signed into a different account (stale tab).
@@ -50,8 +52,11 @@ export async function api<T = unknown>(
         ...(account ? { [ACCOUNT_HEADER]: account } : {}),
       },
       body: body !== undefined ? JSON.stringify(body) : undefined,
+      signal: init?.signal,
     });
   } catch (err) {
+    // Stopped, not failed: the caller reads signal.aborted.
+    if (init?.signal?.aborted) throw err;
     // Network failure. With Unitos Premium the queueable writes save offline
     // and sync later (SPEC.md §17); everything else reports plainly.
     if (offlinePremium() && queueable(path, method)) {

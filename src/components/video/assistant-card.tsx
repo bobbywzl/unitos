@@ -49,8 +49,8 @@ export function MediaAssistant({
   const [busy, setBusy] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  // The running send(), so Stop can abort it — the reply never lands, but the
-  // sent message stays in the transcript.
+  // The running send() or skill, so Stop can abort it — the reply never
+  // lands, but the sent message stays in the transcript.
   const sendAbortRef = useRef<AbortController | null>(null);
   function stopSend() {
     sendAbortRef.current?.abort();
@@ -85,13 +85,18 @@ export function MediaAssistant({
       content: t(format === "article" ? "video.skillArticle" : "video.skillNotes"),
     });
     setBusy(true);
+    const controller = new AbortController();
+    sendAbortRef.current = controller;
     try {
-      const result = await runFormalize({
-        documentId,
-        notebookId,
-        format,
-        sectionId: format === "notes" ? sectionChoices[0]?.id : undefined,
-      });
+      const result = await runFormalize(
+        {
+          documentId,
+          notebookId,
+          format,
+          sectionId: format === "notes" ? sectionChoices[0]?.id : undefined,
+        },
+        controller.signal,
+      );
       push({
         role: "assistant",
         content:
@@ -108,11 +113,14 @@ export function MediaAssistant({
         router.push(`/n/${notebookId}?doc=${result.article.documentId}`);
       }
     } catch (err) {
+      // Stopped, not failed: the skill line stays, no outcome lands.
+      if (controller.signal.aborted) return;
       push({
         role: "assistant",
         content: err instanceof Error ? err.message : t("video.assistantFailed"),
       });
     } finally {
+      if (sendAbortRef.current === controller) sendAbortRef.current = null;
       setBusy(false);
     }
   }

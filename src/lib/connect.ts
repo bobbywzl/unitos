@@ -65,6 +65,8 @@ export async function buildConnections(
   documentId: string,
   userId: string | null,
   lang?: Lang,
+  // The on-demand scan passes the request signal, so Stop aborts the model call.
+  signal?: AbortSignal,
 ): Promise<number> {
   if (!process.env.ANTHROPIC_API_KEY) return 0;
   const reasonLang = lang ?? (await currentLang());
@@ -126,6 +128,7 @@ export async function buildConnections(
     schema: outputSchema,
     label: "CONNECT",
     usage: { userId, feature: "connect", model: CONNECT_MODEL },
+    abortSignal: signal,
   });
   if (!result.ok) {
     console.warn("[connect] scan failed:", result.error);

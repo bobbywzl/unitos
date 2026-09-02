@@ -1044,7 +1044,7 @@ export default async function NotebookPage(props: {
   };
 
   const paneNode = (pane: NonNullable<typeof paneOne>, key: string) => (
-    <div key={key} className="flex h-full min-h-0 flex-col">
+    <div key={key} className="content-in flex h-full min-h-0 flex-col">
       {pane.video ? (
         <VideoPane
           notebookId={notebook.id}
@@ -1157,7 +1157,7 @@ export default async function NotebookPage(props: {
             paneTwo={paneTwo ? paneNode(paneTwo, `two:${paneTwo.document.id}`) : null}
           />
         ) : (
-          <div className="flex h-full flex-col items-center justify-center gap-5">
+          <div className="content-in flex h-full flex-col items-center justify-center gap-5">
             <Logo size={140} className="text-sand-400" />
             <p className="max-w-sm text-center text-sm text-sand-600">
               {(await serverT())("panes.noDocumentOpen")}

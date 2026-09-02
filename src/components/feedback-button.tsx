@@ -4,6 +4,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { isImeKey } from "@/lib/ime";
 import { useT } from "@/components/lang-provider";
+import { Presence } from "@/components/presence";
 
 // Floating feedback button, mounted app-wide (release-edu pattern).
 export function FeedbackButton() {
@@ -65,8 +66,9 @@ export function FeedbackButton() {
       >
         {t("works.feedback")}
       </button>
+      <Presence show={open} exit="pop">
       {open && (
-        <div className="fixed right-4 bottom-16 z-30 w-80 rounded-[28px] bg-card p-5 shadow-float print:hidden">
+        <div className="pop-in fixed right-4 bottom-16 z-30 w-80 rounded-[28px] bg-card p-5 shadow-float print:hidden">
           <form onSubmit={submit} className="space-y-2">
             <div className="flex gap-1">
               {(["bug", "idea", "other"] as const).map((c) => (
@@ -113,6 +115,7 @@ export function FeedbackButton() {
           </form>
         </div>
       )}
+      </Presence>
     </>
   );
 }

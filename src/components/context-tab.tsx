@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { isImeKey } from "@/lib/ime";
 import { useT } from "@/components/lang-provider";
+import { Presence } from "@/components/presence";
 
 export type ContextValues = { background: string; purpose: string; application: string };
 
@@ -105,8 +106,9 @@ export function ContextTab({
         {isSet ? t("panels.context") : t("panels.addContext")}
       </button>
 
+      <Presence show={open} exit="menu">
       {open && (
-        <div className="absolute right-0 z-30 mt-2 w-[340px] rounded-2xl bg-card p-4 shadow-float">
+        <div className="menu-in absolute right-0 z-30 mt-2 w-[340px] rounded-2xl bg-card p-4 shadow-float">
           <p className="text-xs text-sand-600">{t("panels.contextDesc")}</p>
           <label className="mt-3 block">
             <span className="text-xs text-sand-700">{t("panels.fieldBackground")}</span>
@@ -151,6 +153,7 @@ export function ContextTab({
           </div>
         </div>
       )}
+      </Presence>
     </div>
   );
 }

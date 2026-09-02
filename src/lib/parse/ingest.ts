@@ -7,7 +7,8 @@ import { parsePdf } from "@/lib/parse/pdf";
 import { pruneReferences } from "@/lib/parse/references";
 import { splitBlocks, splitPartCount } from "@/lib/parse/split";
 import { selectCoreBlocks, structureBlocks } from "@/lib/parse/structure";
-import { parseUrl } from "@/lib/parse/url";
+import { fetchPage } from "@/lib/parse/fetch-page";
+import { parseHtmlContent, parseUrl } from "@/lib/parse/url";
 import {
   PARSER_VERSION,
   type DocumentReference,
@@ -41,6 +42,8 @@ export type IngestOptions = {
   split?: boolean;
   pages?: boolean;
   convert?: boolean;
+  // A PDF fetched from a link keeps the link, so adding the URL again dedupes.
+  sourceUrl?: string;
 };
 
 // A split part's sourceUrl carries this marker plus its part number, so parts
@@ -119,6 +122,7 @@ async function createDocumentWithBlocks(data: {
 // bytes kept for the page image route, Circle & ask, and conversion (SPEC.md §16).
 async function createHandwrittenDocument(data: {
   title: string;
+  sourceUrl?: string;
   fileHash: string;
   fileData: Uint8Array<ArrayBuffer>;
   pageCount: number;
@@ -128,6 +132,7 @@ async function createHandwrittenDocument(data: {
     const document = await tx.document.create({
       data: {
         title: data.title,
+        sourceUrl: data.sourceUrl,
         fileHash: data.fileHash,
         fileData: data.fileData,
         parserVersion: PARSER_VERSION,
@@ -182,6 +187,7 @@ export async function ingestPdf(
     onProgress?.("save");
     const document = await createHandwrittenDocument({
       title: filename.replace(/\.pdf$/i, ""),
+      sourceUrl: opts.sourceUrl,
       fileHash,
       fileData: bytes,
       pageCount,
@@ -196,11 +202,22 @@ export async function ingestPdf(
   onProgress?.("save");
   const document = await createDocumentWithBlocks({
     title,
+    sourceUrl: opts.sourceUrl,
     fileHash,
     fileData: bytes,
     blocks,
   });
   return { document, deduped: false };
+}
+
+// The file name a PDF link carries, for the document title fallback.
+function filenameOfUrl(url: string): string {
+  try {
+    const last = decodeURIComponent(new URL(url).pathname.split("/").filter(Boolean).pop() ?? "");
+    return last || "document.pdf";
+  } catch {
+    return "document.pdf";
+  }
 }
 
 // URL path. Dedupe by exact sourceUrl. A stale stored parse upgrades in place:
@@ -212,6 +229,7 @@ export async function ingestUrl(
   url: string,
   onProgress?: OnIngestProgress,
   opts: IngestOptions = {},
+  userId: string | null = null,
 ): Promise<{ document: Document; extra?: Document[]; deduped: boolean }> {
   const existing = await db.document.findFirst({ where: { sourceUrl: url } });
   if (existing) {
@@ -229,7 +247,21 @@ export async function ingestUrl(
     if (part) return { document: part, deduped: true };
   }
 
-  const parsed = await parseUrl(url, onProgress);
+  // A link to a PDF file adds the PDF itself: same parse, same judgment, same
+  // stored bytes as an upload, with the link kept for dedupe.
+  const page = await fetchPage(url, onProgress);
+  if (page.kind === "pdf") {
+    const { document, deduped } = await ingestPdf(
+      page.bytes,
+      filenameOfUrl(url),
+      onProgress,
+      { ...opts, sourceUrl: url },
+      userId,
+    );
+    return { document, deduped };
+  }
+  onProgress?.("extract");
+  const parsed = await parseHtmlContent(page.html, url, onProgress);
   const { blocks, references } = await refineUrlBlocks(parsed, onProgress, opts.instructions);
   const title = parsed.title ?? url;
 

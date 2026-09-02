@@ -1034,3 +1034,179 @@ ellipse.anchor-flash {
 .corpus-graph .react-flow__controls-button svg {
   fill: currentColor;
 }
+
+/* ── Motion for opening, closing, and folding ──────────────────────────────
+   Every surface that appears or leaves moves the same way: dropdowns and
+   panels drop in from their control (menu-in), dialogs fade their backdrop
+   and lift their panel (dialog-in), a newly opened document or page fades in
+   (content-in), a tray tab cross-fades (panel-in), the mobile tray slides up
+   (sheet-in). Leaving runs the same move backwards through Presence
+   (components/presence.tsx): presence-exit-* animates the wrapped element.
+   Reduced motion keeps every surface still. */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes fade-out {
+  to {
+    opacity: 0;
+  }
+}
+@keyframes menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes menu-out {
+  to {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+}
+@keyframes dialog-panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes dialog-panel-out {
+  to {
+    opacity: 0;
+    transform: translateY(10px) scale(0.97);
+  }
+}
+@keyframes rise-in-short {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes pop-out {
+  to {
+    opacity: 0;
+    transform: translateY(4px) scale(0.97);
+  }
+}
+@keyframes bubble-out {
+  to {
+    opacity: 0;
+    transform: translateY(10px) scale(0.96);
+    filter: blur(3px);
+  }
+}
+@keyframes sheet-in {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: none;
+  }
+}
+@keyframes sheet-out {
+  to {
+    transform: translateY(100%);
+  }
+}
+/* A leaving surface takes no clicks: the click lands on what is under it. */
+.presence-exit > * {
+  pointer-events: none;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .menu-in {
+    animation: menu-in 0.16s ease-out both;
+  }
+  .dialog-in {
+    animation: fade-in 0.2s ease-out both;
+  }
+  .dialog-in > * {
+    animation: dialog-panel-in 0.24s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+  /* Opacity only: a transform would re-anchor the fixed controls inside a
+     document pane (Stop reading, the linking banner) while it plays. */
+  .content-in {
+    animation: fade-in 0.28s ease-out both;
+  }
+  .panel-in {
+    animation: rise-in-short 0.22s ease-out both;
+  }
+  /* Below md only: on md+ the same aside sits in the side column. */
+  @media (max-width: 767.98px) {
+    .sheet-in {
+      animation: sheet-in 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
+    }
+  }
+  .presence-exit-fade > * {
+    animation: fade-out 0.18s ease-out both;
+  }
+  .presence-exit-pop > * {
+    animation: pop-out 0.14s ease-in both;
+  }
+  .presence-exit-bubble > * {
+    animation: bubble-out 0.22s ease-in both;
+  }
+  .presence-exit-menu > * {
+    animation: menu-out 0.14s ease-in both;
+  }
+  .presence-exit-dialog > * {
+    animation: fade-out 0.2s ease-out both;
+  }
+  .presence-exit-dialog > * > * {
+    animation: dialog-panel-out 0.2s ease-in both;
+  }
+  .presence-exit-sheet > * {
+    animation: sheet-out 0.26s ease-in both;
+  }
+}
+
+/* Collapse (components/presence.tsx): the box grows from 0fr to 1fr and
+   fades in; folding runs it backwards. The inner box clips while the rows
+   animate. Named folding-*: Tailwind's own `collapse` utility hides. */
+.folding {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+}
+.folding-open {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+.folding-inner {
+  min-height: 0;
+  overflow: hidden;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .folding {
+    transition:
+      grid-template-rows 0.22s ease,
+      opacity 0.18s ease;
+  }
+}
+
+/* The tray column (workspace.tsx) slides shut to zero width when collapsed;
+   the reader widens with it. Dragging the resize bar turns the transition
+   off, so the tray follows the pointer without lag. */
+@media (prefers-reduced-motion: no-preference) {
+  .tray-column {
+    transition: width 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .tray-column-resizing {
+    transition: none;
+  }
+}

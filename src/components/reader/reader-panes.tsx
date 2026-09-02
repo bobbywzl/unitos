@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { useT } from "@/components/lang-provider";
+import { Presence } from "@/components/presence";
 import type { TKey } from "@/lib/i18n/dictionaries";
 
 // Reader views: Normal shows one document; Side by Side and Top and Bottom
@@ -215,8 +216,9 @@ export function ReaderPanes({
         >
           <ViewGlyph kind={view} />
         </button>
+        <Presence show={menu} exit="menu">
         {menu && (
-          <div className="absolute bottom-full left-0 mb-1.5 flex w-44 flex-col rounded-2xl bg-card p-1.5 shadow-float">
+          <div className="menu-in absolute bottom-full left-0 mb-1.5 flex w-44 flex-col rounded-2xl bg-card p-1.5 shadow-float">
             {(["normal", "side", "stack"] as const).map((kind) => (
               <button
                 key={kind}
@@ -234,6 +236,7 @@ export function ReaderPanes({
             ))}
           </div>
         )}
+        </Presence>
       </div>
 
       <div ref={paneOneRef} className="relative min-h-0 min-w-0 flex-1">

@@ -30,6 +30,7 @@ import type { TFunc, TKey } from "@/lib/i18n/dictionaries";
 import { useLang, useT } from "@/components/lang-provider";
 import { LinkIcon, MicIcon, NotesIcon, SearchIcon, SparkleIcon, SpinnerIcon, StopIcon, VolumeIcon } from "@/components/icons";
 import { Markdown } from "@/components/markdown";
+import { Collapse, Presence } from "@/components/presence";
 import { ThinkingIndicator } from "@/components/thinking";
 import type { BlockData, Highlight } from "@/components/reader/block-view";
 import { Bibliography } from "@/components/reader/bibliography";
@@ -502,6 +503,11 @@ export function ReaderInteractions({
   // the ask view for editing; nothing persists from an aborted run.
   const distillAbortRef = useRef<AbortController | null>(null);
   const distillReturnScroll = useRef<number | null>(null);
+  // The running Explain, Simplify, and Extract, so Stop can abort them. A
+  // stopped stream keeps what arrived; nothing persists (SPEC.md §6).
+  const explainAbortRef = useRef<AbortController | null>(null);
+  const simplifyAbortRef = useRef<AbortController | null>(null);
+  const extractAbortRef = useRef<AbortController | null>(null);
   // The span a jump landed on (a distilled quote, an extract origin): tinted
   // while the reader arrives.
   const [spanFlash, setSpanFlash] = useState<{
@@ -759,8 +765,14 @@ export function ReaderInteractions({
     }
     return { ...dockSideCard(side, articleLeft, articleRight, cw), top, side };
   }
+  // Closing a card mid-stream stops its run: nobody will read the rest.
   function closeExplain() {
+    explainAbortRef.current?.abort();
+    explainAbortRef.current = null;
     setBubble(null);
+  }
+  function stopExplain() {
+    explainAbortRef.current?.abort();
   }
   async function deleteExplain() {
     const card = bubble;
@@ -775,7 +787,15 @@ export function ReaderInteractions({
     }
   }
   function closeSimplify() {
+    simplifyAbortRef.current?.abort();
+    simplifyAbortRef.current = null;
     setSimplifyCard(null);
+  }
+  function stopSimplify() {
+    simplifyAbortRef.current?.abort();
+  }
+  function stopExtract() {
+    extractAbortRef.current?.abort();
   }
   async function deleteSimplify() {
     const card = simplifyCard;
@@ -886,6 +906,10 @@ export function ReaderInteractions({
     setLocalExtractions([]);
     setExtractCard(null);
     distillAbortRef.current?.abort();
+    explainAbortRef.current?.abort();
+    simplifyAbortRef.current?.abort();
+    extractAbortRef.current?.abort();
+    setExtractBusy(false);
     distillReturnScroll.current = null;
     voiceRunRef.current += 1;
     voiceAudioRef.current?.pause();
@@ -1891,17 +1915,22 @@ export function ReaderInteractions({
     }
   }
 
+  // The anchor travels whole (SPEC.md §5): the block id and offsets, plus the
+  // quote selectors, so the server re-finds the selection when the blocks
+  // changed under the reader (a re-parse, an edit).
+  function anchorBody(anchor: Anchor) {
+    return {
+      blockId: anchor.blockId,
+      startOffset: anchor.startOffset,
+      endOffset: anchor.endOffset,
+      quotedText: anchor.quotedText,
+      prefix: anchor.prefix,
+      suffix: anchor.suffix,
+    };
+  }
+
   function deriveBody(type: string, anchor: Anchor) {
-    return JSON.stringify({
-      type,
-      documentId,
-      notebookId,
-      anchor: {
-        blockId: anchor.blockId,
-        startOffset: anchor.startOffset,
-        endOffset: anchor.endOffset,
-      },
-    });
+    return JSON.stringify({ type, documentId, notebookId, anchor: anchorBody(anchor) });
   }
 
   // EXPLAIN: stream into a bubble docked beside the article (SPEC.md §4, §6).
@@ -1914,10 +1943,14 @@ export function ReaderInteractions({
     markFreshSpan(anchor.blockId, anchor.startOffset, anchor.endOffset);
     const slot = claimSideSlot("explain", yTop);
     setBubble({ ...slot, text: "", streaming: true, error: null, anchor, noteId: null });
+    explainAbortRef.current?.abort();
+    const controller = new AbortController();
+    explainAbortRef.current = controller;
     try {
       const res = await fetch("/api/derive", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
         body: deriveBody("EXPLAIN", anchor),
       });
       if (!res.ok || !res.body) {
@@ -1949,8 +1982,15 @@ export function ReaderInteractions({
       });
       router.refresh();
     } catch (err) {
+      // Stopped, not failed: what streamed in stays; an empty card closes.
+      if (controller.signal.aborted) {
+        setBubble((b) => (b && b.text.trim() ? { ...b, streaming: false } : null));
+        return;
+      }
       const message = err instanceof Error ? err.message : t("reader.deriveFailed");
       setBubble((b) => (b ? { ...b, streaming: false, error: message } : b));
+    } finally {
+      if (explainAbortRef.current === controller) explainAbortRef.current = null;
     }
   }
 
@@ -1974,10 +2014,14 @@ export function ReaderInteractions({
       sentences: null,
       active: null,
     });
+    simplifyAbortRef.current?.abort();
+    const controller = new AbortController();
+    simplifyAbortRef.current = controller;
     try {
       const res = await fetch("/api/derive", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
         body: deriveBody("SIMPLIFY", anchor),
       });
       if (!res.ok || !res.body) {
@@ -2011,8 +2055,15 @@ export function ReaderInteractions({
       });
       router.refresh();
     } catch (err) {
+      // Stopped, not failed: what streamed in stays; an empty card closes.
+      if (controller.signal.aborted) {
+        setSimplifyCard((c) => (c && c.text.trim() ? { ...c, streaming: false } : null));
+        return;
+      }
       const message = err instanceof Error ? err.message : t("reader.simplifyFailed");
       setSimplifyCard((c) => (c ? { ...c, streaming: false, error: message } : c));
+    } finally {
+      if (simplifyAbortRef.current === controller) simplifyAbortRef.current = null;
     }
   }
 
@@ -2300,11 +2351,13 @@ export function ReaderInteractions({
     setSubmenu(null);
     window.getSelection()?.removeAllRanges();
     setExtractBusy(true);
-    showToast(t("reader.extracting"));
+    const controller = new AbortController();
+    extractAbortRef.current = controller;
     try {
       const res = await fetch("/api/derive", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
         body: deriveBody("EXTRACT", anchor),
       });
       const json = (await res.json().catch(() => null)) as {
@@ -2329,8 +2382,11 @@ export function ReaderInteractions({
       );
       router.refresh();
     } catch (err) {
+      // Stopped, not failed: nothing was extracted, nothing to say.
+      if (controller.signal.aborted) return;
       showToast(err instanceof Error ? err.message : t("reader.extractFailed"));
     } finally {
+      if (extractAbortRef.current === controller) extractAbortRef.current = null;
       setExtractBusy(false);
     }
   }
@@ -2698,13 +2754,7 @@ export function ReaderInteractions({
         notebookId,
         documentId,
         command,
-        anchor: anchor
-          ? {
-              blockId: anchor.blockId,
-              startOffset: anchor.startOffset,
-              endOffset: anchor.endOffset,
-            }
-          : undefined,
+        anchor: anchor ? anchorBody(anchor) : undefined,
         history: history.slice(-12),
         conversationNoteId: conversationNoteId ?? undefined,
       }),
@@ -3336,9 +3386,8 @@ export function ReaderInteractions({
             <SearchIcon size={15} />
           </button>
         </div>
-        <div
-          className={`${menuExpanded ? "flex" : "hidden"} pointer-events-auto w-56 flex-col overflow-hidden rounded-2xl bg-card py-1.5 shadow-float`}
-        >
+        <Collapse open={menuExpanded}>
+        <div className="pointer-events-auto flex w-56 flex-col overflow-hidden rounded-2xl bg-card py-1.5 shadow-float">
           {canEdit && (
             <>
               <span className="flex items-center gap-1.5 px-4 pt-1.5 pb-1 text-[11px] font-bold tracking-[0.08em] text-clay-800 uppercase">
@@ -3384,6 +3433,7 @@ export function ReaderInteractions({
             {allDistillations.length > 0 ? ` (${allDistillations.length})` : ""}
           </button>
         </div>
+        </Collapse>
         <ProjectSearch
           notebookId={notebookId}
           open={searchOpen}
@@ -3392,6 +3442,12 @@ export function ReaderInteractions({
       </div>
 
       <div className="sticky top-4 z-10 float-right mr-4 flex items-center gap-2 print:hidden">
+        {extractBusy && (
+          <span className="rounded-full bg-card px-3 py-1.5 text-xs shadow-soft">
+            <ThinkingIndicator label={t("reader.extracting")} onStop={stopExtract} />
+          </span>
+        )}
+      <Presence show={toast !== null} exit="fade">
         {toast && (
           <span className="flex items-center gap-2 rounded-full bg-ink/90 px-3 py-1.5 text-xs text-paper">
             {toast}
@@ -3406,6 +3462,7 @@ export function ReaderInteractions({
             )}
           </span>
         )}
+      </Presence>
         {editMode && (
           <select
             value={font ?? "default"}
@@ -3482,6 +3539,7 @@ export function ReaderInteractions({
 
       <Bibliography references={references} />
 
+      <Presence show={annotationCard !== null} exit="pop">
       {annotationCard && (
         <div
           data-selection-popover
@@ -3552,7 +3610,9 @@ export function ReaderInteractions({
           </div>
         </div>
       )}
+      </Presence>
 
+      <Presence show={extractCard !== null} exit="pop">
       {extractCard &&
         (() => {
           const extraction = allExtractions.find((x) => x.id === extractCard.id);
@@ -3602,6 +3662,7 @@ export function ReaderInteractions({
             </div>
           );
         })()}
+      </Presence>
 
       {connectors.length > 0 && (
         <svg
@@ -3615,6 +3676,7 @@ export function ReaderInteractions({
         </svg>
       )}
 
+      <Presence show={popover !== null} exit="pop">
       {popover && (
         <div
           data-selection-popover
@@ -3673,6 +3735,7 @@ export function ReaderInteractions({
             <SparkleIcon size={coarse ? 14 : 12} />
             {t("reader.assistant")}
           </button>
+          <Collapse open={submenu === "ai"}>
           {submenu === "ai" && (
             <div className="flex flex-col gap-1.5 p-1">
               <textarea
@@ -3720,8 +3783,10 @@ export function ReaderInteractions({
                   {aiBusy ? <StopIcon size={11} /> : t("reader.run")}
                 </button>
               </div>
+              {aiBusy && <ThinkingIndicator className="px-1 pb-0.5 text-[11.5px]" />}
             </div>
           )}
+          </Collapse>
 
           {popover.term && (
             <button
@@ -3779,6 +3844,7 @@ export function ReaderInteractions({
           >
             {t("reader.comment")}
           </button>
+          <Collapse open={submenu === "comment"}>
           {submenu === "comment" && (
             <form
               className="flex flex-col gap-1.5 p-1"
@@ -3817,6 +3883,7 @@ export function ReaderInteractions({
               </button>
             </form>
           )}
+          </Collapse>
 
           <button
             onClick={beginLink}
@@ -3883,6 +3950,7 @@ export function ReaderInteractions({
                 <NotesIcon size={coarse ? 14 : 12} />
                 {t("reader.addToNotes")}
               </button>
+          <Collapse open={submenu === "add"}>
               {submenu === "add" && (
                 <div className="flex max-h-44 flex-col overflow-y-auto">
                   {sectionChoices.map((choice) => (
@@ -3898,6 +3966,7 @@ export function ReaderInteractions({
                   ))}
                 </div>
               )}
+          </Collapse>
             </div>
           )}
 
@@ -3926,7 +3995,9 @@ export function ReaderInteractions({
           </div>
         </div>
       )}
+      </Presence>
 
+      <Presence show={closeLink !== null} exit="pop">
       {closeLink && (
         <button
           data-selection-popover
@@ -3946,7 +4017,9 @@ export function ReaderInteractions({
           {t("reader.closeLink")}
         </button>
       )}
+      </Presence>
 
+      <Presence show={bubble !== null} exit="bubble">
       {bubble && (
         <div
           data-selection-popover
@@ -3967,6 +4040,15 @@ export function ReaderInteractions({
               {bubble.streaming ? t("reader.explaining") : t("reader.explanation")}
             </span>
             <span className="flex items-center gap-3">
+              {bubble.streaming && (
+                <button
+                  onClick={stopExplain}
+                  className="flex items-center gap-1 rounded-full border border-line px-2 py-0.5 text-[11px] font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800"
+                >
+                  <StopIcon size={9} />
+                  {t("common.stop")}
+                </button>
+              )}
               {bubble.noteId && !bubble.streaming && (
                 <button
                   onClick={() => void deleteExplain()}
@@ -3998,7 +4080,9 @@ export function ReaderInteractions({
           )}
         </div>
       )}
+      </Presence>
 
+      <Presence show={simplifyCard !== null} exit="bubble">
       {simplifyCard && (
         <div
           key={`${simplifyCard.anchor.blockId}:${simplifyCard.anchor.startOffset}`}
@@ -4020,6 +4104,15 @@ export function ReaderInteractions({
               {simplifyCard.streaming ? t("reader.simplifying") : t("reader.simplified")}
             </span>
             <span className="flex items-center gap-3">
+              {simplifyCard.streaming && (
+                <button
+                  onClick={stopSimplify}
+                  className="flex items-center gap-1 rounded-full border border-line px-2 py-0.5 text-[11px] font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800"
+                >
+                  <StopIcon size={9} />
+                  {t("common.stop")}
+                </button>
+              )}
               {simplifyCard.noteId && !simplifyCard.streaming && (
                 <button
                   onClick={() => void deleteSimplify()}
@@ -4077,7 +4170,9 @@ export function ReaderInteractions({
           )}
         </div>
       )}
+      </Presence>
 
+      <Presence show={commentCard !== null} exit="bubble">
       {commentCard && (
         <div
           data-selection-popover
@@ -4158,7 +4253,9 @@ export function ReaderInteractions({
           )}
         </div>
       )}
+      </Presence>
 
+      <Presence show={assistantChat !== null} exit="bubble">
       {assistantChat && (
         <div
           data-selection-popover
@@ -4268,9 +4365,11 @@ export function ReaderInteractions({
           </form>
         </div>
       )}
+      </Presence>
 
       {/* The voice outlives the toolbar: with the selection dismissed while
           reading, this floating control stops it. */}
+      <Presence show={voice !== "idle" && !popover} exit="fade">
       {voice !== "idle" && !popover && (
         <button
           onClick={stopVoice}
@@ -4285,7 +4384,9 @@ export function ReaderInteractions({
           {t("reader.stopReading")}
         </button>
       )}
+      </Presence>
 
+      <Presence show={pendingLink !== null} exit="fade">
       {pendingLink && (
         <div className="fixed top-24 left-1/2 z-40 flex max-w-[80vw] -translate-x-1/2 items-center gap-3 rounded-full bg-card px-4 py-2 shadow-float">
           <span className="truncate text-[12.5px] text-sand-700">
@@ -4310,7 +4411,9 @@ export function ReaderInteractions({
           </button>
         </div>
       )}
+      </Presence>
 
+      <Presence show={aiPlan !== null} exit="pop">
       {aiPlan && (
         <div className="fixed bottom-6 left-1/2 z-40 w-[440px] max-w-[92vw] -translate-x-1/2 rounded-[24px] bg-card p-4 shadow-float">
           <div className="mb-2 flex items-center gap-2">
@@ -4386,7 +4489,9 @@ export function ReaderInteractions({
           </div>
         </div>
       )}
+      </Presence>
 
+      <Presence show={distillOpen} exit="fade">
       {distillOpen && (
         <DistillPage
           distillations={allDistillations}
@@ -4412,6 +4517,7 @@ export function ReaderInteractions({
           onAddNote={addQuoteNote}
         />
       )}
+      </Presence>
     </div>
   );
 }

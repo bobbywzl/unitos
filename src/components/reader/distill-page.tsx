@@ -88,7 +88,7 @@ export function DistillPage({
     // the article scroll at the ends.
     <div
       data-selection-popover
-      className="absolute inset-0 z-30 overflow-y-auto overscroll-contain bg-paper print:hidden"
+      className="content-in absolute inset-0 z-30 overflow-y-auto overscroll-contain bg-paper print:hidden"
     >
       <div className="mx-auto max-w-2xl px-8 py-8">
         <div className="mb-6 flex items-center gap-2">
@@ -130,16 +130,13 @@ export function DistillPage({
           <div>
             <h1 className="font-display text-[26px] leading-snug text-ink">{running.question}</h1>
             <p className="mt-5 text-sm">
-              <ThinkingIndicator label={t("panes.scanningArticle")} />
+              <ThinkingIndicator
+                label={t("panes.scanningArticle")}
+                onStop={onCancel}
+                stopLabel={t("common.cancel")}
+                stopTitle={t("panes.stopScan")}
+              />
             </p>
-            <button
-              onClick={onCancel}
-              data-track="distill-page-cancel"
-              title={t("panes.stopScan")}
-              className="mt-4 rounded-full border border-line px-3.5 py-1 text-xs font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800"
-            >
-              {t("common.cancel")}
-            </button>
           </div>
         ) : shown ? (
           <div>

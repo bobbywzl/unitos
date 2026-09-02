@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { api } from "@/lib/api";
 import type { DriveConfig } from "@/lib/drive/config";
 import { pickDriveFiles } from "@/lib/drive/picker-client";
@@ -11,6 +11,8 @@ import { useCollab } from "@/components/collab/collab-context";
 import { ChevronDownIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { Logo } from "@/components/logo";
+import { Collapse, Presence } from "@/components/presence";
+import { LoadingDots, ThinkingIndicator } from "@/components/thinking";
 import type { TFunc } from "@/lib/i18n/dictionaries";
 import { readNdjson } from "@/lib/ndjson";
 import { isOffline, offlinePremium, queueUpload, queueWrite } from "@/lib/offline/queue";
@@ -101,6 +103,8 @@ export function DocumentBar({
   const [pillMenu, setPillMenu] = useState<string | null>(null);
   const [library, setLibrary] = useState<LibraryDocument[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Opening a document is a server round trip; the pill shows it is on its way.
+  const [opening, startOpening] = useTransition();
 
   // Hover keeps the list open across the gap between pill and list; leaving
   // both closes it after a grace period.
@@ -159,7 +163,7 @@ export function DocumentBar({
     const doc2 = searchParams.get("doc2");
     if (view) params.set("view", view);
     if (doc2) params.set("doc2", doc2);
-    router.push(`/n/${notebookId}?${params.toString()}`);
+    startOpening(() => router.push(`/n/${notebookId}?${params.toString()}`));
   }
 
   // Re-parse with the current parser. Runs automatically when the open document
@@ -177,6 +181,11 @@ export function DocumentBar({
   // Manual re-parse: the progress card shows, errors show.
   const [connecting, setConnecting] = useState<string | null>(null);
   const [connectNotice, setConnectNotice] = useState<string | null>(null);
+  // The running scan, so Stop can abort it.
+  const connectAbortRef = useRef<AbortController | null>(null);
+  function stopConnect() {
+    connectAbortRef.current?.abort();
+  }
   // The recommended-links scan, on demand — for documents added before the
   // scan existed (SPEC.md §13).
   async function recommendLinks(doc: AttachedDocument) {
@@ -184,10 +193,15 @@ export function DocumentBar({
     setConnecting(doc.id);
     setConnectNotice(null);
     setError(null);
+    const controller = new AbortController();
+    connectAbortRef.current = controller;
     try {
-      const result = await api<{ linkCount: number }>(`/api/documents/${doc.id}/connect`, "POST", {
-        notebookId,
-      });
+      const result = await api<{ linkCount: number }>(
+        `/api/documents/${doc.id}/connect`,
+        "POST",
+        { notebookId },
+        { signal: controller.signal },
+      );
       setConnectNotice(
         result.linkCount > 0
           ? t("panes.recommendLinksDone", { n: result.linkCount })
@@ -196,8 +210,11 @@ export function DocumentBar({
       setTimeout(() => setConnectNotice(null), 4000);
       router.refresh();
     } catch (err) {
+      // Stopped, not failed: no links, no notice.
+      if (controller.signal.aborted) return;
       setError(err instanceof Error ? err.message : t("common.requestFailed"));
     } finally {
+      if (connectAbortRef.current === controller) connectAbortRef.current = null;
       setConnecting(null);
     }
   }
@@ -275,7 +292,7 @@ export function DocumentBar({
       }
     }
     if (!result || "error" in result) {
-      throw new Error(result && "error" in result ? result.error : t("panes.uploadFailed"));
+      throw new Error(result && "error" in result ? result.error : t("panes.uploadCutOff"));
     }
     setPhase((p) => (p ? { ...p, steps: completeIngestSteps(p.steps) } : p));
     await sleep(250); // let the last checkmark register before the pill clears
@@ -548,7 +565,7 @@ export function DocumentBar({
           >
             <span className="truncate">{active ? active.title : t("panes.documentList")}</span>
             <span className="shrink-0 rounded-full bg-paper/20 px-1.5 text-[11px] tabular-nums">
-              {documents.length}
+              {opening ? <LoadingDots /> : documents.length}
             </span>
             <ChevronDownIcon
               size={13}
@@ -558,8 +575,9 @@ export function DocumentBar({
             />
           </button>
 
+          <Presence show={listOpen} exit="menu">
           {listOpen && (
-            <div className="absolute top-full left-0 z-30 mt-2 flex max-h-[min(60vh,480px)] w-80 max-w-[calc(100vw-96px)] flex-col overflow-y-auto overscroll-contain rounded-2xl bg-card py-1.5 shadow-float">
+            <div className="menu-in absolute top-full left-0 z-30 mt-2 flex max-h-[min(60vh,480px)] w-80 max-w-[calc(100vw-96px)] flex-col overflow-y-auto overscroll-contain rounded-2xl bg-card py-1.5 shadow-float">
               {documents.map((d) => (
                 <div key={d.id} className="flex flex-col">
                   <div className="flex items-center">
@@ -600,6 +618,7 @@ export function DocumentBar({
                       </svg>
                     </button>
                   </div>
+                  <Collapse open={pillMenu === d.id}>
                   {pillMenu === d.id && (
                     <div className="mx-2 mb-1.5 flex flex-col rounded-xl bg-sand-100 py-1">
                       {canEdit && !d.hasVideo && !d.handwritten && (d.sourceUrl !== null || d.hasFile) && (
@@ -688,10 +707,12 @@ export function DocumentBar({
                       )}
                     </div>
                   )}
+                  </Collapse>
                 </div>
               ))}
             </div>
           )}
+          </Presence>
         </div>
       )}
 
@@ -745,6 +766,11 @@ export function DocumentBar({
 
       {/* While the dialog is open it shows the progress and the error itself. */}
       {phase && !dialog && <IngestProgress fileLabel={phase.fileLabel} steps={phase.steps} />}
+      {connecting && (
+        <span className="shrink-0 rounded-full bg-card px-3 py-1 text-xs shadow-soft">
+          <ThinkingIndicator label={t("panes.recommendLinksRunning")} onStop={stopConnect} />
+        </span>
+      )}
       {connectNotice && (
         <span className="shrink-0 rounded-full bg-sage-200 px-3 py-1 text-xs font-semibold text-sage-800">
           {connectNotice}

@@ -8,6 +8,7 @@ import { ChevronDownIcon, ChevronRightIcon } from "@/components/icons";
 import { useCollab } from "@/components/collab/collab-context";
 import { useT } from "@/components/lang-provider";
 import { NoteCard } from "@/components/outline/note-card";
+import { Collapse } from "@/components/presence";
 import { SelectionBar } from "@/components/outline/selection-bar";
 import { filterSections, type OutlineActions } from "@/components/outline/use-outline";
 
@@ -126,8 +127,9 @@ function TraySection({
         )}
       </div>
 
+      <Collapse open={!collapsed}>
       {!collapsed && (
-        <>
+        <div className="flex flex-col gap-2">
           {accepted.map((note) => (
             <NoteCard key={note.id} note={note} actions={actions} variant="tray" />
           ))}
@@ -185,8 +187,9 @@ function TraySection({
               nested
             />
           ))}
-        </>
+        </div>
       )}
+      </Collapse>
     </div>
   );
 }

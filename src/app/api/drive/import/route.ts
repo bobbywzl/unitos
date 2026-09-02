@@ -17,6 +17,7 @@ import { runConversion } from "@/lib/handwritten/convert";
 import { currentLang, serverT } from "@/lib/i18n/server";
 import { progressResponse } from "@/lib/ingest-response";
 import { attachDocument } from "@/lib/parse/attach";
+import { describeIngestError } from "@/lib/parse/ingest-error";
 import { ingestMediaUrl } from "@/lib/video/ingest-media-url";
 import { runTranscription } from "@/lib/video/transcription-job";
 import { parseBody } from "@/lib/validate";
@@ -155,7 +156,7 @@ export async function POST(req: Request) {
       );
     } catch (err) {
       console.error("Drive PDF ingest failed:", err);
-      throw new Error(t("api.pdfParseFailed"));
+      throw new Error(describeIngestError(err, t, "pdf"));
     }
     const { document, deduped } = ingested;
     await attachDocument(data.notebookId, document.id);

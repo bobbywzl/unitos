@@ -30,6 +30,7 @@ import { GuideDialog } from "@/components/guide-dialog";
 import { useT } from "@/components/lang-provider";
 import { NotebookTitle } from "@/components/notebook-title";
 import { NotesTray } from "@/components/outline/notes-tray";
+import { Presence } from "@/components/presence";
 import { useOutline } from "@/components/outline/use-outline";
 import { DocumentBar, type AttachedDocument } from "@/components/reader/document-bar";
 import type { DriveConfig } from "@/lib/drive/config";
@@ -125,6 +126,9 @@ export function Workspace({
   // The tray's width on md+: dragged by the bar between the reader and the
   // tray, clamped by clampTrayWidth, remembered per browser.
   const [trayWidth, setTrayWidth] = useState(TRAY_DEFAULT);
+  // While the bar is dragged the tray column follows the pointer with no
+  // transition; the slide is for collapse and expand.
+  const [resizing, setResizing] = useState(false);
   const [tab, setTab] = useState<Tab>("notes");
   const [menuOpen, setMenuOpen] = useState(false);
   const [guideOpen, setGuideOpen] = useState(false);
@@ -230,6 +234,7 @@ export function Workspace({
     const fromX = e.clientX;
     const fromWidth = trayWidth;
     let latest = fromWidth;
+    setResizing(true);
     document.body.style.userSelect = "none";
     document.body.style.cursor = "col-resize";
     const onMove = (ev: PointerEvent) => {
@@ -241,6 +246,7 @@ export function Workspace({
       window.removeEventListener("pointerup", onUp);
       document.body.style.userSelect = "";
       document.body.style.cursor = "";
+      setResizing(false);
       localStorage.setItem(TRAY_WIDTH_STORE, String(latest));
     };
     window.addEventListener("pointermove", onMove);
@@ -280,11 +286,12 @@ export function Workspace({
     {/* Click telemetry (SPEC.md §7): the header, the rail, and the tray are
         the surfaces; every control in them carries data-track. */}
     <ClickTracker notebookId={notebook.id} />
-    <div className="grid h-screen grid-rows-[68px_1fr] bg-paper print:block print:h-auto">
+    <div className="content-in grid h-screen grid-rows-[68px_1fr] bg-paper print:block print:h-auto">
       <header
         data-track-surface="topbar"
         className="flex min-w-0 items-center gap-2 border-b border-line px-3 sm:gap-3.5 sm:px-5 print:hidden"
       >
+
         <Link
           href="/"
           data-track="back"
@@ -349,8 +356,16 @@ export function Workspace({
           />
         </div>
 
-        {(!collapsed || mobileTray) && (
-          <>
+        {/* The tray column: on md+ it slides shut to zero width when collapsed
+            and the reader takes the room; below md the aside inside is a
+            bottom sheet, shown while mobileTray is set. */}
+        <div
+          style={{ "--tray-w": `${trayWidth}px` } as React.CSSProperties}
+          inert={(collapsed && !mobileTray) || undefined}
+          className={`tray-column flex min-h-0 shrink-0 md:overflow-hidden ${
+            resizing ? "tray-column-resizing" : ""
+          } ${collapsed ? "md:w-0" : "md:w-[var(--tray-w)]"}`}
+        >
           {/* The bar between the reader and the tray: drag to resize, arrow
               keys nudge, double-click resets. It floats over the tray's left
               border, so the layout gains no width. */}
@@ -381,10 +396,9 @@ export function Workspace({
           </div>
           <aside
             data-track-surface="tray"
-            style={{ "--tray-w": `${trayWidth}px` } as React.CSSProperties}
             className={`${
               mobileTray
-                ? "fixed inset-x-0 bottom-[calc(54px+env(safe-area-inset-bottom))] z-30 flex max-h-[70dvh] rounded-t-[24px] border-t shadow-float md:static md:z-auto md:max-h-none md:rounded-none md:border-t-0 md:shadow-none"
+                ? "sheet-in fixed inset-x-0 bottom-[calc(54px+env(safe-area-inset-bottom))] z-30 flex max-h-[70dvh] rounded-t-[24px] border-t shadow-float md:static md:z-auto md:max-h-none md:rounded-none md:border-t-0 md:shadow-none"
                 : "hidden md:flex"
             } min-h-0 w-full min-w-0 shrink flex-col gap-3.5 border-line bg-sand-100 p-[18px] pb-4 md:w-[var(--tray-w)] md:shrink-0 md:border-l print:hidden`}
           >
@@ -408,7 +422,8 @@ export function Workspace({
               </button>
             </div>
 
-            <div className="min-h-0 flex-1 overflow-y-auto">
+            {/* Keyed by tab: switching remounts the panel, and it rises in. */}
+            <div key={tab} className="panel-in min-h-0 flex-1 overflow-y-auto">
               {tab === "notes" && <NotesTray tree={tree} pending={pending} actions={actions} />}
               {tab === "assistant" && assistant}
               {tab === "distill" && distillPanel}
@@ -441,8 +456,7 @@ export function Workspace({
               </Link>
             )}
           </aside>
-          </>
-        )}
+        </div>
 
         <nav
           data-track-surface="sidebar"
@@ -539,8 +553,9 @@ export function Workspace({
             >
               <MoreIcon />
             </button>
+            <Presence show={menuOpen} exit="menu">
             {menuOpen && (
-              <div className="absolute right-0 bottom-full mb-2 flex w-44 flex-col overflow-hidden rounded-2xl bg-card py-1 shadow-float">
+              <div className="menu-in absolute right-0 bottom-full mb-2 flex w-44 flex-col overflow-hidden rounded-2xl bg-card py-1 shadow-float">
                 <Link
                   href={`/n/${notebook.id}/notes`}
                   data-track="more-notes-full-page"
@@ -557,11 +572,13 @@ export function Workspace({
                 </Link>
               </div>
             )}
+            </Presence>
           </div>
         </nav>
       </div>
 
       <GuideDialog open={guideOpen} onClose={() => setGuideOpen(false)} />
+      <Presence show={corpusDistill !== null} exit="fade">
       {corpusDistill && (
         <CorpusDistillPage
           notebookId={notebook.id}
@@ -572,6 +589,8 @@ export function Workspace({
           onClose={() => setCorpusDistill(null)}
         />
       )}
+      </Presence>
+      <Presence show={graphOpen} exit="fade">
       {graphOpen && (
         <GraphOverlay
           notebookId={notebook.id}
@@ -581,6 +600,7 @@ export function Workspace({
           onClose={() => setGraphOpen(false)}
         />
       )}
+      </Presence>
     </div>
     </CollabProvider>
   );
