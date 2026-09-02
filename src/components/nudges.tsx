@@ -159,6 +159,7 @@ export function Nudges() {
 
   return (
     <div
+      key={shown.index}
       role="status"
       style={style}
       className="pop-in fixed z-[60] flex w-[280px] max-w-[calc(100vw-24px)] items-start gap-2 rounded-2xl bg-card px-4 py-3 text-[12.5px] leading-relaxed text-sand-800 shadow-float print:hidden"
