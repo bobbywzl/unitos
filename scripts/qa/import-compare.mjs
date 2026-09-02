@@ -15,7 +15,7 @@
 //
 // Usage:
 //   node scripts/qa/import-compare.mjs --notebook <id> [--app http://localhost:3111]
-//        [--out .qa/import-compare] [--fresh] [--skip-original]
+//        [--out .qa/import-compare] [--fresh] [--skip-original] [--pages N]
 //        [--list sources.txt] <url | pdf-url | file.pdf> ...
 // Sources come from the reader: the arguments, or a list file with one source
 // per line (# comments). A URL that serves a PDF downloads and runs as a PDF.
@@ -40,7 +40,7 @@ const VIEWPORT = { width: 1280, height: 900 };
 const MAX_CROPS_PER_KIND = 60;
 const MAX_FULL_PAGE_HEIGHT = 14000;
 const PDF_PAGE_WIDTH = 1200;
-const MAX_PDF_PAGES = 40;
+const DEFAULT_PDF_PAGES = 40;
 
 // ── Arguments ───────────────────────────────────────────────────────────────
 
@@ -60,6 +60,7 @@ function parseArgs(argv) {
     else if (a === "--notebook") opts.notebook = argv[++i];
     else if (a === "--out") opts.out = argv[++i];
     else if (a === "--fresh") opts.fresh = true;
+    else if (a === "--pages") opts.pages = Number(argv[++i]);
     else if (a === "--skip-original") opts.skipOriginal = true;
     else if (a === "--list") opts.lists.push(argv[++i]);
     else if (a.startsWith("--")) throw new Error(`Unknown option ${a}`);
@@ -469,7 +470,7 @@ async function captureOriginalPdf(source, dir) {
   const pdf = await getDocumentProxy(new Uint8Array(bytes));
   const pageCount = pdf.numPages;
   const pages = [];
-  for (let p = 1; p <= Math.min(pageCount, MAX_PDF_PAGES); p++) {
+  for (let p = 1; p <= Math.min(pageCount, opts.pages || DEFAULT_PDF_PAGES); p++) {
     const png = await renderPageAsImage(new Uint8Array(bytes), p, {
       canvasImport: () => import("@napi-rs/canvas"),
       width: PDF_PAGE_WIDTH,
