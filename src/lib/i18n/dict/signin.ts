@@ -2,8 +2,15 @@
 // the reader as it is, key functions as cards. zh glossary: dict/common.ts.
 
 const en = {
-  heroA: "Your All-Powerful Notebook",
-  heroAccent: "Your Understanding, Your Pace.",
+  // The hero: "Got a ___?" — the blank rolls through heroItems (| separated,
+  // article included), one every 2 seconds; {item} in heroA is the blank.
+  // heroB is the punch line, larger; heroSub is one line on what Unitos is.
+  heroA: "Got {item}?",
+  heroItems:
+    "a video|an audio file|an article|a research paper|a legal document|a PDF assignment",
+  heroB: "Put it in Unitos.",
+  heroSub:
+    "An AI-assisted notebook you can share: every note anchored to its source, every passage explained at your depth, your understanding at your pace.",
   ctaTitle: "New here? Start your first project",
   signinTitle: "Welcome back",
   forgotTitle: "Reset your password",
@@ -21,7 +28,7 @@ const en = {
   apple: "Continue with Apple",
   accountNote: "Sign-in creates your account and keeps your projects yours.",
 
-  // The beta notice: opens once per tab when the page loads.
+  // The beta notice: opens once per tab when the page loads, a bowing figure above it.
   betaTitle: "Unitos is in beta",
   betaThanks:
     "Thank you for being here this early. Every project you build and every piece of feedback you send shapes what Unitos becomes.",
@@ -62,17 +69,18 @@ const en = {
   // The reset page (/reset)
   resetTitle: "Set a new password",
 
-  // The reader, as it is — callouts point from the text
+  // The reader, as it is — callouts point from the text. One structure:
+  // "Function: what it does", in plain words, the dot on that function.
   showcaseTitle: "The reader, as it is",
   showcaseCaption: "A real paper in the reader — every function shown is live.",
   chipAccepted: "✓ Note accepted · anchored",
   screenshotAlt: "The Unitos reader on Attention Is All You Need: highlights, notes, annotations, and links in place.",
-  calloutAssistant: "The assistant: summarize, explain, ask, distill",
-  calloutHighlight: "Highlight, comment, link across texts",
-  calloutComment: "Margin comment",
+  calloutAssistant: "Smart assistant: summarize, explain, ask",
+  calloutHighlight: "Highlight: mark a passage",
+  calloutComment: "Comment: write in the margin",
   calloutExtract: "Extract: every passage on one topic",
-  calloutPending: "Anchored note — Enter to accept",
-  calloutDistill: "Distill: ask the document one question",
+  calloutPending: "Anchored note: accept or reject",
+  calloutDistill: "Distill: ask one question, get quotes",
 
   // Only functions you need
   functionsTitle: "Only functions you need",
@@ -115,8 +123,11 @@ const en = {
 };
 
 const zh: Record<keyof typeof en, string> = {
-  heroA: "你的全能笔记本",
-  heroAccent: "你的理解，你的节奏。",
+  heroA: "手上有{item}？",
+  heroItems: "视频|音频|文章|研究论文|法律文件|PDF 作业",
+  heroB: "放进 Unitos。",
+  heroSub:
+    "一个可共享的 AI 辅助笔记本：每条笔记锚定到出处，每个片段按你的深度解释，你的理解，你的节奏。",
   ctaTitle: "第一次来？创建你的第一个项目",
   signinTitle: "欢迎回来",
   forgotTitle: "重置密码",
@@ -179,12 +190,12 @@ const zh: Record<keyof typeof en, string> = {
   showcaseCaption: "阅读器中的一篇真实论文——展示的功能全部真实可用。",
   chipAccepted: "✓ 笔记已接受 · 已锚定",
   screenshotAlt: "Unitos 阅读器中的 Attention Is All You Need：高亮、笔记、批注和链接一应俱全。",
-  calloutAssistant: "助手：总结、解释、提问、提炼",
-  calloutHighlight: "高亮、评论、跨文本链接",
-  calloutComment: "页边评论",
+  calloutAssistant: "智能助手：总结、解释、提问",
+  calloutHighlight: "高亮：标记一个片段",
+  calloutComment: "评论：写在页边",
   calloutExtract: "提取：同一主题的每个片段",
-  calloutPending: "锚定的笔记——Enter 接受",
-  calloutDistill: "提炼：向文档问一个问题",
+  calloutPending: "锚定笔记：接受或拒绝",
+  calloutDistill: "提炼：问一个问题，得到引文",
 
   // Only functions you need
   functionsTitle: "只有你需要的功能",
