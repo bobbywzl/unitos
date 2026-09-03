@@ -67,7 +67,9 @@ export function ReaderShowcase({
   const fade = { transition: "opacity 0.45s ease" };
 
   return (
-    <div className="relative">
+    // @container: the chips size in cqw, so they keep their place on the
+    // image at every width (page.tsx lays them out for a 630px-wide image).
+    <div className="relative @container">
       <div className="overflow-hidden rounded-xl border border-white/10">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={src} alt={alt} className="block w-full" />
@@ -118,7 +120,7 @@ export function ReaderShowcase({
         <span
           key={c.text}
           aria-hidden
-          className="absolute hidden items-center gap-1.5 rounded-full bg-black/80 px-2.5 py-1 text-[11px] font-semibold whitespace-nowrap text-white shadow-float ring-1 ring-white/25 sm:inline-flex"
+          className="absolute hidden items-center gap-1.5 rounded-full bg-black/80 px-[clamp(7px,1.6cqw,11px)] py-[clamp(3px,0.63cqw,4.5px)] text-[clamp(8px,1.75cqw,12px)] leading-[1.4] font-semibold whitespace-nowrap text-white shadow-float ring-1 ring-white/25 sm:inline-flex"
           style={{
             left: c.chip.left,
             top: c.chip.top,
