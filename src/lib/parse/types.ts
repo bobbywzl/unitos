@@ -154,4 +154,7 @@ export type UrlParseProgress = (stage: "extract", detail?: string) => void;
 //     heading before a headline stays; a promo label and its rail drop; the
 //     page title loses its site suffix and the banner heading anywhere in the
 //     opening blocks drops.
-export const PARSER_VERSION = 14;
+// 15: figures keep their look — the page's stylesheets load at parse, a chart
+//     svg carries the page's colors, fonts, and backdrop as inline style, and
+//     an image carries the backdrop the page drew behind it.
+export const PARSER_VERSION = 15;

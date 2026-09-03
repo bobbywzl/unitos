@@ -4,7 +4,7 @@ import { stripCitationTokens } from "@/lib/parse/references";
 // Allowlist sanitizer. Runs at ingest time; stored html is clean, render trusts it.
 const ALLOWED: Record<string, Set<string>> = {
   a: new Set(["href"]),
-  img: new Set(["src", "alt", "width", "height"]),
+  img: new Set(["src", "alt", "width", "height", "data-backdrop"]),
   table: new Set([]),
   thead: new Set([]),
   tbody: new Set([]),
@@ -68,6 +68,16 @@ const SVG_ATTRIBUTES = new Set([
   "patternunits", "markerunits", "markerwidth", "markerheight", "refx", "refy", "orient",
   "xmlns", "style", "href", "xlink:href",
 ]);
+
+/** A baked backdrop (a color, or plain gradients) that can be written as an
+    inline background; null for anything that could load or run. */
+function safeBackdrop(value: string | null): string | null {
+  if (!value) return null;
+  const text = value.trim();
+  if (!text || text.length > 600) return null;
+  if (/url\s*\(|expression|javascript:|@import|\\|[<>;{}]/i.test(text)) return null;
+  return text;
+}
 
 // A url(...) that is not a local #reference can load external resources.
 function safeSvgValue(value: string): boolean {
@@ -199,14 +209,21 @@ export function sanitizeHtml(html: string, baseUrl?: string): string {
         }
       }
       if (tag === "img") {
+        const declarations: string[] = [];
         // The width attribute is the page's display width when it is smaller
         // than the column: cap the image there, so a small floated photo or a
         // thumbnail is not blown up to the column's width (import compare
         // loop finding). A width at or past the column changes nothing.
         const width = Number(child.getAttribute("width"));
         if (Number.isInteger(width) && width >= 40) {
-          child.setAttribute("style", `max-width:min(100%,${width}px)`);
+          declarations.push(`max-width:min(100%,${width}px)`);
         }
+        // The backdrop the page drew behind the image (lib/parse/figure-style.ts):
+        // a transparent diagram made for a dark page keeps its dark.
+        const backdrop = safeBackdrop(child.getAttribute("data-backdrop"));
+        if (backdrop) declarations.push(`background:${backdrop}`);
+        child.removeAttribute("data-backdrop");
+        if (declarations.length > 0) child.setAttribute("style", declarations.join(";"));
       }
       if (tag === "video") {
         const hasSrc = resolveUrl(child, "src");
