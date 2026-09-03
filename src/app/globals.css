@@ -913,6 +913,38 @@ ellipse.anchor-flash {
   animation: rise-in 0.7s cubic-bezier(0.22, 1, 0.36, 1) 0.26s both;
 }
 
+/* Sign-in hero reel (signin/hero-reel.tsx): the blank in "Got a ___?" is a
+   one-line window over a column of items. The column rolls up one row per
+   beat and settles like a reel; the jump back to the first row carries no
+   transition. The window is one line tall; without the lh unit, its height
+   is the line's leading (1.08, page.tsx) in em. The glow is a filter on the
+   window, not a text-shadow: a shadow would be clipped at the window's
+   edges and the hidden rows' shadows would bleed in. Reduced motion cuts
+   between rows instead of rolling. */
+.hero-reel-window {
+  display: inline-block;
+  vertical-align: top;
+  overflow: hidden;
+  height: 1lh;
+  filter: drop-shadow(0 0 12px rgba(217, 138, 82, 0.5));
+}
+@supports not (height: 1lh) {
+  .hero-reel-window {
+    height: 1.08em;
+  }
+}
+.hero-reel-col {
+  display: block;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .hero-reel-col {
+    transition: transform 0.55s cubic-bezier(0.32, 1.25, 0.5, 1);
+  }
+}
+.hero-reel-col.hero-reel-snap {
+  transition: none;
+}
+
 /* Sign-in backdrop: layered clay/sage glows + a dot lattice, covering the
    whole page. The page wrapper carries .dark, so the tokens here resolve to
    the dark ramp. */
@@ -964,6 +996,80 @@ ellipse.anchor-flash {
 }
 .tour-ripple {
   animation: tour-ripple 0.7s ease-out both;
+}
+
+/* The beta notice's bowing figure (signin/beta-notice.tsx): the body tips
+   forward from the hip, the arm swings back toward hanging straight, the
+   head nods a little further; a hold at the bottom, then up, then a pause.
+   Origins are in the SVG's own units. Still under reduced motion. */
+@keyframes bow-body {
+  0%,
+  12% {
+    transform: rotate(0deg);
+  }
+  32%,
+  58% {
+    transform: rotate(36deg);
+  }
+  78%,
+  100% {
+    transform: rotate(0deg);
+  }
+}
+@keyframes bow-arm {
+  0%,
+  12% {
+    transform: rotate(0deg);
+  }
+  32%,
+  58% {
+    transform: rotate(-20deg);
+  }
+  78%,
+  100% {
+    transform: rotate(0deg);
+  }
+}
+@keyframes bow-head {
+  0%,
+  12% {
+    transform: rotate(0deg);
+  }
+  32%,
+  58% {
+    transform: rotate(10deg);
+  }
+  78%,
+  100% {
+    transform: rotate(0deg);
+  }
+}
+.bow-body,
+.bow-arm,
+.bow-head {
+  transform-box: view-box;
+}
+.bow-body {
+  transform-origin: 58px 118px;
+}
+.bow-arm {
+  transform-origin: 58px 56px;
+}
+.bow-head {
+  transform-origin: 64px 54px;
+}
+/* One full shorthand per part: the minifier folds a nameless shorthand into
+   animation: none. */
+@media (prefers-reduced-motion: no-preference) {
+  .bow-body {
+    animation: bow-body 4.4s cubic-bezier(0.45, 0.05, 0.25, 1) 0.4s infinite;
+  }
+  .bow-arm {
+    animation: bow-arm 4.4s cubic-bezier(0.45, 0.05, 0.25, 1) 0.4s infinite;
+  }
+  .bow-head {
+    animation: bow-head 4.4s cubic-bezier(0.45, 0.05, 0.25, 1) 0.4s infinite;
+  }
 }
 
 /* ── Graph (SPEC.md §13; release-edu canvas patterns) ───────────────────── */

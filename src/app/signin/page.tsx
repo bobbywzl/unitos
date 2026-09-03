@@ -6,6 +6,7 @@ import { appleEnabled, authEnabled, currentUser, emailEnabled, googleEnabled } f
 import { serverT } from "@/lib/i18n/server";
 import type { TKey } from "@/lib/i18n/dictionaries";
 import { BetaNotice } from "./beta-notice";
+import { HeroReel } from "./hero-reel";
 import { ReaderShowcase } from "./reader-showcase";
 
 export const dynamic = "force-dynamic";
@@ -69,9 +70,13 @@ function UnitosButton({ label }: { label: string }) {
 
 // Callouts point from the text: chip, a dotted connector, and a dot on the
 // exact spot in the screenshot. All positions are percent of the image,
-// tuned to public/signin-reader.png. Array order is the tour order the
-// cursor walks: highlight → comment → pending note → distill → extract →
-// assistant.
+// measured on public/signin-reader.png (3200×2000): the dot sits on the
+// control or mark the callout names, the chip sits in clear space beside it,
+// and the line starts inside the chip (the chip paints over it) so its
+// visible part runs from the chip's edge to the dot whatever the chip's
+// width. Chips scale with the image (reader-showcase.tsx), so the layout
+// holds at every width. Array order is the tour order the cursor walks:
+// highlight → comment → pending note → distill → extract → assistant.
 type Callout = {
   key: TKey;
   chip: { left: string; top: string };
@@ -81,41 +86,52 @@ type Callout = {
 };
 const CALLOUTS: Callout[] = [
   {
+    // The highlighted "the Transformer" in the abstract; the chip in the
+    // margin above it.
     key: "signin.calloutHighlight",
-    chip: { left: "1.5%", top: "48.5%" },
-    line: { x1: 15, y1: 49, x2: 34, y2: 36 },
-    dot: { x: 36, y: 34.3 },
-  },
-  {
-    key: "signin.calloutComment",
-    chip: { left: "46%", top: "60%" },
-    line: { x1: 56, y1: 60.5, x2: 68, y2: 53.5 },
-    dot: { x: 69.3, y: 52.3 },
-  },
-  {
-    key: "signin.calloutPending",
-    chip: { left: "98%", top: "43%" },
+    chip: { left: "74.5%", top: "27.5%" },
     alignRight: true,
-    line: { x1: 88, y1: 43, x2: 86.2, y2: 30 },
-    dot: { x: 86.2, y: 28 },
+    line: { x1: 62, y1: 30.5, x2: 50, y2: 34.3 },
+    dot: { x: 48.5, y: 35.4 },
   },
   {
+    // The comment mark after "English-to-German translation task"; the chip
+    // in the margin below it.
+    key: "signin.calloutComment",
+    chip: { left: "58.5%", top: "56.5%" },
+    line: { x1: 65, y1: 59.5, x2: 56.2, y2: 53.2 },
+    dot: { x: 55.2, y: 51.9 },
+  },
+  {
+    // The pending note's Accept button; the chip right under the note.
+    key: "signin.calloutPending",
+    chip: { left: "58.5%", top: "37.5%" },
+    line: { x1: 70, y1: 40.5, x2: 78.3, y2: 36.6 },
+    dot: { x: 79, y: 35.1 },
+  },
+  {
+    // The Distill pill at the top of the document; the chip in the top bar.
     key: "signin.calloutDistill",
-    chip: { left: "36%", top: "2%" },
-    line: { x1: 62, y1: 4.2, x2: 71, y2: 8.2 },
-    dot: { x: 72.3, y: 9 },
+    chip: { left: "74%", top: "1.5%" },
+    alignRight: true,
+    line: { x1: 69, y1: 4.5, x2: 71.4, y2: 8.6 },
+    dot: { x: 72, y: 9.8 },
   },
   {
+    // The E1 extraction mark after "and transduction models"; the chip in
+    // the left gutter below it.
     key: "signin.calloutExtract",
-    chip: { left: "9%", top: "89%" },
-    line: { x1: 24, y1: 89, x2: 33.5, y2: 82 },
-    dot: { x: 35, y: 80.5 },
+    chip: { left: "1.5%", top: "85.6%" },
+    line: { x1: 5, y1: 88.5, x2: 27.7, y2: 82.9 },
+    dot: { x: 29, y: 81.6 },
   },
   {
+    // "Explain simply" in the assistant menu; the chip beside the Abstract
+    // heading, the line over the menu's clear right half.
     key: "signin.calloutAssistant",
-    chip: { left: "1.5%", top: "40%" },
-    line: { x1: 6, y1: 39.5, x2: 7.2, y2: 26.5 },
-    dot: { x: 7.2, y: 25 },
+    chip: { left: "24%", top: "18.8%" },
+    line: { x1: 28, y1: 20, x2: 8, y2: 20.1 },
+    dot: { x: 5.5, y: 20.2 },
   },
 ];
 
@@ -205,6 +221,9 @@ export default async function SignInPage({
       : mode === "forgot"
         ? t("signin.forgotTitle")
         : t("signin.ctaTitle");
+  // The hero's first line splits at {item}, where the reel goes.
+  const [heroBefore = "", heroAfter = ""] = t("signin.heroA").split("{item}");
+  const heroItems = t("signin.heroItems").split("|");
 
   return (
     <div className="dark relative flex min-h-screen flex-col overflow-hidden bg-[#14110d] text-ink">
@@ -232,15 +251,25 @@ export default async function SignInPage({
       <main className="relative z-10 mx-auto w-full max-w-[1560px] flex-1 px-6 pt-10 pb-16 sm:px-10 lg:pt-4">
         <div className="grid items-center gap-12 lg:grid-cols-[1.1fr_0.9fr] lg:gap-14">
           {/* The pitch: the hero and the CTA card; the mark covers the page backdrop above */}
-          <div className="rise-in relative">
-            <h1 className="font-display text-balance text-ink">
-              <span className="block text-[2.6rem] leading-[1.04] [-webkit-text-stroke:1px_currentColor] sm:text-[3.4rem] xl:text-[4.15rem]">
-                {t("signin.heroA")}
+          <div className="rise-in relative @container">
+            {/* Two lines, both bold (Caprasimo ships one weight; the stroke
+                thickens it): "Got a ___?" with the reel in the blank, then
+                "Put it in Unitos." a step larger. The type sizes with the
+                column (cqw): the reel is as wide as its longest item, and
+                "Got a research paper?" needs about 11.8em, so the first
+                line stays one line down to a 1024px viewport. One line under
+                them on what Unitos is. */}
+            <h1 className="font-display text-ink">
+              <span className="block text-[length:clamp(2rem,8.4cqw,3.6rem)] leading-[1.08] [-webkit-text-stroke:1px_currentColor]">
+                <HeroReel before={heroBefore} items={heroItems} after={heroAfter} />
               </span>
-              <span className="mt-3 block text-[1.45rem] leading-[1.2] text-clay [text-shadow:0_0_30px_rgba(217,138,82,0.45)] sm:text-[1.85rem] xl:text-[2.15rem]">
-                {t("signin.heroAccent")}
+              <span className="mt-2 block text-[length:clamp(2.4rem,9.9cqw,4.25rem)] leading-[1.04] [-webkit-text-stroke:1px_currentColor]">
+                {t("signin.heroB")}
               </span>
             </h1>
+            <p className="mt-5 max-w-xl text-base leading-relaxed text-sand-600 sm:text-lg">
+              {t("signin.heroSub")}
+            </p>
 
             {error && (
               <p className="relative mt-6 max-w-md rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-2.5 text-sm text-red-300">
