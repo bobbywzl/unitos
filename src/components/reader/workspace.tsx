@@ -35,6 +35,7 @@ import { useOutline } from "@/components/outline/use-outline";
 import { DocumentBar, type AttachedDocument } from "@/components/reader/document-bar";
 import type { DriveConfig } from "@/lib/drive/config";
 import type { TKey } from "@/lib/i18n/dictionaries";
+import { RESTORE_STYLE_ID, RESTORE_STYLE_MS, restoreScript, trayStateKey } from "@/lib/reading-position";
 
 type Tab = "notes" | "assistant" | "distill" | "annotations" | "edits";
 
@@ -59,10 +60,6 @@ const TRAY_MAX = 640;
 const READER_MIN = 420;
 const RAIL_WIDTH = 52;
 const TRAY_WIDTH_STORE = "unitos-tray-width";
-// The tray's collapsed state and tab, per tab and per project: a page reload
-// (a new deploy turns the next refresh into one) reopened the tray on notes
-// over a reader that had folded it (reader report).
-const TRAY_STATE_STORE = "unitos-tray-state";
 
 function clampTrayWidth(width: number): number {
   const window_ = typeof window !== "undefined" ? window.innerWidth : 1440;
@@ -134,35 +131,57 @@ export function Workspace({
   // transition; the slide is for collapse and expand.
   const [resizing, setResizing] = useState(false);
   const [tab, setTab] = useState<Tab>("notes");
-  // Restored before the first paint, saved on every change after that.
-  const trayStateKey = `${TRAY_STATE_STORE}:${notebook.id}`;
-  const trayStateRestored = useRef(false);
+  // The tray's collapsed state and tab, per tab and per project: a full page
+  // load (a new deploy turns the next refresh into one) reopened the tray on
+  // notes over a reader that had folded it (reader report). The inline
+  // restore script (lib/reading-position.ts) keeps a folded tray folded
+  // before the first paint; this restores the state itself after hydration
+  // and saves it on every change after that.
+  const trayStoreKey = trayStateKey(notebook.id);
+  // The restored state, until the render carrying it lands: the save below
+  // must not write the defaults over it first. undefined = not read yet;
+  // null = nothing stored, or already landed.
+  const trayRestore = useRef<{ collapsed: boolean; tab: Tab } | null | undefined>(undefined);
   useLayoutEffect(() => {
-    // A one-time restore before the first paint: the server render cannot
-    // read the browser's storage, and an effect after paint would show the
-    // tray opening and then folding.
+    let saved: { collapsed: boolean; tab: Tab } | null = null;
     try {
-      const raw = sessionStorage.getItem(trayStateKey);
-      const saved = raw ? (JSON.parse(raw) as { collapsed?: unknown; tab?: unknown }) : null;
-      /* eslint-disable react-hooks/set-state-in-effect */
-      if (typeof saved?.collapsed === "boolean") setCollapsed(saved.collapsed);
-      if (typeof saved?.tab === "string" && saved.tab in TAB_TITLES && (saved.tab !== "assistant" || canEdit)) {
-        setTab(saved.tab as Tab);
+      const raw = sessionStorage.getItem(trayStoreKey);
+      const stored = raw ? (JSON.parse(raw) as { collapsed?: unknown; tab?: unknown }) : null;
+      if (stored && typeof stored.collapsed === "boolean") {
+        const storedTab =
+          typeof stored.tab === "string" && stored.tab in TAB_TITLES && (stored.tab !== "assistant" || canEdit)
+            ? (stored.tab as Tab)
+            : "notes";
+        saved = { collapsed: stored.collapsed, tab: storedTab };
       }
-      /* eslint-enable react-hooks/set-state-in-effect */
     } catch {
       // storage unavailable: the tray opens on notes
     }
-    trayStateRestored.current = true;
-  }, [trayStateKey, canEdit]);
+    trayRestore.current = saved;
+    if (saved) {
+      /* eslint-disable react-hooks/set-state-in-effect */
+      setCollapsed(saved.collapsed);
+      setTab(saved.tab);
+      /* eslint-enable react-hooks/set-state-in-effect */
+    }
+  }, [trayStoreKey, canEdit]);
   useEffect(() => {
-    if (!trayStateRestored.current) return;
+    const pending = trayRestore.current;
+    if (pending === undefined) return;
+    if (pending && (pending.collapsed !== collapsed || pending.tab !== tab)) return;
+    trayRestore.current = null;
     try {
-      sessionStorage.setItem(trayStateKey, JSON.stringify({ collapsed, tab }));
+      sessionStorage.setItem(trayStoreKey, JSON.stringify({ collapsed, tab }));
     } catch {
       // storage unavailable: nothing to remember
     }
-  }, [trayStateKey, collapsed, tab]);
+  }, [trayStoreKey, collapsed, tab]);
+  // The script's style rules leave once React owns the tray and the entrance
+  // fades are past: the tray can then slide, and the fade cannot start late.
+  useEffect(() => {
+    const timer = setTimeout(() => document.getElementById(RESTORE_STYLE_ID)?.remove(), RESTORE_STYLE_MS);
+    return () => clearTimeout(timer);
+  }, []);
   const [menuOpen, setMenuOpen] = useState(false);
   const [guideOpen, setGuideOpen] = useState(false);
   // The ? nudge for a new reader (the welcome flow points here): a pulsing
@@ -634,6 +653,11 @@ export function Workspace({
         />
       )}
       </Presence>
+      {/* Last in the workspace, so every pane and the tray are parsed when it
+          runs: the reading position and the folded tray are back before the
+          first paint of a full page load. Server render only — the browser
+          does not run a script React inserts. */}
+      <script dangerouslySetInnerHTML={{ __html: restoreScript(notebook.id) }} />
     </div>
     </CollabProvider>
   );

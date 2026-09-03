@@ -247,6 +247,7 @@ DOM ranges are never the source of truth. Convert selection → block-relative o
 - **Left:** document reader. Blocks rendered from DB, selection popover on highlight with four buttons: Explain / Simplify / Extract / Add manually.
 - **Right:** docked notes drawer showing the section skeleton of the current notebook. Pending notes render with amber left-border + Accept (`Enter`) / Reject (`Backspace`) / Edit (`e`). Accepting must be exactly one keystroke when a pending note is focused.
 - Notes full-page view exists only for reorganizing/editing/export.
+- A full page load keeps the reader where it was (a note, an annotation, or an AI tool refreshes the page, and a new deploy or a dropped response turns the next refresh into a full load): the reading position — the block at the top of the pane and its offset, not a pixel count, so a figure above it that loads late moves nothing — and the drawer's folded state and tab save per tab in sessionStorage (`lib/reading-position.ts`); an inline script restores them before the first paint, and the reader holds the position while the layout under it settles, until the reader scrolls. A `?src`, `?block`, or `?link` jump wins over the restore.
 - Note edits auto-save: while a note's editor is open, every edit saves on its own — a debounced PATCH after the last keystroke, a keepalive flush when the window closes — so nothing typed is lost. Save closes the editor; Cancel and Esc restore the content from before this edit, auto-saves included.
 
 **Other UX rules:**

@@ -3,6 +3,15 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api";
+import {
+  applyReadingPosition,
+  atReadingPosition,
+  parseReadingPosition,
+  POSITION_HOLD_MS,
+  readingPositionKey,
+  readReadingPosition,
+  type ReadingPosition,
+} from "@/lib/reading-position";
 import type { SourceInput } from "@/lib/anchors/input";
 import { anchorableOffset, anchorableText } from "@/lib/anchors/dom";
 import {
@@ -495,22 +504,83 @@ export function ReaderInteractions({
   const [distillOpen, setDistillOpen] = useState(false);
   const distillOpenRef = useRef(false);
   distillOpenRef.current = distillOpen;
-  // The reading position survives a reload and a remount: a note, an
+  // The reading position survives a full page load and a remount: a note, an
   // annotation, or an AI tool refreshes the page, and when the refresh turns
   // into a full load (a new deploy, a dropped response) the reader came back
-  // at the top (reader report). Saved per tab and per document, restored
-  // before the first paint; a ?src, ?block, or ?link jump still wins after it.
-  const scrollStoreKey = `unitos-reader-scroll:${documentId}`;
+  // at the top (reader report). Saved per tab and per document as the block
+  // at the top of the pane and its offset (lib/reading-position.ts). The
+  // workspace's inline script restores it before the first paint; this
+  // re-applies it after hydration and holds it while the layout under it
+  // settles — a figure above the position loading late moves everything
+  // below it — until the reader scrolls. A ?src, ?block, or ?link jump wins:
+  // with one in the URL nothing restores.
+  const positionStoreKey = readingPositionKey(documentId);
+  const jumpOnOpen = useRef(
+    Boolean(searchParams.get("src") || searchParams.get("block") || searchParams.get("link")),
+  );
+  // While the hold keeps the stored position, saves pause: a clamped
+  // intermediate position must not overwrite the stored one.
+  const positionHeld = useRef(false);
   useLayoutEffect(() => {
     const container = containerRef.current;
-    if (!container) return;
+    if (!container || jumpOnOpen.current) return;
+    let stored: ReadingPosition | null = null;
     try {
-      const saved = Number(sessionStorage.getItem(scrollStoreKey));
-      if (saved > 0) container.scrollTop = saved;
+      stored = parseReadingPosition(sessionStorage.getItem(positionStoreKey));
     } catch {
-      // storage unavailable: the reader starts at the top
+      stored = null; // storage unavailable: the reader starts at the top
     }
-  }, [scrollStoreKey]);
+    if (!stored) return;
+    const position = stored;
+    let expected = applyReadingPosition(container, position);
+    if (expected === null) return; // the block is gone (a re-parse): nothing to hold
+    positionHeld.current = true;
+    // The browser's own scroll anchoring would keep whichever block it picked
+    // at the pane's edge; while the hold runs, the stored block is the anchor.
+    const overflowAnchor = container.style.overflowAnchor;
+    container.style.overflowAnchor = "none";
+    const article = container.querySelector("article") ?? container;
+    let held = true;
+    // The reader took over (a scroll, a touch, the timer): saves resume.
+    const release = () => {
+      if (!held) return;
+      held = false;
+      positionHeld.current = false;
+      container.style.overflowAnchor = overflowAnchor;
+      observer.disconnect();
+      container.removeEventListener("scroll", onScroll);
+      container.removeEventListener("wheel", release);
+      container.removeEventListener("touchmove", release);
+      container.removeEventListener("pointerdown", release);
+      clearTimeout(timer);
+    };
+    // The effect ends (a document switch, or a development re-run): the
+    // stored position stands, so the save on unmount below skips.
+    const cleanup = () => {
+      if (!held) return;
+      release();
+      positionHeld.current = true;
+    };
+    const hold = () => {
+      if (!positionHeld.current) return;
+      expected = applyReadingPosition(container, position);
+      if (expected === null) release();
+    };
+    const onScroll = () => {
+      // The hold's own moves land on expected. Any other scroll is the
+      // reader's, or a jump the reader asked for: the hold ends.
+      if (container.scrollTop === expected || atReadingPosition(container, position)) return;
+      release();
+    };
+    const observer = new ResizeObserver(hold);
+    observer.observe(article);
+    container.addEventListener("scroll", onScroll, { passive: true });
+    container.addEventListener("wheel", release, { passive: true });
+    container.addEventListener("touchmove", release, { passive: true });
+    container.addEventListener("pointerdown", release);
+    const timer = setTimeout(release, POSITION_HOLD_MS);
+    return cleanup;
+  }, [positionStoreKey]);
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -518,10 +588,11 @@ export function ReaderInteractions({
     const save = () => {
       raf = 0;
       // The distilled page scrolls the pane to the top while it is open; that
-      // is not a reading position.
-      if (distillOpenRef.current) return;
+      // is not a reading position. While the hold above keeps the stored
+      // position, the stored one stands.
+      if (distillOpenRef.current || positionHeld.current) return;
       try {
-        sessionStorage.setItem(scrollStoreKey, String(Math.round(container.scrollTop)));
+        sessionStorage.setItem(positionStoreKey, JSON.stringify(readReadingPosition(container)));
       } catch {
         // storage unavailable: nothing to remember
       }
@@ -537,7 +608,7 @@ export function ReaderInteractions({
       if (raf) cancelAnimationFrame(raf);
       save();
     };
-  }, [scrollStoreKey]);
+  }, [positionStoreKey]);
   const [distillShownId, setDistillShownId] = useState<string | null>(null);
   const [distillRun, setDistillRun] = useState<{ question: string } | null>(null);
   const [distillError, setDistillError] = useState<string | null>(null);
@@ -3380,6 +3451,9 @@ export function ReaderInteractions({
     <div
       ref={containerRef}
       data-reader-root
+      // The inline restore script finds this pane's stored reading position by
+      // its document (lib/reading-position.ts).
+      data-document-id={documentId}
       // While the distilled page is open it scrolls itself; the article
       // underneath must not scroll away, so the pane clips instead.
       className={`relative min-h-0 flex-1 print:overflow-visible ${
