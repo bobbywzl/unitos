@@ -913,11 +913,22 @@ ellipse.anchor-flash {
   animation: rise-in 0.7s cubic-bezier(0.22, 1, 0.36, 1) 0.26s both;
 }
 
+/* The sign-in page's display face (signin/page.tsx loads it as --font-hero):
+   Noto Serif Display, heaviest weight, condensed — a formal, high-contrast
+   serif for the hero, the section heading, and the beta notice's title,
+   all set in capitals with a little tracking. Falls back to Caprasimo. */
+.font-hero {
+  font-family: var(--font-hero), var(--font-caprasimo), serif;
+  font-weight: 900;
+  font-stretch: 66%;
+  letter-spacing: 0.02em;
+}
+
 /* Sign-in hero reel (signin/hero-reel.tsx): the blank in "Got a ___?" is a
    one-line window over a column of items. The column rolls up one row per
    beat and settles like a reel; the jump back to the first row carries no
    transition. The window is one line tall; without the lh unit, its height
-   is the line's leading (1.08, page.tsx) in em. The glow is a filter on the
+   is the line's leading (1.05, page.tsx) in em. The glow is a filter on the
    window, not a text-shadow: a shadow would be clipped at the window's
    edges and the hidden rows' shadows would bleed in. Reduced motion cuts
    between rows instead of rolling. */
@@ -930,7 +941,7 @@ ellipse.anchor-flash {
 }
 @supports not (height: 1lh) {
   .hero-reel-window {
-    height: 1.08em;
+    height: 1.05em;
   }
 }
 .hero-reel-col {

@@ -106,7 +106,7 @@ export function BetaNotice() {
                 <span className="flex size-9 shrink-0 items-center justify-center rounded-xl border border-clay/30 bg-clay/12">
                   <Logo size={20} className="text-clay" />
                 </span>
-                <h2 id="beta-notice-title" className="font-display text-[20px] text-ink">
+                <h2 id="beta-notice-title" className="font-hero text-[22px] text-ink uppercase">
                   {t("signin.betaTitle")}
                 </h2>
               </div>

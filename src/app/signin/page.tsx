@@ -1,3 +1,4 @@
+import { Noto_Serif_Display } from "next/font/google";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { LangSwitcher } from "@/components/lang-switcher";
@@ -10,6 +11,17 @@ import { HeroReel } from "./hero-reel";
 import { ReaderShowcase } from "./reader-showcase";
 
 export const dynamic = "force-dynamic";
+
+// The sign-in page's display face (.font-hero in globals.css): a condensed,
+// high-contrast serif, set in capitals — formal and eye-catching, unlike
+// Caprasimo, which carries headings inside the app. Variable weight and
+// width; .font-hero picks 900 and 66%.
+const heroFont = Noto_Serif_Display({
+  variable: "--font-hero",
+  axes: ["wdth"],
+  subsets: ["latin"],
+  display: "swap",
+});
 
 function GoogleMark({ size = 15 }: { size?: number }) {
   return (
@@ -226,7 +238,9 @@ export default async function SignInPage({
   const heroItems = t("signin.heroItems").split("|");
 
   return (
-    <div className="dark relative flex min-h-screen flex-col overflow-hidden bg-[#14110d] text-ink">
+    <div
+      className={`${heroFont.variable} dark relative flex min-h-screen flex-col overflow-hidden bg-[#14110d] text-ink`}
+    >
       {/* Backdrop: clay glow + dot lattice + the mark covering the top-left quadrant, behind everything */}
       <div aria-hidden className="signin-glow pointer-events-none absolute inset-0" />
       <div aria-hidden className="signin-dots pointer-events-none absolute inset-0" />
@@ -252,18 +266,18 @@ export default async function SignInPage({
         <div className="grid items-center gap-12 lg:grid-cols-[1.1fr_0.9fr] lg:gap-14">
           {/* The pitch: the hero and the CTA card; the mark covers the page backdrop above */}
           <div className="rise-in relative @container">
-            {/* Two lines, both bold (Caprasimo ships one weight; the stroke
-                thickens it): "Got a ___?" with the reel in the blank, then
-                "Put it in Unitos." a step larger. The type sizes with the
-                column (cqw): the reel is as wide as its longest item, and
-                "Got a research paper?" needs about 11.8em, so the first
-                line stays one line down to a 1024px viewport. One line under
-                them on what Unitos is. */}
-            <h1 className="font-display text-ink">
-              <span className="block text-[length:clamp(2rem,8.4cqw,3.6rem)] leading-[1.08] [-webkit-text-stroke:1px_currentColor]">
+            {/* Capitals in the hero face, heaviest weight: "Got a ___?" with
+                the reel in the blank, as large as the column allows, then
+                "Put it in Unitos." smaller. The type sizes with the column
+                (cqw): the reel is as wide as its longest item, about 10em
+                with the tracking, so the reel fills the column and "GOT"
+                takes the line above it. One line under them on what Unitos
+                is. */}
+            <h1 className="font-hero text-ink uppercase">
+              <span className="block text-[length:clamp(2rem,9.8cqw,4.75rem)] leading-[1.05]">
                 <HeroReel before={heroBefore} items={heroItems} after={heroAfter} />
               </span>
-              <span className="mt-2 block text-[length:clamp(2.4rem,9.9cqw,4.25rem)] leading-[1.04] [-webkit-text-stroke:1px_currentColor]">
+              <span className="mt-3 block text-[length:clamp(1.5rem,7.4cqw,3.6rem)] leading-[1.05]">
                 {t("signin.heroB")}
               </span>
             </h1>
@@ -489,7 +503,7 @@ export default async function SignInPage({
 
         {/* Only functions you need: two rows, right beneath the hero */}
         <section className="rise-in-later mt-12 lg:mt-14">
-          <h2 className="text-center font-display text-[1.65rem] text-ink sm:text-3xl">
+          <h2 className="font-hero text-center text-[1.75rem] text-ink uppercase sm:text-[2.25rem]">
             {t("signin.functionsTitle")}
           </h2>
           <div className="mt-8 flex flex-wrap justify-center gap-4">
