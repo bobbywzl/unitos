@@ -489,6 +489,16 @@ export function Workspace({
           )}
 
           <button
+            onClick={() => setGraphOpen(true)}
+            data-track="graph"
+            aria-label={t("panes.graph")}
+            title={t("panes.graphTitle")}
+            className={RAIL_BUTTON}
+          >
+            <GraphIcon />
+          </button>
+
+          <button
             onClick={() => show("notes")}
             data-track="notes"
             aria-label={t("panes.notes")}
@@ -511,16 +521,6 @@ export function Workspace({
             className={!collapsed && tab === "distill" ? RAIL_BUTTON_ON : RAIL_BUTTON}
           >
             <DistillIcon />
-          </button>
-
-          <button
-            onClick={() => setGraphOpen(true)}
-            data-track="graph"
-            aria-label={t("panes.graph")}
-            title={t("panes.graphTitle")}
-            className={RAIL_BUTTON}
-          >
-            <GraphIcon />
           </button>
 
           <button
