@@ -123,9 +123,9 @@ const en = {
 };
 
 const zh: Record<keyof typeof en, string> = {
-  heroA: "手上有{item}？",
+  heroA: "搞不懂的{item}？",
   heroItems: "视频|音频|文章|研究论文|法律文件|PDF 作业",
-  heroB: "放进 Unitos。",
+  heroB: "就用 Unitos。",
   heroSub:
     "一个可共享的 AI 辅助笔记本：每条笔记锚定到出处，每个片段按你的深度解释，你的理解，你的节奏。",
   ctaTitle: "第一次来？创建你的第一个项目",
