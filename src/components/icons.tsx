@@ -220,6 +220,19 @@ export function QuestionIcon(props: IconProps) {
   );
 }
 
+// Open corner brackets: a region singled out — extraction, the passages
+// across the document that reveal a phrase's topic.
+export function ExtractIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M4 9V5a1 1 0 0 1 1-1h4" />
+      <path d="M4 15v4a1 1 0 0 0 1 1h4" />
+      <path d="M20 9V5a1 1 0 0 0-1-1h-4" />
+      <path d="M20 15v4a1 1 0 0 1-1 1h-4" />
+    </Icon>
+  );
+}
+
 // Three-quarter arc: spin it for a loading state.
 export function SpinnerIcon(props: IconProps) {
   return (

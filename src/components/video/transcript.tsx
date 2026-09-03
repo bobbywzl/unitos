@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { SpinnerIcon } from "@/components/icons";
+import { CommentIcon, LocateIcon, QuestionIcon, SpinnerIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { formatTime, type TranscriptLine, type VideoAnnotationItem } from "@/lib/video/types";
 
@@ -124,7 +124,7 @@ export function Transcript({
   }, [activeLineId]);
 
   const action =
-    "rounded-full px-2 py-0.5 text-[11px] font-semibold text-sand-600 hover:bg-clay-100 hover:text-clay-800";
+    "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold text-sand-600 hover:bg-clay-100 hover:text-clay-800";
 
   return (
     <section className="mt-6">
@@ -206,6 +206,7 @@ export function Transcript({
                           className={action}
                           title={t("video.commentOnLineTitle")}
                         >
+                          <CommentIcon size={11} />
                           {t("video.comment")}
                         </button>
                         <button
@@ -214,6 +215,7 @@ export function Transcript({
                           className={action}
                           title={t("video.explainThisMoment")}
                         >
+                          <QuestionIcon size={11} />
                           {t("video.explain")}
                         </button>
                         {annotated && (
@@ -223,6 +225,7 @@ export function Transcript({
                             className={action}
                             title={t("video.openNoteTitle")}
                           >
+                            <LocateIcon size={11} />
                             {t("video.openNote")}
                           </button>
                         )}

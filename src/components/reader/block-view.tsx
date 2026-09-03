@@ -2,7 +2,7 @@
 
 import type { BlockType } from "@prisma/client";
 import { useState } from "react";
-import { LinkIcon, QuestionIcon, SparkleIcon, SummaryIcon, UnlinkIcon } from "@/components/icons";
+import { CommentIcon, LinkIcon, QuestionIcon, SparkleIcon, SummaryIcon, UnlinkIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { Equation } from "@/components/reader/equation";
 import type { TFunc, TKey } from "@/lib/i18n/dictionaries";
@@ -356,9 +356,7 @@ function markedText(text: string, highlights: Highlight[], t: TFunc) {
             }}
             className="comment-dot mx-0.5 inline-flex size-[16px] items-center justify-center rounded-full bg-clay-100 align-text-top text-clay-700 hover:bg-clay-200 hover:text-clay-800"
           >
-            <svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-            </svg>
+            <CommentIcon size={10} />
           </button>,
         );
       }
