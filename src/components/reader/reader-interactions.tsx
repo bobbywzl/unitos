@@ -37,7 +37,22 @@ import { isOffline, offlinePremium, queueWrite } from "@/lib/offline/queue";
 import { parseYouTubeId, youtubeWatchUrl } from "@/lib/video/youtube";
 import type { TFunc, TKey } from "@/lib/i18n/dictionaries";
 import { useLang, useT } from "@/components/lang-provider";
-import { LinkIcon, MicIcon, NotesIcon, SearchIcon, SparkleIcon, SpinnerIcon, StopIcon, VolumeIcon } from "@/components/icons";
+import {
+  CommentIcon,
+  DistillIcon,
+  ExtractIcon,
+  LinkIcon,
+  MicIcon,
+  NotesIcon,
+  QuestionIcon,
+  SearchIcon,
+  SparkleIcon,
+  SpinnerIcon,
+  StopIcon,
+  SummaryIcon,
+  UnlinkIcon,
+  VolumeIcon,
+} from "@/components/icons";
 import { Markdown } from "@/components/markdown";
 import { Collapse, Presence } from "@/components/presence";
 import { ThinkingIndicator } from "@/components/thinking";
@@ -3544,8 +3559,9 @@ export function ReaderInteractions({
             }}
             data-track="distill"
             title={t("reader.distillMenuTitle")}
-            className="px-4 py-2 text-left text-[12.5px] text-sand-800 hover:bg-clay-100 hover:text-clay-800"
+            className="flex items-center gap-1.5 px-4 py-2 text-left text-[12.5px] text-sand-800 hover:bg-clay-100 hover:text-clay-800"
           >
+            <DistillIcon size={12} />
             {t("reader.distill")}
             {allDistillations.length > 0 ? ` (${allDistillations.length})` : ""}
           </button>
@@ -3608,9 +3624,10 @@ export function ReaderInteractions({
           <button
             onClick={() => openDistillPage(distillShownId)}
             data-track="distill"
-            className="rounded-full bg-sand-100 px-3.5 py-1.5 text-xs font-semibold text-sand-600 shadow-soft hover:text-clay-800"
+            className="flex items-center gap-1.5 rounded-full bg-sand-100 px-3.5 py-1.5 text-xs font-semibold text-sand-600 shadow-soft hover:text-clay-800"
             title={t("reader.distillButtonTitle")}
           >
+            <DistillIcon size={13} />
             {t("reader.distill")}
             {allDistillations.length > 0 ? ` (${allDistillations.length})` : ""}
           </button>
@@ -3741,7 +3758,8 @@ export function ReaderInteractions({
               style={{ top: extractCard.top, left: extractCard.left }}
             >
               <div className="mb-2 flex items-center justify-between">
-                <span className="text-[11px] font-bold tracking-[0.08em] text-sand-600 uppercase">
+                <span className="flex items-center gap-1.5 text-[11px] font-bold tracking-[0.08em] text-sand-600 uppercase">
+                  <ExtractIcon size={12} />
                   {t("reader.extractLabel", { label: extraction.label })}
                 </span>
                 <button
@@ -3913,7 +3931,10 @@ export function ReaderInteractions({
               title={t("reader.extractTermTitle")}
               className={`flex w-full items-center justify-between gap-2 rounded-full bg-clay-100 ${toolRow} text-left font-semibold text-clay-800 hover:bg-clay-200 disabled:opacity-40`}
             >
-              {t("reader.extract")}
+              <span className="flex items-center gap-1.5">
+                <ExtractIcon size={coarse ? 14 : 12} />
+                {t("reader.extract")}
+              </span>
               <span className="text-[9px] font-bold tracking-[0.06em] text-clay-700 uppercase">
                 {t("reader.recommended")}
               </span>
@@ -3924,16 +3945,18 @@ export function ReaderInteractions({
             onClick={() => void explain()}
             data-track="explain"
             title={popover.figure ? t("reader.explainFigureTitle") : undefined}
-            className={`flex w-full items-center rounded-full ${toolRow} text-left text-sand-800 hover:bg-clay-100 hover:text-clay-800`}
+            className={`flex w-full items-center gap-1.5 rounded-full ${toolRow} text-left text-sand-800 hover:bg-clay-100 hover:text-clay-800`}
           >
+            <QuestionIcon size={coarse ? 14 : 12} />
             {t("reader.explain")}
           </button>
           {!popover.figure && (
             <button
               onClick={() => void simplify()}
               data-track="simplify"
-              className={`flex w-full items-center rounded-full ${toolRow} text-left text-sand-800 hover:bg-clay-100 hover:text-clay-800`}
+              className={`flex w-full items-center gap-1.5 rounded-full ${toolRow} text-left text-sand-800 hover:bg-clay-100 hover:text-clay-800`}
             >
+              <SummaryIcon size={coarse ? 14 : 12} />
               {t("reader.simplify")}
             </button>
           )}
@@ -3943,8 +3966,9 @@ export function ReaderInteractions({
               data-track="extract"
               disabled={extractBusy}
               title={t("reader.extractTitle")}
-              className={`flex w-full items-center rounded-full ${toolRow} text-left text-sand-800 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40`}
+              className={`flex w-full items-center gap-1.5 rounded-full ${toolRow} text-left text-sand-800 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40`}
             >
+              <ExtractIcon size={coarse ? 14 : 12} />
               {t("reader.extract")}
             </button>
           )}
@@ -3953,12 +3977,13 @@ export function ReaderInteractions({
             onClick={() => setSubmenu(submenu === "comment" ? null : "comment")}
             data-track="comment"
             aria-expanded={submenu === "comment"}
-            className={`flex w-full items-center rounded-full ${toolRow} text-left ${
+            className={`flex w-full items-center gap-1.5 rounded-full ${toolRow} text-left ${
               submenu === "comment"
                 ? "bg-clay-100 text-clay-800"
                 : "text-sand-800 hover:bg-clay-100 hover:text-clay-800"
             }`}
           >
+            <CommentIcon size={coarse ? 14 : 12} />
             {t("reader.comment")}
           </button>
           <Collapse open={submenu === "comment"}>
@@ -4006,8 +4031,9 @@ export function ReaderInteractions({
             onClick={beginLink}
             data-track="link"
             title={t("reader.linkTitle")}
-            className={`flex w-full items-center rounded-full ${toolRow} text-left text-sand-800 hover:bg-clay-100 hover:text-clay-800`}
+            className={`flex w-full items-center gap-1.5 rounded-full ${toolRow} text-left text-sand-800 hover:bg-clay-100 hover:text-clay-800`}
           >
+            <UnlinkIcon size={coarse ? 14 : 12} />
             {t("reader.linkAcrossTexts")}
           </button>
 
@@ -4153,7 +4179,8 @@ export function ReaderInteractions({
             title={t("reader.dragToMove")}
             className="mb-2 flex cursor-move items-center justify-between"
           >
-            <span className="text-[11px] font-bold tracking-[0.08em] text-clay-800 uppercase">
+            <span className="flex items-center gap-1.5 text-[11px] font-bold tracking-[0.08em] text-clay-800 uppercase">
+              <QuestionIcon size={12} />
               {bubble.streaming ? t("reader.explaining") : t("reader.explanation")}
             </span>
             <span className="flex items-center gap-3">
@@ -4217,7 +4244,8 @@ export function ReaderInteractions({
             title={t("reader.dragToMove")}
             className="mb-2 flex cursor-move items-center justify-between"
           >
-            <span className="text-[11px] font-bold tracking-[0.08em] text-sage-800 uppercase">
+            <span className="flex items-center gap-1.5 text-[11px] font-bold tracking-[0.08em] text-sage-800 uppercase">
+              <SummaryIcon size={12} />
               {simplifyCard.streaming ? t("reader.simplifying") : t("reader.simplified")}
             </span>
             <span className="flex items-center gap-3">
@@ -4306,7 +4334,8 @@ export function ReaderInteractions({
             title={t("reader.dragToMove")}
             className="mb-2 flex cursor-move items-center justify-between"
           >
-            <span className="text-[11px] font-bold tracking-[0.08em] text-clay-800 uppercase">
+            <span className="flex items-center gap-1.5 text-[11px] font-bold tracking-[0.08em] text-clay-800 uppercase">
+              <CommentIcon size={12} />
               {t("reader.comment")}
             </span>
             <button
@@ -4398,7 +4427,8 @@ export function ReaderInteractions({
             title={t("reader.dragToMove")}
             className="flex cursor-move items-center justify-between px-4 pt-3 pb-1"
           >
-            <span className="text-[11px] font-bold tracking-[0.08em] text-clay-800 uppercase">
+            <span className="flex items-center gap-1.5 text-[11px] font-bold tracking-[0.08em] text-clay-800 uppercase">
+              <SparkleIcon size={12} />
               {t("reader.assistant")}
             </span>
             <span className="flex items-center gap-3">
