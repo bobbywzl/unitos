@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { CorpusDistillationView, GraphEdge, GraphNode, HistoryEntry, NotebookView } from "@/lib/types";
 import {
   ArrowLeftIcon,
@@ -59,6 +59,10 @@ const TRAY_MAX = 640;
 const READER_MIN = 420;
 const RAIL_WIDTH = 52;
 const TRAY_WIDTH_STORE = "unitos-tray-width";
+// The tray's collapsed state and tab, per tab and per project: a page reload
+// (a new deploy turns the next refresh into one) reopened the tray on notes
+// over a reader that had folded it (reader report).
+const TRAY_STATE_STORE = "unitos-tray-state";
 
 function clampTrayWidth(width: number): number {
   const window_ = typeof window !== "undefined" ? window.innerWidth : 1440;
@@ -130,6 +134,35 @@ export function Workspace({
   // transition; the slide is for collapse and expand.
   const [resizing, setResizing] = useState(false);
   const [tab, setTab] = useState<Tab>("notes");
+  // Restored before the first paint, saved on every change after that.
+  const trayStateKey = `${TRAY_STATE_STORE}:${notebook.id}`;
+  const trayStateRestored = useRef(false);
+  useLayoutEffect(() => {
+    // A one-time restore before the first paint: the server render cannot
+    // read the browser's storage, and an effect after paint would show the
+    // tray opening and then folding.
+    try {
+      const raw = sessionStorage.getItem(trayStateKey);
+      const saved = raw ? (JSON.parse(raw) as { collapsed?: unknown; tab?: unknown }) : null;
+      /* eslint-disable react-hooks/set-state-in-effect */
+      if (typeof saved?.collapsed === "boolean") setCollapsed(saved.collapsed);
+      if (typeof saved?.tab === "string" && saved.tab in TAB_TITLES && (saved.tab !== "assistant" || canEdit)) {
+        setTab(saved.tab as Tab);
+      }
+      /* eslint-enable react-hooks/set-state-in-effect */
+    } catch {
+      // storage unavailable: the tray opens on notes
+    }
+    trayStateRestored.current = true;
+  }, [trayStateKey, canEdit]);
+  useEffect(() => {
+    if (!trayStateRestored.current) return;
+    try {
+      sessionStorage.setItem(trayStateKey, JSON.stringify({ collapsed, tab }));
+    } catch {
+      // storage unavailable: nothing to remember
+    }
+  }, [trayStateKey, collapsed, tab]);
   const [menuOpen, setMenuOpen] = useState(false);
   const [guideOpen, setGuideOpen] = useState(false);
   // The ? nudge for a new reader (the welcome flow points here): a pulsing

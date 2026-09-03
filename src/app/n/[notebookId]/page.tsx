@@ -71,6 +71,9 @@ export default async function NotebookPage(props: {
     include: {
       collaborators: true,
       documents: {
+        // Attach order. Without it the rows come back in scan order, and the
+        // first row picks the document a bare project URL opens.
+        orderBy: { document: { createdAt: "asc" } },
         include: {
           document: {
             select: {

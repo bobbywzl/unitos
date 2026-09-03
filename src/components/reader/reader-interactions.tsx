@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import type { SourceInput } from "@/lib/anchors/input";
 import { anchorableOffset, anchorableText } from "@/lib/anchors/dom";
@@ -495,6 +495,49 @@ export function ReaderInteractions({
   const [distillOpen, setDistillOpen] = useState(false);
   const distillOpenRef = useRef(false);
   distillOpenRef.current = distillOpen;
+  // The reading position survives a reload and a remount: a note, an
+  // annotation, or an AI tool refreshes the page, and when the refresh turns
+  // into a full load (a new deploy, a dropped response) the reader came back
+  // at the top (reader report). Saved per tab and per document, restored
+  // before the first paint; a ?src, ?block, or ?link jump still wins after it.
+  const scrollStoreKey = `unitos-reader-scroll:${documentId}`;
+  useLayoutEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    try {
+      const saved = Number(sessionStorage.getItem(scrollStoreKey));
+      if (saved > 0) container.scrollTop = saved;
+    } catch {
+      // storage unavailable: the reader starts at the top
+    }
+  }, [scrollStoreKey]);
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    let raf = 0;
+    const save = () => {
+      raf = 0;
+      // The distilled page scrolls the pane to the top while it is open; that
+      // is not a reading position.
+      if (distillOpenRef.current) return;
+      try {
+        sessionStorage.setItem(scrollStoreKey, String(Math.round(container.scrollTop)));
+      } catch {
+        // storage unavailable: nothing to remember
+      }
+    };
+    const onScroll = () => {
+      if (!raf) raf = requestAnimationFrame(save);
+    };
+    container.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("pagehide", save);
+    return () => {
+      container.removeEventListener("scroll", onScroll);
+      window.removeEventListener("pagehide", save);
+      if (raf) cancelAnimationFrame(raf);
+      save();
+    };
+  }, [scrollStoreKey]);
   const [distillShownId, setDistillShownId] = useState<string | null>(null);
   const [distillRun, setDistillRun] = useState<{ question: string } | null>(null);
   const [distillError, setDistillError] = useState<string | null>(null);
