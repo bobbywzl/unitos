@@ -59,11 +59,13 @@ export function FeedbackButton() {
 
   return (
     <>
+      {/* Above the mobile bottom bar; on md+ above the rail's More button,
+          which sits in the bottom-right corner. */}
       <button
         onClick={() => setOpen(!open)}
         aria-label={t("works.sendFeedback")}
         data-tip={t("works.sendFeedback")}
-        className="fixed right-4 bottom-[calc(64px+env(safe-area-inset-bottom))] z-20 rounded-full bg-card px-4 py-2 text-sm text-sand-700 shadow-lift hover:bg-clay-100 hover:text-clay-800 md:bottom-4 print:hidden"
+        className="fixed right-4 bottom-[calc(64px+env(safe-area-inset-bottom))] z-20 rounded-full bg-card px-4 py-2 text-sm text-sand-700 shadow-lift hover:bg-clay-100 hover:text-clay-800 md:bottom-[60px] print:hidden"
       >
         {t("works.feedback")}
       </button>
