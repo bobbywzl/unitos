@@ -70,7 +70,7 @@ export function HistoryControl({ history }: { history: HistoryEntry[] }) {
         data-track="history"
         aria-expanded={open}
         aria-label={t("panes.history")}
-        title={t("panes.historyTitle")}
+        data-tip={t("panes.historyTitle")}
         className="flex size-[34px] items-center justify-center rounded-full border border-line text-sand-600 hover:bg-clay-100 hover:text-clay-800"
       >
         <HistoryIcon size={16} />
@@ -91,7 +91,8 @@ export function HistoryControl({ history }: { history: HistoryEntry[] }) {
                     onClick={() => setPersonFilter(personFilter === p.id ? null : p.id)}
                     data-track="history-person"
                     aria-pressed={personFilter === p.id}
-                    title={p.name}
+                    aria-label={p.name}
+                    data-tip={p.name}
                     className={`rounded-full ${personFilter === p.id ? "ring-2 ring-clay-500" : "opacity-70 hover:opacity-100"}`}
                   >
                     <PersonBadge person={p} size={20} />

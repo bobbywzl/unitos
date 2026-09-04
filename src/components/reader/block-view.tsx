@@ -129,7 +129,7 @@ function markedText(text: string, highlights: Highlight[], t: TFunc) {
           href={link.href}
           data-link-id={link.linkId}
           data-source-id={anchor?.sourceId ?? undefined}
-          title={link.linkTitle ? t("panes.linkedTo", { title: link.linkTitle }) : undefined}
+          data-tip={link.linkTitle ? t("panes.linkedTo", { title: link.linkTitle }) : undefined}
           className={`link-mark rounded-[4px]${editedClass}`}
         >
           {segment}
@@ -143,7 +143,7 @@ function markedText(text: string, highlights: Highlight[], t: TFunc) {
             href={link.href}
             data-anchor-skip
             aria-label={link.linkTitle ? t("panes.linkedTo", { title: link.linkTitle }) : t("panes.linked")}
-            title={link.linkTitle ? t("panes.linkedTo", { title: link.linkTitle }) : t("panes.linked")}
+            data-tip={link.linkTitle ? t("panes.linkedTo", { title: link.linkTitle }) : t("panes.linked")}
             className={CHAIN_BUTTON}
           >
             <LinkIcon size={10} />
@@ -157,7 +157,7 @@ function markedText(text: string, highlights: Highlight[], t: TFunc) {
           key={from}
           href={`#reference-${citation.referenceId}`}
           data-source-id={anchor?.sourceId ?? undefined}
-          title={citation.referenceText}
+          data-tip={citation.referenceText}
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -179,7 +179,7 @@ function markedText(text: string, highlights: Highlight[], t: TFunc) {
           key={from}
           href={`#block-${toc.targetBlockId}`}
           data-source-id={anchor?.sourceId ?? undefined}
-          title={t("panes.jumpToSection")}
+          data-tip={t("panes.jumpToSection")}
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -234,7 +234,7 @@ function markedText(text: string, highlights: Highlight[], t: TFunc) {
         <mark
           key={from}
           data-source-id={anchor?.sourceId ?? undefined}
-          title={focusable ? t("panes.viewAnnotation") : noteMark ? t("panes.viewNote") : undefined}
+          data-tip={focusable ? t("panes.viewAnnotation") : noteMark ? t("panes.viewNote") : undefined}
           onClick={
             focusable
               ? (e) => {
@@ -284,7 +284,7 @@ function markedText(text: string, highlights: Highlight[], t: TFunc) {
                 ? t("panes.extractStartedHere", { label: extractEnding.extractLabel ?? "" })
                 : t("panes.extractJumpToOrigin", { label: extractEnding.extractLabel ?? "" })
             }
-            title={
+            data-tip={
               extractEnding.extractOrigin
                 ? t("panes.extractStartedHereDetails", { label: extractEnding.extractLabel ?? "" })
                 : t("panes.extractJumpToOrigin", { label: extractEnding.extractLabel ?? "" })
@@ -322,7 +322,7 @@ function markedText(text: string, highlights: Highlight[], t: TFunc) {
             data-anchor-skip
             data-track="tool-chip"
             aria-label={t(TOOL_KEY[toolEnding.tool])}
-            title={t(TOOL_KEY[toolEnding.tool])}
+            data-tip={t(TOOL_KEY[toolEnding.tool])}
             onClick={(e) => {
               e.stopPropagation();
               window.dispatchEvent(
@@ -345,7 +345,7 @@ function markedText(text: string, highlights: Highlight[], t: TFunc) {
             data-anchor-skip
             data-track="comment-icon"
             aria-label={t("panes.openComment")}
-            title={t("panes.openComment")}
+            data-tip={t("panes.openComment")}
             onClick={(e) => {
               e.stopPropagation();
               window.dispatchEvent(
@@ -373,7 +373,7 @@ function markedText(text: string, highlights: Highlight[], t: TFunc) {
             data-anchor-skip
             data-track="link-chip"
             aria-label={t("panes.linkToOtherTexts")}
-            title={t("panes.linkToOtherTexts")}
+            data-tip={t("panes.linkToOtherTexts")}
             onClick={(e) => {
               e.stopPropagation();
               window.dispatchEvent(
@@ -395,7 +395,7 @@ function markedText(text: string, highlights: Highlight[], t: TFunc) {
       parts.push(
         <span
           key={from}
-          title={
+          data-tip={
             term.definition
               ? `${term.definition}\n\n${t("panes.clickForTools")}`
               : t("panes.clickForTools")
@@ -469,7 +469,7 @@ function HighlightLabel({ anchors }: { anchors: Highlight[] }) {
                 )
             : undefined
       }
-      title={
+      data-tip={
         focusable
           ? t("panes.figureAnnotatedTitle", { text })
           : t("panes.figureHighlightedTitle", { text })

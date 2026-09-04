@@ -191,7 +191,7 @@ export function NoteEditor({
             data-track={`note-format:${track}`}
             onMouseDown={keep}
             onClick={() => apply((v, s, e) => mapSelectedLines(v, s, e, map))}
-            title={t(titleKey)}
+            data-tip={t(titleKey)}
             className={barButton}
           >
             {label}
@@ -205,7 +205,7 @@ export function NoteEditor({
             data-track={`note-style:${track}`}
             onMouseDown={keep}
             onClick={() => apply((v, s, e) => wrapSelection(v, s, e, before, after))}
-            title={t(titleKey)}
+            data-tip={t(titleKey)}
             className={`${barButton} ${cls}`}
           >
             {label}
@@ -220,7 +220,7 @@ export function NoteEditor({
             onClick={() => apply((v, s, e) => colorSelection(v, s, e, tag))}
             data-track="note-text-color"
             aria-label={t("panes.textColorIn", { color: t(nameKey) })}
-            title={t("panes.textColorIn", { color: t(nameKey) })}
+            data-tip={t("panes.textColorIn", { color: t(nameKey) })}
             className="mx-0.5 size-[13px] rounded-full transition-transform hover:scale-110"
             style={{ background: dot }}
           />
@@ -231,7 +231,7 @@ export function NoteEditor({
           onMouseDown={keep}
           onClick={() => apply((v, s, e) => mapSelectedLines(v, s, e, outdentLines))}
           data-track="note-outdent"
-          title={t("panes.outdentLine")}
+          data-tip={t("panes.outdentLine")}
           className={barButton}
         >
           ⇤
@@ -241,7 +241,7 @@ export function NoteEditor({
           onMouseDown={keep}
           onClick={() => apply((v, s, e) => mapSelectedLines(v, s, e, indentLines))}
           data-track="note-indent"
-          title={t("panes.indentLine")}
+          data-tip={t("panes.indentLine")}
           className={barButton}
         >
           ⇥

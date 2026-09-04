@@ -77,7 +77,7 @@ export function Markdown({ children }: { children: string }) {
                       new CustomEvent("dissect:flash-block", { detail: { blockId } }),
                     )
                   }
-                  title={t("panels.jumpToBlock")}
+                  data-tip={t("panels.jumpToBlock")}
                   className="mx-0.5 inline-flex size-[18px] items-center justify-center rounded-full bg-clay-100 align-text-bottom text-[11px] font-semibold text-clay-800 no-underline hover:bg-clay-200"
                 >
                   ¶

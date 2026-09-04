@@ -169,7 +169,7 @@ export function Nudges() {
       <button
         onClick={dismiss}
         aria-label={t("works.nudgeDone")}
-        title={t("works.nudgeDone")}
+        data-tip={t("works.nudgeDone")}
         className="relative -mr-1.5 flex size-6 shrink-0 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-700"
       >
         ✕

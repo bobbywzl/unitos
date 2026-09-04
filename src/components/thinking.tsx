@@ -54,7 +54,7 @@ export function ThinkingIndicator({
         <button
           type="button"
           onClick={onStop}
-          title={stopTitle}
+          data-tip={stopTitle ?? t("reader.stopRunTitle")}
           className="ml-1 inline-flex items-center gap-1 rounded-full border border-line px-2 py-0.5 text-[11px] font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800"
         >
           <StopIcon size={9} />

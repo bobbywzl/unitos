@@ -31,6 +31,7 @@ export function ExportMenu({ notebookId }: { notebookId: string }) {
       <button
         onClick={() => setOpen(!open)}
         aria-expanded={open}
+        data-tip={t("outline.exportTitle")}
         className="flex items-center gap-1.5 rounded-full border border-line px-4 py-1.5 text-[13px] text-sand-700 hover:bg-clay-100 hover:text-clay-800"
       >
         {t("outline.export")}

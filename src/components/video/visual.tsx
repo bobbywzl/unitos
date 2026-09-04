@@ -69,7 +69,7 @@ export function Visual({
               <button
                 onClick={() => onOpen(a)}
                 data-track="video-visual-open"
-                title={t("video.jumpOpenNote")}
+                data-tip={t("video.jumpOpenNote")}
                 className={`relative block w-full bg-[#12100e] ${audio ? "h-9" : "aspect-video"}`}
               >
                 {thumb && (
@@ -114,6 +114,7 @@ export function Visual({
                 <button
                   onClick={() => onOpen(a)}
                   data-track="video-visual-open"
+                  data-tip={t("video.jumpOpenNote")}
                   className="min-w-0 flex-1 text-left text-[12.5px] leading-snug text-sand-800 [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2] overflow-hidden hover:text-clay-800"
                 >
                   {markdownPreview(a.content)}
@@ -123,7 +124,7 @@ export function Visual({
                   data-track="video-visual-delete"
                   disabled={busyId === a.noteId}
                   aria-label={t("video.deleteAnnotation")}
-                  title={t("video.deleteAnnotation")}
+                  data-tip={t("video.deleteAnnotation")}
                   className="rounded-full px-1 text-xs text-sand-400 opacity-0 group-hover/card:opacity-100 hover:text-red-500 disabled:opacity-40"
                 >
                   ✕

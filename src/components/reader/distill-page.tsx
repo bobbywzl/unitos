@@ -110,7 +110,7 @@ export function DistillPage({
                 onClick={() => onDelete(shown.id)}
                 data-track="distill-page-delete"
                 className="text-xs font-semibold text-red-500 hover:text-red-700"
-                title={t("panes.deleteDistillation")}
+                data-tip={t("panes.deleteDistillation")}
               >
                 {t("common.delete")}
               </button>
@@ -119,6 +119,7 @@ export function DistillPage({
               onClick={onClose}
               data-track="distill-page-close"
               aria-label={t("common.close")}
+              data-tip={t("common.close")}
               className="flex size-8 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-700"
             >
               ✕
@@ -161,7 +162,7 @@ export function DistillPage({
                       <button
                         onClick={() => onJump(quote)}
                         data-track="distill-page-jump"
-                        title={t("panes.jumpToPassage")}
+                        data-tip={t("panes.jumpToPassage")}
                         className="group block w-full text-left"
                       >
                         <blockquote className="border-l-2 border-clay-300 pl-3 text-[14px] leading-relaxed text-sand-800 group-hover:border-clay-500 group-hover:text-ink">
@@ -185,7 +186,7 @@ export function DistillPage({
                           onClick={() => void addNote(shown, quote, key)}
                           data-track="distill-page-add-to-notes"
                           disabled={savingKey !== null || !canAddNotes || !canEdit}
-                          title={addNoteHint}
+                          data-tip={addNoteHint}
                           className="rounded-full border border-line px-3 py-1 text-[11.5px] font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40"
                         >
                           {savingKey === key ? t("panes.adding") : t("panes.addToNotes")}
@@ -249,7 +250,7 @@ export function DistillPage({
                         onClick={() => onOpen(d.id)}
                         data-track="distill-page-open"
                         className="min-w-0 flex-1 text-left"
-                        title={t("panes.openDistillation")}
+                        data-tip={t("panes.openDistillation")}
                       >
                         <span className="block truncate text-[13.5px] font-semibold text-sand-800 hover:text-clay-800">
                           {d.question}
@@ -267,7 +268,7 @@ export function DistillPage({
                           onClick={() => onDelete(d.id)}
                           data-track="distill-page-delete-item"
                           aria-label={t("panes.deleteDistillation")}
-                          title={t("panes.deleteDistillation")}
+                          data-tip={t("panes.deleteDistillation")}
                           className="shrink-0 rounded-full px-1.5 text-sand-400 hover:text-red-600"
                         >
                           ✕

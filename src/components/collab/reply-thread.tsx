@@ -90,6 +90,7 @@ export function ReplyThread({
                 <button
                   onClick={() => setResolved(reply.id, !isResolved)}
                   data-track="reply-resolve"
+                  data-tip={isResolved ? t("common.reopenTitle") : t("common.resolveTitle")}
                   className="text-[10px] font-semibold text-sand-500 hover:text-sage-700"
                 >
                   {isResolved ? t("common.reopen") : t("common.resolve")}
@@ -100,7 +101,7 @@ export function ReplyThread({
                   onClick={() => remove(reply.id)}
                   data-track="reply-delete"
                   aria-label={t("common.delete")}
-                  title={t("common.delete")}
+                  data-tip={t("common.delete")}
                   className="text-[11px] text-sand-400 hover:text-red-600"
                 >
                   ×
@@ -143,6 +144,7 @@ export function ReplyThread({
         <button
           onClick={() => setComposing(true)}
           data-track="reply"
+          data-tip={t("common.replyTitle")}
           className="self-start text-[11px] font-semibold text-sand-600 hover:text-clay-700"
         >
           {t("common.reply")}

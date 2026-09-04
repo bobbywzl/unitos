@@ -103,6 +103,7 @@ export function WorkCard({
         <button
           onClick={() => setMenuOpen(!menuOpen)}
           aria-label={t("works.moreActionsFor", { title: work.title })}
+          data-tip={t("works.projectActions")}
           aria-expanded={menuOpen}
           className="flex size-8 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-800"
         >

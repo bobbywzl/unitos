@@ -348,6 +348,7 @@ export function Workspace({
           href="/"
           data-track="back"
           aria-label={t("panes.allCorpora")}
+          data-tip={t("panes.allCorporaTitle")}
           className="flex size-[38px] shrink-0 items-center justify-center rounded-full text-sand-700 hover:bg-clay-100 hover:text-clay-800"
         >
           <ArrowLeftIcon size={18} />
@@ -387,7 +388,7 @@ export function Workspace({
           data-track="guide"
           data-nudge="guide"
           aria-label={t("panes.guide")}
-          title={t("panes.guideTitle")}
+          data-tip={t("panes.guideTitle")}
           className="relative hidden size-[38px] shrink-0 items-center justify-center rounded-full text-sand-600 hover:bg-clay-100 hover:text-clay-800 md:flex"
         >
           <QuestionIcon size={18} />
@@ -425,7 +426,7 @@ export function Workspace({
             role="separator"
             aria-orientation="vertical"
             aria-label={t("panes.resizeTray")}
-            title={t("panes.resizeTrayTitle")}
+            data-tip={t("panes.resizeTrayTitle")}
             tabIndex={0}
             onPointerDown={startTrayResize}
             onDoubleClick={() => applyTrayWidth(TRAY_DEFAULT)}
@@ -468,6 +469,7 @@ export function Workspace({
                 onClick={() => setMobileTray(false)}
                 data-track="close"
                 aria-label={t("common.close")}
+                data-tip={t("common.close")}
                 className="ml-auto rounded-full px-2 text-sand-500 hover:text-clay-800 md:hidden"
               >
                 ✕
@@ -489,6 +491,7 @@ export function Workspace({
                 <button
                   onClick={() => void undoReject()}
                   data-track="undo-reject"
+                  data-tip={t("outline.undoRejectTitle")}
                   className="ml-auto rounded-full bg-clay px-3.5 py-1 text-xs font-semibold text-clay-fg hover:bg-clay-600"
                 >
                   {t("panes.undo")}
@@ -500,7 +503,7 @@ export function Workspace({
               <Link
                 href={`/n/${notebook.id}/notes`}
                 data-track="notes-full-page"
-                title={t("panes.notesFullPageTitle")}
+                data-tip={t("panes.notesFullPageTitle")}
                 className="flex shrink-0 items-center justify-center gap-2 rounded-full bg-card px-4 py-2.5 text-[13px] font-semibold text-sand-700 shadow-soft hover:bg-clay-100 hover:text-clay-800"
               >
                 <ExpandIcon size={15} />
@@ -523,6 +526,7 @@ export function Workspace({
             }}
             data-track="collapse-tray"
             aria-label={collapsed ? t("panes.expandTray") : t("panes.collapseTray")}
+            data-tip={collapsed ? t("panes.expandTray") : t("panes.collapseTray")}
             className={`max-md:hidden ${RAIL_BUTTON}`}
           >
             {collapsed ? <ChevronLeftIcon /> : <ChevronRightIcon />}
@@ -533,6 +537,7 @@ export function Workspace({
               onClick={() => show("assistant")}
               data-track="assistant"
               aria-label={t("panes.assistant")}
+              data-tip={t("panes.assistantTabTitle")}
               aria-current={!collapsed && tab === "assistant"}
               className={!collapsed && tab === "assistant" ? RAIL_BUTTON_ON : RAIL_BUTTON}
             >
@@ -544,7 +549,7 @@ export function Workspace({
             onClick={() => setGraphOpen(true)}
             data-track="graph"
             aria-label={t("panes.graph")}
-            title={t("panes.graphTitle")}
+            data-tip={t("panes.graphTitle")}
             className={RAIL_BUTTON}
           >
             <GraphIcon />
@@ -554,6 +559,7 @@ export function Workspace({
             onClick={() => show("notes")}
             data-track="notes"
             aria-label={t("panes.notes")}
+            data-tip={t("panes.notesTabTitle")}
             aria-current={!collapsed && tab === "notes"}
             className={!collapsed && tab === "notes" ? RAIL_BUTTON_ON : RAIL_BUTTON}
           >
@@ -569,6 +575,7 @@ export function Workspace({
             onClick={() => show("distill")}
             data-track="distill"
             aria-label={t("panes.distill")}
+            data-tip={t("panes.distillTabTitle")}
             aria-current={!collapsed && tab === "distill"}
             className={!collapsed && tab === "distill" ? RAIL_BUTTON_ON : RAIL_BUTTON}
           >
@@ -579,6 +586,7 @@ export function Workspace({
             onClick={() => show("annotations")}
             data-track="annotations"
             aria-label={t("panes.annotations")}
+            data-tip={t("panes.annotationsTabTitle")}
             aria-current={!collapsed && tab === "annotations"}
             className={!collapsed && tab === "annotations" ? RAIL_BUTTON_ON : RAIL_BUTTON}
           >
@@ -589,6 +597,7 @@ export function Workspace({
             onClick={() => show("edits")}
             data-track="edits"
             aria-label={t("panes.editHistory")}
+            data-tip={t("panes.editsTabTitle")}
             aria-current={!collapsed && tab === "edits"}
             className={!collapsed && tab === "edits" ? RAIL_BUTTON_ON : RAIL_BUTTON}
           >
@@ -600,6 +609,7 @@ export function Workspace({
               onClick={() => setMenuOpen(!menuOpen)}
               data-track="more"
               aria-label={t("panes.more")}
+              data-tip={t("panes.moreTitle")}
               aria-expanded={menuOpen}
               className={RAIL_BUTTON}
             >

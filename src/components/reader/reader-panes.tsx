@@ -211,7 +211,7 @@ export function ReaderPanes({
           onClick={() => setMenu((v) => !v)}
           data-track="view"
           aria-label={t("panes.readerView")}
-          title={t("panes.readerView")}
+          data-tip={t("panes.readerView")}
           className="flex items-center justify-center rounded-full bg-sand-100 p-2 text-sand-600 shadow-soft hover:text-clay-800"
         >
           <ViewGlyph kind={view} />

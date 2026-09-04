@@ -560,7 +560,7 @@ export function DocumentBar({
             data-track="document-list"
             aria-expanded={listOpen}
             aria-label={t("panes.documentList")}
-            title={active?.title ?? t("panes.documentList")}
+            data-tip={active?.title ?? t("panes.documentList")}
             className="flex max-w-72 min-w-0 items-center gap-1.5 rounded-full bg-ink py-[7px] pr-3 pl-[15px] text-[13px] font-semibold text-paper"
           >
             <span className="truncate">{active ? active.title : t("panes.documentList")}</span>
@@ -593,7 +593,7 @@ export function DocumentBar({
                           ? "font-semibold text-ink"
                           : "text-sand-700 hover:bg-clay-100 hover:text-clay-800"
                       }`}
-                      title={d.title}
+                      data-tip={d.title}
                     >
                       {d.title}
                     </button>
@@ -602,7 +602,7 @@ export function DocumentBar({
                       data-track="document-actions"
                       aria-label={t("panes.documentActionsFor", { title: d.title })}
                       aria-expanded={pillMenu === d.id}
-                      title={t("panes.documentActions")}
+                      data-tip={t("panes.documentActions")}
                       className="mr-2 flex size-6 shrink-0 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-800"
                     >
                       <svg
@@ -630,7 +630,7 @@ export function DocumentBar({
                           data-track="document-reparse"
                           disabled={phase !== null}
                           className={`${rowAction} disabled:opacity-40`}
-                          title={t("panes.reparseDocumentTitle")}
+                          data-tip={t("panes.reparseDocumentTitle")}
                         >
                           {t("panes.reparseDocument")}
                         </button>
@@ -646,7 +646,7 @@ export function DocumentBar({
                           data-track="document-parse-as-article"
                           disabled={phase !== null}
                           className={`${rowAction} disabled:opacity-40`}
-                          title={t("panes.parseAsArticleTitle")}
+                          data-tip={t("panes.parseAsArticleTitle")}
                         >
                           {t("panes.parseAsArticle")}
                         </button>
@@ -660,7 +660,7 @@ export function DocumentBar({
                           data-track="document-open-as-handwritten"
                           disabled={phase !== null}
                           className={`${rowAction} disabled:opacity-40`}
-                          title={t("panes.openAsHandwrittenTitle")}
+                          data-tip={t("panes.openAsHandwrittenTitle")}
                         >
                           {t("panes.openAsHandwritten")}
                         </button>
@@ -674,7 +674,7 @@ export function DocumentBar({
                           data-track="document-recommend-links"
                           disabled={connecting !== null}
                           className={`${rowAction} disabled:opacity-40`}
-                          title={t("panes.recommendLinksTitle")}
+                          data-tip={t("panes.recommendLinksTitle")}
                         >
                           {connecting === d.id ? t("common.working") : t("panes.recommendLinks")}
                         </button>
@@ -687,7 +687,7 @@ export function DocumentBar({
                         data-track="document-print"
                         disabled={d.id !== activeId}
                         className={`${rowAction} disabled:opacity-40`}
-                        title={
+                        data-tip={
                           d.id === activeId
                             ? t("panes.printDocumentTitle")
                             : t("panes.printDocumentOpenFirst")
@@ -700,7 +700,7 @@ export function DocumentBar({
                           onClick={() => void detach(d.id)}
                           data-track="document-detach"
                           className="px-4 py-1.5 text-left text-[12.5px] text-red-600 hover:bg-red-50 dark:hover:bg-red-950"
-                          title={t("panes.detachDocumentTitle")}
+                          data-tip={t("panes.detachDocumentTitle")}
                         >
                           {t("panes.detachDocument")}
                         </button>
@@ -725,6 +725,7 @@ export function DocumentBar({
           data-track="add-document"
           data-nudge="document"
           aria-label={t("panes.addDocument")}
+          data-tip={t("panes.addDocumentTitle")}
           aria-haspopup="dialog"
           aria-expanded={dialog}
           className="flex size-8 items-center justify-center rounded-full border border-dashed border-sand-400 text-sand-600 hover:bg-clay-100 hover:text-clay-800"

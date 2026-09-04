@@ -141,6 +141,7 @@ export function AddDocumentDialog({
             onClick={onClose}
             data-track="add-dialog-close"
             aria-label={t("common.close")}
+            data-tip={t("common.close")}
             className="ml-auto flex size-8 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-700"
           >
             ✕
@@ -159,7 +160,7 @@ export function AddDocumentDialog({
               aria-selected={tab === key}
               onClick={() => setTab(key)}
               data-track={`add-tab:${key}`}
-              title={label}
+              data-tip={label}
               className={`min-w-0 flex-auto truncate rounded-full px-2 py-1.5 text-[12.5px] ${
                 tab === key
                   ? "bg-card font-semibold text-clay-800 shadow-soft"
@@ -257,6 +258,7 @@ export function AddDocumentDialog({
                     <button
                       onClick={() => onAttach(d.id)}
                       data-track="add-library-attach"
+                      data-tip={t("panes.attachTitle")}
                       className="min-w-0 flex-1 truncate rounded-full px-3 py-2 text-left text-sm text-sand-700 hover:bg-clay-100 hover:text-clay-800"
                     >
                       {d.title}{" "}
@@ -268,7 +270,7 @@ export function AddDocumentDialog({
                       onClick={() => onRemoveFromLibrary(d.id)}
                       data-track="add-library-delete"
                       className="rounded-full px-2 py-1 text-xs text-sand-400 hover:text-red-500"
-                      title={t("panes.deleteFromLibrary")}
+                      data-tip={t("panes.deleteFromLibrary")}
                     >
                       ✕
                     </button>

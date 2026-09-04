@@ -46,7 +46,7 @@ export function DistillPanel({
           onClick={() => openCorpus(null)}
           data-track="distill-corpus"
           className="flex w-full items-center justify-center rounded-full bg-card px-4 py-2.5 text-[13px] font-semibold text-sand-700 shadow-soft hover:bg-clay-100 hover:text-clay-800"
-          title={t("panels.distillCorpusTitle")}
+          data-tip={t("panels.distillCorpusTitle")}
         >
           {t("panes.distillCorpus")}
         </button>
@@ -59,7 +59,7 @@ export function DistillPanel({
               onClick={() => openCorpus(d.id)}
               data-track="distill-corpus-open"
               className="rounded-2xl bg-card px-4 py-2.5 text-left shadow-soft hover:bg-clay-100"
-              title={t("panels.openDistillation")}
+              data-tip={t("panels.openDistillation")}
             >
               <span className="block text-[13.5px] leading-snug font-semibold text-sand-800">
                 {d.question}
@@ -95,7 +95,7 @@ export function DistillPanel({
           onClick={() => open(null)}
           data-track="distill-article"
           className="flex w-full items-center justify-center rounded-full bg-card px-4 py-2.5 text-[13px] font-semibold text-sand-700 shadow-soft hover:bg-clay-100 hover:text-clay-800"
-          title={t("panels.distillButtonTitle")}
+          data-tip={t("panels.distillButtonTitle")}
         >
           {t("panels.distillArticle")}
         </button>
@@ -111,7 +111,7 @@ export function DistillPanel({
               onClick={() => open(d.id)}
               data-track="distill-open"
               className="rounded-2xl bg-card px-4 py-2.5 text-left shadow-soft hover:bg-clay-100"
-              title={t("panels.openDistillation")}
+              data-tip={t("panels.openDistillation")}
             >
               <span className="block text-[13.5px] leading-snug font-semibold text-sand-800">
                 {d.question}

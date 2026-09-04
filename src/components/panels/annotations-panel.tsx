@@ -64,7 +64,7 @@ function AnnotationActions({
           onClick={jump}
           data-track="annotation-jump"
           aria-label={t("panels.jumpToAnchor")}
-          title={t("panels.jumpToAnchor")}
+          data-tip={t("panels.jumpToAnchor")}
           className="inline-flex items-center gap-1.5 rounded-full bg-clay-100 px-2.5 py-1 text-[11px] font-semibold text-clay-800 hover:bg-clay-200"
         >
           <LocateIcon size={11} />
@@ -87,6 +87,7 @@ function AnnotationActions({
           <button
             onClick={() => void onDelete(annotation.id)}
             data-track="annotation-delete"
+            data-tip={t("panels.deleteAnnotationTitle")}
             className="text-xs text-red-500 hover:text-red-700"
           >
             {t("common.delete")}
@@ -309,6 +310,7 @@ export function AnnotationsPanel({
                       <button
                         onClick={() => void acceptLink(l.id)}
                         data-track="link-accept"
+                        data-tip={t("panels.acceptLinkTitle")}
                         className="rounded-full bg-sage-600 px-3 py-1 text-[11px] font-semibold text-sage-fg hover:bg-sage-700"
                       >
                         {t("panes.acceptLink")}
@@ -316,6 +318,7 @@ export function AnnotationsPanel({
                       <button
                         onClick={() => void removeLink(l.id)}
                         data-track="link-dismiss"
+                        data-tip={t("panels.dismissLinkTitle")}
                         className="rounded-full border border-line px-2.5 py-1 text-[11px] text-sand-700 hover:bg-clay-100 hover:text-clay-800"
                       >
                         {t("panes.dismissLink")}
@@ -369,6 +372,7 @@ export function AnnotationsPanel({
                   <button
                     onClick={() => void removeLink(l.id)}
                     data-track="link-remove"
+                    data-tip={t("panels.removeLinkTitle")}
                     className="text-xs text-red-500 hover:text-red-700"
                   >
                     {t("common.remove")}
@@ -405,6 +409,7 @@ export function AnnotationsPanel({
                   <button
                     onClick={() => void removeLink(l.id)}
                     data-track="link-remove"
+                    data-tip={t("panels.removeLinkTitle")}
                     className="text-xs text-red-500 hover:text-red-700"
                   >
                     {t("common.remove")}

@@ -107,6 +107,7 @@ export function Outline({ notebook }: { notebook: NotebookView }) {
           <span className="text-[13px] text-sand-600">{t("outline.noteRejected")}</span>
           <button
             onClick={() => void undoReject()}
+            data-tip={t("outline.undoRejectTitle")}
             className="rounded-full bg-clay px-3.5 py-1 text-xs font-semibold text-clay-fg hover:bg-clay-600"
           >
             {t("outline.undo")}

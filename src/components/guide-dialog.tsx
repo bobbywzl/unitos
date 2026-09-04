@@ -76,6 +76,7 @@ export function GuideDialog({ open, onClose }: { open: boolean; onClose: () => v
             onClick={onClose}
             data-track="guide-close"
             aria-label={t("common.close")}
+            data-tip={t("common.close")}
             className="ml-auto flex size-8 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-700"
           >
             ✕

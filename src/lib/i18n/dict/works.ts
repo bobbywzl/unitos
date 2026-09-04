@@ -19,6 +19,7 @@ const en = {
   documentCountOther: "{n} documents",
   pendingCount: "{n} pending",
   moreActionsFor: "More actions for {title}",
+  projectActions: "Project actions",
   notes: "Notes",
   rename: "Rename",
   // Welcome flow (first visit): the splash, then the nudges, one bubble at a time
@@ -127,6 +128,7 @@ const zh: Record<keyof typeof en, string> = {
   documentCountOther: "{n} 份文档",
   pendingCount: "{n} 条待定",
   moreActionsFor: "{title}的更多操作",
+  projectActions: "项目操作",
   notes: "笔记",
   rename: "重命名",
   // Guide dialog

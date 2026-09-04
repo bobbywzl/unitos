@@ -193,7 +193,7 @@ export function CorpusDistillPage({
                 onClick={() => void remove(shown.id)}
                 data-track="distill-corpus-delete"
                 className="text-xs font-semibold text-red-500 hover:text-red-700"
-                title={t("panes.deleteDistillation")}
+                data-tip={t("panes.deleteDistillation")}
               >
                 {t("common.delete")}
               </button>
@@ -202,6 +202,7 @@ export function CorpusDistillPage({
               onClick={onClose}
               data-track="distill-corpus-close"
               aria-label={t("common.close")}
+              data-tip={t("common.close")}
               className="flex size-8 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-700"
             >
               ✕
@@ -249,7 +250,7 @@ export function CorpusDistillPage({
                       <button
                         onClick={() => jump(quote)}
                         data-track="distill-corpus-jump"
-                        title={t("panes.jumpToPassage")}
+                        data-tip={t("panes.jumpToPassage")}
                         className="group block w-full text-left"
                       >
                         <blockquote className="border-l-2 border-clay-300 pl-3 text-[14px] leading-relaxed text-sand-800 group-hover:border-clay-500 group-hover:text-ink">
@@ -273,6 +274,11 @@ export function CorpusDistillPage({
                           <button
                             onClick={() => void addNote(shown, quote, key)}
                             data-track="distill-corpus-add-to-notes"
+                            data-tip={
+                              sectionChoices.length === 0
+                                ? t("reader.addSectionFirst")
+                                : t("reader.addPendingNote", { section: sectionChoices[0].label })
+                            }
                             disabled={savingKey !== null || sectionChoices.length === 0}
                             className="rounded-full border border-line px-3 py-1 text-[11.5px] font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40"
                           >
@@ -338,7 +344,7 @@ export function CorpusDistillPage({
                         onClick={() => setCurrentId(d.id)}
                         data-track="distill-corpus-open"
                         className="min-w-0 flex-1 text-left"
-                        title={t("panes.openDistillation")}
+                        data-tip={t("panes.openDistillation")}
                       >
                         <span className="block truncate text-[13.5px] font-semibold text-sand-800 hover:text-clay-800">
                           {d.question}
@@ -356,7 +362,7 @@ export function CorpusDistillPage({
                           onClick={() => void remove(d.id)}
                           data-track="distill-corpus-delete-item"
                           aria-label={t("panes.deleteDistillation")}
-                          title={t("panes.deleteDistillation")}
+                          data-tip={t("panes.deleteDistillation")}
                           className="shrink-0 rounded-full px-1.5 text-sand-400 hover:text-red-600"
                         >
                           ✕

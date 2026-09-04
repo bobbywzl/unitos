@@ -73,7 +73,7 @@ function SourceChips({ sources, notebookId }: { sources: SourceChip[]; notebookI
         source.orphaned ? (
           <span
             key={source.id}
-            title={t("outline.anchorUnresolvedTitle", { quote: source.quotedText })}
+            data-tip={t("outline.anchorUnresolvedTitle", { quote: source.quotedText })}
             className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-dashed border-red-400 px-2.5 py-0.5 text-[11px] font-semibold text-red-500"
           >
             <AnchorIcon />
@@ -87,7 +87,7 @@ function SourceChips({ sources, notebookId }: { sources: SourceChip[]; notebookI
             key={source.id}
             href={`/n/${notebookId}?doc=${source.documentId}&src=${source.id}`}
             data-track="note-source"
-            title={source.quotedText}
+            data-tip={source.quotedText}
             className="inline-flex max-w-52 items-center gap-1.5 truncate rounded-full bg-clay-100 px-2.5 py-0.5 text-[11px] font-semibold text-clay-800 hover:bg-clay-200"
           >
             <AnchorIcon />
@@ -282,13 +282,13 @@ export function NoteCard({
       data-note-id={note.id}
       onDoubleClick={jumpToSource}
       className={surface}
-      title={isCombineTarget ? t("outline.dropToMerge") : undefined}
+      data-tip={isCombineTarget ? t("outline.dropToMerge") : undefined}
     >
       {note.pinned && (
         <button
           onClick={() => canEdit && void actions.setPinned(note.id, false)}
           data-track="note-unpin"
-          title={canEdit ? t("outline.unpin") : t("outline.pinnedLabel")}
+          data-tip={canEdit ? t("outline.unpin") : t("outline.pinnedLabel")}
           aria-label={canEdit ? t("outline.unpin") : t("outline.pinnedLabel")}
           className={`absolute top-2.5 z-10 text-clay hover:text-clay-600 ${selectable ? "right-9" : "right-2.5"}`}
         >
@@ -302,7 +302,7 @@ export function NoteCard({
           role="checkbox"
           aria-checked={isSelected}
           aria-label={t("outline.selectNote")}
-          title={t("outline.selectNote")}
+          data-tip={t("outline.selectNote")}
           className={`absolute top-2.5 right-2.5 z-10 flex h-[18px] w-[18px] items-center justify-center rounded-full border transition-colors ${
             isSelected
               ? "border-clay bg-clay text-clay-fg opacity-100"
@@ -341,7 +341,7 @@ export function NoteCard({
             onClick={() => void actions.acceptNote(note.id)}
             data-track="note-accept"
             className={`rounded-full bg-sage-600 px-3.5 py-1.5 text-xs font-semibold text-sage-fg hover:bg-sage-700 ${tray ? "" : "ml-auto"}`}
-            title={t("outline.acceptTitle")}
+            data-tip={t("outline.acceptTitle")}
           >
             {t("common.accept")}
           </button>
@@ -349,7 +349,7 @@ export function NoteCard({
             onClick={() => void actions.rejectNote(note.id)}
             data-track="note-reject"
             className="rounded-full border border-line px-3 py-1 text-xs text-sand-700 hover:bg-clay-100 hover:text-clay-800"
-            title={t("outline.rejectTitle")}
+            data-tip={t("outline.rejectTitle")}
           >
             {t("common.reject")}
           </button>
@@ -360,7 +360,7 @@ export function NoteCard({
             }}
             data-track="note-edit"
             className={`text-xs text-sand-600 hover:text-clay-700 ${tray ? "ml-auto" : ""}`}
-            title={t("outline.editTitle")}
+            data-tip={t("outline.editTitle")}
           >
             {t("outline.editLower")}
           </button>
@@ -376,6 +376,7 @@ export function NoteCard({
                 setEditing(true);
               }}
               data-track="note-edit"
+              data-tip={t("outline.editTitle")}
               className="text-xs text-sand-600 hover:text-clay-700"
             >
               {t("common.edit")}
@@ -389,7 +390,7 @@ export function NoteCard({
             }}
             data-track="note-copy"
             className="text-xs text-sand-600 hover:text-clay-700"
-            title={t("outline.copyTitle")}
+            data-tip={t("outline.copyTitle")}
           >
             {copied ? t("outline.copied") : t("outline.copy")}
           </button>
@@ -418,6 +419,7 @@ export function NoteCard({
                 if (confirm(t("outline.confirmDeleteNote"))) void actions.deleteNote(note.id);
               }}
               data-track="note-delete"
+              data-tip={t("outline.deleteNoteTitle")}
               className="text-xs text-red-500 hover:text-red-700"
             >
               {t("common.delete")}

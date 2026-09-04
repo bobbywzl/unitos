@@ -20,7 +20,7 @@ export function PersonBadge({
       <img
         src={person.picture}
         alt=""
-        title={title ?? person.name}
+        data-tip={title ?? person.name}
         width={size}
         height={size}
         className="shrink-0 rounded-full object-cover"
@@ -30,7 +30,7 @@ export function PersonBadge({
   }
   return (
     <span
-      title={title ?? person.name}
+      data-tip={title ?? person.name}
       className="flex shrink-0 items-center justify-center rounded-full font-semibold text-white"
       style={{ width: size, height: size, background: person.color, fontSize: size * 0.52 }}
     >
@@ -60,7 +60,7 @@ export function AuthorChip({
   return (
     <span
       className="inline-flex max-w-40 items-center gap-1 text-[11px] text-sand-600"
-      title={person.name}
+      data-tip={person.name}
     >
       <PersonBadge person={person} size={size} />
       {!nameless && <span className="truncate">{person.name}</span>}
