@@ -6,8 +6,10 @@ import { driveLinkAuthUrl, driveLinkEnabled, revokeDriveToken } from "@/lib/driv
 import { serverT } from "@/lib/i18n/server";
 
 // Link Google Drive (SPEC.md §14). GET starts the drive.file code flow for the
-// signed-in account and returns to `next` after the callback; DELETE unlinks —
-// revoke at Google, clear the stored refresh token.
+// signed-in account; Google returns to the sign-in callback (/api/auth/callback,
+// the redirect URI registered on the client), which finishes the link and
+// returns to `next`. DELETE unlinks — revoke at Google, clear the stored
+// refresh token.
 
 const cookieOpts = {
   httpOnly: true,

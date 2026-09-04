@@ -65,7 +65,7 @@ Supabase instead of Neon works too: enable the `vector` extension, then set `DAT
    - `DATABASE_URL` — Supabase pooled connection (port 6543, `?pgbouncer=true&connection_limit=1`)
    - `DIRECT_URL` — Supabase direct connection (port 5432), used for migrations
    - `ANTHROPIC_API_KEY` — required for derivations, the assistant, and glossary
-   - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `SESSION_SECRET` — Google sign-in at `/signin`; unset = single local reader, nothing gated. Redirect URI: `<origin>/api/auth/callback`
+   - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `SESSION_SECRET` — Google sign-in at `/signin`; unset = single local reader, nothing gated. Redirect URI: `<origin>/api/auth/callback` — the only one to register; Link Google Drive returns through it too
    - `APPLE_CLIENT_ID` (Services ID), `APPLE_TEAM_ID`, `APPLE_KEY_ID`, `APPLE_PRIVATE_KEY` (.p8 contents) — Sign in with Apple; return URL: `<origin>/api/auth/apple/callback`
    - `RESEND_API_KEY`, `EMAIL_FROM` — email sign-in with a confirmation link; the account is created only when the link is clicked
    - `GROQ_API_KEY` — video transcription for uploads and YouTube audio (Groq Whisper first)

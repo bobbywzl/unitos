@@ -100,6 +100,8 @@ const en = {
   pageHighlightTitle: "Highlight the circled spot in this color. Typed text rides on the highlight.",
   driveLink: "Link Google Drive",
   driveLinked: "Google Drive is linked.",
+  driveLinkFirstHint:
+    "The first pick links Google Drive to your account: one Google consent, then no popup.",
   driveOffline: "Offline. Google Drive adds need the server.",
   driveLinkUseDrive:
     "This is a Google Drive link. Add it from the Add from Google Drive tab, or link Google Drive in Settings to add links directly.",
@@ -411,6 +413,7 @@ const zh: Record<keyof typeof en, string> = {
   pageHighlightTitle: "以此颜色圈选高亮圈出的部分。输入的文字会附在高亮上。",
   driveLink: "关联 Google Drive",
   driveLinked: "Google Drive 已关联。",
+  driveLinkFirstHint: "首次选取会把 Google Drive 关联到你的账户：一次 Google 授权，之后不再弹窗。",
   driveOffline: "离线。从 Google Drive 添加需要连接服务器。",
   driveLinkUseDrive:
     "这是 Google Drive 链接。请从“从 Google Drive 添加”页签添加；或在设置中关联 Google Drive 后直接粘贴链接添加。",

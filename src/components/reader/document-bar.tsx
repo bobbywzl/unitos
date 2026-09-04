@@ -21,6 +21,7 @@ import { MEDIA_EXTENSIONS, isMediaUrl } from "@/lib/video/types";
 import { parseYouTubeId } from "@/lib/video/youtube";
 import {
   AddDocumentDialog,
+  type AddTab,
   type LibraryDocument,
 } from "@/components/reader/add-document-dialog";
 import {
@@ -401,6 +402,20 @@ export function DocumentBar({
       setError(t("panes.driveOffline"));
       return;
     }
+    // A signed-in account that can link but has not: link first. The consent
+    // returns through the sign-in redirect URI — the one Google accepts — to
+    // this page with ?drive=linked, and the picker opens then, with a token
+    // minted from the stored grant: no popup, nothing else to register.
+    if (drive.canLink && !drive.linked) {
+      const next = window.location.pathname + window.location.search;
+      // A document navigation on purpose: the route answers with a redirect
+      // to Google's consent page, which the client router cannot follow.
+      window.location.href = new URL(
+        `/api/drive/link?next=${encodeURIComponent(next)}`,
+        window.location.origin,
+      ).toString();
+      return;
+    }
     let token: string;
     let picked: DrivePickedFile[];
     try {
@@ -419,6 +434,29 @@ export function DocumentBar({
     setAssistant({ kind: "drive", token, files: picked });
     setDialog(false);
   }
+
+  // Back from Link Google Drive: the callback returns here with ?drive=linked
+  // or ?drive=link-failed. Linked, the picker opens at once — the add the
+  // reader started; failed, the dialog opens on the Drive tab with the reason.
+  // The param leaves the URL so a reload does not repeat it.
+  const [dialogTab, setDialogTab] = useState<AddTab | null>(null);
+  const driveResult = searchParams.get("drive");
+  const driveResultHandled = useRef(false);
+  useEffect(() => {
+    if (!driveResult || driveResultHandled.current) return;
+    driveResultHandled.current = true;
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("drive");
+    router.replace(`/n/${notebookId}${params.size > 0 ? `?${params}` : ""}`);
+    /* eslint-disable react-hooks/set-state-in-effect */
+    setDialogTab("drive");
+    setDialog(true);
+    if (driveResult === "linked") void importFromDrive();
+    else setError(t("panes.driveAuthFailed"));
+    /* eslint-enable react-hooks/set-state-in-effect */
+    // importFromDrive and t are stable for the life of this mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [driveResult]);
 
   // Drag-and-drop PDF upload: dropping anywhere on the page adds to this work.
   const [dragging, setDragging] = useState(false);
@@ -720,6 +758,7 @@ export function DocumentBar({
         <button
           onClick={() => {
             setError(null);
+            setDialogTab(null);
             setDialog(true);
           }}
           data-track="add-document"
@@ -763,6 +802,7 @@ export function DocumentBar({
         onOpenLibrary={() => void openLibrary()}
         onAttach={(id) => void attach(id)}
         onRemoveFromLibrary={(id) => void removeFromLibrary(id)}
+        initialTab={dialogTab}
       />
 
       {/* While the dialog is open it shows the progress and the error itself. */}

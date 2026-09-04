@@ -100,6 +100,18 @@ export function SettingsForm({
   const [error, setError] = useState<string | null>(null);
   const [driveLinked, setDriveLinked] = useState(drive?.linked ?? false);
   const [driveBusy, setDriveBusy] = useState(false);
+  // Back from Link Google Drive: ?drive=linked or ?drive=link-failed says how
+  // it went; the param leaves the URL so a reload does not repeat the notice.
+  const [driveNotice, setDriveNotice] = useState<string | null>(null);
+  useEffect(() => {
+    const result = new URLSearchParams(window.location.search).get("drive");
+    if (!result) return;
+    /* eslint-disable react-hooks/set-state-in-effect */
+    setDriveNotice(result === "linked" ? t("panes.driveLinked") : t("panes.driveAuthFailed"));
+    if (result === "linked") setDriveLinked(true);
+    /* eslint-enable react-hooks/set-state-in-effect */
+    window.history.replaceState(null, "", window.location.pathname);
+  }, [t]);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSaved = useRef(
     JSON.stringify({
@@ -332,6 +344,9 @@ export function SettingsForm({
           <div className="flex items-center gap-3 rounded-2xl bg-card p-5 shadow-soft">
             <p className="text-xs text-sand-600">
               {driveLinked ? t("settings.driveLinkedDesc") : t("settings.driveDesc")}
+              {driveNotice && (
+                <span className="mt-1 block font-semibold text-clay-800">{driveNotice}</span>
+              )}
             </p>
             {driveLinked ? (
               <button

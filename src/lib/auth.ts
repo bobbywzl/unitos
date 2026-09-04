@@ -101,10 +101,19 @@ export function appOrigin(req: Request): string {
   return `${proto}://${host}`;
 }
 
+// The one redirect URI registered on the Google OAuth client. Sign-in and
+// Link Google Drive (lib/drive/link.ts) both send it: Google rejects any
+// redirect_uri not on the client's list (redirect_uri_mismatch), so a second
+// callback path would need a second console entry, and this one is already
+// there for sign-in.
+export function googleRedirectUri(origin: string): string {
+  return `${origin}/api/auth/callback`;
+}
+
 export function googleAuthUrl(origin: string, state: string): string {
   const p = new URLSearchParams({
     client_id: process.env.GOOGLE_CLIENT_ID!,
-    redirect_uri: `${origin}/api/auth/callback`,
+    redirect_uri: googleRedirectUri(origin),
     response_type: "code",
     scope: "openid email profile",
     state,
@@ -138,7 +147,7 @@ export async function exchangeCode(
       code,
       client_id: process.env.GOOGLE_CLIENT_ID!,
       client_secret: process.env.GOOGLE_CLIENT_SECRET!,
-      redirect_uri: `${origin}/api/auth/callback`,
+      redirect_uri: googleRedirectUri(origin),
       grant_type: "authorization_code",
     }).toString(),
     signal: AbortSignal.timeout(30_000),

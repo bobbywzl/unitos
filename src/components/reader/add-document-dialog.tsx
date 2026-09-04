@@ -13,7 +13,7 @@ import { parseYouTubeId } from "@/lib/video/youtube";
 
 export type LibraryDocument = { id: string; title: string; _count: { blocks: number } };
 
-type AddTab = "pdf" | "video" | "drive" | "url" | "library";
+export type AddTab = "pdf" | "video" | "drive" | "url" | "library";
 
 // The add-document dialog: one centered window for everything that adds a
 // document, opened by the dashed +. The upload types span the top panel as
@@ -38,6 +38,7 @@ export function AddDocumentDialog({
   onOpenLibrary,
   onAttach,
   onRemoveFromLibrary,
+  initialTab,
 }: {
   open: boolean;
   onClose: () => void;
@@ -57,9 +58,19 @@ export function AddDocumentDialog({
   onOpenLibrary: () => void;
   onAttach: (documentId: string) => void;
   onRemoveFromLibrary: (documentId: string) => void;
+  // Set: the dialog opens on this tab (back from Link Google Drive, the Drive
+  // tab). Null: it opens where it was last.
+  initialTab?: AddTab | null;
 }) {
   const t = useT();
   const [tab, setTabState] = useState<AddTab>("pdf");
+  // Opening on the requested tab: adjust during render (the Presence
+  // pattern), so the first frame of the open dialog already shows it.
+  const [prevOpen, setPrevOpen] = useState(open);
+  if (prevOpen !== open) {
+    setPrevOpen(open);
+    if (open && initialTab) setTabState(initialTab);
+  }
   const [url, setUrl] = useState("");
   const [videoUrl, setVideoUrl] = useState("");
 
@@ -79,12 +90,6 @@ export function AddDocumentDialog({
     setTabState(next);
     onError(null);
     if (next === "library") onOpenLibrary();
-  }
-
-  // Where the Link Google Drive callback returns to: this workspace.
-  function currentPath(): string {
-    if (typeof window === "undefined") return "/";
-    return window.location.pathname + window.location.search;
   }
 
   async function addUrl(e: React.FormEvent) {
@@ -215,12 +220,9 @@ export function AddDocumentDialog({
                   {t("panes.driveLinked")}
                 </span>
               ) : driveLink?.canLink ? (
-                <a
-                  href={`/api/drive/link?next=${encodeURIComponent(currentPath())}`}
-                  className="self-center rounded-full border border-line px-3.5 py-1.5 text-xs font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800"
-                >
-                  {t("panes.driveLink")}
-                </a>
+                <span className="text-center text-[11px] text-sand-500">
+                  {t("panes.driveLinkFirstHint")}
+                </span>
               ) : null}
             </div>
           ) : tab === "url" ? (
