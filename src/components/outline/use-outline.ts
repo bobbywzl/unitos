@@ -1,11 +1,26 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { arrayMove } from "@dnd-kit/sortable";
 import { api } from "@/lib/api";
 import type { NotebookView, NoteView, SectionView } from "@/lib/types";
 import { useCollapsedView, type CollapsedView } from "@/components/use-collapsed-view";
+
+// The floating card: one note's editor taken out of the tray, over the
+// article (floating-note-editor.tsx).
+export type FloatingEdit = {
+  id: string;
+  /** The draft the floating card opens with. */
+  draft: string;
+  /** The content before the edit began: what Cancel restores. */
+  original: string;
+  /** Where the card lands. Unset: beside the tray. */
+  left?: number;
+  top?: number;
+  /** Set while the card is being dragged out of the tray: the pointer's offset inside the card. */
+  grab?: { dx: number; dy: number };
+};
 
 export type OutlineActions = {
   notebookId: string;
@@ -24,7 +39,8 @@ export type OutlineActions = {
   rejectNote: (id: string) => Promise<void>;
   sectionChoices: { id: string; label: string }[];
   focusedPendingId: string | null;
-  editRequest: { id: string } | null;
+  /** Open a note's editor: the keyboard queue's `e`, or the floating card docking with its draft. */
+  editRequest: { id: string; draft?: string } | null;
   // The ticker: accepted notes selected for a bulk delete, merge, or pin.
   selected: ReadonlySet<string>;
   toggleSelect: (id: string) => void;
@@ -36,6 +52,12 @@ export type OutlineActions = {
   isCollapsed: (id: string) => boolean;
   toggleCollapsed: (id: string) => void;
   setNotesView: (view: CollapsedView) => void;
+  floating: FloatingEdit | null;
+  floatNote: (edit: FloatingEdit) => void;
+  /** The floating card's draft as it is typed, so docking can carry it. */
+  floatingDraftChanged: (draft: string) => void;
+  /** Close the floating card. reopen: the note's tray card opens its editor on the draft. */
+  dockNote: (reopen: boolean) => void;
 };
 
 // The notes view persists per browser and per project, so the tray and the
@@ -85,7 +107,11 @@ export function useOutline(notebook: NotebookView, canEdit = true) {
   const [tree, setTree] = useState(notebook.sections);
   const [prevSections, setPrevSections] = useState(notebook.sections);
   const [focusIndex, setFocusIndex] = useState(0);
-  const [editRequest, setEditRequest] = useState<{ id: string } | null>(null);
+  const [editRequest, setEditRequest] = useState<{ id: string; draft?: string } | null>(null);
+  // The floating card, and its draft as typed — a ref, so a keystroke in the
+  // card never re-renders the workspace.
+  const [floating, setFloating] = useState<FloatingEdit | null>(null);
+  const floatingDraft = useRef("");
   if (prevSections !== notebook.sections) {
     setPrevSections(notebook.sections);
     setTree(notebook.sections);
@@ -350,6 +376,18 @@ export function useOutline(notebook: NotebookView, canEdit = true) {
     isCollapsed: notesView.isCollapsed,
     toggleCollapsed: notesView.toggle,
     setNotesView: notesView.setView,
+    floating,
+    floatNote(edit) {
+      floatingDraft.current = edit.draft;
+      setFloating(edit);
+    },
+    floatingDraftChanged(draft) {
+      floatingDraft.current = draft;
+    },
+    dockNote(reopen) {
+      if (floating && reopen) setEditRequest({ id: floating.id, draft: floatingDraft.current });
+      setFloating(null);
+    },
   };
 
   return { tree, pending, focused, actions, lastRejected, undoReject };

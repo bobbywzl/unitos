@@ -9,6 +9,7 @@ import { useCollab } from "@/components/collab/collab-context";
 import { useT } from "@/components/lang-provider";
 import { CollapsedViewToggle } from "@/components/collapsed-view-toggle";
 import { NoteCard } from "@/components/outline/note-card";
+import { NoteEditor } from "@/components/outline/note-editor";
 import { Collapse } from "@/components/presence";
 import { SelectionBar } from "@/components/outline/selection-bar";
 import { filterSections, noteMatches, type OutlineActions } from "@/components/outline/use-outline";
@@ -149,18 +150,16 @@ function TraySection({
                 setComposing(false);
               }}
             >
-              <textarea
-                autoFocus
+              <NoteEditor
+                className="rounded-2xl bg-card p-3 shadow-soft"
                 value={draft}
-                onChange={(e) => setDraft(e.target.value)}
+                onChange={setDraft}
                 onKeyDown={(e) => {
                   if (isImeKey(e)) return;
-                  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) e.currentTarget.form?.requestSubmit();
+                  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) e.currentTarget.closest("form")?.requestSubmit();
                   if (e.key === "Escape") setComposing(false);
                 }}
                 placeholder={t("outline.writeNotePlaceholder")}
-                rows={3}
-                className="w-full rounded-2xl bg-card p-3 text-[13.5px] shadow-soft outline-none placeholder:text-sand-500"
               />
               <div className="mt-2 flex gap-2">
                 <button

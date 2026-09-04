@@ -461,6 +461,59 @@ mark,
   content: none;
 }
 
+/* The note editor's document (note-editor.tsx, lib/note-markup.ts): the note
+   as it renders, edited in place. It shares the Markdown component's prose
+   classes; these cover what prose does not — the placeholder, code lines,
+   the ¶ chip, and links. */
+.note-doc {
+  position: relative;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+/* The card's own outline marks editing; the focus ring would double it. */
+.note-doc:focus-visible {
+  outline: none;
+}
+/* A blank line is the markdown paragraph break: a slim line, so the document
+   keeps the rendered note's rhythm, still with room for the caret. */
+.note-doc p:has(> br:only-child) {
+  line-height: 0.75;
+}
+.note-doc[data-empty]::before {
+  content: attr(data-placeholder);
+  position: absolute;
+  top: 0;
+  left: 0;
+  color: var(--sand-500);
+  pointer-events: none;
+}
+.note-doc .note-code {
+  margin: 0;
+  padding: 0 0.5em;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.85em;
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+}
+.note-doc .note-chip {
+  display: inline-flex;
+  height: 18px;
+  width: 18px;
+  margin: 0 0.15em;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--clay-100);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--clay-800);
+  vertical-align: text-bottom;
+}
+.note-doc .note-link {
+  color: var(--clay);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 /* Ingest card: the cat dances while the pipeline works. */
 @keyframes cat-bop {
   0%,

@@ -36,6 +36,7 @@ import { ContextTab, type ContextValues } from "@/components/context-tab";
 import { GuideDialog } from "@/components/guide-dialog";
 import { useT } from "@/components/lang-provider";
 import { NotebookTitle } from "@/components/notebook-title";
+import { FloatingNoteEditor } from "@/components/outline/floating-note-editor";
 import { NotesTray } from "@/components/outline/notes-tray";
 import { Presence } from "@/components/presence";
 import { useOutline } from "@/components/outline/use-outline";
@@ -412,6 +413,17 @@ export function Workspace({
           )}
         </button>
       </header>
+
+      {/* A note's editor taken out of the tray, over the article. Docking it
+          opens the tray on notes, where the note's card reopens the editor. */}
+      {actions.floating && (
+        <FloatingNoteEditor
+          key={actions.floating.id}
+          edit={actions.floating}
+          actions={actions}
+          onDock={() => show("notes")}
+        />
+      )}
 
       <div className="flex min-h-0 pb-[calc(54px+env(safe-area-inset-bottom))] md:pb-0 print:block">
         <div className="relative min-w-0 flex-1 overflow-hidden print:overflow-visible">
