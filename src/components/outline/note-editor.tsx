@@ -172,7 +172,7 @@ export function NoteEditor({
   onKeyDown,
   placeholder,
   className = "",
-  dragBar,
+  handle,
 }: {
   value: string;
   onChange: (next: string) => void;
@@ -181,9 +181,9 @@ export function NoteEditor({
   /** Extra classes on the root: a flex column, the bar above the text. Give it
       a height (min-h-0 flex-1 under a capped parent) and the text scrolls. */
   className?: string;
-  /** When set, the bar is a drag handle with a grip: pointerdown on its
-      empty space (never on a button) goes here. */
-  dragBar?: { onPointerDown: (e: React.PointerEvent<HTMLDivElement>) => void; title: string };
+  /** When set, a slim row above the bar — a grip and a label — is the drag
+      handle: pointerdown on it goes here. */
+  handle?: { onPointerDown: (e: React.PointerEvent<HTMLDivElement>) => void; title: string; label: string };
 }) {
   const t = useT();
   const ref = useRef<HTMLDivElement>(null);
@@ -255,24 +255,20 @@ export function NoteEditor({
 
   return (
     <div className={`flex min-h-0 flex-col gap-1.5 ${className}`}>
-      <div
-        onPointerDown={
-          dragBar
-            ? (e) => {
-                if ((e.target as Element).closest("button")) return;
-                dragBar.onPointerDown(e);
-              }
-            : undefined
-        }
-        style={dragBar ? { touchAction: "none" } : undefined}
-        title={dragBar?.title}
-        className={`flex shrink-0 flex-wrap items-center gap-0.5 ${dragBar ? "cursor-grab active:cursor-grabbing" : ""}`}
-      >
-        {dragBar && (
-          <span className="mr-1 flex text-sand-400">
+      {handle && (
+        <div
+          onPointerDown={handle.onPointerDown}
+          style={{ touchAction: "none" }}
+          title={handle.title}
+          className="flex shrink-0 cursor-grab items-center gap-1.5 text-[11px] font-bold tracking-[0.08em] text-sand-500 uppercase select-none active:cursor-grabbing"
+        >
+          <span className="flex text-sand-400">
             <GripIcon />
           </span>
-        )}
+          {handle.label}
+        </div>
+      )}
+      <div className="flex shrink-0 flex-wrap items-center gap-0.5">
         {FORMATS.map(({ label, titleKey, track, map }) => (
           <button
             key={label}

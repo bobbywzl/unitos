@@ -10,7 +10,7 @@ import type { FloatingEdit, OutlineActions } from "@/components/outline/use-outl
 
 // The floating card: a note's editor taken out of the tray and put over the
 // article, so the note is edited against the document it is about, with the
-// tray free for other work. The bar drags it (a drop on the tray docks it
+// tray free for other work. Its handle drags it (a drop on the tray docks it
 // back), the corner resizes it (native handle), and the tray's auto-save
 // carries on inside it (use-note-draft.ts).
 
@@ -96,8 +96,8 @@ export function FloatingNoteEditor({
     dockRef.current = dock;
   });
 
-  // Grabbed (by the bar, or on the way out of the tray): the card follows the
-  // pointer; released over the tray, it docks.
+  // Grabbed (by the handle, or on the way out of the tray): the card follows
+  // the pointer; released over the tray, it docks.
   useEffect(() => {
     if (!grab) return;
     const onMove = (e: PointerEvent) => {
@@ -172,7 +172,7 @@ export function FloatingNoteEditor({
           if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void save();
           if (e.key === "Escape") close();
         }}
-        dragBar={{ onPointerDown: startDrag, title: t("reader.dragToMove") }}
+        handle={{ onPointerDown: startDrag, title: t("reader.dragToMove"), label: t("outline.floatingTitle") }}
       />
       <div className="mt-2 flex shrink-0 items-center gap-2">
         <button

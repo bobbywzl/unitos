@@ -461,6 +461,15 @@ mark,
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+/* The card's own outline marks editing; the focus ring would double it. */
+.note-doc:focus-visible {
+  outline: none;
+}
+/* A blank line is the markdown paragraph break: a slim line, so the document
+   keeps the rendered note's rhythm, still with room for the caret. */
+.note-doc p:has(> br:only-child) {
+  line-height: 0.75;
+}
 .note-doc[data-empty]::before {
   content: attr(data-placeholder);
   position: absolute;

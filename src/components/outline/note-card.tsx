@@ -206,7 +206,7 @@ export function NoteCard({
   }
 
   // Pop out: the floating card takes the draft and this card's editor closes
-  // (its flush saves the draft). A drag on the bar does the same once the
+  // (its flush saves the draft). A drag on the handle does the same once the
   // pointer has moved, and the card lands under the pointer.
   function popOut(place?: { left: number; top: number; grab: { dx: number; dy: number } }) {
     const current = draft;
@@ -229,8 +229,8 @@ export function NoteCard({
     const onMove = (ev: PointerEvent) => {
       if (Math.abs(ev.clientX - fromX) < 8 && Math.abs(ev.clientY - fromY) < 8) return;
       stop();
-      // The pointer keeps its spot on the bar; the floating card is narrower
-      // than a wide tray, so the spot is capped inside it.
+      // The pointer keeps its spot on the handle; the floating card is
+      // narrower than a wide tray, so the spot is capped inside it.
       const grab = { dx: Math.min(fromX - rect.left, 200), dy: fromY - rect.top };
       popOut({ left: ev.clientX - grab.dx, top: ev.clientY - grab.dy, grab });
     };
@@ -277,7 +277,11 @@ export function NoteCard({
             if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void save();
             if (e.key === "Escape") cancel();
           }}
-          dragBar={tray ? { onPointerDown: startDragOut, title: t("outline.dragOut") } : undefined}
+          handle={
+            tray
+              ? { onPointerDown: startDragOut, title: t("outline.dragOut"), label: t("outline.floatingTitle") }
+              : undefined
+          }
         />
         <div className="mt-2 flex shrink-0 items-center gap-2">
           <button
