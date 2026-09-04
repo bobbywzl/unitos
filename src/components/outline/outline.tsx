@@ -5,8 +5,11 @@ import { isImeKey } from "@/lib/ime";
 import type { NotebookView } from "@/lib/types";
 import { useCollab } from "@/components/collab/collab-context";
 import { useT } from "@/components/lang-provider";
+import { CollapsedViewToggle } from "@/components/collapsed-view-toggle";
+import { Presence } from "@/components/presence";
 import { SortableItem, SortableList } from "@/components/sortable";
 import { AddSection } from "@/components/outline/add-section";
+import { CompareView } from "@/components/outline/compare-view";
 import { NoteCard } from "@/components/outline/note-card";
 import { SectionItem } from "@/components/outline/section-item";
 import { SelectionBar } from "@/components/outline/selection-bar";
@@ -15,6 +18,8 @@ import { filterSections, useOutline } from "@/components/outline/use-outline";
 // The notes full page (design 2b): the reorganizing view. Sections carry drag
 // grips, notes are flat cards, and pending ones stay in place with Accept/Reject
 // inline — unlike the tray, which hoists the whole pending queue to the top.
+// Selecting two or more notes offers Compare: the compare view opens over the
+// page with one pane per note (compare-view.tsx).
 export function Outline({ notebook }: { notebook: NotebookView }) {
   const t = useT();
   const { canEdit } = useCollab();
@@ -22,6 +27,8 @@ export function Outline({ notebook }: { notebook: NotebookView }) {
   const [query, setQuery] = useState("");
   const searching = query.trim().length > 0;
   const results = searching ? filterSections(tree, query) : tree;
+  // The notes in the compare view, in pane order; null = closed.
+  const [compare, setCompare] = useState<string[] | null>(null);
 
   return (
     <div className="flex flex-col">
@@ -35,14 +42,17 @@ export function Outline({ notebook }: { notebook: NotebookView }) {
         <span className="text-[11px] text-sand-500">{t("outline.pageKeyHint")}</span>
       </div>
 
-      <input
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-        onKeyDown={(e) => e.key === "Escape" && !isImeKey(e) && setQuery("")}
-        placeholder={t("outline.searchNotes")}
-        aria-label={t("outline.searchNotes")}
-        className="mt-2 w-72 rounded-full bg-card px-4 py-2 text-[13px] shadow-soft outline-none placeholder:text-sand-500"
-      />
+      <div className="mt-2 flex items-center gap-2">
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={(e) => e.key === "Escape" && !isImeKey(e) && setQuery("")}
+          placeholder={t("outline.searchNotes")}
+          aria-label={t("outline.searchNotes")}
+          className="w-72 rounded-full bg-card px-4 py-2 text-[13px] shadow-soft outline-none placeholder:text-sand-500"
+        />
+        <CollapsedViewToggle view={actions.notesView} onChange={actions.setNotesView} track="notes-view" />
+      </div>
 
       <div className="flex flex-col gap-[30px] pt-[22px]">
         {searching ? (
@@ -100,7 +110,26 @@ export function Outline({ notebook }: { notebook: NotebookView }) {
         )}
       </div>
 
-      <SelectionBar tree={tree} actions={actions} />
+      <SelectionBar
+        tree={tree}
+        actions={actions}
+        onCompare={(ids) => {
+          setCompare(ids);
+          actions.clearSelection();
+        }}
+      />
+
+      <Presence show={compare !== null} exit="fade">
+        {compare && (
+          <CompareView
+            tree={tree}
+            ids={compare}
+            actions={actions}
+            onChange={setCompare}
+            onClose={() => setCompare(null)}
+          />
+        )}
+      </Presence>
 
       {lastRejected && (
         <div className="fixed bottom-6 left-1/2 z-30 flex -translate-x-1/2 items-center gap-3 rounded-full bg-card px-5 py-2.5 shadow-float">

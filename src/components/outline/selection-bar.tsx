@@ -5,9 +5,18 @@ import { useT } from "@/components/lang-provider";
 import { flattenNotes, type OutlineActions } from "@/components/outline/use-outline";
 
 // The bulk action bar for the ticker selection: delete, merge, and pin the
-// selected notes. Rendered by the tray and the notes full page; shows only
-// while notes are selected. Esc clears the selection.
-export function SelectionBar({ tree, actions }: { tree: SectionView[]; actions: OutlineActions }) {
+// selected notes; with onCompare (the notes full page), compare them too.
+// Rendered by the tray and the notes full page; shows only while notes are
+// selected. Esc clears the selection.
+export function SelectionBar({
+  tree,
+  actions,
+  onCompare,
+}: {
+  tree: SectionView[];
+  actions: OutlineActions;
+  onCompare?: (ids: string[]) => void;
+}) {
   const t = useT();
   const selected = flattenNotes(tree).filter((n) => actions.selected.has(n.id));
   if (selected.length === 0) return null;
@@ -29,6 +38,16 @@ export function SelectionBar({ tree, actions }: { tree: SectionView[]; actions: 
       <span className="text-[13px] text-sand-600">
         {t("outline.selectedCount", { n: selected.length })}
       </span>
+      {onCompare && selected.length >= 2 && (
+        <button
+          onClick={() => onCompare(selected.map((n) => n.id))}
+          data-track="notes-compare"
+          className="rounded-full bg-clay px-3.5 py-1 text-xs font-semibold text-clay-fg hover:bg-clay-600"
+          title={t("outline.compareTitle")}
+        >
+          {t("outline.compare")}
+        </button>
+      )}
       {selected.length >= 2 && (
         <button
           onClick={() => void actions.mergeNotes(selected[0].id, selected.slice(1).map((n) => n.id))}
