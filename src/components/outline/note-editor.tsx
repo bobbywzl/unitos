@@ -1,13 +1,16 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
+import { attachNoteEditable, type NoteEditable } from "@/lib/note-editable";
 import { useT } from "@/components/lang-provider";
 import type { TKey } from "@/lib/i18n/dictionaries";
 
 // The note editor: the same editing functions as the document text toolbar
 // (reader.tsx), applied as markdown. Format buttons rewrite the selected
 // lines' markers; style buttons wrap the selection; colors use the note style
-// tags the Markdown component renders (<clay>…</clay> etc.).
+// tags the Markdown component renders (<clay>…</clay> etc.). The text shows
+// its formatting live while it is edited (lib/note-editable.ts): bold reads
+// bold, a heading reads large, the markers stay in the text, faded.
 
 type TextColor = "clay" | "sage" | "gold" | "plum";
 const TEXT_COLORS: { tag: TextColor; dot: string; nameKey: TKey }[] = [
@@ -134,47 +137,107 @@ const FORMATS: { label: string; titleKey: TKey; track: string; map: (lines: stri
   },
 ];
 
-const WRAPS: { label: string; titleKey: TKey; track: string; before: string; after: string; cls: string }[] = [
-  { label: "B", titleKey: "panes.bold", track: "bold", before: "**", after: "**", cls: "font-bold" },
-  { label: "I", titleKey: "panes.italic", track: "italic", before: "*", after: "*", cls: "italic" },
-  { label: "U", titleKey: "panes.underline", track: "underline", before: "<u>", after: "</u>", cls: "underline" },
+// key: the Cmd/Ctrl shortcut, the same as in every editor.
+const WRAPS: { label: string; key: string; titleKey: TKey; track: string; before: string; after: string; cls: string }[] = [
+  { label: "B", key: "b", titleKey: "panes.bold", track: "bold", before: "**", after: "**", cls: "font-bold" },
+  { label: "I", key: "i", titleKey: "panes.italic", track: "italic", before: "*", after: "*", cls: "italic" },
+  { label: "U", key: "u", titleKey: "panes.underline", track: "underline", before: "<u>", after: "</u>", cls: "underline" },
 ];
 
 const indentLines = (ls: string[]) => ls.map((l) => `  ${l}`);
 const outdentLines = (ls: string[]) => ls.map((l) => l.replace(/^ {1,2}/, ""));
+
+function GripIcon() {
+  return (
+    <svg width="10" height="14" viewBox="0 0 10 14" fill="currentColor" aria-hidden>
+      <circle cx="2.5" cy="2.5" r="1.4" />
+      <circle cx="7.5" cy="2.5" r="1.4" />
+      <circle cx="2.5" cy="7" r="1.4" />
+      <circle cx="7.5" cy="7" r="1.4" />
+      <circle cx="2.5" cy="11.5" r="1.4" />
+      <circle cx="7.5" cy="11.5" r="1.4" />
+    </svg>
+  );
+}
 
 export function NoteEditor({
   value,
   onChange,
   onKeyDown,
   placeholder,
+  className = "",
+  dragBar,
 }: {
   value: string;
   onChange: (next: string) => void;
-  onKeyDown?: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
+  onKeyDown?: (e: React.KeyboardEvent<HTMLElement>) => void;
   placeholder?: string;
+  /** Extra classes on the root: a flex column, the bar above the text. Give it
+      a height (min-h-0 flex-1 under a capped parent) and the text scrolls. */
+  className?: string;
+  /** When set, the bar is a drag handle with a grip: pointerdown on its
+      empty space (never on a button) goes here. */
+  dragBar?: { onPointerDown: (e: React.PointerEvent<HTMLDivElement>) => void; title: string };
 }) {
   const t = useT();
-  const ref = useRef<HTMLTextAreaElement>(null);
+  const ref = useRef<HTMLDivElement>(null);
+  const core = useRef<NoteEditable | null>(null);
+  const onChangeRef = useRef(onChange);
+  const valueRef = useRef(value);
 
-  // Open with the caret at the end: on a quote note the addition starts
-  // underneath the quote.
   useEffect(() => {
+    onChangeRef.current = onChange;
+  }, [onChange]);
+
+  // Mount: the editable takes the text, caret at the end — on a quote note
+  // the addition starts underneath the quote.
+  useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
-    el.focus();
-    el.setSelectionRange(el.value.length, el.value.length);
+    const editable = attachNoteEditable(el, {
+      text: valueRef.current,
+      onChange: (text) => onChangeRef.current(text),
+    });
+    core.current = editable;
+    editable.focusEnd();
+    return () => {
+      editable.destroy();
+      core.current = null;
+    };
   }, []);
 
+  // The value changed outside the editable (Cancel restores it): paint it.
+  // After the user's own edits the value already matches, and nothing moves.
+  useLayoutEffect(() => {
+    valueRef.current = value;
+    core.current?.setText(value);
+  }, [value]);
+
   function apply(patch: (value: string, s: number, e: number) => Patch) {
-    const el = ref.current;
-    if (!el) return;
-    const next = patch(el.value, el.selectionStart, el.selectionEnd);
+    const editable = core.current;
+    if (!editable) return;
+    const { start, end } = editable.getSelection();
+    const next = patch(editable.getText(), start, end);
+    editable.setText(next.value, { start: next.start, end: next.end });
     onChange(next.value);
-    requestAnimationFrame(() => {
-      el.focus();
-      el.setSelectionRange(next.start, next.end);
-    });
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
+    const mod = e.metaKey || e.ctrlKey;
+    if (mod && !e.altKey && !e.shiftKey) {
+      const wrap = WRAPS.find((w) => w.key === e.key.toLowerCase());
+      if (wrap) {
+        e.preventDefault();
+        apply((v, s, en) => wrapSelection(v, s, en, wrap.before, wrap.after));
+        return;
+      }
+    }
+    if (e.key === "Tab" && !mod && !e.altKey) {
+      e.preventDefault();
+      apply((v, s, en) => mapSelectedLines(v, s, en, e.shiftKey ? outdentLines : indentLines));
+      return;
+    }
+    onKeyDown?.(e);
   }
 
   const keep = (e: React.MouseEvent) => e.preventDefault();
@@ -182,8 +245,25 @@ export function NoteEditor({
     "rounded-full px-2 py-0.5 text-[11.5px] font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800";
 
   return (
-    <div className="flex flex-col gap-1.5">
-      <div className="flex flex-wrap items-center gap-0.5">
+    <div className={`flex min-h-0 flex-col gap-1.5 ${className}`}>
+      <div
+        onPointerDown={
+          dragBar
+            ? (e) => {
+                if ((e.target as Element).closest("button")) return;
+                dragBar.onPointerDown(e);
+              }
+            : undefined
+        }
+        style={dragBar ? { touchAction: "none" } : undefined}
+        title={dragBar?.title}
+        className={`flex shrink-0 flex-wrap items-center gap-0.5 ${dragBar ? "cursor-grab active:cursor-grabbing" : ""}`}
+      >
+        {dragBar && (
+          <span className="mr-1 flex text-sand-400">
+            <GripIcon />
+          </span>
+        )}
         {FORMATS.map(({ label, titleKey, track, map }) => (
           <button
             key={label}
@@ -247,14 +327,16 @@ export function NoteEditor({
           ⇥
         </button>
       </div>
-      <textarea
+      <div
         ref={ref}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        onKeyDown={onKeyDown}
-        placeholder={placeholder}
-        rows={Math.min(12, Math.max(3, value.split("\n").length + 1))}
-        className="w-full resize-y bg-transparent text-sm outline-none placeholder:text-sand-500"
+        role="textbox"
+        aria-multiline="true"
+        aria-label={placeholder ?? t("outline.noteText")}
+        contentEditable="plaintext-only"
+        suppressContentEditableWarning
+        data-placeholder={placeholder}
+        onKeyDown={handleKeyDown}
+        className="note-markup min-h-[4.5em] min-w-0 flex-1 overflow-y-auto text-sm outline-none"
       />
     </div>
   );
