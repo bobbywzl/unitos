@@ -214,35 +214,41 @@ export function Workspace({
 
   const noteCount = countNotes(tree);
 
-  // Issue cards jump to their note: open the tray on notes, scroll, flash.
+  // Issue cards jump to their note: open the tray on notes, open the note if
+  // it is collapsed (the card listens for dissect:open-note), scroll, flash.
   useEffect(() => {
+    const flash = (el: HTMLElement) => {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      el.classList.add("anchor-flash");
+      setTimeout(() => el.classList.remove("anchor-flash"), 2000);
+    };
     const onShowNote = (e: Event) => {
       const { noteId } = (e as CustomEvent<{ noteId: string }>).detail;
       setCollapsed(false);
       setTab("notes");
       setTimeout(() => {
-        const el = document.querySelector<HTMLElement>(`[data-note-id="${noteId}"]`);
-        if (el) {
-          el.scrollIntoView({ behavior: "smooth", block: "center" });
-          el.classList.add("anchor-flash");
-          setTimeout(() => el.classList.remove("anchor-flash"), 2000);
-        }
+        window.dispatchEvent(new CustomEvent("dissect:open-note", { detail: { noteId } }));
+        // The next frame: the opened card has its full height to center on.
+        requestAnimationFrame(() => {
+          const el = document.querySelector<HTMLElement>(`[data-note-id="${noteId}"]`);
+          if (el) flash(el);
+        });
       }, 100);
     };
-    // Clicking a highlight in the text focuses its card in the Annotations tab.
+    // Clicking a highlight in the text focuses its card in the Annotations
+    // tab, opening the card if it is collapsed (dissect:open-annotation).
     const onFocusAnnotation = (e: Event) => {
       const { sourceId } = (e as CustomEvent<{ sourceId: string }>).detail;
       setCollapsed(false);
       setTab("annotations");
       setTimeout(() => {
-        const el = document.querySelector<HTMLElement>(
-          `[data-annotation-source-id="${sourceId}"]`,
-        );
-        if (el) {
-          el.scrollIntoView({ behavior: "smooth", block: "center" });
-          el.classList.add("anchor-flash");
-          setTimeout(() => el.classList.remove("anchor-flash"), 2000);
-        }
+        window.dispatchEvent(new CustomEvent("dissect:open-annotation", { detail: { sourceId } }));
+        requestAnimationFrame(() => {
+          const el = document.querySelector<HTMLElement>(
+            `[data-annotation-source-id="${sourceId}"]`,
+          );
+          if (el) flash(el);
+        });
       }, 150);
     };
     // The Distill tab opens the corpus distilled page (SPEC.md §13).

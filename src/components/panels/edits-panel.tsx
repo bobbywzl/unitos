@@ -7,6 +7,7 @@ import { api } from "@/lib/api";
 import { useCollab } from "@/components/collab/collab-context";
 import { AuthorChip } from "@/components/collab/person-badge";
 import { ReplyThread } from "@/components/collab/reply-thread";
+import { LocateIcon } from "@/components/icons";
 import { useLang, useT } from "@/components/lang-provider";
 import type { TFunc, TKey } from "@/lib/i18n/dictionaries";
 
@@ -140,10 +141,28 @@ function EditCard({
     }
   }
 
+  // Jump to the edited block: the reader scrolls to it and flashes it (the
+  // same jump as an annotation's), while the block is still in the document.
+  function jump() {
+    if (!edit.blockId) return;
+    window.dispatchEvent(new CustomEvent("dissect:flash-block", { detail: { blockId: edit.blockId } }));
+  }
+
   return (
     <div className="rounded-2xl bg-card p-3.5 shadow-soft">
       <div className="flex items-center gap-2">
         <span className={kindChip}>{t(KIND_KEY[edit.kind])}</span>
+        {edit.blockId && blockLive && (
+          <button
+            onClick={jump}
+            data-track="edit-jump"
+            aria-label={t("panels.jumpToBlock")}
+            title={t("panels.jumpToBlock")}
+            className="flex size-6 items-center justify-center rounded-full bg-clay-100 text-clay-800 hover:bg-clay-200"
+          >
+            <LocateIcon size={11} />
+          </button>
+        )}
         <span className="ml-auto flex items-center gap-2">
           <AuthorChip createdById={edit.userId} nameless />
           <span suppressHydrationWarning className="text-[11px] text-sand-500">
