@@ -128,6 +128,9 @@ export function Workspace({
     accountId: collab.authOn ? collab.myId : null,
   });
   const [collapsed, setCollapsed] = useState(false);
+  // Set while the tray is folded for a floating note (below), so that fold is
+  // neither remembered as the reader's choice nor left behind.
+  const foldedForFloat = useRef(false);
   // Below md the tray is a bottom sheet over the reader, opened from the
   // bottom bar; mobileTray tracks it. On md+ the md: overrides put the same
   // aside back in the side column, so the flag is inert there.
@@ -176,6 +179,7 @@ export function Workspace({
   useEffect(() => {
     const pending = trayRestore.current;
     if (pending === undefined) return;
+    if (foldedForFloat.current) return;
     if (pending && (pending.collapsed !== collapsed || pending.tab !== tab)) return;
     trayRestore.current = null;
     try {
@@ -345,6 +349,30 @@ export function Workspace({
     setMobileTray(true);
   }
 
+  // A note floats over the article (dragged out of the tray): the tray folds
+  // so the card has the room, and unfolds when the card docks or closes.
+  // Docking opens the tray on notes on its own (onDock below); this undoes
+  // only the fold it made, so a tray the reader had folded stays folded.
+  const floatingId = actions.floating?.id ?? null;
+  const collapsedRef = useRef(collapsed);
+  useEffect(() => {
+    collapsedRef.current = collapsed;
+  }, [collapsed]);
+  useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect */
+    if (floatingId) {
+      setMobileTray(false);
+      if (!collapsedRef.current) {
+        foldedForFloat.current = true;
+        setCollapsed(true);
+      }
+    } else if (foldedForFloat.current) {
+      foldedForFloat.current = false;
+      setCollapsed(false);
+    }
+    /* eslint-enable react-hooks/set-state-in-effect */
+  }, [floatingId]);
+
   return (
     // print: the shell flattens to plain flow so the whole document prints,
     // not one screen of the scroll pane; chrome and trays hide.
@@ -352,7 +380,11 @@ export function Workspace({
     {/* Click telemetry (SPEC.md §7): the header, the rail, and the tray are
         the surfaces; every control in them carries data-track. */}
     <ClickTracker notebookId={notebook.id} />
-    <div className="content-in grid h-screen grid-rows-[68px_1fr] bg-paper print:block print:h-auto">
+    <div
+      // A note floats over the article: the article column moves left (globals.css, .reader-column).
+      data-note-floating={actions.floating ? "" : undefined}
+      className="content-in grid h-screen grid-rows-[68px_1fr] bg-paper print:block print:h-auto"
+    >
       <header
         data-track-surface="topbar"
         className="flex min-w-0 items-center gap-2 border-b border-line px-3 sm:gap-3.5 sm:px-5 print:hidden"

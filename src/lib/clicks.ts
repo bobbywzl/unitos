@@ -82,6 +82,8 @@ const CLICK_FUNCTIONS: Record<ClickGroup, readonly string[]> = {
     "note-compose-save",
     "note-edit",
     "note-save",
+    "note-wrap",
+    "note-dock",
     "note-accept",
     "note-reject",
     "undo-reject",

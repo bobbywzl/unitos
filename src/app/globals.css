@@ -833,6 +833,26 @@ ellipse.anchor-flash {
   line-height: 1.75;
 }
 
+/* The article column: 720px wide, centered in the pane; as wide as the pane
+   below that. While a note floats over the article ([data-note-floating] on
+   the workspace) the column moves to the pane's left edge, out from under the
+   card, and slides back when the card docks or closes. Below 720px there is
+   no room to move, so the column stays put. */
+.reader-column {
+  --reader-column-w: 720px;
+  max-width: var(--reader-column-w);
+  margin-left: max(0px, calc(50% - var(--reader-column-w) / 2));
+  margin-right: 0;
+}
+[data-note-floating] .reader-column {
+  margin-left: min(0.5rem, max(0px, calc(50% - var(--reader-column-w) / 2)));
+}
+@media (prefers-reduced-motion: no-preference) {
+  .reader-column {
+    transition: margin-left 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+}
+
 /* Connector line: highlighted text → its tool block. Faint on purpose. */
 .connector-line {
   stroke: color-mix(in srgb, var(--sand-500) 50%, transparent);

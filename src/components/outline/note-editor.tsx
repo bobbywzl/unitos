@@ -256,8 +256,8 @@ export function NoteEditor({
       {handle && (
         <div
           onPointerDown={handle.onPointerDown}
-          style={{ touchAction: "none" }}
-          title={handle.title}
+          style={{ touchAction: "pan-y" }}
+          data-tip={handle.title}
           className="flex shrink-0 cursor-grab items-center gap-1.5 text-[11px] font-bold tracking-[0.08em] text-sand-500 uppercase select-none active:cursor-grabbing"
         >
           <span className="flex text-sand-400">

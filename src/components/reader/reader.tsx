@@ -1,7 +1,9 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { PlusIcon } from "@/components/icons";
+import { NOTE_WRAP_EVENT, type NoteWrapSpacer } from "@/lib/note-wrap";
+import { NoteWrapGap } from "@/components/reader/note-wrap-gap";
 import { useT } from "@/components/lang-provider";
 import { BlockView, type BlockData, type Highlight } from "@/components/reader/block-view";
 import { CircleGlow } from "@/components/reader/circle-glow";
@@ -360,6 +362,15 @@ export function Reader({
     "rounded-full px-2.5 py-1 text-[11.5px] font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40";
   const keep = (e: React.MouseEvent) => e.preventDefault();
 
+  // A floating note in wrap mode (lib/note-wrap.ts): the gap its card needs,
+  // drawn before the block its top edge falls in. One note floats at a time.
+  const [wrapSpacer, setWrapSpacer] = useState<NoteWrapSpacer | null>(null);
+  useEffect(() => {
+    const onWrap = (e: Event) => setWrapSpacer((e as CustomEvent<NoteWrapSpacer | null>).detail);
+    window.addEventListener(NOTE_WRAP_EVENT, onWrap);
+    return () => window.removeEventListener(NOTE_WRAP_EVENT, onWrap);
+  }, []);
+
   return (
     <div className="relative">
       <CircleGlow />
@@ -440,7 +451,7 @@ export function Reader({
         </div>
       )}
 
-      <article className="reader-prose mx-auto w-full max-w-[720px] px-6 py-11 print:py-0" style={{ fontFamily }}>
+      <article className="reader-prose reader-column w-full px-6 py-11 print:py-0" style={{ fontFamily }}>
         <p className="mb-2.5 text-[11px] font-bold tracking-[0.09em] text-clay-700 uppercase print:hidden">
           {t(mode === "edit" ? "panes.documentBlocksEditing" : "panes.documentBlocks", {
             n: blocks.length,
@@ -452,71 +463,69 @@ export function Reader({
           <h2 className="mb-[26px] text-[33px]">{title}</h2>
         )}
 
-        {blocks.map((block, i) =>
-          block.type === "PAGE" && pages && documentId ? (
-            <div key={block.id}>
-              <PageBlock
-                documentId={documentId}
-                notebookId={pages.notebookId}
-                blockId={block.id}
-                text={block.text}
-                marks={pages.marksByBlock[block.id] ?? []}
-                canEdit={pages.canEdit && mode === "read"}
-                hint={i === firstPageIndex}
-              />
-              {i === lastPageIndex && (
-                <ConversionStrip
+        {blocks.map((block, i) => (
+          <Fragment key={block.id}>
+            {wrapSpacer?.blockId === block.id && <NoteWrapGap spacer={wrapSpacer} />}
+            {block.type === "PAGE" && pages && documentId ? (
+              <div>
+                <PageBlock
                   documentId={documentId}
-                  conversion={pages.conversion}
-                  hasText={hasTextBlocks}
-                  canEdit={pages.canEdit}
+                  notebookId={pages.notebookId}
+                  blockId={block.id}
+                  text={block.text}
+                  marks={pages.marksByBlock[block.id] ?? []}
+                  canEdit={pages.canEdit && mode === "read"}
+                  hint={i === firstPageIndex}
                 />
-              )}
-            </div>
-          ) : mode === "edit" ? (
-            <div key={block.id} className="group/block">
-              {TEXT_TYPES.has(block.type) ? (
-                <EditableBlock
-                  block={block}
-                  text={effectiveText(block)}
-                  kind={effectiveKind(block)}
-                  spans={effectiveStyles(block)}
-                  edited={editedByBlock[block.id] ?? []}
-                  restoreSelectionRef={restoreSelectionRef}
-                  pendingFocusRef={pendingFocusRef}
-                  onSave={onSaveText}
-                  onFocusBlock={setFocusedBlockId}
-                />
-              ) : (
-                <BlockView block={block} highlights={[]} documentId={documentId} />
-              )}
-              <div className="relative -my-1.5 h-3">
-                <button
-                  onMouseDown={keep}
-                  data-track="insert-paragraph"
-                  onClick={() =>
-                    void onInsertBlock(block.id).then((id) => {
-                      if (id) pendingFocusRef.current = id;
-                    })
-                  }
-                  aria-label={t("panes.insertParagraphHere")}
-                  data-tip={t("panes.insertParagraphHere")}
-                  className="absolute top-1/2 left-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center gap-1 rounded-full bg-card px-2.5 py-0.5 text-[11px] font-semibold text-sand-600 opacity-0 shadow-soft transition-opacity hover:bg-clay-100 hover:text-clay-800 hover:opacity-100 focus-visible:opacity-100 group-hover/block:opacity-60"
-                >
-                  <PlusIcon size={10} />
-                  {t("panes.paragraphLower")}
-                </button>
+                {i === lastPageIndex && (
+                  <ConversionStrip
+                    documentId={documentId}
+                    conversion={pages.conversion}
+                    hasText={hasTextBlocks}
+                    canEdit={pages.canEdit}
+                  />
+                )}
               </div>
-            </div>
-          ) : (
-            <BlockView
-              key={block.id}
-              block={block}
-              highlights={highlightsByBlock[block.id]}
-              documentId={documentId}
-            />
-          ),
-        )}
+            ) : mode === "edit" ? (
+              <div className="group/block">
+                {TEXT_TYPES.has(block.type) ? (
+                  <EditableBlock
+                    block={block}
+                    text={effectiveText(block)}
+                    kind={effectiveKind(block)}
+                    spans={effectiveStyles(block)}
+                    edited={editedByBlock[block.id] ?? []}
+                    restoreSelectionRef={restoreSelectionRef}
+                    pendingFocusRef={pendingFocusRef}
+                    onSave={onSaveText}
+                    onFocusBlock={setFocusedBlockId}
+                  />
+                ) : (
+                  <BlockView block={block} highlights={[]} documentId={documentId} />
+                )}
+                <div className="relative -my-1.5 h-3">
+                  <button
+                    onMouseDown={keep}
+                    data-track="insert-paragraph"
+                    onClick={() =>
+                      void onInsertBlock(block.id).then((id) => {
+                        if (id) pendingFocusRef.current = id;
+                      })
+                    }
+                    aria-label={t("panes.insertParagraphHere")}
+                    data-tip={t("panes.insertParagraphHere")}
+                    className="absolute top-1/2 left-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center gap-1 rounded-full bg-card px-2.5 py-0.5 text-[11px] font-semibold text-sand-600 opacity-0 shadow-soft transition-opacity hover:bg-clay-100 hover:text-clay-800 hover:opacity-100 focus-visible:opacity-100 group-hover/block:opacity-60"
+                  >
+                    <PlusIcon size={10} />
+                    {t("panes.paragraphLower")}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <BlockView block={block} highlights={highlightsByBlock[block.id]} documentId={documentId} />
+            )}
+          </Fragment>
+        ))}
         {blocks.length === 0 && (
           <p className="text-sm text-sand-600">{t("panes.noBlocks")}</p>
         )}

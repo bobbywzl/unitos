@@ -8,7 +8,7 @@ import type { NoteView, SourceChip } from "@/lib/types";
 import { useCollab } from "@/components/collab/collab-context";
 import { AuthorChip } from "@/components/collab/person-badge";
 import { ReplyThread } from "@/components/collab/reply-thread";
-import { ChevronDownIcon, ChevronRightIcon, ExpandIcon, LocateIcon } from "@/components/icons";
+import { ChevronDownIcon, ChevronRightIcon, LocateIcon, PencilIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { Markdown, markdownPreview } from "@/components/markdown";
 import { DragHandle, useCombineTarget, type HandleProps } from "@/components/sortable";
@@ -34,6 +34,13 @@ function scrollPane(el: HTMLElement): HTMLElement | null {
   return null;
 }
 
+// Drag out of the tray: a hold on the card's header (or the editor's grip row)
+// and a sideways move of this many pixels, farther sideways than up or down,
+// floats the note over the article. A shorter move stays a click; a move that
+// is mostly vertical is a scroll or a reorder and is ignored. 24px keeps a
+// steady hand from floating a note by accident without asking for a long pull.
+const DRAG_OUT_PX = 24;
+
 /** Where the card renders: the 352px tray drawer (design 1a), the 760px notes
     full page column (design 2b), or one pane of the compare view, which draws
     the surface around the card itself. */
@@ -46,6 +53,22 @@ const PADDING: Record<Variant, string> = {
   page: "px-[18px] py-4",
   pane: "px-5 py-4",
 };
+
+// The click that follows a release lands on whatever control the drag began
+// on. Swallow that one click — and only that one: the listener leaves with the
+// release, whether or not a click came.
+function swallowNextClick() {
+  const swallow = (e: MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+  };
+  window.addEventListener("click", swallow, { capture: true });
+  const release = () => {
+    window.removeEventListener("pointerup", release);
+    setTimeout(() => window.removeEventListener("click", swallow, { capture: true }), 0);
+  };
+  window.addEventListener("pointerup", release);
+}
 
 function PinIcon({ size = 12 }: { size?: number }) {
   return (
@@ -259,46 +282,72 @@ export function NoteCard({
     );
   }
 
-  // Pop out: the floating card takes the draft and this card's editor closes
-  // (its flush saves the draft). A drag on the handle does the same once the
-  // pointer has moved, and the card lands under the pointer.
-  function popOut(place?: { left: number; top: number; grab: { dx: number; dy: number } }) {
-    const current = draft;
+  // Float the note over the article: the floating card takes the draft — the
+  // editor's draft while editing, else the note's content — and this card's
+  // editor closes (its flush saves the draft). The card lands under the pointer.
+  function popOut(place: { left: number; top: number; grab: { dx: number; dy: number } }) {
+    const current = editing ? draft : editDraft(note.content);
+    const original = editing ? getOriginal() : note.content;
     setEditing(false);
-    actions.floatNote({ id: note.id, draft: current, original: getOriginal(), ...place });
+    actions.floatNote({ id: note.id, draft: current, original, ...place });
   }
 
+  // A hold on the header (or the editor's grip row) and a sideways move of
+  // DRAG_OUT_PX floats the note. Until then the press is an ordinary press:
+  // the control under it still gets its click. Once the drag begins, the click
+  // that would follow the release is swallowed, so a chevron or the id chip
+  // under the pointer does not fire too.
+  const dragOutEnabled = tray && canEdit && !floating;
   function startDragOut(e: React.PointerEvent) {
     if (e.button !== 0) return;
-    const card = editCardRef.current;
+    if ((e.target as Element).closest("[data-no-drag-out], [contenteditable], textarea, input, select")) return;
+    const card = editCardRef.current ?? cardRef.current;
     if (!card) return;
-    e.preventDefault();
     const fromX = e.clientX;
     const fromY = e.clientY;
     const rect = card.getBoundingClientRect();
     const stop = () => {
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", stop);
+      window.removeEventListener("pointercancel", stop);
     };
     const onMove = (ev: PointerEvent) => {
-      if (Math.abs(ev.clientX - fromX) < 8 && Math.abs(ev.clientY - fromY) < 8) return;
+      const dx = ev.clientX - fromX;
+      const dy = ev.clientY - fromY;
+      // Mostly vertical: a scroll or a reorder, never a drag out.
+      if (Math.abs(dy) >= DRAG_OUT_PX && Math.abs(dy) > Math.abs(dx)) {
+        stop();
+        return;
+      }
+      if (Math.abs(dx) < DRAG_OUT_PX || Math.abs(dx) <= Math.abs(dy)) return;
       stop();
-      // The pointer keeps its spot on the handle; the floating card is
-      // narrower than a wide tray, so the spot is capped inside it.
+      swallowNextClick();
+      window.getSelection()?.removeAllRanges();
+      // The pointer keeps its spot on the card; the floating card is narrower
+      // than a wide tray, so the spot is capped inside it.
       const grab = { dx: Math.min(fromX - rect.left, 200), dy: fromY - rect.top };
       popOut({ left: ev.clientX - grab.dx, top: ev.clientY - grab.dy, grab });
     };
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", stop);
+    window.addEventListener("pointercancel", stop);
   }
 
   // The header row, the same in every state: handle, collapse chevron, id at
   // the left; pin and select at the right. Collapsed, the summary line and the
   // source count sit between them.
   const header = (
-    <div className="flex min-h-[18px] items-center gap-1.5">
+    <div
+      onPointerDown={dragOutEnabled ? startDragOut : undefined}
+      style={dragOutEnabled ? { touchAction: "pan-y" } : undefined}
+      data-tip={dragOutEnabled ? t("outline.dragOut") : undefined}
+      className={`flex min-h-[18px] items-center gap-1.5 ${dragOutEnabled ? "select-none" : ""}`}
+    >
       {handle && !editing && (
-        <div className="-ml-1 opacity-0 transition-opacity group-hover/note:opacity-100 focus-within:opacity-100">
+        <div
+          data-no-drag-out
+          className="-ml-1 opacity-0 transition-opacity group-hover/note:opacity-100 focus-within:opacity-100"
+        >
           <DragHandle handle={handle} label={t("outline.reorderNote")} />
         </div>
       )}
@@ -335,6 +384,17 @@ export function NoteCard({
         </span>
       )}
       <span className="ml-auto flex shrink-0 items-center gap-1.5">
+        {canEdit && !editing && (
+          <button
+            onClick={openEditor}
+            data-track="note-edit"
+            aria-label={t("outline.editTitle")}
+            data-tip={t("outline.editTitle")}
+            className="flex size-[18px] items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-800"
+          >
+            <PencilIcon size={11} />
+          </button>
+        )}
         {jumpSource && !editing && (
           <button
             onClick={() => jumpTo(jumpSource)}
@@ -439,17 +499,6 @@ export function NoteCard({
           >
             {t("common.cancel")}
           </button>
-          {tray && (
-            <button
-              onClick={() => popOut()}
-              data-track="note-pop-out"
-              data-tip={t("outline.popOutTitle")}
-              className="ml-auto flex items-center gap-1 text-xs text-sand-600 hover:text-clay-700"
-            >
-              <ExpandIcon size={12} />
-              {t("outline.popOut")}
-            </button>
-          )}
         </div>
       </div>
     );
@@ -519,27 +568,9 @@ export function NoteCard({
           >
             {t("common.reject")}
           </button>
-          <button
-            onClick={openEditor}
-            data-track="note-edit"
-            className={`text-xs text-sand-600 hover:text-clay-700 ${tray ? "ml-auto" : ""}`}
-            data-tip={t("outline.editTitle")}
-          >
-            {t("outline.editLower")}
-          </button>
         </div>
       ) : (
         <div className="mt-2 flex items-center gap-3 opacity-0 transition-opacity group-hover/note:opacity-100 focus-within:opacity-100">
-          {canEdit && (
-            <button
-              onClick={openEditor}
-              data-track="note-edit"
-              data-tip={t("outline.editTitle")}
-              className="text-xs text-sand-600 hover:text-clay-700"
-            >
-              {t("common.edit")}
-            </button>
-          )}
           <button
             onClick={() => {
               void navigator.clipboard.writeText(note.content);
