@@ -572,17 +572,6 @@ export function Workspace({
           </button>
 
           <button
-            onClick={() => show("distill")}
-            data-track="distill"
-            aria-label={t("panes.distill")}
-            data-tip={t("panes.distillTabTitle")}
-            aria-current={!collapsed && tab === "distill"}
-            className={!collapsed && tab === "distill" ? RAIL_BUTTON_ON : RAIL_BUTTON}
-          >
-            <DistillIcon />
-          </button>
-
-          <button
             onClick={() => show("annotations")}
             data-track="annotations"
             aria-label={t("panes.annotations")}
@@ -591,6 +580,17 @@ export function Workspace({
             className={!collapsed && tab === "annotations" ? RAIL_BUTTON_ON : RAIL_BUTTON}
           >
             <CommentIcon />
+          </button>
+
+          <button
+            onClick={() => show("distill")}
+            data-track="distill"
+            aria-label={t("panes.distill")}
+            data-tip={t("panes.distillTabTitle")}
+            aria-current={!collapsed && tab === "distill"}
+            className={!collapsed && tab === "distill" ? RAIL_BUTTON_ON : RAIL_BUTTON}
+          >
+            <DistillIcon />
           </button>
 
           <button
