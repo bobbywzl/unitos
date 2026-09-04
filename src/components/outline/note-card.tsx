@@ -12,6 +12,8 @@ import { ChevronDownIcon, ChevronRightIcon, LocateIcon, PencilIcon } from "@/com
 import { useT } from "@/components/lang-provider";
 import { Markdown, markdownPreview } from "@/components/markdown";
 import { DragHandle, useCombineTarget, type HandleProps } from "@/components/sortable";
+import { useImageDrop } from "@/components/use-image-drop";
+import { imageMarkdown } from "@/lib/images";
 import { NoteEditor } from "@/components/outline/note-editor";
 import { NoteId } from "@/components/outline/note-id";
 import { useNoteDraft } from "@/components/outline/use-note-draft";
@@ -158,9 +160,10 @@ export function NoteCard({
 }) {
   const t = useT();
   const router = useRouter();
-  const { canEdit } = useCollab();
+  const { canEdit, premium } = useCollab();
   const [editing, setEditing] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [dropError, setDropError] = useState<string | null>(null);
   const [handledEdit, setHandledEdit] = useState<{ id: string } | null>(null);
   const cardRef = useRef<HTMLDivElement>(null);
   const combineTarget = useCombineTarget();
@@ -267,6 +270,26 @@ export function NoteCard({
     setDraft(editDraft(note.content));
     setEditing(true);
   }
+
+  // An image dropped on the note goes into the note (SPEC.md §16): into the
+  // draft while the editor is open, else appended and saved.
+  const imageDrop = useImageDrop({
+    premium,
+    enabled: canEdit && !floating,
+    t,
+    onError: setDropError,
+    onImages: async (images) => {
+      setDropError(null);
+      const added = images.map((i) => imageMarkdown(i.id, i.name)).join("\n\n");
+      if (editing) {
+        setDraft(`${draft.replace(/\s+$/, "")}\n\n${added}\n`);
+        return;
+      }
+      await actions.saveNote(note.id, `${note.content.replace(/\s+$/, "")}\n\n${added}`);
+    },
+  });
+  const dropRing = imageDrop.over ? " outline-2 outline-dashed outline-clay-400" : "";
+  const dropTip = imageDrop.over ? t("panes.dropImageIntoNote") : undefined;
 
   const collapseLabel = collapsed ? t("outline.expandNote") : t("outline.collapseNote");
 
@@ -466,9 +489,12 @@ export function NoteCard({
         ref={editCardRef}
         data-note-id={note.id}
         style={limit !== null ? { maxHeight: limit } : undefined}
-        className={`flex flex-col ${pane ? "outline-2 -outline-offset-2 outline-clay-400" : "rounded-2xl bg-card shadow-soft outline-2 outline-clay-400"} ${PADDING[variant]}`}
+        {...imageDrop.handlers}
+        data-tip={dropTip}
+        className={`flex flex-col ${pane ? "outline-2 -outline-offset-2 outline-clay-400" : "rounded-2xl bg-card shadow-soft outline-2 outline-clay-400"} ${PADDING[variant]}${dropRing}`}
       >
         {header}
+        {dropError && <p className="mt-1 text-[11px] text-red-500">{dropError}</p>}
         <NoteEditor
           className="mt-1 min-h-0 flex-1"
           value={draft}
@@ -513,6 +539,7 @@ export function NoteCard({
     focused ? "outline-2 outline-clay-400" : "",
     pending && !focused ? (tray ? "opacity-82" : "opacity-85") : "",
     isCombineTarget ? "outline-2 outline-sage-500" : isSelected ? "outline-2 outline-clay-300" : "",
+    imageDrop.over ? "outline-2 outline-dashed outline-clay-400" : "",
   ]
     .filter(Boolean)
     .join(" ");
@@ -529,10 +556,12 @@ export function NoteCard({
       ref={cardRef}
       data-note-id={note.id}
       onDoubleClick={jumpToSource}
+      {...imageDrop.handlers}
       className={surface}
-      data-tip={isCombineTarget ? t("outline.dropToMerge") : undefined}
+      data-tip={dropTip ?? (isCombineTarget ? t("outline.dropToMerge") : undefined)}
     >
       {header}
+      {dropError && <p className="mt-1 text-[11px] text-red-500">{dropError}</p>}
 
       {!collapsed && (
         <div className="note-body mt-1">

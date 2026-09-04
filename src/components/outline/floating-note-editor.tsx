@@ -7,6 +7,8 @@ import { NOTE_WRAP_GAP as GAP, announceNoteWrap, type NoteWrapSpacer } from "@/l
 import { useCollab } from "@/components/collab/collab-context";
 import { useT } from "@/components/lang-provider";
 import { NoteEditor } from "@/components/outline/note-editor";
+import { useImageDrop } from "@/components/use-image-drop";
+import { imageMarkdown } from "@/lib/images";
 import { useNoteDraft } from "@/components/outline/use-note-draft";
 import type { FloatingEdit, OutlineActions } from "@/components/outline/use-outline";
 
@@ -155,8 +157,9 @@ export function FloatingNoteEditor({
   onDock: () => void;
 }) {
   const t = useT();
-  const { canEdit } = useCollab();
+  const { canEdit, premium } = useCollab();
   const cardRef = useRef<HTMLDivElement>(null);
+  const [dropError, setDropError] = useState<string | null>(null);
   const { draft, setDraft, cancel, markSaved, getOriginal } = useNoteDraft({
     noteId: edit.id,
     original: edit.original,
@@ -277,6 +280,22 @@ export function FloatingNoteEditor({
   // The card leaves: the gap closes.
   useEffect(() => () => announceNoteWrap(null), []);
 
+  // An image dropped on the card goes into the note, like a drop on its tray
+  // card (SPEC.md §16).
+  const imageDrop = useImageDrop({
+    premium,
+    enabled: canEdit,
+    t,
+    onError: setDropError,
+    onImages: (images) => {
+      setDropError(null);
+      const added = images.map((i) => imageMarkdown(i.id, i.name)).join("\n\n");
+      const next = `${draft.replace(/\s+$/, "")}\n\n${added}\n`;
+      setDraft(next);
+      actions.floatingDraftChanged(next);
+    },
+  });
+
   function startDrag(e: React.PointerEvent) {
     if (e.button !== 0) return;
     const rect = cardRef.current?.getBoundingClientRect();
@@ -312,10 +331,13 @@ export function FloatingNoteEditor({
           ? { left: at.left, top: at.top, width, maxHeight: Math.round(window.innerHeight * 0.7) }
           : { left: pos.left, top: pos.top, width, maxHeight: Math.max(180, window.innerHeight - pos.top - MARGIN) }
       }
+      {...imageDrop.handlers}
+      data-tip={imageDrop.over ? t("panes.dropImageIntoNote") : undefined}
       className={`${pane ? "absolute z-20" : "fixed z-30"} flex max-w-[calc(100vw-32px)] min-h-[180px] min-w-[300px] resize flex-col overflow-hidden rounded-[20px] border border-line bg-card/95 p-3 shadow-float backdrop-blur-md ${
         grab ? "select-none" : ""
-      }`}
+      }${imageDrop.over ? " outline-2 outline-dashed outline-clay-400" : ""}`}
     >
+      {dropError && <p className="mb-1 shrink-0 text-[11px] text-red-500">{dropError}</p>}
       <NoteEditor
         className="min-h-0 flex-1"
         value={draft}

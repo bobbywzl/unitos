@@ -1430,3 +1430,13 @@ ellipse.anchor-flash {
     transition: none;
   }
 }
+
+/* An image dropped into a note (SPEC.md §16): in the note editor it is one
+   atom the caret steps over, sized like the image in the rendered note. */
+.note-doc .note-image {
+  display: block;
+  max-width: 100%;
+  max-height: 320px;
+  margin: 0.4rem 0;
+  border-radius: 12px;
+}

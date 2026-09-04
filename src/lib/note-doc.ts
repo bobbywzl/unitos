@@ -13,7 +13,7 @@
 // leading or trailing whitespace lands outside the run's markers with that
 // whitespace; anywhere else it lands inside them.
 
-import { TEXT_COLORS, type InlineStyle } from "@/lib/note-markup";
+import { TEXT_COLORS, type InlineStyle, type NoteImage } from "@/lib/note-markup";
 
 export const SELECTION_START = "\uE000";
 export const SELECTION_END = "\uE001";
@@ -62,7 +62,13 @@ function isBlock(node: Node): node is Element {
   return node.nodeType === ELEMENT_NODE && BLOCK_TAGS.has((node as Element).tagName);
 }
 
-export type InlineRun = { text: string; styles: InlineStyle[]; href?: string; chip?: string };
+export type InlineRun = {
+  text: string;
+  styles: InlineStyle[];
+  href?: string;
+  chip?: string;
+  image?: NoteImage;
+};
 
 // Browsers type a non-breaking space where a plain one would collapse, and
 // leave zero-width characters around atoms; the note keeps neither.
@@ -88,6 +94,11 @@ function collectInline(node: Node, styles: InlineStyle[], href: string | undefin
   const chip = el.getAttribute("data-block");
   if (chip) {
     out.push({ text: "¶", styles, href, chip });
+    return;
+  }
+  const image = el.getAttribute("data-image");
+  if (image !== null) {
+    out.push({ text: "¶", styles, href, image: { url: image, alt: el.getAttribute("data-alt") ?? "" } });
     return;
   }
   const next = [...styles];
@@ -182,6 +193,8 @@ function emitInline(runs: InlineRun[]): string {
       last &&
       !last.chip &&
       !run.chip &&
+      !last.image &&
+      !run.image &&
       last.text !== "\n" &&
       run.text !== "\n" &&
       last.href === run.href &&
@@ -224,7 +237,11 @@ function emitInline(runs: InlineRun[]): string {
       pendingWs = "";
       continue;
     }
-    const raw = run.chip ? `[block ${run.chip}]` : run.text;
+    const raw = run.chip
+      ? `[block ${run.chip}]`
+      : run.image
+        ? `![${run.image.alt}](${run.image.url})`
+        : run.text;
     const { clean: text, marks } = splitMarks(raw);
     if (ALL_WS.test(text) && !run.styles.includes("code")) {
       pendingWs += raw;

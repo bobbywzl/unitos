@@ -33,6 +33,7 @@ import type { DocumentReference } from "@/lib/parse/types";
 import { splitStreamError, splitStreamNote } from "@/lib/derive/config";
 import { findWeblinks } from "@/lib/weblinks";
 import { isImeKey, useImeGuard } from "@/lib/ime";
+import { imageFigureHtml } from "@/lib/images";
 import { markdownStyleKey } from "@/lib/markdown-style";
 import { isOffline, offlinePremium, queueWrite } from "@/lib/offline/queue";
 import { parseYouTubeId, youtubeWatchUrl } from "@/lib/video/youtube";
@@ -63,6 +64,7 @@ import type { ConversionInfo } from "@/components/reader/conversion-strip";
 import { HIGHLIGHT_HUES, HUE_DOT, HUE_KEY } from "@/components/reader/hues";
 import type { PageMark } from "@/components/reader/page-block";
 import { useCollab } from "@/components/collab/collab-context";
+import { useImageDrop, type DroppedImage } from "@/components/use-image-drop";
 import { AuthorChip } from "@/components/collab/person-badge";
 import { DistillPage } from "@/components/reader/distill-page";
 import { ProjectSearch } from "@/components/reader/project-search";
@@ -492,7 +494,7 @@ export function ReaderInteractions({
   const tCtx = useT();
   // Viewers on a shared corpus read only: no selection tools, no edit mode,
   // no assistant. The server rejects their writes; this keeps the surface honest.
-  const { canEdit } = useCollab();
+  const { canEdit, premium } = useCollab();
   const canEditRef = useRef(canEdit);
   canEditRef.current = canEdit;
   const tRef = useRef(tCtx);
@@ -3213,6 +3215,54 @@ export function ReaderInteractions({
     }
   }
 
+  // A dropped image lands as a figure right after the block it was dropped on
+  // (SPEC.md §16), the same insert path a new paragraph takes.
+  async function insertImageBlock(afterBlockId: string, image: DroppedImage): Promise<string> {
+    const res = await fetch("/api/blocks", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        documentId,
+        afterBlockId,
+        type: "FIGURE",
+        text: image.name,
+        html: imageFigureHtml(image.id, image.name),
+      }),
+    });
+    const json = (await res.json().catch(() => null)) as { id?: string; error?: string } | null;
+    if (!res.ok || !json?.id) {
+      throw new Error(json?.error ?? t("reader.insertFailedStatus", { status: res.status }));
+    }
+    return json.id;
+  }
+
+  // Images drop into the article while editing: the block under the pointer
+  // says where they land. Everything else keeps travelling to the window,
+  // which adds dropped files as documents (document-bar.tsx).
+  const dropPointRef = useRef<{ x: number; y: number } | null>(null);
+  const imageDrop = useImageDrop({
+    premium,
+    enabled: editMode && canEdit,
+    t,
+    onError: showToast,
+    onImages: async (images) => {
+      const point = dropPointRef.current;
+      const blocks = blocksRef.current;
+      const el = point ? document.elementFromPoint(point.x, point.y) : null;
+      const dropped = el?.closest<HTMLElement>("[data-edit-block], [data-block-id]");
+      const afterId =
+        dropped?.dataset.editBlock ??
+        dropped?.dataset.blockId ??
+        blocks[blocks.length - 1]?.id;
+      if (!afterId) return;
+      // Each figure lands after the one before it, so several images keep the
+      // order they were dropped in.
+      let after = afterId;
+      for (const image of images) after = await insertImageBlock(after, image);
+      router.refresh();
+    },
+  });
+
   async function deleteBlock(blockId: string) {
     try {
       const res = await fetch(`/api/blocks/${blockId}`, { method: "DELETE" });
@@ -3494,6 +3544,15 @@ export function ReaderInteractions({
     <div
       ref={containerRef}
       data-reader-root
+      onDragOver={(e) => {
+        dropPointRef.current = { x: e.clientX, y: e.clientY };
+        imageDrop.handlers.onDragOver(e);
+      }}
+      onDragLeave={imageDrop.handlers.onDragLeave}
+      onDrop={(e) => {
+        dropPointRef.current = { x: e.clientX, y: e.clientY };
+        void imageDrop.handlers.onDrop(e);
+      }}
       // The inline restore script finds this pane's stored reading position by
       // its document (lib/reading-position.ts).
       data-document-id={documentId}

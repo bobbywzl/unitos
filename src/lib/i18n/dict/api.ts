@@ -106,6 +106,11 @@ const en = {
   notPdf: "File is not a PDF or an image (png, jpg, gif, webp, bmp)",
   imageUnreadable:
     "Could not read this image. The file may be damaged, or in a format this reader cannot decode.",
+  notImage: "File is not an image (png, jpg, gif, webp, bmp)",
+  imageNotFound: "Image not found",
+  imageTooLarge: "Image is larger than 25 MB",
+  imageNeedsPremium:
+    "Images this large need Unitos Premium. Free drops images up to 5 MB.",
   pdfTooLarge: "PDF is larger than 50 MB",
   pdfParseFailedReason: "Could not read this PDF. {reason}",
   urlIngestFailedReason: "Could not ingest this URL. {reason}",
@@ -302,6 +307,10 @@ const zh: Record<keyof typeof en, string> = {
   missingFile: "缺少文件",
   notPdf: "文件不是 PDF，也不是图片（png、jpg、gif、webp、bmp）",
   imageUnreadable: "无法读取此图片。文件可能已损坏，或是阅读器无法解码的格式。",
+  notImage: "文件不是图片（png、jpg、gif、webp、bmp）",
+  imageNotFound: "未找到图片",
+  imageTooLarge: "图片超过 25 MB",
+  imageNeedsPremium: "这么大的图片需要 Unitos Premium。免费版可拖入最大 5 MB 的图片。",
   pdfTooLarge: "PDF 超过 50 MB",
   pdfParseFailedReason: "无法读取此 PDF。{reason}",
   urlIngestFailedReason: "无法导入此 URL。{reason}",

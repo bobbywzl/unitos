@@ -9,12 +9,19 @@
 // The grammar is the subset the Markdown component renders (markdown.tsx):
 // "# " headings, "- " and "N. " lists nested by two-space indents, "> "
 // quotes, ``` fences, **bold**, *italic*, ~~strike~~, `code`, <u>, the four
-// color tags, [block id] chips, and [text](url) links. Anything else is
-// plain text.
+// color tags, [block id] chips, ![alt](url) images, and [text](url) links.
+// Anything else is plain text.
+//
+// A chip and an image are atoms: the whole tag shows as one thing the caret
+// steps over, so every offset that walks runs treats them alike (isAtom).
 
 export type InlineStyle = "bold" | "italic" | "underline" | "strike" | "code" | TextColor;
 export type TextColor = "clay" | "sage" | "gold" | "plum";
 export const TEXT_COLORS: readonly TextColor[] = ["clay", "sage", "gold", "plum"];
+
+/** A dropped image (SPEC.md §16): the url the reader loads it from and the
+    alt the markdown carries. */
+export type NoteImage = { url: string; alt: string };
 
 export type Run = {
   /** The visible text. */
@@ -29,7 +36,13 @@ export type Run = {
   closeLen: number;
   href?: string;
   chip?: string;
+  image?: NoteImage;
 };
+
+/** A chip or an image: one atom, whatever its source length. */
+export function isAtom(run: { chip?: string; image?: NoteImage }): boolean {
+  return run.chip !== undefined || run.image !== undefined;
+}
 
 export type LineKind =
   | "p"
@@ -68,7 +81,7 @@ export function escapeHtml(s: string): string {
 // lengths at the two ends.
 type Inline = {
   re: RegExp;
-  style: (m: RegExpExecArray) => InlineStyle | "link" | "chip";
+  style: (m: RegExpExecArray) => InlineStyle | "link" | "chip" | "image";
   open: (m: RegExpExecArray) => number;
   close: (m: RegExpExecArray) => number;
 };
@@ -94,6 +107,8 @@ const INLINE: Inline[] = [
     close: (m) => m[1].length + 3,
   },
   { re: /\[block [a-zA-Z0-9]+\]/g, style: () => "chip", open: fixed(0), close: fixed(0) },
+  // Before the link pattern: an image is a link with a "!" in front of it.
+  { re: /!\[[^\]\n]*\]\([^)\n]*\)/g, style: () => "image", open: fixed(0), close: fixed(0) },
   {
     re: /\[[^\]\n]+\]\([^)\n]*\)/g,
     style: () => "link",
@@ -125,6 +140,18 @@ function inline(text: string, base: number, styles: InlineStyle[], href: string 
     const first = runs.length;
     if (style === "chip") {
       runs.push({ text: "¶", styles, src: at, srcLen: whole.length, openLen: 0, closeLen: 0, href, chip: whole.slice(7, -1) });
+    } else if (style === "image") {
+      const parts = /^!\[([^\]\n]*)\]\(([^)\n]*)\)$/.exec(whole);
+      runs.push({
+        text: "¶",
+        styles,
+        src: at,
+        srcLen: whole.length,
+        openLen: 0,
+        closeLen: 0,
+        href,
+        image: { alt: parts?.[1] ?? "", url: parts?.[2] ?? "" },
+      });
     } else {
       const open = tok.open(m);
       const close = tok.close(m);
@@ -212,7 +239,7 @@ export function visibleOffset(lines: NoteLine[], src: number): number {
     }
     for (const run of line.runs) {
       if (src <= run.src) return vis;
-      if (src < run.src + run.srcLen) return run.chip ? vis : vis + (src - run.src);
+      if (src < run.src + run.srcLen) return isAtom(run) ? vis : vis + (src - run.src);
       vis += run.text.length;
       if (src === run.src + run.srcLen) return vis;
     }
@@ -236,7 +263,7 @@ export function sourceOffset(lines: NoteLine[], vis: number): number {
     for (const run of line.runs) {
       if (d <= acc + run.text.length) {
         const inRun = d - acc;
-        if (run.chip) return inRun === 0 ? run.src : run.src + run.srcLen;
+        if (isAtom(run)) return inRun === 0 ? run.src : run.src + run.srcLen;
         return run.src + inRun;
       }
       acc += run.text.length;
@@ -258,6 +285,11 @@ export function lineVisibleStart(lines: NoteLine[], index: number): number {
 function runHtml(run: Run): string {
   if (run.chip) {
     return `<span class="note-chip" data-block="${escapeHtml(run.chip)}" contenteditable="false">¶</span>`;
+  }
+  if (run.image) {
+    const url = escapeHtml(run.image.url);
+    const alt = escapeHtml(run.image.alt);
+    return `<img class="note-image" data-image="${url}" data-alt="${alt}" src="${url}" alt="${alt}" contenteditable="false">`;
   }
   let html = escapeHtml(run.text);
   // The tags the Markdown component renders, so the prose classes style both alike.

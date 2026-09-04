@@ -12,6 +12,7 @@
 // markdown — so the editor's line commands patch the markdown directly.
 
 import {
+  isAtom,
   lineVisibleStart,
   noteDocHtml,
   parseNote,
@@ -232,7 +233,7 @@ function runAt(lines: NoteLine[], src: number): Run | null {
   const line = lineAt(lines, src);
   if (!line) return null;
   for (const run of line.runs) {
-    if (!run.chip && src > run.src && src < run.src + run.srcLen) return run;
+    if (!isAtom(run) && src > run.src && src < run.src + run.srcLen) return run;
   }
   return null;
 }
@@ -242,7 +243,7 @@ function runEdge(lines: NoteLine[], src: number): Run | null {
   const line = lineAt(lines, src);
   if (!line) return null;
   for (const run of line.runs) {
-    if (run.chip) continue;
+    if (isAtom(run)) continue;
     if (src === run.src && run.openLen > 0) return run;
     if (src === run.src + run.srcLen && run.closeLen > 0) return run;
   }
@@ -267,11 +268,11 @@ function toggledRuns(line: NoteLine, from: number, to: number, style: InlineStyl
   for (const run of line.runs) {
     const end = at + run.text.length;
     const piece = (text: string, inside: boolean) => {
-      const r: InlineRun = { text, styles: [...run.styles], href: run.href, chip: run.chip };
+      const r: InlineRun = { text, styles: [...run.styles], href: run.href, chip: run.chip, image: run.image };
       out.push(r);
       if (inside) selected.push(r);
     };
-    if (run.chip || end <= from || at >= to) piece(run.text, run.chip ? at >= from && end <= to : false);
+    if (isAtom(run) || end <= from || at >= to) piece(run.text, isAtom(run) ? at >= from && end <= to : false);
     else {
       const a = Math.max(from, at) - at;
       const b = Math.min(to, end) - at;

@@ -49,8 +49,8 @@ async function float(x, y) {
 }
 
 /** The card, the gap and every line and block, measured together. */
-function survey(gap) {
-  return page.evaluate((GAP) => {
+function survey() {
+  return page.evaluate(() => {
     const cardEl = document.querySelector("[data-floating-note]");
     const c = cardEl.getBoundingClientRect();
     const gapEl = document.querySelector("[data-note-wrap-gap]");
@@ -94,7 +94,7 @@ function survey(gap) {
       nearest,
       squeezed,
     };
-  }, gap);
+  });
 }
 
 async function run() {
@@ -106,7 +106,7 @@ async function run() {
   await page.waitForTimeout(600);
   check("the gap is drawn once", (await page.locator("[data-note-wrap-gap]").count()) === 1);
 
-  let s = await survey(GAP);
+  let s = await survey();
   const near = (a, b) => Math.abs(a - b) <= TOL;
   check("gap top hugs the card", near(s.gap.t, s.card.t - GAP), `gap ${Math.round(s.gap.t)} vs card ${Math.round(s.card.t)} - ${GAP}`);
   check("gap bottom hugs the card", near(s.gap.b, s.card.b + GAP), `gap ${Math.round(s.gap.b)} vs card ${Math.round(s.card.b)} + ${GAP}`);
@@ -130,7 +130,7 @@ async function run() {
   const wrapBtn = page.locator("[data-floating-note]").locator('button[data-track="note-wrap"]');
   if ((await wrapBtn.getAttribute("aria-pressed")) !== "true") await wrapBtn.click();
   await page.waitForTimeout(700);
-  s = await survey(GAP);
+  s = await survey();
   check("over a table and a figure: neither is squeezed", s.squeezed.length === 0, s.squeezed.join(", "));
   check("over a table and a figure: no line intrudes", s.intruding === 0, `${s.intruding} intruding`);
   check("gap still hugs the card", near(s.gap.t, s.card.t - GAP) && near(s.gap.b, s.card.b + GAP),

@@ -57,11 +57,15 @@ function hardBreaks(text: string): string {
 }
 
 // Markdown as one plain line, for small previews (Visual cards, overlay
-// captions, collapsed notes) where rendered markdown has no room.
+// captions, collapsed notes) where rendered markdown has no room. An image
+// reads as its alt text: a preview line has no room for a picture and none
+// for a URL.
 export function markdownPreview(text: string): string {
   return text
     .replace(/```[\s\S]*?```/g, " ")
     .replace(BLOCK_TAG, "")
+    // A dropped image reads as its alt — the file's name — never its URL.
+    .replace(/!\[([^\]\n]*)\]\([^)\n]*\)/g, "$1")
     .replace(/^#{1,6}\s+/gm, "")
     .replace(/^>\s?/gm, "")
     .replace(/<\/?(?:u|clay|sage|gold|plum)>/g, "")

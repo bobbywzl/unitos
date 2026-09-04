@@ -22,7 +22,7 @@ and every check below written against that.
 | Documents: PDF, web page, image, video, audio | Whole |
 | AI: derivations, assistant, distill, extract, glossary, conversion | Whole |
 | Sharing and collaboration | Whole |
-| Images dropped into a note or into the reader's edit mode | Small images only (the cap is under Open questions) |
+| Images dropped into a note or into the reader's edit mode | Up to 5 MB per image (`FREE_IMAGE_BYTES`, `lib/images.ts`) |
 | Offline work | Not available: an offline write fails with the plain offline message |
 
 ## Unitos Premium
@@ -31,8 +31,8 @@ and every check below written against that.
 |---|---|
 | Everything in Free | Whole |
 | Offline work (SPEC.md §17) | Note edits, note create and delete, section renames and reorders, replies, block text edits and deletes, highlights and comments, and content uploads queue in IndexedDB and sync when the browser is back online |
-| Large images dropped into a note or into the reader's edit mode | Above the free cap |
-| Video dropped into a note or into the reader's edit mode | Any video |
+| Large images dropped into a note or into the reader's edit mode | 5 MB to 25 MB per image (`MAX_IMAGE_BYTES` caps every tier) |
+| Video dropped into a note or into the reader's edit mode | Not built yet: a video dropped anywhere is still added as a video document, which is Free today |
 
 ## Unitos Ultra
 
@@ -53,12 +53,12 @@ until the owner makes one.
 ## Open questions
 
 - **The free image cap.** "Relatively small photos" was the owner's phrase.
-  Set at 5 MB per image for now — a phone photo is 2 to 5 MB, a screenshot
-  well under. Confirm or move it.
-- **Where the video rule applies.** Recorded above as: a video dropped into a
-  note or a paragraph is Premium. Video *documents* (an uploaded file, a
-  YouTube link) stay Free, as they are today. Say so if the rule was meant to
-  cover those too.
+  Built at 5 MB per image — a phone photo is 2 to 5 MB, a screenshot well
+  under — with 25 MB the ceiling for every tier. Confirm or move either.
+- **Video inside a note or a paragraph.** Nothing plays inside a note today,
+  so there is nothing to gate: a dropped video is added as a video document,
+  as it always was, and that is Free. Say whether video documents themselves
+  should become Premium, or whether this was only about video inside a note.
 
 ## Decisions, as they were made
 

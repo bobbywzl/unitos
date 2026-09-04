@@ -256,6 +256,19 @@ model Source {
   region      Json?
 }
 
+// An image dropped into a note or into the reader's edit mode (SPEC.md §16).
+// The bytes live here and the reader loads them from /api/images/[imageId];
+// a note points at that URL in its markdown, a FIGURE block in its html.
+model ImageAsset {
+  id        String   @id @default(cuid())
+  mimeType  String
+  size      Int
+  data      Bytes
+  // Account that added it; null = the local reader (sign-in off).
+  userId    String?
+  createdAt DateTime @default(now())
+}
+
 model Document {
   id            String             @id @default(cuid())
   title         String

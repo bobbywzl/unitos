@@ -9,10 +9,15 @@ const createSchema = z.object({
   documentId: z.string().min(1),
   afterBlockId: z.string().min(1),
   text: z.string().max(50_000).optional(),
+  // A dropped image lands as a figure (SPEC.md §16): its html is the <figure>
+  // the reader renders, its text the caption a chip, a search, and the digest
+  // read. Absent = the paragraph the insert button adds.
+  type: z.enum(["PARAGRAPH", "FIGURE"]).default("PARAGRAPH"),
+  html: z.string().max(4_000).optional(),
 });
 
-// Insert a paragraph after a block. User-authored blocks carry originalText ""
-// so the whole paragraph paints as edited.
+// Insert a paragraph, or a figure for a dropped image, after a block.
+// User-authored blocks carry originalText "" so the whole block paints as edited.
 export async function POST(req: Request) {
   const t = await serverT();
   const { data, error } = await parseBody(req, createSchema);
@@ -34,9 +39,10 @@ export async function POST(req: Request) {
       data: {
         documentId: data.documentId,
         order: after.order + 1,
-        type: "PARAGRAPH",
+        type: data.type,
         // Empty until the user types; the editor shows a placeholder.
         text: data.text ?? "",
+        html: data.html,
         originalText: "",
       },
     });
