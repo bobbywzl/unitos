@@ -8,16 +8,15 @@ import { languageName } from "@/lib/prompts/types";
 
 export type ConnectCtx = {
   lang: Lang;
-  documentTitle: string;
   documentBlocks: string; // the new document, rendered as [block <id>] lines
-  others: string; // the corpus's other documents: [document <id>] "title" + block lines
+  others: string; // the corpus's other documents: [document <id>] + block lines
 };
 
 export function connectPrompt(ctx: ConnectCtx): string {
   return [
-    "A reader just added a document to their project. Find where it connects to the documents already there: the same concept, the same claim or its contradiction, a shared quote, a shared keyword used in the same sense. Video transcripts count like any text.",
+    "A reader just added a document to their project. Find where it connects to the documents already there: the same concept, the same claim or its contradiction, a shared quote, a shared keyword used in the same sense. Video transcripts count like any text. Judge only the content below — the article text or transcript. Titles are not shown and are not a signal: two documents with similar titles but unrelated content do not connect, and two with unrelated titles but the same concept do.",
     "",
-    `The new document: "${ctx.documentTitle}". Each block starts with its id as [block <id>].`,
+    "The new document. Each block starts with its id as [block <id>].",
     "",
     ctx.documentBlocks,
     "",

@@ -13,9 +13,11 @@ import { connectPrompt } from "@/lib/prompts/connect";
 
 // Recommended links (SPEC.md §13): when a document joins a corpus, scan it
 // against the corpus's other documents and store the connections as DocLink
-// rows with recommended: true. Nothing paints in the text until the reader
-// accepts a link in the Annotations panel — the user approves everything
-// (SPEC.md §1). Best-effort like the glossary: a failure never breaks ingest.
+// rows with recommended: true. The model reads the content only — block text,
+// transcript included — never a document title, so a link rests on what the
+// documents say, not on what they are called. Nothing paints in the text until
+// the reader accepts a link — the user approves everything (SPEC.md §1).
+// Best-effort like the glossary: a failure never breaks ingest.
 
 const MAX_LINKS = 8;
 const NEW_DOCUMENT_BUDGET = 50_000; // chars of the new document sent
@@ -86,7 +88,6 @@ export async function buildConnections(
         document: {
           select: {
             id: true,
-            title: true,
             blocks: { orderBy: { order: "asc" }, select: { id: true, type: true, text: true } },
           },
         },
@@ -103,7 +104,7 @@ export async function buildConnections(
   let othersUsed = 0;
   for (const { document: other } of attachments) {
     if (other.blocks.every((b) => !b.text.trim())) continue;
-    const rendered = `[document ${other.id}] "${other.title}"\n${cap(renderBlockLines(other.blocks), PER_DOCUMENT_BUDGET)}`;
+    const rendered = `[document ${other.id}]\n${cap(renderBlockLines(other.blocks), PER_DOCUMENT_BUDGET)}`;
     if (othersUsed + rendered.length > OTHERS_BUDGET) break;
     othersUsed += rendered.length;
     otherSections.push(rendered);
@@ -115,7 +116,6 @@ export async function buildConnections(
       role: "user",
       content: connectPrompt({
         lang: reasonLang,
-        documentTitle: document.title,
         documentBlocks: cap(renderBlockLines(document.blocks), NEW_DOCUMENT_BUDGET),
         others: otherSections.join("\n\n"),
       }),
