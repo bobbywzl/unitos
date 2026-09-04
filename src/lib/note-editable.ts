@@ -1,24 +1,45 @@
-// The note editor's editable region: a plaintext contentEditable that shows
-// the note's markdown decorated live (note-markup.ts). The browser owns
-// typing, deleting, IME composition, and the caret; this module owns the
-// text. After every edit it reads the text back from the DOM, re-renders the
-// decorated HTML, and puts the selection back at the same text offsets — the
-// decoration never changes an offset, so the caret never moves. Replacing the
-// DOM breaks the browser's own undo, so undo and redo are kept here too.
+// The note editor's editable region: a contentEditable that shows the note as
+// the document it renders to (lib/note-markup.ts) while the note stays
+// markdown. The browser owns typing, deleting, IME composition, and the
+// caret; this module owns the text. After every edit it reads the document
+// back as markdown (lib/note-doc.ts), re-renders it, and puts the selection
+// back where it was — so the document is canonical again after every
+// keystroke, whatever the browser did. Replacing the DOM breaks the
+// browser's own undo, so undo and redo are kept here too.
 //
-// Enter, paste, and undo are handled here; markdown commands (bold, lists,
-// indent) are the editor's, applied through setText.
+// Offsets in this module's API are source offsets — positions in the
+// markdown — so the editor's commands patch the markdown directly.
+// Enter, Backspace at the start of a marked line, and undo are handled
+// here; the markdown commands (bold, lists, indent) are the editor's,
+// applied through setText.
 
-import { noteMarkupHtml } from "@/lib/note-markup";
+import {
+  noteDocHtml,
+  parseNote,
+  visibleOffset,
+  type InlineStyle,
+  type NoteLine,
+  type Run,
+} from "@/lib/note-markup";
+import {
+  SELECTION_END,
+  SELECTION_START,
+  leafLength,
+  lineElements,
+  ownLeaves,
+  serializeNoteDoc,
+} from "@/lib/note-doc";
 
 export type TextSelection = { start: number; end: number };
 
 export type NoteEditable = {
   getText(): string;
-  /** The selection as text offsets; the caret at the end when it is elsewhere. */
+  /** The selection as source offsets; the caret at the end when it is elsewhere. */
   getSelection(): TextSelection;
   /** Replace the text. With a selection: focus and select it. Without: keep the caret where it was. */
   setText(text: string, selection?: TextSelection): void;
+  /** Read the document back after a command the browser applied (execCommand). */
+  refresh(): void;
   focusEnd(): void;
   destroy(): void;
 };
@@ -28,125 +49,48 @@ type Snapshot = { text: string; start: number; end: number };
 // Keystrokes closer than this merge into one undo step.
 const COALESCE_MS = 400;
 const HISTORY_MAX = 200;
+const TEXT_NODE = 3;
 
-/** The last text or <br> node in document order. */
-function lastLeaf(root: Node): Node | null {
-  let node: Node | null = root;
-  while (node && node.nodeType !== Node.TEXT_NODE && node.nodeName !== "BR") {
-    node = node.lastChild;
-  }
-  return node === root ? null : node;
-}
-
-// Text length of a node: text nodes count their characters, <br> counts one
-// newline — except the trailing <br> that keeps a final empty line visible,
-// which stands for the newline already in the text before it.
-function lengthOf(node: Node, trailing: Node | null): number {
-  if (node.nodeType === Node.TEXT_NODE) return (node as Text).data.length;
-  if (node.nodeName === "BR") return node === trailing ? 0 : 1;
-  let n = 0;
-  for (const child of node.childNodes) n += lengthOf(child, trailing);
-  return n;
-}
-
-/** The text of the editable's DOM: text nodes and <br> line breaks, in order. */
-export function readEditableText(el: HTMLElement): string {
-  const trailing = lastLeaf(el);
-  const parts: string[] = [];
-  const walk = (node: Node) => {
-    if (node.nodeType === Node.TEXT_NODE) parts.push((node as Text).data);
-    else if (node.nodeName === "BR") {
-      if (node !== trailing) parts.push("\n");
-    } else for (const child of node.childNodes) walk(child);
-  };
-  walk(el);
-  // Browsers type a non-breaking space where a plain one would collapse;
-  // the note keeps plain spaces.
-  return parts.join("").replace(/\u00a0/g, " ");
-}
-
-/** Text offset of a DOM position (node, offset) inside the editable. */
-function offsetOf(el: HTMLElement, target: Node, targetOffset: number): number {
-  const trailing = lastLeaf(el);
-  let pos = 0;
-  let found = false;
-  const walk = (node: Node) => {
-    if (found) return;
-    if (node === target) {
-      if (node.nodeType === Node.TEXT_NODE) pos += Math.min(targetOffset, (node as Text).data.length);
-      else {
-        for (let i = 0; i < targetOffset && i < node.childNodes.length; i++) {
-          pos += lengthOf(node.childNodes[i], trailing);
-        }
-      }
-      found = true;
-      return;
-    }
-    if (node.nodeType === Node.TEXT_NODE || node.nodeName === "BR") {
-      pos += lengthOf(node, trailing);
-      return;
-    }
-    for (const child of node.childNodes) {
-      walk(child);
-      if (found) return;
-    }
-  };
-  walk(el);
-  return pos;
-}
-
-/** The selection as text offsets, or null when it is not inside the editable. */
-function selectionOf(el: HTMLElement): TextSelection | null {
-  const sel = window.getSelection();
-  if (!sel || sel.rangeCount === 0) return null;
-  const range = sel.getRangeAt(0);
-  if (!el.contains(range.startContainer) || !el.contains(range.endContainer)) return null;
-  return {
-    start: offsetOf(el, range.startContainer, range.startOffset),
-    end: offsetOf(el, range.endContainer, range.endOffset),
-  };
-}
-
-/** The DOM position of a text offset: the earliest leaf that reaches it. */
+/** The DOM position of a visible offset: the earliest leaf that reaches it. */
 function positionOf(el: HTMLElement, offset: number): { node: Node; offset: number } {
-  const trailing = lastLeaf(el);
-  let pos = 0;
-  let result: { node: Node; offset: number } | null = null;
-  const walk = (node: Node) => {
-    if (result) return;
-    if (node.nodeType === Node.TEXT_NODE) {
-      const len = (node as Text).data.length;
-      if (pos + len >= offset) result = { node, offset: Math.max(0, offset - pos) };
-      pos += len;
-      return;
-    }
-    if (node.nodeName === "BR") {
-      const len = lengthOf(node, trailing);
-      const parent = node.parentNode as Node;
-      const index = Array.prototype.indexOf.call(parent.childNodes, node);
-      if (len === 1 && pos + 1 >= offset) result = { node: parent, offset: offset > pos ? index + 1 : index };
-      else if (len === 0 && pos >= offset) result = { node: parent, offset: index };
-      pos += len;
-      return;
-    }
-    for (const child of node.childNodes) {
-      walk(child);
-      if (result) return;
-    }
+  const beside = (leaf: Node, after: boolean) => {
+    const parent = leaf.parentNode as Node;
+    const index = Array.prototype.indexOf.call(parent.childNodes, leaf);
+    return { node: parent, offset: after ? index + 1 : index };
   };
-  walk(el);
-  if (result) return result;
-  // Past the end, or an empty editable: the end of the content.
-  const last = lastLeaf(el);
-  if (!last) return { node: el, offset: 0 };
-  if (last.nodeType === Node.TEXT_NODE) return { node: last, offset: (last as Text).data.length };
-  const parent = last.parentNode as Node;
-  return { node: parent, offset: Array.prototype.indexOf.call(parent.childNodes, last) };
+  let pos = 0;
+  let lastLine: Element | null = null;
+  for (const line of lineElements(el)) {
+    lastLine = line;
+    const leaves = ownLeaves(line);
+    let length = 0;
+    for (const leaf of leaves) length += leafLength(leaf);
+    if (offset <= pos + length) {
+      let at = pos;
+      for (const leaf of leaves) {
+        const len = leafLength(leaf);
+        if (offset <= at + len) {
+          if (leaf.nodeType !== TEXT_NODE) return beside(leaf, offset > at);
+          return { node: leaf, offset: offset - at };
+        }
+        at += len;
+      }
+      return { node: line, offset: 0 };
+    }
+    pos += length + 1;
+  }
+  // Past the end: the end of the last line.
+  if (!lastLine) return { node: el, offset: 0 };
+  const leaves = ownLeaves(lastLine);
+  const last = leaves[leaves.length - 1];
+  if (!last) return { node: lastLine, offset: 0 };
+  if (last.nodeType === TEXT_NODE) return { node: last, offset: (last as Text).data.length };
+  return beside(last, true);
 }
 
-function setSelection(el: HTMLElement, start: number, end: number) {
-  const a = positionOf(el, Math.min(start, end));
-  const b = start === end ? a : positionOf(el, Math.max(start, end));
+function setSelection(el: HTMLElement, lines: NoteLine[], start: number, end: number) {
+  const a = positionOf(el, visibleOffset(lines, Math.min(start, end)));
+  const b = start === end ? a : positionOf(el, visibleOffset(lines, Math.max(start, end)));
   const range = document.createRange();
   range.setStart(a.node, a.offset);
   range.setEnd(b.node, b.offset);
@@ -156,12 +100,65 @@ function setSelection(el: HTMLElement, start: number, end: number) {
   sel.addRange(range);
 }
 
-function render(el: HTMLElement, text: string): string {
-  // A text ending in a newline has an empty last line; the <br> gives that
-  // line a height so the caret can sit on it.
-  const html = noteMarkupHtml(text) + (text.endsWith("\n") ? "<br>" : "");
-  el.innerHTML = html;
-  return html;
+// Painting normalizes: the document reads back in the serializer's own form
+// ("1)" as "1.", a stray indent dropped), and the text follows the document,
+// so offsets read from the document always fit the text.
+function render(el: HTMLElement, text: string): { text: string; lines: NoteLine[] } {
+  let lines = parseNote(text);
+  el.innerHTML = noteDocHtml(lines);
+  const normalized = serializeNoteDoc(el);
+  if (normalized !== text) {
+    text = normalized;
+    lines = parseNote(text);
+    el.innerHTML = noteDocHtml(lines);
+  }
+  if (text === "") el.setAttribute("data-empty", "");
+  else el.removeAttribute("data-empty");
+  return { text, lines };
+}
+
+// The browser's typing style — bold set with a bare caret styles the next
+// keystroke. Repainting the document drops it, so it is read before and set
+// again after.
+const TYPING_COMMANDS = ["bold", "italic", "underline", "strikeThrough"] as const;
+
+function typingStyles(): Record<string, boolean> {
+  const styles: Record<string, boolean> = {};
+  for (const cmd of TYPING_COMMANDS) {
+    try {
+      styles[cmd] = document.queryCommandState(cmd);
+    } catch {
+      styles[cmd] = false;
+    }
+  }
+  return styles;
+}
+
+/** The selection's source offsets, read by marking its ends in the DOM and serializing. */
+function readSelection(el: HTMLElement): { text: string; selection: TextSelection | null } {
+  const sel = window.getSelection();
+  const range = sel && sel.rangeCount > 0 ? sel.getRangeAt(0) : null;
+  if (!range || !el.contains(range.startContainer) || !el.contains(range.endContainer)) {
+    return { text: serializeNoteDoc(el), selection: null };
+  }
+  const start = { node: range.startContainer, offset: range.startOffset };
+  const end = { node: range.endContainer, offset: range.endOffset };
+  const endMark = document.createTextNode(SELECTION_END);
+  const startMark = document.createTextNode(SELECTION_START);
+  // The end first: inserting there leaves the start's node and offset valid.
+  const r = document.createRange();
+  r.setStart(end.node, end.offset);
+  r.insertNode(endMark);
+  r.setStart(start.node, start.offset);
+  r.insertNode(startMark);
+  const marked = serializeNoteDoc(el);
+  startMark.remove();
+  endMark.remove();
+  const a = marked.indexOf(SELECTION_START);
+  const b = marked.indexOf(SELECTION_END);
+  const text = marked.replace(SELECTION_START, "").replace(SELECTION_END, "");
+  if (a === -1 || b === -1) return { text, selection: null };
+  return { text, selection: { start: Math.min(a, b), end: Math.max(a, b) - 1 } };
 }
 
 // Enter continues the line's structure: a list item starts the next item
@@ -189,23 +186,60 @@ export function newlineFor(text: string, caret: number): { insert: string; from:
   return { insert: `\n${lead[1]}${marker}`, from: caret };
 }
 
+const MARKERS: Record<InlineStyle, [string, string]> = {
+  bold: ["**", "**"],
+  italic: ["*", "*"],
+  underline: ["<u>", "</u>"],
+  strike: ["~~", "~~"],
+  code: ["`", "`"],
+  clay: ["<clay>", "</clay>"],
+  sage: ["<sage>", "</sage>"],
+  gold: ["<gold>", "</gold>"],
+  plum: ["<plum>", "</plum>"],
+};
+
+/** The run a source offset is strictly inside, if any. */
+function runAt(lines: NoteLine[], src: number): Run | null {
+  for (const line of lines) {
+    if (src > line.end) continue;
+    for (const run of line.runs) {
+      if (run.chip) continue;
+      if (src > run.src && src < run.src + run.srcLen) return run;
+    }
+    return null;
+  }
+  return null;
+}
+
+/** A source offset at a run's edge, moved outside the run's markers. */
+function outsideMarkers(lines: NoteLine[], src: number): number {
+  for (const line of lines) {
+    if (src > line.end) continue;
+    for (const run of line.runs) {
+      if (src === run.src && run.openLen > 0) return src - run.openLen;
+      if (src === run.src + run.srcLen && run.closeLen > 0) return src + run.closeLen;
+    }
+    return src;
+  }
+  return src;
+}
+
 export function attachNoteEditable(
   el: HTMLElement,
   opts: { text: string; onChange: (text: string) => void },
 ): NoteEditable {
-  let text = opts.text;
-  let html = render(el, text);
+  const first = render(el, opts.text);
+  let text = first.text;
+  let lines = first.lines;
   let composing = false;
+  // Set while a typing style is put back: the command's input event is not an edit.
+  let arming = false;
   const history: Snapshot[] = [];
   let index = -1;
   let lastPush = 0;
   // Only typing merges with typing: a keystroke after Enter, paste, or a
   // command starts its own undo step.
   let lastCoalescable = false;
-
-  function currentSelection(): TextSelection {
-    return selectionOf(el) ?? { start: text.length, end: text.length };
-  }
 
   function push(sel: TextSelection, coalesce: boolean) {
     const now = Date.now();
@@ -227,32 +261,111 @@ export function attachNoteEditable(
     lastCoalescable = coalesce;
   }
 
-  function paint(sel: TextSelection | null) {
-    html = render(el, text);
-    if (sel) setSelection(el, sel.start, sel.end);
+  function clamp(sel: TextSelection): TextSelection {
+    return { start: Math.min(sel.start, text.length), end: Math.min(sel.end, text.length) };
+  }
+
+  function paint(sel: TextSelection | null, styles?: Record<string, boolean>) {
+    const painted = render(el, text);
+    text = painted.text;
+    lines = painted.lines;
+    if (sel) setSelection(el, lines, sel.start, sel.end);
+    if (!styles || !sel || sel.start !== sel.end) return;
+    const now = typingStyles();
+    for (const cmd of TYPING_COMMANDS) {
+      if (!styles[cmd] || now[cmd]) continue;
+      arming = true;
+      try {
+        document.execCommand(cmd);
+      } finally {
+        arming = false;
+      }
+    }
   }
 
   /** The text changed: paint it, keep the selection, record it, report it. */
-  function commit(next: string, sel: TextSelection, coalesce: boolean) {
+  function commit(next: string, sel: TextSelection, coalesce: boolean, styles?: Record<string, boolean>) {
+    const before = text;
     text = next;
-    paint(sel);
-    push(sel, coalesce);
-    opts.onChange(text);
+    paint(clamp(sel), styles);
+    push(clamp(sel), coalesce);
+    if (text !== before) opts.onChange(text);
   }
 
-  /** Read the DOM after the browser edited it. */
+  /** Read the document after the browser edited it, and make it canonical again. */
   function sync(coalesce: boolean) {
-    const next = readEditableText(el);
-    if (next === text && el.innerHTML === html) return;
-    const sel = currentSelection();
-    commit(next, sel, coalesce);
+    const styles = typingStyles();
+    const read = readSelection(el);
+    commit(read.text, read.selection ?? { start: read.text.length, end: read.text.length }, coalesce, styles);
   }
 
-  function replaceSelection(insert: string, sel = currentSelection(), from = Math.min(sel.start, sel.end)) {
-    const to = Math.max(sel.start, sel.end);
+  /** The selection as source offsets. The document may read back normalized; the text follows it. */
+  function currentSelection(): TextSelection {
+    const read = readSelection(el);
+    if (read.text !== text) {
+      text = read.text;
+      lines = parseNote(text);
+    }
+    return read.selection ?? { start: text.length, end: text.length };
+  }
+
+  /** Enter: a new line that continues the structure; Shift+Enter a plain one.
+      Inside styled text the styles close before the break and reopen after
+      it, so the markers never straddle a line. */
+  function newline(plain: boolean) {
+    const sel = currentSelection();
+    const collapsed = sel.start === sel.end;
+    let { insert, from } = plain || !collapsed ? { insert: "\n", from: Math.min(sel.start, sel.end) } : newlineFor(text, sel.start);
+    let to = Math.max(sel.start, sel.end);
+    if (insert.startsWith("\n") && collapsed) {
+      const run = runAt(lines, from);
+      if (run) {
+        // Spaces beside the break would sit against a marker; markdown wants
+        // the markers on the words.
+        while (from > 0 && text[from - 1] === " ") from -= 1;
+        while (to < text.length && text[to] === " ") to += 1;
+        const closers = [...run.styles].reverse().map((s) => MARKERS[s][1]).join("");
+        const openers = run.styles.map((s) => MARKERS[s][0]).join("");
+        insert = closers + insert + openers;
+      } else {
+        // At a run's edge the break goes outside its markers.
+        from = to = outsideMarkers(lines, from);
+      }
+    }
     const next = text.slice(0, from) + insert + text.slice(to);
     const caret = from + insert.length;
     commit(next, { start: caret, end: caret }, false);
+  }
+
+  /** Backspace at the start of a marked line: a nested item outdents, any other marker goes. */
+  function backspaceAtLineStart(): boolean {
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) return false;
+    const range = sel.getRangeAt(0);
+    if (!range.collapsed || !el.contains(range.startContainer)) return false;
+    const startEl =
+      range.startContainer.nodeType === TEXT_NODE
+        ? range.startContainer.parentElement
+        : (range.startContainer as Element);
+    const lineEl = startEl?.closest("p, h1, h2, h3, h4, h5, h6, li");
+    if (!lineEl || !el.contains(lineEl)) return false;
+    const before = document.createRange();
+    before.setStart(lineEl, 0);
+    before.setEnd(range.startContainer, range.startOffset);
+    if (before.toString().replace(/\u200b/g, "") !== "") return false;
+    const line = lines[lineElements(el).indexOf(lineEl)];
+    if (!line || line.kind === "p" || line.kind === "code") return false;
+    let next: string;
+    let caret: number;
+    if ((line.kind === "bullet" || line.kind === "numbered") && line.indent >= 2) {
+      next = text.slice(0, line.src) + text.slice(line.src + 2);
+      caret = line.bodySrc - 2;
+    } else {
+      next = text.slice(0, line.src) + text.slice(line.bodySrc);
+      caret = line.src;
+    }
+    commit(next, { start: caret, end: caret }, false);
+    return true;
   }
 
   function undo() {
@@ -282,13 +395,6 @@ export function attachNoteEditable(
         e.preventDefault();
         newline(false);
         break;
-      case "insertFromPaste": {
-        const data = e.dataTransfer?.getData("text/plain");
-        if (data === undefined) return;
-        e.preventDefault();
-        replaceSelection(data.replace(/\r\n?/g, "\n"));
-        break;
-      }
       case "historyUndo":
         e.preventDefault();
         undo();
@@ -301,30 +407,22 @@ export function attachNoteEditable(
   }
 
   function onInput(e: Event) {
-    if (composing || (e as InputEvent).isComposing) return;
+    if (composing || arming || (e as InputEvent).isComposing) return;
     sync(true);
-  }
-
-  /** Enter: a new line that continues the structure; Shift+Enter a plain one. */
-  function newline(plain: boolean) {
-    const sel = currentSelection();
-    if (plain || sel.start !== sel.end) {
-      replaceSelection("\n", sel);
-      return;
-    }
-    const { insert, from } = newlineFor(text, sel.start);
-    replaceSelection(insert, sel, from);
   }
 
   function onKeyDown(e: KeyboardEvent) {
     if (e.isComposing || e.keyCode === 229) return;
     const mod = e.metaKey || e.ctrlKey;
     // Cmd+Enter and Ctrl+Enter are the editor's (save); plain and Shift+Enter
-    // are handled here, because a plaintext contentEditable reports both as
-    // one input type.
+    // are handled here, because a contentEditable reports both as one input.
     if (e.key === "Enter" && !mod && !e.altKey) {
       e.preventDefault();
       newline(e.shiftKey);
+      return;
+    }
+    if (e.key === "Backspace" && !mod && !e.altKey && !e.shiftKey) {
+      if (backspaceAtLineStart()) e.preventDefault();
       return;
     }
     if (!mod || e.altKey) return;
@@ -357,6 +455,7 @@ export function attachNoteEditable(
   el.addEventListener("compositionend", onCompositionEnd);
 
   push({ start: text.length, end: text.length }, false);
+  if (text !== opts.text) opts.onChange(text);
 
   return {
     getText: () => text,
@@ -366,14 +465,18 @@ export function attachNoteEditable(
       const focused = document.activeElement === el;
       const keep = selection ?? (focused ? currentSelection() : null);
       text = next;
-      paint(keep ? { start: Math.min(keep.start, text.length), end: Math.min(keep.end, text.length) } : null);
+      paint(keep ? clamp(keep) : null);
       if (selection && !focused) el.focus({ preventScroll: true });
-      if (selection) setSelection(el, selection.start, selection.end);
-      push(keep ?? { start: text.length, end: text.length }, false);
+      if (selection) setSelection(el, lines, selection.start, selection.end);
+      push(keep ? clamp(keep) : { start: text.length, end: text.length }, false);
+      if (text !== next) opts.onChange(text);
+    },
+    refresh() {
+      if (!composing) sync(false);
     },
     focusEnd() {
       el.focus({ preventScroll: true });
-      setSelection(el, text.length, text.length);
+      setSelection(el, lines, text.length, text.length);
     },
     destroy() {
       el.removeEventListener("beforeinput", onBeforeInput);

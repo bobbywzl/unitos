@@ -2,19 +2,18 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
-import { api } from "@/lib/api";
-import { ACCOUNT_HEADER } from "@/lib/constants";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { isImeKey } from "@/lib/ime";
-import { tabAccount } from "@/lib/tab-account";
 import type { NoteView, SourceChip } from "@/lib/types";
 import { useCollab } from "@/components/collab/collab-context";
 import { AuthorChip } from "@/components/collab/person-badge";
 import { ReplyThread } from "@/components/collab/reply-thread";
+import { ExpandIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
-import { Markdown } from "@/components/markdown";
+import { Markdown, markdownPreview } from "@/components/markdown";
 import { DragHandle, useCombineTarget, type HandleProps } from "@/components/sortable";
 import { NoteEditor } from "@/components/outline/note-editor";
+import { useNoteDraft } from "@/components/outline/use-note-draft";
 import type { OutlineActions } from "@/components/outline/use-outline";
 
 // Opening the editor on a quote note (only "> " lines) adds a fresh line, so
@@ -23,6 +22,15 @@ function editDraft(content: string): string {
   const lines = content.split("\n");
   const quoteOnly = lines.length > 0 && lines.every((l) => l.trim() === "" || l.startsWith(">"));
   return quoteOnly ? `${content}\n\n` : content;
+}
+
+/** The nearest ancestor that scrolls: the tray's panel. Null on the notes full page, where the window scrolls. */
+function scrollPane(el: HTMLElement): HTMLElement | null {
+  for (let p = el.parentElement; p; p = p.parentElement) {
+    const { overflowY } = getComputedStyle(p);
+    if (overflowY === "auto" || overflowY === "scroll") return p;
+  }
+  return null;
 }
 
 /** Tray cards sit in the 352px drawer (design 1a); page cards in the 760px column (design 2b). */
@@ -114,7 +122,6 @@ export function NoteCard({
   const router = useRouter();
   const { canEdit } = useCollab();
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(note.content);
   const [copied, setCopied] = useState(false);
   const [handledEdit, setHandledEdit] = useState<{ id: string } | null>(null);
   const cardRef = useRef<HTMLDivElement>(null);
@@ -122,104 +129,147 @@ export function NoteCard({
   const pending = note.status === "PENDING";
   const focused = pending && actions.focusedPendingId === note.id;
   const tray = variant === "tray";
+  // This note's editor is out in the floating card (floating-note-editor.tsx).
+  const floating = actions.floating?.id === note.id;
   // The ticker: accepted notes can be selected for bulk delete, merge, and pin.
   const selectable = note.status === "ACCEPTED" && canEdit;
   const isSelected = actions.selected.has(note.id);
   const isCombineTarget = combineTarget === note.id && note.status === "ACCEPTED";
 
-  // Keyboard queue: `e` on the focused pending note opens the editor.
-  // Adjust-during-render; each keypress creates a new request object.
+  // Auto-save while the editor is open (SPEC.md §6); Cancel restores the
+  // content from before this edit.
+  const { draft, setDraft, cancel: cancelDraft, markSaved, getOriginal } = useNoteDraft({
+    noteId: note.id,
+    original: note.content,
+    initial: note.content,
+    active: editing,
+    canEdit,
+  });
+
+  // Keyboard queue: `e` on the focused pending note opens the editor; the
+  // floating card docking reopens it on the card's draft. Adjust-during-render;
+  // each request is a new object.
   if (actions.editRequest && actions.editRequest.id === note.id && handledEdit !== actions.editRequest) {
     setHandledEdit(actions.editRequest);
-    setDraft(editDraft(note.content));
-    setEditing(true);
+    if (!floating) {
+      setDraft(actions.editRequest.draft ?? editDraft(note.content));
+      setEditing(true);
+    }
   }
 
   useEffect(() => {
     if (focused) cardRef.current?.scrollIntoView({ block: "nearest" });
   }, [focused]);
 
-  // Auto-save: while the editor is open, every edit saves on its own — a
-  // debounced PATCH after the last keystroke, and a keepalive flush when the
-  // window closes or the editor unmounts — so nothing typed is lost. Cancel
-  // still restores the content from before this edit: the flush sees the
-  // reverted draft and writes it back over the auto-saved state.
-  const draftRef = useRef(draft);
-  const lastSavedRef = useRef(note.content);
-
-  useEffect(() => {
+  // The editor shows as much of the note as it can (SPEC.md §6): the card
+  // grows with the text, capped at the height of the pane it scrolls in, and
+  // past the cap the text scrolls inside the card while the bar and the
+  // buttons stay. The pane is the tray's panel; on the notes full page it is
+  // the window.
+  const editCardRef = useRef<HTMLDivElement>(null);
+  const [limit, setLimit] = useState<number | null>(null);
+  useLayoutEffect(() => {
     if (!editing) return;
-    lastSavedRef.current = note.content;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editing]);
-
-  useEffect(() => {
-    draftRef.current = draft;
-    if (!editing || !canEdit) return;
-    const trimmed = draft.trim();
-    if (!trimmed || trimmed === lastSavedRef.current) return;
-    const timer = setTimeout(() => {
-      const before = lastSavedRef.current;
-      lastSavedRef.current = trimmed;
-      void api(`/api/notes/${note.id}`, "PATCH", { content: trimmed }).catch(() => {
-        // Failed quiet save: the next keystroke or the flush retries.
-        if (lastSavedRef.current === trimmed) lastSavedRef.current = before;
-      });
-    }, 900);
-    return () => clearTimeout(timer);
-  }, [draft, editing, canEdit, note.id]);
-
-  useEffect(() => {
-    if (!editing || !canEdit) return;
-    const flush = () => {
-      const trimmed = draftRef.current.trim();
-      if (!trimmed || trimmed === lastSavedRef.current) return;
-      lastSavedRef.current = trimmed;
-      const account = tabAccount();
-      void fetch(`/api/notes/${note.id}`, {
-        method: "PATCH",
-        keepalive: true,
-        headers: {
-          "Content-Type": "application/json",
-          ...(account ? { [ACCOUNT_HEADER]: account } : {}),
-        },
-        body: JSON.stringify({ content: trimmed }),
-      }).catch(() => {});
+    const card = editCardRef.current;
+    if (!card) return;
+    const measure = () => {
+      const pane = scrollPane(card);
+      setLimit(pane ? pane.clientHeight - 8 : window.innerHeight - 48);
     };
-    window.addEventListener("pagehide", flush);
-    window.addEventListener("beforeunload", flush);
+    measure();
+    window.addEventListener("resize", measure);
     return () => {
-      window.removeEventListener("pagehide", flush);
-      window.removeEventListener("beforeunload", flush);
-      flush();
+      window.removeEventListener("resize", measure);
+      setLimit(null);
     };
-  }, [editing, canEdit, note.id]);
+  }, [editing]);
+  // Sized: the whole card comes into view.
+  const sized = editing && limit !== null;
+  useEffect(() => {
+    if (sized) editCardRef.current?.scrollIntoView({ block: "nearest" });
+  }, [sized]);
 
-  // Cancel and Esc restore the content from before this edit: the flush in
-  // the cleanup above sees the reverted draft and writes it back over any
-  // auto-saved state.
   function cancel() {
-    draftRef.current = note.content;
-    setDraft(note.content);
+    cancelDraft();
     setEditing(false);
   }
 
   async function save() {
     const trimmed = draft.trim();
-    if (!trimmed || trimmed === note.content) {
+    if (!trimmed || trimmed === getOriginal()) {
       cancel();
       return;
     }
-    draftRef.current = draft;
-    lastSavedRef.current = trimmed;
+    markSaved(trimmed);
     setEditing(false);
     await actions.saveNote(note.id, trimmed);
   }
 
+  // Pop out: the floating card takes the draft and this card's editor closes
+  // (its flush saves the draft). A drag on the bar does the same once the
+  // pointer has moved, and the card lands under the pointer.
+  function popOut(place?: { left: number; top: number; grab: { dx: number; dy: number } }) {
+    const current = draft;
+    setEditing(false);
+    actions.floatNote({ id: note.id, draft: current, original: getOriginal(), ...place });
+  }
+
+  function startDragOut(e: React.PointerEvent) {
+    if (e.button !== 0) return;
+    const card = editCardRef.current;
+    if (!card) return;
+    e.preventDefault();
+    const fromX = e.clientX;
+    const fromY = e.clientY;
+    const rect = card.getBoundingClientRect();
+    const stop = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", stop);
+    };
+    const onMove = (ev: PointerEvent) => {
+      if (Math.abs(ev.clientX - fromX) < 8 && Math.abs(ev.clientY - fromY) < 8) return;
+      stop();
+      // The pointer keeps its spot on the bar; the floating card is narrower
+      // than a wide tray, so the spot is capped inside it.
+      const grab = { dx: Math.min(fromX - rect.left, 200), dy: fromY - rect.top };
+      popOut({ left: ev.clientX - grab.dx, top: ev.clientY - grab.dy, grab });
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", stop);
+  }
+
+  if (floating) {
+    return (
+      <div
+        data-note-id={note.id}
+        className="rounded-2xl border border-dashed border-clay-300 bg-card/60 p-3.5 text-[13px]"
+      >
+        <div className="flex items-center gap-2">
+          <span className="text-sand-600">{t("outline.floatingLabel")}</span>
+          <button
+            onClick={() => actions.dockNote(true)}
+            data-track="note-dock"
+            title={t("outline.dockBackTitle")}
+            className="ml-auto shrink-0 text-xs text-sand-600 hover:text-clay-700"
+          >
+            {t("outline.dockBack")}
+          </button>
+        </div>
+        <p className="mt-1 truncate text-sand-500">{markdownPreview(note.content)}</p>
+      </div>
+    );
+  }
+
   if (editing) {
     return (
-      <div className="rounded-2xl bg-card p-3 shadow-soft outline-2 outline-clay-400">
+      <div
+        ref={editCardRef}
+        data-note-id={note.id}
+        style={limit !== null ? { maxHeight: limit } : undefined}
+        className="flex flex-col rounded-2xl bg-card p-3 shadow-soft outline-2 outline-clay-400"
+      >
         <NoteEditor
+          className="min-h-0 flex-1"
           value={draft}
           onChange={setDraft}
           onKeyDown={(e) => {
@@ -227,8 +277,9 @@ export function NoteCard({
             if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void save();
             if (e.key === "Escape") cancel();
           }}
+          dragBar={tray ? { onPointerDown: startDragOut, title: t("outline.dragOut") } : undefined}
         />
-        <div className="mt-2 flex items-center gap-2">
+        <div className="mt-2 flex shrink-0 items-center gap-2">
           <button
             onClick={() => void save()}
             data-track="note-save"
@@ -243,6 +294,17 @@ export function NoteCard({
           >
             {t("common.cancel")}
           </button>
+          {tray && (
+            <button
+              onClick={() => popOut()}
+              data-track="note-pop-out"
+              title={t("outline.popOutTitle")}
+              className="ml-auto flex items-center gap-1 text-xs text-sand-600 hover:text-clay-700"
+            >
+              <ExpandIcon size={12} />
+              {t("outline.popOut")}
+            </button>
+          )}
         </div>
       </div>
     );

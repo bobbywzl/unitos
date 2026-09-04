@@ -8,9 +8,10 @@ import type { TKey } from "@/lib/i18n/dictionaries";
 // The note editor: the same editing functions as the document text toolbar
 // (reader.tsx), applied as markdown. Format buttons rewrite the selected
 // lines' markers; style buttons wrap the selection; colors use the note style
-// tags the Markdown component renders (<clay>…</clay> etc.). The text shows
-// its formatting live while it is edited (lib/note-editable.ts): bold reads
-// bold, a heading reads large, the markers stay in the text, faded.
+// tags the Markdown component renders (<clay>…</clay> etc.). The text is
+// edited as the document it renders to (lib/note-editable.ts): bold reads
+// bold, a heading reads large, a list line carries its bullet — the same
+// prose classes as the rendered note, so the two look alike.
 
 type TextColor = "clay" | "sage" | "gold" | "plum";
 const TEXT_COLORS: { tag: TextColor; dot: string; nameKey: TKey }[] = [
@@ -24,8 +25,11 @@ const HUE_TAG = /^<(clay|sage|gold|plum)>([\s\S]*)<\/\1>$/;
 
 type Patch = { value: string; start: number; end: number };
 
-/** Wrap the selection in markers, or unwrap when already wrapped. */
+/** Wrap the selection in markers, or unwrap when already wrapped. Markers
+    hug the words: spaces at the selection's ends stay outside. */
 function wrapSelection(value: string, s: number, e: number, before: string, after: string): Patch {
+  while (s < e && /\s/.test(value[s])) s += 1;
+  while (e > s && /\s/.test(value[e - 1])) e -= 1;
   const selected = value.slice(s, e);
   if (
     selected.length >= before.length + after.length &&
@@ -137,11 +141,13 @@ const FORMATS: { label: string; titleKey: TKey; track: string; map: (lines: stri
   },
 ];
 
-// key: the Cmd/Ctrl shortcut, the same as in every editor.
-const WRAPS: { label: string; key: string; titleKey: TKey; track: string; before: string; after: string; cls: string }[] = [
-  { label: "B", key: "b", titleKey: "panes.bold", track: "bold", before: "**", after: "**", cls: "font-bold" },
-  { label: "I", key: "i", titleKey: "panes.italic", track: "italic", before: "*", after: "*", cls: "italic" },
-  { label: "U", key: "u", titleKey: "panes.underline", track: "underline", before: "<u>", after: "</u>", cls: "underline" },
+// Bold, italic, underline are the browser's own editing commands: with a
+// selection they style it, with a bare caret they style what is typed next,
+// and Cmd+B/I/U work without a handler. The editor reads the result back.
+const STYLES: { label: string; command: string; titleKey: TKey; track: string; cls: string }[] = [
+  { label: "B", command: "bold", titleKey: "panes.bold", track: "bold", cls: "font-bold" },
+  { label: "I", command: "italic", titleKey: "panes.italic", track: "italic", cls: "italic" },
+  { label: "U", command: "underline", titleKey: "panes.underline", track: "underline", cls: "underline" },
 ];
 
 const indentLines = (ls: string[]) => ls.map((l) => `  ${l}`);
@@ -213,25 +219,28 @@ export function NoteEditor({
     core.current?.setText(value);
   }, [value]);
 
-  function apply(patch: (value: string, s: number, e: number) => Patch) {
+  /** A markdown command on the selection. rangeOnly: nothing happens on a bare caret. */
+  function apply(patch: (value: string, s: number, e: number) => Patch, rangeOnly = false) {
     const editable = core.current;
     if (!editable) return;
     const { start, end } = editable.getSelection();
+    if (rangeOnly && start === end) {
+      editable.setText(editable.getText(), { start, end });
+      return;
+    }
     const next = patch(editable.getText(), start, end);
     editable.setText(next.value, { start: next.start, end: next.end });
     onChange(next.value);
   }
 
+  function command(name: string) {
+    ref.current?.focus({ preventScroll: true });
+    document.execCommand(name);
+    core.current?.refresh();
+  }
+
   function handleKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
     const mod = e.metaKey || e.ctrlKey;
-    if (mod && !e.altKey && !e.shiftKey) {
-      const wrap = WRAPS.find((w) => w.key === e.key.toLowerCase());
-      if (wrap) {
-        e.preventDefault();
-        apply((v, s, en) => wrapSelection(v, s, en, wrap.before, wrap.after));
-        return;
-      }
-    }
     if (e.key === "Tab" && !mod && !e.altKey) {
       e.preventDefault();
       apply((v, s, en) => mapSelectedLines(v, s, en, e.shiftKey ? outdentLines : indentLines));
@@ -278,13 +287,13 @@ export function NoteEditor({
           </button>
         ))}
         <span aria-hidden className="mx-1 h-4 w-px bg-line" />
-        {WRAPS.map(({ label, titleKey, track, before, after, cls }) => (
+        {STYLES.map(({ label, command: name, titleKey, track, cls }) => (
           <button
             key={label}
             type="button"
             data-track={`note-style:${track}`}
             onMouseDown={keep}
-            onClick={() => apply((v, s, e) => wrapSelection(v, s, e, before, after))}
+            onClick={() => command(name)}
             title={t(titleKey)}
             className={`${barButton} ${cls}`}
           >
@@ -297,7 +306,7 @@ export function NoteEditor({
             key={tag}
             type="button"
             onMouseDown={keep}
-            onClick={() => apply((v, s, e) => colorSelection(v, s, e, tag))}
+            onClick={() => apply((v, s, e) => colorSelection(v, s, e, tag), true)}
             data-track="note-text-color"
             aria-label={t("panes.textColorIn", { color: t(nameKey) })}
             title={t("panes.textColorIn", { color: t(nameKey) })}
@@ -332,11 +341,11 @@ export function NoteEditor({
         role="textbox"
         aria-multiline="true"
         aria-label={placeholder ?? t("outline.noteText")}
-        contentEditable="plaintext-only"
+        contentEditable
         suppressContentEditableWarning
         data-placeholder={placeholder}
         onKeyDown={handleKeyDown}
-        className="note-markup min-h-[4.5em] min-w-0 flex-1 overflow-y-auto text-sm outline-none"
+        className="note-doc prose prose-sm max-w-none prose-p:my-1.5 prose-headings:my-2 prose-ul:my-1.5 prose-ol:my-1.5 min-h-[4.5em] min-w-0 flex-1 overflow-y-auto outline-none"
       />
     </div>
   );

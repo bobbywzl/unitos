@@ -452,81 +452,48 @@ mark,
   content: none;
 }
 
-/* Live note markup (note-editor.tsx, lib/note-markup.ts): the note's markdown
-   with its formatting applied while it is edited. The text the markers wrap
-   reads as the rendered note will; the markers stay in the text, faded. */
-.note-markup {
+/* The note editor's document (note-editor.tsx, lib/note-markup.ts): the note
+   as it renders, edited in place. It shares the Markdown component's prose
+   classes; these cover what prose does not — the placeholder, code lines,
+   the ¶ chip, and links. */
+.note-doc {
+  position: relative;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
-.note-markup:empty::before {
+.note-doc[data-empty]::before {
   content: attr(data-placeholder);
+  position: absolute;
+  top: 0;
+  left: 0;
   color: var(--sand-500);
+  pointer-events: none;
 }
-.mk-bold {
-  font-weight: 700;
-}
-.mk-italic {
-  font-style: italic;
-}
-.mk-underline {
-  text-decoration: underline;
-  text-underline-offset: 2px;
-}
-.mk-strike {
-  text-decoration: line-through;
-}
-.mk-code {
+.note-doc .note-code {
+  margin: 0;
+  padding: 0 0.5em;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 0.9em;
-  background: color-mix(in srgb, var(--ink) 7%, transparent);
-  border-radius: 4px;
+  font-size: 0.85em;
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
 }
-.mk-h1 {
-  font-size: 1.4em;
-  font-weight: 700;
-  line-height: 1.3;
-}
-.mk-h2 {
-  font-size: 1.22em;
-  font-weight: 700;
-  line-height: 1.3;
-}
-.mk-h3 {
-  font-size: 1.1em;
-  font-weight: 700;
-  line-height: 1.35;
-}
-.mk-bullet {
-  color: var(--clay-600);
-  font-weight: 600;
-}
-.mk-quote {
-  background: color-mix(in srgb, var(--clay-400) 10%, transparent);
-  box-decoration-break: clone;
-  -webkit-box-decoration-break: clone;
-}
-.mk-chip {
+.note-doc .note-chip {
+  display: inline-flex;
+  height: 18px;
+  width: 18px;
+  margin: 0 0.15em;
+  align-items: center;
+  justify-content: center;
   border-radius: 999px;
   background: var(--clay-100);
-  padding: 0 0.35em;
-  font-size: 0.85em;
+  font-size: 11px;
   font-weight: 600;
   color: var(--clay-800);
+  vertical-align: text-bottom;
 }
-.mk-link {
+.note-doc .note-link {
   color: var(--clay);
   text-decoration: underline;
   text-underline-offset: 2px;
-}
-/* Markers come last so they win at equal specificity: faded, and free of the
-   style they switch on, so ** reads as a marker and never as bold text. */
-.mk-mark {
-  color: var(--sand-400);
-  font-weight: 400;
-  font-style: normal;
-  text-decoration: none;
-  background: none;
 }
 
 /* Ingest card: the cat dances while the pipeline works. */

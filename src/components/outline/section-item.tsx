@@ -8,6 +8,7 @@ import { useT } from "@/components/lang-provider";
 import { DragHandle, SortableItem, SortableList, type HandleProps } from "@/components/sortable";
 import { AddSection } from "@/components/outline/add-section";
 import { NoteCard } from "@/components/outline/note-card";
+import { NoteEditor } from "@/components/outline/note-editor";
 import type { OutlineActions } from "@/components/outline/use-outline";
 
 export function SectionItem({
@@ -126,18 +127,16 @@ export function SectionItem({
               setComposing(false);
             }}
           >
-            <textarea
-              autoFocus
+            <NoteEditor
+              className="rounded-2xl bg-card p-4 shadow-soft"
               value={draft}
-              onChange={(e) => setDraft(e.target.value)}
+              onChange={setDraft}
               onKeyDown={(e) => {
                 if (isImeKey(e)) return;
-                if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) e.currentTarget.form?.requestSubmit();
+                if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) e.currentTarget.closest("form")?.requestSubmit();
                 if (e.key === "Escape") setComposing(false);
               }}
               placeholder={t("outline.writeNotePlaceholder")}
-              rows={3}
-              className="w-full rounded-2xl bg-card p-4 text-sm shadow-soft outline-none placeholder:text-sand-500"
             />
             <div className="mt-2 flex gap-2">
               <button
