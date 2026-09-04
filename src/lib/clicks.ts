@@ -88,10 +88,15 @@ const CLICK_FUNCTIONS: Record<ClickGroup, readonly string[]> = {
     "note-delete",
     "note-copy",
     "note-source",
+    "note-jump",
     "notes-pin",
     "note-unpin",
     "notes-merge",
     "notes-delete",
+    "note-collapse",
+    "notes-view:", // the notes view switched: notes-view:expanded, notes-view:collapsed
+    "note-id-copy",
+    "notes-compare",
     "note-format:",
     "note-style:",
     "note-text-color",
@@ -112,6 +117,8 @@ const CLICK_FUNCTIONS: Record<ClickGroup, readonly string[]> = {
     "annotation-recolor:",
     "annotation-save",
     "annotation-delete",
+    "annotation-collapse",
+    "annotations-view:", // the annotations view switched: annotations-view:expanded, annotations-view:collapsed
     "close-link", // the second end of a link: the link is made
     "link-accept", // a recommended link accepted
     "page-highlight:",

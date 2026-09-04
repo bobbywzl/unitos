@@ -60,6 +60,24 @@ const en = {
   trayKeyHint: "⏎ accept · ⌫ reject",
   noteRejected: "Note rejected",
   undo: "Undo",
+
+  // Note structure: the header row's id and collapse, Collapse all, the compare view
+  noteIdTitle: "Note {id} · click to copy",
+  copyNoteId: "Copy note ID",
+  collapseNote: "Collapse note",
+  expandNote: "Expand note",
+  collapseAll: "Collapse all",
+  collapseAllTitle: "Fold every note to one line",
+  expandAll: "Expand all",
+  expandAllTitle: "Show every note whole",
+  compare: "Compare",
+  compareTitle: "Open the selected notes in one screen",
+  compareCount: "Compare · {n} notes",
+  layoutColumns: "Side by side",
+  layoutRows: "Stacked",
+  addToCompare: "Add note…",
+  removeFromCompare: "Remove from compare",
+  notesLabel: "Notes",
 };
 
 const zh: Record<keyof typeof en, string> = {
@@ -115,6 +133,23 @@ const zh: Record<keyof typeof en, string> = {
   trayKeyHint: "⏎ 接受 · ⌫ 拒绝",
   noteRejected: "笔记已拒绝",
   undo: "撤销",
+
+  noteIdTitle: "笔记 {id} · 点击复制",
+  copyNoteId: "复制笔记 ID",
+  collapseNote: "折叠笔记",
+  expandNote: "展开笔记",
+  collapseAll: "全部折叠",
+  collapseAllTitle: "把每条笔记折叠成一行",
+  expandAll: "全部展开",
+  expandAllTitle: "完整显示每条笔记",
+  compare: "对比",
+  compareTitle: "把选中的笔记放到同一屏对比",
+  compareCount: "对比 · {n} 条笔记",
+  layoutColumns: "并排",
+  layoutRows: "上下",
+  addToCompare: "添加笔记…",
+  removeFromCompare: "移出对比",
+  notesLabel: "笔记",
 };
 
 export const outline = { en, zh } as const;

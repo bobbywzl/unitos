@@ -36,8 +36,28 @@ function linkifyStyleTags(text: string): string {
   return out;
 }
 
+// Notes keep their line breaks: a newline typed in the editor stays a line
+// break on display, where markdown alone folds single newlines into spaces —
+// so the note has the same shape after Done as it had while editing. Two
+// trailing spaces make a hard break; a break already marked, a blank line,
+// and a fenced code block stay as they are.
+function hardBreaks(text: string): string {
+  const lines = text.split("\n");
+  let fenced = false;
+  return lines
+    .map((line, i) => {
+      if (/^\s*(```|~~~)/.test(line)) fenced = !fenced;
+      if (fenced) return line;
+      const next = lines[i + 1];
+      if (next === undefined || line.trim() === "" || next.trim() === "") return line;
+      if (line.endsWith("  ") || line.endsWith("\\")) return line;
+      return `${line}  `;
+    })
+    .join("\n");
+}
+
 // Markdown as one plain line, for small previews (Visual cards, overlay
-// captions) where rendered markdown has no room.
+// captions, collapsed notes) where rendered markdown has no room.
 export function markdownPreview(text: string): string {
   return text
     .replace(/```[\s\S]*?```/g, " ")
@@ -52,8 +72,10 @@ export function markdownPreview(text: string): string {
     .trim();
 }
 
-export function Markdown({ children }: { children: string }) {
+/** breaks: single newlines render as line breaks (notes). */
+export function Markdown({ children, breaks = false }: { children: string; breaks?: boolean }) {
   const t = useT();
+  const text = breaks ? hardBreaks(children) : children;
   return (
     <div className="prose prose-sm max-w-none prose-p:my-1.5 prose-headings:my-2 prose-ul:my-1.5 prose-ol:my-1.5">
       <ReactMarkdown
@@ -92,7 +114,7 @@ export function Markdown({ children }: { children: string }) {
           },
         }}
       >
-        {linkifyStyleTags(linkifyBlockTags(children))}
+        {linkifyStyleTags(linkifyBlockTags(text))}
       </ReactMarkdown>
     </div>
   );

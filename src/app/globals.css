@@ -437,6 +437,15 @@ mark,
   --tw-prose-td-borders: var(--sand-200);
 }
 
+/* A note's text, on display and in the editor: one size and line height, so
+   the note keeps its shape when the editor opens and when Done closes it. The
+   display side is prose-sm (markdown.tsx); the editor's textarea and the copy
+   that sizes it (note-editor.tsx) take the same values here. */
+.note-text {
+  font-size: 0.875rem;
+  line-height: 1.7142857;
+}
+
 /* A quote in a note (a highlight added to notes): a boxed quotation, not the
    typography default's bare italic bar. Edits and replies sit underneath it. */
 .prose blockquote {

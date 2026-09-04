@@ -247,15 +247,29 @@ export function NoteEditor({
           ⇥
         </button>
       </div>
-      <textarea
-        ref={ref}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        onKeyDown={onKeyDown}
-        placeholder={placeholder}
-        rows={Math.min(12, Math.max(3, value.split("\n").length + 1))}
-        className="w-full resize-y bg-transparent text-sm outline-none placeholder:text-sand-500"
-      />
+      {/* The textarea grows with the text: an invisible copy of the text sits
+          in the same grid cell and sets the height, so every line the note
+          has is on screen while it is edited — no inner scroll, no drag to
+          resize — and the editor is as tall as the note it replaces. Both
+          take note-text (globals.css), the display's size and line height. */}
+      <div className="grid">
+        <div
+          aria-hidden
+          className="note-text invisible col-start-1 row-start-1 min-h-[3lh] break-words whitespace-pre-wrap"
+        >
+          {value}
+          {"\n"}
+        </div>
+        <textarea
+          ref={ref}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          onKeyDown={onKeyDown}
+          placeholder={placeholder}
+          rows={1}
+          className="note-text col-start-1 row-start-1 w-full resize-none overflow-hidden bg-transparent outline-none placeholder:text-sand-500"
+        />
+      </div>
     </div>
   );
 }

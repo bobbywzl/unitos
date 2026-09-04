@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { arrayMove } from "@dnd-kit/sortable";
 import { api } from "@/lib/api";
 import type { NotebookView, NoteView, SectionView } from "@/lib/types";
+import { useCollapsedView, type CollapsedView } from "@/components/use-collapsed-view";
 
 export type OutlineActions = {
   notebookId: string;
@@ -28,7 +29,18 @@ export type OutlineActions = {
   selected: ReadonlySet<string>;
   toggleSelect: (id: string) => void;
   clearSelection: () => void;
+  // The notes view (use-collapsed-view.ts): collapsed, the default, folds every
+  // accepted note to one line — its id and a summary of its content; expanded
+  // shows every note whole. A note's chevron makes it the exception.
+  notesView: CollapsedView;
+  isCollapsed: (id: string) => boolean;
+  toggleCollapsed: (id: string) => void;
+  setNotesView: (view: CollapsedView) => void;
 };
+
+// The notes view persists per browser and per project, so the tray and the
+// notes full page show the same.
+const NOTES_VIEW_STORE = "unitos-notes-view";
 
 function updateSection(
   sections: SectionView[],
@@ -44,14 +56,22 @@ export function flattenNotes(sections: SectionView[]): NoteView[] {
   return sections.flatMap((s) => [...s.notes, ...flattenNotes(s.children)]);
 }
 
-/** Notes whose content matches the query, with sections that end up empty dropped. */
-export function filterSections(sections: SectionView[], query: string): SectionView[] {
+/** True when the note matches the query: its content, or — for a query
+    starting with "#" — its id, so the id shown on every card finds the note. */
+export function noteMatches(note: NoteView, query: string): boolean {
   const needle = query.trim().toLowerCase();
-  if (!needle) return sections;
+  if (!needle) return true;
+  if (needle.startsWith("#")) return note.id.toLowerCase().includes(needle.slice(1));
+  return note.content.toLowerCase().includes(needle) || note.id.toLowerCase() === needle;
+}
+
+/** Notes that match the query (noteMatches), with sections that end up empty dropped. */
+export function filterSections(sections: SectionView[], query: string): SectionView[] {
+  if (!query.trim()) return sections;
   return sections
     .map((s) => ({
       ...s,
-      notes: s.notes.filter((n) => n.content.toLowerCase().includes(needle)),
+      notes: s.notes.filter((n) => noteMatches(n, query)),
       children: filterSections(s.children, query),
     }))
     .filter((s) => s.notes.length > 0 || s.children.length > 0);
@@ -95,6 +115,8 @@ export function useOutline(notebook: NotebookView, canEdit = true) {
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [selected.size]);
+
+  const notesView = useCollapsedView(`${NOTES_VIEW_STORE}:${notebook.id}`);
 
   // Pending queue in outline order (SPEC.md §6 keyboard flow).
   const pending = useMemo(() => flattenNotes(tree).filter((n) => n.status === "PENDING"), [tree]);
@@ -324,6 +346,10 @@ export function useOutline(notebook: NotebookView, canEdit = true) {
     clearSelection() {
       setSelectedIds(new Set());
     },
+    notesView: notesView.view,
+    isCollapsed: notesView.isCollapsed,
+    toggleCollapsed: notesView.toggle,
+    setNotesView: notesView.setView,
   };
 
   return { tree, pending, focused, actions, lastRejected, undoReject };
