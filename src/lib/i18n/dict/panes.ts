@@ -286,19 +286,25 @@ const en = {
   // Graph (graph-overlay.tsx, graph-view.tsx)
   graph: "Graph",
   graphTitle: "The project as a graph: documents and the links between them",
-  graphHint: "Each node is a document; hover to spotlight its links. A thicker line means more links between two documents; dashed means recommended links awaiting acceptance. Drag to arrange; click a node to open it.",
+  graphHint: "Each node is a document; hover to spotlight its links. A thicker line means more links between two documents; dashed means recommended links awaiting acceptance — open Recommended links to accept or dismiss them. Drag to arrange; click a node to open it.",
   graphEmpty: "Attach at least two documents — the graph draws the links between them.",
   graphCounts: "{docs} documents · {links} link(s)",
 
   // Recommended links (annotations-panel.tsx)
   recommendedLinks: "Recommended links",
-  recommendedLinksDesc: "The AI scanned this document against the project. Accept a link to make it real; dismiss what does not hold.",
+  recommendedLinksDesc:
+    "The AI scanned the documents against each other. Accept a link to make it real; dismiss what does not hold.",
+  recommendedLinksToggleTitle: "Recommended links awaiting Accept, for the whole project",
+  recommendedLinksEmpty: "No recommended links. Recommend links in a document's menu runs the scan.",
+  openLinkEnd: "Open {title} at this link",
+  acceptLinkTitle: "Make this recommended link real; it paints in both texts",
+  dismissLinkTitle: "Drop this recommended link; nothing is recorded",
   acceptLink: "Accept",
   dismissLink: "Dismiss",
   recommendLinks: "Recommend links",
   recommendLinksTitle: "Scan this document against the project for recommended links",
   recommendLinksRunning: "Finding links…",
-  recommendLinksDone: "{n} recommended link(s) found",
+  recommendLinksDone: "{n} recommended link(s) found — open the graph to accept them",
   recommendLinksNone: "No new connections found",
 
   // Project search (project-search.tsx)
@@ -568,18 +574,23 @@ const zh: Record<keyof typeof en, string> = {
 
   graph: "图谱",
   graphTitle: "项目图谱：文档与它们之间的链接",
-  graphHint: "每个节点是一个文档，悬停可聚焦它的链接。线越粗表示两个文档之间的链接越多；虚线是待接受的推荐链接。拖动可调整位置；点击节点打开文档。",
+  graphHint: "每个节点是一个文档，悬停可聚焦它的链接。线越粗表示两个文档之间的链接越多；虚线是待接受的推荐链接——打开“推荐链接”即可接受或忽略。拖动可调整位置；点击节点打开文档。",
   graphEmpty: "至少添加两个文档——图谱会画出它们之间的链接。",
   graphCounts: "{docs} 个文档 · {links} 条链接",
 
   recommendedLinks: "推荐链接",
-  recommendedLinksDesc: "AI 已将此文档与项目比对。接受即成为正式链接；不成立的可忽略。",
+  recommendedLinksDesc: "AI 已将项目中的文档相互比对。接受即成为正式链接；不成立的可忽略。",
+  recommendedLinksToggleTitle: "整个项目中待接受的推荐链接",
+  recommendedLinksEmpty: "没有推荐链接。在文档菜单中选择“扫描推荐链接”可运行扫描。",
+  openLinkEnd: "在此链接处打开{title}",
+  acceptLinkTitle: "接受此推荐链接；它会在两篇文本中显示",
+  dismissLinkTitle: "忽略此推荐链接；不留记录",
   acceptLink: "接受",
   dismissLink: "忽略",
   recommendLinks: "扫描推荐链接",
   recommendLinksTitle: "将此文档与项目比对，寻找推荐链接",
   recommendLinksRunning: "正在查找链接……",
-  recommendLinksDone: "找到 {n} 条推荐链接",
+  recommendLinksDone: "找到 {n} 条推荐链接——打开图谱即可接受",
   recommendLinksNone: "没有发现新的链接",
 
   searchProject: "搜索项目",

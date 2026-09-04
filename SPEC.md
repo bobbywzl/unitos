@@ -566,7 +566,7 @@ Every piece of content in a corpus should connect. Two mechanisms:
 
 When a document joins a corpus — upload, URL, YouTube (after its transcript lands), or attach from the library — a scan (`lib/connect.ts`, prompt in `/lib/prompts/connect.ts`, model `CONNECT_MODEL`) reads it against the corpus's other documents for shared concepts, claims, quotes, and keywords, video transcripts included. Each hit becomes a `DocLink` with `recommended: true`, a `reason`, and both quotes resolved verbatim against the real blocks (unresolvable output drops, SPEC.md §4 discipline). At most 8 per scan; duplicates skip; the scan runs `after()` the response like the glossary, and "Recommend links" in the document menu runs it on demand (`POST /api/documents/[documentId]/connect`).
 
-A recommended link paints nowhere until accepted — the user approves everything (§1). It lives in the Annotations panel under Recommended links: the reason, both quotes, the author badge, a reply thread, and Accept / Dismiss. Accept clears `recommended`, paints the link, and records a LINK_ADD by its accepter; Dismiss deletes it without a history entry.
+A recommended link paints nowhere until accepted — the user approves everything (§1). It lives in the Graph, under its Recommended links list (folded beside the canvas; every recommended link of the project, newest first): the reason, both quotes, the two documents, the author badge, a reply thread, and Accept / Dismiss. The Annotations panel lists accepted links only. Accept clears `recommended`, paints the link, and records a LINK_ADD by its accepter; Dismiss deletes it without a history entry.
 
 ### Corpus distillation
 
@@ -574,7 +574,7 @@ Distill's second scope: the reader asks the whole corpus one question (`POST /ap
 
 ### Graph
 
-The Graph (rail button; full-screen overlay; `reactflow`, the release-edu tree pattern) draws the corpus as a connected whole: every attached document a node, every linked pair one curve. The more links between two documents, the thicker and bolder the curve; a pair held together only by recommended links draws dashed until one is accepted. Nodes drag; click one to open the document; pan and zoom Obsidian-style. Node and edge data come from the workspace page (`GraphNode`, `GraphEdge` in `lib/types.ts`); reactflow lazy-loads when the overlay opens.
+The Graph (rail button; full-screen overlay; `reactflow`, the release-edu tree pattern) draws the corpus as a connected whole: every attached document a node, every linked pair one curve. The more links between two documents, the thicker and bolder the curve; a pair held together only by recommended links draws dashed until one is accepted — the Recommended links list beside the canvas is where that happens. Nodes drag; click one to open the document; pan and zoom Obsidian-style. Node, edge, and recommended-link data come from the workspace page (`GraphNode`, `GraphEdge`, `RecommendedLinkView` in `lib/types.ts`); reactflow lazy-loads when the overlay opens.
 
 ---
 

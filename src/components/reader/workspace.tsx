@@ -2,7 +2,14 @@
 
 import Link from "next/link";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import type { CorpusDistillationView, GraphEdge, GraphNode, HistoryEntry, NotebookView } from "@/lib/types";
+import type {
+  CorpusDistillationView,
+  GraphEdge,
+  GraphNode,
+  HistoryEntry,
+  NotebookView,
+  RecommendedLinkView,
+} from "@/lib/types";
 import {
   ArrowLeftIcon,
   ChevronLeftIcon,
@@ -103,7 +110,7 @@ export function Workspace({
   context: { initial: ContextValues | null; hasOverride: boolean; isSet: boolean };
   collab: CollabState;
   rev: number;
-  graph: { nodes: GraphNode[]; edges: GraphEdge[] };
+  graph: { nodes: GraphNode[]; edges: GraphEdge[]; recommended: RecommendedLinkView[] };
   history: HistoryEntry[];
   corpusDistillations: CorpusDistillationView[];
 }) {
@@ -659,6 +666,7 @@ export function Workspace({
           activeDocumentId={activeDocumentId}
           nodes={graph.nodes}
           edges={graph.edges}
+          recommended={graph.recommended}
           onClose={() => setGraphOpen(false)}
         />
       )}
