@@ -21,6 +21,7 @@ export function AddSection({
     return (
       <button
         onClick={() => setOpen(true)}
+        data-tip={t("outline.addSectionTitle")}
         className={
           small
             ? "self-start text-xs text-sand-600 hover:text-clay-700"

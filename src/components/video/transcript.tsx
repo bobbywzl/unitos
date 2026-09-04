@@ -140,7 +140,7 @@ export function Transcript({
             onClick={onTranscribe}
             data-track="video-transcribe-again"
             className="ml-auto rounded-full px-2 py-0.5 text-[11px] font-semibold text-sand-600 hover:bg-clay-100 hover:text-clay-800"
-            title={t(audio ? "video.transcribeAgainTitleAudio" : "video.transcribeAgainTitle")}
+            data-tip={t(audio ? "video.transcribeAgainTitleAudio" : "video.transcribeAgainTitle")}
           >
             {t("video.transcribeAgain")}
           </button>
@@ -164,7 +164,7 @@ export function Transcript({
               <button
                 onClick={() => onSeek(paragraph[0])}
                 data-track="video-seek"
-                title={t("video.jumpHere")}
+                data-tip={t("video.jumpHere")}
                 className="mr-2 -translate-y-[1px] rounded-full bg-sand-100 px-2 py-[1px] align-middle text-[10.5px] font-semibold tabular-nums text-sand-500 hover:bg-clay-100 hover:text-clay-800"
               >
                 {formatTime(paragraph[0].startTime)}
@@ -184,7 +184,7 @@ export function Transcript({
                           onSeek(line);
                         }
                       }}
-                      title={t("video.jumpHere")}
+                      data-tip={t("video.jumpHere")}
                       className={`cursor-pointer rounded-[4px] box-decoration-clone px-0.5 py-[1px] ${
                         line.id === activeLineId
                           ? "bg-clay-100 text-clay-900"
@@ -204,7 +204,7 @@ export function Transcript({
                           onClick={() => onComment(line)}
                           data-track="video-line-comment"
                           className={action}
-                          title={t("video.commentOnLineTitle")}
+                          data-tip={t("video.commentOnLineTitle")}
                         >
                           <CommentIcon size={11} />
                           {t("video.comment")}
@@ -213,7 +213,7 @@ export function Transcript({
                           onClick={() => onExplain(line)}
                           data-track="video-line-explain"
                           className={action}
-                          title={t("video.explainThisMoment")}
+                          data-tip={t("video.explainThisMoment")}
                         >
                           <QuestionIcon size={11} />
                           {t("video.explain")}
@@ -223,7 +223,7 @@ export function Transcript({
                             onClick={() => onOpenAnnotation(annotated)}
                             data-track="video-line-open-note"
                             className={action}
-                            title={t("video.openNoteTitle")}
+                            data-tip={t("video.openNoteTitle")}
                           >
                             <LocateIcon size={11} />
                             {t("video.openNote")}
@@ -262,7 +262,7 @@ export function Transcript({
                   <button
                     onClick={() => setPasting(true)}
                     data-track="video-transcript-paste"
-                    title={t("video.pasteTranscriptTitle")}
+                    data-tip={t("video.pasteTranscriptTitle")}
                     className="rounded-full px-4 py-1.5 text-xs font-semibold text-sand-600 hover:bg-clay-100 hover:text-clay-800"
                   >
                     {t("video.pasteTranscript")}

@@ -123,7 +123,7 @@ function ReplyList({ replies }: { replies: InstructionReply[] }) {
   return (
     <ul className="flex flex-col gap-1.5">
       {replies.map((r, i) => (
-        <li key={i} className="flex items-start gap-2 text-xs" title={r.instruction}>
+        <li key={i} className="flex items-start gap-2 text-xs" data-tip={r.instruction}>
           {r.willFollow ? (
             <CheckIcon size={12} className="mt-0.5 shrink-0 text-sage" />
           ) : (
@@ -619,13 +619,14 @@ export function UploadAssistant({
               }}
               data-track="upload-close"
               aria-label={t("common.close")}
+              data-tip={t("common.close")}
               className="ml-auto flex size-8 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-700"
             >
               ✕
             </button>
           )}
         </div>
-        <p className="truncate text-xs text-sand-500" title={subject}>
+        <p className="truncate text-xs text-sand-500" data-tip={subject}>
           {subject}
         </p>
 
@@ -705,7 +706,7 @@ export function UploadAssistant({
                   {review.pages.map((page) => (
                     <label
                       key={page.url}
-                      title={page.url}
+                      data-tip={page.url}
                       className="flex cursor-pointer items-start gap-2 rounded-lg px-2 py-1 text-[13px] text-sand-800 hover:bg-clay-100"
                     >
                       <input

@@ -78,6 +78,17 @@ const en = {
   addToCompare: "Add note…",
   removeFromCompare: "Remove from compare",
   notesLabel: "Notes",
+
+  collapseSectionTitle: "Collapse or expand this section",
+  addNoteTitle: "Write a note in this section",
+  deleteSectionTitle: "Delete this section and its notes",
+  addSectionTitle: "Add a section to file notes in",
+  exportTitle: "Export the notes as Markdown or Word",
+  pinTitle: "Pin the selected notes to the top of their section",
+  unpinTitle: "Unpin the selected notes",
+  deleteSelectedTitle: "Delete the selected notes",
+  deleteNoteTitle: "Delete this note",
+  undoRejectTitle: "Put the rejected note back as pending",
 };
 
 const zh: Record<keyof typeof en, string> = {
@@ -150,6 +161,17 @@ const zh: Record<keyof typeof en, string> = {
   addToCompare: "添加笔记…",
   removeFromCompare: "移出对比",
   notesLabel: "笔记",
+
+  collapseSectionTitle: "收起或展开此章节",
+  addNoteTitle: "在此章节写一条笔记",
+  deleteSectionTitle: "删除此章节及其笔记",
+  addSectionTitle: "添加一个章节来存放笔记",
+  exportTitle: "把笔记导出为 Markdown 或 Word",
+  pinTitle: "把选中的笔记置顶到所在章节",
+  unpinTitle: "取消置顶选中的笔记",
+  deleteSelectedTitle: "删除选中的笔记",
+  deleteNoteTitle: "删除此笔记",
+  undoRejectTitle: "把已拒绝的笔记恢复为待定",
 };
 
 export const outline = { en, zh } as const;

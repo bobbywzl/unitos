@@ -21,6 +21,7 @@ import { MEDIA_EXTENSIONS, isMediaUrl } from "@/lib/video/types";
 import { parseYouTubeId } from "@/lib/video/youtube";
 import {
   AddDocumentDialog,
+  type AddTab,
   type LibraryDocument,
 } from "@/components/reader/add-document-dialog";
 import {
@@ -401,6 +402,20 @@ export function DocumentBar({
       setError(t("panes.driveOffline"));
       return;
     }
+    // A signed-in account that can link but has not: link first. The consent
+    // returns through the sign-in redirect URI — the one Google accepts — to
+    // this page with ?drive=linked, and the picker opens then, with a token
+    // minted from the stored grant: no popup, nothing else to register.
+    if (drive.canLink && !drive.linked) {
+      const next = window.location.pathname + window.location.search;
+      // A document navigation on purpose: the route answers with a redirect
+      // to Google's consent page, which the client router cannot follow.
+      window.location.href = new URL(
+        `/api/drive/link?next=${encodeURIComponent(next)}`,
+        window.location.origin,
+      ).toString();
+      return;
+    }
     let token: string;
     let picked: DrivePickedFile[];
     try {
@@ -419,6 +434,29 @@ export function DocumentBar({
     setAssistant({ kind: "drive", token, files: picked });
     setDialog(false);
   }
+
+  // Back from Link Google Drive: the callback returns here with ?drive=linked
+  // or ?drive=link-failed. Linked, the picker opens at once — the add the
+  // reader started; failed, the dialog opens on the Drive tab with the reason.
+  // The param leaves the URL so a reload does not repeat it.
+  const [dialogTab, setDialogTab] = useState<AddTab | null>(null);
+  const driveResult = searchParams.get("drive");
+  const driveResultHandled = useRef(false);
+  useEffect(() => {
+    if (!driveResult || driveResultHandled.current) return;
+    driveResultHandled.current = true;
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("drive");
+    router.replace(`/n/${notebookId}${params.size > 0 ? `?${params}` : ""}`);
+    /* eslint-disable react-hooks/set-state-in-effect */
+    setDialogTab("drive");
+    setDialog(true);
+    if (driveResult === "linked") void importFromDrive();
+    else setError(t("panes.driveAuthFailed"));
+    /* eslint-enable react-hooks/set-state-in-effect */
+    // importFromDrive and t are stable for the life of this mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [driveResult]);
 
   // Drag-and-drop PDF upload: dropping anywhere on the page adds to this work.
   const [dragging, setDragging] = useState(false);
@@ -560,7 +598,7 @@ export function DocumentBar({
             data-track="document-list"
             aria-expanded={listOpen}
             aria-label={t("panes.documentList")}
-            title={active?.title ?? t("panes.documentList")}
+            data-tip={active?.title ?? t("panes.documentList")}
             className="flex max-w-72 min-w-0 items-center gap-1.5 rounded-full bg-ink py-[7px] pr-3 pl-[15px] text-[13px] font-semibold text-paper"
           >
             <span className="truncate">{active ? active.title : t("panes.documentList")}</span>
@@ -593,7 +631,7 @@ export function DocumentBar({
                           ? "font-semibold text-ink"
                           : "text-sand-700 hover:bg-clay-100 hover:text-clay-800"
                       }`}
-                      title={d.title}
+                      data-tip={d.title}
                     >
                       {d.title}
                     </button>
@@ -602,7 +640,7 @@ export function DocumentBar({
                       data-track="document-actions"
                       aria-label={t("panes.documentActionsFor", { title: d.title })}
                       aria-expanded={pillMenu === d.id}
-                      title={t("panes.documentActions")}
+                      data-tip={t("panes.documentActions")}
                       className="mr-2 flex size-6 shrink-0 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-800"
                     >
                       <svg
@@ -630,7 +668,7 @@ export function DocumentBar({
                           data-track="document-reparse"
                           disabled={phase !== null}
                           className={`${rowAction} disabled:opacity-40`}
-                          title={t("panes.reparseDocumentTitle")}
+                          data-tip={t("panes.reparseDocumentTitle")}
                         >
                           {t("panes.reparseDocument")}
                         </button>
@@ -646,7 +684,7 @@ export function DocumentBar({
                           data-track="document-parse-as-article"
                           disabled={phase !== null}
                           className={`${rowAction} disabled:opacity-40`}
-                          title={t("panes.parseAsArticleTitle")}
+                          data-tip={t("panes.parseAsArticleTitle")}
                         >
                           {t("panes.parseAsArticle")}
                         </button>
@@ -660,7 +698,7 @@ export function DocumentBar({
                           data-track="document-open-as-handwritten"
                           disabled={phase !== null}
                           className={`${rowAction} disabled:opacity-40`}
-                          title={t("panes.openAsHandwrittenTitle")}
+                          data-tip={t("panes.openAsHandwrittenTitle")}
                         >
                           {t("panes.openAsHandwritten")}
                         </button>
@@ -674,7 +712,7 @@ export function DocumentBar({
                           data-track="document-recommend-links"
                           disabled={connecting !== null}
                           className={`${rowAction} disabled:opacity-40`}
-                          title={t("panes.recommendLinksTitle")}
+                          data-tip={t("panes.recommendLinksTitle")}
                         >
                           {connecting === d.id ? t("common.working") : t("panes.recommendLinks")}
                         </button>
@@ -687,7 +725,7 @@ export function DocumentBar({
                         data-track="document-print"
                         disabled={d.id !== activeId}
                         className={`${rowAction} disabled:opacity-40`}
-                        title={
+                        data-tip={
                           d.id === activeId
                             ? t("panes.printDocumentTitle")
                             : t("panes.printDocumentOpenFirst")
@@ -700,7 +738,7 @@ export function DocumentBar({
                           onClick={() => void detach(d.id)}
                           data-track="document-detach"
                           className="px-4 py-1.5 text-left text-[12.5px] text-red-600 hover:bg-red-50 dark:hover:bg-red-950"
-                          title={t("panes.detachDocumentTitle")}
+                          data-tip={t("panes.detachDocumentTitle")}
                         >
                           {t("panes.detachDocument")}
                         </button>
@@ -720,11 +758,13 @@ export function DocumentBar({
         <button
           onClick={() => {
             setError(null);
+            setDialogTab(null);
             setDialog(true);
           }}
           data-track="add-document"
           data-nudge="document"
           aria-label={t("panes.addDocument")}
+          data-tip={t("panes.addDocumentTitle")}
           aria-haspopup="dialog"
           aria-expanded={dialog}
           className="flex size-8 items-center justify-center rounded-full border border-dashed border-sand-400 text-sand-600 hover:bg-clay-100 hover:text-clay-800"
@@ -762,6 +802,7 @@ export function DocumentBar({
         onOpenLibrary={() => void openLibrary()}
         onAttach={(id) => void attach(id)}
         onRemoveFromLibrary={(id) => void removeFromLibrary(id)}
+        initialTab={dialogTab}
       />
 
       {/* While the dialog is open it shows the progress and the error itself. */}

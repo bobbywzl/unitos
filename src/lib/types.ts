@@ -270,6 +270,22 @@ export type GraphEdge = {
   recommended: number;
 };
 
+/** One recommended link of the project, listed in the graph (SPEC.md §13):
+    both ends, the AI's reason, and the replies. Accept and Dismiss act on it
+    there; it paints nowhere until accepted. */
+export type RecommendedLinkView = {
+  id: string;
+  fromDocumentId: string;
+  fromTitle: string;
+  toDocumentId: string;
+  toTitle: string;
+  quotedText: string; // the from end
+  toQuotedText: string | null; // the to end; null = document-level
+  reason: string | null;
+  createdById: string | null;
+  replies: ReplyView[];
+};
+
 // ── The assistant as an actor ──────────────────────────────────────────────
 
 export type AssistantAnchor = {

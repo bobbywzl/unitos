@@ -149,6 +149,7 @@ export function DragHandle({ handle, label }: { handle: HandleProps; label: stri
     <button
       type="button"
       aria-label={label}
+      data-tip={label}
       className="flex cursor-grab touch-none items-center rounded-full p-0.5 text-sand-400 hover:bg-clay-100 hover:text-clay-800"
       {...handle.attributes}
       {...(handle.listeners ?? {})}

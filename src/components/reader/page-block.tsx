@@ -356,6 +356,7 @@ export function PageBlock({
                 data-track="page-close"
                 disabled={busy === "comment"}
                 aria-label={t("common.close")}
+                data-tip={t("common.close")}
                 className="rounded-full px-1.5 text-sand-500 hover:text-clay-800 disabled:opacity-40"
               >
                 ✕
@@ -394,7 +395,7 @@ export function PageBlock({
                   onClick={() => void ask(true)}
                   data-track="page-ask"
                   disabled={busy !== null || question.trim().length === 0}
-                  title={t("panes.pageAskTitle")}
+                  data-tip={t("panes.pageAskTitle")}
                   className={buttonClass}
                 >
                   {t("panes.pageAsk")}
@@ -403,7 +404,7 @@ export function PageBlock({
                   onClick={() => void ask(false)}
                   data-track="page-explain"
                   disabled={busy !== null}
-                  title={t("panes.pageExplainTitle")}
+                  data-tip={t("panes.pageExplainTitle")}
                   className={quietButtonClass}
                 >
                   {t("panes.pageExplain")}
@@ -412,14 +413,14 @@ export function PageBlock({
                   onClick={() => void comment()}
                   data-track="page-comment"
                   disabled={busy !== null || question.trim().length === 0}
-                  title={t("panes.pageCommentTitle")}
+                  data-tip={t("panes.pageCommentTitle")}
                   className={quietButtonClass}
                 >
                   {busy === "comment" ? t("common.saving") : t("panes.pageComment")}
                 </button>
                 <span
                   className="ml-auto flex items-center gap-1.5"
-                  title={t("panes.pageHighlightTitle")}
+                  data-tip={t("panes.pageHighlightTitle")}
                 >
                   {HIGHLIGHT_HUES.map((color) => (
                     <button

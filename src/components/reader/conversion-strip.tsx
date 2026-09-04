@@ -94,13 +94,13 @@ export function ConversionStrip({
             {t("panes.convertedText")}
           </span>
           {canEdit && (
-            <button onClick={() => void convert()} data-track="convert-again" title={t("panes.convertAgainTitle")} className={buttonClass}>
+            <button onClick={() => void convert()} data-track="convert-again" data-tip={t("panes.convertAgainTitle")} className={buttonClass}>
               {t("panes.convertAgain")}
             </button>
           )}
         </div>
       ) : canEdit ? (
-        <button onClick={() => void convert()} data-track="convert-to-text" title={t("panes.convertToTextTitle")} className={buttonClass}>
+        <button onClick={() => void convert()} data-track="convert-to-text" data-tip={t("panes.convertToTextTitle")} className={buttonClass}>
           {t("panes.convertToText")}
         </button>
       ) : null}

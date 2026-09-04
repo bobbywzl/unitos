@@ -156,7 +156,7 @@ export function FindPanel({
                 onClick={() => onSeek(match.startTime, match.endTime)}
                 data-track="video-find-seek"
                 className="rounded-full bg-clay-100 px-2.5 py-0.5 text-[11px] font-semibold tabular-nums text-clay-800 hover:bg-clay-200"
-                title={t("video.jumpToPart")}
+                data-tip={t("video.jumpToPart")}
               >
                 {formatTimeRange(match.startTime, match.endTime)}
               </button>
@@ -172,7 +172,7 @@ export function FindPanel({
                     onClick={() => void save(i, match)}
                     data-track="video-find-add-note"
                     disabled={saving !== null || sectionChoices.length === 0}
-                    title={
+                    data-tip={
                       sectionChoices.length === 0
                         ? t("video.addSectionFirst")
                         : t("video.addAsPendingNote", { section: sectionChoices[0].label })

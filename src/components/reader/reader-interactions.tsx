@@ -3496,6 +3496,7 @@ export function ReaderInteractions({
             }}
             data-track="assistant"
             aria-expanded={menuExpanded}
+            data-tip={t("reader.assistantMenuTitle")}
             className="pointer-events-auto flex items-center gap-1.5 rounded-full bg-card px-3 py-2 text-[12px] font-semibold text-clay-800 shadow-float"
           >
             <SparkleIcon size={13} />
@@ -3510,7 +3511,7 @@ export function ReaderInteractions({
             }}
             aria-label={t("panes.searchProject")}
             aria-expanded={searchOpen}
-            title={t("panes.searchProjectTitle")}
+            data-tip={t("panes.searchProjectTitle")}
             className={`pointer-events-auto flex w-[34px] items-center justify-center rounded-full bg-card shadow-float ${
               searchOpen ? "text-clay-800" : "text-sand-600 hover:text-clay-800"
             }`}
@@ -3530,6 +3531,7 @@ export function ReaderInteractions({
                 <button
                   key={ask.labelKey}
                   data-track={`ask:${ask.track}`}
+                  data-tip={t(ask.questionKey)}
                   onClick={() => {
                     setMenuExpanded(false);
                     openArticleChat(t(ask.questionKey));
@@ -3545,6 +3547,7 @@ export function ReaderInteractions({
                   openArticleChat(null);
                 }}
                 data-track="ask-assistant"
+                data-tip={t("reader.askAssistantTitle")}
                 className="px-4 py-2 text-left text-[12.5px] text-sand-800 hover:bg-clay-100 hover:text-clay-800"
               >
                 {t("reader.askAssistant")}
@@ -3558,7 +3561,7 @@ export function ReaderInteractions({
               openDistillPage(null);
             }}
             data-track="distill"
-            title={t("reader.distillMenuTitle")}
+            data-tip={t("reader.distillMenuTitle")}
             className="flex items-center gap-1.5 px-4 py-2 text-left text-[12.5px] text-sand-800 hover:bg-clay-100 hover:text-clay-800"
           >
             <DistillIcon size={12} />
@@ -3613,7 +3616,7 @@ export function ReaderInteractions({
             onClick={toggleEditMode}
             data-track="done"
             className="rounded-full bg-clay px-3.5 py-1.5 text-xs font-semibold text-clay-fg shadow-soft hover:bg-clay-600"
-            title={t("reader.backToReading")}
+            data-tip={t("reader.backToReading")}
           >
             {t("common.done")}
           </button>
@@ -3625,7 +3628,7 @@ export function ReaderInteractions({
             onClick={() => openDistillPage(distillShownId)}
             data-track="distill"
             className="flex items-center gap-1.5 rounded-full bg-sand-100 px-3.5 py-1.5 text-xs font-semibold text-sand-600 shadow-soft hover:text-clay-800"
-            title={t("reader.distillButtonTitle")}
+            data-tip={t("reader.distillButtonTitle")}
           >
             <DistillIcon size={13} />
             {t("reader.distill")}
@@ -3688,6 +3691,7 @@ export function ReaderInteractions({
               onClick={() => setAnnotationCard(null)}
               data-track="annotation-close"
               aria-label={t("common.close")}
+              data-tip={t("common.close")}
               className="rounded-full px-1.5 text-sand-500 hover:text-clay-800"
             >
               ✕
@@ -3702,7 +3706,7 @@ export function ReaderInteractions({
                   data-track={`annotation-recolor:${color}`}
                   disabled={annotationCard.busy}
                   aria-label={t("reader.recolor", { color: t(HUE_KEY[color]) })}
-                  title={t("reader.recolor", { color: t(HUE_KEY[color]) })}
+                  data-tip={t("reader.recolor", { color: t(HUE_KEY[color]) })}
                   className={`size-5 rounded-full disabled:opacity-40 ${
                     annotationCard.color === color ? "ring-2 ring-sand-600 ring-offset-2" : ""
                   }`}
@@ -3728,6 +3732,7 @@ export function ReaderInteractions({
             <button
               onClick={() => void deleteAnnotation()}
               data-track="annotation-delete"
+              data-tip={annotationCard.kind === "highlight" ? t("reader.deleteHighlightTitle") : t("reader.deleteCommentTitle")}
               disabled={annotationCard.busy}
               className="text-xs font-semibold text-red-500 hover:text-red-700 disabled:opacity-40"
             >
@@ -3766,6 +3771,7 @@ export function ReaderInteractions({
                   onClick={() => setExtractCard(null)}
                   data-track="extract-card-close"
                   aria-label={t("common.close")}
+                  data-tip={t("common.close")}
                   className="rounded-full px-1.5 text-sand-500 hover:text-clay-800"
                 >
                   ✕
@@ -3788,7 +3794,7 @@ export function ReaderInteractions({
                     onClick={() => void deleteExtraction(extraction.id)}
                     data-track="extract-card-delete"
                     className="text-xs font-semibold text-red-500 hover:text-red-700"
-                    title={t("reader.deleteExtractionTitle")}
+                    data-tip={t("reader.deleteExtractionTitle")}
                   >
                     {t("common.delete")}
                   </button>
@@ -3850,6 +3856,7 @@ export function ReaderInteractions({
               disabled={busy}
               onClick={() => void completeLink()}
               data-track="close-link"
+              data-tip={t("reader.closeLinkTitle")}
               className={`flex w-full items-center gap-1.5 rounded-full bg-sage-600 ${toolRow} text-left font-semibold text-sage-fg hover:bg-sage-700 disabled:opacity-40`}
             >
               <LinkIcon size={11} />
@@ -3861,6 +3868,7 @@ export function ReaderInteractions({
             onClick={() => setSubmenu(submenu === "ai" ? null : "ai")}
             data-track="assistant"
             aria-expanded={submenu === "ai"}
+            data-tip={t("reader.assistantTitle")}
             className={`flex w-full items-center gap-1.5 rounded-full ${toolRow} text-left font-semibold ${
               submenu === "ai"
                 ? "bg-clay-100 text-clay-800"
@@ -3898,7 +3906,7 @@ export function ReaderInteractions({
                   onClick={toggleVoice}
                   data-track="assistant-voice"
                   aria-label={aiListening ? t("reader.stopListening") : t("reader.speakCommand")}
-                  title={aiListening ? t("reader.stopListening") : t("reader.speakCommand")}
+                  data-tip={aiListening ? t("reader.stopListening") : t("reader.speakCommand")}
                   className={`flex size-7 items-center justify-center rounded-full ${
                     aiListening
                       ? "animate-pulse bg-red-500 text-white"
@@ -3911,7 +3919,7 @@ export function ReaderInteractions({
                   disabled={!aiBusy && !aiCommand.trim()}
                   onClick={() => (aiBusy ? stopAssistantChat() : void runAssistant())}
                   data-track="assistant-run"
-                  title={aiBusy ? t("reader.stopAssistant") : undefined}
+                  data-tip={aiBusy ? t("reader.stopAssistant") : t("reader.runTitle")}
                   aria-label={aiBusy ? t("reader.stopAssistant") : undefined}
                   className="ml-auto rounded-full bg-clay px-3 py-1 text-[11px] font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
                 >
@@ -3928,7 +3936,7 @@ export function ReaderInteractions({
               onClick={() => void extract()}
               data-track="extract-term"
               disabled={extractBusy}
-              title={t("reader.extractTermTitle")}
+              data-tip={t("reader.extractTermTitle")}
               className={`flex w-full items-center justify-between gap-2 rounded-full bg-clay-100 ${toolRow} text-left font-semibold text-clay-800 hover:bg-clay-200 disabled:opacity-40`}
             >
               <span className="flex items-center gap-1.5">
@@ -3944,7 +3952,7 @@ export function ReaderInteractions({
           <button
             onClick={() => void explain()}
             data-track="explain"
-            title={popover.figure ? t("reader.explainFigureTitle") : undefined}
+            data-tip={popover.figure ? t("reader.explainFigureTitle") : t("reader.explainTitle")}
             className={`flex w-full items-center gap-1.5 rounded-full ${toolRow} text-left text-sand-800 hover:bg-clay-100 hover:text-clay-800`}
           >
             <QuestionIcon size={coarse ? 14 : 12} />
@@ -3954,6 +3962,7 @@ export function ReaderInteractions({
             <button
               onClick={() => void simplify()}
               data-track="simplify"
+              data-tip={t("reader.simplifyTitle")}
               className={`flex w-full items-center gap-1.5 rounded-full ${toolRow} text-left text-sand-800 hover:bg-clay-100 hover:text-clay-800`}
             >
               <SummaryIcon size={coarse ? 14 : 12} />
@@ -3965,7 +3974,7 @@ export function ReaderInteractions({
               onClick={() => void extract()}
               data-track="extract"
               disabled={extractBusy}
-              title={t("reader.extractTitle")}
+              data-tip={t("reader.extractTitle")}
               className={`flex w-full items-center gap-1.5 rounded-full ${toolRow} text-left text-sand-800 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40`}
             >
               <ExtractIcon size={coarse ? 14 : 12} />
@@ -3977,6 +3986,7 @@ export function ReaderInteractions({
             onClick={() => setSubmenu(submenu === "comment" ? null : "comment")}
             data-track="comment"
             aria-expanded={submenu === "comment"}
+            data-tip={t("reader.commentTitle")}
             className={`flex w-full items-center gap-1.5 rounded-full ${toolRow} text-left ${
               submenu === "comment"
                 ? "bg-clay-100 text-clay-800"
@@ -4030,7 +4040,7 @@ export function ReaderInteractions({
           <button
             onClick={beginLink}
             data-track="link"
-            title={t("reader.linkTitle")}
+            data-tip={t("reader.linkTitle")}
             className={`flex w-full items-center gap-1.5 rounded-full ${toolRow} text-left text-sand-800 hover:bg-clay-100 hover:text-clay-800`}
           >
             <UnlinkIcon size={coarse ? 14 : 12} />
@@ -4057,7 +4067,7 @@ export function ReaderInteractions({
                 onClick={() => void annotate({ color, comment: commentDraft.trim() || undefined })}
                 data-track={`highlight:${color}`}
                 aria-label={t("reader.highlightIn", { color: t(HUE_KEY[color]) })}
-                title={t(
+                data-tip={t(
                   commentDraft.trim() ? "reader.highlightInWithNote" : "reader.highlightIn",
                   { color: t(HUE_KEY[color]) },
                 )}
@@ -4087,7 +4097,7 @@ export function ReaderInteractions({
                 onClick={() => setSubmenu(submenu === "add" ? null : "add")}
                 data-track="add-to-notes"
                 aria-expanded={submenu === "add"}
-                title={t("reader.addToNotesTitle")}
+                data-tip={t("reader.addToNotesTitle")}
                 className={`flex w-full items-center gap-1.5 rounded-full bg-clay ${toolRow} text-left font-semibold text-clay-fg hover:bg-clay-600`}
               >
                 <NotesIcon size={coarse ? 14 : 12} />
@@ -4102,6 +4112,7 @@ export function ReaderInteractions({
                       disabled={busy}
                       onClick={() => void addToSection(choice.id)}
                       data-track="add-to-notes-section"
+                      data-tip={t("reader.addPendingNote", { section: choice.label })}
                       className={`truncate rounded-full ${toolRow} text-left text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40`}
                     >
                       {choice.label}
@@ -4120,7 +4131,7 @@ export function ReaderInteractions({
               onClick={() => void speakSelection()}
               data-track="read-aloud"
               aria-label={voice === "idle" ? t("reader.readAloud") : t("reader.stopReading")}
-              title={voice === "idle" ? t("reader.readAloud") : t("reader.stopReading")}
+              data-tip={voice === "idle" ? t("reader.readAloud") : t("reader.stopReading")}
               className={`flex ${coarse ? "size-11" : "size-[34px]"} items-center justify-center rounded-full shadow-float ${
                 voice === "idle"
                   ? "bg-card text-sand-700 hover:text-clay-800"
@@ -4147,6 +4158,7 @@ export function ReaderInteractions({
           data-track-surface="ai-toolbar"
           data-track="close-link"
           disabled={busy}
+          data-tip={t("reader.closeLinkTitle")}
           onMouseDown={(e) => e.preventDefault()} // keep the highlight alive under the press
           onClick={() => void completeCloseLink()}
           className="absolute z-20 flex -translate-y-1/2 items-center gap-1.5 rounded-full bg-sage-600 px-2.5 py-1 text-[11.5px] font-semibold text-sage-fg shadow-float hover:bg-sage-700 disabled:opacity-40"
@@ -4176,7 +4188,7 @@ export function ReaderInteractions({
               (left, top) => setBubble((b) => (b ? { ...b, left, top } : b)),
             )}
             style={{ touchAction: "none" }}
-            title={t("reader.dragToMove")}
+            data-tip={t("reader.dragToMove")}
             className="mb-2 flex cursor-move items-center justify-between"
           >
             <span className="flex items-center gap-1.5 text-[11px] font-bold tracking-[0.08em] text-clay-800 uppercase">
@@ -4187,6 +4199,7 @@ export function ReaderInteractions({
               {bubble.streaming && (
                 <button
                   onClick={stopExplain}
+                  data-tip={t("reader.stopRunTitle")}
                   className="flex items-center gap-1 rounded-full border border-line px-2 py-0.5 text-[11px] font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800"
                 >
                   <StopIcon size={9} />
@@ -4198,7 +4211,7 @@ export function ReaderInteractions({
                   onClick={() => void deleteExplain()}
                   data-track="explain-delete"
                   className="text-xs font-semibold text-red-500 hover:text-red-700"
-                  title={t("reader.deleteExplainTitle")}
+                  data-tip={t("reader.deleteExplainTitle")}
                 >
                   {t("common.delete")}
                 </button>
@@ -4208,6 +4221,7 @@ export function ReaderInteractions({
                 data-track="explain-close"
                 className="text-xs text-sand-500 hover:text-clay-700"
                 aria-label={t("common.close")}
+                data-tip={t("common.close")}
               >
                 ✕
               </button>
@@ -4241,7 +4255,7 @@ export function ReaderInteractions({
               (left, top) => setSimplifyCard((c) => (c ? { ...c, left, top } : c)),
             )}
             style={{ touchAction: "none" }}
-            title={t("reader.dragToMove")}
+            data-tip={t("reader.dragToMove")}
             className="mb-2 flex cursor-move items-center justify-between"
           >
             <span className="flex items-center gap-1.5 text-[11px] font-bold tracking-[0.08em] text-sage-800 uppercase">
@@ -4252,6 +4266,7 @@ export function ReaderInteractions({
               {simplifyCard.streaming && (
                 <button
                   onClick={stopSimplify}
+                  data-tip={t("reader.stopRunTitle")}
                   className="flex items-center gap-1 rounded-full border border-line px-2 py-0.5 text-[11px] font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800"
                 >
                   <StopIcon size={9} />
@@ -4263,7 +4278,7 @@ export function ReaderInteractions({
                   onClick={() => void deleteSimplify()}
                   data-track="simplify-delete"
                   className="text-xs font-semibold text-red-500 hover:text-red-700"
-                  title={t("reader.deleteSimplifyTitle")}
+                  data-tip={t("reader.deleteSimplifyTitle")}
                 >
                   {t("common.delete")}
                 </button>
@@ -4273,6 +4288,7 @@ export function ReaderInteractions({
                 data-track="simplify-close"
                 className="text-xs text-sand-500 hover:text-clay-700"
                 aria-label={t("common.close")}
+                data-tip={t("common.close")}
               >
                 ✕
               </button>
@@ -4293,7 +4309,7 @@ export function ReaderInteractions({
                           c ? { ...c, active: c.active === i ? null : i } : c,
                         )
                       }
-                      title={t("reader.sentenceTitle")}
+                      data-tip={t("reader.sentenceTitle")}
                       className={
                         simplifyCard.active === i
                           ? "simplify-sentence simplify-sentence-active"
@@ -4331,7 +4347,7 @@ export function ReaderInteractions({
               (left, top) => setCommentCard((c) => (c ? { ...c, left, top } : c)),
             )}
             style={{ touchAction: "none" }}
-            title={t("reader.dragToMove")}
+            data-tip={t("reader.dragToMove")}
             className="mb-2 flex cursor-move items-center justify-between"
           >
             <span className="flex items-center gap-1.5 text-[11px] font-bold tracking-[0.08em] text-clay-800 uppercase">
@@ -4343,6 +4359,7 @@ export function ReaderInteractions({
               data-track="comment-card-close"
               className="text-xs text-sand-500 hover:text-clay-700"
               aria-label={t("common.close")}
+              data-tip={t("common.close")}
             >
               ✕
             </button>
@@ -4370,6 +4387,7 @@ export function ReaderInteractions({
                 <button
                   onClick={() => void deleteCommentCard()}
                   data-track="comment-card-delete"
+                  data-tip={t("reader.deleteCommentTitle")}
                   disabled={commentCard.busy}
                   className="text-xs font-semibold text-red-500 hover:text-red-700 disabled:opacity-40"
                 >
@@ -4424,7 +4442,7 @@ export function ReaderInteractions({
               (left, top) => setAssistantChat((c) => (c ? { ...c, left, top } : c)),
             )}
             style={{ touchAction: "none" }}
-            title={t("reader.dragToMove")}
+            data-tip={t("reader.dragToMove")}
             className="flex cursor-move items-center justify-between px-4 pt-3 pb-1"
           >
             <span className="flex items-center gap-1.5 text-[11px] font-bold tracking-[0.08em] text-clay-800 uppercase">
@@ -4437,7 +4455,7 @@ export function ReaderInteractions({
                   onClick={() => void deleteAssistantConversation()}
                   data-track="assistant-card-delete"
                   className="text-xs font-semibold text-red-500 hover:text-red-700"
-                  title={t("reader.deleteConversationTitle")}
+                  data-tip={t("reader.deleteConversationTitle")}
                 >
                   {t("common.delete")}
                 </button>
@@ -4447,6 +4465,7 @@ export function ReaderInteractions({
                 data-track="assistant-card-close"
                 className="text-xs text-sand-500 hover:text-clay-700"
                 aria-label={t("common.close")}
+                data-tip={t("common.close")}
               >
                 ✕
               </button>
@@ -4503,7 +4522,7 @@ export function ReaderInteractions({
                 stopAssistantChat();
               }}
               disabled={!assistantChat.busy && !assistantChat.input.trim()}
-              title={assistantChat.busy ? t("reader.stopAssistant") : undefined}
+              data-tip={assistantChat.busy ? t("reader.stopAssistant") : t("reader.sendTitle")}
               aria-label={assistantChat.busy ? t("reader.stopAssistant") : undefined}
               className="rounded-full bg-clay px-3 py-1.5 text-[11px] font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
             >
@@ -4552,6 +4571,7 @@ export function ReaderInteractions({
             onClick={() => broadcastPendingLink(null)}
             data-track="cancel-link"
             aria-label={t("reader.cancelLink")}
+            data-tip={t("reader.cancelLink")}
             className="shrink-0 text-xs text-sand-500 hover:text-clay-700"
           >
             ✕
@@ -4622,6 +4642,7 @@ export function ReaderInteractions({
               disabled={planChecked.size === 0}
               onClick={() => void approvePlan()}
               data-track="plan-apply"
+              data-tip={t("reader.applyActionsTitle")}
               className="rounded-full bg-clay px-4 py-1.5 text-xs font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
             >
               {t("reader.applyActions", { n: planChecked.size, s: plural(planChecked.size) })}
@@ -4629,6 +4650,7 @@ export function ReaderInteractions({
             <button
               onClick={() => setAiPlan(null)}
               data-track="plan-cancel"
+              data-tip={t("reader.discardPlanTitle")}
               className="rounded-full border border-line px-3 py-1 text-xs text-sand-700 hover:bg-clay-100 hover:text-clay-800"
             >
               {t("common.cancel")}

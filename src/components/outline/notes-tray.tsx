@@ -110,6 +110,7 @@ function TraySection({
           onClick={() => setCollapsed(!collapsed)}
           data-track="section-collapse"
           aria-expanded={!collapsed}
+          data-tip={t("outline.collapseSectionTitle")}
           className={`flex items-center gap-1 ${labelClass} text-sand-600 hover:text-clay-700`}
         >
           <span className="self-center text-sand-400">
@@ -122,6 +123,7 @@ function TraySection({
           <button
             onClick={() => setComposing(true)}
             data-track="section-add-note"
+            data-tip={t("outline.addNoteTitle")}
             className="ml-auto text-[11px] text-sand-600 opacity-0 transition-opacity group-hover/section:opacity-100 focus-visible:opacity-100 hover:text-clay-700"
           >
             {t("outline.addNoteBtn")}

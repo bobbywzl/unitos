@@ -19,6 +19,7 @@ const en = {
   documentCountOther: "{n} documents",
   pendingCount: "{n} pending",
   moreActionsFor: "More actions for {title}",
+  projectActions: "Project actions",
   notes: "Notes",
   rename: "Rename",
   // Welcome flow (first visit): the splash, then the nudges, one bubble at a time
@@ -28,7 +29,7 @@ const en = {
   nudgeDocument: "Add an article with +: a PDF, a web page, a video, or Google Drive.",
   nudgeGuide: "Press ? any time. It explains every function, Distill first.",
   nudgeRail:
-    "The sidebar: Assistant, Notes, Distill, Graph, Annotations, Edit history. Open one and explore.",
+    "The sidebar: Assistant, Graph, Notes, Annotations, Distill, Edit history. Open one and explore.",
   nudgeDone: "Got it",
   // Guide dialog
   guideLabel: "Guide",
@@ -127,6 +128,7 @@ const zh: Record<keyof typeof en, string> = {
   documentCountOther: "{n} 份文档",
   pendingCount: "{n} 条待定",
   moreActionsFor: "{title}的更多操作",
+  projectActions: "项目操作",
   notes: "笔记",
   rename: "重命名",
   // Guide dialog
@@ -135,7 +137,7 @@ const zh: Record<keyof typeof en, string> = {
   nudgeProject: "从这里开始：给项目起名并按“创建”。一个项目绑定文档和笔记。",
   nudgeDocument: "用 + 添加文章：PDF、网页、视频或 Google Drive。",
   nudgeGuide: "随时按 ?。它介绍全部功能，提炼排在最前。",
-  nudgeRail: "侧栏：助手、笔记、提炼、图谱、批注、编辑记录。打开一个，开始探索。",
+  nudgeRail: "侧栏：助手、图谱、笔记、批注、提炼、编辑记录。打开一个，开始探索。",
   nudgeDone: "知道了",
   guideLabel: "指南",
   guideTitle: "如何拆解一篇文档",

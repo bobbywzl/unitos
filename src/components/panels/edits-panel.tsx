@@ -192,6 +192,7 @@ function EditCard({
               <button
                 onClick={() => void revert()}
                 data-track="edit-revert"
+                data-tip={t("panels.revertTitle")}
                 disabled={working}
                 className="text-xs text-sand-600 hover:text-clay-700 disabled:opacity-50"
               >
@@ -226,6 +227,7 @@ function EditCard({
               <button
                 onClick={() => void restore()}
                 data-track="edit-restore"
+                data-tip={t("panels.restoreTitle")}
                 disabled={working}
                 className="text-xs text-sand-600 hover:text-clay-700 disabled:opacity-50"
               >

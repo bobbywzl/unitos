@@ -24,11 +24,11 @@ const TOOLS: [TKey, TKey][] = [
 
 // The side panel's tabs, in the rail's order: name key, body key.
 const PANELS: [TKey, TKey][] = [
-  ["works.notes", "works.guidePanelNotesBody"],
   ["works.guideAssistant", "works.guidePanelAssistantBody"],
-  ["works.guideDistill", "works.guidePanelDistillBody"],
   ["works.guidePanelSummary", "works.guidePanelSummaryBody"],
+  ["works.notes", "works.guidePanelNotesBody"],
   ["works.guidePanelAnnotations", "works.guidePanelAnnotationsBody"],
+  ["works.guideDistill", "works.guidePanelDistillBody"],
   ["works.guidePanelEdits", "works.guidePanelEditsBody"],
 ];
 export function GuideDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
@@ -76,6 +76,7 @@ export function GuideDialog({ open, onClose }: { open: boolean; onClose: () => v
             onClick={onClose}
             data-track="guide-close"
             aria-label={t("common.close")}
+            data-tip={t("common.close")}
             className="ml-auto flex size-8 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-700"
           >
             ✕

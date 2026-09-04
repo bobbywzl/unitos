@@ -24,6 +24,17 @@ const en = {
   resizeTrayTitle: "Drag to resize the notes tray. Double-click to reset.",
   more: "More",
   workspace: "Workspace",
+  assistantTabTitle: "Assistant: ask at document, project, or projects scope; run checks",
+  notesTabTitle: "Notes: your sections and the pending queue",
+  distillTabTitle: "Distill: every distillation of the open document",
+  annotationsTabTitle: "Annotations: highlights, comments, explanations, links",
+  editsTabTitle: "Edit history: every edit to the open document",
+  moreTitle: "More: notes full page, settings",
+  allCorporaTitle: "Back to Projects",
+  addDocumentTitle: "Add a document: a PDF, a video, a web page, or Google Drive",
+  attachTitle: "Attach this document to the project",
+  referencesToggleTitle: "Show or hide the references",
+  removeParagraphTitle: "Remove the focused paragraph",
 
   // Reader views (reader-panes.tsx)
   viewNormal: "Normal",
@@ -89,6 +100,8 @@ const en = {
   pageHighlightTitle: "Highlight the circled spot in this color. Typed text rides on the highlight.",
   driveLink: "Link Google Drive",
   driveLinked: "Google Drive is linked.",
+  driveLinkFirstHint:
+    "The first pick links Google Drive to your account: one Google consent, then no popup.",
   driveOffline: "Offline. Google Drive adds need the server.",
   driveLinkUseDrive:
     "This is a Google Drive link. Add it from the Add from Google Drive tab, or link Google Drive in Settings to add links directly.",
@@ -275,19 +288,25 @@ const en = {
   // Graph (graph-overlay.tsx, graph-view.tsx)
   graph: "Graph",
   graphTitle: "The project as a graph: documents and the links between them",
-  graphHint: "Each node is a document; hover to spotlight its links. A thicker line means more links between two documents; dashed means recommended links awaiting acceptance. Drag to arrange; click a node to open it.",
+  graphHint: "Each node is a document; hover to spotlight its links. A thicker line means more links between two documents; dashed means recommended links awaiting acceptance — open Recommended links to accept or dismiss them. Drag to arrange; click a node to open it.",
   graphEmpty: "Attach at least two documents — the graph draws the links between them.",
   graphCounts: "{docs} documents · {links} link(s)",
 
   // Recommended links (annotations-panel.tsx)
   recommendedLinks: "Recommended links",
-  recommendedLinksDesc: "The AI scanned this document against the project. Accept a link to make it real; dismiss what does not hold.",
+  recommendedLinksDesc:
+    "The AI scanned the documents against each other. Accept a link to make it real; dismiss what does not hold.",
+  recommendedLinksToggleTitle: "Recommended links awaiting Accept, for the whole project",
+  recommendedLinksEmpty: "No recommended links. Recommend links in a document's menu runs the scan.",
+  openLinkEnd: "Open {title} at this link",
+  acceptLinkTitle: "Make this recommended link real; it paints in both texts",
+  dismissLinkTitle: "Drop this recommended link; nothing is recorded",
   acceptLink: "Accept",
   dismissLink: "Dismiss",
   recommendLinks: "Recommend links",
   recommendLinksTitle: "Scan this document against the project for recommended links",
   recommendLinksRunning: "Finding links…",
-  recommendLinksDone: "{n} recommended link(s) found",
+  recommendLinksDone: "{n} recommended link(s) found — open the graph to accept them",
   recommendLinksNone: "No new connections found",
 
   // Project search (project-search.tsx)
@@ -323,6 +342,17 @@ const zh: Record<keyof typeof en, string> = {
   resizeTrayTitle: "拖动调整笔记栏宽度。双击恢复默认。",
   more: "更多",
   workspace: "工作区",
+  assistantTabTitle: "助手：在文档、项目或全部项目范围提问；运行检查",
+  notesTabTitle: "笔记：你的章节与待定队列",
+  distillTabTitle: "提炼：当前文档的每次提炼",
+  annotationsTabTitle: "批注：高亮、评论、解释、链接",
+  editsTabTitle: "编辑记录：当前文档的每次编辑",
+  moreTitle: "更多：整页笔记、设置",
+  allCorporaTitle: "返回全部项目",
+  addDocumentTitle: "添加文档：PDF、视频、网页或 Google Drive",
+  attachTitle: "把此文档加入项目",
+  referencesToggleTitle: "显示或隐藏参考文献",
+  removeParagraphTitle: "移除当前段落",
 
   viewNormal: "普通",
   viewSide: "左右分屏",
@@ -383,6 +413,7 @@ const zh: Record<keyof typeof en, string> = {
   pageHighlightTitle: "以此颜色圈选高亮圈出的部分。输入的文字会附在高亮上。",
   driveLink: "关联 Google Drive",
   driveLinked: "Google Drive 已关联。",
+  driveLinkFirstHint: "首次选取会把 Google Drive 关联到你的账户：一次 Google 授权，之后不再弹窗。",
   driveOffline: "离线。从 Google Drive 添加需要连接服务器。",
   driveLinkUseDrive:
     "这是 Google Drive 链接。请从“从 Google Drive 添加”页签添加；或在设置中关联 Google Drive 后直接粘贴链接添加。",
@@ -546,18 +577,23 @@ const zh: Record<keyof typeof en, string> = {
 
   graph: "图谱",
   graphTitle: "项目图谱：文档与它们之间的链接",
-  graphHint: "每个节点是一个文档，悬停可聚焦它的链接。线越粗表示两个文档之间的链接越多；虚线是待接受的推荐链接。拖动可调整位置；点击节点打开文档。",
+  graphHint: "每个节点是一个文档，悬停可聚焦它的链接。线越粗表示两个文档之间的链接越多；虚线是待接受的推荐链接——打开“推荐链接”即可接受或忽略。拖动可调整位置；点击节点打开文档。",
   graphEmpty: "至少添加两个文档——图谱会画出它们之间的链接。",
   graphCounts: "{docs} 个文档 · {links} 条链接",
 
   recommendedLinks: "推荐链接",
-  recommendedLinksDesc: "AI 已将此文档与项目比对。接受即成为正式链接；不成立的可忽略。",
+  recommendedLinksDesc: "AI 已将项目中的文档相互比对。接受即成为正式链接；不成立的可忽略。",
+  recommendedLinksToggleTitle: "整个项目中待接受的推荐链接",
+  recommendedLinksEmpty: "没有推荐链接。在文档菜单中选择“扫描推荐链接”可运行扫描。",
+  openLinkEnd: "在此链接处打开{title}",
+  acceptLinkTitle: "接受此推荐链接；它会在两篇文本中显示",
+  dismissLinkTitle: "忽略此推荐链接；不留记录",
   acceptLink: "接受",
   dismissLink: "忽略",
   recommendLinks: "扫描推荐链接",
   recommendLinksTitle: "将此文档与项目比对，寻找推荐链接",
   recommendLinksRunning: "正在查找链接……",
-  recommendLinksDone: "找到 {n} 条推荐链接",
+  recommendLinksDone: "找到 {n} 条推荐链接——打开图谱即可接受",
   recommendLinksNone: "没有发现新的链接",
 
   searchProject: "搜索项目",

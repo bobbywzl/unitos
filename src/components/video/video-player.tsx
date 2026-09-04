@@ -767,7 +767,7 @@ export const VideoPlayer = forwardRef<
           onClick={togglePlay}
           data-track="video-play"
           aria-label={playing ? t("video.pause") : t("video.play")}
-          title={playing ? t("video.pauseSpace") : t("video.playSpace")}
+          data-tip={playing ? t("video.pauseSpace") : t("video.playSpace")}
           className={CONTROL_BUTTON}
         >
           {playing ? <PauseIcon size={18} /> : <PlayIcon size={18} />}
@@ -815,7 +815,7 @@ export const VideoPlayer = forwardRef<
                 }}
                 data-track="video-marker"
                 aria-label={t("video.annotationAt", { time: formatTime(a.startTime) })}
-                title={`${formatTimeRange(a.startTime, a.endTime)} · ${markdownPreview(a.content).slice(0, 80)}`}
+                data-tip={`${formatTimeRange(a.startTime, a.endTime)} · ${markdownPreview(a.content).slice(0, 80)}`}
                 className="absolute top-1/2 size-[9px] -translate-x-1/2 -translate-y-1/2 rounded-full border border-black/40 bg-clay-300 hover:scale-125"
                 style={{ left: `${(a.startTime / duration) * 100}%` }}
               />
@@ -826,7 +826,7 @@ export const VideoPlayer = forwardRef<
           onClick={() => setMuted((m) => !m)}
           data-track="video-mute"
           aria-label={muted ? t("video.unmute") : t("video.mute")}
-          title={muted ? t("video.unmute") : t("video.mute")}
+          data-tip={muted ? t("video.unmute") : t("video.mute")}
           className={CONTROL_BUTTON}
         >
           {muted ? <MuteIcon size={17} /> : <VolumeIcon size={17} />}
@@ -837,7 +837,7 @@ export const VideoPlayer = forwardRef<
           onClick={onAnnotate}
           data-track="video-annotate"
           aria-label={t("video.annotate")}
-          title={audio ? t("video.audioAnnotateTitle") : t("video.annotateTitle")}
+          data-tip={audio ? t("video.audioAnnotateTitle") : t("video.annotateTitle")}
           className={
             drawing
               ? "flex size-8 shrink-0 items-center justify-center rounded-full bg-clay text-clay-fg"
@@ -853,7 +853,7 @@ export const VideoPlayer = forwardRef<
           onClick={toggleFullscreen}
           data-track="video-fullscreen"
           aria-label={fullscreen ? t("video.exitFullscreen") : t("video.fullscreen")}
-          title={fullscreen ? t("video.exitFullscreenF") : t("video.fullscreenF")}
+          data-tip={fullscreen ? t("video.exitFullscreenF") : t("video.fullscreenF")}
           className={CONTROL_BUTTON}
         >
           <FullscreenIcon size={17} />

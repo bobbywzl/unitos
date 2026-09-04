@@ -197,6 +197,7 @@ export function MediaAssistant({
             onClose();
           }}
           aria-label={t("common.close")}
+          data-tip={t("common.close")}
           className="ml-auto rounded-full px-1.5 text-sand-500 hover:text-clay-800"
         >
           ✕
@@ -209,7 +210,7 @@ export function MediaAssistant({
           onClick={() => void runSkill("article")}
           data-track="video-skill-article"
           disabled={busy || !hasTranscript}
-          title={hasTranscript ? t("video.skillArticleTitle") : t("video.skillNeedsTranscript")}
+          data-tip={hasTranscript ? t("video.skillArticleTitle") : t("video.skillNeedsTranscript")}
           className={chip}
         >
           {t("video.skillArticle")}
@@ -218,7 +219,7 @@ export function MediaAssistant({
           onClick={() => void runSkill("notes")}
           data-track="video-skill-notes"
           disabled={busy || !hasTranscript}
-          title={hasTranscript ? t("video.skillNotesTitle") : t("video.skillNeedsTranscript")}
+          data-tip={hasTranscript ? t("video.skillNotesTitle") : t("video.skillNeedsTranscript")}
           className={chip}
         >
           {t("video.skillNotes")}
@@ -235,7 +236,7 @@ export function MediaAssistant({
               onClick={() => setSpotCleared(true)}
               data-track="video-spot-clear"
               aria-label={t("video.assistantSpotClear")}
-              title={t("video.assistantSpotClear")}
+              data-tip={t("video.assistantSpotClear")}
               className="rounded-full px-0.5 text-clay-700 hover:text-clay-900"
             >
               ✕
@@ -293,7 +294,7 @@ export function MediaAssistant({
             stopSend();
           }}
           disabled={!busy && input.trim() === ""}
-          title={busy ? t("video.stopAssistant") : undefined}
+          data-tip={busy ? t("video.stopAssistant") : undefined}
           aria-label={busy ? t("video.stopAssistant") : undefined}
           className="rounded-full bg-clay px-4 py-2 text-xs font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
         >
@@ -393,12 +394,12 @@ export function ArticleSection({
               data-track="video-article-open"
               disabled={opening}
               className="rounded-full px-2 py-0.5 text-[11px] font-bold text-clay-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40"
-              title={t("video.openArticleTitle")}
+              data-tip={t("video.openArticleTitle")}
             >
               {opening ? t("common.working") : t("video.openArticle")}
             </button>
           )}
-          <button onClick={() => void copy()} data-track="video-article-copy" className={action} title={t("video.copyMarkdownTitle")}>
+          <button onClick={() => void copy()} data-track="video-article-copy" className={action} data-tip={t("video.copyMarkdownTitle")}>
             {copied ? t("video.copied") : t("video.copyMarkdown")}
           </button>
           {canEdit && (
@@ -407,7 +408,7 @@ export function ArticleSection({
               data-track="video-article-regenerate"
               disabled={busy}
               className={action}
-              title={t("video.regenerateArticleTitle")}
+              data-tip={t("video.regenerateArticleTitle")}
             >
               {busy ? t("common.working") : t("common.regenerate")}
             </button>

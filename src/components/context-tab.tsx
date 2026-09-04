@@ -96,7 +96,7 @@ export function ContextTab({
         onClick={toggle}
         data-track="context"
         aria-expanded={open}
-        title={t("panels.contextHint")}
+        data-tip={t("panels.contextHint")}
         className={`rounded-full px-3.5 py-1.5 text-[13px] hover:bg-clay-100 hover:text-clay-800 ${
           isSet
             ? "border border-line text-sand-700"

@@ -67,7 +67,7 @@ export function SectionItem({
           <button
             onClick={() => canEdit && setEditing(true)}
             className={`text-left font-display ${nested ? "text-lg" : "text-[22px]"}`}
-            title={canEdit ? t("outline.renameSection") : undefined}
+            data-tip={canEdit ? t("outline.renameSection") : undefined}
           >
             {section.title}
           </button>
@@ -76,6 +76,7 @@ export function SectionItem({
         {canEdit && (
           <button
             onClick={() => setComposing(true)}
+            data-tip={t("outline.addNoteTitle")}
             className="ml-auto text-xs text-sand-600 hover:text-clay-700"
           >
             {t("outline.addNoteBtn")}
@@ -86,6 +87,7 @@ export function SectionItem({
             onClick={() => {
               if (confirm(t("outline.confirmDeleteSection"))) void actions.deleteSection(section.id);
             }}
+            data-tip={t("outline.deleteSectionTitle")}
             className="text-xs text-red-500 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 hover:text-red-700"
           >
             {t("common.delete")}

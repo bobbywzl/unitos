@@ -88,6 +88,9 @@ const en = {
   replyPlaceholder: "Reply…",
   resolve: "Resolve",
   reopen: "Reopen",
+  resolveTitle: "Close this reply; it moves under Resolved",
+  reopenTitle: "Reopen this reply",
+  replyTitle: "Start a reply",
   resolvedCountOne: "1 resolved",
   resolvedCountMany: "{n} resolved",
   // Notifications (SPEC.md §18): the kind chip, on the admin pages and the
@@ -150,6 +153,9 @@ const zh: Record<keyof typeof en, string> = {
   replyPlaceholder: "回复…",
   resolve: "解决",
   reopen: "重新打开",
+  resolveTitle: "关闭此回复；它会移到“已解决”下",
+  reopenTitle: "重新打开此回复",
+  replyTitle: "开始回复",
   resolvedCountOne: "1 条已解决",
   resolvedCountMany: "{n} 条已解决",
   // Notifications (SPEC.md §18): the kind chip, on the admin page and the dashboard.

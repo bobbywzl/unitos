@@ -381,7 +381,7 @@ export function Reader({
               disabled={!focusedBlock}
               onClick={() => applyFormat(kind)}
               data-track={`format:${kind}`}
-              title={t(titleKey)}
+              data-tip={t(titleKey)}
               className={
                 focusedBlock && effectiveKind(focusedBlock) === kind
                   ? "rounded-full bg-clay-100 px-2.5 py-1 text-[11.5px] font-semibold text-clay-800"
@@ -392,13 +392,13 @@ export function Reader({
             </button>
           ))}
           <span aria-hidden className="mx-1 h-4 w-px bg-line" />
-          <button onMouseDown={keep} disabled={!focusedBlock} data-track="style:bold" onClick={() => applyStyle("bold")} title={t("panes.bold")} className={`${barButton} font-bold`}>
+          <button onMouseDown={keep} disabled={!focusedBlock} data-track="style:bold" onClick={() => applyStyle("bold")} data-tip={t("panes.bold")} className={`${barButton} font-bold`}>
             B
           </button>
-          <button onMouseDown={keep} disabled={!focusedBlock} data-track="style:italic" onClick={() => applyStyle("italic")} title={t("panes.italic")} className={`${barButton} italic`}>
+          <button onMouseDown={keep} disabled={!focusedBlock} data-track="style:italic" onClick={() => applyStyle("italic")} data-tip={t("panes.italic")} className={`${barButton} italic`}>
             I
           </button>
-          <button onMouseDown={keep} disabled={!focusedBlock} data-track="style:underline" onClick={() => applyStyle("underline")} title={t("panes.underline")} className={`${barButton} underline`}>
+          <button onMouseDown={keep} disabled={!focusedBlock} data-track="style:underline" onClick={() => applyStyle("underline")} data-tip={t("panes.underline")} className={`${barButton} underline`}>
             U
           </button>
           <span aria-hidden className="mx-1 h-4 w-px bg-line" />
@@ -410,16 +410,16 @@ export function Reader({
               onClick={() => applyStyle(style)}
               data-track="text-color"
               aria-label={t("panes.textColorIn", { color: t(COLOR_NAME_KEY[style]) })}
-              title={t("panes.textColorIn", { color: t(COLOR_NAME_KEY[style]) })}
+              data-tip={t("panes.textColorIn", { color: t(COLOR_NAME_KEY[style]) })}
               className="mx-0.5 size-[14px] rounded-full transition-transform hover:scale-110 disabled:opacity-40"
               style={{ background: dot }}
             />
           ))}
           <span aria-hidden className="mx-1 h-4 w-px bg-line" />
-          <button onMouseDown={keep} disabled={!focusedBlock} data-track="outdent" onClick={() => applyIndent(-1)} title={t("panes.outdentLine")} className={barButton}>
+          <button onMouseDown={keep} disabled={!focusedBlock} data-track="outdent" onClick={() => applyIndent(-1)} data-tip={t("panes.outdentLine")} className={barButton}>
             ⇤
           </button>
-          <button onMouseDown={keep} disabled={!focusedBlock} data-track="indent" onClick={() => applyIndent(1)} title={t("panes.indentLine")} className={barButton}>
+          <button onMouseDown={keep} disabled={!focusedBlock} data-track="indent" onClick={() => applyIndent(1)} data-tip={t("panes.indentLine")} className={barButton}>
             ⇥
           </button>
           <span aria-hidden className="mx-1 h-4 w-px bg-line" />
@@ -427,6 +427,7 @@ export function Reader({
             onMouseDown={keep}
             disabled={!focusedBlock}
             data-track="remove-paragraph"
+            data-tip={t("panes.removeParagraphTitle")}
             onClick={() => {
               if (focusedBlockId && confirm(t("panes.confirmRemoveParagraph"))) {
                 void onDeleteBlock(focusedBlockId);
@@ -499,7 +500,7 @@ export function Reader({
                     })
                   }
                   aria-label={t("panes.insertParagraphHere")}
-                  title={t("panes.insertParagraphHere")}
+                  data-tip={t("panes.insertParagraphHere")}
                   className="absolute top-1/2 left-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center gap-1 rounded-full bg-card px-2.5 py-0.5 text-[11px] font-semibold text-sand-600 opacity-0 shadow-soft transition-opacity hover:bg-clay-100 hover:text-clay-800 hover:opacity-100 focus-visible:opacity-100 group-hover/block:opacity-60"
                 >
                   <PlusIcon size={10} />

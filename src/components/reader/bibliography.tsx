@@ -62,6 +62,7 @@ export function Bibliography({ references }: { references: DocumentReference[] }
           onClick={() => setOpen((v) => !v)}
           data-track="references"
           aria-expanded={open}
+          data-tip={t("panes.referencesToggleTitle")}
           className="flex items-center gap-1.5 text-[12px] font-bold tracking-[0.09em] text-clay-700 uppercase hover:text-clay-800 print:hidden"
         >
           {open ? <ChevronDownIcon size={13} /> : <ChevronRightIcon size={13} />}

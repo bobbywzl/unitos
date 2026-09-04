@@ -41,6 +41,11 @@ const TASK_LABEL: Record<Task, TKey> = {
   gaps: "assistant.taskGaps",
   unsourced: "assistant.taskUnsourced",
 };
+const TASK_TITLE: Record<Task, TKey> = {
+  contradictions: "assistant.taskContradictionsTitle",
+  gaps: "assistant.taskGapsTitle",
+  unsourced: "assistant.taskUnsourcedTitle",
+};
 const TASK_NOUN: Record<Task, TKey> = {
   contradictions: "assistant.taskNounContradictions",
   gaps: "assistant.taskNounGaps",
@@ -278,6 +283,7 @@ export function AssistantPanel({
                 <button
                   onClick={() => void generateRecommended(recDepth)}
                   data-track="assistant-regenerate"
+                  data-tip={t("assistant.regenerateTitle")}
                   disabled={recBusy !== null}
                   className="text-xs text-sand-500 hover:text-clay-700 disabled:opacity-40"
                 >
@@ -304,7 +310,7 @@ export function AssistantPanel({
             key={s.id}
             onClick={() => setScope(s.id)}
             data-track={`assistant-scope:${s.id}`}
-            title={t(s.hintKey)}
+            data-tip={t(s.hintKey)}
             className={`rounded-full px-3 py-1 text-xs font-semibold disabled:opacity-40 ${
               scope === s.id
                 ? "bg-ink text-paper"
@@ -345,7 +351,7 @@ export function AssistantPanel({
             stopRun();
           }}
           disabled={!busy && !question.trim()}
-          title={busy ? t("assistant.stopAsk") : undefined}
+          data-tip={busy ? t("assistant.stopAsk") : undefined}
           aria-label={busy ? t("assistant.stopAsk") : undefined}
           className="rounded-full bg-clay px-4 py-2 text-sm font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
         >
@@ -360,6 +366,7 @@ export function AssistantPanel({
               key={task}
               onClick={() => void runTask(task)}
               data-track={`assistant-task:${task}`}
+              data-tip={t(TASK_TITLE[task])}
               disabled={busy}
               className="rounded-full border border-line px-3 py-1 text-xs text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40"
             >
@@ -401,6 +408,7 @@ export function AssistantPanel({
                       key={id}
                       onClick={() => showNote(id)}
                       data-track="assistant-note-chip"
+                      data-tip={t("assistant.showNoteTitle")}
                       className="rounded-full bg-clay-100 px-2.5 py-0.5 text-xs font-semibold text-clay-800 hover:bg-clay-200"
                     >
                       {t("assistant.noteChip", { id: id.slice(-6) })}

@@ -27,6 +27,7 @@ import {
   type LinkIn,
   type LinkOut,
   type NotebookView,
+  type RecommendedLinkView,
   type ReplyView,
   type SectionView,
   type SummaryLevels,
@@ -957,6 +958,33 @@ export default async function NotebookPage(props: {
     edgeByPair.set(`${a}|${b}`, edge);
   }
   const graphEdges = [...edgeByPair.values()];
+  // Recommended links (SPEC.md §13) list in the graph, for the whole project:
+  // both ends, the AI's reason, and the replies. Accept and Dismiss live there.
+  const recommendedRows = await db.docLink.findMany({
+    where: {
+      recommended: true,
+      fromDocumentId: { in: attached.map((d) => d.id) },
+      toDocumentId: { in: attached.map((d) => d.id) },
+    },
+    orderBy: { createdAt: "desc" },
+    include: {
+      fromDocument: { select: { title: true } },
+      toDocument: { select: { title: true } },
+      replies: { orderBy: { createdAt: "asc" } },
+    },
+  });
+  const recommendedLinks: RecommendedLinkView[] = recommendedRows.map((link) => ({
+    id: link.id,
+    fromDocumentId: link.fromDocumentId,
+    fromTitle: link.fromDocument.title,
+    toDocumentId: link.toDocumentId,
+    toTitle: link.toDocument.title,
+    quotedText: link.quotedText,
+    toQuotedText: link.toQuotedText,
+    reason: link.reason,
+    createdById: link.createdById,
+    replies: toReplyViews(link.replies),
+  }));
 
   // The History panel (SPEC.md §12): corpus events (deletions, detachments)
   // merged with every attached document's edits, newest first, attributed.
@@ -1020,6 +1048,10 @@ export default async function NotebookPage(props: {
     for (const r of e.replies) authorIds.add(r.userId);
   }
   for (const entry of history) if (entry.userId) authorIds.add(entry.userId);
+  for (const link of recommendedLinks) {
+    if (link.createdById) authorIds.add(link.createdById);
+    for (const r of link.replies) authorIds.add(r.userId);
+  }
   for (const d of corpusDistillations) if (d.createdById) authorIds.add(d.createdById);
   for (const pane of [paneOne, paneTwo]) {
     for (const d of pane?.distillations ?? []) if (d.createdById) authorIds.add(d.createdById);
@@ -1103,7 +1135,7 @@ export default async function NotebookPage(props: {
       drive={driveConfig(user)}
       collab={collab}
       rev={notebook.rev}
-      graph={{ nodes: graphNodes, edges: graphEdges }}
+      graph={{ nodes: graphNodes, edges: graphEdges, recommended: recommendedLinks }}
       history={history}
       corpusDistillations={corpusDistillations}
       context={{
@@ -1144,8 +1176,8 @@ export default async function NotebookPage(props: {
       }
       annotationCount={
         (paneOne?.annotations.length ?? 0) +
-        (paneOne?.linksOut.length ?? 0) +
-        (paneOne?.linksIn.length ?? 0)
+        (paneOne?.linksOut.filter((l) => !l.recommended).length ?? 0) +
+        (paneOne?.linksIn.filter((l) => !l.recommended).length ?? 0)
       }
       distillationCount={(paneOne?.distillations.length ?? 0) + corpusDistillations.length}
       reader={
