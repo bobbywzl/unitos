@@ -144,7 +144,7 @@ const FORMATS: { label: string; titleKey: TKey; track: string; map: (lines: stri
 // Bold, italic, underline are the browser's own editing commands: with a
 // selection they style it, with a bare caret they style what is typed next,
 // and Cmd+B/I/U work without a handler. The editor reads the result back.
-const STYLES: { label: string; command: string; titleKey: TKey; track: string; cls: string }[] = [
+const STYLES: { label: string; command: "bold" | "italic" | "underline"; titleKey: TKey; track: string; cls: string }[] = [
   { label: "B", command: "bold", titleKey: "panes.bold", track: "bold", cls: "font-bold" },
   { label: "I", command: "italic", titleKey: "panes.italic", track: "italic", cls: "italic" },
   { label: "U", command: "underline", titleKey: "panes.underline", track: "underline", cls: "underline" },
@@ -233,10 +233,8 @@ export function NoteEditor({
     onChange(next.value);
   }
 
-  function command(name: string) {
-    ref.current?.focus({ preventScroll: true });
-    document.execCommand(name);
-    core.current?.refresh();
+  function command(name: "bold" | "italic" | "underline") {
+    core.current?.toggleStyle(name);
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {

@@ -221,6 +221,38 @@ export function visibleOffset(lines: NoteLine[], src: number): number {
   return vis;
 }
 
+/** A visible offset as a source offset. At a run boundary: the end of the run before it. */
+export function sourceOffset(lines: NoteLine[], vis: number): number {
+  let at = 0;
+  for (const line of lines) {
+    const len = visibleLength(line);
+    if (vis > at + len) {
+      at += len + 1;
+      continue;
+    }
+    const d = vis - at;
+    if (line.runs.length === 0) return line.bodySrc;
+    let acc = 0;
+    for (const run of line.runs) {
+      if (d <= acc + run.text.length) {
+        const inRun = d - acc;
+        if (run.chip) return inRun === 0 ? run.src : run.src + run.srcLen;
+        return run.src + inRun;
+      }
+      acc += run.text.length;
+    }
+    return line.end;
+  }
+  return lines.length > 0 ? lines[lines.length - 1].end : 0;
+}
+
+/** Visible offset where a line's text starts. */
+export function lineVisibleStart(lines: NoteLine[], index: number): number {
+  let at = 0;
+  for (let i = 0; i < index; i++) at += visibleLength(lines[i]) + 1;
+  return at;
+}
+
 // --- The document HTML the editor shows.
 
 function runHtml(run: Run): string {

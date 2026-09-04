@@ -9,8 +9,9 @@
 //
 // Sentinels: the editor reads the selection by putting one sentinel
 // character at each end of it and serializing; the markdown offsets of the
-// sentinels are the selection's source offsets. They count as whitespace
-// here, so the markers still hug the words around them.
+// sentinels are the selection's source offsets. A sentinel in a run's
+// leading or trailing whitespace lands outside the run's markers with that
+// whitespace; anywhere else it lands inside them.
 
 import { TEXT_COLORS, type InlineStyle } from "@/lib/note-markup";
 
@@ -61,7 +62,7 @@ function isBlock(node: Node): node is Element {
   return node.nodeType === ELEMENT_NODE && BLOCK_TAGS.has((node as Element).tagName);
 }
 
-type InlineRun = { text: string; styles: InlineStyle[]; href?: string; chip?: string };
+export type InlineRun = { text: string; styles: InlineStyle[]; href?: string; chip?: string };
 
 // Browsers type a non-breaking space where a plain one would collapse, and
 // leave zero-width characters around atoms; the note keeps neither.
@@ -131,15 +132,45 @@ const MARKERS: Record<InlineStyle, [string, string]> = {
   plum: ["<plum>", "</plum>"],
 };
 
-const LEAD_WS = /^[\s\uE000\uE001]*/;
-const TRAIL_WS = /[\s\uE000\uE001]*$/;
-const ALL_WS = /^[\s\uE000\uE001]*$/;
+const LEAD_WS = /^\s*/;
+const TRAIL_WS = /\s*$/;
+const ALL_WS = /^\s*$/;
+
+type Mark = { ch: string; pos: number };
+
+/** A run's text without its sentinels, and where each sentinel was. */
+function splitMarks(text: string): { clean: string; marks: Mark[] } {
+  const marks: Mark[] = [];
+  let clean = "";
+  for (const ch of text) {
+    if (ch === SELECTION_START || ch === SELECTION_END) marks.push({ ch, pos: clean.length });
+    else clean += ch;
+  }
+  return { clean, marks };
+}
+
+/** A segment of the clean text (starting at `start`) with the sentinels whose position falls in [lo, hi] put back. */
+function withMarks(segment: string, start: number, marks: Mark[], lo: number, hi: number): string {
+  let out = "";
+  let cursor = 0;
+  for (const mark of marks) {
+    if (mark.pos < lo || mark.pos > hi) continue;
+    const at = mark.pos - start;
+    out += segment.slice(cursor, at) + mark.ch;
+    cursor = at;
+  }
+  return out + segment.slice(cursor);
+}
 
 function sameStyles(a: InlineStyle[], b: InlineStyle[]): boolean {
   return a.length === b.length && a.every((s) => b.includes(s));
 }
 
 /** Inline runs as one markdown string; a "\n" run stays a newline. */
+export function inlineMarkdown(runs: InlineRun[]): string {
+  return emitInline(runs);
+}
+
 function emitInline(runs: InlineRun[]): string {
   // Adjacent runs with the same styles are one run: the browser splits text
   // nodes freely, and split markers would not parse back.
@@ -193,9 +224,10 @@ function emitInline(runs: InlineRun[]): string {
       pendingWs = "";
       continue;
     }
-    const text = run.chip ? `[block ${run.chip}]` : run.text;
+    const raw = run.chip ? `[block ${run.chip}]` : run.text;
+    const { clean: text, marks } = splitMarks(raw);
     if (ALL_WS.test(text) && !run.styles.includes("code")) {
-      pendingWs += text;
+      pendingWs += raw;
       continue;
     }
     let keys = keysOf(run);
@@ -203,15 +235,16 @@ function emitInline(runs: InlineRun[]): string {
     // Code keeps its spaces inside the backticks; every other marker hugs the word.
     const lead = keys.includes("code") ? "" : LEAD_WS.exec(text)![0];
     const trail = keys.includes("code") ? "" : TRAIL_WS.exec(text)![0];
-    const core = text.slice(lead.length, text.length - trail.length);
+    const coreEnd = text.length - trail.length;
+    const core = text.slice(lead.length, coreEnd);
     let common = 0;
     while (common < open.length && common < keys.length && open[common] === keys[common]) common++;
     for (let i = open.length - 1; i >= common; i--) out += marker(open[i], open, 1);
-    out += pendingWs + lead;
+    out += pendingWs + withMarks(lead, 0, marks, 0, lead.length - 1);
     for (let i = common; i < keys.length; i++) out += marker(keys[i], keys, 0);
     open = keys;
-    out += core;
-    pendingWs = trail;
+    out += withMarks(core, lead.length, marks, lead.length, coreEnd);
+    pendingWs = withMarks(trail, coreEnd, marks, coreEnd + 1, Infinity);
   }
   closeAll();
   return out + pendingWs;

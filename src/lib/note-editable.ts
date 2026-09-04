@@ -1,21 +1,21 @@
 // The note editor's editable region: a contentEditable that shows the note as
 // the document it renders to (lib/note-markup.ts) while the note stays
-// markdown. The browser owns typing, deleting, IME composition, and the
-// caret; this module owns the text. After every edit it reads the document
-// back as markdown (lib/note-doc.ts), re-renders it, and puts the selection
-// back where it was — so the document is canonical again after every
-// keystroke, whatever the browser did. Replacing the DOM breaks the
-// browser's own undo, so undo and redo are kept here too.
+// markdown. The text is the model: typed characters, Enter, and the style
+// commands go into the markdown at the caret's source offset and the
+// document is painted from it; deleting, pasting, IME composition, and the
+// caret stay the browser's, and after each of those the document is read
+// back as markdown (lib/note-doc.ts) and painted again — so the document is
+// canonical after every edit, whatever the browser did. Replacing the DOM
+// breaks the browser's own undo, so undo and redo are kept here too.
 //
 // Offsets in this module's API are source offsets — positions in the
-// markdown — so the editor's commands patch the markdown directly.
-// Enter, Backspace at the start of a marked line, and undo are handled
-// here; the markdown commands (bold, lists, indent) are the editor's,
-// applied through setText.
+// markdown — so the editor's line commands patch the markdown directly.
 
 import {
+  lineVisibleStart,
   noteDocHtml,
   parseNote,
+  sourceOffset,
   visibleOffset,
   type InlineStyle,
   type NoteLine,
@@ -24,13 +24,16 @@ import {
 import {
   SELECTION_END,
   SELECTION_START,
+  inlineMarkdown,
   leafLength,
   lineElements,
   ownLeaves,
   serializeNoteDoc,
+  type InlineRun,
 } from "@/lib/note-doc";
 
 export type TextSelection = { start: number; end: number };
+export type StyleCommand = "bold" | "italic" | "underline";
 
 export type NoteEditable = {
   getText(): string;
@@ -38,8 +41,8 @@ export type NoteEditable = {
   getSelection(): TextSelection;
   /** Replace the text. With a selection: focus and select it. Without: keep the caret where it was. */
   setText(text: string, selection?: TextSelection): void;
-  /** Read the document back after a command the browser applied (execCommand). */
-  refresh(): void;
+  /** Bold, italic, underline: a selection is styled or unstyled; a bare caret styles what is typed next. */
+  toggleStyle(command: StyleCommand): void;
   focusEnd(): void;
   destroy(): void;
 };
@@ -51,13 +54,48 @@ const COALESCE_MS = 400;
 const HISTORY_MAX = 200;
 const TEXT_NODE = 3;
 
-/** The DOM position of a visible offset: the earliest leaf that reaches it. */
-function positionOf(el: HTMLElement, offset: number): { node: Node; offset: number } {
-  const beside = (leaf: Node, after: boolean) => {
-    const parent = leaf.parentNode as Node;
-    const index = Array.prototype.indexOf.call(parent.childNodes, leaf);
-    return { node: parent, offset: after ? index + 1 : index };
-  };
+const STYLE_OF: Record<StyleCommand, InlineStyle> = { bold: "bold", italic: "italic", underline: "underline" };
+const STYLE_KEYS: Record<string, StyleCommand> = { b: "bold", i: "italic", u: "underline" };
+const CARET_KEYS = new Set(["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End", "PageUp", "PageDown"]);
+const MARKERS: Record<InlineStyle, [string, string]> = {
+  bold: ["**", "**"],
+  italic: ["*", "*"],
+  underline: ["<u>", "</u>"],
+  strike: ["~~", "~~"],
+  code: ["`", "`"],
+  clay: ["<clay>", "</clay>"],
+  sage: ["<sage>", "</sage>"],
+  gold: ["<gold>", "</gold>"],
+  plum: ["<plum>", "</plum>"],
+};
+
+// --- Caret placement in the painted document.
+
+function beside(node: Node, after: boolean): { node: Node; offset: number } {
+  const parent = node.parentNode as Node;
+  const index = Array.prototype.indexOf.call(parent.childNodes, node);
+  return { node: parent, offset: after ? index + 1 : index };
+}
+
+/** How many inline elements wrap a leaf inside its line. */
+function inlineDepth(leaf: Node, line: Element): number {
+  let depth = 0;
+  for (let p = leaf.parentNode; p && p !== line; p = p.parentNode) depth += 1;
+  return depth;
+}
+
+/** The position right outside the leaf's outermost inline element. */
+function outsideOf(leaf: Node, line: Element, after: boolean): { node: Node; offset: number } {
+  let top: Node = leaf;
+  while (top.parentNode && top.parentNode !== line) top = top.parentNode;
+  return beside(top, after);
+}
+
+/** The DOM position of a visible offset. At the edge of styled text the
+    caret sits outside the style — so what is typed there is plain unless a
+    typing style is on — except when the source offset is inside the run's
+    markers (inside), which keeps typing inside the run. */
+function positionOf(el: HTMLElement, offset: number, inside: boolean): { node: Node; offset: number } {
   let pos = 0;
   let lastLine: Element | null = null;
   for (const line of lineElements(el)) {
@@ -67,11 +105,22 @@ function positionOf(el: HTMLElement, offset: number): { node: Node; offset: numb
     for (const leaf of leaves) length += leafLength(leaf);
     if (offset <= pos + length) {
       let at = pos;
-      for (const leaf of leaves) {
+      for (let i = 0; i < leaves.length; i++) {
+        const leaf = leaves[i];
         const len = leafLength(leaf);
-        if (offset <= at + len) {
-          if (leaf.nodeType !== TEXT_NODE) return beside(leaf, offset > at);
+        const depth = inlineDepth(leaf, line);
+        if (offset === at && i === 0 && depth > 0 && !inside) return outsideOf(leaf, line, false);
+        if (offset < at + len || (offset === at + len && inside)) {
+          if (leaf.nodeType !== TEXT_NODE) return beside(leaf, offset === at + len);
           return { node: leaf, offset: offset - at };
+        }
+        if (offset === at + len) {
+          const next = leaves[i + 1];
+          if (next && inlineDepth(next, line) < depth) {
+            return next.nodeType === TEXT_NODE ? { node: next, offset: 0 } : beside(next, false);
+          }
+          if (!next && depth > 0) return outsideOf(leaf, line, true);
+          return leaf.nodeType === TEXT_NODE ? { node: leaf, offset: len } : beside(leaf, true);
         }
         at += len;
       }
@@ -84,13 +133,16 @@ function positionOf(el: HTMLElement, offset: number): { node: Node; offset: numb
   const leaves = ownLeaves(lastLine);
   const last = leaves[leaves.length - 1];
   if (!last) return { node: lastLine, offset: 0 };
+  if (inlineDepth(last, lastLine) > 0 && !inside) return outsideOf(last, lastLine, true);
   if (last.nodeType === TEXT_NODE) return { node: last, offset: (last as Text).data.length };
   return beside(last, true);
 }
 
 function setSelection(el: HTMLElement, lines: NoteLine[], start: number, end: number) {
-  const a = positionOf(el, visibleOffset(lines, Math.min(start, end)));
-  const b = start === end ? a : positionOf(el, visibleOffset(lines, Math.max(start, end)));
+  const from = Math.min(start, end);
+  const to = Math.max(start, end);
+  const a = positionOf(el, visibleOffset(lines, from), runEdge(lines, from) !== null);
+  const b = start === end ? a : positionOf(el, visibleOffset(lines, to), runEdge(lines, to) !== null);
   const range = document.createRange();
   range.setStart(a.node, a.offset);
   range.setEnd(b.node, b.offset);
@@ -115,23 +167,6 @@ function render(el: HTMLElement, text: string): { text: string; lines: NoteLine[
   if (text === "") el.setAttribute("data-empty", "");
   else el.removeAttribute("data-empty");
   return { text, lines };
-}
-
-// The browser's typing style — bold set with a bare caret styles the next
-// keystroke. Repainting the document drops it, so it is read before and set
-// again after.
-const TYPING_COMMANDS = ["bold", "italic", "underline", "strikeThrough"] as const;
-
-function typingStyles(): Record<string, boolean> {
-  const styles: Record<string, boolean> = {};
-  for (const cmd of TYPING_COMMANDS) {
-    try {
-      styles[cmd] = document.queryCommandState(cmd);
-    } catch {
-      styles[cmd] = false;
-    }
-  }
-  return styles;
 }
 
 /** The selection's source offsets, read by marking its ends in the DOM and serializing. */
@@ -161,6 +196,8 @@ function readSelection(el: HTMLElement): { text: string; selection: TextSelectio
   return { text, selection: { start: Math.min(a, b), end: Math.max(a, b) - 1 } };
 }
 
+// --- The markdown around a source offset.
+
 // Enter continues the line's structure: a list item starts the next item
 // ("- ", "N. "), a quote line the next quote line, an indented line keeps its
 // indent. Enter on an empty item ends the list instead.
@@ -186,42 +223,70 @@ export function newlineFor(text: string, caret: number): { insert: string; from:
   return { insert: `\n${lead[1]}${marker}`, from: caret };
 }
 
-const MARKERS: Record<InlineStyle, [string, string]> = {
-  bold: ["**", "**"],
-  italic: ["*", "*"],
-  underline: ["<u>", "</u>"],
-  strike: ["~~", "~~"],
-  code: ["`", "`"],
-  clay: ["<clay>", "</clay>"],
-  sage: ["<sage>", "</sage>"],
-  gold: ["<gold>", "</gold>"],
-  plum: ["<plum>", "</plum>"],
-};
+function lineAt(lines: NoteLine[], src: number): NoteLine | null {
+  return lines.find((line) => src >= line.src && src <= line.end) ?? null;
+}
 
 /** The run a source offset is strictly inside, if any. */
 function runAt(lines: NoteLine[], src: number): Run | null {
-  for (const line of lines) {
-    if (src > line.end) continue;
-    for (const run of line.runs) {
-      if (run.chip) continue;
-      if (src > run.src && src < run.src + run.srcLen) return run;
-    }
-    return null;
+  const line = lineAt(lines, src);
+  if (!line) return null;
+  for (const run of line.runs) {
+    if (!run.chip && src > run.src && src < run.src + run.srcLen) return run;
+  }
+  return null;
+}
+
+/** The run whose text ends or starts exactly at a source offset inside its markers. */
+function runEdge(lines: NoteLine[], src: number): Run | null {
+  const line = lineAt(lines, src);
+  if (!line) return null;
+  for (const run of line.runs) {
+    if (run.chip) continue;
+    if (src === run.src && run.openLen > 0) return run;
+    if (src === run.src + run.srcLen && run.closeLen > 0) return run;
   }
   return null;
 }
 
 /** A source offset at a run's edge, moved outside the run's markers. */
 function outsideMarkers(lines: NoteLine[], src: number): number {
-  for (const line of lines) {
-    if (src > line.end) continue;
-    for (const run of line.runs) {
-      if (src === run.src && run.openLen > 0) return src - run.openLen;
-      if (src === run.src + run.srcLen && run.closeLen > 0) return src + run.closeLen;
+  const run = runEdge(lines, src);
+  if (!run) return src;
+  return src === run.src ? src - run.openLen : src + run.closeLen;
+}
+
+const openers = (styles: InlineStyle[]) => styles.map((s) => MARKERS[s][0]).join("");
+const closers = (styles: InlineStyle[]) => [...styles].reverse().map((s) => MARKERS[s][1]).join("");
+
+/** A line's runs with a style toggled over a visible range: on for all when any lacks it, else off. */
+function toggledRuns(line: NoteLine, from: number, to: number, style: InlineStyle): InlineRun[] {
+  const out: InlineRun[] = [];
+  const selected: InlineRun[] = [];
+  let at = 0;
+  for (const run of line.runs) {
+    const end = at + run.text.length;
+    const piece = (text: string, inside: boolean) => {
+      const r: InlineRun = { text, styles: [...run.styles], href: run.href, chip: run.chip };
+      out.push(r);
+      if (inside) selected.push(r);
+    };
+    if (run.chip || end <= from || at >= to) piece(run.text, run.chip ? at >= from && end <= to : false);
+    else {
+      const a = Math.max(from, at) - at;
+      const b = Math.min(to, end) - at;
+      if (a > 0) piece(run.text.slice(0, a), false);
+      piece(run.text.slice(a, b), true);
+      if (b < run.text.length) piece(run.text.slice(b), false);
     }
-    return src;
+    at = end;
   }
-  return src;
+  const on = selected.some((r) => !r.styles.includes(style));
+  for (const r of selected) {
+    if (on && !r.styles.includes(style)) r.styles.push(style);
+    if (!on) r.styles = r.styles.filter((s) => s !== style);
+  }
+  return out;
 }
 
 export function attachNoteEditable(
@@ -232,8 +297,10 @@ export function attachNoteEditable(
   let text = first.text;
   let lines = first.lines;
   let composing = false;
-  // Set while a typing style is put back: the command's input event is not an edit.
-  let arming = false;
+  // The typing styles the user switched on or off with a bare caret
+  // (Cmd+B, the bar's B): they shape what is typed next, until the caret
+  // moves on its own.
+  const intent: Partial<Record<StyleCommand, boolean>> = {};
   const history: Snapshot[] = [];
   let index = -1;
   let lastPush = 0;
@@ -265,38 +332,26 @@ export function attachNoteEditable(
     return { start: Math.min(sel.start, text.length), end: Math.min(sel.end, text.length) };
   }
 
-  function paint(sel: TextSelection | null, styles?: Record<string, boolean>) {
+  function paint(sel: TextSelection | null) {
     const painted = render(el, text);
     text = painted.text;
     lines = painted.lines;
     if (sel) setSelection(el, lines, sel.start, sel.end);
-    if (!styles || !sel || sel.start !== sel.end) return;
-    const now = typingStyles();
-    for (const cmd of TYPING_COMMANDS) {
-      if (!styles[cmd] || now[cmd]) continue;
-      arming = true;
-      try {
-        document.execCommand(cmd);
-      } finally {
-        arming = false;
-      }
-    }
   }
 
   /** The text changed: paint it, keep the selection, record it, report it. */
-  function commit(next: string, sel: TextSelection, coalesce: boolean, styles?: Record<string, boolean>) {
+  function commit(next: string, sel: TextSelection, coalesce: boolean) {
     const before = text;
     text = next;
-    paint(clamp(sel), styles);
+    paint(clamp(sel));
     push(clamp(sel), coalesce);
     if (text !== before) opts.onChange(text);
   }
 
   /** Read the document after the browser edited it, and make it canonical again. */
   function sync(coalesce: boolean) {
-    const styles = typingStyles();
     const read = readSelection(el);
-    commit(read.text, read.selection ?? { start: read.text.length, end: read.text.length }, coalesce, styles);
+    commit(read.text, read.selection ?? { start: read.text.length, end: read.text.length }, coalesce);
   }
 
   /** The selection as source offsets. The document may read back normalized; the text follows it. */
@@ -307,6 +362,49 @@ export function attachNoteEditable(
       lines = parseNote(text);
     }
     return read.selection ?? { start: text.length, end: text.length };
+  }
+
+  function clearIntent() {
+    for (const command of Object.keys(intent) as StyleCommand[]) delete intent[command];
+  }
+
+  /** Typed text goes into the markdown at the caret: inside the run the caret
+      is in, outside a run's markers when it is whitespace at the run's edge,
+      and wrapped in the typing styles that are on. */
+  function insertTyped(str: string) {
+    const sel = currentSelection();
+    let from = Math.min(sel.start, sel.end);
+    let to = Math.max(sel.start, sel.end);
+    let insert = str;
+    let closeLen = 0;
+    if (from === to) {
+      const run = runAt(lines, from) ?? runEdge(lines, from);
+      const inside = run ? run.styles : [];
+      if (/^\s+$/.test(str)) {
+        if (runEdge(lines, from)) from = to = outsideMarkers(lines, from);
+      } else {
+        const commands = Object.keys(intent) as StyleCommand[];
+        const off = commands.filter((c) => intent[c] === false && inside.includes(STYLE_OF[c])).map((c) => STYLE_OF[c]);
+        const on = commands.filter((c) => intent[c] === true).map((c) => STYLE_OF[c]);
+        let wrap: InlineStyle[];
+        if (off.length > 0) {
+          // A style switched off inside its run: the text leaves the run and
+          // keeps the run's other styles.
+          from = to = outsideMarkers(lines, from);
+          wrap = [...inside.filter((s) => !off.includes(s)), ...on.filter((s) => !inside.includes(s))];
+        } else {
+          wrap = on.filter((s) => !inside.includes(s));
+        }
+        if (wrap.length > 0) {
+          const close = closers(wrap);
+          insert = openers(wrap) + str + close;
+          closeLen = close.length;
+        }
+      }
+    }
+    const next = text.slice(0, from) + insert + text.slice(to);
+    const caret = from + insert.length - closeLen;
+    commit(next, { start: caret, end: caret }, true);
   }
 
   /** Enter: a new line that continues the structure; Shift+Enter a plain one.
@@ -324,9 +422,7 @@ export function attachNoteEditable(
         // the markers on the words.
         while (from > 0 && text[from - 1] === " ") from -= 1;
         while (to < text.length && text[to] === " ") to += 1;
-        const closers = [...run.styles].reverse().map((s) => MARKERS[s][1]).join("");
-        const openers = run.styles.map((s) => MARKERS[s][0]).join("");
-        insert = closers + insert + openers;
+        insert = closers(run.styles) + insert + openers(run.styles);
       } else {
         // At a run's edge the break goes outside its markers.
         from = to = outsideMarkers(lines, from);
@@ -368,8 +464,44 @@ export function attachNoteEditable(
     return true;
   }
 
+  /** A style over a selection, line by line, the runs rebuilt and re-emitted. */
+  function toggleRange(style: InlineStyle, sel: TextSelection) {
+    const start = Math.min(sel.start, sel.end);
+    const end = Math.max(sel.start, sel.end);
+    const visStart = visibleOffset(lines, start);
+    const visEnd = visibleOffset(lines, end);
+    let next = text;
+    for (let i = lines.length - 1; i >= 0; i--) {
+      const line = lines[i];
+      if (line.end < start || line.src > end || line.kind === "code") continue;
+      const lineStart = lineVisibleStart(lines, i);
+      const from = Math.max(0, visStart - lineStart);
+      const to = Math.min(line.runs.reduce((n, r) => n + r.text.length, 0), visEnd - lineStart);
+      if (to <= from) continue;
+      const body = inlineMarkdown(toggledRuns(line, from, to, style));
+      next = next.slice(0, line.bodySrc) + body + next.slice(line.end);
+    }
+    const after = parseNote(next);
+    commit(next, { start: sourceOffset(after, visStart), end: sourceOffset(after, visEnd) }, false);
+  }
+
+  function toggleStyle(command: StyleCommand) {
+    el.focus({ preventScroll: true });
+    const sel = currentSelection();
+    const style = STYLE_OF[command];
+    if (sel.start !== sel.end) {
+      toggleRange(style, sel);
+      return;
+    }
+    const run = runAt(lines, sel.start) ?? runEdge(lines, sel.start);
+    const inside = run ? run.styles.includes(style) : false;
+    intent[command] = !(intent[command] ?? inside);
+    paint(sel);
+  }
+
   function undo() {
     if (index <= 0) return;
+    clearIntent();
     index -= 1;
     const s = history[index];
     text = s.text;
@@ -379,6 +511,7 @@ export function attachNoteEditable(
 
   function redo() {
     if (index >= history.length - 1) return;
+    clearIntent();
     index += 1;
     const s = history[index];
     text = s.text;
@@ -389,6 +522,11 @@ export function attachNoteEditable(
   function onBeforeInput(e: InputEvent) {
     if (composing) return;
     switch (e.inputType) {
+      case "insertText":
+        if (e.data === null) return;
+        e.preventDefault();
+        insertTyped(e.data);
+        break;
       case "insertParagraph":
       case "insertLineBreak":
         // A soft keyboard's Enter: no keydown told Shift apart.
@@ -407,13 +545,24 @@ export function attachNoteEditable(
   }
 
   function onInput(e: Event) {
-    if (composing || arming || (e as InputEvent).isComposing) return;
+    if (composing || (e as InputEvent).isComposing) return;
     sync(true);
   }
 
   function onKeyDown(e: KeyboardEvent) {
     if (e.isComposing || e.keyCode === 229) return;
     const mod = e.metaKey || e.ctrlKey;
+    if (CARET_KEYS.has(e.key)) {
+      // The caret moves on its own: the typing style is the text's again.
+      clearIntent();
+      return;
+    }
+    const styleKey = mod && !e.altKey && !e.shiftKey ? STYLE_KEYS[e.key.toLowerCase()] : undefined;
+    if (styleKey) {
+      e.preventDefault();
+      toggleStyle(styleKey);
+      return;
+    }
     // Cmd+Enter and Ctrl+Enter are the editor's (save); plain and Shift+Enter
     // are handled here, because a contentEditable reports both as one input.
     if (e.key === "Enter" && !mod && !e.altKey) {
@@ -451,6 +600,7 @@ export function attachNoteEditable(
   el.addEventListener("beforeinput", onBeforeInput);
   el.addEventListener("input", onInput);
   el.addEventListener("keydown", onKeyDown);
+  el.addEventListener("pointerdown", clearIntent);
   el.addEventListener("compositionstart", onCompositionStart);
   el.addEventListener("compositionend", onCompositionEnd);
 
@@ -462,6 +612,7 @@ export function attachNoteEditable(
     getSelection: currentSelection,
     setText(next, selection) {
       if (next === text && !selection) return;
+      clearIntent();
       const focused = document.activeElement === el;
       const keep = selection ?? (focused ? currentSelection() : null);
       text = next;
@@ -471,10 +622,9 @@ export function attachNoteEditable(
       push(keep ? clamp(keep) : { start: text.length, end: text.length }, false);
       if (text !== next) opts.onChange(text);
     },
-    refresh() {
-      if (!composing) sync(false);
-    },
+    toggleStyle,
     focusEnd() {
+      clearIntent();
       el.focus({ preventScroll: true });
       setSelection(el, lines, text.length, text.length);
     },
@@ -482,6 +632,7 @@ export function attachNoteEditable(
       el.removeEventListener("beforeinput", onBeforeInput);
       el.removeEventListener("input", onInput);
       el.removeEventListener("keydown", onKeyDown);
+      el.removeEventListener("pointerdown", clearIntent);
       el.removeEventListener("compositionstart", onCompositionStart);
       el.removeEventListener("compositionend", onCompositionEnd);
     },
