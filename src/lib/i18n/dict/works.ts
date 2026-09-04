@@ -72,7 +72,8 @@ const en = {
     "The round bubble under the tools reads the selection aloud, Chinese and English alike. Press it again to stop.",
   guideDistill: "Distill",
   guidePanelHeader: "Side panel",
-  guidePanelNotesBody: "Your sections and the pending queue.",
+  guidePanelNotesBody:
+    "Your sections and the pending queue. Drag a note by its grip to reorder it. Select notes with the circle at their top right to merge, pin, or delete them together.",
   guidePanelAssistantBody:
     "Ask questions at document, project, or projects scope, and run checks (contradictions, gaps).",
   guidePanelDistillBody: "Every distillation of the open document; open one to read its quotes.",
@@ -175,7 +176,8 @@ const zh: Record<keyof typeof en, string> = {
   guideVoiceBody: "工具下方的圆形气泡朗读选中内容，中英文皆可。再按一次即停止。",
   guideDistill: "提炼",
   guidePanelHeader: "侧栏",
-  guidePanelNotesBody: "你的章节与待定队列。",
+  guidePanelNotesBody:
+    "你的章节与待定队列。拖动笔记的把手可调整顺序。点击笔记右上角的圆圈选择笔记，可一起合并、置顶或删除。",
   guidePanelAssistantBody: "在文档、项目或全部项目范围提问，并运行检查（矛盾、疏漏）。",
   guidePanelDistillBody: "当前文档的每次提炼；打开一条即可读它的引文。",
   guidePanelSummary: "摘要",

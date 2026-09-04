@@ -7,6 +7,8 @@ import { bumpNotebook, notebookAccess } from "@/lib/collab";
 import { buildConnections } from "@/lib/connect";
 import { buildGlossary } from "@/lib/glossary";
 import { runConversion } from "@/lib/handwritten/convert";
+import { IMAGE_EXTENSIONS, sniffImage } from "@/lib/handwritten/image";
+import { imageToPdf } from "@/lib/handwritten/image-pdf";
 import { serverT } from "@/lib/i18n/server";
 import type { TFunc } from "@/lib/i18n/dictionaries";
 import { progressResponse } from "@/lib/ingest-response";
@@ -86,7 +88,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: t("api.pdfTooLarge") }, { status: 413 });
   }
 
-  const bytes = new Uint8Array(total);
+  let bytes = new Uint8Array(total);
   let offset = 0;
   for (const chunk of chunks) {
     bytes.set(chunk.data, offset);
@@ -95,7 +97,20 @@ export async function POST(req: Request) {
   // Chunks are staging only; the assembled bytes are in memory now.
   await db.uploadChunk.deleteMany({ where: { uploadId: data.uploadId } });
 
-  if (bytes.length < 5 || String.fromCharCode(...bytes.slice(0, 5)) !== "%PDF-") {
+  let filename = data.filename;
+  let pages = data.pages;
+  // An image imports as one handwritten page (SPEC.md §16): it wraps into a
+  // one-page PDF here and skips the judgment — there is no text layer to weigh.
+  if (sniffImage(bytes)) {
+    try {
+      bytes = await imageToPdf(bytes);
+    } catch (err) {
+      console.error("Image wrap failed:", err);
+      return NextResponse.json({ error: t("api.imageUnreadable") }, { status: 400 });
+    }
+    filename = filename.replace(IMAGE_EXTENSIONS, "");
+    pages = true;
+  } else if (bytes.length < 5 || String.fromCharCode(...bytes.slice(0, 5)) !== "%PDF-") {
     return NextResponse.json({ error: t("api.notPdf") }, { status: 400 });
   }
 
@@ -103,11 +118,11 @@ export async function POST(req: Request) {
     try {
       const { document, deduped } = await parse.ingestPdf(
         bytes,
-        data.filename,
+        filename,
         onProgress,
         {
           instructions: data.instructions.trim() || undefined,
-          pages: data.pages,
+          pages,
           convert: data.convert,
         },
         user?.id ?? null,

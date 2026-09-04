@@ -9,7 +9,16 @@ import { useCollab } from "@/components/collab/collab-context";
 import { AuthorChip } from "@/components/collab/person-badge";
 import { ReplyThread } from "@/components/collab/reply-thread";
 import { CollapsedViewToggle } from "@/components/collapsed-view-toggle";
-import { ChevronDownIcon, ChevronRightIcon, LocateIcon } from "@/components/icons";
+import {
+  ChevronDownIcon,
+  ChevronRightIcon,
+  CommentIcon,
+  LinkIcon,
+  LocateIcon,
+  QuestionIcon,
+  SparkleIcon,
+  SummaryIcon,
+} from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { Markdown, markdownPreview } from "@/components/markdown";
 import { NoteId } from "@/components/outline/note-id";
@@ -35,6 +44,18 @@ function ColorDot({ color }: { color: string | null }) {
   }
   const bg = color === "sage" ? "bg-sage-500" : "bg-clay";
   return <span className={`size-2 shrink-0 rounded-full ${bg}`} />;
+}
+
+// A group's label carries the symbol of the tool that made its cards — the
+// glyph on the toolbar button and on the mark in the text — so a reader finds
+// a comment or a link by the symbol they used. Highlights carry their color.
+function GroupLabel({ icon, children }: { icon?: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <span className={`${label} flex items-center gap-1.5`}>
+      {icon}
+      {children}
+    </span>
+  );
 }
 
 // One annotation card, the note card's structure (outline/note-card.tsx): a
@@ -173,8 +194,9 @@ function AnnotationActions({
 }
 
 // Annotations tab of the reader side panel. Highlights, comments, explanations,
-// simplified rewrites, then accepted links — each annotation card jumps to its
-// anchor and deletes in place. Recommended links list in the graph instead.
+// simplified rewrites, then accepted links, each group under its tool's symbol
+// — each annotation card jumps to its anchor and deletes in place. Recommended
+// links list in the graph instead.
 export function AnnotationsPanel({
   notebookId,
   documentId,
@@ -249,7 +271,7 @@ export function AnnotationsPanel({
       )}
       {highlights.length > 0 && (
         <div className="flex flex-col gap-2">
-          <span className={label}>{t("panels.highlights")}</span>
+          <GroupLabel>{t("panels.highlights")}</GroupLabel>
           {highlights.map((a) => (
             <AnnotationCard key={a.id} annotation={a} view={view} summary={a.content}>
               <p className="text-[13px]">{a.content}</p>
@@ -266,7 +288,7 @@ export function AnnotationsPanel({
 
       {comments.length > 0 && (
         <div className="flex flex-col gap-2">
-          <span className={label}>{t("panels.comments")}</span>
+          <GroupLabel icon={<CommentIcon size={12} />}>{t("panels.comments")}</GroupLabel>
           {comments.map((a) => (
             <AnnotationCard key={a.id} annotation={a} view={view} summary={markdownPreview(a.content)}>
               <div className="text-[13px]">
@@ -285,7 +307,7 @@ export function AnnotationsPanel({
 
       {explanations.length > 0 && (
         <div className="flex flex-col gap-2">
-          <span className={label}>{t("panels.explanations")}</span>
+          <GroupLabel icon={<QuestionIcon size={12} />}>{t("panels.explanations")}</GroupLabel>
           {explanations.map((a) => (
             <AnnotationCard key={a.id} annotation={a} view={view} summary={markdownPreview(a.content)}>
               <div className="text-[13px]">
@@ -304,7 +326,7 @@ export function AnnotationsPanel({
 
       {conversations.length > 0 && (
         <div className="flex flex-col gap-2">
-          <span className={label}>{t("panels.assistant")}</span>
+          <GroupLabel icon={<SparkleIcon size={12} />}>{t("panels.assistant")}</GroupLabel>
           {conversations.map((a) => (
             <AnnotationCard key={a.id} annotation={a} view={view} summary={markdownPreview(a.content)}>
               {/* The whole conversation, nothing to scroll inside the card. */}
@@ -324,7 +346,7 @@ export function AnnotationsPanel({
 
       {simplifications.length > 0 && (
         <div className="flex flex-col gap-2">
-          <span className={label}>{t("panels.simplified")}</span>
+          <GroupLabel icon={<SummaryIcon size={12} />}>{t("panels.simplified")}</GroupLabel>
           {simplifications.map((a) => (
             <AnnotationCard
               key={a.id}
@@ -348,7 +370,7 @@ export function AnnotationsPanel({
 
       {(acceptedOut.length > 0 || acceptedIn.length > 0) && (
         <div className="flex flex-col gap-2">
-          <span className={label}>{t("panels.links")}</span>
+          <GroupLabel icon={<LinkIcon size={12} />}>{t("panels.links")}</GroupLabel>
           {acceptedOut.map((l) => (
             <div key={l.id} className={card}>
               <p className="line-clamp-2 text-[13px]">{l.quotedText}</p>

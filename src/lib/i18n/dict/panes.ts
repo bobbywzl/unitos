@@ -31,7 +31,7 @@ const en = {
   editsTabTitle: "Edit history: every edit to the open document",
   moreTitle: "More: notes full page, settings",
   allCorporaTitle: "Back to Projects",
-  addDocumentTitle: "Add a document: a PDF, a video, a web page, or Google Drive",
+  addDocumentTitle: "Add a document: a PDF, an image, a video, a web page, or Google Drive",
   attachTitle: "Attach this document to the project",
   referencesToggleTitle: "Show or hide the references",
   removeParagraphTitle: "Remove the focused paragraph",
@@ -94,7 +94,7 @@ const en = {
   ingestFailed: "Ingest failed",
   notVideoLink:
     "This is not a video link. Paste a YouTube link (watch, shorts, or youtu.be) or a direct video or audio file link.",
-  dropPdfOrVideo: "Drop PDF, video, or audio files.",
+  dropPdfOrVideo: "Drop PDF, image, video, or audio files.",
   driveAuthFailed: "Could not connect to Google Drive. Try again.",
   driveUnsupportedFile: "{name} isn't a file type this app can read yet.",
   pageHighlightTitle: "Highlight the circled spot in this color. Typed text rides on the highlight.",
@@ -145,14 +145,14 @@ const en = {
   detachDocument: "Detach document",
   detachDocumentTitle: "Detach this document from this project",
   addDocument: "Add a document",
-  uploadPdf: "Upload PDF",
+  uploadPdf: "Upload PDF or image",
   uploadVideo: "Upload video or audio",
   addFromDrive: "Add from Google Drive",
   driveHint: "pdf · Google Docs, Sheets, Slides, Drawings (as pdf) · video and audio",
   addUrl: "Add URL",
   library: "Library",
-  choosePdf: "Choose PDF files",
-  pdfHint: "pdf · up to 50 MB · or drop files anywhere on the page",
+  choosePdf: "Choose PDF or image files",
+  pdfHint: "pdf · png, jpg, gif, webp, bmp · up to 50 MB · or drop files anywhere on the page",
   urlHint:
     "The page becomes a readable document. A YouTube link or a direct video or audio file link becomes a video document.",
   uploadAssistantHint: "Talk with the assistant about the documents you add.",
@@ -166,7 +166,7 @@ const en = {
   blockCount: "({n} blocks)",
   deleteFromLibrary: "Delete from the library",
   uploadProgress: "{sent} of {total} MB",
-  dropToAdd: "Drop PDFs or videos to add them to this work",
+  dropToAdd: "Drop PDFs, images, or videos to add them to this work",
   uploadQueuedOffline: "Offline · {n} saved for upload on sync · Unitos Premium",
 
   // Ingest progress steps (ingest-progress.tsx); keys map the wire stage ids
@@ -200,6 +200,8 @@ const en = {
     "A web page parses into blocks — text, headings, figures, tables, equations. A page behind a sign-in or built by scripts may come out thin.",
   uploadNuancePdf:
     "PDF up to 50 MB. Computer text parses to blocks in reading order; rough handwritten notes import as pages, and conversion writes the text after them. Pick the import below.",
+  uploadNuanceImage:
+    "Image up to 50 MB (png, jpg, gif, webp, bmp). It imports as one page, exactly as it looks; conversion writes its text after it, and Circle & ask works on it. Pick the import below.",
   uploadNuanceDrive:
     "Google Docs, Sheets, Slides, and Drawings import as PDF through Drive's own conversion; PDFs, video, and audio import as they are.",
   uploadNuanceVideoFile:
@@ -233,6 +235,11 @@ const en = {
   uploadPdfConvert: "Pages + convert to text",
   uploadPdfConvertNote:
     "The pages import as they are, then AI reads them and writes the text after them in the notes' formatting, math as LaTeX.",
+  // The image import pick (SPEC.md §16): two pills, no judgment to make.
+  uploadImageFormat: "Image import",
+  uploadImagePagesNote: "The image imports as one page, exactly as it looks. No text is added.",
+  uploadImageConvertNote:
+    "The image imports as one page, then AI reads it and writes the text after it in the image's formatting, math as LaTeX.",
 
   // Distilled page (distill-page.tsx)
   deleteDistillation: "Delete this distillation",
@@ -349,7 +356,7 @@ const zh: Record<keyof typeof en, string> = {
   editsTabTitle: "编辑记录：当前文档的每次编辑",
   moreTitle: "更多：整页笔记、设置",
   allCorporaTitle: "返回全部项目",
-  addDocumentTitle: "添加文档：PDF、视频、网页或 Google Drive",
+  addDocumentTitle: "添加文档：PDF、图片、视频、网页或 Google Drive",
   attachTitle: "把此文档加入项目",
   referencesToggleTitle: "显示或隐藏参考文献",
   removeParagraphTitle: "移除当前段落",
@@ -407,7 +414,7 @@ const zh: Record<keyof typeof en, string> = {
   fileTooLarge: "{name} 超过 {mb} MB。",
   ingestFailed: "导入失败",
   notVideoLink: "这不是视频链接。请粘贴 YouTube 链接（watch、shorts 或 youtu.be），或视频/音频文件的直链。",
-  dropPdfOrVideo: "请拖放 PDF、视频或音频文件。",
+  dropPdfOrVideo: "请拖放 PDF、图片、视频或音频文件。",
   driveAuthFailed: "无法连接 Google Drive。请重试。",
   driveUnsupportedFile: "{name} 的文件类型暂不支持。",
   pageHighlightTitle: "以此颜色圈选高亮圈出的部分。输入的文字会附在高亮上。",
@@ -453,14 +460,14 @@ const zh: Record<keyof typeof en, string> = {
   detachDocument: "移出文档",
   detachDocumentTitle: "把此文档移出此项目",
   addDocument: "添加文档",
-  uploadPdf: "上传 PDF",
+  uploadPdf: "上传 PDF 或图片",
   uploadVideo: "上传视频或音频",
   addFromDrive: "从 Google Drive 添加",
   driveHint: "pdf · Google 文档、表格、幻灯片、绘图（转为 pdf）· 视频与音频",
   addUrl: "添加 URL",
   library: "文档库",
-  choosePdf: "选择 PDF 文件",
-  pdfHint: "pdf · 最大 50 MB · 或拖放到页面任意位置",
+  choosePdf: "选择 PDF 或图片文件",
+  pdfHint: "pdf · png、jpg、gif、webp、bmp · 最大 50 MB · 或拖放到页面任意位置",
   urlHint: "网页会成为可阅读的文档；YouTube 链接和视频/音频文件的直链会成为视频文档。",
   uploadAssistantHint: "与助手讨论你添加的文档。",
   chooseVideoFile: "选择视频或音频文件",
@@ -473,7 +480,7 @@ const zh: Record<keyof typeof en, string> = {
   blockCount: "（{n} 个块）",
   deleteFromLibrary: "从文档库删除",
   uploadProgress: "{sent}/{total} MB",
-  dropToAdd: "拖放 PDF 或视频，添加到此项目",
+  dropToAdd: "拖放 PDF、图片或视频，添加到此项目",
   uploadQueuedOffline: "离线 · 已保存 {n} 项，恢复联网后上传 · Unitos Premium",
 
   stepUploading: "上传",
@@ -503,6 +510,8 @@ const zh: Record<keyof typeof en, string> = {
     "网页解析为块——文字、标题、插图、表格、公式。需要登录或由脚本生成的页面可能解析出很少内容。",
   uploadNuancePdf:
     "PDF 最大 50 MB。电脑文字按阅读顺序解析为块；粗略手写笔记按页面导入，随后转换写出文本。在下方选择导入方式。",
+  uploadNuanceImage:
+    "图片最大 50 MB（png、jpg、gif、webp、bmp）。按一个页面原样导入；转换在其后写出文本，圈选并提问也可用。在下方选择导入方式。",
   uploadNuanceDrive:
     "Google 文档、表格、幻灯片、绘图经 Drive 自带转换以 PDF 导入；PDF、视频与音频按原样导入。",
   uploadNuanceVideoFile: "视频或音频最大 200 MB。文件存储后生成逐字稿；添加后稍等即到。",
@@ -529,6 +538,9 @@ const zh: Record<keyof typeof en, string> = {
   uploadPdfPagesNote: "整个 PDF 按页面导入，原样呈现，不添加任何文本。",
   uploadPdfConvert: "页面 + 转换为文本",
   uploadPdfConvertNote: "页面原样导入，随后 AI 阅读页面，按笔记的格式在其后写出文本，公式为 LaTeX。",
+  uploadImageFormat: "图片导入方式",
+  uploadImagePagesNote: "图片按一个页面导入，原样呈现，不添加任何文本。",
+  uploadImageConvertNote: "图片按一个页面导入，随后 AI 阅读图片，按其格式在其后写出文本，公式为 LaTeX。",
 
   deleteDistillation: "删除此提炼",
   scanningArticle: "正在扫描文章，找出回答它的引文",

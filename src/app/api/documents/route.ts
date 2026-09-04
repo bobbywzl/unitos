@@ -6,6 +6,8 @@ import { bumpNotebook, notebookAccess } from "@/lib/collab";
 import { buildConnections } from "@/lib/connect";
 import { buildGlossary } from "@/lib/glossary";
 import { runConversion } from "@/lib/handwritten/convert";
+import { IMAGE_EXTENSIONS, sniffImage } from "@/lib/handwritten/image";
+import { imageToPdf } from "@/lib/handwritten/image-pdf";
 import { parseDriveFileId } from "@/lib/drive/types";
 import { currentLang, serverT } from "@/lib/i18n/server";
 import { progressResponse } from "@/lib/ingest-response";
@@ -124,19 +126,32 @@ export async function POST(req: Request) {
     const access = await notebookAccess(fields.data.notebookId, "editor");
     if (access instanceof NextResponse) return access;
 
-    const bytes = new Uint8Array(await file.arrayBuffer());
-    if (bytes.length < 5 || String.fromCharCode(...bytes.slice(0, 5)) !== "%PDF-") {
+    let bytes = new Uint8Array(await file.arrayBuffer());
+    let filename = fields.data.filename;
+    let pages = fields.data.pages === "1";
+    // An image imports as one handwritten page (SPEC.md §16): it wraps into a
+    // one-page PDF here and skips the judgment — there is no text layer to weigh.
+    if (sniffImage(bytes)) {
+      try {
+        bytes = await imageToPdf(bytes);
+      } catch (err) {
+        console.error("Image wrap failed:", err);
+        return NextResponse.json({ error: t("api.imageUnreadable") }, { status: 400 });
+      }
+      filename = filename.replace(IMAGE_EXTENSIONS, "");
+      pages = true;
+    } else if (bytes.length < 5 || String.fromCharCode(...bytes.slice(0, 5)) !== "%PDF-") {
       return NextResponse.json({ error: t("api.notPdf") }, { status: 400 });
     }
     return progressResponse(async (onProgress) => {
       try {
         const { document, deduped } = await parse.ingestPdf(
           bytes,
-          fields.data.filename,
+          filename,
           onProgress,
           {
             instructions: fields.data.instructions.trim() || undefined,
-            pages: fields.data.pages === "1",
+            pages,
             convert: fields.data.convert === "1",
           },
           user?.id ?? null,

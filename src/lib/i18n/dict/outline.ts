@@ -23,13 +23,13 @@ const en = {
   addSectionSmall: "+ Add section",
   sectionTitle: "Section title",
   renameSection: "Rename section",
-  reorderSection: "Reorder section {title}",
+  reorderSection: "Drag to reorder section {title}",
   confirmDeleteSection: "Delete this section and its notes?",
 
   // Note cards
   addNoteBtn: "+ note",
   writeNotePlaceholder: "Write a note (markdown)",
-  reorderNote: "Reorder note",
+  reorderNote: "Drag to reorder this note",
   acceptTitle: "Accept (Enter)",
   rejectTitle: "Reject (Backspace)",
   editTitle: "Edit (e)",
@@ -53,6 +53,10 @@ const en = {
 
   // Ticker selection (upper-right of every accepted note)
   selectNote: "Select note",
+  // What the circle is for: the tray has merge, pin, delete; the notes full page adds compare.
+  selectNoteTitle: "Select this note. Merge, pin, or delete the selected notes together.",
+  selectNoteTitleCompare:
+    "Select this note. Merge, pin, compare, or delete the selected notes together.",
   selectedCount: "{n} selected",
   merge: "Merge",
   mergeTitle: "Merge the selected notes into the first one",
@@ -118,12 +122,12 @@ const zh: Record<keyof typeof en, string> = {
   addSectionSmall: "+ 添加章节",
   sectionTitle: "章节标题",
   renameSection: "重命名章节",
-  reorderSection: "调整章节 {title} 的顺序",
+  reorderSection: "拖动以调整章节 {title} 的顺序",
   confirmDeleteSection: "删除此章节及其笔记？",
 
   addNoteBtn: "+ 笔记",
   writeNotePlaceholder: "写一条笔记（markdown）",
-  reorderNote: "调整笔记顺序",
+  reorderNote: "拖动以调整此笔记的顺序",
   acceptTitle: "接受（Enter）",
   rejectTitle: "拒绝（Backspace）",
   editTitle: "编辑（e）",
@@ -145,6 +149,8 @@ const zh: Record<keyof typeof en, string> = {
   unresolvedLabel: "无法定位：",
 
   selectNote: "选择笔记",
+  selectNoteTitle: "选择此笔记。选中的笔记可一起合并、置顶或删除。",
+  selectNoteTitleCompare: "选择此笔记。选中的笔记可一起合并、置顶、对比或删除。",
   selectedCount: "已选 {n} 条",
   merge: "合并",
   mergeTitle: "把选中的笔记合并进第一条",

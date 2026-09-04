@@ -424,7 +424,7 @@ export function NoteCard({
             role="checkbox"
             aria-checked={isSelected}
             aria-label={t("outline.selectNote")}
-            data-tip={t("outline.selectNote")}
+            data-tip={t(tray ? "outline.selectNoteTitle" : "outline.selectNoteTitleCompare")}
             className={`flex h-[18px] w-[18px] items-center justify-center rounded-full border transition-colors ${
               isSelected
                 ? "border-clay bg-clay text-clay-fg opacity-100"

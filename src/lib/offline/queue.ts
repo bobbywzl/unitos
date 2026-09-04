@@ -2,7 +2,7 @@
 
 import { ACCOUNT_HEADER } from "@/lib/constants";
 import { tabAccount } from "@/lib/tab-account";
-import { UPLOAD_CHUNK_BYTES } from "@/lib/video/types";
+import { MEDIA_EXTENSIONS, UPLOAD_CHUNK_BYTES } from "@/lib/video/types";
 
 // Offline work (SPEC.md §17, Unitos Premium): writes and uploads made while
 // offline queue in IndexedDB and sync in order when the browser is back
@@ -152,10 +152,22 @@ async function sendWrite(record: QueuedWrite): Promise<boolean> {
   }
 }
 
+// Video and audio replay through the chunked media path; PDFs and images
+// (SPEC.md §16) through the PDF path — the split document-bar.tsx makes when
+// the file is dropped online.
+function isMediaRecord(record: QueuedUpload): boolean {
+  return (
+    record.mimeType.startsWith("video/") ||
+    record.mimeType.startsWith("audio/") ||
+    MEDIA_EXTENSIONS.test(record.name)
+  );
+}
+
 async function sendUpload(record: QueuedUpload): Promise<boolean> {
   const bytes = new Uint8Array(record.bytes);
+  const media = isMediaRecord(record);
   try {
-    if (bytes.length <= SINGLE_REQUEST_BYTES && record.mimeType === "application/pdf") {
+    if (!media && bytes.length <= SINGLE_REQUEST_BYTES) {
       const form = new FormData();
       form.set("file", new File([record.bytes], record.name, { type: record.mimeType }));
       form.set("notebookId", record.notebookId);
@@ -169,7 +181,6 @@ async function sendUpload(record: QueuedUpload): Promise<boolean> {
     }
     // The chunked path, same as an online upload of a big file (SPEC.md §11).
     const uploadId = crypto.randomUUID();
-    const media = !record.mimeType.startsWith("application/pdf");
     for (let index = 0, offset = 0; offset < bytes.length; index++, offset += UPLOAD_CHUNK_BYTES) {
       const chunk = bytes.slice(offset, offset + UPLOAD_CHUNK_BYTES);
       const res = await fetch(`/api/uploads?uploadId=${uploadId}&index=${index}`, {

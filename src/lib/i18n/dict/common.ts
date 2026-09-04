@@ -24,7 +24,7 @@
 //   anchor unresolved 无法定位 · app tab 页签 · browser tab 标签页 ·
 //   upload assistant 上传助手 · review(上传审阅) 审阅 · page 页面 ·
 //   split 拆分 · upload instructions 上传要求 · handwritten 手写 ·
-//   conversion(手写转文本) 转换 · Circle & ask 圈选并提问 ·
+//   conversion(手写转文本) 转换 · Circle & ask 圈选并提问 · image 图片 ·
 //   offline 离线 · sync(离线同步) 同步 · Unitos Premium 不翻译 ·
 //   link Google Drive(账号关联) 关联 · pages(手写页面) 页面 ·
 //   lasso highlight(页面圈选高亮) 圈选高亮 ·

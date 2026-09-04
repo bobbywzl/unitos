@@ -8,6 +8,7 @@ import { CheckIcon, SparkleIcon, SpinnerIcon } from "@/components/icons";
 import type { TFunc, TKey } from "@/lib/i18n/dictionaries";
 import { readNdjson } from "@/lib/ndjson";
 import { classifyDriveFile, type DrivePickedFile } from "@/lib/drive/types";
+import { isImageFile } from "@/lib/handwritten/image";
 import type {
   InstructionCheck,
   InstructionReply,
@@ -61,6 +62,9 @@ const SELF = "this-page";
 // writes the handwriting as text after them.
 type PdfFormat = "judge" | "pages" | "convert";
 const PDF_FORMATS: PdfFormat[] = ["judge", "pages", "convert"];
+// An image is one page whatever it shows (SPEC.md §16): no judgment to make,
+// so its pick is pages as they are, or pages + convert.
+const IMAGE_FORMATS: PdfFormat[] = ["pages", "convert"];
 const PDF_FORMAT_LABEL: Record<PdfFormat, TKey> = {
   judge: "panes.uploadPdfJudge",
   pages: "panes.uploadPdfPages",
@@ -70,6 +74,11 @@ const PDF_FORMAT_NOTE: Record<PdfFormat, TKey> = {
   judge: "panes.uploadPdfJudgeNote",
   pages: "panes.uploadPdfPagesNote",
   convert: "panes.uploadPdfConvertNote",
+};
+const IMAGE_FORMAT_NOTE: Record<PdfFormat, TKey> = {
+  judge: "panes.uploadImageConvertNote",
+  pages: "panes.uploadImagePagesNote",
+  convert: "panes.uploadImageConvertNote",
 };
 
 function isMediaFile(file: File): boolean {
@@ -184,8 +193,14 @@ export function UploadAssistant({
   // A Drive pick that ends up as PDF bytes (a PDF, or a Doc/Sheet/Slide/Drawing
   // exported to PDF) takes the same instructions a PDF upload takes.
   const hasPdf =
-    files.some((f) => !isMediaFile(f)) ||
+    files.some((f) => !isMediaFile(f) && !isImageFile(f)) ||
     driveFiles.some((f) => driveKindOf(f) === "pdf" || driveKindOf(f) === "export");
+  // An image imports as one handwritten page (SPEC.md §16): it takes the
+  // instructions and the pages pick a PDF takes, never the judgment.
+  const hasImage = files.some(isImageFile);
+  const hasPages = hasPdf || hasImage;
+  // With images alone the pick has no judge: judge reads as pages + convert.
+  const shownFormat: PdfFormat = !hasPdf && pdfFormat === "judge" ? "convert" : pdfFormat;
   const hasMedia =
     request.kind === "video-url" ||
     files.some(isMediaFile) ||
@@ -272,7 +287,7 @@ export function UploadAssistant({
     setChecking(true);
     try {
       const kind =
-        request.kind === "url" ? "url" : request.kind === "video-url" || !hasPdf ? "video" : "pdf";
+        request.kind === "url" ? "url" : request.kind === "video-url" || !hasPages ? "video" : "pdf";
       const result = await api<{ check: InstructionCheck }>("/api/uploads/review", "POST", {
         notebookId,
         kind,
@@ -763,30 +778,37 @@ export function UploadAssistant({
                   <p className="text-[13px] text-sand-700">{t("panes.uploadNuanceDrive")}</p>
                 )}
                 {hasPdf && <p className="text-[13px] text-sand-700">{t("panes.uploadNuancePdf")}</p>}
+                {hasImage && (
+                  <p className="text-[13px] text-sand-700">{t("panes.uploadNuanceImage")}</p>
+                )}
                 {hasMedia && (
                   <p className="text-[13px] text-sand-700">{t("panes.uploadNuanceVideoFile")}</p>
                 )}
               </div>
             )}
 
-            {hasPdf && (
+            {hasPages && (
               <div className="flex flex-col gap-1.5">
-                <span className={sectionLabel}>{t("panes.uploadPdfFormat")}</span>
+                <span className={sectionLabel}>
+                  {t(hasPdf ? "panes.uploadPdfFormat" : "panes.uploadImageFormat")}
+                </span>
                 <div className="flex flex-wrap items-center gap-2">
-                  {PDF_FORMATS.map((format) => (
+                  {(hasPdf ? PDF_FORMATS : IMAGE_FORMATS).map((format) => (
                     <button
                       key={format}
                       type="button"
                       onClick={() => setPdfFormat(format)}
                       data-track={`upload-format:${format}`}
-                      aria-pressed={pdfFormat === format}
-                      className={`${pill} ${pdfFormat === format ? "bg-clay text-clay-fg" : "bg-sand-100 text-sand-700 hover:bg-clay-100"}`}
+                      aria-pressed={shownFormat === format}
+                      className={`${pill} ${shownFormat === format ? "bg-clay text-clay-fg" : "bg-sand-100 text-sand-700 hover:bg-clay-100"}`}
                     >
                       {t(PDF_FORMAT_LABEL[format])}
                     </button>
                   ))}
                 </div>
-                <p className="text-xs text-sand-500">{t(PDF_FORMAT_NOTE[pdfFormat])}</p>
+                <p className="text-xs text-sand-500">
+                  {t((hasPdf ? PDF_FORMAT_NOTE : IMAGE_FORMAT_NOTE)[shownFormat])}
+                </p>
               </div>
             )}
             {request.kind === "video-url" && (
@@ -805,7 +827,7 @@ export function UploadAssistant({
                 rows={2}
                 className="w-full resize-y rounded-2xl bg-sand-100 px-4 py-2.5 text-sm outline-none placeholder:text-sand-500"
               />
-              {hasMedia && !hasPdf && request.kind !== "url" && (
+              {hasMedia && !hasPages && request.kind !== "url" && (
                 <p className="text-xs text-sand-500">{t("api.instructionsVideo")}</p>
               )}
               {check && <ReplyList replies={check.replies} />}

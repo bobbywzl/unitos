@@ -8,15 +8,17 @@ import { ChevronDownIcon, ChevronRightIcon } from "@/components/icons";
 import { useCollab } from "@/components/collab/collab-context";
 import { useT } from "@/components/lang-provider";
 import { CollapsedViewToggle } from "@/components/collapsed-view-toggle";
+import { SortableItem, SortableList } from "@/components/sortable";
 import { NoteCard } from "@/components/outline/note-card";
 import { NoteEditor } from "@/components/outline/note-editor";
 import { Collapse } from "@/components/presence";
 import { SelectionBar } from "@/components/outline/selection-bar";
 import { filterSections, noteMatches, type OutlineActions } from "@/components/outline/use-outline";
 
-// The tray is for triage, not reorganizing: pending notes hoist to the top as one
-// queue, accepted notes sit under their section label (design 1a). Reordering,
-// renaming, and composing at length live on the notes full page.
+// The tray is for triage first: pending notes hoist to the top as one queue,
+// accepted notes sit under their section label (design 1a) and reorder by
+// their grip, as on the notes full page. Renaming sections and composing at
+// length live on the notes full page.
 export function NotesTray({
   tree,
   pending,
@@ -62,7 +64,13 @@ export function NotesTray({
       )}
 
       {shown.map((section) => (
-        <TraySection key={section.id} section={section} actions={actions} labelClass={label} />
+        <TraySection
+          key={section.id}
+          section={section}
+          actions={actions}
+          labelClass={label}
+          reorderable={!needle}
+        />
       ))}
 
       {needle && shown.length === 0 && shownPending.length === 0 && (
@@ -90,11 +98,15 @@ function TraySection({
   section,
   actions,
   labelClass,
+  reorderable,
   nested,
 }: {
   section: SectionView;
   actions: OutlineActions;
   labelClass: string;
+  // False while a search filters the list: a drop then could not land on the
+  // whole section, the list the order counts in.
+  reorderable: boolean;
   nested?: boolean;
 }) {
   const t = useT();
@@ -103,6 +115,18 @@ function TraySection({
   const [composing, setComposing] = useState(false);
   const [draft, setDraft] = useState("");
   const accepted = section.notes.filter((n) => n.status !== "PENDING");
+  const grips = reorderable && canEdit;
+
+  // Reorder by the grip (SPEC.md §6). The list shows the accepted notes; the
+  // drop lands the note where the note under the pointer sits in the whole
+  // section, pending notes included — the index reorderNote and the server
+  // count with.
+  function moveNote(id: string, to: number) {
+    const overId = accepted[to]?.id;
+    const toIndex = overId ? section.notes.findIndex((n) => n.id === overId) : -1;
+    if (toIndex === -1) return;
+    actions.reorderNote(section.id, id, toIndex);
+  }
 
   return (
     <div className={`group/section flex flex-col gap-2 ${nested ? "pl-3" : ""}`}>
@@ -135,9 +159,20 @@ function TraySection({
       <Collapse open={!collapsed}>
       {!collapsed && (
         <div className="flex flex-col gap-2">
-          {accepted.map((note) => (
-            <NoteCard key={note.id} note={note} actions={actions} variant="tray" />
-          ))}
+          <SortableList id={`tray-notes-${section.id}`} ids={accepted.map((n) => n.id)} onMove={moveNote}>
+            {accepted.map((note) => (
+              <SortableItem key={note.id} id={note.id}>
+                {(handle) => (
+                  <NoteCard
+                    note={note}
+                    actions={actions}
+                    handle={grips ? handle : undefined}
+                    variant="tray"
+                  />
+                )}
+              </SortableItem>
+            ))}
+          </SortableList>
 
           {composing && (
             <form
@@ -187,6 +222,7 @@ function TraySection({
               section={child}
               actions={actions}
               labelClass={labelClass}
+              reorderable={reorderable}
               nested
             />
           ))}

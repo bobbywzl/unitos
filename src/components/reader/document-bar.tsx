@@ -6,6 +6,7 @@ import { api } from "@/lib/api";
 import type { DriveConfig } from "@/lib/drive/config";
 import { pickDriveFiles } from "@/lib/drive/picker-client";
 import { parseDriveFileId, type DrivePickedFile } from "@/lib/drive/types";
+import { IMAGE_ACCEPT, isImageFile } from "@/lib/handwritten/image";
 import { isImeKey } from "@/lib/ime";
 import { useCollab } from "@/components/collab/collab-context";
 import { ChevronDownIcon } from "@/components/icons";
@@ -458,7 +459,8 @@ export function DocumentBar({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [driveResult]);
 
-  // Drag-and-drop PDF upload: dropping anywhere on the page adds to this work.
+  // Drag-and-drop upload — PDFs, images, video and audio files: dropping
+  // anywhere on the page adds to this work.
   const [dragging, setDragging] = useState(false);
   const dragDepth = useRef(0);
   useEffect(() => {
@@ -484,7 +486,11 @@ export function DocumentBar({
       setDragging(false);
       const files = [...(e.dataTransfer?.files ?? [])];
       const accepted = files.filter(
-        (f) => f.type === "application/pdf" || f.name.toLowerCase().endsWith(".pdf") || isMediaFile(f),
+        (f) =>
+          f.type === "application/pdf" ||
+          f.name.toLowerCase().endsWith(".pdf") ||
+          isImageFile(f) ||
+          isMediaFile(f),
       );
       if (accepted.length === 0) {
         setError(t("panes.dropPdfOrVideo"));
@@ -822,7 +828,7 @@ export function DocumentBar({
       <input
         ref={fileRef}
         type="file"
-        accept="application/pdf,.pdf"
+        accept={`application/pdf,.pdf,${IMAGE_ACCEPT}`}
         multiple
         className="hidden"
         onChange={(e) => {

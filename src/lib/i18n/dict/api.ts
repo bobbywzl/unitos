@@ -103,7 +103,9 @@ const en = {
   // Documents and ingest
   parsingUnavailable: "Document parsing is unavailable: {message}",
   missingFile: "Missing file",
-  notPdf: "File is not a PDF",
+  notPdf: "File is not a PDF or an image (png, jpg, gif, webp, bmp)",
+  imageUnreadable:
+    "Could not read this image. The file may be damaged, or in a format this reader cannot decode.",
   pdfTooLarge: "PDF is larger than 50 MB",
   pdfParseFailedReason: "Could not read this PDF. {reason}",
   urlIngestFailedReason: "Could not ingest this URL. {reason}",
@@ -298,7 +300,8 @@ const zh: Record<keyof typeof en, string> = {
 
   parsingUnavailable: "文档解析不可用：{message}",
   missingFile: "缺少文件",
-  notPdf: "文件不是 PDF",
+  notPdf: "文件不是 PDF，也不是图片（png、jpg、gif、webp、bmp）",
+  imageUnreadable: "无法读取此图片。文件可能已损坏，或是阅读器无法解码的格式。",
   pdfTooLarge: "PDF 超过 50 MB",
   pdfParseFailedReason: "无法读取此 PDF。{reason}",
   urlIngestFailedReason: "无法导入此 URL。{reason}",
