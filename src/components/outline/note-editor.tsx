@@ -2,6 +2,7 @@
 
 import { useEffect, useLayoutEffect, useRef } from "react";
 import { attachNoteEditable, type NoteEditable } from "@/lib/note-editable";
+import { wrapSelection, type Patch } from "@/lib/markdown-style";
 import { useT } from "@/components/lang-provider";
 import type { TKey } from "@/lib/i18n/dictionaries";
 
@@ -22,36 +23,6 @@ const TEXT_COLORS: { tag: TextColor; dot: string; nameKey: TKey }[] = [
 ];
 
 const HUE_TAG = /^<(clay|sage|gold|plum)>([\s\S]*)<\/\1>$/;
-
-type Patch = { value: string; start: number; end: number };
-
-/** Wrap the selection in markers, or unwrap when already wrapped. Markers
-    hug the words: spaces at the selection's ends stay outside. */
-function wrapSelection(value: string, s: number, e: number, before: string, after: string): Patch {
-  while (s < e && /\s/.test(value[s])) s += 1;
-  while (e > s && /\s/.test(value[e - 1])) e -= 1;
-  const selected = value.slice(s, e);
-  if (
-    selected.length >= before.length + after.length &&
-    selected.startsWith(before) &&
-    selected.endsWith(after)
-  ) {
-    const inner = selected.slice(before.length, selected.length - after.length);
-    return { value: value.slice(0, s) + inner + value.slice(e), start: s, end: s + inner.length };
-  }
-  if (value.slice(Math.max(0, s - before.length), s) === before && value.slice(e, e + after.length) === after) {
-    return {
-      value: value.slice(0, s - before.length) + selected + value.slice(e + after.length),
-      start: s - before.length,
-      end: s - before.length + selected.length,
-    };
-  }
-  return {
-    value: value.slice(0, s) + before + selected + after + value.slice(e),
-    start: s + before.length,
-    end: s + before.length + selected.length,
-  };
-}
 
 /** One color per selection: same color toggles off, another color replaces. */
 function colorSelection(value: string, s: number, e: number, tag: TextColor): Patch {
@@ -142,8 +113,10 @@ const FORMATS: { label: string; titleKey: TKey; track: string; map: (lines: stri
 ];
 
 // Bold, italic, underline are the browser's own editing commands: with a
-// selection they style it, with a bare caret they style what is typed next,
-// and Cmd+B/I/U work without a handler. The editor reads the result back.
+// selection they style it, with a bare caret they style what is typed next.
+// The editor reads the result back. Cmd+B/I/U reach the same command inside
+// the editable (lib/note-editable.ts), so the keys and the bar do one thing —
+// handling them here too would toggle each press twice.
 const STYLES: { label: string; command: "bold" | "italic" | "underline"; titleKey: TKey; track: string; cls: string }[] = [
   { label: "B", command: "bold", titleKey: "panes.bold", track: "bold", cls: "font-bold" },
   { label: "I", command: "italic", titleKey: "panes.italic", track: "italic", cls: "italic" },

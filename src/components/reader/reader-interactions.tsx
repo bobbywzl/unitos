@@ -33,6 +33,7 @@ import type { DocumentReference } from "@/lib/parse/types";
 import { splitStreamError, splitStreamNote } from "@/lib/derive/config";
 import { findWeblinks } from "@/lib/weblinks";
 import { isImeKey, useImeGuard } from "@/lib/ime";
+import { markdownStyleKey } from "@/lib/markdown-style";
 import { isOffline, offlinePremium, queueWrite } from "@/lib/offline/queue";
 import { parseYouTubeId, youtubeWatchUrl } from "@/lib/video/youtube";
 import type { TFunc, TKey } from "@/lib/i18n/dictionaries";
@@ -1154,17 +1155,7 @@ export function ReaderInteractions({
         window.getSelection()?.removeAllRanges();
         return;
       }
-      if (editModeRef.current) {
-        const active = document.activeElement as HTMLElement | null;
-        const editingId = active?.dataset.editBlock;
-        if (editingId) {
-          const live = active?.textContent ?? "";
-          const stored = blocksRef.current.find((b) => b.id === editingId);
-          if (stored && live !== stored.text) void saveBlockEdit(editingId, live);
-        }
-        editModeRef.current = false;
-        setEditMode(false);
-      }
+      if (editModeRef.current) leaveEditMode();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -3106,6 +3097,43 @@ export function ReaderInteractions({
     rec.start();
   }
 
+  // Leaving edit mode: whatever is being typed saves first, then the mode and
+  // its toolbar go. Escape, Done, and a press outside the article all come
+  // here, so the bar never outlives the mode.
+  function leaveEditMode() {
+    const active = document.activeElement as HTMLElement | null;
+    const editingId = active?.dataset.editBlock;
+    if (editingId) {
+      const live = active?.textContent ?? "";
+      const stored = blocksRef.current.find((b) => b.id === editingId);
+      if (stored && live !== stored.text) void saveBlockEdit(editingId, live);
+    }
+    editModeRef.current = false;
+    setEditMode(false);
+  }
+  const leaveEditModeRef = useRef(leaveEditMode);
+  leaveEditModeRef.current = leaveEditMode;
+
+  // A press anywhere outside the article, its format bar, the edit-mode
+  // controls, and the selection tools leaves edit mode: the reader clicked
+  // away, so the bar goes with the mode.
+  useEffect(() => {
+    if (!editMode) return;
+    const onDown = (e: PointerEvent) => {
+      const target = e.target as Element | null;
+      if (
+        target?.closest(
+          "article.reader-prose, [data-edit-toolbar], [data-edit-control], [data-selection-popover]",
+        )
+      ) {
+        return;
+      }
+      leaveEditModeRef.current();
+    };
+    document.addEventListener("pointerdown", onDown, true);
+    return () => document.removeEventListener("pointerdown", onDown, true);
+  }, [editMode]);
+
   // Edit mode: the whole body is editable in place. Every change goes through
   // the same routes as the assistant's, so history and healing stay uniform.
   function toggleEditMode() {
@@ -3601,6 +3629,7 @@ export function ReaderInteractions({
       </Presence>
         {editMode && (
           <select
+            data-edit-control
             value={font ?? "default"}
             onChange={(e) => void setFont(e.target.value)}
             aria-label={t("reader.readerFont")}
@@ -3613,6 +3642,7 @@ export function ReaderInteractions({
         )}
         {editMode && (
           <button
+            data-edit-control
             onClick={toggleEditMode}
             data-track="done"
             className="rounded-full bg-clay px-3.5 py-1.5 text-xs font-semibold text-clay-fg shadow-soft hover:bg-clay-600"
@@ -3722,6 +3752,11 @@ export function ReaderInteractions({
             }
             onKeyDown={(e) => {
               if (isImeKey(e)) return;
+              const styled = markdownStyleKey(e);
+              if (styled !== null) {
+                setAnnotationCard((c) => (c ? { ...c, draft: styled } : c));
+                return;
+              }
               if (e.key === "Escape") setAnnotationCard(null);
             }}
             placeholder={t("reader.addCommentPlaceholder")}
@@ -4012,6 +4047,11 @@ export function ReaderInteractions({
                 {...ime.props}
                 onKeyDown={(e) => {
                   if (ime.isImeEnter(e) || isImeKey(e)) return;
+                  const styled = markdownStyleKey(e);
+                  if (styled !== null) {
+                    setCommentDraft(styled);
+                    return;
+                  }
                   if (e.key === "Enter" && !e.shiftKey && commentDraft.trim()) {
                     e.preventDefault();
                     void annotate({ comment: commentDraft });
@@ -4373,6 +4413,11 @@ export function ReaderInteractions({
                 }
                 onKeyDown={(e) => {
                   if (isImeKey(e)) return;
+                  const styled = markdownStyleKey(e);
+                  if (styled !== null) {
+                    setCommentCard((c) => (c ? { ...c, draft: styled } : c));
+                    return;
+                  }
                   if (e.key === "Escape") setCommentCard(null);
                 }}
                 rows={4}

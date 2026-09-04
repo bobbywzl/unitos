@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { isImeKey } from "@/lib/ime";
-import { announceNoteWrap, type NoteWrapSpacer } from "@/lib/note-wrap";
+import { NOTE_WRAP_GAP as GAP, announceNoteWrap, type NoteWrapSpacer } from "@/lib/note-wrap";
 import { useCollab } from "@/components/collab/collab-context";
 import { useT } from "@/components/lang-provider";
 import { NoteEditor } from "@/components/outline/note-editor";
@@ -26,8 +26,6 @@ const WIDTH = 460;
 const MARGIN = 16;
 // The part of the card that stays on screen when it is dragged past an edge.
 const KEEP = 96;
-// The text's distance from a wrapped card.
-const GAP = 18;
 // Less room than this beside the card and the text skips below it instead.
 const MIN_BESIDE = 200;
 const WRAP_STORE = "unitos-note-wrap";
@@ -110,7 +108,7 @@ function toContent(pos: Pos, pane: HTMLElement): Pos {
 }
 
 /** The gap the article needs around the card, from both boxes on screen. Null:
-    the card sits beside the text, or below all of it. */
+    the card sits beside the text, or above all of it. */
 function measureWrap(id: string, card: HTMLElement, pane: HTMLElement): NoteWrapSpacer | null {
   const article = pane.querySelector<HTMLElement>("article.reader-prose");
   if (!article) return null;
@@ -119,11 +117,17 @@ function measureWrap(id: string, card: HTMLElement, pane: HTMLElement): NoteWrap
   const style = getComputedStyle(article);
   const textLeft = a.left + parseFloat(style.paddingLeft);
   const textRight = a.right - parseFloat(style.paddingRight);
+  const contentTop = a.top + parseFloat(style.paddingTop);
   const textWidth = textRight - textLeft;
   if (textWidth <= 0) return null;
-  const top = c.top - GAP;
-  const bottom = c.bottom + GAP;
   if (c.right + GAP <= textLeft || c.left - GAP >= textRight) return null;
+  // The spacers sit at the article's content top, so the gap is measured from
+  // there: the card's top edge less its margin, and its whole height plus both
+  // margins. A card that starts above the article keeps the part that overlaps.
+  const top = Math.max(contentTop, c.top - GAP);
+  const bottom = c.bottom + GAP;
+  const height = bottom - top;
+  if (height <= 0) return null;
   // The side whose gap is narrower keeps more text beside the card. Too little
   // room left beside it and the gap takes the whole column: the text skips below.
   const fromRight = textRight - (c.left - GAP);
@@ -131,26 +135,13 @@ function measureWrap(id: string, card: HTMLElement, pane: HTMLElement): NoteWrap
   const side: "left" | "right" = fromRight <= fromLeft ? "right" : "left";
   let width = Math.min(textWidth, side === "right" ? fromRight : fromLeft);
   if (textWidth - width < MIN_BESIDE) width = textWidth;
-  // The block the card's top edge falls in, or the first one below it: the gap
-  // goes before it, pushed down to the card's top.
-  for (const child of Array.from(article.children) as HTMLElement[]) {
-    const blockId = child.dataset.blockId ?? child.querySelector<HTMLElement>("[data-block-id]")?.dataset.blockId;
-    if (!blockId) continue;
-    const r = child.getBoundingClientRect();
-    if (r.bottom <= top) continue;
-    const start = Math.max(top, r.top);
-    const height = bottom - start;
-    if (height <= 0) return null;
-    return {
-      id,
-      blockId,
-      side,
-      width: Math.round(width),
-      offset: Math.round(start - r.top),
-      height: Math.round(height),
-    };
-  }
-  return null;
+  return {
+    id,
+    side,
+    width: Math.round(width),
+    offset: Math.round(top - contentTop),
+    height: Math.round(height),
+  };
 }
 
 export function FloatingNoteEditor({

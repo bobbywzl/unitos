@@ -2,6 +2,7 @@
 
 import { Fragment, useEffect, useRef, useState } from "react";
 import { PlusIcon } from "@/components/icons";
+import { styleShortcut } from "@/lib/markdown-style";
 import { NOTE_WRAP_EVENT, type NoteWrapSpacer } from "@/lib/note-wrap";
 import { NoteWrapGap } from "@/components/reader/note-wrap-gap";
 import { useT } from "@/components/lang-provider";
@@ -13,6 +14,12 @@ import { PageBlock, type PageMark } from "@/components/reader/page-block";
 import { DocumentTitle } from "@/components/reader/document-title";
 
 const TEXT_TYPES = new Set(["PARAGRAPH", "HEADING", "LIST", "CODE", "EQUATION"]);
+
+// The blocks whose lines flow around a wrapped note (SPEC.md §6). Everything
+// else — a figure, a table, a video, a page, an equation, a code block — is one
+// object that would be squeezed to a sliver beside the card, so it clears the
+// card instead and takes its place above or below it.
+const WRAP_FLOW_TYPES = new Set(["PARAGRAPH", "HEADING", "LIST", "TRANSCRIPT"]);
 
 const FONT_STACK: Record<string, string | undefined> = {
   default: undefined,
@@ -371,11 +378,32 @@ export function Reader({
     return () => window.removeEventListener(NOTE_WRAP_EVENT, onWrap);
   }, []);
 
+  // Cmd/Ctrl+B, I, U while editing: the same styling the bar's B, I and U
+  // apply, on the block the caret is in (lib/markdown-style.ts).
+  function onStyleShortcut(e: React.KeyboardEvent<HTMLElement>) {
+    const style = styleShortcut(e);
+    if (!style) return;
+    e.preventDefault();
+    applyStyle(style);
+  }
+
+  // A block that does not flow around the card clears it, so it lands whole
+  // above or below the card rather than squeezed beside it.
+  const wrapClear = (type: string) =>
+    wrapSpacer && !WRAP_FLOW_TYPES.has(type)
+      ? wrapSpacer.side === "left"
+        ? " clear-left"
+        : " clear-right"
+      : "";
+
   return (
     <div className="relative">
       <CircleGlow />
       {mode === "edit" && (
-        <div className="sticky top-3 z-30 mx-auto flex w-fit items-center gap-0.5 rounded-full bg-card px-2 py-1.5 shadow-float print:hidden">
+        <div
+          data-edit-toolbar
+          className="sticky top-3 z-30 mx-auto flex w-fit items-center gap-0.5 rounded-full bg-card px-2 py-1.5 shadow-float print:hidden"
+        >
           {(
             [
               ["paragraph", "¶", "panes.formatParagraph"],
@@ -451,7 +479,15 @@ export function Reader({
         </div>
       )}
 
-      <article className="reader-prose reader-column w-full px-6 py-11 print:py-0" style={{ fontFamily }}>
+      <article
+        className="reader-prose reader-column w-full px-6 py-11 print:py-0"
+        style={{ fontFamily }}
+        onKeyDown={mode === "edit" ? onStyleShortcut : undefined}
+      >
+        {/* The wrapped note's gap: the pair of floats sits at the article's
+            content top, the one position the card can measure against exactly
+            (lib/note-wrap.ts). */}
+        {wrapSpacer && <NoteWrapGap spacer={wrapSpacer} />}
         <p className="mb-2.5 text-[11px] font-bold tracking-[0.09em] text-clay-700 uppercase print:hidden">
           {t(mode === "edit" ? "panes.documentBlocksEditing" : "panes.documentBlocks", {
             n: blocks.length,
@@ -465,9 +501,8 @@ export function Reader({
 
         {blocks.map((block, i) => (
           <Fragment key={block.id}>
-            {wrapSpacer?.blockId === block.id && <NoteWrapGap spacer={wrapSpacer} />}
             {block.type === "PAGE" && pages && documentId ? (
-              <div>
+              <div className={wrapClear(block.type).trim()}>
                 <PageBlock
                   documentId={documentId}
                   notebookId={pages.notebookId}
@@ -487,7 +522,7 @@ export function Reader({
                 )}
               </div>
             ) : mode === "edit" ? (
-              <div className="group/block">
+              <div className={`group/block${wrapClear(block.type)}`}>
                 {TEXT_TYPES.has(block.type) ? (
                   <EditableBlock
                     block={block}
@@ -521,8 +556,14 @@ export function Reader({
                   </button>
                 </div>
               </div>
-            ) : (
+            ) : WRAP_FLOW_TYPES.has(block.type) ? (
               <BlockView block={block} highlights={highlightsByBlock[block.id]} documentId={documentId} />
+            ) : (
+              // The wrapper carries the clear; the block keeps its own margins,
+              // which collapse through it, so spacing does not change.
+              <div className={wrapClear(block.type).trim()}>
+                <BlockView block={block} highlights={highlightsByBlock[block.id]} documentId={documentId} />
+              </div>
             )}
           </Fragment>
         ))}

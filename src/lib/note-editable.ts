@@ -475,8 +475,15 @@ export function attachNoteEditable(
       const line = lines[i];
       if (line.end < start || line.src > end || line.kind === "code") continue;
       const lineStart = lineVisibleStart(lines, i);
-      const from = Math.max(0, visStart - lineStart);
-      const to = Math.min(line.runs.reduce((n, r) => n + r.text.length, 0), visEnd - lineStart);
+      const lineText = line.runs.map((r) => r.text).join("");
+      let from = Math.max(0, visStart - lineStart);
+      let to = Math.min(lineText.length, visEnd - lineStart);
+      // Markers hug the words: spaces at the selection's ends stay outside
+      // them. Without this a selection that runs one space past a styled word
+      // could never turn the style off — the space has no style, so every
+      // press read the range as "not all styled" and turned it on again.
+      while (from < to && /\s/.test(lineText[from])) from += 1;
+      while (to > from && /\s/.test(lineText[to - 1])) to -= 1;
       if (to <= from) continue;
       const body = inlineMarkdown(toggledRuns(line, from, to, style));
       next = next.slice(0, line.bodySrc) + body + next.slice(line.end);
