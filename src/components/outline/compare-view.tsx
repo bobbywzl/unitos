@@ -5,7 +5,7 @@ import { isImeKey } from "@/lib/ime";
 import type { NoteView, SectionView } from "@/lib/types";
 import { ChevronLeftIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
-import { markdownPreview } from "@/components/markdown";
+import { markdownPreview } from "@/lib/markdown-preview";
 import { NoteCard } from "@/components/outline/note-card";
 import { shortNoteId } from "@/components/outline/note-id";
 import type { OutlineActions } from "@/components/outline/use-outline";

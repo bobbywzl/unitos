@@ -19,7 +19,7 @@ import {
   VolumeIcon,
 } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
-import { markdownPreview } from "@/components/markdown";
+import { markdownPreview } from "@/lib/markdown-preview";
 import {
   formatTime,
   formatTimeRange,

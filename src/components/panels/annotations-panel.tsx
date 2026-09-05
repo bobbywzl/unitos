@@ -20,7 +20,8 @@ import {
   SummaryIcon,
 } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
-import { Markdown, markdownPreview } from "@/components/markdown";
+import { Markdown } from "@/components/markdown";
+import { markdownPreview } from "@/lib/markdown-preview";
 import { NoteId } from "@/components/outline/note-id";
 import { useCollapsedView, type CollapsedViewModel } from "@/components/use-collapsed-view";
 import { stripSimplifyMarkers } from "@/lib/sentences";

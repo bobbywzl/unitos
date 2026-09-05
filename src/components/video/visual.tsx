@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import { useT } from "@/components/lang-provider";
-import { markdownPreview } from "@/components/markdown";
+import { markdownPreview } from "@/lib/markdown-preview";
 import { useVideoThumbnails, type ThumbnailSource } from "@/components/video/use-thumbnails";
 import {
   formatTimeRange,

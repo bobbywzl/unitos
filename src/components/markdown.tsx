@@ -14,10 +14,18 @@ function linkifyBlockTags(text: string): string {
 }
 
 // Note style tags: <u> underlines, <clay>/<sage>/<gold>/<plum> color the text
-// (the note editor writes them). react-markdown drops raw HTML, so they
-// become links the a component override styles. Innermost tags convert first,
-// so markdown inside a tag still renders; a tag spanning lines stays raw.
-const STYLE_TAG = /<(u|clay|sage|gold|plum)>((?:(?!<\/?(?:u|clay|sage|gold|plum)>)[^\n])+?)<\/\1>/g;
+// (the note editor writes them). react-markdown drops raw HTML, so they become
+// links the a component override styles.
+//
+// The tags nest — a colour around an underline around bold — and a link cannot
+// hold another link, so converting one tag at a time left the outer one showing
+// as "[text](#dissect-style-clay)". Every run of text is emitted once instead,
+// with all the styles covering it in its href, so nothing nests: one link per
+// run, however many tags wrap it. A markdown link inside a tag is left alone —
+// it cannot be wrapped either — and a tag that never closes, or closes out of
+// order, stays as it was written.
+const STYLE_TAG = /<(\/?)(u|clay|sage|gold|plum)>/g;
+const MD_LINK = /!?\[[^\]\n]*\]\([^)\n]*\)/g;
 const STYLE_HREF = "#dissect-style-";
 const STYLE_CLASS: Record<string, string> = {
   clay: "text-color-clay",
@@ -26,14 +34,45 @@ const STYLE_CLASS: Record<string, string> = {
   plum: "text-color-plum",
 };
 
-function linkifyStyleTags(text: string): string {
-  let out = text;
-  for (let pass = 0; pass < 3; pass++) {
-    const next = out.replace(STYLE_TAG, (_, tag: string, inner: string) => `[${inner}](${STYLE_HREF}${tag})`);
-    if (next === out) break;
-    out = next;
+/** One run of text under `styles`, as a link the override paints. A markdown
+    link inside it stays a link of its own: the styles pass over it. */
+function styledRun(text: string, styles: string[]): string {
+  if (!text || styles.length === 0) return text;
+  const href = `${STYLE_HREF}${styles.join("+")}`;
+  let out = "";
+  let at = 0;
+  MD_LINK.lastIndex = 0;
+  for (let m = MD_LINK.exec(text); m; m = MD_LINK.exec(text)) {
+    if (m.index > at) out += `[${text.slice(at, m.index)}](${href})`;
+    out += m[0];
+    at = m.index + m[0].length;
   }
-  return out;
+  return at === 0 ? `[${text}](${href})` : out + (at < text.length ? `[${text.slice(at)}](${href})` : "");
+}
+
+function linkifyStyleLine(line: string): string {
+  const styles: string[] = [];
+  let out = "";
+  let at = 0;
+  STYLE_TAG.lastIndex = 0;
+  for (let m = STYLE_TAG.exec(line); m; m = STYLE_TAG.exec(line)) {
+    out += styledRun(line.slice(at, m.index), styles);
+    const [, closing, tag] = m;
+    if (!closing) {
+      styles.push(tag);
+    } else if (styles[styles.length - 1] === tag) {
+      styles.pop();
+    } else {
+      return line; // out of order: the line stays as it was written
+    }
+    at = m.index + m[0].length;
+  }
+  if (styles.length > 0) return line; // a tag that never closes
+  return out + line.slice(at);
+}
+
+function linkifyStyleTags(text: string): string {
+  return text.includes("<") ? text.split("\n").map(linkifyStyleLine).join("\n") : text;
 }
 
 // Notes keep their line breaks: a newline typed in the editor stays a line
@@ -56,26 +95,6 @@ function hardBreaks(text: string): string {
     .join("\n");
 }
 
-// Markdown as one plain line, for small previews (Visual cards, overlay
-// captions, collapsed notes) where rendered markdown has no room. An image
-// reads as its alt text: a preview line has no room for a picture and none
-// for a URL.
-export function markdownPreview(text: string): string {
-  return text
-    .replace(/```[\s\S]*?```/g, " ")
-    .replace(BLOCK_TAG, "")
-    // A dropped image reads as its alt — the file's name — never its URL.
-    .replace(/!\[([^\]\n]*)\]\([^)\n]*\)/g, "$1")
-    .replace(/^#{1,6}\s+/gm, "")
-    .replace(/^>\s?/gm, "")
-    .replace(/<\/?(?:u|clay|sage|gold|plum)>/g, "")
-    .replace(/\*\*([^*]+)\*\*/g, "$1")
-    .replace(/\*([^*]+)\*/g, "$1")
-    .replace(/`([^`]+)`/g, "$1")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
 /** breaks: single newlines render as line breaks (notes). */
 export function Markdown({ children, breaks = false }: { children: string; breaks?: boolean }) {
   const t = useT();
@@ -86,10 +105,14 @@ export function Markdown({ children, breaks = false }: { children: string; break
         remarkPlugins={[remarkGfm]}
         components={{
           a: ({ href, children: linkChildren, ...props }) => {
-            const styleTag = href?.startsWith(STYLE_HREF) ? href.slice(STYLE_HREF.length) : null;
-            if (styleTag === "u") return <u>{linkChildren}</u>;
-            if (styleTag && STYLE_CLASS[styleTag]) {
-              return <span className={STYLE_CLASS[styleTag]}>{linkChildren}</span>;
+            // One link carries every style over its run, innermost last.
+            const styleTags = href?.startsWith(STYLE_HREF) ? href.slice(STYLE_HREF.length).split("+") : null;
+            if (styleTags) {
+              const color = styleTags.find((tag) => STYLE_CLASS[tag]);
+              let painted = <>{linkChildren}</>;
+              if (color) painted = <span className={STYLE_CLASS[color]}>{painted}</span>;
+              if (styleTags.includes("u")) painted = <u>{painted}</u>;
+              return painted;
             }
             const blockId = href?.startsWith("#dissect-block-")
               ? href.slice("#dissect-block-".length)
