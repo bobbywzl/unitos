@@ -10,6 +10,7 @@ import { AuthorChip } from "@/components/collab/person-badge";
 import { ReplyThread } from "@/components/collab/reply-thread";
 import { CollapsedViewToggle } from "@/components/collapsed-view-toggle";
 import {
+  ChartIcon,
   ChevronDownIcon,
   ChevronRightIcon,
   CommentIcon,
@@ -195,7 +196,7 @@ function AnnotationActions({
 }
 
 // Annotations tab of the reader side panel. Highlights, comments, explanations,
-// simplified rewrites, then accepted links, each group under its tool's symbol
+// analyses, simplified rewrites, then accepted links, each group under its tool's symbol
 // — each annotation card jumps to its anchor and deletes in place. Recommended
 // links list in the graph instead.
 export function AnnotationsPanel({
@@ -223,6 +224,7 @@ export function AnnotationsPanel({
   const acceptedIn = linksIn.filter((l) => !l.recommended);
   const comments = annotations.filter((a) => a.kind === "comment");
   const explanations = annotations.filter((a) => a.kind === "explain");
+  const analyses = annotations.filter((a) => a.kind === "analyze");
   const conversations = annotations.filter((a) => a.kind === "assistant");
   const simplifications = annotations.filter((a) => a.kind === "simplify");
 
@@ -310,6 +312,25 @@ export function AnnotationsPanel({
         <div className="flex flex-col gap-2">
           <GroupLabel icon={<QuestionIcon size={12} />}>{t("panels.explanations")}</GroupLabel>
           {explanations.map((a) => (
+            <AnnotationCard key={a.id} annotation={a} view={view} summary={markdownPreview(a.content)}>
+              <div className="text-[13px]">
+                <Markdown>{a.content}</Markdown>
+              </div>
+              {a.orphaned && a.quotedText && (
+                <p className="mt-2 line-clamp-2 border-l-2 border-red-300 pl-2 text-xs text-sand-500">
+                  {t("panels.wasAnchoredTo", { text: a.quotedText })}
+                </p>
+              )}
+              {actionsFor(a)}
+            </AnnotationCard>
+          ))}
+        </div>
+      )}
+
+      {analyses.length > 0 && (
+        <div className="flex flex-col gap-2">
+          <GroupLabel icon={<ChartIcon size={12} />}>{t("panels.analyses")}</GroupLabel>
+          {analyses.map((a) => (
             <AnnotationCard key={a.id} annotation={a} view={view} summary={markdownPreview(a.content)}>
               <div className="text-[13px]">
                 <Markdown>{a.content}</Markdown>

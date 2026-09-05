@@ -11,7 +11,7 @@ function clientT(key: TKey, params?: TParams): string {
 
 // Run a derivation that answers over the heartbeat stream (the DISTILL
 // pattern): spaces while the model works, then the payload JSON or the
-// in-band error token. FORMALIZE, COMPARE, and ANALYZE answer this way.
+// in-band error token. FORMALIZE and COMPARE answer this way.
 // Throws with the server's reason on failure.
 export async function runDerivation<T extends object>(
   body: Record<string, unknown>,

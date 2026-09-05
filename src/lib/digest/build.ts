@@ -49,7 +49,7 @@ function noteKind(derivationType: DerivationType | null, color: string | null, h
     case "COMPARE":
       return "comparison";
     case "ANALYZE":
-      return "figure or table analysis";
+      return "analysis";
     case "VOICE":
       return "voice note";
     default:

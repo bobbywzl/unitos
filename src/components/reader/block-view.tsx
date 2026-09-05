@@ -2,7 +2,7 @@
 
 import type { BlockType } from "@prisma/client";
 import { useState } from "react";
-import { CommentIcon, LinkIcon, QuestionIcon, SparkleIcon, SummaryIcon, UnlinkIcon } from "@/components/icons";
+import { ChartIcon, CommentIcon, LinkIcon, QuestionIcon, SparkleIcon, SummaryIcon, UnlinkIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { Equation } from "@/components/reader/equation";
 import type { TFunc, TKey } from "@/lib/i18n/dictionaries";
@@ -39,7 +39,7 @@ export type Highlight = {
   noteId?: string; // owning note; on a regular note's mark, click jumps to the note in the tray
   // Narrow reader: the stored AI annotation's tool icon renders after the
   // span; the icon opens the card. Kind "anchor" only.
-  tool?: "explain" | "simplify" | "assistant";
+  tool?: "explain" | "simplify" | "analyze" | "assistant";
   href?: string; // navigation target, kinds "link" and "weblink"
   linkTitle?: string; // the other end's document title, kind "link" only
   linkId?: string; // for arrival flashing via ?link=, kind "link" only
@@ -64,17 +64,17 @@ function anchorClass(color: string | null | undefined): string {
 }
 
 // Narrow reader: each AI tool's icon next to its highlighted text.
-const TOOL_ICON: Record<
-  "explain" | "simplify" | "assistant",
-  (props: { size?: number }) => React.ReactNode
-> = {
+type ToolKind = "explain" | "simplify" | "analyze" | "assistant";
+const TOOL_ICON: Record<ToolKind, (props: { size?: number }) => React.ReactNode> = {
   explain: QuestionIcon,
   simplify: SummaryIcon,
+  analyze: ChartIcon,
   assistant: SparkleIcon,
 };
-const TOOL_KEY: Record<"explain" | "simplify" | "assistant", TKey> = {
+const TOOL_KEY: Record<ToolKind, TKey> = {
   explain: "panes.openExplanation",
   simplify: "panes.openSimplified",
+  analyze: "panes.openAnalysis",
   assistant: "panes.openConversation",
 };
 

@@ -302,7 +302,8 @@ export default async function NotebookPage(props: {
     }
 
     // Annotations anchored in this document: highlights, comments, EXPLAIN,
-    // SIMPLIFY — all notes in the hidden Annotations section with a source here.
+    // SIMPLIFY, ANALYZE — all notes in the hidden Annotations section with a
+    // source here.
     const annotations: AnnotationItem[] = notebook!.sections
       .filter((s) => s.hidden)
       .flatMap((s) => s.notes)
@@ -314,11 +315,13 @@ export default async function NotebookPage(props: {
             ? ("explain" as const)
             : n.derivationType === "SIMPLIFY"
               ? ("simplify" as const)
-              : n.derivationType === "SYNTHESIS"
-                ? ("assistant" as const)
-                : n.color
-                  ? ("highlight" as const)
-                  : ("comment" as const);
+              : n.derivationType === "ANALYZE"
+                ? ("analyze" as const)
+                : n.derivationType === "SYNTHESIS"
+                  ? ("assistant" as const)
+                  : n.color
+                    ? ("highlight" as const)
+                    : ("comment" as const);
         return {
           id: n.id,
           kind,
@@ -334,14 +337,15 @@ export default async function NotebookPage(props: {
       })
       .filter((a): a is AnnotationItem => a !== null);
 
-    // Stored EXPLAIN, SIMPLIFY, comment, and assistant conversation content by
-    // source id: clicking the mark reopens the card with this content.
+    // Stored EXPLAIN, SIMPLIFY, ANALYZE, comment, and assistant conversation
+    // content by source id: clicking the mark reopens the card with this content.
     const annotationBubbles = Object.fromEntries(
       annotations
         .filter(
           (a) =>
             (a.kind === "explain" ||
               a.kind === "simplify" ||
+              a.kind === "analyze" ||
               a.kind === "comment" ||
               a.kind === "assistant") &&
             a.sourceId,
@@ -349,7 +353,7 @@ export default async function NotebookPage(props: {
         .map((a) => [
           a.sourceId as string,
           {
-            kind: a.kind as "explain" | "simplify" | "comment" | "assistant",
+            kind: a.kind as "explain" | "simplify" | "analyze" | "comment" | "assistant",
             content: a.content,
             noteId: a.id,
           },

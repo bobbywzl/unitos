@@ -37,7 +37,7 @@ export const MAX_OUTPUT_TOKENS: Record<DerivationType, number> = {
   FORMALIZE: 32768, // a long transcript's article is long
   ASK: 4096,
   COMPARE: 16384, // two documents' points, each with its spans
-  ANALYZE: 8192, // a table's rows come back as data
+  ANALYZE: 4096, // three short sections, like an explanation
   VOICE: 0,
 };
 
@@ -84,8 +84,8 @@ function modelCallFailed(): string {
   return translate(isLang(value) ? value : "en", "common.modelCallFailed");
 }
 
-// EXPLAIN and SIMPLIFY persist their annotation before the stream closes, then
-// the stream ends with this token + the note id. The client splits it off, so
+// EXPLAIN, SIMPLIFY, and ANALYZE persist their annotation before the stream
+// closes, then the stream ends with this token + the note id. The client splits it off, so
 // the card can delete its annotation and a refresh always finds the stored mark.
 export const STREAM_NOTE_TOKEN = "\u0000note\u0000";
 

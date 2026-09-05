@@ -15,8 +15,8 @@ export type DigestSource = {
 };
 
 /** One note. Annotations are notes in the hidden Annotations section; kind
-    names their form: explanation, simplified rewrite, highlight, comment,
-    assistant conversation, distillation quote, video find, note. */
+    names their form: explanation, simplified rewrite, analysis, highlight,
+    comment, assistant conversation, distillation quote, video find, note. */
 export type DigestNote = {
   id: string;
   section: string;

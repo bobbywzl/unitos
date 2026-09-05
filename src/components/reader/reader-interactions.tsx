@@ -31,7 +31,6 @@ import type {
 } from "@/lib/types";
 import type { DocumentReference } from "@/lib/parse/types";
 import { splitStreamError, splitStreamNote } from "@/lib/derive/config";
-import { runDerivation } from "@/lib/derive/heartbeat-client";
 import { TranslationBar } from "@/components/reader/translation-bar";
 import { findWeblinks } from "@/lib/weblinks";
 import { isImeKey, useImeGuard } from "@/lib/ime";
@@ -307,7 +306,10 @@ const ACTION_LABEL_KEY: Record<AssistantAction["type"], TKey> = {
   format_block: "reader.actionFormat",
   style: "reader.actionStyle",
 };
+// The card EXPLAIN and ANALYZE stream into (SPEC.md §4, §6): one card, the
+// kind sets its title and glyph.
 type ExplainBubble = {
+  kind: "explain" | "analyze";
   left: number;
   top: number;
   width: number;
@@ -484,11 +486,16 @@ export function ReaderInteractions({
       quotedText: string | null;
     }
   >;
-  // Stored EXPLAIN, SIMPLIFY, comment, and assistant conversation content by
-  // source id: clicking their mark (or icon) reopens the card with this content.
+  // Stored EXPLAIN, SIMPLIFY, ANALYZE, comment, and assistant conversation
+  // content by source id: clicking their mark (or icon) reopens the card with
+  // this content.
   annotationBubbles: Record<
     string,
-    { kind: "explain" | "simplify" | "comment" | "assistant"; content: string; noteId: string }
+    {
+      kind: "explain" | "simplify" | "analyze" | "comment" | "assistant";
+      content: string;
+      noteId: string;
+    }
   >;
   // Stored distillations for this document, newest first, quotes healed
   // against the current blocks.
@@ -698,8 +705,6 @@ export function ReaderInteractions({
   // A fresh extraction shows from local state until the refresh delivers it.
   const [localExtractions, setLocalExtractions] = useState<ExtractionView[]>([]);
   const [extractBusy, setExtractBusy] = useState(false);
-  // ANALYZE (SPEC.md §4): one run at a time; the toast says where the note landed.
-  const [analyzeBusy, setAnalyzeBusy] = useState(false);
   // The document's translation (SPEC.md §19), one text per block, shown
   // under each block while the reader has it on.
   const [translations, setTranslations] = useState<Record<string, string> | null>(null);
@@ -964,7 +969,7 @@ export function ReaderInteractions({
       await api(`/api/notes/${card.noteId}`, "DELETE");
       setBubble(null);
       router.refresh();
-      showToast(t("reader.explanationRemoved"));
+      showToast(t(card.kind === "analyze" ? "reader.analysisRemoved" : "reader.explanationRemoved"));
     } catch (err) {
       showToast(err instanceof Error ? err.message : t("reader.deleteFailed"));
     }
@@ -1694,10 +1699,11 @@ export function ReaderInteractions({
         });
         return;
       }
-      if (stored.kind === "explain") {
+      if (stored.kind === "explain" || stored.kind === "analyze") {
         const slot = claimSideSlot("explain", top);
         setBubble({
           ...slot,
+          kind: stored.kind,
           text: stored.content,
           streaming: false,
           error: null,
@@ -2107,42 +2113,16 @@ export function ReaderInteractions({
     return JSON.stringify({ type, documentId, notebookId, anchor: anchorBody(anchor) });
   }
 
-  // ANALYZE: the figure or table read as data by the vision model; the result
-  // lands as one PENDING note on the block (SPEC.md §4). The toast offers to
-  // show the note in the tray.
-  async function analyze() {
-    if (!popover || analyzeBusy) return;
-    const { anchor } = popover;
-    await flushLiveBlock(anchor.blockId);
-    setPopover(null);
-    window.getSelection()?.removeAllRanges();
-    setAnalyzeBusy(true);
-    showToast(t("reader.analyzing"));
-    try {
-      const result = await runDerivation<{ noteId: string; sectionTitle: string }>({
-        type: "ANALYZE",
-        documentId,
-        notebookId,
-        anchor: anchorBody(anchor),
-        sectionId: sectionChoices[0]?.id,
-      });
-      showToast(t("reader.analysisAdded", { section: result.sectionTitle }), {
-        label: t("reader.showNote"),
-        run: () =>
-          window.dispatchEvent(
-            new CustomEvent("dissect:show-note", { detail: { noteId: result.noteId } }),
-          ),
-      });
-      router.refresh();
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : t("reader.deriveFailed"));
-    } finally {
-      setAnalyzeBusy(false);
-    }
-  }
-
-  // EXPLAIN: stream into a bubble docked beside the article (SPEC.md §4, §6).
+  // EXPLAIN and ANALYZE stream into the same card beside the article (SPEC.md
+  // §4, §6): an explanation of the selection, or the three-section analysis
+  // of a figure or table. Both persist in the hidden Annotations section.
   async function explain() {
+    await streamBubble("explain");
+  }
+  async function analyze() {
+    await streamBubble("analyze");
+  }
+  async function streamBubble(kind: ExplainBubble["kind"]) {
     if (!popover || busy) return;
     const { anchor, yTop } = popover;
     await flushLiveBlock(anchor.blockId);
@@ -2150,7 +2130,7 @@ export function ReaderInteractions({
     window.getSelection()?.removeAllRanges();
     markFreshSpan(anchor.blockId, anchor.startOffset, anchor.endOffset);
     const slot = claimSideSlot("explain", yTop);
-    setBubble({ ...slot, text: "", streaming: true, error: null, anchor, noteId: null });
+    setBubble({ ...slot, kind, text: "", streaming: true, error: null, anchor, noteId: null });
     explainAbortRef.current?.abort();
     const controller = new AbortController();
     explainAbortRef.current = controller;
@@ -2159,7 +2139,7 @@ export function ReaderInteractions({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         signal: controller.signal,
-        body: deriveBody("EXPLAIN", anchor),
+        body: deriveBody(kind === "analyze" ? "ANALYZE" : "EXPLAIN", anchor),
       });
       if (!res.ok || !res.body) {
         const detail = (await res.json().catch(() => null)) as { error?: string } | null;
@@ -4267,12 +4247,11 @@ function blockFormatKind(
           )}
 
           {/* Analyze leads the table and figure toolbars (SPEC.md §4): the
-              block read as data. Never on text. */}
+              three-section analysis beside the article. Never on text. */}
           {has("analyze") && (
             <button
               onClick={() => void analyze()}
               data-track="analyze"
-              disabled={analyzeBusy}
               data-tip={t(popoverKind === "table" ? "reader.analyzeTableTitle" : "reader.analyzeFigureTitle")}
               className={`flex w-full items-center justify-between gap-2 rounded-full bg-clay-100 ${toolRow} text-left font-semibold text-clay-800 hover:bg-clay-200 disabled:opacity-40`}
             >
@@ -4545,8 +4524,14 @@ function blockFormatKind(
             className="mb-2 flex cursor-move items-center justify-between"
           >
             <span className="flex items-center gap-1.5 text-[11px] font-bold tracking-[0.08em] text-clay-800 uppercase">
-              <QuestionIcon size={12} />
-              {bubble.streaming ? t("reader.explaining") : t("reader.explanation")}
+              {bubble.kind === "analyze" ? <ChartIcon size={12} /> : <QuestionIcon size={12} />}
+              {bubble.kind === "analyze"
+                ? bubble.streaming
+                  ? t("reader.analyzing")
+                  : t("reader.analysis")
+                : bubble.streaming
+                  ? t("reader.explaining")
+                  : t("reader.explanation")}
             </span>
             <span className="flex items-center gap-3">
               {bubble.streaming && (
@@ -4562,16 +4547,20 @@ function blockFormatKind(
               {bubble.noteId && !bubble.streaming && (
                 <button
                   onClick={() => void deleteExplain()}
-                  data-track="explain-delete"
+                  data-track={bubble.kind === "analyze" ? "analyze-delete" : "explain-delete"}
                   className="text-xs font-semibold text-red-500 hover:text-red-700"
-                  data-tip={t("reader.deleteExplainTitle")}
+                  data-tip={t(
+                    bubble.kind === "analyze"
+                      ? "reader.deleteAnalysisTitle"
+                      : "reader.deleteExplainTitle",
+                  )}
                 >
                   {t("common.delete")}
                 </button>
               )}
               <button
                 onClick={closeExplain}
-                data-track="explain-close"
+                data-track={bubble.kind === "analyze" ? "analyze-close" : "explain-close"}
                 className="text-xs text-sand-500 hover:text-clay-700"
                 aria-label={t("common.close")}
                 data-tip={t("common.close")}

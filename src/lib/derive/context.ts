@@ -210,7 +210,7 @@ export async function corpusSection(
   }
 
   // Notes from the visible sections; annotations (highlights, comments,
-  // explanations) from the hidden Annotations section.
+  // explanations, analyses) from the hidden Annotations section.
   const notes: string[] = [];
   const annotations: string[] = [];
   let notesBudget = CORPUS_NOTES_BUDGET;
@@ -226,11 +226,13 @@ export async function corpusSection(
             ? "explanation"
             : n.derivationType === "SIMPLIFY"
               ? "simplified rewrite"
-              : n.derivationType === "SYNTHESIS"
-                ? "assistant conversation"
-                : n.color
-                  ? "highlight"
-                  : "comment";
+              : n.derivationType === "ANALYZE"
+                ? "analysis"
+                : n.derivationType === "SYNTHESIS"
+                  ? "assistant conversation"
+                  : n.color
+                    ? "highlight"
+                    : "comment";
         const rendered = `[note ${n.id}] ${kind}${sources ? ` on ${sources}` : ""}\n${n.content.slice(0, 600)}`;
         if (annotationsBudget - rendered.length <= 0) continue;
         annotationsBudget -= rendered.length;
@@ -254,7 +256,7 @@ export async function corpusSection(
       : []),
     ...(notes.length > 0 ? ["", "The reader's notes:", ...notes] : []),
     ...(annotations.length > 0
-      ? ["", "The reader's annotations (highlights, comments, explanations):", ...annotations]
+      ? ["", "The reader's annotations (highlights, comments, explanations, analyses):", ...annotations]
       : []),
   ].join("\n\n");
 }

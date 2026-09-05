@@ -68,7 +68,16 @@ export type PromptCtx = {
   // Set when ANALYZE targets a TABLE block: the table's markup is in html;
   // hasImage: the table's rendered page region is attached as well.
   table?: { html: string; hasImage: boolean };
+  // Set for ANALYZE: whether corpus context follows the document (the
+  // reader's other documents, notes, and annotations), so the prompt asks
+  // for links to it only when it is there.
+  corpus?: boolean;
 };
+
+// The one style line every template carries (CLAUDE.md rule 7). The tools
+// read beside the article, in a card: every sentence has to earn its place.
+export const STYLE_RULE =
+  "Style: short sentences, plain words, one point per sentence. No preamble, no filler, no closing summary. Say only what the reader needs.";
 
 // The one language line appended to assistant-voice templates. Repeated exact
 // wording across templates (CLAUDE.md rule 3).

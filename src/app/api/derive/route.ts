@@ -20,10 +20,9 @@ import {
   renderBlockLines,
   sectionSkeleton,
 } from "@/lib/derive/context";
-import { analysisMarkdown, comparisonMarkdown } from "@/lib/derive/analysis";
+import { comparisonMarkdown } from "@/lib/derive/analysis";
 import { figureContent, figureVisual, renderFigurePage, type FigureImage } from "@/lib/derive/figure";
 import {
-  analyzeOutputSchema,
   compareOutputSchema,
   distillOutputSchema,
   extractOutputSchema,
@@ -113,7 +112,7 @@ const deriveSchema = z
   query: z.string().min(1).max(500).optional(), // FIND only
   question: z.string().min(1).max(500).optional(), // DISTILL and ASK; DISTILL's anchor is optional focus
   format: z.enum(FORMALIZE_FORMATS).optional(), // FORMALIZE only
-  sectionId: z.string().min(1).optional(), // FORMALIZE notes, COMPARE, ANALYZE: where the notes land
+  sectionId: z.string().min(1).optional(), // FORMALIZE notes, COMPARE: where the notes land
   // EXPLAIN on a video moment (SPEC.md §11): the time range, the drawn region,
   // and the paused frame as a JPEG data URL when the client could capture it.
   // ASK: the time range the question is about.
@@ -748,8 +747,8 @@ export async function POST(req: Request) {
   // source; a PDF figure attaches its rendered page; a video figure explains
   // from caption and context only.
   let figureImage: FigureImage | null = null;
-  // ANALYZE reads a FIGURE or TABLE block as data (SPEC.md §4): the anchored
-  // block, with its visual when one can be produced.
+  // ANALYZE reads a FIGURE or TABLE block (SPEC.md §4): the anchored block,
+  // with its visual when one can be produced.
   let analyzedBlock: { id: string; type: string; text: string } | null = null;
   if ((data.type === "EXPLAIN" || data.type === "ANALYZE") && anchor) {
     const anchoredBlock = await db.block.findUnique({
@@ -829,13 +828,21 @@ export async function POST(req: Request) {
     };
   }
 
-  // EXPLAIN answers confusions, so it also sees the corpus: related passages
-  // from the other documents, the reader's notes, and their annotations. Its
-  // own system message after the cached prefix, so the prefix cache holds.
+  // EXPLAIN answers confusions and ANALYZE links a figure or table to the
+  // rest of the project, so both see the corpus: related passages from the
+  // other documents, the reader's notes, and their annotations. Its own
+  // system message after the cached prefix, so the prefix cache holds. The
+  // whole block's text scores the related passages for ANALYZE: a table
+  // selection alone is a few cells.
   const corpus =
-    data.type === "EXPLAIN"
-      ? await corpusSection(data.notebookId, documentId, anchored?.anchoredText ?? "")
+    data.type === "EXPLAIN" || data.type === "ANALYZE"
+      ? await corpusSection(
+          data.notebookId,
+          documentId,
+          analyzedBlock?.text || (anchored?.anchoredText ?? ""),
+        )
       : null;
+  ctx.corpus = corpus !== null;
 
   // 2. Template by type. The document is the cached prefix, byte-identical for every
   // derivation on this document (SPEC.md §2).
@@ -877,10 +884,12 @@ export async function POST(req: Request) {
   const maxOutputTokens = MAX_OUTPUT_TOKENS[data.type];
 
   // 3 + 4. Stream or collect, then route by destination.
-  // EXPLAIN, SIMPLIFY, and SUMMARIZE stream text. SALIENCE and DISTILL return validated JSON.
+  // EXPLAIN, SIMPLIFY, ANALYZE, SUMMARIZE, and ASK stream text. SALIENCE and
+  // DISTILL return validated JSON.
   if (
     data.type === "EXPLAIN" ||
     data.type === "SIMPLIFY" ||
+    data.type === "ANALYZE" ||
     data.type === "SUMMARIZE" ||
     data.type === "ASK"
   ) {
@@ -920,10 +929,10 @@ export async function POST(req: Request) {
     // The stream commits HTTP 200 when it opens, so a failure after that
     // reports in-band: the stream ends with STREAM_ERROR_TOKEN + the reason,
     // and the client shows it. A failed stream persists nothing.
-    // EXPLAIN and SIMPLIFY persist in the hidden Annotations section before the
-    // stream closes, then the stream ends with STREAM_NOTE_TOKEN + the note id:
-    // the client's refresh always finds the stored mark, and the card can
-    // delete its annotation in place.
+    // EXPLAIN, SIMPLIFY, and ANALYZE persist in the hidden Annotations section
+    // before the stream closes, then the stream ends with STREAM_NOTE_TOKEN +
+    // the note id: the client's refresh always finds the stored mark, and the
+    // card can delete its annotation in place.
     const encoder = new TextEncoder();
     const stream = new ReadableStream<Uint8Array>({
       async start(controller) {
@@ -944,7 +953,11 @@ export async function POST(req: Request) {
           }
           return;
         }
-        if ((data.type === "EXPLAIN" || data.type === "SIMPLIFY") && anchor && text.trim()) {
+        if (
+          (data.type === "EXPLAIN" || data.type === "SIMPLIFY" || data.type === "ANALYZE") &&
+          anchor &&
+          text.trim()
+        ) {
           try {
             const block = blockById.get(anchor.blockId);
             if (block) {
@@ -1063,60 +1076,6 @@ export async function POST(req: Request) {
     return new Response(stream, {
       headers: { "Content-Type": "text/plain; charset=utf-8" },
     });
-  }
-
-  // ANALYZE: the figure or table read as data, landed as one PENDING note on
-  // the block (SPEC.md §4). The heartbeat stream carries the call: the vision
-  // model takes its time over a dense table.
-  if (data.type === "ANALYZE") {
-    const block = analyzedBlock!;
-    const analyzeAnchor = anchor!;
-    return heartbeatResponse(
-      req,
-      async () => {
-        const result = await callForJson({
-          model,
-          messages,
-          maxOutputTokens,
-          schema: analyzeOutputSchema,
-          label: "ANALYZE",
-          usage: usageMeta,
-          abortSignal: req.signal,
-        });
-        if (!result.ok) throw new DeriveFailure(result.error);
-        const content = analysisMarkdown(
-          result.data,
-          { kind: block.type === "TABLE" ? "table" : "figure", caption: block.text },
-          t,
-        );
-        const section = await landingSection(data.notebookId, data.sectionId, t("reader.defaultSectionTitle"));
-        const order = await db.note.count({ where: { sectionId: section.id } });
-        const note = await db.note.create({
-          data: {
-            sectionId: section.id,
-            content,
-            status: "PENDING",
-            derivationType: "ANALYZE",
-            createdById: user.id,
-            order,
-            sources: {
-              create: {
-                documentId: documentId,
-                blockId: analyzeAnchor.blockId,
-                startOffset: analyzeAnchor.startOffset,
-                endOffset: analyzeAnchor.endOffset,
-                quotedText: analyzeAnchor.quotedText,
-                prefix: analyzeAnchor.prefix,
-                suffix: analyzeAnchor.suffix,
-              },
-            },
-          },
-        });
-        await bumpNotebook(data.notebookId);
-        return { ok: true, noteId: note.id, sectionTitle: section.title, kind: result.data.kind };
-      },
-      (reason) => t("api.analyzeFailed", { reason }),
-    );
   }
 
   // FIND: matches reference transcript blocks; resolve them to time ranges.
