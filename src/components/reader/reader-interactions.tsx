@@ -836,13 +836,25 @@ export function ReaderInteractions({
   // Links made in this session paint the moment they close; the server's
   // copy replaces each once the refresh lands.
   const [localLinks, setLocalLinks] = useState<LocalLink[]>([]);
+  // What a link is about, as typed in the link card: shown in the mark's tip
+  // from the save on, until the server's copy carries it.
+  const [linkReasons, setLinkReasons] = useState<Record<string, string>>({});
   const [prevLinksProp, setPrevLinksProp] = useState(linksByBlock);
   if (prevLinksProp !== linksByBlock) {
     setPrevLinksProp(linksByBlock);
+    const served = Object.values(linksByBlock).flat();
     setLocalLinks((prev) => {
-      const confirmed = new Set(Object.values(linksByBlock).flat().map((l) => l.linkId));
+      const confirmed = new Set(served.map((l) => l.linkId));
       const keep = prev.filter((l) => !confirmed.has(l.linkId));
       return keep.length === prev.length ? prev : keep;
+    });
+    setLinkReasons((prev) => {
+      const next = Object.fromEntries(
+        Object.entries(prev).filter(
+          ([linkId, reason]) => !served.some((l) => l.linkId === linkId && l.reason === reason),
+        ),
+      );
+      return Object.keys(next).length === Object.keys(prev).length ? prev : next;
     });
   }
   const [prevAnchorsProp, setPrevAnchorsProp] = useState(anchorHighlights);
@@ -2654,7 +2666,7 @@ export function ReaderInteractions({
     setLinkCard({ ...card, busy: true });
     try {
       await api(`/api/links/${card.linkId}`, "PATCH", { reason });
-      setLocalLinks((prev) => prev.map((l) => (l.linkId === card.linkId ? { ...l, reason } : l)));
+      setLinkReasons((prev) => ({ ...prev, [card.linkId]: reason }));
       setLinkCard(null);
       router.refresh();
       showToast(t("common.saved"));
@@ -3940,7 +3952,7 @@ function blockFormatKind(
         href: l.href,
         linkTitle: l.title,
         linkId: l.linkId,
-        linkReason: l.reason,
+        linkReason: linkReasons[l.linkId] ?? l.reason,
       })),
     ];
   }
@@ -3958,7 +3970,7 @@ function blockFormatKind(
         href: l.href,
         linkTitle: l.title,
         linkId: l.linkId,
-        linkReason: l.reason,
+        linkReason: linkReasons[l.linkId] ?? l.reason,
       },
     ];
   }
