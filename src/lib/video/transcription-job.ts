@@ -2,7 +2,9 @@ import { bumpDocument } from "@/lib/collab";
 import { db } from "@/lib/db";
 import { parsePastedTranscript } from "@/lib/video/paste";
 import { tidyTranscript } from "@/lib/video/tidy";
+import { GEMINI_FILE_TTL_MS, geminiFileFresh, type GeminiFile } from "@/lib/video/gemini-files";
 import {
+  GEMINI_FILE_MAX_BYTES,
   groupSegments,
   transcribe,
   TRANSCRIBE_MAX_BYTES,
@@ -36,6 +38,8 @@ export async function runTranscription(documentId: string): Promise<Transcriptio
       mimeType: true,
       transcriptStatus: true,
       transcriptStartedAt: true,
+      geminiFileUri: true,
+      geminiFileExpiresAt: true,
     },
   });
   if (!asset) return { ok: false, status: 404, error: "This document has no video or audio" };
@@ -53,14 +57,24 @@ export async function runTranscription(documentId: string): Promise<Transcriptio
         error: "Set GROQ_API_KEY, OPENAI_API_KEY, or GEMINI_API_KEY. Transcription needs one.",
       };
     }
-    // An MP3 past the cap transcribes in frame-boundary chunks; other
-    // containers cannot be cut safely and keep the cap.
+    // What a big file can still be transcribed by: an MP3 past the Whisper cap
+    // splits at frame boundaries, and any format at all goes through Gemini's
+    // file store, which is what makes an hour-long upload work. Only without
+    // both is the 25 MB cap the end of it.
     const chunkable = asset.mimeType === "audio/mpeg";
-    if (asset.size === null || (!chunkable && asset.size > TRANSCRIBE_MAX_BYTES)) {
+    const store = Boolean(process.env.GEMINI_API_KEY);
+    if (asset.size === null) {
+      return { ok: false, status: 400, error: "This file has no recorded size" };
+    }
+    if (asset.size > GEMINI_FILE_MAX_BYTES) {
+      return { ok: false, status: 413, error: "File is larger than the 200 MB upload cap" };
+    }
+    if (!chunkable && !store && asset.size > TRANSCRIBE_MAX_BYTES) {
       return {
         ok: false,
         status: 413,
-        error: "File is larger than 25 MB, the transcription cap for this format",
+        error:
+          "File is larger than 25 MB, the transcription cap for this format. Set GEMINI_API_KEY to transcribe longer media.",
       };
     }
   }
@@ -102,8 +116,31 @@ export async function runTranscription(documentId: string): Promise<Transcriptio
       source = { kind: "upload", bytes, mimeType: asset.mimeType };
     }
 
+    // A file already in Gemini's store is reused: sending an hour of media is
+    // the slow part of the run, and a retry should not repeat it.
+    const stored: GeminiFile | null =
+      asset.geminiFileUri && geminiFileFresh(asset.geminiFileExpiresAt)
+        ? {
+            uri: asset.geminiFileUri,
+            name: asset.geminiFileUri.split("/").slice(-2).join("/"),
+            mimeType: asset.mimeType ?? "video/mp4",
+          }
+        : null;
     const { segments, provider } = await transcribe(source, {
       deadline: startedAt + LADDER_BUDGET_MS,
+      geminiFile: stored,
+      onGeminiFile: (file) => {
+        // Fire and forget: the run must not wait on remembering the file.
+        void db.videoAsset
+          .update({
+            where: { id: asset.id },
+            data: {
+              geminiFileUri: file.uri,
+              geminiFileExpiresAt: new Date(Date.now() + GEMINI_FILE_TTL_MS),
+            },
+          })
+          .catch(() => {});
+      },
     });
     const lines = await storeTranscript(documentId, asset.id, segments, `${asset.kind} via ${provider}`);
     return { ok: true, lines, provider };

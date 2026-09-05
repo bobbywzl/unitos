@@ -437,6 +437,11 @@ model VideoAsset {
   // When the running transcription started. A PENDING older than 10 minutes is
   // a dead run and may start again.
   transcriptStartedAt DateTime?
+  // The file this media was uploaded to in Gemini's store, and when it stops
+  // being readable (48 hours). A retry inside that window reuses it instead of
+  // sending the bytes again — an hour-long file is the slow part of the run.
+  geminiFileUri       String?
+  geminiFileExpiresAt DateTime?
   chunks              VideoChunk[]
   createdAt           DateTime         @default(now())
 }

@@ -6,7 +6,9 @@
 export type OutboundInit = {
   method?: string;
   headers?: Record<string, string>;
-  body?: string;
+  // Bytes as well as text: a file uploaded to a model provider is a body of
+  // its own, and it has to take the same proxy as every other outbound call.
+  body?: string | Uint8Array | ArrayBuffer;
   signal?: AbortSignal;
 };
 
@@ -28,7 +30,9 @@ export async function outboundFetch(
   url: string,
   init: OutboundInit = {},
 ): Promise<OutboundResponse> {
-  if (!process.env.HTTPS_PROXY && !process.env.HTTP_PROXY) return fetch(url, init);
+  if (!process.env.HTTPS_PROXY && !process.env.HTTP_PROXY) {
+    return fetch(url, init as RequestInit);
+  }
   if (!proxied) {
     const { fetch: undiciFetch, EnvHttpProxyAgent } = await import("undici");
     const dispatcher = new EnvHttpProxyAgent();

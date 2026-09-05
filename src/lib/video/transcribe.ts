@@ -4,9 +4,10 @@ import { recordUsage } from "@/lib/usage";
 import { browserCaptions } from "@/lib/video/browser-transcript";
 import { youtubeCaptions } from "@/lib/video/captions";
 import { geminiCall, geminiCountTokens } from "@/lib/video/gemini";
+import { uploadGeminiFile, type GeminiFile } from "@/lib/video/gemini-files";
 import { splitMp3 } from "@/lib/video/mp3";
 import { normalizeSegments, type TranscriptSegment } from "@/lib/video/segments";
-import { parseTimeInput } from "@/lib/video/types";
+import { MAX_VIDEO_BYTES, parseTimeInput } from "@/lib/video/types";
 import { youtubeWatchUrl } from "@/lib/video/youtube";
 import { youtubeAudio } from "@/lib/video/youtube-audio";
 
@@ -20,7 +21,10 @@ export { groupSegments, normalizeSegments, type TranscriptSegment } from "@/lib/
 //                   the video by URL → the audio stream downloads and takes
 //                   the upload ladder.
 //   Uploaded video or audio: Groq Whisper (best quality per dollar; free tier)
-//                   → OpenAI Whisper → Gemini with the bytes inline.
+//                   → OpenAI Whisper → Gemini, with the bytes inline when they
+//                   are small enough and through Gemini's file store when they
+//                   are not — an hour of media is far past every other rung's
+//                   cap, and the store takes 2 GB.
 // Each rung throws a plain reason; the ladder tries the next and reports every
 // reason when all fail. A rung never starts with under 20 seconds left of the
 // caller's deadline. Segments group into transcript lines at the end; the job
@@ -31,8 +35,11 @@ export const TRANSCRIBE_MAX_BYTES = 25 * 1024 * 1024; // Whisper-family upload c
 // (lib/video/mp3.ts); other containers cannot be cut safely and keep the cap.
 const MP3_CHUNK_BYTES = 24 * 1024 * 1024;
 const MP3_CHUNK_CONCURRENCY = 3;
-// Inline bytes reach Gemini base64-encoded inside a 20 MB request.
+// Inline bytes reach Gemini base64-encoded inside a 20 MB request; past that
+// the file goes in Gemini's store, which takes 2 GB — more than this app
+// accepts, so the app's own upload ceiling is the real cap (lib/video/types.ts).
 const GEMINI_INLINE_MAX_BYTES = 14 * 1024 * 1024;
+export const GEMINI_FILE_MAX_BYTES = MAX_VIDEO_BYTES;
 
 // A video costs Gemini roughly 100 tokens per second, so a feature-length one
 // runs past the 1M context window in a single call (and its transcript would
@@ -52,6 +59,10 @@ export type TranscribeSource =
 export type TranscribeOptions = {
   /** Epoch ms. A rung does not start with under RUNG_MIN_MS left before it. */
   deadline?: number;
+  /** A file already in Gemini's store for this media: the upload is skipped. */
+  geminiFile?: GeminiFile | null;
+  /** Called when a file lands in the store, so a retry can reuse it. */
+  onGeminiFile?: (file: GeminiFile) => void;
 };
 
 const RUNG_MIN_MS = 20_000;
@@ -70,15 +81,19 @@ export async function transcribe(
           ["Gemini", () => geminiYouTube(source.youtubeId)],
           ["YouTube audio", () => youtubeAudioRung(source.youtubeId, opts)],
         ]
-      : uploadRungs(source.bytes, source.mimeType ?? "video/mp4");
+      : uploadRungs(source.bytes, source.mimeType ?? "video/mp4", opts);
   return runLadder(rungs, opts);
 }
 
-function uploadRungs(bytes: Uint8Array<ArrayBuffer>, mimeType: string): Rung[] {
+function uploadRungs(
+  bytes: Uint8Array<ArrayBuffer>,
+  mimeType: string,
+  opts: TranscribeOptions = {},
+): Rung[] {
   return [
     ["Groq Whisper", () => whisperFamily(GROQ_WHISPER, bytes, mimeType)],
     ["OpenAI Whisper", () => whisperFamily(OPENAI_WHISPER, bytes, mimeType)],
-    ["Gemini", () => geminiUpload(bytes, mimeType)],
+    ["Gemini", () => geminiUpload(bytes, mimeType, opts)],
   ];
 }
 
@@ -112,9 +127,15 @@ function youtubeAudioRung(youtubeId: string, opts: TranscribeOptions): Promise<T
     return Promise.reject(new Error("GROQ_API_KEY, OPENAI_API_KEY, or GEMINI_API_KEY is not set"));
   }
   return youtubeAudio(youtubeId, {
-    maxBytes: whisper ? TRANSCRIBE_MAX_BYTES : GEMINI_INLINE_MAX_BYTES,
+    // Gemini's file store takes what the Whisper rungs cannot: with a key
+    // set, the stream only has to fit the app's own upload ceiling.
+    maxBytes: process.env.GEMINI_API_KEY
+      ? GEMINI_FILE_MAX_BYTES
+      : whisper
+        ? TRANSCRIBE_MAX_BYTES
+        : GEMINI_INLINE_MAX_BYTES,
     transcribeBytes: (bytes, mimeType) =>
-      runLadder(uploadRungs(bytes, mimeType), opts).then((result) => {
+      runLadder(uploadRungs(bytes, mimeType, opts), opts).then((result) => {
         console.log(`[transcribe] YouTube audio transcribed by ${result.provider}`);
         return result.segments;
       }),
@@ -327,13 +348,17 @@ function youtubeVideoPart(
   };
 }
 
+// The media as a Gemini part, whole or windowed: a YouTube URL and a file in
+// Gemini's store are the same shape, so one windowing path serves both.
+type MediaPart = (window?: { start: number; end: number; last?: boolean }) => unknown;
+
 // One window of a long video, on the video's own clock.
 function transcribeWindow(
-  youtubeId: string,
+  part: MediaPart,
   w: { start: number; end: number; last?: boolean },
 ): Promise<TranscriptSegment[]> {
   return geminiSegments(
-    [youtubeVideoPart(youtubeId, w), { text: GEMINI_TRANSCRIPT_PROMPT }],
+    [part(w), { text: GEMINI_TRANSCRIPT_PROMPT }],
     { allowEmpty: true },
   ).then((segments) => {
     if (segments.length === 0) return segments;
@@ -379,14 +404,14 @@ function windowCoverage(segments: TranscriptSegment[], w: { start: number }): nu
 // better of the two attempts is what survives. The final window is exempt:
 // the video ends inside it.
 async function transcribeWindowBest(
-  youtubeId: string,
+  part: MediaPart,
   w: { start: number; end: number; last?: boolean },
 ): Promise<TranscriptSegment[]> {
   const span = w.end - w.start;
   let best: TranscriptSegment[] = [];
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
-      const segments = await transcribeWindow(youtubeId, w);
+      const segments = await transcribeWindow(part, w);
       if (windowCoverage(segments, w) > windowCoverage(best, w)) best = segments;
     } catch (err) {
       console.warn(
@@ -405,29 +430,37 @@ async function transcribeWindowBest(
   return best;
 }
 
-// Gemini reads public YouTube videos directly by URL. A video short enough to
-// fit the context window goes in one call; a longer one is measured, split
-// into windows, and stitched. Timestamps inside a window come back relative to
-// that window, so each window's offset is added back.
-async function geminiYouTube(youtubeId: string): Promise<TranscriptSegment[]> {
-  const whole = [youtubeVideoPart(youtubeId), { text: GEMINI_TRANSCRIPT_PROMPT }];
+// Gemini transcribes media it can read — a public YouTube URL, or a file in
+// its own store — in one call when the media fits the context window, and in
+// windows when it does not. Timestamps inside a window come back relative to
+// that window, so each window's offset is added back. `windowable` is false
+// for media that cannot be asked for by time range (audio has no video
+// metadata), which then has to fit one call.
+async function geminiWindowed(
+  part: MediaPart,
+  opts: { windowable: boolean; label: string },
+): Promise<TranscriptSegment[]> {
+  const whole = [part(), { text: GEMINI_TRANSCRIPT_PROMPT }];
   const total = await geminiCountTokens(whole);
   if (total === null || total <= GEMINI_SINGLE_CALL_TOKENS) {
     return geminiSegments(whole);
   }
+  if (!opts.windowable) {
+    throw new Error(`${opts.label} is too long to transcribe in one call`);
+  }
 
-  // Too long for one call. The video's own token rate converts the total into
+  // Too long for one call. The media's own token rate converts the total into
   // a duration: count one known minute, then divide.
   const probe = await geminiCountTokens([
-    youtubeVideoPart(youtubeId, { start: 0, end: 60 }),
+    part({ start: 0, end: 60 }),
     { text: GEMINI_TRANSCRIPT_PROMPT },
   ]);
-  if (probe === null || probe <= 0) throw new Error("video is too long to measure");
+  if (probe === null || probe <= 0) throw new Error(`${opts.label} is too long to measure`);
   const duration = (total / (probe / 60)) * 1.05; // slight overshoot; empty tail windows drop out
   const count = Math.ceil(duration / CHUNK_SECONDS);
   if (count > MAX_CHUNKS) {
     throw new Error(
-      `video is about ${Math.round(duration / 60)} minutes — longer than the ${(MAX_CHUNKS * CHUNK_SECONDS) / 3600}-hour transcription limit`,
+      `${opts.label} is about ${Math.round(duration / 60)} minutes — longer than the ${(MAX_CHUNKS * CHUNK_SECONDS) / 3600}-hour transcription limit`,
     );
   }
   const windows = Array.from({ length: count }, (_, i) => ({
@@ -436,7 +469,7 @@ async function geminiYouTube(youtubeId: string): Promise<TranscriptSegment[]> {
     last: i === count - 1,
   }));
   console.log(
-    `[transcribe] ${Math.round(duration / 60)}min video (${total} tokens) → ${count} windows`,
+    `[transcribe] ${Math.round(duration / 60)}min ${opts.label} (${total} tokens) → ${count} windows`,
   );
 
   const results: TranscriptSegment[][] = [];
@@ -444,7 +477,7 @@ async function geminiYouTube(youtubeId: string): Promise<TranscriptSegment[]> {
     const batch = windows.slice(i, i + CHUNK_CONCURRENCY);
     results.push(
       ...(await Promise.all(
-        batch.map((w) => transcribeWindowBest(youtubeId, w)),
+        batch.map((w) => transcribeWindowBest(part, w)),
       )),
     );
   }
@@ -453,15 +486,52 @@ async function geminiYouTube(youtubeId: string): Promise<TranscriptSegment[]> {
   return segments;
 }
 
-function geminiUpload(
+function geminiYouTube(youtubeId: string): Promise<TranscriptSegment[]> {
+  return geminiWindowed((w) => youtubeVideoPart(youtubeId, w), {
+    windowable: true,
+    label: "video",
+  });
+}
+
+// An uploaded file. Small enough goes inline, in one request. Anything bigger —
+// an hour of media is far past every other rung's cap — is put in Gemini's file
+// store and read from there, which is where the long context is: the same
+// windowing the YouTube path uses then applies. The stored file is handed back
+// so a retry inside its 48 hours skips the upload.
+async function geminiUpload(
   bytes: Uint8Array<ArrayBuffer>,
   mimeType: string,
+  opts: TranscribeOptions = {},
 ): Promise<TranscriptSegment[]> {
-  if (bytes.length > GEMINI_INLINE_MAX_BYTES) {
-    return Promise.reject(new Error("file is larger than the 14 MB inline cap"));
+  if (bytes.length <= GEMINI_INLINE_MAX_BYTES && !opts.geminiFile) {
+    return geminiSegments([
+      { inlineData: { mimeType, data: Buffer.from(bytes).toString("base64") } },
+      { text: GEMINI_TRANSCRIPT_PROMPT },
+    ]);
   }
-  return geminiSegments([
-    { inlineData: { mimeType, data: Buffer.from(bytes).toString("base64") } },
-    { text: GEMINI_TRANSCRIPT_PROMPT },
-  ]);
+  const file =
+    opts.geminiFile ??
+    (await uploadGeminiFile(bytes, mimeType, {
+      displayName: `unitos-media.${EXTENSION[mimeType] ?? "mp4"}`,
+      deadline: opts.deadline,
+    }));
+  if (!opts.geminiFile) opts.onGeminiFile?.(file);
+  console.log(`[transcribe] ${bytes.length} bytes in Gemini's store as ${file.name}`);
+  // Only video can be asked for by time range; audio has to fit one call, and
+  // an audio file long enough not to is past the upload cap anyway.
+  const video = file.mimeType.startsWith("video/");
+  return geminiWindowed(
+    (w) => ({
+      fileData: { fileUri: file.uri, mimeType: file.mimeType },
+      ...(video && w
+        ? {
+            videoMetadata: {
+              startOffset: `${Math.floor(w.start)}s`,
+              ...(w.last ? {} : { endOffset: `${Math.ceil(w.end)}s` }),
+            },
+          }
+        : {}),
+    }),
+    { windowable: video, label: video ? "video" : "audio" },
+  );
 }
