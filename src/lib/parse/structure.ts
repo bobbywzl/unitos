@@ -1,8 +1,8 @@
-import { anthropic } from "@ai-sdk/anthropic";
 import type { ModelMessage } from "ai";
 import { z } from "zod";
 import { PARSE_MODEL } from "@/lib/derive/config";
 import { callForJson } from "@/lib/derive/json-call";
+import { kimi, kimiConfigured } from "@/lib/kimi";
 import type { UsageMeta } from "@/lib/usage";
 import type { ParsedBlock } from "@/lib/parse/types";
 
@@ -107,16 +107,16 @@ export async function selectCoreBlocks(
   title: string | null,
   instructions?: string,
 ): Promise<ParsedBlock[]> {
-  if (!process.env.ANTHROPIC_API_KEY || blocks.length < 5) return blocks;
+  if (!kimiConfigured() || blocks.length < 5) return blocks;
   const listed = blocks.slice(0, MAX_LISTED_BLOCKS);
 
   const messages: ModelMessage[] = [
     { role: "user", content: corePrompt(title, listed, instructions) },
   ];
   const result = await callForJson({
-    model: anthropic(PARSE_MODEL),
+    model: kimi(PARSE_MODEL),
     messages,
-    maxOutputTokens: 4096,
+    maxOutputTokens: 16384,
     schema: coreSchema,
     label: "INGEST_CORE",
     usage: { userId: null, feature: "parse", model: PARSE_MODEL } satisfies UsageMeta,
@@ -150,16 +150,16 @@ export async function structureBlocks(
   title: string | null,
   instructions?: string,
 ): Promise<ParsedBlock[]> {
-  if (!process.env.ANTHROPIC_API_KEY || blocks.length < 5) return blocks;
+  if (!kimiConfigured() || blocks.length < 5) return blocks;
   const listed = blocks.slice(0, MAX_LISTED_BLOCKS);
 
   const messages: ModelMessage[] = [
     { role: "user", content: structurePrompt(title, listed, instructions) },
   ];
   const result = await callForJson({
-    model: anthropic(PARSE_MODEL),
+    model: kimi(PARSE_MODEL),
     messages,
-    maxOutputTokens: 8192,
+    maxOutputTokens: 24576,
     schema: structureSchema,
     label: "INGEST_STRUCTURE",
     usage: { userId: null, feature: "parse", model: PARSE_MODEL } satisfies UsageMeta,

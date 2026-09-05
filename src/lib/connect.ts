@@ -1,4 +1,3 @@
-import { anthropic } from "@ai-sdk/anthropic";
 import type { ModelMessage } from "ai";
 import { z } from "zod";
 import { matchInText } from "@/lib/anchors/match";
@@ -9,6 +8,7 @@ import { renderBlockLines } from "@/lib/derive/context";
 import { callForJson } from "@/lib/derive/json-call";
 import type { Lang } from "@/lib/i18n/config";
 import { currentLang } from "@/lib/i18n/server";
+import { kimi, kimiConfigured } from "@/lib/kimi";
 import { connectPrompt } from "@/lib/prompts/connect";
 
 // Recommended links (SPEC.md §13): when a document joins a corpus, scan it
@@ -70,7 +70,7 @@ export async function buildConnections(
   // The on-demand scan passes the request signal, so Stop aborts the model call.
   signal?: AbortSignal,
 ): Promise<number> {
-  if (!process.env.ANTHROPIC_API_KEY) return 0;
+  if (!kimiConfigured()) return 0;
   const reasonLang = lang ?? (await currentLang());
 
   const [document, attachments] = await Promise.all([
@@ -122,9 +122,9 @@ export async function buildConnections(
     },
   ];
   const result = await callForJson({
-    model: anthropic(CONNECT_MODEL),
+    model: kimi(CONNECT_MODEL),
     messages,
-    maxOutputTokens: 8192,
+    maxOutputTokens: 24576,
     schema: outputSchema,
     label: "CONNECT",
     usage: { userId, feature: "connect", model: CONNECT_MODEL },

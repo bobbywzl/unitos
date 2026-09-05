@@ -1,11 +1,10 @@
-import { anthropic } from "@ai-sdk/anthropic";
 import type { ModelMessage } from "ai";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { resolveAnchor } from "@/lib/anchors/resolve";
 import { bumpNotebook, notebookAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
-import { DERIVATION_MODEL, MAX_OUTPUT_TOKENS } from "@/lib/derive/config";
+import { DERIVATION_EFFORT, DERIVATION_MODEL, MAX_OUTPUT_TOKENS } from "@/lib/derive/config";
 import {
   anchorContext,
   annotationsSection,
@@ -16,6 +15,7 @@ import {
 import { figureContent, figureVisual, type FigureImage } from "@/lib/derive/figure";
 import { callForJson, modelErrorMessage } from "@/lib/derive/json-call";
 import { currentLang, serverT } from "@/lib/i18n/server";
+import { kimi, kimiConfigured } from "@/lib/kimi";
 import type { TFunc } from "@/lib/i18n/dictionaries";
 import { languageName, profileLines } from "@/lib/prompts/types";
 import { parseBody } from "@/lib/validate";
@@ -175,7 +175,7 @@ export async function POST(req: Request) {
 }
 
 async function handle(req: Request, t: TFunc) {
-  if (!process.env.ANTHROPIC_API_KEY) {
+  if (!kimiConfigured()) {
     return NextResponse.json({ error: t("api.assistantNeedsKey") }, { status: 503 });
   }
   const { data, error } = await parseBody(req, requestSchema);
@@ -359,23 +359,23 @@ async function handle(req: Request, t: TFunc) {
     {
       role: "system",
       content: documentPrefix(document.title, document.blocks, document.references),
-      providerOptions: { anthropic: { cacheControl: { type: "ephemeral" } } },
     },
     attachedImage
       ? {
           role: "user",
           content: [
             { type: "text", text: userPrompt },
-            { type: "image", image: attachedImage.bytes, mediaType: attachedImage.mediaType },
+            { type: "file", data: attachedImage.bytes, mediaType: attachedImage.mediaType },
           ],
         }
       : { role: "user", content: userPrompt },
   ];
 
   const result = await callForJson({
-    model: anthropic(DERIVATION_MODEL.SYNTHESIS),
+    model: kimi(DERIVATION_MODEL.SYNTHESIS),
     messages,
     maxOutputTokens: MAX_OUTPUT_TOKENS.SYNTHESIS,
+    effort: DERIVATION_EFFORT.SYNTHESIS,
     schema: planSchema,
     label: "assistant:act",
     usage: { userId: user.id, feature: "act", model: DERIVATION_MODEL.SYNTHESIS },

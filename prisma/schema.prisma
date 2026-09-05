@@ -508,7 +508,7 @@ model UploadChunk {
 model UsageEvent {
   id               String   @id @default(cuid())
   userId           String? // null = a background job with no signed-in reader
-  provider         String // "anthropic" | "google" | "openai"
+  provider         String // "moonshot" | "google" | "groq" | "openai" | "microsoft" | "deepl"
   model            String
   feature          String // explain | simplify | … | assistant | act | glossary | transcribe | describe | voice
   inputTokens      Int      @default(0)

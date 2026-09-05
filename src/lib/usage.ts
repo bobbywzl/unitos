@@ -7,26 +7,19 @@ import { db } from "@/lib/db";
 
 type Price = { input: number; output: number; cacheRead: number; cacheWrite: number };
 
-// Anthropic publishes cache-read at 0.1× input and cache-write at 1.25×;
-// close enough for Gemini's cached tier too (estimates either way).
+// Moonshot serves a cache hit at 0.1× the input price and charges nothing to
+// write the cache, so a cache write counts as plain input; close enough for
+// Gemini's cached tier too (estimates either way).
 const price = (input: number, output: number): Price => ({
   input,
   output,
   cacheRead: input * 0.1,
-  cacheWrite: input * 1.25,
+  cacheWrite: input,
 });
 
 /** Exact-match list prices, USD per 1M tokens. */
 const MODEL_PRICING: Record<string, Price> = {
-  "claude-fable-5-1": price(10, 50),
-  "claude-fable-5": price(10, 50),
-  "claude-opus-5": price(5, 25),
-  "claude-opus-4-8": price(5, 25),
-  "claude-opus-4-7": price(5, 25),
-  "claude-opus-4-6": price(5, 25),
-  "claude-sonnet-5": price(2, 10),
-  "claude-sonnet-4-6": price(3, 15),
-  "claude-haiku-4-5": price(1, 5),
+  "kimi-k3": price(3, 15),
   "gemini-3.7-flash": price(0.3, 2.5),
   "gemini-flash-latest": price(0.3, 2.5),
   // OpenAI: whisper-1 is per-minute — its callers pass costUsd directly.
@@ -46,11 +39,7 @@ const MODEL_PRICING: Record<string, Price> = {
 
 /** Family fallbacks for ids not priced exactly; first match wins. */
 const FAMILY_PRICING: [RegExp, Price][] = [
-  [/^claude.*(fable|mythos)/, price(10, 50)],
-  [/^claude.*opus/, price(5, 25)],
-  [/^claude.*haiku/, price(1, 5)],
-  [/^claude.*sonnet-5/, price(2, 10)],
-  [/^claude/, price(3, 15)],
+  [/^kimi/, price(3, 15)],
   [/^gemini.*flash/, price(0.3, 2.5)],
   [/^gemini/, price(1.25, 10)],
 ];
@@ -100,7 +89,7 @@ export type UsageMeta = {
 };
 
 function providerOf(model: string): string {
-  if (model.startsWith("claude")) return "anthropic";
+  if (model.startsWith("kimi") || model.startsWith("moonshot")) return "moonshot";
   if (model.startsWith("gemini")) return "google";
   if (model.startsWith("whisper-large") || model.startsWith("distil-whisper")) return "groq";
   if (model === "edge-tts") return "microsoft";

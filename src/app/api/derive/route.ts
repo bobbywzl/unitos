@@ -1,4 +1,3 @@
-import { anthropic } from "@ai-sdk/anthropic";
 import { streamText, type ModelMessage } from "ai";
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -6,6 +5,7 @@ import { resolveAnchor } from "@/lib/anchors/resolve";
 import { bumpNotebook, notebookAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
 import {
+  DERIVATION_EFFORT,
   DERIVATION_MODEL,
   MAX_OUTPUT_TOKENS,
   STREAM_ERROR_TOKEN,
@@ -37,6 +37,7 @@ import { callForJson, modelErrorMessage } from "@/lib/derive/json-call";
 import { cropPageRegion, pageBlockText, renderPdfPage } from "@/lib/handwritten/pages";
 import { parseRegion } from "@/lib/video/types";
 import { currentLang, serverT } from "@/lib/i18n/server";
+import { kimi, kimiConfigured, kimiOptions } from "@/lib/kimi";
 import { promptTemplates } from "@/lib/prompts";
 import { corpusDistillPrompt } from "@/lib/prompts/distill";
 import type { PromptCtx } from "@/lib/prompts/types";
@@ -210,7 +211,7 @@ class DeriveFailure extends Error {}
 
 export async function POST(req: Request) {
   const t = await serverT();
-  if (!process.env.ANTHROPIC_API_KEY) {
+  if (!kimiConfigured()) {
     return NextResponse.json({ error: t("api.deriveNeedsKey") }, { status: 503 });
   }
 
@@ -316,7 +317,6 @@ export async function POST(req: Request) {
       {
         role: "system",
         content: corpusText,
-        providerOptions: { anthropic: { cacheControl: { type: "ephemeral" } } },
       },
       {
         role: "user",
@@ -352,9 +352,10 @@ export async function POST(req: Request) {
         const fail = (message: string) => send(`${STREAM_ERROR_TOKEN}${message}`);
         try {
           const result = await callForJson({
-            model: anthropic(DERIVATION_MODEL.DISTILL),
+            model: kimi(DERIVATION_MODEL.DISTILL),
             messages: corpusMessages,
             maxOutputTokens: MAX_OUTPUT_TOKENS.DISTILL,
+            effort: DERIVATION_EFFORT.DISTILL,
             schema: distillOutputSchema,
             label: "DISTILL:corpus",
             usage: usageMeta,
@@ -490,7 +491,6 @@ export async function POST(req: Request) {
       {
         role: "system",
         content: compareText,
-        providerOptions: { anthropic: { cacheControl: { type: "ephemeral" } } },
       },
       {
         role: "user",
@@ -520,9 +520,10 @@ export async function POST(req: Request) {
       req,
       async () => {
         const result = await callForJson({
-          model: anthropic(DERIVATION_MODEL.COMPARE),
+          model: kimi(DERIVATION_MODEL.COMPARE),
           messages: compareMessages,
           maxOutputTokens: MAX_OUTPUT_TOKENS.COMPARE,
+          effort: DERIVATION_EFFORT.COMPARE,
           schema: compareOutputSchema,
           label: "COMPARE",
           usage: usageMeta,
@@ -848,14 +849,12 @@ export async function POST(req: Request) {
     {
       role: "system",
       content: documentPrefix(document.title, document.blocks, document.references),
-      providerOptions: { anthropic: { cacheControl: { type: "ephemeral" } } },
     },
     ...(corpus
       ? [
           {
             role: "system" as const,
             content: corpus,
-            providerOptions: { anthropic: { cacheControl: { type: "ephemeral" as const } } },
           },
         ]
       : []),
@@ -865,16 +864,17 @@ export async function POST(req: Request) {
           content: [
             { type: "text", text: template(ctx) },
             ...attachedImages.map((i) => ({
-              type: "image" as const,
-              image: i.bytes,
+              type: "file" as const,
+              data: i.bytes,
               mediaType: i.mediaType,
             })),
           ],
         }
       : { role: "user", content: template(ctx) },
   ];
-  const model = anthropic(DERIVATION_MODEL[data.type]);
+  const model = kimi(DERIVATION_MODEL[data.type]);
   const maxOutputTokens = MAX_OUTPUT_TOKENS[data.type];
+  const effort = DERIVATION_EFFORT[data.type];
 
   // 3 + 4. Stream or collect, then route by destination.
   // EXPLAIN, SIMPLIFY, and SUMMARIZE stream text. SALIENCE and DISTILL return validated JSON.
@@ -887,6 +887,7 @@ export async function POST(req: Request) {
     const result = streamText({
       model,
       maxOutputTokens,
+      providerOptions: kimiOptions(effort),
       allowSystemInMessages: true,
       messages,
       // Stop aborts the model call too (SPEC.md §6), not just the response.
@@ -1078,6 +1079,7 @@ export async function POST(req: Request) {
           model,
           messages,
           maxOutputTokens,
+          effort,
           schema: analyzeOutputSchema,
           label: "ANALYZE",
           usage: usageMeta,
@@ -1126,6 +1128,7 @@ export async function POST(req: Request) {
       model,
       messages,
       maxOutputTokens,
+      effort,
       schema: findOutputSchema,
       label: "FIND",
       usage: usageMeta,
@@ -1158,6 +1161,7 @@ export async function POST(req: Request) {
       model,
       messages,
       maxOutputTokens,
+      effort,
       schema: salienceOutputSchema,
       label: "SALIENCE",
       usage: usageMeta,
@@ -1191,6 +1195,7 @@ export async function POST(req: Request) {
       model,
       messages,
       maxOutputTokens,
+      effort,
       schema: extractOutputSchema,
       label: "EXTRACT",
       usage: usageMeta,
@@ -1284,6 +1289,7 @@ export async function POST(req: Request) {
               model,
               messages,
               maxOutputTokens,
+              effort,
               schema: formalizeArticleSchema,
               label: "FORMALIZE:article",
               usage: usageMeta,
@@ -1330,6 +1336,7 @@ export async function POST(req: Request) {
             model,
             messages,
             maxOutputTokens,
+            effort,
             schema: formalizeNotesSchema,
             label: "FORMALIZE:notes",
             usage: usageMeta,
@@ -1446,6 +1453,7 @@ export async function POST(req: Request) {
           model,
           messages,
           maxOutputTokens,
+          effort,
           schema: distillOutputSchema,
           label: "DISTILL",
           usage: usageMeta,

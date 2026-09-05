@@ -1,7 +1,9 @@
 import { generateText, type ModelMessage } from "ai";
 import type { LanguageModel } from "ai";
 import type { z } from "zod";
+import type { KimiEffort } from "@/lib/derive/config";
 import { extractJson } from "@/lib/derive/json";
+import { kimiOptions } from "@/lib/kimi";
 import { recordUsage, sdkTokens, type UsageMeta } from "@/lib/usage";
 
 type JsonCallResult<T> = { ok: true; data: T } | { ok: false; error: string };
@@ -28,11 +30,14 @@ export async function callForJson<S extends z.ZodType>(params: {
   // Aborts the model call when the client disconnects (DISTILL passes the
   // request signal, so Cancel stops the generation, not just the response).
   abortSignal?: AbortSignal;
+  // Reasoning effort (lib/derive/config.ts); the default when absent.
+  effort?: KimiEffort;
 }): Promise<JsonCallResult<z.infer<S>>> {
   const attempt = async (messages: ModelMessage[]) => {
     const result = await generateText({
       model: params.model,
       maxOutputTokens: params.maxOutputTokens,
+      providerOptions: kimiOptions(params.effort),
       allowSystemInMessages: true,
       messages,
       abortSignal: params.abortSignal,

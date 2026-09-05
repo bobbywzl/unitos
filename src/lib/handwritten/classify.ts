@@ -1,9 +1,9 @@
-import { anthropic } from "@ai-sdk/anthropic";
 import type { ModelMessage } from "ai";
 import { z } from "zod";
 import { CLASSIFY_MODEL } from "@/lib/derive/config";
 import { callForJson } from "@/lib/derive/json-call";
 import { CLASSIFY_IMAGE_WIDTH, renderPdfPage } from "@/lib/handwritten/pages";
+import { kimi, kimiConfigured } from "@/lib/kimi";
 import type { ParsedBlock } from "@/lib/parse/types";
 import { classifyPrompt } from "@/lib/prompts/classify";
 
@@ -56,7 +56,7 @@ export async function classifyPdf(
 
   const fallback: PdfKind =
     junk || perPage < FALLBACK_HANDWRITTEN_CHARS_PER_PAGE ? "handwritten" : "article";
-  if (!process.env.ANTHROPIC_API_KEY) return fallback;
+  if (!kimiConfigured()) return fallback;
 
   // Sample pages: first, middle, last.
   const samples = [...new Set([1, Math.max(1, Math.ceil(pageCount / 2)), pageCount])].slice(
@@ -78,14 +78,14 @@ export async function classifyPdf(
       role: "user",
       content: [
         { type: "text", text: classifyPrompt({ pageCount, textChars, junk }) },
-        ...images.map((image) => ({ type: "image" as const, image, mediaType: "image/png" })),
+        ...images.map((image) => ({ type: "file" as const, data: image, mediaType: "image/png" })),
       ],
     },
   ];
   const result = await callForJson({
-    model: anthropic(CLASSIFY_MODEL),
+    model: kimi(CLASSIFY_MODEL),
     messages,
-    maxOutputTokens: 2048,
+    maxOutputTokens: 16384,
     schema: classifyOutputSchema,
     label: "CLASSIFY",
     usage: { userId, feature: "classify", model: CLASSIFY_MODEL },

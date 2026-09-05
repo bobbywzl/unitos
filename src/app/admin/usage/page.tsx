@@ -126,7 +126,7 @@ export default async function AdminUsagePage() {
       where: { createdAt: { gte: since30 } },
       _sum: { costUsd: true },
     }),
-    // Every model call stamps its provider (anthropic, google, groq, openai),
+    // Every model call stamps its provider (moonshot, google, groq, openai),
     // so the cost of each API account is one row here.
     db.usageEvent.groupBy({
       by: ["provider"],

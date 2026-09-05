@@ -2,54 +2,80 @@ import type { DerivationType } from "@prisma/client";
 import { isLang, LANG_COOKIE } from "@/lib/i18n/config";
 import { translate } from "@/lib/i18n/dictionaries";
 
+// The one model (SPEC.md §2): Kimi K3, Moonshot AI's flagship, behind every AI
+// feature. The client lives in lib/kimi.ts, not here: client components import
+// this file.
+export const KIMI_K3 = "kimi-k3";
+
+// Reasoning effort per call. Kimi K3 always reasons; "max" is its default and
+// its slowest. The reader's tools answer at "high"; ANALYZE reads a figure or
+// table at "max": a misread number is worse than a slow answer.
+export type KimiEffort = "low" | "high" | "max";
+export const DEFAULT_EFFORT: KimiEffort = "high";
+
 // Model per derivation type (SPEC.md §2). One place to change.
 export const DERIVATION_MODEL: Record<DerivationType, string> = {
-  EXPLAIN: "claude-opus-5",
-  SIMPLIFY: "claude-opus-5",
-  SALIENCE: "claude-opus-5",
-  EXTRACT: "claude-opus-5",
-  SUMMARIZE: "claude-opus-5",
-  SYNTHESIS: "claude-opus-5",
-  FIND: "claude-opus-5",
-  DISTILL: "claude-opus-5",
-  FORMALIZE: "claude-opus-5",
-  ASK: "claude-opus-5",
-  COMPARE: "claude-opus-5",
-  // A figure or table is read by the model that reads visuals best with the
-  // least invention: the most capable model, the one upload and parse already
-  // trust (PARSE_MODEL). A misread number is worse than a slow answer.
-  ANALYZE: "claude-fable-5-1",
-  VOICE: "claude-opus-5", // no model call of its own: the transcription ladder does the work
+  EXPLAIN: KIMI_K3,
+  SIMPLIFY: KIMI_K3,
+  SALIENCE: KIMI_K3,
+  EXTRACT: KIMI_K3,
+  SUMMARIZE: KIMI_K3,
+  SYNTHESIS: KIMI_K3,
+  FIND: KIMI_K3,
+  DISTILL: KIMI_K3,
+  FORMALIZE: KIMI_K3,
+  ASK: KIMI_K3,
+  COMPARE: KIMI_K3,
+  ANALYZE: KIMI_K3,
+  VOICE: KIMI_K3, // no model call of its own: the transcription ladder does the work
 };
 
-// Reasoning tokens count against this ceiling on current models, so every
-// budget leaves room for the model to think before it writes. Too tight a
-// ceiling truncates a JSON derivation mid-object and fails validation.
+export const DERIVATION_EFFORT: Record<DerivationType, KimiEffort> = {
+  EXPLAIN: DEFAULT_EFFORT,
+  SIMPLIFY: DEFAULT_EFFORT,
+  SALIENCE: DEFAULT_EFFORT,
+  EXTRACT: DEFAULT_EFFORT,
+  SUMMARIZE: DEFAULT_EFFORT,
+  SYNTHESIS: DEFAULT_EFFORT,
+  FIND: DEFAULT_EFFORT,
+  DISTILL: DEFAULT_EFFORT,
+  FORMALIZE: DEFAULT_EFFORT,
+  ASK: DEFAULT_EFFORT,
+  COMPARE: DEFAULT_EFFORT,
+  ANALYZE: "max",
+  VOICE: DEFAULT_EFFORT,
+};
+
+// Kimi K3 counts its reasoning tokens against this ceiling too (Moonshot asks
+// for 16000 or more), so every budget leaves room for the model to think
+// before it writes. Too tight a ceiling truncates a JSON derivation mid-object
+// and fails validation.
 export const MAX_OUTPUT_TOKENS: Record<DerivationType, number> = {
-  EXPLAIN: 4096,
-  SIMPLIFY: 4096,
-  SALIENCE: 8192,
-  EXTRACT: 8192,
-  SUMMARIZE: 8192,
-  SYNTHESIS: 16384,
-  FIND: 8192,
-  DISTILL: 8192,
-  FORMALIZE: 32768, // a long transcript's article is long
-  ASK: 4096,
-  COMPARE: 16384, // two documents' points, each with its spans
-  ANALYZE: 8192, // a table's rows come back as data
+  EXPLAIN: 16384,
+  SIMPLIFY: 16384,
+  SALIENCE: 24576,
+  EXTRACT: 24576,
+  SUMMARIZE: 24576,
+  SYNTHESIS: 32768,
+  FIND: 24576,
+  DISTILL: 24576,
+  FORMALIZE: 65536, // a long transcript's article is long
+  ASK: 16384,
+  COMPARE: 32768, // two documents' points, each with its spans
+  ANALYZE: 32768, // a table's rows come back as data
   VOICE: 0,
 };
 
 // The ingest-time corpus scan for recommended links (SPEC.md §13). Not a
 // DerivationType — it runs as a background job, not through /api/derive.
-export const CONNECT_MODEL = "claude-opus-5";
+export const CONNECT_MODEL = KIMI_K3;
 
-// Upload and parse run on the most capable model: what the parse gets wrong,
-// every later tool inherits. One constant for the upload assistant's review
-// and instruction check (SPEC.md §15), the URL core and structure passes
-// (SPEC.md §2), Import PDF's judgment, and conversion (SPEC.md §16).
-export const PARSE_MODEL = "claude-fable-5-1";
+// Upload and parse run on the same model as every other tool: what the parse
+// gets wrong, every later tool inherits. One constant for the upload
+// assistant's review and instruction check (SPEC.md §15), the URL core and
+// structure passes (SPEC.md §2), Import PDF's judgment, and conversion
+// (SPEC.md §16).
+export const PARSE_MODEL = KIMI_K3;
 
 // The upload assistant's review and instruction check (SPEC.md §15). Not a
 // DerivationType — it runs before ingest, not through /api/derive.

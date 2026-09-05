@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { isAdmin } from "@/lib/admin-auth";
 import { authEnabled } from "@/lib/auth";
+import { kimiConfigured } from "@/lib/kimi";
 import { db } from "@/lib/db";
 import { serverT } from "@/lib/i18n/server";
 import { recipientAccounts } from "@/lib/notifications";
@@ -41,7 +42,7 @@ export default async function AdminPage() {
   // Status only — values never leave the server. Operator concern, so it lives
   // here, not in reader Settings.
   const services: { label: string; description: string; set: boolean }[] = [
-    { label: "ANTHROPIC_API_KEY", description: t("admin.svcAnthropic"), set: Boolean(process.env.ANTHROPIC_API_KEY) },
+    { label: "KIMI_API_KEY", description: t("admin.svcKimi"), set: kimiConfigured() },
     { label: "SESSION_SECRET + provider", description: t("admin.svcSignIn"), set: authEnabled() },
     { label: "ADMIN_PASSWORD", description: t("admin.svcAdmin"), set: Boolean(process.env.ADMIN_PASSWORD) },
   ];

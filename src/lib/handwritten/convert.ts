@@ -1,4 +1,3 @@
-import { anthropic } from "@ai-sdk/anthropic";
 import type { ConversionStatus } from "@prisma/client";
 import type { ModelMessage } from "ai";
 import { z } from "zod";
@@ -8,6 +7,7 @@ import { CONVERT_MODEL } from "@/lib/derive/config";
 import { callForJson } from "@/lib/derive/json-call";
 import { PAGE_IMAGE_WIDTH, renderPdfPage } from "@/lib/handwritten/pages";
 import { texError } from "@/lib/katex";
+import { kimi, kimiConfigured } from "@/lib/kimi";
 import { convertPrompt } from "@/lib/prompts/convert";
 import { fixTexPrompt } from "@/lib/prompts/fix-tex";
 
@@ -132,9 +132,9 @@ async function repairEquations(
     },
   ];
   const result = await callForJson({
-    model: anthropic(CONVERT_MODEL),
+    model: kimi(CONVERT_MODEL),
     messages,
-    maxOutputTokens: 16384,
+    maxOutputTokens: 32768,
     schema: fixTexOutputSchema,
     label: "CONVERT_FIX_TEX",
     usage: { userId, feature: "convert", model: CONVERT_MODEL },
@@ -179,8 +179,8 @@ export async function runConversion(
   if (!document.fileData) {
     return { ok: false, status: 400, error: "This document has no stored PDF" };
   }
-  if (!process.env.ANTHROPIC_API_KEY) {
-    return { ok: false, status: 503, error: "Set ANTHROPIC_API_KEY. Conversion needs it." };
+  if (!kimiConfigured()) {
+    return { ok: false, status: 503, error: "Set KIMI_API_KEY. Conversion needs it." };
   }
   const pages = document.blocks.map((b) => b.page).filter((p): p is number => p !== null);
   if (pages.length === 0) {
@@ -239,17 +239,17 @@ export async function runConversion(
                 }),
               },
               ...images.map(({ image }) => ({
-                type: "image" as const,
-                image,
+                type: "file" as const,
+                data: image,
                 mediaType: "image/png",
               })),
             ],
           },
         ];
         const result = await callForJson({
-          model: anthropic(CONVERT_MODEL),
+          model: kimi(CONVERT_MODEL),
           messages,
-          maxOutputTokens: 32768, // dense pages transcribe long
+          maxOutputTokens: 65536, // dense pages transcribe long
           schema: convertOutputSchema,
           label: "CONVERT",
           usage: { userId, feature: "convert", model: CONVERT_MODEL },

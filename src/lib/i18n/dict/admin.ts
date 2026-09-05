@@ -140,7 +140,7 @@ const en = {
   agoDays: "{n} d ago",
   // Services (env status; moved here from Settings — operator concern, not reader)
   services: "Services",
-  svcAnthropic: "Derivations, assistant, glossary",
+  svcKimi: "Derivations, assistant, glossary",
   svcSignIn: "Sign-in at /signin",
   svcAdmin: "Feedback inbox and digest at /admin",
   svcSet: "Set",
@@ -306,7 +306,7 @@ const zh: Record<keyof typeof en, string> = {
   agoHours: "{n} 小时前",
   agoDays: "{n} 天前",
   services: "服务",
-  svcAnthropic: "AI 生成、助手、术语表",
+  svcKimi: "AI 生成、助手、术语表",
   svcSignIn: "位于 /signin 的登录",
   svcAdmin: "位于 /admin 的反馈收件箱与汇编",
   svcSet: "已设置",
