@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { attachNoteEditable, type NoteEditable } from "@/lib/note-editable";
 import { wrapSelection, type Patch } from "@/lib/markdown-style";
+import { RedoIcon, UndoIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import type { TKey } from "@/lib/i18n/dictionaries";
 
@@ -163,6 +164,11 @@ export function NoteEditor({
   const core = useRef<NoteEditable | null>(null);
   const onChangeRef = useRef(onChange);
   const valueRef = useRef(value);
+  // What the undo and redo buttons can do, read back after every edit — the
+  // editable owns the history (lib/note-editable.ts) and Cmd+Z reaches it
+  // there, so the buttons are the same two steps under a symbol.
+  const [history, setHistory] = useState({ canUndo: false, canRedo: false });
+  const readHistory = () => setHistory(core.current?.history() ?? { canUndo: false, canRedo: false });
 
   useEffect(() => {
     onChangeRef.current = onChange;
@@ -175,7 +181,10 @@ export function NoteEditor({
     if (!el) return;
     const editable = attachNoteEditable(el, {
       text: valueRef.current,
-      onChange: (text) => onChangeRef.current(text),
+      onChange: (text) => {
+        onChangeRef.current(text);
+        setHistory(editable.history());
+      },
     });
     core.current = editable;
     editable.focusEnd();
@@ -208,6 +217,13 @@ export function NoteEditor({
 
   function command(name: "bold" | "italic" | "underline") {
     core.current?.toggleStyle(name);
+    readHistory();
+  }
+
+  function step(back: boolean) {
+    if (back) core.current?.undo();
+    else core.current?.redo();
+    readHistory();
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
@@ -222,7 +238,7 @@ export function NoteEditor({
 
   const keep = (e: React.MouseEvent) => e.preventDefault();
   const barButton =
-    "rounded-full px-2 py-0.5 text-[11.5px] font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800";
+    "inline-flex items-center rounded-full px-2 py-0.5 text-[11.5px] font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800";
 
   return (
     <div className={`flex min-h-0 flex-col gap-1.5 ${className}`}>
@@ -240,6 +256,31 @@ export function NoteEditor({
         </div>
       )}
       <div className="flex shrink-0 flex-wrap items-center gap-0.5">
+        <button
+          type="button"
+          data-track="note-undo"
+          onMouseDown={keep}
+          onClick={() => step(true)}
+          disabled={!history.canUndo}
+          aria-label={t("panes.undoEdit")}
+          data-tip={t("panes.undoEdit")}
+          className={`${barButton} disabled:opacity-30`}
+        >
+          <UndoIcon size={13} />
+        </button>
+        <button
+          type="button"
+          data-track="note-redo"
+          onMouseDown={keep}
+          onClick={() => step(false)}
+          disabled={!history.canRedo}
+          aria-label={t("panes.redoEdit")}
+          data-tip={t("panes.redoEdit")}
+          className={`${barButton} disabled:opacity-30`}
+        >
+          <RedoIcon size={13} />
+        </button>
+        <span aria-hidden className="mx-1 h-4 w-px bg-line" />
         {FORMATS.map(({ label, titleKey, track, map }) => (
           <button
             key={label}

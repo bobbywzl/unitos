@@ -3136,9 +3136,81 @@ export function ReaderInteractions({
     return () => document.removeEventListener("pointerdown", onDown, true);
   }, [editMode]);
 
+  // Undo and redo for the article (SPEC.md §6). The note editor keeps its own
+  // history inside the editable; the article's edits are server calls, so the
+  // history here is a stack of steps, each knowing how to take itself back and
+  // how to do itself again. Typing is one step per block: the text the block
+  // held before this run of typing, against the text it holds now.
+  const undoStack = useRef<{ undo: () => Promise<void>; redo: () => Promise<void> }[]>([]);
+  const redoStack = useRef<typeof undoStack.current>([]);
+  const [historyDepth, setHistoryDepth] = useState({ undo: 0, redo: 0 });
+  const syncHistory = () =>
+    setHistoryDepth({ undo: undoStack.current.length, redo: redoStack.current.length });
+  // True while a step is being undone or redone: the calls it makes must not
+  // record steps of their own.
+  const stepping = useRef(false);
+
+  function record(step: { undo: () => Promise<void>; redo: () => Promise<void> }) {
+    if (stepping.current) return;
+    undoStack.current = [...undoStack.current.slice(-99), step];
+    redoStack.current = [];
+    syncHistory();
+  }
+
+  async function runStep(back: boolean) {
+    // Typing that has not been saved yet is a step of its own, so Cmd+Z after
+    // typing takes the typing back rather than the change before it.
+    await flushEditRef.current?.();
+    const from = back ? undoStack.current : redoStack.current;
+    const step = from[from.length - 1];
+    if (!step) return;
+    stepping.current = true;
+    try {
+      await (back ? step.undo() : step.redo());
+      if (back) {
+        undoStack.current = undoStack.current.slice(0, -1);
+        redoStack.current = [...redoStack.current, step];
+      } else {
+        redoStack.current = redoStack.current.slice(0, -1);
+        undoStack.current = [...undoStack.current, step];
+      }
+      syncHistory();
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : t("reader.editFailed"));
+    } finally {
+      stepping.current = false;
+    }
+  }
+  // The article's editor hands back a way to save what is being typed, so undo
+  // can settle it first.
+  const flushEditRef = useRef<(() => Promise<void>) | null>(null);
+
+  // Cmd+Z and Shift+Cmd+Z while editing (Ctrl elsewhere). The article's
+  // editable is the browser's, so its own undo would fight this one: the
+  // article's history is the one that answers, and it holds the typing too.
+  useEffect(() => {
+    if (!editMode) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey) || e.altKey) return;
+      const key = e.key.toLowerCase();
+      const redo = key === "y" || (key === "z" && e.shiftKey);
+      if (key !== "z" && !redo) return;
+      e.preventDefault();
+      e.stopPropagation();
+      void runStep(!redo);
+    };
+    document.addEventListener("keydown", onKey, true);
+    return () => document.removeEventListener("keydown", onKey, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editMode]);
+
   // Edit mode: the whole body is editable in place. Every change goes through
   // the same routes as the assistant's, so history and healing stay uniform.
   function toggleEditMode() {
+    // A fresh session of editing starts with an empty history.
+    undoStack.current = [];
+    redoStack.current = [];
+    syncHistory();
     setPopover(null);
     setSubmenu(null);
     setBubble(null);
@@ -3152,11 +3224,20 @@ export function ReaderInteractions({
     kind: "paragraph" | "h1" | "h2" | "h3" | "list" | "numbered",
     text?: string,
   ) {
+    const was = blocksRef.current.find((b) => b.id === blockId);
+    const wasKind = blockFormatKind(was);
+    const wasText = was?.text;
     try {
       await api(`/api/blocks/${blockId}`, "PATCH", {
         kind,
         ...(text !== undefined ? { text } : {}),
       });
+      if (wasKind) {
+        record({
+          undo: () => formatBlock(blockId, wasKind, text !== undefined ? wasText : undefined),
+          redo: () => formatBlock(blockId, kind, text),
+        });
+      }
       router.refresh();
     } catch (err) {
       showToast(err instanceof Error ? err.message : t("reader.formatFailed"));
@@ -3182,6 +3263,9 @@ export function ReaderInteractions({
         endOffset: end,
         style,
       });
+      // A style is its own opposite: the same span, the same style, off again.
+      const again = () => toggleStyleSpan(blockId, start, end, style);
+      record({ undo: again, redo: again });
       router.refresh();
     } catch (err) {
       showToast(err instanceof Error ? err.message : t("reader.styleFailed"));
@@ -3207,6 +3291,15 @@ export function ReaderInteractions({
       const json = (await res.json().catch(() => null)) as { id?: string; error?: string } | null;
       if (!res.ok || !json?.id)
         throw new Error(json?.error ?? t("reader.insertFailedStatus", { status: res.status }));
+      // Redoing an insert makes a new block; the step follows it, so a second
+      // undo removes the one that is actually there.
+      let id = json.id;
+      record({
+        undo: () => deleteBlock(id),
+        redo: () => insertBlock(afterBlockId).then((next) => {
+          if (next) id = next;
+        }),
+      });
       router.refresh();
       return json.id;
     } catch (err) {
@@ -3266,9 +3359,21 @@ export function ReaderInteractions({
   async function deleteBlock(blockId: string) {
     try {
       const res = await fetch(`/api/blocks/${blockId}`, { method: "DELETE" });
+      const json = (await res.json().catch(() => null)) as { editId?: string; error?: string } | null;
       if (!res.ok) {
-        const detail = (await res.json().catch(() => null)) as { error?: string } | null;
-        throw new Error(detail?.error ?? t("reader.removeFailedStatus", { status: res.status }));
+        throw new Error(json?.error ?? t("reader.removeFailedStatus", { status: res.status }));
+      }
+      // The removal's own edit puts the block back with its id, so anchors on
+      // it heal rather than orphan.
+      const editId = json?.editId;
+      if (editId) {
+        record({
+          undo: async () => {
+            await api("/api/blocks/restore", "POST", { editId });
+            router.refresh();
+          },
+          redo: () => deleteBlock(blockId),
+        });
       }
       router.refresh();
     } catch (err) {
@@ -3277,13 +3382,31 @@ export function ReaderInteractions({
   }
 
   async function saveBlockEdit(blockId: string, text: string) {
+    const before = blocksRef.current.find((b) => b.id === blockId)?.text;
     try {
       await api(`/api/blocks/${blockId}`, "PATCH", { text });
+      if (before !== undefined && before !== text) {
+        record({
+          undo: () => saveBlockEdit(blockId, before),
+          redo: () => saveBlockEdit(blockId, text),
+        });
+      }
       router.refresh();
     } catch (err) {
       showToast(err instanceof Error ? err.message : t("reader.editFailed"));
     }
   }
+
+/** The format a stored block is in, for a step that puts it back. */
+function blockFormatKind(
+  block: { type: string; html: string | null; text: string } | undefined,
+): "paragraph" | "h1" | "h2" | "h3" | "list" | "numbered" | null {
+  if (!block) return null;
+  if (block.type === "LIST") return /^\s*\d{1,3}[.)]\s/.test(block.text) ? "numbered" : "list";
+  if (block.type !== "HEADING") return "paragraph";
+  const level = /^<h([1-3])/.exec(block.html ?? "")?.[1] ?? "2";
+  return `h${level}` as "h1" | "h2" | "h3";
+}
 
   // Merge anchor, extraction, term, and link layers per block.
   const highlightsByBlock: Record<string, Highlight[]> = {};
@@ -3761,6 +3884,10 @@ export function ReaderInteractions({
         onToggleStyle={toggleStyleSpan}
         onInsertBlock={insertBlock}
         onDeleteBlock={deleteBlock}
+        history={{ canUndo: historyDepth.undo > 0, canRedo: historyDepth.redo > 0 }}
+        onUndo={() => void runStep(true)}
+        onRedo={() => void runStep(false)}
+        flushRef={flushEditRef}
       />
 
       <Bibliography references={references} />

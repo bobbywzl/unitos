@@ -44,6 +44,11 @@ export type NoteEditable = {
   setText(text: string, selection?: TextSelection): void;
   /** Bold, italic, underline: a selection is styled or unstyled; a bare caret styles what is typed next. */
   toggleStyle(command: StyleCommand): void;
+  /** Step back through the editor's own history, and forward again. */
+  undo(): void;
+  redo(): void;
+  /** What the undo and redo buttons can do right now. */
+  history(): { canUndo: boolean; canRedo: boolean };
   focusEnd(): void;
   destroy(): void;
 };
@@ -507,6 +512,10 @@ export function attachNoteEditable(
     paint(sel);
   }
 
+  function historyState() {
+    return { canUndo: index > 0, canRedo: index < history.length - 1 };
+  }
+
   function undo() {
     if (index <= 0) return;
     clearIntent();
@@ -631,6 +640,9 @@ export function attachNoteEditable(
       if (text !== next) opts.onChange(text);
     },
     toggleStyle,
+    undo,
+    redo,
+    history: historyState,
     focusEnd() {
       clearIntent();
       el.focus({ preventScroll: true });

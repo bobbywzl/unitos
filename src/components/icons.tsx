@@ -242,6 +242,26 @@ export function SpinnerIcon(props: IconProps) {
   );
 }
 
+// Undo and redo: an arrow curving back on itself, and its mirror — the pair
+// every editor draws, so the button needs no label to be read.
+export function UndoIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M3 8h11a5 5 0 0 1 0 10H7" />
+      <path d="m7 4-4 4 4 4" />
+    </Icon>
+  );
+}
+
+export function RedoIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M21 8H10a5 5 0 0 0 0 10h7" />
+      <path d="m17 4 4 4-4 4" />
+    </Icon>
+  );
+}
+
 export function CheckIcon(props: IconProps) {
   return (
     <Icon {...props}>

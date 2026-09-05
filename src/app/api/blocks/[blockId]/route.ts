@@ -227,7 +227,7 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ blockId: st
     return NextResponse.json({ error: t("api.onlyTextBlocksRemoved") }, { status: 400 });
   }
 
-  await db.$transaction([
+  const [, , , , removal] = await db.$transaction([
     db.block.delete({ where: { id: blockId } }),
     db.source.updateMany({ where: { blockId }, data: { orphaned: true } }),
     db.docLink.updateMany({ where: { fromBlockId: blockId }, data: { fromOrphaned: true } }),
@@ -249,5 +249,7 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ blockId: st
     }),
   ]);
   await bumpDocument(block.documentId);
-  return NextResponse.json({ ok: true });
+  // The removal's id: undo puts the block back through /api/blocks/restore,
+  // with its own id, so anchors on it heal instead of orphaning.
+  return NextResponse.json({ ok: true, editId: removal.id });
 }

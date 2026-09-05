@@ -1440,3 +1440,26 @@ ellipse.anchor-flash {
   margin: 0.4rem 0;
   border-radius: 12px;
 }
+
+/* List markers by level, as a document editor draws them (SPEC.md §6): a
+   nested bullet changes shape, a nested number changes series. Tailwind
+   Typography sets one marker for every level through :where(), which carries
+   no specificity, so these win by naming the nesting. Both the note editor's
+   document (.note-doc) and every rendered note (.prose) follow the same
+   ladder, so a list looks the same while it is written and after. */
+.note-doc ul ul,
+.prose ul ul {
+  list-style-type: circle;
+}
+.note-doc ul ul ul,
+.prose ul ul ul {
+  list-style-type: square;
+}
+.note-doc ol ol,
+.prose ol ol {
+  list-style-type: lower-alpha;
+}
+.note-doc ol ol ol,
+.prose ol ol ol {
+  list-style-type: lower-roman;
+}

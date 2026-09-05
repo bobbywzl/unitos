@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useEffect, useRef, useState } from "react";
-import { PlusIcon } from "@/components/icons";
+import { PlusIcon, RedoIcon, UndoIcon } from "@/components/icons";
 import { styleShortcut } from "@/lib/markdown-style";
 import { NOTE_WRAP_EVENT, type NoteWrapSpacer } from "@/lib/note-wrap";
 import { NoteWrapGap } from "@/components/reader/note-wrap-gap";
@@ -175,6 +175,10 @@ export function Reader({
   onToggleStyle,
   onInsertBlock,
   onDeleteBlock,
+  history,
+  onUndo,
+  onRedo,
+  flushRef,
 }: {
   title: string;
   blocks: BlockData[];
@@ -196,6 +200,12 @@ export function Reader({
   onFormatBlock: (blockId: string, kind: Kind, text?: string) => Promise<void>;
   onToggleStyle: (blockId: string, start: number, end: number, style: ToggleStyleKind) => Promise<void>;
   onInsertBlock: (afterBlockId: string) => Promise<string | null>;
+  /** What the bar's undo and redo can do; the steps live in reader-interactions.tsx. */
+  history: { canUndo: boolean; canRedo: boolean };
+  onUndo: () => void;
+  onRedo: () => void;
+  /** Undo settles what is being typed first; this is how it reaches the block. */
+  flushRef: React.MutableRefObject<(() => Promise<void>) | null>;
   onDeleteBlock: (blockId: string) => Promise<void>;
 }) {
   const t = useT();
@@ -244,6 +254,15 @@ export function Reader({
     setLocalTexts((prev) => ({ ...prev, [blockId]: live }));
     return onSaveText(blockId, live);
   }
+
+  // Undo saves the block being typed in before it steps back, so the typing is
+  // the step it takes back.
+  useEffect(() => {
+    flushRef.current = () => flushFocused() ?? Promise.resolve();
+    return () => {
+      flushRef.current = null;
+    };
+  });
 
   function applyStyle(style: ToggleStyleKind) {
     if (!focusedBlockId) return;
@@ -366,7 +385,7 @@ export function Reader({
   }
 
   const barButton =
-    "rounded-full px-2.5 py-1 text-[11.5px] font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40";
+    "inline-flex items-center rounded-full px-2.5 py-1 text-[11.5px] font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40";
   const keep = (e: React.MouseEvent) => e.preventDefault();
 
   // A floating note in wrap mode (lib/note-wrap.ts): the gap its card needs,
@@ -404,6 +423,29 @@ export function Reader({
           data-edit-toolbar
           className="sticky top-3 z-30 mx-auto flex w-fit items-center gap-0.5 rounded-full bg-card px-2 py-1.5 shadow-float print:hidden"
         >
+          <button
+            onMouseDown={keep}
+            onClick={onUndo}
+            disabled={!history.canUndo}
+            data-track="undo"
+            aria-label={t("panes.undoEdit")}
+            data-tip={t("panes.undoEdit")}
+            className={`${barButton} disabled:opacity-30`}
+          >
+            <UndoIcon size={14} />
+          </button>
+          <button
+            onMouseDown={keep}
+            onClick={onRedo}
+            disabled={!history.canRedo}
+            data-track="redo"
+            aria-label={t("panes.redoEdit")}
+            data-tip={t("panes.redoEdit")}
+            className={`${barButton} disabled:opacity-30`}
+          >
+            <RedoIcon size={14} />
+          </button>
+          <span aria-hidden className="mx-1 h-4 w-px bg-line" />
           {(
             [
               ["paragraph", "¶", "panes.formatParagraph"],

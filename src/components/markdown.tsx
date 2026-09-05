@@ -75,6 +75,46 @@ function linkifyStyleTags(text: string): string {
   return text.includes("<") ? text.split("\n").map(linkifyStyleLine).join("\n") : text;
 }
 
+// The note editor nests a list by two spaces a level, whatever the marker
+// (lib/note-markup.ts). Markdown nests by the parent item's content column
+// instead — three characters under "1. ", two under "- " — so a nested
+// numbered item written by the editor came out flat once the note was
+// rendered: nested while it was written, a plain second item after Done. The
+// lines are re-indented to the columns markdown expects, so the rendered note
+// nests exactly as the editor showed it.
+const LIST_ITEM = /^(\s*)([-*+]|\d{1,3}[.)])(\s+)(.*)$/;
+const FENCE_LINE = /^\s*(```|~~~)/;
+
+function alignListIndents(text: string): string {
+  // The content column of each open level: where a child of that item starts.
+  const columns: number[] = [];
+  let fenced = false;
+  return text
+    .split("\n")
+    .map((line) => {
+      if (FENCE_LINE.test(line)) {
+        fenced = !fenced;
+        columns.length = 0;
+        return line;
+      }
+      if (fenced) return line;
+      const item = LIST_ITEM.exec(line);
+      if (!item) {
+        // A blank line sits inside a list; anything else closes it.
+        if (line.trim() !== "") columns.length = 0;
+        return line;
+      }
+      const [, spaces, marker, , body] = item;
+      // Two spaces a level, and a level is never skipped.
+      const level = Math.min(Math.floor(spaces.length / 2), columns.length);
+      const indent = level === 0 ? 0 : columns[level - 1];
+      columns.length = level;
+      columns.push(indent + marker.length + 1);
+      return `${" ".repeat(indent)}${marker} ${body}`;
+    })
+    .join("\n");
+}
+
 // Notes keep their line breaks: a newline typed in the editor stays a line
 // break on display, where markdown alone folds single newlines into spaces —
 // so the note has the same shape after Done as it had while editing. Two
@@ -98,7 +138,8 @@ function hardBreaks(text: string): string {
 /** breaks: single newlines render as line breaks (notes). */
 export function Markdown({ children, breaks = false }: { children: string; breaks?: boolean }) {
   const t = useT();
-  const text = breaks ? hardBreaks(children) : children;
+  // Lists line up first: hardBreaks reads the lines as they will be nested.
+  const text = breaks ? hardBreaks(alignListIndents(children)) : alignListIndents(children);
   return (
     <div className="prose prose-sm max-w-none prose-p:my-1.5 prose-headings:my-2 prose-ul:my-1.5 prose-ol:my-1.5">
       <ReactMarkdown
