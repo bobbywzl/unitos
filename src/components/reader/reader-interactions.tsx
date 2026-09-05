@@ -4000,7 +4000,8 @@ function blockFormatKind(
         {!split && distillButton}
       </div>
 
-      {editHint && !editMode && (
+      {/* Not in a split pane: the card would sit over the title. */}
+      {editHint && !editMode && !split && (
         <div
           onAnimationEnd={() => setEditHint(false)}
           className={`hint-fade pointer-events-none absolute top-16 right-5 z-10 rounded-2xl bg-card px-4 py-2.5 leading-relaxed text-sand-700 shadow-lift print:hidden ${

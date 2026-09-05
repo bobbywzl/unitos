@@ -871,8 +871,20 @@ ellipse.anchor-flash {
     transition: margin-left 0.35s cubic-bezier(0.22, 1, 0.36, 1);
   }
 }
-/* While the strip scrolls (workspace.tsx) the column follows the cut at once. */
-.strip-scrolling .reader-column {
+/* The pane header (reader-panes.tsx) follows the same cut as the column, so
+   its controls stay in the visible part of the pane. */
+.pane-header {
+  padding-left: calc(0.75rem + var(--reader-cut, 0px));
+}
+@media (prefers-reduced-motion: no-preference) {
+  .pane-header {
+    transition: padding-left 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+}
+/* While the strip scrolls (workspace.tsx) the column and the header follow
+   the cut at once. */
+.strip-scrolling .reader-column,
+.strip-scrolling .pane-header {
   transition: none;
 }
 

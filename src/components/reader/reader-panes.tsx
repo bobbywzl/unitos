@@ -37,9 +37,11 @@ export function viewHref(
 
 // The pane header of a split view: one row at the top of the pane, above
 // its scroller, never over the text. The reader and the video pane both
-// render it; the reader adds its article menu and Distill to the row.
+// render it; the reader adds its article menu and Distill to the row. It
+// follows the strip's cut like the column (globals.css .pane-header), so
+// its controls stay in the visible part of the pane.
 export const PANE_HEADER =
-  "relative z-30 flex h-11 shrink-0 items-center gap-1.5 border-b border-line px-3 print:hidden";
+  "pane-header relative z-30 flex h-11 shrink-0 items-center gap-1.5 border-b border-line px-3 print:hidden";
 
 // The document one pane shows, chosen in the pane header of a split view.
 // Choosing changes the URL, so the choice survives a refresh like the view.

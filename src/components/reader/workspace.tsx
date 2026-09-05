@@ -283,6 +283,10 @@ export function Workspace({
       settle = window.setTimeout(() => strip.classList.remove("strip-scrolling"), 160);
       schedule();
     };
+    // The strip opens on the documents. A card in the tray that asks for
+    // focus as it mounts (the pending queue) has scrolled the tray into view
+    // by now — child effects run first — so this puts the documents back.
+    strip.scrollLeft = 0;
     schedule();
     strip.addEventListener("scroll", onScroll);
     const observer = new ResizeObserver(schedule);
