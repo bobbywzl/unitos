@@ -194,6 +194,104 @@ function AnnotationActions({
   );
 }
 
+// What a link is about, under its quotes: the stored text with Edit, or a
+// Describe button that opens the box. Save stores it on the link.
+function LinkAbout({
+  linkId,
+  reason,
+  busy,
+  onSave,
+}: {
+  linkId: string;
+  reason: string | null;
+  busy: boolean;
+  onSave: (id: string, reason: string) => Promise<void>;
+}) {
+  const t = useT();
+  const { canEdit } = useCollab();
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(reason ?? "");
+  // The stored text changed under the box (a refresh): the box follows.
+  const [prevReason, setPrevReason] = useState(reason);
+  if (prevReason !== reason) {
+    setPrevReason(reason);
+    setDraft(reason ?? "");
+    setEditing(false);
+  }
+
+  async function save() {
+    await onSave(linkId, draft.trim());
+    setEditing(false);
+  }
+
+  if (editing) {
+    return (
+      <div className="mt-2 flex flex-col gap-1.5">
+        <textarea
+          autoFocus
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              void save();
+            }
+            if (e.key === "Escape") setEditing(false);
+          }}
+          placeholder={t("panels.linkAboutPlaceholder")}
+          rows={2}
+          className="field-sizing-content w-full resize-none rounded-xl bg-sand-100 px-2.5 py-2 text-[13px] outline-none placeholder:text-sand-500"
+        />
+        <div className="flex items-center justify-end gap-2">
+          <button
+            onClick={() => setEditing(false)}
+            data-track="link-about-cancel"
+            className="rounded-full px-2.5 py-1 text-[11px] text-sand-600 hover:bg-clay-100 hover:text-clay-800"
+          >
+            {t("common.cancel")}
+          </button>
+          <button
+            onClick={() => void save()}
+            data-track="link-about-save"
+            disabled={busy || draft.trim() === (reason ?? "")}
+            className="rounded-full bg-clay px-3 py-1 text-[11px] font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
+          >
+            {t("common.save")}
+          </button>
+        </div>
+      </div>
+    );
+  }
+  if (reason) {
+    return (
+      <p className="mt-2 flex items-start gap-2 text-[13px] text-sand-800">
+        <span className="min-w-0 flex-1 whitespace-pre-wrap">{reason}</span>
+        {canEdit && (
+          <button
+            onClick={() => setEditing(true)}
+            data-track="link-about-edit"
+            data-tip={t("panels.editLinkAboutTitle")}
+            className="shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold text-sand-600 hover:bg-clay-100 hover:text-clay-800"
+          >
+            {t("common.edit")}
+          </button>
+        )}
+      </p>
+    );
+  }
+  if (!canEdit) return null;
+  return (
+    <button
+      onClick={() => setEditing(true)}
+      data-track="link-about-describe"
+      data-tip={t("panels.describeLinkTitle")}
+      className="mt-2 rounded-full px-2 py-0.5 text-[11px] font-semibold text-sand-600 hover:bg-clay-100 hover:text-clay-800"
+    >
+      {t("panels.describeLink")}
+    </button>
+  );
+}
+
 // Annotations tab of the reader side panel. Highlights, comments, explanations,
 // simplified rewrites, then accepted links, each group under its tool's symbol
 // — each annotation card jumps to its anchor and deletes in place. Recommended
@@ -241,11 +339,27 @@ export function AnnotationsPanel({
   }
 
   async function deleteAnnotation(id: string) {
-    await mutate(id, () => api(`/api/notes/${id}`, "DELETE"));
+    // The reader fades the annotation's mark at once (reader-interactions.tsx),
+    // and puts it back if the delete fails.
+    window.dispatchEvent(new CustomEvent("dissect:note-removed", { detail: { noteId: id } }));
+    await mutate(id, async () => {
+      try {
+        await api(`/api/notes/${id}`, "DELETE");
+      } catch (err) {
+        window.dispatchEvent(new CustomEvent("dissect:note-restored", { detail: { noteId: id } }));
+        throw err;
+      }
+    });
   }
 
   async function removeLink(id: string) {
     await mutate(id, () => api(`/api/links/${id}`, "DELETE"));
+  }
+
+  // What a link is about: typed after Close link, or here. Save stores it as
+  // the link's reason; an empty box clears it.
+  async function describeLink(id: string, reason: string) {
+    await mutate(id, () => api(`/api/links/${id}`, "PATCH", { reason }));
   }
 
   if (annotations.length === 0 && acceptedOut.length === 0 && acceptedIn.length === 0) {
@@ -380,6 +494,7 @@ export function AnnotationsPanel({
                   {l.targetQuotedText}
                 </p>
               )}
+              <LinkAbout linkId={l.id} reason={l.reason} busy={busyId === l.id} onSave={describeLink} />
               <div className="mt-2 flex flex-wrap items-center gap-3">
                 {l.detached ? (
                   <span className="rounded-full bg-sand-200 px-2.5 py-0.5 text-[11px] font-semibold text-sand-600">
@@ -426,6 +541,7 @@ export function AnnotationsPanel({
                   {l.quotedText}
                 </p>
               )}
+              <LinkAbout linkId={l.id} reason={l.reason} busy={busyId === l.id} onSave={describeLink} />
               <div className="mt-2 flex flex-wrap items-center gap-3">
                 <Link href={`/n/${notebookId}?doc=${l.fromDocumentId}&link=${l.id}`} className={chip}>
                   ⇄ {l.fromTitle}

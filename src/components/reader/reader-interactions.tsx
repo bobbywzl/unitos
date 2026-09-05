@@ -71,7 +71,7 @@ import { useImageDrop, type DroppedImage } from "@/components/use-image-drop";
 import { AuthorChip } from "@/components/collab/person-badge";
 import { DistillPage } from "@/components/reader/distill-page";
 import { ProjectSearch } from "@/components/reader/project-search";
-import { Reader } from "@/components/reader/reader";
+import { Reader, type TranscriptVariant } from "@/components/reader/reader";
 
 type Anchor = Omit<SourceInput, "documentId">;
 type Popover = {
@@ -208,7 +208,8 @@ function measureSideCards(container: HTMLElement | null, excludeKind?: string) {
   const articleLeft = arect ? arect.left - crect.left : cw;
   const articleRight = arect ? arect.right - crect.left : 0;
   const rects = [...container.querySelectorAll<HTMLElement>("[data-side-card]")]
-    .filter((el) => el.dataset.sideCard !== excludeKind)
+    // A card still playing its exit (Presence) holds no place.
+    .filter((el) => el.dataset.sideCard !== excludeKind && !el.closest(".presence-exit"))
     .map((el) => {
       const r = el.getBoundingClientRect();
       return {
@@ -364,6 +365,37 @@ type SimplifyCard = {
   active: number | null;
 };
 
+// The card that opens once a link closes: the two ends, and a box for what
+// the link is about (stored as the link's reason; shown in the link's tip and
+// in the Annotations tab).
+type LinkCard = {
+  linkId: string;
+  anchor: Anchor; // this document's end the card docks beside
+  fromQuote: string;
+  toQuote: string;
+  left: number;
+  top: number;
+  width: number;
+  side: "right" | "left";
+  draft: string;
+  busy: boolean;
+};
+
+// A link made in this session, painted before the refresh delivers the
+// server's copy — one entry per end that lies in this document.
+type LocalLink = {
+  linkId: string;
+  blockId: string;
+  start: number;
+  end: number;
+  href: string;
+  title: string;
+  reason: string | null;
+};
+
+// The gap a pushed card keeps from the card above it (SPEC.md §6).
+const SETTLE_GAP = 12;
+
 // On-mark card for a highlight or comment: opens on its mark, edits the
 // comment, recolors, deletes — no trip to the Annotations tab.
 type AnnotationCard = {
@@ -450,11 +482,16 @@ export function ReaderInteractions({
   conversion,
   font,
   translationAvailable,
+  transcript,
 }: {
   documentId: string;
   notebookId: string;
   /** DEEPL_API_KEY is set: the Translate offer shows when the languages differ (SPEC.md §19). */
   translationAvailable: boolean;
+  // A video document's transcript (SPEC.md §11): the blocks are its lines,
+  // the player and the video tools render above them, and every text tool of
+  // an article works on the lines. No edit mode, no article menu.
+  transcript?: TranscriptVariant;
   sectionChoices: { id: string; label: string }[];
   attachedDocuments: { id: string; title: string }[];
   title: string;
@@ -499,7 +536,14 @@ export function ReaderInteractions({
   termsByBlock: Record<string, { start: number; end: number; definition: string }[]>;
   linksByBlock: Record<
     string,
-    { linkId: string; start: number; end: number; href: string; title: string }[]
+    {
+      linkId: string;
+      start: number;
+      end: number;
+      href: string;
+      title: string;
+      reason: string | null; // what the link is about, typed after Close link
+    }[]
   >;
   editedByBlock: Record<string, { start: number; end: number }[]>;
   stylesByBlock: Record<
@@ -733,6 +777,74 @@ export function ReaderInteractions({
   function markFreshSpan(blockId: string, start: number, end: number) {
     freshSpansRef.current.add(`${blockId}:${start}:${end}`);
   }
+  // A span an AI tool persisted keeps its mark after its card closes, until
+  // the server's copy arrives — the same optimistic paint a color dot gets.
+  function addLocalAnchor(anchor: Anchor) {
+    setLocalAnchors((prev) => {
+      const list = prev[anchor.blockId] ?? [];
+      if (list.some((h) => h.start === anchor.startOffset && h.end === anchor.endOffset)) return prev;
+      return {
+        ...prev,
+        [anchor.blockId]: [
+          ...list,
+          { start: anchor.startOffset, end: anchor.endOffset, color: null },
+        ],
+      };
+    });
+  }
+  // Marks of notes deleted in this session, gone before the refresh lands:
+  // "leaving" fades the mark (block-view.tsx), "gone" unpaints it. An entry
+  // clears once the server's props no longer carry the note. Deletes from the
+  // Annotations tab and the notes tray arrive as dissect:note-removed.
+  const [removedNotes, setRemovedNotes] = useState<Record<string, "leaving" | "gone">>({});
+  const removeNoteMarks = useCallback((noteId: string) => {
+    setRemovedNotes((prev) => (prev[noteId] ? prev : { ...prev, [noteId]: "leaving" }));
+    setTimeout(() => {
+      setRemovedNotes((prev) =>
+        prev[noteId] === "leaving" ? { ...prev, [noteId]: "gone" } : prev,
+      );
+    }, 320);
+  }, []);
+  const restoreNoteMarks = useCallback((noteId: string) => {
+    setRemovedNotes((prev) => {
+      if (!prev[noteId]) return prev;
+      const next = { ...prev };
+      delete next[noteId];
+      return next;
+    });
+  }, []);
+  // Every pane paints the marks of a deleted note at once, and a failed
+  // delete puts them back — the events reach the other pane of a split view.
+  function broadcastNoteRemoved(noteId: string) {
+    window.dispatchEvent(new CustomEvent("dissect:note-removed", { detail: { noteId } }));
+  }
+  function broadcastNoteRestored(noteId: string) {
+    window.dispatchEvent(new CustomEvent("dissect:note-restored", { detail: { noteId } }));
+  }
+  useEffect(() => {
+    const onRemoved = (e: Event) =>
+      removeNoteMarks((e as CustomEvent<{ noteId: string }>).detail.noteId);
+    const onRestored = (e: Event) =>
+      restoreNoteMarks((e as CustomEvent<{ noteId: string }>).detail.noteId);
+    window.addEventListener("dissect:note-removed", onRemoved);
+    window.addEventListener("dissect:note-restored", onRestored);
+    return () => {
+      window.removeEventListener("dissect:note-removed", onRemoved);
+      window.removeEventListener("dissect:note-restored", onRestored);
+    };
+  }, [removeNoteMarks, restoreNoteMarks]);
+  // Links made in this session paint the moment they close; the server's
+  // copy replaces each once the refresh lands.
+  const [localLinks, setLocalLinks] = useState<LocalLink[]>([]);
+  const [prevLinksProp, setPrevLinksProp] = useState(linksByBlock);
+  if (prevLinksProp !== linksByBlock) {
+    setPrevLinksProp(linksByBlock);
+    setLocalLinks((prev) => {
+      const confirmed = new Set(Object.values(linksByBlock).flat().map((l) => l.linkId));
+      const keep = prev.filter((l) => !confirmed.has(l.linkId));
+      return keep.length === prev.length ? prev : keep;
+    });
+  }
   const [prevAnchorsProp, setPrevAnchorsProp] = useState(anchorHighlights);
   if (prevAnchorsProp !== anchorHighlights) {
     setPrevAnchorsProp(anchorHighlights);
@@ -749,6 +861,12 @@ export function ReaderInteractions({
         if (keep.length > 0) next[blockId] = keep;
       }
       return next;
+    });
+    // A deleted note's entry clears once the server no longer paints it.
+    setRemovedNotes((prev) => {
+      const present = new Set(Object.values(anchorHighlights).flat().map((h) => h.noteId));
+      const next = Object.fromEntries(Object.entries(prev).filter(([id]) => present.has(id)));
+      return Object.keys(next).length === Object.keys(prev).length ? prev : next;
     });
   }
   const [toast, setToast] = useState<string | null>(null);
@@ -867,6 +985,8 @@ export function ReaderInteractions({
   const recognitionRef = useRef<SpeechRec | null>(null);
   const editModeRef = useRef(false);
   editModeRef.current = editMode;
+  const transcriptModeRef = useRef(false);
+  transcriptModeRef.current = transcript !== undefined;
   const blocksRef = useRef(blocks);
   blocksRef.current = blocks;
   const annotationBubblesRef = useRef(annotationBubbles);
@@ -894,6 +1014,11 @@ export function ReaderInteractions({
     anchor: Anchor | null;
   } | null>(null);
   const chatScrollRef = useRef<HTMLDivElement>(null);
+  // The card a closed link opens: what is this link about?
+  const [linkCard, setLinkCard] = useState<LinkCard | null>(null);
+  // The pane's visible height: every tool card grows with its content up to
+  // this, then its body scrolls (SPEC.md §6). 0 until measured.
+  const [paneHeight, setPaneHeight] = useState(0);
   const overlayOpenRef = useRef(false);
   overlayOpenRef.current =
     popover !== null ||
@@ -902,6 +1027,7 @@ export function ReaderInteractions({
     assistantChat !== null ||
     annotationCard !== null ||
     commentCard !== null ||
+    linkCard !== null ||
     extractCard !== null ||
     closeLink !== null;
   // The mouseup that ends a hold-and-circle gesture must not run selection
@@ -915,7 +1041,7 @@ export function ReaderInteractions({
   const CARD_ESTIMATE = 360;
   const CARD_GAP = 14;
   function claimSideSlot(
-    kind: "explain" | "simplify" | "assistant" | "comment",
+    kind: "explain" | "simplify" | "assistant" | "comment" | "link",
     preferredTop: number,
   ) {
     const { rects, articleLeft, articleRight, cw } = measureSideCards(containerRef.current, kind);
@@ -957,17 +1083,26 @@ export function ReaderInteractions({
   function stopExplain() {
     explainAbortRef.current?.abort();
   }
+  // Deleting is optimistic: the card leaves and the mark fades at once; the
+  // server's refresh confirms, and a failure puts the mark back with a toast.
+  async function deleteNote(noteId: string, removedMessage: string) {
+    broadcastNoteRemoved(noteId);
+    try {
+      await api(`/api/notes/${noteId}`, "DELETE");
+      router.refresh();
+      showToast(removedMessage);
+      return true;
+    } catch (err) {
+      broadcastNoteRestored(noteId);
+      showToast(err instanceof Error ? err.message : t("reader.deleteFailed"));
+      return false;
+    }
+  }
   async function deleteExplain() {
     const card = bubble;
     if (!card?.noteId || card.streaming) return;
-    try {
-      await api(`/api/notes/${card.noteId}`, "DELETE");
-      setBubble(null);
-      router.refresh();
-      showToast(t("reader.explanationRemoved"));
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : t("reader.deleteFailed"));
-    }
+    setBubble(null);
+    await deleteNote(card.noteId, t("reader.explanationRemoved"));
   }
   function closeSimplify() {
     simplifyAbortRef.current?.abort();
@@ -983,14 +1118,8 @@ export function ReaderInteractions({
   async function deleteSimplify() {
     const card = simplifyCard;
     if (!card?.noteId || card.streaming) return;
-    try {
-      await api(`/api/notes/${card.noteId}`, "DELETE");
-      setSimplifyCard(null);
-      router.refresh();
-      showToast(t("reader.simplifiedRemoved"));
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : t("reader.deleteFailed"));
-    }
+    setSimplifyCard(null);
+    await deleteNote(card.noteId, t("reader.simplifiedRemoved"));
   }
   function closeAssistantChat() {
     // A turn still in flight aborts too — closing the card means nobody will
@@ -1002,17 +1131,14 @@ export function ReaderInteractions({
   async function deleteAssistantConversation() {
     const chat = assistantChat;
     if (!chat?.noteId || chat.busy) return;
-    try {
-      await api(`/api/notes/${chat.noteId}`, "DELETE");
-      setAssistantChat(null);
-      router.refresh();
-      showToast(t("reader.conversationRemoved"));
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : t("reader.deleteFailed"));
-    }
+    setAssistantChat(null);
+    await deleteNote(chat.noteId, t("reader.conversationRemoved"));
   }
   function closeCommentCard() {
     setCommentCard(null);
+  }
+  function closeLinkCard() {
+    setLinkCard(null);
   }
 
   // Cards are freely moveable: drag the header. Buttons and inputs still work.
@@ -1029,6 +1155,10 @@ export function ReaderInteractions({
       const fromX = e.clientX;
       const fromY = e.clientY;
       const container = containerRef.current;
+      // A dragged card follows the pointer at once: the slide a pushed card
+      // makes (globals.css [data-side-card]) is off while the drag lasts.
+      const card = (e.currentTarget as HTMLElement).closest<HTMLElement>("[data-side-card]");
+      card?.setAttribute("data-dragging", "");
       const onMove = (ev: PointerEvent) => {
         const maxLeft = (container?.clientWidth ?? 1200) - 80;
         apply(
@@ -1039,6 +1169,7 @@ export function ReaderInteractions({
       const onUp = () => {
         window.removeEventListener("pointermove", onMove);
         window.removeEventListener("pointerup", onUp);
+        card?.removeAttribute("data-dragging");
       };
       window.addEventListener("pointermove", onMove);
       window.addEventListener("pointerup", onUp);
@@ -1074,10 +1205,13 @@ export function ReaderInteractions({
     setSimplifyCard(null);
     setAssistantChat(null);
     setCommentCard(null);
+    setLinkCard(null);
     setAnnotationCard(null);
     setEditMode(false);
     setCommentDraft("");
     setLocalAnchors({});
+    setLocalLinks([]);
+    setRemovedNotes({});
     freshSpansRef.current = new Set();
     freshExtractIdsRef.current = new Set();
     setDistillOpen(false);
@@ -1202,6 +1336,7 @@ export function ReaderInteractions({
         chatAbortRef.current = null;
         setAssistantChat(null);
         setCommentCard(null);
+        setLinkCard(null);
         setAnnotationCard(null);
         setExtractCard(null);
         setCloseLink(null);
@@ -1232,11 +1367,12 @@ export function ReaderInteractions({
       if (document.activeElement?.closest("[data-selection-popover]")) return;
       requestAnimationFrame(() => {
         const captured = captureSelection();
-        // Video documents' blocks refuse annotation outright: a selection over
-        // one shows the refusal instead of tools.
+        // The VIDEO block (the player's own block) refuses annotation: a
+        // selection over it shows the refusal instead of tools. Transcript
+        // lines take every text tool (SPEC.md §11).
         if (captured) {
           const block = blocksRef.current.find((b) => b.id === captured.anchor.blockId);
-          if (block && (block.type === "VIDEO" || block.type === "TRANSCRIPT")) {
+          if (block && block.type === "VIDEO") {
             window.getSelection()?.removeAllRanges();
             setPopover(null);
             setSubmenu(null);
@@ -1325,6 +1461,8 @@ export function ReaderInteractions({
     const onDblClick = (e: MouseEvent) => {
       if (!canEditRef.current) return;
       if (editModeRef.current) return;
+      // A transcript is not edited in place.
+      if (transcriptModeRef.current) return;
       const target = e.target as Element;
       if (target.closest("[data-selection-popover]")) return;
       const blockEl = target.closest<HTMLElement>("[data-block-id]");
@@ -1382,47 +1520,185 @@ export function ReaderInteractions({
     { x1: number; y1: number; x2: number; y2: number }[]
   >([]);
   const [connectorHeight, setConnectorHeight] = useState(0);
+  // The anchors the open cards point at, read by the measure below through a
+  // ref so scroll and transition frames measure without re-subscribing.
+  const cardAnchorsRef = useRef<Record<string, Anchor | null | undefined>>({});
+  cardAnchorsRef.current = {
+    explain: bubble?.anchor,
+    simplify: simplifyCard?.anchor,
+    assistant: assistantChat?.anchor,
+    comment: commentCard?.anchor,
+    link: linkCard?.anchor,
+  };
+  const measureConnectors = useCallback(() => {
+    const container = containerRef.current;
+    if (!container) {
+      setConnectors([]);
+      return;
+    }
+    const crect = container.getBoundingClientRect();
+    const lines: { x1: number; y1: number; x2: number; y2: number }[] = [];
+    for (const el of container.querySelectorAll<HTMLElement>("[data-side-card]")) {
+      if (el.closest(".presence-exit")) continue;
+      const anchor = cardAnchorsRef.current[el.dataset.sideCard ?? ""];
+      if (!anchor) continue;
+      const blockEl = container.querySelector<HTMLElement>(
+        `[data-block-id="${anchor.blockId}"], [data-edit-block="${anchor.blockId}"]`,
+      );
+      if (!blockEl) continue;
+      const b = blockEl.getBoundingClientRect();
+      const c = el.getBoundingClientRect();
+      const toY = (clientY: number) => clientY - crect.top + container.scrollTop;
+      const cardMidX = (c.left + c.right) / 2;
+      const blockMidX = (b.left + b.right) / 2;
+      const cardOnRight = cardMidX >= blockMidX;
+      const y1 = Math.min(Math.max(toY(c.top) + 20, toY(b.top) + 8), toY(b.bottom) - 8);
+      lines.push({
+        x1: (cardOnRight ? b.right : b.left) - crect.left,
+        y1,
+        x2: (cardOnRight ? c.left : c.right) - crect.left,
+        y2: toY(c.top) + 20,
+      });
+    }
+    setConnectors((prev) =>
+      prev.length === lines.length &&
+      prev.every(
+        (l, i) =>
+          l.x1 === lines[i].x1 && l.y1 === lines[i].y1 && l.x2 === lines[i].x2 && l.y2 === lines[i].y2,
+      )
+        ? prev
+        : lines,
+    );
+    setConnectorHeight(container.scrollHeight);
+  }, []);
   useEffect(() => {
-    const raf = requestAnimationFrame(() => {
-      const container = containerRef.current;
-      if (!container) {
-        setConnectors([]);
-        return;
-      }
-      const crect = container.getBoundingClientRect();
-      const lines: { x1: number; y1: number; x2: number; y2: number }[] = [];
-      const anchors: Record<string, Anchor | null | undefined> = {
-        explain: bubble?.anchor,
-        simplify: simplifyCard?.anchor,
-        assistant: assistantChat?.anchor,
-        comment: commentCard?.anchor,
-      };
-      for (const el of container.querySelectorAll<HTMLElement>("[data-side-card]")) {
-        const anchor = anchors[el.dataset.sideCard ?? ""];
-        if (!anchor) continue;
-        const blockEl = container.querySelector<HTMLElement>(
-          `[data-block-id="${anchor.blockId}"], [data-edit-block="${anchor.blockId}"]`,
-        );
-        if (!blockEl) continue;
-        const b = blockEl.getBoundingClientRect();
-        const c = el.getBoundingClientRect();
-        const toY = (clientY: number) => clientY - crect.top + container.scrollTop;
-        const cardMidX = (c.left + c.right) / 2;
-        const blockMidX = (b.left + b.right) / 2;
-        const cardOnRight = cardMidX >= blockMidX;
-        const y1 = Math.min(Math.max(toY(c.top) + 20, toY(b.top) + 8), toY(b.bottom) - 8);
-        lines.push({
-          x1: (cardOnRight ? b.right : b.left) - crect.left,
-          y1,
-          x2: (cardOnRight ? c.left : c.right) - crect.left,
-          y2: toY(c.top) + 20,
+    const raf = requestAnimationFrame(measureConnectors);
+    return () => cancelAnimationFrame(raf);
+  }, [bubble, simplifyCard, assistantChat, commentCard, linkCard, measureConnectors]);
+  // The line follows its ends while they move: a scroll box inside the pane
+  // (the transcript's) scrolls the text under a card, and a card pushed down
+  // by a growing neighbor slides to its new place (globals.css
+  // [data-side-card]) — every frame of the slide re-measures.
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    let raf = 0;
+    const schedule = () => {
+      if (!raf) {
+        raf = requestAnimationFrame(() => {
+          raf = 0;
+          measureConnectors();
         });
       }
-      setConnectors(lines);
-      setConnectorHeight(container.scrollHeight);
+    };
+    let following = 0;
+    let stopAt = 0;
+    const follow = () => {
+      measureConnectors();
+      following = performance.now() < stopAt ? requestAnimationFrame(follow) : 0;
+    };
+    const onTransitionRun = (e: Event) => {
+      const target = e.target as HTMLElement | null;
+      if (!target?.hasAttribute?.("data-side-card")) return;
+      if ((e as TransitionEvent).propertyName !== "top") return;
+      stopAt = performance.now() + 400;
+      if (!following) following = requestAnimationFrame(follow);
+    };
+    const onTransitionEnd = (e: Event) => {
+      const target = e.target as HTMLElement | null;
+      if (target?.hasAttribute?.("data-side-card")) schedule();
+    };
+    container.addEventListener("scroll", schedule, true);
+    container.addEventListener("transitionrun", onTransitionRun);
+    container.addEventListener("transitionend", onTransitionEnd);
+    return () => {
+      container.removeEventListener("scroll", schedule, true);
+      container.removeEventListener("transitionrun", onTransitionRun);
+      container.removeEventListener("transitionend", onTransitionEnd);
+      if (raf) cancelAnimationFrame(raf);
+      if (following) cancelAnimationFrame(following);
+    };
+  }, [measureConnectors]);
+
+  // Every tool card grows with its content up to the pane's height. When a
+  // growing card reaches a card below it on the same side, that card moves
+  // down, and the one below it in turn — the growing card never moves. Sizes
+  // come from the cards' boxes; targets from their inline top, so a card
+  // mid-slide still counts where it will rest.
+  const cardSizesRef = useRef<Record<string, string>>({});
+  const settleSideCards = useCallback((grown: string | null) => {
+    const container = containerRef.current;
+    if (!container) return;
+    type Box = { kind: string; top: number; left: number; right: number; height: number };
+    const boxes: Box[] = [];
+    for (const el of container.querySelectorAll<HTMLElement>("[data-side-card]")) {
+      if (el.closest(".presence-exit")) continue;
+      const kind = el.dataset.sideCard ?? "";
+      boxes.push({
+        kind,
+        top: parseFloat(el.style.top) || el.offsetTop,
+        left: el.offsetLeft,
+        right: el.offsetLeft + el.offsetWidth,
+        height: el.offsetHeight,
+      });
+    }
+    if (boxes.length < 2) return;
+    // The grown card is placed first and stays; the rest settle top to bottom.
+    const order = [
+      ...boxes.filter((b) => b.kind === grown),
+      ...boxes.filter((b) => b.kind !== grown).sort((a, b) => a.top - b.top),
+    ];
+    const placed: Box[] = [];
+    const moved: Record<string, number> = {};
+    for (const box of order) {
+      let top = box.top;
+      let pushed = true;
+      while (pushed) {
+        pushed = false;
+        for (const other of placed) {
+          const sideBySide = box.left < other.right && box.right > other.left;
+          const overlaps = top < other.top + other.height + SETTLE_GAP && top + box.height > other.top;
+          if (sideBySide && overlaps) {
+            top = other.top + other.height + SETTLE_GAP;
+            pushed = true;
+          }
+        }
+      }
+      if (top !== box.top) moved[box.kind] = top;
+      placed.push({ ...box, top });
+    }
+    const lift = <T extends { top: number }>(kind: string) => (c: T | null): T | null =>
+      c && moved[kind] !== undefined && c.top !== moved[kind] ? { ...c, top: moved[kind] } : c;
+    if (moved.explain !== undefined) setBubble(lift<ExplainBubble>("explain"));
+    if (moved.simplify !== undefined) setSimplifyCard(lift<SimplifyCard>("simplify"));
+    if (moved.assistant !== undefined) setAssistantChat(lift<AssistantChat>("assistant"));
+    if (moved.comment !== undefined) setCommentCard(lift<NonNullable<typeof commentCard>>("comment"));
+    if (moved.link !== undefined) setLinkCard(lift<LinkCard>("link"));
+  }, []);
+  const openCards = `${bubble !== null}${simplifyCard !== null}${assistantChat !== null}${commentCard !== null}${linkCard !== null}`;
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const observer = new ResizeObserver((entries) => {
+      // The card whose size changed is the one that stays put. An observer's
+      // first report of a card carries no change: the cards settle top to
+      // bottom then, none pinned.
+      let grown: string | null = null;
+      for (const entry of entries) {
+        const el = entry.target as HTMLElement;
+        const kind = el.dataset.sideCard ?? "";
+        const size = `${el.offsetWidth}x${el.offsetHeight}`;
+        const before = cardSizesRef.current[kind];
+        cardSizesRef.current[kind] = size;
+        if (before !== undefined && before !== size) grown = kind;
+      }
+      settleSideCards(grown);
     });
-    return () => cancelAnimationFrame(raf);
-  }, [bubble, simplifyCard, assistantChat, commentCard]);
+    for (const el of container.querySelectorAll<HTMLElement>("[data-side-card]")) {
+      if (!el.closest(".presence-exit")) observer.observe(el);
+    }
+    return () => observer.disconnect();
+  }, [openCards, settleSideCards]);
 
   const chatMessageCount = assistantChat?.messages.length ?? 0;
   useEffect(() => {
@@ -1757,7 +2033,14 @@ export function ReaderInteractions({
     };
     applyNarrow();
     let lastWidth = container.clientWidth;
+    let lastHeight = 0;
     const observer = new ResizeObserver(() => {
+      // The pane's height caps every tool card (SPEC.md §6).
+      const height = container.clientHeight;
+      if (height !== lastHeight) {
+        lastHeight = height;
+        setPaneHeight(height);
+      }
       const width = container.clientWidth;
       if (width === lastWidth) return;
       lastWidth = width;
@@ -1770,6 +2053,7 @@ export function ReaderInteractions({
       setSimplifyCard((c) => (c ? { ...c, ...redock(c.side) } : c));
       setAssistantChat((c) => (c ? { ...c, ...redock(c.side) } : c));
       setCommentCard((c) => (c ? { ...c, ...redock(c.side) } : c));
+      setLinkCard((c) => (c ? { ...c, ...redock(c.side) } : c));
       setAnnotationCard(null);
       setPopover(null);
       setSubmenu(null);
@@ -2175,11 +2459,13 @@ export function ReaderInteractions({
       }
       // A failure mid-stream arrives in-band; an empty stream is a failure too.
       // The note id trailer means the annotation persisted before the stream
-      // closed, so the refresh below always finds the stored mark.
+      // closed, so the refresh below always finds the stored mark; the mark
+      // paints from here until then, card open or closed.
       setBubble((b) => {
         if (!b) return b;
         const note = splitStreamNote(b.text);
         const { text, error } = splitStreamError(note.text);
+        if (note.noteId) addLocalAnchor(anchor);
         return {
           ...b,
           text,
@@ -2251,6 +2537,7 @@ export function ReaderInteractions({
         if (!c) return c;
         const note = splitStreamNote(c.text);
         const { text, error } = splitStreamError(note.text);
+        if (note.noteId) addLocalAnchor(anchor);
         return {
           ...c,
           text,
@@ -2319,16 +2606,11 @@ export function ReaderInteractions({
   async function deleteAnnotation() {
     const card = annotationCard;
     if (!card || card.busy) return;
-    setAnnotationCard({ ...card, busy: true });
-    try {
-      await api(`/api/notes/${card.noteId}`, "DELETE");
-      router.refresh();
-      setAnnotationCard(null);
-      showToast(card.kind === "highlight" ? t("reader.highlightRemoved") : t("reader.commentRemoved"));
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : t("reader.deleteFailed"));
-      setAnnotationCard((c) => (c ? { ...c, busy: false } : c));
-    }
+    setAnnotationCard(null);
+    await deleteNote(
+      card.noteId,
+      card.kind === "highlight" ? t("reader.highlightRemoved") : t("reader.commentRemoved"),
+    );
   }
 
   // The comment card edits in place too: same notes API, same refresh.
@@ -2355,15 +2637,30 @@ export function ReaderInteractions({
   async function deleteCommentCard() {
     const card = commentCard;
     if (!card || card.busy || !card.noteId) return;
-    setCommentCard({ ...card, busy: true });
+    setCommentCard(null);
+    await deleteNote(card.noteId, t("reader.commentRemoved"));
+  }
+
+  // What the link is about: saved as the link's reason. Skip closes the card
+  // and leaves the link as it is.
+  async function saveLinkCard() {
+    const card = linkCard;
+    if (!card || card.busy) return;
+    const reason = card.draft.trim();
+    if (!reason) {
+      setLinkCard(null);
+      return;
+    }
+    setLinkCard({ ...card, busy: true });
     try {
-      await api(`/api/notes/${card.noteId}`, "DELETE");
+      await api(`/api/links/${card.linkId}`, "PATCH", { reason });
+      setLocalLinks((prev) => prev.map((l) => (l.linkId === card.linkId ? { ...l, reason } : l)));
+      setLinkCard(null);
       router.refresh();
-      setCommentCard(null);
-      showToast(t("reader.commentRemoved"));
+      showToast(t("common.saved"));
     } catch (err) {
-      showToast(err instanceof Error ? err.message : t("reader.deleteFailed"));
-      setCommentCard((c) => (c ? { ...c, busy: false } : c));
+      showToast(err instanceof Error ? err.message : t("reader.saveFailed"));
+      setLinkCard((c) => (c ? { ...c, busy: false } : c));
     }
   }
 
@@ -2854,7 +3151,8 @@ export function ReaderInteractions({
   // Phase 2: an anchor is the other end — from a selection directly, or from
   // the popover's option. Both ends paint and navigate to each other; the
   // pair lists in the Annotations tab. Same-article ends are allowed.
-  async function completeLinkTo(to: Anchor): Promise<boolean> {
+  // top: where this end sits in the pane; the link card docks beside it.
+  async function completeLinkTo(to: Anchor, top: number): Promise<boolean> {
     const pending = pendingLinkRef.current;
     if (!pending || busy) return false;
     const from = pending.anchor;
@@ -2869,7 +3167,7 @@ export function ReaderInteractions({
     setBusy(true);
     try {
       await flushLiveBlock(to.blockId);
-      await api("/api/links", "POST", {
+      const created = await api<{ id: string }>("/api/links", "POST", {
         fromDocumentId: pending.fromDocumentId,
         toDocumentId: documentId,
         anchor: from,
@@ -2878,6 +3176,42 @@ export function ReaderInteractions({
       broadcastPendingLink(null);
       setCloseLink(null);
       window.getSelection()?.removeAllRanges();
+      // Both ends paint at once, sweeping in, in every pane that shows one —
+      // the event reaches the other pane of a split view. The server's copy
+      // replaces them on refresh.
+      markFreshSpan(to.blockId, to.startOffset, to.endOffset);
+      if (pending.fromDocumentId === documentId) {
+        markFreshSpan(from.blockId, from.startOffset, from.endOffset);
+      }
+      const fromTitle =
+        pending.fromDocumentId === documentId
+          ? title
+          : (attachedDocuments.find((d) => d.id === pending.fromDocumentId)?.title ??
+            t("reader.anotherDocument"));
+      window.dispatchEvent(
+        new CustomEvent("dissect:link-created", {
+          detail: {
+            linkId: created.id,
+            fromDocumentId: pending.fromDocumentId,
+            fromTitle,
+            from,
+            toDocumentId: documentId,
+            toTitle: title,
+            to,
+          },
+        }),
+      );
+      // The link card: what is this link about?
+      const slot = claimSideSlot("link", top);
+      setLinkCard({
+        linkId: created.id,
+        anchor: to,
+        fromQuote: from.quotedText,
+        toQuote: to.quotedText,
+        ...slot,
+        draft: "",
+        busy: false,
+      });
       router.refresh();
       showToast(t("reader.linkCreated"));
       return true;
@@ -2891,7 +3225,7 @@ export function ReaderInteractions({
 
   async function completeLink() {
     if (!popover) return;
-    const done = await completeLinkTo(popover.anchor);
+    const done = await completeLinkTo(popover.anchor, popover.yTop);
     if (done) {
       setPopover(null);
       setSubmenu(null);
@@ -2902,8 +3236,52 @@ export function ReaderInteractions({
   // failure the chip stays for another try; the banner's ✕ still cancels.
   async function completeCloseLink() {
     if (!closeLink) return;
-    await completeLinkTo(closeLink.anchor);
+    await completeLinkTo(closeLink.anchor, closeLink.top - 10);
   }
+
+  // A link closed in this pane or the other one: the ends in this document
+  // paint now, before the refresh delivers the server's copy.
+  useEffect(() => {
+    const onCreated = (e: Event) => {
+      const d = (
+        e as CustomEvent<{
+          linkId: string;
+          fromDocumentId: string;
+          fromTitle: string;
+          from: Anchor;
+          toDocumentId: string;
+          toTitle: string;
+          to: Anchor;
+        }>
+      ).detail;
+      const mine: LocalLink[] = [];
+      if (d.fromDocumentId === documentIdRef.current) {
+        mine.push({
+          linkId: d.linkId,
+          blockId: d.from.blockId,
+          start: d.from.startOffset,
+          end: d.from.endOffset,
+          href: `/n/${notebookId}?doc=${d.toDocumentId}&link=${d.linkId}`,
+          title: d.toTitle,
+          reason: null,
+        });
+      }
+      if (d.toDocumentId === documentIdRef.current) {
+        mine.push({
+          linkId: d.linkId,
+          blockId: d.to.blockId,
+          start: d.to.startOffset,
+          end: d.to.endOffset,
+          href: `/n/${notebookId}?doc=${d.fromDocumentId}&link=${d.linkId}`,
+          title: d.fromTitle,
+          reason: null,
+        });
+      }
+      if (mine.length > 0) setLocalLinks((prev) => [...prev, ...mine]);
+    };
+    window.addEventListener("dissect:link-created", onCreated);
+    return () => window.removeEventListener("dissect:link-created", onCreated);
+  }, [notebookId]);
 
   // The assistant engine: command → server-validated plan → approval → the
   // normal API routes. Auto mode skips approval; the toggle persists.
@@ -2923,6 +3301,7 @@ export function ReaderInteractions({
       window.getSelection()?.removeAllRanges();
       // The conversation continues in a chat card docked beside the article.
       markFreshSpan(anchor.blockId, anchor.startOffset, anchor.endOffset);
+      if (turn.noteId) addLocalAnchor(anchor);
       const slot = claimSideSlot("assistant", yTop);
       setAssistantChat({
         anchor,
@@ -3001,6 +3380,7 @@ export function ReaderInteractions({
     chatAbortRef.current = controller;
     try {
       const turn = await assistantTurn(text, chat.anchor, history, chat.noteId, controller.signal);
+      if (turn.noteId && chat.anchor) addLocalAnchor(chat.anchor);
       setAssistantChat((c) =>
         c
           ? {
@@ -3497,14 +3877,22 @@ function blockFormatKind(
   // Merge anchor, extraction, term, and link layers per block.
   const highlightsByBlock: Record<string, Highlight[]> = {};
   for (const [blockId, list] of Object.entries(anchorHighlights)) {
-    highlightsByBlock[blockId] = list.map((h) => {
-      // Narrow reader: a stored AI annotation rests as its tool icon next to
-      // the highlighted text; the icon opens the card. Comments keep their
-      // always-on icon.
-      const stored = narrow ? annotationBubbles[h.sourceId] : undefined;
-      const tool = stored && stored.kind !== "comment" ? stored.kind : undefined;
-      return { ...h, kind: "anchor" as const, tool };
-    });
+    // A deleted note's marks fade first, then unpaint (removedNotes).
+    highlightsByBlock[blockId] = list
+      .filter((h) => removedNotes[h.noteId] !== "gone")
+      .map((h) => {
+        // Narrow reader: a stored AI annotation rests as its tool icon next to
+        // the highlighted text; the icon opens the card. Comments keep their
+        // always-on icon.
+        const stored = narrow ? annotationBubbles[h.sourceId] : undefined;
+        const tool = stored && stored.kind !== "comment" ? stored.kind : undefined;
+        return {
+          ...h,
+          kind: "anchor" as const,
+          tool,
+          leaving: removedNotes[h.noteId] === "leaving",
+        };
+      });
   }
   for (const [blockId, list] of Object.entries(localAnchors)) {
     const existing = highlightsByBlock[blockId] ?? [];
@@ -3552,7 +3940,26 @@ function blockFormatKind(
         href: l.href,
         linkTitle: l.title,
         linkId: l.linkId,
+        linkReason: l.reason,
       })),
+    ];
+  }
+  // Links closed in this session, until the server's copy lands.
+  for (const l of localLinks) {
+    const existing = highlightsByBlock[l.blockId] ?? [];
+    if (existing.some((h) => h.kind === "link" && h.linkId === l.linkId)) continue;
+    highlightsByBlock[l.blockId] = [
+      ...existing,
+      {
+        sourceId: null,
+        start: l.start,
+        end: l.end,
+        kind: "link" as const,
+        href: l.href,
+        linkTitle: l.title,
+        linkId: l.linkId,
+        linkReason: l.reason,
+      },
     ];
   }
   const referenceById = new Map(references.map((r) => [r.id, r]));
@@ -3699,6 +4106,34 @@ function blockFormatKind(
       { sourceId: null, start: anchor.startOffset, end: anchor.endOffset, kind: "anchor" as const },
     ];
   }
+  // The text under the open toolbar keeps the selection tint (block-view.tsx
+  // kind "selection"): the browser's own selection goes the moment the
+  // assistant's command box or the comment box takes focus, and while the
+  // assistant runs; the mark stays until the toolbar closes. The Close link
+  // chip's highlight keeps it the same way.
+  const underToolbar = popover?.anchor ?? closeLink?.anchor ?? null;
+  if (underToolbar) {
+    const existing = highlightsByBlock[underToolbar.blockId] ?? [];
+    highlightsByBlock[underToolbar.blockId] = [
+      ...existing,
+      {
+        sourceId: null,
+        start: underToolbar.startOffset,
+        end: underToolbar.endOffset,
+        kind: "selection" as const,
+      },
+    ];
+  }
+  // The first end of a pending link stays tinted, in the pane that owns it,
+  // until the link closes or the banner cancels it.
+  if (pendingLink && pendingLink.fromDocumentId === documentId) {
+    const { blockId, startOffset, endOffset } = pendingLink.anchor;
+    const existing = highlightsByBlock[blockId] ?? [];
+    highlightsByBlock[blockId] = [
+      ...existing,
+      { sourceId: null, start: startOffset, end: endOffset, kind: "pending-link" as const },
+    ];
+  }
   for (const [blockId, list] of Object.entries(termsByBlock)) {
     const existing = highlightsByBlock[blockId] ?? [];
     highlightsByBlock[blockId] = [
@@ -3717,7 +4152,7 @@ function blockFormatKind(
   for (const [blockId, list] of Object.entries(highlightsByBlock)) {
     for (const h of list) {
       if (
-        (h.kind === "anchor" || h.kind === "simplify") &&
+        (h.kind === "anchor" || h.kind === "simplify" || h.kind === "link") &&
         freshSpansRef.current.has(`${blockId}:${h.start}:${h.end}`)
       ) {
         h.fresh = true;
@@ -3753,6 +4188,9 @@ function blockFormatKind(
     popover ? blocks.find((b) => b.id === popover.anchor.blockId)?.type : undefined,
   );
   const has = (tool: Tool) => TOOLBARS[popoverKind].includes(tool);
+  // Every tool card grows with its content up to the pane's height, then its
+  // body scrolls (SPEC.md §6). Unmeasured (the SSR pass): no cap.
+  const cardMaxHeight = paneHeight > 0 ? Math.max(200, paneHeight - 24) : undefined;
 
   return (
     <div
@@ -3781,7 +4219,9 @@ function blockFormatKind(
           page; the search icon beside the assistant button expands the
           project search bubble. It hides once the reader scrolls and returns
           at the top. The strip spans the pane so the bubble can size to it;
-          only the controls take pointer events. */}
+          only the controls take pointer events. A transcript has the video
+          pane's own tools instead (SPEC.md §11). */}
+      {!transcript && (
       <div
       data-track-surface="article-menu"
         inert={!atTop}
@@ -3877,6 +4317,7 @@ function blockFormatKind(
           onClose={() => setSearchOpen(false)}
         />
       </div>
+      )}
 
       <div className="sticky top-4 z-10 float-right mr-4 flex items-center gap-2 print:hidden">
         {extractBusy && (
@@ -3926,6 +4367,7 @@ function blockFormatKind(
         )}
         {/* Distill (in Salience's old spot): a link into the distilled page.
             While a distillation runs, a progress bar shows under the button. */}
+        {!transcript && (
         <div className="relative">
           <button
             onClick={() => openDistillPage(distillShownId)}
@@ -3943,9 +4385,10 @@ function blockFormatKind(
             </span>
           )}
         </div>
+        )}
       </div>
 
-      {editHint && !editMode && (
+      {editHint && !editMode && !transcript && (
         <div
           onAnimationEnd={() => setEditHint(false)}
           className={`hint-fade pointer-events-none absolute top-16 right-5 z-10 rounded-2xl bg-card px-4 py-2.5 leading-relaxed text-sand-700 shadow-lift print:hidden ${
@@ -3979,6 +4422,7 @@ function blockFormatKind(
         onUndo={() => void runStep(true)}
         onRedo={() => void runStep(false)}
         flushRef={flushEditRef}
+        transcript={transcript}
         banner={
           <TranslationBar
             documentId={documentId}
@@ -4532,8 +4976,8 @@ function blockFormatKind(
         <div
           data-selection-popover
           data-side-card="explain"
-          className="bubble-in absolute z-20 rounded-[20px] border border-line bg-card/90 p-4 shadow-float backdrop-blur-md"
-          style={{ left: bubble.left, top: bubble.top, width: bubble.width }}
+          className="bubble-in absolute z-20 flex flex-col rounded-[20px] border border-line bg-card/90 p-4 shadow-float backdrop-blur-md"
+          style={{ left: bubble.left, top: bubble.top, width: bubble.width, maxHeight: cardMaxHeight }}
         >
           <div
             onPointerDown={dragCard(
@@ -4583,7 +5027,7 @@ function blockFormatKind(
           {bubble.error ? (
             <p className="text-sm text-red-600">{bubble.error}</p>
           ) : bubble.text ? (
-            <div className="max-h-80 overflow-y-auto text-sm">
+            <div className="min-h-0 flex-1 overflow-y-auto text-sm">
               <Markdown>{bubble.text}</Markdown>
             </div>
           ) : (
@@ -4599,8 +5043,13 @@ function blockFormatKind(
           key={`${simplifyCard.anchor.blockId}:${simplifyCard.anchor.startOffset}`}
           data-selection-popover
           data-side-card="simplify"
-          className="bubble-in absolute z-20 rounded-[20px] border border-line bg-card/80 p-4 shadow-float backdrop-blur-md"
-          style={{ top: simplifyCard.top, left: simplifyCard.left, width: simplifyCard.width }}
+          className="bubble-in absolute z-20 flex flex-col rounded-[20px] border border-line bg-card/80 p-4 shadow-float backdrop-blur-md"
+          style={{
+            top: simplifyCard.top,
+            left: simplifyCard.left,
+            width: simplifyCard.width,
+            maxHeight: cardMaxHeight,
+          }}
         >
           <div
             onPointerDown={dragCard(
@@ -4650,7 +5099,7 @@ function blockFormatKind(
           {simplifyCard.error ? (
             <p className="text-sm text-red-600">{simplifyCard.error}</p>
           ) : simplifyCard.sentences ? (
-            <p className="max-h-96 overflow-y-auto text-[13.5px] leading-relaxed whitespace-pre-wrap">
+            <p className="min-h-0 flex-1 overflow-y-auto text-[13.5px] leading-relaxed whitespace-pre-wrap">
               {simplifyCard.sentences.map((sentence, i) => {
                 const lead = /^\s*/.exec(sentence.text)![0];
                 return (
@@ -4676,7 +5125,7 @@ function blockFormatKind(
               })}
             </p>
           ) : (
-            <p className="max-h-96 overflow-y-auto text-[13.5px] leading-relaxed whitespace-pre-wrap">
+            <p className="min-h-0 flex-1 overflow-y-auto text-[13.5px] leading-relaxed whitespace-pre-wrap">
               {stripSimplifyMarkers(simplifyCard.text) || (
                 <ThinkingIndicator className="py-1 text-[12.5px]" />
               )}
@@ -4691,8 +5140,13 @@ function blockFormatKind(
         <div
           data-selection-popover
           data-side-card="comment"
-          className="bubble-in absolute z-20 rounded-[20px] border border-line bg-card/90 p-4 shadow-float backdrop-blur-md"
-          style={{ left: commentCard.left, top: commentCard.top, width: commentCard.width }}
+          className="bubble-in absolute z-20 flex flex-col rounded-[20px] border border-line bg-card/90 p-4 shadow-float backdrop-blur-md"
+          style={{
+            left: commentCard.left,
+            top: commentCard.top,
+            width: commentCard.width,
+            maxHeight: cardMaxHeight,
+          }}
         >
           <div
             onPointerDown={dragCard(
@@ -4734,7 +5188,7 @@ function blockFormatKind(
                   if (e.key === "Escape") setCommentCard(null);
                 }}
                 rows={4}
-                className="w-full resize-none rounded-xl bg-sand-100 px-2.5 py-2 text-[13px] outline-none placeholder:text-sand-500"
+                className="field-sizing-content min-h-0 w-full flex-1 resize-none rounded-xl bg-sand-100 px-2.5 py-2 text-[13px] outline-none placeholder:text-sand-500"
               />
               {commentCard.anchor && (
                 <p className="mt-2 line-clamp-2 border-l-2 border-sand-300 pl-2 text-xs text-sand-500">
@@ -4763,7 +5217,7 @@ function blockFormatKind(
             </>
           ) : (
             <>
-              <div className="max-h-80 overflow-y-auto text-[13px]">
+              <div className="min-h-0 flex-1 overflow-y-auto text-[13px]">
                 <Markdown>{commentCard.draft}</Markdown>
               </div>
               {commentCard.anchor && (
@@ -4773,6 +5227,88 @@ function blockFormatKind(
               )}
             </>
           )}
+        </div>
+      )}
+      </Presence>
+
+      {/* The card a closed link opens: both ends, and a box for what the
+          link is about. Save stores it as the link's reason; Skip leaves the
+          link as it is. */}
+      <Presence show={linkCard !== null} exit="bubble">
+      {linkCard && (
+        <div
+          data-selection-popover
+          data-side-card="link"
+          className="bubble-in absolute z-20 flex flex-col rounded-[20px] border border-line bg-card/90 p-4 shadow-float backdrop-blur-md"
+          style={{ left: linkCard.left, top: linkCard.top, width: linkCard.width, maxHeight: cardMaxHeight }}
+        >
+          <div
+            onPointerDown={dragCard(
+              () => (linkCard ? { left: linkCard.left, top: linkCard.top } : null),
+              (left, top) => setLinkCard((c) => (c ? { ...c, left, top } : c)),
+            )}
+            style={{ touchAction: "none" }}
+            data-tip={t("reader.dragToMove")}
+            className="mb-2 flex cursor-move items-center justify-between"
+          >
+            <span className="flex items-center gap-1.5 text-[11px] font-bold tracking-[0.08em] text-sage-800 uppercase">
+              <LinkIcon size={12} />
+              {t("reader.linkCard")}
+            </span>
+            <button
+              onClick={closeLinkCard}
+              data-track="link-card-close"
+              className="text-xs text-sand-500 hover:text-clay-700"
+              aria-label={t("common.close")}
+              data-tip={t("common.close")}
+            >
+              ✕
+            </button>
+          </div>
+          <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+            <p className="line-clamp-2 border-l-2 border-sage-300 pl-2 text-xs text-sand-500">
+              {linkCard.fromQuote}
+            </p>
+            <p className="mt-1.5 line-clamp-2 border-l-2 border-sage-300 pl-2 text-xs text-sand-500">
+              {linkCard.toQuote}
+            </p>
+            <textarea
+              autoFocus
+              value={linkCard.draft}
+              onChange={(e) => setLinkCard((c) => (c ? { ...c, draft: e.target.value } : c))}
+              {...ime.props}
+              onKeyDown={(e) => {
+                if (ime.isImeEnter(e) || isImeKey(e)) return;
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  void saveLinkCard();
+                }
+                if (e.key === "Escape") closeLinkCard();
+              }}
+              placeholder={t("reader.linkAboutPlaceholder")}
+              rows={2}
+              className="field-sizing-content mt-2.5 min-h-0 w-full resize-none rounded-xl bg-sand-100 px-2.5 py-2 text-[13px] outline-none placeholder:text-sand-500"
+            />
+          </div>
+          <div className="mt-2 flex items-center justify-between">
+            <button
+              onClick={closeLinkCard}
+              data-track="link-card-skip"
+              data-tip={t("reader.linkSkipTitle")}
+              className="text-xs text-sand-500 hover:text-clay-700"
+            >
+              {t("reader.linkSkip")}
+            </button>
+            <button
+              onClick={() => void saveLinkCard()}
+              data-track="link-card-save"
+              disabled={linkCard.busy || !linkCard.draft.trim()}
+              data-tip={t("reader.linkAboutSaveTitle")}
+              className="rounded-full bg-clay px-3 py-1 text-[11px] font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
+            >
+              {t("common.save")}
+            </button>
+          </div>
         </div>
       )}
       </Presence>
@@ -4787,11 +5323,9 @@ function blockFormatKind(
             left: assistantChat.left,
             top: assistantChat.top,
             width: assistantChat.width,
-            height: 340,
             minWidth: 260,
-            minHeight: 220,
             maxWidth: 680,
-            maxHeight: "80vh",
+            maxHeight: cardMaxHeight,
           }}
         >
           <div
@@ -4869,7 +5403,7 @@ function blockFormatKind(
               }}
               placeholder={t("reader.replyPlaceholder")}
               aria-label={t("reader.messageAssistant")}
-              className="min-h-8 flex-1 resize-none rounded-xl bg-sand-100 px-3 py-1.5 text-[12.5px] outline-none placeholder:text-sand-500"
+              className="field-sizing-content max-h-40 min-h-8 flex-1 resize-none rounded-xl bg-sand-100 px-3 py-1.5 text-[12.5px] outline-none placeholder:text-sand-500"
             />
             <button
               type="submit"
@@ -4939,8 +5473,10 @@ function blockFormatKind(
       </Presence>
 
       <Presence show={aiPlan !== null} exit="pop">
+      {/* The plan card grows with the reply and the actions up to the
+          window's height, then scrolls inside. */}
       {aiPlan && (
-        <div className="fixed bottom-6 left-1/2 z-40 w-[440px] max-w-[92vw] -translate-x-1/2 rounded-[24px] bg-card p-4 shadow-float">
+        <div className="fixed bottom-6 left-1/2 z-40 flex max-h-[calc(100vh-3rem)] w-[440px] max-w-[92vw] -translate-x-1/2 flex-col rounded-[24px] bg-card p-4 shadow-float">
           <div className="mb-2 flex items-center gap-2">
             <SparkleIcon size={15} className="text-clay" />
             <span className="font-display text-[15px]">{t("reader.assistantPlan")}</span>
@@ -4948,12 +5484,13 @@ function blockFormatKind(
               {t("reader.askFirst")}
             </span>
           </div>
+          <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
           {aiPlan.reply && (
-            <div className="mb-2 max-h-36 overflow-y-auto text-[13px]">
+            <div className="mb-2 text-[13px]">
               <Markdown>{aiPlan.reply}</Markdown>
             </div>
           )}
-          <div className="flex max-h-56 flex-col gap-1.5 overflow-y-auto">
+          <div className="flex flex-col gap-1.5">
             {aiPlan.actions.map((action, i) => (
               <label
                 key={i}
@@ -4985,6 +5522,7 @@ function blockFormatKind(
                 </span>
               </label>
             ))}
+          </div>
           </div>
           {aiPlan.warnings.length > 0 && (
             <ul className="mt-2 flex flex-col gap-1 rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-2">

@@ -245,8 +245,13 @@ export function MediaAssistant({
         </div>
       )}
 
+      {/* The conversation grows with its replies up to most of the window,
+          then scrolls inside. */}
       {messages.length > 0 && (
-        <div ref={scrollRef} className="mb-2.5 flex max-h-72 flex-col gap-2.5 overflow-y-auto">
+        <div
+          ref={scrollRef}
+          className="mb-2.5 flex max-h-[calc(100vh-14rem)] flex-col gap-2.5 overflow-y-auto"
+        >
           {messages.map((message, i) =>
             message.role === "user" ? (
               <p

@@ -384,7 +384,14 @@ export default async function NotebookPage(props: {
     // in the Annotations tab. Same-document links paint both ends.
     const linksByBlock: Record<
       string,
-      { linkId: string; start: number; end: number; href: string; title: string }[]
+      {
+        linkId: string;
+        start: number;
+        end: number;
+        href: string;
+        title: string;
+        reason: string | null; // what the link is about, shown in the mark's tip
+      }[]
     > = {};
     const linksOut: LinkOut[] = [];
     const linksIn: LinkIn[] = [];
@@ -480,6 +487,7 @@ export default async function NotebookPage(props: {
           ? `/n/${notebookId}?doc=${link.toDocumentId}&link=${link.id}`
           : `/n/${notebookId}?doc=${link.toDocumentId}`,
         title: link.toDocument.title,
+        reason: link.reason,
       });
       linksByBlock[resolved.blockId] = list;
     }
@@ -565,6 +573,7 @@ export default async function NotebookPage(props: {
         end: resolved.end,
         href: `/n/${notebookId}?doc=${link.fromDocumentId}&link=${link.id}`,
         title: link.fromDocument.title,
+        reason: link.reason,
       });
       linksByBlock[resolved.blockId] = list;
     }
@@ -1079,6 +1088,27 @@ export default async function NotebookPage(props: {
     premium: authEnabled() ? user.premium : true,
   };
 
+  // The text layer over a document's blocks: marks, links, terms, and the
+  // tool cards. An article gets it directly; a video document's transcript
+  // lines get the same layer through the video pane (SPEC.md §11).
+  const textLayer = (pane: NonNullable<typeof paneOne>) => ({
+    attachedDocuments: attached,
+    anchorHighlights: pane.anchorHighlights,
+    annotationsBySource: pane.annotationsBySource,
+    annotationBubbles: pane.annotationBubbles,
+    distillations: pane.distillations,
+    extractions: pane.extractions,
+    termsByBlock: pane.termsByBlock,
+    linksByBlock: pane.linksByBlock,
+    editedByBlock: pane.editedByBlock,
+    stylesByBlock: pane.stylesByBlock,
+    contentsLinksByBlock: pane.contentsLinksByBlock,
+    citationsByBlock: pane.citationsByBlock,
+    references: pane.references,
+    pageMarksByBlock: pane.pageMarksByBlock,
+    conversion: pane.conversion,
+    font: pane.document.font,
+  });
   const paneNode = (pane: NonNullable<typeof paneOne>, key: string) => (
     <div key={key} className="content-in flex h-full min-h-0 flex-col">
       {pane.video ? (
@@ -1093,13 +1123,13 @@ export default async function NotebookPage(props: {
           seekBySource={pane.videoSeekBySource}
           sectionChoices={sectionChoices}
           translationAvailable={deeplConfigured()}
+          reader={textLayer(pane)}
         />
       ) : (
         <ReaderInteractions
           documentId={pane.document.id}
           notebookId={notebook.id}
           sectionChoices={sectionChoices}
-          attachedDocuments={attached}
           title={pane.document.title}
           blocks={pane.document.blocks.map((b) => ({
             id: b.id,
@@ -1107,22 +1137,8 @@ export default async function NotebookPage(props: {
             text: b.text,
             html: b.html,
           }))}
-          anchorHighlights={pane.anchorHighlights}
-          annotationsBySource={pane.annotationsBySource}
-          annotationBubbles={pane.annotationBubbles}
-          distillations={pane.distillations}
-          extractions={pane.extractions}
-          termsByBlock={pane.termsByBlock}
-          linksByBlock={pane.linksByBlock}
-          editedByBlock={pane.editedByBlock}
-          stylesByBlock={pane.stylesByBlock}
-          contentsLinksByBlock={pane.contentsLinksByBlock}
-          citationsByBlock={pane.citationsByBlock}
-          references={pane.references}
-          pageMarksByBlock={pane.pageMarksByBlock}
-          conversion={pane.conversion}
-          font={pane.document.font}
           translationAvailable={deeplConfigured()}
+          {...textLayer(pane)}
         />
       )}
     </div>

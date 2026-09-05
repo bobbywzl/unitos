@@ -21,7 +21,23 @@ export type Highlight = {
   sourceId: string | null;
   start: number;
   end: number;
-  kind: "anchor" | "salience" | "simplify" | "term" | "link" | "citation" | "weblink" | "edited" | "style" | "toc" | "extract";
+  // "selection": the text under the open toolbar, tinted like the browser's
+  // selection so the tint survives a text box taking focus. "pending-link":
+  // the first end of a link waiting for its other end.
+  kind:
+    | "anchor"
+    | "salience"
+    | "simplify"
+    | "term"
+    | "link"
+    | "citation"
+    | "weblink"
+    | "edited"
+    | "style"
+    | "toc"
+    | "extract"
+    | "selection"
+    | "pending-link";
   // kind "style" only
   styleKind?:
     | "bold"
@@ -54,6 +70,11 @@ export type Highlight = {
   extractOrigin?: boolean;
   fresh?: boolean; // made in this session: the mark sweeps in left to right
   freshDelay?: number; // ms before the sweep starts; staggers a layer's spans
+  // Its note was just deleted: the mark fades out (globals.css .mark-out) and
+  // takes no clicks; it unpaints once the fade ends. Kind "anchor" only.
+  leaving?: boolean;
+  // kind "link": what the link is about, typed after Close link.
+  linkReason?: string | null;
 };
 
 function anchorClass(color: string | null | undefined): string {
@@ -122,15 +143,29 @@ function markedText(text: string, highlights: Highlight[], t: TFunc) {
     const simplify = covering.find((h) => h.kind === "simplify");
     const term = covering.find((h) => h.kind === "term");
     const extract = covering.find((h) => h.kind === "extract");
+    const selection = covering.find((h) => h.kind === "selection" || h.kind === "pending-link");
+    const selectionClass = selection
+      ? selection.kind === "pending-link"
+        ? " link-pending-mark"
+        : " selection-mark"
+      : "";
     if (link) {
+      // The tip names the other document and, when the reader typed one, what
+      // the link is about.
+      const linkTip = [
+        link.linkTitle ? t("panes.linkedTo", { title: link.linkTitle }) : null,
+        link.linkReason,
+      ]
+        .filter((s): s is string => Boolean(s))
+        .join("\n");
       parts.push(
         <a
           key={from}
           href={link.href}
           data-link-id={link.linkId}
           data-source-id={anchor?.sourceId ?? undefined}
-          data-tip={link.linkTitle ? t("panes.linkedTo", { title: link.linkTitle }) : undefined}
-          className={`link-mark rounded-[4px]${editedClass}`}
+          data-tip={linkTip || undefined}
+          className={`link-mark rounded-[4px]${link.fresh ? " mark-sweep" : ""}${selectionClass}${editedClass}`}
         >
           {segment}
         </a>,
@@ -208,16 +243,20 @@ function markedText(text: string, highlights: Highlight[], t: TFunc) {
           {segment}
         </a>,
       );
-    } else if (anchor || salience || simplify || extract) {
-      const focusable = anchor?.annotation && anchor.sourceId;
+    } else if (anchor || salience || simplify || extract || selection) {
+      // A leaving mark (its note just deleted) fades and takes no clicks.
+      const leaving = Boolean(anchor?.leaving);
+      const focusable = anchor?.annotation && anchor.sourceId && !leaving;
       // A regular note's mark: click jumps to the note in the tray — the
       // link between quote and note works both ways.
-      const noteMark = !anchor?.annotation && anchor?.noteId ? anchor.noteId : null;
+      const noteMark = !anchor?.annotation && anchor?.noteId && !leaving ? anchor.noteId : null;
       // A comment's icon sits right after its span; SVG only, so the block's
       // DOM text stays exactly the stored text (SPEC.md §5).
       const commentEnding = covering.find(
         (h) => h.kind === "anchor" && h.comment && h.sourceId && h.end === to,
       );
+      // The selection tint alone marks nothing else; over a highlight it rides
+      // on top of the highlight's own color.
       const markClass = simplify
         ? "simplify-mark"
         : anchor
@@ -226,10 +265,14 @@ function markedText(text: string, highlights: Highlight[], t: TFunc) {
             ? extract.extractOrigin
               ? "extract-origin-mark"
               : "extract-mark"
-            : "salience-mark";
+            : salience
+              ? "salience-mark"
+              : "";
       // The highlight that gave the segment its class also decides the sweep:
-      // fresh marks sweep in left to right (globals.css .mark-sweep).
+      // fresh marks sweep in left to right (globals.css .mark-sweep). A
+      // leaving mark fades instead.
       const painted = simplify ?? anchor ?? extract ?? salience;
+      const sweep = painted?.fresh && !leaving;
       parts.push(
         <mark
           key={from}
@@ -254,12 +297,8 @@ function markedText(text: string, highlights: Highlight[], t: TFunc) {
                   }
                 : undefined
           }
-          className={`${markClass}${anchors.length > 1 ? " hl-stacked" : ""}${painted?.fresh ? " mark-sweep" : ""} rounded-[4px] ${focusable || noteMark ? "annotation-mark" : ""}${editedClass}`}
-          style={
-            painted?.fresh && painted.freshDelay
-              ? { animationDelay: `${painted.freshDelay}ms` }
-              : undefined
-          }
+          className={`${markClass}${selectionClass}${anchors.length > 1 ? " hl-stacked" : ""}${sweep ? " mark-sweep" : ""}${leaving ? " mark-out" : ""} rounded-[4px] ${focusable || noteMark ? "annotation-mark" : ""}${editedClass}`}
+          style={sweep && painted.freshDelay ? { animationDelay: `${painted.freshDelay}ms` } : undefined}
         >
           {segment}
         </mark>,
@@ -506,19 +545,34 @@ export function BlockView({
   block,
   highlights = [],
   documentId,
+  line,
 }: {
   block: BlockData;
   highlights?: Highlight[];
   documentId?: string;
+  // A transcript line inside a paragraph (reader.tsx): the block renders as
+  // one inline span, the line's own classes on it, marks and all.
+  line?: { className: string };
 }) {
   const t = useT();
   const shared = "reader-block";
 
   const content = highlights.length > 0 ? markedText(block.text, highlights, t) : block.text;
-  const anchorIds = highlights.filter((h) => h.kind === "anchor" && h.sourceId);
-  const figureAnchors = highlights.filter((h) => h.kind === "anchor");
-  const htmlHighlighted = anchorIds.length > 0 ? "rounded-lg ring-2 ring-clay-300" : "";
+  const anchorIds = highlights.filter((h) => h.kind === "anchor" && h.sourceId && !h.leaving);
+  const figureAnchors = highlights.filter((h) => h.kind === "anchor" && !h.leaving);
+  // A whole figure, table, or equation under the toolbar rings like an
+  // annotated one: its text is not selectable, so the ring is the tint.
+  const selected = highlights.some((h) => h.kind === "selection");
+  const htmlHighlighted = anchorIds.length > 0 || selected ? "rounded-lg ring-2 ring-clay-300" : "";
   const firstSourceId = anchorIds[0]?.sourceId ?? undefined;
+
+  if (line) {
+    return (
+      <span data-block-id={block.id} className={`${shared} ${line.className}`}>
+        {content}
+      </span>
+    );
+  }
 
   switch (block.type) {
     case "HEADING": {

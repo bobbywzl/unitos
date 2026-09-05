@@ -206,6 +206,12 @@ const en = {
   removeFailedStatus: "Remove failed ({status})",
   editFailed: "Edit failed",
   defaultSectionTitle: "Notes",
+  // The link card: opens when a link closes
+  linkCard: "Link",
+  linkAboutPlaceholder: "What is this link about?",
+  linkAboutSaveTitle: "Save what this link is about. It shows on the link and in the Annotations tab.",
+  linkSkip: "Skip",
+  linkSkipTitle: "Keep the link without a description",
 };
 
 const zh: Record<keyof typeof en, string> = {
@@ -403,6 +409,12 @@ const zh: Record<keyof typeof en, string> = {
   removeFailedStatus: "移除失败（{status}）",
   editFailed: "编辑失败",
   defaultSectionTitle: "笔记",
+  // The link card: opens when a link closes
+  linkCard: "链接",
+  linkAboutPlaceholder: "这个链接是关于什么的？",
+  linkAboutSaveTitle: "保存链接说明。说明显示在链接上和批注页签中。",
+  linkSkip: "跳过",
+  linkSkipTitle: "保留链接，不加说明",
 };
 
 export const reader = { en, zh } as const;

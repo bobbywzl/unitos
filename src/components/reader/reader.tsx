@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { PlusIcon, RedoIcon, UndoIcon } from "@/components/icons";
 import { styleShortcut } from "@/lib/markdown-style";
 import { NOTE_WRAP_EVENT, type NoteWrapSpacer } from "@/lib/note-wrap";
@@ -14,8 +14,180 @@ import type { TKey } from "@/lib/i18n/dictionaries";
 import { ConversionStrip, type ConversionInfo } from "@/components/reader/conversion-strip";
 import { PageBlock, type PageMark } from "@/components/reader/page-block";
 import { DocumentTitle } from "@/components/reader/document-title";
+import { formatTime, type TranscriptLine } from "@/lib/video/types";
 
 const TEXT_TYPES = new Set(["PARAGRAPH", "HEADING", "LIST", "CODE", "EQUATION"]);
+
+// A video document's transcript as the reader's body (SPEC.md §11): the
+// blocks are the transcript lines, grouped into paragraphs that read like an
+// article, with the player and the video tools above them. Every line is an
+// anchor — click to seek, hover for the moment's tools — and every text tool
+// of an article works on the lines through the same selection toolbar.
+export type TranscriptVariant = {
+  lines: TranscriptLine[];
+  activeLineId: string | null;
+  onSeek: (line: TranscriptLine) => void;
+  // Lines covered by a time-anchored annotation: underlined, like a
+  // highlighted span in an article.
+  annotatedLineIds: Set<string>;
+  // The moment's tools, floating over a line on hover: comment, explain,
+  // open the note.
+  lineTools: (line: TranscriptLine) => React.ReactNode;
+  // Above the lines: the player and the tool bar. Below: the article section.
+  prelude: React.ReactNode;
+  epilogue: React.ReactNode;
+  // The column's width: the player's, not the article's 720px.
+  columnStyle?: React.CSSProperties;
+};
+
+// A paragraph closes at a clear speech gap, or once it is long enough and the
+// line before it finished a sentence. The hard cap keeps a gapless monologue
+// from becoming one wall.
+const PARAGRAPH_GAP_SECONDS = 2.5;
+const PARAGRAPH_BREAK_CHARS = 700;
+const PARAGRAPH_MAX_CHARS = 1400;
+
+export function transcriptParagraphs(transcript: TranscriptLine[]): TranscriptLine[][] {
+  const paragraphs: TranscriptLine[][] = [];
+  let open: TranscriptLine[] = [];
+  let chars = 0;
+  for (const line of transcript) {
+    const last = open[open.length - 1];
+    const breaks =
+      last !== undefined &&
+      (line.startTime - last.endTime > PARAGRAPH_GAP_SECONDS ||
+        chars > PARAGRAPH_MAX_CHARS ||
+        (chars > PARAGRAPH_BREAK_CHARS && /[.!?。！？…”"]$/.test(last.text)));
+    if (breaks) {
+      paragraphs.push(open);
+      open = [];
+      chars = 0;
+    }
+    open.push(line);
+    chars += line.text.length;
+  }
+  if (open.length > 0) paragraphs.push(open);
+  return paragraphs;
+}
+
+// The transcript's lines under the player. Follows playback by scrolling its
+// own box only — never the page — and never fighting a hand on the box.
+function TranscriptBody({
+  transcript,
+  blocks,
+  highlightsByBlock,
+  translations,
+}: {
+  transcript: TranscriptVariant;
+  blocks: BlockData[];
+  highlightsByBlock: Record<string, Highlight[]>;
+  translations?: Record<string, string> | null;
+}) {
+  const t = useT();
+  const uiLang = useLang();
+  const listRef = useRef<HTMLDivElement>(null);
+  const hoveredRef = useRef(false);
+  const { lines, activeLineId, onSeek, annotatedLineIds, lineTools } = transcript;
+  const paragraphs = useMemo(() => transcriptParagraphs(lines), [lines]);
+  const blockById = useMemo(() => new Map(blocks.map((b) => [b.id, b])), [blocks]);
+
+  useEffect(() => {
+    const list = listRef.current;
+    if (!activeLineId || !list || hoveredRef.current) return;
+    const el = list.querySelector<HTMLElement>(`[data-block-id="${activeLineId}"]`);
+    if (!el) return;
+    // Measure against the scroll box, not offsetTop: the line's positioned
+    // wrapper would otherwise be its offsetParent and read ~0 for every line.
+    const elTop = el.getBoundingClientRect().top - list.getBoundingClientRect().top + list.scrollTop;
+    const target = elTop - list.clientHeight / 2 + el.clientHeight / 2;
+    list.scrollTo({ top: Math.max(0, target), behavior: "smooth" });
+  }, [activeLineId]);
+
+  // A click seeks; a drag that ends in a selection is the toolbar's, not a
+  // seek. Marks inside the line stop their own clicks.
+  const seek = (line: TranscriptLine) => {
+    if (!window.getSelection()?.isCollapsed) return;
+    onSeek(line);
+  };
+
+  return (
+    <div
+      ref={listRef}
+      data-transcript-box
+      onPointerEnter={() => (hoveredRef.current = true)}
+      onPointerLeave={() => (hoveredRef.current = false)}
+      className="max-h-[420px] overflow-y-auto rounded-2xl bg-card px-6 py-5 shadow-soft"
+    >
+      {paragraphs.map((paragraph, pi) => (
+        <div key={paragraph[0].id} className={pi === 0 ? "" : "mt-4"}>
+          <p className="indent-7 text-[14px] leading-[1.9] text-sand-800">
+            <button
+              onClick={() => onSeek(paragraph[0])}
+              data-anchor-skip
+              data-track="video-seek"
+              data-tip={t("video.jumpHere")}
+              className="mr-2 -translate-y-[1px] rounded-full bg-sand-100 px-2 py-[1px] align-middle text-[10.5px] font-semibold tabular-nums text-sand-500 hover:bg-clay-100 hover:text-clay-800"
+            >
+              {formatTime(paragraph[0].startTime)}
+            </button>
+            {paragraph.map((line) => {
+              const block = blockById.get(line.id) ?? {
+                id: line.id,
+                type: "TRANSCRIPT" as const,
+                text: line.text,
+                html: null,
+              };
+              const annotated = annotatedLineIds.has(line.id);
+              return (
+                <span key={line.id} className="group/line relative">
+                  <span
+                    onClick={() => seek(line)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        onSeek(line);
+                      }
+                    }}
+                    data-tip={t("video.jumpHere")}
+                  >
+                    <BlockView
+                      block={block}
+                      highlights={highlightsByBlock[line.id]}
+                      line={{
+                        className: `cursor-pointer rounded-[4px] box-decoration-clone px-0.5 py-[1px] ${
+                          line.id === activeLineId ? "bg-clay-100 text-clay-900" : "hover:bg-sand-100"
+                        }${annotated ? " decoration-clay-400 underline decoration-2 underline-offset-4" : ""}`,
+                      }}
+                    />
+                  </span>{" "}
+                  {/* The line's tools, floating over the text on hover. */}
+                  <span className="pointer-events-none absolute bottom-full left-0 z-10 hidden pb-1 group-hover/line:inline-flex">
+                    <span
+                      data-anchor-skip
+                      className="pointer-events-auto flex items-center gap-0.5 rounded-full bg-card px-1 py-0.5 whitespace-nowrap shadow-float"
+                    >
+                      {lineTools(line)}
+                    </span>
+                  </span>
+                </span>
+              );
+            })}
+          </p>
+          {translations &&
+            (() => {
+              const text = paragraph
+                .map((line) => translations[line.id])
+                .filter((s): s is string => Boolean(s))
+                .join(" ");
+              return text ? <TranslationLine text={text} lang={uiLang} /> : null;
+            })()}
+        </div>
+      ))}
+    </div>
+  );
+}
 
 // The blocks whose lines flow around a wrapped note (SPEC.md §6). Everything
 // else — a figure, a table, a video, a page, an equation, a code block — is one
@@ -183,11 +355,14 @@ export function Reader({
   flushRef,
   banner,
   translations,
+  transcript,
 }: {
   title: string;
   blocks: BlockData[];
   /** Above the title: the Translate offer (SPEC.md §19). */
   banner?: React.ReactNode;
+  /** A video document: the blocks are transcript lines (SPEC.md §11). */
+  transcript?: TranscriptVariant;
   /** Translation text per block id, shown under each block in reading mode. */
   translations?: Record<string, string> | null;
   highlightsByBlock: Record<string, Highlight[]>;
@@ -427,6 +602,33 @@ export function Reader({
         ? " clear-left"
         : " clear-right"
       : "";
+
+  // A transcript: the player and its tools, then the lines in their own
+  // scroll box, then the article section. The column is the player's width.
+  if (transcript) {
+    return (
+      <div className="relative">
+        <article
+          className="reader-prose mx-auto w-full px-8 py-11"
+          style={{ ...transcript.columnStyle, fontFamily }}
+        >
+          {transcript.prelude}
+          {blocks.length > 0 && (
+            <>
+              {banner}
+              <TranscriptBody
+                transcript={transcript}
+                blocks={blocks}
+                highlightsByBlock={highlightsByBlock}
+                translations={translations}
+              />
+            </>
+          )}
+          {transcript.epilogue}
+        </article>
+      </div>
+    );
+  }
 
   return (
     <div className="relative">

@@ -207,8 +207,33 @@ select,
   outline-offset: 2px;
   border-radius: 2px;
 }
+:root {
+  --selection-bg: color-mix(in srgb, var(--clay) 30%, transparent);
+}
 ::selection {
-  background: color-mix(in srgb, var(--clay) 30%, transparent);
+  background: var(--selection-bg);
+}
+
+/* The text under the open toolbar keeps this tint (block-view.tsx kind
+   "selection"): the browser's own selection goes the moment a text box takes
+   focus — the assistant's command, a comment — and the mark stays. The same
+   color as ::selection, and the native selection over the mark paints
+   nothing, so the two never stack. Declared before the highlight classes so
+   that on already highlighted text the highlight's color stays underneath
+   and the tint rides background-image over it. */
+.selection-mark,
+.link-pending-mark {
+  background-color: transparent;
+  background-image: linear-gradient(var(--selection-bg), var(--selection-bg));
+}
+.selection-mark::selection,
+.link-pending-mark::selection {
+  background: transparent;
+}
+/* The first end of a link waiting for its other end (SPEC.md §6): tinted
+   like a selection, the link's dashed line under it until Close link. */
+.link-pending-mark {
+  border-bottom: 2px dashed color-mix(in srgb, var(--sage-600) 75%, transparent);
 }
 
 /* Highlights tint the paper behind the words; they never repaint the words.
@@ -316,8 +341,29 @@ mark,
     animation: mark-sweep 0.55s cubic-bezier(0.25, 1, 0.5, 1) backwards;
   }
 }
+/* A mark that opens something answers the pointer: it deepens on hover. */
 .annotation-mark {
   cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    border-bottom-color 0.15s ease;
+}
+.annotation-mark:hover {
+  background-color: color-mix(in srgb, var(--mark-bg) 78%, var(--ink));
+}
+/* A mark whose note was just deleted (block-view.tsx leaving): the tint and
+   the underline fade, then the mark unpaints. The sweep's background-image
+   goes at once so a mark deleted right after it was made fades too. */
+@keyframes mark-out {
+  to {
+    background-color: transparent;
+    border-bottom-color: transparent;
+  }
+}
+.mark-out {
+  background-image: none;
+  pointer-events: none;
+  animation: mark-out 0.3s ease-out forwards;
 }
 /* Text the user changed — diffed against the document as first parsed. */
 .edited-text {
@@ -339,7 +385,8 @@ mark,
   color: color-mix(in srgb, #a78bfa 75%, var(--ink));
 }
 .link-mark {
-  background: color-mix(in srgb, var(--clay-400) 14%, transparent);
+  --mark-bg: color-mix(in srgb, var(--clay-400) 14%, transparent);
+  background-color: var(--mark-bg);
   border-bottom: 2px solid var(--clay-500);
   color: inherit;
   text-decoration: none;
@@ -850,6 +897,18 @@ ellipse.anchor-flash {
 @media (prefers-reduced-motion: no-preference) {
   .reader-column {
     transition: margin-left 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+}
+
+/* A tool card grows with its content up to the pane's height, and a card
+   pushed down by a growing neighbor slides to its new place; a card being
+   dragged follows the pointer at once. */
+@media (prefers-reduced-motion: no-preference) {
+  [data-side-card] {
+    transition: top 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  [data-side-card][data-dragging] {
+    transition: none;
   }
 }
 
@@ -1416,6 +1475,17 @@ ellipse.anchor-flash {
     transition:
       grid-template-rows 0.22s ease,
       opacity 0.18s ease;
+  }
+}
+
+/* The first pane of a split view (reader-panes.tsx) eases to a new share on
+   a reset or an arrow key; while the bar drags the class is off, so the
+   panes follow the pointer without lag. */
+@media (prefers-reduced-motion: no-preference) {
+  .pane-split {
+    transition:
+      width 0.2s ease,
+      height 0.2s ease;
   }
 }
 

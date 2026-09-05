@@ -4,7 +4,14 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { isImeKey } from "@/lib/ime";
-import { QuestionIcon, SearchIcon, SparkleIcon, SpinnerIcon } from "@/components/icons";
+import {
+  CommentIcon,
+  LocateIcon,
+  QuestionIcon,
+  SearchIcon,
+  SparkleIcon,
+  SpinnerIcon,
+} from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { Markdown } from "@/components/markdown";
 import { ThinkingIndicator } from "@/components/thinking";
@@ -14,9 +21,10 @@ import { Visual } from "@/components/video/visual";
 import type { ThumbnailSource } from "@/components/video/use-thumbnails";
 import { useCollab } from "@/components/collab/collab-context";
 import { DocumentTitle } from "@/components/reader/document-title";
-import { TranslationBar } from "@/components/reader/translation-bar";
+import { ReaderInteractions } from "@/components/reader/reader-interactions";
+import type { TranscriptVariant } from "@/components/reader/reader";
 import { FindPanel } from "@/components/video/find-panel";
-import { Transcript } from "@/components/video/transcript";
+import { TranscriptEmpty, TranscriptHeader } from "@/components/video/transcript";
 import {
   VideoPlayer,
   type VideoPlayerHandle,
@@ -40,7 +48,22 @@ import {
 // video in one surface under it — circle and comment, Find, the transcript.
 // Transcription starts on its own when the video is added; a floating caption
 // teaches the tools for a few seconds. Source chips seek here instead of
-// scrolling.
+// scrolling. The pane is the reader's interaction layer with the transcript
+// lines as its blocks: the player and the video tools render above the lines,
+// and every text tool of an article — the selection toolbar, marks, links —
+// works on the lines through the same code path.
+
+// The text layer's props, as the page builds them for any document.
+type ReaderTextProps = Omit<
+  React.ComponentProps<typeof ReaderInteractions>,
+  | "documentId"
+  | "notebookId"
+  | "sectionChoices"
+  | "title"
+  | "blocks"
+  | "translationAvailable"
+  | "transcript"
+>;
 
 type Composer = {
   region: Region | null;
@@ -67,11 +90,14 @@ export function VideoPane({
   seekBySource,
   sectionChoices,
   translationAvailable,
+  reader,
 }: {
   notebookId: string;
   documentId: string;
   title: string;
   video: VideoInfo;
+  /** The text layer over the transcript lines: marks, links, terms, cards. */
+  reader: ReaderTextProps;
   /** DEEPL_API_KEY is set: the Translate offer shows when the languages differ (SPEC.md §19). */
   translationAvailable: boolean;
   transcript: TranscriptLine[];
@@ -104,8 +130,6 @@ export function VideoPane({
   const [hint, setHint] = useState(true);
   // The assistant chat card under the tool bar (SPEC.md §11).
   const [assistantOpen, setAssistantOpen] = useState(false);
-  // The transcript's translation (SPEC.md §19), one text per line.
-  const [translations, setTranslations] = useState<Record<string, string> | null>(null);
   // Ask about a range (SPEC.md §11): the card opens on the current moment,
   // five minutes ahead or to the end, whichever comes first.
   const [askRange, setAskRange] = useState<{ start: number; end: number } | null>(null);
@@ -504,356 +528,428 @@ export function VideoPane({
       ? { startTime: composerStart, endTime: composerEnd, region: composer.region }
       : null;
 
-  return (
-    <div className="relative min-h-0 flex-1 overflow-y-auto">
-      {/* Fluid column: the player grows with the pane — collapsing the tray
-          widens it — capped so the frame stays fully on screen. */}
-      <article
-        className="reader-prose mx-auto w-full px-8 py-11"
-        style={{ maxWidth: audio ? "760px" : `max(640px, calc((100vh - 320px) * ${aspect}))` }}
-      >
-        <p className="mb-2.5 text-[11px] font-bold tracking-[0.09em] text-clay-700 uppercase">
-          {video.kind === "YOUTUBE" ? "YouTube" : audio ? t("video.kindAudio") : t("video.kindVideo")}
-          {video.duration !== null ? ` · ${formatTime(video.duration)}` : ""}
-        </p>
-        <DocumentTitle documentId={documentId} title={title} />
+  // The first annotation covering each line, so a line reads as annotated the
+  // way a highlighted span does in the reader, and its hover tools open it.
+  const annotationByLine = useMemo(() => {
+    const map = new Map<string, VideoAnnotationItem>();
+    for (const line of transcript) {
+      const hit = all.find((a) => a.startTime < line.endTime && a.endTime > line.startTime);
+      if (hit) map.set(line.id, hit);
+    }
+    return map;
+  }, [transcript, all]);
+  const annotatedLineIds = useMemo(() => new Set(annotationByLine.keys()), [annotationByLine]);
 
-        <div className="relative">
-          <VideoPlayer
-            ref={playerRef}
-            source={source}
-            audio={audio}
-            aspect={aspect}
-            storedDuration={video.duration}
-            annotations={all}
-            flashSourceId={flashSourceId}
-            drawing={drawing}
-            onDrawn={onDrawn}
-            pendingRegion={composer?.region ?? null}
-            onMetadata={onMetadata}
-            onTime={(t) => {
-              currentTimeRef.current = t;
-              // The transcript follows playback: one state change per line, not
-              // one per tick.
-              const line = transcript.find((l) => t >= l.startTime && t < l.endTime) ?? null;
-              setActiveLineId((prev) => (prev === (line?.id ?? null) ? prev : (line?.id ?? null)));
-            }}
-            onAnnotate={toggleAnnotate}
-            canAnnotate={canEdit}
-          />
-          {/* The tool caption: floats up for a few seconds, then fades. */}
-          {hint && (
-            <div className="pointer-events-none absolute bottom-20 left-1/2 z-10 -translate-x-1/2">
-              <div
-                onAnimationEnd={() => setHint(false)}
-                className="hint-fade rounded-full bg-black/75 px-5 py-2.5 text-[12.5px] font-medium whitespace-nowrap text-[#f5ead8] backdrop-blur-sm"
-              >
-                {audio ? t("video.hintCaptionAudio") : t("video.hintCaption")}
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* The tool bar: everything for dissecting the video, one surface. */}
-        <div className="mt-4">
-          <FindPanel
-            notebookId={notebookId}
-            documentId={documentId}
-            audio={audio}
-            hasTranscript={transcript.length > 0}
-            sectionChoices={sectionChoices}
-            onSeek={(startTime) => {
-              playerRef.current?.seek(startTime);
-            }}
-            leading={
-              <>
-              {canEdit && (
-              <>
-              <button
-                onClick={toggleAnnotate}
-                data-track="video-circle-comment"
-                data-tip={audio ? t("video.audioCommentTitle") : t("video.circleCommentTitle")}
-                className={
-                  annotateOn
-                    ? "flex shrink-0 items-center gap-1.5 rounded-full bg-clay px-3.5 py-2 text-xs font-semibold text-clay-fg"
-                    : "flex shrink-0 items-center gap-1.5 rounded-full border border-line px-3.5 py-2 text-xs font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800"
-                }
-              >
-                <SearchIcon size={13} />
-                {audio ? t("video.comment") : t("video.circleComment")}
-              </button>
-              <button
-                onClick={() => setAssistantOpen((open) => !open)}
-                data-track="video-assistant"
-                data-tip={t("video.assistantButtonTitle")}
-                className={
-                  assistantOpen
-                    ? "flex shrink-0 items-center gap-1.5 rounded-full bg-clay px-3.5 py-2 text-xs font-semibold text-clay-fg"
-                    : "flex shrink-0 items-center gap-1.5 rounded-full border border-line px-3.5 py-2 text-xs font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800"
-                }
-              >
-                <SparkleIcon size={13} />
-                {t("video.assistant")}
-              </button>
-              </>
-              )}
-              <button
-                onClick={toggleAsk}
-                data-track="video-ask-open"
-                data-tip={t(audio ? "video.askButtonTitleAudio" : "video.askButtonTitle")}
-                className={
-                  askRange
-                    ? "flex shrink-0 items-center gap-1.5 rounded-full bg-clay px-3.5 py-2 text-xs font-semibold text-clay-fg"
-                    : "flex shrink-0 items-center gap-1.5 rounded-full border border-line px-3.5 py-2 text-xs font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800"
-                }
-              >
-                <QuestionIcon size={13} />
-                {t("video.askRange")}
-              </button>
-              </>
-            }
-            trailing={
-              transcript.length > 0 ? (
-                <span className="shrink-0 rounded-full bg-sand-100 px-3 py-1.5 text-[11.5px] font-semibold text-sand-600">
-                  {t("video.linesCount", { n: transcript.length })}
-                </span>
-              ) : transcriptFailedMessage ? (
-                <span className="shrink-0 rounded-full bg-sand-100 px-3 py-1.5 text-[11.5px] font-semibold text-red-500">
-                  {t("video.transcriptFailedChip")}
-                </span>
-              ) : (
-                <span className="flex shrink-0 items-center gap-1.5 rounded-full bg-sand-100 px-3 py-1.5 text-[11.5px] font-semibold text-sand-600">
-                  <SpinnerIcon size={12} className="text-clay motion-safe:animate-spin" />
-                  {t("video.transcribing")}
-                </span>
-              )
-            }
-          />
-        </div>
-
-        {askRange && (
-          <AskRange
-            notebookId={notebookId}
-            documentId={documentId}
-            audio={audio}
-            hasTranscript={transcript.length > 0}
-            defaultStart={askRange.start}
-            defaultEnd={askRange.end}
-            sectionChoices={sectionChoices}
-            onSeek={(startTime) => playerRef.current?.seek(startTime)}
-            onClose={() => setAskRange(null)}
-          />
+  const lineAction =
+    "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold text-sand-600 hover:bg-clay-100 hover:text-clay-800";
+  // The moment's tools on a transcript line: a line is an anchor like a
+  // circled spot — same tools, same time range, no drawn region.
+  const lineTools = (line: TranscriptLine) => {
+    const annotated = annotationByLine.get(line.id);
+    return (
+      <>
+        {canEdit && (
+          <button
+            onClick={() => commentOnLine(line)}
+            data-track="video-line-comment"
+            className={lineAction}
+            data-tip={t("video.commentOnLineTitle")}
+          >
+            <CommentIcon size={11} />
+            {t("video.comment")}
+          </button>
         )}
-
-        {assistantOpen && canEdit && (
-          <MediaAssistant
-            notebookId={notebookId}
-            documentId={documentId}
-            hasTranscript={transcript.length > 0}
-            sectionChoices={sectionChoices}
-            spot={assistantSpot}
-            captureFrame={captureFrame}
-            onClose={() => setAssistantOpen(false)}
-          />
+        {canEdit && (
+          <button
+            onClick={() => explainLine(line)}
+            data-track="video-line-explain"
+            className={lineAction}
+            data-tip={t("video.explainThisMoment")}
+          >
+            <QuestionIcon size={11} />
+            {t("video.explain")}
+          </button>
         )}
-
-        {drawing && (
-          <p className="mt-3 text-[13px] text-sand-600">{t("video.drawHelp")}</p>
+        {annotated && (
+          <button
+            onClick={() => openAnnotation(annotated)}
+            data-track="video-line-open-note"
+            className={lineAction}
+            data-tip={t("video.openNoteTitle")}
+          >
+            <LocateIcon size={11} />
+            {t("video.openNote")}
+          </button>
         )}
+      </>
+    );
+  };
+  function openAnnotation(a: VideoAnnotationItem) {
+    playerRef.current?.seek(a.startTime);
+    flash(a.sourceId);
+    setExplaining(null);
+    setOpenNote(a);
+  }
 
-        {openNote && !explaining && (
-          <div className="mt-4 rounded-2xl bg-card p-4 shadow-float">
-            <div className="mb-2 flex items-center gap-2">
-              <span className="text-[11px] font-bold tracking-[0.08em] text-sand-600 uppercase">
-                {openNote.kind === "explain" ? t("video.explanation") : t("video.comment")}
-              </span>
-              <span className="rounded-full bg-clay-100 px-2.5 py-0.5 text-[11px] font-semibold tabular-nums text-clay-800">
-                {formatTimeRange(openNote.startTime, openNote.endTime)}
-              </span>
-              <button
-                onClick={() => setOpenNote(null)}
-                data-track="video-note-close"
-                aria-label={t("common.close")}
-                data-tip={t("common.close")}
-                className="ml-auto rounded-full px-1.5 text-sand-500 hover:text-clay-800"
-              >
-                ✕
-              </button>
-            </div>
-            <Markdown>{openNote.content}</Markdown>
-          </div>
-        )}
+  // Above the lines: the player and everything for dissecting the video.
+  const prelude = (
+    <>
+      <p className="mb-2.5 text-[11px] font-bold tracking-[0.09em] text-clay-700 uppercase">
+        {video.kind === "YOUTUBE" ? "YouTube" : audio ? t("video.kindAudio") : t("video.kindVideo")}
+        {video.duration !== null ? ` · ${formatTime(video.duration)}` : ""}
+      </p>
+      <DocumentTitle documentId={documentId} title={title} />
 
-        {explaining && (
-          <div className="mt-4 rounded-2xl bg-card p-4 shadow-float">
-            <div className="mb-2 flex items-center gap-2">
-              <span className="text-[11px] font-bold tracking-[0.08em] text-sand-600 uppercase">
-                {t("video.explanation")}
-              </span>
-              {!explaining.done && (
-                <ThinkingIndicator className="text-xs" onStop={stopExplain} />
-              )}
-              {explaining.done && !explaining.error && (
-                <span className="text-xs text-sand-500">{t("video.savedAsAnnotation")}</span>
-              )}
-              <button
-                onClick={() => {
-                  explainAbortRef.current?.abort();
-                  setExplaining(null);
-                  setComposer(null);
-                }}
-                data-track="video-explain-close"
-                aria-label={t("common.close")}
-                data-tip={t("common.close")}
-                className="ml-auto rounded-full px-1.5 text-sand-500 hover:text-clay-800"
-              >
-                ✕
-              </button>
-            </div>
-            {explaining.content && <Markdown>{explaining.content}</Markdown>}
-            {explaining.error && <p className="mt-1.5 text-xs text-red-500">{explaining.error}</p>}
-          </div>
-        )}
-
-        {composer && !explaining && (
-          <div className="mt-4 rounded-2xl bg-card p-4 shadow-float">
-            <div className="mb-2.5 flex items-center gap-2">
-              <span className="text-[11px] font-bold tracking-[0.08em] text-sand-600 uppercase">
-                {t("video.newAnnotation")}
-              </span>
-              <input
-                value={composer.startTime}
-                onChange={(e) => setComposer({ ...composer, startTime: e.target.value })}
-                aria-label={t("video.startTime")}
-                className="w-16 rounded-full bg-sand-100 px-2.5 py-1 text-center text-xs tabular-nums outline-none"
-              />
-              <span className="text-xs text-sand-500">{t("video.to")}</span>
-              <input
-                value={composer.endTime}
-                onChange={(e) => setComposer({ ...composer, endTime: e.target.value })}
-                aria-label={t("video.endTime")}
-                className="w-16 rounded-full bg-sand-100 px-2.5 py-1 text-center text-xs tabular-nums outline-none"
-              />
-              <span className="text-xs text-sand-500">
-                {composer.region
-                  ? t("video.regionShows")
-                  : audio
-                    ? t("video.audioRangeShows")
-                    : t("video.wholeFrameShows")}
-              </span>
-              <button
-                onClick={() => setComposer(null)}
-                data-track="video-composer-close"
-                aria-label={t("common.close")}
-                data-tip={t("common.close")}
-                className="ml-auto rounded-full px-1.5 text-sand-500 hover:text-clay-800"
-              >
-                ✕
-              </button>
-            </div>
-            <textarea
-              autoFocus
-              value={composer.text}
-              onChange={(e) => setComposer({ ...composer, text: e.target.value })}
-              onKeyDown={(e) => {
-                if (isImeKey(e)) return;
-                if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void saveComposer();
-                if (e.key === "Escape") setComposer(null);
-              }}
-              placeholder={
-                composer.region
-                  ? t("video.commentCircledPlaceholder")
-                  : t("video.commentMomentPlaceholder")
-              }
-              rows={2}
-              className="w-full resize-y rounded-2xl bg-sand-100 px-3.5 py-2.5 text-sm outline-none placeholder:text-sand-500"
-            />
-            {composer.error && <p className="mt-1.5 text-xs text-red-500">{composer.error}</p>}
-            <div className="mt-2.5 flex items-center gap-2">
-              <button
-                onClick={() => void saveComposer()}
-                data-track="video-save-annotation"
-                disabled={composer.busy}
-                className="rounded-full bg-clay px-4 py-1.5 text-xs font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
-              >
-                {composer.busy ? t("common.saving") : t("video.saveAnnotation")}
-              </button>
-              <button
-                onClick={() => void explainComposer()}
-                data-track="video-explain"
-                disabled={composer.busy}
-                data-tip={audio ? t("video.audioExplainButtonTitle") : t("video.explainButtonTitle")}
-                className="rounded-full border border-line px-3.5 py-1.5 text-xs font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40"
-              >
-                {composer.region ? t("video.explainCircled") : t("video.explainThisMoment")}
-              </button>
-              <button
-                onClick={() => setComposer(null)}
-                data-track="video-composer-cancel"
-                className="rounded-full border border-line px-3.5 py-1.5 text-xs text-sand-700 hover:bg-clay-100 hover:text-clay-800"
-              >
-                {t("common.cancel")}
-              </button>
-            </div>
-          </div>
-        )}
-
-        <Visual
-          source={thumbnailSource}
+      <div className="relative">
+        <VideoPlayer
+          ref={playerRef}
+          source={source}
           audio={audio}
+          aspect={aspect}
+          storedDuration={video.duration}
           annotations={all}
-          onOpen={(a) => {
-            playerRef.current?.seek(a.startTime);
-            flash(a.sourceId);
-            setExplaining(null);
-            setOpenNote(a);
+          flashSourceId={flashSourceId}
+          drawing={drawing}
+          onDrawn={onDrawn}
+          pendingRegion={composer?.region ?? null}
+          onMetadata={onMetadata}
+          onTime={(t) => {
+            currentTimeRef.current = t;
+            // The transcript follows playback: one state change per line, not
+            // one per tick.
+            const line = transcript.find((l) => t >= l.startTime && t < l.endTime) ?? null;
+            setActiveLineId((prev) => (prev === (line?.id ?? null) ? prev : (line?.id ?? null)));
           }}
-          onDelete={onVisualDelete}
+          onAnnotate={toggleAnnotate}
+          canAnnotate={canEdit}
         />
-
-        {transcript.length > 0 && (
-          <div className="mt-6">
-            <TranslationBar
-              documentId={documentId}
-              text={transcript.map((l) => l.text).join("\n").slice(0, 4000)}
-              available={translationAvailable}
-              onTranslations={setTranslations}
-            />
+        {/* The tool caption: floats up for a few seconds, then fades. */}
+        {hint && (
+          <div className="pointer-events-none absolute bottom-20 left-1/2 z-10 -translate-x-1/2">
+            <div
+              onAnimationEnd={() => setHint(false)}
+              className="hint-fade rounded-full bg-black/75 px-5 py-2.5 text-[12.5px] font-medium whitespace-nowrap text-[#f5ead8] backdrop-blur-sm"
+            >
+              {audio ? t("video.hintCaptionAudio") : t("video.hintCaption")}
+            </div>
           </div>
         )}
+      </div>
 
-        <Transcript
-          transcript={transcript}
-          translations={translations}
+      {/* The tool bar: everything for dissecting the video, one surface. */}
+      <div className="mt-4">
+        <FindPanel
+          notebookId={notebookId}
+          documentId={documentId}
           audio={audio}
-          activeLineId={activeLineId}
-          annotations={all}
+          hasTranscript={transcript.length > 0}
+          sectionChoices={sectionChoices}
+          onSeek={(startTime) => {
+            playerRef.current?.seek(startTime);
+          }}
+          leading={
+            <>
+            {canEdit && (
+            <>
+            <button
+              onClick={toggleAnnotate}
+              data-track="video-circle-comment"
+              data-tip={audio ? t("video.audioCommentTitle") : t("video.circleCommentTitle")}
+              className={
+                annotateOn
+                  ? "flex shrink-0 items-center gap-1.5 rounded-full bg-clay px-3.5 py-2 text-xs font-semibold text-clay-fg"
+                  : "flex shrink-0 items-center gap-1.5 rounded-full border border-line px-3.5 py-2 text-xs font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800"
+              }
+            >
+              <SearchIcon size={13} />
+              {audio ? t("video.comment") : t("video.circleComment")}
+            </button>
+            <button
+              onClick={() => setAssistantOpen((open) => !open)}
+              data-track="video-assistant"
+              data-tip={t("video.assistantButtonTitle")}
+              className={
+                assistantOpen
+                  ? "flex shrink-0 items-center gap-1.5 rounded-full bg-clay px-3.5 py-2 text-xs font-semibold text-clay-fg"
+                  : "flex shrink-0 items-center gap-1.5 rounded-full border border-line px-3.5 py-2 text-xs font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800"
+              }
+            >
+              <SparkleIcon size={13} />
+              {t("video.assistant")}
+            </button>
+            </>
+            )}
+            <button
+              onClick={toggleAsk}
+              data-track="video-ask-open"
+              data-tip={t(audio ? "video.askButtonTitleAudio" : "video.askButtonTitle")}
+              className={
+                askRange
+                  ? "flex shrink-0 items-center gap-1.5 rounded-full bg-clay px-3.5 py-2 text-xs font-semibold text-clay-fg"
+                  : "flex shrink-0 items-center gap-1.5 rounded-full border border-line px-3.5 py-2 text-xs font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800"
+              }
+            >
+              <QuestionIcon size={13} />
+              {t("video.askRange")}
+            </button>
+            </>
+          }
+          trailing={
+            transcript.length > 0 ? (
+              <span className="shrink-0 rounded-full bg-sand-100 px-3 py-1.5 text-[11.5px] font-semibold text-sand-600">
+                {t("video.linesCount", { n: transcript.length })}
+              </span>
+            ) : transcriptFailedMessage ? (
+              <span className="shrink-0 rounded-full bg-sand-100 px-3 py-1.5 text-[11.5px] font-semibold text-red-500">
+                {t("video.transcriptFailedChip")}
+              </span>
+            ) : (
+              <span className="flex shrink-0 items-center gap-1.5 rounded-full bg-sand-100 px-3 py-1.5 text-[11.5px] font-semibold text-sand-600">
+                <SpinnerIcon size={12} className="text-clay motion-safe:animate-spin" />
+                {t("video.transcribing")}
+              </span>
+            )
+          }
+        />
+      </div>
+
+      {askRange && (
+        <AskRange
+          notebookId={notebookId}
+          documentId={documentId}
+          audio={audio}
+          hasTranscript={transcript.length > 0}
+          defaultStart={askRange.start}
+          defaultEnd={askRange.end}
+          sectionChoices={sectionChoices}
+          onSeek={(startTime) => playerRef.current?.seek(startTime)}
+          onClose={() => setAskRange(null)}
+        />
+      )}
+
+      {assistantOpen && canEdit && (
+        <MediaAssistant
+          notebookId={notebookId}
+          documentId={documentId}
+          hasTranscript={transcript.length > 0}
+          sectionChoices={sectionChoices}
+          spot={assistantSpot}
+          captureFrame={captureFrame}
+          onClose={() => setAssistantOpen(false)}
+        />
+      )}
+
+      {drawing && (
+        <p className="mt-3 text-[13px] text-sand-600">{t("video.drawHelp")}</p>
+      )}
+
+      {openNote && !explaining && (
+        <div className="mt-4 rounded-2xl bg-card p-4 shadow-float">
+          <div className="mb-2 flex items-center gap-2">
+            <span className="text-[11px] font-bold tracking-[0.08em] text-sand-600 uppercase">
+              {openNote.kind === "explain" ? t("video.explanation") : t("video.comment")}
+            </span>
+            <span className="rounded-full bg-clay-100 px-2.5 py-0.5 text-[11px] font-semibold tabular-nums text-clay-800">
+              {formatTimeRange(openNote.startTime, openNote.endTime)}
+            </span>
+            <button
+              onClick={() => setOpenNote(null)}
+              data-track="video-note-close"
+              aria-label={t("common.close")}
+              data-tip={t("common.close")}
+              className="ml-auto rounded-full px-1.5 text-sand-500 hover:text-clay-800"
+            >
+              ✕
+            </button>
+          </div>
+          <Markdown>{openNote.content}</Markdown>
+        </div>
+      )}
+
+      {explaining && (
+        <div className="mt-4 rounded-2xl bg-card p-4 shadow-float">
+          <div className="mb-2 flex items-center gap-2">
+            <span className="text-[11px] font-bold tracking-[0.08em] text-sand-600 uppercase">
+              {t("video.explanation")}
+            </span>
+            {!explaining.done && (
+              <ThinkingIndicator className="text-xs" onStop={stopExplain} />
+            )}
+            {explaining.done && !explaining.error && (
+              <span className="text-xs text-sand-500">{t("video.savedAsAnnotation")}</span>
+            )}
+            <button
+              onClick={() => {
+                explainAbortRef.current?.abort();
+                setExplaining(null);
+                setComposer(null);
+              }}
+              data-track="video-explain-close"
+              aria-label={t("common.close")}
+              data-tip={t("common.close")}
+              className="ml-auto rounded-full px-1.5 text-sand-500 hover:text-clay-800"
+            >
+              ✕
+            </button>
+          </div>
+          {explaining.content && <Markdown>{explaining.content}</Markdown>}
+          {explaining.error && <p className="mt-1.5 text-xs text-red-500">{explaining.error}</p>}
+        </div>
+      )}
+
+      {composer && !explaining && (
+        <div className="mt-4 rounded-2xl bg-card p-4 shadow-float">
+          <div className="mb-2.5 flex items-center gap-2">
+            <span className="text-[11px] font-bold tracking-[0.08em] text-sand-600 uppercase">
+              {t("video.newAnnotation")}
+            </span>
+            <input
+              value={composer.startTime}
+              onChange={(e) => setComposer({ ...composer, startTime: e.target.value })}
+              aria-label={t("video.startTime")}
+              className="w-16 rounded-full bg-sand-100 px-2.5 py-1 text-center text-xs tabular-nums outline-none"
+            />
+            <span className="text-xs text-sand-500">{t("video.to")}</span>
+            <input
+              value={composer.endTime}
+              onChange={(e) => setComposer({ ...composer, endTime: e.target.value })}
+              aria-label={t("video.endTime")}
+              className="w-16 rounded-full bg-sand-100 px-2.5 py-1 text-center text-xs tabular-nums outline-none"
+            />
+            <span className="text-xs text-sand-500">
+              {composer.region
+                ? t("video.regionShows")
+                : audio
+                  ? t("video.audioRangeShows")
+                  : t("video.wholeFrameShows")}
+            </span>
+            <button
+              onClick={() => setComposer(null)}
+              data-track="video-composer-close"
+              aria-label={t("common.close")}
+              data-tip={t("common.close")}
+              className="ml-auto rounded-full px-1.5 text-sand-500 hover:text-clay-800"
+            >
+              ✕
+            </button>
+          </div>
+          <textarea
+            autoFocus
+            value={composer.text}
+            onChange={(e) => setComposer({ ...composer, text: e.target.value })}
+            onKeyDown={(e) => {
+              if (isImeKey(e)) return;
+              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void saveComposer();
+              if (e.key === "Escape") setComposer(null);
+            }}
+            placeholder={
+              composer.region
+                ? t("video.commentCircledPlaceholder")
+                : t("video.commentMomentPlaceholder")
+            }
+            rows={2}
+            className="w-full resize-y rounded-2xl bg-sand-100 px-3.5 py-2.5 text-sm outline-none placeholder:text-sand-500"
+          />
+          {composer.error && <p className="mt-1.5 text-xs text-red-500">{composer.error}</p>}
+          <div className="mt-2.5 flex items-center gap-2">
+            <button
+              onClick={() => void saveComposer()}
+              data-track="video-save-annotation"
+              disabled={composer.busy}
+              className="rounded-full bg-clay px-4 py-1.5 text-xs font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
+            >
+              {composer.busy ? t("common.saving") : t("video.saveAnnotation")}
+            </button>
+            <button
+              onClick={() => void explainComposer()}
+              data-track="video-explain"
+              disabled={composer.busy}
+              data-tip={audio ? t("video.audioExplainButtonTitle") : t("video.explainButtonTitle")}
+              className="rounded-full border border-line px-3.5 py-1.5 text-xs font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40"
+            >
+              {composer.region ? t("video.explainCircled") : t("video.explainThisMoment")}
+            </button>
+            <button
+              onClick={() => setComposer(null)}
+              data-track="video-composer-cancel"
+              className="rounded-full border border-line px-3.5 py-1.5 text-xs text-sand-700 hover:bg-clay-100 hover:text-clay-800"
+            >
+              {t("common.cancel")}
+            </button>
+          </div>
+        </div>
+      )}
+
+      <Visual
+        source={thumbnailSource}
+        audio={audio}
+        annotations={all}
+        onOpen={openAnnotation}
+        onDelete={onVisualDelete}
+      />
+
+      <TranscriptHeader
+        count={transcript.length}
+        audio={audio}
+        pending={transcriptPending}
+        onTranscribe={() => void transcribe()}
+      />
+    </>
+  );
+
+  // Below the lines: the failed state when there are none, the article.
+  const epilogue = (
+    <>
+      {transcript.length === 0 && (
+        <TranscriptEmpty
+          audio={audio}
           pending={transcriptPending}
           failedMessage={transcriptFailedMessage}
-          onSeek={(line) => {
-            playerRef.current?.seek(line.startTime);
-            setActiveLineId(line.id);
-          }}
-          onComment={commentOnLine}
-          onExplain={explainLine}
-          onOpenAnnotation={(a) => {
-            playerRef.current?.seek(a.startTime);
-            flash(a.sourceId);
-            setExplaining(null);
-            setOpenNote(a);
-          }}
           onTranscribe={() => void transcribe()}
           onPaste={pasteTranscript}
           pasteHelp={t(video.kind === "YOUTUBE" ? "video.pasteHelpYoutube" : "video.pasteHelpFile")}
         />
+      )}
+      {transcript.length > 0 && transcriptFailedMessage && (
+        <p className="mt-2 px-1 text-xs text-red-500">{transcriptFailedMessage}</p>
+      )}
+      <ArticleSection
+        notebookId={notebookId}
+        documentId={documentId}
+        article={formalized}
+        canEdit={canEdit}
+      />
+    </>
+  );
 
-        <ArticleSection
-          notebookId={notebookId}
-          documentId={documentId}
-          article={formalized}
-          canEdit={canEdit}
-        />
-      </article>
-    </div>
+  const transcriptView: TranscriptVariant = {
+    lines: transcript,
+    activeLineId,
+    onSeek: (line) => {
+      playerRef.current?.seek(line.startTime);
+      setActiveLineId(line.id);
+    },
+    annotatedLineIds,
+    lineTools,
+    prelude,
+    epilogue,
+    // Fluid column: the player grows with the pane — collapsing the tray
+    // widens it — capped so the frame stays fully on screen.
+    columnStyle: {
+      maxWidth: audio ? "760px" : `max(640px, calc((100vh - 320px) * ${aspect}))`,
+    },
+  };
+
+  return (
+    <ReaderInteractions
+      documentId={documentId}
+      notebookId={notebookId}
+      sectionChoices={sectionChoices}
+      title={title}
+      translationAvailable={translationAvailable}
+      blocks={transcript.map((l) => ({ id: l.id, type: "TRANSCRIPT" as const, text: l.text, html: null }))}
+      {...reader}
+      transcript={transcriptView}
+    />
   );
 }
