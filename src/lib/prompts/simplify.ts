@@ -22,6 +22,7 @@ export function simplifyPrompt(ctx: PromptCtx): string {
     "3. Word it intuitively: say what happens before you say why it matters. A short analogy is fine when it makes the meaning clearer.",
     "4. After each rewritten sentence, append a source marker naming the numbered original sentences it restates: [[1]] or [[2,3]]. Every rewritten sentence gets exactly one marker with at least one number. Use only the numbers above.",
     "5. Write in the passage's language.",
+    "6. Keep the rewrite close to the original's length: short sentences, plain words, no filler.",
     "Return only the rewritten passage as plain text with the markers. No preamble, no markdown headings.",
   ].join("\n");
 }

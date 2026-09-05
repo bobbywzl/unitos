@@ -14,7 +14,7 @@ export function findPrompt(ctx: PromptCtx): string {
     "",
     "Find the parts of the video that answer it.",
     "1. Return up to 5 matches, best first. A match is one contiguous run of transcript blocks where the video deals with the search.",
-    `2. For each match, list the exact block ids it spans, in order, and explain in 1–3 sentences, in ${languageName(ctx.lang)}, what that part says and why it answers the search. Quote key phrases from the transcript.`,
+    `2. For each match, list the exact block ids it spans, in order, and explain in one or two sentences, in ${languageName(ctx.lang)}, what that part says and why it answers the search. Quote key phrases from the transcript.`,
     "3. No real match: return an empty list. Never stretch a weak match.",
     'Return ONLY JSON: {"matches": [{"blockIds": ["<id>", "…"], "explanation": "…"}]}',
   ].join("\n");

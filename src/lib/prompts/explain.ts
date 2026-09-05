@@ -1,4 +1,4 @@
-import { answerLanguage, profileLines, type PromptCtx } from "@/lib/prompts/types";
+import { answerLanguage, profileLines, STYLE_RULE, type PromptCtx } from "@/lib/prompts/types";
 
 // EXPLAIN: annotation bubble in the reader rail. Persisted as a note in the hidden
 // Annotations section (SPEC.md §4).
@@ -22,7 +22,8 @@ export function explainPrompt(ctx: PromptCtx): string {
       "1. Start with what is said at this moment: the claim, the point, the example.",
       "2. Then place it: what the recording is arguing here and how this moment fits what came before and after, using the timed transcript.",
       "3. Connect it to the reader's purpose when the connection is real.",
-      "Keep it under 200 words, in flowing prose — no headings, no numbered sections. Start with the explanation, no preamble.",
+      "Keep it under 150 words, in flowing prose: no headings, no numbered sections. Start with the explanation.",
+      STYLE_RULE,
       answerLanguage(ctx.lang),
     ].join("\n");
   }
@@ -61,7 +62,8 @@ export function explainPrompt(ctx: PromptCtx): string {
       "2. Then place it: what the video is saying here, using the timed transcript, and how the visual and the words fit together.",
       "3. Never state anything about the image you cannot actually see. Where the frame is too small or unclear to be sure, say so plainly instead of guessing. If the image and the description disagree, trust the image and say what you see.",
       "4. Connect it to the reader's purpose when the connection is real.",
-      "Keep it under 200 words, in flowing prose — no headings, no numbered sections. Start with the explanation, no preamble.",
+      "Keep it under 150 words, in flowing prose: no headings, no numbered sections. Start with the explanation.",
+      STYLE_RULE,
       answerLanguage(ctx.lang),
     ].join("\n");
   }
@@ -82,7 +84,8 @@ export function explainPrompt(ctx: PromptCtx): string {
       "2. Then place it: how the spot fits the rest of the page and the document.",
       "3. Never state anything about the image you cannot actually see. Where the handwriting is illegible, say so plainly instead of guessing.",
       "4. Connect it to the reader's purpose when the connection is real.",
-      "Keep it under 200 words. Use markdown. Start with the answer, no preamble.",
+      "Keep it under 150 words. Use markdown. Start with the answer.",
+      STYLE_RULE,
       answerLanguage(ctx.lang),
     ].join("\n");
   }
@@ -112,7 +115,8 @@ export function explainPrompt(ctx: PromptCtx): string {
       "2. Read out the concrete content: axes, series, numbers, trends, comparisons — whatever is actually visible. Never invent values you cannot see.",
       "3. State the takeaway the document draws from it, tied to their purpose when the connection is real.",
       "When project context follows the document — other documents' passages, the reader's notes, highlights, comments — reference what clarifies this figure by name and draw the analogy explicitly.",
-      "Keep it under 200 words. Use markdown. Start with the explanation, no preamble.",
+      "Keep it under 150 words. Use markdown. Start with the explanation.",
+      STYLE_RULE,
       answerLanguage(ctx.lang),
     ].join("\n");
   }
@@ -136,7 +140,8 @@ export function explainPrompt(ctx: PromptCtx): string {
     "3. Connect the passage to their purpose when the connection is real. Skip forced connections.",
     "When you point at another part of the document, cite its block tag exactly as written above ([block <id>]) — the tag renders as a link the reader can click.",
     "When project context follows the document — other documents' passages, the reader's notes, highlights, comments — reference what clarifies the passage by name and draw the analogy explicitly.",
-    "Keep it under 200 words. Use markdown. Start with the explanation, no preamble.",
+    "Keep it under 150 words. Use markdown. Start with the explanation.",
+    STYLE_RULE,
     answerLanguage(ctx.lang),
   ].join("\n");
 }

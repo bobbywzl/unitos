@@ -28,7 +28,7 @@ export function formalizePrompt(ctx: PromptCtx): string {
     ...shared,
     "Distill the transcript into personal bullet-point notes the reader will come back to.",
     "1. Group the content into topics, in transcript order. One topic = one coherent stretch of the recording.",
-    "2. heading: the topic in a few words. bullets: the points that matter — claims, numbers, examples, decisions — one point per bullet, short and concrete.",
+    "2. heading: the topic in a few words. bullets: the points that matter — claims, numbers, examples, decisions — one point per bullet, one line each, short and concrete.",
     "3. blockIds: the transcript block ids that topic covers, in order, exactly as given.",
     "4. Never invent content. Write in the transcript's language.",
     'Return ONLY JSON: {"topics": [{"heading": "…", "bullets": ["…"], "blockIds": ["…"]}]}',

@@ -342,6 +342,7 @@ async function handle(req: Request, t: TFunc) {
     "5. TABLE and FIGURE blocks cannot be edited or removed.",
     "6. In reply, cite blocks as [block <id>] when you point at specific parts of the document — the tags render as links the reader can click.",
     `7. Write reply and every description in ${languageName(await currentLang())}.`,
+    "8. reply: short sentences, plain words, one point per sentence, under 150 words. No preamble, no filler, no closing summary.",
     "",
     ...(data.history && data.history.length > 0
       ? [

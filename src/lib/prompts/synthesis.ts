@@ -1,5 +1,5 @@
 import type { Lang } from "@/lib/i18n/config";
-import { answerLanguage, languageName, profileLines, type ReaderProfileCtx } from "@/lib/prompts/types";
+import { answerLanguage, languageName, profileLines, STYLE_RULE, type ReaderProfileCtx } from "@/lib/prompts/types";
 
 // SYNTHESIS: notebook-scope assistant output (SPEC.md §7). Free questions stream text;
 // contradiction/gap/unsourced tasks return JSON issue cards.
@@ -23,7 +23,9 @@ export function synthesisAskPrompt(params: {
     "",
     "Answer from the material above. Reference notes by their [note <id>] markers and",
     "blocks by their [block <id>] markers when they ground a claim. Say plainly when the",
-    "material does not answer the question. Use markdown. No preamble.",
+    "material does not answer the question. Use markdown. Start with the answer.",
+    "Keep it under 250 words unless the question needs more.",
+    STYLE_RULE,
     ...(params.web
       ? [
           "",
@@ -68,8 +70,9 @@ export function synthesisTaskPrompt(params: {
     "",
     "Rules:",
     "1. Only report real issues. An empty list is a valid answer.",
-    `2. issue: one sentence naming the problem. explanation: 1-3 sentences with the evidence. Write both in ${languageName(params.lang)}.`,
+    `2. issue: one sentence naming the problem. explanation: one or two sentences with the evidence. Write both in ${languageName(params.lang)}.`,
     "3. Use note ids exactly as they appear in [note <id>] markers.",
+    `4. ${STYLE_RULE}`,
     "",
     'Return ONLY JSON: {"issues": [{"noteIds": ["<id>"], "issue": "<sentence>", "explanation": "<sentences>"}]}',
   ].join("\n");
