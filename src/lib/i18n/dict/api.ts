@@ -55,7 +55,7 @@ const en = {
   noVideoBlock: "This document has no video block",
 
   // Assistant
-  assistantNeedsKey: "KIMI_API_KEY is not set. The assistant needs it.",
+  assistantNeedsKey: "MOONSHOT_API_KEY is not set. The assistant needs it.",
   assistantFailed: "The assistant failed. {reason}",
   taskCorpusScope: "This task runs at Project scope",
   questionRequired: "Question is required",
@@ -69,7 +69,7 @@ const en = {
   warnLinkTargetNotAttached: "Skipped: the link target is not another attached document. ({description})",
 
   // Derivations
-  deriveNeedsKey: "KIMI_API_KEY is not set. Derivations need it.",
+  deriveNeedsKey: "MOONSHOT_API_KEY is not set. Derivations need it.",
   typeNotBuilt: "{type} is not built yet",
   typeRequiresAnchor: "{type} requires an anchor",
   findRequiresQuery: "FIND requires a query",
@@ -144,7 +144,7 @@ const en = {
   pdfEncrypted: "This PDF is password-protected. Remove the password and upload it again.",
   pdfDamaged: "This PDF could not be opened. The file may be damaged, or not a PDF.",
   modelBusy: "The AI service is busy right now. Wait a minute and try again.",
-  modelKeyInvalid: "The AI service rejected the key. Check KIMI_API_KEY.",
+  modelKeyInvalid: "The AI service rejected the key. Check MOONSHOT_API_KEY.",
   ingestTimedOut: "The add ran out of time. Try again; a long page or a large PDF may need splitting.",
   // Why a page could not be fetched (lib/parse/fetch-page.ts), in plain words
   fetchBlocked:
@@ -159,7 +159,7 @@ const en = {
   fetchUnreachable: "{host} could not be reached. Check the link.",
   fetchArchivedCopy: "{host} refused the request. Reading the archived copy…",
   notesCiteDocument: "Notes cite this document. Delete those notes first.",
-  glossaryNeedsKey: "KIMI_API_KEY is not set. Glossary extraction needs it.",
+  glossaryNeedsKey: "MOONSHOT_API_KEY is not set. Glossary extraction needs it.",
   glossaryFailed: "Glossary extraction failed",
   videoNoReparse: "Video documents do not re-parse",
   shapeSwitchNeedsPdf: "This document has no stored PDF to switch from",
@@ -288,7 +288,7 @@ const zh: Record<keyof typeof en, string> = {
   noVideo: "此文档没有视频",
   noVideoBlock: "此文档没有视频块",
 
-  assistantNeedsKey: "未设置 KIMI_API_KEY。助手需要它。",
+  assistantNeedsKey: "未设置 MOONSHOT_API_KEY。助手需要它。",
   assistantFailed: "助手请求失败。{reason}",
   taskCorpusScope: "此任务在项目范围运行",
   questionRequired: "请输入问题",
@@ -301,7 +301,7 @@ const zh: Record<keyof typeof en, string> = {
   warnOnlyTextEdited: "已跳过：只有文本块可以编辑。（{description}）",
   warnLinkTargetNotAttached: "已跳过：链接目标不是此项目中的另一个文档。（{description}）",
 
-  deriveNeedsKey: "未设置 KIMI_API_KEY。AI 生成需要它。",
+  deriveNeedsKey: "未设置 MOONSHOT_API_KEY。AI 生成需要它。",
   typeNotBuilt: "{type} 尚未实现",
   typeRequiresAnchor: "{type} 需要锚点",
   findRequiresQuery: "FIND 需要查询词",
@@ -370,7 +370,7 @@ const zh: Record<keyof typeof en, string> = {
   pdfEncrypted: "此 PDF 有密码保护。请去掉密码后重新上传。",
   pdfDamaged: "此 PDF 无法打开。文件可能已损坏，或不是 PDF。",
   modelBusy: "AI 服务当前繁忙。请稍等一分钟再试。",
-  modelKeyInvalid: "AI 服务拒绝了密钥。请检查 KIMI_API_KEY。",
+  modelKeyInvalid: "AI 服务拒绝了密钥。请检查 MOONSHOT_API_KEY。",
   ingestTimedOut: "添加超时。请重试；很长的页面或很大的 PDF 可能需要拆分。",
   fetchBlocked:
     "{host} 拒绝了请求（HTTP {status}）。该网站拦截自动读取，也没有存档副本。请在浏览器中打开页面，另存为 PDF，再上传该 PDF。",
@@ -383,7 +383,7 @@ const zh: Record<keyof typeof en, string> = {
   fetchUnreachable: "无法连接 {host}。请检查链接。",
   fetchArchivedCopy: "{host} 拒绝了请求。正在读取存档副本……",
   notesCiteDocument: "有笔记引用此文档。请先删除这些笔记。",
-  glossaryNeedsKey: "未设置 KIMI_API_KEY。术语表生成需要它。",
+  glossaryNeedsKey: "未设置 MOONSHOT_API_KEY。术语表生成需要它。",
   glossaryFailed: "术语表生成失败",
   videoNoReparse: "视频文档不能重新解析",
   shapeSwitchNeedsPdf: "此文档没有存储的 PDF，无法切换",

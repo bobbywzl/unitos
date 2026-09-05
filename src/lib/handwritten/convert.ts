@@ -180,7 +180,7 @@ export async function runConversion(
     return { ok: false, status: 400, error: "This document has no stored PDF" };
   }
   if (!kimiConfigured()) {
-    return { ok: false, status: 503, error: "Set KIMI_API_KEY. Conversion needs it." };
+    return { ok: false, status: 503, error: "Set MOONSHOT_API_KEY. Conversion needs it." };
   }
   const pages = document.blocks.map((b) => b.page).filter((p): p is number => p !== null);
   if (pages.length === 0) {

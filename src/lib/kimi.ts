@@ -6,14 +6,14 @@ import { outboundFetch } from "@/lib/outbound-fetch";
 
 // The Kimi client (SPEC.md §2): every model call in the app goes through here.
 // Moonshot AI's API is OpenAI-compatible; the AI SDK's Moonshot provider speaks
-// it. The key is KIMI_API_KEY, or MOONSHOT_API_KEY, the provider's own name.
-// KIMI_BASE_URL points a local run at a stand-in server (scripts/qa) or at the
-// China platform (https://api.moonshot.cn/v1).
+// it. The key is MOONSHOT_API_KEY. MOONSHOT_BASE_URL points a local run at a
+// stand-in server (scripts/qa) or at the China platform
+// (https://api.moonshot.cn/v1).
 
 const DEFAULT_BASE_URL = "https://api.moonshot.ai/v1";
 
 export function kimiApiKey(): string | undefined {
-  return process.env.KIMI_API_KEY || process.env.MOONSHOT_API_KEY || undefined;
+  return process.env.MOONSHOT_API_KEY || undefined;
 }
 
 /** A key is set, so the AI features are on. Every route checks this first. */
@@ -22,7 +22,7 @@ export function kimiConfigured(): boolean {
 }
 
 export function kimiBaseUrl(): string {
-  return (process.env.KIMI_BASE_URL || DEFAULT_BASE_URL).replace(/\/+$/, "");
+  return (process.env.MOONSHOT_BASE_URL || DEFAULT_BASE_URL).replace(/\/+$/, "");
 }
 
 let provider: MoonshotAIProvider | null = null;

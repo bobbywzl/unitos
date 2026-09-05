@@ -4,7 +4,7 @@
 // output: real block ids, real quotes, schema-exact JSON — so every AI flow
 // (EXPLAIN, SIMPLIFY, EXTRACT, SALIENCE, assistant ask and act) runs
 // end-to-end with zero external calls. Point the app at it with
-//   KIMI_API_KEY=mock KIMI_BASE_URL=http://localhost:3399/v1
+//   MOONSHOT_API_KEY=mock MOONSHOT_BASE_URL=http://localhost:3399/v1
 import http from "node:http";
 
 const PORT = 3399;

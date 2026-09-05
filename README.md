@@ -50,13 +50,13 @@ npx prisma migrate deploy
 npm run dev                   # → http://localhost:3000
 ```
 
-Reading, notes, anchoring, and export work with no API keys. Add `KIMI_API_KEY` to `.env` for the AI features, and `GROQ_API_KEY`, `OPENAI_API_KEY`, or `GEMINI_API_KEY` for video transcription (YouTube captions need no key).
+Reading, notes, anchoring, and export work with no API keys. Add `MOONSHOT_API_KEY` to `.env` for the AI features, and `GROQ_API_KEY`, `OPENAI_API_KEY`, or `GEMINI_API_KEY` for video transcription (YouTube captions need no key).
 
 ## Deploy (Vercel)
 
 1. Import this repo on vercel.com.
 2. Storage → Create Database → **Neon** (Postgres) → connect it to the project. Vercel adds the database env vars; the build maps them and runs migrations (the first migration creates the `vector` extension).
-3. Settings → Environment Variables: `KIMI_API_KEY` (AI features), `GROQ_API_KEY`, `OPENAI_API_KEY`, or `GEMINI_API_KEY` (video transcription), `BROWSER_WS_ENDPOINT` (a browser service's CDP websocket, for YouTube transcripts when the server's own requests are bot-checked), `GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET` + `SESSION_SECRET` (Google sign-in; redirect URI `<origin>/api/auth/callback`), `APPLE_CLIENT_ID` + `APPLE_TEAM_ID` + `APPLE_KEY_ID` + `APPLE_PRIVATE_KEY` (Apple sign-in; return URL `<origin>/api/auth/apple/callback` on the Services ID), `RESEND_API_KEY` + `EMAIL_FROM` (email sign-in; sender on a domain verified in Resend), `ADMIN_PASSWORD` (`/admin`), `CRON_SECRET` (cleanup cron). All optional to boot; add and redeploy any time.
+3. Settings → Environment Variables: `MOONSHOT_API_KEY` (AI features), `GROQ_API_KEY`, `OPENAI_API_KEY`, or `GEMINI_API_KEY` (video transcription), `BROWSER_WS_ENDPOINT` (a browser service's CDP websocket, for YouTube transcripts when the server's own requests are bot-checked), `GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET` + `SESSION_SECRET` (Google sign-in; redirect URI `<origin>/api/auth/callback`), `APPLE_CLIENT_ID` + `APPLE_TEAM_ID` + `APPLE_KEY_ID` + `APPLE_PRIVATE_KEY` (Apple sign-in; return URL `<origin>/api/auth/apple/callback` on the Services ID), `RESEND_API_KEY` + `EMAIL_FROM` (email sign-in; sender on a domain verified in Resend), `ADMIN_PASSWORD` (`/admin`), `CRON_SECRET` (cleanup cron). All optional to boot; add and redeploy any time.
 4. Deployments → Redeploy the latest.
 
 Vercel caps request bodies at about 4.5 MB, so PDF uploads above that fail there. Self-hosted deployments take PDFs up to 50 MB.
@@ -69,7 +69,7 @@ Supabase instead of Neon works too: enable the `vector` extension, then set `DAT
 2. Copy `.env.example` to `.env` and fill in:
    - `DATABASE_URL` — Supabase pooled connection (port 6543, `?pgbouncer=true&connection_limit=1`)
    - `DIRECT_URL` — Supabase direct connection (port 5432), used for migrations
-   - `KIMI_API_KEY` — required for derivations, the assistant, and glossary (`MOONSHOT_API_KEY` works too; `KIMI_BASE_URL` overrides the endpoint)
+   - `MOONSHOT_API_KEY` — required for derivations, the assistant, and glossary (`MOONSHOT_BASE_URL` overrides the endpoint)
    - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `SESSION_SECRET` — Google sign-in at `/signin`; unset = single local reader, nothing gated. Redirect URI: `<origin>/api/auth/callback` — the only one to register; Link Google Drive returns through it too
    - `APPLE_CLIENT_ID` (Services ID), `APPLE_TEAM_ID`, `APPLE_KEY_ID`, `APPLE_PRIVATE_KEY` (.p8 contents) — Sign in with Apple; return URL: `<origin>/api/auth/apple/callback`
    - `RESEND_API_KEY`, `EMAIL_FROM` — email sign-in with a confirmation link; the account is created only when the link is clicked

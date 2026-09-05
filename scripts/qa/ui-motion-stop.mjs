@@ -1,7 +1,7 @@
 // QA check for motion, the Thinking + Stop row, the anchor ladder, and the
 // ingest reasons. Needs the dev server on :3000 with the mock Kimi server
-// on :3399 (start the dev server with KIMI_API_KEY=mock
-// KIMI_BASE_URL=http://localhost:3399/v1) and outbound network for the
+// on :3399 (start the dev server with MOONSHOT_API_KEY=mock
+// MOONSHOT_BASE_URL=http://localhost:3399/v1) and outbound network for the
 // ingest checks. Pass seeded ids and a folder for the screenshots:
 //   NB=<notebook id> DOC=<document id> OUT=<dir> node scripts/qa/ui-motion-stop.mjs
 import { chromium } from "playwright-core";

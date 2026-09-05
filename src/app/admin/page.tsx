@@ -42,7 +42,7 @@ export default async function AdminPage() {
   // Status only — values never leave the server. Operator concern, so it lives
   // here, not in reader Settings.
   const services: { label: string; description: string; set: boolean }[] = [
-    { label: "KIMI_API_KEY", description: t("admin.svcKimi"), set: kimiConfigured() },
+    { label: "MOONSHOT_API_KEY", description: t("admin.svcKimi"), set: kimiConfigured() },
     { label: "SESSION_SECRET + provider", description: t("admin.svcSignIn"), set: authEnabled() },
     { label: "ADMIN_PASSWORD", description: t("admin.svcAdmin"), set: Boolean(process.env.ADMIN_PASSWORD) },
   ];

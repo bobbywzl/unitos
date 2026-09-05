@@ -3,7 +3,7 @@
 // Ask about a range on an audio document, Translate a Chinese document, a
 // voice note, and the assistant's web access with cited sources.
 // Env: NB, DOC, TABLE, FIGURE, AUDIO, ZH, CHROME. The server runs with
-//   KIMI_API_KEY=mock KIMI_BASE_URL=http://localhost:3399/v1
+//   MOONSHOT_API_KEY=mock MOONSHOT_BASE_URL=http://localhost:3399/v1
 //   DEEPL_API_KEY=mock:fx DEEPL_API_URL=http://localhost:3398
 //   GROQ_API_KEY=mock GROQ_API_URL=http://localhost:3398/openai/v1/audio/transcriptions
 // (scripts/qa/mock-kimi.mjs and scripts/qa/mock-services.mjs).

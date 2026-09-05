@@ -1,6 +1,6 @@
 // QA check for the Summary tab and the SIMPLIFY bubble. Needs the dev server on
 // :3311 and the mock Kimi server on :3399 (start the dev server with
-// KIMI_API_KEY=mock KIMI_BASE_URL=http://localhost:3399/v1). Pass seeded ids:
+// MOONSHOT_API_KEY=mock MOONSHOT_BASE_URL=http://localhost:3399/v1). Pass seeded ids:
 //   NB=<notebook id> DOC=<document id> node scripts/qa/verify-summary-simplify.mjs
 import { chromium } from "playwright-core";
 
