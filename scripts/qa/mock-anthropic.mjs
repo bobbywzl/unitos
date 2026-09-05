@@ -196,21 +196,23 @@ function buildResponse(all) {
     });
   }
 
-  // ANALYZE: a figure or table read as data.
-  if (all.includes('"readings"') && all.includes('"cautions"')) {
+  // ANALYZE: the three sections, in order, with one printed value and one
+  // estimate, linking to a real block.
+  if (all.includes("Write exactly three sections")) {
     const table = all.includes("The table's markup:");
-    return JSON.stringify({
-      kind: table ? "table" : "chart",
-      summary: table ? "Mock table analysis: two rows of counts." : "Mock chart analysis: one series over time.",
-      structure: table ? "Columns: item and count." : "X axis: year. Y axis: share (%).",
-      readings: [
-        { label: "Row one", value: "42", certainty: "read" },
-        { label: "Peak", value: "80", certainty: "estimated" },
-      ],
-      data: table ? { columns: ["Item", "Count"], rows: [["Pages", "2"], ["Notes", "42"]] } : null,
-      takeaway: "The mock takeaway.",
-      cautions: ["Mock caution: the legend was not read."],
-    });
+    const cited = blocks[0] ? `[block ${blocks[0].id}]` : "the opening claim";
+    return [
+      "**Insights**",
+      table ? "Mock table analysis: two counts, and notes outnumber pages." : "Mock chart analysis: one series rising over time.",
+      table ? "- Notes outnumber pages twenty to one." : "- The share climbs every year and peaks at the end.",
+      "",
+      "**Quantitative**",
+      table ? "- Pages: 2; Notes: 42" : "- Share at the end: ≈ 80%",
+      "- Peak: ≈ 80",
+      "",
+      "**Linking to context**",
+      `No contradiction with the document; it supports ${cited}.`,
+    ].join("\n");
   }
 
   // Notebook tasks: no issues found.

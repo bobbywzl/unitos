@@ -98,15 +98,52 @@ async function run() {
   check("the table toolbar has no Simplify, Extract, or Read aloud", (await tablePopover.locator('button[data-track="simplify"]').count()) === 0 && (await tablePopover.locator('button[data-track="extract"]').count()) === 0 && (await tablePopover.locator('button[data-track="read-aloud"]').count()) === 0);
   check("Analyze leads the table toolbar as recommended", (await analyzeButton.innerText()).toLowerCase().includes("recommended"));
   await analyzeButton.click();
-  await page.waitForFunction(() => document.body.innerText.includes("Analysis added"), null, { timeout: 60000 });
-  check("toast says the analysis landed", true);
-  await page.waitForTimeout(1500);
-  const tableNote = tray().getByText("Table analysis", { exact: false }).first();
-  await tableNote.waitFor({ timeout: 15000 });
-  check("a pending Table analysis note is in the tray", (await tableNote.count()) === 1);
-  const trayText = await tray().innerText();
-  check("the analysis lists the data rows", trayText.includes("Pages · 2"));
-  check("an estimate is marked with ≈", trayText.includes("≈ 80"));
+  // The analysis streams into the card beside the article — the same card as
+  // Explain, titled Analysis — never into the notes tray.
+  const analysisCard = page.locator('[data-side-card="explain"]');
+  await analysisCard.waitFor({ timeout: 15000 });
+  check("Analyze opens a card beside the article", (await analysisCard.count()) === 1);
+  await page.waitForFunction(
+    () => document.querySelector('[data-side-card="explain"] .prose') !== null,
+    null,
+    { timeout: 60000 },
+  );
+  await page.waitForFunction(
+    () => !document.body.innerText.includes("Analyzing…"),
+    null,
+    { timeout: 60000 },
+  );
+  await page.screenshot({ path: `${SHOT}/ai-tools-analysis-card.png` });
+  const cardText = await analysisCard.innerText();
+  // The title renders in small caps, so innerText carries it upper-cased.
+  check("the card is titled Analysis", /analysis/i.test(cardText.split("\n")[0] ?? ""));
+  const sectionsAt = ["Insights", "Quantitative", "Linking to context"].map((s) => cardText.indexOf(s));
+  check(
+    "the analysis has the three sections in order",
+    sectionsAt.every((at, i) => at >= 0 && (i === 0 || at > sectionsAt[i - 1])),
+    cardText.slice(0, 160).replace(/\n/g, " "),
+  );
+  check("an estimate is marked with ≈", cardText.includes("≈ 80"));
+  check("the analysis is not a pending note", !(await tray().innerText()).includes("Table analysis"));
+  check("the card offers Delete once the annotation persisted", (await analysisCard.locator('button[data-track="analyze-delete"]').count()) === 1);
+  await analysisCard.locator('button[data-track="analyze-close"]').click();
+  await page.waitForTimeout(400);
+  // The analysis persisted as an annotation: the Annotations tab lists it
+  // under Analyses.
+  await page.locator("[data-track-surface='sidebar'] [data-track='annotations']").click();
+  await page
+    .waitForFunction(
+      () => /analyses/i.test(document.body.innerText) && document.body.innerText.includes("Mock table analysis"),
+      null,
+      { timeout: 15000 },
+    )
+    .catch(() => {});
+  const annotationsText = await tray().innerText();
+  check("the Annotations tab lists the analysis under Analyses", /analyses/i.test(annotationsText) && annotationsText.includes("Mock table analysis"));
+  await page.screenshot({ path: `${SHOT}/ai-tools-analysis-annotations.png` });
+  // Back to the Notes tab: the tray remembers its tab across the reload below.
+  await page.locator("[data-track-surface='sidebar'] [data-track='notes']").click();
+  await page.waitForTimeout(400);
 
   // ── Analyze a figure: the hold-and-circle gesture opens the figure popover ──
   await page.keyboard.press("Escape");
@@ -166,13 +203,14 @@ async function run() {
       anchor: { blockId: FIGURE, startOffset: 0, endOffset: caption.length, quotedText: caption },
     },
   });
-  const figureRaw = (await figureRes.text()).trim();
-  let figurePayload = null;
-  try {
-    figurePayload = JSON.parse(figureRaw);
-  } catch {}
-  check("figure ANALYZE answers ok with a note id", figureRes.ok() && figurePayload?.ok === true && Boolean(figurePayload.noteId), figureRaw.slice(0, 120));
-  check("figure ANALYZE reports the chart kind", figurePayload?.kind === "chart");
+  const figureRaw = await figureRes.text();
+  check(
+    "figure ANALYZE streams the three sections",
+    figureRes.ok() && figureRaw.includes("**Insights**") && figureRaw.includes("**Quantitative**") && figureRaw.includes("**Linking to context**"),
+    figureRaw.slice(0, 120),
+  );
+  check("figure ANALYZE reads the chart", figureRaw.includes("Mock chart analysis"));
+  check("figure ANALYZE persists an annotation and ends with its id", /\u0000note\u0000[a-z0-9]+$/.test(figureRaw));
 
   // ── Compare two documents from the document list ──
   await page.reload({ waitUntil: "networkidle" });
