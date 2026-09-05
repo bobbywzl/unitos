@@ -70,6 +70,7 @@ import { useImageDrop, type DroppedImage } from "@/components/use-image-drop";
 import { AuthorChip } from "@/components/collab/person-badge";
 import { DistillPage } from "@/components/reader/distill-page";
 import { ProjectSearch } from "@/components/reader/project-search";
+import { PANE_HEADER } from "@/components/reader/reader-panes";
 import { Reader } from "@/components/reader/reader";
 
 type Anchor = Omit<SourceInput, "documentId">;
@@ -439,6 +440,8 @@ export function ReaderInteractions({
   anchorHighlights,
   annotationsBySource,
   annotationBubbles,
+  split = false,
+  paneHeader,
   distillations,
   extractions,
   termsByBlock,
@@ -497,6 +500,11 @@ export function ReaderInteractions({
       noteId: string;
     }
   >;
+  // A split view (SPEC.md §6): the pane header row replaces the floating
+  // chrome, and tool cards stay collapsed to their symbols until clicked.
+  split?: boolean;
+  // The pane's document select, at the head of the pane header.
+  paneHeader?: React.ReactNode;
   // Stored distillations for this document, newest first, quotes healed
   // against the current blocks.
   distillations: DistillationView[];
@@ -881,10 +889,11 @@ export function ReaderInteractions({
   const [annotationCard, setAnnotationCard] = useState<AnnotationCard | null>(null);
   const anchorHighlightsRef = useRef(anchorHighlights);
   anchorHighlightsRef.current = anchorHighlights;
-  // Narrow reader (see NARROW_GUTTER): stored AI annotations rest as tool
-  // icons next to their text, and open cards dock below the highlight.
-  const [narrow, setNarrow] = useState(false);
+  // Narrow reader (see NARROW_GUTTER), and every split pane: open cards dock
+  // below the highlight, and stored cards collapse to their symbols.
   const narrowRef = useRef(false);
+  const splitRef = useRef(split);
+  splitRef.current = split;
   const [assistantChat, setAssistantChat] = useState<AssistantChat | null>(null);
   // A stored comment, opened from its icon beside the text — editable in place.
   const [commentCard, setCommentCard] = useState<{
@@ -1739,35 +1748,40 @@ export function ReaderInteractions({
   // collapsing, or the window resizing, moves that edge. Re-dock every open
   // card so they stay right next to the content body, and track whether the
   // reader is now too narrow for side cards at all. On turning narrow, cards
-  // with a stored annotation collapse to their tool icons next to the text;
-  // a streaming or unsaved card stays open, re-docked below the highlight.
-  // Position popovers close instead — their coordinates are stale the moment
-  // the layout shifts.
+  // with a stored annotation collapse to their tool symbols at the end of the
+  // text; a streaming or unsaved card stays open, re-docked below the
+  // highlight. Position popovers close instead — their coordinates are stale
+  // the moment the layout shifts. A split pane counts as narrow whatever its
+  // width: in a split view a tool card opens only when the reader clicks its
+  // highlight or symbol (SPEC.md §6).
+  const applyNarrow = useCallback(() => {
+    const container = containerRef.current;
+    if (!container) return null;
+    const measured = measureSideCards(container);
+    const isNarrow = splitRef.current || measured.cw - measured.articleRight < NARROW_GUTTER;
+    if (isNarrow !== narrowRef.current) {
+      narrowRef.current = isNarrow;
+      if (isNarrow) {
+        setBubble((b) => (b && !b.streaming && b.noteId ? null : b));
+        setSimplifyCard((c) => (c && !c.streaming && c.noteId ? null : c));
+        setAssistantChat((c) => (c && !c.busy && c.noteId ? null : c));
+        setCommentCard((c) => (c && !c.busy && c.noteId && c.draft === c.saved ? null : c));
+      }
+    }
+    return measured;
+  }, []);
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
-    const applyNarrow = () => {
-      const measured = measureSideCards(container);
-      const isNarrow = measured.cw - measured.articleRight < NARROW_GUTTER;
-      if (isNarrow !== narrowRef.current) {
-        narrowRef.current = isNarrow;
-        setNarrow(isNarrow);
-        if (isNarrow) {
-          setBubble((b) => (b && !b.streaming && b.noteId ? null : b));
-          setSimplifyCard((c) => (c && !c.streaming && c.noteId ? null : c));
-          setAssistantChat((c) => (c && !c.busy && c.noteId ? null : c));
-          setCommentCard((c) => (c && !c.busy && c.noteId && c.draft === c.saved ? null : c));
-        }
-      }
-      return measured;
-    };
     applyNarrow();
     let lastWidth = container.clientWidth;
     const observer = new ResizeObserver(() => {
       const width = container.clientWidth;
       if (width === lastWidth) return;
       lastWidth = width;
-      const { articleLeft, articleRight, cw } = applyNarrow();
+      const measured = applyNarrow();
+      if (!measured) return;
+      const { articleLeft, articleRight, cw } = measured;
       const redock = (side: "right" | "left") =>
         narrowRef.current
           ? dockBelowCard(articleLeft, articleRight, cw)
@@ -1782,7 +1796,13 @@ export function ReaderInteractions({
     });
     observer.observe(container);
     return () => observer.disconnect();
-  }, []);
+  }, [applyNarrow]);
+  // The view switches without remounting the pane: a pane that becomes a
+  // split pane collapses its stored cards at once, and one that leaves a
+  // split view measures its width again.
+  useEffect(() => {
+    applyNarrow();
+  }, [split, applyNarrow]);
 
   // The on-mark card closes on a click anywhere else. A click on another mark
   // stays: the open handler replaces the card.
@@ -3478,10 +3498,11 @@ function blockFormatKind(
   const highlightsByBlock: Record<string, Highlight[]> = {};
   for (const [blockId, list] of Object.entries(anchorHighlights)) {
     highlightsByBlock[blockId] = list.map((h) => {
-      // Narrow reader: a stored AI annotation rests as its tool icon next to
-      // the highlighted text; the icon opens the card. Comments keep their
-      // always-on icon.
-      const stored = narrow ? annotationBubbles[h.sourceId] : undefined;
+      // A stored AI annotation carries the symbol of the tool that made it —
+      // Explain's question mark, Simplify's lines, the assistant's sparkle —
+      // at the end of the highlighted text, in every view; the symbol opens
+      // the card (SPEC.md §6). Comments keep their own icon.
+      const stored = annotationBubbles[h.sourceId];
       const tool = stored && stored.kind !== "comment" ? stored.kind : undefined;
       return { ...h, kind: "anchor" as const, tool };
     });
@@ -3734,42 +3755,26 @@ function blockFormatKind(
   );
   const has = (tool: Tool) => TOOLBARS[popoverKind].includes(tool);
 
-  return (
-    <div
-      ref={containerRef}
-      data-reader-root
-      onDragOver={(e) => {
-        dropPointRef.current = { x: e.clientX, y: e.clientY };
-        imageDrop.handlers.onDragOver(e);
-      }}
-      onDragLeave={imageDrop.handlers.onDragLeave}
-      onDrop={(e) => {
-        dropPointRef.current = { x: e.clientX, y: e.clientY };
-        void imageDrop.handlers.onDrop(e);
-      }}
-      // The inline restore script finds this pane's stored reading position by
-      // its document (lib/reading-position.ts).
-      data-document-id={documentId}
-      // While the distilled page is open it scrolls itself; the article
-      // underneath must not scroll away, so the pane clips instead.
-      className={`relative min-h-0 flex-1 print:overflow-visible ${
-        distillOpen ? "overflow-hidden" : "overflow-y-auto"
-      }`}
-    >
-      {/* The article menu floats open at the top of the page: frequent asks
-          go to the assistant at document scope; Distill opens the distilled
-          page; the search icon beside the assistant button expands the
-          project search bubble. It hides once the reader scrolls and returns
-          at the top. The strip spans the pane so the bubble can size to it;
-          only the controls take pointer events. */}
+  // The article menu: frequent asks go to the assistant at document scope;
+  // Distill opens the distilled page; the search icon beside the assistant
+  // button expands the project search bubble. In Normal view it floats open
+  // at the top of the page, hides once the reader scrolls, and returns at the
+  // top — the strip spans the pane so the bubble can size to it, and only the
+  // controls take pointer events. In a split view it sits in the pane header,
+  // always in reach, and its panels drop below the header (SPEC.md §6).
+  const articleMenu = (
       <div
       data-track-surface="article-menu"
-        inert={!atTop}
-        className={`pointer-events-none absolute inset-x-4 top-4 z-30 transition duration-200 print:hidden ${
-          atTop ? "opacity-100" : "-translate-y-2 opacity-0"
-        }`}
+        inert={!split && !atTop}
+        className={
+          split
+            ? "relative flex shrink-0 items-center"
+            : `pointer-events-none absolute inset-x-4 top-4 z-30 transition duration-200 print:hidden ${
+                atTop ? "opacity-100" : "-translate-y-2 opacity-0"
+              }`
+        }
       >
-        <div className="mb-1.5 flex w-max gap-1.5">
+        <div className={`flex w-max gap-1.5${split ? "" : " mb-1.5"}`}>
           <button
             onClick={() => {
               setMenuExpanded((v) => !v);
@@ -3800,6 +3805,15 @@ function blockFormatKind(
             <SearchIcon size={15} />
           </button>
         </div>
+        {/* The panels: under the pill in Normal view; under the pane header,
+            over the text, in a split view. */}
+        <div
+          className={
+            split
+              ? "pointer-events-none absolute top-full left-0 z-30 mt-2 flex w-[min(400px,70vw)] flex-col gap-1.5"
+              : "contents"
+          }
+        >
         <Collapse open={menuExpanded}>
         <div className="pointer-events-auto flex w-56 flex-col overflow-hidden rounded-2xl bg-card py-1.5 shadow-float">
           {canEdit && (
@@ -3856,7 +3870,66 @@ function blockFormatKind(
           open={searchOpen}
           onClose={() => setSearchOpen(false)}
         />
+        </div>
       </div>
+  );
+  // Distill: a link into the distilled page. While a distillation runs, a
+  // progress bar shows under the button. Top right of the page in Normal
+  // view; the end of the pane header in a split view.
+  const distillButton = (
+        <div className="relative">
+          <button
+            onClick={() => openDistillPage(distillShownId)}
+            data-track="distill"
+            className="flex items-center gap-1.5 rounded-full bg-sand-100 px-3.5 py-1.5 text-xs font-semibold text-sand-600 shadow-soft hover:text-clay-800"
+            data-tip={t("reader.distillButtonTitle")}
+          >
+            <DistillIcon size={13} />
+            {t("reader.distill")}
+            {allDistillations.length > 0 ? ` (${allDistillations.length})` : ""}
+          </button>
+          {distillRun && (
+            <span aria-hidden className="progress-track absolute right-1.5 -bottom-[7px] left-1.5">
+              <span className="progress-fill" />
+            </span>
+          )}
+        </div>
+  );
+
+  return (
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+      {/* A split view: the pane header — the pane's document, the article
+          menu, Distill — one row above the scroller, never over the text
+          (SPEC.md §6). */}
+      {split && (
+        <div className={PANE_HEADER}>
+          {paneHeader}
+          {articleMenu}
+          <div className="ml-auto flex shrink-0 items-center gap-2">{distillButton}</div>
+        </div>
+      )}
+    <div
+      ref={containerRef}
+      data-reader-root
+      onDragOver={(e) => {
+        dropPointRef.current = { x: e.clientX, y: e.clientY };
+        imageDrop.handlers.onDragOver(e);
+      }}
+      onDragLeave={imageDrop.handlers.onDragLeave}
+      onDrop={(e) => {
+        dropPointRef.current = { x: e.clientX, y: e.clientY };
+        void imageDrop.handlers.onDrop(e);
+      }}
+      // The inline restore script finds this pane's stored reading position by
+      // its document (lib/reading-position.ts).
+      data-document-id={documentId}
+      // While the distilled page is open it scrolls itself; the article
+      // underneath must not scroll away, so the pane clips instead.
+      className={`relative min-h-0 min-w-0 flex-1 print:overflow-visible ${
+        distillOpen ? "overflow-hidden" : "overflow-y-auto"
+      }`}
+    >
+      {!split && articleMenu}
 
       <div className="sticky top-4 z-10 float-right mr-4 flex items-center gap-2 print:hidden">
         {extractBusy && (
@@ -3904,28 +3977,11 @@ function blockFormatKind(
             {t("common.done")}
           </button>
         )}
-        {/* Distill (in Salience's old spot): a link into the distilled page.
-            While a distillation runs, a progress bar shows under the button. */}
-        <div className="relative">
-          <button
-            onClick={() => openDistillPage(distillShownId)}
-            data-track="distill"
-            className="flex items-center gap-1.5 rounded-full bg-sand-100 px-3.5 py-1.5 text-xs font-semibold text-sand-600 shadow-soft hover:text-clay-800"
-            data-tip={t("reader.distillButtonTitle")}
-          >
-            <DistillIcon size={13} />
-            {t("reader.distill")}
-            {allDistillations.length > 0 ? ` (${allDistillations.length})` : ""}
-          </button>
-          {distillRun && (
-            <span aria-hidden className="progress-track absolute right-1.5 -bottom-[7px] left-1.5">
-              <span className="progress-fill" />
-            </span>
-          )}
-        </div>
+        {!split && distillButton}
       </div>
 
-      {editHint && !editMode && (
+      {/* Not in a split pane: the card would sit over the title. */}
+      {editHint && !editMode && !split && (
         <div
           onAnimationEnd={() => setEditHint(false)}
           className={`hint-fade pointer-events-none absolute top-16 right-5 z-10 rounded-2xl bg-card px-4 py-2.5 leading-relaxed text-sand-700 shadow-lift print:hidden ${
@@ -5034,6 +5090,7 @@ function blockFormatKind(
         />
       )}
       </Presence>
+    </div>
     </div>
   );
 }

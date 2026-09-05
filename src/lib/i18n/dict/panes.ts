@@ -41,7 +41,10 @@ const en = {
   viewSide: "Side by Side",
   viewStack: "Top and Bottom",
   readerView: "Reader view",
-  secondPaneDocument: "Second pane document",
+  paneDocument: "Document in this pane",
+  paneDocumentTitle: "Choose the document this pane shows",
+  stripToTray: "Scroll to the notes tray",
+  stripToDocuments: "Scroll back to the documents",
 
   // Reader edit toolbar and article body (reader.tsx)
   formatParagraph: "Paragraph",
@@ -386,7 +389,10 @@ const zh: Record<keyof typeof en, string> = {
   viewSide: "左右分屏",
   viewStack: "上下分屏",
   readerView: "阅读器视图",
-  secondPaneDocument: "第二窗格文档",
+  paneDocument: "此窗格的文档",
+  paneDocumentTitle: "选择此窗格显示的文档",
+  stripToTray: "滚动到笔记栏",
+  stripToDocuments: "滚动回文档",
 
   formatParagraph: "段落",
   formatHeading1: "标题 1",
