@@ -84,13 +84,53 @@ type Popover = {
   endLeft: number;
   endTop: number;
   truncated: boolean; // selection crossed into another paragraph; anchor covers the first
-  figure?: boolean; // opened by the hold-and-circle gesture on a figure; no Simplify or Distill
+  figure?: boolean; // opened by the hold-and-circle gesture on a figure, equation, or table: the anchor is the whole block
   term?: boolean; // opened by clicking a key term; Extract leads, recommended
   // Placement, by proximity to open tool blocks: right of the text first, then
   // left, then directly below the highlighted text. Bases are container coords.
   side: "right" | "left" | "below";
   rightBase: number;
   cw: number;
+};
+
+// One toolbar per content kind (SPEC.md §6). The popover shows the tools of
+// the kind under the selection and nothing else: a tool missing from a
+// kind's list is not offered there. The first tool of a kind after the
+// assistant is its lead tool and reads as recommended.
+type ContentKind = "text" | "table" | "figure" | "equation";
+type Tool =
+  | "assistant"
+  | "analyze"
+  | "explain"
+  | "simplify"
+  | "extract"
+  | "comment"
+  | "link"
+  | "highlight"
+  | "addToNotes"
+  | "readAloud";
+
+const TOOLBARS: Record<ContentKind, readonly Tool[]> = {
+  text: ["assistant", "explain", "simplify", "extract", "comment", "link", "highlight", "addToNotes", "readAloud"],
+  table: ["assistant", "analyze", "explain", "comment", "link", "highlight", "addToNotes"],
+  figure: ["assistant", "analyze", "explain", "comment", "link", "highlight", "addToNotes"],
+  equation: ["assistant", "explain", "comment", "link", "highlight", "addToNotes"],
+};
+
+// The blocks the hold-and-circle gesture opens a toolbar on, whole.
+const CIRCLED_TYPES = new Set(["FIGURE", "EQUATION", "TABLE"]);
+
+function contentKindOf(type: string | undefined): ContentKind {
+  if (type === "TABLE") return "table";
+  if (type === "FIGURE") return "figure";
+  if (type === "EQUATION") return "equation";
+  return "text";
+}
+
+const KIND_LABEL: Record<Exclude<ContentKind, "text">, TKey> = {
+  table: "reader.tableTools",
+  figure: "reader.figureTools",
+  equation: "reader.equationTools",
 };
 
 type PendingLink = { fromDocumentId: string; anchor: Anchor };
@@ -1416,7 +1456,7 @@ export function ReaderInteractions({
       const blockId = el?.dataset.blockId;
       if (!blockId) return null;
       const block = blocksRef.current.find((b) => b.id === blockId);
-      return block && (block.type === "FIGURE" || block.type === "EQUATION") ? blockId : null;
+      return block && CIRCLED_TYPES.has(block.type) ? blockId : null;
     };
     // Glow seam: a sibling layer renders the visual effect from these events.
     // Emitted only while a figure/equation block is tracked, in viewport coords.
@@ -1965,8 +2005,9 @@ export function ReaderInteractions({
     });
   }
 
-  // The figure popover: anchored to the whole caption (offsets 0..length), so
-  // provenance validation holds and the annotation lists like any other.
+  // The block popover of a figure, equation, or table: anchored to the whole
+  // block's text (offsets 0..length), so provenance validation holds and the
+  // annotation lists like any other. The kind's toolbar renders (TOOLBARS).
   function openFigureTools(blockId: string, clientX: number, clientY: number) {
     const container = containerRef.current;
     const block = blocksRef.current.find((b) => b.id === blockId);
@@ -3707,6 +3748,11 @@ function blockFormatKind(
     : { top: 0, left: 0, width: 0 };
   // One row of the toolbox. Coarse pointers get 44px-tall rows.
   const toolRow = coarse ? "px-3.5 py-2.5 text-[14px]" : "px-2.5 py-[5px] text-[12px]";
+  // The open popover's content kind and its toolbar (SPEC.md §6).
+  const popoverKind: ContentKind = contentKindOf(
+    popover ? blocks.find((b) => b.id === popover.anchor.blockId)?.type : undefined,
+  );
+  const has = (tool: Tool) => TOOLBARS[popoverKind].includes(tool);
 
   return (
     <div
@@ -4112,13 +4158,9 @@ function blockFormatKind(
               {t("reader.anchorsFirstParagraph")}
             </p>
           )}
-          {popover.figure && (
+          {popoverKind !== "text" && (
             <p className="px-2.5 py-1 text-[10.5px] leading-snug text-sand-500">
-              {t(
-                blocks.find((b) => b.id === popover.anchor.blockId)?.type === "EQUATION"
-                  ? "reader.equationTools"
-                  : "reader.figureTools",
-              )}
+              {t(KIND_LABEL[popoverKind])}
             </p>
           )}
           {popover.term && (
@@ -4224,39 +4266,37 @@ function blockFormatKind(
             </button>
           )}
 
+          {/* Analyze leads the table and figure toolbars (SPEC.md §4): the
+              block read as data. Never on text. */}
+          {has("analyze") && (
+            <button
+              onClick={() => void analyze()}
+              data-track="analyze"
+              disabled={analyzeBusy}
+              data-tip={t(popoverKind === "table" ? "reader.analyzeTableTitle" : "reader.analyzeFigureTitle")}
+              className={`flex w-full items-center justify-between gap-2 rounded-full bg-clay-100 ${toolRow} text-left font-semibold text-clay-800 hover:bg-clay-200 disabled:opacity-40`}
+            >
+              <span className="flex items-center gap-1.5">
+                <ChartIcon size={coarse ? 14 : 12} />
+                {t(popoverKind === "table" ? "reader.analyzeTable" : "reader.analyzeFigure")}
+              </span>
+              <span className="text-[9px] font-bold tracking-[0.06em] text-clay-700 uppercase">
+                {t("reader.recommended")}
+              </span>
+            </button>
+          )}
+          {has("explain") && (
           <button
             onClick={() => void explain()}
             data-track="explain"
-            data-tip={popover.figure ? t("reader.explainFigureTitle") : t("reader.explainTitle")}
+            data-tip={popoverKind === "figure" ? t("reader.explainFigureTitle") : t("reader.explainTitle")}
             className={`flex w-full items-center gap-1.5 rounded-full ${toolRow} text-left text-sand-800 hover:bg-clay-100 hover:text-clay-800`}
           >
             <QuestionIcon size={coarse ? 14 : 12} />
             {t("reader.explain")}
           </button>
-          {(() => {
-            // Analyze reads a figure or a table as data (SPEC.md §4): on the
-            // figure popover for a FIGURE block, on the selection popover for
-            // a selection inside a TABLE block.
-            const anchoredType = blocks.find((b) => b.id === popover.anchor.blockId)?.type;
-            const analyzable =
-              (popover.figure && anchoredType === "FIGURE") ||
-              (!popover.figure && anchoredType === "TABLE");
-            if (!analyzable) return null;
-            const table = anchoredType === "TABLE";
-            return (
-              <button
-                onClick={() => void analyze()}
-                data-track="analyze"
-                disabled={analyzeBusy}
-                data-tip={t(table ? "reader.analyzeTableTitle" : "reader.analyzeFigureTitle")}
-                className={`flex w-full items-center gap-1.5 rounded-full ${toolRow} text-left text-sand-800 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40`}
-              >
-                <ChartIcon size={coarse ? 14 : 12} />
-                {t(table ? "reader.analyzeTable" : "reader.analyzeFigure")}
-              </button>
-            );
-          })()}
-          {!popover.figure && (
+          )}
+          {has("simplify") && (
             <button
               onClick={() => void simplify()}
               data-track="simplify"
@@ -4267,7 +4307,7 @@ function blockFormatKind(
               {t("reader.simplify")}
             </button>
           )}
-          {!popover.figure && !popover.term && (
+          {has("extract") && !popover.term && (
             <button
               onClick={() => void extract()}
               data-track="extract"
@@ -4280,6 +4320,8 @@ function blockFormatKind(
             </button>
           )}
 
+          {has("comment") && (
+          <>
           <button
             onClick={() => setSubmenu(submenu === "comment" ? null : "comment")}
             data-track="comment"
@@ -4339,7 +4381,10 @@ function blockFormatKind(
             </form>
           )}
           </Collapse>
+          </>
+          )}
 
+          {has("link") && (
           <button
             onClick={beginLink}
             data-track="link"
@@ -4349,11 +4394,13 @@ function blockFormatKind(
             <UnlinkIcon size={coarse ? 14 : 12} />
             {t("reader.linkAcrossTexts")}
           </button>
+          )}
 
           {/* Highlight: a separate bubble right above the toolbox holds the
               color dots, as wide as the toolbox. Near the top of the page it
               drops below instead, under the voice bubble, so it never lands
               out of reach. On a coarse pointer it is the toolbox's first row. */}
+          {has("highlight") && (
           <div
             className={
               coarse
@@ -4379,6 +4426,7 @@ function blockFormatKind(
               />
             ))}
           </div>
+          )}
 
           {/* Add to notes: a separate bubble above the toolbar, as wide as the
               toolbox. Press it, pick a section, and the highlighted text lands
@@ -4386,7 +4434,7 @@ function blockFormatKind(
               bubble; when the highlight bubble drops below near the page top,
               it takes the near slot. On a coarse pointer it is the toolbox's
               second row. */}
-          {sectionChoices.length > 0 && (
+          {has("addToNotes") && sectionChoices.length > 0 && (
             <div
               className={
                 coarse
@@ -4428,7 +4476,8 @@ function blockFormatKind(
           )}
 
           {/* Voice: a separate bubble under the toolbar reads the highlighted
-              text aloud. Press again to stop. */}
+              text aloud. Press again to stop. Text only. */}
+          {has("readAloud") && (
           <div className="absolute top-full left-0 mt-2">
             <button
               onClick={() => void speakSelection()}
@@ -4450,6 +4499,7 @@ function blockFormatKind(
               )}
             </button>
           </div>
+          )}
         </div>
       )}
       </Presence>

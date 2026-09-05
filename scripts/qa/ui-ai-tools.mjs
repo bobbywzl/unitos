@@ -69,10 +69,34 @@ async function run() {
   // ── Analyze a table from the selection popover ──
   await page.goto(`${base}/n/${NB}?doc=${DOC}`, { waitUntil: "networkidle" });
   await page.waitForSelector("article.reader-prose [data-block-id]", { timeout: 20000 });
+  // The text toolbar: no Analyze; Simplify, Extract, Read aloud present.
+  const paragraphId = await page.evaluate(() => {
+    for (const el of document.querySelectorAll("article.reader-prose [data-block-id]")) {
+      const prose = el.tagName === "P" || el.querySelector("p");
+      if (prose && el.textContent.trim().length > 60 && !el.querySelector("table, figure, img")) {
+        return el.getAttribute("data-block-id");
+      }
+    }
+    return null;
+  });
+  check("a text block is on the page", Boolean(paragraphId));
+  await selectIn(paragraphId, 30);
+  const textPopover = page.locator("[data-selection-popover]");
+  check("text selection opens the text toolbar without Analyze", (await textPopover.count()) === 1 && (await textPopover.locator('button[data-track="analyze"]').count()) === 0);
+  check("the text toolbar has Simplify, Extract, and Read aloud", (await textPopover.locator('button[data-track="simplify"]').count()) === 1 && (await textPopover.locator('button[data-track="extract"]').count()) === 1 && (await textPopover.locator('button[data-track="read-aloud"]').count()) === 1);
+  check("the text toolbar carries no kind label", !(await textPopover.innerText()).includes("tools"));
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(300);
+
+  // The table toolbar: Analyze leads; no Simplify, Extract, or Read aloud.
   await selectIn(TABLE, 5);
-  const analyzeButton = page.locator('[data-selection-popover] button[data-track="analyze"]');
+  const tablePopover = page.locator("[data-selection-popover]");
+  const analyzeButton = tablePopover.locator('button[data-track="analyze"]');
   check("table selection offers Analyze table", (await analyzeButton.count()) === 1);
   check("table Analyze reads 'Analyze table'", (await analyzeButton.textContent())?.includes("Analyze table") === true);
+  check("the table toolbar is labeled Table tools", (await tablePopover.innerText()).includes("Table tools"));
+  check("the table toolbar has no Simplify, Extract, or Read aloud", (await tablePopover.locator('button[data-track="simplify"]').count()) === 0 && (await tablePopover.locator('button[data-track="extract"]').count()) === 0 && (await tablePopover.locator('button[data-track="read-aloud"]').count()) === 0);
+  check("Analyze leads the table toolbar as recommended", (await analyzeButton.innerText()).toLowerCase().includes("recommended"));
   await analyzeButton.click();
   await page.waitForFunction(() => document.body.innerText.includes("Analysis added"), null, { timeout: 60000 });
   check("toast says the analysis landed", true);
@@ -103,8 +127,33 @@ async function run() {
     await page.mouse.up();
     await page.waitForTimeout(500);
   }
-  const figureAnalyze = page.locator('[data-selection-popover] button[data-track="analyze"]');
+  const figurePopover = page.locator("[data-selection-popover]");
+  const figureAnalyze = figurePopover.locator('button[data-track="analyze"]');
   check("circling the figure offers Analyze figure", figureBox !== null && (await figureAnalyze.count()) === 1 && (await figureAnalyze.textContent())?.includes("Analyze figure") === true);
+  check("the figure toolbar is labeled Figure tools without text-only tools", (await figurePopover.innerText()).includes("Figure tools") && (await figurePopover.locator('button[data-track="simplify"], button[data-track="extract"], button[data-track="read-aloud"]').count()) === 0);
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(300);
+
+  // Circling a table opens the table toolbar on the whole table.
+  const tableEl = page.locator(`[data-block-id="${TABLE}"]`);
+  await tableEl.scrollIntoViewIfNeeded();
+  await page.waitForTimeout(300);
+  const tableBox = await tableEl.boundingBox();
+  if (tableBox) {
+    const cx = tableBox.x + tableBox.width / 2;
+    const cy = tableBox.y + Math.min(tableBox.height / 2, 60);
+    await page.mouse.move(cx + 30, cy);
+    await page.mouse.down();
+    for (let i = 1; i <= 24; i++) {
+      const a = (i / 24) * Math.PI * 2;
+      await page.mouse.move(cx + 30 * Math.cos(a), cy + 30 * Math.sin(a), { steps: 1 });
+      await page.waitForTimeout(10);
+    }
+    await page.mouse.up();
+    await page.waitForTimeout(500);
+  }
+  const circledTable = page.locator("[data-selection-popover]");
+  check("circling the table opens Table tools with Analyze table", tableBox !== null && (await circledTable.count()) === 1 && (await circledTable.innerText()).includes("Table tools") && (await circledTable.locator('button[data-track="analyze"]').count()) === 1);
   await page.keyboard.press("Escape");
 
   // ── Analyze a figure through the route ──

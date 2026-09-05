@@ -20,6 +20,7 @@ const en = {
   keyTerm: "Key term",
   figureTools: "Figure tools",
   equationTools: "Equation tools",
+  tableTools: "Table tools",
   videoNoEditAnnotate: "Video content cannot be edited or annotated.",
   openAsVideoDoc: "Open as a video document",
   anchorsFirstParagraph: "Anchors to the first paragraph of the selection",
@@ -91,9 +92,9 @@ const en = {
   fontMono: "Mono",
   backToReading: "Back to reading (Esc)",
   editHint:
-    "Double-click any paragraph to edit it. Click the title to edit it. Hold and draw a small circle on a figure for its tools.",
+    "Double-click any paragraph to edit it. Click the title to edit it. Hold and draw a small circle on a figure or a table for its tools.",
   touchHint:
-    "Hold a word and drag the handles to select text. The tools open under the selection. Double-tap any paragraph to edit it. Tap the title to edit it. Hold and draw a small circle on a figure for its tools.",
+    "Hold a word and drag the handles to select text. The tools open under the selection. Double-tap any paragraph to edit it. Tap the title to edit it. Hold and draw a small circle on a figure or a table for its tools.",
   documentTitle: "Document title",
   renameDocumentTitle: "Click to edit the title",
 
@@ -223,6 +224,7 @@ const zh: Record<keyof typeof en, string> = {
   keyTerm: "关键术语",
   figureTools: "插图工具",
   equationTools: "公式工具",
+  tableTools: "表格工具",
   videoNoEditAnnotate: "视频内容无法编辑或批注。",
   openAsVideoDoc: "作为视频文档打开",
   anchorsFirstParagraph: "锚定到选中内容的第一段",
@@ -288,9 +290,9 @@ const zh: Record<keyof typeof en, string> = {
   fontMono: "等宽",
   backToReading: "返回阅读（Esc）",
   editHint:
-    "双击任意段落即可编辑。点击标题即可编辑。在插图上按住并画一个小圈，可打开它的工具。",
+    "双击任意段落即可编辑。点击标题即可编辑。在插图或表格上按住并画一个小圈，可打开它的工具。",
   touchHint:
-    "长按一个词并拖动选择柄以选中文本，工具出现在选中内容下方。双击任意段落即可编辑。点击标题即可编辑。在插图上按住并画一个小圈，可打开它的工具。",
+    "长按一个词并拖动选择柄以选中文本，工具出现在选中内容下方。双击任意段落即可编辑。点击标题即可编辑。在插图或表格上按住并画一个小圈，可打开它的工具。",
   documentTitle: "文档标题",
   renameDocumentTitle: "点击编辑标题",
 
