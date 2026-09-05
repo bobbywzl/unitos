@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type {
   CorpusDistillationView,
   GraphEdge,
@@ -41,6 +41,7 @@ import { NotesTray } from "@/components/outline/notes-tray";
 import { Presence } from "@/components/presence";
 import { useOutline } from "@/components/outline/use-outline";
 import { DocumentBar, type AttachedDocument } from "@/components/reader/document-bar";
+import type { ReaderViewKind } from "@/components/reader/reader-panes";
 import type { DriveConfig } from "@/lib/drive/config";
 import type { TKey } from "@/lib/i18n/dictionaries";
 import { RESTORE_STYLE_ID, RESTORE_STYLE_MS, restoreScript, trayStateKey } from "@/lib/reading-position";
@@ -58,6 +59,10 @@ const TAB_TITLES: Record<Tab, TKey> = {
 const RAIL_BUTTON =
   "relative flex size-[38px] items-center justify-center rounded-full text-sand-600 hover:bg-clay-100 hover:text-clay-800";
 const RAIL_BUTTON_ON = "relative flex size-[38px] items-center justify-center rounded-full bg-clay-200 text-clay-800";
+// The strip's edge buttons (a split view): one scrolls to the tray, one back
+// to the documents. md+ only — below md the tray is a sheet, never a screen.
+const STRIP_BUTTON =
+  "absolute top-1/2 z-30 hidden size-8 -translate-y-1/2 items-center justify-center rounded-full bg-card text-sand-600 shadow-float hover:text-clay-800 md:flex print:hidden";
 
 // Tray width bounds: the bar between the reader and the tray drags within
 // these, so it can never overextend — the tray keeps a readable minimum and
@@ -81,6 +86,7 @@ function clampTrayWidth(width: number): number {
 export function Workspace({
   notebook,
   documents,
+  readerView,
   activeDocumentId,
   drive,
   reader,
@@ -99,6 +105,9 @@ export function Workspace({
 }: {
   notebook: NotebookView;
   documents: AttachedDocument[];
+  // The reader view (reader-panes.tsx): a split view puts the reader and the
+  // tray in the strip below.
+  readerView: ReaderViewKind;
   activeDocumentId: string | null;
   drive: DriveConfig | null;
   reader: React.ReactNode;
@@ -226,6 +235,95 @@ export function Workspace({
 
   const noteCount = countNotes(tree);
 
+  // The strip (SPEC.md §6). In a split view on md+ the reader keeps the width
+  // it has with the tray folded — the two panes fill the browser exactly —
+  // and the tray is a screen past the reader's right edge: the reader and
+  // the tray column sit in a strip that scrolls sideways and snaps to one of
+  // two rests, the documents or the tray. Opening a tab scrolls to the tray;
+  // the edge buttons and a sideways scroll move between the two; folding the
+  // tray scrolls back to the documents first, then the column closes.
+  const split = readerView !== "normal";
+  const stripRef = useRef<HTMLDivElement>(null);
+  const trayColumnRef = useRef<HTMLDivElement>(null);
+  // Which edge the strip rests at; the edge buttons show for the other one.
+  const [stripEdge, setStripEdge] = useState({ start: true, end: true });
+  // Scroll the strip to the tray. The column has its width the moment it
+  // opens (no width transition in a split view), so the next frame reaches it.
+  const revealTray = useCallback(() => {
+    const strip = stripRef.current;
+    if (!strip) return;
+    requestAnimationFrame(() =>
+      strip.scrollTo({ left: strip.scrollWidth - strip.clientWidth, behavior: "smooth" }),
+    );
+  }, []);
+  // The strip's scroll position, read once per frame: the edge it rests at,
+  // and --strip-cut for the panes — how much of the reader's left is hidden
+  // behind the strip's edge (globals.css .reader-column). While the strip
+  // moves, the columns follow the cut without their transition.
+  useEffect(() => {
+    const strip = stripRef.current;
+    const column = trayColumnRef.current;
+    if (!strip || !split) return;
+    let raf = 0;
+    let settle = 0;
+    const measure = () => {
+      raf = 0;
+      const max = strip.scrollWidth - strip.clientWidth;
+      const left = strip.scrollLeft;
+      strip.style.setProperty("--strip-cut", `${Math.round(left)}px`);
+      const next = { start: left <= 2, end: left >= max - 2 };
+      setStripEdge((prev) => (prev.start === next.start && prev.end === next.end ? prev : next));
+    };
+    const schedule = () => {
+      if (!raf) raf = requestAnimationFrame(measure);
+    };
+    const onScroll = () => {
+      strip.classList.add("strip-scrolling");
+      window.clearTimeout(settle);
+      settle = window.setTimeout(() => strip.classList.remove("strip-scrolling"), 160);
+      schedule();
+    };
+    schedule();
+    strip.addEventListener("scroll", onScroll);
+    const observer = new ResizeObserver(schedule);
+    observer.observe(strip);
+    if (column) observer.observe(column);
+    return () => {
+      strip.removeEventListener("scroll", onScroll);
+      observer.disconnect();
+      if (raf) cancelAnimationFrame(raf);
+      window.clearTimeout(settle);
+      strip.classList.remove("strip-scrolling");
+      strip.style.removeProperty("--strip-cut");
+    };
+  }, [split]);
+  // Folding in a split view: the column keeps its width while the strip
+  // scrolls back to the documents, then closes. Opening: the strip scrolls to
+  // the tray. Normal view keeps its width transition as the motion. Before
+  // the paint, so the folded column never shows for a frame.
+  const wasCollapsed = useRef(collapsed);
+  useLayoutEffect(() => {
+    const was = wasCollapsed.current;
+    wasCollapsed.current = collapsed;
+    const strip = stripRef.current;
+    const column = trayColumnRef.current;
+    if (!split || !strip || !column || was === collapsed) return;
+    if (!collapsed) {
+      revealTray();
+      return;
+    }
+    if (strip.scrollLeft <= 2) return;
+    column.style.width = column.style.getPropertyValue("--tray-w");
+    strip.scrollTo({ left: 0, behavior: "smooth" });
+    const timer = window.setTimeout(() => {
+      column.style.width = "";
+    }, 420);
+    return () => {
+      window.clearTimeout(timer);
+      column.style.width = "";
+    };
+  }, [collapsed, split, revealTray]);
+
   // Issue cards jump to their note: open the tray on notes, open the note if
   // it is collapsed (the card listens for dissect:open-note), scroll, flash.
   useEffect(() => {
@@ -238,6 +336,7 @@ export function Workspace({
       const { noteId } = (e as CustomEvent<{ noteId: string }>).detail;
       setCollapsed(false);
       setTab("notes");
+      revealTray();
       setTimeout(() => {
         window.dispatchEvent(new CustomEvent("dissect:open-note", { detail: { noteId } }));
         // The next frame: the opened card has its full height to center on.
@@ -253,6 +352,7 @@ export function Workspace({
       const { sourceId } = (e as CustomEvent<{ sourceId: string }>).detail;
       setCollapsed(false);
       setTab("annotations");
+      revealTray();
       setTimeout(() => {
         window.dispatchEvent(new CustomEvent("dissect:open-annotation", { detail: { sourceId } }));
         requestAnimationFrame(() => {
@@ -276,7 +376,7 @@ export function Workspace({
       window.removeEventListener("dissect:focus-annotation", onFocusAnnotation);
       window.removeEventListener("dissect:open-corpus-distillation", onOpenCorpusDistillation);
     };
-  }, []);
+  }, [revealTray]);
 
   // Post-hydration restore on purpose: localStorage is client-only, so the
   // SSR pass must render the default width. Window resizes re-clamp, so the
@@ -347,6 +447,7 @@ export function Workspace({
     setTab(next);
     setCollapsed(false);
     setMobileTray(true);
+    revealTray();
   }
 
   // A note floats over the article (dragged out of the tray): the tray folds
@@ -383,7 +484,9 @@ export function Workspace({
     <div
       // A note floats over the article: the article column moves left (globals.css, .reader-column).
       data-note-floating={actions.floating ? "" : undefined}
-      className="content-in grid h-screen grid-rows-[68px_1fr] bg-paper print:block print:h-auto"
+      // One column that can never grow past the browser: a pane's widest
+      // line stays inside its pane instead of pushing the rail off screen.
+      className="content-in grid h-screen grid-cols-[minmax(0,1fr)] grid-rows-[68px_1fr] bg-paper print:block print:h-auto"
     >
       <header
         data-track-surface="topbar"
@@ -457,8 +560,19 @@ export function Workspace({
         />
       )}
 
-      <div className="flex min-h-0 pb-[calc(54px+env(safe-area-inset-bottom))] md:pb-0 print:block">
-        <div className="relative min-w-0 flex-1 overflow-hidden print:overflow-visible">
+      <div className="relative flex min-h-0 min-w-0 pb-[calc(54px+env(safe-area-inset-bottom))] md:pb-0 print:block">
+        {/* The strip: in a split view (globals.css .reader-strip) the reader
+            keeps the strip's full width and the tray column follows past its
+            right edge; in Normal view it is a plain row, reader then tray. */}
+        <div
+          ref={stripRef}
+          className={`flex min-h-0 min-w-0 flex-1 print:block ${split ? "reader-strip" : ""}`}
+        >
+        <div
+          className={`relative min-w-0 flex-1 overflow-hidden print:overflow-visible ${
+            split ? "reader-screen" : ""
+          }`}
+        >
           {reader}
           <div
             aria-hidden
@@ -468,12 +582,14 @@ export function Workspace({
 
         {/* The tray column: on md+ it slides shut to zero width when collapsed
             and the reader takes the room; below md the aside inside is a
-            bottom sheet, shown while mobileTray is set. */}
+            bottom sheet, shown while mobileTray is set. In a split view the
+            width changes at once — the strip's scroll is the motion. */}
         <div
+          ref={trayColumnRef}
           style={{ "--tray-w": `${trayWidth}px` } as React.CSSProperties}
           inert={(collapsed && !mobileTray) || undefined}
           className={`tray-column flex min-h-0 shrink-0 md:overflow-hidden ${
-            resizing ? "tray-column-resizing" : ""
+            resizing || split ? "tray-column-resizing" : ""
           } ${collapsed ? "md:w-0" : "md:w-[var(--tray-w)]"}`}
         >
           {/* The bar between the reader and the tray: drag to resize, arrow
@@ -569,6 +685,33 @@ export function Workspace({
             )}
           </aside>
         </div>
+        </div>
+
+        {/* The strip's edges: a button to scroll to the tray, one to scroll
+            back to the documents — for a mouse with no sideways scroll. Only
+            the edge with a screen past it shows one. */}
+        {split && !collapsed && !stripEdge.start && (
+          <button
+            onClick={() => stripRef.current?.scrollTo({ left: 0, behavior: "smooth" })}
+            data-track="strip-documents"
+            aria-label={t("panes.stripToDocuments")}
+            data-tip={t("panes.stripToDocuments")}
+            className={`${STRIP_BUTTON} left-2`}
+          >
+            <ChevronLeftIcon size={16} />
+          </button>
+        )}
+        {split && !collapsed && !stripEdge.end && (
+          <button
+            onClick={revealTray}
+            data-track="strip-tray"
+            aria-label={t("panes.stripToTray")}
+            data-tip={t("panes.stripToTray")}
+            className={`${STRIP_BUTTON} right-[60px]`}
+          >
+            <ChevronRightIcon size={16} />
+          </button>
+        )}
 
         <nav
           data-track-surface="sidebar"

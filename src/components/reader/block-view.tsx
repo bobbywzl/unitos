@@ -9,6 +9,13 @@ import type { TFunc, TKey } from "@/lib/i18n/dictionaries";
 
 const CHAIN_BUTTON =
   "link-chain mx-0.5 inline-flex size-[16px] items-center justify-center rounded-full bg-clay-100 align-text-top text-clay-700 hover:bg-clay-200 hover:text-clay-800";
+// The symbol at the end of a highlighted text — the tool that made the
+// annotation, or the comment bubble. A small round chip on the highlight's
+// bottom edge, right after its last character (globals.css .mark-chip);
+// clicking it opens the card. SVG only, so the block's DOM text stays exactly
+// the stored text (SPEC.md §5).
+const MARK_CHIP =
+  "mark-chip inline-flex items-center justify-center rounded-full bg-clay-100 text-clay-700 hover:bg-clay-200 hover:text-clay-800";
 
 export type BlockData = {
   id: string;
@@ -37,8 +44,8 @@ export type Highlight = {
   annotation?: boolean; // anchor belongs to an annotation; click focuses its card
   comment?: boolean; // comment annotation: a comment icon renders after the span
   noteId?: string; // owning note; on a regular note's mark, click jumps to the note in the tray
-  // Narrow reader: the stored AI annotation's tool icon renders after the
-  // span; the icon opens the card. Kind "anchor" only.
+  // The stored AI annotation's tool symbol renders at the end of the span, in
+  // every view; the symbol opens the card. Kind "anchor" only.
   tool?: "explain" | "simplify" | "assistant";
   href?: string; // navigation target, kinds "link" and "weblink"
   linkTitle?: string; // the other end's document title, kind "link" only
@@ -63,7 +70,8 @@ function anchorClass(color: string | null | undefined): string {
   return "anchor-mark";
 }
 
-// Narrow reader: each AI tool's icon next to its highlighted text.
+// Each AI tool's symbol, at the end of its highlighted text — the glyph on
+// the toolbar button and on the group label in the Annotations tab.
 const TOOL_ICON: Record<
   "explain" | "simplify" | "assistant",
   (props: { size?: number }) => React.ReactNode
@@ -307,9 +315,8 @@ function markedText(text: string, highlights: Highlight[], t: TFunc) {
           </button>,
         );
       }
-      // Narrow reader: a stored AI annotation's tool icon sits right after its
-      // span — explain, simplify, or assistant — and opens the card. SVG only,
-      // so the block's DOM text stays exactly the stored text (SPEC.md §5).
+      // A stored AI annotation's tool symbol sits at the end of its span —
+      // explain, simplify, or assistant — and opens the card.
       const toolEnding = covering.find(
         (h) => h.kind === "anchor" && h.tool && h.sourceId && h.end === to,
       );
@@ -331,7 +338,7 @@ function markedText(text: string, highlights: Highlight[], t: TFunc) {
                 }),
               );
             }}
-            className="mx-0.5 inline-flex size-[16px] items-center justify-center rounded-full bg-clay-100 align-text-top text-clay-700 hover:bg-clay-200 hover:text-clay-800"
+            className={MARK_CHIP}
           >
             <ToolIcon size={10} />
           </button>,
@@ -354,7 +361,7 @@ function markedText(text: string, highlights: Highlight[], t: TFunc) {
                 }),
               );
             }}
-            className="comment-dot mx-0.5 inline-flex size-[16px] items-center justify-center rounded-full bg-clay-100 align-text-top text-clay-700 hover:bg-clay-200 hover:text-clay-800"
+            className={`comment-dot ${MARK_CHIP}`}
           >
             <CommentIcon size={10} />
           </button>,
@@ -440,13 +447,16 @@ const LABEL_DOT: Record<string, string> = {
 // A highlighted figure, table, or equation gets a side label instead of text
 // marks: it sits to the right of the block and jumps to the annotation. The
 // label shows the block's annotation ids ("A1"), matching the chips on the
-// annotation cards. Outside the block element, so the block's DOM text stays
-// exactly the stored text (SPEC.md §5).
+// annotation cards, behind the symbol of the tool that made the annotation
+// (a color dot for a plain highlight). Outside the block element, so the
+// block's DOM text stays exactly the stored text (SPEC.md §5).
 function HighlightLabel({ anchors }: { anchors: Highlight[] }) {
   const t = useT();
   const focusable = anchors.find((h) => h.annotation && h.sourceId);
   const noteMark = anchors.find((h) => !h.annotation && h.noteId);
   const color = anchors.find((h) => h.color)?.color ?? "clay";
+  const tool = anchors.find((h) => h.tool)?.tool;
+  const ToolIcon = tool ? TOOL_ICON[tool] : null;
   const labels = anchors.map((h) => h.figureLabel).filter((l): l is string => Boolean(l));
   const text = labels.length > 0 ? labels.join(" · ") : t("panes.highlighted");
   return (
@@ -476,7 +486,11 @@ function HighlightLabel({ anchors }: { anchors: Highlight[] }) {
       }
       className="absolute top-2 right-0 z-10 flex translate-x-[calc(100%+10px)] items-center gap-1.5 rounded-full bg-card px-2.5 py-1 text-[10.5px] font-semibold text-sand-700 shadow-soft hover:text-clay-800"
     >
-      <span aria-hidden className="size-2 rounded-full" style={{ background: LABEL_DOT[color] ?? LABEL_DOT.clay }} />
+      {ToolIcon ? (
+        <ToolIcon size={11} />
+      ) : (
+        <span aria-hidden className="size-2 rounded-full" style={{ background: LABEL_DOT[color] ?? LABEL_DOT.clay }} />
+      )}
       {text}
     </button>
   );

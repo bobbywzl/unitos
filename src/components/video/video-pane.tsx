@@ -16,6 +16,7 @@ import { useCollab } from "@/components/collab/collab-context";
 import { DocumentTitle } from "@/components/reader/document-title";
 import { TranslationBar } from "@/components/reader/translation-bar";
 import { FindPanel } from "@/components/video/find-panel";
+import { PANE_HEADER } from "@/components/reader/reader-panes";
 import { Transcript } from "@/components/video/transcript";
 import {
   VideoPlayer,
@@ -67,11 +68,14 @@ export function VideoPane({
   seekBySource,
   sectionChoices,
   translationAvailable,
+  paneHeader,
 }: {
   notebookId: string;
   documentId: string;
   title: string;
   video: VideoInfo;
+  /** A split view (SPEC.md §6): the pane's document select, shown in the pane header. */
+  paneHeader?: React.ReactNode;
   /** DEEPL_API_KEY is set: the Translate offer shows when the languages differ (SPEC.md §19). */
   translationAvailable: boolean;
   transcript: TranscriptLine[];
@@ -505,12 +509,21 @@ export function VideoPane({
       : null;
 
   return (
-    <div className="relative min-h-0 flex-1 overflow-y-auto">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+      {/* A split view: the pane header carries the pane's document (SPEC.md §6). */}
+      {paneHeader && <div className={PANE_HEADER}>{paneHeader}</div>}
+    <div className="relative min-h-0 min-w-0 flex-1 overflow-y-auto">
       {/* Fluid column: the player grows with the pane — collapsing the tray
-          widens it — capped so the frame stays fully on screen. */}
+          widens it — capped so the frame stays fully on screen. It centers
+          like the article column (globals.css .reader-column), so Top and
+          Bottom with the tray in view keeps it clear of the strip's edge. */}
       <article
-        className="reader-prose mx-auto w-full px-8 py-11"
-        style={{ maxWidth: audio ? "760px" : `max(640px, calc((100vh - 320px) * ${aspect}))` }}
+        className="reader-prose reader-column w-full px-8 py-11"
+        style={
+          {
+            "--reader-column-w": audio ? "760px" : `max(640px, calc((100vh - 320px) * ${aspect}))`,
+          } as React.CSSProperties
+        }
       >
         <p className="mb-2.5 text-[11px] font-bold tracking-[0.09em] text-clay-700 uppercase">
           {video.kind === "YOUTUBE" ? "YouTube" : audio ? t("video.kindAudio") : t("video.kindVideo")}
@@ -854,6 +867,7 @@ export function VideoPane({
           canEdit={canEdit}
         />
       </article>
+    </div>
     </div>
   );
 }

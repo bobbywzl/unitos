@@ -319,6 +319,18 @@ mark,
 .annotation-mark {
   cursor: pointer;
 }
+/* The symbol at the end of a highlighted text (block-view.tsx): the tool that
+   made the annotation, or the comment bubble. A 15px chip that sits on the
+   highlight's bottom edge right after its last character — low in the line,
+   not at its top — with a paper ring so it reads as a badge on the mark. */
+.mark-chip {
+  width: 15px;
+  height: 15px;
+  margin-left: 1px;
+  margin-right: 3px;
+  vertical-align: -0.22em;
+  box-shadow: 0 0 0 1.5px var(--paper);
+}
 /* Text the user changed — diffed against the document as first parsed. */
 .edited-text {
   color: var(--clay-600);
@@ -837,11 +849,18 @@ ellipse.anchor-flash {
    below that. While a note floats over the article ([data-note-floating] on
    the workspace) the column moves to the pane's left edge, out from under the
    card, and slides back when the card docks or closes. Below 720px there is
-   no room to move, so the column stays put. */
+   no room to move, so the column stays put. --reader-cut (reader-panes.tsx,
+   from the strip's --strip-cut) is how much of the pane's left is hidden
+   behind the strip's edge — Top and Bottom with the tray in view: the column
+   centers in what is visible and never starts under the cut. The video
+   pane's column shares the rule with its own --reader-column-w. */
 .reader-column {
   --reader-column-w: 720px;
   max-width: var(--reader-column-w);
-  margin-left: max(0px, calc(50% - var(--reader-column-w) / 2));
+  margin-left: max(
+    var(--reader-cut, 0px),
+    calc(var(--reader-cut, 0px) / 2 + 50% - var(--reader-column-w) / 2)
+  );
   margin-right: 0;
 }
 [data-note-floating] .reader-column {
@@ -851,6 +870,10 @@ ellipse.anchor-flash {
   .reader-column {
     transition: margin-left 0.35s cubic-bezier(0.22, 1, 0.36, 1);
   }
+}
+/* While the strip scrolls (workspace.tsx) the column follows the cut at once. */
+.strip-scrolling .reader-column {
+  transition: none;
 }
 
 /* Connector line: highlighted text → its tool block. Faint on purpose. */
@@ -1421,13 +1444,41 @@ ellipse.anchor-flash {
 
 /* The tray column (workspace.tsx) slides shut to zero width when collapsed;
    the reader widens with it. Dragging the resize bar turns the transition
-   off, so the tray follows the pointer without lag. */
+   off, so the tray follows the pointer without lag; a split view turns it
+   off too — there the strip's scroll is the motion. */
 @media (prefers-reduced-motion: no-preference) {
   .tray-column {
     transition: width 0.3s cubic-bezier(0.22, 1, 0.36, 1);
   }
   .tray-column-resizing {
     transition: none;
+  }
+}
+
+/* The strip of a split view (workspace.tsx, SPEC.md §6), md+ only: the reader
+   keeps the strip's full width — the two panes fill the browser exactly —
+   the tray column follows past the right edge, and the strip scrolls
+   sideways between them, snapping to the documents or to the tray. No
+   scrollbar: the edge buttons and a sideways scroll move it. Contained, so
+   a swipe past the end never turns into the browser's back gesture. */
+@media (min-width: 768px) {
+  .reader-strip {
+    overflow-x: auto;
+    overflow-y: hidden;
+    scroll-snap-type: x mandatory;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+  }
+  .reader-strip::-webkit-scrollbar {
+    display: none;
+  }
+  .reader-strip > .reader-screen {
+    flex: none;
+    width: 100%;
+    scroll-snap-align: start;
+  }
+  .reader-strip > .tray-column {
+    scroll-snap-align: end;
   }
 }
 

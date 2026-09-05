@@ -41,7 +41,7 @@ import { EditsPanel } from "@/components/panels/edits-panel";
 import type { ConversionInfo } from "@/components/reader/conversion-strip";
 import type { PageMark } from "@/components/reader/page-block";
 import { ReaderInteractions } from "@/components/reader/reader-interactions";
-import { ReaderPanes, type ReaderViewKind } from "@/components/reader/reader-panes";
+import { PaneDocumentSelect, ReaderPanes, type ReaderViewKind } from "@/components/reader/reader-panes";
 import { Workspace } from "@/components/reader/workspace";
 import { VideoPane } from "@/components/video/video-pane";
 import { deeplConfigured } from "@/lib/translate/deepl";
@@ -1079,8 +1079,23 @@ export default async function NotebookPage(props: {
     premium: authEnabled() ? user.premium : true,
   };
 
-  const paneNode = (pane: NonNullable<typeof paneOne>, key: string) => (
-    <div key={key} className="content-in flex h-full min-h-0 flex-col">
+  // A split view (SPEC.md §6): each pane's header carries the pane's
+  // document, and the pane's tool cards stay collapsed to their symbols until
+  // the reader clicks one.
+  const split = readerView !== "normal";
+  const paneNode = (pane: NonNullable<typeof paneOne>, key: string, role: "one" | "two") => {
+    const paneHeader = split ? (
+      <PaneDocumentSelect
+        notebookId={notebook.id}
+        view={readerView}
+        pane={role}
+        paneOneId={paneOne?.document.id ?? pane.document.id}
+        paneTwoId={paneTwo?.document.id ?? null}
+        documents={attached.map((d) => ({ id: d.id, title: d.title }))}
+      />
+    ) : null;
+    return (
+    <div key={key} className="content-in flex min-h-0 min-w-0 flex-1 flex-col">
       {pane.video ? (
         <VideoPane
           notebookId={notebook.id}
@@ -1093,6 +1108,7 @@ export default async function NotebookPage(props: {
           seekBySource={pane.videoSeekBySource}
           sectionChoices={sectionChoices}
           translationAvailable={deeplConfigured()}
+          paneHeader={paneHeader}
         />
       ) : (
         <ReaderInteractions
@@ -1101,6 +1117,8 @@ export default async function NotebookPage(props: {
           sectionChoices={sectionChoices}
           attachedDocuments={attached}
           title={pane.document.title}
+          split={split}
+          paneHeader={paneHeader}
           blocks={pane.document.blocks.map((b) => ({
             id: b.id,
             type: b.type,
@@ -1126,7 +1144,8 @@ export default async function NotebookPage(props: {
         />
       )}
     </div>
-  );
+    );
+  };
 
   return (
     <>
@@ -1134,6 +1153,7 @@ export default async function NotebookPage(props: {
     <Workspace
       notebook={view}
       documents={attached}
+      readerView={readerView}
       activeDocumentId={paneOne?.document.id ?? null}
       drive={driveConfig(user)}
       collab={collab}
@@ -1191,8 +1211,8 @@ export default async function NotebookPage(props: {
             paneOneId={paneOne.document.id}
             paneTwoId={paneTwo?.document.id ?? null}
             documents={attached.map((d) => ({ id: d.id, title: d.title }))}
-            paneOne={paneNode(paneOne, `one:${paneOne.document.id}`)}
-            paneTwo={paneTwo ? paneNode(paneTwo, `two:${paneTwo.document.id}`) : null}
+            paneOne={paneNode(paneOne, `one:${paneOne.document.id}`, "one")}
+            paneTwo={paneTwo ? paneNode(paneTwo, `two:${paneTwo.document.id}`, "two") : null}
           />
         ) : (
           <div className="content-in flex h-full flex-col items-center justify-center gap-5">

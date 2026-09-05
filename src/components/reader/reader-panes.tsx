@@ -10,8 +10,80 @@ import type { TKey } from "@/lib/i18n/dictionaries";
 // show two panes, each with the full tool set. The choice lives in the URL —
 // a fresh open is Normal. Links whose two ends are visible in the two panes
 // draw as dashed lines between the marks.
+//
+// A split view is its own layout (SPEC.md §6): each pane's chrome is one row
+// at its top (the pane header: the pane's document, the article menu, the
+// search, Distill), the two panes fill the browser exactly, and the tray is a
+// screen to their right that the workspace scrolls to (workspace.tsx).
 
 export type ReaderViewKind = "normal" | "side" | "stack";
+
+// One URL per reader view: ?doc= for the first pane; a split view adds
+// ?view= and ?doc2= for the second (page.tsx reads them).
+export function viewHref(
+  notebookId: string,
+  view: ReaderViewKind,
+  paneOneId: string,
+  paneTwoId: string | null,
+): string {
+  const params = new URLSearchParams();
+  params.set("doc", paneOneId);
+  if (view !== "normal") {
+    params.set("view", view);
+    params.set("doc2", paneTwoId ?? paneOneId);
+  }
+  return `/n/${notebookId}?${params.toString()}`;
+}
+
+// The pane header of a split view: one row at the top of the pane, above
+// its scroller, never over the text. The reader and the video pane both
+// render it; the reader adds its article menu and Distill to the row.
+export const PANE_HEADER =
+  "relative z-30 flex h-11 shrink-0 items-center gap-1.5 border-b border-line px-3 print:hidden";
+
+// The document one pane shows, chosen in the pane header of a split view.
+// Choosing changes the URL, so the choice survives a refresh like the view.
+export function PaneDocumentSelect({
+  notebookId,
+  view,
+  pane,
+  paneOneId,
+  paneTwoId,
+  documents,
+}: {
+  notebookId: string;
+  view: ReaderViewKind;
+  pane: "one" | "two";
+  paneOneId: string;
+  paneTwoId: string | null;
+  documents: { id: string; title: string }[];
+}) {
+  const t = useT();
+  const router = useRouter();
+  const value = pane === "one" ? paneOneId : (paneTwoId ?? paneOneId);
+  return (
+    <select
+      value={value}
+      onChange={(e) =>
+        router.push(
+          pane === "one"
+            ? viewHref(notebookId, view, e.target.value, paneTwoId)
+            : viewHref(notebookId, view, paneOneId, e.target.value),
+        )
+      }
+      data-track={`pane-document:${pane}`}
+      aria-label={t("panes.paneDocument")}
+      data-tip={t("panes.paneDocumentTitle")}
+      className="min-w-0 max-w-[50%] shrink truncate rounded-full bg-sand-100 px-3 py-1.5 text-xs font-semibold text-sand-700 shadow-soft outline-none hover:text-clay-800"
+    >
+      {documents.map((d) => (
+        <option key={d.id} value={d.id}>
+          {d.title.length > 48 ? `${d.title.slice(0, 48)}…` : d.title}
+        </option>
+      ))}
+    </select>
+  );
+}
 
 const VIEW_LABEL: Record<ReaderViewKind, TKey> = {
   normal: "panes.viewNormal",
@@ -181,27 +253,29 @@ export function ReaderPanes({
     };
   }, [menu]);
 
-  function go(next: ReaderViewKind, nextPaneTwo?: string) {
-    const params = new URLSearchParams();
-    params.set("doc", paneOneId);
-    if (next !== "normal") {
-      params.set("view", next);
-      params.set(
-        "doc2",
-        nextPaneTwo ??
-          paneTwoId ??
-          documents.find((d) => d.id !== paneOneId)?.id ??
-          paneOneId,
-      );
-    }
+  function go(next: ReaderViewKind) {
     setMenu(false);
-    router.push(`/n/${notebookId}?${params.toString()}`);
+    router.push(
+      viewHref(
+        notebookId,
+        next,
+        paneOneId,
+        paneTwoId ?? documents.find((d) => d.id !== paneOneId)?.id ?? paneOneId,
+      ),
+    );
   }
 
   return (
     <div
       ref={containerRef}
       data-track-surface="reader"
+      // Top and Bottom with the tray in view: the strip hides the panes' left
+      // part, and each article column centers in what is visible (globals.css
+      // .reader-column). Side by Side panes are narrower than the column, so
+      // they keep their place and the first pane peeks from under the edge.
+      style={
+        { "--reader-cut": view === "stack" ? "var(--strip-cut, 0px)" : "0px" } as React.CSSProperties
+      }
       className={`relative flex h-full min-h-0 min-w-0 ${view === "stack" ? "flex-col" : "flex-row"}`}
     >
       {/* Bottom-left: clear of the article menu (top-left) and the sticky
@@ -239,28 +313,15 @@ export function ReaderPanes({
         </Presence>
       </div>
 
-      <div ref={paneOneRef} className="relative min-h-0 min-w-0 flex-1">
+      {/* Each pane is a column: the pane header (a split view) above the
+          scroller. The pane's document is chosen in that header. */}
+      <div ref={paneOneRef} className="relative flex min-h-0 min-w-0 flex-1 flex-col">
         {paneOne}
       </div>
       {view !== "normal" && paneTwo && (
         <>
           <div aria-hidden className={view === "stack" ? "h-px shrink-0 bg-line" : "w-px shrink-0 bg-line"} />
-          <div ref={paneTwoRef} className="relative min-h-0 min-w-0 flex-1">
-            {/* Below the pane's assistant pill (top-4 left-4), never over it. */}
-            <div className="absolute top-14 left-4 z-30 max-w-[45%] print:hidden">
-              <select
-                value={paneTwoId ?? ""}
-                onChange={(e) => go(view, e.target.value)}
-                aria-label={t("panes.secondPaneDocument")}
-                className="w-full truncate rounded-full bg-sand-100 px-3 py-1.5 text-xs font-semibold text-sand-700 shadow-soft outline-none"
-              >
-                {documents.map((d) => (
-                  <option key={d.id} value={d.id}>
-                    {d.title.length > 48 ? `${d.title.slice(0, 48)}…` : d.title}
-                  </option>
-                ))}
-              </select>
-            </div>
+          <div ref={paneTwoRef} className="relative flex min-h-0 min-w-0 flex-1 flex-col">
             {paneTwo}
           </div>
           <LinkLines
