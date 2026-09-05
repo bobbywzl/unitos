@@ -22,6 +22,12 @@ const en = {
   askPlaceholderCorpora: "Ask across your projects",
   ask: "Ask",
   stopAsk: "Stop. Whatever answered so far stays on screen.",
+  // Web access (SPEC.md §7)
+  web: "Web",
+  webOnTitle:
+    "Web is on: the assistant checks its answer against the web and cites the outside sources it uses. Click to answer from the project only.",
+  webOffTitle:
+    "Web is off: the assistant answers from the project only. Click to let it search the web and cite outside sources.",
   // Tasks: button labels, then the noun inside noTaskFound
   taskContradictions: "Contradictions",
   taskGaps: "Gaps",
@@ -61,6 +67,9 @@ const zh: Record<keyof typeof en, string> = {
   askPlaceholderCorpora: "跨全部项目提问",
   ask: "提问",
   stopAsk: "停止。已作答的部分保留在屏幕上。",
+  web: "联网",
+  webOnTitle: "联网已开启：助手会用网络核对答案，并注明所用的外部来源。点击后只根据项目作答。",
+  webOffTitle: "联网已关闭：助手只根据项目作答。点击后允许它搜索网络并注明外部来源。",
   taskContradictions: "矛盾",
   taskGaps: "疏漏",
   taskUnsourced: "无出处",

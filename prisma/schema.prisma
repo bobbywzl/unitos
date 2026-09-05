@@ -228,6 +228,10 @@ enum DerivationType {
   FIND // video content reader: query → time ranges + explanations (SPEC.md §11)
   DISTILL // question → the quotes that answer it, stored on the attachment (SPEC.md §4)
   FORMALIZE // transcript → formal article on the attachment, or bullet-point notes (PENDING)
+  ASK // a question about a time range of a video or audio document, answered from the transcript in that range; "Add to notes" lands PENDING (SPEC.md §11)
+  COMPARE // two documents → one PENDING note of agreements, disagreements, and what only one covers, sourced on both (SPEC.md §4)
+  ANALYZE // a figure or table read by the vision model: values verbatim, estimates marked; one PENDING note on the block (SPEC.md §4)
+  VOICE // a spoken note: transcribed, cleaned, landed PENDING for the reader to accept (SPEC.md §6)
 }
 
 model Source {
@@ -254,6 +258,21 @@ model Source {
   // the frame; on a PAGE block it is a page anchor (SPEC.md §16) — offsets
   // 0/0, the text ladder skipped, orphaned only if the PAGE block is gone.
   region      Json?
+}
+
+// One block's translation into one language (SPEC.md §19): DeepL output,
+// cached so a document translates once. sourceHash is the SHA-256 of the
+// block text it was made from; a block edited since reads as stale and
+// translates again on the next Translate.
+model BlockTranslation {
+  id         String   @id @default(cuid())
+  blockId    String
+  lang       String // target: "en" | "zh"
+  sourceHash String
+  text       String
+  createdAt  DateTime @default(now())
+
+  @@unique([blockId, lang])
 }
 
 // An image dropped into a note or into the reader's edit mode (SPEC.md §16).

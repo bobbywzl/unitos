@@ -192,6 +192,18 @@ export function SummaryIcon(props: IconProps) {
   );
 }
 
+// Analyze: a figure or table read as data (SPEC.md §4).
+export function ChartIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M3 3v18h18" />
+      <rect x="7" y="10" width="3" height="7" />
+      <rect x="12" y="6" width="3" height="11" />
+      <rect x="17" y="13" width="3" height="4" />
+    </Icon>
+  );
+}
+
 export function MicIcon(props: IconProps) {
   return (
     <Icon {...props}>

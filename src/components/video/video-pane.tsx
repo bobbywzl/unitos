@@ -4,15 +4,17 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { isImeKey } from "@/lib/ime";
-import { SearchIcon, SparkleIcon, SpinnerIcon } from "@/components/icons";
+import { QuestionIcon, SearchIcon, SparkleIcon, SpinnerIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { Markdown } from "@/components/markdown";
 import { ThinkingIndicator } from "@/components/thinking";
+import { AskRange } from "@/components/video/ask-panel";
 import { ArticleSection, MediaAssistant } from "@/components/video/assistant-card";
 import { Visual } from "@/components/video/visual";
 import type { ThumbnailSource } from "@/components/video/use-thumbnails";
 import { useCollab } from "@/components/collab/collab-context";
 import { DocumentTitle } from "@/components/reader/document-title";
+import { TranslationBar } from "@/components/reader/translation-bar";
 import { FindPanel } from "@/components/video/find-panel";
 import { Transcript } from "@/components/video/transcript";
 import {
@@ -64,11 +66,14 @@ export function VideoPane({
   annotations,
   seekBySource,
   sectionChoices,
+  translationAvailable,
 }: {
   notebookId: string;
   documentId: string;
   title: string;
   video: VideoInfo;
+  /** DEEPL_API_KEY is set: the Translate offer shows when the languages differ (SPEC.md §19). */
+  translationAvailable: boolean;
   transcript: TranscriptLine[];
   /** The formalized article on this corpus's attachment; null = none yet. */
   formalized: FormalizedArticle | null;
@@ -99,6 +104,20 @@ export function VideoPane({
   const [hint, setHint] = useState(true);
   // The assistant chat card under the tool bar (SPEC.md §11).
   const [assistantOpen, setAssistantOpen] = useState(false);
+  // The transcript's translation (SPEC.md §19), one text per line.
+  const [translations, setTranslations] = useState<Record<string, string> | null>(null);
+  // Ask about a range (SPEC.md §11): the card opens on the current moment,
+  // five minutes ahead or to the end, whichever comes first.
+  const [askRange, setAskRange] = useState<{ start: number; end: number } | null>(null);
+  function toggleAsk() {
+    if (askRange) {
+      setAskRange(null);
+      return;
+    }
+    const start = Math.max(0, Math.floor(currentTimeRef.current));
+    const limit = video.duration !== null && video.duration > start ? video.duration : start + 300;
+    setAskRange({ start, end: Math.min(limit, start + 300) });
+  }
 
   // Optimistic annotations and deletes, reconciled when the server props land.
   const [added, setAdded] = useState<VideoAnnotationItem[]>([]);
@@ -547,7 +566,8 @@ export function VideoPane({
               playerRef.current?.seek(startTime);
             }}
             leading={
-              !canEdit ? null : (
+              <>
+              {canEdit && (
               <>
               <button
                 onClick={toggleAnnotate}
@@ -576,7 +596,21 @@ export function VideoPane({
                 {t("video.assistant")}
               </button>
               </>
-              )
+              )}
+              <button
+                onClick={toggleAsk}
+                data-track="video-ask-open"
+                data-tip={t(audio ? "video.askButtonTitleAudio" : "video.askButtonTitle")}
+                className={
+                  askRange
+                    ? "flex shrink-0 items-center gap-1.5 rounded-full bg-clay px-3.5 py-2 text-xs font-semibold text-clay-fg"
+                    : "flex shrink-0 items-center gap-1.5 rounded-full border border-line px-3.5 py-2 text-xs font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800"
+                }
+              >
+                <QuestionIcon size={13} />
+                {t("video.askRange")}
+              </button>
+              </>
             }
             trailing={
               transcript.length > 0 ? (
@@ -596,6 +630,20 @@ export function VideoPane({
             }
           />
         </div>
+
+        {askRange && (
+          <AskRange
+            notebookId={notebookId}
+            documentId={documentId}
+            audio={audio}
+            hasTranscript={transcript.length > 0}
+            defaultStart={askRange.start}
+            defaultEnd={askRange.end}
+            sectionChoices={sectionChoices}
+            onSeek={(startTime) => playerRef.current?.seek(startTime)}
+            onClose={() => setAskRange(null)}
+          />
+        )}
 
         {assistantOpen && canEdit && (
           <MediaAssistant
@@ -763,8 +811,20 @@ export function VideoPane({
           onDelete={onVisualDelete}
         />
 
+        {transcript.length > 0 && (
+          <div className="mt-6">
+            <TranslationBar
+              documentId={documentId}
+              text={transcript.map((l) => l.text).join("\n").slice(0, 4000)}
+              available={translationAvailable}
+              onTranslations={setTranslations}
+            />
+          </div>
+        )}
+
         <Transcript
           transcript={transcript}
+          translations={translations}
           audio={audio}
           activeLineId={activeLineId}
           annotations={all}

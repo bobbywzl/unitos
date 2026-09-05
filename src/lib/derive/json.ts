@@ -87,6 +87,45 @@ export const formalizeNotesSchema = z.object({
     .max(24),
 });
 
+// COMPARE (SPEC.md §4): the points where two documents agree, disagree, and
+// what only one covers, each citing spans the route resolves against the real
+// block text before the note lands.
+const comparePointSchema = z.object({
+  point: z.string().min(1).max(1_000),
+  spans: z.array(spanSchema).max(4),
+});
+export const compareOutputSchema = z.object({
+  agreements: z.array(comparePointSchema).max(12),
+  disagreements: z.array(comparePointSchema).max(12),
+  onlyFirst: z.array(comparePointSchema).max(10),
+  onlySecond: z.array(comparePointSchema).max(10),
+});
+
+// ANALYZE (SPEC.md §4): a figure or table read as data. certainty separates a
+// value printed on the visual from one estimated off it.
+export const analyzeOutputSchema = z.object({
+  kind: z.enum(["table", "chart", "diagram", "photo", "map", "other"]),
+  summary: z.string().min(1).max(2_000),
+  structure: z.string().max(3_000),
+  readings: z
+    .array(
+      z.object({
+        label: z.string().min(1).max(300),
+        value: z.string().min(1).max(300),
+        certainty: z.enum(["read", "estimated"]),
+      }),
+    )
+    .max(60),
+  data: z
+    .object({
+      columns: z.array(z.string().max(300)).max(20),
+      rows: z.array(z.array(z.string().max(300)).max(20)).max(80),
+    })
+    .nullable(),
+  takeaway: z.string().max(2_000),
+  cautions: z.array(z.string().max(600)).max(20),
+});
+
 export type Span = z.infer<typeof spanSchema>;
 
 // Clamp a span to its block text; drop it when it does not resolve to non-empty text.

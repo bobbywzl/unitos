@@ -93,6 +93,16 @@ const en = {
 
   collapseSectionTitle: "Collapse or expand this section",
   addNoteTitle: "Write a note in this section",
+  // Voice note (SPEC.md §6)
+  speakNote: "Speak",
+  speakNoteTitle:
+    "Speak a note: the recording is transcribed and cleaned, and lands as a pending note in this section",
+  stopRecording: "Stop recording; the note is transcribed",
+  voiceNoteTranscribing: "Transcribing…",
+  voiceNoteEmpty: "Nothing was recorded.",
+  voiceNoteFailed: "Voice note failed",
+  voiceNoteUnsupported: "This browser cannot record audio.",
+  micDenied: "Microphone access was refused. Allow it in the browser to speak a note.",
   deleteSectionTitle: "Delete this section and its notes",
   addSectionTitle: "Add a section to file notes in",
   exportTitle: "Export the notes as Markdown or Word",
@@ -185,6 +195,14 @@ const zh: Record<keyof typeof en, string> = {
 
   collapseSectionTitle: "收起或展开此章节",
   addNoteTitle: "在此章节写一条笔记",
+  speakNote: "语音",
+  speakNoteTitle: "口述一条笔记：录音会被转写并整理，成为此章节的一条待定笔记",
+  stopRecording: "停止录音；笔记随即转写",
+  voiceNoteTranscribing: "正在转写……",
+  voiceNoteEmpty: "没有录到内容。",
+  voiceNoteFailed: "语音笔记失败",
+  voiceNoteUnsupported: "此浏览器无法录音。",
+  micDenied: "麦克风权限被拒绝。请在浏览器中允许后再口述笔记。",
   deleteSectionTitle: "删除此章节及其笔记",
   addSectionTitle: "添加一个章节来存放笔记",
   exportTitle: "把笔记导出为 Markdown 或 Word",

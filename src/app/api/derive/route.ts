@@ -20,8 +20,11 @@ import {
   renderBlockLines,
   sectionSkeleton,
 } from "@/lib/derive/context";
-import { figureContent, figureVisual, type FigureImage } from "@/lib/derive/figure";
+import { analysisMarkdown, comparisonMarkdown } from "@/lib/derive/analysis";
+import { figureContent, figureVisual, renderFigurePage, type FigureImage } from "@/lib/derive/figure";
 import {
+  analyzeOutputSchema,
+  compareOutputSchema,
   distillOutputSchema,
   extractOutputSchema,
   findOutputSchema,
@@ -32,6 +35,7 @@ import {
 } from "@/lib/derive/json";
 import { callForJson, modelErrorMessage } from "@/lib/derive/json-call";
 import { cropPageRegion, pageBlockText, renderPdfPage } from "@/lib/handwritten/pages";
+import { parseRegion } from "@/lib/video/types";
 import { currentLang, serverT } from "@/lib/i18n/server";
 import { promptTemplates } from "@/lib/prompts";
 import { corpusDistillPrompt } from "@/lib/prompts/distill";
@@ -50,6 +54,7 @@ import {
   type SummaryLevels,
 } from "@/lib/types";
 import { materializeArticle } from "@/lib/video/article-document";
+import { landingSection } from "@/lib/derive/landing";
 import { videoAnchorFor } from "@/lib/video/anchor";
 import { describeYouTubeClip } from "@/lib/video/gemini";
 import {
@@ -70,9 +75,24 @@ export const maxDuration = 300;
 // new prompt template + destination handler below.
 const deriveSchema = z
   .object({
-  type: z.enum(["EXPLAIN", "SIMPLIFY", "SALIENCE", "EXTRACT", "DISTILL", "SUMMARIZE", "FIND", "FORMALIZE"]),
-  // Absent only for corpus-scope DISTILL, which reads every document.
+  type: z.enum([
+    "EXPLAIN",
+    "SIMPLIFY",
+    "SALIENCE",
+    "EXTRACT",
+    "DISTILL",
+    "SUMMARIZE",
+    "FIND",
+    "FORMALIZE",
+    "ASK",
+    "COMPARE",
+    "ANALYZE",
+  ]),
+  // Absent only for corpus-scope DISTILL, which reads every document, and for
+  // COMPARE, which names its two documents in documentIds.
   documentId: z.string().min(1).optional(),
+  // COMPARE only: the two documents, both attached to the project.
+  documentIds: z.array(z.string().min(1)).length(2).optional(),
   // DISTILL only: "corpus" scans every document in the corpus (SPEC.md §13).
   scope: z.enum(["document", "corpus"]).optional(),
   notebookId: z.string().min(1),
@@ -91,11 +111,12 @@ const deriveSchema = z
     .optional(),
   depth: z.enum(SUMMARY_DEPTHS).optional(), // SUMMARIZE only
   query: z.string().min(1).max(500).optional(), // FIND only
-  question: z.string().min(1).max(500).optional(), // DISTILL only; anchor is optional focus
+  question: z.string().min(1).max(500).optional(), // DISTILL and ASK; DISTILL's anchor is optional focus
   format: z.enum(FORMALIZE_FORMATS).optional(), // FORMALIZE only
-  sectionId: z.string().min(1).optional(), // FORMALIZE notes: where the notes land
+  sectionId: z.string().min(1).optional(), // FORMALIZE notes, COMPARE, ANALYZE: where the notes land
   // EXPLAIN on a video moment (SPEC.md §11): the time range, the drawn region,
   // and the paused frame as a JPEG data URL when the client could capture it.
+  // ASK: the time range the question is about.
   video: z
     .object({
       startTime: z.number().min(0),
@@ -119,8 +140,15 @@ const deriveSchema = z
     })
     .optional(),
   })
-  .refine((d) => d.documentId || (d.type === "DISTILL" && d.scope === "corpus"), {
-    message: "documentId is required",
+  .refine(
+    (d) =>
+      d.documentId ||
+      (d.type === "DISTILL" && d.scope === "corpus") ||
+      (d.type === "COMPARE" && d.documentIds),
+    { message: "documentId is required" },
+  )
+  .refine((d) => d.type !== "COMPARE" || (d.documentIds && d.documentIds[0] !== d.documentIds[1]), {
+    message: "COMPARE needs two different documents",
   })
   .refine((d) => d.scope !== "corpus" || d.type === "DISTILL", {
     message: "scope corpus is DISTILL only",
@@ -135,7 +163,50 @@ const deriveSchema = z
     message: "page is EXPLAIN only",
   });
 
-const ANCHOR_REQUIRED = new Set(["EXPLAIN", "SIMPLIFY", "EXTRACT"]);
+const ANCHOR_REQUIRED = new Set(["EXPLAIN", "SIMPLIFY", "EXTRACT", "ANALYZE"]);
+
+// A model call that holds one connection for minutes dies at idle proxies, so
+// the response streams a heartbeat space while the model works and ends with
+// the payload JSON or STREAM_ERROR_TOKEN + the reason — the DISTILL pattern.
+// Cancel aborts the request: a cancelled run persists nothing.
+function heartbeatResponse(
+  req: Request,
+  run: () => Promise<{ ok: true } & Record<string, unknown>>,
+  failure: (reason: string) => string,
+): Response {
+  const encoder = new TextEncoder();
+  let cancelled = false;
+  let heartbeat: ReturnType<typeof setInterval> | null = null;
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      const send = (text: string) => {
+        if (!cancelled) controller.enqueue(encoder.encode(text));
+      };
+      heartbeat = setInterval(() => send(" "), 5_000);
+      try {
+        const payload = await run();
+        if (cancelled || req.signal.aborted) return;
+        send(JSON.stringify(payload));
+      } catch (err) {
+        if (!cancelled && !req.signal.aborted) {
+          console.error("[derive] run failed:", err);
+          send(`${STREAM_ERROR_TOKEN}${failure(modelErrorMessage(err))}`);
+        }
+      } finally {
+        if (heartbeat) clearInterval(heartbeat);
+        if (!cancelled) controller.close();
+      }
+    },
+    cancel() {
+      cancelled = true;
+      if (heartbeat) clearInterval(heartbeat);
+    },
+  });
+  return new Response(stream, { headers: { "Content-Type": "text/plain; charset=utf-8" } });
+}
+
+// A failed JSON call throws with the reason; heartbeatResponse reports it.
+class DeriveFailure extends Error {}
 
 export async function POST(req: Request) {
   const t = await serverT();
@@ -146,8 +217,12 @@ export async function POST(req: Request) {
   const { data, error } = await parseBody(req, deriveSchema);
   if (error) return error;
   // Every derivation persists something (annotation, layer, summary), so the
-  // gate is editor — except FIND, which persists nothing and stays open to viewers.
-  const access = await notebookAccess(data.notebookId, data.type === "FIND" ? "viewer" : "editor");
+  // gate is editor — except FIND and ASK, which persist nothing and stay open
+  // to viewers.
+  const access = await notebookAccess(
+    data.notebookId,
+    data.type === "FIND" || data.type === "ASK" ? "viewer" : "editor",
+  );
   if (access instanceof NextResponse) return access;
   const user = access.user;
   const usageMeta = {
@@ -176,6 +251,9 @@ export async function POST(req: Request) {
   }
   if (data.type === "FORMALIZE" && !data.format) {
     return NextResponse.json({ error: t("api.formalizeRequiresFormat") }, { status: 400 });
+  }
+  if (data.type === "ASK" && (!data.question?.trim() || !data.video)) {
+    return NextResponse.json({ error: t("api.askRequiresRangeAndQuestion") }, { status: 400 });
   }
   if (data.video && !timeRangeSchema.safeParse(data.video).success) {
     return NextResponse.json({ error: t("api.endBeforeStart") }, { status: 400 });
@@ -358,6 +436,169 @@ export async function POST(req: Request) {
     });
   }
 
+  // ── COMPARE (SPEC.md §4): two documents, read whole ────────────────────────
+  // Both documents ride as one cacheable system message under their ids, the
+  // corpus DISTILL rendering; the points come back citing block spans, and the
+  // server resolves each against the real text before one PENDING note lands
+  // with a source per span — nothing enters notes without the reader.
+  if (data.type === "COMPARE") {
+    const [firstId, secondId] = data.documentIds!;
+    const attachments = await db.notebookDocument.findMany({
+      where: { notebookId: data.notebookId, documentId: { in: [firstId, secondId] } },
+      include: {
+        document: {
+          select: {
+            id: true,
+            title: true,
+            blocks: {
+              orderBy: { order: "asc" },
+              select: { id: true, type: true, text: true, startTime: true, endTime: true },
+            },
+          },
+        },
+      },
+    });
+    const first = attachments.find((a) => a.documentId === firstId)?.document;
+    const second = attachments.find((a) => a.documentId === secondId)?.document;
+    if (!first || !second) {
+      return NextResponse.json({ error: t("api.documentNotAttachedToCorpus") }, { status: 404 });
+    }
+    if (!first.blocks.some((b) => b.text.trim()) || !second.blocks.some((b) => b.text.trim())) {
+      return NextResponse.json({ error: t("api.compareNeedsText") }, { status: 400 });
+    }
+    const profile = await loadProfile(data.notebookId);
+    const PER_DOCUMENT = 220_000;
+    const renderDoc = (doc: typeof first) => {
+      const lines = renderBlockLines(doc.blocks);
+      return (
+        `[document ${doc.id}] "${doc.title}"` +
+        "\n" +
+        (lines.length > PER_DOCUMENT
+          ? `${lines.slice(0, PER_DOCUMENT)}\n\n(document cut for length)`
+          : lines)
+      );
+    };
+    const compareText = [
+      "You assist a reader comparing two documents of a project. Both follow.",
+      "Each document starts with its id as [document <id>]; each block starts with its id as [block <id>]. Block ids are unique across both documents. Reference block ids exactly as given.",
+      "",
+      renderDoc(first),
+      "",
+      renderDoc(second),
+    ].join("\n");
+    const compareMessages: ModelMessage[] = [
+      {
+        role: "system",
+        content: compareText,
+        providerOptions: { anthropic: { cacheControl: { type: "ephemeral" } } },
+      },
+      {
+        role: "user",
+        content: template({
+          profile,
+          lang: await currentLang(),
+          documentTitle: first.title,
+          anchoredText: "",
+          contextBefore: "",
+          contextAfter: "",
+          sectionSkeleton: await sectionSkeleton(data.notebookId),
+          compare: {
+            first: { id: first.id, title: first.title },
+            second: { id: second.id, title: second.title },
+          },
+        }),
+      },
+    ];
+    const compareBlockById = new Map(
+      [...first.blocks, ...second.blocks].map((b) => [b.id, { id: b.id, text: b.text }] as const),
+    );
+    const docByBlock = new Map<string, string>([
+      ...first.blocks.map((b) => [b.id, first.id] as const),
+      ...second.blocks.map((b) => [b.id, second.id] as const),
+    ]);
+    return heartbeatResponse(
+      req,
+      async () => {
+        const result = await callForJson({
+          model: anthropic(DERIVATION_MODEL.COMPARE),
+          messages: compareMessages,
+          maxOutputTokens: MAX_OUTPUT_TOKENS.COMPARE,
+          schema: compareOutputSchema,
+          label: "COMPARE",
+          usage: usageMeta,
+          abortSignal: req.signal,
+        });
+        if (!result.ok) throw new DeriveFailure(result.error);
+        // Every span resolves against the real block text; a point keeps only
+        // its resolved spans, and a point with none still stands as text.
+        const resolvePoints = (points: { point: string; spans: { blockId: string; start: number; end: number }[] }[]) =>
+          points.map((p) => ({
+            point: p.point.trim(),
+            spans: p.spans
+              .map((span) => {
+                const resolved = resolveSpan(span, compareBlockById);
+                const documentId = resolved ? docByBlock.get(resolved.blockId) : undefined;
+                return resolved && documentId ? { ...resolved, documentId } : null;
+              })
+              .filter((span) => span !== null),
+          }));
+        const comparison = {
+          agreements: resolvePoints(result.data.agreements),
+          disagreements: resolvePoints(result.data.disagreements),
+          onlyFirst: resolvePoints(result.data.onlyFirst),
+          onlySecond: resolvePoints(result.data.onlySecond),
+        };
+        const total =
+          comparison.agreements.length +
+          comparison.disagreements.length +
+          comparison.onlyFirst.length +
+          comparison.onlySecond.length;
+        if (total === 0) throw new DeriveFailure(t("api.compareNoPoints"));
+        const content = comparisonMarkdown(comparison, { first: first.title, second: second.title }, t);
+        // One source per distinct span, the first document's first, capped so
+        // the card stays readable.
+        const seen = new Set<string>();
+        const sources: { documentId: string; blockId: string; start: number; end: number; quotedText: string; prefix: string; suffix: string }[] = [];
+        for (const list of [comparison.agreements, comparison.disagreements, comparison.onlyFirst, comparison.onlySecond]) {
+          for (const point of list) {
+            for (const span of point.spans) {
+              const key = `${span.blockId}:${span.start}:${span.end}`;
+              if (seen.has(key) || sources.length >= 24) continue;
+              seen.add(key);
+              sources.push(span);
+            }
+          }
+        }
+        const section = await landingSection(data.notebookId, data.sectionId, t("reader.defaultSectionTitle"));
+        const order = await db.note.count({ where: { sectionId: section.id } });
+        const note = await db.note.create({
+          data: {
+            sectionId: section.id,
+            content,
+            status: "PENDING",
+            derivationType: "COMPARE",
+            createdById: user.id,
+            order,
+            sources: {
+              create: sources.map((span) => ({
+                documentId: span.documentId,
+                blockId: span.blockId,
+                startOffset: span.start,
+                endOffset: span.end,
+                quotedText: span.quotedText,
+                prefix: span.prefix,
+                suffix: span.suffix,
+              })),
+            },
+          },
+        });
+        await bumpNotebook(data.notebookId);
+        return { ok: true, noteId: note.id, sectionTitle: section.title, pointCount: total };
+      },
+      (reason) => t("api.compareFailed", { reason }),
+    );
+  }
+
   if (!data.documentId) {
     return NextResponse.json({ error: t("api.documentNotFound") }, { status: 404 });
   }
@@ -419,8 +660,28 @@ export async function POST(req: Request) {
   const timedBlocks = document.blocks.filter(
     (b) => b.type === "TRANSCRIPT" && b.startTime !== null && b.endTime !== null,
   );
-  if (data.type === "FIND" && timedBlocks.length === 0) {
+  if ((data.type === "FIND" || data.type === "ASK") && timedBlocks.length === 0) {
     return NextResponse.json({ error: t("api.findNeedsTranscript") }, { status: 400 });
+  }
+  // ASK: the question is about a time range (SPEC.md §11). The range's lines
+  // repeat in the prompt; the whole transcript stays the cached prefix, so
+  // the answer can say where else the recording deals with it.
+  if (data.type === "ASK" && data.video) {
+    const asset = await db.videoAsset.findUnique({
+      where: { documentId: document.id },
+      select: { mimeType: true },
+    });
+    const excerpt = timedBlocks
+      .filter((b) => b.startTime! < data.video!.endTime && b.endTime! > data.video!.startTime)
+      .map((b) => `[${formatTimeRange(b.startTime!, b.endTime!)}] ${b.text}`)
+      .join("\n");
+    ctx.video = {
+      timeRange: formatTimeRange(data.video.startTime, data.video.endTime),
+      transcriptExcerpt: excerpt.length > 60_000 ? `${excerpt.slice(0, 59_999)}…` : excerpt,
+      hasFrame: false,
+      hasRegion: false,
+      audio: isAudioMime(asset?.mimeType ?? null),
+    };
   }
   // FORMALIZE rewrites the transcript; without one there is nothing to rewrite.
   if (data.type === "FORMALIZE" && timedBlocks.length === 0) {
@@ -487,11 +748,34 @@ export async function POST(req: Request) {
   // source; a PDF figure attaches its rendered page; a video figure explains
   // from caption and context only.
   let figureImage: FigureImage | null = null;
-  if (data.type === "EXPLAIN" && anchor) {
+  // ANALYZE reads a FIGURE or TABLE block as data (SPEC.md §4): the anchored
+  // block, with its visual when one can be produced.
+  let analyzedBlock: { id: string; type: string; text: string } | null = null;
+  if ((data.type === "EXPLAIN" || data.type === "ANALYZE") && anchor) {
     const anchoredBlock = await db.block.findUnique({
       where: { id: anchor.blockId },
       select: { type: true, html: true, text: true, page: true, region: true },
     });
+    if (data.type === "ANALYZE") {
+      if (!anchoredBlock || (anchoredBlock.type !== "FIGURE" && anchoredBlock.type !== "TABLE")) {
+        return NextResponse.json({ error: t("api.analyzeNeedsFigureOrTable") }, { status: 400 });
+      }
+      analyzedBlock = { id: anchor.blockId, type: anchoredBlock.type, text: anchoredBlock.text };
+      if (anchoredBlock.type === "TABLE") {
+        // The markup carries the cells; a PDF table's page region rides along
+        // so the model can check the markup against the print.
+        const region = parseRegion(anchoredBlock.region);
+        const image =
+          anchoredBlock.page !== null && region
+            ? await renderFigurePage(document.id, anchoredBlock.page, region)
+            : null;
+        figureImage = image;
+        ctx.table = {
+          html: (anchoredBlock.html ?? anchoredBlock.text).slice(0, 60_000),
+          hasImage: image !== null,
+        };
+      }
+    }
     const figure = figureContent(anchoredBlock);
     if (figure && anchoredBlock) {
       const visual = await figureVisual(figure, anchoredBlock, document.id, document.sourceUrl);
@@ -594,7 +878,12 @@ export async function POST(req: Request) {
 
   // 3 + 4. Stream or collect, then route by destination.
   // EXPLAIN, SIMPLIFY, and SUMMARIZE stream text. SALIENCE and DISTILL return validated JSON.
-  if (data.type === "EXPLAIN" || data.type === "SIMPLIFY" || data.type === "SUMMARIZE") {
+  if (
+    data.type === "EXPLAIN" ||
+    data.type === "SIMPLIFY" ||
+    data.type === "SUMMARIZE" ||
+    data.type === "ASK"
+  ) {
     const result = streamText({
       model,
       maxOutputTokens,
@@ -774,6 +1063,60 @@ export async function POST(req: Request) {
     return new Response(stream, {
       headers: { "Content-Type": "text/plain; charset=utf-8" },
     });
+  }
+
+  // ANALYZE: the figure or table read as data, landed as one PENDING note on
+  // the block (SPEC.md §4). The heartbeat stream carries the call: the vision
+  // model takes its time over a dense table.
+  if (data.type === "ANALYZE") {
+    const block = analyzedBlock!;
+    const analyzeAnchor = anchor!;
+    return heartbeatResponse(
+      req,
+      async () => {
+        const result = await callForJson({
+          model,
+          messages,
+          maxOutputTokens,
+          schema: analyzeOutputSchema,
+          label: "ANALYZE",
+          usage: usageMeta,
+          abortSignal: req.signal,
+        });
+        if (!result.ok) throw new DeriveFailure(result.error);
+        const content = analysisMarkdown(
+          result.data,
+          { kind: block.type === "TABLE" ? "table" : "figure", caption: block.text },
+          t,
+        );
+        const section = await landingSection(data.notebookId, data.sectionId, t("reader.defaultSectionTitle"));
+        const order = await db.note.count({ where: { sectionId: section.id } });
+        const note = await db.note.create({
+          data: {
+            sectionId: section.id,
+            content,
+            status: "PENDING",
+            derivationType: "ANALYZE",
+            createdById: user.id,
+            order,
+            sources: {
+              create: {
+                documentId: documentId,
+                blockId: analyzeAnchor.blockId,
+                startOffset: analyzeAnchor.startOffset,
+                endOffset: analyzeAnchor.endOffset,
+                quotedText: analyzeAnchor.quotedText,
+                prefix: analyzeAnchor.prefix,
+                suffix: analyzeAnchor.suffix,
+              },
+            },
+          },
+        });
+        await bumpNotebook(data.notebookId);
+        return { ok: true, noteId: note.id, sectionTitle: section.title, kind: result.data.kind };
+      },
+      (reason) => t("api.analyzeFailed", { reason }),
+    );
   }
 
   // FIND: matches reference transcript blocks; resolve them to time ranges.
@@ -999,22 +1342,11 @@ export async function POST(req: Request) {
           }
           // Where the notes land: the requested section, else the first
           // visible section, else a new "Notes" section.
-          let section = data.sectionId
-            ? await db.section.findFirst({
-                where: { id: data.sectionId, notebookId: data.notebookId, hidden: false },
-              })
-            : null;
-          if (!section) {
-            section = await db.section.findFirst({
-              where: { notebookId: data.notebookId, hidden: false },
-              orderBy: { order: "asc" },
-            });
-          }
-          if (!section) {
-            section = await db.section.create({
-              data: { notebookId: data.notebookId, title: t("reader.defaultSectionTitle"), order: 0 },
-            });
-          }
+          const section = await landingSection(
+            data.notebookId,
+            data.sectionId,
+            t("reader.defaultSectionTitle"),
+          );
           // Every note cites its span of the recording: the topic's blocks
           // give the time range; a topic with no resolvable blocks anchors to
           // the whole recording on the VIDEO block.

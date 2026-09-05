@@ -180,6 +180,39 @@ function buildResponse(all) {
     });
   }
 
+  // COMPARE: one agreement citing a span in each document, one point only
+  // the first covers.
+  if (all.includes('"agreements"') && all.includes('"onlyFirst"')) {
+    const headers = [...all.matchAll(/\[document ([^\]]+)\] "/g)];
+    const pick = (list) => list.filter((b) => b.type === "PARAGRAPH" && b.text.length > 60)[0];
+    const one = headers[0] ? pick(parseBlocks(all.slice(headers[0].index, headers[1]?.index ?? all.length))) : null;
+    const two = headers[1] ? pick(parseBlocks(all.slice(headers[1].index))) : null;
+    const span = (b) => ({ blockId: b.id, start: 0, end: Math.min(90, b.text.length) });
+    return JSON.stringify({
+      agreements: one && two ? [{ point: "Both documents treat monetization as the deciding force.", spans: [span(one), span(two)] }] : [],
+      disagreements: [],
+      onlyFirst: one ? [{ point: "The first document quantifies the default payments.", spans: [span(one)] }] : [],
+      onlySecond: [],
+    });
+  }
+
+  // ANALYZE: a figure or table read as data.
+  if (all.includes('"readings"') && all.includes('"cautions"')) {
+    const table = all.includes("The table's markup:");
+    return JSON.stringify({
+      kind: table ? "table" : "chart",
+      summary: table ? "Mock table analysis: two rows of counts." : "Mock chart analysis: one series over time.",
+      structure: table ? "Columns: item and count." : "X axis: year. Y axis: share (%).",
+      readings: [
+        { label: "Row one", value: "42", certainty: "read" },
+        { label: "Peak", value: "80", certainty: "estimated" },
+      ],
+      data: table ? { columns: ["Item", "Count"], rows: [["Pages", "2"], ["Notes", "42"]] } : null,
+      takeaway: "The mock takeaway.",
+      cautions: ["Mock caution: the legend was not read."],
+    });
+  }
+
   // Notebook tasks: no issues found.
   if (all.includes('"issues"')) return JSON.stringify({ issues: [] });
 
@@ -255,6 +288,10 @@ const server = http.createServer((req, res) => {
     }
     const all = [textOf(body.system), ...(body.messages ?? []).map((m) => textOf(m.content))].join("\n");
     const text = buildResponse(all);
+    // Web search (SPEC.md §7): with the search tool declared, one mock
+    // search runs server-side and one source is cited, in the real stream
+    // shape — a server_tool_use block, its result, then text with a citation.
+    const webSearch = (body.tools ?? []).some((t) => String(t.type ?? "").startsWith("web_search"));
     const usage = {
       input_tokens: 100,
       output_tokens: 50,
@@ -280,19 +317,68 @@ const server = http.createServer((req, res) => {
           usage,
         },
       });
-      send("content_block_start", {
-        type: "content_block_start",
-        index: 0,
-        content_block: { type: "text", text: "" },
-      });
-      for (let i = 0; i < text.length; i += 40) {
+      let index = 0;
+      if (webSearch) {
+        send("content_block_start", {
+          type: "content_block_start",
+          index: 0,
+          content_block: { type: "server_tool_use", id: "srvtoolu_mock", name: "web_search", input: {} },
+        });
         send("content_block_delta", {
           type: "content_block_delta",
           index: 0,
+          delta: { type: "input_json_delta", partial_json: '{"query":"mock verification"}' },
+        });
+        send("content_block_stop", { type: "content_block_stop", index: 0 });
+        send("content_block_start", {
+          type: "content_block_start",
+          index: 1,
+          content_block: {
+            type: "web_search_tool_result",
+            tool_use_id: "srvtoolu_mock",
+            content: [
+              {
+                type: "web_search_result",
+                url: "https://example.com/mock-source",
+                title: "Mock web source",
+                encrypted_content: "mock",
+                page_age: null,
+              },
+            ],
+          },
+        });
+        send("content_block_stop", { type: "content_block_stop", index: 1 });
+        index = 2;
+      }
+      send("content_block_start", {
+        type: "content_block_start",
+        index,
+        content_block: { type: "text", text: "" },
+      });
+      if (webSearch) {
+        send("content_block_delta", {
+          type: "content_block_delta",
+          index,
+          delta: {
+            type: "citations_delta",
+            citation: {
+              type: "web_search_result_location",
+              url: "https://example.com/mock-source",
+              title: "Mock web source",
+              cited_text: "mock",
+              encrypted_index: "mock",
+            },
+          },
+        });
+      }
+      for (let i = 0; i < text.length; i += 40) {
+        send("content_block_delta", {
+          type: "content_block_delta",
+          index,
           delta: { type: "text_delta", text: text.slice(i, i + 40) },
         });
       }
-      send("content_block_stop", { type: "content_block_stop", index: 0 });
+      send("content_block_stop", { type: "content_block_stop", index });
       send("message_delta", {
         type: "message_delta",
         delta: { stop_reason: "end_turn", stop_sequence: null },

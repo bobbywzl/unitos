@@ -121,6 +121,17 @@ const en = {
   jumpOpenNote: "Jump here and open the note",
   deleteAnnotation: "Delete the annotation",
 
+  // Ask about a range
+  askRange: "Ask about a range",
+  askButtonTitle: "Ask a question about a stretch of the video; the model answers from the transcript in that range",
+  askButtonTitleAudio: "Ask a question about a stretch of the audio; the model answers from the transcript in that range",
+  askPlaceholder: "What is said in this range?",
+  askPlaceholderAudio: "What is said in this range?",
+  ask: "Ask",
+  askTitle: "Answer from the transcript in this range",
+  stopAsk: "Stop. Whatever answered so far stays on screen.",
+  askFailed: "Ask failed",
+
   // Assistant on the media pane, with the two formalize skills
   assistant: "Assistant",
   assistantButtonTitle: "Ask the assistant; it reads the whole transcript",
@@ -263,6 +274,17 @@ const zh: Record<keyof typeof en, string> = {
   visualAudio: "时刻批注",
   jumpOpenNote: "跳转到这里并打开笔记",
   deleteAnnotation: "删除批注",
+
+  // Ask about a range
+  askRange: "就区间提问",
+  askButtonTitle: "就视频的一段区间提问；模型从该区间的逐字稿作答",
+  askButtonTitleAudio: "就音频的一段区间提问；模型从该区间的逐字稿作答",
+  askPlaceholder: "这段区间里说了什么？",
+  askPlaceholderAudio: "这段区间里说了什么？",
+  ask: "提问",
+  askTitle: "从该区间的逐字稿作答",
+  stopAsk: "停止。已作答的部分保留在屏幕上。",
+  askFailed: "提问失败",
 
   // Assistant on the media pane, with the two formalize skills
   assistant: "助手",

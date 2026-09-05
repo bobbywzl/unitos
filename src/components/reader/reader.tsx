@@ -7,6 +7,8 @@ import { NOTE_WRAP_EVENT, type NoteWrapSpacer } from "@/lib/note-wrap";
 import { NoteWrapGap } from "@/components/reader/note-wrap-gap";
 import { useT } from "@/components/lang-provider";
 import { BlockView, type BlockData, type Highlight } from "@/components/reader/block-view";
+import { TranslationLine } from "@/components/reader/translation-bar";
+import { useLang } from "@/components/lang-provider";
 import { CircleGlow } from "@/components/reader/circle-glow";
 import type { TKey } from "@/lib/i18n/dictionaries";
 import { ConversionStrip, type ConversionInfo } from "@/components/reader/conversion-strip";
@@ -179,9 +181,15 @@ export function Reader({
   onUndo,
   onRedo,
   flushRef,
+  banner,
+  translations,
 }: {
   title: string;
   blocks: BlockData[];
+  /** Above the title: the Translate offer (SPEC.md §19). */
+  banner?: React.ReactNode;
+  /** Translation text per block id, shown under each block in reading mode. */
+  translations?: Record<string, string> | null;
   highlightsByBlock: Record<string, Highlight[]>;
   mode: "read" | "edit";
   font: string | null;
@@ -209,7 +217,12 @@ export function Reader({
   onDeleteBlock: (blockId: string) => Promise<void>;
 }) {
   const t = useT();
+  const uiLang = useLang();
   const [focusedBlockId, setFocusedBlockId] = useState<string | null>(null);
+  const translationOf = (block: BlockData) =>
+    mode === "read" && translations?.[block.id] ? (
+      <TranslationLine text={translations[block.id]} lang={uiLang} />
+    ) : null;
   // Optimistic overrides: applied the instant a bar button is clicked, cleared
   // when the server round-trip lands (the blocks prop identity changes then).
   const [localKinds, setLocalKinds] = useState<Record<string, Kind>>({});
@@ -530,6 +543,7 @@ export function Reader({
             content top, the one position the card can measure against exactly
             (lib/note-wrap.ts). */}
         {wrapSpacer && <NoteWrapGap spacer={wrapSpacer} />}
+        {banner}
         <p className="mb-2.5 text-[11px] font-bold tracking-[0.09em] text-clay-700 uppercase print:hidden">
           {t(mode === "edit" ? "panes.documentBlocksEditing" : "panes.documentBlocks", {
             n: blocks.length,
@@ -599,12 +613,16 @@ export function Reader({
                 </div>
               </div>
             ) : WRAP_FLOW_TYPES.has(block.type) ? (
-              <BlockView block={block} highlights={highlightsByBlock[block.id]} documentId={documentId} />
+              <>
+                <BlockView block={block} highlights={highlightsByBlock[block.id]} documentId={documentId} />
+                {translationOf(block)}
+              </>
             ) : (
               // The wrapper carries the clear; the block keeps its own margins,
               // which collapse through it, so spacing does not change.
               <div className={wrapClear(block.type).trim()}>
                 <BlockView block={block} highlights={highlightsByBlock[block.id]} documentId={documentId} />
+                {translationOf(block)}
               </div>
             )}
           </Fragment>

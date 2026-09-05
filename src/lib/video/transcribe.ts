@@ -183,7 +183,8 @@ type WhisperProvider = {
 
 const GROQ_WHISPER: WhisperProvider = {
   keyEnv: "GROQ_API_KEY",
-  endpoint: "https://api.groq.com/openai/v1/audio/transcriptions",
+  // GROQ_API_URL points a local run at a stand-in server (scripts/qa).
+  endpoint: process.env.GROQ_API_URL ?? "https://api.groq.com/openai/v1/audio/transcriptions",
   model: "whisper-large-v3-turbo",
   usdPerMinute: 0.04 / 60,
 };

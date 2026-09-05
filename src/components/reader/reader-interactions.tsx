@@ -31,6 +31,8 @@ import type {
 } from "@/lib/types";
 import type { DocumentReference } from "@/lib/parse/types";
 import { splitStreamError, splitStreamNote } from "@/lib/derive/config";
+import { runDerivation } from "@/lib/derive/heartbeat-client";
+import { TranslationBar } from "@/components/reader/translation-bar";
 import { findWeblinks } from "@/lib/weblinks";
 import { isImeKey, useImeGuard } from "@/lib/ime";
 import { imageFigureHtml } from "@/lib/images";
@@ -47,6 +49,7 @@ import {
   MicIcon,
   NotesIcon,
   QuestionIcon,
+  ChartIcon,
   SearchIcon,
   SparkleIcon,
   SpinnerIcon,
@@ -406,9 +409,12 @@ export function ReaderInteractions({
   pageMarksByBlock,
   conversion,
   font,
+  translationAvailable,
 }: {
   documentId: string;
   notebookId: string;
+  /** DEEPL_API_KEY is set: the Translate offer shows when the languages differ (SPEC.md §19). */
+  translationAvailable: boolean;
   sectionChoices: { id: string; label: string }[];
   attachedDocuments: { id: string; title: string }[];
   title: string;
@@ -652,6 +658,11 @@ export function ReaderInteractions({
   // A fresh extraction shows from local state until the refresh delivers it.
   const [localExtractions, setLocalExtractions] = useState<ExtractionView[]>([]);
   const [extractBusy, setExtractBusy] = useState(false);
+  // ANALYZE (SPEC.md §4): one run at a time; the toast says where the note landed.
+  const [analyzeBusy, setAnalyzeBusy] = useState(false);
+  // The document's translation (SPEC.md §19), one text per block, shown
+  // under each block while the reader has it on.
+  const [translations, setTranslations] = useState<Record<string, string> | null>(null);
   // The card an origin chip opens: the origin quote, the count, Delete.
   const [extractCard, setExtractCard] = useState<{ id: string; top: number; left: number } | null>(
     null,
@@ -2053,6 +2064,40 @@ export function ReaderInteractions({
 
   function deriveBody(type: string, anchor: Anchor) {
     return JSON.stringify({ type, documentId, notebookId, anchor: anchorBody(anchor) });
+  }
+
+  // ANALYZE: the figure or table read as data by the vision model; the result
+  // lands as one PENDING note on the block (SPEC.md §4). The toast offers to
+  // show the note in the tray.
+  async function analyze() {
+    if (!popover || analyzeBusy) return;
+    const { anchor } = popover;
+    await flushLiveBlock(anchor.blockId);
+    setPopover(null);
+    window.getSelection()?.removeAllRanges();
+    setAnalyzeBusy(true);
+    showToast(t("reader.analyzing"));
+    try {
+      const result = await runDerivation<{ noteId: string; sectionTitle: string }>({
+        type: "ANALYZE",
+        documentId,
+        notebookId,
+        anchor: anchorBody(anchor),
+        sectionId: sectionChoices[0]?.id,
+      });
+      showToast(t("reader.analysisAdded", { section: result.sectionTitle }), {
+        label: t("reader.showNote"),
+        run: () =>
+          window.dispatchEvent(
+            new CustomEvent("dissect:show-note", { detail: { noteId: result.noteId } }),
+          ),
+      });
+      router.refresh();
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : t("reader.deriveFailed"));
+    } finally {
+      setAnalyzeBusy(false);
+    }
   }
 
   // EXPLAIN: stream into a bubble docked beside the article (SPEC.md §4, §6).
@@ -3888,6 +3933,15 @@ function blockFormatKind(
         onUndo={() => void runStep(true)}
         onRedo={() => void runStep(false)}
         flushRef={flushEditRef}
+        banner={
+          <TranslationBar
+            documentId={documentId}
+            text={blocks.map((b) => b.text).join("\n").slice(0, 4000)}
+            available={translationAvailable}
+            onTranslations={setTranslations}
+          />
+        }
+        translations={translations}
       />
 
       <Bibliography references={references} />
@@ -4179,6 +4233,29 @@ function blockFormatKind(
             <QuestionIcon size={coarse ? 14 : 12} />
             {t("reader.explain")}
           </button>
+          {(() => {
+            // Analyze reads a figure or a table as data (SPEC.md §4): on the
+            // figure popover for a FIGURE block, on the selection popover for
+            // a selection inside a TABLE block.
+            const anchoredType = blocks.find((b) => b.id === popover.anchor.blockId)?.type;
+            const analyzable =
+              (popover.figure && anchoredType === "FIGURE") ||
+              (!popover.figure && anchoredType === "TABLE");
+            if (!analyzable) return null;
+            const table = anchoredType === "TABLE";
+            return (
+              <button
+                onClick={() => void analyze()}
+                data-track="analyze"
+                disabled={analyzeBusy}
+                data-tip={t(table ? "reader.analyzeTableTitle" : "reader.analyzeFigureTitle")}
+                className={`flex w-full items-center gap-1.5 rounded-full ${toolRow} text-left text-sand-800 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40`}
+              >
+                <ChartIcon size={coarse ? 14 : 12} />
+                {t(table ? "reader.analyzeTable" : "reader.analyzeFigure")}
+              </button>
+            );
+          })()}
           {!popover.figure && (
             <button
               onClick={() => void simplify()}

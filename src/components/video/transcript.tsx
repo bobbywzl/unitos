@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CommentIcon, LocateIcon, QuestionIcon, SpinnerIcon } from "@/components/icons";
-import { useT } from "@/components/lang-provider";
+import { useLang, useT } from "@/components/lang-provider";
+import { TranslationLine } from "@/components/reader/translation-bar";
 import { formatTime, type TranscriptLine, type VideoAnnotationItem } from "@/lib/video/types";
 
 // The transcript under the player (SPEC.md §11), shaped like an article:
@@ -48,6 +49,7 @@ function paragraphsOf(transcript: TranscriptLine[]): TranscriptLine[][] {
 
 export function Transcript({
   transcript,
+  translations,
   audio,
   activeLineId,
   annotations,
@@ -62,6 +64,8 @@ export function Transcript({
   pasteHelp,
 }: {
   transcript: TranscriptLine[];
+  /** Translation text per line id (SPEC.md §19); a paragraph's lines read together under it. */
+  translations?: Record<string, string> | null;
   audio: boolean;
   activeLineId: string | null;
   annotations: VideoAnnotationItem[];
@@ -77,6 +81,7 @@ export function Transcript({
   pasteHelp: string;
 }) {
   const t = useT();
+  const uiLang = useLang();
   const [pasting, setPasting] = useState(false);
   const [pasteText, setPasteText] = useState("");
   const [savingPaste, setSavingPaste] = useState(false);
@@ -155,11 +160,9 @@ export function Transcript({
           className="max-h-[420px] overflow-y-auto rounded-2xl bg-card px-6 py-5 shadow-soft"
         >
           {paragraphs.map((paragraph, pi) => (
+            <div key={paragraph[0].id} className={pi === 0 ? "" : "mt-4"}>
             <p
-              key={paragraph[0].id}
-              className={`indent-7 text-[14px] leading-[1.9] text-sand-800 ${
-                pi === 0 ? "" : "mt-4"
-              }`}
+              className="indent-7 text-[14px] leading-[1.9] text-sand-800"
             >
               <button
                 onClick={() => onSeek(paragraph[0])}
@@ -235,6 +238,15 @@ export function Transcript({
                 );
               })}
             </p>
+            {translations &&
+              (() => {
+                const text = paragraph
+                  .map((line) => translations[line.id])
+                  .filter((s): s is string => Boolean(s))
+                  .join(" ");
+                return text ? <TranslationLine text={text} lang={uiLang} /> : null;
+              })()}
+            </div>
           ))}
         </div>
       ) : (

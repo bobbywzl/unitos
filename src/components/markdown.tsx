@@ -174,8 +174,15 @@ export function Markdown({ children, breaks = false }: { children: string; break
                 </button>
               );
             }
+            // An outside link (a web source the assistant cites) opens in a
+            // new tab; the reader's page stays.
+            const external = /^https?:\/\//.test(href ?? "");
             return (
-              <a href={href} {...props}>
+              <a
+                href={href}
+                {...props}
+                {...(external ? { target: "_blank", rel: "noopener noreferrer" } : {})}
+              >
                 {linkChildren}
               </a>
             );

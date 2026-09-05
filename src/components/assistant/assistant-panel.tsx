@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useRef, useState } from "react";
+import { useRef, useState, useSyncExternalStore } from "react";
 import { splitStreamError } from "@/lib/derive/config";
 import { useImeGuard } from "@/lib/ime";
 import type { SummaryDepth, SummaryLevels } from "@/lib/types";
@@ -14,6 +14,36 @@ import { LoadingDots, ThinkingIndicator } from "@/components/thinking";
 type Scope = "notebook" | "corpus";
 type Task = "contradictions" | "gaps" | "unsourced";
 type Issue = { noteIds: string[]; issue: string; explanation: string };
+
+// Web access (SPEC.md §7): on by default, remembered in this browser. The
+// choice is read as an external store, so the server's render (on) and the
+// first client render agree.
+const WEB_KEY = "unitos-assistant-web";
+const WEB_EVENT = "unitos:assistant-web";
+function readWeb(): boolean {
+  try {
+    return localStorage.getItem(WEB_KEY) !== "off";
+  } catch {
+    return true;
+  }
+}
+function writeWeb(on: boolean) {
+  try {
+    if (on) localStorage.removeItem(WEB_KEY);
+    else localStorage.setItem(WEB_KEY, "off");
+  } catch {
+    // A blocked store only loses the memory of the choice.
+  }
+  window.dispatchEvent(new Event(WEB_EVENT));
+}
+function subscribeWeb(onChange: () => void) {
+  window.addEventListener(WEB_EVENT, onChange);
+  window.addEventListener("storage", onChange);
+  return () => {
+    window.removeEventListener(WEB_EVENT, onChange);
+    window.removeEventListener("storage", onChange);
+  };
+}
 
 // Two scopes, both reading the digest (SPEC.md §7). Scope ids stay as wire
 // values; the labels say Corpus for this binding of documents and Corpora for
@@ -66,6 +96,7 @@ export function AssistantPanel({
   const t = useT();
   const ime = useImeGuard();
   const [scope, setScope] = useState<Scope>("notebook");
+  const web = useSyncExternalStore(subscribeWeb, readWeb, () => true);
   const [question, setQuestion] = useState("");
   const [answer, setAnswer] = useState("");
   const [issues, setIssues] = useState<Issue[] | null>(null);
@@ -166,7 +197,7 @@ export function AssistantPanel({
     const controller = new AbortController();
     runAbortRef.current = controller;
     try {
-      const body = { notebookId, scope, task: "ask", question: q };
+      const body = { notebookId, scope, task: "ask", question: q, web };
       const res = await fetch("/api/assistant", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -320,6 +351,17 @@ export function AssistantPanel({
             {t(s.labelKey)}
           </button>
         ))}
+        <button
+          onClick={() => writeWeb(!web)}
+          data-track={`assistant-web:${web ? "off" : "on"}`}
+          aria-pressed={web}
+          data-tip={t(web ? "assistant.webOnTitle" : "assistant.webOffTitle")}
+          className={`ml-auto rounded-full px-3 py-1 text-xs font-semibold ${
+            web ? "bg-sage-600 text-sage-fg" : "bg-card text-sand-600 shadow-soft hover:text-clay-800"
+          }`}
+        >
+          {t("assistant.web")}
+        </button>
       </div>
       <p className="text-xs text-sand-500">{scopeRow ? t(scopeRow.hintKey) : null}</p>
 

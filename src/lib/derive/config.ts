@@ -13,6 +13,13 @@ export const DERIVATION_MODEL: Record<DerivationType, string> = {
   FIND: "claude-opus-5",
   DISTILL: "claude-opus-5",
   FORMALIZE: "claude-opus-5",
+  ASK: "claude-opus-5",
+  COMPARE: "claude-opus-5",
+  // A figure or table is read by the model that reads visuals best with the
+  // least invention: the most capable model, the one upload and parse already
+  // trust (PARSE_MODEL). A misread number is worse than a slow answer.
+  ANALYZE: "claude-fable-5-1",
+  VOICE: "claude-opus-5", // no model call of its own: the transcription ladder does the work
 };
 
 // Reasoning tokens count against this ceiling on current models, so every
@@ -28,6 +35,10 @@ export const MAX_OUTPUT_TOKENS: Record<DerivationType, number> = {
   FIND: 8192,
   DISTILL: 8192,
   FORMALIZE: 32768, // a long transcript's article is long
+  ASK: 4096,
+  COMPARE: 16384, // two documents' points, each with its spans
+  ANALYZE: 8192, // a table's rows come back as data
+  VOICE: 0,
 };
 
 // The ingest-time corpus scan for recommended links (SPEC.md §13). Not a

@@ -1,4 +1,7 @@
 import type { DerivationType } from "@prisma/client";
+import { analyzePrompt } from "@/lib/prompts/analyze";
+import { askPrompt } from "@/lib/prompts/ask";
+import { comparePrompt } from "@/lib/prompts/compare";
 import { distillPrompt } from "@/lib/prompts/distill";
 import { explainPrompt } from "@/lib/prompts/explain";
 import { extractPrompt } from "@/lib/prompts/extract";
@@ -20,4 +23,8 @@ export const promptTemplates: Partial<Record<DerivationType, (ctx: PromptCtx) =>
   SUMMARIZE: summarizePrompt,
   FIND: findPrompt,
   FORMALIZE: formalizePrompt,
+  ASK: askPrompt,
+  COMPARE: comparePrompt,
+  ANALYZE: analyzePrompt,
+  // VOICE has no template: the transcription ladder does the work (SPEC.md §6).
 };

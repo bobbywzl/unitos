@@ -4,11 +4,15 @@ import { answerLanguage, languageName, profileLines, type ReaderProfileCtx } fro
 // SYNTHESIS: notebook-scope assistant output (SPEC.md §7). Free questions stream text;
 // contradiction/gap/unsourced tasks return JSON issue cards.
 
+// web: the assistant can search the web (SPEC.md §7). The material stays the
+// first source; the web checks it and fills what it lacks, and every web
+// source is cited as a link so the reader can verify it.
 export function synthesisAskPrompt(params: {
   profile: ReaderProfileCtx;
   lang: Lang;
   scopeLabel: string;
   question: string;
+  web?: boolean;
 }): string {
   return [
     profileLines(params.profile),
@@ -20,6 +24,16 @@ export function synthesisAskPrompt(params: {
     "Answer from the material above. Reference notes by their [note <id>] markers and",
     "blocks by their [block <id>] markers when they ground a claim. Say plainly when the",
     "material does not answer the question. Use markdown. No preamble.",
+    ...(params.web
+      ? [
+          "",
+          "You can search the web. Use it to verify the factual claims the material and your answer rest on against outside sources, and to add what the material lacks. Rules:",
+          "1. Answer from the material first; the web checks it. Never present a web result as if it came from the material.",
+          "2. Cite every web source you use as a markdown link at the point it supports, with the page title as the link text.",
+          "3. When the web contradicts the material, say so plainly and show both sides.",
+          "4. End with a section titled \"Web sources\" listing every web page you relied on as a markdown link, one per line. Leave the section out when you used none.",
+        ]
+      : []),
     answerLanguage(params.lang),
   ].join("\n");
 }

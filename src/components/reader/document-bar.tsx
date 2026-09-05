@@ -3,6 +3,7 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { api } from "@/lib/api";
+import { runDerivation } from "@/lib/derive/heartbeat-client";
 import type { DriveConfig } from "@/lib/drive/config";
 import { pickDriveFiles } from "@/lib/drive/picker-client";
 import { parseDriveFileId, type DrivePickedFile } from "@/lib/drive/types";
@@ -187,6 +188,38 @@ export function DocumentBar({
   const connectAbortRef = useRef<AbortController | null>(null);
   function stopConnect() {
     connectAbortRef.current?.abort();
+  }
+  // Compare two documents (SPEC.md §4): the open document against this one.
+  // One PENDING note of agreements, disagreements, and what only one covers
+  // lands in the notes tray; the notice says where.
+  const [comparing, setComparing] = useState<string | null>(null);
+  const compareAbortRef = useRef<AbortController | null>(null);
+  function stopCompare() {
+    compareAbortRef.current?.abort();
+  }
+  async function compare(doc: AttachedDocument) {
+    if (comparing || !activeId || doc.id === activeId) return;
+    setComparing(doc.id);
+    setConnectNotice(null);
+    setError(null);
+    const controller = new AbortController();
+    compareAbortRef.current = controller;
+    try {
+      const result = await runDerivation<{ noteId: string; sectionTitle: string; pointCount: number }>(
+        { type: "COMPARE", notebookId, documentIds: [activeId, doc.id] },
+        controller.signal,
+      );
+      setConnectNotice(t("panes.compareDone", { section: result.sectionTitle }));
+      setTimeout(() => setConnectNotice(null), 6000);
+      router.refresh();
+    } catch (err) {
+      // Stopped, not failed: no note, no notice.
+      if (controller.signal.aborted) return;
+      setError(err instanceof Error ? err.message : t("common.requestFailed"));
+    } finally {
+      if (compareAbortRef.current === controller) compareAbortRef.current = null;
+      setComparing(null);
+    }
   }
   // The recommended-links scan, on demand — for documents added before the
   // scan existed (SPEC.md §13).
@@ -709,6 +742,20 @@ export function DocumentBar({
                           {t("panes.openAsHandwritten")}
                         </button>
                       )}
+                      {canEdit && activeId && d.id !== activeId && (
+                        <button
+                          onClick={() => {
+                            closeList();
+                            void compare(d);
+                          }}
+                          data-track="document-compare"
+                          disabled={comparing !== null}
+                          className={`${rowAction} disabled:opacity-40`}
+                          data-tip={t("panes.compareWithOpenTitle", { title: active?.title ?? "" })}
+                        >
+                          {comparing === d.id ? t("common.working") : t("panes.compareWithOpen")}
+                        </button>
+                      )}
                       {canEdit && (
                         <button
                           onClick={() => {
@@ -816,6 +863,11 @@ export function DocumentBar({
       {connecting && (
         <span className="shrink-0 rounded-full bg-card px-3 py-1 text-xs shadow-soft">
           <ThinkingIndicator label={t("panes.recommendLinksRunning")} onStop={stopConnect} />
+        </span>
+      )}
+      {comparing && (
+        <span className="shrink-0 rounded-full bg-card px-3 py-1 text-xs shadow-soft">
+          <ThinkingIndicator label={t("panes.compareRunning")} onStop={stopCompare} />
         </span>
       )}
       {connectNotice && (

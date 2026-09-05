@@ -49,6 +49,11 @@ until the owner makes one.
 - Video length and transcription minutes
 - Google Drive import
 - Admin surfaces (already gated by `ADMIN_PASSWORD`, not by tier)
+- Translation (SPEC.md §19): DeepL bills per character — $25 per million on the Pro API, 500k a month free on the Free API — and a document translates once per language. A characters-per-month cap, or the feature itself, is a natural Premium line; nobody has drawn it
+- The assistant's web access (SPEC.md §7): each answer with Web on can run up to five searches at $0.01 each on top of the tokens
+- Figure and table analysis (SPEC.md §4): runs on the most capable model, the most expensive call per use in the app
+- Voice notes (SPEC.md §6): transcription minutes, like video
+- Compare two documents and Ask about a range: tokens like every derivation
 
 ## Open questions
 

@@ -52,6 +52,7 @@ const CLICK_FUNCTIONS: Record<ClickGroup, readonly string[]> = {
     "ask:",
     // the assistant panel: the scope asked, the task run, the summary depth
     "assistant-ask:",
+    "assistant-web:",
     "assistant-task:",
     "assistant-recommended:",
     "assistant-regenerate",
@@ -64,9 +65,15 @@ const CLICK_FUNCTIONS: Record<ClickGroup, readonly string[]> = {
     "convert-to-text",
     "convert-again",
     "convert-retry",
+    // analyze a figure or table; compare two documents; translate
+    "analyze",
+    "document-compare",
+    "translate",
     // video
     "video-explain",
     "video-line-explain",
+    "video-ask",
+    "video-ask-add-note",
     "video-assistant-send",
     "video-skill-article",
     "video-skill-notes",
@@ -75,6 +82,8 @@ const CLICK_FUNCTIONS: Record<ClickGroup, readonly string[]> = {
     "document-recommend-links",
   ],
   notes: [
+    "voice-note",
+    "voice-note-stop",
     "notes", // the notes tab opened
     "notes-full-page",
     "more-notes-full-page",

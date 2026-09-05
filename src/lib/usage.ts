@@ -38,6 +38,10 @@ const MODEL_PRICING: Record<string, Price> = {
   // Microsoft Edge read-aloud voice: free, no key.
   "edge-tts": price(0, 0),
   "text-embedding-3-small": price(0.02, 0),
+  // DeepL bills per character: $25 per 1M characters on the Pro API, free
+  // to 500k a month on the Free API. Callers pass the character count as
+  // inputTokens.
+  deepl: price(25, 0),
 };
 
 /** Family fallbacks for ids not priced exactly; first match wins. */
@@ -100,6 +104,7 @@ function providerOf(model: string): string {
   if (model.startsWith("gemini")) return "google";
   if (model.startsWith("whisper-large") || model.startsWith("distil-whisper")) return "groq";
   if (model === "edge-tts") return "microsoft";
+  if (model === "deepl") return "deepl";
   return "openai";
 }
 

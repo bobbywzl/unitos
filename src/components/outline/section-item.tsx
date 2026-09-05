@@ -9,6 +9,7 @@ import { DragHandle, SortableItem, SortableList, type HandleProps } from "@/comp
 import { AddSection } from "@/components/outline/add-section";
 import { NoteCard } from "@/components/outline/note-card";
 import { NoteEditor } from "@/components/outline/note-editor";
+import { VoiceNoteButton } from "@/components/outline/voice-note";
 import type { OutlineActions } from "@/components/outline/use-outline";
 
 export function SectionItem({
@@ -28,6 +29,7 @@ export function SectionItem({
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState(section.title);
   const [composing, setComposing] = useState(false);
+  const [voiceError, setVoiceError] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
 
   async function saveTitle() {
@@ -84,6 +86,13 @@ export function SectionItem({
           </button>
         )}
         {canEdit && (
+          <VoiceNoteButton
+            sectionId={section.id}
+            onError={setVoiceError}
+            className="text-xs text-sand-600 hover:text-clay-700"
+          />
+        )}
+        {canEdit && (
           <button
             onClick={() => {
               if (confirm(t("outline.confirmDeleteSection"))) void actions.deleteSection(section.id);
@@ -96,6 +105,7 @@ export function SectionItem({
         )}
       </div>
 
+      {voiceError && <p className="mb-2 text-xs text-red-500">{voiceError}</p>}
       <div className="flex flex-col gap-2.5">
         <SortableList
           id={`notes-${section.id}`}

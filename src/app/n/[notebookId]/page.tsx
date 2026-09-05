@@ -44,6 +44,7 @@ import { ReaderInteractions } from "@/components/reader/reader-interactions";
 import { ReaderPanes, type ReaderViewKind } from "@/components/reader/reader-panes";
 import { Workspace } from "@/components/reader/workspace";
 import { VideoPane } from "@/components/video/video-pane";
+import { deeplConfigured } from "@/lib/translate/deepl";
 import {
   parseRegion,
   transcriptIsStale,
@@ -1091,6 +1092,7 @@ export default async function NotebookPage(props: {
           annotations={pane.videoAnnotations}
           seekBySource={pane.videoSeekBySource}
           sectionChoices={sectionChoices}
+          translationAvailable={deeplConfigured()}
         />
       ) : (
         <ReaderInteractions
@@ -1120,6 +1122,7 @@ export default async function NotebookPage(props: {
           pageMarksByBlock={pane.pageMarksByBlock}
           conversion={pane.conversion}
           font={pane.document.font}
+          translationAvailable={deeplConfigured()}
         />
       )}
     </div>

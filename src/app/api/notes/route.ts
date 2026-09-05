@@ -24,9 +24,10 @@ const createSchema = z
       })
       .optional(),
     // Assistant-written notes carry their authorship, and land pending when the
-    // user has not approved them one by one (Auto mode). Find and distill
-    // results always land pending. Nothing enters notes silently (SPEC.md §1).
-    origin: z.enum(["assistant", "find", "distill"]).optional(),
+    // user has not approved them one by one (Auto mode). Find, distill, ask,
+    // and voice results always land pending. Nothing enters notes silently
+    // (SPEC.md §1).
+    origin: z.enum(["assistant", "find", "distill", "ask", "voice"]).optional(),
     pending: z.boolean().optional(),
   })
   .refine((d) => !(d.source && d.video), { message: "Provide source or video, not both" });
@@ -82,21 +83,22 @@ export async function POST(req: Request) {
     };
   }
 
-  const derivationType =
-    data.origin === "assistant"
-      ? ("SYNTHESIS" as const)
-      : data.origin === "find"
-        ? ("FIND" as const)
-        : data.origin === "distill"
-          ? ("DISTILL" as const)
-          : undefined;
+  const ORIGIN_TYPE = {
+    assistant: "SYNTHESIS",
+    find: "FIND",
+    distill: "DISTILL",
+    ask: "ASK",
+    voice: "VOICE",
+  } as const;
+  const derivationType = data.origin ? ORIGIN_TYPE[data.origin] : undefined;
+  const alwaysPending = data.origin !== undefined && data.origin !== "assistant";
   const count = await db.note.count({ where: { sectionId: data.sectionId } });
   const note = await db.note.create({
     data: {
       sectionId: data.sectionId,
       content: data.content,
-      // Find and distill output is AI output: it lands PENDING, no exceptions (SPEC.md §1).
-      status: data.pending || data.origin === "find" || data.origin === "distill" ? "PENDING" : "ACCEPTED",
+      // Find, distill, ask, and voice output is AI output: it lands PENDING, no exceptions (SPEC.md §1).
+      status: data.pending || alwaysPending ? "PENDING" : "ACCEPTED",
       ...(derivationType ? { derivationType } : {}),
       createdById: access.user.id,
       order: count,

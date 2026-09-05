@@ -11,6 +11,7 @@ import { CollapsedViewToggle } from "@/components/collapsed-view-toggle";
 import { SortableItem, SortableList } from "@/components/sortable";
 import { NoteCard } from "@/components/outline/note-card";
 import { NoteEditor } from "@/components/outline/note-editor";
+import { VoiceNoteButton } from "@/components/outline/voice-note";
 import { Collapse } from "@/components/presence";
 import { SelectionBar } from "@/components/outline/selection-bar";
 import { filterSections, noteMatches, type OutlineActions } from "@/components/outline/use-outline";
@@ -114,6 +115,7 @@ function TraySection({
   const [collapsed, setCollapsed] = useState(false);
   const [composing, setComposing] = useState(false);
   const [draft, setDraft] = useState("");
+  const [voiceError, setVoiceError] = useState<string | null>(null);
   const accepted = section.notes.filter((n) => n.status !== "PENDING");
   const grips = reorderable && canEdit;
 
@@ -154,7 +156,15 @@ function TraySection({
             {t("outline.addNoteBtn")}
           </button>
         )}
+        {!collapsed && canEdit && (
+          <VoiceNoteButton
+            sectionId={section.id}
+            onError={setVoiceError}
+            className="text-[11px] text-sand-600 opacity-0 transition-opacity group-hover/section:opacity-100 focus-visible:opacity-100 hover:text-clay-700"
+          />
+        )}
       </div>
+      {voiceError && <p className="text-xs text-red-500">{voiceError}</p>}
 
       <Collapse open={!collapsed}>
       {!collapsed && (

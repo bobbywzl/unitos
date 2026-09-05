@@ -11,7 +11,7 @@ import { callForJson, modelErrorMessage } from "@/lib/derive/json-call";
 import { ensureAllDigests, ensureDigest } from "@/lib/digest/ensure";
 import { corporaSystem, corpusSystem } from "@/lib/digest/render";
 import { currentLang, serverT } from "@/lib/i18n/server";
-import { recordUsage, sdkTokens } from "@/lib/usage";
+import { computeCostUsd, recordUsage, sdkTokens } from "@/lib/usage";
 import type { TFunc } from "@/lib/i18n/dictionaries";
 import { synthesisAskPrompt, synthesisTaskPrompt } from "@/lib/prompts/synthesis";
 import { parseBody } from "@/lib/validate";
@@ -26,7 +26,14 @@ const assistantSchema = z.object({
   scope: z.enum(["notebook", "corpus"]),
   task: z.enum(["ask", "contradictions", "gaps", "unsourced"]),
   question: z.string().min(1).max(4000).optional(),
+  // ask only: the assistant may search the web and cite outside sources
+  // (SPEC.md §7).
+  web: z.boolean().optional(),
 });
+
+// Anthropic bills a web search on top of the tokens: $10 per 1,000 searches.
+const WEB_SEARCH_USD = 0.01;
+const WEB_SEARCH_MAX_USES = 5;
 
 const issuesSchema = z.object({
   issues: z
@@ -115,26 +122,34 @@ async function handle(req: Request, t: TFunc) {
               lang: await currentLang(),
               scopeLabel,
               question: data.question!,
+              web: data.web,
             })
           : synthesisTaskPrompt({ profile, lang: await currentLang(), task: data.task }),
     },
   ];
 
   if (data.task === "ask") {
+    // Web access (SPEC.md §7): Anthropic's own search tool runs server-side;
+    // the answer streams as before, the sources it cites arrive as source
+    // parts, and the ones the model did not link itself are appended.
+    const web = data.web === true;
+    let searches = 0;
     const result = streamText({
       model,
       maxOutputTokens,
       allowSystemInMessages: true,
       messages,
+      ...(web ? { tools: { web_search: anthropic.tools.webSearch_20260209({ maxUses: WEB_SEARCH_MAX_USES }) } } : {}),
       // Stop aborts here too (SPEC.md §6): the client disconnecting stops the
       // model call, not just the response the client would have read.
       abortSignal: req.signal,
       onEnd: ({ usage }) => {
         console.log(
-          `[assistant] ask scope=${data.scope} chars=${system.length} cacheRead=${usage.inputTokenDetails.cacheReadTokens ?? 0} ` +
+          `[assistant] ask scope=${data.scope} web=${web} searches=${searches} chars=${system.length} cacheRead=${usage.inputTokenDetails.cacheReadTokens ?? 0} ` +
             `cacheWrite=${usage.inputTokenDetails.cacheWriteTokens ?? 0} output=${usage.outputTokens ?? 0}`,
         );
-        recordUsage(usageMeta, sdkTokens(usage));
+        const tokens = sdkTokens(usage);
+        recordUsage(usageMeta, tokens, computeCostUsd(usageMeta.model, tokens) + searches * WEB_SEARCH_USD);
       },
     });
     // A model failure must reach the reader: the stream ends with
@@ -144,8 +159,30 @@ async function handle(req: Request, t: TFunc) {
     const stream = new ReadableStream<Uint8Array>({
       async start(controller) {
         try {
-          for await (const chunk of result.textStream) {
-            controller.enqueue(encoder.encode(chunk));
+          let text = "";
+          const sources = new Map<string, string>();
+          for await (const part of result.fullStream) {
+            if (part.type === "text-delta") {
+              text += part.text;
+              controller.enqueue(encoder.encode(part.text));
+            } else if (part.type === "source" && part.sourceType === "url") {
+              if (!sources.has(part.url)) sources.set(part.url, part.title ?? part.url);
+            } else if (part.type === "tool-call" && part.toolName === "web_search") {
+              searches++;
+            } else if (part.type === "error") {
+              throw part.error instanceof Error ? part.error : new Error(String(part.error));
+            }
+          }
+          // Web sources the model read but did not link: listed after the
+          // answer, so every source that shaped it is on screen.
+          const unlisted = [...sources].filter(([url]) => !text.includes(url));
+          if (unlisted.length > 0) {
+            const heading = text.includes("Web sources") || text.includes("网络来源") ? "" : `\n\n**${t("api.webSources")}**\n`;
+            controller.enqueue(
+              encoder.encode(
+                heading + "\n" + unlisted.map(([url, title]) => `- [${title}](${url})`).join("\n"),
+              ),
+            );
           }
         } catch (err) {
           console.error("[assistant] stream error:", err);

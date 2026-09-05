@@ -63,6 +63,11 @@ export type PromptCtx = {
   // The destination shape, for FORMALIZE: a formal article for publishing, or
   // personal bullet-point notes.
   format?: FormalizeFormat;
+  // Set for COMPARE: the two documents, both rendered above under their ids.
+  compare?: { first: { id: string; title: string }; second: { id: string; title: string } };
+  // Set when ANALYZE targets a TABLE block: the table's markup is in html;
+  // hasImage: the table's rendered page region is attached as well.
+  table?: { html: string; hasImage: boolean };
 };
 
 // The one language line appended to assistant-voice templates. Repeated exact

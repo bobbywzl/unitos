@@ -1463,3 +1463,16 @@ ellipse.anchor-flash {
 .prose ol ol ol {
   list-style-type: lower-roman;
 }
+
+/* A block's translation (SPEC.md §19): under the original, quieter, marked by
+   a rule so the eye pairs each translation with its block. */
+.translation-line {
+  margin: -0.35rem 0 1rem;
+  padding-left: 0.75rem;
+  border-left: 2px solid var(--clay-200);
+  color: var(--sand-700);
+  font-size: 0.94em;
+  line-height: 1.7;
+  white-space: pre-line;
+  text-indent: 0;
+}

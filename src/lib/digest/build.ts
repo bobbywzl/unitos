@@ -44,6 +44,14 @@ function noteKind(derivationType: DerivationType | null, color: string | null, h
       return "extraction note";
     case "SUMMARIZE":
       return "summary note";
+    case "ASK":
+      return "range answer";
+    case "COMPARE":
+      return "comparison";
+    case "ANALYZE":
+      return "figure or table analysis";
+    case "VOICE":
+      return "voice note";
     default:
       return hidden ? (color ? "highlight" : "comment") : "note";
   }
