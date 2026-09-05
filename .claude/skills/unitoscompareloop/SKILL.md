@@ -8,8 +8,8 @@ description: Parse-QA loop. Subagents imitate a reader — ingest diverse real w
 One loop iteration:
 
 1. **Stand up the app.** Local Postgres (`pg_ctlcluster 16 main start`, db `dissect`), migrations applied, `npm run build`, then
-   `DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/dissect DIRECT_URL=$DATABASE_URL ANTHROPIC_API_KEY=sk-ant-dummy PORT=3111 npm run start`.
-   The dummy key skips the AI select/structure passes, so the loop tests the mechanical parser — the layer fixes land in.
+   `DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/dissect DIRECT_URL=$DATABASE_URL PORT=3111 npm run start`, with `KIMI_API_KEY` unset.
+   Without a key the AI select/structure passes are skipped, so the loop tests the mechanical parser — the layer fixes land in.
 2. **Create one corpus** for the run: `POST /api/notebooks {"title":"ParseQA"}` → notebookId.
 3. **Fan out collector subagents**, one per content category: research papers, news, blogs/essays, docs and misc formats (Wikipedia, transcripts, PDFs). Each agent:
    - finds 3-5 real, reachable URLs in its category (web search; verify reachability with the parser's own UA `Mozilla/5.0 (compatible; Unitos/1.0)` first),

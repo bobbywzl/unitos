@@ -1,7 +1,10 @@
-// Deterministic Anthropic mock for the QA autoloop. Sniffs each prompt and
-// returns valid, context-aware output: real block ids, real quotes, schema-exact
-// JSON — so every AI flow (EXPLAIN, SIMPLIFY, EXTRACT, SALIENCE, assistant ask
-// and act) runs end-to-end with zero external calls.
+// Deterministic Kimi mock for the QA autoloop: Moonshot's OpenAI-compatible
+// chat completions on /v1/chat/completions, plus the Formula API endpoints the
+// web-search tool uses. Sniffs each prompt and returns valid, context-aware
+// output: real block ids, real quotes, schema-exact JSON — so every AI flow
+// (EXPLAIN, SIMPLIFY, EXTRACT, SALIENCE, assistant ask and act) runs
+// end-to-end with zero external calls. Point the app at it with
+//   KIMI_API_KEY=mock KIMI_BASE_URL=http://localhost:3399/v1
 import http from "node:http";
 
 const PORT = 3399;
@@ -271,138 +274,154 @@ function buildResponse(all) {
   return `Mock response: this passage sets out the core claim in plain terms, with the key figure restated for the reader's purpose.${cited}`;
 }
 
-const server = http.createServer((req, res) => {
-  if (req.method !== "POST" || !req.url?.includes("/messages")) {
+const WEB_SOURCE = { url: "https://example.com/mock-source", title: "Mock web source" };
+
+// The Formula API's declaration of the official web-search tool, and its run.
+const WEB_SEARCH_TOOLS = {
+  object: "list",
+  tools: [
+    {
+      type: "function",
+      function: {
+        name: "web_search",
+        description: "Search the web for information",
+        parameters: {
+          type: "object",
+          properties: { query: { description: "What to search for", type: "string" } },
+          required: ["query"],
+        },
+      },
+    },
+  ],
+};
+
+function readJson(req) {
+  return new Promise((resolve, reject) => {
+    let raw = "";
+    req.on("data", (c) => (raw += c));
+    req.on("end", () => {
+      try {
+        resolve(raw ? JSON.parse(raw) : {});
+      } catch {
+        reject(new Error("bad json"));
+      }
+    });
+  });
+}
+
+const usage = () => ({ prompt_tokens: 100, completion_tokens: 50, total_tokens: 150, cached_tokens: 0 });
+
+function chatCompletion(body, res) {
+  const all = (body.messages ?? []).map((m) => textOf(m.content)).join("\n");
+  // Web access (SPEC.md §7): with the web_search tool declared, the first
+  // answer is one tool call; once its result is in the messages, the answer
+  // cites the source the way the prompt asks — a link in the text and a Web
+  // sources list at the end.
+  const webSearch = (body.tools ?? []).some((t) => t.function?.name === "web_search");
+  const searched = (body.messages ?? []).some((m) => m.role === "tool");
+  const toolCall =
+    webSearch && !searched
+      ? { id: "web_search:0", type: "function", function: { name: "web_search", arguments: JSON.stringify({ query: "mock verification" }) } }
+      : null;
+  const text = toolCall
+    ? ""
+    : searched
+      ? `${buildResponse(all)} The web agrees ([${WEB_SOURCE.title}](${WEB_SOURCE.url})).\n\n**Web sources**\n- [${WEB_SOURCE.title}](${WEB_SOURCE.url})`
+      : buildResponse(all);
+  const finish = toolCall ? "tool_calls" : "stop";
+
+  if (body.stream) {
+    res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache" });
+    const chunk = (delta, finish_reason = null, extra = {}) =>
+      res.write(
+        `data: ${JSON.stringify({
+          id: "chatcmpl-mock",
+          object: "chat.completion.chunk",
+          created: 1,
+          model: body.model,
+          choices: [{ index: 0, delta, finish_reason }],
+          ...extra,
+        })}\n\n`,
+      );
+    chunk({ role: "assistant", content: "" });
+    if (toolCall) {
+      chunk({ tool_calls: [{ index: 0, ...toolCall }] });
+    } else {
+      for (let i = 0; i < text.length; i += 40) chunk({ content: text.slice(i, i + 40) });
+    }
+    chunk({}, finish);
+    if (body.stream_options?.include_usage) {
+      res.write(
+        `data: ${JSON.stringify({ id: "chatcmpl-mock", object: "chat.completion.chunk", created: 1, model: body.model, choices: [], usage: usage() })}\n\n`,
+      );
+    }
+    res.write("data: [DONE]\n\n");
+    res.end();
+    return;
+  }
+
+  res.writeHead(200, { "content-type": "application/json" });
+  res.end(
+    JSON.stringify({
+      id: "chatcmpl-mock",
+      object: "chat.completion",
+      created: 1,
+      model: body.model,
+      choices: [
+        {
+          index: 0,
+          message: toolCall
+            ? { role: "assistant", content: null, tool_calls: [toolCall] }
+            : { role: "assistant", content: text },
+          finish_reason: finish,
+        },
+      ],
+      usage: usage(),
+    }),
+  );
+}
+
+const server = http.createServer(async (req, res) => {
+  const url = req.url ?? "";
+  if (req.method === "GET" && url.includes("/formulas/") && url.endsWith("/tools")) {
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(JSON.stringify(WEB_SEARCH_TOOLS));
+    return;
+  }
+  if (req.method !== "POST") {
     res.writeHead(404).end("not found");
     return;
   }
-  let raw = "";
-  req.on("data", (c) => (raw += c));
-  req.on("end", () => {
-    let body;
-    try {
-      body = JSON.parse(raw);
-    } catch {
-      res.writeHead(400).end("bad json");
-      return;
-    }
-    const all = [textOf(body.system), ...(body.messages ?? []).map((m) => textOf(m.content))].join("\n");
-    const text = buildResponse(all);
-    // Web search (SPEC.md §7): with the search tool declared, one mock
-    // search runs server-side and one source is cited, in the real stream
-    // shape — a server_tool_use block, its result, then text with a citation.
-    const webSearch = (body.tools ?? []).some((t) => String(t.type ?? "").startsWith("web_search"));
-    const usage = {
-      input_tokens: 100,
-      output_tokens: 50,
-      cache_creation_input_tokens: 0,
-      cache_read_input_tokens: 0,
-    };
-
-    if (body.stream) {
-      res.writeHead(200, {
-        "content-type": "text/event-stream",
-        "cache-control": "no-cache",
-      });
-      const send = (event, data) => res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
-      send("message_start", {
-        type: "message_start",
-        message: {
-          id: "msg_mock",
-          type: "message",
-          role: "assistant",
-          model: body.model,
-          content: [],
-          stop_reason: null,
-          usage,
-        },
-      });
-      let index = 0;
-      if (webSearch) {
-        send("content_block_start", {
-          type: "content_block_start",
-          index: 0,
-          content_block: { type: "server_tool_use", id: "srvtoolu_mock", name: "web_search", input: {} },
-        });
-        send("content_block_delta", {
-          type: "content_block_delta",
-          index: 0,
-          delta: { type: "input_json_delta", partial_json: '{"query":"mock verification"}' },
-        });
-        send("content_block_stop", { type: "content_block_stop", index: 0 });
-        send("content_block_start", {
-          type: "content_block_start",
-          index: 1,
-          content_block: {
-            type: "web_search_tool_result",
-            tool_use_id: "srvtoolu_mock",
-            content: [
-              {
-                type: "web_search_result",
-                url: "https://example.com/mock-source",
-                title: "Mock web source",
-                encrypted_content: "mock",
-                page_age: null,
-              },
-            ],
-          },
-        });
-        send("content_block_stop", { type: "content_block_stop", index: 1 });
-        index = 2;
-      }
-      send("content_block_start", {
-        type: "content_block_start",
-        index,
-        content_block: { type: "text", text: "" },
-      });
-      if (webSearch) {
-        send("content_block_delta", {
-          type: "content_block_delta",
-          index,
-          delta: {
-            type: "citations_delta",
-            citation: {
-              type: "web_search_result_location",
-              url: "https://example.com/mock-source",
-              title: "Mock web source",
-              cited_text: "mock",
-              encrypted_index: "mock",
-            },
-          },
-        });
-      }
-      for (let i = 0; i < text.length; i += 40) {
-        send("content_block_delta", {
-          type: "content_block_delta",
-          index,
-          delta: { type: "text_delta", text: text.slice(i, i + 40) },
-        });
-      }
-      send("content_block_stop", { type: "content_block_stop", index });
-      send("message_delta", {
-        type: "message_delta",
-        delta: { stop_reason: "end_turn", stop_sequence: null },
-        usage: { output_tokens: 50 },
-      });
-      send("message_stop", { type: "message_stop" });
-      res.end();
-      return;
-    }
-
+  let body;
+  try {
+    body = await readJson(req);
+  } catch {
+    res.writeHead(400).end("bad json");
+    return;
+  }
+  if (url.includes("/formulas/") && url.endsWith("/fibers")) {
+    // The run of one search: web-search is protected, so its result is
+    // encrypted for the model alone.
     res.writeHead(200, { "content-type": "application/json" });
     res.end(
       JSON.stringify({
-        id: "msg_mock",
-        type: "message",
-        role: "assistant",
-        model: body.model,
-        content: [{ type: "text", text }],
-        stop_reason: "end_turn",
-        stop_sequence: null,
-        usage,
+        id: "fiber-mock",
+        object: "fiber",
+        status: "succeeded",
+        context: {
+          input: JSON.stringify(body),
+          encrypted_output: "----MOONSHOT ENCRYPTED BEGIN----mock----MOONSHOT ENCRYPTED END----",
+        },
+        formula: "moonshot/web-search:latest",
       }),
     );
-  });
+    return;
+  }
+  if (url.includes("/chat/completions")) {
+    chatCompletion(body, res);
+    return;
+  }
+  res.writeHead(404).end("not found");
 });
 
-server.listen(PORT, () => console.log(`mock anthropic on :${PORT}`));
+server.listen(PORT, () => console.log(`mock kimi on :${PORT}`));

@@ -9,7 +9,7 @@ Read `scripts/qa/import-compare.mjs` before the first run. It is the capture too
 
 1. Postgres 16 with pgvector on 127.0.0.1:5432, database `dissect` (`pg_ctlcluster 16 main start`; on a laptop `docker compose up -d`).
 2. `.env` with `DATABASE_URL` and `DIRECT_URL` pointing at it (`.env.local.example` has the values). Then `npm ci`, `npx prisma migrate deploy`, `npm run build`, `PORT=3111 npm run start` in the background.
-3. Leave `ANTHROPIC_API_KEY` unset. Without a key the URL ingest skips the core and structure passes and the PDF judgment falls back to the text-layer yield, so the loop tests the mechanical parser — the layer fixes land in. Set the key only for a round about page chrome, which those passes remove.
+3. Leave `KIMI_API_KEY` unset. Without a key the URL ingest skips the core and structure passes and the PDF judgment falls back to the text-layer yield, so the loop tests the mechanical parser — the layer fixes land in. Set the key only for a round about page chrome, which those passes remove.
 4. Create the round's project once: `curl -s -X POST http://127.0.0.1:3111/api/notebooks -H 'Content-Type: application/json' -d '{"title":"ImportCompare"}'` → `id` is the notebookId every capture uses.
 
 ## 2. Your sources
