@@ -36,6 +36,7 @@ import { callForJson, modelErrorMessage } from "@/lib/derive/json-call";
 import { streamTextTo } from "@/lib/derive/text-stream";
 import { cropPageRegion, pageBlockText, renderPdfPage } from "@/lib/handwritten/pages";
 import { parseRegion } from "@/lib/video/types";
+import type { TFunc } from "@/lib/i18n/dictionaries";
 import { currentLang, serverT } from "@/lib/i18n/server";
 import { kimi, kimiConfigured, kimiOptions } from "@/lib/kimi";
 import { promptTemplates } from "@/lib/prompts";
@@ -209,8 +210,22 @@ function heartbeatResponse(
 // A failed JSON call throws with the reason; heartbeatResponse reports it.
 class DeriveFailure extends Error {}
 
+// Any unexpected throw still answers with the reason, never a bare 500 (the
+// assistant route's pattern): the reader's card shows it, and the log keeps it.
 export async function POST(req: Request) {
   const t = await serverT();
+  try {
+    return await handle(req, t);
+  } catch (err) {
+    console.error("[derive] failed:", err);
+    return NextResponse.json(
+      { error: t("api.deriveFailed", { reason: modelErrorMessage(err) }) },
+      { status: 500 },
+    );
+  }
+}
+
+async function handle(req: Request, t: TFunc) {
   if (!kimiConfigured()) {
     return NextResponse.json({ error: t("api.deriveNeedsKey") }, { status: 503 });
   }
@@ -941,8 +956,15 @@ export async function POST(req: Request) {
     let cancelled = false;
     const stream = new ReadableStream<Uint8Array>({
       async start(controller) {
+        // A closed stream takes nothing more: the heartbeat runs on a timer,
+        // and a throw there would take the process down.
         const send = (chunk: string) => {
-          if (!cancelled) controller.enqueue(encoder.encode(chunk));
+          if (cancelled) return;
+          try {
+            controller.enqueue(encoder.encode(chunk));
+          } catch {
+            cancelled = true;
+          }
         };
         let text = "";
         try {

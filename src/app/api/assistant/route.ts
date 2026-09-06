@@ -171,8 +171,15 @@ async function handle(req: Request, t: TFunc) {
     let cancelled = false;
     const stream = new ReadableStream<Uint8Array>({
       async start(controller) {
+        // A closed stream takes nothing more: the heartbeat runs on a timer,
+        // and a throw there would take the process down.
         const send = (chunk: string) => {
-          if (!cancelled) controller.enqueue(encoder.encode(chunk));
+          if (cancelled) return;
+          try {
+            controller.enqueue(encoder.encode(chunk));
+          } catch {
+            cancelled = true;
+          }
         };
         try {
           await streamTextTo(result, send, {
