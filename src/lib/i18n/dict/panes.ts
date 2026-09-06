@@ -352,6 +352,21 @@ const en = {
   corpusAskHint:
     "One question. The AI scans every document in the project and pulls the quotes that answer it, each cited to its document.",
   scanningCorpus: "Scanning the project",
+
+  // The layout step of a URL add (ingest-progress.tsx)
+  stepLayingOut: "Laying out the page",
+  // The figure check (upload-assistant.tsx, ingest-progress.tsx; SPEC.md §15)
+  detailCaptionsWithoutFigure1: "{n} caption without a figure",
+  detailCaptionsWithoutFigureN: "{n} captions without a figure",
+  uploadFigureCheck: "{figures} figures · {captions} captions",
+  uploadFiguresOk: "Every caption has its figure.",
+  uploadCaptionWithoutFigure:
+    "No figure loaded for {label}: the parse found the caption but no image or chart beside it.",
+  uploadScriptedFigures:
+    "The page draws figures with scripts. Set BROWSER_WS_ENDPOINT or CHROMIUM_PATH so the upload can render them.",
+  uploadReviewAgainNote: "Review again re-checks the figures.",
+  uploadFiguresLoaded: "{n} figures loaded",
+  uploadEveryCaptionHasFigure: "every caption has its figure",
 };
 
 const zh: Record<keyof typeof en, string> = {
@@ -665,6 +680,18 @@ const zh: Record<keyof typeof en, string> = {
   corpusAskPlaceholder: "这个项目应该回答什么？",
   corpusAskHint: "一个问题。AI 扫描项目中的每个文档，找出回答它的引文，每条引文注明所在文档。",
   scanningCorpus: "正在扫描项目",
+
+  stepLayingOut: "排版页面",
+  detailCaptionsWithoutFigure1: "{n} 条说明没有插图",
+  detailCaptionsWithoutFigureN: "{n} 条说明没有插图",
+  uploadFigureCheck: "{figures} 张插图 · {captions} 条说明",
+  uploadFiguresOk: "每条说明都有插图。",
+  uploadCaptionWithoutFigure: "{label} 没有加载插图：解析找到了说明，但旁边没有图片或图表。",
+  uploadScriptedFigures:
+    "页面用脚本绘制插图。设置 BROWSER_WS_ENDPOINT 或 CHROMIUM_PATH，上传才能渲染它们。",
+  uploadReviewAgainNote: "重新审阅会再次检查插图。",
+  uploadFiguresLoaded: "已加载 {n} 张插图",
+  uploadEveryCaptionHasFigure: "每条说明都有插图",
 };
 
 export const panes = { en, zh } as const;

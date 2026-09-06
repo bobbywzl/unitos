@@ -33,6 +33,7 @@ const STEP_TEMPLATES: Record<
     { key: "extract", labelKey: "panes.stepReadingPage" },
     { key: "select", labelKey: "panes.stepFindingArticle" },
     { key: "structure", labelKey: "panes.stepStructuring" },
+    { key: "layout", labelKey: "panes.stepLayingOut" },
     { key: "save", labelKey: "panes.stepSaving" },
   ],
   video: [
@@ -79,22 +80,57 @@ export function completeIngestSteps(steps: IngestStep[]): IngestStep[] {
   return steps.map((s) => ({ ...s, status: "done" }));
 }
 
-// Count details travel as JSON ({blocks, figures, equations, references}) and
-// render in the UI language; any other detail renders as sent.
-function detailText(t: TFunc, detail: string): string {
-  if (!detail.startsWith("{")) return detail;
+// Count details travel as JSON: the extract step carries the parse counts
+// ({blocks, figures, equations, references, captionsWithoutFigure}), the save
+// step the final figure check ({figures, captionsWithoutFigure}; SPEC.md §15).
+// They render in the UI language; any other detail renders as sent.
+export type IngestCounts = {
+  blocks: number;
+  figures: number;
+  equations: number;
+  references: number;
+  captionsWithoutFigure: number;
+};
+
+/** The counts in a JSON detail; null for a detail that is not counts. A
+    count sent as a list counts its entries. */
+export function ingestCounts(detail: string): IngestCounts | null {
+  if (!detail.startsWith("{")) return null;
   try {
-    const counts = JSON.parse(detail) as Record<string, number>;
-    const parts = [
-      ...(counts.blocks > 0 ? [t("panes.detailBlocks", { n: counts.blocks })] : []),
-      ...(counts.figures > 0 ? [t("panes.detailFigures", { n: counts.figures })] : []),
-      ...(counts.equations > 0 ? [t("panes.detailEquations", { n: counts.equations })] : []),
-      ...(counts.references > 0 ? [t("panes.detailReferences", { n: counts.references })] : []),
-    ];
-    return parts.join(" · ") || detail;
+    const raw = JSON.parse(detail) as Record<string, unknown>;
+    const count = (key: string): number => {
+      const value = raw[key];
+      return typeof value === "number" ? value : Array.isArray(value) ? value.length : 0;
+    };
+    return {
+      blocks: count("blocks"),
+      figures: count("figures"),
+      equations: count("equations"),
+      references: count("references"),
+      captionsWithoutFigure: count("captionsWithoutFigure"),
+    };
   } catch {
-    return detail;
+    return null;
   }
+}
+
+/** "1 caption without a figure" / "3 captions without a figure". */
+export function captionsWithoutFigureText(t: TFunc, n: number): string {
+  return t(n === 1 ? "panes.detailCaptionsWithoutFigure1" : "panes.detailCaptionsWithoutFigureN", { n });
+}
+
+function detailText(t: TFunc, detail: string): string {
+  const counts = ingestCounts(detail);
+  if (!counts) return detail;
+  return [
+    ...(counts.blocks > 0 ? [t("panes.detailBlocks", { n: counts.blocks })] : []),
+    ...(counts.figures > 0 ? [t("panes.detailFigures", { n: counts.figures })] : []),
+    ...(counts.equations > 0 ? [t("panes.detailEquations", { n: counts.equations })] : []),
+    ...(counts.references > 0 ? [t("panes.detailReferences", { n: counts.references })] : []),
+    ...(counts.captionsWithoutFigure > 0
+      ? [captionsWithoutFigureText(t, counts.captionsWithoutFigure)]
+      : []),
+  ].join(" · ");
 }
 
 // A small line-art cat that dances while the pipeline works. Same 24-grid and
@@ -201,23 +237,25 @@ export function IngestProgress({
       </div>
 
       <ul className="mt-3 flex flex-col gap-1.5">
-        {steps.map((s) => (
-          <li key={s.key} className="flex items-center gap-2 text-xs">
-            {s.status === "done" ? (
-              <CheckIcon size={12} className="shrink-0 text-sage" />
-            ) : s.status === "active" ? (
-              <SpinnerIcon size={12} className="shrink-0 text-clay motion-safe:animate-spin" />
-            ) : (
-              <span aria-hidden className="mx-[3px] size-1.5 shrink-0 rounded-full bg-sand-300" />
-            )}
-            <span className={s.status === "pending" ? "text-sand-500" : "font-medium text-sand-700"}>
-              {t(s.labelKey)}
-            </span>
-            {s.detail && s.status !== "pending" && (
-              <span className="min-w-0 truncate text-sand-500">· {detailText(t, s.detail)}</span>
-            )}
-          </li>
-        ))}
+        {steps.map((s) => {
+          // A counts detail with nothing to count renders no line.
+          const detail = s.detail && s.status !== "pending" ? detailText(t, s.detail) : "";
+          return (
+            <li key={s.key} className="flex items-center gap-2 text-xs">
+              {s.status === "done" ? (
+                <CheckIcon size={12} className="shrink-0 text-sage" />
+              ) : s.status === "active" ? (
+                <SpinnerIcon size={12} className="shrink-0 text-clay motion-safe:animate-spin" />
+              ) : (
+                <span aria-hidden className="mx-[3px] size-1.5 shrink-0 rounded-full bg-sand-300" />
+              )}
+              <span className={s.status === "pending" ? "text-sand-500" : "font-medium text-sand-700"}>
+                {t(s.labelKey)}
+              </span>
+              {detail && <span className="min-w-0 truncate text-sand-500">· {detail}</span>}
+            </li>
+          );
+        })}
       </ul>
     </div>
   );
