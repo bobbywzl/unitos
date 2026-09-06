@@ -63,7 +63,8 @@ export function AddDocumentDialog({
   initialTab?: AddTab | null;
 }) {
   const t = useT();
-  const [tab, setTabState] = useState<AddTab>("pdf");
+  // The dialog opens on URL, the first tab.
+  const [tab, setTabState] = useState<AddTab>("url");
   // Opening on the requested tab: adjust during render (the Presence
   // pattern), so the first frame of the open dialog already shows it.
   const [prevOpen, setPrevOpen] = useState(open);
@@ -110,13 +111,14 @@ export function AddDocumentDialog({
     if (await onIngestUrl(trimmed)) setVideoUrl("");
   }
 
+  // Tab order: URL, PDF or image, Video or audio, Google Drive, Library.
   const tabs: { key: AddTab; label: string }[] = [
+    { key: "url", label: t("panes.addUrl") },
     { key: "pdf", label: t("panes.uploadPdf") },
     { key: "video", label: t("panes.uploadVideo") },
     ...(onImportDrive
       ? [{ key: "drive" as const, label: t("panes.tabDrive") }]
       : []),
-    { key: "url", label: t("panes.addUrl") },
     { key: "library", label: t("panes.library") },
   ];
   const chooseArea =

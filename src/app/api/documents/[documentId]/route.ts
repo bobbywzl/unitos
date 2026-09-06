@@ -8,7 +8,7 @@ import { parseBody } from "@/lib/validate";
 // Reader body font and title for this document. Either field, or both.
 const patchSchema = z
   .object({
-    font: z.enum(["default", "serif", "mono"]).optional(),
+    font: z.enum(["default", "serif", "mono", "sans"]).optional(),
     title: z.string().trim().min(1).max(200).optional(),
   })
   .refine((d) => d.font !== undefined || d.title !== undefined);

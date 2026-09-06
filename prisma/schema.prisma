@@ -312,7 +312,7 @@ model Document {
   edits         BlockEdit[]
   linksFrom     DocLink[]          @relation("DocLinkFrom")
   linksTo       DocLink[]          @relation("DocLinkTo")
-  glossary      Json? // Phase 7: [{term, definition, blockIds[]}]
+  glossary      Json? // Phase 7: [{term, definition, blockIds[], lang, definitions: {en?, zh?}}] — one definition per reader language
   references    Json? // the article's reference list, extracted at ingest: [{id, label, text, url}]
   video         VideoAsset? // set = video document; the reader renders the video pane (SPEC.md §11)
   createdAt     DateTime           @default(now())

@@ -9,7 +9,7 @@ import { buildGlossary } from "@/lib/glossary";
 import { runConversion } from "@/lib/handwritten/convert";
 import { IMAGE_EXTENSIONS, sniffImage } from "@/lib/handwritten/image";
 import { imageToPdf } from "@/lib/handwritten/image-pdf";
-import { serverT } from "@/lib/i18n/server";
+import { currentLang, serverT } from "@/lib/i18n/server";
 import type { TFunc } from "@/lib/i18n/dictionaries";
 import { progressResponse } from "@/lib/ingest-response";
 import { describeIngestError } from "@/lib/parse/ingest-error";
@@ -50,6 +50,8 @@ type Body = z.infer<typeof bodySchema>;
 export async function POST(req: Request) {
   const user = await currentUser();
   const t = await serverT();
+  // Captured now: the after() scans below outlive the request and its cookies.
+  const lang = await currentLang();
   const { data, error } = await parseBody(req, bodySchema);
   if (error) return error;
   const notebook = await db.notebook.findUnique({ where: { id: data.notebookId } });
@@ -137,17 +139,17 @@ export async function POST(req: Request) {
         after(() =>
           runConversion(document.id, user?.id ?? null)
             .then((r) =>
-              r.ok ? buildGlossary(document.id, user?.id ?? null).catch(() => {}) : undefined,
+              r.ok ? buildGlossary(document.id, user?.id ?? null, lang).catch(() => {}) : undefined,
             )
-            .then(() => buildConnections(data.notebookId, document.id, user?.id ?? null))
+            .then(() => buildConnections(data.notebookId, document.id, user?.id ?? null, lang))
             .catch(() => {}),
         );
       } else if (!document.handwritten || document.conversionStatus === "READY") {
         // On-ingest glossary extraction (SPEC.md §8 Phase 7). Best-effort; after() keeps it
         // alive past the response on serverless. A handwritten document
         // without converted text has nothing to read — both scans skip.
-        if (!deduped) after(() => buildGlossary(document.id, user?.id ?? null).catch(() => {}));
-        after(() => buildConnections(data.notebookId, document.id, user?.id ?? null).catch(() => {}));
+        if (!deduped) after(() => buildGlossary(document.id, user?.id ?? null, lang).catch(() => {}));
+        after(() => buildConnections(data.notebookId, document.id, user?.id ?? null, lang).catch(() => {}));
       }
       return { id: document.id, title: document.title, deduped };
     } catch (err) {

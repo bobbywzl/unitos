@@ -2,6 +2,13 @@ import { JSDOM } from "jsdom";
 import { stripCitationTokens } from "@/lib/parse/references";
 
 // Allowlist sanitizer. Runs at ingest time; stored html is clean, render trusts it.
+//
+// Figure layout (lib/parse/figures.ts, lib/parse/figure-style.ts): a media
+// element or a nested figure carrying data-width-pct gets style="width:NN%"
+// (NN an integer 15–100), a caption carrying data-align="center" inside a
+// figure gets class="center", and a nested figure stays only as a direct
+// child of the root figure. The attributes themselves never reach the
+// stored html.
 const ALLOWED: Record<string, Set<string>> = {
   a: new Set(["href"]),
   img: new Set(["src", "alt", "width", "height", "data-backdrop"]),
@@ -68,6 +75,14 @@ const SVG_ATTRIBUTES = new Set([
   "patternunits", "markerunits", "markerwidth", "markerheight", "refx", "refy", "orient",
   "xmlns", "style", "href", "xlink:href",
 ]);
+
+/** A width percentage the page gave a media element or a figure column
+    (data-width-pct), as the inline declaration; null when absent or out of
+    range. */
+function widthDeclaration(el: Element): string | null {
+  const n = Number(el.getAttribute("data-width-pct") ?? "");
+  return Number.isInteger(n) && n >= 15 && n <= 100 ? `width:${n}%` : null;
+}
 
 /** A baked backdrop (a color, or plain gradients) that can be written as an
     inline background; null for anything that could load or run. */
@@ -145,8 +160,16 @@ export function sanitizeHtml(html: string, baseUrl?: string): string {
   const walk = (node: Element) => {
     for (const child of [...node.children]) {
       const tag = child.tagName.toLowerCase();
+      // Layout facts read before the allowlist strips them.
+      const widthStyle = widthDeclaration(child);
+      const centered = child.getAttribute("data-align") === "center" || child.classList.contains("center");
       if (tag === "svg") {
-        if (!sanitizeSvgElement(child)) child.remove();
+        if (!sanitizeSvgElement(child)) {
+          child.remove();
+          continue;
+        }
+        // A chart's baked root style keeps the page's look; its width joins it.
+        if (widthStyle) child.setAttribute("style", [child.getAttribute("style") ?? "", widthStyle].filter(Boolean).join("; "));
         continue;
       }
       if (tag === "iframe") {
@@ -164,6 +187,7 @@ export function sanitizeHtml(html: string, baseUrl?: string): string {
             }
             child.setAttribute("src", parsed.toString());
             child.setAttribute("loading", "lazy");
+            if (widthStyle) child.setAttribute("style", widthStyle);
             // YouTube refuses to play without a referrer ("Video player
             // configuration error", error 153 — import compare loop finding).
             // "origin" sends the reader's origin and nothing of the page.
@@ -189,6 +213,8 @@ export function sanitizeHtml(html: string, baseUrl?: string): string {
       for (const attr of [...child.attributes]) {
         if (!allowed.has(attr.name)) child.removeAttribute(attr.name);
       }
+      if ((tag === "p" || tag === "figcaption") && centered && child.closest("figure")) child.setAttribute("class", "center");
+      if ((tag === "figure" || tag === "video") && widthStyle) child.setAttribute("style", widthStyle);
       if (tag === "a") {
         const href = child.getAttribute("href") ?? "";
         if (/^\s*javascript:/i.test(href)) child.removeAttribute("href");
@@ -223,6 +249,8 @@ export function sanitizeHtml(html: string, baseUrl?: string): string {
         const backdrop = safeBackdrop(child.getAttribute("data-backdrop"));
         if (backdrop) declarations.push(`background:${backdrop}`);
         child.removeAttribute("data-backdrop");
+        // The width the page gave the image, as a share of the text column.
+        if (widthStyle) declarations.push(widthStyle);
         if (declarations.length > 0) child.setAttribute("style", declarations.join(";"));
       }
       if (tag === "video") {
@@ -241,6 +269,13 @@ export function sanitizeHtml(html: string, baseUrl?: string): string {
     }
   };
   walk(document.body);
+  // A nested figure is a column of a figure row: a direct child of the root
+  // figure. Any deeper, it unwraps.
+  for (const figure of [...document.body.querySelectorAll("figure figure")]) {
+    const parent = figure.parentElement;
+    if (parent && parent.tagName.toLowerCase() === "figure" && parent.parentElement === document.body) continue;
+    figure.replaceWith(...figure.childNodes);
+  }
   // Citation sentinel tokens belong in block text, never in stored html.
   return stripCitationTokens(document.body.innerHTML);
 }

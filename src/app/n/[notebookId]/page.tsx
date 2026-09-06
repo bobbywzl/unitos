@@ -2,11 +2,12 @@ import { Logo } from "@/components/logo";
 import { notFound, redirect } from "next/navigation";
 import { authEnabled, currentUser } from "@/lib/auth";
 import { driveConfig } from "@/lib/drive/config";
-import { serverT } from "@/lib/i18n/server";
+import { currentLang, serverT } from "@/lib/i18n/server";
 import { peopleByIds, roleOf } from "@/lib/collab";
 import { matchInText } from "@/lib/anchors/match";
 import { hasContext } from "@/lib/derive/context";
 import { editedRanges } from "@/lib/diff";
+import { definitionFor, glossaryEntries, lacksDefinitionsIn } from "@/lib/glossary";
 import { conversionIsStale } from "@/lib/handwritten/convert";
 import { documentReferences } from "@/lib/parse/types";
 import { resolveDocumentSources } from "@/lib/anchors/resolve";
@@ -39,6 +40,7 @@ import { AnnotationsPanel } from "@/components/panels/annotations-panel";
 import { DistillPanel } from "@/components/panels/distill-panel";
 import { EditsPanel } from "@/components/panels/edits-panel";
 import type { ConversionInfo } from "@/components/reader/conversion-strip";
+import { GlossaryLanguage } from "@/components/reader/glossary-language";
 import type { PageMark } from "@/components/reader/page-block";
 import { ReaderInteractions } from "@/components/reader/reader-interactions";
 import { PaneDocumentSelect, ReaderPanes, type ReaderViewKind } from "@/components/reader/reader-panes";
@@ -110,6 +112,8 @@ export default async function NotebookPage(props: {
   // disclosure). Viewers read; the role gates every write server-side too.
   const myRole = authEnabled() ? roleOf(notebook, user) : "owner";
   if (!myRole) notFound();
+  // The reader's language: glossary definitions read in it (SPEC.md §8 Phase 7).
+  const lang = await currentLang();
 
   const attached = notebook.documents.map((nd) => ({
     id: nd.document.id,
@@ -282,24 +286,27 @@ export default async function NotebookPage(props: {
       spans: (x.spans ?? []).map(healSpan),
     }));
 
-    // Glossary hover terms: first occurrence per term per listed block.
+    // Glossary hover terms: first occurrence per term per listed block. The
+    // definition reads in the reader's language (SPEC.md §8 Phase 7). An entry
+    // without one in it still underlines; "" leaves its hover at "Click for
+    // tools" until the definitions land.
     const termsByBlock: Record<string, { start: number; end: number; definition: string }[]> = {};
-    const glossary = (document.glossary ?? null) as
-      | { term: string; definition: string; blockIds: string[] }[]
-      | null;
-    if (glossary && Array.isArray(glossary)) {
-      for (const entry of glossary) {
-        for (const blockId of entry.blockIds) {
-          const block = blockById.get(blockId);
-          if (!block) continue;
-          const idx = block.text.toLowerCase().indexOf(entry.term.toLowerCase());
-          if (idx === -1) continue;
-          const list = termsByBlock[blockId] ?? [];
-          list.push({ start: idx, end: idx + entry.term.length, definition: entry.definition });
-          termsByBlock[blockId] = list;
-        }
+    const glossary = glossaryEntries(document.glossary);
+    for (const entry of glossary) {
+      const definition = definitionFor(entry, lang) ?? "";
+      for (const blockId of entry.blockIds) {
+        const block = blockById.get(blockId);
+        if (!block) continue;
+        const idx = block.text.toLowerCase().indexOf(entry.term.toLowerCase());
+        if (idx === -1) continue;
+        const list = termsByBlock[blockId] ?? [];
+        list.push({ start: idx, end: idx + entry.term.length, definition });
+        termsByBlock[blockId] = list;
       }
     }
+    // The glossary has an entry without a definition in the reader's language:
+    // the pane asks for them once per browser session (glossary-language.tsx).
+    const glossaryLanguage = glossary.length > 0 && lacksDefinitionsIn(glossary, lang);
 
     // Annotations anchored in this document: highlights, comments, EXPLAIN,
     // SIMPLIFY, ANALYZE — all notes in the hidden Annotations section with a
@@ -794,6 +801,7 @@ export default async function NotebookPage(props: {
       annotationBubbles,
       annotationsBySource,
       termsByBlock,
+      glossaryLanguage,
       linksByBlock,
       linksOut,
       linksIn,
@@ -1184,6 +1192,9 @@ export default async function NotebookPage(props: {
           translationAvailable={deeplConfigured()}
           {...textLayer(pane)}
         />
+      )}
+      {pane.glossaryLanguage && myRole !== "viewer" && (
+        <GlossaryLanguage documentId={pane.document.id} lang={lang} />
       )}
     </div>
     );

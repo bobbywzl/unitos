@@ -4,7 +4,7 @@ import { bumpDocument, documentAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
 import { buildGlossary } from "@/lib/glossary";
 import { runConversion } from "@/lib/handwritten/convert";
-import { serverT } from "@/lib/i18n/server";
+import { currentLang, serverT } from "@/lib/i18n/server";
 import { ndjsonWriter } from "@/lib/ndjson";
 import { describeIngestError } from "@/lib/parse/ingest-error";
 
@@ -20,6 +20,8 @@ const bodySchema = z.object({ as: z.enum(["article", "handwritten"]).optional() 
 // /api/documents so the client shows the same progress card.
 export async function POST(req: Request, ctx: { params: Promise<{ documentId: string }> }) {
   const t = await serverT();
+  // Captured now: the after() scans below outlive the request and its cookies.
+  const lang = await currentLang();
   const { documentId } = await ctx.params;
   const access = await documentAccess(documentId, "editor");
   if (access instanceof NextResponse) return access;
@@ -76,7 +78,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ documentId: st
           if (as === "handwritten") {
             after(() =>
               runConversion(documentId, userId)
-                .then((r) => (r.ok ? buildGlossary(documentId, userId) : undefined))
+                .then((r) => (r.ok ? buildGlossary(documentId, userId, lang) : undefined))
                 .catch(() => {}),
             );
           }

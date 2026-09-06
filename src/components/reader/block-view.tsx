@@ -112,6 +112,59 @@ function headingLevel(html: string | null): 1 | 2 | 3 {
   return m ? (Number(m[1]) as 1 | 2 | 3) : 2;
 }
 
+// Layout tokens: the class tokens on a text block's first tag. The parser
+// stores `<p class="kicker center">`, `<h2 class="center">`,
+// `<ol class="contents">` for a page's masthead, contents list, pull quote,
+// or caption; the reader lays the block out by them (SPEC.md §6). One token
+// decides a block's look, in the order below; center only aligns.
+export type LayoutToken =
+  | "center"
+  | "kicker"
+  | "meta"
+  | "label"
+  | "contents"
+  | "display"
+  | "quote"
+  | "caption";
+const LAYOUT_TOKENS = new Set<string>([
+  "center",
+  "kicker",
+  "meta",
+  "label",
+  "contents",
+  "display",
+  "quote",
+  "caption",
+]);
+
+export function layoutTokens(html: string | null): Set<LayoutToken> {
+  const tokens = new Set<LayoutToken>();
+  const m = html?.match(/^<[a-z][a-z0-9]*\b[^>]*?\bclass=(?:"([^"]*)"|'([^']*)')/i);
+  for (const token of (m?.[1] ?? m?.[2] ?? "").split(/\s+/)) {
+    if (LAYOUT_TOKENS.has(token)) tokens.add(token as LayoutToken);
+  }
+  return tokens;
+}
+
+// Small mono uppercase, muted: the kicker, the meta line, and a label.
+const MONO_LINE = "font-mono text-[12px] text-sand-600 uppercase";
+
+/** The block's classes for its layout tokens; base is the plain block's. */
+export function layoutClass(tokens: Set<LayoutToken>, base: string): string {
+  const center = tokens.has("center") ? " text-center" : "";
+  if (tokens.has("kicker")) return `${MONO_LINE} tracking-[0.22em] mt-0 mb-4${center}`;
+  if (tokens.has("meta")) return `${MONO_LINE} tracking-[0.14em] my-3${center}`;
+  if (tokens.has("label")) {
+    return `${MONO_LINE} tracking-[0.14em] mt-10 mb-2 border-b border-line pb-2${center}`;
+  }
+  if (tokens.has("display")) return `my-10 text-[28px] leading-[1.35]${center}`;
+  if (tokens.has("quote")) return `my-5 border-l-2 border-sand-300 pl-4 text-sand-700${center}`;
+  if (tokens.has("caption")) return `-mt-2 mb-6 text-[13px] leading-[1.6] text-sand-600${center}`;
+  // The contents list: globals.css .reader-contents.
+  if (tokens.has("contents")) return `reader-contents mt-0 mb-10${center}`;
+  return `${base}${center}`;
+}
+
 // Split block text into plain and <mark> segments. Declarative painting: highlights are part
 // of the React tree, never DOM mutation after render (anchor offsets stay stable).
 function markedText(text: string, highlights: Highlight[], t: TFunc) {
@@ -591,25 +644,33 @@ export function BlockView({
   switch (block.type) {
     case "HEADING": {
       const level = headingLevel(block.html);
-      const cls =
+      const cls = layoutClass(
+        layoutTokens(block.html),
         level === 1
           ? "mt-10 mb-3 text-[26px]"
           : level === 2
             ? "mt-8 mb-2.5 text-[22px]"
-            : "mt-6 mb-2.5 text-[20px]";
+            : "mt-6 mb-2.5 text-[20px]",
+      );
       if (level === 1) return <h1 data-block-id={block.id} className={`${shared} ${cls}`}>{content}</h1>;
       if (level === 2) return <h2 data-block-id={block.id} className={`${shared} ${cls}`}>{content}</h2>;
       return <h3 data-block-id={block.id} className={`${shared} ${cls}`}>{content}</h3>;
     }
     case "PARAGRAPH":
       return (
-        <p data-block-id={block.id} className={`${shared} my-4 whitespace-pre-wrap`}>
+        <p
+          data-block-id={block.id}
+          className={`${shared} ${layoutClass(layoutTokens(block.html), "my-4")} whitespace-pre-wrap`}
+        >
           {content}
         </p>
       );
     case "LIST":
       return (
-        <div data-block-id={block.id} className={`${shared} my-4 pl-5 whitespace-pre-wrap`}>
+        <div
+          data-block-id={block.id}
+          className={`${shared} ${layoutClass(layoutTokens(block.html), "my-4 pl-5")} whitespace-pre-wrap`}
+        >
           {content}
         </div>
       );

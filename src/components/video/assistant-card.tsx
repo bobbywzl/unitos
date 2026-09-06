@@ -6,6 +6,7 @@ import { api } from "@/lib/api";
 import { useImeGuard } from "@/lib/ime";
 import { SparkleIcon, StopIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
+import { setRevealFlag } from "@/components/reader/reveal";
 import { Markdown } from "@/components/markdown";
 import { ThinkingIndicator } from "@/components/thinking";
 import { runFormalize } from "@/lib/video/formalize-client";
@@ -110,6 +111,8 @@ export function MediaAssistant({
       router.refresh();
       // The article is a document now (SPEC.md §11) — open it, ready to work on.
       if (format === "article" && result.article?.documentId) {
+        // A generated article opens with the first-open reveal (reveal.tsx).
+        setRevealFlag(result.article.documentId);
         router.push(`/n/${notebookId}?doc=${result.article.documentId}`);
       }
     } catch (err) {
@@ -353,6 +356,8 @@ export function ArticleSection({
   async function open() {
     if (!article || opening) return;
     if (article.documentId) {
+      // A generated article opens with the first-open reveal (reveal.tsx).
+      setRevealFlag(article.documentId);
       router.push(`/n/${notebookId}?doc=${article.documentId}`);
       return;
     }
@@ -364,6 +369,8 @@ export function ArticleSection({
         "POST",
         { notebookId },
       );
+      // A generated article opens with the first-open reveal (reveal.tsx).
+      setRevealFlag(result.articleDocumentId);
       router.push(`/n/${notebookId}?doc=${result.articleDocumentId}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : t("common.requestFailed"));

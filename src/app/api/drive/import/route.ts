@@ -169,7 +169,7 @@ export async function POST(req: Request) {
       after(() =>
         runConversion(document.id, user?.id ?? null)
           .then((r) =>
-            r.ok ? buildGlossary(document.id, user?.id ?? null).catch(() => {}) : undefined,
+            r.ok ? buildGlossary(document.id, user?.id ?? null, lang).catch(() => {}) : undefined,
           )
           .then(() => buildConnections(data.notebookId, document.id, user?.id ?? null, lang))
           .catch(() => {}),
@@ -177,7 +177,7 @@ export async function POST(req: Request) {
     } else if (!document.handwritten || document.conversionStatus === "READY") {
       // A handwritten document without converted text has nothing to read —
       // both scans skip.
-      if (!deduped) after(() => buildGlossary(document.id, user?.id ?? null).catch(() => {}));
+      if (!deduped) after(() => buildGlossary(document.id, user?.id ?? null, lang).catch(() => {}));
       after(() =>
         buildConnections(data.notebookId, document.id, user?.id ?? null, lang).catch(() => {}),
       );

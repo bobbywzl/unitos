@@ -8,21 +8,28 @@ import { claude, claudeConfigured, claudeOptions } from "@/lib/claude";
 import type { OnIngestProgress } from "@/lib/parse/ingest";
 import { pageEstimate, SPLIT_ASK_PAGES, splitPartCount } from "@/lib/parse/split";
 import { fetchPage } from "@/lib/parse/fetch-page";
+import { auditFigures } from "@/lib/parse/figure-audit";
+import { needsBrowserRender, renderIfNeeded } from "@/lib/parse/render-page";
 import { parseFetchedPage } from "@/lib/parse/url";
 import { uploadInstructionsPrompt } from "@/lib/prompts/upload-instructions";
 import { uploadReviewPrompt } from "@/lib/prompts/upload-review";
+import { browserConfigured } from "@/lib/video/browser-transcript";
 
 // The upload assistant's server side (SPEC.md §15). review: fetch the page in
 // a private sandbox — the page never touches the reader's browser — parse it
-// exactly as ingest would, and report how the content should be added: what it
-// is, which linked pages are parts of the same work, whether to split, and an
-// answer to each upload instruction. check: answer the instructions alone.
-// Both are advisory; ingest itself never depends on them.
+// exactly as ingest would, run the figure check, and report how the content
+// should be added: what it is, which caption has no figure, which linked
+// pages are parts of the same work, whether to split, and an answer to each
+// upload instruction. check: answer the instructions alone. Both are
+// advisory; ingest itself never depends on them.
 
 const EXCERPT_HEAD_CHARS = 6_000;
 const EXCERPT_TAIL_CHARS = 1_500;
 const MAX_LINK_CANDIDATES = 60;
 const MAX_PAGES = 30;
+// A caption reported without its figure travels whole up to this length; the
+// label ("Figure 4") opens it, so the report loses nothing.
+const MAX_CAPTION_CHARS = 200;
 // The model may propose a split below the always-ask threshold, but never for
 // content this short.
 const SPLIT_MODEL_FLOOR_PAGES = 15;
@@ -44,6 +51,14 @@ export type UploadReview = {
   blockCount: number;
   figures: number;
   equations: number;
+  // The figure check (SPEC.md §15): facts from lib/parse/figure-audit.ts, set
+  // before any model call and kept when the model call fails.
+  captions: number;
+  captionsWithoutFigure: string[]; // caption texts the parse found no figure beside
+  figuresWithoutCaption: number;
+  // The page draws figures with scripts and no browser is configured to
+  // render them: those figures will not load.
+  scriptedFigures: boolean;
   pageEstimate: number;
   pasteThisPage: boolean;
   pages: { url: string; title: string; recommended: boolean }[];
@@ -176,7 +191,9 @@ export async function reviewUpload(
   const t = await serverT();
 
   onProgress?.("fetch");
-  const page = await fetchPage(url, onProgress);
+  // The same page ingest would parse: a page whose figures its scripts draw
+  // renders in a browser first, where one is configured (lib/parse/render-page.ts).
+  const page = await renderIfNeeded(await fetchPage(url, onProgress), url, onProgress);
   onProgress?.("extract");
   const parsed = await parseFetchedPage(page, url);
   const links = page.kind === "html" ? harvestLinks(page.html, url) : [];
@@ -184,6 +201,7 @@ export async function reviewUpload(
   const chars = parsed.blocks.reduce((n, b) => n + b.text.length, 0);
   const pages = pageEstimate(chars);
   const texts = parsed.blocks.map((b) => b.text);
+  const audit = auditFigures(parsed.blocks);
   const review: UploadReview = {
     title: parsed.title,
     kind: "article",
@@ -191,8 +209,13 @@ export async function reviewUpload(
     advice: [],
     chars,
     blockCount: parsed.blocks.length,
-    figures: parsed.blocks.filter((b) => b.type === "FIGURE").length,
+    figures: audit.figures,
     equations: parsed.blocks.filter((b) => b.type === "EQUATION").length,
+    captions: audit.captions,
+    captionsWithoutFigure: audit.captionsWithoutFigure.map((c) => c.slice(0, MAX_CAPTION_CHARS)),
+    figuresWithoutCaption: audit.figuresWithoutCaption,
+    scriptedFigures:
+      page.kind === "html" && needsBrowserRender(page.html) && !browserConfigured(),
     pageEstimate: pages,
     pasteThisPage: true,
     pages: [],
@@ -215,6 +238,10 @@ export async function reviewUpload(
     blockCount: parsed.blocks.length,
     figures: review.figures,
     equations: review.equations,
+    captions: review.captions,
+    captionsWithoutFigure: review.captionsWithoutFigure,
+    figuresWithoutCaption: review.figuresWithoutCaption,
+    scriptedFigures: review.scriptedFigures,
     excerptHead: excerpt(texts, EXCERPT_HEAD_CHARS),
     excerptTail:
       chars > EXCERPT_HEAD_CHARS + EXCERPT_TAIL_CHARS

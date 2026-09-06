@@ -9,6 +9,7 @@ import type { TFunc, TKey } from "@/lib/i18n/dictionaries";
 import { readNdjson } from "@/lib/ndjson";
 import { classifyDriveFile, type DrivePickedFile } from "@/lib/drive/types";
 import { isImageFile } from "@/lib/handwritten/image";
+import { captionLabel } from "@/lib/parse/figure-audit";
 import type {
   InstructionCheck,
   InstructionReply,
@@ -20,17 +21,20 @@ import { parseYouTubeId } from "@/lib/video/youtube";
 import {
   IngestProgress,
   advanceIngestSteps,
+  captionsWithoutFigureText,
   completeIngestSteps,
+  ingestCounts,
   initialIngestSteps,
   type IngestStep,
 } from "@/components/reader/ingest-progress";
 
 // The upload assistant (SPEC.md §15): the box that opens on every add. For a
 // URL it reviews the page in a private sandbox first — what the content is,
-// which linked pages are parts of the same work, whether to split — and for
-// every kind it takes upload instructions and answers each one honestly
-// before anything is saved. The box drives the adds itself, one request per
-// page or file, and shows the progress in place.
+// which caption has no figure, which linked pages are parts of the same work,
+// whether to split — and for every kind it takes upload instructions and
+// answers each one honestly before anything is saved. The box drives the adds
+// itself, one request per page or file, shows the progress in place, and ends
+// on the final figure check.
 
 export type UploadRequest =
   | { kind: "url"; url: string }
@@ -206,6 +210,17 @@ export function UploadAssistant({
     files.some(isMediaFile) ||
     driveFiles.some((f) => driveKindOf(f) === "media");
   const busy = phase === "adding" || checking;
+  // Requests the add sends: pages picked, files picked, or the one link.
+  const selectedCount =
+    request.kind === "url"
+      ? (selected.has(SELF) ? 1 : 0) +
+        (review?.pages ?? []).filter((p) => selected.has(p.url)).length
+      : request.kind === "drive"
+        ? Math.max(1, driveFiles.length)
+        : Math.max(1, files.length);
+  // The save stage detail of the last add — the final figure check (SPEC.md
+  // §15) — read at the end of the add: a lost figure keeps the box open.
+  const saveDetailRef = useRef<string | null>(null);
 
   // ── Review (url kind): the sandbox read, on open and on Review again ──────
   // The running review, so Cancel can abort it: the box goes to ready with
@@ -317,8 +332,10 @@ export function UploadAssistant({
     }
     let result: IngestEvent | null = null;
     for await (const event of readNdjson<IngestEvent>(res)) {
-      if ("stage" in event) setSteps((s) => (s ? advanceIngestSteps(s, event.stage, event.detail) : s));
-      else result = event;
+      if ("stage" in event) {
+        if (event.stage === "save" && event.detail) saveDetailRef.current = event.detail;
+        setSteps((s) => (s ? advanceIngestSteps(s, event.stage, event.detail) : s));
+      } else result = event;
     }
     if (!result || "error" in result) {
       throw new Error(result && "error" in result ? result.error : t("panes.uploadCutOff"));
@@ -394,6 +411,7 @@ export function UploadAssistant({
     }
     const collected: Added[] = [];
     const failed: string[] = [];
+    saveDetailRef.current = null;
 
     if (request.kind === "url") {
       const pages: { url: string; title: string }[] = [
@@ -572,9 +590,17 @@ export function UploadAssistant({
       return;
     }
     setPhase("done");
-    // Clean adds close themselves; failures stay visible until Close.
-    if (failed.length === 0) {
-      setTimeout(() => onClose(collected[0].id), collected.length > 1 ? 900 : 300);
+    // Clean adds close themselves; failures stay visible until Close, and so
+    // does a lost figure: a single add whose figure check found a caption
+    // without a figure. A clean figure check line shows long enough to read.
+    const lost =
+      selectedCount === 1 &&
+      (ingestCounts(saveDetailRef.current ?? "")?.captionsWithoutFigure ?? 0) > 0;
+    if (failed.length === 0 && !lost) {
+      setTimeout(
+        () => onClose(collected[0].id),
+        collected.length > 1 || saveDetailRef.current ? 900 : 300,
+      );
     }
   }
 
@@ -591,13 +617,6 @@ export function UploadAssistant({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase]);
 
-  const selectedCount =
-    request.kind === "url"
-      ? (selected.has(SELF) ? 1 : 0) +
-        (review?.pages ?? []).filter((p) => selected.has(p.url)).length
-      : request.kind === "drive"
-        ? Math.max(1, driveFiles.length)
-        : Math.max(1, files.length);
   const splitEligible =
     request.kind === "url" && review !== null && review.splitProposed && selectedCount === 1 && selected.has(SELF);
   const addCount = splitEligible && split ? review.splitParts : selectedCount;
@@ -607,9 +626,24 @@ export function UploadAssistant({
       : request.kind === "drive"
         ? driveFiles.map((f) => f.name).join(" · ")
         : request.url;
+  // The final figure check (SPEC.md §15): the save step's counts of a single
+  // add. A batch's last page would stand for the whole batch, so none shows.
+  const saveDetail = steps?.find((s) => s.key === "save")?.detail;
+  const verification =
+    phase === "done" && selectedCount === 1 && saveDetail ? ingestCounts(saveDetail) : null;
+  const lostFigures = (verification?.captionsWithoutFigure ?? 0) > 0;
+  // The review's figure check passes: every caption has its figure and no
+  // figure waits on a browser render.
+  const figuresOk =
+    review !== null &&
+    review.captions > 0 &&
+    review.captionsWithoutFigure.length === 0 &&
+    !review.scriptedFigures;
 
   const sectionLabel = "text-[12px] font-semibold text-sand-600";
   const pill = "rounded-full px-3.5 py-1.5 text-xs font-semibold";
+  const amberNote =
+    "rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-950 dark:text-amber-200";
 
   return (
     <div
@@ -661,9 +695,7 @@ export function UploadAssistant({
         {phase === "ready" && (
           <div className="flex flex-col gap-3">
             {reviewError && (
-              <p className="rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-950 dark:text-amber-200">
-                {t("panes.uploadReviewFailed", { reason: reviewError })}
-              </p>
+              <p className={amberNote}>{t("panes.uploadReviewFailed", { reason: reviewError })}</p>
             )}
 
             {request.kind === "url" && review && (
@@ -679,6 +711,28 @@ export function UploadAssistant({
                       })
                     : t("panes.detailBlocks", { n: review.blockCount })}
                 </p>
+                {/* The figure check (SPEC.md §15): the audit's counts, one line
+                    per caption with no figure, one when figures wait on a
+                    browser render, one when every caption has its figure. */}
+                <p className="text-xs text-sand-500">
+                  {t("panes.uploadFigureCheck", {
+                    figures: review.figures,
+                    captions: review.captions,
+                  })}
+                </p>
+                {(review.captionsWithoutFigure.length > 0 || review.scriptedFigures) && (
+                  <ul className={`flex flex-col gap-1 ${amberNote}`}>
+                    {review.captionsWithoutFigure.map((caption, i) => (
+                      <li key={i}>
+                        {t("panes.uploadCaptionWithoutFigure", {
+                          label: captionLabel(caption) ?? caption,
+                        })}
+                      </li>
+                    ))}
+                    {review.scriptedFigures && <li>{t("panes.uploadScriptedFigures")}</li>}
+                  </ul>
+                )}
+                {figuresOk && <p className="text-xs text-sand-500">{t("panes.uploadFiguresOk")}</p>}
                 {review.summary && (
                   <p className="text-[13px] leading-relaxed text-sand-700">{review.summary}</p>
                 )}
@@ -849,14 +903,17 @@ export function UploadAssistant({
                     : t("common.add")}
               </button>
               {request.kind === "url" && (
-                <button
-                  onClick={() => void runReview(instructions.trim())}
-                  data-track="upload-review-again"
-                  disabled={busy}
-                  className="rounded-full border border-line px-3.5 py-1.5 text-xs text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40"
-                >
-                  {t("panes.uploadReviewAgain")}
-                </button>
+                <>
+                  <button
+                    onClick={() => void runReview(instructions.trim())}
+                    data-track="upload-review-again"
+                    disabled={busy}
+                    className="rounded-full border border-line px-3.5 py-1.5 text-xs text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40"
+                  >
+                    {t("panes.uploadReviewAgain")}
+                  </button>
+                  <span className="text-xs text-sand-500">{t("panes.uploadReviewAgainNote")}</span>
+                </>
               )}
               <button
                 onClick={() => onClose(null)}
@@ -892,13 +949,25 @@ export function UploadAssistant({
                 ? t("panes.uploadAddedCount", { n: added.length })
                 : (added[0]?.title ?? t("common.done"))}
             </p>
-            {failures.length > 0 && (
+            {verification && (
+              <p className={lostFigures ? amberNote : "text-xs text-sand-500"}>
+                {[
+                  t("panes.uploadFiguresLoaded", { n: verification.figures }),
+                  lostFigures
+                    ? captionsWithoutFigureText(t, verification.captionsWithoutFigure)
+                    : t("panes.uploadEveryCaptionHasFigure"),
+                ].join(" · ")}
+              </p>
+            )}
+            {(failures.length > 0 || lostFigures) && (
               <>
-                <ul className="flex flex-col gap-1 text-xs text-red-500">
-                  {failures.map((line, i) => (
-                    <li key={i}>{line}</li>
-                  ))}
-                </ul>
+                {failures.length > 0 && (
+                  <ul className="flex flex-col gap-1 text-xs text-red-500">
+                    {failures.map((line, i) => (
+                      <li key={i}>{line}</li>
+                    ))}
+                  </ul>
+                )}
                 <button
                   onClick={() => onClose(added[0]?.id ?? null)}
                   data-track="upload-done"

@@ -9,8 +9,18 @@ import { useT } from "@/components/lang-provider";
 
 // The document title, editable in place like the blocks under it: click it,
 // type, Enter or blur saves, Escape cancels. Viewers see plain text. The
-// pattern is NotebookTitle's; the save goes to the document route.
-export function DocumentTitle({ documentId, title }: { documentId: string; title: string }) {
+// pattern is NotebookTitle's; the save goes to the document route. A masthead
+// title (reader.tsx hasMasthead) is centered, large and light: globals.css
+// .reader-masthead-title.
+export function DocumentTitle({
+  documentId,
+  title,
+  masthead = false,
+}: {
+  documentId: string;
+  title: string;
+  masthead?: boolean;
+}) {
   const router = useRouter();
   const t = useT();
   const ime = useImeGuard();
@@ -41,7 +51,8 @@ export function DocumentTitle({ documentId, title }: { documentId: string; title
     }
   }
 
-  if (!canEdit) return <h2 className="mb-[26px] text-[33px]">{shown}</h2>;
+  const size = masthead ? "reader-masthead-title mb-3" : "mb-[26px] text-[33px]";
+  if (!canEdit) return <h2 className={size}>{shown}</h2>;
 
   if (editing) {
     return (
@@ -64,7 +75,9 @@ export function DocumentTitle({ documentId, title }: { documentId: string; title
           }
         }}
         aria-label={t("reader.documentTitle")}
-        className="mb-[26px] w-full resize-none rounded-xl bg-sand-100 px-2 py-1 font-display text-[33px] leading-tight outline-none field-sizing-content"
+        className={`reader-title-editor w-full resize-none rounded-xl bg-sand-100 px-2 py-1 font-display outline-none field-sizing-content ${
+          masthead ? "reader-masthead-title mb-3" : "mb-[26px] text-[33px] leading-tight"
+        }`}
       />
     );
   }
@@ -77,9 +90,11 @@ export function DocumentTitle({ documentId, title }: { documentId: string; title
           setEditing(true);
         }}
         data-tip={t("reader.renameDocumentTitle")}
-        className={`cursor-text rounded-xl hover:bg-sand-100 ${error ? "mb-1" : "mb-[26px]"}`}
+        className={`cursor-text rounded-xl hover:bg-sand-100 ${masthead ? "reader-masthead-title" : ""} ${
+          error ? "mb-1" : masthead ? "mb-3" : "mb-[26px]"
+        }`}
       >
-        <span className="text-[33px]">{shown}</span>
+        <span className={masthead ? undefined : "text-[33px]"}>{shown}</span>
       </h2>
       {error && <p className="mb-[26px] text-xs text-red-500">{error}</p>}
     </>

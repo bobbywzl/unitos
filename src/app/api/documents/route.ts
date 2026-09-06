@@ -166,7 +166,7 @@ export async function POST(req: Request) {
           after(() =>
             runConversion(document.id, user?.id ?? null)
               .then((r) =>
-                r.ok ? buildGlossary(document.id, user?.id ?? null).catch(() => {}) : undefined,
+                r.ok ? buildGlossary(document.id, user?.id ?? null, lang).catch(() => {}) : undefined,
               )
               .then(() =>
                 buildConnections(fields.data.notebookId, document.id, user?.id ?? null, lang),
@@ -177,7 +177,7 @@ export async function POST(req: Request) {
           // On-ingest glossary extraction (SPEC.md §8 Phase 7). Best-effort; after() keeps it
           // alive past the response on serverless. A handwritten document
           // without converted text has nothing to read — both scans skip.
-          if (!deduped) after(() => buildGlossary(document.id, user?.id ?? null).catch(() => {}));
+          if (!deduped) after(() => buildGlossary(document.id, user?.id ?? null, lang).catch(() => {}));
           // Recommended links (SPEC.md §13): scan the document against the corpus.
           after(() =>
             buildConnections(fields.data.notebookId, document.id, user?.id ?? null, lang).catch(
@@ -285,7 +285,7 @@ export async function POST(req: Request) {
       const documents = [document, ...(extra ?? [])];
       for (const doc of documents) {
         await attachDocument(data.notebookId, doc.id);
-        if (!deduped) after(() => buildGlossary(doc.id, user?.id ?? null).catch(() => {}));
+        if (!deduped) after(() => buildGlossary(doc.id, user?.id ?? null, lang).catch(() => {}));
         after(() =>
           buildConnections(data.notebookId, doc.id, user?.id ?? null, lang).catch(() => {}),
         );

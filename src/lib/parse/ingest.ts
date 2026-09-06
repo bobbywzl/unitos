@@ -4,11 +4,14 @@ import { db } from "@/lib/db";
 import { classifyPdf } from "@/lib/handwritten/classify";
 import { pageBlockText, pdfPageCount } from "@/lib/handwritten/pages";
 import { parsePdf } from "@/lib/parse/pdf";
+import { auditFigures } from "@/lib/parse/figure-audit";
+import { layoutBlocks } from "@/lib/parse/layout";
 import { pruneReferences } from "@/lib/parse/references";
+import { renderIfNeeded } from "@/lib/parse/render-page";
 import { splitBlocks, splitPartCount } from "@/lib/parse/split";
 import { selectCoreBlocks, structureBlocks } from "@/lib/parse/structure";
 import { fetchPage } from "@/lib/parse/fetch-page";
-import { parseHtmlContent, parseUrl } from "@/lib/parse/url";
+import { parseFetchedPage, parseHtmlContent, resolveContentsLinks } from "@/lib/parse/url";
 import {
   PARSER_VERSION,
   type DocumentReference,
@@ -19,7 +22,7 @@ import {
 // Ingest progress, reported to the caller as each stage starts. A repeated stage
 // updates the detail line ("148 figures · 152 equations"). Dedupe hits report
 // nothing — there is no parse or save to do, the caller treats "no events" as instant.
-// PDF stages: parse, save. URL stages: fetch, extract, select, structure, save.
+// PDF stages: parse, save. URL stages: fetch, extract, select, structure, layout, save.
 // The upload assistant's review streams fetch, extract, review.
 export type IngestStage =
   | "parse"
@@ -28,6 +31,7 @@ export type IngestStage =
   | "extract"
   | "select"
   | "structure"
+  | "layout"
   | "review";
 export type OnIngestProgress = (stage: IngestStage, detail?: string) => void;
 
@@ -72,6 +76,14 @@ async function refineUrlBlocks(
   return { blocks, references };
 }
 
+// The final figure check, reported with the save stage so the upload
+// assistant can show it: how many figures, and the captions whose figure the
+// parse did not load.
+function saveDetail(blocks: ParsedBlock[]): string {
+  const audit = auditFigures(blocks);
+  return JSON.stringify({ figures: audit.figures, captionsWithoutFigure: audit.captionsWithoutFigure });
+}
+
 // Each split part keeps only the references its own blocks cite.
 function referencesForPart(
   blocks: ParsedBlock[],
@@ -82,6 +94,9 @@ function referencesForPart(
   return kept.length > 0 ? kept : undefined;
 }
 
+// Contents links resolve here, after every pass that drops or merges blocks:
+// each entry's targetOrder is the order of its heading, and the in-memory
+// fragments never reach the database.
 async function createDocumentWithBlocks(data: {
   title: string;
   sourceUrl?: string;
@@ -89,7 +104,9 @@ async function createDocumentWithBlocks(data: {
   fileData?: Uint8Array<ArrayBuffer>;
   blocks: ParsedBlock[];
   references?: DocumentReference[];
+  font?: ParsedDocument["font"];
 }) {
+  const blocks = resolveContentsLinks(data.blocks);
   return db.$transaction(async (tx) => {
     const document = await tx.document.create({
       data: {
@@ -99,10 +116,11 @@ async function createDocumentWithBlocks(data: {
         fileData: data.fileData,
         parserVersion: PARSER_VERSION,
         references: data.references,
+        font: data.font,
       },
     });
     await tx.block.createMany({
-      data: data.blocks.map((b, i) => ({
+      data: blocks.map((b, i) => ({
         documentId: document.id,
         order: i,
         type: b.type,
@@ -263,14 +281,27 @@ export async function ingestUrl(
   }
   onProgress?.("extract");
   const parsed = await parseHtmlContent(page.html, url, onProgress);
-  const { blocks, references } = await refineUrlBlocks(parsed, onProgress, opts.instructions);
+  const refined = await refineUrlBlocks(parsed, onProgress, opts.instructions);
+  const { references } = refined;
+  // The layout pass lays the blocks out as the page does (lib/parse/layout.ts);
+  // the page's font comes from the parse, else from the pass.
+  onProgress?.("layout");
+  const laid = await layoutBlocks({
+    blocks: refined.blocks,
+    title: parsed.title,
+    pageHtml: page.html,
+    url,
+    instructions: opts.instructions,
+  });
+  const blocks = laid.blocks;
+  const font = parsed.font ?? laid.font;
   const title = parsed.title ?? url;
 
   if (opts.split) {
     const chars = blocks.reduce((n, b) => n + b.text.length, 0);
     const parts = splitBlocks(title, blocks, splitPartCount(chars));
     if (parts.length > 1) {
-      onProgress?.("save");
+      onProgress?.("save", saveDetail(blocks));
       const documents = [];
       for (let i = 0; i < parts.length; i++) {
         documents.push(
@@ -279,6 +310,7 @@ export async function ingestUrl(
             sourceUrl: `${url}${SPLIT_URL_MARKER}${i + 1}`,
             blocks: parts[i].blocks,
             references: referencesForPart(parts[i].blocks, references),
+            font,
           }),
         );
       }
@@ -286,17 +318,19 @@ export async function ingestUrl(
     }
   }
 
-  onProgress?.("save");
+  onProgress?.("save", saveDetail(blocks));
   const document = await createDocumentWithBlocks({
     title,
     sourceUrl: url,
     blocks,
     references,
+    font,
   });
   return { document, deduped: false };
 }
 
 // Re-parse from stored bytes or source URL. Block ids change; anchors re-resolve by quote (SPEC.md §5).
+// A re-parse never changes Document.font: the reader may have picked one.
 // Video documents never re-parse: their blocks are the player and the transcript (SPEC.md §11).
 // `as` flips a PDF between the two shapes (SPEC.md §16) — the escape hatch when
 // Import PDF judged it wrong: "article" parses the stored bytes to text blocks;
@@ -347,17 +381,33 @@ export async function reparseDocument(
     onProgress?.("parse");
     blocks = (await parsePdf(new Uint8Array(document.fileData))).blocks;
   } else if (document.sourceUrl) {
-    const parsed = await parseUrl(document.sourceUrl, onProgress);
-    ({ blocks, references } = await refineUrlBlocks(parsed, onProgress));
+    const url = document.sourceUrl;
+    const fetched = await fetchPage(url, onProgress);
+    // A page whose figures its scripts draw renders in a browser first, where
+    // one is configured (lib/parse/render-page.ts).
+    const page = await renderIfNeeded(fetched, url, onProgress);
+    onProgress?.("extract");
+    const parsed = await parseFetchedPage(page, url, onProgress);
+    const refined = await refineUrlBlocks(parsed, onProgress);
+    references = refined.references;
+    onProgress?.("layout");
+    const laid = await layoutBlocks({
+      blocks: refined.blocks,
+      title: parsed.title,
+      pageHtml: page.kind === "html" ? page.html : null,
+      url,
+    });
+    blocks = laid.blocks;
   } else {
     throw new Error("Document has no stored file and no source URL");
   }
 
   onProgress?.("save");
+  const rows = resolveContentsLinks(blocks);
   await db.$transaction(async (tx) => {
     await tx.block.deleteMany({ where: { documentId } });
     await tx.block.createMany({
-      data: blocks.map((b, i) => ({
+      data: rows.map((b, i) => ({
         documentId,
         order: i,
         type: b.type,

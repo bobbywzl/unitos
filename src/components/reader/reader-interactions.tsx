@@ -4427,6 +4427,7 @@ function blockFormatKind(
             <option value="default">Figtree</option>
             <option value="serif">{t("reader.fontSerif")}</option>
             <option value="mono">{t("reader.fontMono")}</option>
+            <option value="sans">{t("reader.fontSans")}</option>
           </select>
         )}
         {editMode && (
