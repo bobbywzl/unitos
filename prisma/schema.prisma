@@ -27,9 +27,12 @@ model User {
   // Unitos Premium (SPEC.md §17): offline work syncs when the reader is back
   // online. No billing yet — the operator sets the flag on the account.
   premium      Boolean   @default(false)
-  // Linked Google Drive (SPEC.md §14): the refresh token from the drive.file
-  // code flow. "" = not linked; the picker then asks per visit.
+  // Linked Google Drive (SPEC.md §14): the refresh token from the Drive code
+  // flow, and the scope Google granted with it (drive.readonly = all files;
+  // drive.file = picked files only). "" = not linked; the picker then asks
+  // per visit.
   driveRefreshToken String @default("")
+  driveScope        String @default("")
   createdAt    DateTime  @default(now())
   lastSeenAt   DateTime  @default(now())
   sessions     Session[]

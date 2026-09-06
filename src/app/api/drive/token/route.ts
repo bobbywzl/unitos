@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { authEnabled, currentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { driveLinkEnabled, mintDriveAccessToken } from "@/lib/drive/link";
+import { clearDriveLink, driveLinkEnabled, mintDriveAccessToken } from "@/lib/drive/link";
 import { serverT } from "@/lib/i18n/server";
 
 // A short-lived Drive access token minted from the linked account's refresh
@@ -27,7 +27,7 @@ export async function POST() {
   }
   const minted = await mintDriveAccessToken(row.driveRefreshToken);
   if (minted === "revoked") {
-    await db.user.update({ where: { id: user.id }, data: { driveRefreshToken: "" } });
+    await clearDriveLink(user.id);
     return NextResponse.json({ error: t("api.driveNotLinked"), linked: false }, { status: 401 });
   }
   if (!minted) {

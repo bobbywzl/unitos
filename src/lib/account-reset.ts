@@ -92,6 +92,7 @@ export async function resetAccount(userId: string): Promise<AccountResetCounts |
         color: "",
         premium: false,
         driveRefreshToken: "",
+        driveScope: "",
         createdAt: now,
         lastSeenAt: now,
       },

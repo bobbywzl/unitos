@@ -183,6 +183,8 @@ const en = {
   driveExportTooLarge:
     "This Google Doc, Sheet, Slide, or Drawing is larger than Drive's 10 MB export limit",
   driveFetchFailed: "This Drive file did not load. It may be private, removed, or no longer accessible.",
+  driveNotPicked:
+    "Google Drive lets Unitos read only the files you picked. Pick this file from the Google Drive tab, or link Google Drive again in Settings for all files.",
   driveNotLinked: "Google Drive is not linked",
   driveTokenMintFailed: "Google Drive did not issue a token. Try again.",
   driveLinkUseDrive: "This is a Google Drive link. Use the Google Drive tab.",
@@ -399,6 +401,8 @@ const zh: Record<keyof typeof en, string> = {
     "此 Drive 文件类型暂不支持。请选择 PDF、Google 文档、表格、幻灯片、绘图、视频或音频文件。",
   driveExportTooLarge: "此 Google 文档/表格/幻灯片/绘图超过 Drive 10 MB 的导出限制",
   driveFetchFailed: "这个 Drive 文件无法加载。文件可能已设为私密、被删除，或已无法访问。",
+  driveNotPicked:
+    "Google Drive 只允许 Unitos 读取你选取过的文件。请从“Google Drive”页签选取此文件，或在设置中重新关联 Google Drive 以访问全部文件。",
   driveNotLinked: "Google Drive 未关联",
   driveTokenMintFailed: "Google Drive 未签发访问令牌。请重试。",
   driveLinkUseDrive: "这是 Google Drive 链接。请使用“Google Drive”页签。",

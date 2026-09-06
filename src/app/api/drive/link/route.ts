@@ -2,14 +2,21 @@ import { NextResponse } from "next/server";
 import { appOrigin, authEnabled, currentUser, newState } from "@/lib/auth";
 import { DRIVE_RETURN_COOKIE, DRIVE_STATE_COOKIE } from "@/lib/constants";
 import { db } from "@/lib/db";
-import { driveLinkAuthUrl, driveLinkEnabled, revokeDriveToken } from "@/lib/drive/link";
+import {
+  clearDriveLink,
+  driveLinkAuthUrl,
+  driveLinkEnabled,
+  revokeDriveToken,
+} from "@/lib/drive/link";
 import { serverT } from "@/lib/i18n/server";
 
-// Link Google Drive (SPEC.md §14). GET starts the drive.file code flow for the
-// signed-in account; Google returns to the sign-in callback (/api/auth/callback,
-// the redirect URI registered on the client), which finishes the link and
-// returns to `next`. DELETE unlinks — revoke at Google, clear the stored
-// refresh token.
+// Link Google Drive (SPEC.md §14). GET starts the Drive code flow for the
+// signed-in account, asking the configured access (GOOGLE_DRIVE_ACCESS) —
+// also the Link again for all files path, when the stored grant reaches
+// picked files only; Google returns to the sign-in callback
+// (/api/auth/callback, the redirect URI registered on the client), which
+// finishes the link and returns to `next`. DELETE unlinks — revoke at Google,
+// clear the stored refresh token and its scope.
 
 const cookieOpts = {
   httpOnly: true,
@@ -48,7 +55,7 @@ export async function DELETE() {
   });
   if (row?.driveRefreshToken) {
     await revokeDriveToken(row.driveRefreshToken);
-    await db.user.update({ where: { id: user.id }, data: { driveRefreshToken: "" } });
+    await clearDriveLink(user.id);
   }
   return NextResponse.json({ linked: false });
 }

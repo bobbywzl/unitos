@@ -1,6 +1,12 @@
 "use client";
 
-import { DRIVE_PICKER_MIME_TYPES, DRIVE_SCOPE, type DrivePickedFile } from "@/lib/drive/types";
+import {
+  DRIVE_PICKER_MIME_TYPES,
+  DRIVE_SCOPES,
+  type DriveAccess,
+  type DrivePickedFile,
+  driveAppId,
+} from "@/lib/drive/types";
 
 // Google Drive upload (SPEC.md §14), the browser half: load Google Identity
 // Services and the Picker on demand, get a short-lived OAuth token with no
@@ -24,12 +30,14 @@ type PickerResponse = { action: string; docs?: PickerDoc[] };
 type PickerDocsView = {
   setIncludeFolders: (v: boolean) => PickerDocsView;
   setSelectFolderEnabled: (v: boolean) => PickerDocsView;
+  setEnableDrives: (v: boolean) => PickerDocsView;
   setMimeTypes: (types: string) => PickerDocsView;
 };
 type PickerBuilder = {
   addView: (view: PickerDocsView) => PickerBuilder;
   setOAuthToken: (token: string) => PickerBuilder;
   setDeveloperKey: (key: string) => PickerBuilder;
+  setAppId: (appId: string) => PickerBuilder;
   enableFeature: (feature: string) => PickerBuilder;
   setCallback: (cb: (response: PickerResponse) => void) => PickerBuilder;
   build: () => { setVisible: (visible: boolean) => void };
@@ -39,7 +47,7 @@ type GooglePickerNamespace = {
   DocsView: new (viewId?: string) => PickerDocsView;
   ViewId: { DOCS: string };
   Action: { PICKED: string; CANCEL: string };
-  Feature: { MULTISELECT_ENABLED: string };
+  Feature: { MULTISELECT_ENABLED: string; SUPPORT_DRIVES: string };
 };
 
 declare global {
@@ -101,13 +109,13 @@ async function requestLinkedToken(): Promise<string | null> {
   }
 }
 
-async function requestAccessToken(clientId: string): Promise<string> {
+async function requestAccessToken(clientId: string, access: DriveAccess): Promise<string> {
   await loadGsi();
   if (cachedToken && cachedToken.expiresAt > Date.now() + 30_000) return cachedToken.token;
   return new Promise((resolve, reject) => {
     const client = window.google!.accounts!.oauth2!.initTokenClient({
       client_id: clientId,
-      scope: DRIVE_SCOPE,
+      scope: DRIVE_SCOPES[access],
       callback: (response) => {
         if (!response.access_token) {
           reject(new Error(response.error_description ?? response.error ?? "drive-auth-failed"));
@@ -127,30 +135,40 @@ async function requestAccessToken(clientId: string): Promise<string> {
 // Get a Drive token, open the picker, resolve with whatever the reader picked
 // (empty = closed the picker without picking — not an error) plus the token
 // to import with. A linked account's token comes from the server; otherwise
-// the per-visit grant runs, which must start from a click handler: the token
-// request opens a popup, which browsers block outside a user gesture.
+// the per-visit grant runs, asking the configured access, which must start
+// from a click handler: the token request opens a popup, which browsers block
+// outside a user gesture.
 export async function pickDriveFiles(opts: {
   clientId: string;
   apiKey: string | null;
   linked: boolean;
+  access: DriveAccess;
 }): Promise<{ token: string; files: DrivePickedFile[] }> {
   const [token] = await Promise.all([
     (async () =>
       (opts.linked ? await requestLinkedToken() : null) ??
-      (await requestAccessToken(opts.clientId)))(),
+      (await requestAccessToken(opts.clientId, opts.access)))(),
     loadPicker(),
   ]);
   const picker = window.google!.picker!;
+  // Shared drives show beside My Drive (SUPPORT_DRIVES + setEnableDrives).
   const view = new picker.DocsView(picker.ViewId.DOCS)
     .setIncludeFolders(true)
     .setSelectFolderEnabled(false)
+    .setEnableDrives(true)
     .setMimeTypes(DRIVE_PICKER_MIME_TYPES);
   const files = await new Promise<DrivePickedFile[]>((resolve) => {
     const builder = new picker.PickerBuilder()
       .addView(view)
       .setOAuthToken(token)
-      .enableFeature(picker.Feature.MULTISELECT_ENABLED);
+      .enableFeature(picker.Feature.MULTISELECT_ENABLED)
+      .enableFeature(picker.Feature.SUPPORT_DRIVES);
     if (opts.apiKey) builder.setDeveloperKey(opts.apiKey);
+    // The Cloud project number: with it, a pick extends a picked-files grant
+    // (drive.file) to the picked file. Without it Drive answers 404 for
+    // every picked file — the import then fails as "did not load".
+    const appId = driveAppId(opts.clientId);
+    if (appId) builder.setAppId(appId);
     builder
       .setCallback((response) => {
         if (response.action === picker.Action.PICKED) {

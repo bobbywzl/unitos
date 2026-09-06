@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { isImeKey } from "@/lib/ime";
 import { useT } from "@/components/lang-provider";
 import { Presence } from "@/components/presence";
+import type { DriveAccess } from "@/lib/drive/types";
 import {
   IngestProgress,
   type IngestStep,
@@ -49,9 +50,11 @@ export function AddDocumentDialog({
   onChoosePdf: () => void;
   onChooseVideo: () => void;
   onImportDrive: (() => void) | null; // null: Google Drive is not configured, no tab
-  // Link Google Drive (SPEC.md §14): linked shows the state; canLink offers
-  // the link flow. null when Drive is not configured.
-  driveLink: { linked: boolean; canLink: boolean } | null;
+  // Link Google Drive (SPEC.md §14): linked shows the state — the grant's
+  // access, and Link again when it reaches picked files only while the
+  // deployment asks for all; canLink offers the link flow. null when Drive is
+  // not configured.
+  driveLink: { linked: boolean; canLink: boolean; access: DriveAccess; grant: DriveAccess | null } | null;
   onIngestUrl: (url: string) => Promise<boolean>; // true: document added and opened
   library: LibraryDocument[] | null;
   attachedIds: Set<string>;
@@ -218,7 +221,13 @@ export function AddDocumentDialog({
               <span className="text-center text-[11px] text-sand-500">{t("panes.driveHint")}</span>
               {driveLink?.linked ? (
                 <span className="text-center text-[11px] text-sand-500">
-                  {t("panes.driveLinked")}
+                  {t(
+                    driveLink.grant === "all"
+                      ? "panes.driveLinkedAll"
+                      : driveLink.access === "all"
+                        ? "panes.driveLinkedPickedRelink"
+                        : "panes.driveLinkedPicked",
+                  )}
                 </span>
               ) : driveLink?.canLink ? (
                 <span className="text-center text-[11px] text-sand-500">
