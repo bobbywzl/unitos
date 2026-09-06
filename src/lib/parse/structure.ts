@@ -6,10 +6,13 @@ import { claude, claudeConfigured, claudeOptions } from "@/lib/claude";
 import type { UsageMeta } from "@/lib/usage";
 import type { LinkSpan, ParsedBlock, StyleSpan } from "@/lib/parse/types";
 
-// AI structure pass for URL ingest: after the mechanical parse, the model tidies
-// the block list — drop residual junk, fix a wrong type, merge a split fragment.
-// It references blocks by index only and never writes text, so it cannot invent
+// AI structure pass: after the mechanical parse, the model tidies the block
+// list — drop residual junk, fix a wrong type, merge a split fragment. It
+// references blocks by index only and never writes text, so it cannot invent
 // content. On any failure the mechanical blocks stand (SPEC.md §2 quality bar).
+// A URL document gets this work from the layout pass (lib/parse/layout.ts),
+// which reads the page's HTML as well; this pass alone runs for a PDF with
+// upload instructions, and for a URL whose page html is not at hand.
 const MAX_LISTED_BLOCKS = 500;
 
 const RETYPABLE = new Set(["PARAGRAPH", "HEADING", "LIST", "CODE"]);
@@ -110,6 +113,9 @@ export async function selectCoreBlocks(
   blocks: ParsedBlock[],
   title: string | null,
   instructions?: string,
+  // The pass's time budget (lib/parse/ingest.ts modelPassSignal): past it the
+  // call aborts and the blocks stand.
+  signal?: AbortSignal,
 ): Promise<ParsedBlock[]> {
   if (!claudeConfigured() || blocks.length < 5) return blocks;
   const listed = blocks.slice(0, MAX_LISTED_BLOCKS);
@@ -125,6 +131,7 @@ export async function selectCoreBlocks(
     schema: coreSchema,
     label: "INGEST_CORE",
     usage: { userId: null, feature: "parse", model: PARSE_MODEL } satisfies UsageMeta,
+    abortSignal: signal,
   });
   if (!result.ok) {
     console.warn(`[ingest] core pass failed, keeping all blocks: ${result.error}`);
@@ -174,6 +181,7 @@ export async function structureBlocks(
   blocks: ParsedBlock[],
   title: string | null,
   instructions?: string,
+  signal?: AbortSignal,
 ): Promise<ParsedBlock[]> {
   if (!claudeConfigured() || blocks.length < 5) return blocks;
   const listed = blocks.slice(0, MAX_LISTED_BLOCKS);
@@ -189,6 +197,7 @@ export async function structureBlocks(
     schema: structureSchema,
     label: "INGEST_STRUCTURE",
     usage: { userId: null, feature: "parse", model: PARSE_MODEL } satisfies UsageMeta,
+    abortSignal: signal,
   });
   if (!result.ok) {
     console.warn(`[ingest] structure pass failed, keeping mechanical blocks: ${result.error}`);

@@ -55,6 +55,10 @@ export async function POST(req: Request) {
   }
 
   const url = data.url;
+  // The review's model call stops at the route's limit less a margin, so a
+  // slow review degrades to the parsed facts instead of a cut stream; Cancel
+  // in the box stops it too (SPEC.md §15).
+  const budget = AbortSignal.any([req.signal, AbortSignal.timeout((maxDuration - 30) * 1000)]);
   return progressResponse(async (onProgress) => {
     try {
       const review = await assistant.reviewUpload(
@@ -62,7 +66,7 @@ export async function POST(req: Request) {
         instructions,
         user?.id ?? null,
         onProgress,
-        req.signal,
+        budget,
       );
       return { review };
     } catch (err) {

@@ -8,9 +8,11 @@ import { isFigureCaption } from "@/lib/parse/figure-audit";
 import type { CitationSpan, LinkSpan, ParsedBlock, StyleSpan } from "@/lib/parse/types";
 import type { UsageMeta } from "@/lib/usage";
 
-// The layout pass for URL ingest (SPEC.md §2): the third AI pass, after the
-// core and structure passes. The mechanical walk reads the page's HTML by
-// rule; this pass reads it the way a person reads the browser's inspector —
+// The layout pass for URL ingest (SPEC.md §2): the second AI pass, after the
+// core pass, and it does the structure pass's work too (drop residual junk,
+// fix a wrong type, merge a split fragment) — one call instead of two, on the
+// page's HTML instead of the block list alone. The mechanical walk reads the
+// page's HTML by rule; this pass reads it the way a person reads the browser's inspector —
 // the page's own elements with their class names, inline styles, and the
 // layout facts the page-style bake wrote into them (text alignment, weight,
 // font size, figure widths) — and says what each block IS on the page: the
@@ -20,10 +22,11 @@ import type { UsageMeta } from "@/lib/usage";
 // page's layout tokens, so the document reads as a replica of the page.
 //
 // Same discipline as the other passes: ops reference blocks by index and never
-// write text. A join concatenates blocks with one of four separators; a
-// figure row wraps figure blocks in one figure; nothing else changes a
-// block's words. On any failure the blocks stand as they came in. Runs on
-// PARSE_MODEL, like every parse pass.
+// write text. A join concatenates blocks with one of four separators, a
+// merge_up joins a fragment to the block above it with a space, a figure row
+// wraps figure blocks in one figure; nothing else changes a block's words. On
+// any failure, or past its time budget, the blocks stand as they came in.
+// Runs on PARSE_MODEL, like every parse pass.
 
 export type PageFont = "sans" | "serif" | "mono";
 
@@ -40,6 +43,7 @@ const DROP_CEILING = 0.4;
 const DROP_CEILING_INSTRUCTED = 0.9;
 
 const ROLES = ["kicker", "meta", "label", "display", "quote", "caption", "paragraph"] as const;
+const RETYPES = ["PARAGRAPH", "HEADING", "LIST", "CODE"] as const;
 const ALIGNS = ["center", "right", "left"] as const;
 const SEPARATORS = [" · ", " ", " — ", ": "] as const;
 // Every token the reader knows (block-view.tsx). A token outside this list
@@ -55,6 +59,8 @@ const opSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("join"), indexes: z.array(index).min(2).max(24), separator: z.enum(SEPARATORS) }),
   z.object({ action: z.literal("figure_row"), indexes: z.array(index).min(2).max(12) }),
   z.object({ action: z.literal("drop"), index }),
+  z.object({ action: z.literal("retype"), index, type: z.enum(RETYPES) }),
+  z.object({ action: z.literal("merge_up"), index }),
 ]);
 const layoutSchema = z.object({
   font: z.enum(["sans", "serif", "mono"]).optional(),
@@ -212,7 +218,7 @@ function listBlocks(blocks: ParsedBlock[]): string {
 function instructionLines(instructions: string | undefined): string[] {
   if (!instructions?.trim()) return [];
   return [
-    "The reader gave instructions for this upload. Follow the ones about layout, headings, and what to keep or drop; ignore the rest:",
+    "The reader gave instructions for this upload. Follow the ones about layout, headings, block types, merging, and what to keep or drop; ignore the rest:",
     instructions.trim(),
     "",
   ];
@@ -232,11 +238,13 @@ function layoutPrompt(
     "3. contents: the list block that is the page's table of contents, and the paragraph that is its label.",
     "4. join: consecutive short blocks that are one line on the page — a byline split into label and value rows, a label and its value — become one block, joined with the separator. Consecutive indexes only. Never join body paragraphs.",
     "5. figure_row: consecutive figure blocks, with the caption blocks between them, that sit side by side in one row on the page become one figure row. Consecutive indexes only.",
-    "6. drop: a block that is page chrome — navigation, footer link lists, newsletter and subscribe forms, share and cookie fragments, player controls such as [Sound] or [ Fullscreen ]. Never body text, never a figure with a caption, never the contents list.",
-    "7. font: the body text's typeface family on the page: sans, serif, or mono.",
-    "8. Leave a block that is already right alone. An empty ops array is a valid answer.",
+    "6. drop: a block that is not article content — page chrome such as navigation, footer link lists, newsletter and subscribe forms, share and cookie fragments, player controls such as [Sound] or [ Fullscreen ], unhydrated widget values (a bare \"0\" or \"0.0M\" and the labels around them), a leading heading that merely repeats the document title. Never body text, never a figure with a caption, never the contents list.",
+    "7. retype: a block that has the wrong type. Allowed between PARAGRAPH, HEADING, LIST, CODE only. Use heading for a heading with its level; retype is for LIST and CODE, and for a heading that is body text.",
+    "8. merge_up: a block that is a fragment split mid-sentence from the block above it. Both must be PARAGRAPH.",
+    "9. font: the body text's typeface family on the page: sans, serif, or mono.",
+    "10. Leave a block that is already right alone. Keep every block that is article content; when unsure, keep. An empty ops array is a valid answer.",
     ...instructionLines(instructions),
-    'Return ONLY JSON: {"font": "sans", "ops": [{"action": "role", "index": 0, "role": "kicker", "align": "center"}, {"action": "join", "indexes": [1, 2, 3, 4], "separator": " · "}, {"action": "role", "index": 1, "role": "meta", "align": "center"}, {"action": "contents", "index": 5}, {"action": "heading", "index": 9, "level": 2}, {"action": "figure_row", "indexes": [40, 41, 42]}, {"action": "drop", "index": 98}]}',
+    'Return ONLY JSON: {"font": "sans", "ops": [{"action": "role", "index": 0, "role": "kicker", "align": "center"}, {"action": "join", "indexes": [1, 2, 3, 4], "separator": " · "}, {"action": "role", "index": 1, "role": "meta", "align": "center"}, {"action": "contents", "index": 5}, {"action": "heading", "index": 9, "level": 2}, {"action": "figure_row", "indexes": [40, 41, 42]}, {"action": "drop", "index": 98}, {"action": "retype", "index": 61, "type": "LIST"}, {"action": "merge_up", "index": 63}]}',
     "",
     "Blocks:",
     listBlocks(blocks),
@@ -277,6 +285,7 @@ function setRole(tokens: string[], role: (typeof ROLES)[number]): string[] {
 }
 
 const TEXT_TYPES = new Set(["PARAGRAPH", "HEADING", "LIST"]);
+const RETYPABLE = new Set<string>(RETYPES);
 
 function isCaptionText(block: ParsedBlock): boolean {
   return block.type === "PARAGRAPH" && block.text.length <= CAPTION_MAX_CHARS && isFigureCaption(block.text);
@@ -377,10 +386,15 @@ export function applyLayoutOps(
   const inRange = (i: number) => i >= 0 && i < listed;
   let applied = 0;
 
-  // Groups first: a join or a row claims its indexes; single ops on those
-  // indexes land on the group.
+  // Groups first: a join, a merge, or a row claims its indexes; single ops
+  // on those indexes land on the group.
   const groups = new Map<number, { kind: "join"; indexes: number[]; separator: string } | { kind: "row"; indexes: number[] }>();
   const claimed = new Set<number>();
+  const claim = (indexes: number[], group: { kind: "join"; indexes: number[]; separator: string } | { kind: "row"; indexes: number[] }) => {
+    groups.set(indexes[0], group);
+    for (const i of indexes) claimed.add(i);
+    applied += 1;
+  };
   for (const op of result.ops) {
     if (op.action !== "join" && op.action !== "figure_row") continue;
     const indexes = [...op.indexes].sort((a, b) => a - b);
@@ -388,14 +402,26 @@ export function applyLayoutOps(
     const members = indexes.map((i) => blocks[i]);
     if (op.action === "join") {
       if (!members.every((b) => TEXT_TYPES.has(b.type) && b.text.length <= JOIN_MAX_CHARS)) continue;
-      groups.set(indexes[0], { kind: "join", indexes, separator: op.separator });
+      claim(indexes, { kind: "join", indexes, separator: op.separator });
     } else {
       const figures = members.filter((b) => b.type === "FIGURE").length;
       if (figures < 2 || !members.every((b) => b.type === "FIGURE" || isCaptionText(b))) continue;
-      groups.set(indexes[0], { kind: "row", indexes });
+      claim(indexes, { kind: "row", indexes });
     }
-    for (const i of indexes) claimed.add(i);
-    applied += 1;
+  }
+  // A merge_up joins a fragment to the block above it with one space; a chain
+  // of merge_ups (a paragraph split three ways) is one group. Both must be
+  // paragraphs, whatever their length.
+  const mergeUps = [...new Set(result.ops.flatMap((op) => (op.action === "merge_up" ? [op.index] : [])))]
+    .filter((i) => inRange(i) && i > 0)
+    .sort((a, b) => a - b);
+  for (let k = 0; k < mergeUps.length; ) {
+    let end = k;
+    while (end + 1 < mergeUps.length && mergeUps[end + 1] === mergeUps[end] + 1) end += 1;
+    const indexes = [mergeUps[k] - 1, ...mergeUps.slice(k, end + 1)];
+    k = end + 1;
+    if (indexes.some((i) => claimed.has(i)) || !indexes.every((i) => blocks[i].type === "PARAGRAPH")) continue;
+    claim(indexes, { kind: "join", indexes, separator: " " });
   }
 
   const drops = new Set<number>();
@@ -410,7 +436,7 @@ export function applyLayoutOps(
 
   const singles = new Map<number, LayoutOp[]>();
   for (const op of result.ops) {
-    if (op.action === "join" || op.action === "figure_row" || op.action === "drop") continue;
+    if (op.action === "join" || op.action === "figure_row" || op.action === "drop" || op.action === "merge_up") continue;
     if (!inRange(op.index) || drops.has(op.index)) continue;
     // A single op on a group member lands on the group.
     let at = op.index;
@@ -441,6 +467,21 @@ export function applyLayoutOps(
         if (next.type === "LIST") next = withTokens(next, (tokens) => [...tokens.filter((t) => !ROLE_TOKENS.has(t)), "contents"]);
         else if (next.type === "PARAGRAPH") next = withTokens(next, (tokens) => setRole(tokens, "label"));
         else continue;
+        applied += 1;
+      } else if (op.action === "retype") {
+        // Between the text types only; the alignment travels, a role belonged
+        // to the old type, and a span over a whole heading is the heading's
+        // own weight.
+        if (!RETYPABLE.has(next.type) || next.type === op.type) continue;
+        const tokens = classTokens(next.html).filter((t) => !ROLE_TOKENS.has(t) && t !== "contents");
+        const styles =
+          op.type === "HEADING"
+            ? (next.styles ?? []).filter((s) => !(s.start <= 0 && s.end >= next.text.length))
+            : (next.styles ?? []);
+        const retyped: ParsedBlock = { ...next, type: op.type, html: op.type === "HEADING" ? "<h2>" : undefined };
+        if (styles.length > 0) retyped.styles = styles;
+        else delete retyped.styles;
+        next = withTokens(retyped, () => tokens);
         applied += 1;
       }
     }
@@ -474,8 +515,11 @@ export async function layoutBlocks(input: {
   pageHtml: string | null;
   url: string;
   instructions?: string;
+  // The pass's time budget (lib/parse/ingest.ts modelPassSignal): past it the
+  // call aborts and the blocks stand.
+  signal?: AbortSignal;
 }): Promise<{ blocks: ParsedBlock[]; font?: PageFont }> {
-  const { blocks, title, pageHtml, url, instructions } = input;
+  const { blocks, title, pageHtml, url, instructions, signal } = input;
   if (!claudeConfigured() || !pageHtml || blocks.length < 3) return { blocks };
   const digest = pageDigest(pageHtml, url);
   if (!digest) return { blocks };
@@ -491,6 +535,7 @@ export async function layoutBlocks(input: {
     schema: layoutSchema,
     label: "INGEST_LAYOUT",
     usage: { userId: null, feature: "parse", model: PARSE_MODEL } satisfies UsageMeta,
+    abortSignal: signal,
   });
   if (!result.ok) {
     console.warn(`[ingest] layout pass failed, keeping blocks as they are: ${result.error}`);

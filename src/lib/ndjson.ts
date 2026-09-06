@@ -25,3 +25,22 @@ export function ndjsonWriter(controller: ReadableStreamDefaultController<Uint8Ar
   const encoder = new TextEncoder();
   return (value: unknown) => controller.enqueue(encoder.encode(JSON.stringify(value) + "\n"));
 }
+
+// A model call sends no byte while it reasons, and an idle connection dies at
+// proxies (lib/derive/text-stream.ts has the same heartbeat): an empty line
+// goes out every HEARTBEAT_MS while a stream's work runs. readNdjson skips
+// empty lines, so the client never sees them. Returns the stop function; call
+// it before the controller closes.
+export const HEARTBEAT_MS = 5_000;
+
+export function ndjsonHeartbeat(controller: ReadableStreamDefaultController<Uint8Array>): () => void {
+  const encoder = new TextEncoder();
+  const timer = setInterval(() => {
+    try {
+      controller.enqueue(encoder.encode("\n"));
+    } catch {
+      clearInterval(timer);
+    }
+  }, HEARTBEAT_MS);
+  return () => clearInterval(timer);
+}

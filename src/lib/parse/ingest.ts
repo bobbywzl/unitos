@@ -48,32 +48,71 @@ export type IngestOptions = {
   convert?: boolean;
   // A PDF fetched from a link keeps the link, so adding the URL again dedupes.
   sourceUrl?: string;
+  // When the model passes must be done, epoch ms (modelPassDeadline): a pass
+  // that cannot finish in time aborts or is skipped, and the mechanical parse
+  // stands (SPEC.md §2). Absent: no budget.
+  deadline?: number;
 };
+
+// The time the model passes may use in one request: the route's limit less
+// the fetch, the parse, the save, and a margin. Epoch ms.
+export function modelPassDeadline(maxDurationSeconds: number): number {
+  return Date.now() + Math.max(30, maxDurationSeconds - 45) * 1000;
+}
+
+// A pass needs at least this long to answer; with less left it is skipped.
+const PASS_MIN_MS = 20_000;
+
+// A pass's abort signal against the deadline: undefined without a budget,
+// null when the budget is spent (skip the pass), else a signal that aborts
+// the call at the deadline.
+export function modelPassSignal(deadline: number | undefined): AbortSignal | null | undefined {
+  if (deadline === undefined) return undefined;
+  const remaining = deadline - Date.now();
+  if (remaining < PASS_MIN_MS) return null;
+  return AbortSignal.timeout(remaining);
+}
 
 // A split part's sourceUrl carries this marker plus its part number, so parts
 // stay distinct for dedupe and never re-parse (a re-parse would paste the whole
 // page over one part).
 export const SPLIT_URL_MARKER = "#unitos-part-";
 
-// URL blocks pass through two model passes: the core pass separates the article
-// from page chrome, then the structure pass tidies what survives (SPEC.md §2).
-// References prune afterwards: a link reference whose citing blocks were
-// dropped was chrome, not a citation.
+// URL blocks pass through two model passes (SPEC.md §2): the core pass
+// separates the article from page chrome, then the layout pass reads the
+// page's HTML beside what survives and lays it out as the page does — the
+// structure pass's work (drop, retype, merge) included. Without the page's
+// html the structure pass runs alone. Each pass gets the request's time
+// budget: past it a pass is skipped and the blocks stand. References prune
+// afterwards: a link reference whose citing blocks were dropped was chrome,
+// not a citation.
 async function refineUrlBlocks(
   parsed: ParsedDocument,
-  onProgress?: OnIngestProgress,
-  instructions?: string,
+  onProgress: OnIngestProgress | undefined,
+  opts: { instructions?: string; deadline?: number; pageHtml: string | null; url: string },
 ) {
+  const { instructions, deadline, pageHtml, url } = opts;
+  let blocks = parsed.blocks;
+  let font: ParsedDocument["font"] | undefined;
   onProgress?.("select");
-  const core = await selectCoreBlocks(parsed.blocks, parsed.title, instructions);
+  const coreSignal = modelPassSignal(deadline);
+  if (coreSignal === null) console.warn("[ingest] core pass skipped: the time budget is spent");
+  else blocks = await selectCoreBlocks(blocks, parsed.title, instructions, coreSignal);
   onProgress?.("structure");
-  const blocks = await structureBlocks(core, parsed.title, instructions);
+  const signal = modelPassSignal(deadline);
+  if (signal === null) console.warn("[ingest] layout pass skipped: the time budget is spent");
+  else if (pageHtml) {
+    onProgress?.("layout");
+    const laid = await layoutBlocks({ blocks, title: parsed.title, pageHtml, url, instructions, signal });
+    blocks = laid.blocks;
+    font = laid.font;
+  } else blocks = await structureBlocks(blocks, parsed.title, instructions, signal);
   const references = pruneReferences(
     blocks,
     parsed.references ?? [],
     parsed.formalReferences ?? 0,
   );
-  return { blocks, references };
+  return { blocks, references, font };
 }
 
 // The final figure check, reported with the save stage so the upload
@@ -253,7 +292,7 @@ export async function ingestUrl(
   const existing = await db.document.findFirst({ where: { sourceUrl: url } });
   if (existing) {
     if (existing.parserVersion < PARSER_VERSION) {
-      const document = await reparseDocument(existing.id, onProgress);
+      const document = await reparseDocument(existing.id, onProgress, undefined, opts.deadline);
       if (document) return { document, deduped: false };
     }
     return { document: existing, deduped: true };
@@ -268,10 +307,10 @@ export async function ingestUrl(
 
   // A link to a PDF file adds the PDF itself: same parse, same judgment, same
   // stored bytes as an upload, with the link kept for dedupe.
-  const page = await fetchPage(url, onProgress);
-  if (page.kind === "pdf") {
+  const fetched = await fetchPage(url, onProgress);
+  if (fetched.kind === "pdf") {
     const { document, deduped } = await ingestPdf(
-      page.bytes,
+      fetched.bytes,
       filenameOfUrl(url),
       onProgress,
       { ...opts, sourceUrl: url },
@@ -279,22 +318,20 @@ export async function ingestUrl(
     );
     return { document, deduped };
   }
+  // A page whose figures its scripts draw renders in a browser first, where
+  // one is configured (lib/parse/render-page.ts).
+  const page = await renderIfNeeded(fetched, url, onProgress);
+  const pageHtml = page.kind === "html" ? page.html : fetched.html;
   onProgress?.("extract");
-  const parsed = await parseHtmlContent(page.html, url, onProgress);
-  const refined = await refineUrlBlocks(parsed, onProgress, opts.instructions);
-  const { references } = refined;
-  // The layout pass lays the blocks out as the page does (lib/parse/layout.ts);
-  // the page's font comes from the parse, else from the pass.
-  onProgress?.("layout");
-  const laid = await layoutBlocks({
-    blocks: refined.blocks,
-    title: parsed.title,
-    pageHtml: page.html,
-    url,
+  const parsed = await parseHtmlContent(pageHtml, url, onProgress);
+  const { blocks, references, font: laidFont } = await refineUrlBlocks(parsed, onProgress, {
     instructions: opts.instructions,
+    deadline: opts.deadline,
+    pageHtml,
+    url,
   });
-  const blocks = laid.blocks;
-  const font = parsed.font ?? laid.font;
+  // The page's font comes from the parse, else from the layout pass.
+  const font = parsed.font ?? laidFont;
   const title = parsed.title ?? url;
 
   if (opts.split) {
@@ -340,6 +377,8 @@ export async function reparseDocument(
   documentId: string,
   onProgress?: OnIngestProgress,
   as?: "article" | "handwritten",
+  // The model passes' time budget (modelPassDeadline); absent: no budget.
+  deadline?: number,
 ) {
   const document = await db.document.findUnique({
     where: { id: documentId },
@@ -388,16 +427,13 @@ export async function reparseDocument(
     const page = await renderIfNeeded(fetched, url, onProgress);
     onProgress?.("extract");
     const parsed = await parseFetchedPage(page, url, onProgress);
-    const refined = await refineUrlBlocks(parsed, onProgress);
-    references = refined.references;
-    onProgress?.("layout");
-    const laid = await layoutBlocks({
-      blocks: refined.blocks,
-      title: parsed.title,
+    const refined = await refineUrlBlocks(parsed, onProgress, {
+      deadline,
       pageHtml: page.kind === "html" ? page.html : null,
       url,
     });
-    blocks = laid.blocks;
+    references = refined.references;
+    blocks = refined.blocks;
   } else {
     throw new Error("Document has no stored file and no source URL");
   }
