@@ -37,6 +37,11 @@ const bodySchema = z.object({
   instructions: z.string().max(2_000).default(""),
   pages: z.boolean().default(false),
   convert: z.boolean().default(true),
+  // Who runs the glossary and recommended-links scans after the save:
+  // "server" in after(), "client" in the upload assistant's finishing step,
+  // before the document opens (SPEC.md §15). Conversion and transcription
+  // keep their own chains.
+  scans: z.enum(["server", "client"]).default("server"),
 });
 
 type Body = z.infer<typeof bodySchema>;
@@ -144,7 +149,10 @@ export async function POST(req: Request) {
             .then(() => buildConnections(data.notebookId, document.id, user?.id ?? null, lang))
             .catch(() => {}),
         );
-      } else if (!document.handwritten || document.conversionStatus === "READY") {
+      } else if (
+        data.scans === "server" &&
+        (!document.handwritten || document.conversionStatus === "READY")
+      ) {
         // On-ingest glossary extraction (SPEC.md §8 Phase 7). Best-effort; after() keeps it
         // alive past the response on serverless. A handwritten document
         // without converted text has nothing to read — both scans skip.

@@ -7,6 +7,7 @@ import { useT } from "@/components/lang-provider";
 import { CheckIcon, SparkleIcon, SpinnerIcon } from "@/components/icons";
 import type { TFunc, TKey } from "@/lib/i18n/dictionaries";
 import { readNdjson } from "@/lib/ndjson";
+import { type FinishPlan, warmImages } from "@/lib/finish";
 import { classifyDriveFile, type DrivePickedFile } from "@/lib/drive/types";
 import { isImageFile } from "@/lib/handwritten/image";
 import { captionLabel } from "@/lib/parse/figure-audit";
@@ -108,6 +109,14 @@ const REVIEW_STEPS: IngestStep[] = [
   { key: "review", labelKey: "panes.stepReviewing", status: "pending" },
 ];
 
+// The finishing step (SPEC.md §15), after the save: the scans the box runs
+// itself, then the visuals loaded into the browser's cache.
+const FINISH_STEPS: IngestStep[] = [
+  { key: "glossary", labelKey: "panes.stepGlossary", status: "pending" },
+  { key: "links", labelKey: "panes.stepLinks", status: "pending" },
+  { key: "figures", labelKey: "panes.stepFigures", status: "pending" },
+];
+
 function StepList({ steps }: { steps: IngestStep[] }) {
   const t = useT();
   return (
@@ -165,14 +174,27 @@ function ReplyList({ replies }: { replies: InstructionReply[] }) {
 export function UploadAssistant({
   notebookId,
   request,
+  hidden,
+  onHide,
+  onShow,
   onClose,
 }: {
   notebookId: string;
   request: UploadRequest;
+  // Hidden while its add runs on (SPEC.md §15): the box keeps its state and
+  // its work; the document bar shows the running pill instead.
+  hidden: boolean;
+  onHide: () => void;
+  // The box asks to be shown again: the add ended with something to read.
+  onShow: () => void;
   // Called once the box is done: the first added document to open, or null.
   onClose: (openDocId: string | null) => void;
 }) {
   const t = useT();
+  const hiddenRef = useRef(hidden);
+  useEffect(() => {
+    hiddenRef.current = hidden;
+  }, [hidden]);
   const [phase, setPhase] = useState<Phase>(request.kind === "url" ? "review" : "ready");
   const [review, setReview] = useState<UploadReview | null>(null);
   const [reviewSteps, setReviewSteps] = useState<IngestStep[]>(REVIEW_STEPS);
@@ -344,6 +366,49 @@ export function UploadAssistant({
     return result;
   }
 
+  // ── The finishing step (SPEC.md §15): the document opens complete ─────────
+  // What the server left to this box — the glossary and recommended-links
+  // scans of a text document — runs now, then every visual the reader will
+  // request loads once into the browser's cache. A scan that fails leaves the
+  // add standing: the document is saved, and the scan can run again from the
+  // document list.
+  async function finishDocument(id: string) {
+    let plan: FinishPlan;
+    try {
+      const res = await fetch(`/api/documents/${id}/finish`);
+      if (!res.ok) return;
+      plan = (await res.json()) as FinishPlan;
+    } catch {
+      return;
+    }
+    const scan = plan.scans === "client";
+    const visuals = plan.images.length > 0;
+    if (!scan && !visuals) return;
+    const finishSteps = FINISH_STEPS.filter((s) => (s.key === "figures" ? visuals : scan));
+    setSteps((s) => [...completeIngestSteps(s ?? []), ...finishSteps]);
+    if (scan) {
+      setSteps((s) => (s ? advanceIngestSteps(s, "glossary") : s));
+      await api(`/api/documents/${id}/glossary`, "POST", {}).catch(() => {});
+      setSteps((s) => (s ? advanceIngestSteps(s, "links") : s));
+      await api(`/api/documents/${id}/connect`, "POST", { notebookId }).catch(() => {});
+    }
+    if (visuals) {
+      const progress = (done: number) =>
+        setSteps((s) => (s ? advanceIngestSteps(s, "figures", `${done}/${plan.images.length}`) : s));
+      progress(0);
+      await warmImages(plan.images, progress);
+    }
+    setSteps((s) => (s ? completeIngestSteps(s) : s));
+  }
+
+  async function ingestAndFinish(res: Response): Promise<IngestResult> {
+    const result = await streamIngest(res);
+    for (const doc of result.documents ?? [{ id: result.id, title: result.title }]) {
+      await finishDocument(doc.id);
+    }
+    return result;
+  }
+
   async function uploadChunked(
     file: File,
     kind: "pdf" | "video",
@@ -385,6 +450,8 @@ export function UploadAssistant({
         kind,
         instructions: kind === "pdf" ? instructionsText : "",
         ...(kind === "pdf" ? { pages: pdf.pages, convert: pdf.convert } : {}),
+        // The box runs the scans itself, in the finishing step.
+        scans: "client",
       }),
     });
   }
@@ -434,7 +501,7 @@ export function UploadAssistant({
         );
         setSteps(initialIngestSteps("url"));
         try {
-          const result = await streamIngest(
+          const result = await ingestAndFinish(
             await fetch("/api/documents", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -445,6 +512,8 @@ export function UploadAssistant({
                 // Split answers the question asked about this page — never a
                 // lone part page picked from the list.
                 split: pages.length === 1 && selected.has(SELF) && split,
+                // The box runs the scans itself, in the finishing step.
+                scans: "client",
               }),
             }),
           );
@@ -485,7 +554,7 @@ export function UploadAssistant({
         }
         setSteps(initialIngestSteps(kind === "media" ? "media" : "drive"));
         try {
-          const result = await streamIngest(
+          const result = await ingestAndFinish(
             await fetch("/api/drive/import", {
               method: "POST",
               headers: {
@@ -500,6 +569,8 @@ export function UploadAssistant({
                 instructions: feasible,
                 pages: pdfDirectives.pages,
                 convert: pdfDirectives.convert,
+                // The box runs the scans itself, in the finishing step.
+                scans: "client",
               }),
             }),
           );
@@ -517,7 +588,7 @@ export function UploadAssistant({
       setPhase("adding");
       setSteps(initialIngestSteps(parseYouTubeId(request.url) ? "youtube" : "media"));
       try {
-        const result = await streamIngest(
+        const result = await ingestAndFinish(
           await fetch("/api/documents", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -553,7 +624,7 @@ export function UploadAssistant({
         }
         setSteps(initialIngestSteps(media ? "video" : "pdf"));
         try {
-          const result = await streamIngest(
+          const result = await ingestAndFinish(
             media
               ? await uploadChunked(file, "video", feasible, pdfDirectives)
               : file.size > SINGLE_REQUEST_BYTES
@@ -565,6 +636,8 @@ export function UploadAssistant({
                     form.set("instructions", feasible);
                     form.set("pages", pdfDirectives.pages ? "1" : "0");
                     form.set("convert", pdfDirectives.convert ? "1" : "0");
+                    // The box runs the scans itself, in the finishing step.
+                    form.set("scans", "client");
                     return fetch("/api/documents", { method: "POST", body: form });
                   })(),
           );
@@ -587,6 +660,8 @@ export function UploadAssistant({
       setPhase("ready");
       setSteps(null);
       setError(failed.join(" ") || t("panes.uploadFailed"));
+      // A hidden box comes back with the failure to read.
+      if (hiddenRef.current) onShow();
       return;
     }
     setPhase("done");
@@ -601,21 +676,26 @@ export function UploadAssistant({
         () => onClose(collected[0].id),
         collected.length > 1 || saveDetailRef.current ? 900 : 300,
       );
+    } else if (hiddenRef.current) {
+      // A hidden box comes back with the failure or the lost figure to read.
+      onShow();
     }
   }
 
-  // Escape and the backdrop close the box, except while an add is running.
+  // Escape and the backdrop close the box; while an add runs they hide it
+  // instead — the add runs on, the document bar shows it running.
   useEffect(() => {
+    if (hidden) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !isImeKey(e) && phase !== "adding") {
-        e.stopPropagation();
-        onClose(null);
-      }
+      if (e.key !== "Escape" || isImeKey(e)) return;
+      e.stopPropagation();
+      if (phase === "adding") onHide();
+      else onClose(null);
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase]);
+  }, [phase, hidden]);
 
   const splitEligible =
     request.kind === "url" && review !== null && review.splitProposed && selectedCount === 1 && selected.has(SELF);
@@ -645,10 +725,12 @@ export function UploadAssistant({
   const amberNote =
     "rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-950 dark:text-amber-200";
 
+  if (hidden) return null;
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-ink/30 p-4"
-      onClick={() => phase !== "adding" && onClose(null)}
+      onClick={() => (phase === "adding" ? onHide() : onClose(null))}
       role="dialog"
       aria-modal
       aria-label={t("panes.uploadAssistant")}
@@ -660,20 +742,22 @@ export function UploadAssistant({
         <div className="flex items-center gap-2">
           <SparkleIcon size={16} className="shrink-0 text-clay" />
           <span className="font-display text-[17px]">{t("panes.uploadAssistant")}</span>
-          {phase !== "adding" && (
-            <button
-              onClick={() => {
-                reviewAbortRef.current?.abort();
-                onClose(null);
-              }}
-              data-track="upload-close"
-              aria-label={t("common.close")}
-              data-tip={t("common.close")}
-              className="ml-auto flex size-8 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-700"
-            >
-              ✕
-            </button>
-          )}
+          <button
+            onClick={() => {
+              if (phase === "adding") {
+                onHide();
+                return;
+              }
+              reviewAbortRef.current?.abort();
+              onClose(null);
+            }}
+            data-track={phase === "adding" ? "upload-hide" : "upload-close"}
+            aria-label={t(phase === "adding" ? "panes.uploadHide" : "common.close")}
+            data-tip={t(phase === "adding" ? "panes.uploadHide" : "common.close")}
+            className="ml-auto flex size-8 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-700"
+          >
+            ✕
+          </button>
         </div>
         <p className="truncate text-xs text-sand-500" data-tip={subject}>
           {subject}

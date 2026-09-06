@@ -4,7 +4,7 @@
 
 const en = {
   // Shared
-  updated: "Last updated: 26 August 2026",
+  updated: "Last updated: 6 September 2026",
   backToApp: "Back to Unitos",
   privacyTitle: "Privacy Policy",
   termsTitle: "Terms of Service",
@@ -22,7 +22,9 @@ const en = {
   pCollectHeading: "What Unitos stores",
   pCollectIntro: "Unitos stores what it needs to be your notebook, and nothing else:",
   pCollectAccount:
-    "Your account: the email address, name, and profile picture on the Google account you sign in with. Unitos asks Google for those three things and nothing more — it cannot read your Gmail, Drive, or Calendar.",
+    "Your account: the email address, name, and profile picture on the Google or Apple account you sign in with, or the name, email, and password you sign up with. Sign-in asks for those things and nothing more — it cannot read your Gmail or Calendar.",
+  pCollectDrive:
+    "Google Drive, only if you link it in Settings: a token that lets Unitos read your Drive files — every file you can read, or only the files you pick, as the Google consent screen said. Unitos reads a file only when you add it, keeps that copy as a document, and never changes anything in your Drive. Unlink in Settings any time; that revokes the token.",
   pCollectContent:
     "What you put in: the documents and videos you upload, the pages you add by URL and the text parsed from them, and every project, section, note, annotation, highlight, comment, distillation, extraction, and summary you make.",
   pCollectContext:
@@ -30,6 +32,8 @@ const en = {
   pCollectPrefs: "Your preferences: interface language and theme.",
   pCollectFeedback:
     "Feedback you send: the message, the page you sent it from, and your browser's user-agent string.",
+  pCollectUsage:
+    "Usage: which controls you click, with the open project, and each AI call's provider, model, token counts, and cost — never the text of the call. Settings → Your data shows these counts.",
   pCollectLogs:
     "Ordinary server logs kept by the hosting provider, such as IP addresses and request times.",
 
@@ -144,7 +148,7 @@ const en = {
 
 const zh: Record<keyof typeof en, string> = {
   // Shared
-  updated: "最后更新：2026年8月26日",
+  updated: "最后更新：2026年9月6日",
   backToApp: "返回 Unitos",
   privacyTitle: "隐私政策",
   termsTitle: "服务条款",
@@ -162,13 +166,17 @@ const zh: Record<keyof typeof en, string> = {
   pCollectHeading: "Unitos 存储什么",
   pCollectIntro: "Unitos 只存储作为你的笔记本所必需的内容：",
   pCollectAccount:
-    "你的账户：你用于登录的 Google 账户上的邮箱地址、姓名和头像。Unitos 只向 Google 请求这三项，不请求更多——它无法读取你的 Gmail、云端硬盘或日历。",
+    "你的账户：你用于登录的 Google 或 Apple 账户上的邮箱地址、姓名和头像，或你注册时填写的姓名、邮箱和密码。登录只请求这些，不请求更多——它无法读取你的 Gmail 或日历。",
+  pCollectDrive:
+    "Google Drive（仅当你在设置中关联时）：一个令牌，让 Unitos 读取你的 Drive 文件——范围是你能读取的全部文件，或仅你选取的文件，以 Google 授权页面所示为准。Unitos 只在你添加文件时读取它，把这份副本保存为文档，绝不改动你 Drive 中的任何内容。可随时在设置中取消关联，令牌随之撤销。",
   pCollectContent:
     "你放进去的内容：你上传的文档和视频、你通过网址添加的页面及其解析出的文字，以及你做的每一个项目、章节、笔记、批注、高亮、评论、提炼、提取和摘要。",
   pCollectContext:
     "你的背景：你在“背景”页签中选填的背景、目的和用途，它们决定助手如何作答。",
   pCollectPrefs: "你的偏好：界面语言和主题。",
   pCollectFeedback: "你发送的反馈：内容本身、发送时所在的页面，以及浏览器的 user-agent 字符串。",
+  pCollectUsage:
+    "使用情况：你点击了哪些控件及当时打开的项目，以及每次 AI 调用的服务商、模型、token 数和费用——不含调用的文字内容。设置 → 你的数据 显示这些计数。",
   pCollectLogs: "托管服务商保留的常规服务器日志，例如 IP 地址和请求时间。",
 
   pCookiesHeading: "Cookie",

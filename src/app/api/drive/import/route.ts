@@ -4,7 +4,8 @@ import { db } from "@/lib/db";
 import { authEnabled, currentUser } from "@/lib/auth";
 import { bumpNotebook, notebookAccess } from "@/lib/collab";
 import { buildConnections } from "@/lib/connect";
-import { classifyDriveFile } from "@/lib/drive/types";
+import { driveAccess } from "@/lib/drive/config";
+import { classifyDriveFile, type DriveAccess, driveGrant } from "@/lib/drive/types";
 import {
   driveDownloadUrl,
   fetchDriveMetadata,
@@ -26,7 +27,9 @@ import { parseBody } from "@/lib/validate";
 // OAuth token (per-visit grant, or minted from the linked account's refresh
 // token) and the file the reader picked; this route spends the token once,
 // immediately, and never stores it. A request without a bearer token mints one
-// from the linked grant — the pasted-Drive-link path. Same budget as
+// from the linked grant — the pasted-Drive-link path. What the token reaches
+// (the stored grant, or the configured access a per-visit grant asked for)
+// picks the message when Drive refuses a file. Same budget as
 // /api/documents, which downloads media URLs under the same ceiling.
 export const maxDuration = 120;
 
@@ -42,6 +45,11 @@ const bodySchema = z.object({
   instructions: z.string().max(2_000).default(""),
   pages: z.boolean().default(false),
   convert: z.boolean().default(true),
+  // Who runs the glossary and recommended-links scans after the save:
+  // "server" in after(), "client" in the upload assistant's finishing step,
+  // before the document opens (SPEC.md §15). Conversion and transcription
+  // keep their own chains.
+  scans: z.enum(["server", "client"]).default("server"),
 });
 
 export async function POST(req: Request) {
@@ -59,17 +67,23 @@ export async function POST(req: Request) {
 
   const authHeader = req.headers.get("authorization") ?? "";
   let token = authHeader.startsWith("Bearer ") ? authHeader.slice("Bearer ".length) : "";
-  if (!token && authEnabled() && user) {
-    // No per-visit grant on the request: mint from the linked account
-    // (SPEC.md §14). A revoked grant clears itself on the token route; here it
-    // just fails the mint.
+  let grant: DriveAccess = driveAccess();
+  if (authEnabled() && user) {
     const row = await db.user.findUnique({
       where: { id: user.id },
-      select: { driveRefreshToken: true },
+      select: { driveRefreshToken: true, driveScope: true },
     });
     if (row?.driveRefreshToken) {
-      const minted = await mintDriveAccessToken(row.driveRefreshToken);
-      if (minted !== null && minted !== "revoked") token = minted.token;
+      // A linked account's token — on the request or minted here — reaches
+      // what the stored grant reaches.
+      grant = driveGrant(row.driveScope);
+      if (!token) {
+        // No per-visit grant on the request: mint from the linked account
+        // (SPEC.md §14). A revoked grant clears itself on the token route;
+        // here it just fails the mint.
+        const minted = await mintDriveAccessToken(row.driveRefreshToken);
+        if (minted !== null && minted !== "revoked") token = minted.token;
+      }
     }
   }
   if (!token) return NextResponse.json({ error: t("api.driveTokenMissing") }, { status: 401 });
@@ -78,7 +92,7 @@ export async function POST(req: Request) {
   let mimeType = data.mimeType;
   if (!name || !mimeType) {
     try {
-      ({ name, mimeType } = await fetchDriveMetadata(data.fileId, token, t));
+      ({ name, mimeType } = await fetchDriveMetadata(data.fileId, token, grant, t));
     } catch (err) {
       const message = err instanceof Error ? err.message : t("api.driveFetchFailed");
       return NextResponse.json({ error: message }, { status: 400 });
@@ -138,8 +152,8 @@ export async function POST(req: Request) {
     onProgress("fetch");
     const bytes =
       kind === "export"
-        ? await fetchExportedPdf(data.fileId, token, t)
-        : await fetchDrivePdf(data.fileId, token, t);
+        ? await fetchExportedPdf(data.fileId, token, grant, t)
+        : await fetchDrivePdf(data.fileId, token, grant, t);
     const filename = kind === "export" ? `${pdfName}.pdf` : pdfName;
     let ingested: Awaited<ReturnType<typeof parse.ingestPdf>>;
     try {
@@ -174,7 +188,10 @@ export async function POST(req: Request) {
           .then(() => buildConnections(data.notebookId, document.id, user?.id ?? null, lang))
           .catch(() => {}),
       );
-    } else if (!document.handwritten || document.conversionStatus === "READY") {
+    } else if (
+      data.scans === "server" &&
+      (!document.handwritten || document.conversionStatus === "READY")
+    ) {
       // A handwritten document without converted text has nothing to read —
       // both scans skip.
       if (!deduped) after(() => buildGlossary(document.id, user?.id ?? null, lang).catch(() => {}));

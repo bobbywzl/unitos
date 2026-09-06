@@ -6,11 +6,40 @@ import { MEDIA_EXTENSIONS } from "@/lib/video/types";
 // reaches the network) and the server (the authoritative check) — one
 // definition of what is supported, never two that can drift apart.
 
-// drive.file: the app only ever sees files the reader explicitly picks in the
-// Google Picker, never the rest of their Drive. Google classifies this scope
-// as non-sensitive — the OAuth token is requested fresh in the browser
-// (lib/drive/picker-client.ts) and is never written to the database.
-export const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.file";
+// Drive access: what the app asks Google for (GOOGLE_DRIVE_ACCESS,
+// lib/drive/config.ts). "all": read access to every file the account can
+// read — Google calls this scope restricted: the deployer lists it on the
+// OAuth consent screen, and until Google verifies the app the consent shows
+// Google's unverified-app warning. "picked": the files the reader picks in
+// the Google Picker only — non-sensitive, no verification. Neither scope
+// writes to Drive. A per-visit token is requested fresh in the browser
+// (lib/drive/picker-client.ts) and never written to the database; a linked
+// account stores a refresh token (lib/drive/link.ts).
+export type DriveAccess = "all" | "picked";
+
+export const DRIVE_SCOPES: Record<DriveAccess, string> = {
+  all: "https://www.googleapis.com/auth/drive.readonly",
+  picked: "https://www.googleapis.com/auth/drive.file",
+};
+
+// What a stored grant reaches, read from the scope string Google returned at
+// link time (space-separated). Any scope that reads the whole Drive counts
+// as "all"; drive.file, or a grant stored before the scope was, is "picked".
+export function driveGrant(scope: string): DriveAccess {
+  const scopes = scope.split(/\s+/);
+  return scopes.includes(DRIVE_SCOPES.all) ||
+    scopes.includes("https://www.googleapis.com/auth/drive")
+    ? "all"
+    : "picked";
+}
+
+// The Cloud project number the Google Picker needs (setAppId) so a picked
+// file reaches a drive.file grant: it is the numeric prefix of the OAuth
+// client id (<project-number>-<hash>.apps.googleusercontent.com). Without
+// it Drive answers 404 for every picked file.
+export function driveAppId(clientId: string): string | null {
+  return /^(\d+)-/.exec(clientId)?.[1] ?? null;
+}
 
 // Google Docs, Sheets, Slides, and Drawings have no reader of their own here;
 // Drive exports them to PDF first (lib/drive/fetch.ts), then they ingest

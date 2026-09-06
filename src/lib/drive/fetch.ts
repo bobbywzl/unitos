@@ -1,9 +1,12 @@
+import type { DriveAccess } from "@/lib/drive/types";
 import type { TFunc } from "@/lib/i18n/dictionaries";
 import { outboundFetch, type OutboundResponse } from "@/lib/outbound-fetch";
 
-// Google Drive downloads (SPEC.md §14), authorized with the bearer token the
-// client obtained from Google Identity Services and forwarded on the import
-// request — the server never sees a stored Drive token, only this one-off one.
+// Google Drive downloads (SPEC.md §14), authorized with a bearer token: the
+// one the client obtained from Google Identity Services and forwarded on the
+// import request, or one minted from the linked account's refresh token. The
+// token is spent here and never stored. `grant` is what the token reaches
+// (lib/drive/types.ts) — it picks the message when Drive refuses a file.
 
 const DRIVE_FILES_URL = "https://www.googleapis.com/drive/v3/files";
 const MAX_PDF_BYTES = 50 * 1024 * 1024;
@@ -19,7 +22,11 @@ function driveExportUrl(fileId: string): string {
   return `${DRIVE_FILES_URL}/${encodeURIComponent(fileId)}/export?mimeType=${mimeType}`;
 }
 
-async function driveErrorMessage(t: TFunc, res: OutboundResponse): Promise<string> {
+async function driveErrorMessage(
+  t: TFunc,
+  res: OutboundResponse,
+  grant: DriveAccess,
+): Promise<string> {
   if (res.status === 401) return t("api.driveTokenExpired");
   let reason = "";
   try {
@@ -30,6 +37,12 @@ async function driveErrorMessage(t: TFunc, res: OutboundResponse): Promise<strin
     // response) — the status code alone still picks a reasonable message.
   }
   if (reason === "exportSizeLimitExceeded") return t("api.driveExportTooLarge");
+  // A picked-files grant reaches only what the reader picked in the Google
+  // Picker; Drive answers 404 (or 403) for anything else — a pasted link to a
+  // file the app never touched. Say so, instead of "private or removed".
+  if (grant === "picked" && (res.status === 404 || res.status === 403)) {
+    return t("api.driveNotPicked");
+  }
   return t("api.driveFetchFailed");
 }
 
@@ -38,11 +51,12 @@ async function driveErrorMessage(t: TFunc, res: OutboundResponse): Promise<strin
 export async function fetchDriveMetadata(
   fileId: string,
   token: string,
+  grant: DriveAccess,
   t: TFunc,
 ): Promise<{ name: string; mimeType: string }> {
   const url = `${DRIVE_FILES_URL}/${encodeURIComponent(fileId)}?fields=${encodeURIComponent("name,mimeType")}`;
   const res = await outboundFetch(url, { headers: { Authorization: `Bearer ${token}` } });
-  if (!res.ok) throw new Error(await driveErrorMessage(t, res));
+  if (!res.ok) throw new Error(await driveErrorMessage(t, res, grant));
   const data = (await res.json()) as { name?: string; mimeType?: string };
   if (!data.name || !data.mimeType) throw new Error(t("api.driveFetchFailed"));
   return { name: data.name, mimeType: data.mimeType };
@@ -54,12 +68,13 @@ export async function fetchDriveMetadata(
 export async function fetchExportedPdf(
   fileId: string,
   token: string,
+  grant: DriveAccess,
   t: TFunc,
 ): Promise<Uint8Array<ArrayBuffer>> {
   const res = await outboundFetch(driveExportUrl(fileId), {
     headers: { Authorization: `Bearer ${token}` },
   });
-  if (!res.ok) throw new Error(await driveErrorMessage(t, res));
+  if (!res.ok) throw new Error(await driveErrorMessage(t, res, grant));
   const bytes = new Uint8Array(await res.arrayBuffer());
   if (bytes.length === 0) throw new Error(t("api.driveFetchFailed"));
   return bytes;
@@ -70,12 +85,13 @@ export async function fetchExportedPdf(
 export async function fetchDrivePdf(
   fileId: string,
   token: string,
+  grant: DriveAccess,
   t: TFunc,
 ): Promise<Uint8Array<ArrayBuffer>> {
   const res = await outboundFetch(driveDownloadUrl(fileId), {
     headers: { Authorization: `Bearer ${token}` },
   });
-  if (!res.ok) throw new Error(await driveErrorMessage(t, res));
+  if (!res.ok) throw new Error(await driveErrorMessage(t, res, grant));
   const declared = Number(res.headers.get("content-length") ?? "0");
   if (declared > MAX_PDF_BYTES) throw new Error(t("api.pdfTooLarge"));
   const bytes = new Uint8Array(await res.arrayBuffer());
