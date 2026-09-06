@@ -35,5 +35,13 @@ const run = (args) => {
 };
 
 run(["prisma", "generate"]);
-run(["prisma", "migrate", "deploy"]);
+// Migrations run in the production build only. Vercel builds every pushed
+// branch as a preview with the same database variables, so a preview build
+// would apply a work branch's migration to the production database — the
+// database the code on main reads.
+if (process.env.VERCEL_ENV && process.env.VERCEL_ENV !== "production") {
+  console.log(`Preview build (${process.env.VERCEL_ENV}): skipping prisma migrate deploy.`);
+} else {
+  run(["prisma", "migrate", "deploy"]);
+}
 run(["next", "build"]);
