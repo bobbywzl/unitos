@@ -12,6 +12,7 @@ import {
 } from "@/lib/derive/config";
 import { loadProfile } from "@/lib/derive/context";
 import { callForJson, modelErrorMessage } from "@/lib/derive/json-call";
+import { streamTextTo } from "@/lib/derive/text-stream";
 import { ensureAllDigests, ensureDigest } from "@/lib/digest/ensure";
 import { corporaSystem, corpusSystem } from "@/lib/digest/render";
 import { currentLang, serverT } from "@/lib/i18n/server";
@@ -163,31 +164,34 @@ async function handle(req: Request, t: TFunc) {
       },
     });
     // A model failure must reach the reader: the stream ends with
-    // STREAM_ERROR_TOKEN + the reason, never a silent empty 200 (the derive
-    // route's pattern).
+    // STREAM_ERROR_TOKEN + the reason, never a silent empty 200
+    // (lib/derive/text-stream.ts, the derive route's pattern: heartbeat spaces
+    // while the model reasons or searches, the real reason on failure).
     const encoder = new TextEncoder();
+    let cancelled = false;
     const stream = new ReadableStream<Uint8Array>({
       async start(controller) {
+        const send = (chunk: string) => {
+          if (!cancelled) controller.enqueue(encoder.encode(chunk));
+        };
         try {
-          for await (const part of result.fullStream) {
-            if (part.type === "text-delta") {
-              controller.enqueue(encoder.encode(part.text));
-            } else if (part.type === "tool-call" && part.toolName === WEB_SEARCH_TOOL) {
-              searches++;
-            } else if (part.type === "error") {
-              throw part.error instanceof Error ? part.error : new Error(String(part.error));
-            }
-          }
+          await streamTextTo(result, send, {
+            t,
+            onPart: (part) => {
+              if (part.type === "tool-call" && part.toolName === WEB_SEARCH_TOOL) searches++;
+            },
+          });
         } catch (err) {
+          // Stopped by the reader: nobody is listening.
+          if (req.signal.aborted) return;
           console.error("[assistant] stream error:", err);
-          controller.enqueue(
-            encoder.encode(
-              `${STREAM_ERROR_TOKEN}${t("api.assistantFailed", { reason: modelErrorMessage(err) })}`,
-            ),
-          );
+          send(`${STREAM_ERROR_TOKEN}${t("api.assistantFailed", { reason: modelErrorMessage(err) })}`);
         } finally {
-          controller.close();
+          if (!cancelled) controller.close();
         }
+      },
+      cancel() {
+        cancelled = true;
       },
     });
     return new Response(stream, { headers: { "Content-Type": "text/plain; charset=utf-8" } });
