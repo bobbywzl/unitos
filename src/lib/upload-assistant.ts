@@ -1,7 +1,7 @@
 import { JSDOM } from "jsdom";
 import type { ModelMessage } from "ai";
 import { z } from "zod";
-import { UPLOAD_MODEL } from "@/lib/derive/config";
+import { UPLOAD_MODEL, UPLOAD_REVIEW_MODEL } from "@/lib/derive/config";
 import { callForJson } from "@/lib/derive/json-call";
 import { currentLang, serverT } from "@/lib/i18n/server";
 import { claude, claudeConfigured, claudeOptions } from "@/lib/claude";
@@ -251,14 +251,16 @@ export async function reviewUpload(
     instructions,
   });
   const messages: ModelMessage[] = [{ role: "user", content: prompt }];
+  // The review is quick by design (lib/derive/config.ts): a fast model, no
+  // reasoning, a short answer.
   const result = await callForJson({
-    model: claude(UPLOAD_MODEL),
+    model: claude(UPLOAD_REVIEW_MODEL),
     messages,
-    maxOutputTokens: 24576,
-    providerOptions: claudeOptions(),
+    maxOutputTokens: 8192,
+    providerOptions: {},
     schema: reviewSchema,
     label: "UPLOAD_REVIEW",
-    usage: { userId, feature: "upload", model: UPLOAD_MODEL },
+    usage: { userId, feature: "upload", model: UPLOAD_REVIEW_MODEL },
     abortSignal: signal,
   });
   if (!result.ok) {

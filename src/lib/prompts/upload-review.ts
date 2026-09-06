@@ -1,6 +1,9 @@
 // Upload review (SPEC.md §15): the upload assistant read the page in a private
 // sandbox before anything is saved, and reports how the content should be
-// added. Linked pages are referenced by number, never by written-out URL —
+// added. The review is quick: one sentence on what the page is and the import
+// details — the figure check, the structure check, the pages of the same
+// work, the split — never a reading of the article. Linked pages are
+// referenced by number, never by written-out URL —
 // the same index discipline as the block passes. The figure check rides along
 // as facts: the deterministic audit (lib/parse/figure-audit.ts) already knows
 // which caption has no figure; the model repeats each one in its advice.
@@ -56,7 +59,7 @@ export function uploadReviewPrompt(ctx: UploadReviewCtx): string {
     ? "say the figure needs a browser render to load"
     : "say the figure will not load";
   return [
-    "You are the upload assistant. A reader is adding a web page to their project. You read the page in a private sandbox before anything is saved. Report what the page is and how the content should be added.",
+    "You are the upload assistant. A reader is adding a web page to their project. You read the page in a private sandbox before anything is saved. Report what the page is and how the content should be added. Be quick and short: the reader wants the import details, not a review of the article.",
     "",
     `The page: ${ctx.title ? `"${ctx.title}" — ` : ""}${ctx.url}`,
     `Parsed size: about ${ctx.pageEstimate} pages of text, ${ctx.blockCount} blocks, ${ctx.figures} figures, ${ctx.equations} equations.`,
@@ -72,8 +75,8 @@ export function uploadReviewPrompt(ctx: UploadReviewCtx): string {
     "",
     "Rules:",
     '1. kind: "article" when the page\'s own text is the content. "index" when the page mainly points at other pages — a table of contents, a series overview, a publications list. "other" when neither fits.',
-    `2. summary: one or two plain sentences on what the page is. In ${name}.`,
-    `3. advice: up to 6 lines. The figure check (rule 4) and the structure check (rule 5) come first; then short recommendations for adding this content — formatting to watch for, what to keep or drop, where the parse may struggle. Only advice that changes what the reader would do; an empty array is a valid answer. In ${name}.`,
+    `2. summary: one plain sentence on what the page is. In ${name}.`,
+    `3. advice: up to 3 lines. The figure check (rule 4) and the structure check (rule 5) come first; then at most one short recommendation for adding this content — formatting to watch for, what to keep or drop, where the parse may struggle. Only advice that changes what the reader would do; an empty array is a valid answer. In ${name}.`,
     `4. Figure check: every caption listed above with no figure is a figure the parse did not load. Put one line in advice per caption with no figure: name the figure label ("Figure 4") and ${verdict}. When more than 4 captions have no figure, put one line that names every figure label instead. No figure line when no caption is listed with no figure. A figure with no caption needs no line.`,
     "5. Structure check: read the opening text for structure that looks off — a title repeated, a byline split into fragments, a contents list missing while the headings are numbered. Put one line in advice when the structure looks off, naming what is off. No line when the structure looks right.",
     "6. pages: the linked pages that are parts of the same work as this page — chapters, series parts, sections of one essay. Reading order. Reference by link number exactly as given. Not related articles, not other posts. An empty array is a valid answer. recommended: whether the reader likely wants that part added.",

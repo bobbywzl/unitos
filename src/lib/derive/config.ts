@@ -8,6 +8,7 @@ import { translate } from "@/lib/i18n/dictionaries";
 // lib/claude.ts, not here: client components import this file.
 export const KIMI_K3 = "kimi-k3";
 export const CLAUDE_FABLE_5_1 = "claude-fable-5-1";
+export const CLAUDE_HAIKU_4_5 = "claude-haiku-4-5";
 
 // Reasoning effort per call. Kimi K3 always reasons; "max" is its default and
 // its slowest. The reader's tools answer at "high"; ANALYZE reads a figure or
@@ -89,9 +90,16 @@ export const GIST_EFFORT: KimiEffort = "low";
 export const PARSE_MODEL = CLAUDE_FABLE_5_1;
 export const PARSE_EFFORT: ClaudeEffort = "max";
 
-// The upload assistant's review and instruction check (SPEC.md §15). Not a
+// The upload assistant's instruction check (SPEC.md §15). Not a
 // DerivationType — it runs before ingest, not through /api/derive.
 export const UPLOAD_MODEL = PARSE_MODEL;
+
+// The upload assistant's review of a page (SPEC.md §15): a quick summary and
+// the import details, not a reading of the article. Claude Haiku 4.5 with no
+// reasoning: it answers in seconds. Nothing in the import depends on the
+// review, so the fast model costs nothing downstream. Haiku 4.5 takes no
+// reasoning effort and no fallback, so the call sends no provider options.
+export const UPLOAD_REVIEW_MODEL = CLAUDE_HAIKU_4_5;
 
 // Handwritten documents (SPEC.md §16). Not DerivationTypes: classification
 // runs inside Import PDF, conversion as a background job.
