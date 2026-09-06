@@ -9,7 +9,9 @@ import type { TKey } from "@/lib/i18n/dictionaries";
 // Reader views: Normal shows one document; Side by Side and Top and Bottom
 // show two panes, each with the full tool set. The choice lives in the URL —
 // a fresh open is Normal. Links whose two ends are visible in the two panes
-// draw as dashed lines between the marks.
+// draw as dashed lines between the marks. The bar between the panes drags to
+// change how they share the reader, like the notes tray's bar; the split is
+// remembered per browser, one per view kind.
 //
 // A split view is its own layout (SPEC.md §6): each pane's chrome is one row
 // at its top (the pane header: the pane's document, the article menu, the
@@ -17,6 +19,33 @@ import type { TKey } from "@/lib/i18n/dictionaries";
 // screen to their right that the workspace scrolls to (workspace.tsx).
 
 export type ReaderViewKind = "normal" | "side" | "stack";
+
+// The first pane's share of the reader, 0.2 to 0.8; 0.5 is the default.
+const SPLIT_STORE = "unitos-pane-split";
+const SPLIT_DEFAULT = 0.5;
+const SPLIT_MIN = 0.2;
+const SPLIT_MAX = 0.8;
+
+function clampSplit(split: number): number {
+  return Math.min(SPLIT_MAX, Math.max(SPLIT_MIN, split));
+}
+
+function readStoredSplit(view: ReaderViewKind): number {
+  try {
+    const stored = Number(localStorage.getItem(`${SPLIT_STORE}:${view}`));
+    return Number.isFinite(stored) && stored > 0 ? clampSplit(stored) : SPLIT_DEFAULT;
+  } catch {
+    return SPLIT_DEFAULT;
+  }
+}
+
+function storeSplit(view: ReaderViewKind, split: number) {
+  try {
+    localStorage.setItem(`${SPLIT_STORE}:${view}`, String(split));
+  } catch {
+    // Storage can be unavailable (private mode); the split then lives in memory only.
+  }
+}
 
 // One URL per reader view: ?doc= for the first pane; a split view adds
 // ?view= and ?doc2= for the second (page.tsx reads them).
@@ -36,10 +65,11 @@ export function viewHref(
 }
 
 // The pane header of a split view: one row at the top of the pane, above
-// its scroller, never over the text. The reader and the video pane both
-// render it; the reader adds its article menu and Distill to the row. It
-// follows the strip's cut like the column (globals.css .pane-header), so
-// its controls stay in the visible part of the pane.
+// its scroller, never over the text. The reader renders it — for a video
+// document too, through the video pane — and adds its article menu and
+// Distill to the row for an article. It follows the strip's cut like the
+// column (globals.css .pane-header), so its controls stay in the visible
+// part of the pane.
 export const PANE_HEADER =
   "pane-header relative z-30 flex h-11 shrink-0 items-center gap-1.5 border-b border-line px-3 print:hidden";
 
@@ -192,6 +222,9 @@ function LinkLines({
     container.addEventListener("scroll", schedule, true);
     const resizeObserver = new ResizeObserver(schedule);
     resizeObserver.observe(container);
+    // A dragged split resizes both panes without the container moving.
+    resizeObserver.observe(one);
+    resizeObserver.observe(two);
     const mutationObserver = new MutationObserver(schedule);
     mutationObserver.observe(container, { childList: true, subtree: true });
     return () => {
@@ -238,6 +271,52 @@ export function ReaderPanes({
   const containerRef = useRef<HTMLDivElement>(null);
   const paneOneRef = useRef<HTMLDivElement>(null);
   const paneTwoRef = useRef<HTMLDivElement>(null);
+  // The first pane's share of the reader. Post-hydration restore on purpose:
+  // localStorage is client-only, so the SSR pass renders the default.
+  const [split, setSplit] = useState(SPLIT_DEFAULT);
+  const [resizing, setResizing] = useState(false);
+  useEffect(() => {
+    if (view === "normal") return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setSplit(readStoredSplit(view));
+  }, [view]);
+
+  function applySplit(next: number) {
+    const clamped = clampSplit(next);
+    setSplit(clamped);
+    storeSplit(view, clamped);
+  }
+
+  // Drag the bar: the pointer's place along the container is the split.
+  function startSplitResize(e: React.PointerEvent<HTMLDivElement>) {
+    if (e.button !== 0) return;
+    const container = containerRef.current;
+    if (!container) return;
+    e.preventDefault();
+    const vertical = view === "stack";
+    let latest = split;
+    setResizing(true);
+    document.body.style.userSelect = "none";
+    document.body.style.cursor = vertical ? "row-resize" : "col-resize";
+    const onMove = (ev: PointerEvent) => {
+      const rect = container.getBoundingClientRect();
+      const along = vertical
+        ? (ev.clientY - rect.top) / rect.height
+        : (ev.clientX - rect.left) / rect.width;
+      latest = clampSplit(along);
+      setSplit(latest);
+    };
+    const onUp = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      document.body.style.userSelect = "";
+      document.body.style.cursor = "";
+      setResizing(false);
+      storeSplit(view, latest);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  }
 
   useEffect(() => {
     if (!menu) return;
@@ -316,13 +395,64 @@ export function ReaderPanes({
       </div>
 
       {/* Each pane is a column: the pane header (a split view) above the
-          scroller. The pane's document is chosen in that header. */}
-      <div ref={paneOneRef} className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+          scroller. In a split view the first pane takes its share and the
+          second the rest; while the bar drags, no transition, so the panes
+          follow the pointer. */}
+      <div
+        ref={paneOneRef}
+        className={`relative flex min-h-0 min-w-0 flex-col ${
+          view === "normal" ? "flex-1" : resizing ? "shrink-0" : "pane-split shrink-0"
+        }`}
+        style={
+          view === "side"
+            ? { width: `${split * 100}%` }
+            : view === "stack"
+              ? { height: `${split * 100}%` }
+              : undefined
+        }
+      >
         {paneOne}
       </div>
       {view !== "normal" && paneTwo && (
         <>
-          <div aria-hidden className={view === "stack" ? "h-px shrink-0 bg-line" : "w-px shrink-0 bg-line"} />
+          {/* The bar between the panes: drag to resize, arrow keys nudge,
+              double-click resets. It floats over the divider line, so the
+              layout gains no width. */}
+          <div
+            role="separator"
+            aria-orientation={view === "stack" ? "horizontal" : "vertical"}
+            aria-label={t("panes.resizePanes")}
+            data-tip={t("panes.resizePanesTitle")}
+            tabIndex={0}
+            onPointerDown={startSplitResize}
+            onDoubleClick={() => applySplit(SPLIT_DEFAULT)}
+            onKeyDown={(e) => {
+              const less = view === "stack" ? "ArrowUp" : "ArrowLeft";
+              const more = view === "stack" ? "ArrowDown" : "ArrowRight";
+              if (e.key === less) {
+                e.preventDefault();
+                applySplit(split - 0.02);
+              }
+              if (e.key === more) {
+                e.preventDefault();
+                applySplit(split + 0.02);
+              }
+            }}
+            className={`group relative z-30 shrink-0 outline-none print:hidden ${
+              view === "stack"
+                ? "-my-[5px] h-[10px] cursor-row-resize"
+                : "-mx-[5px] w-[10px] cursor-col-resize"
+            }`}
+          >
+            <span
+              aria-hidden
+              className={`absolute rounded-full bg-line transition-colors group-hover:bg-clay-300 group-focus-visible:bg-clay-400 ${
+                view === "stack"
+                  ? "inset-x-0 top-1/2 h-px -translate-y-1/2 group-hover:h-[3px] group-focus-visible:h-[3px]"
+                  : "inset-y-0 left-1/2 w-px -translate-x-1/2 group-hover:w-[3px] group-focus-visible:w-[3px]"
+              }`}
+            />
+          </div>
           <div ref={paneTwoRef} className="relative flex min-h-0 min-w-0 flex-1 flex-col">
             {paneTwo}
           </div>

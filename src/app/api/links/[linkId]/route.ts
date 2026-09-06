@@ -5,14 +5,23 @@ import { db } from "@/lib/db";
 import { serverT } from "@/lib/i18n/server";
 import { parseBody } from "@/lib/validate";
 
-const patchSchema = z.object({ accept: z.literal(true) });
+// accept: a recommended link becomes a normal link. reason: what the link is
+// about — the reader types it after Close link, or in the Annotations tab.
+const patchSchema = z
+  .object({
+    accept: z.literal(true).optional(),
+    reason: z.string().max(2000).optional(),
+  })
+  .refine((d) => d.accept !== undefined || d.reason !== undefined, {
+    message: "Provide accept or reason",
+  });
 
 // Accept a recommended link: it becomes a normal link — it paints in the text
-// and joins the Edits panel as a LINK_ADD by its accepter.
+// and joins the Edits panel as a LINK_ADD by its accepter. Or set the reason.
 export async function PATCH(req: Request, ctx: { params: Promise<{ linkId: string }> }) {
   const t = await serverT();
   const { linkId } = await ctx.params;
-  const { error } = await parseBody(req, patchSchema);
+  const { data, error } = await parseBody(req, patchSchema);
   if (error) return error;
   const link = await db.docLink.findUnique({
     where: { id: linkId },
@@ -21,6 +30,15 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ linkId: strin
   if (!link) return NextResponse.json({ error: t("api.linkNotFound") }, { status: 404 });
   const access = await documentAccess(link.fromDocumentId, "editor");
   if (access instanceof NextResponse) return access;
+  if (data.reason !== undefined) {
+    const reason = data.reason.trim();
+    const updated = await db.docLink.update({
+      where: { id: linkId },
+      data: { reason: reason ? reason : null },
+    });
+    await bumpDocument(link.fromDocumentId);
+    return NextResponse.json(updated);
+  }
   if (!link.recommended) return NextResponse.json(link);
 
   const [accepted] = await db.$transaction([

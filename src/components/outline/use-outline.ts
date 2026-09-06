@@ -288,7 +288,15 @@ export function useOutline(notebook: NotebookView, canEdit = true) {
       refresh();
     },
     async deleteNote(id) {
-      await api(`/api/notes/${id}`, "DELETE");
+      // The reader fades the note's marks at once (reader-interactions.tsx),
+      // and puts them back if the delete fails.
+      window.dispatchEvent(new CustomEvent("dissect:note-removed", { detail: { noteId: id } }));
+      try {
+        await api(`/api/notes/${id}`, "DELETE");
+      } catch (err) {
+        window.dispatchEvent(new CustomEvent("dissect:note-restored", { detail: { noteId: id } }));
+        throw err;
+      }
       refresh();
     },
     reorderNote(sectionId, id, toIndex) {
