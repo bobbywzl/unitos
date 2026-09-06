@@ -2,9 +2,18 @@ import { generateText, type ModelMessage } from "ai";
 import type { LanguageModel } from "ai";
 import type { z } from "zod";
 import { extractJson } from "@/lib/derive/json";
+import { serverT } from "@/lib/i18n/server";
 import { recordUsage, sdkTokens, type UsageMeta } from "@/lib/usage";
 
 type JsonCallResult<T> = { ok: true; data: T } | { ok: false; error: string };
+
+// One model call's answer: its text and why it stopped.
+type Attempt = { text: string; finishReason: string };
+
+// The request's language, or English outside a request (background jobs).
+async function outputBudgetSpent(): Promise<string> {
+  return (await serverT())("api.outputBudgetSpent");
+}
 
 // The AI SDK's provider options, as generateText takes them.
 type ProviderOptions = NonNullable<Parameters<typeof generateText>[0]["providerOptions"]>;
@@ -50,17 +59,20 @@ export async function callForJson<S extends z.ZodType>(params: {
         `output=${result.usage.outputTokens ?? 0}`,
     );
     if (params.usage) recordUsage(params.usage, sdkTokens(result.usage));
-    return result.text;
+    return { text: result.text, finishReason: result.finishReason };
   };
 
-  let first: string;
+  let first: Attempt;
   try {
     first = await attempt(params.messages);
   } catch (err) {
     console.error(`[derive] ${params.label} model call failed:`, err);
     return { ok: false, error: modelErrorMessage(err) };
   }
-  const firstJson = extractJson(first);
+  // Kimi K3 counts its reasoning against maxOutputTokens: a budget spent
+  // before the JSON ends reports as the budget, not as cut-off JSON.
+  if (first.finishReason === "length") return { ok: false, error: await outputBudgetSpent() };
+  const firstJson = extractJson(first.text);
   const firstParsed = params.schema.safeParse(firstJson);
   if (firstParsed.success) return { ok: true, data: firstParsed.data };
 
@@ -70,20 +82,21 @@ export async function callForJson<S extends z.ZodType>(params: {
       : `Validation failed: ${JSON.stringify(firstParsed.error.issues.slice(0, 5))}`;
   const retryMessages: ModelMessage[] = [
     ...params.messages,
-    { role: "assistant", content: first },
+    { role: "assistant", content: first.text },
     {
       role: "user",
       content: `${error}\nReturn ONLY the corrected JSON. No other text.`,
     },
   ];
-  let second: string;
+  let second: Attempt;
   try {
     second = await attempt(retryMessages);
   } catch (err) {
     console.error(`[derive] ${params.label} model call failed on retry:`, err);
     return { ok: false, error: modelErrorMessage(err) };
   }
-  const secondJson = extractJson(second);
+  if (second.finishReason === "length") return { ok: false, error: await outputBudgetSpent() };
+  const secondJson = extractJson(second.text);
   const secondParsed = params.schema.safeParse(secondJson);
   if (secondParsed.success) return { ok: true, data: secondParsed.data };
   return { ok: false, error };

@@ -33,6 +33,7 @@ import {
   salienceOutputSchema,
 } from "@/lib/derive/json";
 import { callForJson, modelErrorMessage } from "@/lib/derive/json-call";
+import { streamTextTo } from "@/lib/derive/text-stream";
 import { cropPageRegion, pageBlockText, renderPdfPage } from "@/lib/handwritten/pages";
 import { parseRegion } from "@/lib/video/types";
 import { currentLang, serverT } from "@/lib/i18n/server";
@@ -929,25 +930,28 @@ export async function POST(req: Request) {
     });
     // The stream commits HTTP 200 when it opens, so a failure after that
     // reports in-band: the stream ends with STREAM_ERROR_TOKEN + the reason,
-    // and the client shows it. A failed stream persists nothing.
+    // and the client shows it (lib/derive/text-stream.ts: heartbeat spaces
+    // while the model reasons, the real reason on failure). A failed stream
+    // persists nothing.
     // EXPLAIN, SIMPLIFY, and ANALYZE persist in the hidden Annotations section
     // before the stream closes, then the stream ends with STREAM_NOTE_TOKEN +
     // the note id: the client's refresh always finds the stored mark, and the
     // card can delete its annotation in place.
     const encoder = new TextEncoder();
+    let cancelled = false;
     const stream = new ReadableStream<Uint8Array>({
       async start(controller) {
+        const send = (chunk: string) => {
+          if (!cancelled) controller.enqueue(encoder.encode(chunk));
+        };
         let text = "";
         try {
-          for await (const chunk of result.textStream) {
-            text += chunk;
-            controller.enqueue(encoder.encode(chunk));
-          }
+          text = await streamTextTo(result, send, { t });
         } catch (err) {
           // Stopped by the reader: nobody is listening, and nothing persists.
           if (req.signal.aborted) return;
           try {
-            controller.enqueue(encoder.encode(`${STREAM_ERROR_TOKEN}${modelErrorMessage(err)}`));
+            send(`${STREAM_ERROR_TOKEN}${modelErrorMessage(err)}`);
             controller.close();
           } catch {
             // The reader left before the reason could be sent.
@@ -986,13 +990,11 @@ export async function POST(req: Request) {
                 },
               });
               await bumpNotebook(data.notebookId);
-              controller.enqueue(encoder.encode(`${STREAM_NOTE_TOKEN}${note.id}`));
+              send(`${STREAM_NOTE_TOKEN}${note.id}`);
             }
           } catch (err) {
             console.error("[derive] annotation save failed:", err);
-            controller.enqueue(
-              encoder.encode(`${STREAM_ERROR_TOKEN}${t("api.annotationNotSaved")}`),
-            );
+            send(`${STREAM_ERROR_TOKEN}${t("api.annotationNotSaved")}`);
           }
         }
         // A page EXPLAIN persists with its page anchor, so the circled spot
@@ -1024,12 +1026,10 @@ export async function POST(req: Request) {
               },
             });
             await bumpNotebook(data.notebookId);
-            controller.enqueue(encoder.encode(`${STREAM_NOTE_TOKEN}${note.id}`));
+            send(`${STREAM_NOTE_TOKEN}${note.id}`);
           } catch (err) {
             console.error("[derive] annotation save failed:", err);
-            controller.enqueue(
-              encoder.encode(`${STREAM_ERROR_TOKEN}${t("api.annotationNotSaved")}`),
-            );
+            send(`${STREAM_ERROR_TOKEN}${t("api.annotationNotSaved")}`);
           }
         }
         // A video EXPLAIN persists with its time anchor, so the explained
@@ -1063,15 +1063,16 @@ export async function POST(req: Request) {
               },
             });
             await bumpNotebook(data.notebookId);
-            controller.enqueue(encoder.encode(`${STREAM_NOTE_TOKEN}${note.id}`));
+            send(`${STREAM_NOTE_TOKEN}${note.id}`);
           } catch (err) {
             console.error("[derive] annotation save failed:", err);
-            controller.enqueue(
-              encoder.encode(`${STREAM_ERROR_TOKEN}${t("api.annotationNotSaved")}`),
-            );
+            send(`${STREAM_ERROR_TOKEN}${t("api.annotationNotSaved")}`);
           }
         }
-        controller.close();
+        if (!cancelled) controller.close();
+      },
+      cancel() {
+        cancelled = true;
       },
     });
     return new Response(stream, {

@@ -103,13 +103,15 @@ export const ANNOTATIONS_SECTION_TITLE = "Annotations";
 // A streaming derivation commits HTTP 200 the moment the stream opens, so a
 // failure after that reports in-band: the stream ends with this token and the
 // reason. The client splits it off and shows the reason, never a silent stall.
+// The heartbeat spaces before the first text delta (lib/derive/text-stream.ts)
+// leave with the text's leading whitespace.
 export const STREAM_ERROR_TOKEN = "\u0000error\u0000";
 
 export function splitStreamError(text: string): { text: string; error: string | null } {
   const at = text.indexOf(STREAM_ERROR_TOKEN);
-  if (at === -1) return { text, error: null };
+  if (at === -1) return { text: text.trimStart(), error: null };
   return {
-    text: text.slice(0, at),
+    text: text.slice(0, at).trimStart(),
     error: text.slice(at + STREAM_ERROR_TOKEN.length) || modelCallFailed(),
   };
 }

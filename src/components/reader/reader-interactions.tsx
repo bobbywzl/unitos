@@ -2466,29 +2466,32 @@ export function ReaderInteractions({
       }
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
+      let raw = "";
       for (;;) {
         const { done, value } = await reader.read();
         if (done) break;
-        const chunk = decoder.decode(value, { stream: true });
-        setBubble((b) => (b ? { ...b, text: b.text + chunk } : b));
+        raw += decoder.decode(value, { stream: true });
+        const live = splitStreamNote(splitStreamError(raw).text).text;
+        setBubble((b) => (b ? { ...b, text: live } : b));
       }
       // A failure mid-stream arrives in-band; an empty stream is a failure too.
       // The note id trailer means the annotation persisted before the stream
       // closed, so the refresh below always finds the stored mark; the mark
       // paints from here until then, card open or closed.
-      setBubble((b) => {
-        if (!b) return b;
-        const note = splitStreamNote(b.text);
-        const { text, error } = splitStreamError(note.text);
-        if (note.noteId) addLocalAnchor(anchor);
-        return {
-          ...b,
-          text,
-          noteId: note.noteId ?? b.noteId,
-          streaming: false,
-          error: error ?? (text.trim() ? null : t("reader.emptyResponse")),
-        };
-      });
+      const { text: withoutError, error } = splitStreamError(raw);
+      const { text, noteId } = splitStreamNote(withoutError);
+      if (noteId) addLocalAnchor(anchor);
+      setBubble((b) =>
+        b
+          ? {
+              ...b,
+              text,
+              noteId: noteId ?? b.noteId,
+              streaming: false,
+              error: error ?? (text.trim() ? null : t("reader.emptyResponse")),
+            }
+          : b,
+      );
       router.refresh();
     } catch (err) {
       // Stopped, not failed: what streamed in stays; an empty card closes.
@@ -2539,30 +2542,33 @@ export function ReaderInteractions({
       }
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
+      let raw = "";
       for (;;) {
         const { done, value } = await reader.read();
         if (done) break;
-        const chunk = decoder.decode(value, { stream: true });
-        setSimplifyCard((c) => (c ? { ...c, text: c.text + chunk } : c));
+        raw += decoder.decode(value, { stream: true });
+        const live = splitStreamNote(splitStreamError(raw).text).text;
+        setSimplifyCard((c) => (c ? { ...c, text: live } : c));
       }
       // A failure mid-stream arrives in-band; an empty stream is a failure too.
       // The note id trailer means the annotation persisted before the stream
       // closed, so the refresh below always finds the stored mark.
-      setSimplifyCard((c) => {
-        if (!c) return c;
-        const note = splitStreamNote(c.text);
-        const { text, error } = splitStreamError(note.text);
-        if (note.noteId) addLocalAnchor(anchor);
-        return {
-          ...c,
-          text,
-          noteId: note.noteId ?? c.noteId,
-          streaming: false,
-          error: error ?? (text.trim() ? null : t("reader.emptyResponse")),
-          sentences: error || !text.trim() ? null : parseSimplified(text),
-          active: null,
-        };
-      });
+      const { text: withoutError, error } = splitStreamError(raw);
+      const { text, noteId } = splitStreamNote(withoutError);
+      if (noteId) addLocalAnchor(anchor);
+      setSimplifyCard((c) =>
+        c
+          ? {
+              ...c,
+              text,
+              noteId: noteId ?? c.noteId,
+              streaming: false,
+              error: error ?? (text.trim() ? null : t("reader.emptyResponse")),
+              sentences: error || !text.trim() ? null : parseSimplified(text),
+              active: null,
+            }
+          : c,
+      );
       router.refresh();
     } catch (err) {
       // Stopped, not failed: what streamed in stays; an empty card closes.
