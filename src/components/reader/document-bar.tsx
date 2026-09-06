@@ -10,7 +10,7 @@ import { parseDriveFileId, type DrivePickedFile } from "@/lib/drive/types";
 import { IMAGE_ACCEPT, isImageFile } from "@/lib/handwritten/image";
 import { isImeKey } from "@/lib/ime";
 import { useCollab } from "@/components/collab/collab-context";
-import { ChevronDownIcon } from "@/components/icons";
+import { ChevronDownIcon, SpinnerIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { clipWords } from "@/lib/markdown-preview";
 import { Logo } from "@/components/logo";
@@ -349,6 +349,14 @@ export function DocumentBar({
   // itself. Google Drive picks open it too — the server fetches those files
   // at import time, so only the sandbox review has nothing to read.
   const [assistant, setAssistant] = useState<UploadRequest | null>(null);
+  // The box hidden while its add runs on (SPEC.md §15): the header shows the
+  // running pill instead, and clicking the pill brings the box back.
+  const [assistantHidden, setAssistantHidden] = useState(false);
+  const assistantSubject = !assistant
+    ? ""
+    : assistant.kind === "files" || assistant.kind === "drive"
+      ? assistant.files.map((f) => f.name).join(" · ")
+      : assistant.url;
 
   function openAssistant(request: UploadRequest) {
     setError(null);
@@ -381,6 +389,7 @@ export function DocumentBar({
       return;
     }
     setAssistant(request);
+    setAssistantHidden(false);
     setDialog(false);
     if (fileRef.current) fileRef.current.value = "";
     if (videoFileRef.current) videoFileRef.current.value = "";
@@ -410,8 +419,9 @@ export function DocumentBar({
 
   // A pasted Drive link on a linked account: no picker, no token in the
   // browser — the server mints one from the stored grant and reads the file's
-  // facts from Drive metadata. drive.file scope only reaches files this app
-  // has touched; anything else fails with Drive's plain reason.
+  // facts from Drive metadata. An all-files grant reaches any file the
+  // account can read; a picked-files grant reaches picked files only, and the
+  // server says so.
   async function importDriveLink(fileId: string): Promise<boolean> {
     setError(null);
     try {
@@ -466,6 +476,7 @@ export function DocumentBar({
         clientId: drive.clientId,
         apiKey: drive.apiKey,
         linked: drive.linked,
+        access: drive.access,
       });
       token = result.token;
       picked = result.files;
@@ -475,6 +486,7 @@ export function DocumentBar({
     }
     if (picked.length === 0) return; // closed the picker without choosing a file
     setAssistant({ kind: "drive", token, files: picked });
+    setAssistantHidden(false);
     setDialog(false);
   }
 
@@ -856,7 +868,11 @@ export function DocumentBar({
         onChoosePdf={() => fileRef.current?.click()}
         onChooseVideo={() => videoFileRef.current?.click()}
         onImportDrive={drive ? () => void importFromDrive() : null}
-        driveLink={drive ? { linked: drive.linked, canLink: drive.canLink } : null}
+        driveLink={
+          drive
+            ? { linked: drive.linked, canLink: drive.canLink, access: drive.access, grant: drive.grant }
+            : null
+        }
         onIngestUrl={assistantFromUrl}
         library={library}
         attachedIds={attachedIds}
@@ -866,6 +882,20 @@ export function DocumentBar({
         initialTab={dialogTab}
       />
 
+      {/* The add running on behind a hidden box (SPEC.md §15). */}
+      {assistant && assistantHidden && (
+        <button
+          onClick={() => setAssistantHidden(false)}
+          data-track="upload-running"
+          data-tip={t("panes.uploadRunningTip")}
+          className="flex shrink-0 items-center gap-1.5 rounded-full bg-card px-3 py-1 text-xs font-medium text-sand-700 shadow-soft hover:bg-clay-100 hover:text-clay-800"
+        >
+          <SpinnerIcon size={12} className="shrink-0 text-clay motion-safe:animate-spin" />
+          <span className="max-w-[14rem] truncate">
+            {t("panes.uploadRunning", { title: assistantSubject })}
+          </span>
+        </button>
+      )}
       {/* While the dialog is open it shows the progress and the error itself. */}
       {phase && !dialog && <IngestProgress fileLabel={phase.fileLabel} steps={phase.steps} />}
       {connecting && (
@@ -912,8 +942,12 @@ export function DocumentBar({
         <UploadAssistant
           notebookId={notebookId}
           request={assistant}
+          hidden={assistantHidden}
+          onHide={() => setAssistantHidden(true)}
+          onShow={() => setAssistantHidden(false)}
           onClose={(docId) => {
             setAssistant(null);
+            setAssistantHidden(false);
             if (docId) openAdded(docId);
           }}
         />

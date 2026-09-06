@@ -62,11 +62,18 @@ export async function GET() {
 // check, threaded into the AI passes. split: save one very long page as
 // multiple documents (SPEC.md §15). The upload assistant's box sends both; a
 // multi-page add sends one request per page.
+// scans: who runs the glossary and recommended-links scans after the save.
+// "server" runs them in after(); "client" leaves them to the upload
+// assistant's finishing step, which runs them before the document opens
+// (SPEC.md §15). Conversion and transcription keep their own chains.
+const scansSchema = z.enum(["server", "client"]).default("server");
+
 const urlSchema = z.object({
   url: z.url(),
   notebookId: z.string().min(1),
   instructions: z.string().max(2_000).default(""),
   split: z.boolean().default(false),
+  scans: scansSchema,
 });
 
 // pages and convert are the PDF directives from the instruction check
@@ -77,6 +84,7 @@ const fileFieldsSchema = z.object({
   instructions: z.string().max(2_000),
   pages: z.enum(["0", "1"]).default("0"),
   convert: z.enum(["0", "1"]).default("1"),
+  scans: scansSchema,
 });
 
 // PDF upload (multipart) or URL ingestion (JSON). Both attach to the notebook.
@@ -114,6 +122,7 @@ export async function POST(req: Request) {
       instructions: form.get("instructions") ?? "",
       pages: form.get("pages") ?? "0",
       convert: form.get("convert") ?? "1",
+      scans: form.get("scans") ?? "server",
     });
     if (!fields.success) {
       return NextResponse.json({ error: t("api.validationFailed"), issues: fields.error.issues }, { status: 400 });
@@ -173,7 +182,10 @@ export async function POST(req: Request) {
               )
               .catch(() => {}),
           );
-        } else if (!document.handwritten || document.conversionStatus === "READY") {
+        } else if (
+          fields.data.scans === "server" &&
+          (!document.handwritten || document.conversionStatus === "READY")
+        ) {
           // On-ingest glossary extraction (SPEC.md §8 Phase 7). Best-effort; after() keeps it
           // alive past the response on serverless. A handwritten document
           // without converted text has nothing to read — both scans skip.
@@ -285,6 +297,7 @@ export async function POST(req: Request) {
       const documents = [document, ...(extra ?? [])];
       for (const doc of documents) {
         await attachDocument(data.notebookId, doc.id);
+        if (data.scans !== "server") continue;
         if (!deduped) after(() => buildGlossary(doc.id, user?.id ?? null, lang).catch(() => {}));
         after(() =>
           buildConnections(data.notebookId, doc.id, user?.id ?? null, lang).catch(() => {}),

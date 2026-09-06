@@ -111,6 +111,10 @@ const en = {
   pageHighlightTitle: "Highlight the circled spot in this color. Typed text rides on the highlight.",
   driveLink: "Link Google Drive",
   driveLinked: "Google Drive is linked.",
+  driveLinkedAll: "Google Drive is linked: all files.",
+  driveLinkedPicked: "Google Drive is linked: picked files only.",
+  driveLinkedPickedRelink:
+    "Google Drive is linked: picked files only. Link again in Settings for all files.",
   driveLinkFirstHint:
     "The first pick links Google Drive to your account: one Google consent, then no popup.",
   driveOffline: "Offline. Google Drive adds need the server.",
@@ -185,6 +189,14 @@ const en = {
   stepUploading: "Uploading",
   stepParsing: "Parsing",
   stepSaving: "Saving",
+  // The finishing step (SPEC.md §15): the scans and the visuals, before the
+  // document opens.
+  stepGlossary: "Building the glossary",
+  stepLinks: "Finding links",
+  stepFigures: "Preparing figures",
+  uploadHide: "Hide — the add keeps running",
+  uploadRunning: "Adding {title}…",
+  uploadRunningTip: "Still adding. Click to see the progress.",
   stepFetchingPage: "Fetching the page",
   stepReadingPage: "Reading the page",
   noDocumentOpen: "No document open. Upload a PDF, drop one here, or add a URL to start reading.",
@@ -477,6 +489,9 @@ const zh: Record<keyof typeof en, string> = {
   pageHighlightTitle: "以此颜色圈选高亮圈出的部分。输入的文字会附在高亮上。",
   driveLink: "关联 Google Drive",
   driveLinked: "Google Drive 已关联。",
+  driveLinkedAll: "Google Drive 已关联：全部文件。",
+  driveLinkedPicked: "Google Drive 已关联：仅选取的文件。",
+  driveLinkedPickedRelink: "Google Drive 已关联：仅选取的文件。在设置中重新关联可访问全部文件。",
   driveLinkFirstHint: "首次选取会把 Google Drive 关联到你的账户：一次 Google 授权，之后不再弹窗。",
   driveOffline: "离线。从 Google Drive 添加需要连接服务器。",
   driveLinkUseDrive:
@@ -544,6 +559,12 @@ const zh: Record<keyof typeof en, string> = {
   stepUploading: "上传",
   stepParsing: "解析",
   stepSaving: "保存",
+  stepGlossary: "生成术语表",
+  stepLinks: "查找链接",
+  stepFigures: "准备插图",
+  uploadHide: "隐藏——添加继续进行",
+  uploadRunning: "正在添加 {title}……",
+  uploadRunningTip: "仍在添加。点击查看进度。",
   stepFetchingPage: "获取页面",
   stepReadingPage: "读取页面",
   noDocumentOpen: "尚未打开文档。上传 PDF、拖入文件，或添加 URL 开始阅读。",
