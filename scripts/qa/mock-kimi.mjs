@@ -325,7 +325,26 @@ function readJson(req) {
 
 const usage = () => ({ prompt_tokens: 100, completion_tokens: 50, total_tokens: 150, cached_tokens: 0 });
 
-function chatCompletion(body, res) {
+// QA failure modes, by env. MOCK_KIMI_FAIL=401 answers every chat call with
+// Moonshot's invalid-key error. MOCK_KIMI_FAIL=length streams reasoning alone
+// and ends with finish_reason length: the output budget spent before the
+// answer. MOCK_KIMI_DELAY_MS holds the first content delta that long: Kimi
+// K3's silent reasoning, the text stream heartbeat's case.
+const FAIL = process.env.MOCK_KIMI_FAIL ?? "";
+const DELAY_MS = Number(process.env.MOCK_KIMI_DELAY_MS ?? 0);
+const REASONING = "The mock reasons until the output budget is spent.";
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function chatCompletion(body, res) {
+  if (FAIL === "401") {
+    res.writeHead(401, { "content-type": "application/json" });
+    res.end(
+      JSON.stringify({
+        error: { message: "Invalid Authentication", type: "invalid_authentication_error" },
+      }),
+    );
+    return;
+  }
   const all = (body.messages ?? []).map((m) => textOf(m.content)).join("\n");
   // Web access (SPEC.md §7): with the web_search tool declared, the first
   // answer is one tool call; once its result is in the messages, the answer
@@ -342,7 +361,7 @@ function chatCompletion(body, res) {
     : searched
       ? `${buildResponse(all)} The web agrees ([${WEB_SOURCE.title}](${WEB_SOURCE.url})).\n\n**Web sources**\n- [${WEB_SOURCE.title}](${WEB_SOURCE.url})`
       : buildResponse(all);
-  const finish = toolCall ? "tool_calls" : "stop";
+  const finish = FAIL === "length" ? "length" : toolCall ? "tool_calls" : "stop";
 
   if (body.stream) {
     res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache" });
@@ -358,7 +377,10 @@ function chatCompletion(body, res) {
         })}\n\n`,
       );
     chunk({ role: "assistant", content: "" });
-    if (toolCall) {
+    if (DELAY_MS) await sleep(DELAY_MS);
+    if (FAIL === "length") {
+      chunk({ reasoning_content: REASONING });
+    } else if (toolCall) {
       chunk({ tool_calls: [{ index: 0, ...toolCall }] });
     } else {
       for (let i = 0; i < text.length; i += 40) chunk({ content: text.slice(i, i + 40) });
@@ -384,9 +406,12 @@ function chatCompletion(body, res) {
       choices: [
         {
           index: 0,
-          message: toolCall
-            ? { role: "assistant", content: null, tool_calls: [toolCall] }
-            : { role: "assistant", content: text },
+          message:
+            FAIL === "length"
+              ? { role: "assistant", content: "", reasoning_content: REASONING }
+              : toolCall
+                ? { role: "assistant", content: null, tool_calls: [toolCall] }
+                : { role: "assistant", content: text },
           finish_reason: finish,
         },
       ],
@@ -500,7 +525,7 @@ const server = http.createServer(async (req, res) => {
     return;
   }
   if (url.includes("/chat/completions")) {
-    chatCompletion(body, res);
+    await chatCompletion(body, res);
     return;
   }
   if (url.includes("/messages")) {

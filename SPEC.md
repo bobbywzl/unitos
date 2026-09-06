@@ -214,7 +214,7 @@ type DeriveRequest = {
 Flow:
 1. Load document blocks (cached prompt prefix) + ReaderProfile + notebook section skeleton.
 2. Select prompt template by `type` (templates in `/lib/prompts/`, one file per type).
-3. Stream response.
+3. Stream response. A streamed text derivation (EXPLAIN, SIMPLIFY, ANALYZE, SUMMARIZE, ASK, and the assistant's answer) goes through `lib/derive/text-stream.ts`: a heartbeat space every 5 s until the first text delta (Kimi K3 reasons before it writes, in silence, and an idle connection dies at proxies), then the text; a failure reports in-band, the stream ending with `STREAM_ERROR_TOKEN` and the reason — the API's error, the output budget spent before the answer, or the model declining. The client drops the heartbeat spaces and shows the reason, never an empty answer for a failed call.
 4. Route output by destination:
    - `EXPLAIN` → annotation bubble in the reader rail (persisted as a Note in a hidden "Annotations" section, so it's searchable, but rendered in the rail)
    - `SIMPLIFY` → bubble beside the article, level with the selection (ephemeral, not persisted; close to dismiss)

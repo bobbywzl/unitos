@@ -163,9 +163,9 @@ export function AssistantPanel({
       for (;;) {
         const { done, value } = await reader.read();
         if (done) break;
-        const chunk = decoder.decode(value, { stream: true });
-        streamed += chunk;
-        setRecTexts((t) => ({ ...t, [depth]: (t[depth] ?? "") + chunk }));
+        streamed += decoder.decode(value, { stream: true });
+        const live = splitStreamError(streamed).text;
+        setRecTexts((t) => ({ ...t, [depth]: live }));
       }
       // A failure mid-stream arrives in-band; an empty stream is a failure too.
       const { text, error: streamError } = splitStreamError(streamed);
@@ -216,9 +216,8 @@ export function AssistantPanel({
       for (;;) {
         const { done, value } = await reader.read();
         if (done) break;
-        const chunk = decoder.decode(value, { stream: true });
-        streamed += chunk;
-        setAnswer((a) => a + chunk);
+        streamed += decoder.decode(value, { stream: true });
+        setAnswer(splitStreamError(streamed).text);
       }
       // A failure mid-stream arrives in-band; an empty stream is a failure too.
       const { text, error: streamError } = splitStreamError(streamed);
