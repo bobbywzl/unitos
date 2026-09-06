@@ -15,8 +15,10 @@ import type { ParsedBlock } from "@/lib/parse/types";
 // figure row — a flex or grid parent whose columns each hold media and a
 // caption — one nested <figure> per captioned column. Widths ride as
 // data-width-pct, written by the page-style bake (lib/parse/figure-style.ts)
-// and turned into inline style by the sanitizer. A figure's block text is
-// its captions joined with "\n", else the image's alt, else "Figure".
+// and turned into inline style by the sanitizer; a figure the page sets
+// wider than its text column carries the width past 100 on the <figure>
+// itself. A figure's block text is its captions joined with "\n", else the
+// image's alt, else "Figure".
 
 export type WalkCtx = {
   url: string;
@@ -154,10 +156,38 @@ function figureRow(container: Element): Element | null {
   return null;
 }
 
+// Width percentages: a column or a media element holds up to the column's
+// width; a figure wider than the column holds up to twice it.
+const WIDTH_PCT_MIN = 15;
+const WIDTH_PCT_MAX = 200;
+
 /** A width percentage attribute, or null. */
 function widthPct(el: Element): number | null {
   const n = Number(el.getAttribute("data-width-pct") ?? "");
-  return Number.isInteger(n) && n >= 15 && n <= 100 ? n : null;
+  return Number.isInteger(n) && n >= WIDTH_PCT_MIN && n <= WIDTH_PCT_MAX ? n : null;
+}
+
+/** A figure wider than the text column: the width past 100 moves from the
+    figure's media (or its row) to the figure itself, so the sanitizer writes
+    it on the <figure> and the reader draws the figure past the column's
+    edges. The media inside is then as wide as the figure. */
+function liftWideWidth(shell: Element, row: Element | null) {
+  const candidates: Element[] = [];
+  if (row) candidates.push(row);
+  for (const media of shell.querySelectorAll(MEDIA_SELECTOR)) {
+    if (media.parentElement?.closest("figure") === shell) candidates.push(media);
+  }
+  let wide: number | null = null;
+  for (const el of candidates) {
+    const pct = widthPct(el);
+    if (pct !== null && pct > 100 && (wide === null || pct > wide)) wide = pct;
+  }
+  if (wide === null) return;
+  shell.setAttribute("data-width-pct", String(wide));
+  for (const el of candidates) {
+    const pct = widthPct(el);
+    if (pct !== null && pct > 100) el.removeAttribute("data-width-pct");
+  }
 }
 
 /** Wrap each captioned column of a row in its own figure. The column's
@@ -178,7 +208,7 @@ function nestColumns(row: Element) {
       }
       const inColumn = Math.round((100 * mediaPct) / columnPct);
       if (inColumn >= 95) media.removeAttribute("data-width-pct");
-      else media.setAttribute("data-width-pct", String(Math.max(15, inColumn)));
+      else media.setAttribute("data-width-pct", String(Math.max(WIDTH_PCT_MIN, inColumn)));
     }
     figure.append(...column.childNodes);
     column.replaceWith(figure);
@@ -213,13 +243,20 @@ export function figureBlock(el: Element, ctx: WalkCtx): ParsedBlock | null {
 
   // A wrapper around one <figure> is that figure, not a figure in a figure.
   const only = clone.children.length === 1 && !hasDirectText(clone) ? clone.children[0] : null;
-  const shell =
+  let shell =
     clone.tagName.toLowerCase() === "figure"
       ? clone
       : only && only.tagName.toLowerCase() === "figure"
         ? only
         : null;
-  const html = sanitizeHtml(shell ? shell.outerHTML : `<figure>${clone.innerHTML}</figure>`, ctx.url);
+  if (!shell) {
+    shell = clone.ownerDocument.createElement("figure");
+    // A bare media element is the figure's whole content; a container's
+    // children are.
+    shell.append(...(isMedia(clone) ? [clone] : [...clone.childNodes]));
+  }
+  liftWideWidth(shell, row && shell.contains(row) ? row : null);
+  const html = sanitizeHtml(shell.outerHTML, ctx.url);
   // The sanitizer drops what it does not keep (an iframe from an unknown
   // host): a figure left with no media is its caption or nothing (import
   // compare loop finding: an empty FIGURE where a nutrition-label iframe was).

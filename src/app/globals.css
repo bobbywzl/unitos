@@ -927,6 +927,27 @@ ellipse.anchor-flash {
 .reader-figure .center {
   text-align: center;
 }
+/* A figure the page set wider than its text column (lib/parse/figures.ts:
+   width past 100% on the figure): centered on the column and drawn past its
+   edges, as wide as the pane allows — the frame (reader.tsx .reader-frame)
+   is the pane's width, less the article's padding and the strip's cut. A
+   narrower pane (the tray open, a split view) contracts it. While a note
+   floats over the article the column sits at the pane's left edge, so the
+   figure keeps to the column. */
+.reader-frame {
+  container-type: inline-size;
+}
+.reader-figure > figure[style*="width:"] {
+  position: relative;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: calc(100cqw - var(--reader-cut, 0px) - 3rem);
+}
+[data-note-floating] .reader-figure > figure[style*="width:"] {
+  left: 0;
+  transform: none;
+  max-width: 100%;
+}
 
 /* EQUATION blocks: KaTeX display math, scrollable when wide. */
 .equation-block .katex-display {

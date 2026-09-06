@@ -1141,6 +1141,7 @@ export default async function NotebookPage(props: {
     pageMarksByBlock: pane.pageMarksByBlock,
     conversion: pane.conversion,
     font: pane.document.font,
+    columnWidth: pane.document.columnWidth,
   });
   // A split view (SPEC.md §6): each pane's header carries the pane's
   // document, and the pane's tool cards stay collapsed to their symbols until

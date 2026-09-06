@@ -77,6 +77,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ documentId: st
           (stage, detail) => send({ stage, detail }),
           as,
           deadline,
+          userId,
         );
         if (!updated) send({ error: t("api.documentNotFound") });
         else {

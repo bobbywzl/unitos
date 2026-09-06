@@ -24,6 +24,9 @@ import { DocumentTitle } from "@/components/reader/document-title";
 import { formatTime, type TranscriptLine } from "@/lib/video/types";
 
 const TEXT_TYPES = new Set(["PARAGRAPH", "HEADING", "LIST", "CODE", "EQUATION"]);
+// The article's horizontal padding (px-6 on both sides), added to the
+// page's text column width for the column.
+const ARTICLE_PADDING_PX = 48;
 
 // A video document's transcript as the reader's body (SPEC.md §11): the
 // blocks are the transcript lines, grouped into paragraphs that read like an
@@ -362,6 +365,7 @@ export function Reader({
   highlightsByBlock,
   mode,
   font,
+  columnWidth,
   stylesByBlock,
   editedByBlock,
   documentId,
@@ -390,6 +394,9 @@ export function Reader({
   highlightsByBlock: Record<string, Highlight[]>;
   mode: "read" | "edit";
   font: string | null;
+  // The page's text column width in px (Document.columnWidth); null = the
+  // reader's default (globals.css .reader-column).
+  columnWidth: number | null;
   stylesByBlock: Record<string, StyleSpan[]>;
   editedByBlock: Record<string, { start: number; end: number }[]>;
   documentId?: string; // PDF figure blocks render their page via the figure image route
@@ -440,6 +447,13 @@ export function Reader({
   const styleSyncRef = useRef<Promise<unknown>>(Promise.resolve());
 
   const fontFamily = FONT_STACK[font ?? "default"];
+  // The article column is the page's text column plus the article's own
+  // padding (px-6), so the text runs as wide as it did on the page; the pane
+  // still caps it (globals.css .reader-column), so the column contracts when
+  // the tray opens.
+  const columnStyle: React.CSSProperties = columnWidth
+    ? ({ "--reader-column-w": `${columnWidth + ARTICLE_PADDING_PX}px` } as React.CSSProperties)
+    : {};
   // Handwritten document: the Circle & ask hint rides the first page; the
   // conversion strip renders after the last page (SPEC.md §16).
   const firstPageIndex = blocks.findIndex((b) => b.type === "PAGE");
@@ -728,7 +742,7 @@ export function Reader({
   // scroll box, then the article section. The column is the player's width.
   if (transcript) {
     return (
-      <div className="relative">
+      <div className="reader-frame relative">
         <article
           className="reader-prose reader-column w-full px-8 py-11"
           data-font={font ?? "default"}
@@ -753,7 +767,9 @@ export function Reader({
   }
 
   return (
-    <div className="relative">
+    // The frame is the pane's width: a figure wider than the column measures
+    // against it (globals.css .reader-figure).
+    <div className="reader-frame relative">
       <CircleGlow />
       {mode === "edit" && (
         <div
@@ -861,7 +877,7 @@ export function Reader({
       <article
         className="reader-prose reader-column w-full px-6 py-11 print:py-0"
         data-font={font ?? "default"}
-        style={{ fontFamily }}
+        style={{ ...columnStyle, fontFamily }}
         onKeyDown={mode === "edit" ? onStyleShortcut : undefined}
       >
         {/* The wrapped note's gap: the pair of floats sits at the article's

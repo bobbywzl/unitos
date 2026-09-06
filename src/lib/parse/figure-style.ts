@@ -15,12 +15,14 @@ import { outboundFetch } from "@/lib/outbound-fetch";
 //    it out: what that browser hides carries `data-unitos-hidden`; centered
 //    and right-aligned blocks carry `data-align`; bold, italic, underlined,
 //    and monospace elements carry `data-style`; headings and resized text
-//    carry `data-font-size`; the body carries `data-body-font-size` and
-//    `data-font`; and every media element and every column of a figure row
-//    carries `data-width-pct`, its width as a percentage of the page's text
-//    column. The walk (lib/parse/url.ts, lib/parse/figures.ts) and the
-//    sanitizer read those attributes; without stylesheets none is written and
-//    nothing depends on them.
+//    carry `data-font-size`; the body carries `data-body-font-size`,
+//    `data-font`, and `data-column-px` (the text column's width); and every
+//    media element, every column of a figure row, and every figure row
+//    wider than the column carries `data-width-pct`, its width as a
+//    percentage of the page's text column — past 100, wider than the column.
+//    The walk (lib/parse/url.ts, lib/parse/figures.ts) and the sanitizer
+//    read those attributes; without stylesheets none is written and nothing
+//    depends on them.
 //
 // Bounded: the sheet, element, and rule budgets below stop the work, never
 // the parse — a figure without its look is the old behavior, never a
@@ -57,9 +59,13 @@ const VISIBILITY_TEXT_LIMIT = 200;
 const ROW_TEXT_LIMIT = 1_500;
 // The text column when the page's paragraphs do not say.
 const DEFAULT_COLUMN_PX = 680;
-// Width percentages written: at or past the full mark, the element is as
-// wide as the column and the attribute is omitted.
+// Width percentages written: from the full mark to the wide mark, the
+// element is as wide as the column and the attribute is omitted; past the
+// wide mark it is wider than the column (a figure set wider than the text,
+// up to the widest mark), and the reader draws it so.
 const FULL_WIDTH_PCT = 95;
+const WIDE_WIDTH_PCT = 105;
+const WIDEST_WIDTH_PCT = 200;
 const MIN_WIDTH_PCT = 15;
 // Presentation properties written into svg elements.
 const SVG_PROPERTIES = [
@@ -1879,26 +1885,29 @@ function isFigureRow(el: Element, page: Page): boolean {
 }
 
 /** The width percentage an element gets: its pixels over the wider of the
-    text column, itself, and the widest figure row it sits in; null when the
-    element is as wide as that or its width is unknown. */
+    text column and the widest figure row it sits in; null when the element
+    is as wide as that or its width is unknown. Past 100, the element is
+    wider than the column. */
 function widthPercent(el: Element, page: Page): number | null {
   const width = widthOf(el, page);
   if (width === null || width <= 0) return null;
-  let denominator = Math.max(page.columnPx, width);
+  let denominator = page.columnPx;
   for (let node = el.parentElement; node; node = node.parentElement) {
     if (!isFigureRow(node, page)) continue;
     const rowWidth = widthOf(node, page);
     if (rowWidth !== null) denominator = Math.max(denominator, rowWidth);
   }
   const pct = Math.round((100 * width) / denominator);
-  // At the full mark the element is as wide as the column; under the
-  // minimum it is an icon or a thumbnail, and the reader keeps its own size.
-  if (pct >= FULL_WIDTH_PCT || pct < MIN_WIDTH_PCT) return null;
+  // Around the full mark the element is as wide as the column; under the
+  // minimum it is an icon or a thumbnail, and the reader keeps its own size;
+  // past the widest mark the page's layout is not one the reader can hold.
+  if ((pct >= FULL_WIDTH_PCT && pct <= WIDE_WIDTH_PCT) || pct < MIN_WIDTH_PCT || pct > WIDEST_WIDTH_PCT) return null;
   return pct;
 }
 
-/** Every media element, and every column of a figure row, carries its
-    width as a percentage of the text column. */
+/** Every media element, every column of a figure row, and every figure
+    row wider than the column carries its width as a percentage of the text
+    column. */
 function markWidths(document: Document, page: Page) {
   const media = [...document.body.querySelectorAll("img[src], video, iframe, svg")].filter((el) => {
     if (isHidden(el) || el.parentElement?.closest("svg")) return false;
@@ -1919,6 +1928,12 @@ function markWidths(document: Document, page: Page) {
       const pct = widthPercent(el, page);
       if (pct !== null) el.setAttribute("data-width-pct", String(pct));
     }
+    // The row's own width, when it is wider than the column: its columns
+    // are shares of the row.
+    const rowWidth = widthOf(row, page);
+    if (rowWidth === null) continue;
+    const rowPct = Math.round((100 * rowWidth) / page.columnPx);
+    if (rowPct > WIDE_WIDTH_PCT && rowPct <= WIDEST_WIDTH_PCT) row.setAttribute("data-width-pct", String(rowPct));
   }
 }
 
@@ -1967,6 +1982,9 @@ export async function bakeFigureStyles(rawHtml: string, url: string): Promise<st
       markHidden(document, rules, page);
       const prose = proseSample(document);
       page.columnPx = columnWidth(prose, page);
+      // The text column's width, for the reader's column (lib/parse/url.ts
+      // reads it into ParsedDocument.columnWidth).
+      document.body.setAttribute("data-column-px", String(Math.round(page.columnPx)));
       markFontSizes(document, rules, page, prose);
       markAlignment(document, rules, page);
       markStyles(document, rules, page);

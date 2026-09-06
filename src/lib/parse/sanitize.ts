@@ -5,10 +5,14 @@ import { stripCitationTokens } from "@/lib/parse/references";
 //
 // Figure layout (lib/parse/figures.ts, lib/parse/figure-style.ts): a media
 // element or a nested figure carrying data-width-pct gets style="width:NN%"
-// (NN an integer 15–100), a caption carrying data-align="center" inside a
-// figure gets class="center", and a nested figure stays only as a direct
-// child of the root figure. The attributes themselves never reach the
-// stored html.
+// (NN an integer 15–100; on the root figure up to 200, a figure wider than
+// the text column), a caption carrying data-align="center" inside a figure
+// gets class="center", and a nested figure stays only as a direct child of
+// the root figure. The attributes themselves never reach the stored html.
+//
+// An image the parse stored itself (a captured chart animation,
+// lib/parse/capture-animation.ts) has the reader's own path, /api/images/<id>,
+// and keeps it: it is never resolved against the page.
 const ALLOWED: Record<string, Set<string>> = {
   a: new Set(["href"]),
   img: new Set(["src", "alt", "width", "height", "data-backdrop"]),
@@ -76,12 +80,15 @@ const SVG_ATTRIBUTES = new Set([
   "xmlns", "style", "href", "xlink:href",
 ]);
 
-/** A width percentage the page gave a media element or a figure column
-    (data-width-pct), as the inline declaration; null when absent or out of
-    range. */
-function widthDeclaration(el: Element): string | null {
+// The reader's own image path (lib/images.ts imageUrl).
+const OWN_IMAGE_RX = /^\/api\/images\/[A-Za-z0-9_-]+$/;
+
+/** A width percentage the page gave a media element, a figure column, or
+    the root figure (data-width-pct), as the inline declaration; null when
+    absent or out of range. */
+function widthDeclaration(el: Element, max = 100): string | null {
   const n = Number(el.getAttribute("data-width-pct") ?? "");
-  return Number.isInteger(n) && n >= 15 && n <= 100 ? `width:${n}%` : null;
+  return Number.isInteger(n) && n >= 15 && n <= max ? `width:${n}%` : null;
 }
 
 /** A baked backdrop (a color, or plain gradients) that can be written as an
@@ -146,6 +153,7 @@ export function sanitizeHtml(html: string, baseUrl?: string): string {
       el.removeAttribute(attr);
       return false;
     }
+    if (attr === "src" && OWN_IMAGE_RX.test(value)) return true;
     if (baseUrl) {
       try {
         el.setAttribute(attr, new URL(value, baseUrl).toString());
@@ -160,8 +168,10 @@ export function sanitizeHtml(html: string, baseUrl?: string): string {
   const walk = (node: Element) => {
     for (const child of [...node.children]) {
       const tag = child.tagName.toLowerCase();
-      // Layout facts read before the allowlist strips them.
-      const widthStyle = widthDeclaration(child);
+      // Layout facts read before the allowlist strips them. The root figure
+      // may be wider than the column; anything inside it is a share of it.
+      const rootFigure = tag === "figure" && node === document.body;
+      const widthStyle = widthDeclaration(child, rootFigure ? 200 : 100);
       const centered = child.getAttribute("data-align") === "center" || child.classList.contains("center");
       if (tag === "svg") {
         if (!sanitizeSvgElement(child)) {

@@ -87,6 +87,14 @@ export async function fetchFigureImage(
       return null;
     }
   }
+  // The reader's own image (a captured chart animation, lib/parse/render-page.ts,
+  // or a dropped image): read from the store, never fetched.
+  const own = /^\/api\/images\/([A-Za-z0-9_-]+)$/.exec(imageUrl);
+  if (own) {
+    const image = await db.imageAsset.findUnique({ where: { id: own[1] }, select: { data: true, mimeType: true } });
+    if (!image || !IMAGE_MEDIA_TYPES.has(image.mimeType) || image.data.length === 0 || image.data.length > IMAGE_MAX_BYTES) return null;
+    return { bytes: new Uint8Array(image.data), mediaType: image.mimeType };
+  }
   // A relative src (parsed before URLs were absolutized) resolves against the
   // document's page.
   let resolved: string;
