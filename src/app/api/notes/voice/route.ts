@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { bumpNotebook, sectionAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
+import { modelErrorMessage } from "@/lib/derive/json-call";
 import { serverT } from "@/lib/i18n/server";
 import { tidyTranscript } from "@/lib/video/tidy";
 import { transcribe } from "@/lib/video/transcribe";
@@ -76,7 +77,7 @@ export async function POST(req: Request) {
   } catch (err) {
     console.error("[voice-note] transcription failed:", err);
     return NextResponse.json(
-      { error: t("api.voiceNoteFailed", { reason: err instanceof Error ? err.message : String(err) }) },
+      { error: t("api.voiceNoteFailed", { reason: modelErrorMessage(err) }) },
       { status: 502 },
     );
   }

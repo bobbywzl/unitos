@@ -10,8 +10,10 @@ import { PARSE_EFFORT, type ClaudeEffort } from "@/lib/derive/config";
 
 const DEFAULT_BASE_URL = "https://api.anthropic.com/v1";
 
+// Whitespace stripped: a key pasted into the host's settings with a line
+// break inside it is refused as a header value, and the request never leaves.
 export function claudeApiKey(): string | undefined {
-  return process.env.ANTHROPIC_API_KEY || undefined;
+  return process.env.ANTHROPIC_API_KEY?.replace(/\s+/g, "") || undefined;
 }
 
 /** A key is set, so the import's AI passes are on. Every import call checks this first. */
