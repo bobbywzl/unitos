@@ -2,7 +2,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { GIST_EFFORT, GIST_MODEL } from "@/lib/derive/config";
 import { callForJson } from "@/lib/derive/json-call";
-import { kimi, kimiConfigured } from "@/lib/kimi";
+import { kimi, kimiConfigured, kimiOptions } from "@/lib/kimi";
 import { clipWords, markdownPreview } from "@/lib/markdown-preview";
 import { GIST_MAX_CHARS, gistPrompt } from "@/lib/prompts/gist";
 import { stripSimplifyMarkers } from "@/lib/sentences";
@@ -47,7 +47,7 @@ export async function writeGists(
       model: kimi(GIST_MODEL),
       messages: [{ role: "user", content: gistPrompt({ notes: batch }) }],
       maxOutputTokens: 16384,
-      effort: GIST_EFFORT,
+      providerOptions: kimiOptions(GIST_EFFORT),
       schema: gistSchema,
       label: "GIST",
       usage: { userId, feature: "gist", model: GIST_MODEL } satisfies UsageMeta,

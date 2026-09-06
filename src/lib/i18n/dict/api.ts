@@ -136,7 +136,7 @@ const en = {
   pdfEncrypted: "This PDF is password-protected. Remove the password and upload it again.",
   pdfDamaged: "This PDF could not be opened. The file may be damaged, or not a PDF.",
   modelBusy: "The AI service is busy right now. Wait a minute and try again.",
-  modelKeyInvalid: "The AI service rejected the key. Check MOONSHOT_API_KEY.",
+  modelKeyInvalid: "The AI service rejected the key. Check ANTHROPIC_API_KEY.",
   ingestTimedOut: "The add ran out of time. Try again; a long page or a large PDF may need splitting.",
   // Why a page could not be fetched (lib/parse/fetch-page.ts), in plain words
   fetchBlocked:
@@ -354,7 +354,7 @@ const zh: Record<keyof typeof en, string> = {
   pdfEncrypted: "此 PDF 有密码保护。请去掉密码后重新上传。",
   pdfDamaged: "此 PDF 无法打开。文件可能已损坏，或不是 PDF。",
   modelBusy: "AI 服务当前繁忙。请稍等一分钟再试。",
-  modelKeyInvalid: "AI 服务拒绝了密钥。请检查 MOONSHOT_API_KEY。",
+  modelKeyInvalid: "AI 服务拒绝了密钥。请检查 ANTHROPIC_API_KEY。",
   ingestTimedOut: "添加超时。请重试；很长的页面或很大的 PDF 可能需要拆分。",
   fetchBlocked:
     "{host} 拒绝了请求（HTTP {status}）。该网站拦截自动读取，也没有存档副本。请在浏览器中打开页面，另存为 PDF，再上传该 PDF。",

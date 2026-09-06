@@ -15,7 +15,7 @@ import {
 import { figureContent, figureVisual, type FigureImage } from "@/lib/derive/figure";
 import { callForJson, modelErrorMessage } from "@/lib/derive/json-call";
 import { currentLang, serverT } from "@/lib/i18n/server";
-import { kimi, kimiConfigured } from "@/lib/kimi";
+import { kimi, kimiConfigured, kimiOptions } from "@/lib/kimi";
 import type { TFunc } from "@/lib/i18n/dictionaries";
 import { languageName, profileLines } from "@/lib/prompts/types";
 import { parseBody } from "@/lib/validate";
@@ -376,7 +376,7 @@ async function handle(req: Request, t: TFunc) {
     model: kimi(DERIVATION_MODEL.SYNTHESIS),
     messages,
     maxOutputTokens: MAX_OUTPUT_TOKENS.SYNTHESIS,
-    effort: DERIVATION_EFFORT.SYNTHESIS,
+    providerOptions: kimiOptions(DERIVATION_EFFORT.SYNTHESIS),
     schema: planSchema,
     label: "assistant:act",
     usage: { userId: user.id, feature: "act", model: DERIVATION_MODEL.SYNTHESIS },

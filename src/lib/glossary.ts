@@ -5,7 +5,7 @@ import { db } from "@/lib/db";
 import { KIMI_K3 } from "@/lib/derive/config";
 import { documentPrefix } from "@/lib/derive/context";
 import { callForJson } from "@/lib/derive/json-call";
-import { kimi, kimiConfigured } from "@/lib/kimi";
+import { kimi, kimiConfigured, kimiOptions } from "@/lib/kimi";
 import type { UsageMeta } from "@/lib/usage";
 
 // On-ingest glossary extraction: terms, acronyms, symbols (SPEC.md §8 Phase 7).
@@ -58,6 +58,7 @@ export async function buildGlossary(documentId: string, userId: string | null = 
     model: kimi(GLOSSARY_MODEL),
     messages,
     maxOutputTokens: 8192,
+    providerOptions: kimiOptions(),
     schema: glossarySchema,
     label: "GLOSSARY",
     usage: { userId, feature: "glossary", model: GLOSSARY_MODEL } satisfies UsageMeta,

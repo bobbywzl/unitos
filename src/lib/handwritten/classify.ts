@@ -3,7 +3,7 @@ import { z } from "zod";
 import { CLASSIFY_MODEL } from "@/lib/derive/config";
 import { callForJson } from "@/lib/derive/json-call";
 import { CLASSIFY_IMAGE_WIDTH, renderPdfPage } from "@/lib/handwritten/pages";
-import { kimi, kimiConfigured } from "@/lib/kimi";
+import { claude, claudeConfigured, claudeOptions } from "@/lib/claude";
 import type { ParsedBlock } from "@/lib/parse/types";
 import { classifyPrompt } from "@/lib/prompts/classify";
 
@@ -56,7 +56,7 @@ export async function classifyPdf(
 
   const fallback: PdfKind =
     junk || perPage < FALLBACK_HANDWRITTEN_CHARS_PER_PAGE ? "handwritten" : "article";
-  if (!kimiConfigured()) return fallback;
+  if (!claudeConfigured()) return fallback;
 
   // Sample pages: first, middle, last.
   const samples = [...new Set([1, Math.max(1, Math.ceil(pageCount / 2)), pageCount])].slice(
@@ -83,9 +83,10 @@ export async function classifyPdf(
     },
   ];
   const result = await callForJson({
-    model: kimi(CLASSIFY_MODEL),
+    model: claude(CLASSIFY_MODEL),
     messages,
     maxOutputTokens: 16384,
+    providerOptions: claudeOptions(),
     schema: classifyOutputSchema,
     label: "CLASSIFY",
     usage: { userId, feature: "classify", model: CLASSIFY_MODEL },

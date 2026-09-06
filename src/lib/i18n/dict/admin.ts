@@ -141,6 +141,7 @@ const en = {
   // Services (env status; moved here from Settings — operator concern, not reader)
   services: "Services",
   svcKimi: "Derivations, assistant, glossary",
+  svcClaude: "Import: upload review, parse, PDF judgment, conversion",
   svcSignIn: "Sign-in at /signin",
   svcAdmin: "Feedback inbox and digest at /admin",
   svcSet: "Set",
@@ -307,6 +308,7 @@ const zh: Record<keyof typeof en, string> = {
   agoDays: "{n} 天前",
   services: "服务",
   svcKimi: "AI 生成、助手、术语表",
+  svcClaude: "导入：上传审阅、解析、PDF 判断、转换",
   svcSignIn: "位于 /signin 的登录",
   svcAdmin: "位于 /admin 的反馈收件箱与汇编",
   svcSet: "已设置",

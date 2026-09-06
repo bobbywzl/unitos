@@ -1,10 +1,13 @@
-// Deterministic Kimi mock for the QA autoloop: Moonshot's OpenAI-compatible
+// Deterministic model mock for the QA autoloop: Moonshot's OpenAI-compatible
 // chat completions on /v1/chat/completions, plus the Formula API endpoints the
-// web-search tool uses. Sniffs each prompt and returns valid, context-aware
-// output: real block ids, real quotes, schema-exact JSON — so every AI flow
-// (EXPLAIN, SIMPLIFY, EXTRACT, SALIENCE, assistant ask and act) runs
-// end-to-end with zero external calls. Point the app at it with
+// web-search tool uses, and Anthropic's Messages API on /v1/messages for the
+// import's model (lib/claude.ts). Sniffs each prompt and returns valid,
+// context-aware output: real block ids, real quotes, schema-exact JSON — so
+// every AI flow (EXPLAIN, SIMPLIFY, EXTRACT, SALIENCE, assistant ask and act,
+// the import's passes) runs end-to-end with zero external calls. Point the app
+// at it with
 //   MOONSHOT_API_KEY=mock MOONSHOT_BASE_URL=http://localhost:3399/v1
+//   ANTHROPIC_API_KEY=mock ANTHROPIC_BASE_URL=http://localhost:3399/v1
 import http from "node:http";
 
 const PORT = 3399;
@@ -392,6 +395,74 @@ function chatCompletion(body, res) {
   );
 }
 
+// The import's model (lib/claude.ts) speaks Anthropic's Messages API: the
+// same prompt sniffing, in the Messages response shape.
+function anthropicMessage(body, res) {
+  const all = [textOf(body.system), ...(body.messages ?? []).map((m) => textOf(m.content))].join(
+    "\n",
+  );
+  const text = buildResponse(all);
+  const usage = {
+    input_tokens: 100,
+    output_tokens: 50,
+    cache_creation_input_tokens: 0,
+    cache_read_input_tokens: 0,
+  };
+
+  if (body.stream) {
+    res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache" });
+    const send = (event, data) => res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    send("message_start", {
+      type: "message_start",
+      message: {
+        id: "msg_mock",
+        type: "message",
+        role: "assistant",
+        model: body.model,
+        content: [],
+        stop_reason: null,
+        stop_sequence: null,
+        usage,
+      },
+    });
+    send("content_block_start", {
+      type: "content_block_start",
+      index: 0,
+      content_block: { type: "text", text: "" },
+    });
+    for (let i = 0; i < text.length; i += 40) {
+      send("content_block_delta", {
+        type: "content_block_delta",
+        index: 0,
+        delta: { type: "text_delta", text: text.slice(i, i + 40) },
+      });
+    }
+    send("content_block_stop", { type: "content_block_stop", index: 0 });
+    send("message_delta", {
+      type: "message_delta",
+      delta: { stop_reason: "end_turn", stop_sequence: null },
+      usage: { output_tokens: 50 },
+    });
+    send("message_stop", { type: "message_stop" });
+    res.end();
+    return;
+  }
+
+  res.writeHead(200, { "content-type": "application/json" });
+  res.end(
+    JSON.stringify({
+      id: "msg_mock",
+      type: "message",
+      role: "assistant",
+      model: body.model,
+      content: [{ type: "text", text }],
+      stop_reason: "end_turn",
+      stop_sequence: null,
+      usage,
+    }),
+  );
+}
+
 const server = http.createServer(async (req, res) => {
   const url = req.url ?? "";
   if (req.method === "GET" && url.includes("/formulas/") && url.endsWith("/tools")) {
@@ -432,7 +503,11 @@ const server = http.createServer(async (req, res) => {
     chatCompletion(body, res);
     return;
   }
+  if (url.includes("/messages")) {
+    anthropicMessage(body, res);
+    return;
+  }
   res.writeHead(404).end("not found");
 });
 
-server.listen(PORT, () => console.log(`mock kimi on :${PORT}`));
+server.listen(PORT, () => console.log(`mock kimi and claude on :${PORT}`));

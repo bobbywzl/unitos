@@ -4,7 +4,8 @@ import { z } from "zod";
 import { DEFAULT_EFFORT, type KimiEffort } from "@/lib/derive/config";
 import { outboundFetch } from "@/lib/outbound-fetch";
 
-// The Kimi client (SPEC.md §2): every model call in the app goes through here.
+// The Kimi client (SPEC.md §2): every model call but the import's goes through
+// here (the import's client is lib/claude.ts).
 // Moonshot AI's API is OpenAI-compatible; the AI SDK's Moonshot provider speaks
 // it. The key is MOONSHOT_API_KEY. MOONSHOT_BASE_URL points a local run at a
 // stand-in server (scripts/qa) or at the China platform

@@ -8,7 +8,7 @@ import { renderBlockLines } from "@/lib/derive/context";
 import { callForJson } from "@/lib/derive/json-call";
 import type { Lang } from "@/lib/i18n/config";
 import { currentLang } from "@/lib/i18n/server";
-import { kimi, kimiConfigured } from "@/lib/kimi";
+import { kimi, kimiConfigured, kimiOptions } from "@/lib/kimi";
 import { connectPrompt } from "@/lib/prompts/connect";
 
 // Recommended links (SPEC.md §13): when a document joins a corpus, scan it
@@ -125,6 +125,7 @@ export async function buildConnections(
     model: kimi(CONNECT_MODEL),
     messages,
     maxOutputTokens: 24576,
+    providerOptions: kimiOptions(),
     schema: outputSchema,
     label: "CONNECT",
     usage: { userId, feature: "connect", model: CONNECT_MODEL },

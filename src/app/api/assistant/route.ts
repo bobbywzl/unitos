@@ -197,7 +197,7 @@ async function handle(req: Request, t: TFunc) {
     model,
     messages,
     maxOutputTokens,
-    effort: DERIVATION_EFFORT.SYNTHESIS,
+    providerOptions: kimiOptions(DERIVATION_EFFORT.SYNTHESIS),
     schema: issuesSchema,
     label: `assistant:${data.task}`,
     usage: usageMeta,

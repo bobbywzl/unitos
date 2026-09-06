@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { isAdmin } from "@/lib/admin-auth";
 import { authEnabled } from "@/lib/auth";
+import { claudeConfigured } from "@/lib/claude";
 import { kimiConfigured } from "@/lib/kimi";
 import { db } from "@/lib/db";
 import { serverT } from "@/lib/i18n/server";
@@ -43,6 +44,7 @@ export default async function AdminPage() {
   // here, not in reader Settings.
   const services: { label: string; description: string; set: boolean }[] = [
     { label: "MOONSHOT_API_KEY", description: t("admin.svcKimi"), set: kimiConfigured() },
+    { label: "ANTHROPIC_API_KEY", description: t("admin.svcClaude"), set: claudeConfigured() },
     { label: "SESSION_SECRET + provider", description: t("admin.svcSignIn"), set: authEnabled() },
     { label: "ADMIN_PASSWORD", description: t("admin.svcAdmin"), set: Boolean(process.env.ADMIN_PASSWORD) },
   ];

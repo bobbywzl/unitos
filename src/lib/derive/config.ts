@@ -2,16 +2,22 @@ import type { DerivationType } from "@prisma/client";
 import { isLang, LANG_COOKIE } from "@/lib/i18n/config";
 import { translate } from "@/lib/i18n/dictionaries";
 
-// The one model (SPEC.md §2): Kimi K3, Moonshot AI's flagship, behind every AI
-// feature. The client lives in lib/kimi.ts, not here: client components import
-// this file.
+// Two models (SPEC.md §2). Kimi K3, Moonshot AI's flagship, is behind every AI
+// feature but the import; Claude Fable 5.1, Anthropic's most capable model, is
+// the import's model (PARSE_MODEL below). The clients live in lib/kimi.ts and
+// lib/claude.ts, not here: client components import this file.
 export const KIMI_K3 = "kimi-k3";
+export const CLAUDE_FABLE_5_1 = "claude-fable-5-1";
 
 // Reasoning effort per call. Kimi K3 always reasons; "max" is its default and
 // its slowest. The reader's tools answer at "high"; ANALYZE reads a figure or
 // table at "max": a misread number is worse than a slow answer.
 export type KimiEffort = "low" | "high" | "max";
 export const DEFAULT_EFFORT: KimiEffort = "high";
+
+// Reasoning effort per Claude call. Claude Fable 5.1 always reasons; "max" is
+// its slowest and its most thorough.
+export type ClaudeEffort = "low" | "medium" | "high" | "xhigh" | "max";
 
 // Model per derivation type (SPEC.md §2). One place to change.
 export const DERIVATION_MODEL: Record<DerivationType, string> = {
@@ -75,12 +81,13 @@ export const CONNECT_MODEL = KIMI_K3;
 export const GIST_MODEL = KIMI_K3;
 export const GIST_EFFORT: KimiEffort = "low";
 
-// Upload and parse run on the same model as every other tool: what the parse
-// gets wrong, every later tool inherits. One constant for the upload
-// assistant's review and instruction check (SPEC.md §15), the URL core and
-// structure passes (SPEC.md §2), Import PDF's judgment, and conversion
-// (SPEC.md §16).
-export const PARSE_MODEL = KIMI_K3;
+// The import runs on the most capable model at its highest reasoning effort:
+// what the parse gets wrong, every later tool inherits. One constant for the
+// upload assistant's review and instruction check (SPEC.md §15), the URL core
+// and structure passes (SPEC.md §2), Import PDF's judgment, and conversion
+// (SPEC.md §16). The client is lib/claude.ts.
+export const PARSE_MODEL = CLAUDE_FABLE_5_1;
+export const PARSE_EFFORT: ClaudeEffort = "max";
 
 // The upload assistant's review and instruction check (SPEC.md §15). Not a
 // DerivationType — it runs before ingest, not through /api/derive.

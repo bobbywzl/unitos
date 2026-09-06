@@ -4,7 +4,7 @@ import { z } from "zod";
 import { UPLOAD_MODEL } from "@/lib/derive/config";
 import { callForJson } from "@/lib/derive/json-call";
 import { currentLang, serverT } from "@/lib/i18n/server";
-import { kimi, kimiConfigured } from "@/lib/kimi";
+import { claude, claudeConfigured, claudeOptions } from "@/lib/claude";
 import type { OnIngestProgress } from "@/lib/parse/ingest";
 import { pageEstimate, SPLIT_ASK_PAGES, splitPartCount } from "@/lib/parse/split";
 import { fetchPage } from "@/lib/parse/fetch-page";
@@ -204,7 +204,7 @@ export async function reviewUpload(
       : [],
     feasible: "",
   };
-  if (!kimiConfigured()) return review;
+  if (!claudeConfigured()) return review;
 
   onProgress?.("review");
   const prompt = uploadReviewPrompt({
@@ -225,9 +225,10 @@ export async function reviewUpload(
   });
   const messages: ModelMessage[] = [{ role: "user", content: prompt }];
   const result = await callForJson({
-    model: kimi(UPLOAD_MODEL),
+    model: claude(UPLOAD_MODEL),
     messages,
     maxOutputTokens: 24576,
+    providerOptions: claudeOptions(),
     schema: reviewSchema,
     label: "UPLOAD_REVIEW",
     usage: { userId, feature: "upload", model: UPLOAD_MODEL },
@@ -284,7 +285,7 @@ export async function checkInstructions(
       feasible: "",
     };
   }
-  if (!kimiConfigured()) {
+  if (!claudeConfigured()) {
     return {
       replies: [
         { instruction: instructions, willFollow: false, reply: t("api.instructionsUnchecked") },
@@ -298,9 +299,10 @@ export async function checkInstructions(
     { role: "user", content: uploadInstructionsPrompt({ lang, kind, instructions }) },
   ];
   const result = await callForJson({
-    model: kimi(UPLOAD_MODEL),
+    model: claude(UPLOAD_MODEL),
     messages,
     maxOutputTokens: 16384,
+    providerOptions: claudeOptions(),
     schema: checkSchema,
     label: "UPLOAD_INSTRUCTIONS",
     usage: { userId, feature: "upload", model: UPLOAD_MODEL },
