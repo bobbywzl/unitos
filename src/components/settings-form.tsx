@@ -1,9 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import Link from "next/link";
+import { Fragment, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { LangSwitcher } from "@/components/lang-switcher";
-import { useT } from "@/components/lang-provider";
+import { useLang, useT } from "@/components/lang-provider";
 import { PersonBadge } from "@/components/collab/person-badge";
+import type { AccountData } from "@/lib/account-data";
+import type { DriveAccess } from "@/lib/drive/types";
 import type { TKey } from "@/lib/i18n/dictionaries";
 import { PERSON_COLORS, personOf, type Person } from "@/lib/person";
 import { api } from "@/lib/api";
@@ -15,6 +18,10 @@ const THEMES: { value: Theme; label: TKey; description: TKey }[] = [
   { value: "dark", label: "settings.themeDark", description: "settings.themeDarkDesc" },
   { value: "system", label: "settings.themeSystem", description: "settings.themeSystemDesc" },
 ];
+
+// The operator's contact for deletion requests — the address the Privacy
+// Policy names (dict/legal.ts).
+const CONTACT_EMAIL = "robertwzl311@gmail.com";
 
 // Theme lives in localStorage; the layout script applies it on load. This store
 // keeps the selected card in sync without effects.
@@ -71,23 +78,35 @@ async function resizePicture(file: File): Promise<string> {
 
 const sectionTitle = "text-[11px] font-bold tracking-[0.08em] text-sand-600 uppercase";
 const fieldLabel = "text-xs text-sand-700";
+const primaryButton =
+  "shrink-0 rounded-full bg-clay px-4 py-1.5 text-xs font-semibold text-clay-fg hover:bg-clay-600";
+const secondaryButton =
+  "shrink-0 rounded-full border border-line px-4 py-1.5 text-xs font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40";
 
 // Settings: one Profile section (picture, name, symbol, color, background),
-// then Language and Theme. Changes save automatically.
+// Unitos Premium, Connections (sign-in and Google Drive), Your data (every
+// stored field and count about the account), then Language and Theme.
+// Changes save automatically.
 export function SettingsForm({
   account,
   background,
   premium,
   drive,
+  data,
 }: {
   // The signed-in account; null = sign-in off (single-reader mode).
   account: (Person & { email: string; storedSymbol: string; storedColor: string }) | null;
   background: string;
   premium: boolean;
-  // Link Google Drive (SPEC.md §14); null = Drive linking not available.
-  drive: { linked: boolean; canLink: boolean } | null;
+  // Google Drive under Connections (SPEC.md §14): access is what a link asks
+  // for, grant what this account's stored grant reaches. null = Drive linking
+  // not available.
+  drive: { linked: boolean; canLink: boolean; access: DriveAccess; grant: DriveAccess | null } | null;
+  // Your data: what Unitos holds about this account (lib/account-data.ts).
+  data: AccountData;
 }) {
   const t = useT();
+  const lang = useLang();
   const theme = useSyncExternalStore(subscribeTheme, readTheme, () => "system");
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -98,7 +117,9 @@ export function SettingsForm({
   const [backgroundText, setBackgroundText] = useState(background);
   const [status, setStatus] = useState<"idle" | "saving" | "saved">("idle");
   const [error, setError] = useState<string | null>(null);
-  const [driveLinked, setDriveLinked] = useState(drive?.linked ?? false);
+  // What the stored Drive grant reaches; null = not linked. The page renders
+  // after the link callback, so this starts current.
+  const [driveGrant, setDriveGrant] = useState<DriveAccess | null>(drive?.grant ?? null);
   const [driveBusy, setDriveBusy] = useState(false);
   // Back from Link Google Drive: ?drive=linked or ?drive=link-failed says how
   // it went; the param leaves the URL so a reload does not repeat the notice.
@@ -108,7 +129,6 @@ export function SettingsForm({
     if (!result) return;
     /* eslint-disable react-hooks/set-state-in-effect */
     setDriveNotice(result === "linked" ? t("panes.driveLinked") : t("panes.driveAuthFailed"));
-    if (result === "linked") setDriveLinked(true);
     /* eslint-enable react-hooks/set-state-in-effect */
     window.history.replaceState(null, "", window.location.pathname);
   }, [t]);
@@ -187,7 +207,8 @@ export function SettingsForm({
     setDriveBusy(true);
     try {
       await api("/api/drive/link", "DELETE");
-      setDriveLinked(false);
+      setDriveGrant(null);
+      setDriveNotice(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : t("common.requestFailed"));
     } finally {
@@ -199,6 +220,92 @@ export function SettingsForm({
   const preview = account
     ? personOf({ id: account.id, name: name.trim() || account.name, symbol, color, picture })
     : null;
+
+  // The Google Drive row's text: the stored grant's access, or what a link
+  // would ask for.
+  const driveText = !drive
+    ? ""
+    : driveGrant === "all"
+      ? t("settings.driveLinkedAll")
+      : driveGrant === "picked"
+        ? t("settings.driveLinkedPicked")
+        : drive.access === "all"
+          ? t("settings.driveDescAll")
+          : t("settings.driveDescPicked");
+
+  // Dates in the reader's language, UTC on both server and client so the
+  // first render matches.
+  const fmtDate = (iso: string) =>
+    new Date(iso).toLocaleDateString(lang === "zh" ? "zh-CN" : "en-GB", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+      timeZone: "UTC",
+    });
+  const storedOrNone = (stored: boolean) => t(stored ? "settings.dataStored" : "settings.dataNone");
+
+  // Your data: one row per stored fact — what is held, and a line on what it
+  // is for where the label alone does not say.
+  const rows: { label: TKey; value: string; desc?: TKey }[] = [
+    ...(account
+      ? [
+          { label: "settings.dataEmail" as const, value: account.email },
+          { label: "settings.dataName" as const, value: name.trim() || account.name },
+          { label: "settings.dataPicture" as const, value: storedOrNone(Boolean(picture)) },
+          {
+            label: "settings.dataPassword" as const,
+            value: t(data.passwordSet ? "settings.passwordSet" : "settings.passwordNone"),
+          },
+          ...(data.createdAt
+            ? [{ label: "settings.dataCreated" as const, value: fmtDate(data.createdAt) }]
+            : []),
+          ...(data.lastSeenAt
+            ? [
+                {
+                  label: "settings.dataLastSeen" as const,
+                  value: fmtDate(data.lastSeenAt),
+                  desc: "settings.dataLastSeenDesc" as const,
+                },
+              ]
+            : []),
+          {
+            label: "settings.dataSessions" as const,
+            value: String(data.sessions),
+            desc: "settings.dataSessionsDesc" as const,
+          },
+        ]
+      : []),
+    {
+      label: "settings.dataBackground",
+      value: storedOrNone(backgroundText.trim().length > 0),
+      desc: "settings.dataBackgroundDesc",
+    },
+    { label: "settings.dataProjects", value: String(data.projects) },
+    { label: "settings.dataDocuments", value: String(data.documents), desc: "settings.dataDocumentsDesc" },
+    { label: "settings.dataNotes", value: String(data.notes) },
+    { label: "settings.dataDigests", value: String(data.digests), desc: "settings.dataDigestsDesc" },
+    { label: "settings.dataClicks", value: String(data.clicks), desc: "settings.dataClicksDesc" },
+    { label: "settings.dataUsage", value: String(data.usage), desc: "settings.dataUsageDesc" },
+    { label: "settings.dataFeedback", value: String(data.feedback), desc: "settings.dataFeedbackDesc" },
+    { label: "settings.dataNotifications", value: String(data.notifications) },
+    ...(drive
+      ? [
+          {
+            label: "settings.drive" as const,
+            value: t(
+              driveGrant === "all"
+                ? "settings.dataDriveAll"
+                : driveGrant === "picked"
+                  ? "settings.dataDrivePicked"
+                  : "settings.dataDriveNone",
+            ),
+            desc: "settings.dataDriveDesc" as const,
+          },
+        ]
+      : []),
+    { label: "settings.dataBrowser", value: t("settings.dataBrowserValue") },
+    { label: "settings.dataLogs", value: t("settings.dataLogsValue") },
+  ];
 
   return (
     <div className="space-y-10">
@@ -338,35 +445,87 @@ export function SettingsForm({
         </p>
       </section>
 
-      {drive && (
-        <section className="space-y-3">
-          <h2 className={sectionTitle}>{t("settings.drive")}</h2>
-          <div className="flex items-center gap-3 rounded-2xl bg-card p-5 shadow-soft">
-            <p className="text-xs text-sand-600">
-              {driveLinked ? t("settings.driveLinkedDesc") : t("settings.driveDesc")}
-              {driveNotice && (
-                <span className="mt-1 block font-semibold text-clay-800">{driveNotice}</span>
-              )}
+      <section className="space-y-3">
+        <h2 className={sectionTitle}>{t("settings.connections")}</h2>
+        <div className="space-y-4 rounded-2xl bg-card p-5 shadow-soft">
+          <p className="text-xs text-sand-600">{t("settings.connectionsDesc")}</p>
+          {account && (
+            <div className="border-t border-line pt-4 text-xs">
+              <div className="font-semibold text-sand-800">{t("settings.signIn")}</div>
+              <p className="mt-0.5 text-sand-600">
+                {t("settings.signInDesc", {
+                  email: account.email,
+                  password: t(data.passwordSet ? "settings.passwordSet" : "settings.passwordNone"),
+                })}
+              </p>
+            </div>
+          )}
+          {drive && (
+            <div className="flex items-center gap-3 border-t border-line pt-4 text-xs">
+              <div className="min-w-0">
+                <div className="font-semibold text-sand-800">{t("settings.drive")}</div>
+                <p className="mt-0.5 text-sand-600">
+                  {driveText}
+                  {driveNotice && (
+                    <span className="mt-1 block font-semibold text-clay-800">{driveNotice}</span>
+                  )}
+                </p>
+              </div>
+              <div className="ml-auto flex shrink-0 items-center gap-2">
+                {driveGrant === "picked" && drive.access === "all" && drive.canLink && (
+                  <a href="/api/drive/link?next=/settings" className={primaryButton}>
+                    {t("settings.driveRelink")}
+                  </a>
+                )}
+                {driveGrant ? (
+                  <button
+                    onClick={() => void unlinkDrive()}
+                    disabled={driveBusy}
+                    className={secondaryButton}
+                  >
+                    {t("settings.driveUnlink")}
+                  </button>
+                ) : drive.canLink ? (
+                  <a href="/api/drive/link?next=/settings" className={primaryButton}>
+                    {t("settings.driveLink")}
+                  </a>
+                ) : null}
+              </div>
+            </div>
+          )}
+          {!account && !drive && (
+            <p className="border-t border-line pt-4 text-xs text-sand-600">
+              {t("settings.connectionsNone")}
             </p>
-            {driveLinked ? (
-              <button
-                onClick={() => void unlinkDrive()}
-                disabled={driveBusy}
-                className="ml-auto shrink-0 rounded-full border border-line px-4 py-1.5 text-xs font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40"
-              >
-                {t("settings.driveUnlink")}
-              </button>
-            ) : drive.canLink ? (
-              <a
-                href="/api/drive/link?next=/settings"
-                className="ml-auto shrink-0 rounded-full bg-clay px-4 py-1.5 text-xs font-semibold text-clay-fg hover:bg-clay-600"
-              >
-                {t("settings.driveLink")}
-              </a>
-            ) : null}
-          </div>
-        </section>
-      )}
+          )}
+        </div>
+      </section>
+
+      <section className="space-y-3">
+        <h2 className={sectionTitle}>{t("settings.data")}</h2>
+        <div className="space-y-4 rounded-2xl bg-card p-5 shadow-soft">
+          <p className="text-xs text-sand-600">
+            {t("settings.dataDesc")}{" "}
+            <Link href="/privacy" className="underline hover:text-clay-800">
+              {t("legal.privacyTitle")}
+            </Link>
+          </p>
+          <dl className="grid grid-cols-[minmax(0,10rem)_minmax(0,1fr)] gap-x-4 gap-y-2.5 border-t border-line pt-4 text-xs">
+            {rows.map((row) => (
+              <Fragment key={row.label}>
+                <dt className="text-sand-700">{t(row.label)}</dt>
+                <dd className="min-w-0 text-sand-800">
+                  <span className="break-words">{row.value}</span>
+                  {row.desc && <span className="block text-sand-500">{t(row.desc)}</span>}
+                </dd>
+              </Fragment>
+            ))}
+          </dl>
+          <p className="border-t border-line pt-4 text-[11px] text-sand-500">
+            {t("settings.dataDelete", { email: CONTACT_EMAIL })}
+          </p>
+        </div>
+      </section>
 
       <section className="space-y-3">
         <h2 className={sectionTitle}>{t("settings.language")}</h2>

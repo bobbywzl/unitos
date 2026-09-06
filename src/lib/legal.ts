@@ -18,10 +18,12 @@ export const PRIVACY_SECTIONS: LegalSection[] = [
       {
         ul: [
           "legal.pCollectAccount",
+          "legal.pCollectDrive",
           "legal.pCollectContent",
           "legal.pCollectContext",
           "legal.pCollectPrefs",
           "legal.pCollectFeedback",
+          "legal.pCollectUsage",
           "legal.pCollectLogs",
         ],
       },
