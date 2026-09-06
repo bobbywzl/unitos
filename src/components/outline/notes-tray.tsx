@@ -10,7 +10,7 @@ import { useT } from "@/components/lang-provider";
 import { CollapsedViewToggle } from "@/components/collapsed-view-toggle";
 import { SortableItem, SortableList } from "@/components/sortable";
 import { NoteCard } from "@/components/outline/note-card";
-import { NoteEditor } from "@/components/outline/note-editor";
+import { NoteComposer } from "@/components/outline/note-composer";
 import { VoiceNoteButton } from "@/components/outline/voice-note";
 import { Collapse } from "@/components/presence";
 import { SelectionBar } from "@/components/outline/selection-bar";
@@ -114,10 +114,15 @@ function TraySection({
   const { canEdit } = useCollab();
   const [collapsed, setCollapsed] = useState(false);
   const [composing, setComposing] = useState(false);
-  const [draft, setDraft] = useState("");
+  // The note the open composer created: it shows in the composer, not as a card.
+  const [ownedId, setOwnedId] = useState<string | null>(null);
   const [voiceError, setVoiceError] = useState<string | null>(null);
-  const accepted = section.notes.filter((n) => n.status !== "PENDING");
+  const accepted = section.notes.filter((n) => n.status !== "PENDING" && n.id !== ownedId);
   const grips = reorderable && canEdit;
+  // The section's controls: always visible and large enough to press on a
+  // touch screen — a control that shows on hover has no hover to show on.
+  const control =
+    "rounded-full px-2 py-0.5 text-[12px] font-bold text-sand-700 hover:bg-clay-100 hover:text-clay-800";
 
   // Reorder by the grip (SPEC.md §6). The list shows the accepted notes; the
   // drop lands the note where the note under the pointer sits in the whole
@@ -134,7 +139,11 @@ function TraySection({
     <div className={`group/section flex flex-col gap-2 ${nested ? "pl-3" : ""}`}>
       <div className="flex items-baseline gap-2">
         <button
-          onClick={() => setCollapsed(!collapsed)}
+          onClick={() => {
+            // Collapsing closes the composer; its flush saves what was typed.
+            if (!collapsed) setComposing(false);
+            setCollapsed(!collapsed);
+          }}
           data-track="section-collapse"
           aria-expanded={!collapsed}
           data-tip={t("outline.collapseSectionTitle")}
@@ -151,17 +160,13 @@ function TraySection({
             onClick={() => setComposing(true)}
             data-track="section-add-note"
             data-tip={t("outline.addNoteTitle")}
-            className="ml-auto text-[11px] text-sand-600 opacity-0 transition-opacity group-hover/section:opacity-100 focus-visible:opacity-100 hover:text-clay-700"
+            className={`ml-auto ${control}`}
           >
             {t("outline.addNoteBtn")}
           </button>
         )}
         {!collapsed && canEdit && (
-          <VoiceNoteButton
-            sectionId={section.id}
-            onError={setVoiceError}
-            className="text-[11px] text-sand-600 opacity-0 transition-opacity group-hover/section:opacity-100 focus-visible:opacity-100 hover:text-clay-700"
-          />
+          <VoiceNoteButton sectionId={section.id} onError={setVoiceError} className={control} />
         )}
       </div>
       {voiceError && <p className="text-xs text-red-500">{voiceError}</p>}
@@ -185,45 +190,13 @@ function TraySection({
           </SortableList>
 
           {composing && (
-            <form
-              onSubmit={async (e) => {
-                e.preventDefault();
-                const trimmed = draft.trim();
-                if (!trimmed) return;
-                await actions.addNote(section.id, trimmed);
-                setDraft("");
-                setComposing(false);
-              }}
-            >
-              <NoteEditor
-                className="rounded-2xl bg-card p-3 shadow-soft"
-                value={draft}
-                onChange={setDraft}
-                onKeyDown={(e) => {
-                  if (isImeKey(e)) return;
-                  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) e.currentTarget.closest("form")?.requestSubmit();
-                  if (e.key === "Escape") setComposing(false);
-                }}
-                placeholder={t("outline.writeNotePlaceholder")}
-              />
-              <div className="mt-2 flex gap-2">
-                <button
-                  type="submit"
-                  data-track="note-compose-save"
-                  className="rounded-full bg-sage-600 px-3.5 py-1 text-xs font-semibold text-sage-fg hover:bg-sage-700"
-                >
-                  {t("common.save")}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setComposing(false)}
-                  data-track="note-compose-cancel"
-                  className="rounded-full border border-line px-3 py-1 text-xs text-sand-700 hover:bg-clay-100 hover:text-clay-800"
-                >
-                  {t("common.cancel")}
-                </button>
-              </div>
-            </form>
+            <NoteComposer
+              sectionId={section.id}
+              actions={actions}
+              onOwn={setOwnedId}
+              onClose={() => setComposing(false)}
+              className="rounded-2xl bg-card p-3 shadow-soft"
+            />
           )}
 
           {section.children.map((child) => (
