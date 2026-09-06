@@ -47,7 +47,9 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ noteId: strin
     await db.note.update({
       where: { id: noteId },
       data: {
-        ...(data.content !== undefined ? { content: data.content } : {}),
+        // A content edit clears the gist; the next collapsed render asks for a
+        // new one (SPEC.md §6).
+        ...(data.content !== undefined ? { content: data.content, gist: null } : {}),
         ...(data.status !== undefined ? { status: data.status } : {}),
         ...(data.color !== undefined ? { color: data.color } : {}),
         ...(data.pinned !== undefined ? { pinned: data.pinned } : {}),

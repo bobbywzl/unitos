@@ -26,3 +26,17 @@ export function markdownPreview(text: string): string {
     .replace(IMAGE, "$1");
   return visibleText(parseNote(source)).replace(/\s+/g, " ").trim();
 }
+
+// The first words of a line that fit in max characters, cut at a word
+// boundary: a document title in a pill or a select, a note's first words
+// before its gist arrives. No ellipsis — a cut line reads as words, and the
+// full text is one hover away (SPEC.md §6). Text without spaces (Chinese) is
+// cut at max.
+export function clipWords(text: string, max: number): string {
+  const line = text.replace(/\s+/g, " ").trim();
+  if (line.length <= max) return line;
+  const head = line.slice(0, max + 1);
+  const space = head.lastIndexOf(" ");
+  const cut = space > max / 2 ? head.slice(0, space) : line.slice(0, max);
+  return cut.replace(/[\s,;:—–-]+$/, "");
+}

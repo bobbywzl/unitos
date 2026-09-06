@@ -12,6 +12,7 @@ import { isImeKey } from "@/lib/ime";
 import { useCollab } from "@/components/collab/collab-context";
 import { ChevronDownIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
+import { clipWords } from "@/lib/markdown-preview";
 import { Logo } from "@/components/logo";
 import { Collapse, Presence } from "@/components/presence";
 import { LoadingDots, ThinkingIndicator } from "@/components/thinking";
@@ -645,9 +646,9 @@ export function DocumentBar({
             aria-expanded={listOpen}
             aria-label={t("panes.documentList")}
             data-tip={active?.title ?? t("panes.documentList")}
-            className="flex max-w-72 min-w-0 items-center gap-1.5 rounded-full bg-ink py-[7px] pr-3 pl-[15px] text-[13px] font-semibold text-paper"
+            className="flex max-w-[min(50vw,32rem)] min-w-0 items-center gap-1.5 rounded-full bg-ink py-[7px] pr-3 pl-[15px] text-[13px] font-semibold text-paper"
           >
-            <span className="truncate">{active ? active.title : t("panes.documentList")}</span>
+            <span className="overflow-hidden whitespace-nowrap">{active ? clipWords(active.title, 56) : t("panes.documentList")}</span>
             <span className="shrink-0 rounded-full bg-paper/20 px-1.5 text-[11px] tabular-nums">
               {opening ? <LoadingDots /> : documents.length}
             </span>
@@ -672,14 +673,14 @@ export function DocumentBar({
                       }}
                       data-track="document-open"
                       data-active-row={d.id === activeId || undefined}
-                      className={`min-w-0 flex-1 truncate px-4 py-2 text-left text-[13px] ${
+                      className={`min-w-0 flex-1 overflow-hidden px-4 py-2 text-left text-[13px] whitespace-nowrap ${
                         d.id === activeId
                           ? "font-semibold text-ink"
                           : "text-sand-700 hover:bg-clay-100 hover:text-clay-800"
                       }`}
                       data-tip={d.title}
                     >
-                      {d.title}
+                      {clipWords(d.title, 44)}
                     </button>
                     <button
                       onClick={() => setPillMenu(pillMenu === d.id ? null : d.id)}

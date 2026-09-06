@@ -4,6 +4,7 @@ import { documentAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
 import { buildGlossary, glossaryEntries, glossaryInLanguage, lacksDefinitionsIn } from "@/lib/glossary";
 import { currentLang, serverT } from "@/lib/i18n/server";
+import { kimiConfigured } from "@/lib/kimi";
 
 export const maxDuration = 120;
 
@@ -16,7 +17,7 @@ const bodySchema = z.object({ lang: z.enum(["en", "zh"]).optional() });
 // model call writes them. Definitions already in lang: no model call.
 export async function POST(req: Request, ctx: { params: Promise<{ documentId: string }> }) {
   const t = await serverT();
-  if (!process.env.ANTHROPIC_API_KEY) {
+  if (!kimiConfigured()) {
     return NextResponse.json({ error: t("api.glossaryNeedsKey") }, { status: 503 });
   }
   const { documentId } = await ctx.params;

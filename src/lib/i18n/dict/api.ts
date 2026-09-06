@@ -55,7 +55,7 @@ const en = {
   noVideoBlock: "This document has no video block",
 
   // Assistant
-  assistantNeedsKey: "ANTHROPIC_API_KEY is not set. The assistant needs it.",
+  assistantNeedsKey: "MOONSHOT_API_KEY is not set. The assistant needs it.",
   assistantFailed: "The assistant failed. {reason}",
   taskCorpusScope: "This task runs at Project scope",
   questionRequired: "Question is required",
@@ -69,7 +69,7 @@ const en = {
   warnLinkTargetNotAttached: "Skipped: the link target is not another attached document. ({description})",
 
   // Derivations
-  deriveNeedsKey: "ANTHROPIC_API_KEY is not set. Derivations need it.",
+  deriveNeedsKey: "MOONSHOT_API_KEY is not set. Derivations need it.",
   typeNotBuilt: "{type} is not built yet",
   typeRequiresAnchor: "{type} requires an anchor",
   findRequiresQuery: "FIND requires a query",
@@ -102,7 +102,6 @@ const en = {
   askRequiresRangeAndQuestion: "ASK requires a time range and a question",
   voiceNoteNeedsKey: "GROQ_API_KEY, OPENAI_API_KEY, or GEMINI_API_KEY is not set. Voice notes need one.",
   translateNeedsKey: "DEEPL_API_KEY is not set. Translation needs it.",
-  webSources: "Web sources",
   translateNothing: "This document has no text to translate",
   translateFailed: "Translation failed. {reason}",
   voiceNoteNotAudio: "The recording is not audio",
@@ -152,7 +151,7 @@ const en = {
   fetchUnreachable: "{host} could not be reached. Check the link.",
   fetchArchivedCopy: "{host} refused the request. Reading the archived copy…",
   notesCiteDocument: "Notes cite this document. Delete those notes first.",
-  glossaryNeedsKey: "ANTHROPIC_API_KEY is not set. Glossary extraction needs it.",
+  glossaryNeedsKey: "MOONSHOT_API_KEY is not set. Glossary extraction needs it.",
   glossaryFailed: "Glossary extraction failed",
   videoNoReparse: "Video documents do not re-parse",
   shapeSwitchNeedsPdf: "This document has no stored PDF to switch from",
@@ -184,7 +183,7 @@ const en = {
   driveFetchFailed: "This Drive file did not load. It may be private, removed, or no longer accessible.",
   driveNotLinked: "Google Drive is not linked",
   driveTokenMintFailed: "Google Drive did not issue a token. Try again.",
-  driveLinkUseDrive: "This is a Google Drive link. Use Add from Google Drive.",
+  driveLinkUseDrive: "This is a Google Drive link. Use the Google Drive tab.",
 
   // Video playback and frames
   videoPlaysFromYouTube: "This video plays from YouTube",
@@ -284,7 +283,7 @@ const zh: Record<keyof typeof en, string> = {
   noVideo: "此文档没有视频",
   noVideoBlock: "此文档没有视频块",
 
-  assistantNeedsKey: "未设置 ANTHROPIC_API_KEY。助手需要它。",
+  assistantNeedsKey: "未设置 MOONSHOT_API_KEY。助手需要它。",
   assistantFailed: "助手请求失败。{reason}",
   taskCorpusScope: "此任务在项目范围运行",
   questionRequired: "请输入问题",
@@ -297,7 +296,7 @@ const zh: Record<keyof typeof en, string> = {
   warnOnlyTextEdited: "已跳过：只有文本块可以编辑。（{description}）",
   warnLinkTargetNotAttached: "已跳过：链接目标不是此项目中的另一个文档。（{description}）",
 
-  deriveNeedsKey: "未设置 ANTHROPIC_API_KEY。AI 生成需要它。",
+  deriveNeedsKey: "未设置 MOONSHOT_API_KEY。AI 生成需要它。",
   typeNotBuilt: "{type} 尚未实现",
   typeRequiresAnchor: "{type} 需要锚点",
   findRequiresQuery: "FIND 需要查询词",
@@ -328,7 +327,6 @@ const zh: Record<keyof typeof en, string> = {
   askRequiresRangeAndQuestion: "提问需要时间区间和问题",
   voiceNoteNeedsKey: "未设置 GROQ_API_KEY、OPENAI_API_KEY 或 GEMINI_API_KEY。语音笔记需要其一。",
   translateNeedsKey: "未设置 DEEPL_API_KEY。翻译需要它。",
-  webSources: "网络来源",
   translateNothing: "此文档没有可翻译的文本",
   translateFailed: "翻译失败。{reason}",
   voiceNoteNotAudio: "录音不是音频",
@@ -372,7 +370,7 @@ const zh: Record<keyof typeof en, string> = {
   fetchUnreachable: "无法连接 {host}。请检查链接。",
   fetchArchivedCopy: "{host} 拒绝了请求。正在读取存档副本……",
   notesCiteDocument: "有笔记引用此文档。请先删除这些笔记。",
-  glossaryNeedsKey: "未设置 ANTHROPIC_API_KEY。术语表生成需要它。",
+  glossaryNeedsKey: "未设置 MOONSHOT_API_KEY。术语表生成需要它。",
   glossaryFailed: "术语表生成失败",
   videoNoReparse: "视频文档不能重新解析",
   shapeSwitchNeedsPdf: "此文档没有存储的 PDF，无法切换",
@@ -398,7 +396,7 @@ const zh: Record<keyof typeof en, string> = {
   driveFetchFailed: "这个 Drive 文件无法加载。文件可能已设为私密、被删除，或已无法访问。",
   driveNotLinked: "Google Drive 未关联",
   driveTokenMintFailed: "Google Drive 未签发访问令牌。请重试。",
-  driveLinkUseDrive: "这是 Google Drive 链接。请使用“从 Google Drive 添加”。",
+  driveLinkUseDrive: "这是 Google Drive 链接。请使用“Google Drive”页签。",
 
   videoPlaysFromYouTube: "此视频从 YouTube 播放",
   noStoryboard: "此视频没有预览画面",

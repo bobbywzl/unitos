@@ -6,6 +6,9 @@ import { recordUsage, sdkTokens, type UsageMeta } from "@/lib/usage";
 
 type JsonCallResult<T> = { ok: true; data: T } | { ok: false; error: string };
 
+// The AI SDK's provider options, as generateText takes them.
+type ProviderOptions = NonNullable<Parameters<typeof generateText>[0]["providerOptions"]>;
+
 /** A model-call failure as a readable message. The route returns it to the
     client, so the toast shows the real reason, never a bare 500. */
 export function modelErrorMessage(err: unknown): string {
@@ -28,11 +31,15 @@ export async function callForJson<S extends z.ZodType>(params: {
   // Aborts the model call when the client disconnects (DISTILL passes the
   // request signal, so Cancel stops the generation, not just the response).
   abortSignal?: AbortSignal;
+  // The options of the model's client: kimiOptions(effort) for Kimi K3,
+  // claudeOptions() for Claude Fable 5.1 (lib/derive/config.ts).
+  providerOptions: ProviderOptions;
 }): Promise<JsonCallResult<z.infer<S>>> {
   const attempt = async (messages: ModelMessage[]) => {
     const result = await generateText({
       model: params.model,
       maxOutputTokens: params.maxOutputTokens,
+      providerOptions: params.providerOptions,
       allowSystemInMessages: true,
       messages,
       abortSignal: params.abortSignal,

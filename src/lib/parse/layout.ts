@@ -1,7 +1,7 @@
-import { anthropic } from "@ai-sdk/anthropic";
 import { JSDOM, VirtualConsole } from "jsdom";
 import type { ModelMessage } from "ai";
 import { z } from "zod";
+import { claude, claudeConfigured, claudeOptions } from "@/lib/claude";
 import { PARSE_MODEL } from "@/lib/derive/config";
 import { callForJson } from "@/lib/derive/json-call";
 import { isFigureCaption } from "@/lib/parse/figure-audit";
@@ -476,7 +476,7 @@ export async function layoutBlocks(input: {
   instructions?: string;
 }): Promise<{ blocks: ParsedBlock[]; font?: PageFont }> {
   const { blocks, title, pageHtml, url, instructions } = input;
-  if (!process.env.ANTHROPIC_API_KEY || !pageHtml || blocks.length < 3) return { blocks };
+  if (!claudeConfigured() || !pageHtml || blocks.length < 3) return { blocks };
   const digest = pageDigest(pageHtml, url);
   if (!digest) return { blocks };
   const listed = blocks.slice(0, MAX_LISTED_BLOCKS);
@@ -484,9 +484,10 @@ export async function layoutBlocks(input: {
     { role: "user", content: layoutPrompt(title, listed, digest, instructions) },
   ];
   const result = await callForJson({
-    model: anthropic(PARSE_MODEL),
+    model: claude(PARSE_MODEL),
     messages,
-    maxOutputTokens: 8192,
+    maxOutputTokens: 24576,
+    providerOptions: claudeOptions(),
     schema: layoutSchema,
     label: "INGEST_LAYOUT",
     usage: { userId: null, feature: "parse", model: PARSE_MODEL } satisfies UsageMeta,

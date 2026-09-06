@@ -3,7 +3,9 @@
 import { chromium } from "playwright-core";
 
 // Usage: node scripts/qa/ui-handwritten.mjs <notebookId> <documentId>
-// Expects the dev server on :3311 with the mock model (scripts/qa/mock-anthropic.mjs)
+// Expects the dev server on :3311 with the mock model (scripts/qa/mock-kimi.mjs;
+// conversion calls Claude, so set ANTHROPIC_API_KEY=mock
+// ANTHROPIC_BASE_URL=http://localhost:3399/v1 beside the Moonshot pair)
 // and a handwritten document that has converted text and two stored marks on
 // page 1 (one explain around 20-42% x, one comment lower).
 const [NB, DOC] = process.argv.slice(2);

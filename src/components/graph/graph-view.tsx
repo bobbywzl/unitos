@@ -5,6 +5,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import ReactFlow, {
   Background,
   Controls,
+  EdgeLabelRenderer,
   Handle,
   Position,
   ReactFlowProvider,
@@ -16,16 +17,18 @@ import ReactFlow, {
   type NodeProps,
 } from "reactflow";
 import "reactflow/dist/style.css";
-import type { GraphEdge, GraphNode } from "@/lib/types";
+import type { GraphEdge, GraphEdgeLink, GraphNode } from "@/lib/types";
 import { FilmIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
+import { clipWords } from "@/lib/markdown-preview";
 
 // The corpus graph (SPEC.md §13; the release-edu canvas patterns): documents
 // as nodes on a pan/zoom canvas, links between them as swept curves. The more
 // links between two documents, the thicker and bolder the curve; a pair held
 // together only by recommended links draws dashed (marching) until one is
 // accepted, and both its documents breathe. Hovering a node spotlights it,
-// its links, and its linked documents; hovering a curve spotlights the pair.
+// its links, and its linked documents; hovering a curve spotlights the pair
+// and lists its links at the curve; a click pins the list.
 // Nodes float in scattered on first open and settle into place. Clicking a
 // node opens that document.
 
@@ -45,9 +48,23 @@ type Spotlight = "base" | "lit" | "dim";
 
 type HoverState = { nodeId?: string; edgeId?: string } | null;
 
-const SpotlightContext = createContext<{ hover: HoverState; litIds: Set<string> | null }>({
+// The canvas state the nodes and curves read: the spotlight, the pinned
+// curve, and the handlers a curve's link list needs (it renders in the label
+// layer, off the curve, so its own hover has to keep the spotlight alive).
+const SpotlightContext = createContext<{
+  hover: HoverState;
+  litIds: Set<string> | null;
+  pinnedEdgeId: string | null;
+  hoverEdge: (edgeId: string) => void;
+  scheduleClear: () => void;
+  openLink: (link: GraphEdgeLink) => void;
+}>({
   hover: null,
   litIds: null,
+  pinnedEdgeId: null,
+  hoverEdge: () => {},
+  scheduleClear: () => {},
+  openLink: () => {},
 });
 
 type DocumentNodeData = {
@@ -61,6 +78,7 @@ type DocumentNodeData = {
 type LinkEdgeData = {
   count: number;
   recommendedOnly: boolean;
+  links: GraphEdgeLink[];
 };
 
 function DocumentNode({ id, data }: NodeProps<DocumentNodeData>) {
@@ -102,29 +120,52 @@ function DocumentNode({ id, data }: NodeProps<DocumentNodeData>) {
   );
 }
 
-// A swept curve between two documents (release-edu's branch edge), weight from
-// the pair's link count. Accepted links draw solid clay; a recommended-only
-// pair draws sand, dashed, dashes marching until a link is accepted.
+// The clay of a curve from the pair's link count, depth 0..1: one link a
+// light line, eight or more the deepest.
+function edgeTone(depth: number): string {
+  return `color-mix(in srgb, var(--clay-400) ${Math.round((1 - depth) * 100)}%, var(--clay-900))`;
+}
+
+// A swept curve between two documents (release-edu's branch edge), weight and
+// depth from the pair's link count: every link makes the curve wider and its
+// clay deeper, deepest at the middle (SPEC.md §13). Accepted links draw clay;
+// a recommended-only pair draws sand, dashed, dashes marching until a link is
+// accepted. Hovering the curve, or clicking it to pin, lists the pair's links
+// at the curve; each opens the reader on that link.
 function LinkEdge({ id, source, target, sourceX, sourceY, targetX, targetY, data }: EdgeProps<LinkEdgeData>) {
-  const { hover } = useContext(SpotlightContext);
+  const { hover, pinnedEdgeId, hoverEdge, scheduleClear, openLink } = useContext(SpotlightContext);
+  const t = useT();
   const lit = hover?.nodeId ? source === hover.nodeId || target === hover.nodeId : hover?.edgeId === id;
   const spotlight: Spotlight = hover === null ? "base" : lit ? "lit" : "dim";
   const count = data?.count ?? 1;
   const recommendedOnly = data?.recommendedOnly ?? false;
+  const links = data?.links ?? [];
+  const listOpen = links.length > 0 && (hover?.edgeId === id || pinnedEdgeId === id);
   const bow = seeded(id, 3) * 46 + (targetX - sourceX) * 0.14;
   const midX = (sourceX + targetX) / 2;
   const midY = (sourceY + targetY) / 2;
   const path = `M ${sourceX} ${sourceY} Q ${midX + bow} ${midY} ${targetX} ${targetY}`;
-  const width = Math.min(5, 1.4 + count * 0.7) + (spotlight === "lit" ? 0.8 : 0);
-  const opacity = spotlight === "dim" ? 0.07 : spotlight === "lit" ? 0.95 : recommendedOnly ? 0.45 : 0.6;
+  const depth = Math.min(1, Math.max(0, count - 1) / 7);
+  const width = 1.6 + depth * 6.4 + (spotlight === "lit" ? 0.8 : 0);
+  const opacity = spotlight === "dim" ? 0.07 : spotlight === "lit" ? 0.95 : recommendedOnly ? 0.45 : 0.7;
+  const gradientId = `edge-${id.replace(/[^a-zA-Z0-9]/g, "-")}`;
   const label = String(count);
   const pillWidth = 14 + label.length * 7;
   return (
     <g style={{ opacity, transition: "opacity 0.25s ease" }}>
+      {!recommendedOnly && (
+        <defs>
+          <linearGradient id={gradientId} gradientUnits="userSpaceOnUse" x1={sourceX} y1={sourceY} x2={targetX} y2={targetY}>
+            <stop offset="0" stopColor={edgeTone(depth * 0.55)} />
+            <stop offset="0.5" stopColor={edgeTone(depth)} />
+            <stop offset="1" stopColor={edgeTone(depth * 0.55)} />
+          </linearGradient>
+        </defs>
+      )}
       <path
         d={path}
         fill="none"
-        stroke={recommendedOnly ? "var(--sand-500)" : "var(--clay)"}
+        stroke={recommendedOnly ? "var(--sand-500)" : `url(#${gradientId})`}
         strokeLinecap="round"
         strokeDasharray={recommendedOnly ? "5 7" : undefined}
         className={recommendedOnly ? "graph-dash-march" : undefined}
@@ -140,6 +181,49 @@ function LinkEdge({ id, source, target, sourceX, sourceY, targetX, targetY, data
             {label}
           </text>
         </g>
+      )}
+      {listOpen && (
+        <EdgeLabelRenderer>
+          <div
+            onMouseEnter={() => hoverEdge(id)}
+            onMouseLeave={scheduleClear}
+            onClick={(e) => e.stopPropagation()}
+            data-track-surface="graph-links"
+            className="nodrag nopan menu-in absolute z-20 flex w-72 max-w-[calc(100vw-32px)] flex-col gap-0.5 rounded-2xl border border-line bg-card/95 p-2 shadow-float backdrop-blur-md"
+            style={{
+              transform: `translate(-50%, 0) translate(${midX + bow / 2}px, ${midY + 12}px)`,
+              pointerEvents: "all",
+            }}
+          >
+            <p className="px-2 pt-0.5 pb-1 text-[11px] font-bold tracking-[0.06em] text-sand-600 uppercase">
+              {count === 1 ? t("panes.graphPairLinkOne") : t("panes.graphPairLinks", { count })}
+            </p>
+            {links.map((l) => (
+              <button
+                key={l.id}
+                onClick={() => openLink(l)}
+                data-track="graph-link-open"
+                data-tip={t("panes.graphOpenLink")}
+                className="flex w-full flex-col items-start gap-0.5 rounded-xl px-2 py-1.5 text-left hover:bg-clay-100"
+              >
+                <span className="text-[12.5px] leading-snug font-semibold text-ink">
+                  {l.reason ?? clipWords(l.quotedText, 60)}
+                </span>
+                {l.reason && (
+                  <span className="text-[11px] leading-snug text-sand-600">{clipWords(l.quotedText, 60)}</span>
+                )}
+                {l.toQuotedText && (
+                  <span className="text-[11px] leading-snug text-sand-500">{clipWords(l.toQuotedText, 60)}</span>
+                )}
+                {l.recommended && (
+                  <span className="mt-0.5 rounded-full border border-dashed border-clay-300 px-2 text-[10.5px] font-semibold text-clay-700">
+                    {t("panes.graphLinkRecommended")}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+        </EdgeLabelRenderer>
       )}
     </g>
   );
@@ -209,7 +293,52 @@ function GraphCanvas({
   const phaseRef = useRef<"scatter" | "settle" | "done">("scatter");
   // Hand-dragged positions survive data refreshes and hover rebuilds.
   const draggedPos = useRef<Map<string, { x: number; y: number }>>(new Map());
-  const [hover, setHover] = useState<{ nodeId?: string; edgeId?: string } | null>(null);
+  const [hover, setHover] = useState<HoverState>(null);
+  // A curve's link list lives in the label layer, off the curve: the leave
+  // that fires on the way there waits a beat, and the list's own hover cancels
+  // it. A click on a curve pins its list until the pane is clicked.
+  const [pinnedEdgeId, setPinnedEdgeId] = useState<string | null>(null);
+  const clearTimer = useRef<number | null>(null);
+  const cancelClear = useCallback(() => {
+    if (clearTimer.current !== null) {
+      window.clearTimeout(clearTimer.current);
+      clearTimer.current = null;
+    }
+  }, []);
+  const scheduleClear = useCallback(() => {
+    cancelClear();
+    clearTimer.current = window.setTimeout(() => {
+      clearTimer.current = null;
+      setHover(null);
+    }, 160);
+  }, [cancelClear]);
+  const hoverEdge = useCallback(
+    (edgeId: string) => {
+      cancelClear();
+      setHover({ edgeId });
+    },
+    [cancelClear],
+  );
+  const hoverNode = useCallback(
+    (nodeId: string) => {
+      cancelClear();
+      setHover({ nodeId });
+    },
+    [cancelClear],
+  );
+  useEffect(() => cancelClear, [cancelClear]);
+  const openLink = useCallback(
+    (link: GraphEdgeLink) => {
+      router.push(`/n/${notebookId}?doc=${link.fromDocumentId}&link=${link.id}`);
+      onOpenDocument();
+    },
+    [router, notebookId, onOpenDocument],
+  );
+  // Nothing hovered: a pinned curve keeps its pair in the spotlight.
+  const shown = useMemo<HoverState>(
+    () => hover ?? (pinnedEdgeId ? { edgeId: pinnedEdgeId } : null),
+    [hover, pinnedEdgeId],
+  );
 
   const { adjacency, degree, breathing } = useMemo(() => {
     const adjacency = new Map<string, Set<string>>();
@@ -235,16 +364,16 @@ function GraphCanvas({
   // The hovered neighborhood: the node and its linked documents, or a curve's
   // two endpoints. Everything else dims.
   const litIds = useMemo(() => {
-    if (!hover) return null;
+    if (!shown) return null;
     const lit = new Set<string>();
-    if (hover.nodeId) {
-      lit.add(hover.nodeId);
-      for (const n of adjacency.get(hover.nodeId) ?? []) lit.add(n);
-    } else if (hover.edgeId) {
-      for (const id of hover.edgeId.split("|")) lit.add(id);
+    if (shown.nodeId) {
+      lit.add(shown.nodeId);
+      for (const n of adjacency.get(shown.nodeId) ?? []) lit.add(n);
+    } else if (shown.edgeId) {
+      for (const id of shown.edgeId.split("|")) lit.add(id);
     }
     return lit;
-  }, [hover, adjacency]);
+  }, [shown, adjacency]);
 
   useEffect(() => {
     const mk = (n: GraphNode, position: { x: number; y: number }): FlowNode<DocumentNodeData> => ({
@@ -309,12 +438,15 @@ function GraphCanvas({
         source: e.a,
         target: e.b,
         type: "link",
-        data: { count: e.accepted + e.recommended, recommendedOnly: e.accepted === 0 },
+        data: { count: e.accepted + e.recommended, recommendedOnly: e.accepted === 0, links: e.links },
       })),
     [edges],
   );
 
-  const spotlight = useMemo(() => ({ hover, litIds }), [hover, litIds]);
+  const spotlight = useMemo(
+    () => ({ hover: shown, litIds, pinnedEdgeId, hoverEdge, scheduleClear, openLink }),
+    [shown, litIds, pinnedEdgeId, hoverEdge, scheduleClear, openLink],
+  );
 
   const onNodeDragStop = useCallback((_: unknown, node: FlowNode) => {
     draggedPos.current.set(node.id, node.position);
@@ -334,16 +466,23 @@ function GraphCanvas({
           router.push(`/n/${notebookId}?doc=${node.id}`);
           onOpenDocument();
         }}
-        onNodeMouseEnter={(_, node) => setHover({ nodeId: node.id })}
-        onNodeMouseLeave={() => setHover(null)}
-        onEdgeMouseEnter={(_, edge) => setHover({ edgeId: edge.id })}
-        onEdgeMouseLeave={() => setHover(null)}
+        onNodeMouseEnter={(_, node) => hoverNode(node.id)}
+        onNodeMouseLeave={scheduleClear}
+        onEdgeMouseEnter={(_, edge) => hoverEdge(edge.id)}
+        onEdgeMouseLeave={scheduleClear}
+        onEdgeClick={(_, edge) => setPinnedEdgeId((pinned) => (pinned === edge.id ? null : edge.id))}
+        onPaneClick={(e) => {
+          if (e.target instanceof Element && e.target.classList.contains("react-flow__pane")) {
+            setPinnedEdgeId(null);
+          }
+        }}
         // An edge's mouse-leave is lost when the hovered edge re-renders. Node
         // and edge moves bubble here too, so clear the spotlight only when the
-        // pointer is on the pane itself — off every node and edge.
+        // pointer is on the pane itself — off every node and edge — after the
+        // same beat, so a move from a curve into its link list keeps the list.
         onPaneMouseMove={(e) => {
           if (e.target instanceof Element && e.target.classList.contains("react-flow__pane")) {
-            setHover((h) => (h ? null : h));
+            scheduleClear();
           }
         }}
         fitView
