@@ -307,7 +307,11 @@ const en = {
   // Graph (graph-overlay.tsx, graph-view.tsx)
   graph: "Graph",
   graphTitle: "The project as a graph: documents and the links between them",
-  graphHint: "Each node is a document; hover to spotlight its links. A thicker line means more links between two documents; dashed means recommended links awaiting acceptance — open Recommended links to accept or dismiss them. Drag to arrange; click a node to open it.",
+  graphHint: "Each node is a document; hover to spotlight its links. A thicker, deeper line means more links between two documents; hover or click a line to list them. Dashed means recommended links awaiting acceptance — open Recommended links to accept or dismiss them. Drag to arrange; click a node to open it.",
+  graphPairLinkOne: "1 link between these documents",
+  graphPairLinks: "{count} links between these documents",
+  graphOpenLink: "Open the reader at this link",
+  graphLinkRecommended: "Recommended link, not yet accepted",
   graphEmpty: "Attach at least two documents — the graph draws the links between them.",
   graphCounts: "{docs} documents · {links} link(s)",
 
@@ -628,7 +632,11 @@ const zh: Record<keyof typeof en, string> = {
 
   graph: "图谱",
   graphTitle: "项目图谱：文档与它们之间的链接",
-  graphHint: "每个节点是一个文档，悬停可聚焦它的链接。线越粗表示两个文档之间的链接越多；虚线是待接受的推荐链接——打开“推荐链接”即可接受或忽略。拖动可调整位置；点击节点打开文档。",
+  graphHint: "每个节点是一个文档，悬停可聚焦它的链接。线越粗、颜色越深，表示两个文档之间的链接越多；悬停或点击线可列出这些链接。虚线是待接受的推荐链接——打开“推荐链接”即可接受或忽略。拖动可调整位置；点击节点打开文档。",
+  graphPairLinkOne: "这两篇文档之间有 1 个链接",
+  graphPairLinks: "这两篇文档之间有 {count} 个链接",
+  graphOpenLink: "在阅读器中打开此链接",
+  graphLinkRecommended: "推荐链接，尚未接受",
   graphEmpty: "至少添加两个文档——图谱会画出它们之间的链接。",
   graphCounts: "{docs} 个文档 · {links} 条链接",
 

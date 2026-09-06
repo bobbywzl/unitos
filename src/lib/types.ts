@@ -264,13 +264,27 @@ export type GraphNode = {
   hasVideo: boolean;
 };
 
-/** One undirected pair of documents. Edge thickness scales with the total;
-    a pair connected only by recommended links draws dashed. */
+/** One link of a pair, listed when the pair's curve is hovered or pinned
+    (SPEC.md §13): its description — the reader's, or the AI's reason for a
+    recommended link — both quotes, and the end the reader lands on. */
+export type GraphEdgeLink = {
+  id: string;
+  fromDocumentId: string;
+  toDocumentId: string;
+  quotedText: string; // the from end
+  toQuotedText: string | null; // the to end; null = document-level
+  reason: string | null;
+  recommended: boolean;
+};
+
+/** One undirected pair of documents. Edge width and clay depth scale with
+    the total; a pair connected only by recommended links draws dashed. */
 export type GraphEdge = {
   a: string; // document id
   b: string; // document id
   accepted: number;
   recommended: number;
+  links: GraphEdgeLink[]; // accepted first, oldest first
 };
 
 /** One recommended link of the project, listed in the graph (SPEC.md §13):

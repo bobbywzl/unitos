@@ -962,15 +962,34 @@ export default async function NotebookPage(props: {
       fromDocumentId: { in: attached.map((d) => d.id) },
       toDocumentId: { in: attached.map((d) => d.id) },
     },
-    select: { fromDocumentId: true, toDocumentId: true, recommended: true },
+    // Accepted links first, then by age: the order the pair's list shows.
+    orderBy: [{ recommended: "asc" }, { createdAt: "asc" }],
+    select: {
+      id: true,
+      fromDocumentId: true,
+      toDocumentId: true,
+      recommended: true,
+      reason: true,
+      quotedText: true,
+      toQuotedText: true,
+    },
   });
   const edgeByPair = new Map<string, GraphEdge>();
   for (const link of graphLinks) {
     if (link.fromDocumentId === link.toDocumentId) continue;
     const [a, b] = [link.fromDocumentId, link.toDocumentId].sort();
-    const edge = edgeByPair.get(`${a}|${b}`) ?? { a, b, accepted: 0, recommended: 0 };
+    const edge = edgeByPair.get(`${a}|${b}`) ?? { a, b, accepted: 0, recommended: 0, links: [] };
     if (link.recommended) edge.recommended++;
     else edge.accepted++;
+    edge.links.push({
+      id: link.id,
+      fromDocumentId: link.fromDocumentId,
+      toDocumentId: link.toDocumentId,
+      quotedText: link.quotedText,
+      toQuotedText: link.toQuotedText,
+      reason: link.reason,
+      recommended: link.recommended,
+    });
     edgeByPair.set(`${a}|${b}`, edge);
   }
   const graphEdges = [...edgeByPair.values()];
