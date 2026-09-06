@@ -33,7 +33,7 @@ const en = {
   betaThanks:
     "Thank you for being here this early. Every project you build and every piece of feedback you send shapes what Unitos becomes.",
   betaFree:
-    "As our thanks, every beta account gets Unitos free and without limits for now: the whole notebook, and the Claude, Gemini, and Groq tokens it uses, at no cost to you.",
+    "As our thanks, every beta account gets Unitos free and without limits for now: the whole notebook, and the Kimi, Gemini, and Groq tokens it uses, at no cost to you.",
   betaSigned: "— The Unitos team",
   betaContinue: "Continue",
 
@@ -149,7 +149,7 @@ const zh: Record<keyof typeof en, string> = {
   betaTitle: "Unitos 正处于测试阶段",
   betaThanks: "感谢你这么早就来到这里。你建立的每个项目、发来的每条反馈，都在塑造 Unitos 的未来。",
   betaFree:
-    "作为感谢，目前每个测试账户都可以免费、不限量地使用 Unitos：整个笔记本，以及它所使用的 Claude、Gemini 和 Groq 的 token，全部免费。",
+    "作为感谢，目前每个测试账户都可以免费、不限量地使用 Unitos：整个笔记本，以及它所使用的 Kimi、Gemini 和 Groq 的 token，全部免费。",
   betaSigned: "——Unitos 团队",
   betaContinue: "继续",
 

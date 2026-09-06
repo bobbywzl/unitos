@@ -1,16 +1,21 @@
-import { anthropic } from "@ai-sdk/anthropic";
-import { streamText, type ModelMessage } from "ai";
+import { isStepCount, streamText, type ModelMessage } from "ai";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { authEnabled } from "@/lib/auth";
 import { notebookAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
-import { DERIVATION_MODEL, MAX_OUTPUT_TOKENS, STREAM_ERROR_TOKEN } from "@/lib/derive/config";
+import {
+  DERIVATION_EFFORT,
+  DERIVATION_MODEL,
+  MAX_OUTPUT_TOKENS,
+  STREAM_ERROR_TOKEN,
+} from "@/lib/derive/config";
 import { loadProfile } from "@/lib/derive/context";
 import { callForJson, modelErrorMessage } from "@/lib/derive/json-call";
 import { ensureAllDigests, ensureDigest } from "@/lib/digest/ensure";
 import { corporaSystem, corpusSystem } from "@/lib/digest/render";
 import { currentLang, serverT } from "@/lib/i18n/server";
+import { kimi, kimiConfigured, kimiOptions, WEB_SEARCH_TOOL, WEB_SEARCH_USD, webSearchTool } from "@/lib/kimi";
 import { computeCostUsd, recordUsage, sdkTokens } from "@/lib/usage";
 import type { TFunc } from "@/lib/i18n/dictionaries";
 import { synthesisAskPrompt, synthesisTaskPrompt } from "@/lib/prompts/synthesis";
@@ -31,8 +36,8 @@ const assistantSchema = z.object({
   web: z.boolean().optional(),
 });
 
-// Anthropic bills a web search on top of the tokens: $10 per 1,000 searches.
-const WEB_SEARCH_USD = 0.01;
+// Web access (SPEC.md §7): at most this many searches per answer, one step
+// each, then the answer.
 const WEB_SEARCH_MAX_USES = 5;
 
 const issuesSchema = z.object({
@@ -62,7 +67,7 @@ export async function POST(req: Request) {
 }
 
 async function handle(req: Request, t: TFunc) {
-  if (!process.env.ANTHROPIC_API_KEY) {
+  if (!kimiConfigured()) {
     return NextResponse.json({ error: t("api.assistantNeedsKey") }, { status: 503 });
   }
   const { data, error } = await parseBody(req, assistantSchema);
@@ -85,7 +90,7 @@ async function handle(req: Request, t: TFunc) {
   };
 
   const profile = await loadProfile(data.notebookId);
-  const model = anthropic(DERIVATION_MODEL.SYNTHESIS);
+  const model = kimi(DERIVATION_MODEL.SYNTHESIS);
   const maxOutputTokens = MAX_OUTPUT_TOKENS.SYNTHESIS;
 
   // The digest is the scope context: deterministic until the content changes,
@@ -111,7 +116,6 @@ async function handle(req: Request, t: TFunc) {
     {
       role: "system",
       content: system,
-      providerOptions: { anthropic: { cacheControl: { type: "ephemeral" } } },
     },
     {
       role: "user",
@@ -129,17 +133,23 @@ async function handle(req: Request, t: TFunc) {
   ];
 
   if (data.task === "ask") {
-    // Web access (SPEC.md §7): Anthropic's own search tool runs server-side;
-    // the answer streams as before, the sources it cites arrive as source
-    // parts, and the ones the model did not link itself are appended.
+    // Web access (SPEC.md §7): the model calls Moonshot's web-search tool
+    // (lib/kimi.ts), reads the result, and answers with the pages it used as
+    // links; the answer streams as before.
     const web = data.web === true;
     let searches = 0;
     const result = streamText({
       model,
       maxOutputTokens,
+      providerOptions: kimiOptions(DERIVATION_EFFORT.SYNTHESIS),
       allowSystemInMessages: true,
       messages,
-      ...(web ? { tools: { web_search: anthropic.tools.webSearch_20260209({ maxUses: WEB_SEARCH_MAX_USES }) } } : {}),
+      ...(web
+        ? {
+            tools: { [WEB_SEARCH_TOOL]: webSearchTool },
+            stopWhen: isStepCount(WEB_SEARCH_MAX_USES + 1),
+          }
+        : {}),
       // Stop aborts here too (SPEC.md §6): the client disconnecting stops the
       // model call, not just the response the client would have read.
       abortSignal: req.signal,
@@ -159,30 +169,14 @@ async function handle(req: Request, t: TFunc) {
     const stream = new ReadableStream<Uint8Array>({
       async start(controller) {
         try {
-          let text = "";
-          const sources = new Map<string, string>();
           for await (const part of result.fullStream) {
             if (part.type === "text-delta") {
-              text += part.text;
               controller.enqueue(encoder.encode(part.text));
-            } else if (part.type === "source" && part.sourceType === "url") {
-              if (!sources.has(part.url)) sources.set(part.url, part.title ?? part.url);
-            } else if (part.type === "tool-call" && part.toolName === "web_search") {
+            } else if (part.type === "tool-call" && part.toolName === WEB_SEARCH_TOOL) {
               searches++;
             } else if (part.type === "error") {
               throw part.error instanceof Error ? part.error : new Error(String(part.error));
             }
-          }
-          // Web sources the model read but did not link: listed after the
-          // answer, so every source that shaped it is on screen.
-          const unlisted = [...sources].filter(([url]) => !text.includes(url));
-          if (unlisted.length > 0) {
-            const heading = text.includes("Web sources") || text.includes("网络来源") ? "" : `\n\n**${t("api.webSources")}**\n`;
-            controller.enqueue(
-              encoder.encode(
-                heading + "\n" + unlisted.map(([url, title]) => `- [${title}](${url})`).join("\n"),
-              ),
-            );
           }
         } catch (err) {
           console.error("[assistant] stream error:", err);
@@ -203,6 +197,7 @@ async function handle(req: Request, t: TFunc) {
     model,
     messages,
     maxOutputTokens,
+    effort: DERIVATION_EFFORT.SYNTHESIS,
     schema: issuesSchema,
     label: `assistant:${data.task}`,
     usage: usageMeta,

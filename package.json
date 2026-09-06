@@ -13,7 +13,7 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "@ai-sdk/anthropic": "^4.0.36",
+    "@ai-sdk/moonshotai": "^3.0.45",
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
@@ -22,7 +22,7 @@
     "@prisma/client": "^6.19.3",
     "@tailwindcss/typography": "^0.5.20",
     "@types/katex": "^0.16.8",
-    "ai": "^7.0.58",
+    "ai": "^7.0.93",
     "docx": "^9.7.1",
     "jsdom": "^26.1.0",
     "katex": "^0.18.4",
