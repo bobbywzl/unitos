@@ -8,6 +8,7 @@ import { currentLang, serverT } from "@/lib/i18n/server";
 import type { OnIngestProgress } from "@/lib/parse/ingest";
 import { pageEstimate, SPLIT_ASK_PAGES, splitPartCount } from "@/lib/parse/split";
 import { fetchPage } from "@/lib/parse/fetch-page";
+import { renderIfNeeded } from "@/lib/parse/render-page";
 import { parseFetchedPage } from "@/lib/parse/url";
 import { uploadInstructionsPrompt } from "@/lib/prompts/upload-instructions";
 import { uploadReviewPrompt } from "@/lib/prompts/upload-review";
@@ -176,7 +177,9 @@ export async function reviewUpload(
   const t = await serverT();
 
   onProgress?.("fetch");
-  const page = await fetchPage(url, onProgress);
+  // The same page ingest would parse: a page whose figures its scripts draw
+  // renders in a browser first, where one is configured (lib/parse/render-page.ts).
+  const page = await renderIfNeeded(await fetchPage(url, onProgress), url, onProgress);
   onProgress?.("extract");
   const parsed = await parseFetchedPage(page, url);
   const links = page.kind === "html" ? harvestLinks(page.html, url) : [];
