@@ -10,7 +10,9 @@
 - `src/lib/glossary.ts`, `src/app/api/documents/[documentId]/glossary/route.ts`, `src/components/reader/glossary-language.tsx`, `src/app/n/[notebookId]/page.tsx`, the ingest routes (`documents`, `uploads/complete`, `drive/import`, `reparse`, `convert`), `src/lib/i18n/dict/api.ts`, `prisma/schema.prisma` (comment) — definitions written in the reader's language, one per language per entry, asked for once when a document opens in another language.
 - `src/lib/upload-assistant.ts`, `src/lib/prompts/upload-review.ts`, `src/components/reader/upload-assistant.tsx`, `src/components/reader/ingest-progress.tsx`, `src/lib/i18n/dict/panes.ts` — the figure check in the review, the prompt's figure and structure checks, the progress and done lines, the layout step.
 - `src/components/reader/add-document-dialog.tsx` — tab order URL, PDF or image, Video or audio, Google Drive, Library; opens on URL.
-- `SPEC.md` — §2 (three passes, the layout bake), §6 (layout tokens, figure rows, fonts, first open), §8 Phase 2 and Phase 7, §15 (figure check, tab order).
+- `src/lib/ndjson.ts`, `src/lib/ingest-response.ts`, `src/app/api/documents/[documentId]/reparse/route.ts`, `src/app/api/documents/route.ts`, `src/app/api/uploads/review/route.ts` — a heartbeat line on every ingest stream while a model pass reasons in silence; the re-parse route allows 300 s like the add; the add and the re-parse pass a model-pass deadline; the review's call stops at its route's limit.
+- `src/lib/parse/ingest.ts`, `src/lib/parse/structure.ts`, `src/lib/parse/layout.ts` — `modelPassDeadline`/`modelPassSignal`: each pass runs against the request's time budget and is skipped past it; the layout pass does the structure pass's work (retype and merge_up ops) so a URL makes two calls; the URL add renders script-drawn figures in a browser like the re-parse.
+- `SPEC.md` — §2 (two passes for a URL, the layout bake, the time budget, the heartbeat), §6 (layout tokens, figure rows, fonts, first open), §8 Phase 2 and Phase 7, §15 (figure check, tab order).
 
 **Decisions:**
 - Layout travels as class tokens on a text block's opening tag (`<p class="kicker center">`) and as inline widths inside figure html, not as a new column: no migration, and the reader reads what it already stores.
@@ -19,3 +21,6 @@
 - The browser render runs only where `BROWSER_WS_ENDPOINT` or `CHROMIUM_PATH` is set (the §11 browser); without one the caption stays, the audit reports it, and the upload assistant says so.
 - The glossary route translates existing definitions into the asked language with one call rather than rebuilding the glossary; terms are never translated.
 - The `.next` symlink that the merge worktree had staged is untracked again.
+- A pass past its time budget is skipped rather than the add failing: a document with the mechanical layout beats an error. The budget is the route's limit less 45 s, and a pass needs 20 s left to start.
+- The structure pass and the layout pass are one call for a URL; the structure pass alone stays for a PDF with upload instructions.
+- This branch's work was merged to main at the reader's instruction (PRs #5 and #6) before the round rules applied; from then on the branch is a worker branch and main is not touched.
