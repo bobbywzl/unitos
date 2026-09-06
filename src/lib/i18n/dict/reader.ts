@@ -213,6 +213,8 @@ const en = {
   linkAboutSaveTitle: "Save what this link is about. It shows on the link and in the Annotations tab.",
   linkSkip: "Skip",
   linkSkipTitle: "Keep the link without a description",
+  // The font picker's sans option (reader-interactions.tsx)
+  fontSans: "Sans",
 };
 
 const zh: Record<keyof typeof en, string> = {
@@ -417,6 +419,7 @@ const zh: Record<keyof typeof en, string> = {
   linkAboutSaveTitle: "保存链接说明。说明显示在链接上和批注页签中。",
   linkSkip: "跳过",
   linkSkipTitle: "保留链接，不加说明",
+  fontSans: "无衬线",
 };
 
 export const reader = { en, zh } as const;

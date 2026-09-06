@@ -842,6 +842,47 @@ ellipse.anchor-flash {
 .reader-table tbody tr:nth-child(even) td {
   background: color-mix(in srgb, var(--ink) 2.5%, transparent);
 }
+/* A figure's html is one <figure> (SPEC.md §6): media, captions, and for a
+   figure row one nested <figure> per captioned column. The children lay out
+   as a wrapping row centered in the column: a lone image is one row, two
+   charts at width:48% share a row, a nested column stacks its media over
+   its caption. An inline width from the page (style="width:48%", a percent
+   of the article column) wins over every width below — none is !important —
+   so the figure keeps the page's proportions. */
+.reader-figure > figure {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: center;
+  column-gap: 2%;
+  row-gap: 8px;
+  margin: 0;
+}
+.reader-figure > figure > p,
+.reader-figure > figure > figcaption {
+  flex-basis: 100%;
+}
+/* A row of columns has no flex gap: each column carries its gap inside, as
+   padding within its width, so three columns at width:33% fill one row. */
+.reader-figure > figure:has(> figure) {
+  column-gap: 0;
+}
+.reader-figure figure figure {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 0;
+  margin: 0;
+  padding: 0 1%;
+  box-sizing: border-box;
+}
+.reader-figure figure figure > img,
+.reader-figure figure figure > svg,
+.reader-figure figure figure > video,
+.reader-figure figure figure > p,
+.reader-figure figure figure > figcaption {
+  width: 100%;
+}
 .reader-figure img {
   /* A portrait photo that floated beside the text at half width would fill
      a screen at the column's width: cap the height, keep the ratio. */
@@ -849,24 +890,27 @@ ellipse.anchor-flash {
   max-height: 80vh;
   width: auto;
   height: auto;
+  min-width: 0;
+  object-fit: contain;
   border-radius: 10px;
 }
 .reader-figure svg {
   width: 100%;
+  max-width: 100%;
   height: auto;
+  min-width: 0;
   background: #ffffff;
   border-radius: 10px;
 }
 .reader-figure video {
   max-width: 100%;
+  height: auto;
+  min-width: 0;
   border-radius: 10px;
 }
-/* A gallery figure (many clips) lays out as a grid, not a stack. */
+/* A gallery figure (many clips) lays out three to a row. */
 .reader-figure video:not(:only-of-type) {
-  width: calc(33.33% - 4px);
-  display: inline-block;
-  vertical-align: top;
-  margin: 2px;
+  width: 32%;
 }
 .reader-figure iframe {
   width: 100%;
@@ -880,6 +924,9 @@ ellipse.anchor-flash {
   color: var(--sand-600);
   margin-top: 0.25rem;
 }
+.reader-figure .center {
+  text-align: center;
+}
 
 /* EQUATION blocks: KaTeX display math, scrollable when wide. */
 .equation-block .katex-display {
@@ -890,6 +937,96 @@ ellipse.anchor-flash {
 .reader-prose {
   font-size: 17px;
   line-height: 1.75;
+}
+
+/* A sans document (Document.font "sans": a page set in a sans face): the
+   body keeps the app's sans, and the headings, the title, and the title's
+   editor (document-title.tsx) leave the display face for the same sans.
+   Unlayered like the heading rule above, so it wins over it. */
+.reader-prose[data-font="sans"] :is(h1, h2, h3),
+.reader-prose[data-font="sans"] .reader-title-editor {
+  font-family: var(--font-figtree), system-ui, sans-serif;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+/* The masthead title (reader.tsx hasMasthead): centered, large and light,
+   the kicker above it and the meta line below. [data-font] is always set,
+   and lifts the rule over the sans weight. */
+.reader-prose[data-font] :is(h2, textarea).reader-masthead-title {
+  max-width: 712px;
+  margin-left: auto;
+  margin-right: auto;
+  font-size: 40px;
+  font-weight: 400;
+  line-height: 1.16;
+  text-align: center;
+}
+
+/* The contents list (a LIST block with the contents token, block-view.tsx):
+   no list padding, one entry per 32px line, a hairline under each line
+   drawn by a repeating gradient — no text node joins the block, so its DOM
+   text stays the stored text (SPEC.md §5). The entry labels ("01", "03.1")
+   are the parser's code spans, shown as plain mono, not chips. */
+.reader-contents {
+  font-size: 15px;
+  line-height: 32px;
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0 31px,
+    var(--line) 31px 32px
+  );
+}
+.reader-contents .code-mark {
+  background: none;
+  padding: 0;
+  font-size: 13px;
+  color: var(--sand-600);
+}
+
+/* The first-open reveal (reveal.tsx, SPEC.md §6). A waiting block is
+   invisible in its place; its turn runs one animation on its wrapper — a
+   text block unclips line by line (the script sets steps(n), one step per
+   line, and the length), a figure, a table, or a page fades in and rises —
+   then the wrapper keeps nothing. Reduced motion never hides a block;
+   neither does print. */
+@media (prefers-reduced-motion: no-preference) {
+  .reveal-wait {
+    opacity: 0;
+  }
+  .reveal-lines {
+    animation: reveal-lines 0.7s steps(8, end) both;
+  }
+  .reveal-rise {
+    animation: reveal-rise 0.32s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+}
+@keyframes reveal-lines {
+  from {
+    clip-path: inset(0 0 100% 0);
+    opacity: 1;
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+    opacity: 1;
+  }
+}
+@keyframes reveal-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@media print {
+  .reveal-wait,
+  .reveal-lines,
+  .reveal-rise {
+    opacity: 1;
+    animation: none;
+  }
 }
 
 /* The article column: 720px wide, centered in the pane; as wide as the pane

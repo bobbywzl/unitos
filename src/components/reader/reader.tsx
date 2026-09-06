@@ -1,12 +1,19 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { PlusIcon, RedoIcon, UndoIcon } from "@/components/icons";
 import { styleShortcut } from "@/lib/markdown-style";
 import { NOTE_WRAP_EVENT, type NoteWrapSpacer } from "@/lib/note-wrap";
 import { NoteWrapGap } from "@/components/reader/note-wrap-gap";
 import { useT } from "@/components/lang-provider";
-import { BlockView, type BlockData, type Highlight } from "@/components/reader/block-view";
+import {
+  BlockView,
+  layoutClass,
+  layoutTokens,
+  type BlockData,
+  type Highlight,
+} from "@/components/reader/block-view";
+import { Reveal, inactiveReveal, useReveal, type RevealKind } from "@/components/reader/reveal";
 import { TranslationLine } from "@/components/reader/translation-bar";
 import { useLang } from "@/components/lang-provider";
 import { CircleGlow } from "@/components/reader/circle-glow";
@@ -201,6 +208,9 @@ const FONT_STACK: Record<string, string | undefined> = {
   // Chinese glyphs, a poor long-form reading face.
   serif: "Georgia, 'Times New Roman', 'Songti SC', 'Noto Serif CJK SC', 'Source Han Serif SC', serif",
   mono: "ui-monospace, SFMono-Regular, Menlo, monospace",
+  // The body keeps the app's sans; the article's data-font moves the headings
+  // and the title into it too (globals.css).
+  sans: undefined,
 };
 
 type Kind = "paragraph" | "h1" | "h2" | "h3" | "list" | "numbered";
@@ -233,6 +243,18 @@ function blockKind(block: BlockData): Kind {
   if (block.type === "LIST") return /^\s*\d{1,3}[.)]\s/.test(block.text) ? "numbered" : "list";
   if (block.type !== "HEADING") return "paragraph";
   return `h${headingLevel(block.html)}` as Kind;
+}
+
+// A page's masthead (SPEC.md §6): a centered kicker or meta line opens the
+// document, or its first heading is centered. The title then renders
+// centered, large and light, the kicker above it and the meta line below.
+function hasMasthead(blocks: BlockData[]): boolean {
+  for (const block of blocks.slice(0, 2)) {
+    const tokens = layoutTokens(block.html);
+    if (tokens.has("center") && (tokens.has("kicker") || tokens.has("meta"))) return true;
+  }
+  const heading = blocks.find((b) => b.type === "HEADING");
+  return heading !== undefined && layoutTokens(heading.html).has("center");
 }
 
 // List markers live in the text ("- " / "N. ", two-space indents — the parser's
@@ -585,6 +607,17 @@ export function Reader({
     return () => window.removeEventListener(NOTE_WRAP_EVENT, onWrap);
   }, []);
 
+  // A first open reveals the blocks as the reader scrolls (reveal.tsx);
+  // reading mode only, never the transcript.
+  const reveal = useReveal(documentId, mode === "read" && !transcript);
+  const blockReveal = mode === "read" ? reveal : inactiveReveal;
+  const masthead = hasMasthead(blocks);
+  // A leading kicker renders above the title, still through BlockView.
+  const leadKicker =
+    blocks.length > 0 && TEXT_TYPES.has(blocks[0].type) && layoutTokens(blocks[0].html).has("kicker")
+      ? blocks[0]
+      : null;
+
   // Cmd/Ctrl+B, I, U while editing: the same styling the bar's B, I and U
   // apply, on the block the caret is in (lib/markdown-style.ts).
   function onStyleShortcut(e: React.KeyboardEvent<HTMLElement>) {
@@ -603,6 +636,94 @@ export function Reader({
         : " clear-right"
       : "";
 
+  // One block of the reading column. On a first open the reveal wrapper is a
+  // plain div (reveal.tsx); otherwise nothing wraps, so the layout is the same.
+  function renderBlock(block: BlockData, i: number) {
+    const kind: RevealKind = TEXT_TYPES.has(block.type) ? "text" : "object";
+    let node: React.ReactNode;
+    if (block.type === "PAGE" && pages && documentId) {
+      node = (
+        <div className={wrapClear(block.type).trim()}>
+          <PageBlock
+            documentId={documentId}
+            notebookId={pages.notebookId}
+            blockId={block.id}
+            text={block.text}
+            marks={pages.marksByBlock[block.id] ?? []}
+            canEdit={pages.canEdit && mode === "read"}
+            hint={i === firstPageIndex}
+          />
+          {i === lastPageIndex && (
+            <ConversionStrip
+              documentId={documentId}
+              conversion={pages.conversion}
+              hasText={hasTextBlocks}
+              canEdit={pages.canEdit}
+            />
+          )}
+        </div>
+      );
+    } else if (mode === "edit") {
+      node = (
+        <div className={`group/block${wrapClear(block.type)}`}>
+          {TEXT_TYPES.has(block.type) ? (
+            <EditableBlock
+              block={block}
+              text={effectiveText(block)}
+              kind={effectiveKind(block)}
+              spans={effectiveStyles(block)}
+              edited={editedByBlock[block.id] ?? []}
+              restoreSelectionRef={restoreSelectionRef}
+              pendingFocusRef={pendingFocusRef}
+              onSave={onSaveText}
+              onFocusBlock={setFocusedBlockId}
+            />
+          ) : (
+            <BlockView block={block} highlights={[]} documentId={documentId} />
+          )}
+          <div className="relative -my-1.5 h-3">
+            <button
+              onMouseDown={keep}
+              data-track="insert-paragraph"
+              onClick={() =>
+                void onInsertBlock(block.id).then((id) => {
+                  if (id) pendingFocusRef.current = id;
+                })
+              }
+              aria-label={t("panes.insertParagraphHere")}
+              data-tip={t("panes.insertParagraphHere")}
+              className="absolute top-1/2 left-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center gap-1 rounded-full bg-card px-2.5 py-0.5 text-[11px] font-semibold text-sand-600 opacity-0 shadow-soft transition-opacity hover:bg-clay-100 hover:text-clay-800 hover:opacity-100 focus-visible:opacity-100 group-hover/block:opacity-60"
+            >
+              <PlusIcon size={10} />
+              {t("panes.paragraphLower")}
+            </button>
+          </div>
+        </div>
+      );
+    } else if (WRAP_FLOW_TYPES.has(block.type)) {
+      node = (
+        <>
+          <BlockView block={block} highlights={highlightsByBlock[block.id]} documentId={documentId} />
+          {translationOf(block)}
+        </>
+      );
+    } else {
+      // The wrapper carries the clear; the block keeps its own margins,
+      // which collapse through it, so spacing does not change.
+      node = (
+        <div className={wrapClear(block.type).trim()}>
+          <BlockView block={block} highlights={highlightsByBlock[block.id]} documentId={documentId} />
+          {translationOf(block)}
+        </div>
+      );
+    }
+    return (
+      <Reveal key={block.id} reveal={blockReveal} id={block.id} order={i} kind={kind}>
+        {node}
+      </Reveal>
+    );
+  }
+
   // A transcript: the player and its tools, then the lines in their own
   // scroll box, then the article section. The column is the player's width.
   if (transcript) {
@@ -610,6 +731,7 @@ export function Reader({
       <div className="relative">
         <article
           className="reader-prose reader-column w-full px-8 py-11"
+          data-font={font ?? "default"}
           style={{ ...transcript.columnStyle, fontFamily }}
         >
           {transcript.prelude}
@@ -738,6 +860,7 @@ export function Reader({
 
       <article
         className="reader-prose reader-column w-full px-6 py-11 print:py-0"
+        data-font={font ?? "default"}
         style={{ fontFamily }}
         onKeyDown={mode === "edit" ? onStyleShortcut : undefined}
       >
@@ -751,84 +874,18 @@ export function Reader({
             n: blocks.length,
           })}
         </p>
-        {documentId ? (
-          <DocumentTitle documentId={documentId} title={title} />
-        ) : (
-          <h2 className="mb-[26px] text-[33px]">{title}</h2>
-        )}
+        {leadKicker && renderBlock(leadKicker, 0)}
+        <Reveal reveal={blockReveal} id="__title" order={leadKicker ? 0.5 : -1} kind="text">
+          {documentId ? (
+            <DocumentTitle documentId={documentId} title={title} masthead={masthead} />
+          ) : (
+            <h2 className={masthead ? "reader-masthead-title mb-3" : "mb-[26px] text-[33px]"}>
+              {title}
+            </h2>
+          )}
+        </Reveal>
 
-        {blocks.map((block, i) => (
-          <Fragment key={block.id}>
-            {block.type === "PAGE" && pages && documentId ? (
-              <div className={wrapClear(block.type).trim()}>
-                <PageBlock
-                  documentId={documentId}
-                  notebookId={pages.notebookId}
-                  blockId={block.id}
-                  text={block.text}
-                  marks={pages.marksByBlock[block.id] ?? []}
-                  canEdit={pages.canEdit && mode === "read"}
-                  hint={i === firstPageIndex}
-                />
-                {i === lastPageIndex && (
-                  <ConversionStrip
-                    documentId={documentId}
-                    conversion={pages.conversion}
-                    hasText={hasTextBlocks}
-                    canEdit={pages.canEdit}
-                  />
-                )}
-              </div>
-            ) : mode === "edit" ? (
-              <div className={`group/block${wrapClear(block.type)}`}>
-                {TEXT_TYPES.has(block.type) ? (
-                  <EditableBlock
-                    block={block}
-                    text={effectiveText(block)}
-                    kind={effectiveKind(block)}
-                    spans={effectiveStyles(block)}
-                    edited={editedByBlock[block.id] ?? []}
-                    restoreSelectionRef={restoreSelectionRef}
-                    pendingFocusRef={pendingFocusRef}
-                    onSave={onSaveText}
-                    onFocusBlock={setFocusedBlockId}
-                  />
-                ) : (
-                  <BlockView block={block} highlights={[]} documentId={documentId} />
-                )}
-                <div className="relative -my-1.5 h-3">
-                  <button
-                    onMouseDown={keep}
-                    data-track="insert-paragraph"
-                    onClick={() =>
-                      void onInsertBlock(block.id).then((id) => {
-                        if (id) pendingFocusRef.current = id;
-                      })
-                    }
-                    aria-label={t("panes.insertParagraphHere")}
-                    data-tip={t("panes.insertParagraphHere")}
-                    className="absolute top-1/2 left-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center gap-1 rounded-full bg-card px-2.5 py-0.5 text-[11px] font-semibold text-sand-600 opacity-0 shadow-soft transition-opacity hover:bg-clay-100 hover:text-clay-800 hover:opacity-100 focus-visible:opacity-100 group-hover/block:opacity-60"
-                  >
-                    <PlusIcon size={10} />
-                    {t("panes.paragraphLower")}
-                  </button>
-                </div>
-              </div>
-            ) : WRAP_FLOW_TYPES.has(block.type) ? (
-              <>
-                <BlockView block={block} highlights={highlightsByBlock[block.id]} documentId={documentId} />
-                {translationOf(block)}
-              </>
-            ) : (
-              // The wrapper carries the clear; the block keeps its own margins,
-              // which collapse through it, so spacing does not change.
-              <div className={wrapClear(block.type).trim()}>
-                <BlockView block={block} highlights={highlightsByBlock[block.id]} documentId={documentId} />
-                {translationOf(block)}
-              </div>
-            )}
-          </Fragment>
-        ))}
+        {blocks.map((block, i) => (block === leadKicker ? null : renderBlock(block, i)))}
         {blocks.length === 0 && (
           <p className="text-sm text-sand-600">{t("panes.noBlocks")}</p>
         )}
@@ -911,11 +968,10 @@ function EditableBlock({
     "rounded-lg outline-none focus:bg-card/60 whitespace-pre-wrap empty:before:content-[attr(data-placeholder)] empty:before:text-sand-500";
 
   const isList = kind === "list" || kind === "numbered" || block.type === "LIST";
+  // The block keeps its layout tokens while it is edited (block-view.tsx).
   const base = block.type === "CODE" || block.type === "EQUATION"
     ? "my-4 overflow-x-auto rounded-2xl bg-sand-200 p-4 text-sm"
-    : isList
-      ? "my-4 pl-5"
-      : KIND_CLASS[kind];
+    : layoutClass(layoutTokens(block.html), isList ? "my-4 pl-5" : KIND_CLASS[kind]);
 
   if (block.type === "CODE" || block.type === "EQUATION") {
     return <pre key={key} {...shared} className={`${base} ${editable}`} />;

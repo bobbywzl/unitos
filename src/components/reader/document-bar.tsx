@@ -33,6 +33,7 @@ import {
   initialIngestSteps,
   type IngestStep,
 } from "@/components/reader/ingest-progress";
+import { setRevealFlag } from "@/components/reader/reveal";
 import { UploadAssistant, type UploadRequest } from "@/components/reader/upload-assistant";
 
 export type AttachedDocument = {
@@ -167,6 +168,14 @@ export function DocumentBar({
     if (view) params.set("view", view);
     if (doc2) params.set("doc2", doc2);
     startOpening(() => router.push(`/n/${notebookId}?${params.toString()}`));
+  }
+
+  // A document just added opens with the reveal (reveal.tsx): the flag is
+  // set before the open, the reader takes it on mount.
+  function openAdded(docId: string) {
+    setRevealFlag(docId);
+    open(docId);
+    router.refresh();
   }
 
   // Re-parse with the current parser. Runs automatically when the open document
@@ -413,8 +422,7 @@ export function DocumentBar({
         }),
       );
       setDialog(false);
-      open(result.id);
-      router.refresh();
+      openAdded(result.id);
       return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : t("panes.uploadFailed"));
@@ -562,8 +570,7 @@ export function DocumentBar({
         }),
       );
       setDialog(false);
-      open(result.id);
-      router.refresh();
+      openAdded(result.id);
       return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : t("panes.ingestFailed"));
@@ -906,10 +913,7 @@ export function DocumentBar({
           request={assistant}
           onClose={(docId) => {
             setAssistant(null);
-            if (docId) {
-              open(docId);
-              router.refresh();
-            }
+            if (docId) openAdded(docId);
           }}
         />
       )}
