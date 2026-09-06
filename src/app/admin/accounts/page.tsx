@@ -5,6 +5,7 @@ import { USER_ID } from "@/lib/constants";
 import { db } from "@/lib/db";
 import { serverT } from "@/lib/i18n/server";
 import { personSymbol } from "@/lib/person";
+import type { Tier } from "@/lib/tiers";
 import { AdminNav } from "@/components/admin/admin-nav";
 import { AccountReset } from "@/components/admin/account-reset";
 
@@ -22,7 +23,7 @@ type AccountRow = {
   picture: string;
   createdAt: Date | null;
   lastSeenAt: Date | null;
-  premium: boolean;
+  tier: Tier;
   driveLinked: boolean;
 };
 
@@ -72,7 +73,7 @@ export default async function AdminAccountsPage() {
             picture: "",
             createdAt: null,
             lastSeenAt: null,
-            premium: false,
+            tier: "ULTRA" as Tier,
             driveLinked: false,
           },
         ]),
@@ -83,7 +84,7 @@ export default async function AdminAccountsPage() {
       picture: u.picture,
       createdAt: u.createdAt,
       lastSeenAt: u.lastSeenAt,
-      premium: u.premium,
+      tier: u.tier,
       driveLinked: Boolean(u.driveRefreshToken),
     })),
   ];
@@ -117,7 +118,8 @@ export default async function AdminAccountsPage() {
                   <Chip>{t("admin.countCorpora", { n: counts.projects })}</Chip>
                   <Chip>{t("admin.countDocuments", { n: counts.documents })}</Chip>
                   <Chip>{t("admin.countNotes", { n: counts.notes })}</Chip>
-                  {a.premium && <Chip>{t("admin.accountPremium")}</Chip>}
+                  {a.tier === "PREMIUM" && <Chip>{t("admin.accountPremium")}</Chip>}
+                  {a.tier === "ULTRA" && <Chip>{t("admin.accountUltra")}</Chip>}
                   {a.driveLinked && <Chip>{t("admin.accountDrive")}</Chip>}
                 </div>
                 {a.createdAt && a.lastSeenAt && (

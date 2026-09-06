@@ -24,15 +24,82 @@ model User {
   symbol       String    @default("")
   color        String    @default("")
   passwordHash String    @default("") // "" = no password (OAuth or link-only); scrypt "s1$salt$hash"
-  // Unitos Premium (SPEC.md §17): offline work syncs when the reader is back
-  // online. No billing yet — the operator sets the flag on the account.
-  premium      Boolean   @default(false)
+  // The account's tier (TIERS.md, SPEC.md §20): Free, Premium, or Ultra. Set
+  // by the Stripe webhook from the account's subscriptions (lib/billing/sync.ts);
+  // never by the admin. The local reader (sign-in off) is Ultra.
+  tier         Tier      @default(FREE)
+  // The account's Stripe customer, created on its first checkout. "" = none.
+  stripeCustomerId String @default("")
   // Linked Google Drive (SPEC.md §14): the refresh token from the drive.file
   // code flow. "" = not linked; the picker then asks per visit.
   driveRefreshToken String @default("")
   createdAt    DateTime  @default(now())
   lastSeenAt   DateTime  @default(now())
   sessions     Session[]
+  subscriptions Subscription[]
+}
+
+enum Tier {
+  FREE
+  PREMIUM
+  ULTRA
+}
+
+// One Stripe subscription (SPEC.md §20): the row mirrors Stripe, written only
+// by the webhook. id is Stripe's subscription id. status is Stripe's word
+// (active, trialing, past_due, canceled, unpaid, incomplete, incomplete_expired,
+// paused). amountCents is the recurring price per interval (month | year).
+model Subscription {
+  id                 String   @id
+  userId             String
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  stripeCustomerId   String
+  stripePriceId      String
+  tier               Tier
+  status             String
+  interval           String
+  amountCents        Int
+  currency           String
+  currentPeriodStart DateTime
+  currentPeriodEnd   DateTime
+  cancelAtPeriodEnd  Boolean  @default(false)
+  canceledAt         DateTime?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([userId])
+  @@index([status])
+}
+
+// One money movement (SPEC.md §20): an invoice Stripe collected or failed to
+// collect (kind "invoice", stripeId "in_…"), or a refund (kind "refund",
+// stripeId "re_…", amountCents negative). status: paid | failed | refunded.
+// createdAt is Stripe's clock. The admin financials page sums these.
+model Payment {
+  id               String    @id @default(cuid())
+  stripeId         String    @unique
+  kind             String
+  userId           String?
+  stripeCustomerId String
+  subscriptionId   String    @default("")
+  tier             String    @default("")
+  amountCents      Int
+  currency         String
+  status           String
+  periodStart      DateTime?
+  periodEnd        DateTime?
+  createdAt        DateTime
+
+  @@index([createdAt])
+  @@index([userId, createdAt])
+}
+
+// Every Stripe webhook event handled, by Stripe's event id: a redelivery is
+// answered 200 and skipped.
+model StripeEvent {
+  id         String   @id
+  type       String
+  receivedAt DateTime @default(now())
 }
 
 // One sign-in session: random token in an httpOnly cookie, 30 days.

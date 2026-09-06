@@ -9,10 +9,18 @@ here is a plan or a proposal: each line is either a decision the owner stated
 nobody has assigned to a tier is listed under **Unassigned** rather than
 guessed at.
 
-Today there is no billing. The flag is `User.premium` (a boolean), set by the
-operator on the account; the single local reader (sign-in off) always has it.
-Three tiers will need a `tier` column in its place — Free, Premium, Ultra —
-and every check below written against that.
+The flag is `User.tier` — `FREE`, `PREMIUM`, `ULTRA` — and every check below
+is written against it (`lib/tiers.ts`: `hasPremium` is the Premium gate, and
+Ultra holds everything Premium holds). Stripe sets the tier through the
+webhook (SPEC.md §20); the admin never does. The single local reader (sign-in
+off) is Ultra: there is no account to gate.
+
+Billing exists and is not visible to readers: the checkout, portal, and
+webhook routes, the `Subscription` and `Payment` tables, and the admin's
+financials page (`/admin/financials`, revenue beside AI cost). It runs when
+the Stripe keys and price ids are set (`.env.example`). Prices are not
+decided: the Stripe prices carry them, this file does not, until the owner
+states them.
 
 ## Unitos Free
 
@@ -36,7 +44,11 @@ and every check below written against that.
 
 ## Unitos Ultra
 
-Nothing assigned yet.
+| Feature | Limit |
+|---|---|
+| Everything in Premium | Whole |
+
+Nothing of its own assigned yet.
 
 ## Unassigned
 
@@ -72,3 +84,7 @@ until the owner makes one.
 - **2026-09-04** — Images drop into a note and into the reader's edit mode.
   Small images are Free; larger images and video of any kind are Premium.
 - **before this file** — Offline work is Premium (SPEC.md §17).
+- **2026-09-06** — `User.tier` replaces `User.premium`; an account the
+  operator had set to premium migrates to Premium. The Stripe payment layer
+  is built and hidden from readers (SPEC.md §20): Ultra holds everything
+  Premium holds and nothing of its own yet; prices stay undecided.

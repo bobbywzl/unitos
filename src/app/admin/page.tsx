@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { isAdmin } from "@/lib/admin-auth";
 import { authEnabled } from "@/lib/auth";
+import { stripeConfigured, webhookConfigured } from "@/lib/billing/stripe";
 import { claudeConfigured } from "@/lib/claude";
 import { kimiConfigured } from "@/lib/kimi";
 import { db } from "@/lib/db";
@@ -47,6 +48,8 @@ export default async function AdminPage() {
     { label: "ANTHROPIC_API_KEY", description: t("admin.svcClaude"), set: claudeConfigured() },
     { label: "SESSION_SECRET + provider", description: t("admin.svcSignIn"), set: authEnabled() },
     { label: "ADMIN_PASSWORD", description: t("admin.svcAdmin"), set: Boolean(process.env.ADMIN_PASSWORD) },
+    { label: "STRIPE_SECRET_KEY + prices", description: t("admin.svcStripe"), set: stripeConfigured() },
+    { label: "STRIPE_WEBHOOK_SECRET", description: t("admin.svcStripeWebhook"), set: webhookConfigured() },
   ];
 
   return (

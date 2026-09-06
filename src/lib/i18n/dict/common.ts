@@ -30,7 +30,10 @@
 //   lasso highlight(页面圈选高亮) 圈选高亮 ·
 //   account 账户 · notification 通知 · recipient 收件人 ·
 //   dismiss(通知) 关闭 · update(通知类型) 更新 · account change 账户变更 ·
-//   gist 要旨
+//   gist 要旨 · tier 套餐 · Unitos Free / Unitos Ultra 不翻译 ·
+//   billing 计费 · subscription 订阅 · payment 付款 · revenue 收入 ·
+//   refund 退款 · margin 毛利 · financials 财务 · MRR 不翻译 ·
+//   checkout 结账 · customer portal 客户门户
 // highlight 高亮 仅指高亮功能；表示选取文字一律用 选中。
 
 const en = {

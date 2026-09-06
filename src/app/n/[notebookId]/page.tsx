@@ -54,6 +54,7 @@ import {
   type VideoAnnotationItem,
   type VideoInfo,
 } from "@/lib/video/types";
+import { hasPremium } from "@/lib/tiers";
 
 export const dynamic = "force-dynamic";
 
@@ -1118,7 +1119,7 @@ export default async function NotebookPage(props: {
     shared: authEnabled() && notebook.collaborators.length > 0,
     myId: user.id,
     people: await peopleByIds(authorIds),
-    premium: authEnabled() ? user.premium : true,
+    premium: authEnabled() ? hasPremium(user.tier) : true,
   };
 
   // The text layer over a document's blocks: marks, links, terms, and the

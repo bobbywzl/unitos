@@ -8,6 +8,7 @@ import { personOf } from "@/lib/person";
 import { Logo } from "@/components/logo";
 import { AccountGuard } from "@/components/account-guard";
 import { SettingsForm } from "@/components/settings-form";
+import { hasPremium } from "@/lib/tiers";
 
 export const dynamic = "force-dynamic";
 
@@ -50,7 +51,7 @@ export default async function SettingsPage() {
       <SettingsForm
         account={account}
         background={background}
-        premium={authEnabled() ? user.premium : true}
+        premium={authEnabled() ? hasPremium(user.tier) : true}
         drive={(() => {
           const config = driveConfig(user);
           return config && (config.canLink || config.linked)

@@ -11,6 +11,7 @@ import { CollabProvider, type CollabState } from "@/components/collab/collab-con
 import { SyncRefresh } from "@/components/collab/sync-refresh";
 import { ExportMenu } from "@/components/export-menu";
 import { Outline } from "@/components/outline/outline";
+import { hasPremium } from "@/lib/tiers";
 
 export const dynamic = "force-dynamic";
 
@@ -101,7 +102,7 @@ export default async function NotesPage(props: { params: Promise<{ notebookId: s
     shared: authEnabled() && notebook.collaborators.length > 0,
     myId: user.id,
     people: await peopleByIds(authorIds),
-    premium: authEnabled() ? user.premium : true,
+    premium: authEnabled() ? hasPremium(user.tier) : true,
   };
 
   return (

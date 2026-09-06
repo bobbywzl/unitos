@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { sniffImage } from "@/lib/handwritten/image";
 import { serverT } from "@/lib/i18n/server";
 import { FREE_IMAGE_BYTES, MAX_IMAGE_BYTES } from "@/lib/images";
+import { hasPremium } from "@/lib/tiers";
 
 export const maxDuration = 60;
 
@@ -21,7 +22,7 @@ export async function POST(req: Request) {
   if (bytes.length > MAX_IMAGE_BYTES) {
     return NextResponse.json({ error: t("api.imageTooLarge") }, { status: 413 });
   }
-  if (bytes.length > FREE_IMAGE_BYTES && !user.premium) {
+  if (bytes.length > FREE_IMAGE_BYTES && !hasPremium(user.tier)) {
     return NextResponse.json({ error: t("api.imageNeedsPremium") }, { status: 402 });
   }
   const mimeType = sniffImage(bytes);

@@ -51,7 +51,8 @@ export function middleware(request: NextRequest) {
   if (!authOn) return NextResponse.next();
 
   // Public doors: the sign-in page, the password reset page, the auth
-  // callbacks, the cron endpoint, and the two legal documents — those are
+  // callbacks, the cron endpoint, the Stripe webhook (Stripe signs its body;
+  // the route checks the signature), and the two legal documents — those are
   // linked from Google's consent screen, so a signed-out reader must reach
   // them without hitting the gate.
   if (
@@ -60,7 +61,8 @@ export function middleware(request: NextRequest) {
     pathname === "/privacy" ||
     pathname === "/terms" ||
     pathname.startsWith("/api/auth/") ||
-    pathname.startsWith("/api/cron/")
+    pathname.startsWith("/api/cron/") ||
+    pathname === "/api/stripe/webhook"
   ) {
     return NextResponse.next();
   }

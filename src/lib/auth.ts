@@ -65,7 +65,8 @@ export const LOCAL_USER: User = {
   symbol: "",
   color: "",
   passwordHash: "",
-  premium: true, // the local reader owns the instance; offline work is not gated
+  tier: "ULTRA", // the local reader owns the instance; no tier gate applies
+  stripeCustomerId: "",
   driveRefreshToken: "", // linking needs an account row; the local reader uses the per-visit grant
   createdAt: new Date(0),
   lastSeenAt: new Date(0),

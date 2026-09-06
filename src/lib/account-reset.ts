@@ -1,3 +1,4 @@
+import { recomputeTier } from "@/lib/billing/sync";
 import { USER_ID } from "@/lib/constants";
 import { db } from "@/lib/db";
 import { revokeDriveToken } from "@/lib/drive/link";
@@ -12,8 +13,9 @@ import { revokeDriveToken } from "@/lib/drive/link";
 // account's project, or cited by a note in one, stays in the library (the
 // document DELETE rule); its profile; its sessions (signed out everywhere);
 // its memberships on other accounts' shared projects; its pending email links;
-// its Drive link (revoked at Google); its picture, symbol, color, and premium
-// flag.
+// its Drive link (revoked at Google); its picture, symbol, and color. Its tier
+// is recomputed from its Stripe subscriptions (SPEC.md §20): a paid tier
+// survives, an operator-set one does not.
 //
 // Kept: the account row with its email, name, and password; its usage
 // telemetry; the notes, edits, and replies it made in other accounts' projects
@@ -90,12 +92,14 @@ export async function resetAccount(userId: string): Promise<AccountResetCounts |
         picture: "",
         symbol: "",
         color: "",
-        premium: false,
         driveRefreshToken: "",
         createdAt: now,
         lastSeenAt: now,
       },
     });
+    // The tier follows the account's subscriptions (SPEC.md §20): a paid
+    // subscription survives the reset; a tier the operator set does not.
+    await recomputeTier(userId);
   }
 
   return { projects: notebooks.length, documents: orphaned.length, notes };

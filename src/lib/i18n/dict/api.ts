@@ -132,6 +132,11 @@ const en = {
   imageTooLarge: "Image is larger than 25 MB",
   imageNeedsPremium:
     "Images this large need Unitos Premium. Free drops images up to 5 MB.",
+  // Billing (SPEC.md §20)
+  billingOff: "Billing is not set up.",
+  billingNeedsSignIn: "Billing needs a signed-in account.",
+  billingPriceMissing: "No price is set for this tier and interval.",
+  billingNoCustomer: "No billing account yet. Start a checkout first.",
   pdfTooLarge: "PDF is larger than 50 MB",
   pdfParseFailedReason: "Could not read this PDF. {reason}",
   urlIngestFailedReason: "Could not ingest this URL. {reason}",
@@ -356,6 +361,10 @@ const zh: Record<keyof typeof en, string> = {
   imageNotFound: "未找到图片",
   imageTooLarge: "图片超过 25 MB",
   imageNeedsPremium: "这么大的图片需要 Unitos Premium。免费版可拖入最大 5 MB 的图片。",
+  billingOff: "计费尚未设置。",
+  billingNeedsSignIn: "计费需要已登录的账户。",
+  billingPriceMissing: "此套餐和周期没有设置价格。",
+  billingNoCustomer: "还没有计费账户。请先开始结账。",
   pdfTooLarge: "PDF 超过 50 MB",
   pdfParseFailedReason: "无法读取此 PDF。{reason}",
   urlIngestFailedReason: "无法导入此 URL。{reason}",
