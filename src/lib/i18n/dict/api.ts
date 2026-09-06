@@ -237,6 +237,7 @@ const en = {
 
   // Glossary language (SPEC.md §8 Phase 7)
   glossaryLanguageFailed: "Writing glossary definitions in your language failed",
+  renderingPage: "Rendering the page in a browser",
 };
 
 const zh: Record<keyof typeof en, string> = {
@@ -440,6 +441,7 @@ const zh: Record<keyof typeof en, string> = {
   notificationNoRecipients: "没有收件人。请至少选择一个账户。",
 
   glossaryLanguageFailed: "用你的语言生成术语表定义失败",
+  renderingPage: "在浏览器中渲染页面",
 };
 
 export const api = { en, zh } as const;

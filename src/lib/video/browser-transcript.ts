@@ -1,4 +1,5 @@
 import type { Browser, Page } from "playwright-core";
+import { launchBrowser } from "@/lib/browser";
 import { parseJson3, parseXml, pickTrack, trackUrl, type TrackList } from "@/lib/video/captions";
 import { normalizeSegments, type TranscriptSegment } from "@/lib/video/segments";
 import { parseTimeInput } from "@/lib/video/types";
@@ -20,9 +21,7 @@ const STEP_TIMEOUT_MS = 15_000;
 
 const reason = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
-export function browserConfigured(): boolean {
-  return Boolean(process.env.BROWSER_WS_ENDPOINT || process.env.CHROMIUM_PATH);
-}
+export { browserConfigured } from "@/lib/browser";
 
 function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -35,24 +34,7 @@ function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promi
 /** The transcript YouTube shows, read by a browser. Throws with the reason
     when no browser is configured, the page is a captcha, or nothing loads. */
 export async function browserCaptions(youtubeId: string): Promise<TranscriptSegment[]> {
-  const endpoint = process.env.BROWSER_WS_ENDPOINT;
-  const executable = process.env.CHROMIUM_PATH;
-  if (!endpoint && !executable) {
-    throw new Error("BROWSER_WS_ENDPOINT and CHROMIUM_PATH are not set");
-  }
-  const { chromium } = await import("playwright-core");
-  const browser: Browser = endpoint
-    ? await chromium.connectOverCDP(endpoint, { timeout: 20_000 })
-    : await chromium.launch({
-        executablePath: executable,
-        headless: true,
-        args: [
-          "--no-sandbox",
-          "--disable-dev-shm-usage",
-          "--mute-audio",
-          ...(process.env.CHROMIUM_ARGS?.split(/\s+/).filter(Boolean) ?? []),
-        ],
-      });
+  const browser: Browser = await launchBrowser();
   try {
     return await withTimeout(
       readInBrowser(browser, youtubeId),

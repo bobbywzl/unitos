@@ -26,8 +26,9 @@ export function captionLabel(text: string): string | null {
 export type FigureAudit = {
   // FIGURE blocks in the list.
   figures: number;
-  // Blocks whose text opens like a caption: FIGURE blocks with a caption, and
-  // text blocks that are a caption on their own.
+  // Captions in the list: every caption line of a FIGURE's text (a figure
+  // row carries one per column), and text blocks that are a caption on
+  // their own.
   captions: number;
   // Caption texts that stand as text blocks with no FIGURE directly before or
   // after them: figures the parse did not load.
@@ -40,13 +41,19 @@ function hasMedia(block: ParsedBlock): boolean {
   return block.type === "FIGURE" && (block.html === undefined || /<(?:img|video|iframe|svg)\b/i.test(block.html));
 }
 
+/** The caption lines of a figure's text. */
+function captionLines(block: ParsedBlock): number {
+  return block.text.split("\n").filter((line) => isFigureCaption(line)).length;
+}
+
 /** Audit a block list: which captions have their figure, which do not. */
 export function auditFigures(blocks: ParsedBlock[]): FigureAudit {
   const audit: FigureAudit = { figures: 0, captions: 0, captionsWithoutFigure: [], figuresWithoutCaption: 0 };
   blocks.forEach((block, i) => {
     if (block.type === "FIGURE") {
       audit.figures += 1;
-      if (isFigureCaption(block.text)) audit.captions += 1;
+      const lines = captionLines(block);
+      if (lines > 0) audit.captions += lines;
       else {
         // A caption block right beside the figure captions it.
         const beside = [blocks[i - 1], blocks[i + 1]].some(
