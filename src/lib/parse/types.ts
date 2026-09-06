@@ -34,12 +34,16 @@ export type StyleSpan = {
 // One link span in block text. Contents entries carry targetOrder (the target
 // heading's block order); hyperlinks from PDF link annotations carry href.
 // Stored on Block.links; quotedText re-resolves the span like styles.
+// targetFragment is the element id a URL contents entry points at, in memory
+// only: resolveContentsLinks (lib/parse/url.ts) turns it into targetOrder
+// after the model passes and strips it before the blocks are saved.
 export type LinkSpan = {
   start: number;
   end: number;
   quotedText: string;
   targetOrder?: number;
   href?: string;
+  targetFragment?: string;
 };
 
 export type ParsedBlock = {
@@ -51,6 +55,10 @@ export type ParsedBlock = {
   citations?: CitationSpan[];
   styles?: StyleSpan[];
   links?: LinkSpan[];
+  // URL blocks, in memory only: the id of the element the block came from
+  // (its own id, or the id of a wrapper whose first block it is), the target
+  // a contents entry's targetFragment resolves against. Stripped before save.
+  fragment?: string;
 };
 
 export type ParsedDocument = {
@@ -61,6 +69,9 @@ export type ParsedDocument = {
   // The rest came from hyperlinks; pruneReferences drops the uncited ones
   // after the model passes settle which blocks survive.
   formalReferences?: number;
+  // The page's body font family, read from the baked <body data-font>
+  // (lib/parse/figure-style.ts); stored in Document.font on creation.
+  font?: "sans" | "serif" | "mono";
 };
 
 /** Document.references as stored Json → typed entries. Defensive: bad rows drop. */
@@ -157,4 +168,5 @@ export type UrlParseProgress = (stage: "extract", detail?: string) => void;
 // 15: figures keep their look — the page's stylesheets load at parse, a chart
 //     svg carries the page's colors, fonts, and backdrop as inline style, and
 //     an image carries the backdrop the page drew behind it.
-export const PARSER_VERSION = 15;
+// 16: replica fidelity — a page's hidden tree is pruned by its stylesheet, a contents list keeps its links to the article's headings, sub-headings set as styled paragraphs and headings sized by the page become headings by level, the kicker, metadata line, pull quotes, and captions carry their layout, bold, italic, underline, and code runs become style spans, the page's font family travels with the document, figures keep the page's widths and rows, a scripted chart renders in a browser where one is configured.
+export const PARSER_VERSION = 16;

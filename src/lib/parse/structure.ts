@@ -4,7 +4,7 @@ import { z } from "zod";
 import { PARSE_MODEL } from "@/lib/derive/config";
 import { callForJson } from "@/lib/derive/json-call";
 import type { UsageMeta } from "@/lib/usage";
-import type { ParsedBlock } from "@/lib/parse/types";
+import type { LinkSpan, ParsedBlock, StyleSpan } from "@/lib/parse/types";
 
 // AI structure pass for URL ingest: after the mechanical parse, the model tidies
 // the block list — drop residual junk, fix a wrong type, merge a split fragment.
@@ -67,6 +67,8 @@ function structurePrompt(
     "   must be PARAGRAPH.",
     "Also drop a leading heading that merely repeats the document title.",
     "Keep every block that is article content. When unsure, keep.",
+    "A contents list of this article (entries that point at its own headings), the kicker, the",
+    "byline, the date, and the metadata line are article content: keep them.",
     ...instructionLines(instructions, "dropping, retyping, or merging blocks"),
     'Return ONLY JSON: {"ops": [{"index": 0, "action": "drop"}, {"index": 4, "action": "retype", "type": "HEADING"}]}',
     "An empty ops array is a valid answer.",
@@ -89,6 +91,8 @@ function corePrompt(title: string | null, blocks: ParsedBlock[], instructions?: 
     "promos, comment sections, legal boilerplate.",
     "Ranges are inclusive. Use several ranges when promos interrupt the article.",
     "When unsure about a block, keep it inside a range.",
+    "A contents list of this article (entries that point at its own headings), the kicker, the",
+    "byline, the date, and the metadata line are article content: keep them.",
     ...instructionLines(instructions, "what counts as content to keep or drop"),
     'Return ONLY JSON: {"ranges": [{"start": 2, "end": 41}]}',
     "",
@@ -145,6 +149,26 @@ export async function selectCoreBlocks(
   return kept;
 }
 
+// The layout tokens a retyped block keeps: alignment holds for any text
+// block; a role (kicker, caption, display) belonged to the old type.
+function retypedHtml(block: ParsedBlock, type: ParsedBlock["type"]): string | undefined {
+  const tokens = (/^<[a-z][a-z0-9]*\b[^>]*\bclass="([^"]*)"/i.exec(block.html ?? "")?.[1] ?? "")
+    .split(/\s+/)
+    .filter((t) => t === "center" || t === "right");
+  const attr = tokens.length > 0 ? ` class="${tokens.join(" ")}"` : "";
+  if (type === "HEADING") return `<h2${attr}>`;
+  if (type === "PARAGRAPH" && attr) return `<p${attr}>`;
+  return undefined;
+}
+
+function coversWhole(text: string, span: { start: number; end: number }): boolean {
+  return text.slice(0, span.start).trim() === "" && text.slice(span.end).trim() === "";
+}
+
+function shifted<T extends { start: number; end: number }>(spans: T[] | undefined, by: number): T[] {
+  return (spans ?? []).map((s) => ({ ...s, start: s.start + by, end: s.end + by }));
+}
+
 export async function structureBlocks(
   blocks: ParsedBlock[],
   title: string | null,
@@ -194,21 +218,37 @@ export async function structureBlocks(
     let next = block;
     const retype = retypes.get(i);
     if (retype && retype !== block.type) {
-      next = { type: retype, text: block.text, citations: block.citations }; // html belongs to the old type
+      // Spans, the fragment, and the alignment travel; the html's role
+      // tokens belonged to the old type. A span over a whole heading is
+      // redundant: headings are set bold already.
+      const html = retypedHtml(block, retype);
+      const styles =
+        retype === "HEADING" ? block.styles?.filter((s) => !coversWhole(block.text, s)) : block.styles;
+      next = {
+        type: retype,
+        text: block.text,
+        ...(html !== undefined ? { html } : {}),
+        ...(block.citations ? { citations: block.citations } : {}),
+        ...(styles && styles.length > 0 ? { styles } : {}),
+        ...(block.links ? { links: block.links } : {}),
+        ...(block.fragment !== undefined ? { fragment: block.fragment } : {}),
+      };
     }
     const previous = out[out.length - 1];
     if (merges.has(i) && previous?.type === "PARAGRAPH" && next.type === "PARAGRAPH") {
-      // Both texts are normalized, so the join is one space: citation offsets
-      // in the merged-up block shift by previous.text.length + 1.
+      // Both texts are normalized, so the join is one space: citation,
+      // style, and link offsets in the merged-up block shift by
+      // previous.text.length + 1.
       const shift = previous.text.length + 1;
-      const citations = [
-        ...(previous.citations ?? []),
-        ...(next.citations ?? []).map((c) => ({ ...c, start: c.start + shift, end: c.end + shift })),
-      ];
+      const citations = [...(previous.citations ?? []), ...shifted(next.citations, shift)];
+      const styles: StyleSpan[] = [...(previous.styles ?? []), ...shifted(next.styles, shift)];
+      const links: LinkSpan[] = [...(previous.links ?? []), ...shifted(next.links, shift)];
       out[out.length - 1] = {
         ...previous,
         text: `${previous.text} ${next.text}`.replace(/\s+/g, " ").trim(),
         ...(citations.length > 0 ? { citations } : {}),
+        ...(styles.length > 0 ? { styles } : {}),
+        ...(links.length > 0 ? { links } : {}),
       };
       return;
     }
