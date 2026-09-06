@@ -183,7 +183,7 @@ const en = {
   driveFetchFailed: "This Drive file did not load. It may be private, removed, or no longer accessible.",
   driveNotLinked: "Google Drive is not linked",
   driveTokenMintFailed: "Google Drive did not issue a token. Try again.",
-  driveLinkUseDrive: "This is a Google Drive link. Use Add from Google Drive.",
+  driveLinkUseDrive: "This is a Google Drive link. Use the Google Drive tab.",
 
   // Video playback and frames
   videoPlaysFromYouTube: "This video plays from YouTube",
@@ -393,7 +393,7 @@ const zh: Record<keyof typeof en, string> = {
   driveFetchFailed: "这个 Drive 文件无法加载。文件可能已设为私密、被删除，或已无法访问。",
   driveNotLinked: "Google Drive 未关联",
   driveTokenMintFailed: "Google Drive 未签发访问令牌。请重试。",
-  driveLinkUseDrive: "这是 Google Drive 链接。请使用“从 Google Drive 添加”。",
+  driveLinkUseDrive: "这是 Google Drive 链接。请使用“Google Drive”页签。",
 
   videoPlaysFromYouTube: "此视频从 YouTube 播放",
   noStoryboard: "此视频没有预览画面",

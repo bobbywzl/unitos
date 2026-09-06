@@ -23,6 +23,7 @@ import {
 import { useT } from "@/components/lang-provider";
 import { Markdown } from "@/components/markdown";
 import { markdownPreview } from "@/lib/markdown-preview";
+import { useGist } from "@/lib/gist-client";
 import { NoteId } from "@/components/outline/note-id";
 import { useCollapsedView, type CollapsedViewModel } from "@/components/use-collapsed-view";
 import { stripSimplifyMarkers } from "@/lib/sentences";
@@ -62,8 +63,8 @@ function GroupLabel({ icon, children }: { icon?: React.ReactNode; children: Reac
 
 // One annotation card, the note card's structure (outline/note-card.tsx): a
 // header row — collapse chevron, the highlight's color, the id at the left —
-// then the body. Collapsed, the header row is the whole card: the id and one
-// line summarizing the content. A jump to the annotation from its mark in the
+// then the body. Collapsed, the header row is the whole card: the id and the
+// gist (SPEC.md §6). A jump to the annotation from its mark in the
 // text (dissect:open-annotation) opens a collapsed card first.
 function AnnotationCard({
   annotation,
@@ -78,6 +79,7 @@ function AnnotationCard({
 }) {
   const t = useT();
   const collapsed = view.isCollapsed(annotation.id);
+  const gist = useGist(annotation.id, annotation.gist, summary, collapsed);
   const collapseLabel = collapsed ? t("outline.expandNote") : t("outline.collapseNote");
   const { sourceId } = annotation;
   const toggle = view.toggle;
@@ -110,9 +112,9 @@ function AnnotationCard({
             onClick={() => toggle(annotation.id)}
             data-track="annotation-collapse"
             title={t("outline.expandNote")}
-            className="min-w-0 flex-1 truncate text-left text-[13px] leading-[18px] text-sand-800 hover:text-clay-800"
+            className="min-w-0 flex-1 overflow-hidden text-left text-[13px] leading-[18px] whitespace-nowrap text-sand-800 hover:text-clay-800"
           >
-            {summary}
+            {gist}
           </button>
         )}
         {collapsed && annotation.figureLabel && (

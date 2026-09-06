@@ -114,7 +114,7 @@ export function AddDocumentDialog({
     { key: "pdf", label: t("panes.uploadPdf") },
     { key: "video", label: t("panes.uploadVideo") },
     ...(onImportDrive
-      ? [{ key: "drive" as const, label: t("panes.addFromDrive") }]
+      ? [{ key: "drive" as const, label: t("panes.tabDrive") }]
       : []),
     { key: "url", label: t("panes.addUrl") },
     { key: "library", label: t("panes.library") },
@@ -156,7 +156,7 @@ export function AddDocumentDialog({
         <div
           role="tablist"
           aria-label={t("panes.addDocument")}
-          className="flex w-full gap-1 rounded-full bg-sand-100 p-1"
+          className="flex w-full gap-1 overflow-x-auto rounded-full bg-sand-100 p-1"
         >
           {tabs.map(({ key, label }) => (
             <button
@@ -165,8 +165,7 @@ export function AddDocumentDialog({
               aria-selected={tab === key}
               onClick={() => setTab(key)}
               data-track={`add-tab:${key}`}
-              data-tip={label}
-              className={`min-w-0 flex-auto truncate rounded-full px-2 py-1.5 text-[12.5px] ${
+              className={`flex-auto rounded-full px-2 py-1.5 text-[12.5px] whitespace-nowrap ${
                 tab === key
                   ? "bg-card font-semibold text-clay-800 shadow-soft"
                   : "text-sand-600 hover:text-clay-800"

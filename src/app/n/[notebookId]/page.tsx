@@ -326,6 +326,7 @@ export default async function NotebookPage(props: {
           id: n.id,
           kind,
           content: n.content,
+          gist: n.gist,
           color: n.color,
           sourceId: source.id,
           quotedText: source.quotedText,
@@ -823,6 +824,7 @@ export default async function NotebookPage(props: {
     notes: s.notes.map((n) => ({
       id: n.id,
       content: n.content,
+      gist: n.gist,
       status: n.status,
       derivationType: n.derivationType,
       pinned: n.pinned,

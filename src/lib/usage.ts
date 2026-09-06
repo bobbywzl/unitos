@@ -84,7 +84,7 @@ export function sdkTokens(usage: {
 
 export type UsageMeta = {
   userId: string | null;
-  feature: string; // explain | simplify | … | assistant | act | glossary | transcribe | describe | voice
+  feature: string; // explain | simplify | … | assistant | act | glossary | transcribe | describe | voice | gist
   model: string;
 };
 

@@ -20,6 +20,7 @@ export type SourceChip = {
 export type NoteView = {
   id: string;
   content: string;
+  gist: string | null; // the phrase the collapsed row shows; null = not written yet (SPEC.md §6)
   status: NoteStatus;
   derivationType: DerivationType | null;
   pinned: boolean;
@@ -190,6 +191,7 @@ export type AnnotationItem = {
   id: string; // note id
   kind: "explain" | "simplify" | "analyze" | "highlight" | "comment" | "assistant";
   content: string;
+  gist: string | null; // the phrase the collapsed row shows; null = not written yet (SPEC.md §6)
   color: string | null; // "clay" | "sage" | "gold" for highlights
   sourceId: string | null;
   quotedText: string | null;

@@ -70,6 +70,11 @@ export const MAX_OUTPUT_TOKENS: Record<DerivationType, number> = {
 // DerivationType — it runs as a background job, not through /api/derive.
 export const CONNECT_MODEL = KIMI_K3;
 
+// The gist of a note — the phrase its collapsed row shows (SPEC.md §6): a
+// five-word label from a short text, so the lowest effort.
+export const GIST_MODEL = KIMI_K3;
+export const GIST_EFFORT: KimiEffort = "low";
+
 // Upload and parse run on the same model as every other tool: what the parse
 // gets wrong, every later tool inherits. One constant for the upload
 // assistant's review and instruction check (SPEC.md §15), the URL core and

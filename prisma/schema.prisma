@@ -176,6 +176,7 @@ model Note {
   sectionId      String
   section        Section         @relation(fields: [sectionId], references: [id], onDelete: Cascade)
   content        String // markdown
+  gist           String? // the phrase a collapsed row shows, written by AI to fit the row (SPEC.md §6); null until written, cleared when content changes
   status         NoteStatus      @default(ACCEPTED) // manual notes are ACCEPTED on create
   derivationType DerivationType? // null = manually written
   color          String? // manual highlight hue: "clay" | "sage" | "gold"

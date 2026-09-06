@@ -12,6 +12,7 @@ import { ChevronDownIcon, ChevronRightIcon, LocateIcon, PencilIcon } from "@/com
 import { useT } from "@/components/lang-provider";
 import { Markdown } from "@/components/markdown";
 import { markdownPreview } from "@/lib/markdown-preview";
+import { useGist } from "@/lib/gist-client";
 import { DragHandle, useCombineTarget, type HandleProps } from "@/components/sortable";
 import { useImageDrop } from "@/components/use-image-drop";
 import { imageMarkdown } from "@/lib/images";
@@ -182,6 +183,9 @@ export function NoteCard({
   // accepted, and a compare pane exists to show the note whole.
   const foldable = note.status === "ACCEPTED" && !pane;
   const collapsed = foldable && actions.isCollapsed(note.id);
+  // The collapsed row's line (SPEC.md §6): the note's gist, its first words
+  // until the gist arrives. The floating placeholder shows the same line.
+  const gist = useGist(note.id, note.gist, markdownPreview(note.content), collapsed || floating);
   // The source the card jumps to: the reader opens on the document and
   // flashes the quote — the exact position the note came from.
   const jumpSource = note.sources.find((s) => !s.orphaned) ?? null;
@@ -393,9 +397,9 @@ export function NoteCard({
           onClick={() => actions.toggleCollapsed(note.id)}
           data-track="note-collapse"
           data-tip={t("outline.expandNote")}
-          className="min-w-0 flex-1 truncate text-left text-[13px] leading-[18px] text-sand-800 hover:text-clay-800"
+          className="min-w-0 flex-1 overflow-hidden text-left text-[13px] leading-[18px] whitespace-nowrap text-sand-800 hover:text-clay-800"
         >
-          {markdownPreview(note.content)}
+          {gist}
         </button>
       )}
       {collapsed && note.sources.length > 0 && (
@@ -479,7 +483,7 @@ export function NoteCard({
             {t("outline.dockBack")}
           </button>
         </div>
-        <p className="mt-1 truncate text-sand-500">{markdownPreview(note.content)}</p>
+        <p className="mt-1 overflow-hidden whitespace-nowrap text-sand-500">{gist}</p>
       </div>
     );
   }

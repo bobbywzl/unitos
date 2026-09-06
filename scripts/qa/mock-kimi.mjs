@@ -219,6 +219,15 @@ function buildResponse(all) {
   }
 
   // Notebook tasks: no issues found.
+  // Gists: the first five words of each listed note.
+  if (all.includes('"gists"')) {
+    const gists = [...all.matchAll(/\[note ([^\]]+)\]\n([^\n]*)/g)].map((m) => ({
+      id: m[1],
+      gist: m[2].split(/\s+/).slice(0, 5).join(" ").slice(0, 30),
+    }));
+    return JSON.stringify({ gists });
+  }
+
   if (all.includes('"issues"')) return JSON.stringify({ issues: [] });
 
   // Ingest core pass: keep ranges around everything that does not look like page
