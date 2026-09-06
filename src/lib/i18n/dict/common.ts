@@ -30,7 +30,7 @@
 //   lasso highlight(页面圈选高亮) 圈选高亮 ·
 //   account 账户 · notification 通知 · recipient 收件人 ·
 //   dismiss(通知) 关闭 · update(通知类型) 更新 · account change 账户变更 ·
-//   gist 要旨
+//   gist 要旨 · table 表格
 // highlight 高亮 仅指高亮功能；表示选取文字一律用 选中。
 
 const en = {

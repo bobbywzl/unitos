@@ -2,6 +2,7 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { attachNoteEditable, type NoteEditable } from "@/lib/note-editable";
+import { insertTable, stepTableCell } from "@/lib/note-markup";
 import { wrapSelection, type Patch } from "@/lib/markdown-style";
 import { RedoIcon, UndoIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
@@ -10,10 +11,12 @@ import type { TKey } from "@/lib/i18n/dictionaries";
 // The note editor: the same editing functions as the document text toolbar
 // (reader.tsx), applied as markdown. Format buttons rewrite the selected
 // lines' markers; style buttons wrap the selection; colors use the note style
-// tags the Markdown component renders (<clay>…</clay> etc.). The text is
-// edited as the document it renders to (lib/note-editable.ts): bold reads
-// bold, a heading reads large, a list line carries its bullet — the same
-// prose classes as the rendered note, so the two look alike.
+// tags the Markdown component renders (<clay>…</clay> etc.); the table button
+// inserts a markdown table, and in a table row Enter adds a row and Tab moves
+// to the next cell (lib/note-markup.ts). The text is edited as the document
+// it renders to (lib/note-editable.ts): bold reads bold, a heading reads
+// large, a list line carries its bullet — the same prose classes as the
+// rendered note, so the two look alike.
 
 type TextColor = "clay" | "sage" | "gold" | "plum";
 const TEXT_COLORS: { tag: TextColor; dot: string; nameKey: TKey }[] = [
@@ -230,7 +233,12 @@ export function NoteEditor({
     const mod = e.metaKey || e.ctrlKey;
     if (e.key === "Tab" && !mod && !e.altKey) {
       e.preventDefault();
-      apply((v, s, en) => mapSelectedLines(v, s, en, e.shiftKey ? outdentLines : indentLines));
+      // In a table row Tab steps through the cells; elsewhere it indents.
+      apply(
+        (v, s, en) =>
+          (s === en ? stepTableCell(v, s, e.shiftKey) : null) ??
+          mapSelectedLines(v, s, en, e.shiftKey ? outdentLines : indentLines),
+      );
       return;
     }
     onKeyDown?.(e);
@@ -294,6 +302,16 @@ export function NoteEditor({
             {label}
           </button>
         ))}
+        <button
+          type="button"
+          data-track="note-format:table"
+          onMouseDown={keep}
+          onClick={() => apply(insertTable)}
+          data-tip={t("panes.insertTable")}
+          className={barButton}
+        >
+          ⊞
+        </button>
         <span aria-hidden className="mx-1 h-4 w-px bg-line" />
         {STYLES.map(({ label, command: name, titleKey, track, cls }) => (
           <button

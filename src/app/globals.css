@@ -553,6 +553,17 @@ mark,
   font-size: 0.85em;
   background: color-mix(in srgb, var(--ink) 6%, transparent);
 }
+/* A table row (SPEC.md §6): the markdown row, monospace so the pipes line up
+   across rows; the rendered note draws the table. */
+.note-doc .note-table {
+  margin: 0;
+  padding: 0 0.5em;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.85em;
+  white-space: pre;
+  overflow-x: auto;
+  background: color-mix(in srgb, var(--clay-500) 7%, transparent);
+}
 .note-doc .note-chip {
   display: inline-flex;
   height: 18px;

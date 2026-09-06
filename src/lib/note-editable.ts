@@ -12,11 +12,15 @@
 // markdown — so the editor's line commands patch the markdown directly.
 
 import {
+  emptyTableRow,
   isAtom,
+  lineBounds,
   lineVisibleStart,
   noteDocHtml,
   parseNote,
   sourceOffset,
+  TABLE_ROW,
+  tableCells,
   visibleOffset,
   type InlineStyle,
   type NoteLine,
@@ -205,15 +209,34 @@ function readSelection(el: HTMLElement): { text: string; selection: TextSelectio
 // --- The markdown around a source offset.
 
 // Enter continues the line's structure: a list item starts the next item
-// ("- ", "N. "), a quote line the next quote line, an indented line keeps its
-// indent. Enter on an empty item ends the list instead.
+// ("- ", "N. "), a quote line the next quote line, a table row the next row
+// with the same cells, an indented line keeps its indent. Enter on an empty
+// item ends the list, and on an empty row ends the table.
 const LINE_LEAD = /^(\s*)(?:([-*+])|(\d{1,3})([.)])|(>))(\s+|$)/;
 
-export function newlineFor(text: string, caret: number): { insert: string; from: number } {
-  const lineStart = text.lastIndexOf("\n", caret - 1) + 1;
-  const lineEndIdx = text.indexOf("\n", caret);
-  const lineEnd = lineEndIdx === -1 ? text.length : lineEndIdx;
-  const line = text.slice(lineStart, lineEnd);
+export type Newline = {
+  insert: string;
+  /** The insert replaces the text from here to the caret, or to `to` when set. */
+  from: number;
+  to?: number;
+  /** Where the caret lands; the end of the insert when unset. */
+  caret?: number;
+  /** The caret's line is a table row: the break never splits it. */
+  table?: boolean;
+};
+
+export function newlineFor(text: string, caret: number): Newline {
+  const { start: lineStart, end: lineEnd, line } = lineBounds(text, caret);
+  if (TABLE_ROW.test(line)) {
+    const cells = tableCells(line);
+    if (cells.every((c) => c.trim() === "")) {
+      // An empty row: the row goes, the caret stays on a plain line.
+      return { insert: "", from: lineStart, to: lineEnd, caret: lineStart, table: true };
+    }
+    // A new empty row under this one, the caret in its first cell.
+    const row = emptyTableRow(cells.length);
+    return { insert: `\n${row}`, from: lineEnd, to: lineEnd, caret: lineEnd + 3, table: true };
+  }
   const lead = LINE_LEAD.exec(line);
   if (!lead || caret < lineStart + lead[0].length) {
     // A plain line, or the caret inside the marker: split the line, keeping
@@ -419,9 +442,11 @@ export function attachNoteEditable(
   function newline(plain: boolean) {
     const sel = currentSelection();
     const collapsed = sel.start === sel.end;
-    let { insert, from } = plain || !collapsed ? { insert: "\n", from: Math.min(sel.start, sel.end) } : newlineFor(text, sel.start);
-    let to = Math.max(sel.start, sel.end);
-    if (insert.startsWith("\n") && collapsed) {
+    const nl: Newline =
+      plain || !collapsed ? { insert: "\n", from: Math.min(sel.start, sel.end) } : newlineFor(text, sel.start);
+    let { insert, from } = nl;
+    let to = nl.to ?? Math.max(sel.start, sel.end);
+    if (insert.startsWith("\n") && collapsed && !nl.table) {
       const run = runAt(lines, from);
       if (run) {
         // Spaces beside the break would sit against a marker; markdown wants
@@ -435,7 +460,7 @@ export function attachNoteEditable(
       }
     }
     const next = text.slice(0, from) + insert + text.slice(to);
-    const caret = from + insert.length;
+    const caret = nl.caret ?? from + insert.length;
     commit(next, { start: caret, end: caret }, false);
   }
 
@@ -456,7 +481,7 @@ export function attachNoteEditable(
     before.setEnd(range.startContainer, range.startOffset);
     if (before.toString().replace(/\u200b/g, "") !== "") return false;
     const line = lines[lineElements(el).indexOf(lineEl)];
-    if (!line || line.kind === "p" || line.kind === "code") return false;
+    if (!line || line.kind === "p" || line.kind === "code" || line.kind === "table") return false;
     let next: string;
     let caret: number;
     if ((line.kind === "bullet" || line.kind === "numbered") && line.indent >= 2) {

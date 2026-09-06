@@ -14,6 +14,10 @@ import { parseNote, visibleText } from "@/lib/note-markup";
 const BLOCK_TAG = /\[block [a-zA-Z0-9]+\]/g;
 const IMAGE = /!\[([^\]\n]*)\]\([^)\n]*\)/g;
 const FENCE = /```[\s\S]*?```/g;
+// A table's separator row ("| --- | --- |") carries no words; the other rows'
+// pipes read as spaces.
+const TABLE_SEPARATOR = /^\s*\|(?:\s*:?-+:?\s*\|)+\s*$/gm;
+const PIPE = /\|/g;
 
 export function markdownPreview(text: string): string {
   const source = text
@@ -23,7 +27,9 @@ export function markdownPreview(text: string): string {
     // image as its alt — a preview line has no room for a picture, and none
     // for a URL.
     .replace(BLOCK_TAG, "")
-    .replace(IMAGE, "$1");
+    .replace(IMAGE, "$1")
+    .replace(TABLE_SEPARATOR, " ")
+    .replace(PIPE, " ");
   return visibleText(parseNote(source)).replace(/\s+/g, " ").trim();
 }
 

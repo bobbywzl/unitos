@@ -8,9 +8,13 @@
 //
 // The grammar is the subset the Markdown component renders (markdown.tsx):
 // "# " headings, "- " and "N. " lists nested by two-space indents, "> "
-// quotes, ``` fences, **bold**, *italic*, ~~strike~~, `code`, <u>, the four
-// color tags, [block id] chips, ![alt](url) images, and [text](url) links.
-// Anything else is plain text.
+// quotes, ``` fences, "| " table rows, **bold**, *italic*, ~~strike~~,
+// `code`, <u>, the four color tags, [block id] chips, ![alt](url) images,
+// and [text](url) links. Anything else is plain text.
+//
+// A table row is one line whose cells sit between pipes. The editor shows the
+// row as its markdown — the pipes stay visible, in a monospace line, so the
+// columns line up — and the rendered note draws the table (markdown.tsx).
 //
 // A chip and an image are atoms: the whole tag shows as one thing the caret
 // steps over, so every offset that walks runs treats them alike (isAtom).
@@ -55,7 +59,8 @@ export type LineKind =
   | "bullet"
   | "numbered"
   | "quote"
-  | "code";
+  | "code"
+  | "table";
 
 export type NoteLine = {
   kind: LineKind;
@@ -181,6 +186,9 @@ const BULLET = /^(\s*)([-*+])(\s)/;
 const NUMBERED = /^(\s*)(\d{1,3}[.)])(\s)/;
 const QUOTE = /^(\s*)(>)(\s?)/;
 const FENCE = /^\s*```/;
+// A table row: the line opens with a pipe. The separator row ("| --- |") is a
+// table row too.
+export const TABLE_ROW = /^\s*\|/;
 
 function parseLine(raw: string, src: number, inFence: boolean): NoteLine {
   const end = src + raw.length;
@@ -202,7 +210,104 @@ function parseLine(raw: string, src: number, inFence: boolean): NoteLine {
   if (numbered) return line("numbered", numbered[1].length, numbered[0].length);
   const quote = QUOTE.exec(raw);
   if (quote) return line("quote", 0, quote[0].length);
+  if (TABLE_ROW.test(raw)) return line("table", 0, 0);
   return line("p", 0, 0);
+}
+
+// --- Tables.
+
+/** The cells of a table row line: the text between its pipes. An empty array when the line is no table row. */
+export function tableCells(line: string): string[] {
+  if (!TABLE_ROW.test(line)) return [];
+  const trimmed = line.trim();
+  const inner = trimmed.slice(1, trimmed.endsWith("|") && trimmed.length > 1 ? -1 : undefined);
+  return inner.split("|");
+}
+
+/** An empty table row with `cols` cells. */
+export function emptyTableRow(cols: number): string {
+  return `|${"  |".repeat(Math.max(1, cols))}`;
+}
+
+const TABLE_COLUMNS = 2;
+const TABLE_ROWS = 2;
+
+/** The table the bar's table button inserts: a header row, its separator, and empty rows. */
+export function tableTemplate(): string {
+  const row = emptyTableRow(TABLE_COLUMNS);
+  const separator = `|${" --- |".repeat(TABLE_COLUMNS)}`;
+  return [row, separator, ...Array.from({ length: TABLE_ROWS }, () => row)].join("\n");
+}
+
+/** The line the caret is on: its start and end source offsets, and its text. */
+export function lineBounds(text: string, caret: number): { start: number; end: number; line: string } {
+  const start = text.lastIndexOf("\n", Math.max(0, caret - 1)) + 1;
+  const endIdx = text.indexOf("\n", caret);
+  const end = endIdx === -1 ? text.length : endIdx;
+  return { start, end, line: text.slice(start, end) };
+}
+
+/** Insert the table template at the caret, on lines of its own: a blank line
+    before it when the caret's line has text, and a blank line after it. The
+    caret lands in the first cell. */
+export function insertTable(text: string, s: number, e: number): { value: string; start: number; end: number } {
+  const before = text.slice(0, s);
+  const after = text.slice(e);
+  const lead = before === "" || before.endsWith("\n\n") ? "" : before.endsWith("\n") ? "\n" : "\n\n";
+  const trail = after === "" || after.startsWith("\n\n") ? "" : after.startsWith("\n") ? "\n" : "\n\n";
+  const value = before + lead + tableTemplate() + trail + after;
+  const caret = before.length + lead.length + 2;
+  return { value, start: caret, end: caret };
+}
+
+/** Tab in a table row: the caret moves to the next cell, or back to the
+    previous one. Past the last cell of the last row a new row is added.
+    Null when the caret is not in a table row. */
+export function stepTableCell(
+  text: string,
+  caret: number,
+  back: boolean,
+): { value: string; start: number; end: number } | null {
+  const { start, end, line } = lineBounds(text, caret);
+  if (!TABLE_ROW.test(line)) return null;
+  // The pipes' offsets in the line; the cells sit between them.
+  const pipes: number[] = [];
+  for (let i = 0; i < line.length; i++) if (line[i] === "|") pipes.push(i);
+  if (pipes.length < 2) return null;
+  const at = caret - start;
+  const cellIndex = pipes.findIndex((p, i) => at > p && (i === pipes.length - 1 || at <= pipes[i + 1]));
+  // Inside cell k: between pipes[k] and pipes[k + 1]. Before the first pipe or after the last: the row's edge.
+  const cell = cellIndex === -1 ? (at <= pipes[0] ? -1 : pipes.length - 1) : cellIndex;
+  const lastCell = pipes.length - 2;
+  const cellAt = (i: number) => start + pipes[i] + 1 + (line[pipes[i] + 1] === " " ? 1 : 0);
+  if (back) {
+    if (cell > 0) return caretPatch(text, cellAt(Math.min(cell - 1, lastCell)));
+    // The first cell: the last cell of the row above, when that is a table row.
+    if (start === 0) return caretPatch(text, cellAt(0));
+    const above = lineBounds(text, start - 1);
+    if (!TABLE_ROW.test(above.line)) return caretPatch(text, cellAt(0));
+    const pipesAbove = [...above.line].flatMap((ch, i) => (ch === "|" ? [i] : []));
+    if (pipesAbove.length < 2) return caretPatch(text, cellAt(0));
+    const p = pipesAbove[pipesAbove.length - 2];
+    return caretPatch(text, above.start + p + 1 + (above.line[p + 1] === " " ? 1 : 0));
+  }
+  if (cell < lastCell) return caretPatch(text, cellAt(cell + 1));
+  // The last cell: the first cell of the row below, or a new row.
+  if (end < text.length) {
+    const below = lineBounds(text, end + 1);
+    if (TABLE_ROW.test(below.line)) {
+      const first = below.line.indexOf("|");
+      return caretPatch(text, below.start + first + 1 + (below.line[first + 1] === " " ? 1 : 0));
+    }
+  }
+  const row = emptyTableRow(pipes.length - 1);
+  const value = text.slice(0, end) + "\n" + row + text.slice(end);
+  const c = end + 1 + 2;
+  return { value, start: c, end: c };
+}
+
+function caretPatch(text: string, caret: number): { value: string; start: number; end: number } {
+  return { value: text, start: caret, end: caret };
 }
 
 /** The note's lines: one per newline, with their runs and source offsets. */
@@ -350,6 +455,7 @@ export function noteDocHtml(lines: NoteLine[]): string {
     }
     closeQuote();
     if (line.kind === "code") html += `<p class="note-code">${inner(line)}</p>`;
+    else if (line.kind === "table") html += `<p class="note-table">${inner(line)}</p>`;
     else if (line.kind === "p") html += `<p>${inner(line)}</p>`;
     else html += `<${line.kind}>${inner(line)}</${line.kind}>`;
   }
