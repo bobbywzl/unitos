@@ -140,7 +140,7 @@ model Document {
   blocks    Block[]
   notebooks NotebookDocument[]
   sources   Source[]
-  glossary  Json?    // Phase 7: [{term, definition, blockIds[]}]
+  glossary  Json?    // Phase 7: [{term, definition, blockIds[], lang, definitions: {en?, zh?}}]
   createdAt DateTime @default(now())
 }
 
@@ -377,7 +377,7 @@ Each phase must be fully working end-to-end before starting the next.
 - Admin digest page at `/admin/digest`.
 
 ### Phase 7 — Glossary + export
-- On-ingest glossary extraction (terms/acronyms/symbols); hover definitions in reader.
+- On-ingest glossary extraction (terms/acronyms/symbols); hover definitions in reader. Definitions are written in the reader's language (§4): every ingest captures it before its after() scan and passes it to `buildGlossary`. The entry stores one definition per language — `Document.glossary`: `[{term, definition, blockIds[], lang, definitions: {en?, zh?}}]`, `lang` the language `definition` was written in, `definitions[lang]` mirroring it; an entry saved before `lang` was stored is unknown-language. A document opened in another language asks `POST /api/documents/[documentId]/glossary {lang}` (editor) for that language's definitions once per browser session; one model call over the term list writes them, and the hover shows them when they land. Until then the term still underlines and its hover shows only "Click for tools". The term itself is never translated: it reads as the document writes it.
 - Export notebook → Markdown and .docx with footnotes resolving to `documentTitle, blockId` citations.
 
 ---

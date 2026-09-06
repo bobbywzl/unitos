@@ -234,6 +234,9 @@ const en = {
   // Notifications (SPEC.md §18)
   notificationNotFound: "Notification not found",
   notificationNoRecipients: "No recipients. Pick at least one account.",
+
+  // Glossary language (SPEC.md §8 Phase 7)
+  glossaryLanguageFailed: "Writing glossary definitions in your language failed",
 };
 
 const zh: Record<keyof typeof en, string> = {
@@ -435,6 +438,8 @@ const zh: Record<keyof typeof en, string> = {
 
   notificationNotFound: "未找到通知",
   notificationNoRecipients: "没有收件人。请至少选择一个账户。",
+
+  glossaryLanguageFailed: "用你的语言生成术语表定义失败",
 };
 
 export const api = { en, zh } as const;
