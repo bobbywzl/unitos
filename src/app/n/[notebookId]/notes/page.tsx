@@ -50,6 +50,7 @@ export default async function NotesPage(props: { params: Promise<{ notebookId: s
     notes: s.notes.map((n) => ({
       id: n.id,
       content: n.content,
+      gist: n.gist,
       status: n.status,
       derivationType: n.derivationType,
       pinned: n.pinned,

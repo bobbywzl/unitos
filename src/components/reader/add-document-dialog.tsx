@@ -63,7 +63,8 @@ export function AddDocumentDialog({
   initialTab?: AddTab | null;
 }) {
   const t = useT();
-  const [tab, setTabState] = useState<AddTab>("pdf");
+  // The dialog opens on URL, the first tab.
+  const [tab, setTabState] = useState<AddTab>("url");
   // Opening on the requested tab: adjust during render (the Presence
   // pattern), so the first frame of the open dialog already shows it.
   const [prevOpen, setPrevOpen] = useState(open);
@@ -110,13 +111,14 @@ export function AddDocumentDialog({
     if (await onIngestUrl(trimmed)) setVideoUrl("");
   }
 
+  // Tab order: URL, PDF or image, Video or audio, Google Drive, Library.
   const tabs: { key: AddTab; label: string }[] = [
+    { key: "url", label: t("panes.addUrl") },
     { key: "pdf", label: t("panes.uploadPdf") },
     { key: "video", label: t("panes.uploadVideo") },
     ...(onImportDrive
-      ? [{ key: "drive" as const, label: t("panes.addFromDrive") }]
+      ? [{ key: "drive" as const, label: t("panes.tabDrive") }]
       : []),
-    { key: "url", label: t("panes.addUrl") },
     { key: "library", label: t("panes.library") },
   ];
   const chooseArea =
@@ -156,7 +158,7 @@ export function AddDocumentDialog({
         <div
           role="tablist"
           aria-label={t("panes.addDocument")}
-          className="flex w-full gap-1 rounded-full bg-sand-100 p-1"
+          className="flex w-full gap-1 overflow-x-auto rounded-full bg-sand-100 p-1"
         >
           {tabs.map(({ key, label }) => (
             <button
@@ -165,8 +167,7 @@ export function AddDocumentDialog({
               aria-selected={tab === key}
               onClick={() => setTab(key)}
               data-track={`add-tab:${key}`}
-              data-tip={label}
-              className={`min-w-0 flex-auto truncate rounded-full px-2 py-1.5 text-[12.5px] ${
+              className={`flex-auto rounded-full px-2 py-1.5 text-[12.5px] whitespace-nowrap ${
                 tab === key
                   ? "bg-card font-semibold text-clay-800 shadow-soft"
                   : "text-sand-600 hover:text-clay-800"

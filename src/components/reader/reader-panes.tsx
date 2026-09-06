@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { useT } from "@/components/lang-provider";
+import { clipWords } from "@/lib/markdown-preview";
 import { Presence } from "@/components/presence";
 import type { TKey } from "@/lib/i18n/dictionaries";
 
@@ -110,7 +111,7 @@ export function PaneDocumentSelect({
     >
       {documents.map((d) => (
         <option key={d.id} value={d.id}>
-          {d.title.length > 48 ? `${d.title.slice(0, 48)}…` : d.title}
+          {clipWords(d.title, 48)}
         </option>
       ))}
     </select>

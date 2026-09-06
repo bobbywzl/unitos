@@ -7,26 +7,29 @@ import { db } from "@/lib/db";
 
 type Price = { input: number; output: number; cacheRead: number; cacheWrite: number };
 
-// Anthropic publishes cache-read at 0.1× input and cache-write at 1.25×;
-// close enough for Gemini's cached tier too (estimates either way).
+// Moonshot serves a cache hit at 0.1× the input price and charges nothing to
+// write the cache, so a cache write counts as plain input; close enough for
+// Gemini's cached tier too (estimates either way).
 const price = (input: number, output: number): Price => ({
   input,
   output,
   cacheRead: input * 0.1,
+  cacheWrite: input,
+});
+
+// Anthropic serves a cache hit at 0.1× the input price and charges 1.25× to
+// write the cache. Claude Fable 5.1 serves a cache hit at $0.25 flat.
+const anthropicPrice = (input: number, output: number, cacheRead = input * 0.1): Price => ({
+  input,
+  output,
+  cacheRead,
   cacheWrite: input * 1.25,
 });
 
 /** Exact-match list prices, USD per 1M tokens. */
 const MODEL_PRICING: Record<string, Price> = {
-  "claude-fable-5-1": price(10, 50),
-  "claude-fable-5": price(10, 50),
-  "claude-opus-5": price(5, 25),
-  "claude-opus-4-8": price(5, 25),
-  "claude-opus-4-7": price(5, 25),
-  "claude-opus-4-6": price(5, 25),
-  "claude-sonnet-5": price(2, 10),
-  "claude-sonnet-4-6": price(3, 15),
-  "claude-haiku-4-5": price(1, 5),
+  "claude-fable-5-1": anthropicPrice(10, 50, 0.25),
+  "kimi-k3": price(3, 15),
   "gemini-3.7-flash": price(0.3, 2.5),
   "gemini-flash-latest": price(0.3, 2.5),
   // OpenAI: whisper-1 is per-minute — its callers pass costUsd directly.
@@ -46,11 +49,12 @@ const MODEL_PRICING: Record<string, Price> = {
 
 /** Family fallbacks for ids not priced exactly; first match wins. */
 const FAMILY_PRICING: [RegExp, Price][] = [
-  [/^claude.*(fable|mythos)/, price(10, 50)],
-  [/^claude.*opus/, price(5, 25)],
-  [/^claude.*haiku/, price(1, 5)],
-  [/^claude.*sonnet-5/, price(2, 10)],
-  [/^claude/, price(3, 15)],
+  [/^claude.*(fable|mythos)/, anthropicPrice(10, 50)],
+  [/^claude.*opus/, anthropicPrice(5, 25)],
+  [/^claude.*haiku/, anthropicPrice(1, 5)],
+  [/^claude.*sonnet-5/, anthropicPrice(2, 10)],
+  [/^claude/, anthropicPrice(3, 15)],
+  [/^kimi/, price(3, 15)],
   [/^gemini.*flash/, price(0.3, 2.5)],
   [/^gemini/, price(1.25, 10)],
 ];
@@ -95,12 +99,13 @@ export function sdkTokens(usage: {
 
 export type UsageMeta = {
   userId: string | null;
-  feature: string; // explain | simplify | … | assistant | act | glossary | transcribe | describe | voice
+  feature: string; // explain | simplify | … | assistant | act | glossary | transcribe | describe | voice | gist
   model: string;
 };
 
 function providerOf(model: string): string {
   if (model.startsWith("claude")) return "anthropic";
+  if (model.startsWith("kimi") || model.startsWith("moonshot")) return "moonshot";
   if (model.startsWith("gemini")) return "google";
   if (model.startsWith("whisper-large") || model.startsWith("distil-whisper")) return "groq";
   if (model === "edge-tts") return "microsoft";

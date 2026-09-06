@@ -1,12 +1,13 @@
-import { anthropic } from "@ai-sdk/anthropic";
 import type { ModelMessage } from "ai";
 import { z } from "zod";
 import { bumpDocument } from "@/lib/collab";
 import { db } from "@/lib/db";
+import { KIMI_K3 } from "@/lib/derive/config";
 import { documentPrefix } from "@/lib/derive/context";
 import { callForJson } from "@/lib/derive/json-call";
 import { isLang, type Lang } from "@/lib/i18n/config";
 import { currentLang } from "@/lib/i18n/server";
+import { kimi, kimiConfigured, kimiOptions } from "@/lib/kimi";
 import { languageName } from "@/lib/prompts/types";
 import type { UsageMeta } from "@/lib/usage";
 
@@ -18,7 +19,7 @@ import type { UsageMeta } from "@/lib/usage";
 // definitions[lang] mirrors definition. An entry saved before lang was stored
 // has no lang: its language is unknown, so only definitions can serve it.
 // The term is never translated: it stays as the document writes it.
-const GLOSSARY_MODEL = "claude-opus-5";
+const GLOSSARY_MODEL = KIMI_K3;
 const TERM_MAX = 80;
 const DEFINITION_MAX = 500;
 
@@ -136,7 +137,7 @@ export async function buildGlossary(
   userId: string | null = null,
   lang?: Lang,
 ): Promise<number> {
-  if (!process.env.ANTHROPIC_API_KEY) return 0;
+  if (!kimiConfigured()) return 0;
   const definitionLang = lang ?? (await currentLang());
   const document = await db.document.findUnique({
     where: { id: documentId },
@@ -148,14 +149,14 @@ export async function buildGlossary(
     {
       role: "system",
       content: documentPrefix(document.title, document.blocks, document.references),
-      providerOptions: { anthropic: { cacheControl: { type: "ephemeral" } } },
     },
     { role: "user", content: glossaryPrompt(definitionLang) },
   ];
   const result = await callForJson({
-    model: anthropic(GLOSSARY_MODEL),
+    model: kimi(GLOSSARY_MODEL),
     messages,
     maxOutputTokens: 8192,
+    providerOptions: kimiOptions(),
     schema: glossarySchema,
     label: "GLOSSARY",
     usage: { userId, feature: "glossary", model: GLOSSARY_MODEL } satisfies UsageMeta,
@@ -186,7 +187,7 @@ export async function glossaryInLanguage(
   userId: string | null,
   lang: Lang,
 ): Promise<number> {
-  if (!process.env.ANTHROPIC_API_KEY) return 0;
+  if (!kimiConfigured()) return 0;
   const document = await db.document.findUnique({
     where: { id: documentId },
     select: { title: true, glossary: true },
@@ -201,7 +202,8 @@ export async function glossaryInLanguage(
     { role: "user", content: glossaryLanguagePrompt(document.title, wanted, lang) },
   ];
   const result = await callForJson({
-    model: anthropic(GLOSSARY_MODEL),
+    model: kimi(GLOSSARY_MODEL),
+    providerOptions: kimiOptions(),
     messages,
     maxOutputTokens: 8192,
     schema: glossaryLanguageSchema,
