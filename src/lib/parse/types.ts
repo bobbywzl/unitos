@@ -72,6 +72,10 @@ export type ParsedDocument = {
   // The page's body font family, read from the baked <body data-font>
   // (lib/parse/figure-style.ts); stored in Document.font on creation.
   font?: "sans" | "serif" | "mono";
+  // The page's text column width in px, as a 1280×900 desktop browser lays
+  // it out, read from the baked <body data-column-px>; stored in
+  // Document.columnWidth, the reader's column width for the document.
+  columnWidth?: number;
 };
 
 /** Document.references as stored Json → typed entries. Defensive: bad rows drop. */
@@ -169,4 +173,9 @@ export type UrlParseProgress = (stage: "extract", detail?: string) => void;
 //     svg carries the page's colors, fonts, and backdrop as inline style, and
 //     an image carries the backdrop the page drew behind it.
 // 16: replica fidelity — a page's hidden tree is pruned by its stylesheet, a contents list keeps its links to the article's headings, sub-headings set as styled paragraphs and headings sized by the page become headings by level, the kicker, metadata line, pull quotes, and captions carry their layout, bold, italic, underline, and code runs become style spans, the page's font family travels with the document, figures keep the page's widths and rows, a scripted chart renders in a browser where one is configured.
-export const PARSER_VERSION = 16;
+// 17: the page's width — the text column's width travels with the document
+//     and is the reader's column; a figure the page sets wider than its text
+//     column draws wider in the reader too; a chart the page's scripts
+//     animate settles before the parse, and a looping one is captured as a
+//     GIF of one loop (browser render only).
+export const PARSER_VERSION = 17;

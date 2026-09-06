@@ -486,6 +486,7 @@ export function ReaderInteractions({
   pageMarksByBlock,
   conversion,
   font,
+  columnWidth,
   translationAvailable,
   transcript,
 }: {
@@ -591,6 +592,9 @@ export function ReaderInteractions({
   pageMarksByBlock: Record<string, PageMark[]>;
   conversion: ConversionInfo | null;
   font: string | null;
+  // The page's text column width in px (Document.columnWidth): the article
+  // column's width. Null = the reader's default.
+  columnWidth: number | null;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -4464,6 +4468,7 @@ function blockFormatKind(
         highlightsByBlock={highlightsByBlock}
         mode={editMode ? "edit" : "read"}
         font={font}
+        columnWidth={columnWidth}
         stylesByBlock={stylesByBlock}
         editedByBlock={editedByBlock}
         pages={

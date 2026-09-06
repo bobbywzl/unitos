@@ -283,19 +283,29 @@ model BlockTranslation {
 // The bytes live here and the reader loads them from /api/images/[imageId];
 // a note points at that URL in its markdown, a FIGURE block in its html.
 model ImageAsset {
-  id        String   @id @default(cuid())
-  mimeType  String
-  size      Int
-  data      Bytes
+  id         String    @id @default(cuid())
+  mimeType   String
+  size       Int
+  data       Bytes
   // Account that added it; null = the local reader (sign-in off).
-  userId    String?
-  createdAt DateTime @default(now())
+  userId     String?
+  // The document whose parse captured it (a chart animation's loop,
+  // lib/parse/capture-animation.ts): it goes with the document, and a
+  // re-parse replaces it. Null = an image the reader dropped.
+  documentId String?
+  document   Document? @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  createdAt  DateTime  @default(now())
+
+  @@index([documentId])
 }
 
 model Document {
   id            String             @id @default(cuid())
   title         String
   font          String? // reader body font: null = default, "serif", "mono"
+  // The page's text column width in px (lib/parse/figure-style.ts): the
+  // reader's column width for a URL document. Null = the reader's default.
+  columnWidth   Int?
   parserVersion Int                @default(0) // parse pipeline version; stale URL documents re-parse automatically
   sourceUrl     String?
   fileHash      String?            @unique // dedupe re-uploads
@@ -318,6 +328,7 @@ model Document {
   glossary      Json? // Phase 7: [{term, definition, blockIds[], lang, definitions: {en?, zh?}}] — one definition per reader language
   references    Json? // the article's reference list, extracted at ingest: [{id, label, text, url}]
   video         VideoAsset? // set = video document; the reader renders the video pane (SPEC.md §11)
+  images        ImageAsset[] // images the parse captured (chart animations)
   createdAt     DateTime           @default(now())
 }
 

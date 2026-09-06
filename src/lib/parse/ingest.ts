@@ -144,6 +144,7 @@ async function createDocumentWithBlocks(data: {
   blocks: ParsedBlock[];
   references?: DocumentReference[];
   font?: ParsedDocument["font"];
+  columnWidth?: number;
 }) {
   const blocks = resolveContentsLinks(data.blocks);
   return db.$transaction(async (tx) => {
@@ -156,6 +157,7 @@ async function createDocumentWithBlocks(data: {
         parserVersion: PARSER_VERSION,
         references: data.references,
         font: data.font,
+        columnWidth: data.columnWidth,
       },
     });
     await tx.block.createMany({
@@ -172,8 +174,32 @@ async function createDocumentWithBlocks(data: {
         links: b.links,
       })),
     });
+    await claimCapturedImages(tx, document.id, blocks);
     return document;
   });
+}
+
+// An image the parse stored itself (a captured chart animation,
+// lib/parse/render-page.ts) belongs to the document whose figure carries
+// it: it goes with the document, and a re-parse replaces it.
+const OWN_IMAGE_SRC_RX = /\ssrc="\/api\/images\/([A-Za-z0-9_-]+)"/g;
+
+function capturedImageIds(blocks: { html?: string | null }[]): string[] {
+  const ids = new Set<string>();
+  for (const block of blocks) {
+    for (const match of (block.html ?? "").matchAll(OWN_IMAGE_SRC_RX)) ids.add(match[1]);
+  }
+  return [...ids];
+}
+
+async function claimCapturedImages(
+  tx: Pick<typeof db, "imageAsset">,
+  documentId: string,
+  blocks: { html?: string | null }[],
+) {
+  const ids = capturedImageIds(blocks);
+  if (ids.length === 0) return;
+  await tx.imageAsset.updateMany({ where: { id: { in: ids }, documentId: null }, data: { documentId } });
 }
 
 // A handwritten document: no text blocks — one PAGE block per PDF page, the
@@ -292,7 +318,7 @@ export async function ingestUrl(
   const existing = await db.document.findFirst({ where: { sourceUrl: url } });
   if (existing) {
     if (existing.parserVersion < PARSER_VERSION) {
-      const document = await reparseDocument(existing.id, onProgress, undefined, opts.deadline);
+      const document = await reparseDocument(existing.id, onProgress, undefined, opts.deadline, userId);
       if (document) return { document, deduped: false };
     }
     return { document: existing, deduped: true };
@@ -319,8 +345,9 @@ export async function ingestUrl(
     return { document, deduped };
   }
   // A page whose figures its scripts draw renders in a browser first, where
-  // one is configured (lib/parse/render-page.ts).
-  const page = await renderIfNeeded(fetched, url, onProgress);
+  // one is configured (lib/parse/render-page.ts); an animated chart's loop
+  // is stored as an image of the document.
+  const page = await renderIfNeeded(fetched, url, onProgress, { store: { userId } });
   const pageHtml = page.kind === "html" ? page.html : fetched.html;
   onProgress?.("extract");
   const parsed = await parseHtmlContent(pageHtml, url, onProgress);
@@ -332,6 +359,7 @@ export async function ingestUrl(
   });
   // The page's font comes from the parse, else from the layout pass.
   const font = parsed.font ?? laidFont;
+  const columnWidth = parsed.columnWidth;
   const title = parsed.title ?? url;
 
   if (opts.split) {
@@ -348,6 +376,7 @@ export async function ingestUrl(
             blocks: parts[i].blocks,
             references: referencesForPart(parts[i].blocks, references),
             font,
+            columnWidth,
           }),
         );
       }
@@ -362,12 +391,15 @@ export async function ingestUrl(
     blocks,
     references,
     font,
+    columnWidth,
   });
   return { document, deduped: false };
 }
 
 // Re-parse from stored bytes or source URL. Block ids change; anchors re-resolve by quote (SPEC.md §5).
 // A re-parse never changes Document.font: the reader may have picked one.
+// It does set Document.columnWidth: the page's width is the page's fact.
+// The images the last parse captured go; the new parse's take their place.
 // Video documents never re-parse: their blocks are the player and the transcript (SPEC.md §11).
 // `as` flips a PDF between the two shapes (SPEC.md §16) — the escape hatch when
 // Import PDF judged it wrong: "article" parses the stored bytes to text blocks;
@@ -379,6 +411,8 @@ export async function reparseDocument(
   as?: "article" | "handwritten",
   // The model passes' time budget (modelPassDeadline); absent: no budget.
   deadline?: number,
+  // The account the captured images are recorded under.
+  userId: string | null = null,
 ) {
   const document = await db.document.findUnique({
     where: { id: documentId },
@@ -416,6 +450,7 @@ export async function reparseDocument(
 
   let blocks: ParsedBlock[];
   let references: DocumentReference[] | undefined;
+  let columnWidth: number | undefined;
   if (document.fileData) {
     onProgress?.("parse");
     blocks = (await parsePdf(new Uint8Array(document.fileData))).blocks;
@@ -423,8 +458,9 @@ export async function reparseDocument(
     const url = document.sourceUrl;
     const fetched = await fetchPage(url, onProgress);
     // A page whose figures its scripts draw renders in a browser first, where
-    // one is configured (lib/parse/render-page.ts).
-    const page = await renderIfNeeded(fetched, url, onProgress);
+    // one is configured (lib/parse/render-page.ts); an animated chart's loop
+    // is stored as an image of the document.
+    const page = await renderIfNeeded(fetched, url, onProgress, { store: { userId } });
     onProgress?.("extract");
     const parsed = await parseFetchedPage(page, url, onProgress);
     const refined = await refineUrlBlocks(parsed, onProgress, {
@@ -434,6 +470,7 @@ export async function reparseDocument(
     });
     references = refined.references;
     blocks = refined.blocks;
+    columnWidth = parsed.columnWidth;
   } else {
     throw new Error("Document has no stored file and no source URL");
   }
@@ -442,6 +479,7 @@ export async function reparseDocument(
   const rows = resolveContentsLinks(blocks);
   await db.$transaction(async (tx) => {
     await tx.block.deleteMany({ where: { documentId } });
+    await tx.imageAsset.deleteMany({ where: { documentId } });
     await tx.block.createMany({
       data: rows.map((b, i) => ({
         documentId,
@@ -456,11 +494,13 @@ export async function reparseDocument(
         links: b.links,
       })),
     });
+    await claimCapturedImages(tx, documentId, rows);
     await tx.document.update({
       where: { id: documentId },
       data: {
         parserVersion: PARSER_VERSION,
         references,
+        columnWidth: columnWidth ?? null,
         handwritten: false,
         conversionStatus: "NONE",
         conversionError: null,
