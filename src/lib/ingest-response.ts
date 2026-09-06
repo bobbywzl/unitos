@@ -1,5 +1,5 @@
 import { serverT } from "@/lib/i18n/server";
-import { ndjsonWriter } from "@/lib/ndjson";
+import { ndjsonHeartbeat, ndjsonWriter } from "@/lib/ndjson";
 import type { OnIngestProgress } from "@/lib/parse/ingest";
 
 // Once validation passes, ingest is real work worth showing progress for (parse, save).
@@ -7,12 +7,15 @@ import type { OnIngestProgress } from "@/lib/parse/ingest";
 // on are reported in-band as a final {error} line instead of a status code — same tradeoff
 // the /api/derive text stream already makes. The terminal line is the run's result:
 // {id, title, deduped} for ingest, {review} for the upload assistant's review.
+// A heartbeat keeps the connection alive while a model pass reasons in
+// silence (lib/ndjson.ts).
 export function progressResponse<T extends Record<string, unknown>>(
   run: (onProgress: OnIngestProgress) => Promise<T>,
 ) {
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       const send = ndjsonWriter(controller);
+      const stopHeartbeat = ndjsonHeartbeat(controller);
       try {
         const result = await run((stage, detail) => send({ stage, detail }));
         send(result);
@@ -20,6 +23,7 @@ export function progressResponse<T extends Record<string, unknown>>(
         const t = await serverT();
         send({ error: err instanceof Error ? err.message : t("common.requestFailed") });
       } finally {
+        stopHeartbeat();
         controller.close();
       }
     },

@@ -277,7 +277,13 @@ export async function POST(req: Request) {
       const { document, extra, deduped } = await parse.ingestUrl(
         data.url,
         onProgress,
-        { instructions: data.instructions.trim() || undefined, split: data.split },
+        {
+          instructions: data.instructions.trim() || undefined,
+          split: data.split,
+          // The model passes must finish inside the route's time; past the
+          // budget a pass is skipped and the mechanical parse stands (SPEC.md §2).
+          deadline: parse.modelPassDeadline(maxDuration),
+        },
         user?.id ?? null,
       );
       // A split add saves several documents; every one attaches, gets its

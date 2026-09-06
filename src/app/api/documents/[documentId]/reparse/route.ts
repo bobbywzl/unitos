@@ -5,10 +5,13 @@ import { db } from "@/lib/db";
 import { buildGlossary } from "@/lib/glossary";
 import { runConversion } from "@/lib/handwritten/convert";
 import { currentLang, serverT } from "@/lib/i18n/server";
-import { ndjsonWriter } from "@/lib/ndjson";
+import { ndjsonHeartbeat, ndjsonWriter } from "@/lib/ndjson";
+import { modelPassDeadline } from "@/lib/parse/ingest";
 import { describeIngestError } from "@/lib/parse/ingest-error";
 
-export const maxDuration = 120;
+// A URL re-parse runs the same model passes as an add (SPEC.md §2); the
+// passes get the same time budget the add gets.
+export const maxDuration = 300;
 
 // The body is optional: no body re-parses in the document's shape; `as` flips
 // a PDF between article and handwritten (SPEC.md §16) — the escape hatch when
@@ -61,14 +64,19 @@ export async function POST(req: Request, ctx: { params: Promise<{ documentId: st
   }
 
   const userId = access.user.id;
+  // The model passes must finish inside the route's time; past the budget a
+  // pass is skipped and the mechanical parse stands (SPEC.md §2).
+  const deadline = modelPassDeadline(maxDuration);
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       const send = ndjsonWriter(controller);
+      const stopHeartbeat = ndjsonHeartbeat(controller);
       try {
         const updated = await parse.reparseDocument(
           documentId,
           (stage, detail) => send({ stage, detail }),
           as,
+          deadline,
         );
         if (!updated) send({ error: t("api.documentNotFound") });
         else {
@@ -88,6 +96,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ documentId: st
         console.error("Re-parse failed:", err);
         send({ error: describeIngestError(err, t, "reparse") });
       } finally {
+        stopHeartbeat();
         controller.close();
       }
     },
