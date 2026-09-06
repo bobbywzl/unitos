@@ -20,8 +20,16 @@ type ProviderOptions = NonNullable<Parameters<typeof generateText>[0]["providerO
 
 /** A model-call failure as a readable message. The route returns it to the
     client, so the toast shows the real reason, never a bare 500. */
+// The reason shown on the reader's card. A message from the HTTP layer can
+// quote the request's Authorization header, key included (an invalid header
+// value, a failed fetch); the key never reaches the screen or the log line
+// that quotes this text.
+const BEARER_RX = /Bearer\s+[^\s"']+/g;
+const KEY_RX = /\bsk-[A-Za-z0-9_-]{8,}/g;
+
 export function modelErrorMessage(err: unknown): string {
-  const message = err instanceof Error ? err.message : String(err);
+  const raw = err instanceof Error ? err.message : String(err);
+  const message = raw.replace(BEARER_RX, "Bearer [redacted]").replace(KEY_RX, "[redacted]");
   return message.length > 400 ? `${message.slice(0, 400)}…` : message;
 }
 

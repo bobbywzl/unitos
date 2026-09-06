@@ -13,8 +13,10 @@ import { outboundFetch } from "@/lib/outbound-fetch";
 
 const DEFAULT_BASE_URL = "https://api.moonshot.ai/v1";
 
+// Whitespace stripped: a key pasted into the host's settings with a line
+// break inside it is refused as a header value, and the request never leaves.
 export function kimiApiKey(): string | undefined {
-  return process.env.MOONSHOT_API_KEY || undefined;
+  return process.env.MOONSHOT_API_KEY?.replace(/\s+/g, "") || undefined;
 }
 
 /** A key is set, so the AI features are on. Every route checks this first. */
