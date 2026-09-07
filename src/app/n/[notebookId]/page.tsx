@@ -58,6 +58,7 @@ import {
   type VideoAnnotationItem,
   type VideoInfo,
 } from "@/lib/video/types";
+import { premiumActive, ultraActive } from "@/lib/tiers";
 
 export const dynamic = "force-dynamic";
 
@@ -341,11 +342,13 @@ export default async function NotebookPage(props: {
               ? ("simplify" as const)
               : n.derivationType === "ANALYZE"
                 ? ("analyze" as const)
-                : n.derivationType === "SYNTHESIS"
-                  ? ("assistant" as const)
-                  : n.color
-                    ? ("highlight" as const)
-                    : ("comment" as const);
+                : n.derivationType === "VISUALIZE"
+                  ? ("visualize" as const)
+                  : n.derivationType === "SYNTHESIS"
+                    ? ("assistant" as const)
+                    : n.color
+                      ? ("highlight" as const)
+                      : ("comment" as const);
         return {
           id: n.id,
           kind,
@@ -362,8 +365,9 @@ export default async function NotebookPage(props: {
       })
       .filter((a): a is AnnotationItem => a !== null);
 
-    // Stored EXPLAIN, SIMPLIFY, ANALYZE, comment, and assistant conversation
-    // content by source id: clicking the mark reopens the card with this content.
+    // Stored EXPLAIN, SIMPLIFY, ANALYZE, VISUALIZE, comment, and assistant
+    // conversation content by source id: clicking the mark reopens the card
+    // with this content.
     const annotationBubbles = Object.fromEntries(
       annotations
         .filter(
@@ -371,6 +375,7 @@ export default async function NotebookPage(props: {
             (a.kind === "explain" ||
               a.kind === "simplify" ||
               a.kind === "analyze" ||
+              a.kind === "visualize" ||
               a.kind === "comment" ||
               a.kind === "assistant") &&
             a.sourceId,
@@ -378,7 +383,7 @@ export default async function NotebookPage(props: {
         .map((a) => [
           a.sourceId as string,
           {
-            kind: a.kind as "explain" | "simplify" | "analyze" | "comment" | "assistant",
+            kind: a.kind as "explain" | "simplify" | "analyze" | "visualize" | "comment" | "assistant",
             content: a.content,
             noteId: a.id,
           },
@@ -1141,7 +1146,8 @@ export default async function NotebookPage(props: {
     shared: authEnabled() && notebook.collaborators.length > 0,
     myId: user.id,
     people: await peopleByIds(authorIds),
-    premium: authEnabled() ? user.premium : true,
+    premium: authEnabled() ? premiumActive(user) : true,
+    ultra: authEnabled() ? ultraActive(user) : true,
   };
 
   // The text layer over a document's blocks: marks, links, terms, and the

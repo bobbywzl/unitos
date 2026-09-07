@@ -8,6 +8,8 @@ import { serverT } from "@/lib/i18n/server";
 import { recipientAccounts } from "@/lib/notifications";
 import { AdminNav } from "@/components/admin/admin-nav";
 import { FeedbackInbox } from "@/components/admin/feedback-inbox";
+import { ModelCheck } from "@/components/admin/model-check";
+import { MODEL_ROLES, ROLE_ORDER } from "@/lib/models";
 
 export const dynamic = "force-dynamic";
 
@@ -18,7 +20,7 @@ export default async function AdminPage() {
   if (!(await isAdmin())) redirect("/admin/login");
   const t = await serverT();
 
-  const [feedback, accounts] = await Promise.all([
+  const [feedback, accounts, modelRows] = await Promise.all([
     db.feedback.findMany({
       orderBy: { createdAt: "desc" },
       take: 300,
@@ -35,7 +37,24 @@ export default async function AdminPage() {
       },
     }),
     recipientAccounts(),
+    db.modelChoice.findMany(),
   ]);
+  // The model per role (lib/models.ts): the constant, the id called now,
+  // and what the last model update found.
+  const fmtDate = (d: Date) => d.toISOString().slice(0, 10);
+  const models = ROLE_ORDER.map((role) => {
+    const row = modelRows.find((r) => r.role === role);
+    return {
+      role,
+      provider: MODEL_ROLES[role].provider,
+      defaultId: MODEL_ROLES[role].defaultId,
+      modelId: row?.modelId ?? MODEL_ROLES[role].defaultId,
+      previousModelId: row?.previousModelId ?? "",
+      checkedAt: row ? fmtDate(row.checkedAt) : null,
+      changedAt: row?.changedAt ? fmtDate(row.changedAt) : null,
+      note: row?.note ?? "",
+    };
+  });
   // The account that sent each feedback, by name. The admin's view of accounts
   // is names and emails (lib/notifications.ts) — enough to reply.
   const nameOf = new Map(accounts.map((a) => [a.id, a.name || t("admin.localReader")]));
@@ -73,6 +92,32 @@ export default async function AdminPage() {
             </div>
           ))}
           <p className="border-t border-line py-2 text-xs text-sand-600">{t("admin.envHint")}</p>
+        </div>
+      </section>
+      <section className="mb-8">
+        <h2 className="mb-2 text-[11px] font-bold tracking-[0.08em] text-sand-600 uppercase">
+          {t("admin.models")}
+        </h2>
+        <div className="rounded-2xl bg-card px-4 py-2 shadow-soft">
+          <p className="py-2 text-xs text-sand-600">{t("admin.modelsDesc")}</p>
+          {models.map((m) => (
+            <div key={m.role} className="flex flex-col gap-0.5 border-t border-line py-2">
+              <div className="flex items-center justify-between gap-4">
+                <div className="font-mono text-sm">{m.modelId}</div>
+                <span className="text-xs text-sand-600">{m.provider}</span>
+              </div>
+              <div className="text-xs text-sand-600">
+                {m.modelId !== m.defaultId && `${t("admin.modelDefault", { id: m.defaultId })} · `}
+                {m.checkedAt
+                  ? t("admin.modelChecked", { date: m.checkedAt })
+                  : t("admin.modelNotChecked")}
+                {m.changedAt &&
+                  ` · ${t("admin.modelChanged", { date: m.changedAt, from: m.previousModelId })}`}
+              </div>
+              {m.note && <div className="text-xs text-sand-500">{m.note}</div>}
+            </div>
+          ))}
+          <ModelCheck />
         </div>
       </section>
       <FeedbackInbox

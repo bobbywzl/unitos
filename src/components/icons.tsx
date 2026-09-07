@@ -225,6 +225,17 @@ export function ChartIcon(props: IconProps) {
   );
 }
 
+// Visualize (SPEC.md §20): a picture.
+export function VisualizeIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <circle cx="8.5" cy="9.5" r="1.5" />
+      <path d="M21 15l-5-5-9 9" />
+    </Icon>
+  );
+}
+
 export function MicIcon(props: IconProps) {
   return (
     <Icon {...props}>

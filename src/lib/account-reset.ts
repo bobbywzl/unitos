@@ -1,6 +1,7 @@
 import { USER_ID } from "@/lib/constants";
 import { db } from "@/lib/db";
 import { revokeDriveToken } from "@/lib/drive/link";
+import { trialEnd } from "@/lib/tiers";
 
 // Reset an account (the admin accounts page, /admin/accounts): delete
 // everything the account holds and put it back at onboarding, so it reads like
@@ -90,7 +91,8 @@ export async function resetAccount(userId: string): Promise<AccountResetCounts |
         picture: "",
         symbol: "",
         color: "",
-        premium: false,
+        tier: "PREMIUM",
+        trialEndsAt: trialEnd(now),
         driveRefreshToken: "",
         driveScope: "",
         createdAt: now,

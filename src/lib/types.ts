@@ -220,12 +220,13 @@ export function extractionList(value: unknown): Extraction[] {
 /** One annotation on the open document, shown in the Annotations tab.
     kind: "highlight" = manual color highlight, "comment" = margin comment,
     "explain" = AI explanation, "simplify" = AI simplified rewrite, "analyze" =
-    AI analysis of a figure or table, "assistant" = assistant conversation. All
+    AI analysis of a figure or table, "visualize" = AI picture of the selection
+    (SPEC.md §20), "assistant" = assistant conversation. All
     live as notes in the hidden Annotations section; highlights carry a color,
     comments carry the user's text. */
 export type AnnotationItem = {
   id: string; // note id
-  kind: "explain" | "simplify" | "analyze" | "highlight" | "comment" | "assistant";
+  kind: "explain" | "simplify" | "analyze" | "visualize" | "highlight" | "comment" | "assistant";
   content: string;
   gist: string | null; // the phrase the collapsed row shows; null = not written yet (SPEC.md §6)
   color: string | null; // "clay" | "sage" | "gold" for highlights

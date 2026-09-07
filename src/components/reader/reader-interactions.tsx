@@ -53,6 +53,7 @@ import {
   QuoteIcon,
   ChartIcon,
   SearchIcon,
+  VisualizeIcon,
   SparkleIcon,
   SpinnerIcon,
   StopIcon,
@@ -128,6 +129,7 @@ type Tool =
   | "analyze"
   | "explain"
   | "simplify"
+  | "visualize"
   | "extract"
   | "comment"
   | "link"
@@ -136,10 +138,10 @@ type Tool =
   | "readAloud";
 
 const TOOLBARS: Record<ContentKind, readonly Tool[]> = {
-  text: ["assistant", "explain", "simplify", "extract", "comment", "link", "highlight", "addToNotes", "readAloud"],
+  text: ["assistant", "explain", "simplify", "visualize", "extract", "comment", "link", "highlight", "addToNotes", "readAloud"],
   table: ["assistant", "analyze", "explain", "comment", "link", "highlight", "addToNotes"],
   figure: ["assistant", "analyze", "explain", "comment", "link", "highlight", "addToNotes"],
-  equation: ["assistant", "explain", "comment", "link", "highlight", "addToNotes"],
+  equation: ["assistant", "explain", "visualize", "comment", "link", "highlight", "addToNotes"],
 };
 
 // The blocks the hold-and-circle gesture opens a toolbar on, whole.
@@ -336,7 +338,7 @@ const ACTION_LABEL_KEY: Record<AssistantAction["type"], TKey> = {
 // The card EXPLAIN and ANALYZE stream into (SPEC.md §4, §6): one card, the
 // kind sets its title and glyph.
 type ExplainBubble = {
-  kind: "explain" | "analyze";
+  kind: "explain" | "analyze" | "visualize";
   left: number;
   top: number;
   width: number;
@@ -344,6 +346,8 @@ type ExplainBubble = {
   text: string;
   streaming: boolean;
   error: string | null;
+  // VISUALIZE only (SPEC.md §20): the model declined to draw, and this is why.
+  declined: string | null;
   anchor: Anchor | null; // the highlighted text this bubble explains
   noteId: string | null; // the persisted annotation; Delete removes it and its mark
 };
@@ -374,6 +378,12 @@ type AssistantChat = {
   input: string;
   busy: boolean;
 };
+
+// The picture a stored visualization's markdown points at (SPEC.md §20):
+// the card's Open link shows it full size in a new tab.
+function visualizationImage(markdown: string): string | null {
+  return /!\[[^\]]*\]\((\/api\/images\/[A-Za-z0-9_-]+)\)/.exec(markdown)?.[1] ?? null;
+}
 
 // SIMPLIFY output: a translucent bubble beside the article, level with the
 // selection. The selection stays tinted while the bubble is open (SPEC.md §6).
@@ -561,7 +571,7 @@ export function ReaderInteractions({
   annotationBubbles: Record<
     string,
     {
-      kind: "explain" | "simplify" | "analyze" | "comment" | "assistant";
+      kind: "explain" | "simplify" | "analyze" | "visualize" | "comment" | "assistant";
       content: string;
       noteId: string;
     }
@@ -638,7 +648,7 @@ export function ReaderInteractions({
   const tCtx = useT();
   // Viewers on a shared corpus read only: no selection tools, no edit mode,
   // no assistant. The server rejects their writes; this keeps the surface honest.
-  const { canEdit, premium } = useCollab();
+  const { canEdit, premium, ultra } = useCollab();
   const canEditRef = useRef(canEdit);
   canEditRef.current = canEdit;
   const tRef = useRef(tCtx);
@@ -1183,7 +1193,13 @@ export function ReaderInteractions({
     setBubble(null);
     await deleteNote(
       card.noteId,
-      t(card.kind === "analyze" ? "reader.analysisRemoved" : "reader.explanationRemoved"),
+      t(
+        card.kind === "analyze"
+          ? "reader.analysisRemoved"
+          : card.kind === "visualize"
+            ? "reader.visualizationRemoved"
+            : "reader.explanationRemoved",
+      ),
     );
   }
   function closeSimplify() {
@@ -2084,7 +2100,7 @@ export function ReaderInteractions({
         });
         return;
       }
-      if (stored.kind === "explain" || stored.kind === "analyze") {
+      if (stored.kind === "explain" || stored.kind === "analyze" || stored.kind === "visualize") {
         const slot = claimSideSlot("explain", top);
         setBubble({
           ...slot,
@@ -2092,6 +2108,7 @@ export function ReaderInteractions({
           text: stored.content,
           streaming: false,
           error: null,
+          declined: null,
           anchor,
           noteId: stored.noteId,
         });
@@ -2552,7 +2569,7 @@ export function ReaderInteractions({
     window.getSelection()?.removeAllRanges();
     markFreshAnchor(anchor);
     const slot = claimSideSlot("explain", yTop);
-    setBubble({ ...slot, kind, text: "", streaming: true, error: null, anchor, noteId: null });
+    setBubble({ ...slot, kind, text: "", streaming: true, error: null, declined: null, anchor, noteId: null });
     explainAbortRef.current?.abort();
     const controller = new AbortController();
     explainAbortRef.current = controller;
@@ -2683,6 +2700,87 @@ export function ReaderInteractions({
       setSimplifyCard((c) => (c ? { ...c, streaming: false, error: message } : c));
     } finally {
       if (simplifyAbortRef.current === controller) simplifyAbortRef.current = null;
+    }
+  }
+
+  // VISUALIZE (SPEC.md §20, Unitos Ultra): the selection as a picture, into
+  // the same card as EXPLAIN. The server answers behind a heartbeat stream
+  // with the annotation's markdown (the picture and its caption), or with the
+  // reason the model declined to draw; a decline persists nothing.
+  async function visualize() {
+    if (!popover || busy) return;
+    if (!ultra) {
+      showToast(t("reader.visualizeNeedsUltra"));
+      return;
+    }
+    const { anchor, yTop } = popover;
+    await flushLiveBlock(anchor.blockId);
+    setPopover(null);
+    window.getSelection()?.removeAllRanges();
+    markFreshAnchor(anchor);
+    const slot = claimSideSlot("explain", yTop);
+    setBubble({
+      ...slot,
+      kind: "visualize",
+      text: "",
+      streaming: true,
+      error: null,
+      declined: null,
+      anchor,
+      noteId: null,
+    });
+    explainAbortRef.current?.abort();
+    const controller = new AbortController();
+    explainAbortRef.current = controller;
+    try {
+      const res = await fetch("/api/derive", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
+        body: deriveBody("VISUALIZE", anchor),
+      });
+      if (!res.ok || !res.body) {
+        const detail = (await res.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(detail?.error ?? t("reader.deriveFailedStatus", { status: res.status }));
+      }
+      // Heartbeat spaces while the model works, then the payload JSON or the
+      // error token with the reason.
+      const { text, error } = splitStreamError(await res.text());
+      if (error) throw new Error(error);
+      let parsed: unknown = null;
+      try {
+        parsed = JSON.parse(text.trim());
+      } catch {
+        parsed = null;
+      }
+      const payload = parsed as {
+        declined?: boolean;
+        reason?: string;
+        noteId?: string;
+        content?: string;
+      } | null;
+      if (!payload) throw new Error(t("reader.emptyResponse"));
+      if (payload.declined) {
+        const reason = payload.reason ?? "";
+        setBubble((b) => (b ? { ...b, streaming: false, declined: reason } : b));
+        return;
+      }
+      const content = payload.content ?? "";
+      const noteId = payload.noteId ?? null;
+      if (!content.trim()) throw new Error(t("reader.emptyResponse"));
+      if (noteId) addLocalAnchor(anchor);
+      setBubble((b) => (b ? { ...b, text: content, noteId, streaming: false } : b));
+      router.refresh();
+    } catch (err) {
+      // Stopped, not failed: nothing to keep, the card closes.
+      if (controller.signal.aborted) {
+        setBubble(null);
+        return;
+      }
+      const message = err instanceof Error ? err.message : t("reader.visualizeFailed");
+      setBubble((b) => (b ? { ...b, streaming: false, error: message } : b));
+    } finally {
+      if (explainAbortRef.current === controller) explainAbortRef.current = null;
     }
   }
 
@@ -5104,6 +5202,22 @@ function blockFormatKind(
               {t("reader.simplify")}
             </button>
           )}
+          {has("visualize") && (
+            <button
+              onClick={() => void visualize()}
+              data-track="visualize"
+              data-tip={t("reader.visualizeTitle")}
+              className={`flex w-full items-center justify-between gap-2 rounded-full ${toolRow} text-left text-sand-800 hover:bg-clay-100 hover:text-clay-800`}
+            >
+              <span className="flex items-center gap-1.5">
+                <VisualizeIcon size={coarse ? 14 : 12} />
+                {t("reader.visualize")}
+              </span>
+              <span className="text-[9px] font-bold tracking-[0.06em] text-sand-500 uppercase">
+                {t("reader.ultra")}
+              </span>
+            </button>
+          )}
           {has("extract") && !popover.term && (
             <button
               onClick={() => void extract()}
@@ -5342,14 +5456,24 @@ function blockFormatKind(
             className="mb-2 flex cursor-move items-center justify-between"
           >
             <span className="flex items-center gap-1.5 text-[11px] font-bold tracking-[0.08em] text-clay-800 uppercase">
-              {bubble.kind === "analyze" ? <ChartIcon size={12} /> : <QuestionIcon size={12} />}
+              {bubble.kind === "analyze" ? (
+                <ChartIcon size={12} />
+              ) : bubble.kind === "visualize" ? (
+                <VisualizeIcon size={12} />
+              ) : (
+                <QuestionIcon size={12} />
+              )}
               {bubble.kind === "analyze"
                 ? bubble.streaming
                   ? t("reader.analyzing")
                   : t("reader.analysis")
-                : bubble.streaming
-                  ? t("reader.explaining")
-                  : t("reader.explanation")}
+                : bubble.kind === "visualize"
+                  ? bubble.streaming
+                    ? t("reader.visualizing")
+                    : t("reader.visualization")
+                  : bubble.streaming
+                    ? t("reader.explaining")
+                    : t("reader.explanation")}
             </span>
             <span className="flex items-center gap-3">
               {bubble.streaming && (
@@ -5362,15 +5486,29 @@ function blockFormatKind(
                   {t("common.stop")}
                 </button>
               )}
+              {bubble.kind === "visualize" && !bubble.streaming && visualizationImage(bubble.text) && (
+                <a
+                  href={visualizationImage(bubble.text)!}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  data-track="visualize-open"
+                  className="text-xs font-semibold text-sand-700 hover:text-clay-800"
+                  data-tip={t("reader.openVisualizationTitle")}
+                >
+                  {t("reader.openVisualization")}
+                </a>
+              )}
               {bubble.noteId && !bubble.streaming && (
                 <button
                   onClick={() => void deleteExplain()}
-                  data-track={bubble.kind === "analyze" ? "analyze-delete" : "explain-delete"}
+                  data-track={`${bubble.kind}-delete`}
                   className="text-xs font-semibold text-red-500 hover:text-red-700"
                   data-tip={t(
                     bubble.kind === "analyze"
                       ? "reader.deleteAnalysisTitle"
-                      : "reader.deleteExplainTitle",
+                      : bubble.kind === "visualize"
+                        ? "reader.deleteVisualizeTitle"
+                        : "reader.deleteExplainTitle",
                   )}
                 >
                   {t("common.delete")}
@@ -5378,7 +5516,7 @@ function blockFormatKind(
               )}
               <button
                 onClick={closeExplain}
-                data-track={bubble.kind === "analyze" ? "analyze-close" : "explain-close"}
+                data-track={`${bubble.kind}-close`}
                 className="text-xs text-sand-500 hover:text-clay-700"
                 aria-label={t("common.close")}
                 data-tip={t("common.close")}
@@ -5389,6 +5527,12 @@ function blockFormatKind(
           </div>
           {bubble.error ? (
             <p className="text-sm text-red-600">{bubble.error}</p>
+          ) : bubble.declined !== null ? (
+            <div className="min-h-0 flex-1 overflow-y-auto text-sm text-sand-700">
+              <p className="font-semibold">{t("reader.visualizeDeclined")}</p>
+              {bubble.declined && <p className="mt-1">{bubble.declined}</p>}
+              <p className="mt-1 text-sand-600">{t("reader.visualizeDeclinedHint")}</p>
+            </div>
           ) : bubble.text ? (
             <div className="min-h-0 flex-1 overflow-y-auto text-sm">
               <Markdown>{bubble.text}</Markdown>

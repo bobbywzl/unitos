@@ -376,7 +376,7 @@ async function handle(req: Request, t: TFunc) {
   ];
 
   const result = await callForJson({
-    model: kimi(DERIVATION_MODEL.SYNTHESIS),
+    model: await kimi(DERIVATION_MODEL.SYNTHESIS),
     messages,
     maxOutputTokens: MAX_OUTPUT_TOKENS.SYNTHESIS,
     providerOptions: kimiOptions(DERIVATION_EFFORT.SYNTHESIS),

@@ -8,6 +8,16 @@ import { translate } from "@/lib/i18n/dictionaries";
 // lib/claude.ts, not here: client components import this file.
 export const KIMI_K3 = "kimi-k3";
 export const CLAUDE_FABLE_5_1 = "claude-fable-5-1";
+// Gemini's flash model reads video (SPEC.md §11): transcription and clip
+// descriptions. The client is lib/video/gemini.ts.
+export const GEMINI_FLASH = "gemini-3.7-flash";
+
+// The three constants above are the roles' defaults. The bimonthly model
+// update (lib/models.ts, /api/cron/models) moves each role to the newest
+// version of its family as the provider's model list publishes it; the
+// clients (lib/kimi.ts, lib/claude.ts, lib/video/gemini.ts) resolve a
+// default id to the role's current id on every call. A constant that is not
+// a role default (an alias rung like gemini-flash-latest) is called as is.
 
 // Reasoning effort per call. Kimi K3 always reasons; "max" is its default and
 // its slowest. The reader's tools answer at "high"; ANALYZE reads a figure or
@@ -37,6 +47,7 @@ export const DERIVATION_MODEL: Record<DerivationType, string> = {
   COMPARE: KIMI_K3,
   ANALYZE: KIMI_K3,
   VOICE: KIMI_K3, // no model call of its own: the transcription ladder does the work
+  VISUALIZE: CLAUDE_FABLE_5_1, // the most capable model: the picture has to be faithful or refused (SPEC.md §20)
 };
 
 export const DERIVATION_EFFORT: Record<DerivationType, KimiEffort> = {
@@ -54,7 +65,14 @@ export const DERIVATION_EFFORT: Record<DerivationType, KimiEffort> = {
   COMPARE: DEFAULT_EFFORT,
   ANALYZE: "max",
   VOICE: DEFAULT_EFFORT,
+  VISUALIZE: "max", // not a Kimi call: VISUALIZE_EFFORT below is the effort used
 };
+
+// VISUALIZE (SPEC.md §20, Unitos Ultra) runs on Claude Fable 5.1 at its
+// highest reasoning effort: the model first judges whether a picture can
+// carry the passage's core idea with certainty, and draws only then.
+export const VISUALIZE_MODEL = CLAUDE_FABLE_5_1;
+export const VISUALIZE_EFFORT: ClaudeEffort = "max";
 
 // Kimi K3 counts its reasoning tokens against this ceiling too (Moonshot asks
 // for 16000 or more), so every budget leaves room for the model to think
@@ -75,6 +93,7 @@ export const MAX_OUTPUT_TOKENS: Record<DerivationType, number> = {
   COMPARE: 32768, // two documents' points, each with its spans
   ANALYZE: 32768, // three short sections, read at "max" effort: room for the reasoning
   VOICE: 0,
+  VISUALIZE: 32768, // the judgment, then a diagram spec or an SVG; an animation's SVG is long
 };
 
 // The ingest-time corpus scan for recommended links (SPEC.md §13). Not a

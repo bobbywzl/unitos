@@ -124,7 +124,7 @@ export async function selectCoreBlocks(
     { role: "user", content: corePrompt(title, listed, instructions) },
   ];
   const result = await callForJson({
-    model: claude(PARSE_MODEL),
+    model: await claude(PARSE_MODEL),
     messages,
     maxOutputTokens: 16384,
     providerOptions: claudeOptions(),
@@ -190,7 +190,7 @@ export async function structureBlocks(
     { role: "user", content: structurePrompt(title, listed, instructions) },
   ];
   const result = await callForJson({
-    model: claude(PARSE_MODEL),
+    model: await claude(PARSE_MODEL),
     messages,
     maxOutputTokens: 24576,
     providerOptions: claudeOptions(),

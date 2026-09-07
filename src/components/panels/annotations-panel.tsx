@@ -18,6 +18,7 @@ import {
   LocateIcon,
   QuestionIcon,
   SparkleIcon,
+  VisualizeIcon,
   SummaryIcon,
 } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
@@ -296,7 +297,7 @@ function LinkAbout({
 }
 
 // Annotations tab of the reader side panel. Highlights, comments, explanations,
-// analyses, simplified rewrites, then accepted links, each group under its tool's symbol
+// analyses, visualizations, simplified rewrites, then accepted links, each group under its tool's symbol
 // — each annotation card jumps to its anchor and deletes in place. Recommended
 // links list in the graph instead.
 export function AnnotationsPanel({
@@ -325,6 +326,7 @@ export function AnnotationsPanel({
   const comments = annotations.filter((a) => a.kind === "comment");
   const explanations = annotations.filter((a) => a.kind === "explain");
   const analyses = annotations.filter((a) => a.kind === "analyze");
+  const visualizations = annotations.filter((a) => a.kind === "visualize");
   const conversations = annotations.filter((a) => a.kind === "assistant");
   const simplifications = annotations.filter((a) => a.kind === "simplify");
 
@@ -447,6 +449,25 @@ export function AnnotationsPanel({
         <div className="flex flex-col gap-2">
           <GroupLabel icon={<ChartIcon size={12} />}>{t("panels.analyses")}</GroupLabel>
           {analyses.map((a) => (
+            <AnnotationCard key={a.id} annotation={a} view={view} summary={markdownPreview(a.content)}>
+              <div className="text-[13px]">
+                <Markdown>{a.content}</Markdown>
+              </div>
+              {a.orphaned && a.quotedText && (
+                <p className="mt-2 line-clamp-2 border-l-2 border-red-300 pl-2 text-xs text-sand-500">
+                  {t("panels.wasAnchoredTo", { text: a.quotedText })}
+                </p>
+              )}
+              {actionsFor(a)}
+            </AnnotationCard>
+          ))}
+        </div>
+      )}
+
+      {visualizations.length > 0 && (
+        <div className="flex flex-col gap-2">
+          <GroupLabel icon={<VisualizeIcon size={12} />}>{t("panels.visualizations")}</GroupLabel>
+          {visualizations.map((a) => (
             <AnnotationCard key={a.id} annotation={a} view={view} summary={markdownPreview(a.content)}>
               <div className="text-[13px]">
                 <Markdown>{a.content}</Markdown>

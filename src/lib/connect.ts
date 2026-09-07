@@ -122,7 +122,7 @@ export async function buildConnections(
     },
   ];
   const result = await callForJson({
-    model: kimi(CONNECT_MODEL),
+    model: await kimi(CONNECT_MODEL),
     messages,
     maxOutputTokens: 24576,
     providerOptions: kimiOptions(),

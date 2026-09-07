@@ -7,6 +7,7 @@ import { serverT } from "@/lib/i18n/server";
 import { personSymbol } from "@/lib/person";
 import { AdminNav } from "@/components/admin/admin-nav";
 import { AccountReset } from "@/components/admin/account-reset";
+import { tierState, type TierState } from "@/lib/tiers";
 
 export const dynamic = "force-dynamic";
 
@@ -22,7 +23,8 @@ type AccountRow = {
   picture: string;
   createdAt: Date | null;
   lastSeenAt: Date | null;
-  premium: boolean;
+  // The account's tier state (lib/tiers.ts) and the trial's end when it has one.
+  plan: { state: TierState; trialEndsAt: Date | null };
   driveLinked: boolean;
 };
 
@@ -72,7 +74,7 @@ export default async function AdminAccountsPage() {
             picture: "",
             createdAt: null,
             lastSeenAt: null,
-            premium: false,
+            plan: { state: "ultra" as const, trialEndsAt: null },
             driveLinked: false,
           },
         ]),
@@ -83,7 +85,7 @@ export default async function AdminAccountsPage() {
       picture: u.picture,
       createdAt: u.createdAt,
       lastSeenAt: u.lastSeenAt,
-      premium: u.premium,
+      plan: { state: tierState(u), trialEndsAt: u.trialEndsAt },
       driveLinked: Boolean(u.driveRefreshToken),
     })),
   ];
@@ -117,7 +119,15 @@ export default async function AdminAccountsPage() {
                   <Chip>{t("admin.countCorpora", { n: counts.projects })}</Chip>
                   <Chip>{t("admin.countDocuments", { n: counts.documents })}</Chip>
                   <Chip>{t("admin.countNotes", { n: counts.notes })}</Chip>
-                  {a.premium && <Chip>{t("admin.accountPremium")}</Chip>}
+                  <Chip>
+                    {a.plan.state === "ultra"
+                      ? t("admin.accountUltra")
+                      : a.plan.state === "premium"
+                        ? t("admin.accountPremium")
+                        : t(a.plan.state === "trial" ? "admin.accountTrial" : "admin.accountExpired", {
+                            date: a.plan.trialEndsAt ? fmtDate(a.plan.trialEndsAt) : "",
+                          })}
+                  </Chip>
                   {a.driveLinked && <Chip>{t("admin.accountDrive")}</Chip>}
                 </div>
                 {a.createdAt && a.lastSeenAt && (

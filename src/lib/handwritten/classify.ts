@@ -83,7 +83,7 @@ export async function classifyPdf(
     },
   ];
   const result = await callForJson({
-    model: claude(CLASSIFY_MODEL),
+    model: await claude(CLASSIFY_MODEL),
     messages,
     maxOutputTokens: 16384,
     providerOptions: claudeOptions(),
