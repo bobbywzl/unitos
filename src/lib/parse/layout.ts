@@ -75,7 +75,7 @@ const DIGEST_ATTRS = [
   "id", "class", "style", "role", "aria-label", "href", "src", "poster", "alt", "viewBox",
   "width", "height", "colspan", "rowspan",
   // The page-style bake's layout facts (lib/parse/figure-style.ts).
-  "data-align", "data-style", "data-font-size", "data-width-pct", "data-body-font-size", "data-font",
+  "data-align", "data-style", "data-font-size", "data-width-pct", "data-body-font-size", "data-font", "data-box",
 ];
 const DIGEST_SKIP = new Set(["script", "style", "noscript", "template", "link", "meta", "head", "title"]);
 const TEXT_TAGS = new Set(["p", "h1", "h2", "h3", "h4", "h5", "h6", "li", "td", "th", "figcaption", "blockquote", "dt", "dd", "pre"]);
@@ -231,9 +231,9 @@ function layoutPrompt(
   instructions?: string,
 ): string {
   return [
-    `A web page${title ? ` titled "${title}"` : ""} was parsed into the numbered blocks below. The page's own HTML follows the blocks, as a browser lays it out: class names, inline styles, and the resolved layout facts — data-align (text alignment), data-style (bold italic underline code), data-font-size (px), data-width-pct (a figure's width as a percentage of the text column), data-font on body. Elements a desktop browser hides are already gone.`,
+    `A web page${title ? ` titled "${title}"` : ""} was parsed into the numbered blocks below. The page's own HTML follows the blocks, as a browser lays it out: class names, inline styles, and the resolved layout facts — data-align (text alignment), data-style (bold italic underline code), data-font-size (px), data-width-pct (a figure's width as a percentage of the text column), data-font on body, data-box (an element the page boxes: its own background, or its own font around a chart). Elements a desktop browser hides are already gone.`,
     "Make the blocks an exact replica of the page's structure. Return ops that say what each block is on the page. Ops reference blocks by index. Never write, rewrite, or shorten text.",
-    "1. role: what a text block is on the page. kicker: the short label line set above the title. meta: the byline, date, category, or reading-time line. label: a small label that names what follows, such as the word Contents with its section count. display: a large standalone statement or pull quote. quote: a quotation set apart from the body. caption: a figure caption standing alone. paragraph: plain body text; use it to take a wrong role off. align: center or right when the page centers or right-aligns the block; left takes an alignment off.",
+    "1. role: what a text block is on the page. kicker: the short label line set above the title. meta: the byline, date, category, or reading-time line. label: a small label that names what follows, such as the word Contents with its section count. display: a large standalone statement or pull quote. quote: a quotation set apart from the body. caption: a figure caption standing alone, outside the figure's box. Text inside a data-box element that holds the figure is the figure's words (a chart's title, legend, axis label, source line), never a caption. paragraph: plain body text; use it to take a wrong role off. align: center or right when the page centers or right-aligns the block; left takes an alignment off.",
     "2. heading: a block that is a section heading on the page — by its size, weight, and position, or because the contents list points at it — with its level: 1 for the page's top sections, 2 for subsections, 3 below that. Use the page's own hierarchy, not the tag name: an article whose sections are h2 has level 1 sections.",
     "3. contents: the list block that is the page's table of contents, and the paragraph that is its label.",
     "4. join: consecutive short blocks that are one line on the page — a byline split into label and value rows, a label and its value — become one block, joined with the separator. Consecutive indexes only. Never join body paragraphs.",

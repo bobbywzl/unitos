@@ -19,6 +19,7 @@ import {
   type ParsedBlock,
   type ParsedDocument,
 } from "@/lib/parse/types";
+import { parseMarkdownDocument } from "@/lib/parse/markdown-document";
 
 // Ingest progress, reported to the caller as each stage starts. A repeated stage
 // updates the detail line ("148 figures · 152 equations"). Dedupe hits report
@@ -321,6 +322,43 @@ export async function ingestPdf(
   return { document, deduped: false };
 }
 
+/** Are these bytes a PDF: the file starts with its magic. A stored file
+    that is not a PDF is a Markdown file. */
+export function isPdfBytes(bytes: Uint8Array): boolean {
+  return bytes.length >= 5 && String.fromCharCode(...bytes.slice(0, 5)) === "%PDF-";
+}
+
+// Markdown upload path (SPEC.md §2). Dedupe by fileHash like a PDF; the
+// bytes are kept for re-parse. The file parses through the URL walk, no
+// model pass; with instructions, the structure pass runs over the blocks.
+export async function ingestMarkdown(
+  bytes: Uint8Array<ArrayBuffer>,
+  filename: string,
+  onProgress?: OnIngestProgress,
+  opts: IngestOptions = {},
+) {
+  const fileHash = createHash("sha256").update(bytes).digest("hex");
+  const existing = await db.document.findUnique({ where: { fileHash } });
+  if (existing) return { document: existing, deduped: true };
+
+  onProgress?.("parse");
+  const parsed = await parseMarkdownDocument(new TextDecoder("utf-8").decode(bytes), filename);
+  const title = parsed.title ?? filename;
+  const blocks = opts.instructions?.trim()
+    ? await structureBlocks(parsed.blocks, title, opts.instructions)
+    : parsed.blocks;
+  onProgress?.("save", saveDetail(blocks));
+  const document = await createDocumentWithBlocks({
+    title,
+    sourceUrl: opts.sourceUrl,
+    fileHash,
+    fileData: bytes,
+    blocks,
+    references: parsed.references,
+  });
+  return { document, deduped: false };
+}
+
 // The file name a PDF link carries, for the document title fallback.
 function filenameOfUrl(url: string): string {
   try {
@@ -458,6 +496,7 @@ export async function reparseDocument(
   const target = as ?? (document.handwritten ? "handwritten" : "article");
   if (target === "handwritten") {
     if (!document.fileData) throw new Error("Document has no stored file");
+    if (!isPdfBytes(new Uint8Array(document.fileData))) throw new Error("Only a PDF has pages");
     onProgress?.("save");
     const pageCount = await pdfPageCount(new Uint8Array(document.fileData));
     await db.$transaction(async (tx) => {
@@ -484,7 +523,14 @@ export async function reparseDocument(
   let render: RenderReport | null = null;
   if (document.fileData) {
     onProgress?.("parse");
-    blocks = (await parsePdf(new Uint8Array(document.fileData))).blocks;
+    const bytes = new Uint8Array(document.fileData);
+    if (isPdfBytes(bytes)) blocks = (await parsePdf(bytes)).blocks;
+    else {
+      // A Markdown file: the same walk as on the add (lib/parse/markdown-document.ts).
+      const parsed = await parseMarkdownDocument(new TextDecoder("utf-8").decode(bytes), document.title);
+      blocks = parsed.blocks;
+      references = parsed.references;
+    }
   } else if (document.sourceUrl) {
     const url = document.sourceUrl;
     const fetched = await fetchPage(url, onProgress);

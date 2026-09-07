@@ -8,7 +8,10 @@ import { readAccountCookie } from "@/lib/tab-account";
 
 export type SyncPresence = Person & { documentId: string | null };
 
-const POLL_MS = 4_000;
+// Every open tab polls on this cadence, and each poll is a few database
+// round trips, so the cadence is the corpus's baseline load. The presence
+// window (sync/route.ts) is 25 s; a poll well inside it keeps people present.
+const POLL_MS = 8_000;
 
 // Typing must never be clobbered: a refresh waits while an input, textarea, or
 // editable block has focus, or a text selection is open.

@@ -32,7 +32,7 @@ const createSchema = z
     // user has not approved them one by one (Auto mode). Find, distill, ask,
     // and voice results always land pending. Nothing enters notes silently
     // (SPEC.md §1).
-    origin: z.enum(["assistant", "find", "distill", "ask", "voice"]).optional(),
+    origin: z.enum(["assistant", "find", "distill", "keypoints", "ask", "voice"]).optional(),
     pending: z.boolean().optional(),
   })
   .refine((d) => !(d.source && d.video), { message: "Provide source or video, not both" });
@@ -92,6 +92,7 @@ export async function POST(req: Request) {
     assistant: "SYNTHESIS",
     find: "FIND",
     distill: "DISTILL",
+    keypoints: "KEYPOINTS",
     ask: "ASK",
     voice: "VOICE",
   } as const;

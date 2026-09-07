@@ -10,6 +10,7 @@ import { parseDriveFileId, type DrivePickedFile } from "@/lib/drive/types";
 import { IMAGE_ACCEPT, isImageFile } from "@/lib/handwritten/image";
 import { isImeKey } from "@/lib/ime";
 import { useCollab } from "@/components/collab/collab-context";
+import { reportError } from "@/lib/error-log";
 import { ChevronDownIcon, SpinnerIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { clipWords } from "@/lib/markdown-preview";
@@ -42,6 +43,7 @@ import {
 } from "@/components/reader/figure-capture";
 import { setRevealFlag } from "@/components/reader/reveal";
 import { UploadAssistant, type UploadRequest } from "@/components/reader/upload-assistant";
+import { isMarkdownFile, MARKDOWN_ACCEPT } from "@/lib/markdown-file";
 
 export type AttachedDocument = {
   id: string;
@@ -66,6 +68,30 @@ type IngestEvent =
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// The automatic upgrade re-parse runs once per document per parser version
+// per browser in this window. Each run is a full parse on the server, so a
+// reload while one runs, or after one failed, must not start another; the
+// document's actions in the list still re-parse on demand.
+const REPARSE_COOLDOWN_MS = 6 * 60 * 60 * 1000;
+function reparseKey(documentId: string): string {
+  return `unitos:reparse:${documentId}:${PARSER_VERSION}`;
+}
+function reparseDue(documentId: string): boolean {
+  try {
+    const at = Number(localStorage.getItem(reparseKey(documentId)) ?? 0);
+    return !(at > 0 && Date.now() - at < REPARSE_COOLDOWN_MS);
+  } catch {
+    return true;
+  }
+}
+function markReparse(documentId: string): void {
+  try {
+    localStorage.setItem(reparseKey(documentId), String(Date.now()));
+  } catch {
+    // storage unavailable: the next page load may try again
+  }
 }
 
 // The save stage's figure check ({figures, captionsWithoutFigure,
@@ -163,6 +189,11 @@ export function DocumentBar({
   const [pillMenu, setPillMenu] = useState<string | null>(null);
   const [library, setLibrary] = useState<LibraryDocument[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Every error the bar shows also lands in the error log: the rail's error
+  // button lists them (workspace.tsx).
+  useEffect(() => {
+    if (error) reportError(error);
+  }, [error]);
   // Opening a document is a server round trip; the pill shows it is on its way.
   const [opening, startOpening] = useTransition();
 
@@ -361,9 +392,9 @@ export function DocumentBar({
   }
 
   // Automatic upgrade re-parse: the document already reads fine, so no
-  // progress card and no error banner — the reader never waits on it. Success
-  // swaps the upgraded blocks in with a refresh; failure logs and leaves the
-  // old parse standing until the next open tries again.
+  // progress card — the reader never waits on it. Success swaps the upgraded
+  // blocks in with a refresh; failure goes to the error log and leaves the
+  // old parse standing until the cooldown passes.
   //
   // `figures`: the run is bringing a figure over (activeGap) — the figure's
   // place in the reader moves while it runs, and says why when the figure
@@ -374,13 +405,21 @@ export function DocumentBar({
       captureRunning.current = true;
       setFigureCapture({ documentId: doc.id, status: "running", error: null });
     }
-    const failed = (error: string | null) => {
-      if (figures) setFigureCapture({ documentId: doc.id, status: "failed", error });
+    const failed = (detail: string | null) => {
+      reportError(detail ? `${t("panes.reparseFailed")}: ${detail}` : t("panes.reparseFailed"));
+      if (figures) setFigureCapture({ documentId: doc.id, status: "failed", error: detail });
     };
     try {
       const res = await fetch(`/api/documents/${doc.id}/reparse`, { method: "POST" });
+      // 409: another tab or a reload is already running this re-parse; its
+      // outcome reaches this tab with the refresh.
+      if (res.status === 409) {
+        if (figures) setFigureCapture(null);
+        return;
+      }
       if (!res.ok || !res.body) {
-        failed(statusMessage(t, res.status));
+        const detail = await readJson<{ error?: string }>(res);
+        failed(detail?.error ?? statusMessage(t, res.status));
         return;
       }
       let result: IngestEvent | null = null;
@@ -397,16 +436,15 @@ export function DocumentBar({
         // a browser for the deployment — or the render's own error says
         // what went wrong (SPEC.md §15).
         const notice = saveDetail ? figureNotice(t, saveDetail) : null;
-        if (notice) setConnectNotice(notice);
-        const outcome = saveDetail ? figureOutcome(saveDetail) : null;
-        if (outcome && outcome.captions.length > 0) failed(outcome.renderError);
-        else if (figures) setFigureCapture(null);
-      } else if (result && "error" in result) {
-        console.warn("[reparse] upgrade failed:", result.error);
-        failed(result.error);
-      } else failed(null);
+        if (notice) reportError(notice);
+        if (figures) {
+          const outcome = saveDetail ? figureOutcome(saveDetail) : null;
+          if (outcome && outcome.captions.length > 0) {
+            setFigureCapture({ documentId: doc.id, status: "failed", error: outcome.renderError });
+          } else setFigureCapture(null);
+        }
+      } else failed(result && "error" in result ? result.error : t("panes.uploadCutOff"));
     } catch (err) {
-      console.warn("[reparse] upgrade failed:", err);
       failed(err instanceof Error ? err.message : null);
     } finally {
       if (figures) captureRunning.current = false;
@@ -417,7 +455,13 @@ export function DocumentBar({
     if (active === null || phase !== null) return;
     if (!activeStale && !activeNeedsCapture) return;
     if (reparseAttempted.current.has(active.id)) return;
+    if (isOffline() || !reparseDue(active.id)) {
+      // A figure run held back: the figure's place says so, with Try again.
+      if (activeNeedsCapture) setFigureCapture({ documentId: active.id, status: "failed", error: null });
+      return;
+    }
     reparseAttempted.current.add(active.id);
+    markReparse(active.id);
     void reparseSilently(active, activeGap);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeId, activeStale, activeNeedsCapture]);
@@ -425,7 +469,10 @@ export function DocumentBar({
   // The reader's Try again, at the figure's place.
   useEffect(() => {
     if (active === null || !activeGap) return;
-    return registerFigureCaptureHandler(active.id, () => void reparseSilently(active, true));
+    return registerFigureCaptureHandler(active.id, () => {
+      markReparse(active.id);
+      void reparseSilently(active, true);
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active?.id, activeGap]);
 
@@ -662,6 +709,7 @@ export function DocumentBar({
           f.type === "application/pdf" ||
           f.name.toLowerCase().endsWith(".pdf") ||
           isImageFile(f) ||
+          isMarkdownFile(f) ||
           isMediaFile(f),
       );
       if (accepted.length === 0) {
@@ -1041,12 +1089,11 @@ export function DocumentBar({
           {connectNotice}
         </span>
       )}
-      {error && !dialog && <span className="text-xs text-red-500">{error}</span>}
 
       <input
         ref={fileRef}
         type="file"
-        accept={`application/pdf,.pdf,${IMAGE_ACCEPT}`}
+        accept={`application/pdf,.pdf,${IMAGE_ACCEPT},${MARKDOWN_ACCEPT}`}
         multiple
         className="hidden"
         onChange={(e) => {

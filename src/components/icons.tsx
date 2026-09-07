@@ -174,10 +174,31 @@ export function StopIcon(props: IconProps) {
   );
 }
 
+// The error button under Distill in the rail (workspace.tsx).
+export function WarningIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M12 3.5 2.5 20h19L12 3.5z" />
+      <path d="M12 9.5v4.5" />
+      <path d="M12 17.25h.01" />
+    </Icon>
+  );
+}
+
 export function DistillIcon(props: IconProps) {
   return (
     <Icon {...props}>
       <path d="M21 4H3l7 8.5V20l4-2v-5.5L21 4z" />
+    </Icon>
+  );
+}
+
+// Extract (DISTILL): the quotes that answer a question.
+export function QuoteIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M10 7H6a2 2 0 0 0-2 2v3a2 2 0 0 0 2 2h2v2a2 2 0 0 1-2 2" />
+      <path d="M20 7h-4a2 2 0 0 0-2 2v3a2 2 0 0 0 2 2h2v2a2 2 0 0 1-2 2" />
     </Icon>
   );
 }

@@ -122,7 +122,7 @@ const CALLOUTS: Callout[] = [
     dot: { x: 79, y: 35.1 },
   },
   {
-    // The Distill pill at the top of the document; the chip in the top bar.
+    // The Extract pill at the top of the document; the chip in the top bar.
     key: "signin.calloutDistill",
     chip: { left: "74%", top: "1.5%" },
     alignRight: true,
@@ -130,7 +130,7 @@ const CALLOUTS: Callout[] = [
     dot: { x: 72, y: 9.8 },
   },
   {
-    // The E1 extraction mark after "and transduction models"; the chip in
+    // The M1 match mark after "and transduction models"; the chip in
     // the left gutter below it.
     key: "signin.calloutExtract",
     chip: { left: "1.5%", top: "85.6%" },
@@ -179,9 +179,14 @@ const FUNCTIONS: { key: TKey; sub: TKey; icon: React.ReactNode }[] = [
     icon: <path d="M5 7h14M8 12h8M10 17h4" />,
   },
   {
+    key: "signin.fnKeypoints",
+    sub: "signin.fnKeypointsSub",
+    icon: <path d="M4 4h16l-6 8v6l-4 2v-8L4 4Z" />,
+  },
+  {
     key: "signin.fnDistill",
     sub: "signin.fnDistillSub",
-    icon: <path d="M4 4h16l-6 8v6l-4 2v-8L4 4Z" />,
+    icon: <path d="M10 7H6a2 2 0 0 0-2 2v3a2 2 0 0 0 2 2h2v2a2 2 0 0 1-2 2m14-11h-4a2 2 0 0 0-2 2v3a2 2 0 0 0 2 2h2v2a2 2 0 0 1-2 2" />,
   },
   {
     key: "signin.fnExtract",

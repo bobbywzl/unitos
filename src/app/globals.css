@@ -883,6 +883,23 @@ ellipse.anchor-flash {
 .reader-figure figure figure > figcaption {
   width: 100%;
 }
+/* A box inside a figure (lib/parse/figure-style.ts): the page painted its own
+   background under the figure's media and words, and the caption sits
+   outside it. The one div a figure keeps; its background, padding, and
+   corner ride inline. It takes the column's width and stacks its content. */
+.reader-figure figure > div {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  row-gap: 8px;
+  flex-basis: 100%;
+  width: 100%;
+  box-sizing: border-box;
+}
+.reader-figure figure > div > p,
+.reader-figure figure > div > figcaption {
+  width: 100%;
+}
 .reader-figure img {
   /* A portrait photo that floated beside the text at half width would fill
      a screen at the column's width: cap the height, keep the ratio. */

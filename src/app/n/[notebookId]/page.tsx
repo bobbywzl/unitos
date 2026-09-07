@@ -18,10 +18,12 @@ import {
   corpusDistillationList,
   distillationList,
   extractionList,
+  keypointsStored,
   formalizedArticle,
   type AnnotationItem,
   type CorpusDistillationView,
   type DistillationView,
+  type KeypointsView,
   type EditItem,
   type ExtractionView,
   type GraphEdge,
@@ -193,7 +195,7 @@ export default async function NotebookPage(props: {
         noteId: string;
       }[]
     > = {};
-    const resolved = await resolveDocumentSources(document.id);
+    const resolved = await resolveDocumentSources(document.id, document.blocks);
 
     // Annotated figure, table, and equation blocks carry sequential labels
     // ("A1", "A2", …) in document order. The label renders at the block and on
@@ -247,13 +249,13 @@ export default async function NotebookPage(props: {
       anchorHighlights[r.blockId] = list;
     }
 
-    // Stored summaries, distillations, extractions, and the formalized article
-    // live on the attachment (SPEC.md §4).
+    // Stored summaries, distillations, extractions, keypoints, and the
+    // formalized article live on the attachment (SPEC.md §4).
     const attachment = notebook!.documents.find((d) => d.documentId === document.id);
     const summaries = (attachment?.summaries as SummaryLevels | null) ?? {};
     const formalized = formalizedArticle(attachment?.formalized ?? null);
 
-    // Stored distillation quotes and extraction spans heal at render with the
+    // Stored distillation quotes, extraction spans, and keypoint spans heal at render with the
     // anchor ladder (SPEC.md §5): exact offsets, the quote matcher within the
     // stored block, then across all blocks — a re-parse gives new block ids.
     const healSpan = <T extends { blockId: string; start: number; end: number; quotedText: string; prefix: string; suffix: string }>(
@@ -287,10 +289,19 @@ export default async function NotebookPage(props: {
       id: x.id,
       createdAt: x.createdAt,
       createdById: x.createdById,
-      label: `E${i + 1}`,
+      label: `M${i + 1}`,
       origin: healSpan(x.origin),
       spans: (x.spans ?? []).map(healSpan),
     }));
+    const storedKeypoints = keypointsStored(attachment?.keypoints);
+    const keypoints: KeypointsView | null = storedKeypoints
+      ? {
+          id: storedKeypoints.id,
+          createdAt: storedKeypoints.createdAt,
+          createdById: storedKeypoints.createdById,
+          points: storedKeypoints.points.map(healSpan),
+        }
+      : null;
 
     // Glossary hover terms: first occurrence per term per listed block. The
     // definition reads in the reader's language (SPEC.md §8 Phase 7). An entry
@@ -802,6 +813,7 @@ export default async function NotebookPage(props: {
       summaries,
       distillations,
       extractions,
+      keypoints,
       anchorHighlights,
       annotations,
       annotationBubbles,
@@ -871,16 +883,80 @@ export default async function NotebookPage(props: {
     ...s.children.map((c) => ({ id: c.id, label: `${s.title} / ${c.title}` })),
   ]);
 
-  // Edit history for the open document, newest first.
-  const edits: EditItem[] = paneOne
-    ? (
-        await db.blockEdit.findMany({
-          where: { documentId: paneOne.document.id },
-          orderBy: { createdAt: "desc" },
-          take: 100,
-          include: { replies: { orderBy: { createdAt: "asc" } } },
-        })
-      ).map((e) => ({
+  // Corpus distillations cite documents by id; their blocks load below.
+  const storedCorpusDistillations = corpusDistillationList(notebook.distillations);
+  const corpusQuoteDocIds = [
+    ...new Set(storedCorpusDistillations.flatMap((d) => d.quotes.map((q) => q.documentId))),
+  ];
+  const attachedIdList = attached.map((d) => d.id);
+
+  // The rest of the page's reads depend on nothing below: they start together.
+  const [editRows, globalProfile, corpusQuoteDocs, graphLinks, recommendedRows, events, allEdits] =
+    await Promise.all([
+      // Edit history for the open document, newest first.
+      paneOne
+        ? db.blockEdit.findMany({
+            where: { documentId: paneOne.document.id },
+            orderBy: { createdAt: "desc" },
+            take: 100,
+            include: { replies: { orderBy: { createdAt: "asc" } } },
+          })
+        : [],
+      db.readerProfile.findUnique({ where: { userId: notebook.userId } }),
+      corpusQuoteDocIds.length > 0
+        ? db.document.findMany({
+            where: { id: { in: corpusQuoteDocIds } },
+            select: {
+              id: true,
+              title: true,
+              blocks: { orderBy: { order: "asc" }, select: { id: true, text: true } },
+            },
+          })
+        : [],
+      db.docLink.findMany({
+        where: {
+          fromDocumentId: { in: attachedIdList },
+          toDocumentId: { in: attachedIdList },
+        },
+        // Accepted links first, then by age: the order the pair's list shows.
+        orderBy: [{ recommended: "asc" }, { createdAt: "asc" }],
+        select: {
+          id: true,
+          fromDocumentId: true,
+          toDocumentId: true,
+          recommended: true,
+          reason: true,
+          quotedText: true,
+          toQuotedText: true,
+        },
+      }),
+      db.docLink.findMany({
+        where: {
+          recommended: true,
+          fromDocumentId: { in: attachedIdList },
+          toDocumentId: { in: attachedIdList },
+        },
+        orderBy: { createdAt: "desc" },
+        include: {
+          fromDocument: { select: { title: true } },
+          toDocument: { select: { title: true } },
+          replies: { orderBy: { createdAt: "asc" } },
+        },
+      }),
+      db.notebookEvent.findMany({
+        where: { notebookId },
+        orderBy: { createdAt: "desc" },
+        take: 80,
+      }),
+      db.blockEdit.findMany({
+        where: { documentId: { in: attachedIdList } },
+        orderBy: { createdAt: "desc" },
+        take: 80,
+        include: { document: { select: { title: true } } },
+      }),
+    ]);
+
+  const edits: EditItem[] = editRows.map((e) => ({
         id: e.id,
         kind: e.kind as EditItem["kind"],
         blockId: e.blockId,
@@ -890,12 +966,10 @@ export default async function NotebookPage(props: {
         userId: e.userId,
         replies: toReplyViews(e.replies),
         createdAt: e.createdAt.toISOString(),
-      }))
-    : [];
+      }));
 
   // Context for the Context tab: notebook override wins over the global context
   // (SPEC.md §3). Same ladder as loadProfile.
-  const globalProfile = await db.readerProfile.findUnique({ where: { userId: notebook.userId } });
   const override = notebook.profile as {
     background?: string;
     purpose?: string;
@@ -919,21 +993,6 @@ export default async function NotebookPage(props: {
   // Corpus distillations (SPEC.md §13): quotes heal against the current blocks
   // of every document they cite, orphaning visibly (SPEC.md §5); each quote
   // carries its document's title for the corpus distilled page.
-  const storedCorpusDistillations = corpusDistillationList(notebook.distillations);
-  const corpusQuoteDocIds = [
-    ...new Set(storedCorpusDistillations.flatMap((d) => d.quotes.map((q) => q.documentId))),
-  ];
-  const corpusQuoteDocs =
-    corpusQuoteDocIds.length > 0
-      ? await db.document.findMany({
-          where: { id: { in: corpusQuoteDocIds } },
-          select: {
-            id: true,
-            title: true,
-            blocks: { orderBy: { order: "asc" }, select: { id: true, text: true } },
-          },
-        })
-      : [];
   const corpusQuoteDocById = new Map(corpusQuoteDocs.map((d) => [d.id, d]));
   const corpusDistillations: CorpusDistillationView[] = storedCorpusDistillations.map((d) => ({
     id: d.id,
@@ -971,23 +1030,6 @@ export default async function NotebookPage(props: {
     title: d.title,
     hasVideo: d.hasVideo,
   }));
-  const graphLinks = await db.docLink.findMany({
-    where: {
-      fromDocumentId: { in: attached.map((d) => d.id) },
-      toDocumentId: { in: attached.map((d) => d.id) },
-    },
-    // Accepted links first, then by age: the order the pair's list shows.
-    orderBy: [{ recommended: "asc" }, { createdAt: "asc" }],
-    select: {
-      id: true,
-      fromDocumentId: true,
-      toDocumentId: true,
-      recommended: true,
-      reason: true,
-      quotedText: true,
-      toQuotedText: true,
-    },
-  });
   const edgeByPair = new Map<string, GraphEdge>();
   for (const link of graphLinks) {
     if (link.fromDocumentId === link.toDocumentId) continue;
@@ -1009,19 +1051,6 @@ export default async function NotebookPage(props: {
   const graphEdges = [...edgeByPair.values()];
   // Recommended links (SPEC.md §13) list in the graph, for the whole project:
   // both ends, the AI's reason, and the replies. Accept and Dismiss live there.
-  const recommendedRows = await db.docLink.findMany({
-    where: {
-      recommended: true,
-      fromDocumentId: { in: attached.map((d) => d.id) },
-      toDocumentId: { in: attached.map((d) => d.id) },
-    },
-    orderBy: { createdAt: "desc" },
-    include: {
-      fromDocument: { select: { title: true } },
-      toDocument: { select: { title: true } },
-      replies: { orderBy: { createdAt: "asc" } },
-    },
-  });
   const recommendedLinks: RecommendedLinkView[] = recommendedRows.map((link) => ({
     id: link.id,
     fromDocumentId: link.fromDocumentId,
@@ -1037,19 +1066,6 @@ export default async function NotebookPage(props: {
 
   // The History panel (SPEC.md §12): corpus events (deletions, detachments)
   // merged with every attached document's edits, newest first, attributed.
-  const [events, allEdits] = await Promise.all([
-    db.notebookEvent.findMany({
-      where: { notebookId },
-      orderBy: { createdAt: "desc" },
-      take: 80,
-    }),
-    db.blockEdit.findMany({
-      where: { documentId: { in: attached.map((d) => d.id) } },
-      orderBy: { createdAt: "desc" },
-      take: 80,
-      include: { document: { select: { title: true } } },
-    }),
-  ]);
   const history: HistoryEntry[] = [
     ...events.map(
       (e): HistoryEntry => ({
@@ -1105,6 +1121,7 @@ export default async function NotebookPage(props: {
   for (const pane of [paneOne, paneTwo]) {
     for (const d of pane?.distillations ?? []) if (d.createdById) authorIds.add(d.createdById);
     for (const x of pane?.extractions ?? []) if (x.createdById) authorIds.add(x.createdById);
+    if (pane?.keypoints?.createdById) authorIds.add(pane.keypoints.createdById);
     for (const link of [...(pane?.linksOut ?? []), ...(pane?.linksIn ?? [])]) {
       if (link.createdById) authorIds.add(link.createdById);
       for (const r of link.replies) authorIds.add(r.userId);
@@ -1137,6 +1154,7 @@ export default async function NotebookPage(props: {
     annotationBubbles: pane.annotationBubbles,
     distillations: pane.distillations,
     extractions: pane.extractions,
+    keypoints: pane.keypoints,
     termsByBlock: pane.termsByBlock,
     linksByBlock: pane.linksByBlock,
     editedByBlock: pane.editedByBlock,
@@ -1248,6 +1266,7 @@ export default async function NotebookPage(props: {
         <DistillPanel
           documentId={paneOne && !paneOne.video ? paneOne.document.id : null}
           distillations={paneOne?.distillations ?? []}
+          keypoints={paneOne?.keypoints ?? null}
           corpusDistillations={corpusDistillations}
           hasDocuments={attached.length > 0}
         />
@@ -1272,7 +1291,11 @@ export default async function NotebookPage(props: {
         (paneOne?.linksOut.filter((l) => !l.recommended).length ?? 0) +
         (paneOne?.linksIn.filter((l) => !l.recommended).length ?? 0)
       }
-      distillationCount={(paneOne?.distillations.length ?? 0) + corpusDistillations.length}
+      distillationCount={
+        (paneOne?.keypoints ? 1 : 0) +
+        (paneOne?.distillations.length ?? 0) +
+        corpusDistillations.length
+      }
       reader={
         paneOne ? (
           <ReaderPanes

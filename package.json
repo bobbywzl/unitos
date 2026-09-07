@@ -35,13 +35,16 @@
     "react-markdown": "^10.1.0",
     "reactflow": "^11.11.4",
     "remark-gfm": "^4.0.1",
+    "remark-parse": "^11.0.0",
     "undici": "^8.10.0",
+    "unified": "^11.0.5",
     "unpdf": "^1.8.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/jsdom": "^21.1.7",
+    "@types/mdast": "^4.0.4",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",

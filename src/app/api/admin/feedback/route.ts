@@ -6,12 +6,30 @@ import { serverT } from "@/lib/i18n/server";
 import { feedbackReplyTitle, recipientAccounts } from "@/lib/notifications";
 import { parseBody } from "@/lib/validate";
 
-export async function GET() {
+const STATUSES = ["new", "seen", "resolved"] as const;
+
+// The inbox, newest first. Query: status = a comma list of new, seen,
+// resolved (default: all); take = at most 2000 rows (default 300); since =
+// an ISO date, rows filed at or after it. The feedback pipeline
+// (.claude/skills/feedback-pipeline) reads new and seen in bulk this way.
+export async function GET(req: Request) {
   const denied = await adminApiGuard();
   if (denied) return denied;
+  const params = new URL(req.url).searchParams;
+  const statuses = (params.get("status") ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s): s is (typeof STATUSES)[number] => (STATUSES as readonly string[]).includes(s));
+  const take = Math.min(2000, Math.max(1, Number(params.get("take")) || 300));
+  const sinceRaw = params.get("since");
+  const since = sinceRaw && !Number.isNaN(Date.parse(sinceRaw)) ? new Date(sinceRaw) : null;
   const feedback = await db.feedback.findMany({
+    where: {
+      ...(statuses.length > 0 ? { status: { in: statuses } } : {}),
+      ...(since ? { createdAt: { gte: since } } : {}),
+    },
     orderBy: { createdAt: "desc" },
-    take: 300,
+    take,
   });
   return NextResponse.json(feedback);
 }
