@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { documentBlocks, resolveAnchor } from "@/lib/anchors/resolve";
+import { passageSources, resolvePassage, segmentsSchema } from "@/lib/anchors/passage";
+import { documentBlocks } from "@/lib/anchors/resolve";
 import { bumpNotebook, notebookAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
 import { annotationsSection } from "@/lib/derive/context";
@@ -49,6 +50,9 @@ const createSchema = z
     notebookId: z.string().min(1),
     documentId: z.string().min(1),
     anchor: anchorSchema.optional(),
+    // A selection over several blocks (lib/anchors/passage.ts): one anchor
+    // per block, the first being `anchor`; every segment becomes a source.
+    segments: segmentsSchema,
     color: z.enum(["clay", "sage", "gold", "plum"]).optional(),
     comment: z.string().max(10_000).optional(),
     video: videoSchema.optional(),
@@ -98,7 +102,8 @@ export async function POST(req: Request) {
   // re-parse gives every block a new id while an open reader still sends the
   // old ones. Provenance is non-negotiable (SPEC.md §1): the stored quote is
   // the text at the stored offsets, or the anchor is rejected.
-  const anchor = resolveAnchor(await documentBlocks(data.documentId), data.anchor);
+  const passage = resolvePassage(await documentBlocks(data.documentId), data.anchor, data.segments);
+  const anchor = passage[0];
   if (!anchor) {
     return NextResponse.json({ error: t("api.anchorNotResolvedInDocument") }, { status: 400 });
   }
@@ -107,9 +112,10 @@ export async function POST(req: Request) {
   const order = await db.note.count({ where: { sectionId: section.id } });
 
   // A highlight has a color; its content is the note when one was typed, else
-  // the quote. A comment without a color stays a plain comment.
+  // the quote (the whole passage, one paragraph per block). A comment without
+  // a color stays a plain comment.
   const comment = data.comment?.trim();
-  const content = comment ? comment : anchor.quotedText.slice(0, 5000);
+  const content = comment ? comment : passage.map((s) => s.quotedText).join("\n\n").slice(0, 5000);
   const color = data.color ?? (comment ? null : "clay");
 
   // The same highlight twice is one highlight, not two stacked cards.
@@ -139,17 +145,8 @@ export async function POST(req: Request) {
       color,
       createdById: access.user.id,
       order,
-      sources: {
-        create: {
-          documentId: data.documentId,
-          blockId: anchor.blockId,
-          startOffset: anchor.startOffset,
-          endOffset: anchor.endOffset,
-          quotedText: anchor.quotedText,
-          prefix: anchor.prefix,
-          suffix: anchor.suffix,
-        },
-      },
+      // One source per segment: the marks cover the whole passage.
+      sources: { create: passageSources(data.documentId, passage) },
     },
     include: { sources: true },
   });

@@ -3,7 +3,8 @@ import { z } from "zod";
 import { bumpNotebook, sectionAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
 import { sourceInputSchema } from "@/lib/anchors/input";
-import { documentBlocks, resolveAnchor, type ResolvedAnchor } from "@/lib/anchors/resolve";
+import { MAX_SEGMENTS, passageSources, resolvePassage } from "@/lib/anchors/passage";
+import { documentBlocks, type ResolvedAnchor } from "@/lib/anchors/resolve";
 import { serverT } from "@/lib/i18n/server";
 import { videoAnchorFor } from "@/lib/video/anchor";
 import { timeRangeSchema } from "@/lib/video/types";
@@ -14,6 +15,10 @@ const createSchema = z
     sectionId: z.string().min(1),
     content: z.string().min(1).max(50_000),
     source: sourceInputSchema.optional(),
+    // A selection over several blocks of the source's document
+    // (lib/anchors/passage.ts): one anchor per block, the first being
+    // `source`; every segment becomes a source of the note.
+    segments: z.array(sourceInputSchema.omit({ documentId: true })).min(1).max(MAX_SEGMENTS).optional(),
     // A video source (SPEC.md §11): a time range; the server picks the anchor
     // block and the quoted text. Used by Find's "Add to notes".
     video: z
@@ -47,16 +52,16 @@ export async function POST(req: Request) {
   // then the quote inside the block, then the quote across the document — a
   // re-parse gives every block a new id while an open reader still sends the
   // old ones.
-  let source: (ResolvedAnchor & { documentId: string }) | null = null;
+  let sources: (ResolvedAnchor & { documentId: string })[] = [];
   if (data.source) {
     if (data.source.endOffset <= data.source.startOffset) {
       return NextResponse.json({ error: t("api.anchorOffsetsInvalid") }, { status: 400 });
     }
-    const resolved = resolveAnchor(await documentBlocks(data.source.documentId), data.source);
-    if (!resolved) {
+    const passage = resolvePassage(await documentBlocks(data.source.documentId), data.source, data.segments);
+    if (passage.length === 0) {
       return NextResponse.json({ error: t("api.anchorNotResolvedInDocument") }, { status: 400 });
     }
-    source = { documentId: data.source.documentId, ...resolved };
+    sources = passageSources(data.source.documentId, passage);
   }
 
   let videoSource: {
@@ -102,21 +107,7 @@ export async function POST(req: Request) {
       ...(derivationType ? { derivationType } : {}),
       createdById: access.user.id,
       order: count,
-      ...(source
-        ? {
-            sources: {
-              create: {
-                documentId: source.documentId,
-                blockId: source.blockId,
-                startOffset: source.startOffset,
-                endOffset: source.endOffset,
-                quotedText: source.quotedText,
-                prefix: source.prefix,
-                suffix: source.suffix,
-              },
-            },
-          }
-        : {}),
+      ...(sources.length > 0 ? { sources: { create: sources } } : {}),
       ...(videoSource
         ? {
             sources: {

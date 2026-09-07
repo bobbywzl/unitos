@@ -9,16 +9,20 @@ export function splitSentences(text: string): SentenceSpan[] {
   // whitespace, then something that starts a sentence. Decimal points and
   // mid-word periods never match — no whitespace follows them. CJK terminators
   // (。！？；…) end a sentence with no whitespace, and any character starts the
-  // next one.
+  // next one. A line break is always a boundary: a passage over several
+  // blocks joins them with blank lines (lib/anchors/passage.ts), and a
+  // sentence never crosses a block, so the numbering per block is the same
+  // whether the text is one block or the whole passage.
   const boundaries: number[] = [];
-  const rx = /[.!?]+["'”’)\]]*\s+|[。！？；…]+[”’」』）】》〕\]]*\s*/g;
+  const rx = /[.!?]+["'”’)\]]*\s+|[。！？；…]+[”’」』）】》〕\]]*\s*|[^\S\n]*\n\s*/g;
   let m: RegExpExecArray | null;
   while ((m = rx.exec(text))) {
     const at = m.index + m[0].length;
     const after = text[at];
     if (!after) continue;
     const cjkBoundary = /[。！？；…]/.test(m[0]);
-    if (cjkBoundary || /[A-Z0-9"'“‘([]/.test(after)) boundaries.push(at);
+    const lineBreak = m[0].includes("\n");
+    if (cjkBoundary || lineBreak || /[A-Z0-9"'“‘([]/.test(after)) boundaries.push(at);
   }
   const spans: SentenceSpan[] = [];
   let start = 0;

@@ -7,10 +7,11 @@ import { parsePdf } from "@/lib/parse/pdf";
 import { auditFigures } from "@/lib/parse/figure-audit";
 import { layoutBlocks } from "@/lib/parse/layout";
 import { pruneReferences } from "@/lib/parse/references";
-import { renderIfNeeded } from "@/lib/parse/render-page";
+import { browserConfigured } from "@/lib/browser";
+import { needsBrowserRender, renderIfNeeded } from "@/lib/parse/render-page";
 import { splitBlocks, splitPartCount } from "@/lib/parse/split";
 import { selectCoreBlocks, structureBlocks } from "@/lib/parse/structure";
-import { fetchPage } from "@/lib/parse/fetch-page";
+import { fetchPage, type FetchedPage } from "@/lib/parse/fetch-page";
 import { parseFetchedPage, parseHtmlContent, resolveContentsLinks } from "@/lib/parse/url";
 import {
   PARSER_VERSION,
@@ -116,11 +117,23 @@ async function refineUrlBlocks(
 }
 
 // The final figure check, reported with the save stage so the upload
-// assistant can show it: how many figures, and the captions whose figure the
-// parse did not load.
-function saveDetail(blocks: ParsedBlock[]): string {
+// assistant and the document bar can show it: how many figures, the captions
+// whose figure the parse did not load, and whether the page draws figures
+// with scripts that no configured browser could render (the reason a
+// caption stands alone; lib/parse/render-page.ts).
+function saveDetail(blocks: ParsedBlock[], scriptedFigures = false): string {
   const audit = auditFigures(blocks);
-  return JSON.stringify({ figures: audit.figures, captionsWithoutFigure: audit.captionsWithoutFigure });
+  return JSON.stringify({
+    figures: audit.figures,
+    captionsWithoutFigure: audit.captionsWithoutFigure,
+    scriptedFigures,
+  });
+}
+
+/** Does the page draw figures with scripts that this deployment cannot
+    render: scripted charts in the static page and no browser configured. */
+function unrenderedScripts(fetched: FetchedPage): boolean {
+  return fetched.kind === "html" && !browserConfigured() && needsBrowserRender(fetched.html);
 }
 
 // Each split part keeps only the references its own blocks cite.
@@ -366,7 +379,7 @@ export async function ingestUrl(
     const chars = blocks.reduce((n, b) => n + b.text.length, 0);
     const parts = splitBlocks(title, blocks, splitPartCount(chars));
     if (parts.length > 1) {
-      onProgress?.("save", saveDetail(blocks));
+      onProgress?.("save", saveDetail(blocks, unrenderedScripts(fetched)));
       const documents = [];
       for (let i = 0; i < parts.length; i++) {
         documents.push(
@@ -384,7 +397,7 @@ export async function ingestUrl(
     }
   }
 
-  onProgress?.("save", saveDetail(blocks));
+  onProgress?.("save", saveDetail(blocks, unrenderedScripts(fetched)));
   const document = await createDocumentWithBlocks({
     title,
     sourceUrl: url,
@@ -451,12 +464,14 @@ export async function reparseDocument(
   let blocks: ParsedBlock[];
   let references: DocumentReference[] | undefined;
   let columnWidth: number | undefined;
+  let scriptedFigures = false;
   if (document.fileData) {
     onProgress?.("parse");
     blocks = (await parsePdf(new Uint8Array(document.fileData))).blocks;
   } else if (document.sourceUrl) {
     const url = document.sourceUrl;
     const fetched = await fetchPage(url, onProgress);
+    scriptedFigures = unrenderedScripts(fetched);
     // A page whose figures its scripts draw renders in a browser first, where
     // one is configured (lib/parse/render-page.ts); an animated chart's loop
     // is stored as an image of the document.
@@ -475,7 +490,9 @@ export async function reparseDocument(
     throw new Error("Document has no stored file and no source URL");
   }
 
-  onProgress?.("save");
+  // The figure check rides with the save stage, as on an add: the document
+  // bar reports a caption left without its figure.
+  onProgress?.("save", saveDetail(blocks, scriptedFigures));
   const rows = resolveContentsLinks(blocks);
   await db.$transaction(async (tx) => {
     await tx.block.deleteMany({ where: { documentId } });

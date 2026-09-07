@@ -384,6 +384,8 @@ const en = {
   uploadReviewAgainNote: "Review again re-checks the figures.",
   uploadFiguresLoaded: "{n} figures loaded",
   uploadEveryCaptionHasFigure: "every caption has its figure",
+  // The document bar, after the automatic re-parse (document-bar.tsx)
+  reparseCaptionsWithoutFigure: "No figure loaded for {labels} after the re-parse.",
 };
 
 const zh: Record<keyof typeof en, string> = {
@@ -723,6 +725,7 @@ const zh: Record<keyof typeof en, string> = {
   uploadReviewAgainNote: "重新审阅会再次检查插图。",
   uploadFiguresLoaded: "已加载 {n} 张插图",
   uploadEveryCaptionHasFigure: "每条说明都有插图",
+  reparseCaptionsWithoutFigure: "重新解析后，{labels} 没有加载插图。",
 };
 
 export const panes = { en, zh } as const;

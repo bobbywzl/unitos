@@ -57,6 +57,27 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+// The save stage's figure check ({figures, captionsWithoutFigure,
+// scriptedFigures}; lib/parse/ingest.ts saveDetail) as one line, or null
+// when every caption has its figure.
+function figureNotice(t: TFunc, detail: string): string | null {
+  if (!detail.startsWith("{")) return null;
+  try {
+    const raw = JSON.parse(detail) as { captionsWithoutFigure?: unknown; scriptedFigures?: unknown };
+    const captions = Array.isArray(raw.captionsWithoutFigure)
+      ? raw.captionsWithoutFigure.filter((c): c is string => typeof c === "string")
+      : [];
+    if (captions.length === 0) return null;
+    const labels = captions.map((c) => c.split(/[.:]\s/)[0].slice(0, 24)).join(", ");
+    return [
+      t("panes.reparseCaptionsWithoutFigure", { labels }),
+      ...(raw.scriptedFigures === true ? [t("panes.uploadScriptedFigures")] : []),
+    ].join(" ");
+  } catch {
+    return null;
+  }
+}
+
 // Platform errors (Vercel 413, crashed function) return empty or non-JSON bodies.
 async function readJson<T>(res: Response): Promise<T | null> {
   return res.json().catch(() => null) as Promise<T | null>;
@@ -293,11 +314,20 @@ export function DocumentBar({
       const res = await fetch(`/api/documents/${doc.id}/reparse`, { method: "POST" });
       if (!res.ok || !res.body) return;
       let result: IngestEvent | null = null;
+      let saveDetail: string | null = null;
       for await (const event of readNdjson<IngestEvent>(res)) {
-        if (!("stage" in event)) result = event;
+        if ("stage" in event) {
+          if (event.stage === "save" && event.detail) saveDetail = event.detail;
+        } else result = event;
       }
-      if (result && "id" in result) router.refresh();
-      else if (result && "error" in result) console.warn("[reparse] upgrade failed:", result.error);
+      if (result && "id" in result) {
+        router.refresh();
+        // A figure the re-parse could not load is worth a line: the caption
+        // stands alone, and when the page draws it with scripts, the fix is
+        // a browser for the deployment (SPEC.md §15).
+        const notice = saveDetail ? figureNotice(t, saveDetail) : null;
+        if (notice) setConnectNotice(notice);
+      } else if (result && "error" in result) console.warn("[reparse] upgrade failed:", result.error);
     } catch (err) {
       console.warn("[reparse] upgrade failed:", err);
     }

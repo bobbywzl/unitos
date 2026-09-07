@@ -116,6 +116,28 @@ export function anchorContext(
   };
 }
 
+// A passage over several blocks (lib/anchors/passage.ts): the anchored text
+// is the segments' quotes, one paragraph each; the context before is the
+// first segment's, the context after the last's. One segment reads as
+// anchorContext does.
+export function passageContext(
+  blocks: Pick<Block, "id" | "text">[],
+  segments: { blockId: string; startOffset: number; endOffset: number }[],
+) {
+  if (segments.length === 0) return null;
+  const first = segments[0];
+  const last = segments[segments.length - 1];
+  const head = anchorContext(blocks, first.blockId, first.startOffset, first.endOffset);
+  const tail = anchorContext(blocks, last.blockId, last.startOffset, last.endOffset);
+  if (!head || !tail) return null;
+  if (segments.length === 1) return head;
+  const anchoredText = segments
+    .map((s) => blocks.find((b) => b.id === s.blockId)?.text.slice(s.startOffset, s.endOffset) ?? "")
+    .filter(Boolean)
+    .join("\n\n");
+  return { anchoredText, contextBefore: head.contextBefore, contextAfter: tail.contextAfter };
+}
+
 export async function sectionSkeleton(notebookId: string): Promise<PromptCtx["sectionSkeleton"]> {
   const sections = await db.section.findMany({
     where: { notebookId, hidden: false },

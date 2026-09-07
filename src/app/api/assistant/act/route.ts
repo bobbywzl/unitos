@@ -1,15 +1,15 @@
 import type { ModelMessage } from "ai";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { resolveAnchor } from "@/lib/anchors/resolve";
+import { passageSources, resolvePassage, segmentsSchema } from "@/lib/anchors/passage";
 import { bumpNotebook, notebookAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
 import { DERIVATION_EFFORT, DERIVATION_MODEL, MAX_OUTPUT_TOKENS } from "@/lib/derive/config";
 import {
-  anchorContext,
   annotationsSection,
   documentPrefix,
   loadProfile,
+  passageContext,
   sectionSkeleton,
 } from "@/lib/derive/context";
 import { figureContent, figureVisual, type FigureImage } from "@/lib/derive/figure";
@@ -45,6 +45,10 @@ const requestSchema = z.object({
       suffix: z.string().max(64).optional(),
     })
     .optional(),
+  // A selection over several blocks (lib/anchors/passage.ts): one anchor per
+  // block, the first being `anchor`; every segment becomes a source of the
+  // conversation note.
+  segments: segmentsSchema,
   // A circled spot of a video document (SPEC.md §11): the time range, the
   // drawn region, and the paused frame as a JPEG data URL when the client
   // could capture it — the same shape EXPLAIN takes.
@@ -228,10 +232,9 @@ async function handle(req: Request, t: TFunc) {
   // then the quote inside the block, then the quote across the document. A
   // re-parse gives every block a new id while an open reader still sends the
   // old ones; the quote carries the selection across.
-  const anchor = data.anchor ? resolveAnchor(document.blocks, data.anchor) : null;
-  const anchored = anchor
-    ? anchorContext(document.blocks, anchor.blockId, anchor.startOffset, anchor.endOffset)
-    : null;
+  const passage = data.anchor ? resolvePassage(document.blocks, data.anchor, data.segments) : [];
+  const anchor = passage[0] ?? null;
+  const anchored = anchor ? passageContext(document.blocks, passage) : null;
   if (data.anchor && (!anchor || !anchored)) {
     return NextResponse.json({ error: t("api.anchorNotResolvedInDocument") }, { status: 400 });
   }
@@ -514,17 +517,8 @@ async function handle(req: Request, t: TFunc) {
             derivationType: "SYNTHESIS",
             createdById: user.id,
             order: count,
-            sources: {
-              create: {
-                documentId: data.documentId,
-                blockId: anchor.blockId,
-                startOffset: anchor.startOffset,
-                endOffset: anchor.endOffset,
-                quotedText: anchor.quotedText,
-                prefix: anchor.prefix,
-                suffix: anchor.suffix,
-              },
-            },
+            // One source per segment: the marks cover the whole passage.
+            sources: { create: passageSources(data.documentId, passage) },
           },
         });
         conversationNoteId = note.id;
