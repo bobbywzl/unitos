@@ -85,7 +85,7 @@ function imageStore(userId: string | null): CaptureStore {
   return async (gif) => {
     try {
       const image = await db.imageAsset.create({
-        data: { mimeType: "image/gif", size: gif.length, data: gif, userId },
+        data: { mimeType: "image/gif", size: gif.length, data: Buffer.from(gif), userId },
         select: { id: true },
       });
       return `/api/images/${image.id}`;
