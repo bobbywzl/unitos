@@ -19,7 +19,12 @@ import { outboundFetch } from "@/lib/outbound-fetch";
 //    `data-font`, and `data-column-px` (the text column's width); and every
 //    media element, every column of a figure row, and every figure row
 //    wider than the column carries `data-width-pct`, its width as a
-//    percentage of the page's text column — past 100, wider than the column.
+//    percentage of the page's text column — past 100, wider than the column;
+//    and every box carries `data-box`: an element the page paints its own
+//    background under, different from the page's, or sets in its own font
+//    while it holds a chart. Text in a box that holds a figure is the
+//    figure's words (a chart's title, legend, axis labels, source line),
+//    not its caption (lib/parse/figures.ts).
 //    The walk (lib/parse/url.ts, lib/parse/figures.ts) and the sanitizer
 //    read those attributes; without stylesheets none is written and nothing
 //    depends on them.
@@ -1536,6 +1541,77 @@ function markFontSizes(document: Document, rules: Rule[], page: Page, prose: Ele
   }
 }
 
+// ── Boxes ───────────────────────────────────────────────────────────────────
+
+/** A color as a comparable key: hex expanded to six digits, an opaque
+    rgb() as hex, white and black as hex; anything else lower-cased with
+    its spaces removed. */
+function colorKey(value: string): string {
+  const v = value.trim().toLowerCase();
+  if (v === "white") return "#ffffff";
+  if (v === "black") return "#000000";
+  const hex = /^#([0-9a-f]{3,8})$/.exec(v);
+  if (hex) {
+    let h = hex[1];
+    if (h.length === 3 || h.length === 4) h = [...h].map((c) => c + c).join("");
+    if (h.length === 8 && h.endsWith("ff")) h = h.slice(0, 6);
+    return `#${h}`;
+  }
+  const rgb = /^rgba?\(\s*(\d+)[\s,]+(\d+)[\s,]+(\d+)(?:\s*[,/]\s*(\d*\.?\d+%?))?\s*\)$/.exec(v);
+  if (rgb) {
+    const alpha = rgb[4] === undefined ? 1 : rgb[4].endsWith("%") ? Number(rgb[4].slice(0, -1)) / 100 : Number(rgb[4]);
+    const channels = [rgb[1], rgb[2], rgb[3]].map((c) => Math.min(255, Number(c)).toString(16).padStart(2, "0")).join("");
+    return alpha >= 1 ? `#${channels}` : `#${channels}/${alpha}`;
+  }
+  return v.replace(/\s+/g, "");
+}
+
+/** A font-family list as a comparable key: each face lower-cased, unquoted. */
+function familyKey(list: string): string {
+  return list
+    .split(",")
+    .map((f) => f.trim().replace(/^["']|["']$/g, "").toLowerCase())
+    .filter(Boolean)
+    .join(",");
+}
+
+/** Mark boxes: an element the page paints its own background under,
+    different from the page's background, or sets in its own font while it
+    holds a chart with text. The figure functions read the mark: text in a
+    box that holds a figure is the figure's words, not its caption. */
+function markBoxes(document: Document, rules: Rule[], page: Page) {
+  const body = document.body;
+  const html = document.documentElement;
+  const bodyStyle = styleOf(body, page);
+  const htmlStyle = styleOf(html, page);
+  if (!bodyStyle || !htmlStyle) return;
+  const pageBackground = colorKey(
+    backdropOf([
+      { el: body, style: bodyStyle },
+      { el: html, style: htmlStyle },
+    ])?.background ?? "white",
+  );
+  const bodyFamily = inheritedValue(bodyStyle, "font-family");
+  const candidates = matchAll(document, selectorsDeclaring(rules, ["background", "background-color", "font-family", "font"]), page);
+  for (const el of document.querySelectorAll('[style*="background"], [style*="font"], [bgcolor]')) candidates.add(el);
+  for (const el of candidates) {
+    if (SKIP_TAGS.has(el.tagName.toLowerCase()) || el.closest("svg") || isHidden(el)) continue;
+    const style = styleOf(el, page);
+    if (!style) return;
+    const own = backdropOf([{ el, style }])?.background ?? el.getAttribute("bgcolor");
+    let boxed = own !== null && own.trim() !== "" && colorKey(own) !== pageBackground;
+    if (!boxed) {
+      const family = ownValue(style, "font-family");
+      boxed =
+        family !== null &&
+        bodyFamily !== null &&
+        familyKey(family) !== familyKey(bodyFamily) &&
+        [...el.querySelectorAll("svg")].some((svg) => isChartSvg(svg) && svg.querySelector("text") !== null);
+    }
+    if (boxed) el.setAttribute("data-box", "1");
+  }
+}
+
 // ── Widths: a small layout walk ─────────────────────────────────────────────
 // The page's own boxes, top down: a px width sets, a percentage multiplies,
 // padding subtracts, a grid divides by its tracks, a flex row shares the
@@ -1951,7 +2027,7 @@ function columnWidth(prose: Element[], page: Page): number {
 // ── The bake ────────────────────────────────────────────────────────────────
 
 /** The page's html with the page's look written into its DOM: hidden,
-    alignment, style, font-size, and width attributes on its elements, and
+    alignment, style, font-size, box, and width attributes on its elements, and
     every chart svg and image carrying the page's presentation as inline
     style. The html comes back unchanged when the page has no stylesheet
     and no figure, when its stylesheets will not load, or when anything in
@@ -1988,6 +2064,7 @@ export async function bakeFigureStyles(rawHtml: string, url: string): Promise<st
       markFontSizes(document, rules, page, prose);
       markAlignment(document, rules, page);
       markStyles(document, rules, page);
+      markBoxes(document, rules, page);
       markWidths(document, page);
     }
     // Figures keep their look: visible charts first, so the budget goes to
