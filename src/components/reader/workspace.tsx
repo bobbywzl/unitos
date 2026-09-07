@@ -89,6 +89,8 @@ export function Workspace({
   readerView,
   activeDocumentId,
   drive,
+  figureGaps,
+  browserConfigured,
   reader,
   assistant,
   distillPanel,
@@ -110,6 +112,10 @@ export function Workspace({
   readerView: ReaderViewKind;
   activeDocumentId: string | null;
   drive: DriveConfig | null;
+  // The open document's captions left without their figure, and whether a
+  // browser is configured to render them (document-bar.tsx; SPEC.md §15).
+  figureGaps: string[];
+  browserConfigured: boolean;
   reader: React.ReactNode;
   assistant: React.ReactNode;
   distillPanel: React.ReactNode;
@@ -516,6 +522,8 @@ export function Workspace({
             documents={documents}
             activeId={activeDocumentId}
             drive={drive}
+            figureGaps={figureGaps}
+            browserConfigured={browserConfigured}
           />
         </div>
         <OfflineStatus />

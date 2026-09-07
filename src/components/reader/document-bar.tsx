@@ -34,6 +34,12 @@ import {
   initialIngestSteps,
   type IngestStep,
 } from "@/components/reader/ingest-progress";
+import {
+  MovingFigureIcon,
+  registerFigureCaptureHandler,
+  setFigureCapture,
+  useFigureCapture,
+} from "@/components/reader/figure-capture";
 import { setRevealFlag } from "@/components/reader/reveal";
 import { UploadAssistant, type UploadRequest } from "@/components/reader/upload-assistant";
 
@@ -45,6 +51,11 @@ export type AttachedDocument = {
   hasFile: boolean;
   hasVideo: boolean; // video documents never re-parse (SPEC.md §11)
   handwritten: boolean; // pages, not text blocks; the menu flips the shape (SPEC.md §16)
+  // The browser render for scripted figures (Document.figureRenderAt,
+  // figureRenderError): none has run, or when the last ran and why it did
+  // not deliver (SPEC.md §15).
+  figureRenderAt: string | null;
+  figureRenderError: string | null;
 };
 type IngestPhase = { fileLabel: string; steps: IngestStep[] };
 // Wire format from /api/documents: a stage event per line, then one terminal line.
@@ -58,24 +69,40 @@ function sleep(ms: number) {
 }
 
 // The save stage's figure check ({figures, captionsWithoutFigure,
-// scriptedFigures}; lib/parse/ingest.ts saveDetail) as one line, or null
-// when every caption has its figure.
-function figureNotice(t: TFunc, detail: string): string | null {
+// scriptedFigures, renderError}; lib/parse/ingest.ts saveDetail): the
+// captions left without their figure, and why.
+type FigureOutcome = { captions: string[]; scriptedFigures: boolean; renderError: string | null };
+
+function figureOutcome(detail: string): FigureOutcome | null {
   if (!detail.startsWith("{")) return null;
   try {
-    const raw = JSON.parse(detail) as { captionsWithoutFigure?: unknown; scriptedFigures?: unknown };
-    const captions = Array.isArray(raw.captionsWithoutFigure)
-      ? raw.captionsWithoutFigure.filter((c): c is string => typeof c === "string")
-      : [];
-    if (captions.length === 0) return null;
-    const labels = captions.map((c) => c.split(/[.:]\s/)[0].slice(0, 24)).join(", ");
-    return [
-      t("panes.reparseCaptionsWithoutFigure", { labels }),
-      ...(raw.scriptedFigures === true ? [t("panes.uploadScriptedFigures")] : []),
-    ].join(" ");
+    const raw = JSON.parse(detail) as {
+      captionsWithoutFigure?: unknown;
+      scriptedFigures?: unknown;
+      renderError?: unknown;
+    };
+    return {
+      captions: Array.isArray(raw.captionsWithoutFigure)
+        ? raw.captionsWithoutFigure.filter((c): c is string => typeof c === "string")
+        : [],
+      scriptedFigures: raw.scriptedFigures === true,
+      renderError: typeof raw.renderError === "string" && raw.renderError ? raw.renderError : null,
+    };
   } catch {
     return null;
   }
+}
+
+// The figure check as one line, or null when every caption has its figure.
+function figureNotice(t: TFunc, detail: string): string | null {
+  const outcome = figureOutcome(detail);
+  if (!outcome || outcome.captions.length === 0) return null;
+  const labels = outcome.captions.map((c) => c.split(/[.:]\s/)[0].slice(0, 24)).join(", ");
+  return [
+    t("panes.reparseCaptionsWithoutFigure", { labels }),
+    ...(outcome.scriptedFigures ? [t("panes.uploadScriptedFigures")] : []),
+    ...(outcome.renderError ? [t("panes.reparseRenderFailed", { reason: outcome.renderError })] : []),
+  ].join(" ");
 }
 
 // Platform errors (Vercel 413, crashed function) return empty or non-JSON bodies.
@@ -106,11 +133,18 @@ export function DocumentBar({
   documents,
   activeId,
   drive,
+  figureGaps,
+  browserConfigured,
 }: {
   notebookId: string;
   documents: AttachedDocument[];
   activeId: string | null;
   drive: DriveConfig | null;
+  // The open document's captions left without their figure, by label
+  // (lib/parse/figure-audit.ts captionGaps), and whether this deployment
+  // has a browser to render them with (SPEC.md §15).
+  figureGaps: string[];
+  browserConfigured: boolean;
 }) {
   const { canEdit } = useCollab();
   const t = useT();
@@ -211,6 +245,20 @@ export function DocumentBar({
     !active.handwritten &&
     (active.sourceUrl !== null || active.hasFile) &&
     active.parserVersion < PARSER_VERSION;
+  // The open document's figures a browser render can bring over: captions
+  // left without their figure on a page, while a browser is configured. One
+  // run on open when no render has run for the document yet — a browser
+  // configured after the add brings the figures over on the next open; Try
+  // again in the reader runs another (figure-capture.tsx).
+  const activeGap =
+    active !== null &&
+    !active.hasVideo &&
+    !active.handwritten &&
+    active.sourceUrl !== null &&
+    figureGaps.length > 0;
+  const activeNeedsCapture = activeGap && browserConfigured && active.figureRenderAt === null;
+  const capture = useFigureCapture(active?.id);
+  const captureRunning = useRef(false);
 
   // Manual re-parse: the progress card shows, errors show.
   const [connecting, setConnecting] = useState<string | null>(null);
@@ -289,6 +337,10 @@ export function DocumentBar({
   // the escape hatch when Import PDF judged it wrong. Absent = plain re-parse.
   async function reparse(doc: AttachedDocument, as?: "article" | "handwritten") {
     setError(null);
+    // The figure's place in the reader moves while the re-parse runs; the
+    // refresh brings the outcome the document stores.
+    const figures = activeGap && doc.id === active?.id;
+    if (figures) setFigureCapture({ documentId: doc.id, status: "running", error: null });
     try {
       await runIngest(doc.title, doc.sourceUrl && !as ? "url" : "pdf", () =>
         fetch(`/api/documents/${doc.id}/reparse`, {
@@ -298,8 +350,11 @@ export function DocumentBar({
         }),
       );
       router.refresh();
+      if (figures) setFigureCapture(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : t("panes.reparseFailed"));
+      const message = err instanceof Error ? err.message : t("panes.reparseFailed");
+      setError(message);
+      if (figures) setFigureCapture({ documentId: doc.id, status: "failed", error: message });
     } finally {
       setPhase(null);
     }
@@ -309,10 +364,25 @@ export function DocumentBar({
   // progress card and no error banner — the reader never waits on it. Success
   // swaps the upgraded blocks in with a refresh; failure logs and leaves the
   // old parse standing until the next open tries again.
-  async function reparseSilently(doc: AttachedDocument) {
+  //
+  // `figures`: the run is bringing a figure over (activeGap) — the figure's
+  // place in the reader moves while it runs, and says why when the figure
+  // still did not come through (figure-capture.tsx).
+  async function reparseSilently(doc: AttachedDocument, figures = false) {
+    if (figures) {
+      if (captureRunning.current) return;
+      captureRunning.current = true;
+      setFigureCapture({ documentId: doc.id, status: "running", error: null });
+    }
+    const failed = (error: string | null) => {
+      if (figures) setFigureCapture({ documentId: doc.id, status: "failed", error });
+    };
     try {
       const res = await fetch(`/api/documents/${doc.id}/reparse`, { method: "POST" });
-      if (!res.ok || !res.body) return;
+      if (!res.ok || !res.body) {
+        failed(statusMessage(t, res.status));
+        return;
+      }
       let result: IngestEvent | null = null;
       let saveDetail: string | null = null;
       for await (const event of readNdjson<IngestEvent>(res)) {
@@ -324,22 +394,40 @@ export function DocumentBar({
         router.refresh();
         // A figure the re-parse could not load is worth a line: the caption
         // stands alone, and when the page draws it with scripts, the fix is
-        // a browser for the deployment (SPEC.md §15).
+        // a browser for the deployment — or the render's own error says
+        // what went wrong (SPEC.md §15).
         const notice = saveDetail ? figureNotice(t, saveDetail) : null;
         if (notice) setConnectNotice(notice);
-      } else if (result && "error" in result) console.warn("[reparse] upgrade failed:", result.error);
+        const outcome = saveDetail ? figureOutcome(saveDetail) : null;
+        if (outcome && outcome.captions.length > 0) failed(outcome.renderError);
+        else if (figures) setFigureCapture(null);
+      } else if (result && "error" in result) {
+        console.warn("[reparse] upgrade failed:", result.error);
+        failed(result.error);
+      } else failed(null);
     } catch (err) {
       console.warn("[reparse] upgrade failed:", err);
+      failed(err instanceof Error ? err.message : null);
+    } finally {
+      if (figures) captureRunning.current = false;
     }
   }
 
   useEffect(() => {
-    if (!activeStale || active === null || phase !== null) return;
+    if (active === null || phase !== null) return;
+    if (!activeStale && !activeNeedsCapture) return;
     if (reparseAttempted.current.has(active.id)) return;
     reparseAttempted.current.add(active.id);
-    void reparseSilently(active);
+    void reparseSilently(active, activeGap);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeId, activeStale]);
+  }, [activeId, activeStale, activeNeedsCapture]);
+
+  // The reader's Try again, at the figure's place.
+  useEffect(() => {
+    if (active === null || !activeGap) return;
+    return registerFigureCaptureHandler(active.id, () => void reparseSilently(active, true));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active?.id, activeGap]);
 
   // Drives one ingest call: seeds the progress card, streams stage events into it,
   // and resolves with the terminal result. Shared by PDF upload and URL ingestion below.
@@ -938,7 +1026,17 @@ export function DocumentBar({
           <ThinkingIndicator label={t("panes.compareRunning")} onStop={stopCompare} />
         </span>
       )}
-      {connectNotice && (
+      {capture?.status === "running" && (
+        <span
+          role="status"
+          aria-live="polite"
+          className="flex shrink-0 items-center gap-1.5 rounded-full bg-sage-200 px-3 py-1 text-xs font-semibold text-sage-800"
+        >
+          <MovingFigureIcon size={14} />
+          <span className="thinking-label">{t("panes.figureMoving", { label: figureGaps.join(", ") })}</span>
+        </span>
+      )}
+      {connectNotice && capture?.status !== "running" && (
         <span className="shrink-0 rounded-full bg-sage-200 px-3 py-1 text-xs font-semibold text-sage-800">
           {connectNotice}
         </span>

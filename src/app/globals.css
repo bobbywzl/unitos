@@ -1767,3 +1767,26 @@ ellipse.anchor-flash {
   white-space: pre-line;
   text-indent: 0;
 }
+
+/* The figure on its way (figure-capture.tsx): the picture slides into its
+   frame, over and over. Still under reduced motion. */
+@media (prefers-reduced-motion: no-preference) {
+  .figure-moving-icon-slide {
+    animation: figure-slide 1.8s ease-in-out infinite;
+  }
+}
+@keyframes figure-slide {
+  0% {
+    transform: translateX(-9px);
+    opacity: 0;
+  }
+  30%,
+  70% {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(9px);
+    opacity: 0;
+  }
+}

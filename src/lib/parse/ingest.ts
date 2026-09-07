@@ -8,7 +8,7 @@ import { auditFigures } from "@/lib/parse/figure-audit";
 import { layoutBlocks } from "@/lib/parse/layout";
 import { pruneReferences } from "@/lib/parse/references";
 import { browserConfigured } from "@/lib/browser";
-import { needsBrowserRender, renderIfNeeded } from "@/lib/parse/render-page";
+import { needsBrowserRender, renderIfNeeded, type RenderReport } from "@/lib/parse/render-page";
 import { splitBlocks, splitPartCount } from "@/lib/parse/split";
 import { selectCoreBlocks, structureBlocks } from "@/lib/parse/structure";
 import { fetchPage, type FetchedPage } from "@/lib/parse/fetch-page";
@@ -118,16 +118,28 @@ async function refineUrlBlocks(
 
 // The final figure check, reported with the save stage so the upload
 // assistant and the document bar can show it: how many figures, the captions
-// whose figure the parse did not load, and whether the page draws figures
-// with scripts that no configured browser could render (the reason a
-// caption stands alone; lib/parse/render-page.ts).
-function saveDetail(blocks: ParsedBlock[], scriptedFigures = false): string {
+// whose figure the parse did not load, whether the page draws figures with
+// scripts that no configured browser could render, and why a browser
+// render that ran did not deliver (the reasons a caption stands alone;
+// lib/parse/render-page.ts).
+function saveDetail(blocks: ParsedBlock[], scriptedFigures = false, render: RenderReport | null = null): string {
   const audit = auditFigures(blocks);
   return JSON.stringify({
     figures: audit.figures,
     captionsWithoutFigure: audit.captionsWithoutFigure,
     scriptedFigures,
+    renderError: render?.error ?? null,
   });
+}
+
+// The render's state as the document stores it: when a browser render last
+// ran for the document, and why it did not deliver. No render: both null,
+// so the reader tries one on open once a browser is configured.
+function renderColumns(render: RenderReport | null) {
+  return {
+    figureRenderAt: render?.attempted ? new Date() : null,
+    figureRenderError: render?.attempted ? render.error : null,
+  };
 }
 
 /** Does the page draw figures with scripts that this deployment cannot
@@ -158,6 +170,7 @@ async function createDocumentWithBlocks(data: {
   references?: DocumentReference[];
   font?: ParsedDocument["font"];
   columnWidth?: number;
+  render?: RenderReport | null;
 }) {
   const blocks = resolveContentsLinks(data.blocks);
   return db.$transaction(async (tx) => {
@@ -171,6 +184,7 @@ async function createDocumentWithBlocks(data: {
         references: data.references,
         font: data.font,
         columnWidth: data.columnWidth,
+        ...renderColumns(data.render ?? null),
       },
     });
     await tx.block.createMany({
@@ -360,7 +374,7 @@ export async function ingestUrl(
   // A page whose figures its scripts draw renders in a browser first, where
   // one is configured (lib/parse/render-page.ts); an animated chart's loop
   // is stored as an image of the document.
-  const page = await renderIfNeeded(fetched, url, onProgress, { store: { userId } });
+  const { page, render } = await renderIfNeeded(fetched, url, onProgress, { store: { userId } });
   const pageHtml = page.kind === "html" ? page.html : fetched.html;
   onProgress?.("extract");
   const parsed = await parseHtmlContent(pageHtml, url, onProgress);
@@ -379,7 +393,7 @@ export async function ingestUrl(
     const chars = blocks.reduce((n, b) => n + b.text.length, 0);
     const parts = splitBlocks(title, blocks, splitPartCount(chars));
     if (parts.length > 1) {
-      onProgress?.("save", saveDetail(blocks, unrenderedScripts(fetched)));
+      onProgress?.("save", saveDetail(blocks, unrenderedScripts(fetched), render));
       const documents = [];
       for (let i = 0; i < parts.length; i++) {
         documents.push(
@@ -390,6 +404,7 @@ export async function ingestUrl(
             references: referencesForPart(parts[i].blocks, references),
             font,
             columnWidth,
+            render,
           }),
         );
       }
@@ -397,7 +412,7 @@ export async function ingestUrl(
     }
   }
 
-  onProgress?.("save", saveDetail(blocks, unrenderedScripts(fetched)));
+  onProgress?.("save", saveDetail(blocks, unrenderedScripts(fetched), render));
   const document = await createDocumentWithBlocks({
     title,
     sourceUrl: url,
@@ -405,6 +420,7 @@ export async function ingestUrl(
     references,
     font,
     columnWidth,
+    render,
   });
   return { document, deduped: false };
 }
@@ -465,6 +481,7 @@ export async function reparseDocument(
   let references: DocumentReference[] | undefined;
   let columnWidth: number | undefined;
   let scriptedFigures = false;
+  let render: RenderReport | null = null;
   if (document.fileData) {
     onProgress?.("parse");
     blocks = (await parsePdf(new Uint8Array(document.fileData))).blocks;
@@ -475,7 +492,9 @@ export async function reparseDocument(
     // A page whose figures its scripts draw renders in a browser first, where
     // one is configured (lib/parse/render-page.ts); an animated chart's loop
     // is stored as an image of the document.
-    const page = await renderIfNeeded(fetched, url, onProgress, { store: { userId } });
+    const rendered = await renderIfNeeded(fetched, url, onProgress, { store: { userId } });
+    const page = rendered.page;
+    render = rendered.render;
     onProgress?.("extract");
     const parsed = await parseFetchedPage(page, url, onProgress);
     const refined = await refineUrlBlocks(parsed, onProgress, {
@@ -492,7 +511,7 @@ export async function reparseDocument(
 
   // The figure check rides with the save stage, as on an add: the document
   // bar reports a caption left without its figure.
-  onProgress?.("save", saveDetail(blocks, scriptedFigures));
+  onProgress?.("save", saveDetail(blocks, scriptedFigures, render));
   const rows = resolveContentsLinks(blocks);
   await db.$transaction(async (tx) => {
     await tx.block.deleteMany({ where: { documentId } });
@@ -518,6 +537,7 @@ export async function reparseDocument(
         parserVersion: PARSER_VERSION,
         references,
         columnWidth: columnWidth ?? null,
+        ...renderColumns(render),
         handwritten: false,
         conversionStatus: "NONE",
         conversionError: null,

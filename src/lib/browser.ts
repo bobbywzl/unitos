@@ -9,6 +9,22 @@ import type { Browser } from "playwright-core";
 // flags).
 
 const CONNECT_TIMEOUT_MS = 20_000;
+// The longest a session may run. Browserless ends a session at its `timeout`
+// query parameter — 60 s unless the endpoint sets one, shorter than a page
+// render with a chart capture (lib/parse/render-page.ts) — so an endpoint
+// there that sets none gets this one; every other endpoint is used as given.
+const SESSION_TIMEOUT_MS = 300_000;
+
+function sessionEndpoint(endpoint: string): string {
+  try {
+    const url = new URL(endpoint);
+    if (!/(^|\.)browserless\.io$/i.test(url.hostname) || url.searchParams.has("timeout")) return endpoint;
+    url.searchParams.set("timeout", String(SESSION_TIMEOUT_MS));
+    return url.toString();
+  } catch {
+    return endpoint;
+  }
+}
 
 export function browserConfigured(): boolean {
   return Boolean(process.env.BROWSER_WS_ENDPOINT || process.env.CHROMIUM_PATH);
@@ -23,7 +39,7 @@ export async function launchBrowser(): Promise<Browser> {
     throw new Error("BROWSER_WS_ENDPOINT and CHROMIUM_PATH are not set");
   }
   const { chromium } = await import("playwright-core");
-  if (endpoint) return chromium.connectOverCDP(endpoint, { timeout: CONNECT_TIMEOUT_MS });
+  if (endpoint) return chromium.connectOverCDP(sessionEndpoint(endpoint), { timeout: CONNECT_TIMEOUT_MS });
   const extra = process.env.CHROMIUM_ARGS?.split(/\s+/).filter(Boolean) ?? [];
   return chromium.launch({
     executablePath: executable,
