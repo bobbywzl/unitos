@@ -727,6 +727,8 @@ Offline, the open tab keeps working — reading what is loaded, and for a premiu
 
 The admin sends notifications to accounts; the admin never has access to an account. `/admin` is the operator's console — feedback, digest, usage, notifications — behind its own password (§2). It holds no session for any account, opens no account, and changes nothing on one: no impersonation, no profile edits, no premium toggle. The notification is the one thing the admin sends into an account, and it flows one way — the recipient reads and dismisses; nothing comes back. Feedback is the reader's one message to the admin, and the admin's reply to it is a notification too (kind `feedback`).
 
+**The feedback pipeline** (`.claude/skills/feedback-pipeline`): a daily Routine reads the inbox (`GET /api/admin/feedback?status=new,seen&take=2000`), clusters the requests that fit this spec, makes each change on a `feedback/<slug>` branch, and opens one pull request per change with the feedback quoted and a review checklist, marking the feedback `seen`. A person reviews and merges; Vercel deploys `main`. The next run finds the merged pull request by its `Feedback-Ids:` line, replies to each sender ("Shipped: …", the admin's reply notification) and marks the feedback `resolved`. The pipeline never pushes to `main`, never merges, never replies before the change is on `main`, and opens at most five pull requests per run. Feedback it cannot place — vague, out of scope, or rejected by a closed pull request — keeps its status for a person.
+
 ### Data model additions
 
 ```prisma
