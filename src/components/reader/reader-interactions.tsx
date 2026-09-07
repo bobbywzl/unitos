@@ -28,6 +28,8 @@ import type {
   DistillationView,
   Extraction,
   ExtractionView,
+  Keypoints,
+  KeypointsView,
 } from "@/lib/types";
 import type { DocumentReference } from "@/lib/parse/types";
 import { splitStreamError, splitStreamNote } from "@/lib/derive/config";
@@ -48,6 +50,7 @@ import {
   MicIcon,
   NotesIcon,
   QuestionIcon,
+  QuoteIcon,
   ChartIcon,
   SearchIcon,
   SparkleIcon,
@@ -69,6 +72,7 @@ import { useCollab } from "@/components/collab/collab-context";
 import { useImageDrop, type DroppedImage } from "@/components/use-image-drop";
 import { AuthorChip } from "@/components/collab/person-badge";
 import { DistillPage } from "@/components/reader/distill-page";
+import { KeypointsPage } from "@/components/reader/keypoints-page";
 import { ProjectSearch } from "@/components/reader/project-search";
 import { PANE_HEADER } from "@/components/reader/reader-panes";
 import { Reader, type TranscriptVariant } from "@/components/reader/reader";
@@ -496,6 +500,7 @@ export function ReaderInteractions({
   paneHeader,
   distillations,
   extractions,
+  keypoints,
   termsByBlock,
   linksByBlock,
   editedByBlock,
@@ -566,9 +571,12 @@ export function ReaderInteractions({
   // Stored distillations for this document, newest first, quotes healed
   // against the current blocks.
   distillations: DistillationView[];
-  // Stored extractions for this document, oldest first (labels E1…), spans
+  // Stored extractions for this document, oldest first (labels M1…), spans
   // healed against the current blocks.
   extractions: ExtractionView[];
+  // The stored keypoints for this document (the reader's Distill), points
+  // healed against the current blocks; null = none yet.
+  keypoints: KeypointsView | null;
   termsByBlock: Record<string, { start: number; end: number; definition: string }[]>;
   linksByBlock: Record<
     string,
@@ -651,6 +659,17 @@ export function ReaderInteractions({
   const [distillOpen, setDistillOpen] = useState(false);
   const distillOpenRef = useRef(false);
   distillOpenRef.current = distillOpen;
+  // The distilled page (KEYPOINTS, the reader's Distill): the article's most
+  // important points. A fresh result shows from local state until the refresh
+  // delivers it as a prop; null local = nothing fresh, deleted = removed here.
+  const [keypointsOpen, setKeypointsOpen] = useState(false);
+  const keypointsOpenRef = useRef(false);
+  keypointsOpenRef.current = keypointsOpen;
+  const [keypointsRun, setKeypointsRun] = useState(false);
+  const [keypointsError, setKeypointsError] = useState<string | null>(null);
+  const [localKeypoints, setLocalKeypoints] = useState<KeypointsView | null | "deleted">(null);
+  const keypointsAbortRef = useRef<AbortController | null>(null);
+  const keypointsReturnScroll = useRef<number | null>(null);
   // The reading position survives a full page load and a remount: a note, an
   // annotation, or an AI tool refreshes the page, and when the refresh turns
   // into a full load (a new deploy, a dropped response) the reader came back
@@ -734,10 +753,10 @@ export function ReaderInteractions({
     let raf = 0;
     const save = () => {
       raf = 0;
-      // The distilled page scrolls the pane to the top while it is open; that
+      // The distilled page and the extract page scroll the pane to the top while open; that
       // is not a reading position. While the hold above keeps the stored
       // position, the stored one stands.
-      if (distillOpenRef.current || positionHeld.current) return;
+      if (distillOpenRef.current || keypointsOpenRef.current || positionHeld.current) return;
       try {
         sessionStorage.setItem(positionStoreKey, JSON.stringify(readReadingPosition(container)));
       } catch {
@@ -1275,6 +1294,13 @@ export function ReaderInteractions({
     setDistillRun(null);
     setDistillError(null);
     setLocalDistillations([]);
+    setKeypointsOpen(false);
+    setKeypointsRun(false);
+    setKeypointsError(null);
+    setLocalKeypoints(null);
+    keypointsAbortRef.current?.abort();
+    keypointsAbortRef.current = null;
+    keypointsReturnScroll.current = null;
     setSpanFlash(null);
     setLocalExtractions([]);
     setExtractCard(null);
@@ -2289,9 +2315,9 @@ export function ReaderInteractions({
     return () => window.removeEventListener("dissect:extract-chip", onChip);
   }, [t]);
 
-  // The Distill panel in the side tray opens the distilled page: a stored
-  // distillation by id, or the ask view (id null). Only the pane showing the
-  // panel's document handles it.
+  // The Distill panel in the side tray opens the extract page (a stored
+  // distillation by id, or the ask view, id null) or the distilled page. Only
+  // the pane showing the panel's document handles it.
   useEffect(() => {
     const onOpen = (e: Event) => {
       const { documentId: forDocument, distillationId } = (
@@ -2300,8 +2326,17 @@ export function ReaderInteractions({
       if (forDocument !== documentIdRef.current) return;
       openDistillPage(distillationId);
     };
+    const onOpenKeypoints = (e: Event) => {
+      const { documentId: forDocument } = (e as CustomEvent<{ documentId: string }>).detail;
+      if (forDocument !== documentIdRef.current) return;
+      openKeypointsPage();
+    };
     window.addEventListener("dissect:open-distillation", onOpen);
-    return () => window.removeEventListener("dissect:open-distillation", onOpen);
+    window.addEventListener("dissect:open-keypoints", onOpenKeypoints);
+    return () => {
+      window.removeEventListener("dissect:open-distillation", onOpen);
+      window.removeEventListener("dissect:open-keypoints", onOpenKeypoints);
+    };
      
   }, []);
 
@@ -2752,6 +2787,152 @@ export function ReaderInteractions({
     ...localDistillations.filter((d) => !distillations.some((p) => p.id === d.id)),
     ...distillations,
   ];
+
+  // KEYPOINTS — the reader's Distill: the article's most important points as
+  // bullets, each anchored (SPEC.md §4). One per document; Distill again
+  // overwrites. The fresh result stands until the refresh delivers it.
+  const currentKeypoints: KeypointsView | null =
+    localKeypoints === "deleted" ? null : (localKeypoints ?? keypoints);
+
+  function openKeypointsPage() {
+    const container = containerRef.current;
+    if (container && !keypointsOpenRef.current) {
+      keypointsReturnScroll.current = container.scrollTop;
+      container.scrollTo({ top: 0 });
+    }
+    setKeypointsError(null);
+    setKeypointsOpen(true);
+  }
+
+  // Closing the page never cancels: a running Distill keeps going, with the
+  // progress bar under the Distill button showing it.
+  function closeKeypointsPage() {
+    setKeypointsOpen(false);
+    const container = containerRef.current;
+    if (container && keypointsReturnScroll.current !== null) {
+      container.scrollTo({ top: keypointsReturnScroll.current });
+    }
+    keypointsReturnScroll.current = null;
+  }
+
+  // Cancel a running Distill: the request aborts, the server persists
+  // nothing, and the stored distillation stays.
+  function cancelKeypoints() {
+    keypointsAbortRef.current?.abort();
+    keypointsAbortRef.current = null;
+    setKeypointsRun(false);
+  }
+
+  async function runKeypoints() {
+    if (keypointsRun) return;
+    const runDocumentId = documentId;
+    const controller = new AbortController();
+    keypointsAbortRef.current = controller;
+    setKeypointsRun(true);
+    setKeypointsError(null);
+    try {
+      const res = await fetch("/api/derive", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
+        body: JSON.stringify({ type: "KEYPOINTS", documentId, notebookId }),
+      });
+      if (!res.ok || !res.body) {
+        const detail = (await res.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(detail?.error ?? t("reader.keypointsFailedStatus", { status: res.status }));
+      }
+      // The response streams heartbeat spaces while the model works; the
+      // payload is the trailer — the keypoints JSON, or the in-band error.
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let raw = "";
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        raw += decoder.decode(value, { stream: true });
+      }
+      const { text, error } = splitStreamError(raw);
+      if (error) throw new Error(error);
+      let payload: { keypoints?: Keypoints } | null = null;
+      try {
+        payload = JSON.parse(text.trim()) as { keypoints?: Keypoints };
+      } catch {
+        payload = null;
+      }
+      if (!payload?.keypoints) throw new Error(t("reader.keypointsUnfinished"));
+      if (controller.signal.aborted || documentIdRef.current !== runDocumentId) return;
+      setLocalKeypoints({
+        ...payload.keypoints,
+        points: payload.keypoints.points.map((point) => ({ ...point, orphaned: false })),
+      });
+      // The page may be closed: the pill's progress bar stops, and the toast
+      // says where the result is.
+      if (!keypointsOpenRef.current) showToast(t("reader.keypointsToast"));
+      router.refresh();
+    } catch (err) {
+      // A cancelled run is not a failure: the stored distillation stays.
+      if (controller.signal.aborted) return;
+      if (documentIdRef.current !== runDocumentId) return;
+      const message = err instanceof Error ? err.message : t("reader.keypointsFailed");
+      setKeypointsError(message);
+      if (!keypointsOpenRef.current) showToast(message);
+    } finally {
+      if (keypointsAbortRef.current === controller) keypointsAbortRef.current = null;
+      if (documentIdRef.current === runDocumentId) setKeypointsRun(false);
+    }
+  }
+
+  async function deleteKeypoints() {
+    try {
+      await api(`/api/notebooks/${notebookId}/documents/${documentId}`, "PATCH", {
+        removeKeypoints: true,
+      });
+      setLocalKeypoints("deleted");
+      router.refresh();
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : t("reader.deleteFailed"));
+    }
+  }
+
+  // A point lands as a note: the point as content, its passage as source,
+  // PENDING like every AI note (SPEC.md §1).
+  async function addKeypointNote(point: KeypointsView["points"][number]): Promise<boolean> {
+    const section = sectionChoices[0];
+    if (!section) {
+      showToast(t("reader.addSectionFirstDot"));
+      return false;
+    }
+    try {
+      await api("/api/notes", "POST", {
+        sectionId: section.id,
+        content: point.text,
+        source: {
+          documentId,
+          blockId: point.blockId,
+          startOffset: point.start,
+          endOffset: point.end,
+          quotedText: point.quotedText,
+          prefix: point.prefix,
+          suffix: point.suffix,
+        },
+        origin: "keypoints",
+      });
+      markFreshSpan(point.blockId, point.start, point.end);
+      router.refresh();
+      return true;
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : t("reader.addFailed"));
+      return false;
+    }
+  }
+
+  // Jump from the distilled page: close it, then land on the point's passage.
+  function jumpToKeypoint(point: { blockId: string; start: number; end: number; orphaned: boolean }) {
+    if (point.orphaned) return;
+    setKeypointsOpen(false);
+    keypointsReturnScroll.current = null;
+    flashSpan(point.blockId, point.start, point.end);
+  }
 
   // Oldest first, matching the stored order — the index gives the label.
   const allExtractions = [
@@ -4290,7 +4471,7 @@ function blockFormatKind(
   const cardMaxHeight = paneHeight > 0 ? Math.max(200, paneHeight - 24) : undefined;
 
   // The article menu: frequent asks go to the assistant at document scope;
-  // Distill opens the distilled page; the search icon beside the assistant
+  // Distill opens the distilled page, Extract the extract page; the search icon beside the assistant
   // button expands the project search bubble. In Normal view it floats open
   // at the top of the page, hides once the reader scrolls, and returns at the
   // top — the strip spans the pane so the bubble can size to it, and only the
@@ -4388,13 +4569,25 @@ function blockFormatKind(
           <button
             onClick={() => {
               setMenuExpanded(false);
+              openKeypointsPage();
+            }}
+            data-track="keypoints"
+            data-tip={t("reader.keypointsMenuTitle")}
+            className="flex items-center gap-1.5 px-4 py-2 text-left text-[12.5px] text-sand-800 hover:bg-clay-100 hover:text-clay-800"
+          >
+            <DistillIcon size={12} />
+            {t("reader.keypoints")}
+          </button>
+          <button
+            onClick={() => {
+              setMenuExpanded(false);
               openDistillPage(null);
             }}
             data-track="distill"
             data-tip={t("reader.distillMenuTitle")}
             className="flex items-center gap-1.5 px-4 py-2 text-left text-[12.5px] text-sand-800 hover:bg-clay-100 hover:text-clay-800"
           >
-            <DistillIcon size={12} />
+            <QuoteIcon size={12} />
             {t("reader.distill")}
             {allDistillations.length > 0 ? ` (${allDistillations.length})` : ""}
           </button>
@@ -4408,11 +4601,28 @@ function blockFormatKind(
         </div>
       </div>
   );
-  // Distill: a link into the distilled page. While a distillation runs, a
-  // progress bar shows under the button. Top right of the page in Normal
-  // view; the end of the pane header in a split view. A transcript has none:
-  // the video pane has its own tools (SPEC.md §11).
+  // Distill and Extract: links into the distilled page and the extract page.
+  // While a run is going, a progress bar shows under its button. Top right of
+  // the page in Normal view; the end of the pane header in a split view. A
+  // transcript has none: the video pane has its own tools (SPEC.md §11).
   const distillButton = (
+        <>
+        <div className="relative">
+          <button
+            onClick={() => openKeypointsPage()}
+            data-track="keypoints"
+            className="flex items-center gap-1.5 rounded-full bg-sand-100 px-3.5 py-1.5 text-xs font-semibold text-sand-600 shadow-soft hover:text-clay-800"
+            data-tip={t("reader.keypointsButtonTitle")}
+          >
+            <DistillIcon size={13} />
+            {t("reader.keypoints")}
+          </button>
+          {keypointsRun && (
+            <span aria-hidden className="progress-track absolute right-1.5 -bottom-[7px] left-1.5">
+              <span className="progress-fill" />
+            </span>
+          )}
+        </div>
         <div className="relative">
           <button
             onClick={() => openDistillPage(distillShownId)}
@@ -4420,7 +4630,7 @@ function blockFormatKind(
             className="flex items-center gap-1.5 rounded-full bg-sand-100 px-3.5 py-1.5 text-xs font-semibold text-sand-600 shadow-soft hover:text-clay-800"
             data-tip={t("reader.distillButtonTitle")}
           >
-            <DistillIcon size={13} />
+            <QuoteIcon size={13} />
             {t("reader.distill")}
             {allDistillations.length > 0 ? ` (${allDistillations.length})` : ""}
           </button>
@@ -4430,6 +4640,7 @@ function blockFormatKind(
             </span>
           )}
         </div>
+        </>
   );
 
   return (
@@ -4461,10 +4672,10 @@ function blockFormatKind(
       // The inline restore script finds this pane's stored reading position by
       // its document (lib/reading-position.ts).
       data-document-id={documentId}
-      // While the distilled page is open it scrolls itself; the article
+      // While the distilled page or the extract page is open it scrolls itself; the article
       // underneath must not scroll away, so the pane clips instead.
       className={`relative min-h-0 min-w-0 flex-1 print:overflow-visible ${
-        distillOpen ? "overflow-hidden" : "overflow-y-auto"
+        distillOpen || keypointsOpen ? "overflow-hidden" : "overflow-y-auto"
       }`}
     >
       {!split && !transcript && articleMenu}
@@ -5723,6 +5934,29 @@ function blockFormatKind(
           onDelete={(id) => void deleteDistillation(id)}
           onJump={jumpToQuote}
           onAddNote={addQuoteNote}
+        />
+      )}
+      </Presence>
+
+      <Presence show={keypointsOpen} exit="fade">
+      {keypointsOpen && (
+        <KeypointsPage
+          title={title}
+          keypoints={currentKeypoints}
+          running={keypointsRun}
+          error={keypointsError}
+          canAddNotes={sectionChoices.length > 0}
+          addNoteHint={
+            sectionChoices.length === 0
+              ? t("reader.addSectionFirst")
+              : t("reader.addPendingNote", { section: sectionChoices[0].label })
+          }
+          onRun={() => void runKeypoints()}
+          onCancel={cancelKeypoints}
+          onClose={closeKeypointsPage}
+          onDelete={() => void deleteKeypoints()}
+          onJump={jumpToKeypoint}
+          onAddNote={addKeypointNote}
         />
       )}
       </Presence>

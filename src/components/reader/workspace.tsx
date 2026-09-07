@@ -51,7 +51,7 @@ type Tab = "notes" | "assistant" | "distill" | "annotations" | "edits";
 const TAB_TITLES: Record<Tab, TKey> = {
   notes: "panes.notes",
   assistant: "panes.assistant",
-  distill: "panes.distill",
+  distill: "panes.keypoints",
   annotations: "panes.annotations",
   edits: "panes.edits",
 };
@@ -789,7 +789,7 @@ export function Workspace({
           <button
             onClick={() => show("distill")}
             data-track="distill"
-            aria-label={t("panes.distill")}
+            aria-label={t("panes.keypoints")}
             data-tip={t("panes.distillTabTitle")}
             aria-current={!collapsed && tab === "distill"}
             className={!collapsed && tab === "distill" ? RAIL_BUTTON_ON : RAIL_BUTTON}

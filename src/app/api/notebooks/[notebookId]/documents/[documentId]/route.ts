@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { bumpNotebook, notebookAccess } from "@/lib/collab";
@@ -6,15 +7,20 @@ import { serverT } from "@/lib/i18n/server";
 import { distillationList, extractionList } from "@/lib/types";
 import { parseBody } from "@/lib/validate";
 
-// Delete one stored distillation or extraction from the attachment.
+// Delete one stored distillation (DISTILL, the reader's Extract) or extraction
+// (EXTRACT, the reader's Match-it), or the keypoints (KEYPOINTS, the reader's
+// Distill) from the attachment. Exactly one of the three.
 const patchSchema = z
   .object({
     removeDistillationId: z.string().min(1).optional(),
     removeExtractionId: z.string().min(1).optional(),
+    removeKeypoints: z.literal(true).optional(),
   })
-  .refine((d) => Boolean(d.removeDistillationId) !== Boolean(d.removeExtractionId), {
-    message: "Provide removeDistillationId or removeExtractionId, not both",
-  });
+  .refine(
+    (d) =>
+      [d.removeDistillationId, d.removeExtractionId, d.removeKeypoints].filter(Boolean).length === 1,
+    { message: "Provide exactly one of removeDistillationId, removeExtractionId, removeKeypoints" },
+  );
 
 export async function PATCH(
   req: Request,
@@ -34,17 +40,19 @@ export async function PATCH(
   }
   await db.notebookDocument.update({
     where: { notebookId_documentId: { notebookId, documentId } },
-    data: data.removeDistillationId
-      ? {
-          distillations: distillationList(attachment.distillations).filter(
-            (d) => d.id !== data.removeDistillationId,
-          ),
-        }
-      : {
-          extractions: extractionList(attachment.extractions).filter(
-            (x) => x.id !== data.removeExtractionId,
-          ),
-        },
+    data: data.removeKeypoints
+      ? { keypoints: Prisma.DbNull }
+      : data.removeDistillationId
+        ? {
+            distillations: distillationList(attachment.distillations).filter(
+              (d) => d.id !== data.removeDistillationId,
+            ),
+          }
+        : {
+            extractions: extractionList(attachment.extractions).filter(
+              (x) => x.id !== data.removeExtractionId,
+            ),
+          },
   });
   await bumpNotebook(notebookId);
   return NextResponse.json({ ok: true });

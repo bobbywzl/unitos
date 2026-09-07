@@ -149,7 +149,7 @@ const en = {
     "Rewrite the transcript as a formal article; it becomes a document in this project, with every reader tool",
   skillNotes: "Formalize into bullet-point notes",
   skillNotesTitle:
-    "Distill the transcript into bullet-point notes; they land pending in the notes tray",
+    "Turn the transcript into bullet-point notes; they land pending in the notes tray",
   skillNeedsTranscript: "Needs the transcript",
   articleReady: "The article is ready — opening it as a document.",
   notesReady: "{n} notes are pending in {section}. Accept them in the notes tray.",

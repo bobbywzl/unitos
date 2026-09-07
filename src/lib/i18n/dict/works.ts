@@ -34,11 +34,16 @@ const en = {
   // Guide dialog
   guideLabel: "Guide",
   guideTitle: "How to dissect a document",
-  guideDistillHeader: "Distill — ask the article one question",
+  guideKeypointsHeader: "Distill — the article as bullet points",
+  guideKeypointsBody:
+    "Press Distill at the top right. The AI reads the whole document, thinks through what it establishes, and opens the distilled page: its most important points as bullets, in document order, each anchored to the passage it comes from.",
+  guideKeypointsNotesBody:
+    "Click a point to jump to its passage. Add to notes files a point as a pending note. Distill again replaces the points.",
+  guideDistillHeader: "Extract — ask the article one question",
   guideDistillBody:
-    "Press Distill at the top right and ask one question. The AI scans the whole document and opens the distilled page: your question at the top, under it the quotes that answer it, each with a caption saying how it answers the question.",
+    "Press Extract at the top right and ask one question. The AI scans the whole document and opens the extract page: your question at the top, under it the quotes that answer it, each with a caption saying how it answers the question.",
   guideDistillNotesBody:
-    "Click a quote to jump to its exact words. Add to notes files a quote as a pending note. The Distill tab in the side panel lists every distillation of the open document.",
+    "Click a quote to jump to its exact words. Add to notes files a quote as a pending note. The Distill tab in the side panel lists the distillation and every extraction of the open document.",
   guideCircleHeader: "Circle & ask — draw on anything",
   guideCircleBody:
     "Hold and circle any part of a figure or equation. Explain reads the visual; a color marks it; Comment and Link work as on text.",
@@ -54,9 +59,9 @@ const en = {
   guideSimplify: "Simplify",
   guideSimplifyBody:
     "Rewrites the selection in plain words in a bubble beside the article. Press a sentence to light up the original it restates. Saved under Annotations.",
-  guideExtract: "Extract",
+  guideExtract: "Match-it",
   guideExtractBody:
-    "Highlights every passage in the article that reveals what the selection focuses on. Each gets a label chip (E1, E2, …) that jumps back to the selection.",
+    "Highlights every passage in the article that matches what the selection focuses on. Each gets a label chip (M1, M2, …) that jumps back to the selection.",
   guideColors: "Colors",
   guideColorsBody: "Highlight the selection. Type a comment first and it rides on the highlight.",
   guideComment: "Comment",
@@ -76,7 +81,7 @@ const en = {
     "Your sections and the pending queue. Drag a note by its grip to reorder it. Select notes with the circle at their top right to merge, pin, or delete them together.",
   guidePanelAssistantBody:
     "Ask questions at document, project, or projects scope, and run checks (contradictions, gaps).",
-  guidePanelDistillBody: "Every distillation of the open document; open one to read its quotes.",
+  guidePanelDistillBody: "The distillation and every extraction of the open document; open one to read it.",
   guidePanelSummary: "Summary",
   guidePanelSummaryBody:
     "The whole document summarized at the depth you pick: layman, intermediate, or professional. Each depth is kept once generated.",
@@ -142,11 +147,15 @@ const zh: Record<keyof typeof en, string> = {
   nudgeDone: "知道了",
   guideLabel: "指南",
   guideTitle: "如何拆解一篇文档",
-  guideDistillHeader: "提炼——向文章提出一个问题",
+  guideKeypointsHeader: "提炼——把文章写成分条要点",
+  guideKeypointsBody:
+    "按右上角的“提炼”。AI 通读整篇文档，想清楚它论证了什么，然后打开提炼页：最重要的要点按文中顺序分条列出，每条锚定到它所依据的片段。",
+  guideKeypointsNotesBody: "点击要点可跳到它的片段。“添加到笔记”把一条要点存为待定笔记。“重新提炼”会替换这些要点。",
+  guideDistillHeader: "提取——向文章提出一个问题",
   guideDistillBody:
-    "按右上角的“提炼”，提出一个问题。AI 扫描整篇文档并打开提炼页：你的问题居顶，下方是回答它的引文，每条配有说明，讲它如何回答问题。",
+    "按右上角的“提取”，提出一个问题。AI 扫描整篇文档并打开提取页：你的问题居顶，下方是回答它的引文，每条配有说明，讲它如何回答问题。",
   guideDistillNotesBody:
-    "点击引文可跳到它的原文字句。“添加到笔记”把一条引文存为待定笔记。侧栏的“提炼”页签列出当前文档的每次提炼。",
+    "点击引文可跳到它的原文字句。“添加到笔记”把一条引文存为待定笔记。侧栏的“提炼”页签列出当前文档的提炼和每次提取。",
   guideCircleHeader: "圈选并提问——在任何内容上画圈",
   guideCircleBody:
     "按住并在插图或公式的任意部分画圈。“解释”解读图像；颜色标记它；“评论”和“链接”与文本上相同。",
@@ -161,9 +170,9 @@ const zh: Record<keyof typeof en, string> = {
   guideSimplify: "简化",
   guideSimplifyBody:
     "用平实的话改写选中内容，显示在文章旁的气泡里。点击一句，它复述的原文就会亮起。保存在批注下。",
-  guideExtract: "提取",
+  guideExtract: "匹配",
   guideExtractBody:
-    "在全文中高亮揭示选中内容主旨的每处片段。每处都有一个标签（E1、E2……），点击跳回选中内容。",
+    "在全文中高亮与选中内容主旨匹配的每处片段。每处都有一个标签（M1、M2……），点击跳回选中内容。",
   guideColors: "颜色",
   guideColorsBody: "高亮选中内容。先输入评论，评论就附在高亮上。",
   guideComment: "评论",
@@ -179,7 +188,7 @@ const zh: Record<keyof typeof en, string> = {
   guidePanelNotesBody:
     "你的章节与待定队列。拖动笔记的把手可调整顺序。点击笔记右上角的圆圈选择笔记，可一起合并、置顶或删除。",
   guidePanelAssistantBody: "在文档、项目或全部项目范围提问，并运行检查（矛盾、疏漏）。",
-  guidePanelDistillBody: "当前文档的每次提炼；打开一条即可读它的引文。",
+  guidePanelDistillBody: "当前文档的提炼和每次提取；打开一条即可阅读。",
   guidePanelSummary: "摘要",
   guidePanelSummaryBody: "整篇文档按你选的深度摘要：通俗、进阶或专业。每个深度生成后即保留。",
   guidePanelAnnotations: "批注",

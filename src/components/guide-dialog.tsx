@@ -5,7 +5,7 @@ import { useT } from "@/components/lang-provider";
 import { Presence } from "@/components/presence";
 import type { TKey } from "@/lib/i18n/dictionaries";
 
-// The reader's guide: Distill, Circle & ask, every selection tool, and every
+// The reader's guide: Distill, Extract, Circle & ask, every selection tool, and every
 // side panel tab, in one place. Opened from the ? button in the header. Each
 // tool and each tab is one card: its name, then what it does.
 
@@ -84,6 +84,15 @@ export function GuideDialog({ open, onClose }: { open: boolean; onClose: () => v
         </div>
 
         {/* Distill leads the guide, emphasized. */}
+        <section className="flex flex-col gap-1.5 rounded-2xl bg-clay-100/70 p-4">
+          <span className={h}>{t("works.guideKeypointsHeader")}</span>
+          <p className="text-[13px] leading-relaxed text-sand-800">{t("works.guideKeypointsBody")}</p>
+          <p className="text-[13px] leading-relaxed text-sand-800">
+            {t("works.guideKeypointsNotesBody")}
+          </p>
+        </section>
+
+        {/* Extract: one question, the quotes that answer it. */}
         <section className="flex flex-col gap-1.5 rounded-2xl bg-clay-100/70 p-4">
           <span className={h}>{t("works.guideDistillHeader")}</span>
           <p className="text-[13px] leading-relaxed text-sand-800">{t("works.guideDistillBody")}</p>
