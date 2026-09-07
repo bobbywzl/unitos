@@ -18,6 +18,7 @@ import { sniffMedia } from "@/lib/video/storage";
 import { runTranscription } from "@/lib/video/transcription-job";
 import { MAX_VIDEO_BYTES, UPLOAD_CHUNK_BYTES } from "@/lib/video/types";
 import { parseBody } from "@/lib/validate";
+import { isMarkdownFile } from "@/lib/markdown-file";
 
 // Media uploads kick off transcription in after(); a long audio's chunked run
 // plus the cleanup pass needs the headroom.
@@ -117,7 +118,26 @@ export async function POST(req: Request) {
     }
     filename = filename.replace(IMAGE_EXTENSIONS, "");
     pages = true;
-  } else if (bytes.length < 5 || String.fromCharCode(...bytes.slice(0, 5)) !== "%PDF-") {
+  } else if (isMarkdownFile({ type: "", name: filename })) {
+    // A Markdown file (SPEC.md §2): the URL walk reads it, no judgment.
+    return progressResponse(async (onProgress) => {
+      try {
+        const { document, deduped } = await parse.ingestMarkdown(bytes, filename, onProgress, {
+          instructions: data.instructions.trim() || undefined,
+        });
+        await attachDocument(data.notebookId, document.id);
+        await bumpNotebook(data.notebookId);
+        if (data.scans === "server") {
+          if (!deduped) after(() => buildGlossary(document.id, user?.id ?? null, lang).catch(() => {}));
+          after(() => buildConnections(data.notebookId, document.id, user?.id ?? null, lang).catch(() => {}));
+        }
+        return { id: document.id, title: document.title, deduped };
+      } catch (err) {
+        console.error("Markdown ingest failed:", err);
+        throw new Error(describeIngestError(err, t, "pdf"));
+      }
+    });
+  } else if (!parse.isPdfBytes(bytes)) {
     return NextResponse.json({ error: t("api.notPdf") }, { status: 400 });
   }
 

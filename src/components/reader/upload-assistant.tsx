@@ -10,6 +10,7 @@ import { readNdjson } from "@/lib/ndjson";
 import { type FinishPlan, warmImages } from "@/lib/finish";
 import { classifyDriveFile, type DrivePickedFile } from "@/lib/drive/types";
 import { isImageFile } from "@/lib/handwritten/image";
+import { isMarkdownFile } from "@/lib/markdown-file";
 import { captionLabel } from "@/lib/parse/figure-audit";
 import type {
   InstructionCheck,
@@ -219,7 +220,7 @@ export function UploadAssistant({
   // A Drive pick that ends up as PDF bytes (a PDF, or a Doc/Sheet/Slide/Drawing
   // exported to PDF) takes the same instructions a PDF upload takes.
   const hasPdf =
-    files.some((f) => !isMediaFile(f) && !isImageFile(f)) ||
+    files.some((f) => !isMediaFile(f) && !isImageFile(f) && !isMarkdownFile(f)) ||
     driveFiles.some((f) => driveKindOf(f) === "pdf" || driveKindOf(f) === "export");
   // An image imports as one handwritten page (SPEC.md §16): it takes the
   // instructions and the pages pick a PDF takes, never the judgment.

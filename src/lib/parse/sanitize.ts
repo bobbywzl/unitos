@@ -10,6 +10,15 @@ import { stripCitationTokens } from "@/lib/parse/references";
 // gets class="center", and a nested figure stays only as a direct child of
 // the root figure. The attributes themselves never reach the stored html.
 //
+// The figure's words keep the page's look (lib/parse/figure-style.ts): a
+// text element inside a figure keeps the inline style the bake wrote —
+// font size, weight, style, color, transform, spacing, alignment, and for a
+// legend swatch its size, color, and corner — and a box (a figure or a div
+// carrying data-box-style) keeps the box's background, padding, and corner:
+// the one div a figure keeps, so the box's words and media sit inside it
+// and the caption outside. Only the properties below, with plain values;
+// nothing that could load or run.
+//
 // An image the parse stored itself (a captured chart animation,
 // lib/parse/capture-animation.ts) has the reader's own path, /api/images/<id>,
 // and keeps it: it is never resolved against the page.
@@ -89,6 +98,50 @@ const OWN_IMAGE_RX = /^\/api\/images\/[A-Za-z0-9_-]+$/;
 function widthDeclaration(el: Element, max = 100): string | null {
   const n = Number(el.getAttribute("data-width-pct") ?? "");
   return Number.isInteger(n) && n >= 15 && n <= max ? `width:${n}%` : null;
+}
+
+// Inline style kept on the figure's words and on a boxed figure.
+const WORD_STYLE_PROPERTIES = new Set([
+  "font-size", "font-weight", "font-style", "color", "text-transform", "letter-spacing",
+  "text-align", "opacity", "display", "width", "height", "background", "background-color",
+  "border-radius", "margin-right",
+]);
+const BOX_STYLE_PROPERTIES = new Set(["background", "background-color", "padding", "border-radius"]);
+const WORD_STYLE_TAGS = new Set(["p", "span", "i", "b", "em", "strong", "sub", "sup", "figcaption", "code"]);
+const DISPLAY_VALUES = new Set(["inline", "inline-block", "block"]);
+// A length the words' look may carry: a swatch's size, a font size, a
+// padding. Past this, the value is a layout the reader keeps for itself.
+const LENGTH_MAX_PX = 64;
+
+/** The declarations of a baked inline style that a figure may keep: the
+    allowed properties with plain values, lengths within bounds; null when
+    nothing survives. */
+function safeFigureStyle(value: string | null, allowed: Set<string>): string | null {
+  if (!value || value.length > 1200) return null;
+  const kept: string[] = [];
+  for (const part of value.split(";")) {
+    const at = part.indexOf(":");
+    if (at <= 0) continue;
+    const prop = part.slice(0, at).trim().toLowerCase();
+    const v = part.slice(at + 1).trim();
+    if (!allowed.has(prop) || !v || v.length > 200) continue;
+    if (/url\s*\(|expression|javascript:|@import|\\|[<>{}"']/i.test(v)) continue;
+    if (prop === "display" && !DISPLAY_VALUES.has(v.toLowerCase())) continue;
+    if (prop === "width" || prop === "height" || prop === "font-size" || prop === "padding" || prop === "margin-right") {
+      const lengths = v.match(/-?\d*\.?\d+(?:px|em|rem|%)?/g) ?? [];
+      const ok = lengths.every((len) => {
+        const n = Number.parseFloat(len);
+        if (!Number.isFinite(n) || n < 0) return false;
+        if (len.endsWith("px")) return n <= LENGTH_MAX_PX;
+        if (len.endsWith("em") || len.endsWith("rem")) return n <= 4;
+        if (len.endsWith("%")) return n <= 100;
+        return n === 0;
+      });
+      if (!ok || lengths.length === 0) continue;
+    }
+    kept.push(`${prop}:${v}`);
+  }
+  return kept.length > 0 ? kept.join(";") : null;
 }
 
 /** A baked backdrop (a color, or plain gradients) that can be written as an
@@ -173,6 +226,12 @@ export function sanitizeHtml(html: string, baseUrl?: string): string {
       const rootFigure = tag === "figure" && node === document.body;
       const widthStyle = widthDeclaration(child, rootFigure ? 200 : 100);
       const centered = child.getAttribute("data-align") === "center" || child.classList.contains("center");
+      // The figure's words keep the page's look; a boxed figure keeps the
+      // box's (lib/parse/figure-style.ts). Read before the allowlist strips them.
+      const wordStyle =
+        WORD_STYLE_TAGS.has(tag) && child.closest("figure") ? safeFigureStyle(child.getAttribute("style"), WORD_STYLE_PROPERTIES) : null;
+      const boxStyle =
+        tag === "figure" || tag === "div" ? safeFigureStyle(child.getAttribute("data-box-style"), BOX_STYLE_PROPERTIES) : null;
       if (tag === "svg") {
         if (!sanitizeSvgElement(child)) {
           child.remove();
@@ -214,6 +273,13 @@ export function sanitizeHtml(html: string, baseUrl?: string): string {
         continue;
       }
       walk(child);
+      if (tag === "div" && boxStyle && child.closest("figure")) {
+        // A box inside a figure: the one div a figure keeps, with the box's
+        // look and nothing else.
+        for (const attr of [...child.attributes]) child.removeAttribute(attr.name);
+        child.setAttribute("style", boxStyle);
+        continue;
+      }
       if (!(tag in ALLOWED)) {
         // Unwrap: keep children, drop the element.
         child.replaceWith(...child.childNodes);
@@ -224,7 +290,9 @@ export function sanitizeHtml(html: string, baseUrl?: string): string {
         if (!allowed.has(attr.name)) child.removeAttribute(attr.name);
       }
       if ((tag === "p" || tag === "figcaption") && centered && child.closest("figure")) child.setAttribute("class", "center");
-      if ((tag === "figure" || tag === "video") && widthStyle) child.setAttribute("style", widthStyle);
+      if (wordStyle) child.setAttribute("style", wordStyle);
+      if (tag === "figure" && (boxStyle || widthStyle)) child.setAttribute("style", [boxStyle, widthStyle].filter(Boolean).join(";"));
+      if (tag === "video" && widthStyle) child.setAttribute("style", widthStyle);
       if (tag === "a") {
         const href = child.getAttribute("href") ?? "";
         if (/^\s*javascript:/i.test(href)) child.removeAttribute("href");

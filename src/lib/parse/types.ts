@@ -178,4 +178,11 @@ export type UrlParseProgress = (stage: "extract", detail?: string) => void;
 //     column draws wider in the reader too; a chart the page's scripts
 //     animate settles before the parse, and a looping one is captured as a
 //     GIF of one loop (browser render only).
-export const PARSER_VERSION = 17;
+// 18: a figure's words stay out of its caption and keep the page's look —
+//     text in a box the page paints its own background under, or sets in
+//     its own font around a chart (a chart's title, legend, axis labels,
+//     source line), is the figure's, the caption is the text outside the
+//     box, the words carry their font size, weight, color, and alignment,
+//     a legend swatch its size and color, and the box its background and
+//     padding; a Markdown file imports through the URL walk.
+export const PARSER_VERSION = 18;

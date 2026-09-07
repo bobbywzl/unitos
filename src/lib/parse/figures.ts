@@ -1,4 +1,4 @@
-import { isChartSvg } from "@/lib/parse/figure-style";
+import { FIGURE_BOX_TEXT_MAX, isChartSvg } from "@/lib/parse/figure-style";
 import { hasDirectText, normalizeText, separateBlocks, spacedText, withReadableMath } from "@/lib/parse/dom-text";
 import { isFigureCaption } from "@/lib/parse/figure-audit";
 import { stripCitationTokens } from "@/lib/parse/references";
@@ -31,6 +31,12 @@ export type WalkCtx = {
 const CAPTION_MAX_CHARS = 200;
 // A caption folded into the figure beside it is at most this long.
 const REPAIR_CAPTION_MAX_CHARS = 300;
+// A box that holds a figure (data-box, from the page-style bake: an element
+// the page paints its own background under, or sets in its own font around
+// a chart) holds the figure's words: a chart's title, legend, axis labels,
+// source line. They are at most FIGURE_BOX_TEXT_MAX long outside the media
+// (lib/parse/figure-style.ts); a box with more text is a boxed section of
+// prose, not a figure.
 const MEDIA_SELECTOR = "img[src], video, iframe, svg";
 
 // A decorative asset is not content: tiny dimensions, or an unlabeled .svg icon.
@@ -97,6 +103,39 @@ function captionText(el: Element): string {
   return spacedText(withReadableMath(el));
 }
 
+/** The text an element holds outside its media. */
+function textOutsideMedia(el: Element): string {
+  const clone = el.cloneNode(true) as Element;
+  for (const media of clone.querySelectorAll("svg, video, iframe, img")) media.remove();
+  return spacedText(clone);
+}
+
+/** A box that holds a figure: a data-box element with meaningful media
+    and no more text than a figure's words. */
+function isFigureBox(el: Element): boolean {
+  return el.hasAttribute("data-box") && hasMeaningfulMedia(el) && textOutsideMedia(el).length <= FIGURE_BOX_TEXT_MAX;
+}
+
+/** The boxes that hold a figure below a container, and the same elements
+    in a clone of the container (a deep clone keeps document order). */
+function figureBoxes(container: Element, clone: Element): Element[] {
+  const original = [...container.querySelectorAll("[data-box]")];
+  const copied = [...clone.querySelectorAll("[data-box]")];
+  return copied.filter((_, i) => original[i] !== undefined && isFigureBox(original[i]));
+}
+
+/** Text in a box that holds the figure's media, below the container, is
+    the figure's words, not its caption: a chart's title, legend, axis
+    labels, source line. The caption sits outside the box, on the page's
+    own background. A labeled caption is a caption wherever it sits. */
+function isFigureWords(el: Element, container: Element): boolean {
+  if (isLabeledCaption(el)) return false;
+  for (let node = el.parentElement; node && node !== container; node = node.parentElement) {
+    if (node.hasAttribute("data-box") && hasMeaningfulMedia(node)) return isFigureBox(node);
+  }
+  return false;
+}
+
 /** Does the element, or an ancestor below the container, sit beside media? */
 function besideMedia(el: Element, container: Element): boolean {
   for (let node: Element | null = el; node && node !== container; node = node.parentElement) {
@@ -120,23 +159,24 @@ function isPlainCaption(el: Element, container: Element): boolean {
 
 /** The caption elements of a figure container: its labeled captions when it
     has any, else its plain captions. Never a caption inside a nested
-    caption. */
+    caption, never the figure's words. */
 function captionElements(container: Element): Element[] {
   const candidates = [...container.querySelectorAll("figcaption, p")].filter(
     (el) => captionText(el).length > 0 && el.parentElement?.closest("figcaption") === null,
   );
   const labeled = candidates.filter(isLabeledCaption);
   if (labeled.length > 0) return labeled;
-  return candidates.filter((el) => isPlainCaption(el, container));
+  return candidates.filter((el) => !isFigureWords(el, container) && isPlainCaption(el, container));
 }
 
 /** A figure's caption text: its captions joined with a line break; else
-    whatever short text sits beside the media. Called on figure containers
-    and on captioned tables (lib/parse/url.ts). */
+    whatever short text sits beside the media, the figure's words left out.
+    Called on figure containers and on captioned tables (lib/parse/url.ts). */
 export function figureCaption(el: Element): string {
   const captions = captionElements(el);
   if (captions.length > 0) return captions.map(captionText).join("\n");
   const clone = el.cloneNode(true) as Element;
+  for (const box of figureBoxes(el, clone)) box.remove();
   for (const media of clone.querySelectorAll("svg, video, img")) media.remove();
   const residual = spacedText(clone);
   return residual.length <= CAPTION_MAX_CHARS ? residual : "";
@@ -190,9 +230,35 @@ function liftWideWidth(shell: Element, row: Element | null) {
   }
 }
 
+// Block elements the sanitizer unwraps. One that holds only inline content
+// (a legend row of spans, a chart's title in a div) becomes a paragraph, so
+// its words stay on one row in the figure instead of falling out one per
+// line.
+const INLINE_ONLY_WRAPPERS = new Set(["div", "section", "header", "footer", "aside", "nav", "small", "label"]);
+const BLOCK_SELECTOR = "p, div, section, header, footer, aside, nav, figure, figcaption, ul, ol, li, table, pre, blockquote, h1, h2, h3, h4, h5, h6, img, svg, video, iframe";
+
+/** Inside a figure, every wrapper that holds only inline content becomes a
+    <p> that keeps the wrapper's look and alignment. */
+function inlineWrappersToParagraphs(root: Element) {
+  const document = root.ownerDocument;
+  for (const el of [...root.querySelectorAll("*")].reverse()) {
+    if (!INLINE_ONLY_WRAPPERS.has(el.tagName.toLowerCase()) || el === root) continue;
+    if (el.querySelector(BLOCK_SELECTOR) || el.closest("svg")) continue;
+    if (normalizeText(el.textContent ?? "").length === 0) continue;
+    const p = document.createElement("p");
+    for (const name of ["style", "data-align", "class"]) {
+      const value = el.getAttribute(name);
+      if (value) p.setAttribute(name, value);
+    }
+    p.append(...el.childNodes);
+    el.replaceWith(p);
+  }
+}
+
 /** Wrap each captioned column of a row in its own figure. The column's
     width is the row's share it had on the page; the media inside is
-    resized to the column. */
+    resized to the column. A box inside the column stays a box: the
+    sanitizer keeps it as a div with the box's look. */
 function nestColumns(row: Element) {
   const document = row.ownerDocument;
   for (const column of mediaColumns(row)) {
@@ -234,6 +300,9 @@ export function figureBlock(el: Element, ctx: WalkCtx): ParsedBlock | null {
   // so a caption span and a credit span read apart on screen too and the
   // figure's DOM text stays the block's text (SPEC.md §5).
   separateBlocks(clone);
+  // The figure's words keep their rows: a legend of spans in a div is one
+  // paragraph, not one line per span.
+  inlineWrappersToParagraphs(clone);
   if (!hasMeaningfulMedia(clone)) {
     // A figure with no media is its text: a pull quote wrapped in <figure>
     // is a paragraph, and a bare caption is a paragraph.
@@ -252,8 +321,11 @@ export function figureBlock(el: Element, ctx: WalkCtx): ParsedBlock | null {
   if (!shell) {
     shell = clone.ownerDocument.createElement("figure");
     // A bare media element is the figure's whole content; a container's
-    // children are.
+    // children are. A container that is itself a box keeps the box's look
+    // on the figure: the shell takes its data-box-style.
     shell.append(...(isMedia(clone) ? [clone] : [...clone.childNodes]));
+    const boxStyle = clone.getAttribute("data-box-style");
+    if (boxStyle && !isMedia(clone)) shell.setAttribute("data-box-style", boxStyle);
   }
   liftWideWidth(shell, row && shell.contains(row) ? row : null);
   const html = sanitizeHtml(shell.outerHTML, ctx.url);
@@ -285,11 +357,14 @@ export function svgBlock(svg: Element): ParsedBlock | null {
 /** A container whose media IS the content (chart panels, video galleries,
     image + caption sections, figure rows) becomes one composite FIGURE
     block. Every paragraph in it must be a caption: labeled, or short and
-    beside media, at most one plain caption per column. */
+    beside media, at most one plain caption per column. The figure's words
+    (text in a box that holds the media) are neither and count as neither. */
 export function tryCompositeFigure(el: Element, ctx: WalkCtx): boolean {
   if (!hasMeaningfulMedia(el)) return false;
   if (el.querySelector("h1, h2, h3, h4, h5, h6, ul, ol, table, pre, x-math, blockquote")) return false;
-  const paragraphs = [...el.querySelectorAll("p, figcaption")].filter((p) => captionText(p).length > 0);
+  const paragraphs = [...el.querySelectorAll("p, figcaption")].filter(
+    (p) => captionText(p).length > 0 && !isFigureWords(p, el),
+  );
   const labeled = paragraphs.filter(isLabeledCaption);
   const plain = paragraphs.filter((p) => !isLabeledCaption(p) && isPlainCaption(p, el));
   // A paragraph that is neither is prose beside media: a header, a card
@@ -300,6 +375,7 @@ export function tryCompositeFigure(el: Element, ctx: WalkCtx): boolean {
   const columns = row ? mediaColumns(row).length : 1;
   if (plain.length > columns) return false;
   const clone = el.cloneNode(true) as Element;
+  for (const box of figureBoxes(el, clone)) box.remove();
   for (const media of clone.querySelectorAll("svg, video, img")) media.remove();
   for (const p of clone.querySelectorAll("p, figcaption")) p.remove();
   const residual = spacedText(clone);
