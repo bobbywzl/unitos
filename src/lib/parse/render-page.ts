@@ -85,7 +85,8 @@ function imageStore(userId: string | null): CaptureStore {
   return async (gif) => {
     try {
       const image = await db.imageAsset.create({
-        data: { mimeType: "image/gif", size: gif.length, data: gif, userId },
+        // A copy: Prisma's Bytes wants a Uint8Array over a plain ArrayBuffer.
+        data: { mimeType: "image/gif", size: gif.length, data: new Uint8Array(gif), userId },
         select: { id: true },
       });
       return `/api/images/${image.id}`;

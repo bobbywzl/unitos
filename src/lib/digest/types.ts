@@ -44,7 +44,7 @@ export type DigestDistillation = {
 };
 
 export type DigestExtraction = {
-  label: string; // "E1"…
+  label: string; // "M1"…
   origin: DigestQuote;
   passages: DigestQuote[];
 };
@@ -90,6 +90,10 @@ export type DigestDocument = {
   // The formalized article (FORMALIZE, SPEC.md §11). Optional: digests built
   // before it existed read as none.
   formalized?: { title: string; markdown: string } | null;
+  // The keypoints (KEYPOINTS, the reader's Distill; SPEC.md §4): each point's
+  // text rides as the caption of the span it comes from. Optional: digests
+  // built before it existed read as none.
+  keypoints?: DigestQuote[] | null;
   links: DigestLink[];
   edits: DigestEdit[]; // newest first, capped
 };

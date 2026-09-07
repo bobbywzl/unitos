@@ -11,7 +11,9 @@ export const CLAUDE_FABLE_5_1 = "claude-fable-5-1";
 
 // Reasoning effort per call. Kimi K3 always reasons; "max" is its default and
 // its slowest. The reader's tools answer at "high"; ANALYZE reads a figure or
-// table at "max": a misread number is worse than a slow answer.
+// table at "max": a misread number is worse than a slow answer. KEYPOINTS
+// (the reader's Distill) reads the whole document at "max": the points it
+// keeps are the ones the reader will trust in place of the article.
 export type KimiEffort = "low" | "high" | "max";
 export const DEFAULT_EFFORT: KimiEffort = "high";
 
@@ -29,6 +31,7 @@ export const DERIVATION_MODEL: Record<DerivationType, string> = {
   SYNTHESIS: KIMI_K3,
   FIND: KIMI_K3,
   DISTILL: KIMI_K3,
+  KEYPOINTS: KIMI_K3,
   FORMALIZE: KIMI_K3,
   ASK: KIMI_K3,
   COMPARE: KIMI_K3,
@@ -45,6 +48,7 @@ export const DERIVATION_EFFORT: Record<DerivationType, KimiEffort> = {
   SYNTHESIS: DEFAULT_EFFORT,
   FIND: DEFAULT_EFFORT,
   DISTILL: DEFAULT_EFFORT,
+  KEYPOINTS: "max",
   FORMALIZE: DEFAULT_EFFORT,
   ASK: DEFAULT_EFFORT,
   COMPARE: DEFAULT_EFFORT,
@@ -65,6 +69,7 @@ export const MAX_OUTPUT_TOKENS: Record<DerivationType, number> = {
   SYNTHESIS: 32768,
   FIND: 24576,
   DISTILL: 24576,
+  KEYPOINTS: 32768, // read at "max" effort: room for the reasoning before the points
   FORMALIZE: 65536, // a long transcript's article is long
   ASK: 16384,
   COMPARE: 32768, // two documents' points, each with its spans

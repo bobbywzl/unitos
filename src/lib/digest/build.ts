@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { renderBlockLines, renderReferenceLines } from "@/lib/derive/context";
 import {
   distillationList,
+  keypointsStored,
   extractionList,
   formalizedArticle,
   type SummaryLevels,
@@ -38,6 +39,8 @@ function noteKind(derivationType: DerivationType | null, color: string | null, h
       return "assistant conversation";
     case "DISTILL":
       return "distillation quote";
+    case "KEYPOINTS":
+      return "keypoint";
     case "FIND":
       return "video find";
     case "EXTRACT":
@@ -211,7 +214,7 @@ export async function buildDigest(
       quotes: di.quotes.map((quote) => resolveQuote(quote, blockText)),
     }));
     const extractions = extractionList(attachment.extractions).map((ex, i) => ({
-      label: `E${i + 1}`,
+      label: `M${i + 1}`,
       origin: resolveQuote(ex.origin, blockText),
       passages: ex.spans.map((span) => resolveQuote(span, blockText)),
     }));
@@ -222,6 +225,10 @@ export async function buildDigest(
     }));
     const salience = salienceSpans(attachment.salience).map((span) => resolveQuote(span, blockText));
     const formalized = formalizedArticle(attachment.formalized);
+    const storedKeypoints = keypointsStored(attachment.keypoints);
+    const keypoints = storedKeypoints
+      ? storedKeypoints.points.map((p) => ({ ...resolveQuote(p, blockText), caption: p.text }))
+      : null;
 
     const documentLinks: DigestLink[] = links
       .filter((l) => l.fromDocumentId === d.id)
@@ -263,6 +270,7 @@ export async function buildDigest(
       summaries,
       salience,
       formalized: formalized ? { title: formalized.title, markdown: formalized.markdown } : null,
+      keypoints,
       links: documentLinks,
       edits: documentEdits,
     };

@@ -1,12 +1,16 @@
 // UI strings of the reader pane chrome (workspace, panes, document bar,
-// ingest, distill page). zh glossary: dict/common.ts. Every key exists in
-// both languages — zh's type enforces it.
+// ingest, distilled page, extract page). zh glossary: dict/common.ts. Every
+// key exists in both languages — zh's type enforces it.
+// Key names are code identifiers: keypoints* = the reader's Distill
+// (KEYPOINTS), distill* = the reader's Extract (DISTILL), extract* = the
+// reader's Match-it (EXTRACT).
 
 const en = {
   // Workspace tabs and rail (workspace.tsx)
   notes: "Notes",
   assistant: "Assistant",
-  distill: "Distill",
+  keypoints: "Distill",
+  distill: "Extract",
   annotations: "Annotations",
   edits: "Edits",
   editHistory: "Edit history",
@@ -28,7 +32,7 @@ const en = {
   workspace: "Workspace",
   assistantTabTitle: "Assistant: ask at document, project, or projects scope; run checks",
   notesTabTitle: "Notes: your sections and the pending queue",
-  distillTabTitle: "Distill: every distillation of the open document",
+  distillTabTitle: "Distill: the distillation and every extraction of the open document",
   annotationsTabTitle: "Annotations: highlights, comments, explanations, links",
   editsTabTitle: "Edit history: every edit to the open document",
   moreTitle: "More: notes full page, settings",
@@ -80,9 +84,9 @@ const en = {
   openSimplified: "Open the simplified text",
   openAnalysis: "Open the analysis",
   openConversation: "Open the assistant conversation",
-  extractStartedHere: "Extract {label} started here",
-  extractStartedHereDetails: "Extract {label} started here. Click for details",
-  extractJumpToOrigin: "Jump to the phrase Extract {label} started from",
+  extractStartedHere: "Match-it {label} started here",
+  extractStartedHereDetails: "Match-it {label} started here. Click for details",
+  extractJumpToOrigin: "Jump to the phrase Match-it {label} started from",
   openComment: "Open the comment",
   linkToOtherTexts: "Link to other texts",
   clickForTools: "Click for tools",
@@ -265,8 +269,19 @@ const en = {
   uploadImageConvertNote:
     "The image imports as one page, then AI reads it and writes the text after it in the image's formatting, math as LaTeX.",
 
-  // Distilled page (distill-page.tsx)
-  deleteDistillation: "Delete this distillation",
+  // Distilled page (keypoints-page.tsx)
+  keypointsArticle: "Distill the article",
+  keypointsHint:
+    "The AI reads the whole article, thinks through what it establishes, and writes its most important points as bullets. Each point jumps to the passage it comes from.",
+  keypointsAgain: "Distill again",
+  keypointsAgainTitle: "Distill the article again. The new points replace these.",
+  deleteKeypoints: "Delete the distillation",
+  distillingArticle: "Reading the whole article for its most important points",
+  stopDistill: "Stop this run. The stored distillation stays.",
+  pointCount1: "{n} point",
+  pointCountN: "{n} points",
+  // Extract page (distill-page.tsx)
+  deleteDistillation: "Delete this extraction",
   scanningArticle: "Scanning the article for the quotes that answer it",
   stopScan: "Stop this scan and edit the question",
   quoteCount1: "{n} quote",
@@ -279,8 +294,8 @@ const en = {
   askPlaceholder: "What should this article answer?",
   askHint:
     "One question. The AI scans the whole article and pulls the quotes that answer it, each with a caption saying how it answers the question.",
-  distilled: "Distilled",
-  openDistillation: "Open this distillation",
+  distilled: "Extracted",
+  openDistillation: "Open this extraction",
 
   // References section (bibliography.tsx)
   referencesCount: "References ({n})",
@@ -363,8 +378,8 @@ const en = {
   searchProject: "Search the project",
   searchProjectTitle: "Search every document in the project by meaning",
   searchNoMatches: "No passages match \u201c{query}\u201d.",
-  // Project distillation (corpus-distill-page.tsx)
-  distillCorpus: "Distill the project",
+  // Project extraction (corpus-distill-page.tsx)
+  distillCorpus: "Extract from the project",
   corpusAskPlaceholder: "What should this project answer?",
   corpusAskHint:
     "One question. The AI scans every document in the project and pulls the quotes that answer it, each cited to its document.",
@@ -391,7 +406,8 @@ const en = {
 const zh: Record<keyof typeof en, string> = {
   notes: "笔记",
   assistant: "助手",
-  distill: "提炼",
+  keypoints: "提炼",
+  distill: "提取",
   annotations: "批注",
   edits: "编辑记录",
   editHistory: "编辑记录",
@@ -413,7 +429,7 @@ const zh: Record<keyof typeof en, string> = {
   workspace: "工作区",
   assistantTabTitle: "助手：在文档、项目或全部项目范围提问；运行检查",
   notesTabTitle: "笔记：你的章节与待定队列",
-  distillTabTitle: "提炼：当前文档的每次提炼",
+  distillTabTitle: "提炼：当前文档的提炼和每次提取",
   annotationsTabTitle: "批注：高亮、评论、解释、链接",
   editsTabTitle: "编辑记录：当前文档的每次编辑",
   moreTitle: "更多：整页笔记、设置",
@@ -462,9 +478,9 @@ const zh: Record<keyof typeof en, string> = {
   openSimplified: "打开简化文本",
   openAnalysis: "打开分析",
   openConversation: "打开助手对话",
-  extractStartedHere: "提取 {label} 始于此处",
-  extractStartedHereDetails: "提取 {label} 始于此处。点击查看详情",
-  extractJumpToOrigin: "跳转到提取 {label} 的起始短语",
+  extractStartedHere: "匹配 {label} 始于此处",
+  extractStartedHereDetails: "匹配 {label} 始于此处。点击查看详情",
+  extractJumpToOrigin: "跳转到匹配 {label} 的起始短语",
   openComment: "打开评论",
   linkToOtherTexts: "链接到其他文本",
   clickForTools: "点击使用工具",
@@ -623,7 +639,16 @@ const zh: Record<keyof typeof en, string> = {
   uploadImagePagesNote: "图片按一个页面导入，原样呈现，不添加任何文本。",
   uploadImageConvertNote: "图片按一个页面导入，随后 AI 阅读图片，按其格式在其后写出文本，公式为 LaTeX。",
 
-  deleteDistillation: "删除此提炼",
+  keypointsArticle: "提炼文章",
+  keypointsHint: "AI 通读全文，想清楚它论证了什么，再把最重要的要点写成分条。每条要点都能跳到它所依据的片段。",
+  keypointsAgain: "重新提炼",
+  keypointsAgainTitle: "重新提炼文章。新的要点会替换这些。",
+  deleteKeypoints: "删除提炼",
+  distillingArticle: "正在通读全文，找出最重要的要点",
+  stopDistill: "停止本次运行。已保存的提炼保留。",
+  pointCount1: "{n} 条要点",
+  pointCountN: "{n} 条要点",
+  deleteDistillation: "删除此提取",
   scanningArticle: "正在扫描文章，找出回答它的引文",
   stopScan: "停止扫描并编辑问题",
   quoteCount1: "{n} 条引文",
@@ -635,8 +660,8 @@ const zh: Record<keyof typeof en, string> = {
   addToNotes: "添加到笔记",
   askPlaceholder: "这篇文章应该回答什么？",
   askHint: "一个问题。AI 扫描全文，找出回答它的引文，每条引文配一条说明，讲它如何回答该问题。",
-  distilled: "已提炼",
-  openDistillation: "打开此提炼",
+  distilled: "已提取",
+  openDistillation: "打开此提取",
 
   referencesCount: "参考文献（{n}）",
   share: "共享",
@@ -709,7 +734,7 @@ const zh: Record<keyof typeof en, string> = {
   searchProject: "搜索项目",
   searchProjectTitle: "按语义搜索项目中的每篇文档",
   searchNoMatches: "没有匹配“{query}”的片段。",
-  distillCorpus: "提炼项目",
+  distillCorpus: "从项目提取",
   corpusAskPlaceholder: "这个项目应该回答什么？",
   corpusAskHint: "一个问题。AI 扫描项目中的每个文档，找出回答它的引文，每条引文注明所在文档。",
   scanningCorpus: "正在扫描项目",

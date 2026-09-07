@@ -53,6 +53,16 @@ export const distillOutputSchema = z.object({
     .max(20),
 });
 
+// KEYPOINTS — the reader's Distill (SPEC.md §4): the article's most important
+// points as bullets, each anchored to the span it comes from. The route
+// resolves every span before anything persists.
+export const keypointsOutputSchema = z.object({
+  points: z
+    .array(spanSchema.extend({ text: z.string().min(1).max(1_000) }))
+    .min(1)
+    .max(30),
+});
+
 // FIND (SPEC.md §11): matches reference transcript blocks by id; the route
 // resolves them to time ranges. An empty list is a correct answer.
 export const findOutputSchema = z.object({

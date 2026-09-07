@@ -163,6 +163,14 @@ function layerItems(doc: DigestDocument): string[] {
         : doc.formalized.markdown;
     items.push(`Formalized article of this transcript: "${doc.formalized.title}" — ${opening}`);
   }
+  if (doc.keypoints && doc.keypoints.length > 0) {
+    items.push(
+      "Keypoints of this document (the reader's Distill: its most important points, each with the passage it comes from):",
+      ...doc.keypoints.map(
+        (p) => `- ${p.caption ?? ""} — "${p.quote}" [block ${p.blockId}]${p.orphaned ? " (orphaned)" : ""}`,
+      ),
+    );
+  }
   if (doc.salience.length > 0) {
     items.push(
       `Salient passages: ${doc.salience.map((q) => `"${q.quote}"${q.orphaned ? " (orphaned)" : ""}`).join("; ")}`,

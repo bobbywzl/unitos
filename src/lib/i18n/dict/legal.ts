@@ -26,7 +26,7 @@ const en = {
   pCollectDrive:
     "Google Drive, only if you link it in Settings: a token that lets Unitos read your Drive files — every file you can read, or only the files you pick, as the Google consent screen said. Unitos reads a file only when you add it, keeps that copy as a document, and never changes anything in your Drive. Unlink in Settings any time; that revokes the token.",
   pCollectContent:
-    "What you put in: the documents and videos you upload, the pages you add by URL and the text parsed from them, and every project, section, note, annotation, highlight, comment, distillation, extraction, and summary you make.",
+    "What you put in: the documents and videos you upload, the pages you add by URL and the text parsed from them, and every project, section, note, annotation, highlight, comment, distillation, extraction, match, and summary you make.",
   pCollectContext:
     "Your context: the background, purpose, and application you optionally write in the Context tab, which conditions what the assistant says.",
   pCollectPrefs: "Your preferences: interface language and theme.",
@@ -47,7 +47,7 @@ const en = {
   pAiAnthropic:
     "Anthropic (Claude) receives document text, page images, and your upload instructions, when you add a document or convert handwritten pages.",
   pAiMoonshot:
-    "Moonshot AI (Kimi) receives document text, your notes and annotations, and your context, when you use Explain, Simplify, Distill, Extract, Summarize, or the assistant.",
+    "Moonshot AI (Kimi) receives document text, your notes and annotations, and your context, when you use Explain, Simplify, Distill, Extract, Match-it, Summarize, or the assistant.",
   pAiOpenAI:
     "OpenAI receives the text you ask to be read aloud. OpenAI and Groq receive the audio of videos you upload, or of YouTube videos you add that have no captions, for transcription.",
   pAiGoogle:
@@ -170,7 +170,7 @@ const zh: Record<keyof typeof en, string> = {
   pCollectDrive:
     "Google Drive（仅当你在设置中关联时）：一个令牌，让 Unitos 读取你的 Drive 文件——范围是你能读取的全部文件，或仅你选取的文件，以 Google 授权页面所示为准。Unitos 只在你添加文件时读取它，把这份副本保存为文档，绝不改动你 Drive 中的任何内容。可随时在设置中取消关联，令牌随之撤销。",
   pCollectContent:
-    "你放进去的内容：你上传的文档和视频、你通过网址添加的页面及其解析出的文字，以及你做的每一个项目、章节、笔记、批注、高亮、评论、提炼、提取和摘要。",
+    "你放进去的内容：你上传的文档和视频、你通过网址添加的页面及其解析出的文字，以及你做的每一个项目、章节、笔记、批注、高亮、评论、提炼、提取、匹配和摘要。",
   pCollectContext:
     "你的背景：你在“背景”页签中选填的背景、目的和用途，它们决定助手如何作答。",
   pCollectPrefs: "你的偏好：界面语言和主题。",
@@ -189,7 +189,7 @@ const zh: Record<keyof typeof en, string> = {
   pAiAnthropic:
     "当你添加文档或转换手写页面时，Anthropic（Claude）会收到文档文字、页面图片和你的上传要求。",
   pAiMoonshot:
-    "当你使用解释、简化、提炼、提取、摘要或助手时，Moonshot AI（Kimi）会收到文档文字、你的笔记和批注，以及你的背景。",
+    "当你使用解释、简化、提炼、提取、匹配、摘要或助手时，Moonshot AI（Kimi）会收到文档文字、你的笔记和批注，以及你的背景。",
   pAiOpenAI: "OpenAI 会收到你要求朗读的文字。OpenAI 和 Groq 会收到你上传的视频、或你添加的没有字幕的 YouTube 视频的音频，用于转写。",
   pAiGoogle:
     "Google（Gemini）会收到你上传的视频，或你添加的 YouTube 视频链接，用于转写以及描述你所询问的画面。",

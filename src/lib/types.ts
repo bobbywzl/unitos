@@ -90,6 +90,42 @@ export function distillationList(value: unknown): Distillation[] {
   return Array.isArray(value) ? (value as Distillation[]) : [];
 }
 
+// ── KEYPOINTS — the reader's Distill (SPEC.md §4): the article as bullets ──
+
+/** One point of a distillation: the bullet text plus the verbatim span it
+    comes from (same dual anchor as Source, SPEC.md §5). */
+export type Keypoint = {
+  text: string;
+  blockId: string;
+  start: number;
+  end: number;
+  quotedText: string;
+  prefix: string;
+  suffix: string;
+};
+
+/** Stored on NotebookDocument.keypoints: one per notebook per document.
+    Distill again overwrites. */
+export type Keypoints = {
+  id: string;
+  createdAt: string; // ISO
+  createdById?: string; // account that ran Distill
+  points: Keypoint[];
+};
+
+/** The distillation as the reader sees it: points re-resolved against the
+    current blocks, orphaned visibly when the words are gone (SPEC.md §5). */
+export type KeypointsView = Omit<Keypoints, "points"> & {
+  points: (Keypoint & { orphaned: boolean })[];
+};
+
+/** Tolerant read of the Json column; anything malformed reads as none. */
+export function keypointsStored(value: unknown): Keypoints | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const k = value as Keypoints;
+  return typeof k.id === "string" && Array.isArray(k.points) ? k : null;
+}
+
 // ── Corpus-scope DISTILL (SPEC.md §13): one question, every document ───────
 
 /** One quote of a corpus distillation: a DistillQuote plus the document it
@@ -156,7 +192,7 @@ export type ExtractionSpan = {
 };
 
 /** Stored on NotebookDocument.extractions, oldest first — the index gives the
-    label (E1, E2, …). origin = the phrase Extract was applied on; spans = the
+    label (M1, M2, …). origin = the phrase Match-it was applied on; spans = the
     passages across the document most revealing about its topic. */
 export type Extraction = {
   id: string;
@@ -169,7 +205,7 @@ export type Extraction = {
 /** One extraction as the reader sees it: spans re-resolved against the
     current blocks; an unresolvable span stays stored but unpainted. */
 export type ExtractionView = Omit<Extraction, "origin" | "spans"> & {
-  label: string; // "E1"…
+  label: string; // "M1"…
   origin: ExtractionSpan & { orphaned: boolean };
   spans: (ExtractionSpan & { orphaned: boolean })[];
 };

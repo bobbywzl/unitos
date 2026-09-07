@@ -4,8 +4,10 @@
 // (CLAUDE.md rule 2 holds in Chinese too: one term per concept, everywhere):
 //   project 项目 · Projects(全部) 全部项目 · section 章节 ·
 //   note 笔记 · source 出处 · anchor 锚点 · block 块 · pending 待定 ·
-//   accepted 已接受 · distill/distillation 提炼 · quote 引文 · caption 说明 ·
-//   extract/extraction 提取 · summary 摘要 · digest 汇编 · annotation 批注 ·
+//   accepted 已接受 · distill/distillation(要点分条; code KEYPOINTS) 提炼 ·
+//   extract/extraction(问题→引文; code DISTILL) 提取 · quote 引文 · caption 说明 ·
+//   Match-it/match(短语→片段; code EXTRACT) 匹配 · point(提炼的一条) 要点 ·
+//   summary 摘要 · digest 汇编 · annotation 批注 ·
 //   highlight 高亮 · comment 评论 · explain 解释 · simplify 简化 ·
 //   assistant 助手 · document 文档 · video 视频 · audio 音频 ·
 //   transcript 逐字稿 · formalize 整理 · article (formalized) 文章 ·

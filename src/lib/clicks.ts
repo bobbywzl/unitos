@@ -56,7 +56,9 @@ const CLICK_FUNCTIONS: Record<ClickGroup, readonly string[]> = {
     "assistant-task:",
     "assistant-recommended:",
     "assistant-regenerate",
-    // distill runs
+    // distill (keypoints) and extract (distill) runs
+    "keypoints-page-run",
+    "keypoints-page-regenerate",
     "distill-page-run",
     "distill-corpus-run",
     // handwritten pages
@@ -116,6 +118,7 @@ const CLICK_FUNCTIONS: Record<ClickGroup, readonly string[]> = {
     // notes made from elsewhere
     "add-to-notes",
     "add-to-notes-section",
+    "keypoints-page-add-to-notes",
     "distill-page-add-to-notes",
     "distill-corpus-add-to-notes",
     "video-find-add-note",
