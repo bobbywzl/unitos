@@ -517,6 +517,10 @@ export function DocumentBar({
   // The box hidden while its add runs on (SPEC.md §15): the header shows the
   // running pill instead, and clicking the pill brings the box back.
   const [assistantHidden, setAssistantHidden] = useState(false);
+  // The document the box opened before its finishing step was done (SPEC.md
+  // §15): the pill says the add is finishing, and the close that ends the
+  // add refreshes the open document instead of opening it again.
+  const [assistantOpened, setAssistantOpened] = useState<string | null>(null);
   const assistantSubject = !assistant
     ? ""
     : assistant.kind === "files" || assistant.kind === "drive"
@@ -1053,12 +1057,12 @@ export function DocumentBar({
         <button
           onClick={() => setAssistantHidden(false)}
           data-track="upload-running"
-          data-tip={t("panes.uploadRunningTip")}
+          data-tip={t(assistantOpened ? "panes.uploadFinishingTip" : "panes.uploadRunningTip")}
           className="flex shrink-0 items-center gap-1.5 rounded-full bg-card px-3 py-1 text-xs font-medium text-sand-700 shadow-soft hover:bg-clay-100 hover:text-clay-800"
         >
           <SpinnerIcon size={12} className="shrink-0 text-clay motion-safe:animate-spin" />
           <span className="max-w-[14rem] truncate">
-            {t("panes.uploadRunning", { title: assistantSubject })}
+            {t(assistantOpened ? "panes.uploadFinishing" : "panes.uploadRunning", { title: assistantSubject })}
           </span>
         </button>
       )}
@@ -1120,10 +1124,20 @@ export function DocumentBar({
           hidden={assistantHidden}
           onHide={() => setAssistantHidden(true)}
           onShow={() => setAssistantHidden(false)}
+          onOpenEarly={(docId) => {
+            setAssistantOpened(docId);
+            setAssistantHidden(true);
+            openAdded(docId);
+          }}
           onClose={(docId) => {
+            const opened = assistantOpened;
             setAssistant(null);
             setAssistantHidden(false);
-            if (docId) openAdded(docId);
+            setAssistantOpened(null);
+            if (docId && docId !== opened) openAdded(docId);
+            // Opened early: the glossary and links the finishing step wrote
+            // arrive with a refresh.
+            else if (docId) router.refresh();
           }}
         />
       )}

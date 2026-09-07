@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { CheckIcon, SpinnerIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import type { TFunc, TKey } from "@/lib/i18n/dictionaries";
@@ -133,6 +133,24 @@ function detailText(t: TFunc, detail: string): string {
   ].join(" · ");
 }
 
+// The time since the work started, ticking once a second while it runs and
+// standing once it is done.
+function useElapsed(startedAt: number, running: boolean): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!running) return;
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [running]);
+  return Math.max(0, now - startedAt);
+}
+
+/** "0:42", "12:05". */
+export function formatElapsed(ms: number): string {
+  const seconds = Math.floor(ms / 1000);
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+}
+
 // A small line-art cat that dances while the pipeline works. Same 24-grid and
 // stroke weight as the workspace icons; sits still when reduced motion is set.
 function DancingCat({ done }: { done: boolean }) {
@@ -181,12 +199,17 @@ export function IngestProgress({
   fileLabel,
   steps,
   inline = false,
+  startedAt,
 }: {
   fileLabel: string;
   steps: IngestStep[];
   inline?: boolean;
+  // When the work started, for the elapsed time beside the step count; absent,
+  // the card's own mount.
+  startedAt?: number;
 }) {
   const t = useT();
+  const [mountedAt] = useState(() => Date.now());
   const activeIndex = steps.findIndex((s) => s.status === "active");
   const doneCount = steps.filter((s) => s.status === "done").length;
   const complete = doneCount === steps.length;
@@ -195,6 +218,7 @@ export function IngestProgress({
     ? steps.length
     : Math.min(activeIndex === -1 ? steps.length : activeIndex + 1, steps.length);
   const fillPercent = complete ? 100 : ((doneCount + (activeIndex === -1 ? 0 : 0.5)) / steps.length) * 100;
+  const elapsed = useElapsed(startedAt ?? mountedAt, !complete);
   const [gait] = useState(() => ({
     lap: 6.5 + Math.random() * 3,
     hop: 0.7 + Math.random() * 0.5,
@@ -225,7 +249,7 @@ export function IngestProgress({
           <p className="truncate text-xs text-sand-500">{fileLabel}</p>
         </div>
         <span className="shrink-0 text-xs tabular-nums text-sand-500">
-          {position}/{steps.length}
+          {position}/{steps.length} · {formatElapsed(elapsed)}
         </span>
       </div>
 

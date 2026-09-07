@@ -110,6 +110,23 @@ const REVIEW_STEPS: IngestStep[] = [
   { key: "review", labelKey: "panes.stepReviewing", status: "pending" },
 ];
 
+// An add that has run this long opens its document as soon as the document
+// reads well — saved, with this share of its captions carrying their figure —
+// and the finishing step runs on behind the document bar's running pill
+// (SPEC.md §15). A shorter add opens complete, as before.
+const EARLY_OPEN_MS = 20_000;
+const EARLY_OPEN_FIGURE_SHARE = 0.9;
+
+// Does the saved document read well enough to open before its finishing
+// step is done? The save stage's figure check says: the figures that loaded
+// against the captions left without one. No check: nothing speaks against it.
+function readsWell(saveDetail: string | null): boolean {
+  const counts = saveDetail ? ingestCounts(saveDetail) : null;
+  if (!counts) return true;
+  const captions = counts.figures + counts.captionsWithoutFigure;
+  return captions === 0 || counts.figures / captions >= EARLY_OPEN_FIGURE_SHARE;
+}
+
 // The finishing step (SPEC.md §15), after the save: the scans the box runs
 // itself, then the visuals loaded into the browser's cache.
 const FINISH_STEPS: IngestStep[] = [
@@ -178,6 +195,7 @@ export function UploadAssistant({
   hidden,
   onHide,
   onShow,
+  onOpenEarly,
   onClose,
 }: {
   notebookId: string;
@@ -188,6 +206,10 @@ export function UploadAssistant({
   onHide: () => void;
   // The box asks to be shown again: the add ended with something to read.
   onShow: () => void;
+  // The add has run EARLY_OPEN_MS and its first document reads well: open it
+  // now and hide the box; the finishing step runs on. onClose follows with
+  // the same id once the box is done.
+  onOpenEarly: (docId: string) => void;
   // Called once the box is done: the first added document to open, or null.
   onClose: (openDocId: string | null) => void;
 }) {
@@ -244,6 +266,12 @@ export function UploadAssistant({
   // The save stage detail of the last add — the final figure check (SPEC.md
   // §15) — read at the end of the add: a lost figure keeps the box open.
   const saveDetailRef = useRef<string | null>(null);
+  // When the running add started: the progress card's elapsed time, and the
+  // early open's mark. The early open is pending until the add's first
+  // document either opens early or finishes in time — never a later one.
+  const [addStartedAt, setAddStartedAt] = useState(0);
+  const addStartedAtRef = useRef(0);
+  const earlyOpenRef = useRef<"pending" | "opened" | "off">("off");
 
   // ── Review (url kind): the sandbox read, on open and on Review again ──────
   // The running review, so Cancel can abort it: the box goes to ready with
@@ -404,8 +432,28 @@ export function UploadAssistant({
 
   async function ingestAndFinish(res: Response): Promise<IngestResult> {
     const result = await streamIngest(res);
-    for (const doc of result.documents ?? [{ id: result.id, title: result.title }]) {
-      await finishDocument(doc.id);
+    const documents = result.documents ?? [{ id: result.id, title: result.title }];
+    // The document is saved and reads well: past the mark it opens now; before
+    // it, a timer opens it at the mark should the finishing step still run.
+    let earlyTimer: ReturnType<typeof setTimeout> | null = null;
+    if (earlyOpenRef.current === "pending") {
+      const first = documents[0];
+      if (first && readsWell(saveDetailRef.current)) {
+        const openEarly = () => {
+          if (earlyOpenRef.current !== "pending") return;
+          earlyOpenRef.current = "opened";
+          onOpenEarly(first.id);
+        };
+        const left = EARLY_OPEN_MS - (Date.now() - addStartedAtRef.current);
+        if (left <= 0) openEarly();
+        else earlyTimer = setTimeout(openEarly, left);
+      } else earlyOpenRef.current = "off";
+    }
+    try {
+      for (const doc of documents) await finishDocument(doc.id);
+    } finally {
+      if (earlyTimer) clearTimeout(earlyTimer);
+      if (earlyOpenRef.current === "pending") earlyOpenRef.current = "off";
     }
     return result;
   }
@@ -480,6 +528,9 @@ export function UploadAssistant({
     const collected: Added[] = [];
     const failed: string[] = [];
     saveDetailRef.current = null;
+    addStartedAtRef.current = Date.now();
+    setAddStartedAt(addStartedAtRef.current);
+    earlyOpenRef.current = "pending";
 
     if (request.kind === "url") {
       const pages: { url: string; title: string }[] = [
@@ -1014,7 +1065,9 @@ export function UploadAssistant({
 
         {phase === "adding" && (
           <div className="flex flex-col gap-2.5">
-            {steps && <IngestProgress inline fileLabel={headline ?? subject} steps={steps} />}
+            {steps && (
+              <IngestProgress inline fileLabel={headline ?? subject} steps={steps} startedAt={addStartedAt} />
+            )}
             {check && <ReplyList replies={check.replies} />}
             {failures.length > 0 && (
               <ul className="flex flex-col gap-1 text-xs text-red-500">

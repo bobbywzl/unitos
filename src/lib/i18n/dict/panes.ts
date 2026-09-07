@@ -204,6 +204,9 @@ const en = {
   uploadHide: "Hide — the add keeps running",
   uploadRunning: "Adding {title}…",
   uploadRunningTip: "Still adding. Click to see the progress.",
+  uploadFinishing: "Finishing {title}…",
+  uploadFinishingTip:
+    "The article is open. Its glossary, links, and figures are still loading — click to see the progress.",
   stepFetchingPage: "Fetching the page",
   stepReadingPage: "Reading the page",
   noDocumentOpen: "No document open. Upload a PDF, drop one here, or add a URL to start reading.",
@@ -597,6 +600,8 @@ const zh: Record<keyof typeof en, string> = {
   uploadHide: "隐藏——添加继续进行",
   uploadRunning: "正在添加 {title}……",
   uploadRunningTip: "仍在添加。点击查看进度。",
+  uploadFinishing: "正在完成 {title}…",
+  uploadFinishingTip: "文章已打开。术语表、链接和插图仍在加载——点击查看进度。",
   stepFetchingPage: "获取页面",
   stepReadingPage: "读取页面",
   noDocumentOpen: "尚未打开文档。上传 PDF、拖入文件，或添加 URL 开始阅读。",
