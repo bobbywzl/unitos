@@ -37,8 +37,28 @@ export type FigureAudit = {
   figuresWithoutCaption: number;
 };
 
-function hasMedia(block: ParsedBlock): boolean {
-  return block.type === "FIGURE" && (block.html === undefined || /<(?:img|video|iframe|svg)\b/i.test(block.html));
+// A parsed block or a stored Block row: both audit alike.
+export type AuditBlock = { type: string; text: string; html?: string | null };
+
+function hasMedia(block: AuditBlock): boolean {
+  return block.type === "FIGURE" && (block.html == null || /<(?:img|video|iframe|svg)\b/i.test(block.html));
+}
+
+// A text block that opens like a caption with no figure beside it.
+function isCaptionGap(blocks: AuditBlock[], i: number): boolean {
+  const block = blocks[i];
+  if (block.type !== "PARAGRAPH" && block.type !== "HEADING") return false;
+  if (!isFigureCaption(block.text)) return false;
+  return ![blocks[i - 1], blocks[i + 1]].some((b) => b !== undefined && hasMedia(b));
+}
+
+/** The captions left without their figure, with their blocks: the reader
+    marks each figure's place while a browser render tries to bring it over
+    (components/reader/figure-capture.tsx). */
+export function captionGaps<B extends AuditBlock & { id: string }>(blocks: B[]): { id: string; label: string }[] {
+  return blocks.flatMap((block, i) =>
+    isCaptionGap(blocks, i) ? [{ id: block.id, label: captionLabel(block.text) ?? block.text.trim().slice(0, 24) }] : [],
+  );
 }
 
 /** The caption lines of a figure's text. */
@@ -66,8 +86,7 @@ export function auditFigures(blocks: ParsedBlock[]): FigureAudit {
     if (block.type !== "PARAGRAPH" && block.type !== "HEADING") return;
     if (!isFigureCaption(block.text)) return;
     audit.captions += 1;
-    const beside = [blocks[i - 1], blocks[i + 1]].some((b) => b !== undefined && hasMedia(b));
-    if (!beside) audit.captionsWithoutFigure.push(block.text.trim());
+    if (isCaptionGap(blocks, i)) audit.captionsWithoutFigure.push(block.text.trim());
   });
   return audit;
 }

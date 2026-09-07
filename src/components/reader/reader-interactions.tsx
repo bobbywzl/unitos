@@ -75,6 +75,7 @@ import { DistillPage } from "@/components/reader/distill-page";
 import { KeypointsPage } from "@/components/reader/keypoints-page";
 import { ProjectSearch } from "@/components/reader/project-search";
 import { PANE_HEADER } from "@/components/reader/reader-panes";
+import type { FigureRenderInfo } from "@/components/reader/figure-capture";
 import { Reader, type TranscriptVariant } from "@/components/reader/reader";
 
 // One block's span of a selection (SPEC.md §5).
@@ -512,6 +513,8 @@ export function ReaderInteractions({
   conversion,
   font,
   columnWidth,
+  captionGaps,
+  figureRender,
   translationAvailable,
   transcript,
 }: {
@@ -623,6 +626,10 @@ export function ReaderInteractions({
   // The page's text column width in px (Document.columnWidth): the article
   // column's width. Null = the reader's default.
   columnWidth: number | null;
+  // The captions left without their figure and the browser render's state
+  // (figure-capture.tsx): the reader marks each figure's place.
+  captionGaps: { id: string; label: string }[];
+  figureRender: FigureRenderInfo;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -4751,6 +4758,8 @@ function blockFormatKind(
         mode={editMode ? "edit" : "read"}
         font={font}
         columnWidth={columnWidth}
+        captionGaps={captionGaps}
+        figureRender={figureRender}
         stylesByBlock={stylesByBlock}
         editedByBlock={editedByBlock}
         pages={

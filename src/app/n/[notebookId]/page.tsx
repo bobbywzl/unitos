@@ -1,6 +1,7 @@
 import { Logo } from "@/components/logo";
 import { notFound, redirect } from "next/navigation";
 import { authEnabled, currentUser } from "@/lib/auth";
+import { browserConfigured } from "@/lib/browser";
 import { driveConfig } from "@/lib/drive/config";
 import { currentLang, serverT } from "@/lib/i18n/server";
 import { peopleByIds, roleOf } from "@/lib/collab";
@@ -9,6 +10,7 @@ import { hasContext } from "@/lib/derive/context";
 import { editedRanges } from "@/lib/diff";
 import { definitionFor, glossaryEntries, lacksDefinitionsIn } from "@/lib/glossary";
 import { conversionIsStale } from "@/lib/handwritten/convert";
+import { captionGaps } from "@/lib/parse/figure-audit";
 import { documentReferences } from "@/lib/parse/types";
 import { resolveDocumentSources } from "@/lib/anchors/resolve";
 import { db } from "@/lib/db";
@@ -89,6 +91,8 @@ export default async function NotebookPage(props: {
               parserVersion: true,
               fileHash: true,
               handwritten: true,
+              figureRenderAt: true,
+              figureRenderError: true,
               video: { select: { id: true } },
             },
           },
@@ -125,6 +129,8 @@ export default async function NotebookPage(props: {
     hasFile: nd.document.fileHash !== null,
     hasVideo: nd.document.video !== null,
     handwritten: nd.document.handwritten,
+    figureRenderAt: nd.document.figureRenderAt?.toISOString() ?? null,
+    figureRenderError: nd.document.figureRenderError,
   }));
   const activeId = doc && attached.some((d) => d.id === doc) ? doc : (attached[0]?.id ?? null);
   // The reader view is a per-visit choice carried in the URL; a fresh open is Normal.
@@ -1160,6 +1166,14 @@ export default async function NotebookPage(props: {
     conversion: pane.conversion,
     font: pane.document.font,
     columnWidth: pane.document.columnWidth,
+    // The captions left without their figure and the browser render's
+    // state: the reader marks each figure's place (figure-capture.tsx).
+    captionGaps: captionGaps(pane.document.blocks),
+    figureRender: {
+      attemptedAt: pane.document.figureRenderAt?.toISOString() ?? null,
+      error: pane.document.figureRenderError,
+      browser: browserConfigured(),
+    },
   });
   // A split view (SPEC.md §6): each pane's header carries the pane's
   // document, and the pane's tool cards stay collapsed to their symbols until
@@ -1228,6 +1242,8 @@ export default async function NotebookPage(props: {
       readerView={readerView}
       activeDocumentId={paneOne?.document.id ?? null}
       drive={driveConfig(user)}
+      figureGaps={paneOne ? captionGaps(paneOne.document.blocks).map((g) => g.label) : []}
+      browserConfigured={browserConfigured()}
       collab={collab}
       rev={notebook.rev}
       graph={{ nodes: graphNodes, edges: graphEdges, recommended: recommendedLinks }}

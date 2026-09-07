@@ -314,6 +314,12 @@ model Document {
   // The page's text column width in px (lib/parse/figure-style.ts): the
   // reader's column width for a URL document. Null = the reader's default.
   columnWidth   Int?
+  // The browser render for scripted figures (lib/parse/render-page.ts): when
+  // the last one ran for this document, and why it did not deliver (null =
+  // it did). Both null with a caption left without its figure: the reader
+  // runs one on open where a browser is configured (SPEC.md §15).
+  figureRenderAt    DateTime?
+  figureRenderError String?
   parserVersion Int                @default(0) // parse pipeline version; stale URL documents re-parse automatically
   sourceUrl     String?
   fileHash      String?            @unique // dedupe re-uploads

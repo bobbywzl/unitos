@@ -2,7 +2,7 @@ import { JSDOM, VirtualConsole } from "jsdom";
 import { browserConfigured, launchBrowser, withTimeout } from "@/lib/browser";
 import { db } from "@/lib/db";
 import { serverT } from "@/lib/i18n/server";
-import { captureAnimatedCharts, type CaptureStore } from "@/lib/parse/capture-animation";
+import { captureAnimatedCharts, type CaptureResult, type CaptureStore } from "@/lib/parse/capture-animation";
 import type { FetchedPage } from "@/lib/parse/fetch-page";
 import { isEmptyChart } from "@/lib/parse/figures";
 import type { OnIngestProgress } from "@/lib/parse/ingest";
@@ -32,6 +32,22 @@ const SETTLE_MS = 500;
 // The charts get this much of the render's time.
 const CAPTURE_BUDGET_MS = 110_000;
 
+// What the render did, saved with the document (Document.figureRenderAt,
+// figureRenderError) and reported with the save stage, so the reader can
+// say why a caption still has no figure and try again (SPEC.md §15).
+export type RenderReport = {
+  // The page needed a browser and one is configured: a render ran.
+  attempted: boolean;
+  // Why the render, or its chart capture, did not deliver — the connection
+  // refused, the time up, a loop not found — or null when nothing failed.
+  error: string | null;
+  charts: CaptureResult | null;
+};
+
+export type RenderResult = { page: FetchedPage; render: RenderReport };
+
+const NO_RENDER: RenderReport = { attempted: false, error: null, charts: null };
+
 export type RenderOptions = {
   // Store the loops of animated charts as GIFs (an ingest or a re-parse);
   // the account the images are recorded under. Absent (the upload
@@ -57,26 +73,39 @@ export function needsBrowserRender(html: string): boolean {
 }
 
 /** The page as a browser renders it, when the static page needs it and a
-    browser is configured; the page itself otherwise. Never throws: a failed
-    render leaves the static page standing. */
+    browser is configured; the page itself otherwise — with the report of
+    what the render did. Never throws: a failed render leaves the static
+    page standing and says why. */
 export async function renderIfNeeded(
   page: FetchedPage,
   url: string,
   onProgress?: OnIngestProgress,
   options: RenderOptions = {},
-): Promise<FetchedPage> {
-  if (page.kind !== "html" || !browserConfigured() || !needsBrowserRender(page.html)) return page;
+): Promise<RenderResult> {
+  if (page.kind !== "html" || !browserConfigured() || !needsBrowserRender(page.html)) {
+    return { page, render: NO_RENDER };
+  }
   try {
     const t = await serverT();
     onProgress?.("fetch", t("api.renderingPage"));
     const store: CaptureStore | null = options.store ? imageStore(options.store.userId) : null;
-    const html = await withTimeout(renderInBrowser(url, store), RENDER_TIMEOUT_MS, "the browser ran out of time");
-    return html.trim() ? { kind: "html", html } : page;
+    const rendered = await withTimeout(renderInBrowser(url, store), RENDER_TIMEOUT_MS, "the browser ran out of time");
+    const render: RenderReport = { attempted: true, error: rendered.error, charts: rendered.charts };
+    return { page: rendered.html.trim() ? { kind: "html", html: rendered.html } : page, render };
   } catch (err) {
-    // The static page stands; the log says why the figures did not render.
+    // The static page stands; the report says why the figures did not render.
     console.warn(`[render] browser render failed for ${url}:`, err);
-    return page;
+    return { page, render: { attempted: true, error: reasonOf(err), charts: null } };
   }
+}
+
+// A failure's first line, for the reader: a Playwright error carries its
+// call log under the message.
+const REASON_MAX = 200;
+function reasonOf(err: unknown): string {
+  const message = err instanceof Error ? err.message : String(err);
+  const line = message.split("\n").find((l) => l.trim()) ?? "unknown error";
+  return line.trim().slice(0, REASON_MAX);
 }
 
 /** A captured GIF as an ImageAsset row; the document it belongs to is set
@@ -96,7 +125,9 @@ function imageStore(userId: string | null): CaptureStore {
   };
 }
 
-async function renderInBrowser(url: string, store: CaptureStore | null): Promise<string> {
+type Rendered = { html: string; error: string | null; charts: CaptureResult | null };
+
+async function renderInBrowser(url: string, store: CaptureStore | null): Promise<Rendered> {
   const browser = await launchBrowser();
   try {
     const context = await browser.newContext({ locale: "en-US", viewport: { width: 1280, height: 900 } });
@@ -114,10 +145,12 @@ async function renderInBrowser(url: string, store: CaptureStore | null): Promise
       // scroll; it runs with real time until then. A browser that refuses
       // the clock renders without it: the charts then stand as the scroll
       // left them.
+      let clockError: string | null = null;
       const clock = await page.clock.install().then(
         () => true,
         (err: unknown) => {
           console.warn("[render] the page clock is unavailable:", err);
+          clockError = `the page clock is unavailable: ${reasonOf(err)}`;
           return false;
         },
       );
@@ -139,7 +172,7 @@ async function renderInBrowser(url: string, store: CaptureStore | null): Promise
       // render — the figures stay as they are.
       const serialize = async () => `<!DOCTYPE html>\n${await page.evaluate(() => document.documentElement.outerHTML)}`;
       let html = await serialize();
-      if (!clock) return html;
+      if (!clock) return { html, error: clockError, charts: null };
       try {
         const capture = captureAnimatedCharts(page, { store, deadline: Date.now() + CAPTURE_BUDGET_MS });
         // Past the time limit the capture keeps failing against a closing
@@ -148,10 +181,18 @@ async function renderInBrowser(url: string, store: CaptureStore | null): Promise
         const charts = await withTimeout(capture, CAPTURE_BUDGET_MS + 10_000, "the chart capture ran out of time");
         console.info(`[render] charts: ${charts.still} still, ${charts.settled} settled, ${charts.looped} looped, ${charts.undecided} undecided`);
         html = await serialize();
+        // A chart that neither held still nor repeated in the time sampled
+        // stands as the scroll left it: the reason a caption may still
+        // have no figure.
+        const error =
+          charts.undecided > 0
+            ? `${charts.undecided} animated chart${charts.undecided === 1 ? "" : "s"} neither settled nor looped in the time sampled`
+            : null;
+        return { html, error, charts };
       } catch (err) {
         console.warn("[render] chart capture failed; the scrolled page stands:", err);
+        return { html, error: `the chart capture failed: ${reasonOf(err)}`, charts: null };
       }
-      return html;
     } finally {
       await context.close().catch(() => {});
     }
