@@ -23,9 +23,7 @@ import {
   NotesIcon,
   QuestionIcon,
   SparkleIcon,
-  WarningIcon,
 } from "@/components/icons";
-import { clearErrors, useErrorLog } from "@/lib/error-log";
 import { ClickTracker } from "@/components/click-tracker";
 import { CollabProvider, type CollabState } from "@/components/collab/collab-context";
 import { HistoryControl } from "@/components/collab/history-control";
@@ -206,11 +204,6 @@ export function Workspace({
     return () => clearTimeout(timer);
   }, []);
   const [menuOpen, setMenuOpen] = useState(false);
-  // The error log (lib/error-log.ts): the button under Distill shows while it
-  // has entries; click lists them.
-  const errors = useErrorLog();
-  const [errorsOpen, setErrorsOpen] = useState(false);
-  const errorsRef = useRef<HTMLDivElement>(null);
   const [guideOpen, setGuideOpen] = useState(false);
   // The ? nudge for a new reader (the welcome flow points here): a pulsing
   // dot on the guide button until the guide is opened once on this browser.
@@ -449,22 +442,6 @@ export function Workspace({
       window.removeEventListener("keydown", onKeyDown);
     };
   }, [menuOpen]);
-
-  useEffect(() => {
-    if (!errorsOpen) return;
-    const onPointerDown = (e: PointerEvent) => {
-      if (!errorsRef.current?.contains(e.target as Node)) setErrorsOpen(false);
-    };
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setErrorsOpen(false);
-    };
-    window.addEventListener("pointerdown", onPointerDown);
-    window.addEventListener("keydown", onKeyDown);
-    return () => {
-      window.removeEventListener("pointerdown", onPointerDown);
-      window.removeEventListener("keydown", onKeyDown);
-    };
-  }, [errorsOpen]);
 
   function show(next: Tab) {
     if (mobileTray && tab === next) {
@@ -819,57 +796,6 @@ export function Workspace({
           >
             <DistillIcon />
           </button>
-
-          {errors.length > 0 && (
-            <div ref={errorsRef} className="relative md:-mt-1.5">
-              <button
-                onClick={() => setErrorsOpen(!errorsOpen)}
-                data-track="errors"
-                aria-label={t("panes.errors")}
-                data-tip={t("panes.errorsTitle")}
-                aria-expanded={errorsOpen}
-                className="flex size-6 items-center justify-center rounded-full text-red-600 hover:bg-red-50 dark:hover:bg-red-950"
-              >
-                <WarningIcon size={13} />
-              </button>
-              <Presence show={errorsOpen} exit="menu">
-              {errorsOpen && (
-                <div className="menu-in absolute right-0 bottom-full mb-2 flex w-72 flex-col overflow-hidden rounded-2xl bg-card py-1 shadow-float md:top-0 md:right-full md:bottom-auto md:mr-2 md:mb-0">
-                  <div className="flex items-center justify-between px-4 py-1.5">
-                    <span className="text-xs font-semibold text-sand-700">{t("panes.errors")}</span>
-                    <button
-                      onClick={() => {
-                        clearErrors();
-                        setErrorsOpen(false);
-                      }}
-                      data-track="errors-clear"
-                      className="text-xs text-sand-600 hover:text-clay-800"
-                    >
-                      {t("panes.errorsClear")}
-                    </button>
-                  </div>
-                  <ul className="max-h-72 overflow-y-auto">
-                    {errors.map((e) => (
-                      <li
-                        key={e.id}
-                        className="flex items-start gap-2 px-4 py-1.5 text-[12.5px] text-sand-800"
-                      >
-                        <WarningIcon size={12} className="mt-[3px] shrink-0 text-red-600" />
-                        <span className="min-w-0 flex-1 break-words">{e.message}</span>
-                        <time
-                          dateTime={new Date(e.at).toISOString()}
-                          className="shrink-0 text-[11px] text-sand-500"
-                        >
-                          {new Date(e.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                        </time>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-              </Presence>
-            </div>
-          )}
 
           <button
             onClick={() => show("edits")}

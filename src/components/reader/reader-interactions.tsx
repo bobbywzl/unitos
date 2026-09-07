@@ -38,6 +38,7 @@ import { findWeblinks } from "@/lib/weblinks";
 import { isImeKey, useImeGuard } from "@/lib/ime";
 import { imageFigureHtml } from "@/lib/images";
 import { markdownStyleKey } from "@/lib/markdown-style";
+import { reportError } from "@/lib/error-log";
 import { isOffline, offlinePremium, queueWrite } from "@/lib/offline/queue";
 import { parseYouTubeId, youtubeWatchUrl } from "@/lib/video/youtube";
 import type { TFunc, TKey } from "@/lib/i18n/dictionaries";
@@ -64,6 +65,7 @@ import { Markdown } from "@/components/markdown";
 import { Collapse, Presence } from "@/components/presence";
 import { ThinkingIndicator } from "@/components/thinking";
 import type { BlockData, Highlight } from "@/components/reader/block-view";
+import { ArticleErrors } from "@/components/reader/article-errors";
 import { Bibliography } from "@/components/reader/bibliography";
 import type { ConversionInfo } from "@/components/reader/conversion-strip";
 import { HIGHLIGHT_HUES, HUE_DOT, HUE_KEY } from "@/components/reader/hues";
@@ -1166,7 +1168,7 @@ export function ReaderInteractions({
       return true;
     } catch (err) {
       broadcastNoteRestored(noteId);
-      showToast(err instanceof Error ? err.message : t("reader.deleteFailed"));
+      showError(err instanceof Error ? err.message : t("reader.deleteFailed"));
       return false;
     }
   }
@@ -2389,6 +2391,14 @@ export function ReaderInteractions({
     }, 5000);
   }
 
+  // A failure shows as a toast and lands in the error log on this document,
+  // so it stays readable under Distill and Extract after the toast fades
+  // (article-errors.tsx).
+  function showError(message: string) {
+    showToast(message);
+    reportError(message, documentId);
+  }
+
   // A media figure (video/audio/embedded player inside an article) refuses
   // tools; the toast offers to open it as a video document, where the video
   // tools apply. The link goes to the document bar's ingest path — progress
@@ -2497,7 +2507,7 @@ export function ReaderInteractions({
       window.getSelection()?.removeAllRanges();
       router.refresh();
     } catch (err) {
-      showToast(err instanceof Error ? err.message : t("reader.addFailed"));
+      showError(err instanceof Error ? err.message : t("reader.addFailed"));
     } finally {
       setBusy(false);
     }
@@ -2690,7 +2700,7 @@ export function ReaderInteractions({
       router.refresh();
       setAnnotationCard((c) => (c && c.sourceId === card.sourceId ? { ...c, busy: false } : c));
     } catch (err) {
-      showToast(err instanceof Error ? err.message : t("reader.recolorFailed"));
+      showError(err instanceof Error ? err.message : t("reader.recolorFailed"));
       setAnnotationCard((c) =>
         c && c.sourceId === card.sourceId ? { ...c, color: card.color, busy: false } : c,
       );
@@ -2715,7 +2725,7 @@ export function ReaderInteractions({
       setAnnotationCard(null);
       showToast(t("common.saved"));
     } catch (err) {
-      showToast(err instanceof Error ? err.message : t("reader.saveFailed"));
+      showError(err instanceof Error ? err.message : t("reader.saveFailed"));
       setAnnotationCard((c) => (c ? { ...c, busy: false } : c));
     }
   }
@@ -2746,7 +2756,7 @@ export function ReaderInteractions({
       setCommentCard((c) => (c ? { ...c, saved: content, busy: false } : c));
       showToast(t("common.saved"));
     } catch (err) {
-      showToast(err instanceof Error ? err.message : t("reader.saveFailed"));
+      showError(err instanceof Error ? err.message : t("reader.saveFailed"));
       setCommentCard((c) => (c ? { ...c, busy: false } : c));
     }
   }
@@ -2776,7 +2786,7 @@ export function ReaderInteractions({
       router.refresh();
       showToast(t("common.saved"));
     } catch (err) {
-      showToast(err instanceof Error ? err.message : t("reader.saveFailed"));
+      showError(err instanceof Error ? err.message : t("reader.saveFailed"));
       setLinkCard((c) => (c ? { ...c, busy: false } : c));
     }
   }
@@ -2875,6 +2885,7 @@ export function ReaderInteractions({
       if (documentIdRef.current !== runDocumentId) return;
       const message = err instanceof Error ? err.message : t("reader.keypointsFailed");
       setKeypointsError(message);
+      reportError(message, runDocumentId);
       if (!keypointsOpenRef.current) showToast(message);
     } finally {
       if (keypointsAbortRef.current === controller) keypointsAbortRef.current = null;
@@ -2890,7 +2901,7 @@ export function ReaderInteractions({
       setLocalKeypoints("deleted");
       router.refresh();
     } catch (err) {
-      showToast(err instanceof Error ? err.message : t("reader.deleteFailed"));
+      showError(err instanceof Error ? err.message : t("reader.deleteFailed"));
     }
   }
 
@@ -2921,7 +2932,7 @@ export function ReaderInteractions({
       router.refresh();
       return true;
     } catch (err) {
-      showToast(err instanceof Error ? err.message : t("reader.addFailed"));
+      showError(err instanceof Error ? err.message : t("reader.addFailed"));
       return false;
     }
   }
@@ -3028,6 +3039,7 @@ export function ReaderInteractions({
       if (documentIdRef.current !== runDocumentId) return;
       const message = err instanceof Error ? err.message : t("reader.distillFailed");
       setDistillError(message);
+      reportError(message, runDocumentId);
       if (!distillOpenRef.current) showToast(message);
     } finally {
       if (distillAbortRef.current === controller) distillAbortRef.current = null;
@@ -3044,7 +3056,7 @@ export function ReaderInteractions({
       if (distillShownId === id) setDistillShownId(null);
       router.refresh();
     } catch (err) {
-      showToast(err instanceof Error ? err.message : t("reader.deleteFailed"));
+      showError(err instanceof Error ? err.message : t("reader.deleteFailed"));
     }
   }
 
@@ -3078,7 +3090,7 @@ export function ReaderInteractions({
       router.refresh();
       return true;
     } catch (err) {
-      showToast(err instanceof Error ? err.message : t("reader.addFailed"));
+      showError(err instanceof Error ? err.message : t("reader.addFailed"));
       return false;
     }
   }
@@ -3152,7 +3164,7 @@ export function ReaderInteractions({
     } catch (err) {
       // Stopped, not failed: nothing was extracted, nothing to say.
       if (controller.signal.aborted) return;
-      showToast(err instanceof Error ? err.message : t("reader.extractFailed"));
+      showError(err instanceof Error ? err.message : t("reader.extractFailed"));
     } finally {
       if (extractAbortRef.current === controller) extractAbortRef.current = null;
       setExtractBusy(false);
@@ -3169,7 +3181,7 @@ export function ReaderInteractions({
       router.refresh();
       showToast(t("reader.extractionRemoved"));
     } catch (err) {
-      showToast(err instanceof Error ? err.message : t("reader.deleteFailed"));
+      showError(err instanceof Error ? err.message : t("reader.deleteFailed"));
     }
   }
 
@@ -3274,7 +3286,7 @@ export function ReaderInteractions({
     } catch (err) {
       if (voiceRunRef.current !== run) return;
       setVoice("idle");
-      showToast(err instanceof Error ? err.message : t("reader.voiceFailed"));
+      showError(err instanceof Error ? err.message : t("reader.voiceFailed"));
     }
   }
 
@@ -3399,7 +3411,7 @@ export function ReaderInteractions({
         }
         return next;
       });
-      showToast(err instanceof Error ? err.message : t("reader.annotationFailed"));
+      showError(err instanceof Error ? err.message : t("reader.annotationFailed"));
     } finally {
       setBusy(false);
     }
@@ -3483,7 +3495,7 @@ export function ReaderInteractions({
       showToast(t("reader.linkCreated"));
       return true;
     } catch (err) {
-      showToast(err instanceof Error ? err.message : t("reader.linkFailed"));
+      showError(err instanceof Error ? err.message : t("reader.linkFailed"));
       return false;
     } finally {
       setBusy(false);
@@ -3584,7 +3596,7 @@ export function ReaderInteractions({
     } catch (err) {
       // Stopped, not failed: the command stays in the box to edit or resend.
       if (controller.signal.aborted) return;
-      showToast(err instanceof Error ? err.message : t("reader.assistantFailed"));
+      showError(err instanceof Error ? err.message : t("reader.assistantFailed"));
     } finally {
       if (chatAbortRef.current === controller) chatAbortRef.current = null;
       setAiBusy(false);
@@ -3910,7 +3922,7 @@ export function ReaderInteractions({
       }
       syncHistory();
     } catch (err) {
-      showToast(err instanceof Error ? err.message : t("reader.editFailed"));
+      showError(err instanceof Error ? err.message : t("reader.editFailed"));
     } finally {
       stepping.current = false;
     }
@@ -3974,7 +3986,7 @@ export function ReaderInteractions({
       }
       router.refresh();
     } catch (err) {
-      showToast(err instanceof Error ? err.message : t("reader.formatFailed"));
+      showError(err instanceof Error ? err.message : t("reader.formatFailed"));
     }
   }
 
@@ -4002,7 +4014,7 @@ export function ReaderInteractions({
       record({ undo: again, redo: again });
       router.refresh();
     } catch (err) {
-      showToast(err instanceof Error ? err.message : t("reader.styleFailed"));
+      showError(err instanceof Error ? err.message : t("reader.styleFailed"));
     }
   }
 
@@ -4011,7 +4023,7 @@ export function ReaderInteractions({
       await api(`/api/documents/${documentId}`, "PATCH", { font: next });
       router.refresh();
     } catch (err) {
-      showToast(err instanceof Error ? err.message : t("reader.fontFailed"));
+      showError(err instanceof Error ? err.message : t("reader.fontFailed"));
     }
   }
 
@@ -4037,7 +4049,7 @@ export function ReaderInteractions({
       router.refresh();
       return json.id;
     } catch (err) {
-      showToast(err instanceof Error ? err.message : t("reader.insertFailed"));
+      showError(err instanceof Error ? err.message : t("reader.insertFailed"));
       return null;
     }
   }
@@ -4111,7 +4123,7 @@ export function ReaderInteractions({
       }
       router.refresh();
     } catch (err) {
-      showToast(err instanceof Error ? err.message : t("reader.removeFailed"));
+      showError(err instanceof Error ? err.message : t("reader.removeFailed"));
     }
   }
 
@@ -4127,7 +4139,7 @@ export function ReaderInteractions({
       }
       router.refresh();
     } catch (err) {
-      showToast(err instanceof Error ? err.message : t("reader.editFailed"));
+      showError(err instanceof Error ? err.message : t("reader.editFailed"));
     }
   }
 
@@ -4653,7 +4665,13 @@ function blockFormatKind(
           {paneHeader}
           {!transcript && articleMenu}
           {!transcript && (
-            <div className="ml-auto flex shrink-0 items-center gap-2">{distillButton}</div>
+            <div className="relative ml-auto flex shrink-0 items-center gap-2">
+              {distillButton}
+              {/* The article's errors: under the buttons, over the text. */}
+              <div className="absolute top-full right-0 mt-2">
+                <ArticleErrors documentId={documentId} />
+              </div>
+            </div>
           )}
         </div>
       )}
@@ -4680,7 +4698,13 @@ function blockFormatKind(
     >
       {!split && !transcript && articleMenu}
 
-      <div className="sticky top-4 z-10 float-right mr-4 flex items-center gap-2 print:hidden">
+      {/* The controls float over the article at the top right of the pane
+          and stay there as it scrolls: a sticky block with no height, so the
+          text runs under them and never wraps around them. The article's
+          errors sit under the controls. */}
+      <div className="pointer-events-none sticky top-4 z-10 h-0 print:hidden">
+      <div className="absolute top-0 right-4 flex flex-col items-end gap-2">
+      <div className="pointer-events-auto flex items-center gap-2">
         {extractBusy && (
           <span className="rounded-full bg-card px-3 py-1.5 text-xs shadow-soft">
             <ThinkingIndicator label={t("reader.extracting")} onStop={stopExtract} />
@@ -4728,6 +4752,9 @@ function blockFormatKind(
           </button>
         )}
         {!split && !transcript && distillButton}
+      </div>
+      {!split && !transcript && <ArticleErrors documentId={documentId} />}
+      </div>
       </div>
 
       {/* Not in a split pane: the card would sit over the title. Not on a

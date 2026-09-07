@@ -155,11 +155,12 @@ export function DocumentBar({
   const [pillMenu, setPillMenu] = useState<string | null>(null);
   const [library, setLibrary] = useState<LibraryDocument[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  // Every error the bar shows also lands in the error log: the rail's error
-  // button lists them (workspace.tsx).
+  // Every error the bar shows also lands in the error log, on the open
+  // document: the reader lists them under Distill and Extract
+  // (article-errors.tsx).
   useEffect(() => {
-    if (error) reportError(error);
-  }, [error]);
+    if (error) reportError(error, activeId);
+  }, [error, activeId]);
   // Opening a document is a server round trip; the pill shows it is on its way.
   const [opening, startOpening] = useTransition();
 
@@ -342,7 +343,10 @@ export function DocumentBar({
   // old parse standing until the cooldown passes.
   async function reparseSilently(doc: AttachedDocument) {
     const failed = (detail: string | null) =>
-      reportError(detail ? `${t("panes.reparseFailed")}: ${detail}` : t("panes.reparseFailed"));
+      reportError(
+        detail ? `${t("panes.reparseFailed")}: ${detail}` : t("panes.reparseFailed"),
+        doc.id,
+      );
     try {
       const res = await fetch(`/api/documents/${doc.id}/reparse`, { method: "POST" });
       // 409: another tab or a reload is already running this re-parse.
@@ -365,7 +369,7 @@ export function DocumentBar({
         // stands alone, and when the page draws it with scripts, the fix is
         // a browser for the deployment (SPEC.md §15).
         const notice = saveDetail ? figureNotice(t, saveDetail) : null;
-        if (notice) reportError(notice);
+        if (notice) reportError(notice, doc.id);
       } else failed(result && "error" in result ? result.error : t("panes.uploadCutOff"));
     } catch (err) {
       failed(err instanceof Error ? err.message : null);
