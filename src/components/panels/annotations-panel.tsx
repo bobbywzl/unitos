@@ -50,6 +50,30 @@ function ColorDot({ color }: { color: string | null }) {
   return <span className={`size-2 shrink-0 rounded-full ${bg}`} />;
 }
 
+// The conversation continued from a tool's output (SPEC.md §21), under the
+// output: the reader's messages as chat bubbles, the assistant's as markdown
+// — the same shapes as the card beside the article. Nothing scrolls inside.
+function ToolConversation({ turns }: { turns: AnnotationItem["conversation"] }) {
+  const t = useT();
+  if (turns.length === 0) return null;
+  return (
+    <div className="mt-2.5 flex flex-col gap-2 border-t border-line pt-2.5">
+      <span className={label}>{t("panels.conversation")}</span>
+      {turns.map((message, i) =>
+        message.role === "user" ? (
+          <p key={i} className="ml-6 self-end rounded-2xl bg-clay-100 px-3 py-1.5 text-[12.5px] text-clay-800">
+            {message.content}
+          </p>
+        ) : (
+          <div key={i} className="text-[13px]">
+            <Markdown>{message.content}</Markdown>
+          </div>
+        ),
+      )}
+    </div>
+  );
+}
+
 // A group's label carries the symbol of the tool that made its cards — the
 // glyph on the toolbar button and on the mark in the text — so a reader finds
 // a comment or a link by the symbol they used. Highlights carry their color.
@@ -434,6 +458,7 @@ export function AnnotationsPanel({
               <div className="text-[13px]">
                 <Markdown>{a.content}</Markdown>
               </div>
+              <ToolConversation turns={a.conversation} />
               {a.orphaned && a.quotedText && (
                 <p className="mt-2 line-clamp-2 border-l-2 border-red-300 pl-2 text-xs text-sand-500">
                   {t("panels.wasAnchoredTo", { text: a.quotedText })}
@@ -453,6 +478,7 @@ export function AnnotationsPanel({
               <div className="text-[13px]">
                 <Markdown>{a.content}</Markdown>
               </div>
+              <ToolConversation turns={a.conversation} />
               {a.orphaned && a.quotedText && (
                 <p className="mt-2 line-clamp-2 border-l-2 border-red-300 pl-2 text-xs text-sand-500">
                   {t("panels.wasAnchoredTo", { text: a.quotedText })}
@@ -472,6 +498,7 @@ export function AnnotationsPanel({
               <div className="text-[13px]">
                 <Markdown>{a.content}</Markdown>
               </div>
+              <ToolConversation turns={a.conversation} />
               {a.orphaned && a.quotedText && (
                 <p className="mt-2 line-clamp-2 border-l-2 border-red-300 pl-2 text-xs text-sand-500">
                   {t("panels.wasAnchoredTo", { text: a.quotedText })}
@@ -516,6 +543,7 @@ export function AnnotationsPanel({
               <div className="text-[13px]">
                 <Markdown>{stripSimplifyMarkers(a.content)}</Markdown>
               </div>
+              <ToolConversation turns={a.conversation} />
               {a.quotedText && (
                 <p className="mt-2 line-clamp-2 border-l-2 border-sage-300 pl-2 text-xs text-sand-500">
                   {a.quotedText}

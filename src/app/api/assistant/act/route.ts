@@ -3,6 +3,16 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { passageSources, resolvePassage, segmentsSchema } from "@/lib/anchors/passage";
 import { bumpNotebook, notebookAccess } from "@/lib/collab";
+import {
+  type ChatTurn,
+  parseStoredConversation,
+  renderTranscript,
+  TOOL_NAME,
+  TOOL_OUTPUT_NAME,
+  type ToolKind,
+  toolKindOf,
+} from "@/lib/conversation";
+import { stripSimplifyMarkers } from "@/lib/sentences";
 import { db } from "@/lib/db";
 import { DERIVATION_EFFORT, DERIVATION_MODEL, MAX_OUTPUT_TOKENS } from "@/lib/derive/config";
 import {
@@ -76,6 +86,11 @@ const requestSchema = z.object({
     .optional(),
   // The persisted conversation note; later turns update it in place.
   conversationNoteId: z.string().optional(),
+  // A tool conversation (SPEC.md §21): the reader continues from an AI tool's
+  // output — Explain+, Simplify+, Analyze+, Visualize+. The note is the
+  // tool's annotation; the selection is its sources; the turns persist on
+  // Note.conversation, never as a conversation note of their own.
+  toolNoteId: z.string().optional(),
 });
 
 const quote = z.string().min(1).max(2000);
@@ -223,6 +238,43 @@ async function handle(req: Request, t: TFunc) {
     }),
   ]);
 
+  // A tool conversation continues from the tool's stored annotation: its
+  // sources are the selection, its content the output the turns build on.
+  let toolNote: {
+    id: string;
+    kind: ToolKind;
+    content: string;
+    turns: ChatTurn[];
+    sources: { blockId: string; startOffset: number; endOffset: number; quotedText: string; prefix: string; suffix: string }[];
+  } | null = null;
+  if (data.toolNoteId) {
+    const note = await db.note.findUnique({
+      where: { id: data.toolNoteId },
+      select: {
+        id: true,
+        content: true,
+        derivationType: true,
+        conversation: true,
+        section: { select: { notebookId: true } },
+        sources: {
+          where: { documentId: data.documentId },
+          select: { blockId: true, startOffset: true, endOffset: true, quotedText: true, prefix: true, suffix: true },
+        },
+      },
+    });
+    const kind = note ? toolKindOf(note.derivationType) : null;
+    if (!note || !kind || note.section.notebookId !== data.notebookId || note.sources.length === 0) {
+      return NextResponse.json({ error: t("api.noteNotFound") }, { status: 404 });
+    }
+    toolNote = {
+      id: note.id,
+      kind,
+      content: note.content,
+      turns: parseStoredConversation(note.conversation),
+      sources: note.sources,
+    };
+  }
+
   // A selection on a FIGURE block carries the figure itself: image bytes when
   // they can be produced (fetched, decoded, or the PDF page rendered), SVG
   // source for charts — same treatment as EXPLAIN (SPEC.md §4: one pipeline).
@@ -232,10 +284,12 @@ async function handle(req: Request, t: TFunc) {
   // then the quote inside the block, then the quote across the document. A
   // re-parse gives every block a new id while an open reader still sends the
   // old ones; the quote carries the selection across.
-  const passage = data.anchor ? resolvePassage(document.blocks, data.anchor, data.segments) : [];
+  const anchorInput = toolNote ? toolNote.sources[0] : data.anchor;
+  const segmentsInput = toolNote ? toolNote.sources : data.segments;
+  const passage = anchorInput ? resolvePassage(document.blocks, anchorInput, segmentsInput) : [];
   const anchor = passage[0] ?? null;
   const anchored = anchor ? passageContext(document.blocks, passage) : null;
-  if (data.anchor && (!anchor || !anchored)) {
+  if (anchorInput && (!anchor || !anchored)) {
     return NextResponse.json({ error: t("api.anchorNotResolvedInDocument") }, { status: 400 });
   }
   if (anchor && anchored) {
@@ -305,12 +359,27 @@ async function handle(req: Request, t: TFunc) {
     .map((nd) => nd.document)
     .filter((d) => d.id !== data.documentId);
 
+  // The tool's output, for a tool conversation: the turns go deeper on it.
+  const toolBlock = toolNote
+    ? [
+        `The reader ran ${TOOL_NAME[toolNote.kind]} on this selection. The ${TOOL_OUTPUT_NAME[toolNote.kind]} it got:`,
+        toolNote.kind === "simplify" ? stripSimplifyMarkers(toolNote.content) : toolNote.content,
+        "",
+        `The reader's messages continue from this ${TOOL_OUTPUT_NAME[toolNote.kind]}: they want to expand it, go deeper, and understand the selection better. Answer from the ${TOOL_OUTPUT_NAME[toolNote.kind]}, the selection, and the document. Keep the ${TOOL_OUTPUT_NAME[toolNote.kind]}'s terms. Never repeat what it already says; add to it.`,
+      ].join("\n")
+    : "";
+  // A tool conversation continues its stored turns; an assistant conversation
+  // the turns the client sends. The prompt reads the last 20.
+  const priorTurns: ChatTurn[] = toolNote ? toolNote.turns : (data.history ?? []);
+  const history = priorTurns.slice(-20);
+
   const userPrompt = [
     "Convert the reader's command into a plan of actions on this document and notebook. The reader approves the plan before anything runs.",
     "",
     profileLines(profile),
     "",
     selectionBlock || "The reader has no text selected. The command applies to the document.",
+    ...(toolBlock ? ["", toolBlock] : []),
     "",
     `Sections in the corpus (id — title):\n${sections.length > 0 ? sections.map((s) => `${s.id} — ${s.parentTitle ? `${s.parentTitle} / ` : ""}${s.title}`).join("\n") : "none yet"}`,
     "",
@@ -347,10 +416,10 @@ async function handle(req: Request, t: TFunc) {
     `7. Write reply and every description in ${languageName(await currentLang())}.`,
     "8. reply: short sentences, plain words, one point per sentence, under 150 words. No preamble, no filler, no closing summary.",
     "",
-    ...(data.history && data.history.length > 0
+    ...(history.length > 0
       ? [
           "Conversation so far. The command continues it:",
-          ...data.history.map((m) => `${m.role === "user" ? "Reader" : "Assistant"}: ${m.content}`),
+          ...history.map((m) => `${m.role === "user" ? "Reader" : "Assistant"}: ${m.content}`),
           "",
         ]
       : []),
@@ -483,19 +552,28 @@ async function handle(req: Request, t: TFunc) {
   // hidden Annotations section, anchored to the selection, updated per turn.
   // Clicking the mark reopens the conversation; the Annotations tab deletes it.
   let conversationNoteId: string | null = data.conversationNoteId ?? null;
-  if (anchor) {
-    const replyText =
-      result.data.reply ??
-      (actions.length > 0
-        ? `Applied ${actions.length} action${actions.length === 1 ? "" : "s"}.`
-        : "No actions proposed.");
-    const transcript = [
-      ...(data.history ?? []),
-      { role: "user" as const, content: data.command },
-      { role: "assistant" as const, content: replyText },
-    ]
-      .map((m) => `**${m.role === "user" ? "Reader" : "Assistant"}:** ${m.content}`)
-      .join("\n\n");
+  const replyText =
+    result.data.reply ??
+    (actions.length > 0
+      ? `Applied ${actions.length} action${actions.length === 1 ? "" : "s"}.`
+      : "No actions proposed.");
+  const turns: ChatTurn[] = [
+    ...priorTurns,
+    { role: "user", content: data.command },
+    { role: "assistant", content: replyText },
+  ];
+  if (toolNote) {
+    // A tool conversation (SPEC.md §21) persists on the tool's own annotation:
+    // the turns after the output, the mark gaining its plus. The log is stale
+    // by its turn count; the next hover writes it again.
+    await db.note.update({
+      where: { id: toolNote.id },
+      data: { conversation: turns.slice(-60) },
+    });
+    await bumpNotebook(data.notebookId);
+    conversationNoteId = toolNote.id;
+  } else if (anchor) {
+    const transcript = renderTranscript(turns);
     if (conversationNoteId) {
       try {
         await db.note.update({ where: { id: conversationNoteId }, data: { content: transcript } });

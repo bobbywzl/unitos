@@ -17,6 +17,8 @@ const en = {
   otherEndUnresolved: "Other end unresolved",
   wasAnchoredTo: "was anchored to: {text}",
   notAttached: "not attached",
+  // The conversation continued from the output (SPEC.md §21)
+  conversation: "Conversation",
   // Distill tab. Key names are code identifiers: keypoints* = the reader's
   // Distill (KEYPOINTS), distill* = the reader's Extract (DISTILL).
   keypointsArticle: "Distill the article",
@@ -105,6 +107,8 @@ const zh: Record<keyof typeof en, string> = {
   links: "链接",
   jumpToAnchor: "跳转到阅读器中的锚点",
   anchorUnresolved: "锚点无法定位",
+  // The conversation continued from the output (SPEC.md §21)
+  conversation: "对话",
   otherEndUnresolved: "另一端无法定位",
   wasAnchoredTo: "原锚定于：{text}",
   notAttached: "不在此项目",

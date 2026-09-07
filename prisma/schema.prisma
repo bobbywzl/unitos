@@ -197,6 +197,15 @@ model Note {
   status         NoteStatus      @default(ACCEPTED) // manual notes are ACCEPTED on create
   derivationType DerivationType? // null = manually written
   color          String? // manual highlight hue: "clay" | "sage" | "gold"
+  // The conversation continued from an AI tool's output — Explain+, Simplify+,
+  // Analyze+, Visualize+ (SPEC.md §21): [{role: "user" | "assistant", content}],
+  // oldest first. Null = the tool's output alone. An assistant conversation
+  // (SYNTHESIS) keeps its transcript in content instead.
+  conversation   Json?
+  // The condensed log of the conversation (SPEC.md §21): {turns, lines:
+  // [{role, text}]}, one line per message, written by AI when the reader
+  // hovers the mark; stale when turns no longer matches the conversation.
+  log            Json?
   pinned         Boolean         @default(false) // pinning also moves the note to the top of its section
   order          Int
   // Account that wrote the note (or ran the derivation that produced it).
