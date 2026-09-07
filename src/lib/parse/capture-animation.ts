@@ -154,8 +154,14 @@ async function pixelsOf(png: Buffer): Promise<{ width: number; height: number; r
 }
 
 /** One period of the chart, frame by frame from where its clock stands.
-    Null when the chart has no box on screen or changes size mid-loop. */
-async function recordLoop(page: Page, chart: Locator, period: number): Promise<{ width: number; height: number; frames: GifFrame[] } | null> {
+    Null when the chart has no box on screen, changes size mid-loop, or the
+    deadline passes before the loop is whole. */
+async function recordLoop(
+  page: Page,
+  chart: Locator,
+  period: number,
+  deadline: number,
+): Promise<{ width: number; height: number; frames: GifFrame[] } | null> {
   const box = await chart.boundingBox();
   if (!box || box.width < MIN_WIDTH || box.height < MIN_HEIGHT) return null;
   const clip = { x: Math.round(box.x), y: Math.round(box.y), width: Math.round(box.width), height: Math.round(box.height) };
@@ -163,6 +169,7 @@ async function recordLoop(page: Page, chart: Locator, period: number): Promise<{
   let width = 0;
   let height = 0;
   for (let i = 0; i < period; i++) {
+    if (Date.now() > deadline) return null;
     const png = await page.screenshot({ type: "png", clip });
     const pixels = await pixelsOf(png);
     if (i === 0) {
@@ -254,7 +261,7 @@ export async function captureAnimatedCharts(
           }
         }
         if (period !== null && opts.store && result.looped < MAX_CHARTS) {
-          const loop = await recordLoop(page, chart, period);
+          const loop = await recordLoop(page, chart, period, opts.deadline);
           const gif = loop ? encodeWithinCap(loop.width, loop.height, loop.frames) : null;
           const src = gif ? await opts.store(gif) : null;
           if (loop && src) {

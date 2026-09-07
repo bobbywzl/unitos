@@ -21,7 +21,7 @@ import type { OnIngestProgress } from "@/lib/parse/ingest";
 // GIF, stored as an ImageAsset, and takes the svg's place as an <img> of the
 // reader's own /api/images/<id> path.
 
-const RENDER_TIMEOUT_MS = 150_000;
+const RENDER_TIMEOUT_MS = 180_000;
 const NAVIGATION_TIMEOUT_MS = 30_000;
 const IDLE_TIMEOUT_MS = 10_000;
 const STEP_TIMEOUT_MS = 15_000;
@@ -72,7 +72,9 @@ export async function renderIfNeeded(
     const store: CaptureStore | null = options.store ? imageStore(options.store.userId) : null;
     const html = await withTimeout(renderInBrowser(url, store), RENDER_TIMEOUT_MS, "the browser ran out of time");
     return html.trim() ? { kind: "html", html } : page;
-  } catch {
+  } catch (err) {
+    // The static page stands; the log says why the figures did not render.
+    console.warn(`[render] browser render failed for ${url}:`, err);
     return page;
   }
 }
@@ -109,8 +111,16 @@ async function renderInBrowser(url: string, store: CaptureStore | null): Promise
       const page = await context.newPage();
       page.setDefaultTimeout(STEP_TIMEOUT_MS);
       // The page's clock, so an animated chart can be stepped after the
-      // scroll; it runs with real time until then.
-      await page.clock.install();
+      // scroll; it runs with real time until then. A browser that refuses
+      // the clock renders without it: the charts then stand as the scroll
+      // left them.
+      const clock = await page.clock.install().then(
+        () => true,
+        (err: unknown) => {
+          console.warn("[render] the page clock is unavailable:", err);
+          return false;
+        },
+      );
       await page.goto(url, { waitUntil: "domcontentloaded", timeout: NAVIGATION_TIMEOUT_MS });
       await page.waitForLoadState("networkidle", { timeout: IDLE_TIMEOUT_MS }).catch(() => {});
       for (let i = 0; i < SCROLL_STEPS; i++) {
@@ -124,12 +134,24 @@ async function renderInBrowser(url: string, store: CaptureStore | null): Promise
       }
       await page.evaluate(() => window.scrollTo(0, 0));
       await page.waitForTimeout(SETTLE_MS);
-      const charts = await captureAnimatedCharts(page, { store, deadline: Date.now() + CAPTURE_BUDGET_MS });
-      if (charts.looped > 0 || charts.settled > 0 || charts.undecided > 0) {
+      // The page as the scroll left it is the render; the capture improves
+      // on it. A capture that fails or runs out of time never costs the
+      // render — the figures stay as they are.
+      const serialize = async () => `<!DOCTYPE html>\n${await page.evaluate(() => document.documentElement.outerHTML)}`;
+      let html = await serialize();
+      if (!clock) return html;
+      try {
+        const capture = captureAnimatedCharts(page, { store, deadline: Date.now() + CAPTURE_BUDGET_MS });
+        // Past the time limit the capture keeps failing against a closing
+        // page; nobody is waiting for it then.
+        capture.catch(() => {});
+        const charts = await withTimeout(capture, CAPTURE_BUDGET_MS + 10_000, "the chart capture ran out of time");
         console.info(`[render] charts: ${charts.still} still, ${charts.settled} settled, ${charts.looped} looped, ${charts.undecided} undecided`);
+        html = await serialize();
+      } catch (err) {
+        console.warn("[render] chart capture failed; the scrolled page stands:", err);
       }
-      const html = await page.evaluate(() => document.documentElement.outerHTML);
-      return `<!DOCTYPE html>\n${html}`;
+      return html;
     } finally {
       await context.close().catch(() => {});
     }

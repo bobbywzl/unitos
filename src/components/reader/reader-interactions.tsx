@@ -73,7 +73,27 @@ import { ProjectSearch } from "@/components/reader/project-search";
 import { PANE_HEADER } from "@/components/reader/reader-panes";
 import { Reader, type TranscriptVariant } from "@/components/reader/reader";
 
-type Anchor = Omit<SourceInput, "documentId">;
+// One block's span of a selection (SPEC.md §5).
+type Segment = Omit<SourceInput, "documentId">;
+// A selection: the first block's span, plus every block's span when the
+// selection crossed blocks (lib/anchors/passage.ts) — the first segment is
+// the anchor itself. Every tool works on the whole passage; the routes take
+// `segments` beside `anchor` and give the note one source per block.
+type Anchor = Segment & { segments?: Segment[] };
+
+/** The passage's segments: one per block, the anchor alone when the
+    selection stayed in one block. */
+function segmentsOf(anchor: Anchor): Segment[] {
+  return anchor.segments && anchor.segments.length > 0 ? anchor.segments : [anchor];
+}
+
+/** The passage's text: the segments' quotes, one paragraph each. */
+function passageText(anchor: Anchor): string {
+  return segmentsOf(anchor)
+    .map((s) => s.quotedText)
+    .join("\n\n");
+}
+
 type Popover = {
   anchor: Anchor;
   x: number;
@@ -83,7 +103,7 @@ type Popover = {
   // Container coords of the end of the selection: the Close link chip sits there.
   endLeft: number;
   endTop: number;
-  truncated: boolean; // selection crossed into another paragraph; anchor covers the first
+  truncated: boolean; // the selection crossed an equation or a page, which the passage leaves out
   figure?: boolean; // opened by the hold-and-circle gesture on a figure, equation, or table: the anchor is the whole block
   term?: boolean; // opened by clicking a key term; Extract leads, recommended
   // Placement, by proximity to open tool blocks: right of the text first, then
@@ -794,19 +814,22 @@ export function ReaderInteractions({
   function markFreshSpan(blockId: string, start: number, end: number) {
     freshSpansRef.current.add(`${blockId}:${start}:${end}`);
   }
+  /** Every segment of the passage sweeps in. */
+  function markFreshAnchor(anchor: Anchor) {
+    for (const s of segmentsOf(anchor)) markFreshSpan(s.blockId, s.startOffset, s.endOffset);
+  }
   // A span an AI tool persisted keeps its mark after its card closes, until
   // the server's copy arrives — the same optimistic paint a color dot gets.
+  // Every segment of the passage paints.
   function addLocalAnchor(anchor: Anchor) {
     setLocalAnchors((prev) => {
-      const list = prev[anchor.blockId] ?? [];
-      if (list.some((h) => h.start === anchor.startOffset && h.end === anchor.endOffset)) return prev;
-      return {
-        ...prev,
-        [anchor.blockId]: [
-          ...list,
-          { start: anchor.startOffset, end: anchor.endOffset, color: null },
-        ],
-      };
+      let next = prev;
+      for (const s of segmentsOf(anchor)) {
+        const list = next[s.blockId] ?? [];
+        if (list.some((h) => h.start === s.startOffset && h.end === s.endOffset)) continue;
+        next = { ...next, [s.blockId]: [...list, { start: s.startOffset, end: s.endOffset, color: null }] };
+      }
+      return next;
     });
   }
   // Marks of notes deleted in this session, gone before the refresh lands:
@@ -1282,33 +1305,50 @@ export function ReaderInteractions({
       return el?.closest("[data-block-id], [data-edit-block]") ?? null;
     };
     const startBlock = blockOf(range.startContainer);
+    const endBlock = blockOf(range.endContainer);
     if (!startBlock) return null;
-    const blockId = startBlock.dataset.blockId ?? startBlock.dataset.editBlock;
-    if (!blockId) return null;
-    // A rendered equation's DOM text is not the stored TeX; offsets there would
-    // anchor to the wrong characters. No selection tools on math blocks.
-    if (startBlock.hasAttribute("data-math-block")) return null;
-    // A page's DOM text is its label and the Circle & ask card, not stored
-    // text. Page anchors are drawn regions (SPEC.md §16), never selections.
-    if (blocksRef.current.find((b) => b.id === blockId)?.type === "PAGE") return null;
 
-    // Offsets over the block's anchorable text, never Range.toString(): inline
-    // controls ([data-anchor-skip], e.g. extract chips) render text the stored
-    // block text does not have, and counting it would shift every offset after
-    // it. The quote is sliced from the same walked text, so the anchor is
-    // exactly the selected text.
-    const blockText = anchorableText(startBlock);
-    const startOffset = anchorableOffset(startBlock, range.startContainer, range.startOffset);
-    const truncated = !startBlock.contains(range.endContainer);
-    const endOffset = truncated
-      ? blockText.length
-      : anchorableOffset(startBlock, range.endContainer, range.endOffset);
-    if (endOffset <= startOffset) return null;
-    const quotedText = blockText.slice(startOffset, endOffset);
-    if (!quotedText.trim()) return null;
-
-    const prefix = blockText.slice(Math.max(0, startOffset - 32), startOffset);
-    const suffix = blockText.slice(endOffset, endOffset + 32);
+    // The passage: every block the selection touches, in reading order, one
+    // segment per block (lib/anchors/passage.ts). A rendered equation's DOM
+    // text is not the stored TeX, and a page's DOM text is its label and the
+    // Circle & ask card, not stored text: neither takes a span, and a
+    // selection that crosses one leaves it out (truncated says so).
+    const blockEls = Array.from(
+      container.querySelectorAll<HTMLElement>("[data-block-id], [data-edit-block]"),
+    ).filter((el) => el === startBlock || el === endBlock || range.intersectsNode(el));
+    const segments: Segment[] = [];
+    let truncated = false;
+    for (const el of blockEls) {
+      const id = el.dataset.blockId ?? el.dataset.editBlock;
+      if (!id) continue;
+      const type = blocksRef.current.find((b) => b.id === id)?.type;
+      if (el.hasAttribute("data-math-block") || type === "PAGE" || type === "EQUATION") {
+        truncated = true;
+        continue;
+      }
+      // Offsets over the block's anchorable text, never Range.toString():
+      // inline controls ([data-anchor-skip], e.g. extract chips) render text
+      // the stored block text does not have, and counting it would shift
+      // every offset after it. The quote is sliced from the same walked text,
+      // so the anchor is exactly the selected text.
+      const text = anchorableText(el);
+      const start = el === startBlock ? anchorableOffset(el, range.startContainer, range.startOffset) : 0;
+      const end = el === endBlock ? anchorableOffset(el, range.endContainer, range.endOffset) : text.length;
+      if (end <= start) continue;
+      const quote = text.slice(start, end);
+      if (!quote.trim()) continue;
+      segments.push({
+        blockId: id,
+        startOffset: start,
+        endOffset: end,
+        quotedText: quote,
+        prefix: text.slice(Math.max(0, start - 32), start),
+        suffix: text.slice(end, end + 32),
+      });
+    }
+    if (segments.length === 0) return null;
+    const first = segments[0];
+    const { blockId, startOffset, endOffset, quotedText, prefix, suffix } = first;
 
     const rect = range.getBoundingClientRect();
     const containerRect = container.getBoundingClientRect();
@@ -1339,7 +1379,15 @@ export function ReaderInteractions({
           ? ("left" as const)
           : ("below" as const);
     return {
-      anchor: { blockId, startOffset, endOffset, quotedText, prefix, suffix },
+      anchor: {
+        blockId,
+        startOffset,
+        endOffset,
+        quotedText,
+        prefix,
+        suffix,
+        ...(segments.length > 1 ? { segments } : {}),
+      },
       x: Math.max(margin, Math.min(rawX, containerRect.width - margin)),
       y: rect.bottom - containerRect.top + container.scrollTop + (side === "below" ? 14 : 6),
       yTop,
@@ -2397,17 +2445,19 @@ export function ReaderInteractions({
     try {
       await flushLiveBlock(popover.anchor.blockId);
       // The highlighted text lands as a quote: blockquote lines render as the
-      // boxed quotation on the note card. Edits and replies go underneath.
-      const quote = popover.anchor.quotedText
+      // boxed quotation on the note card. Edits and replies go underneath. A
+      // passage over several blocks quotes every block, a blank line between.
+      const quote = passageText(popover.anchor)
         .split("\n")
-        .map((line) => `> ${line}`)
+        .map((line) => (line ? `> ${line}` : ">"))
         .join("\n");
       await api("/api/notes", "POST", {
         sectionId,
         content: quote,
-        source: { documentId, ...popover.anchor },
+        source: { documentId, ...anchorBody(popover.anchor) },
+        ...segmentsBody(popover.anchor),
       });
-      markFreshSpan(popover.anchor.blockId, popover.anchor.startOffset, popover.anchor.endOffset);
+      markFreshAnchor(popover.anchor);
       setPopover(null);
       window.getSelection()?.removeAllRanges();
       router.refresh();
@@ -2432,8 +2482,15 @@ export function ReaderInteractions({
     };
   }
 
+  // A passage over several blocks travels as `segments` beside the anchor
+  // (lib/anchors/passage.ts); one block sends nothing more.
+  function segmentsBody(anchor: Anchor): { segments?: ReturnType<typeof anchorBody>[] } {
+    const segments = segmentsOf(anchor);
+    return segments.length > 1 ? { segments: segments.map(anchorBody) } : {};
+  }
+
   function deriveBody(type: string, anchor: Anchor) {
-    return JSON.stringify({ type, documentId, notebookId, anchor: anchorBody(anchor) });
+    return JSON.stringify({ type, documentId, notebookId, anchor: anchorBody(anchor), ...segmentsBody(anchor) });
   }
 
   // EXPLAIN and ANALYZE stream into the same card beside the article (SPEC.md
@@ -2451,7 +2508,7 @@ export function ReaderInteractions({
     await flushLiveBlock(anchor.blockId);
     setPopover(null);
     window.getSelection()?.removeAllRanges();
-    markFreshSpan(anchor.blockId, anchor.startOffset, anchor.endOffset);
+    markFreshAnchor(anchor);
     const slot = claimSideSlot("explain", yTop);
     setBubble({ ...slot, kind, text: "", streaming: true, error: null, anchor, noteId: null });
     explainAbortRef.current?.abort();
@@ -2518,7 +2575,7 @@ export function ReaderInteractions({
     await flushLiveBlock(anchor.blockId);
     setPopover(null);
     window.getSelection()?.removeAllRanges();
-    markFreshSpan(anchor.blockId, anchor.startOffset, anchor.endOffset);
+    markFreshAnchor(anchor);
     const slot = claimSideSlot("simplify", yTop);
     setSimplifyCard({
       anchor,
@@ -2998,7 +3055,7 @@ export function ReaderInteractions({
       return;
     }
     if (!popover) return;
-    const text = popover.anchor.quotedText.slice(0, 4000);
+    const text = passageText(popover.anchor).slice(0, 4000);
     if (!text.trim()) return;
     const run = ++voiceRunRef.current;
     setVoice("loading");
@@ -3110,28 +3167,35 @@ export function ReaderInteractions({
     if (input.comment !== undefined && !input.comment.trim()) return;
     const { anchor } = popover;
     await flushLiveBlock(anchor.blockId);
-    markFreshSpan(anchor.blockId, anchor.startOffset, anchor.endOffset);
-    const optimistic = { start: anchor.startOffset, end: anchor.endOffset, color: input.color ?? null };
-    setLocalAnchors((prev) => ({
-      ...prev,
-      [anchor.blockId]: [...(prev[anchor.blockId] ?? []), optimistic],
+    markFreshAnchor(anchor);
+    // Every segment of the passage paints at once.
+    const optimistic = segmentsOf(anchor).map((s) => ({
+      blockId: s.blockId,
+      mark: { start: s.startOffset, end: s.endOffset, color: input.color ?? null },
     }));
+    setLocalAnchors((prev) => {
+      let next = prev;
+      for (const { blockId, mark } of optimistic) next = { ...next, [blockId]: [...(next[blockId] ?? []), mark] };
+      return next;
+    });
     setPopover(null);
     setSubmenu(null);
     setCommentDraft("");
     window.getSelection()?.removeAllRanges();
     setBusy(true);
+    const body = {
+      notebookId,
+      documentId,
+      anchor: anchorBody(anchor),
+      ...segmentsBody(anchor),
+      color: input.color,
+      comment: input.comment,
+    };
     try {
       const res = await fetch("/api/annotations", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          notebookId,
-          documentId,
-          anchor,
-          color: input.color,
-          comment: input.comment,
-        }),
+        body: JSON.stringify(body),
       });
       if (!res.ok) {
         const detail = (await res.json().catch(() => null)) as { error?: string } | null;
@@ -3142,21 +3206,18 @@ export function ReaderInteractions({
       // Offline (SPEC.md §17, Unitos Premium): a highlight or comment is a
       // non-AI annotation — queue it, keep the optimistic paint, sync later.
       if (isOffline() && offlinePremium()) {
-        await queueWrite("/api/annotations", "POST", {
-          notebookId,
-          documentId,
-          anchor,
-          color: input.color,
-          comment: input.comment,
-        });
+        await queueWrite("/api/annotations", "POST", body);
         showToast(t("reader.annotationQueuedOffline"));
         setBusy(false);
         return;
       }
-      setLocalAnchors((prev) => ({
-        ...prev,
-        [anchor.blockId]: (prev[anchor.blockId] ?? []).filter((h) => h !== optimistic),
-      }));
+      setLocalAnchors((prev) => {
+        let next = prev;
+        for (const { blockId, mark } of optimistic) {
+          next = { ...next, [blockId]: (next[blockId] ?? []).filter((h) => h !== mark) };
+        }
+        return next;
+      });
       showToast(err instanceof Error ? err.message : t("reader.annotationFailed"));
     } finally {
       setBusy(false);
@@ -3325,7 +3386,7 @@ export function ReaderInteractions({
       setAiCommand("");
       window.getSelection()?.removeAllRanges();
       // The conversation continues in a chat card docked beside the article.
-      markFreshSpan(anchor.blockId, anchor.startOffset, anchor.endOffset);
+      markFreshAnchor(anchor);
       if (turn.noteId) addLocalAnchor(anchor);
       const slot = claimSideSlot("assistant", yTop);
       setAssistantChat({
@@ -3367,6 +3428,7 @@ export function ReaderInteractions({
         documentId,
         command,
         anchor: anchor ? anchorBody(anchor) : undefined,
+        ...(anchor ? segmentsBody(anchor) : {}),
         history: history.slice(-12),
         conversationNoteId: conversationNoteId ?? undefined,
       }),
@@ -4048,32 +4110,40 @@ function blockFormatKind(
     ];
   }
   if (simplifyCard) {
-    const { blockId, startOffset, endOffset, quotedText } = simplifyCard.anchor;
-    const existing = highlightsByBlock[blockId] ?? [];
     // With a pressed sentence, only its source sentences tint — the mirroring.
-    // Otherwise the whole selection keeps the light tint.
+    // Otherwise the whole selection keeps the light tint. The sentences
+    // number on through the passage, block after block, as the prompt
+    // numbers them (lib/sentences.ts: a block boundary is a sentence
+    // boundary), so a pressed sentence finds its sources in whichever block
+    // holds them.
     const pressed =
       simplifyCard.active !== null && simplifyCard.sentences
         ? simplifyCard.sentences[simplifyCard.active]
         : null;
-    const sourceSpans = pressed ? splitSentences(quotedText) : [];
-    const ranges = pressed
-      ? pressed.refs
-          .map((n) => sourceSpans[n - 1])
-          .filter((span): span is SentenceSpan => Boolean(span))
-          .map((span) => ({
-            sourceId: null,
-            start: startOffset + span.start,
-            end: startOffset + span.end,
-            kind: "simplify" as const,
-          }))
-      : [];
-    highlightsByBlock[blockId] = [
-      ...existing,
-      ...(ranges.length > 0
-        ? ranges
-        : [{ sourceId: null, start: startOffset, end: endOffset, kind: "simplify" as const }]),
-    ];
+    let number = 0;
+    for (const s of segmentsOf(simplifyCard.anchor)) {
+      const existing = highlightsByBlock[s.blockId] ?? [];
+      const sourceSpans: (SentenceSpan & { n: number })[] = splitSentences(s.quotedText).map((span) => ({
+        ...span,
+        n: ++number,
+      }));
+      const ranges = pressed
+        ? sourceSpans
+            .filter((span) => pressed.refs.includes(span.n))
+            .map((span) => ({
+              sourceId: null,
+              start: s.startOffset + span.start,
+              end: s.startOffset + span.end,
+              kind: "simplify" as const,
+            }))
+        : [];
+      highlightsByBlock[s.blockId] = [
+        ...existing,
+        ...(pressed
+          ? ranges
+          : [{ sourceId: null, start: s.startOffset, end: s.endOffset, kind: "simplify" as const }]),
+      ];
+    }
   }
   // Extraction layers: the origin phrase and its revealing passages, each
   // carrying the extraction's label chip. Unresolvable spans stay unpainted.
@@ -4122,33 +4192,34 @@ function blockFormatKind(
   // Spans the server already marks are skipped, so the text never double-marks.
   for (const anchor of [bubble?.anchor, assistantChat?.anchor, commentCard?.anchor]) {
     if (!anchor) continue;
-    const existing = highlightsByBlock[anchor.blockId] ?? [];
-    const marked = existing.some(
-      (h) => h.kind === "anchor" && h.start === anchor.startOffset && h.end === anchor.endOffset,
-    );
-    if (marked) continue;
-    highlightsByBlock[anchor.blockId] = [
-      ...existing,
-      { sourceId: null, start: anchor.startOffset, end: anchor.endOffset, kind: "anchor" as const },
-    ];
+    for (const s of segmentsOf(anchor)) {
+      const existing = highlightsByBlock[s.blockId] ?? [];
+      const marked = existing.some(
+        (h) => h.kind === "anchor" && h.start === s.startOffset && h.end === s.endOffset,
+      );
+      if (marked) continue;
+      highlightsByBlock[s.blockId] = [
+        ...existing,
+        { sourceId: null, start: s.startOffset, end: s.endOffset, kind: "anchor" as const },
+      ];
+    }
   }
   // The text under the open toolbar keeps the selection tint (block-view.tsx
   // kind "selection"): the browser's own selection goes the moment the
   // assistant's command box or the comment box takes focus, and while the
-  // assistant runs; the mark stays until the toolbar closes. The Close link
-  // chip's highlight keeps it the same way.
+  // assistant runs; the mark stays until the toolbar closes. Every block of
+  // the passage keeps it, so the tint is the selection, whole, from the
+  // moment the pointer lifts. The Close link chip's highlight keeps it the
+  // same way.
   const underToolbar = popover?.anchor ?? closeLink?.anchor ?? null;
   if (underToolbar) {
-    const existing = highlightsByBlock[underToolbar.blockId] ?? [];
-    highlightsByBlock[underToolbar.blockId] = [
-      ...existing,
-      {
-        sourceId: null,
-        start: underToolbar.startOffset,
-        end: underToolbar.endOffset,
-        kind: "selection" as const,
-      },
-    ];
+    for (const s of segmentsOf(underToolbar)) {
+      const existing = highlightsByBlock[s.blockId] ?? [];
+      highlightsByBlock[s.blockId] = [
+        ...existing,
+        { sourceId: null, start: s.startOffset, end: s.endOffset, kind: "selection" as const },
+      ];
+    }
   }
   // The first end of a pending link stays tinted, in the pane that owns it,
   // until the link closes or the banner cancels it.

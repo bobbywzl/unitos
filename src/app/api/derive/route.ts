@@ -1,7 +1,7 @@
 import { streamText, type ModelMessage } from "ai";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { resolveAnchor } from "@/lib/anchors/resolve";
+import { passageSources, resolvePassage, segmentsSchema } from "@/lib/anchors/passage";
 import { bumpNotebook, notebookAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
 import {
@@ -12,11 +12,11 @@ import {
   STREAM_NOTE_TOKEN,
 } from "@/lib/derive/config";
 import {
-  anchorContext,
   annotationsSection,
   corpusSection,
   documentPrefix,
   loadProfile,
+  passageContext,
   renderBlockLines,
   sectionSkeleton,
 } from "@/lib/derive/context";
@@ -111,6 +111,10 @@ const deriveSchema = z
       suffix: z.string().max(64).optional(),
     })
     .optional(),
+  // A selection over several blocks (lib/anchors/passage.ts): one anchor per
+  // block, the first being `anchor`. The passage is the anchored text, and
+  // every segment becomes a source of the annotation.
+  segments: segmentsSchema,
   depth: z.enum(SUMMARY_DEPTHS).optional(), // SUMMARIZE only
   query: z.string().min(1).max(500).optional(), // FIND only
   question: z.string().min(1).max(500).optional(), // DISTILL and ASK; DISTILL's anchor is optional focus
@@ -640,13 +644,14 @@ async function handle(req: Request, t: TFunc) {
   // The anchor resolves through the ladder (SPEC.md §5): block id and offsets,
   // then the quote inside the block, then the quote across the document. A
   // re-parse gives every block a new id while an open reader still sends the
-  // old ones; the quote carries the selection across.
-  const anchor = data.anchor ? resolveAnchor(document.blocks, data.anchor) : null;
-  let anchored: ReturnType<typeof anchorContext> = null;
+  // old ones; the quote carries the selection across. A selection over
+  // several blocks resolves segment by segment (lib/anchors/passage.ts): the
+  // first segment is the anchor, the passage is the anchored text.
+  const passage = data.anchor ? resolvePassage(document.blocks, data.anchor, data.segments) : [];
+  const anchor = passage[0] ?? null;
+  let anchored: ReturnType<typeof passageContext> = null;
   if (data.anchor) {
-    anchored = anchor
-      ? anchorContext(document.blocks, anchor.blockId, anchor.startOffset, anchor.endOffset)
-      : null;
+    anchored = passageContext(document.blocks, passage);
     if (!anchored || !anchored.anchoredText.trim()) {
       return NextResponse.json({ error: t("api.anchorNotResolvedInDocument") }, { status: 400 });
     }
@@ -998,17 +1003,8 @@ async function handle(req: Request, t: TFunc) {
                   derivationType: data.type,
                   createdById: user.id,
                   order: count,
-                  sources: {
-                    create: {
-                      documentId: documentId,
-                      blockId: anchor.blockId,
-                      startOffset: anchor.startOffset,
-                      endOffset: anchor.endOffset,
-                      quotedText: anchor.quotedText,
-                      prefix: anchor.prefix,
-                      suffix: anchor.suffix,
-                    },
-                  },
+                  // One source per segment: the marks cover the whole passage.
+                  sources: { create: passageSources(documentId, passage) },
                 },
               });
               await bumpNotebook(data.notebookId);
