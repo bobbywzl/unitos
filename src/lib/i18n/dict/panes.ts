@@ -405,6 +405,14 @@ const en = {
   uploadEveryCaptionHasFigure: "every caption has its figure",
   // The document bar, after the automatic re-parse (document-bar.tsx)
   reparseCaptionsWithoutFigure: "No figure loaded for {labels} after the re-parse.",
+  reparseRenderFailed: "The browser render failed: {reason}",
+  // The figure's place in the reader (figure-capture.tsx)
+  figureMoving: "Unitos is moving {label} over…",
+  figureMoveFailed: "Unitos could not move {label} over: {reason}",
+  figureMoveMissing: "{label} has not come through: the page's chart was not captured.",
+  figureMoveNoBrowser:
+    "{label} is drawn by the page's scripts. Set BROWSER_WS_ENDPOINT or CHROMIUM_PATH so Unitos can move it over.",
+  figureTryAgain: "Try again",
 };
 
 const zh: Record<keyof typeof en, string> = {
@@ -759,6 +767,13 @@ const zh: Record<keyof typeof en, string> = {
   uploadFiguresLoaded: "已加载 {n} 张插图",
   uploadEveryCaptionHasFigure: "每条说明都有插图",
   reparseCaptionsWithoutFigure: "重新解析后，{labels} 没有加载插图。",
+  reparseRenderFailed: "浏览器渲染失败：{reason}",
+  figureMoving: "Unitos 正在把 {label} 搬过来…",
+  figureMoveFailed: "Unitos 无法把 {label} 搬过来：{reason}",
+  figureMoveMissing: "{label} 还没有搬过来：页面的图表没有被捕获。",
+  figureMoveNoBrowser:
+    "{label} 由页面脚本绘制。设置 BROWSER_WS_ENDPOINT 或 CHROMIUM_PATH，Unitos 才能把它搬过来。",
+  figureTryAgain: "再试一次",
 };
 
 export const panes = { en, zh } as const;

@@ -13,6 +13,7 @@ import {
   type BlockData,
   type Highlight,
 } from "@/components/reader/block-view";
+import { FigurePlace, type FigureRenderInfo } from "@/components/reader/figure-capture";
 import { Reveal, inactiveReveal, useReveal, type RevealKind } from "@/components/reader/reveal";
 import { TranslationLine } from "@/components/reader/translation-bar";
 import { useLang } from "@/components/lang-provider";
@@ -366,6 +367,8 @@ export function Reader({
   mode,
   font,
   columnWidth,
+  captionGaps,
+  figureRender,
   stylesByBlock,
   editedByBlock,
   documentId,
@@ -397,6 +400,10 @@ export function Reader({
   // The page's text column width in px (Document.columnWidth); null = the
   // reader's default (globals.css .reader-column).
   columnWidth: number | null;
+  // The captions left without their figure and the browser render's state:
+  // each such caption gets the figure's place above it (figure-capture.tsx).
+  captionGaps: { id: string; label: string }[];
+  figureRender: FigureRenderInfo;
   stylesByBlock: Record<string, StyleSpan[]>;
   editedByBlock: Record<string, { start: number; end: number }[]>;
   documentId?: string; // PDF figure blocks render their page via the figure image route
@@ -451,6 +458,7 @@ export function Reader({
   // padding (px-6), so the text runs as wide as it did on the page; the pane
   // still caps it (globals.css .reader-column), so the column contracts when
   // the tray opens.
+  const gapById = useMemo(() => new Map(captionGaps.map((g) => [g.id, g.label])), [captionGaps]);
   const columnStyle: React.CSSProperties = columnWidth
     ? ({ "--reader-column-w": `${columnWidth + ARTICLE_PADDING_PX}px` } as React.CSSProperties)
     : {};
@@ -731,8 +739,10 @@ export function Reader({
         </div>
       );
     }
+    const gap = gapById.get(block.id);
     return (
       <Reveal key={block.id} reveal={blockReveal} id={block.id} order={i} kind={kind}>
+        {gap !== undefined && documentId && <FigurePlace documentId={documentId} label={gap} render={figureRender} />}
         {node}
       </Reveal>
     );

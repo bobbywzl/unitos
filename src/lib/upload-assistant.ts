@@ -193,7 +193,7 @@ export async function reviewUpload(
   onProgress?.("fetch");
   // The same page ingest would parse: a page whose figures its scripts draw
   // renders in a browser first, where one is configured (lib/parse/render-page.ts).
-  const page = await renderIfNeeded(await fetchPage(url, onProgress), url, onProgress);
+  const { page } = await renderIfNeeded(await fetchPage(url, onProgress), url, onProgress);
   onProgress?.("extract");
   const parsed = await parseFetchedPage(page, url);
   const links = page.kind === "html" ? harvestLinks(page.html, url) : [];
