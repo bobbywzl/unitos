@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { isMarkdownFile } from "@/lib/markdown-file";
 import { MAX_VIDEO_BYTES, UPLOAD_CHUNK_BYTES } from "@/lib/video/types";
 
 export const maxDuration = 60;
@@ -24,7 +25,7 @@ export async function POST(req: Request) {
   if (file instanceof Blob && file.size > 0) {
     const name = (file instanceof File && file.name) || "document.pdf";
     const kind =
-      file.type === "application/pdf" || /\.pdf$/i.test(name)
+      file.type === "application/pdf" || /\.pdf$/i.test(name) || isMarkdownFile({ type: file.type, name })
         ? "pdf"
         : file.type.startsWith("audio/") || file.type.startsWith("video/")
           ? "video"

@@ -1,4 +1,4 @@
-import { isChartSvg } from "@/lib/parse/figure-style";
+import { FIGURE_BOX_TEXT_MAX, isChartSvg } from "@/lib/parse/figure-style";
 import { hasDirectText, normalizeText, separateBlocks, spacedText, withReadableMath } from "@/lib/parse/dom-text";
 import { isFigureCaption } from "@/lib/parse/figure-audit";
 import { stripCitationTokens } from "@/lib/parse/references";
@@ -34,9 +34,9 @@ const REPAIR_CAPTION_MAX_CHARS = 300;
 // A box that holds a figure (data-box, from the page-style bake: an element
 // the page paints its own background under, or sets in its own font around
 // a chart) holds the figure's words: a chart's title, legend, axis labels,
-// source line. They are at most this long outside the media; a box with
-// more text is a boxed section of prose, not a figure.
-const FIGURE_BOX_TEXT_MAX = 400;
+// source line. They are at most FIGURE_BOX_TEXT_MAX long outside the media
+// (lib/parse/figure-style.ts); a box with more text is a boxed section of
+// prose, not a figure.
 const MEDIA_SELECTOR = "img[src], video, iframe, svg";
 
 // A decorative asset is not content: tiny dimensions, or an unlabeled .svg icon.
@@ -230,9 +230,35 @@ function liftWideWidth(shell: Element, row: Element | null) {
   }
 }
 
+// Block elements the sanitizer unwraps. One that holds only inline content
+// (a legend row of spans, a chart's title in a div) becomes a paragraph, so
+// its words stay on one row in the figure instead of falling out one per
+// line.
+const INLINE_ONLY_WRAPPERS = new Set(["div", "section", "header", "footer", "aside", "nav", "small", "label"]);
+const BLOCK_SELECTOR = "p, div, section, header, footer, aside, nav, figure, figcaption, ul, ol, li, table, pre, blockquote, h1, h2, h3, h4, h5, h6, img, svg, video, iframe";
+
+/** Inside a figure, every wrapper that holds only inline content becomes a
+    <p> that keeps the wrapper's look and alignment. */
+function inlineWrappersToParagraphs(root: Element) {
+  const document = root.ownerDocument;
+  for (const el of [...root.querySelectorAll("*")].reverse()) {
+    if (!INLINE_ONLY_WRAPPERS.has(el.tagName.toLowerCase()) || el === root) continue;
+    if (el.querySelector(BLOCK_SELECTOR) || el.closest("svg")) continue;
+    if (normalizeText(el.textContent ?? "").length === 0) continue;
+    const p = document.createElement("p");
+    for (const name of ["style", "data-align", "class"]) {
+      const value = el.getAttribute(name);
+      if (value) p.setAttribute(name, value);
+    }
+    p.append(...el.childNodes);
+    el.replaceWith(p);
+  }
+}
+
 /** Wrap each captioned column of a row in its own figure. The column's
     width is the row's share it had on the page; the media inside is
-    resized to the column. */
+    resized to the column. A box inside the column stays a box: the
+    sanitizer keeps it as a div with the box's look. */
 function nestColumns(row: Element) {
   const document = row.ownerDocument;
   for (const column of mediaColumns(row)) {
@@ -274,6 +300,9 @@ export function figureBlock(el: Element, ctx: WalkCtx): ParsedBlock | null {
   // so a caption span and a credit span read apart on screen too and the
   // figure's DOM text stays the block's text (SPEC.md §5).
   separateBlocks(clone);
+  // The figure's words keep their rows: a legend of spans in a div is one
+  // paragraph, not one line per span.
+  inlineWrappersToParagraphs(clone);
   if (!hasMeaningfulMedia(clone)) {
     // A figure with no media is its text: a pull quote wrapped in <figure>
     // is a paragraph, and a bare caption is a paragraph.
@@ -292,8 +321,11 @@ export function figureBlock(el: Element, ctx: WalkCtx): ParsedBlock | null {
   if (!shell) {
     shell = clone.ownerDocument.createElement("figure");
     // A bare media element is the figure's whole content; a container's
-    // children are.
+    // children are. A container that is itself a box keeps the box's look
+    // on the figure: the shell takes its data-box-style.
     shell.append(...(isMedia(clone) ? [clone] : [...clone.childNodes]));
+    const boxStyle = clone.getAttribute("data-box-style");
+    if (boxStyle && !isMedia(clone)) shell.setAttribute("data-box-style", boxStyle);
   }
   liftWideWidth(shell, row && shell.contains(row) ? row : null);
   const html = sanitizeHtml(shell.outerHTML, ctx.url);

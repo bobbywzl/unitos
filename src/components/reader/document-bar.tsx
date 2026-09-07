@@ -36,6 +36,7 @@ import {
 } from "@/components/reader/ingest-progress";
 import { setRevealFlag } from "@/components/reader/reveal";
 import { UploadAssistant, type UploadRequest } from "@/components/reader/upload-assistant";
+import { isMarkdownFile, MARKDOWN_ACCEPT } from "@/lib/markdown-file";
 
 export type AttachedDocument = {
   id: string;
@@ -574,6 +575,7 @@ export function DocumentBar({
           f.type === "application/pdf" ||
           f.name.toLowerCase().endsWith(".pdf") ||
           isImageFile(f) ||
+          isMarkdownFile(f) ||
           isMediaFile(f),
       );
       if (accepted.length === 0) {
@@ -948,7 +950,7 @@ export function DocumentBar({
       <input
         ref={fileRef}
         type="file"
-        accept={`application/pdf,.pdf,${IMAGE_ACCEPT}`}
+        accept={`application/pdf,.pdf,${IMAGE_ACCEPT},${MARKDOWN_ACCEPT}`}
         multiple
         className="hidden"
         onChange={(e) => {

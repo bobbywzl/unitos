@@ -1,5 +1,6 @@
 import { JSDOM, VirtualConsole } from "jsdom";
 import { outboundFetch } from "@/lib/outbound-fetch";
+import { isFigureCaption } from "@/lib/parse/figure-audit";
 
 // The page-style bake (SPEC.md §2). The stored html never sees the page's
 // stylesheets: the sanitizer drops class names and <style> blocks, and the
@@ -24,7 +25,12 @@ import { outboundFetch } from "@/lib/outbound-fetch";
 //    background under, different from the page's, or sets in its own font
 //    while it holds a chart. Text in a box that holds a figure is the
 //    figure's words (a chart's title, legend, axis labels, source line),
-//    not its caption (lib/parse/figures.ts).
+//    not its caption (lib/parse/figures.ts), and the words keep the page's
+//    look: their font size, weight, style, color, and alignment ride as
+//    inline style, a legend swatch keeps its size and color, and the box
+//    carries its background and padding as `data-box-style`, which the
+//    figure that takes its place inherits. The sanitizer keeps that look
+//    inside a figure and nowhere else.
 //    The walk (lib/parse/url.ts, lib/parse/figures.ts) and the sanitizer
 //    read those attributes; without stylesheets none is written and nothing
 //    depends on them.
@@ -1576,9 +1582,10 @@ function familyKey(list: string): string {
 }
 
 /** Mark boxes: an element the page paints its own background under,
-    different from the page's background, or sets in its own font while it
-    holds a chart with text. The figure functions read the mark: text in a
-    box that holds a figure is the figure's words, not its caption. */
+    different from the background behind it (the nearest painted ancestor,
+    else the page's), or sets in its own font while it holds a chart with
+    text. The figure functions read the mark: text in a box that holds a
+    figure is the figure's words, not its caption. */
 function markBoxes(document: Document, rules: Rule[], page: Page) {
   const body = document.body;
   const html = document.documentElement;
@@ -1599,7 +1606,14 @@ function markBoxes(document: Document, rules: Rule[], page: Page) {
     const style = styleOf(el, page);
     if (!style) return;
     const own = backdropOf([{ el, style }])?.background ?? el.getAttribute("bgcolor");
-    let boxed = own !== null && own.trim() !== "" && colorKey(own) !== pageBackground;
+    let boxed = false;
+    if (own !== null && own.trim() !== "") {
+      // The background behind the element: a white card on an ivory section
+      // is a box; a white card on the page's own white is not.
+      const chain = ancestorChain(el, page);
+      const behind = chain.length > 0 ? (backdropOf([...chain].reverse())?.background ?? null) : null;
+      boxed = colorKey(own) !== (behind !== null ? colorKey(behind) : pageBackground);
+    }
     if (!boxed) {
       const family = ownValue(style, "font-family");
       boxed =
@@ -1609,6 +1623,158 @@ function markBoxes(document: Document, rules: Rule[], page: Page) {
         [...el.querySelectorAll("svg")].some((svg) => isChartSvg(svg) && svg.querySelector("text") !== null);
     }
     if (boxed) el.setAttribute("data-box", "1");
+  }
+}
+
+// ── The figure's words keep their look ──────────────────────────────────────
+
+// A box that holds a figure holds the figure's words: a chart's title,
+// legend, axis labels, source line. They are at most this long outside the
+// media; a box with more text is a boxed section of prose, not a figure.
+// lib/parse/figures.ts reads the same limit.
+export const FIGURE_BOX_TEXT_MAX = 400;
+// A legend swatch (a colored square before its label) is at most this wide.
+const SWATCH_MAX_PX = 48;
+// Values that are the browser's defaults: nothing to write.
+const DEFAULT_VALUES: Record<string, Set<string>> = {
+  "font-weight": new Set(["400", "normal"]),
+  "font-style": new Set(["normal"]),
+  "text-transform": new Set(["none"]),
+  "letter-spacing": new Set(["normal", "0", "0px"]),
+  "text-align": new Set(["start", "left"]),
+  opacity: new Set(["1"]),
+};
+
+/** Does the element hold a figure's media: a content image, a video, an
+    embed, or a chart svg. */
+function holdsFigureMedia(el: Element): boolean {
+  if (el.querySelector("img[src], video, iframe")) return true;
+  return [...el.querySelectorAll("svg")].some(isChartSvg);
+}
+
+/** The length of an element's text outside its svg charts. */
+function textOutsideCharts(el: Element): number {
+  let inside = 0;
+  for (const svg of el.querySelectorAll("svg")) inside += textLength(svg);
+  return Math.max(0, textLength(el) - inside);
+}
+
+/** A caption keeps the reader's caption look: a figcaption, or text that
+    opens like "Figure 2." */
+function isCaptionElement(el: Element): boolean {
+  if (el.tagName.toLowerCase() === "figcaption" || el.closest("figcaption")) return true;
+  return isFigureCaption((el.textContent ?? "").replace(/\s+/g, " ").trim());
+}
+
+/** The declarations already inline on an element, then the baked ones. */
+function mergeInlineStyle(el: Element, declarations: Map<string, string>) {
+  if (declarations.size === 0) return;
+  const existing = el.getAttribute("style") ?? "";
+  const merged = new Map<string, string>();
+  for (const part of existing.split(";")) {
+    const at = part.indexOf(":");
+    if (at > 0) merged.set(part.slice(0, at).trim(), part.slice(at + 1).trim());
+  }
+  for (const [prop, value] of declarations) merged.set(prop, value);
+  setInlineStyle(el, merged);
+}
+
+/** A one-to-four-value length shorthand (padding, border-radius) resolved
+    to pixels, each value rounded; null when absent or when a value only the
+    browser can resolve. */
+function pxShorthand(style: ElementStyle, prop: string, page: Page): string | null {
+  const value = ownValue(style, prop);
+  if (value === null) return null;
+  const parts = valueParts(value).slice(0, 4);
+  if (parts.length === 0) return null;
+  const px: string[] = [];
+  for (const part of parts) {
+    const n = lengthOf(part, lengthEnv(style, null, page));
+    if (n === null || n < 0) return null;
+    px.push(`${Math.round(n)}px`);
+  }
+  return px.join(" ");
+}
+
+/** The horizontal gap a flex or grid parent puts between its children, in
+    pixels: column-gap, else the gap shorthand's last value; null when none. */
+function gapPx(style: ElementStyle, page: Page): number | null {
+  const column = lengthProp(style, "column-gap", null, page);
+  if (column !== null) return column;
+  const gap = ownValue(style, "gap");
+  if (gap === null) return null;
+  const parts = valueParts(gap);
+  const last = parts[parts.length - 1];
+  return last ? lengthOf(last, lengthEnv(style, null, page)) : null;
+}
+
+/** Write the page's look onto the figure's words: every box that holds a
+    figure's media and no more text than a figure's words. A text element
+    keeps its font size (when it differs from the body's), weight, style,
+    color, transform, spacing, and alignment; a legend swatch (an empty
+    element with its own background) keeps its size, color, and corner; the
+    box itself carries its background, padding, and corner as
+    data-box-style. Captions keep the reader's look. */
+function bakeFigureWords(document: Document, page: Page) {
+  const bodyStyle = styleOf(document.body, page);
+  if (!bodyStyle) return;
+  const bodyPx = Math.round(bodyStyle.fontSize);
+  for (const box of document.querySelectorAll("[data-box]")) {
+    if (isHidden(box) || !holdsFigureMedia(box)) continue;
+    if (textOutsideCharts(box) > FIGURE_BOX_TEXT_MAX) continue;
+    const boxStyle = styleOf(box, page);
+    if (!boxStyle) return;
+    const boxLook = new Map<string, string>();
+    const backdrop = backdropOf([{ el: box, style: boxStyle }]);
+    if (backdrop) boxLook.set("background", backdrop.background);
+    const padding = pxShorthand(boxStyle, "padding", page);
+    if (padding !== null) boxLook.set("padding", padding);
+    const radius = pxShorthand(boxStyle, "border-radius", page);
+    if (radius !== null) boxLook.set("border-radius", radius);
+    if (boxLook.size > 0) {
+      box.setAttribute("data-box-style", [...boxLook].map(([prop, value]) => `${prop}: ${value}`).join("; "));
+    }
+    for (const el of box.querySelectorAll("*")) {
+      const tag = el.tagName.toLowerCase();
+      if (SKIP_TAGS.has(tag) || tag === "svg" || el.closest("svg") || isHidden(el)) continue;
+      if (isCaptionElement(el)) continue;
+      const style = styleOf(el, page);
+      if (!style) return;
+      const look = new Map<string, string>();
+      const text = textLength(el);
+      if (text > 0) {
+        const px = Math.round(style.fontSize * 100) / 100;
+        if (Math.round(px) !== bodyPx) look.set("font-size", `${px}px`);
+        if (style.color && safeValue(style.color)) look.set("color", style.color);
+        for (const prop of ["font-weight", "font-style", "text-transform", "letter-spacing", "text-align"]) {
+          const value = inheritedValue(style, prop);
+          if (value === null || DEFAULT_VALUES[prop]?.has(value) || !safeValue(value)) continue;
+          look.set(prop, value);
+        }
+        const opacity = ownValue(style, "opacity");
+        if (opacity !== null && !DEFAULT_VALUES.opacity.has(opacity) && safeValue(opacity)) look.set("opacity", opacity);
+      } else if (el.children.length === 0) {
+        // A legend swatch: an empty element with a background of its own.
+        const swatch = backdropOf([{ el, style }]);
+        const width = lengthProp(style, "width", null, page);
+        const height = lengthProp(style, "height", null, page);
+        if (swatch && width !== null && height !== null && width > 0 && width <= SWATCH_MAX_PX && height > 0 && height <= SWATCH_MAX_PX) {
+          look.set("display", "inline-block");
+          look.set("width", `${Math.round(width)}px`);
+          look.set("height", `${Math.round(height)}px`);
+          look.set("background", swatch.background);
+          const radius = bakedValue("border-radius", style);
+          if (radius !== null) look.set("border-radius", radius);
+          // The space between the swatch and its label: the page's gap, its
+          // margin, else a small one.
+          const parent = el.parentElement ? styleOf(el.parentElement, page) : null;
+          const gap = parent ? gapPx(parent, page) : null;
+          const margin = lengthProp(style, "margin-right", null, page);
+          look.set("margin-right", margin !== null && margin > 0 ? `${Math.round(margin)}px` : gap !== null && gap > 0 ? `${Math.round(gap)}px` : "0.3em");
+        }
+      }
+      mergeInlineStyle(el, look);
+    }
   }
 }
 
@@ -2066,6 +2232,7 @@ export async function bakeFigureStyles(rawHtml: string, url: string): Promise<st
       markStyles(document, rules, page);
       markBoxes(document, rules, page);
       markWidths(document, page);
+      bakeFigureWords(document, page);
     }
     // Figures keep their look: visible charts first, so the budget goes to
     // what the reader sees.

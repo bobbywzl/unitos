@@ -19,6 +19,7 @@ import { runTranscription } from "@/lib/video/transcription-job";
 import { isMediaUrl } from "@/lib/video/types";
 import { parseYouTubeId } from "@/lib/video/youtube";
 import { parseBody } from "@/lib/validate";
+import { isMarkdownFile } from "@/lib/markdown-file";
 
 // A split add parses one very long page and saves several documents; the AI
 // passes on such a page need the headroom.
@@ -149,7 +150,31 @@ export async function POST(req: Request) {
       }
       filename = filename.replace(IMAGE_EXTENSIONS, "");
       pages = true;
-    } else if (bytes.length < 5 || String.fromCharCode(...bytes.slice(0, 5)) !== "%PDF-") {
+    } else if (isMarkdownFile({ type: file.type, name: filename })) {
+      // A Markdown file (SPEC.md §2): the URL walk reads it, no judgment, no
+      // model pass. The scans run as they do for a computer-text PDF.
+      return progressResponse(async (onProgress) => {
+        try {
+          const { document, deduped } = await parse.ingestMarkdown(bytes, filename, onProgress, {
+            instructions: fields.data.instructions.trim() || undefined,
+          });
+          await attachDocument(fields.data.notebookId, document.id);
+          await bumpNotebook(fields.data.notebookId);
+          if (fields.data.scans === "server") {
+            if (!deduped) after(() => buildGlossary(document.id, user?.id ?? null, lang).catch(() => {}));
+            after(() =>
+              buildConnections(fields.data.notebookId, document.id, user?.id ?? null, lang).catch(
+                () => {},
+              ),
+            );
+          }
+          return { id: document.id, title: document.title, deduped };
+        } catch (err) {
+          console.error("Markdown ingest failed:", err);
+          throw new Error(describeIngestError(err, t, "pdf"));
+        }
+      });
+    } else if (!parse.isPdfBytes(bytes)) {
       return NextResponse.json({ error: t("api.notPdf") }, { status: 400 });
     }
     return progressResponse(async (onProgress) => {
