@@ -1,3 +1,5 @@
+import { GEMINI_FLASH } from "@/lib/derive/config";
+import { currentModelId } from "@/lib/models";
 import { outboundFetch } from "@/lib/outbound-fetch";
 import { recordUsage } from "@/lib/usage";
 import { regionBounds, type Region } from "@/lib/video/types";
@@ -10,8 +12,15 @@ export type GeminiUsageMeta = { userId: string | null; feature: string };
 // descriptions. The first model that answers wins; the alias rung means a
 // retired model can never take the feature down — it always resolves to the
 // current flash. A caller's parse throwing counts as a failure, so a bad
-// answer from one model retries on the next.
-const GEMINI_MODELS = ["gemini-3.7-flash", "gemini-flash-latest"];
+// answer from one model retries on the next. The first rung is the gemini
+// role's current id (lib/models.ts): GEMINI_FLASH, or the newer version the
+// bimonthly model update found.
+const GEMINI_ALIAS = "gemini-flash-latest";
+
+async function geminiModels(): Promise<string[]> {
+  const current = await currentModelId("gemini");
+  return Array.from(new Set([current, GEMINI_FLASH, GEMINI_ALIAS]));
+}
 
 export async function geminiCall<T>(
   parts: unknown[],
@@ -21,7 +30,7 @@ export async function geminiCall<T>(
   const key = process.env.GEMINI_API_KEY;
   if (!key) throw new Error("GEMINI_API_KEY is not set");
   const failures: string[] = [];
-  for (const model of GEMINI_MODELS) {
+  for (const model of await geminiModels()) {
     try {
       const res = await outboundFetch(
         `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
@@ -79,7 +88,7 @@ export async function geminiCall<T>(
 export async function geminiCountTokens(parts: unknown[]): Promise<number | null> {
   const key = process.env.GEMINI_API_KEY;
   if (!key) return null;
-  const model = GEMINI_MODELS[0];
+  const model = await currentModelId("gemini");
   try {
     const res = await outboundFetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${model}:countTokens`,

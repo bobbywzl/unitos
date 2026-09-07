@@ -146,6 +146,18 @@ const en = {
   svcAdmin: "Feedback inbox and digest at /admin",
   svcSet: "Set",
   svcNotSet: "Not set",
+  // The model per role (lib/models.ts) and the bimonthly model update
+  models: "Models",
+  modelsDesc:
+    "The model each role calls. On the 1st of every second month the model update reads each provider's published model list, moves the role to the newest version of its family after one probe call, and records what it found here.",
+  modelDefault: "default {id}",
+  modelChecked: "checked {date}",
+  modelNotChecked: "not checked yet",
+  modelChanged: "changed {date} from {from}",
+  modelsCheck: "Check now",
+  modelsChecking: "Checking…",
+  modelsChecked: "Checked {n} roles. {changed} changed.",
+  modelsCheckFailed: "Check failed",
   envHint:
     "Set these in your host's environment variables and redeploy. On Vercel: Settings → Environment Variables.",
   // Notifications page (SPEC.md §18)
@@ -176,6 +188,9 @@ const en = {
   accountCreated: "created {date}",
   accountLastSeen: "last seen {date}",
   accountPremium: "Unitos Premium",
+  accountTrial: "Unitos Premium · trial until {date}",
+  accountExpired: "Unitos Premium · trial ended {date}",
+  accountUltra: "Unitos Ultra",
   accountDrive: "Google Drive linked",
   resetAccount: "Reset account",
   resetConfirmDesc:
@@ -313,6 +328,17 @@ const zh: Record<keyof typeof en, string> = {
   svcAdmin: "位于 /admin 的反馈收件箱与汇编",
   svcSet: "已设置",
   svcNotSet: "未设置",
+  models: "模型",
+  modelsDesc:
+    "各角色调用的模型。每隔一个月的 1 日，模型更新会读取各提供商公布的模型列表，经一次探测调用后把角色切换到其系列的最新版本，并把结果记录在此。",
+  modelDefault: "默认 {id}",
+  modelChecked: "检查于 {date}",
+  modelNotChecked: "尚未检查",
+  modelChanged: "{date} 从 {from} 切换",
+  modelsCheck: "立即检查",
+  modelsChecking: "检查中…",
+  modelsChecked: "已检查 {n} 个角色，{changed} 个有变化。",
+  modelsCheckFailed: "检查失败",
   envHint: "在托管平台的环境变量中设置这些值并重新部署。Vercel 上：Settings → Environment Variables。",
   // Notifications page (SPEC.md §18)
   notifications: "通知",
@@ -342,6 +368,9 @@ const zh: Record<keyof typeof en, string> = {
   accountCreated: "创建于 {date}",
   accountLastSeen: "最近活动 {date}",
   accountPremium: "Unitos Premium",
+  accountTrial: "Unitos Premium · 试用至 {date}",
+  accountExpired: "Unitos Premium · 试用已于 {date} 结束",
+  accountUltra: "Unitos Ultra",
   accountDrive: "已关联 Google Drive",
   resetAccount: "重置账户",
   resetConfirmDesc: "删除该账户的全部项目、文档、笔记和设置，并在所有设备上退出登录。输入 {confirm} 以确认。",

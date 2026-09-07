@@ -2,7 +2,16 @@
 
 import type { BlockType } from "@prisma/client";
 import { useState } from "react";
-import { ChartIcon, CommentIcon, LinkIcon, QuestionIcon, SparkleIcon, SummaryIcon, UnlinkIcon } from "@/components/icons";
+import {
+  ChartIcon,
+  CommentIcon,
+  LinkIcon,
+  QuestionIcon,
+  SparkleIcon,
+  SummaryIcon,
+  UnlinkIcon,
+  VisualizeIcon,
+} from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { Equation } from "@/components/reader/equation";
 import type { TFunc, TKey } from "@/lib/i18n/dictionaries";
@@ -62,7 +71,7 @@ export type Highlight = {
   noteId?: string; // owning note; on a regular note's mark, click jumps to the note in the tray
   // The stored AI annotation's tool symbol renders at the end of the span, in
   // every view; the symbol opens the card. Kind "anchor" only.
-  tool?: "explain" | "simplify" | "analyze" | "assistant";
+  tool?: "explain" | "simplify" | "analyze" | "visualize" | "assistant";
   href?: string; // navigation target, kinds "link" and "weblink"
   linkTitle?: string; // the other end's document title, kind "link" only
   linkId?: string; // for arrival flashing via ?link=, kind "link" only
@@ -93,17 +102,19 @@ function anchorClass(color: string | null | undefined): string {
 
 // Each AI tool's symbol, at the end of its highlighted text — the glyph on
 // the toolbar button and on the group label in the Annotations tab.
-type ToolKind = "explain" | "simplify" | "analyze" | "assistant";
+type ToolKind = "explain" | "simplify" | "analyze" | "visualize" | "assistant";
 const TOOL_ICON: Record<ToolKind, (props: { size?: number }) => React.ReactNode> = {
   explain: QuestionIcon,
   simplify: SummaryIcon,
   analyze: ChartIcon,
+  visualize: VisualizeIcon,
   assistant: SparkleIcon,
 };
 const TOOL_KEY: Record<ToolKind, TKey> = {
   explain: "panes.openExplanation",
   simplify: "panes.openSimplified",
   analyze: "panes.openAnalysis",
+  visualize: "panes.openVisualization",
   assistant: "panes.openConversation",
 };
 

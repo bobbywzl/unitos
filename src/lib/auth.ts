@@ -14,6 +14,7 @@ import { db } from "@/lib/db";
 import { sendConfirmationEmail, sendResetEmail } from "@/lib/email";
 import type { Lang } from "@/lib/i18n/config";
 import { outboundFetch } from "@/lib/outbound-fetch";
+import { trialEnd } from "@/lib/tiers";
 
 // Google, Apple, and email sign-in (Scalae pattern): hand-rolled OIDC
 // authorization-code flows plus an email confirmation flow, no dependencies;
@@ -65,7 +66,8 @@ export const LOCAL_USER: User = {
   symbol: "",
   color: "",
   passwordHash: "",
-  premium: true, // the local reader owns the instance; offline work is not gated
+  tier: "ULTRA", // the local reader owns the instance; nothing is gated
+  trialEndsAt: null,
   driveRefreshToken: "", // linking needs an account row; the local reader uses the per-visit grant
   driveScope: "",
   createdAt: new Date(0),
@@ -481,8 +483,9 @@ export async function upsertUser(profile: {
     });
   }
   const first = (await db.user.count()) === 0;
+  // A new account starts its Premium trial (TIERS.md, lib/tiers.ts).
   const user = await db.user.create({
-    data: { email, name: profile.name, picture: profile.picture },
+    data: { email, name: profile.name, picture: profile.picture, trialEndsAt: trialEnd(new Date()) },
   });
   if (first) {
     await db.$transaction([

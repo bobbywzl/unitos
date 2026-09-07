@@ -1,6 +1,7 @@
 import { createAnthropic, type AnthropicProvider } from "@ai-sdk/anthropic";
 import type { LanguageModel } from "ai";
 import { PARSE_EFFORT, type ClaudeEffort } from "@/lib/derive/config";
+import { resolveModelId } from "@/lib/models";
 
 // The Claude client (SPEC.md §2): the import's model calls go through here —
 // the upload assistant's review and instruction check, the URL core and
@@ -27,10 +28,13 @@ export function claudeBaseUrl(): string {
 
 let provider: AnthropicProvider | null = null;
 
-/** The model to call. The provider is built once per process, on first use. */
-export function claude(modelId: string): LanguageModel {
+/** The model to call. The provider is built once per process, on first use.
+    A role's default id (CLAUDE_FABLE_5_1) resolves to the role's current id
+    — the newest version the bimonthly model update found (lib/models.ts);
+    the returned model's modelId is the id called. */
+export async function claude(modelId: string): Promise<LanguageModel> {
   provider ??= createAnthropic({ apiKey: claudeApiKey(), baseURL: claudeBaseUrl() });
-  return provider(modelId);
+  return provider(await resolveModelId(modelId));
 }
 
 /** Provider options for one call: the reasoning effort (lib/derive/config.ts)

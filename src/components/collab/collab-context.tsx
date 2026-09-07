@@ -16,6 +16,9 @@ export type CollabState = {
   // Unitos Premium (SPEC.md §17): offline work syncs when back online. The
   // local reader always has it — there is no account to gate.
   premium: boolean;
+  // Unitos Ultra (TIERS.md): Visualize (SPEC.md §20). The local reader
+  // always has it.
+  ultra: boolean;
 };
 
 export const SOLO_COLLAB: CollabState = {
@@ -26,6 +29,7 @@ export const SOLO_COLLAB: CollabState = {
   myId: "",
   people: {},
   premium: true,
+  ultra: true,
 };
 
 const CollabContext = createContext<CollabState>(SOLO_COLLAB);

@@ -10,6 +10,7 @@ import type { DriveAccess } from "@/lib/drive/types";
 import type { TKey } from "@/lib/i18n/dictionaries";
 import { PERSON_COLORS, personOf, type Person } from "@/lib/person";
 import { api } from "@/lib/api";
+import type { TierState } from "@/lib/tiers";
 
 type Theme = "light" | "dark" | "system";
 
@@ -90,14 +91,16 @@ const secondaryButton =
 export function SettingsForm({
   account,
   background,
-  premium,
+  plan,
   drive,
   data,
 }: {
   // The signed-in account; null = sign-in off (single-reader mode).
   account: (Person & { email: string; storedSymbol: string; storedColor: string }) | null;
   background: string;
-  premium: boolean;
+  // The account's tier (TIERS.md, lib/tiers.ts) and, on trial or expired,
+  // the trial's end as an ISO date.
+  plan: { state: TierState; trialEndsAt: string | null };
   // Google Drive under Connections (SPEC.md §14): access is what a link asks
   // for, grant what this account's stored grant reaches. null = Drive linking
   // not available.
@@ -439,9 +442,15 @@ export function SettingsForm({
       </section>
 
       <section className="space-y-3">
-        <h2 className={sectionTitle}>{t("settings.premium")}</h2>
+        <h2 className={sectionTitle}>{t("settings.plan")}</h2>
         <p className="text-xs text-sand-600">
-          {premium ? t("settings.premiumOn") : t("settings.premiumOff")}
+          {plan.state === "ultra"
+            ? t("settings.planUltra")
+            : plan.state === "premium"
+              ? t("settings.planPremium")
+              : t(plan.state === "trial" ? "settings.planTrial" : "settings.planExpired", {
+                  date: plan.trialEndsAt ? fmtDate(plan.trialEndsAt) : "",
+                })}
         </p>
       </section>
 

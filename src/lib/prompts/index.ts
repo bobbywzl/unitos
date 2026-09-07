@@ -11,6 +11,7 @@ import { keypointsPrompt } from "@/lib/prompts/keypoints";
 import { saliencePrompt } from "@/lib/prompts/salience";
 import { simplifyPrompt } from "@/lib/prompts/simplify";
 import { summarizePrompt } from "@/lib/prompts/summarize";
+import { visualizePrompt } from "@/lib/prompts/visualize";
 import type { PromptCtx } from "@/lib/prompts/types";
 
 // One template per DerivationType. New derivation = new template + destination handler,
@@ -28,5 +29,6 @@ export const promptTemplates: Partial<Record<DerivationType, (ctx: PromptCtx) =>
   ASK: askPrompt,
   COMPARE: comparePrompt,
   ANALYZE: analyzePrompt,
+  VISUALIZE: visualizePrompt,
   // VOICE has no template: the transcription ladder does the work (SPEC.md §6).
 };

@@ -24,9 +24,14 @@ model User {
   symbol       String    @default("")
   color        String    @default("")
   passwordHash String    @default("") // "" = no password (OAuth or link-only); scrypt "s1$salt$hash"
-  // Unitos Premium (SPEC.md §17): offline work syncs when the reader is back
-  // online. No billing yet — the operator sets the flag on the account.
-  premium      Boolean   @default(false)
+  // The account's tier (TIERS.md): Unitos Premium or Unitos Ultra. No
+  // billing yet — the operator sets it on the account.
+  tier         Tier      @default(PREMIUM)
+  // When the account's Premium trial ends (TIERS.md): a new account gets
+  // Unitos Premium free for TRIAL_MONTHS (lib/tiers.ts). Null = no end: the
+  // operator granted the tier. Past this date, on PREMIUM, the account is
+  // expired: Premium features gate until the operator extends or grants.
+  trialEndsAt  DateTime?
   // Linked Google Drive (SPEC.md §14): the refresh token from the Drive code
   // flow, and the scope Google granted with it (drive.readonly = all files;
   // drive.file = picked files only). "" = not linked; the picker then asks
@@ -36,6 +41,13 @@ model User {
   createdAt    DateTime  @default(now())
   lastSeenAt   DateTime  @default(now())
   sessions     Session[]
+}
+
+// The tiers (TIERS.md): every account is Premium (on trial or granted) or
+// Ultra. There is no free tier.
+enum Tier {
+  PREMIUM
+  ULTRA
 }
 
 // One sign-in session: random token in an httpOnly cookie, 30 days.
@@ -241,6 +253,7 @@ enum DerivationType {
   COMPARE // two documents → one PENDING note of agreements, disagreements, and what only one covers, sourced on both (SPEC.md §4)
   ANALYZE // a figure or table read by the vision model: values verbatim, estimates marked; one PENDING note on the block (SPEC.md §4)
   VOICE // a spoken note: transcribed, cleaned, landed PENDING for the reader to accept (SPEC.md §6)
+  VISUALIZE // Unitos Ultra: the selection as a picture — a diagram, a drawing, or a short animation — stored as an SVG ImageAsset and one annotation on the selection; declined when the model is not certain the picture is faithful (SPEC.md §20)
 }
 
 model Source {
@@ -629,6 +642,19 @@ model NotificationRecipient {
 
   @@unique([notificationId, userId])
   @@index([userId, dismissedAt])
+}
+
+// The model the app calls for one role (lib/models.ts): the newest version
+// of that model's family, as the provider's model list publishes it. One row
+// per role, written by the bimonthly model update (/api/cron/models) and
+// read by the model clients; no row = the constant in lib/derive/config.ts.
+model ModelChoice {
+  role            String   @id // "kimi" | "claude" | "gemini"
+  modelId         String // the id the clients call
+  previousModelId String   @default("") // the id before the last change; "" = never changed
+  checkedAt       DateTime @default(now()) // the last run that checked this role
+  changedAt       DateTime? // the last run that changed modelId
+  note            String   @default("") // the last run's outcome for this role, for the admin page
 }
 
 model ReaderProfile {

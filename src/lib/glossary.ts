@@ -153,7 +153,7 @@ export async function buildGlossary(
     { role: "user", content: glossaryPrompt(definitionLang) },
   ];
   const result = await callForJson({
-    model: kimi(GLOSSARY_MODEL),
+    model: await kimi(GLOSSARY_MODEL),
     messages,
     maxOutputTokens: 8192,
     providerOptions: kimiOptions(),
@@ -202,7 +202,7 @@ export async function glossaryInLanguage(
     { role: "user", content: glossaryLanguagePrompt(document.title, wanted, lang) },
   ];
   const result = await callForJson({
-    model: kimi(GLOSSARY_MODEL),
+    model: await kimi(GLOSSARY_MODEL),
     providerOptions: kimiOptions(),
     messages,
     maxOutputTokens: 8192,

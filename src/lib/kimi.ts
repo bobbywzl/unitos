@@ -2,6 +2,7 @@ import { createMoonshotAI, type MoonshotAIProvider } from "@ai-sdk/moonshotai";
 import { tool, type LanguageModel } from "ai";
 import { z } from "zod";
 import { DEFAULT_EFFORT, type KimiEffort } from "@/lib/derive/config";
+import { resolveModelId } from "@/lib/models";
 import { outboundFetch } from "@/lib/outbound-fetch";
 
 // The Kimi client (SPEC.md §2): every model call but the import's goes through
@@ -30,10 +31,13 @@ export function kimiBaseUrl(): string {
 
 let provider: MoonshotAIProvider | null = null;
 
-/** The model to call. The provider is built once per process, on first use. */
-export function kimi(modelId: string): LanguageModel {
+/** The model to call. The provider is built once per process, on first use.
+    A role's default id (KIMI_K3) resolves to the role's current id — the
+    newest version the bimonthly model update found (lib/models.ts); the
+    returned model's modelId is the id called. */
+export async function kimi(modelId: string): Promise<LanguageModel> {
   provider ??= createMoonshotAI({ apiKey: kimiApiKey(), baseURL: kimiBaseUrl() });
-  return provider(modelId);
+  return provider(await resolveModelId(modelId));
 }
 
 /** Provider options for one call: the reasoning effort (lib/derive/config.ts).

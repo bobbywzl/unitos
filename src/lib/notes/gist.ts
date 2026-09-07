@@ -44,7 +44,7 @@ export async function writeGists(
       .filter((n) => n.text !== "");
     if (batch.length === 0) continue;
     const result = await callForJson({
-      model: kimi(GIST_MODEL),
+      model: await kimi(GIST_MODEL),
       messages: [{ role: "user", content: gistPrompt({ notes: batch }) }],
       maxOutputTokens: 16384,
       providerOptions: kimiOptions(GIST_EFFORT),

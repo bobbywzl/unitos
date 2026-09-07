@@ -14,10 +14,19 @@ export async function GET(_req: Request, ctx: { params: Promise<{ imageId: strin
     const t = await serverT();
     return NextResponse.json({ error: t("api.imageNotFound") }, { status: 404 });
   }
+  // A visualization is an SVG (SPEC.md §20), reduced before it was stored;
+  // opened as a page of its own it still runs nothing.
+  const svg = image.mimeType === "image/svg+xml";
   return new Response(new Uint8Array(image.data), {
     headers: {
       "Content-Type": image.mimeType,
       "Cache-Control": "public, max-age=31536000, immutable",
+      ...(svg
+        ? {
+            "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'",
+            "X-Content-Type-Options": "nosniff",
+          }
+        : {}),
     },
   });
 }
