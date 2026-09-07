@@ -172,6 +172,8 @@ model Section {
   parent     Section?  @relation("SectionNesting", fields: [parentId], references: [id])
   children   Section[] @relation("SectionNesting")
   notes      Note[]
+
+  @@index([notebookId])
 }
 
 model Note {
@@ -192,6 +194,8 @@ model Note {
   replies        Reply[]
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
+
+  @@index([sectionId])
 }
 
 // One reply in the discussion under a note (notes and annotations alike),
@@ -263,6 +267,9 @@ model Source {
   // the frame; on a PAGE block it is a page anchor (SPEC.md §16) — offsets
   // 0/0, the text ladder skipped, orphaned only if the PAGE block is gone.
   region      Json?
+
+  @@index([documentId])
+  @@index([noteId])
 }
 
 // One block's translation into one language (SPEC.md §19): DeepL output,
@@ -320,6 +327,11 @@ model Document {
   // When the running conversion started. A PENDING older than 10 minutes is
   // a dead run and may start again.
   conversionStartedAt DateTime?
+  // When the running re-parse started (/api/documents/[documentId]/reparse).
+  // A second re-parse of the same document waits while one is running; a
+  // start older than the route's time budget is a dead run and may start
+  // again.
+  reparseStartedAt    DateTime?
   blocks        Block[]
   notebooks     NotebookDocument[]
   sources       Source[]
@@ -402,6 +414,7 @@ model NotebookDocument {
   keypoints     Json? // KEYPOINTS output: {id, createdAt, createdById, points}, one per notebook per document; Distill again overwrites (SPEC.md §4)
 
   @@id([notebookId, documentId])
+  @@index([documentId])
 }
 
 model Block {
@@ -428,6 +441,8 @@ model Block {
   // Semantic search vector (text-embedding-3-small, 1024 dims). Null = not
   // embedded yet; the search route backfills lazily, a text edit clears it.
   embedding    Unsupported("vector(1024)")?
+
+  @@index([documentId, order])
 }
 
 enum BlockType {

@@ -12,6 +12,9 @@ import { describeIngestError } from "@/lib/parse/ingest-error";
 // A URL re-parse runs the same model passes as an add (SPEC.md §2); the
 // passes get the same time budget the add gets.
 export const maxDuration = 300;
+// A re-parse stamp older than this is a dead run: the route's time budget
+// plus a margin.
+const REPARSE_STALE_MS = (maxDuration + 60) * 1000;
 
 // The body is optional: no body re-parses in the document's shape; `as` flips
 // a PDF between article and handwritten (SPEC.md §16) — the escape hatch when
@@ -63,6 +66,28 @@ export async function POST(req: Request, ctx: { params: Promise<{ documentId: st
     return NextResponse.json({ error: t("api.shapeSwitchNeedsPdf") }, { status: 400 });
   }
 
+  // One re-parse per document at a time. Every open of a stale document
+  // starts the automatic upgrade re-parse (document-bar.tsx); two tabs or a
+  // reload must not run two full parses of the same document. The stamp
+  // claims the run; a claim older than the time budget is a dead run.
+  const claimed = await db.document.updateMany({
+    where: {
+      id: documentId,
+      OR: [
+        { reparseStartedAt: null },
+        { reparseStartedAt: { lt: new Date(Date.now() - REPARSE_STALE_MS) } },
+      ],
+    },
+    data: { reparseStartedAt: new Date() },
+  });
+  if (claimed.count === 0) {
+    return NextResponse.json({ error: t("api.reparseRunning") }, { status: 409 });
+  }
+  const releaseClaim = () =>
+    db.document
+      .updateMany({ where: { id: documentId }, data: { reparseStartedAt: null } })
+      .catch(() => {});
+
   const userId = access.user.id;
   // The model passes must finish inside the route's time; past the budget a
   // pass is skipped and the mechanical parse stands (SPEC.md §2).
@@ -97,6 +122,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ documentId: st
         console.error("Re-parse failed:", err);
         send({ error: describeIngestError(err, t, "reparse") });
       } finally {
+        await releaseClaim();
         stopHeartbeat();
         controller.close();
       }

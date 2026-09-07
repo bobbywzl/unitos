@@ -174,6 +174,17 @@ export function StopIcon(props: IconProps) {
   );
 }
 
+// The error button under Distill in the rail (workspace.tsx).
+export function WarningIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M12 3.5 2.5 20h19L12 3.5z" />
+      <path d="M12 9.5v4.5" />
+      <path d="M12 17.25h.01" />
+    </Icon>
+  );
+}
+
 export function DistillIcon(props: IconProps) {
   return (
     <Icon {...props}>
