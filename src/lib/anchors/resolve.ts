@@ -94,14 +94,20 @@ export function documentBlocks(documentId: string): Promise<{ id: string; text: 
 // 3. Re-find the quote across all blocks (handles re-parse with new block ids).
 // 4. Give up → orphaned, quoted text preserved. Never silently drop.
 // Rebinds and orphan flags are written back so resolution self-heals.
-export async function resolveDocumentSources(documentId: string): Promise<ResolvedSource[]> {
+// A caller that already holds the document's blocks in reading order passes
+// them; the blocks table is the largest, and one read of it per pane is enough.
+export async function resolveDocumentSources(
+  documentId: string,
+  loadedBlocks?: { id: string; type: string; text: string }[],
+): Promise<ResolvedSource[]> {
   const [sources, blocks] = await Promise.all([
     db.source.findMany({ where: { documentId } }),
-    db.block.findMany({
-      where: { documentId },
-      orderBy: { order: "asc" },
-      select: { id: true, type: true, text: true },
-    }),
+    loadedBlocks ??
+      db.block.findMany({
+        where: { documentId },
+        orderBy: { order: "asc" },
+        select: { id: true, type: true, text: true },
+      }),
   ]);
   const blockById = new Map(blocks.map((b) => [b.id, b]));
 

@@ -18,29 +18,36 @@ export async function GET(req: Request, ctx: { params: Promise<{ notebookId: str
   const access = await notebookAccess(notebookId, "viewer");
   if (access instanceof NextResponse) return access;
 
-  const notebook = await db.notebook.findUnique({
-    where: { id: notebookId },
-    select: { rev: true },
-  });
-  if (!notebook) return NextResponse.json({ error: "Project not found" }, { status: 404 });
-
   // Single-reader mode has no accounts to be present as.
-  if (!authEnabled()) return NextResponse.json({ rev: notebook.rev, people: [] });
+  if (!authEnabled()) {
+    const notebook = await db.notebook.findUnique({
+      where: { id: notebookId },
+      select: { rev: true },
+    });
+    if (!notebook) return NextResponse.json({ error: "Project not found" }, { status: 404 });
+    return NextResponse.json({ rev: notebook.rev, people: [] });
+  }
 
+  // The rev, the presence stamp, and the others present are independent:
+  // one round of queries, not three in a row. The others-present query
+  // excludes the caller, so it need not wait for the stamp.
   const documentId = new URL(req.url).searchParams.get("doc") || null;
-  await db.notebookPresence.upsert({
-    where: { notebookId_userId: { notebookId, userId: access.user.id } },
-    update: { documentId, lastSeenAt: new Date() },
-    create: { notebookId, userId: access.user.id, documentId },
-  });
-
-  const rows = await db.notebookPresence.findMany({
-    where: {
-      notebookId,
-      lastSeenAt: { gt: new Date(Date.now() - PRESENT_WINDOW_MS) },
-      NOT: { userId: access.user.id },
-    },
-  });
+  const [notebook, , rows] = await Promise.all([
+    db.notebook.findUnique({ where: { id: notebookId }, select: { rev: true } }),
+    db.notebookPresence.upsert({
+      where: { notebookId_userId: { notebookId, userId: access.user.id } },
+      update: { documentId, lastSeenAt: new Date() },
+      create: { notebookId, userId: access.user.id, documentId },
+    }),
+    db.notebookPresence.findMany({
+      where: {
+        notebookId,
+        lastSeenAt: { gt: new Date(Date.now() - PRESENT_WINDOW_MS) },
+        NOT: { userId: access.user.id },
+      },
+    }),
+  ]);
+  if (!notebook) return NextResponse.json({ error: "Project not found" }, { status: 404 });
   let people: SyncPresence[] = [];
   if (rows.length > 0) {
     const users = await db.user.findMany({ where: { id: { in: rows.map((r) => r.userId) } } });

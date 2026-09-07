@@ -10,6 +10,7 @@ import { parseDriveFileId, type DrivePickedFile } from "@/lib/drive/types";
 import { IMAGE_ACCEPT, isImageFile } from "@/lib/handwritten/image";
 import { isImeKey } from "@/lib/ime";
 import { useCollab } from "@/components/collab/collab-context";
+import { reportError } from "@/lib/error-log";
 import { ChevronDownIcon, SpinnerIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { clipWords } from "@/lib/markdown-preview";
@@ -56,6 +57,30 @@ type IngestEvent =
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// The automatic upgrade re-parse runs once per document per parser version
+// per browser in this window. Each run is a full parse on the server, so a
+// reload while one runs, or after one failed, must not start another; the
+// document's actions in the list still re-parse on demand.
+const REPARSE_COOLDOWN_MS = 6 * 60 * 60 * 1000;
+function reparseKey(documentId: string): string {
+  return `unitos:reparse:${documentId}:${PARSER_VERSION}`;
+}
+function reparseDue(documentId: string): boolean {
+  try {
+    const at = Number(localStorage.getItem(reparseKey(documentId)) ?? 0);
+    return !(at > 0 && Date.now() - at < REPARSE_COOLDOWN_MS);
+  } catch {
+    return true;
+  }
+}
+function markReparse(documentId: string): void {
+  try {
+    localStorage.setItem(reparseKey(documentId), String(Date.now()));
+  } catch {
+    // storage unavailable: the next page load may try again
+  }
 }
 
 // The save stage's figure check ({figures, captionsWithoutFigure,
@@ -130,6 +155,11 @@ export function DocumentBar({
   const [pillMenu, setPillMenu] = useState<string | null>(null);
   const [library, setLibrary] = useState<LibraryDocument[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Every error the bar shows also lands in the error log: the rail's error
+  // button lists them (workspace.tsx).
+  useEffect(() => {
+    if (error) reportError(error);
+  }, [error]);
   // Opening a document is a server round trip; the pill shows it is on its way.
   const [opening, startOpening] = useTransition();
 
@@ -307,13 +337,21 @@ export function DocumentBar({
   }
 
   // Automatic upgrade re-parse: the document already reads fine, so no
-  // progress card and no error banner — the reader never waits on it. Success
-  // swaps the upgraded blocks in with a refresh; failure logs and leaves the
-  // old parse standing until the next open tries again.
+  // progress card — the reader never waits on it. Success swaps the upgraded
+  // blocks in with a refresh; failure goes to the error log and leaves the
+  // old parse standing until the cooldown passes.
   async function reparseSilently(doc: AttachedDocument) {
+    const failed = (detail: string | null) =>
+      reportError(detail ? `${t("panes.reparseFailed")}: ${detail}` : t("panes.reparseFailed"));
     try {
       const res = await fetch(`/api/documents/${doc.id}/reparse`, { method: "POST" });
-      if (!res.ok || !res.body) return;
+      // 409: another tab or a reload is already running this re-parse.
+      if (res.status === 409) return;
+      if (!res.ok || !res.body) {
+        const detail = await readJson<{ error?: string }>(res);
+        failed(detail?.error ?? statusMessage(t, res.status));
+        return;
+      }
       let result: IngestEvent | null = null;
       let saveDetail: string | null = null;
       for await (const event of readNdjson<IngestEvent>(res)) {
@@ -327,17 +365,19 @@ export function DocumentBar({
         // stands alone, and when the page draws it with scripts, the fix is
         // a browser for the deployment (SPEC.md §15).
         const notice = saveDetail ? figureNotice(t, saveDetail) : null;
-        if (notice) setConnectNotice(notice);
-      } else if (result && "error" in result) console.warn("[reparse] upgrade failed:", result.error);
+        if (notice) reportError(notice);
+      } else failed(result && "error" in result ? result.error : t("panes.uploadCutOff"));
     } catch (err) {
-      console.warn("[reparse] upgrade failed:", err);
+      failed(err instanceof Error ? err.message : null);
     }
   }
 
   useEffect(() => {
     if (!activeStale || active === null || phase !== null) return;
     if (reparseAttempted.current.has(active.id)) return;
+    if (isOffline() || !reparseDue(active.id)) return;
     reparseAttempted.current.add(active.id);
+    markReparse(active.id);
     void reparseSilently(active);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeId, activeStale]);
@@ -945,7 +985,6 @@ export function DocumentBar({
           {connectNotice}
         </span>
       )}
-      {error && !dialog && <span className="text-xs text-red-500">{error}</span>}
 
       <input
         ref={fileRef}
