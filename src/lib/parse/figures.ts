@@ -212,6 +212,11 @@ function widthPct(el: Element): number | null {
     it on the <figure> and the reader draws the figure past the column's
     edges. The media inside is then as wide as the figure. */
 function liftWideWidth(shell: Element, row: Element | null) {
+  // A video keeps the column: drawn past it, a video runs past its own
+  // pixels on a high-density screen and goes soft, where a chart or a
+  // photo holds up (the videos of a page are made for its column, not for
+  // twice the pixels).
+  if (shell.querySelector("video")) return;
   const candidates: Element[] = [];
   if (row) candidates.push(row);
   for (const media of shell.querySelectorAll(MEDIA_SELECTOR)) {
