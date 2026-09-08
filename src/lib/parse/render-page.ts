@@ -1,5 +1,5 @@
 import { JSDOM, VirtualConsole } from "jsdom";
-import { browserConfigured, launchBrowser, withTimeout } from "@/lib/browser";
+import { browserConfigured, launchBrowser, sessionLengthOf, withTimeout } from "@/lib/browser";
 import { db } from "@/lib/db";
 import { serverT } from "@/lib/i18n/server";
 import { captureAnimatedCharts, type CaptureResult, type CaptureStore } from "@/lib/parse/capture-animation";
@@ -27,10 +27,13 @@ const IDLE_TIMEOUT_MS = 10_000;
 const STEP_TIMEOUT_MS = 15_000;
 // One viewport per step, a short wait for the charts that draw on scroll.
 const SCROLL_STEPS = 40;
-const SCROLL_WAIT_MS = 250;
+const SCROLL_WAIT_MS = 150;
 const SETTLE_MS = 500;
-// The charts get this much of the render's time.
+// The charts get this much of the render's time — less when the browser's
+// session ends sooner (lib/browser.ts sessionLengthOf): the capture must be
+// stored before the service closes the page, with this much to spare.
 const CAPTURE_BUDGET_MS = 110_000;
+const SESSION_MARGIN_MS = 6_000;
 
 // What the render did, saved with the document (Document.figureRenderAt,
 // figureRenderError) and reported with the save stage, so the reader can
@@ -129,6 +132,9 @@ type Rendered = { html: string; error: string | null; charts: CaptureResult | nu
 
 async function renderInBrowser(url: string, store: CaptureStore | null): Promise<Rendered> {
   const browser = await launchBrowser();
+  const connectedAt = Date.now();
+  const sessionMs = sessionLengthOf(browser);
+  const sessionEnd = sessionMs === null ? Infinity : connectedAt + sessionMs - SESSION_MARGIN_MS;
   try {
     const context = await browser.newContext({ locale: "en-US", viewport: { width: 1280, height: 900 } });
     try {
@@ -174,7 +180,9 @@ async function renderInBrowser(url: string, store: CaptureStore | null): Promise
       let html = await serialize();
       if (!clock) return { html, error: clockError, charts: null };
       try {
-        const capture = captureAnimatedCharts(page, { store, deadline: Date.now() + CAPTURE_BUDGET_MS });
+        const deadline = Math.min(Date.now() + CAPTURE_BUDGET_MS, sessionEnd);
+        if (deadline <= Date.now()) throw new Error("the browser's session is over before the charts");
+        const capture = captureAnimatedCharts(page, { store, deadline });
         // Past the time limit the capture keeps failing against a closing
         // page; nobody is waiting for it then.
         capture.catch(() => {});

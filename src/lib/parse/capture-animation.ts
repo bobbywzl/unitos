@@ -28,8 +28,13 @@ const STEP_MS = 100;
 // Steps sampled at most: a chart that neither holds nor repeats in this time
 // stays as it is.
 const MAX_SAMPLES = 300;
-// A chart that changes nothing in this time is still.
+// Steps the clock runs between two reads of the samples: the page samples
+// itself every step (startSampler), so a batch costs two round trips to the
+// browser — one to step, one to read — where a step at a time cost two each.
+// Over a remote browser (Browserless) a round trip is tens of milliseconds
+// and a session is minutes at most. The first batch is the still check.
 const STILL_MS = 1_000;
+const SAMPLE_BATCH = 30;
 // A chart that holds for this long has settled.
 const SETTLE_MS = 4_000;
 // A loop is at least this long, and at least this much of a second period
@@ -47,6 +52,14 @@ const MAX_GIF_BYTES = 6_000_000;
 // A chart's rendered size, at least, to be a chart.
 const MIN_WIDTH = 120;
 const MIN_HEIGHT = 60;
+// The recording measures its frames as it goes, and when the loop will not
+// be done by the deadline at a frame per step — with this share of the time
+// left to spare — records every second, third, or fourth step at the
+// matching delay: a coarser GIF in time over a slow link (a remote browser)
+// rather than none.
+const PROBE_FRAMES = 5;
+const MAX_STRIDE = 4;
+const TIME_SPARE = 0.3;
 
 const MARK = "data-unitos-chart";
 
@@ -110,13 +123,50 @@ function periodOf(samples: Shape[]): number | null {
   return null;
 }
 
-/** The chart's shape now: the count of its elements, then every number in
-    its markup. */
-function shapeOf(chart: Locator): Promise<Shape> {
-  return chart.evaluate((el) => {
-    const numbers = el.outerHTML.match(/-?\d*\.?\d+(?:e[+-]?\d+)?/gi) ?? [];
-    return [el.querySelectorAll("*").length, ...numbers.map(Number)];
-  });
+// The chart's shape: the count of its elements, then every number in its
+// markup. The page samples it under its stepped clock (startSampler): a
+// timer on the page's clock appends the shape to a list on the window every
+// STEP_MS of the page's time, after the frames the page drew in that step.
+const SAMPLES = "__unitosChartSamples";
+
+async function startSampler(chart: Locator): Promise<void> {
+  await chart.evaluate(
+    // No inner named function: a bundler that keeps function names would
+    // reference a helper the page does not have once this is serialized.
+    (el, { key, stepMs }) => {
+      const store = window as unknown as Record<string, unknown>;
+      const samples: number[][] = [
+        [el.querySelectorAll("*").length, ...(el.outerHTML.match(/-?\d*\.?\d+(?:e[+-]?\d+)?/gi) ?? []).map(Number)],
+      ];
+      store[key] = samples;
+      store[`${key}Timer`] = setInterval(
+        () =>
+          samples.push([
+            el.querySelectorAll("*").length,
+            ...(el.outerHTML.match(/-?\d*\.?\d+(?:e[+-]?\d+)?/gi) ?? []).map(Number),
+          ]),
+        stepMs,
+      );
+    },
+    { key: SAMPLES, stepMs: STEP_MS },
+  );
+}
+
+/** The samples the page took from the given index on. */
+function readSamples(page: Page, from: number): Promise<Shape[]> {
+  return page.evaluate(
+    ({ key, from }) => ((window as unknown as Record<string, number[][]>)[key] ?? []).slice(from),
+    { key: SAMPLES, from },
+  );
+}
+
+async function stopSampler(page: Page): Promise<void> {
+  await page.evaluate((key) => {
+    const store = window as unknown as Record<string, unknown>;
+    clearInterval(store[`${key}Timer`] as ReturnType<typeof setInterval>);
+    delete store[`${key}Timer`];
+    delete store[key];
+  }, SAMPLES);
 }
 
 /** Mark the page's charts — every inline svg with a viewBox outside the
@@ -168,18 +218,28 @@ async function recordLoop(
   const frames: GifFrame[] = [];
   let width = 0;
   let height = 0;
-  for (let i = 0; i < period; i++) {
+  let stride = 1;
+  const startedAt = Date.now();
+  for (let step = 0; step < period; step += stride) {
     if (Date.now() > deadline) return null;
+    if (frames.length >= PROBE_FRAMES && frames.length % PROBE_FRAMES === 0) {
+      const perFrame = (Date.now() - startedAt) / frames.length;
+      const left = Math.max(1, deadline - Date.now()) * (1 - TIME_SPARE);
+      const need = Math.ceil((perFrame * (period - step)) / left);
+      stride = Math.min(MAX_STRIDE, Math.max(stride, need));
+    }
     const png = await page.screenshot({ type: "png", clip });
     const pixels = await pixelsOf(png);
-    if (i === 0) {
+    if (frames.length === 0) {
       width = pixels.width;
       height = pixels.height;
     } else if (pixels.width !== width || pixels.height !== height) {
       return null;
     }
-    frames.push({ rgba: pixels.rgba, delayMs: STEP_MS });
-    await page.clock.runFor(STEP_MS);
+    // The last frame holds until the loop's end, whatever the stride.
+    const steps = Math.min(stride, period - step);
+    frames.push({ rgba: pixels.rgba, delayMs: STEP_MS * steps });
+    await page.clock.runFor(STEP_MS * steps);
   }
   return { width, height, frames };
 }
@@ -234,31 +294,44 @@ export async function captureAnimatedCharts(
       }
       const chart = page.locator(`[${MARK}="${n}"]`);
       let kind: keyof CaptureResult = "undecided";
+      const chartStartedAt = Date.now();
+      let sampled = 0;
+      let foundPeriod: number | null = null;
       try {
         // In view, so an animation that waits to be seen starts.
         await chart.scrollIntoViewIfNeeded();
         await page.waitForTimeout(150);
-        const samples: Shape[] = [await shapeOf(chart)];
+        await startSampler(chart);
+        const samples: Shape[] = [];
         let period: number | null = null;
-        while (samples.length < MAX_SAMPLES && Date.now() < opts.deadline) {
-          await page.clock.runFor(STEP_MS);
-          samples.push(await shapeOf(chart));
-          const length = samples.length;
-          if (length === stillSamples + 1 && samples.every((s) => sameShape(s, samples[0]))) {
-            kind = "still";
-            break;
-          }
-          if (length > settleSamples + 1) {
-            const tail = samples.slice(length - settleSamples - 1);
-            if (tail.every((s) => sameShape(s, tail[0]))) {
-              kind = "settled";
+        try {
+          samples.push(...(await readSamples(page, 0)));
+          while (samples.length < MAX_SAMPLES && Date.now() < opts.deadline) {
+            const batch = Math.min(
+              samples.length <= stillSamples ? stillSamples : SAMPLE_BATCH,
+              MAX_SAMPLES - samples.length,
+            );
+            await page.clock.runFor(STEP_MS * batch);
+            samples.push(...(await readSamples(page, samples.length)));
+            const length = samples.length;
+            if (length > stillSamples && samples.slice(0, stillSamples + 1).every((s) => sameShape(s, samples[0]))) {
+              kind = "still";
               break;
             }
-          }
-          if (length % 10 === 0) {
+            if (length > settleSamples + 1) {
+              const tail = samples.slice(length - settleSamples - 1);
+              if (tail.every((s) => sameShape(s, tail[0]))) {
+                kind = "settled";
+                break;
+              }
+            }
             period = periodOf(samples);
             if (period !== null) break;
           }
+        } finally {
+          sampled = samples.length;
+          foundPeriod = period;
+          await stopSampler(page).catch(() => {});
         }
         if (period !== null && opts.store && result.looped < MAX_CHARTS) {
           const loop = await recordLoop(page, chart, period, opts.deadline);
@@ -269,10 +342,14 @@ export async function captureAnimatedCharts(
             kind = "looped";
           }
         }
-      } catch {
+      } catch (err) {
         // this chart stays as it is
+        console.warn(`[capture] chart ${n} stays as it is:`, err);
       }
       result[kind] += 1;
+      console.info(
+        `[capture] chart ${n}: ${kind}, ${sampled} samples${foundPeriod ? `, period ${foundPeriod}` : ""}, ${Date.now() - chartStartedAt} ms`,
+      );
     }
   } finally {
     await unmarkCharts(page).catch(() => {});
