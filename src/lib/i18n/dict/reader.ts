@@ -125,6 +125,10 @@ const en = {
   deleteExplainTitle: "Delete this explanation and its mark",
   deleteAnalysisTitle: "Delete this analysis and its mark",
   deleteSimplifyTitle: "Delete this simplified rewrite and its mark",
+  regenerateExplanationTitle: "Explain this selection again. The new explanation replaces this one.",
+  regenerateAnalysisTitle: "Analyze this block again. The new analysis replaces this one.",
+  regenerateVisualizationTitle: "Visualize this selection again. The new picture replaces this one.",
+  regenerateSimplifyTitle: "Simplify this selection again. The new rewrite replaces this one.",
   deleteConversationTitle: "Delete this conversation and its mark",
   sentenceTitle: "Press to see what this restates in the original",
   thinking: "Thinking",
@@ -153,6 +157,7 @@ const en = {
   extractCardOrigin: "Origin",
   extractCardPassages: "{n} passage{s}",
   deleteExtractionTitle: "Remove this match and its highlights",
+  regenerateExtractionTitle: "Match this phrase again. The new match replaces this one.",
 
   // Plan card
   assistantPlan: "Assistant plan",
@@ -366,6 +371,10 @@ const zh: Record<keyof typeof en, string> = {
   deleteExplainTitle: "删除此解释及其标记",
   deleteAnalysisTitle: "删除此分析及其标记",
   deleteSimplifyTitle: "删除此简化及其标记",
+  regenerateExplanationTitle: "重新解释这段选中的文字。新的解释会替换当前这条。",
+  regenerateAnalysisTitle: "重新分析此块。新的分析会替换当前这条。",
+  regenerateVisualizationTitle: "重新为这段选中的文字作图。新的图会替换当前这幅。",
+  regenerateSimplifyTitle: "重新简化这段选中的文字。新的简化会替换当前这条。",
   deleteConversationTitle: "删除此对话及其标记",
   sentenceTitle: "点击查看这句对应的原文",
   thinking: "思考中",
@@ -393,6 +402,7 @@ const zh: Record<keyof typeof en, string> = {
   extractCardOrigin: "起点",
   extractCardPassages: "{n} 个片段",
   deleteExtractionTitle: "移除此匹配及其高亮",
+  regenerateExtractionTitle: "重新匹配此短语。新的匹配会替换当前这条。",
 
   // Plan card
   assistantPlan: "助手计划",

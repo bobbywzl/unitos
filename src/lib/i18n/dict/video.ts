@@ -83,6 +83,9 @@ const en = {
   comment: "Comment",
   savedAsAnnotation: "Saved as an annotation",
   explainFailed: "Explain failed",
+  regenerateExplainTitle: "Explain this moment again. The new explanation replaces this one.",
+  regenerateAnswerTitle: "Ask this question again. The new answer replaces this one.",
+  regenerateFindTitle: "Search this query again. The new matches replace these.",
   requestFailedStatus: "Request failed ({status})",
 
   // Transcript
@@ -240,6 +243,9 @@ const zh: Record<keyof typeof en, string> = {
   comment: "评论",
   savedAsAnnotation: "已保存为批注",
   explainFailed: "解释失败",
+  regenerateExplainTitle: "重新解释这个片段。新的解释会替换当前这条。",
+  regenerateAnswerTitle: "重新提出这个问题。新的回答会替换当前这条。",
+  regenerateFindTitle: "重新搜索这个查询。新的结果会替换这些。",
   requestFailedStatus: "请求失败（{status}）",
 
   // Transcript
