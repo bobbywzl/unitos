@@ -50,7 +50,8 @@ Missing any of these: say which one, and stop. Never guess a URL or a password.
      - The Claude Code attribution footer.
    - `PATCH` each id in the cluster to `seen`.
    - A cluster whose change fails the checks or cannot be finished: `git checkout main`, delete the branch, leave the feedback alone, and list the cluster in the report with the reason.
-7. **Report.** End with one report: pull requests opened (title, link, feedback count), feedback resolved and replied to, feedback skipped and why. Nothing else.
+7. **Re-read.** `curl -sS -b $JAR "$UNITOS_URL/api/admin/feedback?status=new,seen&take=2000"` again. Step 2's counts are from before this run's replies and status patches; this read is the true state after.
+8. **Report.** End with one report, built from step 7 and this run's actions: pull requests opened (title, link, feedback count); feedback resolved and replied to; feedback skipped and why; new and seen items still open, from step 7. Nothing else.
 
 ## What a person does
 
