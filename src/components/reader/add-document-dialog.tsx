@@ -140,6 +140,7 @@ export function AddDocumentDialog({
       role="dialog"
       aria-modal
       aria-label={t("panes.addDocument")}
+      data-nudge-pause
     >
       <div
         onClick={(e) => e.stopPropagation()}

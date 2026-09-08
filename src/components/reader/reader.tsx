@@ -887,6 +887,7 @@ export function Reader({
       <article
         className="reader-prose reader-column w-full px-6 py-11 print:py-0"
         data-font={font ?? "default"}
+        data-nudge="select"
         style={{ ...columnStyle, fontFamily }}
         onKeyDown={mode === "edit" ? onStyleShortcut : undefined}
       >

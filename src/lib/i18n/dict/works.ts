@@ -6,9 +6,8 @@
 const en = {
   // Works shelf
   corpora: "Projects",
-  newCorpusTitle: "New project title",
-  create: "Create",
   newWork: "New project",
+  untitledProject: "Untitled project",
   deleteCorpusConfirm: "Delete this project and all its notes?",
   corpusTitle: "Project title",
   renameCorpus: "Rename project",
@@ -22,14 +21,18 @@ const en = {
   projectActions: "Project actions",
   notes: "Notes",
   rename: "Rename",
-  // Welcome flow (first visit): the splash, then the nudges, one bubble at a time
+  // Welcome flow (first visit): the splash, then the nudges — the onboarding
+  // feature look: the target glows, one small translucent caption beside it
   welcomeName: "Welcome {name}",
   welcomeTagline: "Unitos Notebook, your all-powerful notemaker",
-  nudgeProject: "Start here: name a project and press Create. A project binds documents and notes.",
-  nudgeDocument: "Add an article with +: a PDF, a web page, a video, or Google Drive.",
-  nudgeGuide: "Press ? any time. It explains every function, Distill first.",
+  nudgeProject: "Start here: press New project. A project binds documents and notes.",
+  nudgeDocument: "Add more documents with +: a PDF, a web page, a video, or Google Drive.",
+  nudgeSelect: "Select any passage of the text. A toolbar appears: Explain, Simplify, Comment, and the Assistant.",
   nudgeRail:
-    "The sidebar: Assistant, Graph, Notes, Annotations, Distill, Edit history. Open one and explore.",
+    "The side panel: Assistant, Graph, Notes, Annotations, Distill, Edit history. Open one and explore.",
+  nudgeTools:
+    "Distill writes the article as bullet points. Extract answers one question with quotes. Assistant, top left, takes any command.",
+  nudgeFloat: "Hold a note's header and drag it left. The note floats over the article while you read.",
   nudgeDone: "Got it",
   // Guide dialog
   guideLabel: "Guide",
@@ -121,9 +124,8 @@ const en = {
 const zh: Record<keyof typeof en, string> = {
   // Works shelf
   corpora: "全部项目",
-  newCorpusTitle: "新项目标题",
-  create: "创建",
   newWork: "新建项目",
+  untitledProject: "未命名项目",
   deleteCorpusConfirm: "删除该项目及其全部笔记？",
   corpusTitle: "项目标题",
   renameCorpus: "重命名项目",
@@ -140,10 +142,12 @@ const zh: Record<keyof typeof en, string> = {
   // Guide dialog
   welcomeName: "欢迎，{name}",
   welcomeTagline: "Unitos Notebook，你的全能笔记本",
-  nudgeProject: "从这里开始：给项目起名并按“创建”。一个项目绑定文档和笔记。",
-  nudgeDocument: "用 + 添加文章：PDF、网页、视频或 Google Drive。",
-  nudgeGuide: "随时按 ?。它介绍全部功能，提炼排在最前。",
+  nudgeProject: "从这里开始：按“新建项目”。一个项目绑定文档和笔记。",
+  nudgeDocument: "用 + 添加更多文档：PDF、网页、视频或 Google Drive。",
+  nudgeSelect: "选中正文中的任意一段。工具栏随即出现：解释、简化、评论和助手。",
   nudgeRail: "侧栏：助手、图谱、笔记、批注、提炼、编辑记录。打开一个，开始探索。",
+  nudgeTools: "提炼把文章写成分条要点。提取用引文回答一个问题。左上角的助手接受任何指令。",
+  nudgeFloat: "按住笔记的标题行向左拖。笔记会浮在文章上，边读边写。",
   nudgeDone: "知道了",
   guideLabel: "指南",
   guideTitle: "如何拆解一篇文档",
