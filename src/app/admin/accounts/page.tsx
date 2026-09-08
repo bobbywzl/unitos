@@ -4,23 +4,29 @@ import { authEnabled } from "@/lib/auth";
 import { USER_ID } from "@/lib/constants";
 import { db } from "@/lib/db";
 import { serverT } from "@/lib/i18n/server";
-import { personSymbol } from "@/lib/person";
+import { personColor, personOf, personSymbol, type Person } from "@/lib/person";
+import { PersonBadge } from "@/components/collab/person-badge";
 import { AdminNav } from "@/components/admin/admin-nav";
 import { AccountReset } from "@/components/admin/account-reset";
+import { TierControl } from "@/components/admin/tier-control";
+import { TierChip } from "@/components/tier-mark";
 import { tierState, type TierState } from "@/lib/tiers";
 
 export const dynamic = "force-dynamic";
 
-// Admin: every account and what it holds — projects, documents, notes — with
-// Reset account (lib/account-reset.ts), which deletes the account's data and
-// puts it back at onboarding. Sign-in off: the local reader is the one account.
+// Admin: every account, its tier, and what it holds — projects, documents,
+// notes — with Tier (components/admin/tier-control.tsx, TIERS.md), which sets
+// the account's tier, and Reset account (lib/account-reset.ts), which deletes
+// the account's data and puts it back at onboarding. Sign-in off: the local
+// reader is the one account; it has no row to set a tier on.
 
 type AccountRow = {
   id: string;
   name: string;
   // null = the local reader: no account row, so no email and no dates.
   email: string | null;
-  picture: string;
+  // The badge (lib/person.ts), with the tier state for the tier mark.
+  person: Person;
   createdAt: Date | null;
   lastSeenAt: Date | null;
   // The account's tier state (lib/tiers.ts) and the trial's end when it has one.
@@ -71,7 +77,14 @@ export default async function AdminAccountsPage() {
             id: USER_ID,
             name: t("admin.localReader"),
             email: null,
-            picture: "",
+            person: {
+              id: USER_ID,
+              name: t("admin.localReader"),
+              symbol: personSymbol(t("admin.localReader")),
+              color: personColor(USER_ID),
+              picture: "",
+              tier: "ultra" as const,
+            },
             createdAt: null,
             lastSeenAt: null,
             plan: { state: "ultra" as const, trialEndsAt: null },
@@ -82,7 +95,7 @@ export default async function AdminAccountsPage() {
       id: u.id,
       name: u.name,
       email: u.email,
-      picture: u.picture,
+      person: personOf(u),
       createdAt: u.createdAt,
       lastSeenAt: u.lastSeenAt,
       plan: { state: tierState(u), trialEndsAt: u.trialEndsAt },
@@ -106,28 +119,16 @@ export default async function AdminAccountsPage() {
             return (
               <li key={a.id} className="rounded-2xl bg-card p-4 shadow-soft">
                 <div className="flex flex-wrap items-center gap-2">
-                  {a.picture ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={a.picture} alt="" className="size-7 rounded-full object-cover" />
-                  ) : (
-                    <span className="flex size-7 items-center justify-center rounded-full bg-clay-100 text-xs font-semibold text-clay-800">
-                      {personSymbol(a.name)}
-                    </span>
-                  )}
+                  <PersonBadge person={a.person} size={28} />
                   <h2 className="text-sm font-bold text-sand-800">{a.name}</h2>
                   <span className="text-xs text-sand-500">{a.email ?? a.id}</span>
                   <Chip>{t("admin.countCorpora", { n: counts.projects })}</Chip>
                   <Chip>{t("admin.countDocuments", { n: counts.documents })}</Chip>
                   <Chip>{t("admin.countNotes", { n: counts.notes })}</Chip>
-                  <Chip>
-                    {a.plan.state === "ultra"
-                      ? t("admin.accountUltra")
-                      : a.plan.state === "premium"
-                        ? t("admin.accountPremium")
-                        : t(a.plan.state === "trial" ? "admin.accountTrial" : "admin.accountExpired", {
-                            date: a.plan.trialEndsAt ? fmtDate(a.plan.trialEndsAt) : "",
-                          })}
-                  </Chip>
+                  <TierChip
+                    state={a.plan.state}
+                    trialEndsAt={a.plan.trialEndsAt?.toISOString() ?? null}
+                  />
                   {a.driveLinked && <Chip>{t("admin.accountDrive")}</Chip>}
                 </div>
                 {a.createdAt && a.lastSeenAt && (
@@ -135,6 +136,13 @@ export default async function AdminAccountsPage() {
                     {t("admin.accountCreated", { date: fmtDate(a.createdAt) })} ·{" "}
                     {t("admin.accountLastSeen", { date: fmtDate(a.lastSeenAt) })}
                   </p>
+                )}
+                {a.email !== null && (
+                  <TierControl
+                    userId={a.id}
+                    state={a.plan.state}
+                    trialEndsAt={a.plan.trialEndsAt?.toISOString() ?? null}
+                  />
                 )}
                 <AccountReset userId={a.id} confirm={a.email ?? a.id} />
               </li>

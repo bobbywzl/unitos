@@ -11,7 +11,7 @@ import { CollabProvider, type CollabState } from "@/components/collab/collab-con
 import { SyncRefresh } from "@/components/collab/sync-refresh";
 import { ExportMenu } from "@/components/export-menu";
 import { Outline } from "@/components/outline/outline";
-import { premiumActive, ultraActive } from "@/lib/tiers";
+import { accountTier } from "@/lib/tiers";
 
 export const dynamic = "force-dynamic";
 
@@ -95,6 +95,9 @@ export default async function NotesPage(props: { params: Promise<{ notebookId: s
       for (const r of n.replies) authorIds.add(r.userId);
     }
   }
+  // One tier read for every gate on this page (TIERS.md): the mark in the
+  // header, offline work, Visualize, and tool conversations.
+  const tier = accountTier(user, authEnabled());
   const collab: CollabState = {
     authOn: authEnabled(),
     role: myRole,
@@ -102,8 +105,10 @@ export default async function NotesPage(props: { params: Promise<{ notebookId: s
     shared: authEnabled() && notebook.collaborators.length > 0,
     myId: user.id,
     people: await peopleByIds(authorIds),
-    premium: authEnabled() ? premiumActive(user) : true,
-    ultra: authEnabled() ? ultraActive(user) : true,
+    tier,
+    trialEndsAt: user.trialEndsAt?.toISOString() ?? null,
+    premium: tier !== "expired",
+    ultra: tier === "ultra",
   };
 
   return (

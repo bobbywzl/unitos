@@ -164,7 +164,15 @@ export async function peopleByIds(userIds: Iterable<string>): Promise<Record<str
   if (ids.length === 0) return {};
   const users = await db.user.findMany({
     where: { id: { in: ids } },
-    select: { id: true, name: true, symbol: true, color: true, picture: true },
+    select: {
+      id: true,
+      name: true,
+      symbol: true,
+      color: true,
+      picture: true,
+      tier: true,
+      trialEndsAt: true,
+    },
   });
   return Object.fromEntries(users.map((u) => [u.id, personOf(u)]));
 }

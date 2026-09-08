@@ -29,6 +29,8 @@
 //   conversion(手写转文本) 转换 · Circle & ask 圈选并提问 · image 图片 ·
 //   offline 离线 · sync(离线同步) 同步 · Unitos Premium 不翻译 ·
 //   Unitos Ultra 不翻译 · plan(账户方案) 方案 · trial 试用 ·
+//   tier(账户等级) 方案 · tier mark(方案标记) 方案标记 · black diamond 黑钻 ·
+//   white crystal 白水晶 ·
 //   visualize 可视化 · visualization(可视化生成的图) 可视化图 ·
 //   link Google Drive(账号关联) 关联 · pages(手写页面) 页面 ·
 //   lasso highlight(页面圈选高亮) 圈选高亮 ·
@@ -66,6 +68,12 @@ const en = {
   open: "Open",
   requestFailed: "Request failed",
   requestFailedStatus: "Request failed ({status})",
+  // Tiers (TIERS.md): the tier's name, as the tier chip and the tier mark's
+  // tooltip say it. On a trial or after it, the trial's end.
+  tierUltra: "Unitos Ultra",
+  tierPremium: "Unitos Premium",
+  tierTrial: "Unitos Premium · trial until {date}",
+  tierExpired: "Unitos Premium · trial ended {date}",
   // Offline work (SPEC.md §17, Unitos Premium)
   offline: "Offline. This change did not save.",
   offlineQueued: "Offline · {n} saved for sync · Unitos Premium",
@@ -135,6 +143,10 @@ const zh: Record<keyof typeof en, string> = {
   open: "打开",
   requestFailed: "请求失败",
   requestFailedStatus: "请求失败（{status}）",
+  tierUltra: "Unitos Ultra",
+  tierPremium: "Unitos Premium",
+  tierTrial: "Unitos Premium · 试用至 {date}",
+  tierExpired: "Unitos Premium · 试用已于 {date} 结束",
   // Offline work (SPEC.md §17, Unitos Premium)
   offline: "已离线。此更改未保存。",
   offlineQueued: "离线 · 已保存 {n} 项待同步 · Unitos Premium",

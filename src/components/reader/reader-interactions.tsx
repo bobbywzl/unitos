@@ -78,6 +78,7 @@ import type { ConversionInfo } from "@/components/reader/conversion-strip";
 import { HIGHLIGHT_HUES, HUE_DOT, HUE_KEY } from "@/components/reader/hues";
 import type { PageMark } from "@/components/reader/page-block";
 import { useCollab } from "@/components/collab/collab-context";
+import { TierMark } from "@/components/tier-mark";
 import { useImageDrop, type DroppedImage } from "@/components/use-image-drop";
 import { AuthorChip } from "@/components/collab/person-badge";
 import { DistillPage } from "@/components/reader/distill-page";
@@ -4943,7 +4944,8 @@ function blockFormatKind(
             {t("reader.continueConversation")}
           </span>
           {!ultra && (
-            <span className="text-[9px] font-bold tracking-[0.06em] text-sand-500 uppercase">
+            <span className="flex items-center gap-1 text-[9px] font-bold tracking-[0.06em] text-sand-500 uppercase">
+              <TierMark state="ultra" size={10} />
               {t("reader.ultra")}
             </span>
           )}
@@ -5681,7 +5683,8 @@ function blockFormatKind(
                 <VisualizeIcon size={coarse ? 14 : 12} />
                 {t("reader.visualize")}
               </span>
-              <span className="text-[9px] font-bold tracking-[0.06em] text-sand-500 uppercase">
+              <span className="flex items-center gap-1 text-[9px] font-bold tracking-[0.06em] text-sand-500 uppercase">
+                <TierMark state="ultra" size={10} />
                 {t("reader.ultra")}
               </span>
             </button>

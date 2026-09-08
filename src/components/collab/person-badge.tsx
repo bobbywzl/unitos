@@ -2,9 +2,15 @@
 
 import type { Person } from "@/lib/person";
 import { useCollab } from "@/components/collab/collab-context";
+import { TierMark, tierLook } from "@/components/tier-mark";
+
+// A badge this size or larger carries the tier mark (TIERS.md) at its corner
+// and a ring in the tier's material; a smaller badge has no room for it.
+const TIER_MARK_MIN = 24;
 
 // The round badge for one person: picture when set, else symbol on their
-// color. Sized for chips (18px) and presence rows (26px).
+// color. Sized for chips (18px) and presence rows (26px). With the person's
+// tier known and the badge large enough, the tier mark sits at the corner.
 export function PersonBadge({
   person,
   size = 18,
@@ -14,27 +20,39 @@ export function PersonBadge({
   size?: number;
   title?: string;
 }) {
-  if (person.picture) {
-    return (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img
-        src={person.picture}
-        alt=""
-        data-tip={title ?? person.name}
-        width={size}
-        height={size}
-        className="shrink-0 rounded-full object-cover"
-        style={{ width: size, height: size }}
-      />
-    );
-  }
-  return (
+  const tip = title ?? person.name;
+  const face = person.picture ? (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={person.picture}
+      alt=""
+      data-tip={tip}
+      width={size}
+      height={size}
+      className="shrink-0 rounded-full object-cover"
+      style={{ width: size, height: size }}
+    />
+  ) : (
     <span
-      data-tip={title ?? person.name}
+      data-tip={tip}
       className="flex shrink-0 items-center justify-center rounded-full font-semibold text-white"
       style={{ width: size, height: size, background: person.color, fontSize: size * 0.52 }}
     >
       {person.symbol}
+    </span>
+  );
+  if (!person.tier || size < TIER_MARK_MIN) return face;
+  const look = tierLook(person.tier);
+  const mark = Math.round(size * 0.42);
+  return (
+    <span
+      className={`relative inline-flex shrink-0 rounded-full tier-ring-${look}`}
+      style={{ width: size, height: size }}
+    >
+      {face}
+      <span className="tier-corner" style={{ width: mark + 4, height: mark + 4 }}>
+        <TierMark state={person.tier} size={mark} />
+      </span>
     </span>
   );
 }

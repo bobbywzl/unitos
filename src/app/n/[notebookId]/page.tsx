@@ -59,7 +59,7 @@ import {
   type VideoAnnotationItem,
   type VideoInfo,
 } from "@/lib/video/types";
-import { premiumActive, ultraActive } from "@/lib/tiers";
+import { accountTier } from "@/lib/tiers";
 
 export const dynamic = "force-dynamic";
 
@@ -1142,6 +1142,9 @@ export default async function NotebookPage(props: {
     });
     for (const u of collaboratorUsers) authorIds.add(u.id);
   }
+  // One tier read for every gate on this page (TIERS.md): the mark in the
+  // header, offline work, Visualize, and tool conversations.
+  const tier = accountTier(user, authEnabled());
   const collab: CollabState = {
     authOn: authEnabled(),
     role: myRole,
@@ -1149,8 +1152,10 @@ export default async function NotebookPage(props: {
     shared: authEnabled() && notebook.collaborators.length > 0,
     myId: user.id,
     people: await peopleByIds(authorIds),
-    premium: authEnabled() ? premiumActive(user) : true,
-    ultra: authEnabled() ? ultraActive(user) : true,
+    tier,
+    trialEndsAt: user.trialEndsAt?.toISOString() ?? null,
+    premium: tier !== "expired",
+    ultra: tier === "ultra",
   };
 
   // The text layer over a document's blocks: marks, links, terms, and the
