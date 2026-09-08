@@ -1,8 +1,8 @@
-**Intent:** The deployed browser render finds playwright-core: the production function failed with "Cannot find module '/var/task/node_modules/playwright-core/browsers.json'", which the reader's new error tell surfaced.
+**Intent:** A Browserless plan that refuses the 300 s session timeout with 400 still connects: the endpoint as configured is tried next, and the capture reports if the session ends before it is done.
 
 **Files:**
-- `next.config.ts`: `outputFileTracingIncludes` adds `node_modules/playwright-core/**/*` to every API route's trace. playwright-core is external (unbundled) and reads `browsers.json` and its lib by path at runtime, so the trace missed them and the deployed function had no browser client to connect with.
+- `src/lib/browser.ts`: `launchBrowser` retries the connection without the appended `timeout` when the first attempt fails with 400; any other failure is thrown as before.
 
 **Decisions:**
-- Every API route rather than the four that launch a browser (add, re-parse, upload review, transcript): one key, no route to forget, and the package is small.
-- Verified in the local build: the reparse, documents, and upload-review route traces list `playwright-core/browsers.json`.
+- Retry rather than drop the timeout for everyone: a plan that allows it gets the long session the capture needs; one that does not gets its default and a clear reason in the reader if the capture is cut.
+- Not verified against Browserless with a valid token (none in the sandbox): a bad token answers 401 on both hosts, so the production 400 is either the plan's cap or the legacy `chrome.browserless.io` host; the user is asked to switch to the regional endpoint.

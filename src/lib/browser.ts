@@ -39,7 +39,19 @@ export async function launchBrowser(): Promise<Browser> {
     throw new Error("BROWSER_WS_ENDPOINT and CHROMIUM_PATH are not set");
   }
   const { chromium } = await import("playwright-core");
-  if (endpoint) return chromium.connectOverCDP(sessionEndpoint(endpoint), { timeout: CONNECT_TIMEOUT_MS });
+  if (endpoint) {
+    const withSession = sessionEndpoint(endpoint);
+    try {
+      return await chromium.connectOverCDP(withSession, { timeout: CONNECT_TIMEOUT_MS });
+    } catch (err) {
+      // A plan that caps the session shorter answers 400 to the timeout: the
+      // endpoint as given connects, and the capture reports if the session
+      // ends before it is done.
+      if (withSession === endpoint || !/\b400\b/.test(err instanceof Error ? err.message : String(err))) throw err;
+      console.warn("[browser] the session timeout was refused; connecting as configured:", err);
+      return chromium.connectOverCDP(endpoint, { timeout: CONNECT_TIMEOUT_MS });
+    }
+  }
   const extra = process.env.CHROMIUM_ARGS?.split(/\s+/).filter(Boolean) ?? [];
   return chromium.launch({
     executablePath: executable,
