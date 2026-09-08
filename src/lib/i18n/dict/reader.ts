@@ -137,6 +137,8 @@ const en = {
   continueConversationTitle:
     "Ask the assistant about this output to expand it and go deeper. The conversation saves with the output, under Annotations.",
   continuePlaceholder: "Ask about this…",
+  // Continuing into a conversation is Unitos Ultra (TIERS.md)
+  continueNeedsUltra: "Continue in a conversation is Unitos Ultra.",
   explainPlus: "Explain+",
   simplifyPlus: "Simplify+",
   analyzePlus: "Analyze+",
@@ -376,6 +378,8 @@ const zh: Record<keyof typeof en, string> = {
   continueConversation: "继续对话",
   continueConversationTitle: "就这段输出向助手提问，扩展并深入理解。对话随输出一起保存在批注下。",
   continuePlaceholder: "就此提问…",
+  // Continuing into a conversation is Unitos Ultra (TIERS.md)
+  continueNeedsUltra: "继续对话是 Unitos Ultra 功能。",
   explainPlus: "解释+",
   simplifyPlus: "简化+",
   analyzePlus: "分析+",

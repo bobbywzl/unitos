@@ -3994,7 +3994,14 @@ export function ReaderInteractions({
     if (kind === "explain") setBubble((b) => (b ? { ...b, ...update(b) } : b));
     else setSimplifyCard((c) => (c ? { ...c, ...update(c) } : c));
   }
+  // Continuing a tool's output into a conversation is Unitos Ultra (TIERS.md):
+  // the button and the box are offered to every account, and a non-Ultra
+  // press answers with the plain Ultra message, like Visualize.
   function openToolChat(kind: "explain" | "simplify") {
+    if (!ultra) {
+      showToast(t("reader.continueNeedsUltra"));
+      return;
+    }
     setToolChat(kind, () => ({ chatOpen: true }));
   }
   function stopToolChat(kind: "explain" | "simplify") {
@@ -4003,6 +4010,10 @@ export function ReaderInteractions({
     setToolChat(kind, () => ({ busy: false }));
   }
   async function sendToolMessage(kind: "explain" | "simplify") {
+    if (!ultra) {
+      showToast(t("reader.continueNeedsUltra"));
+      return;
+    }
     const card = kind === "explain" ? bubble : simplifyCard;
     const text = card?.input.trim();
     if (!card || !text || card.busy || card.streaming || !card.noteId) return;
@@ -4877,16 +4888,36 @@ function blockFormatKind(
   ) => {
     if (!card.noteId || card.streaming || card.error) return null;
     if (!card.chatOpen) {
+      // Continuing into a conversation is Unitos Ultra (TIERS.md): every
+      // account sees the mention at the end of the tool's output; a
+      // non-Ultra press answers with the plain Ultra message, never the box.
       return (
         <button
           onClick={() => openToolChat(kind)}
           data-track={`${tool}-continue`}
-          data-tip={t("reader.continueConversationTitle")}
-          className="mt-2.5 flex items-center gap-1.5 self-start rounded-full border border-line px-2.5 py-1 text-[11px] font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800"
+          data-tip={ultra ? t("reader.continueConversationTitle") : t("reader.continueNeedsUltra")}
+          className="mt-2.5 flex w-full items-center justify-between gap-2 self-start rounded-full border border-line px-2.5 py-1 text-[11px] font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800"
         >
-          <ToolSymbol tool={tool} plus size={11} />
-          {t("reader.continueConversation")}
+          <span className="flex items-center gap-1.5">
+            <ToolSymbol tool={tool} plus size={11} />
+            {t("reader.continueConversation")}
+          </span>
+          {!ultra && (
+            <span className="text-[9px] font-bold tracking-[0.06em] text-sand-500 uppercase">
+              {t("reader.ultra")}
+            </span>
+          )}
         </button>
+      );
+    }
+    if (!ultra) {
+      // A conversation started while the account was Ultra, since downgraded:
+      // the turns above stay readable; no more can be sent.
+      return (
+        <p className="mt-2 flex items-center gap-1.5 text-[11px] text-sand-500">
+          <ToolSymbol tool={tool} plus size={11} />
+          {t("reader.continueNeedsUltra")}
+        </p>
       );
     }
     return (
