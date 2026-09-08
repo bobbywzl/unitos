@@ -57,6 +57,7 @@ export default async function NotesPage(props: { params: Promise<{ notebookId: s
       pinned: n.pinned,
       order: n.order,
       createdById: n.createdById,
+      updatedAt: n.updatedAt.toISOString(),
       sources: n.sources.map((src) => ({
         id: src.id,
         documentId: src.documentId,

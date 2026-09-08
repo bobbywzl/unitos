@@ -46,6 +46,7 @@ export function SortableList({
   onMove,
   onCombine,
   canCombine,
+  axis,
   children,
 }: {
   id: string;
@@ -53,9 +54,17 @@ export function SortableList({
   onMove: (id: string, toIndex: number) => void;
   onCombine?: (id: string, intoId: string) => void;
   canCombine?: (id: string, intoId: string) => boolean;
+  // "y": the reorder starts on a vertical move only, and a sideways move first
+  // (past 12px) lets the sensor go — the notes tray's cards drag out of the
+  // tray sideways by the same grip (SPEC.md §6, note-card.tsx).
+  axis?: "y";
   children: React.ReactNode;
 }) {
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: axis === "y" ? { distance: { y: 6 }, tolerance: { x: 12 } } : { distance: 4 },
+    }),
+  );
   const [combineTarget, setCombineTarget] = useState<string | null>(null);
   // The ring must match the drop: handleDragEnd reads the ref, not the state.
   const combineRef = useRef<string | null>(null);
@@ -150,7 +159,8 @@ export function DragHandle({ handle, label }: { handle: HandleProps; label: stri
       type="button"
       aria-label={label}
       data-tip={label}
-      className="flex cursor-grab touch-none items-center rounded-full p-0.5 text-sand-400 hover:bg-clay-100 hover:text-clay-800"
+      data-drag-handle
+      className="flex cursor-grab touch-none items-center rounded-full p-0.5 text-sand-500 hover:bg-clay-100 hover:text-clay-800"
       {...handle.attributes}
       {...(handle.listeners ?? {})}
     >

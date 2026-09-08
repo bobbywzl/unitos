@@ -9,6 +9,9 @@ import { DragHandle, SortableItem, SortableList, type HandleProps } from "@/comp
 import { AddSection } from "@/components/outline/add-section";
 import { NoteCard } from "@/components/outline/note-card";
 import { NoteEditor } from "@/components/outline/note-editor";
+import { SECTION_ACTION } from "@/components/outline/section-action";
+import { SaveStateLabel } from "@/components/outline/save-state";
+import { useNoteCompose } from "@/components/outline/use-note-compose";
 import { VoiceNoteButton } from "@/components/outline/voice-note";
 import type { OutlineActions } from "@/components/outline/use-outline";
 
@@ -28,9 +31,10 @@ export function SectionItem({
   const ime = useImeGuard();
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState(section.title);
-  const [composing, setComposing] = useState(false);
   const [voiceError, setVoiceError] = useState<string | null>(null);
-  const [draft, setDraft] = useState("");
+  // The composer auto-saves (use-note-compose.ts); the note it owns stays out of the list.
+  const compose = useNoteCompose({ sectionId: section.id, notes: section.notes, actions, canEdit });
+  const notes = compose.visibleNotes;
 
   async function saveTitle() {
     const trimmed = title.trim();
@@ -75,22 +79,14 @@ export function SectionItem({
             {section.title}
           </button>
         )}
-        <span className="text-[13px] text-sand-600">{section.notes.length || ""}</span>
+        <span className="text-[13px] text-sand-600">{notes.length || ""}</span>
         {canEdit && (
-          <button
-            onClick={() => setComposing(true)}
-            data-tip={t("outline.addNoteTitle")}
-            className="ml-auto text-xs text-sand-600 hover:text-clay-700"
-          >
+          <button onClick={compose.open} data-tip={t("outline.addNoteTitle")} className={`ml-auto ${SECTION_ACTION}`}>
             {t("outline.addNoteBtn")}
           </button>
         )}
         {canEdit && (
-          <VoiceNoteButton
-            sectionId={section.id}
-            onError={setVoiceError}
-            className="text-xs text-sand-600 hover:text-clay-700"
-          />
+          <VoiceNoteButton sectionId={section.id} onError={setVoiceError} className={SECTION_ACTION} />
         )}
         {canEdit && (
           <button
@@ -107,46 +103,27 @@ export function SectionItem({
 
       {voiceError && <p className="mb-2 text-xs text-red-500">{voiceError}</p>}
       <div className="flex flex-col gap-2.5">
-        <SortableList
-          id={`notes-${section.id}`}
-          ids={section.notes.map((n) => n.id)}
-          onMove={(id, to) => actions.reorderNote(section.id, id, to)}
-          // Dropping a note on the middle of another merges the two.
-          onCombine={canEdit ? (id, intoId) => void actions.mergeNotes(intoId, [id]) : undefined}
-          canCombine={(id, intoId) => {
-            const a = section.notes.find((n) => n.id === id);
-            const b = section.notes.find((n) => n.id === intoId);
-            return a?.status === "ACCEPTED" && b?.status === "ACCEPTED";
-          }}
-        >
-          {section.notes.map((note) => (
-            <SortableItem key={note.id} id={note.id}>
-              {(noteHandle) => (
-                <NoteCard note={note} actions={actions} handle={noteHandle} variant="page" />
-              )}
-            </SortableItem>
-          ))}
-        </SortableList>
-
-        {composing && (
+        {/* The composer sits above the notes: a new note lands at the top of
+            the section (SPEC.md §6). */}
+        {compose.composing && (
           <form
-            onSubmit={async (e) => {
+            onSubmit={(e) => {
               e.preventDefault();
-              const trimmed = draft.trim();
-              if (!trimmed) return;
-              await actions.addNote(section.id, trimmed);
-              setDraft("");
-              setComposing(false);
+              void compose.save();
             }}
           >
+            {/* The save state at the top of the composer (SPEC.md §6). */}
+            <div className="mb-1 flex min-h-4 justify-end">
+              <SaveStateLabel state={compose.saveState} />
+            </div>
             <NoteEditor
               className="rounded-2xl bg-card p-4 shadow-soft"
-              value={draft}
-              onChange={setDraft}
+              value={compose.draft}
+              onChange={compose.setDraft}
               onKeyDown={(e) => {
                 if (isImeKey(e)) return;
                 if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) e.currentTarget.closest("form")?.requestSubmit();
-                if (e.key === "Escape") setComposing(false);
+                if (e.key === "Escape") compose.escape();
               }}
               placeholder={t("outline.writeNotePlaceholder")}
             />
@@ -159,7 +136,7 @@ export function SectionItem({
               </button>
               <button
                 type="button"
-                onClick={() => setComposing(false)}
+                onClick={() => void compose.cancel()}
                 className="rounded-full border border-line px-3 py-1 text-xs text-sand-700 hover:bg-clay-100 hover:text-clay-800"
               >
                 {t("common.cancel")}
@@ -167,6 +144,27 @@ export function SectionItem({
             </div>
           </form>
         )}
+
+        <SortableList
+          id={`notes-${section.id}`}
+          ids={notes.map((n) => n.id)}
+          onMove={(id, to) => actions.reorderNote(section.id, id, to)}
+          // Dropping a note on the middle of another merges the two.
+          onCombine={canEdit ? (id, intoId) => void actions.mergeNotes(intoId, [id]) : undefined}
+          canCombine={(id, intoId) => {
+            const a = notes.find((n) => n.id === id);
+            const b = notes.find((n) => n.id === intoId);
+            return a?.status === "ACCEPTED" && b?.status === "ACCEPTED";
+          }}
+        >
+          {notes.map((note) => (
+            <SortableItem key={note.id} id={note.id}>
+              {(noteHandle) => (
+                <NoteCard note={note} actions={actions} handle={noteHandle} variant="page" />
+              )}
+            </SortableItem>
+          ))}
+        </SortableList>
 
         {!nested && (
           <>

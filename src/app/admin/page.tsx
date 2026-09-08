@@ -125,6 +125,8 @@ export default async function AdminPage() {
           id: f.id,
           category: f.category,
           message: f.message,
+          images: f.images,
+          links: f.links,
           page: f.page,
           userAgent: f.userAgent,
           status: f.status,

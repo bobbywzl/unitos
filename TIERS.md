@@ -54,14 +54,15 @@ user row.
 
 Around the mark, each tier has one material, used the same way everywhere:
 Ultra is obsidian and gold, Premium is pearl, expired is plain sand. The tier
-chip (mark and name, one pill) sits beside the badge in the dashboard header,
-in the reader header (to Settings), and on the admin accounts page; the plan
-card in Settings is the same material at full size with the tier's name as
-its title and what the tier holds under it; a hairline band in the material
-runs along the top of the dashboard and the reader. Ultra is the richer of
-the two on purpose; Premium is the same idea, toned down. Inside the reader,
-Visualize's toolbar row and the Continue button carry the black diamond
-beside the word Ultra when the account is not Ultra.
+chip (mark and name, one pill) sits beside the badge in the dashboard header
+and on the admin accounts page; the plan card in Settings is the same
+material at full size with the tier's name as its title and what the tier
+holds under it; a hairline band in the material runs along the top of the
+dashboard. The reader shows no tier: the chip and the band are the
+dashboard's and Settings' (2026-09-08). Ultra is the richer of the two on
+purpose; Premium is the same idea, toned down. Inside the reader, Visualize's
+toolbar row and the Continue button carry the black diamond beside the word
+Ultra when the account is not Ultra.
 
 ## The trial
 
@@ -126,6 +127,12 @@ until the owner makes one.
 
 ## Decisions, as they were made
 
+- **2026-09-08** — Every current account is Unitos Ultra: they have access to
+  everything. One migration sets `tier = ULTRA` and clears `trialEndsAt` on
+  every account row (`prisma/migrations/20260908160000_all_accounts_ultra`).
+  A new account still starts on the Premium trial.
+- **2026-09-08** — The tier does not show in the reader. The tier chip and
+  the band stay on the dashboard and in Settings (the profile).
 - **2026-09-08** — The tier shows everywhere the account shows. Unitos
   Premium is the white crystal, Unitos Ultra is the black diamond, beside the
   person's badge; Ultra's surfaces feel premium (obsidian and gold), Premium's

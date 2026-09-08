@@ -7,6 +7,7 @@ import { NOTE_WRAP_GAP as GAP, announceNoteWrap, type NoteWrapSpacer } from "@/l
 import { useCollab } from "@/components/collab/collab-context";
 import { useT } from "@/components/lang-provider";
 import { NoteEditor } from "@/components/outline/note-editor";
+import { SaveStateLabel } from "@/components/outline/save-state";
 import { useImageDrop } from "@/components/use-image-drop";
 import { imageMarkdown } from "@/lib/images";
 import { useNoteDraft } from "@/components/outline/use-note-draft";
@@ -26,6 +27,19 @@ import type { FloatingEdit, OutlineActions } from "@/components/outline/use-outl
 
 const WIDTH = 460;
 const MARGIN = 16;
+
+/** The width a floating card opens at: WIDTH, or what the window leaves. */
+export function floatingWidth(): number {
+  return Math.min(WIDTH, window.innerWidth - 2 * MARGIN);
+}
+
+/** Where a card dragged out lands: whole on screen. `left` is where the
+    pointer would put it; the card shifts in from the edge when it would hang
+    off, and the caller moves the grab point by the same amount, so the card
+    keeps tracking the pointer. */
+export function landingLeft(left: number): number {
+  return Math.max(MARGIN, Math.min(left, window.innerWidth - floatingWidth() - MARGIN));
+}
 // The part of the card that stays on screen when it is dragged past an edge.
 const KEEP = 96;
 // Less room than this beside the card and the text skips below it instead.
@@ -160,7 +174,7 @@ export function FloatingNoteEditor({
   const { canEdit, premium } = useCollab();
   const cardRef = useRef<HTMLDivElement>(null);
   const [dropError, setDropError] = useState<string | null>(null);
-  const { draft, setDraft, cancel, markSaved, getOriginal } = useNoteDraft({
+  const { draft, setDraft, cancel, markSaved, confirmSaved, saveState, getOriginal } = useNoteDraft({
     noteId: edit.id,
     original: edit.original,
     initial: edit.draft,
@@ -204,6 +218,7 @@ export function FloatingNoteEditor({
     markSaved(trimmed);
     actions.dockNote(false);
     await actions.saveNote(edit.id, trimmed);
+    confirmSaved(trimmed);
   }
 
   const dockRef = useRef(dock);
@@ -225,7 +240,12 @@ export function FloatingNoteEditor({
       setGrab(null);
       if (inRect(e.clientX, e.clientY, trayRect()) || inRect(e.clientX, e.clientY, railRect())) {
         dockRef.current();
+        return;
       }
+      // Released over the article: the card settles whole on screen. A drag
+      // may leave it hanging off the window's edge (the pull out of the tray
+      // ends near that edge); a card the reader cannot see whole is lost.
+      if (!pane) setPos((p) => ({ left: landingLeft(p.left), top: p.top }));
     };
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
@@ -338,6 +358,10 @@ export function FloatingNoteEditor({
       }${imageDrop.over ? " outline-2 outline-dashed outline-clay-400" : ""}`}
     >
       {dropError && <p className="mb-1 shrink-0 text-[11px] text-red-500">{dropError}</p>}
+      {/* The save state at the top of the card (SPEC.md §6). */}
+      <div className="mb-1 flex shrink-0 justify-end">
+        <SaveStateLabel state={saveState} />
+      </div>
       <NoteEditor
         className="min-h-0 flex-1"
         value={draft}

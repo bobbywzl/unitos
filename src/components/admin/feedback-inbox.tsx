@@ -19,6 +19,9 @@ export type FeedbackItem = {
   id: string;
   category: string;
   message: string;
+  // Photos (ImageAsset ids) and links on the feedback (SPEC.md §18).
+  images: string[];
+  links: string[];
   page: string | null;
   userAgent: string | null;
   status: string;
@@ -156,6 +159,27 @@ export function FeedbackInbox({ items }: { items: FeedbackItem[] }) {
                 <span className="ml-auto">{valueLabel(t, f.status)}</span>
               </div>
               <p className="mt-2 text-sm whitespace-pre-wrap">{f.message}</p>
+              {f.images.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {f.images.map((id, i) => (
+                    <a key={id} href={`/api/images/${id}`} target="_blank" rel="noreferrer" data-tip={t("admin.feedbackPhoto", { n: i + 1 })}>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={`/api/images/${id}`} alt={t("admin.feedbackPhoto", { n: i + 1 })} className="max-h-40 rounded-lg border border-line" />
+                    </a>
+                  ))}
+                </div>
+              )}
+              {f.links.length > 0 && (
+                <ul className="mt-2 space-y-0.5">
+                  {f.links.map((link) => (
+                    <li key={link} className="truncate text-xs">
+                      <a href={link} target="_blank" rel="noreferrer" className="text-clay-700 underline hover:text-clay-800">
+                        {link}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              )}
               {f.replies.length > 0 && (
                 <ul className="mt-3 space-y-3 border-l-2 border-line pl-3">
                   {f.replies.map((r) => (

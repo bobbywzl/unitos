@@ -18,6 +18,8 @@ import { useImageDrop } from "@/components/use-image-drop";
 import { imageMarkdown } from "@/lib/images";
 import { NoteEditor } from "@/components/outline/note-editor";
 import { NoteId } from "@/components/outline/note-id";
+import { SaveStateLabel } from "@/components/outline/save-state";
+import { landingLeft } from "@/components/outline/floating-note-editor";
 import { useNoteDraft } from "@/components/outline/use-note-draft";
 import type { OutlineActions } from "@/components/outline/use-outline";
 
@@ -44,6 +46,11 @@ function scrollPane(el: HTMLElement): HTMLElement | null {
 // is mostly vertical is a scroll or a reorder and is ignored. 24px keeps a
 // steady hand from floating a note by accident without asking for a long pull.
 const DRAG_OUT_PX = 24;
+// From the grip the pull is shorter: the grip is for dragging, so 12px sideways
+// floats the note, and 6px up or down hands it to the reorder instead — the
+// same numbers the reorder sensor uses (sortable.tsx, axis "y").
+const GRIP_OUT_PX = 12;
+const GRIP_STAY_PX = 6;
 
 /** Where the card renders: the 352px tray drawer (design 1a), the 760px notes
     full page column (design 2b), or one pane of the compare view, which draws
@@ -203,7 +210,7 @@ export function NoteCard({
 
   // Auto-save while the editor is open (SPEC.md §6); Cancel restores the
   // content from before this edit.
-  const { draft, setDraft, cancel: cancelDraft, markSaved, getOriginal } = useNoteDraft({
+  const { draft, setDraft, cancel: cancelDraft, markSaved, confirmSaved, saveState, getOriginal } = useNoteDraft({
     noteId: note.id,
     original: note.content,
     initial: note.content,
@@ -269,6 +276,7 @@ export function NoteCard({
     markSaved(trimmed);
     setEditing(false);
     await actions.saveNote(note.id, trimmed);
+    confirmSaved(trimmed);
   }
 
   function openEditor() {
@@ -331,6 +339,13 @@ export function NoteCard({
     if ((e.target as Element).closest("[data-no-drag-out], [contenteditable], textarea, input, select")) return;
     const card = editCardRef.current ?? cardRef.current;
     if (!card) return;
+    // The grip (the six dots) reorders on a vertical move and drags out on a
+    // sideways move. Its reorder sensor starts at 6px down or up and lets go
+    // past 12px sideways (sortable.tsx, axis "y"), so the same thresholds
+    // decide here: whichever comes first wins, and the two never both run.
+    const grip = Boolean((e.target as Element).closest("[data-drag-handle]"));
+    const outPx = grip ? GRIP_OUT_PX : DRAG_OUT_PX;
+    const stayPx = grip ? GRIP_STAY_PX : DRAG_OUT_PX;
     const fromX = e.clientX;
     const fromY = e.clientY;
     const rect = card.getBoundingClientRect();
@@ -343,18 +358,23 @@ export function NoteCard({
       const dx = ev.clientX - fromX;
       const dy = ev.clientY - fromY;
       // Mostly vertical: a scroll or a reorder, never a drag out.
-      if (Math.abs(dy) >= DRAG_OUT_PX && Math.abs(dy) > Math.abs(dx)) {
+      if (Math.abs(dy) >= stayPx && Math.abs(dy) > Math.abs(dx)) {
         stop();
         return;
       }
-      if (Math.abs(dx) < DRAG_OUT_PX || Math.abs(dx) <= Math.abs(dy)) return;
+      if (Math.abs(dx) < outPx || Math.abs(dx) <= Math.abs(dy)) return;
       stop();
       swallowNextClick();
       window.getSelection()?.removeAllRanges();
       // The pointer keeps its spot on the card; the floating card is narrower
-      // than a wide tray, so the spot is capped inside it.
+      // than a wide tray, so the spot is capped inside it. A card that would
+      // hang off the window's edge (a pull by the grip at the card's left,
+      // near the tray's right edge) shifts in whole, and the grab point moves
+      // with it, so the card stays under the pointer as the drag goes on.
       const grab = { dx: Math.min(fromX - rect.left, 200), dy: fromY - rect.top };
-      popOut({ left: ev.clientX - grab.dx, top: ev.clientY - grab.dy, grab });
+      const left = landingLeft(ev.clientX - grab.dx);
+      grab.dx = ev.clientX - left;
+      popOut({ left, top: ev.clientY - grab.dy, grab });
     };
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", stop);
@@ -374,12 +394,11 @@ export function NoteCard({
       data-nudge={dragOutEnabled ? "float" : undefined}
       className={`flex min-h-[18px] items-center gap-1.5 ${dragOutEnabled ? "select-none" : ""}`}
     >
+      {/* The grip stays visible: it is how a note reorders, and in the tray how
+          it drags out over the article (SPEC.md §6). */}
       {handle && !editing && (
-        <div
-          data-no-drag-out
-          className="-ml-1 opacity-0 transition-opacity group-hover/note:opacity-100 focus-within:opacity-100"
-        >
-          <DragHandle handle={handle} label={t("outline.reorderNote")} />
+        <div className="-ml-1 opacity-70 transition-opacity group-hover/note:opacity-100 focus-within:opacity-100">
+          <DragHandle handle={handle} label={t(tray ? "outline.gripTitle" : "outline.reorderNote")} />
         </div>
       )}
       {foldable && !editing && (
@@ -415,6 +434,8 @@ export function NoteCard({
         </span>
       )}
       <span className="ml-auto flex shrink-0 items-center gap-1.5">
+        {/* The save state, while editing (SPEC.md §6). */}
+        {editing && <SaveStateLabel state={saveState} />}
         {canEdit && !editing && (
           <button
             onClick={openEditor}

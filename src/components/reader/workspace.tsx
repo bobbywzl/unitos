@@ -36,7 +36,6 @@ import { ContextTab, type ContextValues } from "@/components/context-tab";
 import { GuideDialog } from "@/components/guide-dialog";
 import { useT } from "@/components/lang-provider";
 import { NotebookTitle } from "@/components/notebook-title";
-import { TierBand, TierChip } from "@/components/tier-mark";
 import { FloatingNoteEditor } from "@/components/outline/floating-note-editor";
 import { NotesTray } from "@/components/outline/notes-tray";
 import { Presence } from "@/components/presence";
@@ -499,7 +498,6 @@ export function Workspace({
       // line stays inside its pane instead of pushing the rail off screen.
       className="content-in grid h-screen grid-cols-[minmax(0,1fr)] grid-rows-[68px_1fr] bg-paper print:block print:h-auto"
     >
-      {collab.authOn && <TierBand state={collab.tier} />}
       <header
         data-track-surface="topbar"
         className="flex min-w-0 items-center gap-2 border-b border-line px-3 sm:gap-3.5 sm:px-5 print:hidden"
@@ -545,18 +543,6 @@ export function Workspace({
           <span className="hidden shrink-0 rounded-full bg-clay-200 px-3.5 py-1.5 text-xs font-semibold text-clay-800 lg:inline">
             {t("panes.pendingCount", { n: pending.length })}
           </span>
-        )}
-        {/* The account's tier (TIERS.md): the tier chip, to Settings. The
-            local reader has no account to show. */}
-        {collab.authOn && (
-          <Link
-            href="/settings"
-            data-track="tier"
-            aria-label={t("common.settings")}
-            className="hidden shrink-0 md:flex"
-          >
-            <TierChip state={collab.tier} trialEndsAt={collab.trialEndsAt} short />
-          </Link>
         )}
         <button
           onClick={openGuide}

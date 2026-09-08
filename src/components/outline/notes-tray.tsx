@@ -11,6 +11,9 @@ import { CollapsedViewToggle } from "@/components/collapsed-view-toggle";
 import { SortableItem, SortableList } from "@/components/sortable";
 import { NoteCard } from "@/components/outline/note-card";
 import { NoteEditor } from "@/components/outline/note-editor";
+import { SaveStateLabel } from "@/components/outline/save-state";
+import { SECTION_ACTION } from "@/components/outline/section-action";
+import { useNoteCompose } from "@/components/outline/use-note-compose";
 import { VoiceNoteButton } from "@/components/outline/voice-note";
 import { Collapse } from "@/components/presence";
 import { SelectionBar } from "@/components/outline/selection-bar";
@@ -113,10 +116,10 @@ function TraySection({
   const t = useT();
   const { canEdit } = useCollab();
   const [collapsed, setCollapsed] = useState(false);
-  const [composing, setComposing] = useState(false);
-  const [draft, setDraft] = useState("");
   const [voiceError, setVoiceError] = useState<string | null>(null);
-  const accepted = section.notes.filter((n) => n.status !== "PENDING");
+  // The composer auto-saves (use-note-compose.ts); the note it owns stays out of the list.
+  const compose = useNoteCompose({ sectionId: section.id, notes: section.notes, actions, canEdit });
+  const accepted = compose.visibleNotes.filter((n) => n.status !== "PENDING");
   const grips = reorderable && canEdit;
 
   // Reorder by the grip (SPEC.md §6). The list shows the accepted notes; the
@@ -146,22 +149,20 @@ function TraySection({
           {section.title}
         </button>
         {accepted.length > 0 && <span className="text-[11px] text-sand-500">{accepted.length}</span>}
+        {/* The section's actions stay visible (SPEC.md §6): a pill each, the
+            same on the notes full page. */}
         {!collapsed && canEdit && (
           <button
-            onClick={() => setComposing(true)}
+            onClick={compose.open}
             data-track="section-add-note"
             data-tip={t("outline.addNoteTitle")}
-            className="ml-auto text-[11px] text-sand-600 opacity-0 transition-opacity group-hover/section:opacity-100 focus-visible:opacity-100 hover:text-clay-700"
+            className={`ml-auto ${SECTION_ACTION}`}
           >
             {t("outline.addNoteBtn")}
           </button>
         )}
         {!collapsed && canEdit && (
-          <VoiceNoteButton
-            sectionId={section.id}
-            onError={setVoiceError}
-            className="text-[11px] text-sand-600 opacity-0 transition-opacity group-hover/section:opacity-100 focus-visible:opacity-100 hover:text-clay-700"
-          />
+          <VoiceNoteButton sectionId={section.id} onError={setVoiceError} className={SECTION_ACTION} />
         )}
       </div>
       {voiceError && <p className="text-xs text-red-500">{voiceError}</p>}
@@ -169,40 +170,27 @@ function TraySection({
       <Collapse open={!collapsed}>
       {!collapsed && (
         <div className="flex flex-col gap-2">
-          <SortableList id={`tray-notes-${section.id}`} ids={accepted.map((n) => n.id)} onMove={moveNote}>
-            {accepted.map((note) => (
-              <SortableItem key={note.id} id={note.id}>
-                {(handle) => (
-                  <NoteCard
-                    note={note}
-                    actions={actions}
-                    handle={grips ? handle : undefined}
-                    variant="tray"
-                  />
-                )}
-              </SortableItem>
-            ))}
-          </SortableList>
-
-          {composing && (
+          {/* The composer sits above the notes: a new note lands at the top of
+              the section (SPEC.md §6). */}
+          {compose.composing && (
             <form
-              onSubmit={async (e) => {
+              onSubmit={(e) => {
                 e.preventDefault();
-                const trimmed = draft.trim();
-                if (!trimmed) return;
-                await actions.addNote(section.id, trimmed);
-                setDraft("");
-                setComposing(false);
+                void compose.save();
               }}
             >
+              {/* The save state at the top of the composer (SPEC.md §6). */}
+              <div className="mb-1 flex min-h-4 justify-end">
+                <SaveStateLabel state={compose.saveState} />
+              </div>
               <NoteEditor
                 className="rounded-2xl bg-card p-3 shadow-soft"
-                value={draft}
-                onChange={setDraft}
+                value={compose.draft}
+                onChange={compose.setDraft}
                 onKeyDown={(e) => {
                   if (isImeKey(e)) return;
                   if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) e.currentTarget.closest("form")?.requestSubmit();
-                  if (e.key === "Escape") setComposing(false);
+                  if (e.key === "Escape") compose.escape();
                 }}
                 placeholder={t("outline.writeNotePlaceholder")}
               />
@@ -216,7 +204,7 @@ function TraySection({
                 </button>
                 <button
                   type="button"
-                  onClick={() => setComposing(false)}
+                  onClick={() => void compose.cancel()}
                   data-track="note-compose-cancel"
                   className="rounded-full border border-line px-3 py-1 text-xs text-sand-700 hover:bg-clay-100 hover:text-clay-800"
                 >
@@ -225,6 +213,21 @@ function TraySection({
               </div>
             </form>
           )}
+
+          <SortableList id={`tray-notes-${section.id}`} ids={accepted.map((n) => n.id)} onMove={moveNote} axis="y">
+            {accepted.map((note) => (
+              <SortableItem key={note.id} id={note.id}>
+                {(handle) => (
+                  <NoteCard
+                    note={note}
+                    actions={actions}
+                    handle={grips ? handle : undefined}
+                    variant="tray"
+                  />
+                )}
+              </SortableItem>
+            ))}
+          </SortableList>
 
           {section.children.map((child) => (
             <TraySection

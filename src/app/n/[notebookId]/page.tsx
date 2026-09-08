@@ -849,6 +849,13 @@ export default async function NotebookPage(props: {
   const paneOne = activeId ? await paneData(activeId) : null;
   const paneTwo =
     paneTwoId === null ? null : paneTwoId === activeId ? paneOne : await paneData(paneTwoId);
+  // A media document's article (SPEC.md §11) is its own document: its reader
+  // data goes to the video pane, and the article card renders through the
+  // reader's interaction layer, so every text tool works on it in place.
+  const articleData = async (pane: typeof paneOne) =>
+    pane?.video && pane.formalized?.documentId ? await paneData(pane.formalized.documentId) : null;
+  const articleOne = await articleData(paneOne);
+  const articleTwo = paneTwo === paneOne ? articleOne : await articleData(paneTwo);
 
   const toView = (s: (typeof notebook.sections)[number]): SectionView => ({
     id: s.id,
@@ -864,6 +871,7 @@ export default async function NotebookPage(props: {
       pinned: n.pinned,
       order: n.order,
       createdById: n.createdById,
+      updatedAt: n.updatedAt.toISOString(),
       sources: n.sources.map((src) => ({
         id: src.id,
         documentId: src.documentId,
@@ -1204,6 +1212,7 @@ export default async function NotebookPage(props: {
         documents={attached.map((d) => ({ id: d.id, title: d.title }))}
       />
     ) : null;
+    const articlePane = role === "one" ? articleOne : articleTwo;
     return (
     <div key={key} className="content-in flex min-h-0 min-w-0 flex-1 flex-col">
       {pane.video ? (
@@ -1214,6 +1223,21 @@ export default async function NotebookPage(props: {
           video={pane.video}
           transcript={pane.transcript}
           formalized={pane.formalized}
+          article={
+            articlePane
+              ? {
+                  documentId: articlePane.document.id,
+                  title: articlePane.document.title,
+                  blocks: articlePane.document.blocks.map((b) => ({
+                    id: b.id,
+                    type: b.type,
+                    text: b.text,
+                    html: b.html,
+                  })),
+                  reader: textLayer(articlePane),
+                }
+              : null
+          }
           annotations={pane.videoAnnotations}
           seekBySource={pane.videoSeekBySource}
           sectionChoices={sectionChoices}

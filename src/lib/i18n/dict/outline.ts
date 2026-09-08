@@ -29,7 +29,12 @@ const en = {
   // Note cards
   addNoteBtn: "+ note",
   writeNotePlaceholder: "Write a note (markdown)",
+  // The save state at the top of a note being edited (SPEC.md §6)
+  saving: "Saving…",
+  saved: "Saved",
+  saveFailed: "Not saved",
   reorderNote: "Drag to reorder this note",
+  gripTitle: "Drag up or down to reorder; drag sideways to float this note over the article",
   acceptTitle: "Accept (Enter)",
   rejectTitle: "Reject (Backspace)",
   editTitle: "Edit (e)",
@@ -137,7 +142,11 @@ const zh: Record<keyof typeof en, string> = {
 
   addNoteBtn: "+ 笔记",
   writeNotePlaceholder: "写一条笔记（markdown）",
+  saving: "保存中…",
+  saved: "已保存",
+  saveFailed: "未保存",
   reorderNote: "拖动以调整此笔记的顺序",
+  gripTitle: "上下拖动调整顺序；横向拖动让此笔记浮在文章上",
   acceptTitle: "接受（Enter）",
   rejectTitle: "拒绝（Backspace）",
   editTitle: "编辑（e）",

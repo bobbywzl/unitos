@@ -586,6 +586,7 @@ export function ReaderInteractions({
   annotationBubbles,
   split = false,
   paneHeader,
+  embedded,
   distillations,
   extractions,
   keypoints,
@@ -661,6 +662,11 @@ export function ReaderInteractions({
   split?: boolean;
   // The pane's document select, at the head of the pane header.
   paneHeader?: React.ReactNode;
+  /** The article card in the video pane (SPEC.md §11): the layer renders inside
+      another reader's scroller. No article menu, no Distill, no reading
+      position, no scroll box of its own; the selection toolbar, marks, links,
+      and edit mode work as on any document. */
+  embedded?: boolean;
   // Stored distillations for this document, newest first, quotes healed
   // against the current blocks.
   distillations: DistillationView[];
@@ -786,7 +792,8 @@ export function ReaderInteractions({
   const positionHeld = useRef(false);
   useLayoutEffect(() => {
     const container = containerRef.current;
-    if (!container || jumpOnOpen.current) return;
+    // An embedded layer does not scroll: the pane around it keeps the position.
+    if (!container || jumpOnOpen.current || embedded) return;
     let stored: ReadingPosition | null = null;
     try {
       stored = parseReadingPosition(sessionStorage.getItem(positionStoreKey));
@@ -843,10 +850,10 @@ export function ReaderInteractions({
     container.addEventListener("pointerdown", release);
     const timer = setTimeout(release, POSITION_HOLD_MS);
     return cleanup;
-  }, [positionStoreKey]);
+  }, [positionStoreKey, embedded]);
   useEffect(() => {
     const container = containerRef.current;
-    if (!container) return;
+    if (!container || embedded) return;
     let raf = 0;
     const save = () => {
       raf = 0;
@@ -871,7 +878,7 @@ export function ReaderInteractions({
       if (raf) cancelAnimationFrame(raf);
       save();
     };
-  }, [positionStoreKey]);
+  }, [positionStoreKey, embedded]);
   const [distillShownId, setDistillShownId] = useState<string | null>(null);
   const [distillRun, setDistillRun] = useState<{ question: string } | null>(null);
   const [distillError, setDistillError] = useState<string | null>(null);
@@ -1449,6 +1456,11 @@ export function ReaderInteractions({
     const startBlock = blockOf(range.startContainer);
     const endBlock = blockOf(range.endContainer);
     if (!startBlock) return null;
+    // A layer inside this one (the article card in the video pane, SPEC.md
+    // §11) takes its own selections: a block whose nearest reader root is
+    // not this container belongs to that layer.
+    const own = (el: Element) => el.closest("[data-reader-root]") === container;
+    if (!own(startBlock)) return null;
 
     // The passage: every block the selection touches, in reading order, one
     // segment per block (lib/anchors/passage.ts). A rendered equation's DOM
@@ -1457,7 +1469,7 @@ export function ReaderInteractions({
     // selection that crosses one leaves it out (truncated says so).
     const blockEls = Array.from(
       container.querySelectorAll<HTMLElement>("[data-block-id], [data-edit-block]"),
-    ).filter((el) => el === startBlock || el === endBlock || range.intersectsNode(el));
+    ).filter((el) => own(el) && (el === startBlock || el === endBlock || range.intersectsNode(el)));
     const segments: Segment[] = [];
     let truncated = false;
     for (const el of blockEls) {
@@ -5217,15 +5229,20 @@ function blockFormatKind(
         void imageDrop.handlers.onDrop(e);
       }}
       // The inline restore script finds this pane's stored reading position by
-      // its document (lib/reading-position.ts).
-      data-document-id={documentId}
+      // its document (lib/reading-position.ts). An embedded layer has none.
+      data-document-id={embedded ? undefined : documentId}
       // While the distilled page or the extract page is open it scrolls itself; the article
-      // underneath must not scroll away, so the pane clips instead.
-      className={`relative min-h-0 min-w-0 flex-1 print:overflow-visible ${
-        distillOpen || keypointsOpen ? "overflow-hidden" : "overflow-y-auto"
-      }`}
+      // underneath must not scroll away, so the pane clips instead. An
+      // embedded layer scrolls with the pane around it.
+      className={
+        embedded
+          ? "relative min-w-0"
+          : `relative min-h-0 min-w-0 flex-1 print:overflow-visible ${
+              distillOpen || keypointsOpen ? "overflow-hidden" : "overflow-y-auto"
+            }`
+      }
     >
-      {!split && !transcript && articleMenu}
+      {!split && !transcript && !embedded && articleMenu}
 
       {/* The controls float over the article at the top right of the pane
           and stay there as it scrolls: a sticky block with no height, so the
@@ -5283,15 +5300,15 @@ function blockFormatKind(
             {t("common.done")}
           </button>
         )}
-        {!split && !transcript && distillButton}
+        {!split && !transcript && !embedded && distillButton}
       </div>
-      {!split && !transcript && <ArticleErrors documentId={documentId} />}
+      {!split && !transcript && !embedded && <ArticleErrors documentId={documentId} />}
       </div>
       </div>
 
       {/* Not in a split pane: the card would sit over the title. Not on a
           transcript: it has no edit mode. */}
-      {editHint && !editMode && !split && !transcript && (
+      {editHint && !editMode && !split && !transcript && !embedded && (
         <div
           onAnimationEnd={() => setEditHint(false)}
           className={`hint-fade pointer-events-none absolute top-16 right-5 z-10 rounded-2xl bg-card px-4 py-2.5 leading-relaxed text-sand-700 shadow-lift print:hidden ${
@@ -5329,6 +5346,7 @@ function blockFormatKind(
         onRedo={() => void runStep(false)}
         flushRef={flushEditRef}
         transcript={transcript}
+        embedded={embedded}
         banner={
           <TranslationBar
             documentId={documentId}

@@ -54,7 +54,7 @@ import {
 // works on the lines through the same code path.
 
 // The text layer's props, as the page builds them for any document.
-type ReaderTextProps = Omit<
+export type ReaderTextProps = Omit<
   React.ComponentProps<typeof ReaderInteractions>,
   | "documentId"
   | "notebookId"
@@ -65,7 +65,18 @@ type ReaderTextProps = Omit<
   | "transcript"
   | "split"
   | "paneHeader"
+  | "embedded"
 >;
+
+/** The formalized article as its own document's reader layer (SPEC.md §11):
+    the article card renders through it, so the selection toolbar, marks,
+    links, and edit mode work on the article in place. */
+export type ArticleLayer = {
+  documentId: string;
+  title: string;
+  blocks: React.ComponentProps<typeof ReaderInteractions>["blocks"];
+  reader: ReaderTextProps;
+};
 
 type Composer = {
   region: Region | null;
@@ -95,11 +106,14 @@ export function VideoPane({
   split,
   paneHeader,
   reader,
+  article,
 }: {
   notebookId: string;
   documentId: string;
   title: string;
   video: VideoInfo;
+  /** The article's own reader layer; null until the article has a document. */
+  article: ArticleLayer | null;
   /** A split view (SPEC.md §6): the pane header carries the pane's document; the reader renders it. */
   split?: boolean;
   paneHeader?: React.ReactNode;
@@ -924,6 +938,8 @@ export function VideoPane({
         notebookId={notebookId}
         documentId={documentId}
         article={formalized}
+        layer={article}
+        sectionChoices={sectionChoices}
         canEdit={canEdit}
       />
     </>
