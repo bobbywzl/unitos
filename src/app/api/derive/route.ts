@@ -11,6 +11,8 @@ import {
   MAX_OUTPUT_TOKENS,
   STREAM_ERROR_TOKEN,
   STREAM_NOTE_TOKEN,
+  VISUALIZE_CHECK,
+  VISUALIZE_CHECK_MAX_SVG,
   VISUALIZE_EFFORT,
   VISUALIZE_MODEL,
 } from "@/lib/derive/config";
@@ -38,7 +40,13 @@ import {
 } from "@/lib/derive/json";
 import { callForJson, modelErrorMessage } from "@/lib/derive/json-call";
 import { streamTextTo } from "@/lib/derive/text-stream";
-import { renderVisual, visualizationMarkdown, visualizeOutputSchema } from "@/lib/derive/visualize";
+import {
+  renderVisual,
+  visualizationMarkdown,
+  visualizeCheckSchema,
+  visualizeOutputSchema,
+} from "@/lib/derive/visualize";
+import { visualizeCheckPrompt } from "@/lib/prompts/visualize-check";
 import { cropPageRegion, pageBlockText, renderPdfPage } from "@/lib/handwritten/pages";
 import { parseRegion } from "@/lib/video/types";
 import type { TFunc } from "@/lib/i18n/dictionaries";
@@ -919,19 +927,23 @@ async function handle(req: Request, t: TFunc) {
         }
       : { role: "user", content: template(ctx) },
   ];
-  // VISUALIZE (SPEC.md §20, Unitos Ultra): one JSON call on Claude at its
+  // VISUALIZE (SPEC.md §20, Unitos Ultra): two JSON calls on Claude at its
   // highest effort. The model judges first; when it is certain a picture
   // carries the passage's core idea it draws one, and the server lays it out
-  // (diagram) or reduces it (picture, animation), stores it as an SVG
-  // ImageAsset, and lands one annotation on the selection whose markdown
-  // points at it. When it is not certain, the run declines with the reason
-  // and persists nothing: the card says so and points at the assistant,
-  // Explain, and Simplify. Runs behind the heartbeat stream.
+  // (diagram) or reduces it (picture, animation). Then the check reads the
+  // finished picture back and keeps it, replaces it, or withdraws it — the
+  // pass that drew it never sees it. What stands is stored as an SVG
+  // ImageAsset, and one annotation lands on the selection whose markdown
+  // points at it. When the model is not certain, or the check withdraws the
+  // picture, the run declines with the reason and persists nothing: the card
+  // says so and points at the assistant, Explain, and Simplify. Runs behind
+  // the heartbeat stream.
   if (data.type === "VISUALIZE" && anchor) {
     return heartbeatResponse(
       req,
       async () => {
         const visualModel = await claude(VISUALIZE_MODEL);
+        const visualUsage = { ...usageMeta, model: await resolveModelId(VISUALIZE_MODEL) };
         const result = await callForJson({
           model: visualModel,
           messages,
@@ -939,17 +951,65 @@ async function handle(req: Request, t: TFunc) {
           providerOptions: claudeOptions(VISUALIZE_EFFORT),
           schema: visualizeOutputSchema,
           label: "VISUALIZE",
-          usage: { ...usageMeta, model: await resolveModelId(VISUALIZE_MODEL) },
+          usage: visualUsage,
           abortSignal: req.signal,
         });
         if (!result.ok) throw new DeriveFailure(result.error);
-        const { judgment, visual } = result.data;
-        if (!judgment.certain || !visual) {
+        const { judgment, visual: drawn } = result.data;
+        if (!judgment.certain || !drawn) {
           return { ok: true, declined: true, reason: judgment.reason.trim() };
         }
-        const rendered = await renderVisual(visual);
-        if ("error" in rendered) {
-          throw new DeriveFailure(t("api.visualizeNotRendered", { reason: rendered.error }));
+        const first = await renderVisual(drawn);
+        if ("error" in first) {
+          throw new DeriveFailure(t("api.visualizeNotRendered", { reason: first.error }));
+        }
+        let visual = drawn;
+        let rendered = first;
+        // The check. A failed check leaves the picture as drawn: the draft is
+        // the work, and losing it to a second call that did not answer would
+        // be the worse outcome.
+        if (VISUALIZE_CHECK && rendered.svg.length <= VISUALIZE_CHECK_MAX_SVG) {
+          const checked = await callForJson({
+            model: visualModel,
+            // The document prefix again, so the cache holds; the draft is
+            // not repeated — the picture below is what it came to.
+            messages: [
+              ...messages,
+              {
+                role: "user",
+                content: visualizeCheckPrompt({
+                  lang: ctx.lang,
+                  passage: ctx.anchoredText,
+                  kind: drawn.kind,
+                  caption: drawn.caption.trim(),
+                  spec: drawn.diagram ? JSON.stringify(drawn.diagram) : null,
+                  svg: rendered.svg,
+                }),
+              },
+            ],
+            maxOutputTokens: MAX_OUTPUT_TOKENS.VISUALIZE,
+            providerOptions: claudeOptions(VISUALIZE_EFFORT),
+            schema: visualizeCheckSchema,
+            label: "VISUALIZE:check",
+            usage: visualUsage,
+            abortSignal: req.signal,
+          });
+          if (checked.ok && !checked.data.keep) {
+            if (!checked.data.visual) {
+              return { ok: true, declined: true, reason: checked.data.reason.trim() };
+            }
+            const again = await renderVisual(checked.data.visual);
+            // A replacement that does not render is no replacement: the
+            // picture that already rendered stands.
+            if (!("error" in again)) {
+              visual = checked.data.visual;
+              rendered = again;
+            } else {
+              console.warn("[derive] VISUALIZE:check replacement not rendered:", again.error);
+            }
+          } else if (!checked.ok) {
+            console.warn("[derive] VISUALIZE:check failed; the picture stands:", checked.error);
+          }
         }
         const bytes = new TextEncoder().encode(rendered.svg);
         const image = await db.imageAsset.create({

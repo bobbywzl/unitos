@@ -74,6 +74,17 @@ export const DERIVATION_EFFORT: Record<DerivationType, KimiEffort> = {
 export const VISUALIZE_MODEL = CLAUDE_FABLE_5_1;
 export const VISUALIZE_EFFORT: ClaudeEffort = "max";
 
+// The check (SPEC.md §20): a second call on the same model and effort, after
+// the picture is drawn and laid out. It is the one pass that sees the
+// finished picture — the pass that drew it never does — so it catches what
+// only the result shows: a diagram that reads as a strip, a drawing the
+// reduction cut into, a caption that says more than the picture does. It
+// keeps the picture, replaces it, or withdraws it. One place to turn off.
+export const VISUALIZE_CHECK = true;
+// Past this the picture is kept as drawn: reading back an SVG this large
+// costs more than the check is worth, and a picture that big is rare.
+export const VISUALIZE_CHECK_MAX_SVG = 40_000;
+
 // Kimi K3 counts its reasoning tokens against this ceiling too (Moonshot asks
 // for 16000 or more), so every budget leaves room for the model to think
 // before it writes. Too tight a ceiling truncates a JSON derivation mid-object
