@@ -83,8 +83,8 @@ export type Highlight = {
   referenceText?: string; // the reference text, shown on hover, kind "citation" only
   targetBlockId?: string; // Contents entry target: click scrolls to the block, kind "toc" only
   figureLabel?: string | null; // "A1"… label on an annotated figure/table/equation anchor
-  // kind "extract": the extraction this span belongs to. The label chip after
-  // a passage jumps to the origin; the origin's chip opens the extract card.
+  // kind "extract": the extraction this span belongs to. The span and its
+  // label chip both open the match card.
   extractId?: string;
   extractLabel?: string;
   extractOrigin?: boolean;
@@ -371,11 +371,22 @@ function markedText(text: string, highlights: Highlight[], t: TFunc) {
       // leaving mark fades instead.
       const painted = simplify ?? anchor ?? extract ?? salience;
       const sweep = painted?.fresh && !leaving;
+      // An extract span opens the match card: the whole highlight is
+      // pressable, not only its label chip.
+      const extractMark = extract && !focusable && !noteMark ? extract : null;
       parts.push(
         <mark
           key={from}
           data-source-id={anchor?.sourceId ?? undefined}
-          data-tip={focusable ? t("panes.viewAnnotation") : noteMark ? t("panes.viewNote") : undefined}
+          data-tip={
+            focusable
+              ? t("panes.viewAnnotation")
+              : noteMark
+                ? t("panes.viewNote")
+                : extractMark
+                  ? t("panes.extractOpenCard", { label: extractMark.extractLabel ?? "" })
+                  : undefined
+          }
           onClick={
             focusable
               ? (e) => {
@@ -393,19 +404,30 @@ function markedText(text: string, highlights: Highlight[], t: TFunc) {
                       new CustomEvent("dissect:show-note", { detail: { noteId: noteMark } }),
                     );
                   }
-                : undefined
+                : extractMark
+                  ? (e) => {
+                      e.stopPropagation();
+                      window.dispatchEvent(
+                        new CustomEvent("dissect:extract-chip", {
+                          detail: {
+                            extractId: extractMark.extractId,
+                            element: e.currentTarget,
+                          },
+                        }),
+                      );
+                    }
+                  : undefined
           }
-          className={`${markClass}${selectionClass}${anchors.length > 1 ? " hl-stacked" : ""}${sweep ? " mark-sweep" : ""}${leaving ? " mark-out" : ""} rounded-[4px] ${focusable || noteMark ? "annotation-mark" : ""}${editedClass}`}
+          className={`${markClass}${selectionClass}${anchors.length > 1 ? " hl-stacked" : ""}${sweep ? " mark-sweep" : ""}${leaving ? " mark-out" : ""} rounded-[4px] ${focusable || noteMark || extractMark ? "annotation-mark" : ""}${editedClass}`}
           style={sweep && painted.freshDelay ? { animationDelay: `${painted.freshDelay}ms` } : undefined}
         >
           {segment}
         </mark>,
       );
-      // An extract span carries its label chip right after the span: a
-      // passage's chip jumps back to the origin phrase; the origin's chip
-      // opens the extract card. The chip's label is DOM text the stored block
-      // text does not have — data-anchor-skip keeps it out of anchor offsets
-      // (SPEC.md §5).
+      // An extract span carries its label chip right after the span: the chip
+      // opens the match card, the same as the span itself. The chip's label is
+      // DOM text the stored block text does not have — data-anchor-skip keeps
+      // it out of anchor offsets (SPEC.md §5).
       const extractEnding = covering.find(
         (h) => h.kind === "extract" && h.end === to && h.extractLabel,
       );
@@ -416,23 +438,14 @@ function markedText(text: string, highlights: Highlight[], t: TFunc) {
             type="button"
             data-anchor-skip
             data-track="extract-chip"
-            aria-label={
-              extractEnding.extractOrigin
-                ? t("panes.extractStartedHere", { label: extractEnding.extractLabel ?? "" })
-                : t("panes.extractJumpToOrigin", { label: extractEnding.extractLabel ?? "" })
-            }
-            data-tip={
-              extractEnding.extractOrigin
-                ? t("panes.extractStartedHereDetails", { label: extractEnding.extractLabel ?? "" })
-                : t("panes.extractJumpToOrigin", { label: extractEnding.extractLabel ?? "" })
-            }
+            aria-label={t("panes.extractOpenCard", { label: extractEnding.extractLabel ?? "" })}
+            data-tip={t("panes.extractOpenCard", { label: extractEnding.extractLabel ?? "" })}
             onClick={(e) => {
               e.stopPropagation();
               window.dispatchEvent(
                 new CustomEvent("dissect:extract-chip", {
                   detail: {
                     extractId: extractEnding.extractId,
-                    origin: Boolean(extractEnding.extractOrigin),
                     element: e.currentTarget,
                   },
                 }),

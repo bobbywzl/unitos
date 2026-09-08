@@ -532,6 +532,44 @@ function dockBelowCard(articleLeft: number, articleRight: number, cw: number) {
   return { left, width };
 }
 
+/** One row of the match card: a quote that jumps to its text in the article.
+    The origin phrase reads solid, a passage dashed — the same as the marks.
+    A span the article no longer holds does not jump. */
+function ExtractRow({
+  span,
+  origin,
+  onJump,
+  t,
+}: {
+  span: { blockId: string; start: number; end: number; quotedText: string; orphaned: boolean };
+  origin?: boolean;
+  onJump: (span: { blockId: string; start: number; end: number }) => void;
+  t: TFunc;
+}) {
+  const border = origin ? "border-solid border-clay-400" : "border-dashed border-sand-300";
+  if (span.orphaned) {
+    return (
+      <p
+        data-tip={t("panes.anchorUnresolvedChanged")}
+        className={`line-clamp-2 border-l-2 ${border} pl-2 text-xs text-sand-400`}
+      >
+        {span.quotedText}
+      </p>
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={() => onJump(span)}
+      data-track="extract-card-jump"
+      data-tip={t("panes.jumpToPassage")}
+      className={`line-clamp-2 border-l-2 ${border} pl-2 text-left text-xs text-sand-600 hover:border-clay-500 hover:text-ink`}
+    >
+      {span.quotedText}
+    </button>
+  );
+}
+
 // Client layer over the reader: selection capture, popover, EXPLAIN bubble,
 // SIMPLIFY bubble, SALIENCE overlay toggle, DISTILL page, the article menu,
 // jump-to-anchor.
@@ -861,7 +899,8 @@ export function ReaderInteractions({
   // The document's translation (SPEC.md §19), one text per block, shown
   // under each block while the reader has it on.
   const [translations, setTranslations] = useState<Record<string, string> | null>(null);
-  // The card an origin chip opens: the origin quote, the count, Delete.
+  // The card an extract span or its chip opens: the origin phrase, every
+  // passage, and Delete. Each row jumps to its text.
   const [extractCard, setExtractCard] = useState<{ id: string; top: number; left: number } | null>(
     null,
   );
@@ -2486,46 +2525,41 @@ export function ReaderInteractions({
 
   }, []);
 
-  // Extract label chips: a passage's chip jumps back to the origin phrase;
-  // the origin's chip opens the extract card. Only the owning pane handles it.
+  // Extract spans and label chips: either one opens the match card, which
+  // lists the origin phrase and every passage. Only the owning pane handles it.
   useEffect(() => {
     const onChip = (e: Event) => {
-      const { extractId, origin, element } = (
-        e as CustomEvent<{ extractId: string; origin: boolean; element: Element }>
+      const { extractId, element } = (
+        e as CustomEvent<{ extractId: string; element: Element }>
       ).detail;
       const container = containerRef.current;
       if (!container || !element || !container.contains(element)) return;
       const extraction = allExtractionsRef.current.find((x) => x.id === extractId);
       if (!extraction) return;
-      if (origin) {
-        const containerRect = container.getBoundingClientRect();
-        const rect = element.getBoundingClientRect();
-        const width = 280;
-        setExtractCard({
-          id: extractId,
-          top: Math.min(
+      const containerRect = container.getBoundingClientRect();
+      const rect = element.getBoundingClientRect();
+      const width = 300;
+      setExtractCard({
+        id: extractId,
+        top: Math.max(
+          container.scrollTop + 12,
+          Math.min(
             rect.bottom - containerRect.top + container.scrollTop + 8,
-            container.scrollTop + container.clientHeight - 210,
+            container.scrollTop + container.clientHeight - 300,
           ),
-          left: Math.max(
-            12,
-            Math.min(
-              rect.left - containerRect.left + container.scrollLeft,
-              container.clientWidth - width - 12,
-            ),
+        ),
+        left: Math.max(
+          12,
+          Math.min(
+            rect.left - containerRect.left + container.scrollLeft,
+            container.clientWidth - width - 12,
           ),
-        });
-        return;
-      }
-      if (extraction.origin.orphaned) {
-        showToast(t("reader.originChanged"));
-        return;
-      }
-      flashSpan(extraction.origin.blockId, extraction.origin.start, extraction.origin.end);
+        ),
+      });
     };
     window.addEventListener("dissect:extract-chip", onChip);
     return () => window.removeEventListener("dissect:extract-chip", onChip);
-  }, [t]);
+  }, []);
 
   // The Distill panel in the side tray opens the extract page (a stored
   // distillation by id, or the ask view, id null) or the distilled page. Only
@@ -3403,6 +3437,12 @@ export function ReaderInteractions({
       el.classList.add("anchor-flash");
       setTimeout(() => el.classList.remove("anchor-flash"), 2000);
     });
+  }
+
+  // Jump from the match card: close the card, then land on the span.
+  function jumpToExtractSpan(span: { blockId: string; start: number; end: number }) {
+    setExtractCard(null);
+    flashSpan(span.blockId, span.start, span.end);
   }
 
   // Jump from the distilled page: close it, then land on the quote.
@@ -5354,7 +5394,7 @@ function blockFormatKind(
           return (
             <div
               data-selection-popover
-              className="pop-in absolute z-30 w-[280px] rounded-2xl bg-card p-3 shadow-float"
+              className="pop-in absolute z-30 w-[300px] rounded-2xl bg-card p-3 shadow-float"
               style={{ top: extractCard.top, left: extractCard.left }}
             >
               <div className="mb-2 flex items-center justify-between">
@@ -5372,16 +5412,35 @@ function blockFormatKind(
                   ✕
                 </button>
               </div>
-              <p className="line-clamp-2 border-l-2 border-sand-300 pl-2 text-xs text-sand-600">
-                {extraction.origin.quotedText}
-              </p>
-              <p className="mt-2 text-xs text-sand-500">
-                {t("reader.extractCardBody", {
-                  n: extraction.spans.length,
-                  s: plural(extraction.spans.length),
-                  label: extraction.label,
-                })}
-              </p>
+              <div className="-mr-1 max-h-[260px] overflow-y-auto pr-1">
+                <p className="text-[10.5px] font-bold tracking-[0.08em] text-sand-500 uppercase">
+                  {t("reader.extractCardOrigin")}
+                </p>
+                <div className="mt-1 flex flex-col gap-1">
+                  <ExtractRow
+                    span={extraction.origin}
+                    origin
+                    onJump={jumpToExtractSpan}
+                    t={t}
+                  />
+                </div>
+                <p className="mt-3 text-[10.5px] font-bold tracking-[0.08em] text-sand-500 uppercase">
+                  {t("reader.extractCardPassages", {
+                    n: extraction.spans.length,
+                    s: plural(extraction.spans.length),
+                  })}
+                </p>
+                <div className="mt-1 flex flex-col gap-1">
+                  {extraction.spans.map((span, i) => (
+                    <ExtractRow
+                      key={`${span.blockId}:${span.start}:${i}`}
+                      span={span}
+                      onJump={jumpToExtractSpan}
+                      t={t}
+                    />
+                  ))}
+                </div>
+              </div>
               <div className="mt-2 flex items-center justify-between">
                 <AuthorChip createdById={extraction.createdById} />
                 {canEdit && (
