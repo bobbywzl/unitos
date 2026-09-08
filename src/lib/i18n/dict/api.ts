@@ -250,6 +250,9 @@ const en = {
   // Glossary language (SPEC.md §8 Phase 7)
   glossaryLanguageFailed: "Writing glossary definitions in your language failed",
   renderingPage: "Rendering the page in a browser",
+  renderingOpening: "Rendering the page: opening it",
+  renderingScrolling: "Rendering the page: scrolling through it",
+  renderingChart: "Rendering the page: settling chart {n} of {total}",
 };
 
 const zh: Record<keyof typeof en, string> = {
@@ -466,6 +469,9 @@ const zh: Record<keyof typeof en, string> = {
 
   glossaryLanguageFailed: "用你的语言生成术语表定义失败",
   renderingPage: "在浏览器中渲染页面",
+  renderingOpening: "渲染页面：正在打开",
+  renderingScrolling: "渲染页面：正在滚动浏览",
+  renderingChart: "渲染页面：正在稳定第 {n}/{total} 个图表",
 };
 
 export const api = { en, zh } as const;

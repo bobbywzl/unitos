@@ -93,9 +93,7 @@ const en = {
   openSimplifiedPlus: "Open the simplified text and its conversation",
   openAnalysisPlus: "Open the analysis and its conversation",
   openVisualizationPlus: "Open the visualization and its conversation",
-  extractStartedHere: "Match-it {label} started here",
-  extractStartedHereDetails: "Match-it {label} started here. Click for details",
-  extractJumpToOrigin: "Jump to the phrase Match-it {label} started from",
+  extractOpenCard: "Match-it {label}: the origin phrase and every passage",
   openComment: "Open the comment",
   linkToOtherTexts: "Link to other texts",
   clickForTools: "Click for tools",
@@ -421,6 +419,9 @@ const en = {
   figureMoveNoBrowser:
     "{label} is drawn by the page's scripts. Set BROWSER_WS_ENDPOINT or CHROMIUM_PATH so Unitos can move it over.",
   figureTryAgain: "Try again",
+  // A figure's video that has not loaded (figure-media.tsx)
+  videoLoading: "Loading the video…",
+  videoNotLoading: "This figure is a video. It is not loading.",
 };
 
 const zh: Record<keyof typeof en, string> = {
@@ -507,9 +508,7 @@ const zh: Record<keyof typeof en, string> = {
   openSimplifiedPlus: "打开简化文本及其对话",
   openAnalysisPlus: "打开分析及其对话",
   openVisualizationPlus: "打开可视化图及其对话",
-  extractStartedHere: "匹配 {label} 始于此处",
-  extractStartedHereDetails: "匹配 {label} 始于此处。点击查看详情",
-  extractJumpToOrigin: "跳转到匹配 {label} 的起始短语",
+  extractOpenCard: "匹配 {label}：起点短语与全部片段",
   openComment: "打开评论",
   linkToOtherTexts: "链接到其他文本",
   clickForTools: "点击使用工具",
@@ -789,6 +788,9 @@ const zh: Record<keyof typeof en, string> = {
   figureMoveNoBrowser:
     "{label} 由页面脚本绘制。设置 BROWSER_WS_ENDPOINT 或 CHROMIUM_PATH，Unitos 才能把它搬过来。",
   figureTryAgain: "再试一次",
+  // A figure's video that has not loaded (figure-media.tsx)
+  videoLoading: "正在加载视频…",
+  videoNotLoading: "此图为视频。视频未能加载。",
 };
 
 export const panes = { en, zh } as const;

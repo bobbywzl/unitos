@@ -150,8 +150,8 @@ const en = {
 
   // Match-it card
   extractLabel: "Match-it {label}",
-  extractCardBody:
-    "{n} passage{s} highlighted across the article. Each {label} chip jumps back here.",
+  extractCardOrigin: "Origin",
+  extractCardPassages: "{n} passage{s}",
   deleteExtractionTitle: "Remove this match and its highlights",
 
   // Plan card
@@ -220,7 +220,6 @@ const en = {
   extractDone: "Match-it {label}: {n} passage{s} highlighted",
   extractFailed: "Match-it failed",
   extractFailedStatus: "Match-it failed ({status})",
-  originChanged: "The origin phrase changed — nothing to jump to.",
   blockNotOpen: "That block is not in the open document.",
   figureNoCaption: "This figure has no caption to anchor to.",
   voiceUnavailable: "Voice is not available in this browser.",
@@ -391,7 +390,8 @@ const zh: Record<keyof typeof en, string> = {
 
   // Match-it card
   extractLabel: "匹配 {label}",
-  extractCardBody: "全文已高亮 {n} 个片段。每个 {label} 标签都可跳回此处。",
+  extractCardOrigin: "起点",
+  extractCardPassages: "{n} 个片段",
   deleteExtractionTitle: "移除此匹配及其高亮",
 
   // Plan card
@@ -460,7 +460,6 @@ const zh: Record<keyof typeof en, string> = {
   extractDone: "匹配 {label}：已高亮 {n} 个片段",
   extractFailed: "匹配失败",
   extractFailedStatus: "匹配失败（{status}）",
-  originChanged: "起点短语已更改，无法跳转。",
   blockNotOpen: "该块不在当前打开的文档中。",
   figureNoCaption: "此插图没有可锚定的说明。",
   voiceUnavailable: "此浏览器不支持朗读。",

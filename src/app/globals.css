@@ -939,6 +939,30 @@ ellipse.anchor-flash {
   min-width: 0;
   border-radius: 10px;
 }
+/* The place a video takes while it loads and in its stead when it does not
+   load (components/reader/figure-media.tsx). It stands where the video
+   stands, at the figure column's full width; the video hides while it does. */
+.video-place-host {
+  display: block;
+  flex-basis: 100%;
+  width: 100%;
+  min-width: 0;
+}
+.video-place-empty {
+  display: none;
+}
+.video-not-loaded {
+  display: none;
+}
+/* The place's icons are chrome, not the figure's picture: the figure's own
+   svg rule below would blow them up to the column's width. */
+.video-place-host svg {
+  width: auto;
+  height: auto;
+  min-width: 0;
+  background: none;
+  border-radius: 0;
+}
 /* A gallery figure (many clips) lays out three to a row. */
 .reader-figure video:not(:only-of-type) {
   width: 32%;
