@@ -5233,7 +5233,10 @@ function blockFormatKind(
           errors sit under the controls. */}
       <div className="pointer-events-none sticky top-4 z-10 h-0 print:hidden">
       <div className="absolute top-0 right-4 flex flex-col items-end gap-2">
-      <div className="pointer-events-auto flex items-center gap-2">
+      <div
+        className="pointer-events-auto flex items-center gap-2 rounded-full"
+        data-nudge={!split && !transcript ? "tools" : undefined}
+      >
         {extractBusy && (
           <span className="rounded-full bg-card px-3 py-1.5 text-xs shadow-soft">
             <ThinkingIndicator label={t("reader.extracting")} onStop={stopExtract} />

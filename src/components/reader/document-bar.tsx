@@ -692,6 +692,23 @@ export function DocumentBar({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [driveResult]);
 
+  // A new project opens on the add-document dialog: New project on the
+  // dashboard pushes ?add=1, so the first thing the project asks for is a
+  // document. The param leaves the URL so a reload does not repeat it.
+  const addParam = searchParams.get("add");
+  const addParamHandled = useRef(false);
+  useEffect(() => {
+    if (addParam !== "1" || addParamHandled.current || !canEdit) return;
+    addParamHandled.current = true;
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("add");
+    router.replace(`/n/${notebookId}${params.size > 0 ? `?${params}` : ""}`);
+    setError(null);
+    setDialogTab(null);
+    setDialog(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [addParam, canEdit]);
+
   // Drag-and-drop upload — PDFs, images, video and audio files: dropping
   // anywhere on the page adds to this work.
   const [dragging, setDragging] = useState(false);
@@ -1015,7 +1032,9 @@ export function DocumentBar({
             setDialog(true);
           }}
           data-track="add-document"
-          data-nudge="document"
+          // The onboarding nudge on + waits for the first document: a new
+          // project opens on the dialog, so the nudge would sit behind it.
+          data-nudge={documents.length > 0 && !dialog ? "document" : undefined}
           aria-label={t("panes.addDocument")}
           data-tip={t("panes.addDocumentTitle")}
           aria-haspopup="dialog"

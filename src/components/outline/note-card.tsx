@@ -369,6 +369,9 @@ export function NoteCard({
       onPointerDown={dragOutEnabled ? startDragOut : undefined}
       style={dragOutEnabled ? { touchAction: "pan-y" } : undefined}
       data-tip={dragOutEnabled ? t("outline.dragOut") : undefined}
+      // The onboarding nudge on the first note: a ghost card slides out of
+      // the tray (components/nudges.tsx).
+      data-nudge={dragOutEnabled ? "float" : undefined}
       className={`flex min-h-[18px] items-center gap-1.5 ${dragOutEnabled ? "select-none" : ""}`}
     >
       {handle && !editing && (

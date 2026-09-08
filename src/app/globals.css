@@ -1239,6 +1239,64 @@ ellipse.anchor-flash {
   animation: welcome-rise 0.7s ease 0.75s both;
 }
 
+/* The onboarding feature look (components/nudges.tsx): the next thing to try
+   glows — a pulsing clay ring on the target, or on the caption when the
+   target is the whole article — and one translucent caption sits beside it. */
+@keyframes nudge-glow {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 3px color-mix(in srgb, var(--clay) 55%, transparent),
+      0 0 18px 4px color-mix(in srgb, var(--clay) 40%, transparent);
+  }
+  50% {
+    box-shadow:
+      0 0 0 5px color-mix(in srgb, var(--clay) 35%, transparent),
+      0 0 32px 10px color-mix(in srgb, var(--clay) 55%, transparent);
+  }
+}
+.nudge-glow {
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--clay) 55%, transparent),
+    0 0 18px 4px color-mix(in srgb, var(--clay) 40%, transparent);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .nudge-glow {
+    animation: nudge-glow 1.8s ease-in-out infinite;
+  }
+}
+
+/* The ghost note (the float nudge): a translucent card slides out of the
+   tray toward the article and fades, on a loop — the drag it stands for.
+   --ghost-dx is the slide's length. Under reduced motion it rests halfway. */
+@keyframes nudge-ghost {
+  0% {
+    opacity: 0;
+    transform: none;
+  }
+  15% {
+    opacity: 1;
+    transform: translate(-6px, 4px);
+  }
+  70% {
+    opacity: 1;
+    transform: translate(calc(-1 * var(--ghost-dx)), 28px);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(calc(-1 * var(--ghost-dx)), 28px);
+  }
+}
+.nudge-ghost {
+  opacity: 0.7;
+  transform: translate(calc(-0.5 * var(--ghost-dx)), 14px);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .nudge-ghost {
+    animation: nudge-ghost 2.8s ease-in-out infinite;
+  }
+}
+
 /* Print: the open document only. The app shell flattens and chrome hides via
    print: utilities (workspace, reader); these rules cover pagination and media. */
 @media print {
