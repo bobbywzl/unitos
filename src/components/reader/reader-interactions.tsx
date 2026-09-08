@@ -33,11 +33,18 @@ import type {
 } from "@/lib/types";
 import type { DocumentReference } from "@/lib/parse/types";
 import { splitStreamError, splitStreamNote } from "@/lib/derive/config";
+import {
+  type ChatTurn,
+  type ConversationLog,
+  parseTranscript,
+  type ToolKind,
+} from "@/lib/conversation";
 import { TranslationBar } from "@/components/reader/translation-bar";
 import { findWeblinks } from "@/lib/weblinks";
 import { isImeKey, useImeGuard } from "@/lib/ime";
 import { imageFigureHtml } from "@/lib/images";
 import { markdownStyleKey } from "@/lib/markdown-style";
+import { reportError } from "@/lib/error-log";
 import { isOffline, offlinePremium, queueWrite } from "@/lib/offline/queue";
 import { parseYouTubeId, youtubeWatchUrl } from "@/lib/video/youtube";
 import type { TFunc, TKey } from "@/lib/i18n/dictionaries";
@@ -53,6 +60,7 @@ import {
   QuoteIcon,
   ChartIcon,
   SearchIcon,
+  VisualizeIcon,
   SparkleIcon,
   SpinnerIcon,
   StopIcon,
@@ -63,7 +71,8 @@ import {
 import { Markdown } from "@/components/markdown";
 import { Collapse, Presence } from "@/components/presence";
 import { ThinkingIndicator } from "@/components/thinking";
-import type { BlockData, Highlight } from "@/components/reader/block-view";
+import { type BlockData, type Highlight, ToolSymbol } from "@/components/reader/block-view";
+import { ArticleErrors } from "@/components/reader/article-errors";
 import { Bibliography } from "@/components/reader/bibliography";
 import type { ConversionInfo } from "@/components/reader/conversion-strip";
 import { HIGHLIGHT_HUES, HUE_DOT, HUE_KEY } from "@/components/reader/hues";
@@ -128,6 +137,7 @@ type Tool =
   | "analyze"
   | "explain"
   | "simplify"
+  | "visualize"
   | "extract"
   | "comment"
   | "link"
@@ -136,10 +146,10 @@ type Tool =
   | "readAloud";
 
 const TOOLBARS: Record<ContentKind, readonly Tool[]> = {
-  text: ["assistant", "explain", "simplify", "extract", "comment", "link", "highlight", "addToNotes", "readAloud"],
+  text: ["assistant", "explain", "simplify", "visualize", "extract", "comment", "link", "highlight", "addToNotes", "readAloud"],
   table: ["assistant", "analyze", "explain", "comment", "link", "highlight", "addToNotes"],
   figure: ["assistant", "analyze", "explain", "comment", "link", "highlight", "addToNotes"],
-  equation: ["assistant", "explain", "comment", "link", "highlight", "addToNotes"],
+  equation: ["assistant", "explain", "visualize", "comment", "link", "highlight", "addToNotes"],
 };
 
 // The blocks the hold-and-circle gesture opens a toolbar on, whole.
@@ -333,10 +343,21 @@ const ACTION_LABEL_KEY: Record<AssistantAction["type"], TKey> = {
   format_block: "reader.actionFormat",
   style: "reader.actionStyle",
 };
+// A tool's output continued into a conversation — Explain+, Simplify+,
+// Analyze+, Visualize+ (SPEC.md §21). Continue opens the box; the turns
+// persist on the tool's annotation (Note.conversation) and reopen with it.
+type ToolChat = {
+  conversation: ChatTurn[];
+  chatOpen: boolean; // the box is open: Continue was pressed, or turns exist
+  input: string;
+  busy: boolean; // a turn is in flight
+};
+const NO_CHAT: ToolChat = { conversation: [], chatOpen: false, input: "", busy: false };
+
 // The card EXPLAIN and ANALYZE stream into (SPEC.md §4, §6): one card, the
 // kind sets its title and glyph.
-type ExplainBubble = {
-  kind: "explain" | "analyze";
+type ExplainBubble = ToolChat & {
+  kind: "explain" | "analyze" | "visualize";
   left: number;
   top: number;
   width: number;
@@ -344,23 +365,44 @@ type ExplainBubble = {
   text: string;
   streaming: boolean;
   error: string | null;
+  // VISUALIZE only (SPEC.md §20): the model declined to draw, and this is why.
+  declined: string | null;
   anchor: Anchor | null; // the highlighted text this bubble explains
   noteId: string | null; // the persisted annotation; Delete removes it and its mark
 };
 
-type ChatMessage = { role: "user" | "assistant"; content: string };
+type ChatMessage = ChatTurn;
 
-// Transcript format written by /api/assistant/act: "**Reader:** …" and
-// "**Assistant:** …" turns separated by blank lines.
-function parseConversation(content: string): ChatMessage[] {
-  const chunks = content.split(/\n\n(?=\*\*(?:Reader|Assistant):\*\* )/);
-  const messages: ChatMessage[] = [];
-  for (const chunk of chunks) {
-    const m = /^\*\*(Reader|Assistant):\*\* ([\s\S]*)$/.exec(chunk.trim());
-    if (m) messages.push({ role: m[1] === "Reader" ? "user" : "assistant", content: m[2] });
-  }
-  return messages.length > 0 ? messages : [{ role: "assistant", content }];
-}
+// The log card (SPEC.md §21): hovering a mark whose annotation holds a
+// conversation shows the conversation's condensed log where the card would
+// open — one line per message. Leaving the mark closes it; a click opens the
+// card in its place.
+type LogCard = {
+  sourceId: string;
+  noteId: string;
+  tool: ToolKind | "assistant";
+  anchor: Anchor | null;
+  left: number;
+  top: number;
+  width: number;
+  side: "right" | "left";
+  log: ConversationLog | null; // null while it loads
+  failed: boolean;
+};
+// Logs fetched this session, by note id: a log is written once per
+// conversation length, so a hover on the same conversation asks once.
+const logCache = new Map<string, { turns: number; log: ConversationLog }>();
+const HOVER_LOG_DELAY = 320;
+const HOVER_LOG_LINGER = 220;
+
+// The tool card's title and symbol, with the plus once its output continued
+// into a conversation.
+const TOOL_PLUS_KEY: Record<ToolKind, TKey> = {
+  explain: "reader.explainPlus",
+  simplify: "reader.simplifyPlus",
+  analyze: "reader.analyzePlus",
+  visualize: "reader.visualizePlus",
+};
 // The assistant as a miniature chat, docked beside the article. anchor = the
 // selection the conversation started from; every turn keeps applying to it.
 type AssistantChat = {
@@ -375,9 +417,15 @@ type AssistantChat = {
   busy: boolean;
 };
 
+// The picture a stored visualization's markdown points at (SPEC.md §20):
+// the card's Open link shows it full size in a new tab.
+function visualizationImage(markdown: string): string | null {
+  return /!\[[^\]]*\]\((\/api\/images\/[A-Za-z0-9_-]+)\)/.exec(markdown)?.[1] ?? null;
+}
+
 // SIMPLIFY output: a translucent bubble beside the article, level with the
 // selection. The selection stays tinted while the bubble is open (SPEC.md §6).
-type SimplifyCard = {
+type SimplifyCard = ToolChat & {
   anchor: Anchor;
   top: number;
   left: number;
@@ -557,13 +605,16 @@ export function ReaderInteractions({
   >;
   // Stored EXPLAIN, SIMPLIFY, ANALYZE, comment, and assistant conversation
   // content by source id: clicking their mark (or icon) reopens the card with
-  // this content.
+  // this content. conversation: the turns after a tool's output (Explain+,
+  // Simplify+, Analyze+, Visualize+) or the assistant conversation's own;
+  // a mark with turns shows the log on hover (SPEC.md §21).
   annotationBubbles: Record<
     string,
     {
-      kind: "explain" | "simplify" | "analyze" | "comment" | "assistant";
+      kind: "explain" | "simplify" | "analyze" | "visualize" | "comment" | "assistant";
       content: string;
       noteId: string;
+      conversation: ChatTurn[];
     }
   >;
   // A split view (SPEC.md §6): the pane header row replaces the floating
@@ -638,7 +689,7 @@ export function ReaderInteractions({
   const tCtx = useT();
   // Viewers on a shared corpus read only: no selection tools, no edit mode,
   // no assistant. The server rejects their writes; this keeps the surface honest.
-  const { canEdit, premium } = useCollab();
+  const { canEdit, premium, ultra } = useCollab();
   const canEditRef = useRef(canEdit);
   canEditRef.current = canEdit;
   const tRef = useRef(tCtx);
@@ -1060,6 +1111,15 @@ export function ReaderInteractions({
   // button before the chat card exists, or the chat card's Send button once
   // it does; only one is ever in flight at a time.
   const chatAbortRef = useRef<AbortController | null>(null);
+  // A tool conversation's turn in flight (SPEC.md §21), one per card kind.
+  const toolChatAbortRef = useRef<Record<"explain" | "simplify", AbortController | null>>({
+    explain: null,
+    simplify: null,
+  });
+  // The log card a hovered conversation mark shows (SPEC.md §21).
+  const [logCard, setLogCard] = useState<LogCard | null>(null);
+  const logCardRef = useRef(logCard);
+  logCardRef.current = logCard;
   const recognitionRef = useRef<SpeechRec | null>(null);
   const editModeRef = useRef(false);
   editModeRef.current = editMode;
@@ -1120,7 +1180,7 @@ export function ReaderInteractions({
   const CARD_ESTIMATE = 360;
   const CARD_GAP = 14;
   function claimSideSlot(
-    kind: "explain" | "simplify" | "assistant" | "comment" | "link",
+    kind: "explain" | "simplify" | "assistant" | "comment" | "link" | "log",
     preferredTop: number,
   ) {
     const { rects, articleLeft, articleRight, cw } = measureSideCards(containerRef.current, kind);
@@ -1153,10 +1213,12 @@ export function ReaderInteractions({
     }
     return { ...dockSideCard(side, articleLeft, articleRight, cw), top, side };
   }
-  // Closing a card mid-stream stops its run: nobody will read the rest.
+  // Closing a card mid-stream stops its run: nobody will read the rest. A
+  // tool conversation's turn in flight stops with its card too.
   function closeExplain() {
     explainAbortRef.current?.abort();
     explainAbortRef.current = null;
+    stopToolChat("explain");
     setBubble(null);
   }
   function stopExplain() {
@@ -1173,22 +1235,29 @@ export function ReaderInteractions({
       return true;
     } catch (err) {
       broadcastNoteRestored(noteId);
-      showToast(err instanceof Error ? err.message : t("reader.deleteFailed"));
+      showError(err instanceof Error ? err.message : t("reader.deleteFailed"));
       return false;
     }
   }
   async function deleteExplain() {
     const card = bubble;
-    if (!card?.noteId || card.streaming) return;
+    if (!card?.noteId || card.streaming || card.busy) return;
     setBubble(null);
     await deleteNote(
       card.noteId,
-      t(card.kind === "analyze" ? "reader.analysisRemoved" : "reader.explanationRemoved"),
+      t(
+        card.kind === "analyze"
+          ? "reader.analysisRemoved"
+          : card.kind === "visualize"
+            ? "reader.visualizationRemoved"
+            : "reader.explanationRemoved",
+      ),
     );
   }
   function closeSimplify() {
     simplifyAbortRef.current?.abort();
     simplifyAbortRef.current = null;
+    stopToolChat("simplify");
     setSimplifyCard(null);
   }
   function stopSimplify() {
@@ -1199,7 +1268,7 @@ export function ReaderInteractions({
   }
   async function deleteSimplify() {
     const card = simplifyCard;
-    if (!card?.noteId || card.streaming) return;
+    if (!card?.noteId || card.streaming || card.busy) return;
     setSimplifyCard(null);
     await deleteNote(card.noteId, t("reader.simplifiedRemoved"));
   }
@@ -1643,6 +1712,7 @@ export function ReaderInteractions({
     assistant: assistantChat?.anchor,
     comment: commentCard?.anchor,
     link: linkCard?.anchor,
+    log: logCard?.anchor,
   };
   const measureConnectors = useCallback(() => {
     const container = containerRef.current;
@@ -1652,9 +1722,11 @@ export function ReaderInteractions({
     }
     const crect = container.getBoundingClientRect();
     const lines: { x1: number; y1: number; x2: number; y2: number }[] = [];
-    for (const el of container.querySelectorAll<HTMLElement>("[data-side-card]")) {
+    // The log card (data-log-card) gets its line too; it is not a side card,
+    // so it never takes a slot or pushes a card.
+    for (const el of container.querySelectorAll<HTMLElement>("[data-side-card], [data-log-card]")) {
       if (el.closest(".presence-exit")) continue;
-      const anchor = cardAnchorsRef.current[el.dataset.sideCard ?? ""];
+      const anchor = cardAnchorsRef.current[el.dataset.sideCard ?? el.dataset.logCard ?? ""];
       if (!anchor) continue;
       const blockEl = container.querySelector<HTMLElement>(
         `[data-block-id="${anchor.blockId}"], [data-edit-block="${anchor.blockId}"]`,
@@ -1688,7 +1760,7 @@ export function ReaderInteractions({
   useEffect(() => {
     const raf = requestAnimationFrame(measureConnectors);
     return () => cancelAnimationFrame(raf);
-  }, [bubble, simplifyCard, assistantChat, commentCard, linkCard, measureConnectors]);
+  }, [bubble, simplifyCard, assistantChat, commentCard, linkCard, logCard, measureConnectors]);
   // The line follows its ends while they move: a scroll box inside the pane
   // (the transcript's) scrolls the text under a card, and a card pushed down
   // by a growing neighbor slides to its new place (globals.css
@@ -1819,6 +1891,19 @@ export function ReaderInteractions({
     const el = chatScrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [chatMessageCount]);
+  // A tool card's body scrolls to a new turn of its conversation (SPEC.md §21).
+  const explainBodyRef = useRef<HTMLDivElement>(null);
+  const simplifyBodyRef = useRef<HTMLDivElement>(null);
+  const explainTurnCount = bubble?.conversation.length ?? 0;
+  const simplifyTurnCount = simplifyCard?.conversation.length ?? 0;
+  useEffect(() => {
+    const el = explainBodyRef.current;
+    if (el && explainTurnCount > 0) el.scrollTop = el.scrollHeight;
+  }, [explainTurnCount]);
+  useEffect(() => {
+    const el = simplifyBodyRef.current;
+    if (el && simplifyTurnCount > 0) el.scrollTop = el.scrollHeight;
+  }, [simplifyTurnCount]);
 
   useEffect(() => {
     if (localStorage.getItem("unitos-edit-hint") === "done") return;
@@ -1987,6 +2072,134 @@ export function ReaderInteractions({
     return () => window.removeEventListener("dissect:flash-source", onFlash);
   }, [flashSource]);
 
+  // Where a stored mark sits in the pane, for a card that opens beside it.
+  const markTop = useCallback((sourceId: string) => {
+    const container = containerRef.current;
+    if (!container) return 80;
+    const markEl = container.querySelector<HTMLElement>(`[data-source-id="${sourceId}"]`);
+    return markEl
+      ? markEl.getBoundingClientRect().top - container.getBoundingClientRect().top + container.scrollTop
+      : 80;
+  }, []);
+  // The anchor a stored mark paints, rebuilt from its highlight entry.
+  const anchorOfSource = useCallback((sourceId: string): Anchor | null => {
+    for (const [blockId, list] of Object.entries(anchorHighlightsRef.current)) {
+      const hit = list.find((h) => h.sourceId === sourceId);
+      if (!hit) continue;
+      const block = blocksRef.current.find((b) => b.id === blockId);
+      if (!block) return null;
+      return {
+        blockId,
+        startOffset: hit.start,
+        endOffset: hit.end,
+        quotedText: block.text.slice(hit.start, hit.end),
+        prefix: "",
+        suffix: "",
+      };
+    }
+    return null;
+  }, []);
+
+  // The log card (SPEC.md §21): hovering a mark whose annotation holds a
+  // conversation — an assistant conversation, or a tool's output continued
+  // into one — shows the conversation's log where its card would open, one
+  // line per message. It waits out a passing pointer, leaves when the pointer
+  // leaves the mark and the card, and gives way to the card on a click.
+  const openNoteIdsRef = useRef(new Set<string>());
+  openNoteIdsRef.current = new Set(
+    [bubble?.noteId, simplifyCard?.noteId, assistantChat?.noteId].filter((id): id is string => Boolean(id)),
+  );
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    let showTimer: number | null = null;
+    let pendingSourceId: string | null = null; // the mark the show timer waits on
+    let hideTimer: number | null = null;
+    const clearTimers = () => {
+      if (showTimer !== null) clearTimeout(showTimer);
+      if (hideTimer !== null) clearTimeout(hideTimer);
+      showTimer = null;
+      pendingSourceId = null;
+      hideTimer = null;
+    };
+    const hide = () => {
+      clearTimers();
+      if (logCardRef.current) setLogCard(null);
+    };
+    const show = (sourceId: string) => {
+      const stored = annotationBubblesRef.current[sourceId];
+      if (!stored || stored.kind === "comment" || stored.conversation.length === 0) return;
+      if (openNoteIdsRef.current.has(stored.noteId)) return; // the card itself is open
+      const slot = claimSideSlot("log", markTop(sourceId));
+      const key = `${stored.noteId}:${stored.conversation.length}`;
+      const cached = logCache.get(key)?.log ?? null;
+      setLogCard({
+        sourceId,
+        noteId: stored.noteId,
+        tool: stored.kind,
+        anchor: anchorOfSource(sourceId),
+        ...slot,
+        log: cached,
+        failed: false,
+      });
+      if (cached) return;
+      void fetch(`/api/notes/${stored.noteId}/log`, { method: "POST" })
+        .then((res) => (res.ok ? (res.json() as Promise<{ log?: ConversationLog | null }>) : null))
+        .then((data) => {
+          const log = data?.log ?? null;
+          if (log) logCache.set(key, { turns: log.turns, log });
+          setLogCard((c) => (c && c.noteId === stored.noteId ? { ...c, log, failed: log === null } : c));
+        })
+        .catch(() => {
+          setLogCard((c) => (c && c.noteId === stored.noteId ? { ...c, failed: true } : c));
+        });
+    };
+    const onOver = (e: MouseEvent) => {
+      const target = e.target as Element | null;
+      if (target?.closest("[data-log-card]")) {
+        // Over the card: it stays.
+        if (hideTimer !== null) clearTimeout(hideTimer);
+        hideTimer = null;
+        return;
+      }
+      const markEl = target?.closest<HTMLElement>("[data-source-id], [data-hover-source]");
+      const sourceId = markEl?.dataset.sourceId ?? markEl?.dataset.hoverSource ?? null;
+      const current = logCardRef.current;
+      if (sourceId && current?.sourceId === sourceId) {
+        if (hideTimer !== null) clearTimeout(hideTimer);
+        hideTimer = null;
+        return;
+      }
+      // Still on the mark the timer waits on (its text, then its chip): wait on.
+      if (sourceId && showTimer !== null && pendingSourceId === sourceId) return;
+      clearTimers();
+      if (sourceId) {
+        pendingSourceId = sourceId;
+        showTimer = window.setTimeout(() => {
+          showTimer = null;
+          pendingSourceId = null;
+          show(sourceId);
+        }, HOVER_LOG_DELAY);
+      }
+      if (current) hideTimer = window.setTimeout(hide, HOVER_LOG_LINGER);
+    };
+    const onLeave = () => {
+      clearTimers();
+      if (logCardRef.current) hideTimer = window.setTimeout(hide, HOVER_LOG_LINGER);
+    };
+    container.addEventListener("mouseover", onOver);
+    container.addEventListener("mouseleave", onLeave);
+    container.addEventListener("scroll", hide, true);
+    window.addEventListener("mousedown", hide);
+    return () => {
+      clearTimers();
+      container.removeEventListener("mouseover", onOver);
+      container.removeEventListener("mouseleave", onLeave);
+      container.removeEventListener("scroll", hide, true);
+      window.removeEventListener("mousedown", hide);
+    };
+  }, [anchorOfSource, markTop]);
+
   // Clicking an annotation mark: EXPLAIN and SIMPLIFY reopen their bubble with
   // the stored content, beside the mark; everything else focuses its card in
   // the Annotations tab.
@@ -2036,36 +2249,19 @@ export function ReaderInteractions({
         });
         return;
       }
-      const markEl = container.querySelector<HTMLElement>(`[data-source-id="${sourceId}"]`);
-      const containerRect = container.getBoundingClientRect();
-      const top = markEl
-        ? markEl.getBoundingClientRect().top - containerRect.top + container.scrollTop
-        : 80;
+      // The card takes the log card's place (SPEC.md §21).
+      setLogCard(null);
+      const top = markTop(sourceId);
       // Rebuild the anchor from the mark's highlight entry: the connector line
       // needs it, and SIMPLIFY's sentence mirroring maps against it.
-      let anchor: Anchor | null = null;
-      for (const [blockId, list] of Object.entries(anchorHighlightsRef.current)) {
-        const hit = list.find((h) => h.sourceId === sourceId);
-        if (!hit) continue;
-        const block = blocksRef.current.find((b) => b.id === blockId);
-        if (!block) break;
-        anchor = {
-          blockId,
-          startOffset: hit.start,
-          endOffset: hit.end,
-          quotedText: block.text.slice(hit.start, hit.end),
-          prefix: "",
-          suffix: "",
-        };
-        break;
-      }
+      const anchor = anchorOfSource(sourceId);
       if (stored.kind === "assistant") {
         const slot = claimSideSlot("assistant", top);
         setAssistantChat({
           anchor,
           noteId: stored.noteId,
           ...slot,
-          messages: parseConversation(stored.content),
+          messages: parseTranscript(stored.content),
           input: "",
           busy: false,
         });
@@ -2084,14 +2280,23 @@ export function ReaderInteractions({
         });
         return;
       }
-      if (stored.kind === "explain" || stored.kind === "analyze") {
+      // A conversation continued from the output reopens with it, its box
+      // open (SPEC.md §21).
+      const chat: ToolChat = {
+        ...NO_CHAT,
+        conversation: stored.conversation,
+        chatOpen: stored.conversation.length > 0,
+      };
+      if (stored.kind === "explain" || stored.kind === "analyze" || stored.kind === "visualize") {
         const slot = claimSideSlot("explain", top);
         setBubble({
           ...slot,
+          ...chat,
           kind: stored.kind,
           text: stored.content,
           streaming: false,
           error: null,
+          declined: null,
           anchor,
           noteId: stored.noteId,
         });
@@ -2107,6 +2312,7 @@ export function ReaderInteractions({
       setSimplifyCard({
         anchor,
         ...slot,
+        ...chat,
         text: stored.content,
         streaming: false,
         error: null,
@@ -2117,8 +2323,7 @@ export function ReaderInteractions({
     };
     window.addEventListener("dissect:open-annotation", onOpen);
     return () => window.removeEventListener("dissect:open-annotation", onOpen);
-     
-  }, []);
+  }, [anchorOfSource, markTop]);
 
   // Side cards dock to the article's edge; the notes tray resizing or
   // collapsing, or the window resizing, moves that edge. Re-dock every open
@@ -2138,8 +2343,8 @@ export function ReaderInteractions({
     if (isNarrow !== narrowRef.current) {
       narrowRef.current = isNarrow;
       if (isNarrow) {
-        setBubble((b) => (b && !b.streaming && b.noteId ? null : b));
-        setSimplifyCard((c) => (c && !c.streaming && c.noteId ? null : c));
+        setBubble((b) => (b && !b.streaming && !b.busy && b.noteId ? null : b));
+        setSimplifyCard((c) => (c && !c.streaming && !c.busy && c.noteId ? null : c));
         setAssistantChat((c) => (c && !c.busy && c.noteId ? null : c));
         setCommentCard((c) => (c && !c.busy && c.noteId && c.draft === c.saved ? null : c));
       }
@@ -2396,6 +2601,14 @@ export function ReaderInteractions({
     }, 5000);
   }
 
+  // A failure shows as a toast and lands in the error log on this document,
+  // so it stays readable under Distill and Extract after the toast fades
+  // (article-errors.tsx).
+  function showError(message: string) {
+    showToast(message);
+    reportError(message, documentId);
+  }
+
   // A media figure (video/audio/embedded player inside an article) refuses
   // tools; the toast offers to open it as a video document, where the video
   // tools apply. The link goes to the document bar's ingest path — progress
@@ -2504,7 +2717,7 @@ export function ReaderInteractions({
       window.getSelection()?.removeAllRanges();
       router.refresh();
     } catch (err) {
-      showToast(err instanceof Error ? err.message : t("reader.addFailed"));
+      showError(err instanceof Error ? err.message : t("reader.addFailed"));
     } finally {
       setBusy(false);
     }
@@ -2552,7 +2765,7 @@ export function ReaderInteractions({
     window.getSelection()?.removeAllRanges();
     markFreshAnchor(anchor);
     const slot = claimSideSlot("explain", yTop);
-    setBubble({ ...slot, kind, text: "", streaming: true, error: null, anchor, noteId: null });
+    setBubble({ ...slot, ...NO_CHAT, kind, text: "", streaming: true, error: null, declined: null, anchor, noteId: null });
     explainAbortRef.current?.abort();
     const controller = new AbortController();
     explainAbortRef.current = controller;
@@ -2622,6 +2835,7 @@ export function ReaderInteractions({
     setSimplifyCard({
       anchor,
       ...slot,
+      ...NO_CHAT,
       text: "",
       streaming: true,
       error: null,
@@ -2686,6 +2900,88 @@ export function ReaderInteractions({
     }
   }
 
+  // VISUALIZE (SPEC.md §20, Unitos Ultra): the selection as a picture, into
+  // the same card as EXPLAIN. The server answers behind a heartbeat stream
+  // with the annotation's markdown (the picture and its caption), or with the
+  // reason the model declined to draw; a decline persists nothing.
+  async function visualize() {
+    if (!popover || busy) return;
+    if (!ultra) {
+      showToast(t("reader.visualizeNeedsUltra"));
+      return;
+    }
+    const { anchor, yTop } = popover;
+    await flushLiveBlock(anchor.blockId);
+    setPopover(null);
+    window.getSelection()?.removeAllRanges();
+    markFreshAnchor(anchor);
+    const slot = claimSideSlot("explain", yTop);
+    setBubble({
+      ...slot,
+      ...NO_CHAT,
+      kind: "visualize",
+      text: "",
+      streaming: true,
+      error: null,
+      declined: null,
+      anchor,
+      noteId: null,
+    });
+    explainAbortRef.current?.abort();
+    const controller = new AbortController();
+    explainAbortRef.current = controller;
+    try {
+      const res = await fetch("/api/derive", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
+        body: deriveBody("VISUALIZE", anchor),
+      });
+      if (!res.ok || !res.body) {
+        const detail = (await res.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(detail?.error ?? t("reader.deriveFailedStatus", { status: res.status }));
+      }
+      // Heartbeat spaces while the model works, then the payload JSON or the
+      // error token with the reason.
+      const { text, error } = splitStreamError(await res.text());
+      if (error) throw new Error(error);
+      let parsed: unknown = null;
+      try {
+        parsed = JSON.parse(text.trim());
+      } catch {
+        parsed = null;
+      }
+      const payload = parsed as {
+        declined?: boolean;
+        reason?: string;
+        noteId?: string;
+        content?: string;
+      } | null;
+      if (!payload) throw new Error(t("reader.emptyResponse"));
+      if (payload.declined) {
+        const reason = payload.reason ?? "";
+        setBubble((b) => (b ? { ...b, streaming: false, declined: reason } : b));
+        return;
+      }
+      const content = payload.content ?? "";
+      const noteId = payload.noteId ?? null;
+      if (!content.trim()) throw new Error(t("reader.emptyResponse"));
+      if (noteId) addLocalAnchor(anchor);
+      setBubble((b) => (b ? { ...b, text: content, noteId, streaming: false } : b));
+      router.refresh();
+    } catch (err) {
+      // Stopped, not failed: nothing to keep, the card closes.
+      if (controller.signal.aborted) {
+        setBubble(null);
+        return;
+      }
+      const message = err instanceof Error ? err.message : t("reader.visualizeFailed");
+      setBubble((b) => (b ? { ...b, streaming: false, error: message } : b));
+    } finally {
+      if (explainAbortRef.current === controller) explainAbortRef.current = null;
+    }
+  }
+
   // On-mark card actions: recolor, save the comment, delete. Every action
   // syncs through the normal notes API and refreshes the painted marks.
   async function recolorAnnotation(color: (typeof HIGHLIGHT_HUES)[number]) {
@@ -2697,7 +2993,7 @@ export function ReaderInteractions({
       router.refresh();
       setAnnotationCard((c) => (c && c.sourceId === card.sourceId ? { ...c, busy: false } : c));
     } catch (err) {
-      showToast(err instanceof Error ? err.message : t("reader.recolorFailed"));
+      showError(err instanceof Error ? err.message : t("reader.recolorFailed"));
       setAnnotationCard((c) =>
         c && c.sourceId === card.sourceId ? { ...c, color: card.color, busy: false } : c,
       );
@@ -2722,7 +3018,7 @@ export function ReaderInteractions({
       setAnnotationCard(null);
       showToast(t("common.saved"));
     } catch (err) {
-      showToast(err instanceof Error ? err.message : t("reader.saveFailed"));
+      showError(err instanceof Error ? err.message : t("reader.saveFailed"));
       setAnnotationCard((c) => (c ? { ...c, busy: false } : c));
     }
   }
@@ -2753,7 +3049,7 @@ export function ReaderInteractions({
       setCommentCard((c) => (c ? { ...c, saved: content, busy: false } : c));
       showToast(t("common.saved"));
     } catch (err) {
-      showToast(err instanceof Error ? err.message : t("reader.saveFailed"));
+      showError(err instanceof Error ? err.message : t("reader.saveFailed"));
       setCommentCard((c) => (c ? { ...c, busy: false } : c));
     }
   }
@@ -2783,7 +3079,7 @@ export function ReaderInteractions({
       router.refresh();
       showToast(t("common.saved"));
     } catch (err) {
-      showToast(err instanceof Error ? err.message : t("reader.saveFailed"));
+      showError(err instanceof Error ? err.message : t("reader.saveFailed"));
       setLinkCard((c) => (c ? { ...c, busy: false } : c));
     }
   }
@@ -2882,6 +3178,7 @@ export function ReaderInteractions({
       if (documentIdRef.current !== runDocumentId) return;
       const message = err instanceof Error ? err.message : t("reader.keypointsFailed");
       setKeypointsError(message);
+      reportError(message, runDocumentId);
       if (!keypointsOpenRef.current) showToast(message);
     } finally {
       if (keypointsAbortRef.current === controller) keypointsAbortRef.current = null;
@@ -2897,7 +3194,7 @@ export function ReaderInteractions({
       setLocalKeypoints("deleted");
       router.refresh();
     } catch (err) {
-      showToast(err instanceof Error ? err.message : t("reader.deleteFailed"));
+      showError(err instanceof Error ? err.message : t("reader.deleteFailed"));
     }
   }
 
@@ -2928,7 +3225,7 @@ export function ReaderInteractions({
       router.refresh();
       return true;
     } catch (err) {
-      showToast(err instanceof Error ? err.message : t("reader.addFailed"));
+      showError(err instanceof Error ? err.message : t("reader.addFailed"));
       return false;
     }
   }
@@ -3035,6 +3332,7 @@ export function ReaderInteractions({
       if (documentIdRef.current !== runDocumentId) return;
       const message = err instanceof Error ? err.message : t("reader.distillFailed");
       setDistillError(message);
+      reportError(message, runDocumentId);
       if (!distillOpenRef.current) showToast(message);
     } finally {
       if (distillAbortRef.current === controller) distillAbortRef.current = null;
@@ -3051,7 +3349,7 @@ export function ReaderInteractions({
       if (distillShownId === id) setDistillShownId(null);
       router.refresh();
     } catch (err) {
-      showToast(err instanceof Error ? err.message : t("reader.deleteFailed"));
+      showError(err instanceof Error ? err.message : t("reader.deleteFailed"));
     }
   }
 
@@ -3085,7 +3383,7 @@ export function ReaderInteractions({
       router.refresh();
       return true;
     } catch (err) {
-      showToast(err instanceof Error ? err.message : t("reader.addFailed"));
+      showError(err instanceof Error ? err.message : t("reader.addFailed"));
       return false;
     }
   }
@@ -3159,7 +3457,7 @@ export function ReaderInteractions({
     } catch (err) {
       // Stopped, not failed: nothing was extracted, nothing to say.
       if (controller.signal.aborted) return;
-      showToast(err instanceof Error ? err.message : t("reader.extractFailed"));
+      showError(err instanceof Error ? err.message : t("reader.extractFailed"));
     } finally {
       if (extractAbortRef.current === controller) extractAbortRef.current = null;
       setExtractBusy(false);
@@ -3176,7 +3474,7 @@ export function ReaderInteractions({
       router.refresh();
       showToast(t("reader.extractionRemoved"));
     } catch (err) {
-      showToast(err instanceof Error ? err.message : t("reader.deleteFailed"));
+      showError(err instanceof Error ? err.message : t("reader.deleteFailed"));
     }
   }
 
@@ -3281,7 +3579,7 @@ export function ReaderInteractions({
     } catch (err) {
       if (voiceRunRef.current !== run) return;
       setVoice("idle");
-      showToast(err instanceof Error ? err.message : t("reader.voiceFailed"));
+      showError(err instanceof Error ? err.message : t("reader.voiceFailed"));
     }
   }
 
@@ -3406,7 +3704,7 @@ export function ReaderInteractions({
         }
         return next;
       });
-      showToast(err instanceof Error ? err.message : t("reader.annotationFailed"));
+      showError(err instanceof Error ? err.message : t("reader.annotationFailed"));
     } finally {
       setBusy(false);
     }
@@ -3490,7 +3788,7 @@ export function ReaderInteractions({
       showToast(t("reader.linkCreated"));
       return true;
     } catch (err) {
-      showToast(err instanceof Error ? err.message : t("reader.linkFailed"));
+      showError(err instanceof Error ? err.message : t("reader.linkFailed"));
       return false;
     } finally {
       setBusy(false);
@@ -3591,7 +3889,7 @@ export function ReaderInteractions({
     } catch (err) {
       // Stopped, not failed: the command stays in the box to edit or resend.
       if (controller.signal.aborted) return;
-      showToast(err instanceof Error ? err.message : t("reader.assistantFailed"));
+      showError(err instanceof Error ? err.message : t("reader.assistantFailed"));
     } finally {
       if (chatAbortRef.current === controller) chatAbortRef.current = null;
       setAiBusy(false);
@@ -3606,6 +3904,9 @@ export function ReaderInteractions({
     history: ChatMessage[],
     conversationNoteId: string | null,
     signal?: AbortSignal,
+    // A tool conversation (SPEC.md §21): the turn continues from the tool's
+    // annotation; the server takes the selection and the turns from it.
+    toolNoteId?: string,
   ): Promise<{ reply: string; noteId: string | null }> {
     const res = await fetch("/api/assistant/act", {
       method: "POST",
@@ -3615,10 +3916,11 @@ export function ReaderInteractions({
         notebookId,
         documentId,
         command,
-        anchor: anchor ? anchorBody(anchor) : undefined,
-        ...(anchor ? segmentsBody(anchor) : {}),
+        anchor: anchor && !toolNoteId ? anchorBody(anchor) : undefined,
+        ...(anchor && !toolNoteId ? segmentsBody(anchor) : {}),
         history: history.slice(-12),
         conversationNoteId: conversationNoteId ?? undefined,
+        toolNoteId,
       }),
     });
     const plan = (await res.json().catch(() => null)) as
@@ -3680,6 +3982,59 @@ export function ReaderInteractions({
       );
     } finally {
       if (chatAbortRef.current === controller) chatAbortRef.current = null;
+    }
+  }
+
+  // A tool conversation (SPEC.md §21): Continue opens the box at the bottom
+  // of the Explain, Analyze, Visualize, or Simplify card; the card becomes
+  // Explain+ (Simplify+, …) and every turn goes deeper on the output. The
+  // turns persist on the tool's annotation, so the card reopens with them
+  // and the mark's symbol gains its plus.
+  function setToolChat(kind: "explain" | "simplify", update: (c: ToolChat) => Partial<ToolChat>) {
+    if (kind === "explain") setBubble((b) => (b ? { ...b, ...update(b) } : b));
+    else setSimplifyCard((c) => (c ? { ...c, ...update(c) } : c));
+  }
+  function openToolChat(kind: "explain" | "simplify") {
+    setToolChat(kind, () => ({ chatOpen: true }));
+  }
+  function stopToolChat(kind: "explain" | "simplify") {
+    toolChatAbortRef.current[kind]?.abort();
+    toolChatAbortRef.current[kind] = null;
+    setToolChat(kind, () => ({ busy: false }));
+  }
+  async function sendToolMessage(kind: "explain" | "simplify") {
+    const card = kind === "explain" ? bubble : simplifyCard;
+    const text = card?.input.trim();
+    if (!card || !text || card.busy || card.streaming || !card.noteId) return;
+    const noteId = card.noteId;
+    const history = card.conversation;
+    setToolChat(kind, (c) => ({
+      input: "",
+      busy: true,
+      chatOpen: true,
+      conversation: [...c.conversation, { role: "user", content: text }],
+    }));
+    const controller = new AbortController();
+    toolChatAbortRef.current[kind] = controller;
+    try {
+      const turn = await assistantTurn(text, card.anchor, history, null, controller.signal, noteId);
+      setToolChat(kind, (c) => ({
+        busy: false,
+        conversation: [...c.conversation, { role: "assistant", content: turn.reply }],
+      }));
+    } catch (err) {
+      // Stopped, not failed: the sent message stays, no reply lands.
+      if (controller.signal.aborted) {
+        setToolChat(kind, () => ({ busy: false }));
+        return;
+      }
+      const message = err instanceof Error ? err.message : t("reader.assistantFailed");
+      setToolChat(kind, (c) => ({
+        busy: false,
+        conversation: [...c.conversation, { role: "assistant", content: message }],
+      }));
+    } finally {
+      if (toolChatAbortRef.current[kind] === controller) toolChatAbortRef.current[kind] = null;
     }
   }
 
@@ -3917,7 +4272,7 @@ export function ReaderInteractions({
       }
       syncHistory();
     } catch (err) {
-      showToast(err instanceof Error ? err.message : t("reader.editFailed"));
+      showError(err instanceof Error ? err.message : t("reader.editFailed"));
     } finally {
       stepping.current = false;
     }
@@ -3981,7 +4336,7 @@ export function ReaderInteractions({
       }
       router.refresh();
     } catch (err) {
-      showToast(err instanceof Error ? err.message : t("reader.formatFailed"));
+      showError(err instanceof Error ? err.message : t("reader.formatFailed"));
     }
   }
 
@@ -4009,7 +4364,7 @@ export function ReaderInteractions({
       record({ undo: again, redo: again });
       router.refresh();
     } catch (err) {
-      showToast(err instanceof Error ? err.message : t("reader.styleFailed"));
+      showError(err instanceof Error ? err.message : t("reader.styleFailed"));
     }
   }
 
@@ -4018,7 +4373,7 @@ export function ReaderInteractions({
       await api(`/api/documents/${documentId}`, "PATCH", { font: next });
       router.refresh();
     } catch (err) {
-      showToast(err instanceof Error ? err.message : t("reader.fontFailed"));
+      showError(err instanceof Error ? err.message : t("reader.fontFailed"));
     }
   }
 
@@ -4044,7 +4399,7 @@ export function ReaderInteractions({
       router.refresh();
       return json.id;
     } catch (err) {
-      showToast(err instanceof Error ? err.message : t("reader.insertFailed"));
+      showError(err instanceof Error ? err.message : t("reader.insertFailed"));
       return null;
     }
   }
@@ -4118,7 +4473,7 @@ export function ReaderInteractions({
       }
       router.refresh();
     } catch (err) {
-      showToast(err instanceof Error ? err.message : t("reader.removeFailed"));
+      showError(err instanceof Error ? err.message : t("reader.removeFailed"));
     }
   }
 
@@ -4134,7 +4489,7 @@ export function ReaderInteractions({
       }
       router.refresh();
     } catch (err) {
-      showToast(err instanceof Error ? err.message : t("reader.editFailed"));
+      showError(err instanceof Error ? err.message : t("reader.editFailed"));
     }
   }
 
@@ -4162,10 +4517,23 @@ function blockFormatKind(
         // the card (SPEC.md §6). Comments keep their own icon.
         const stored = annotationBubbles[h.sourceId];
         const tool = stored && stored.kind !== "comment" ? stored.kind : undefined;
+        // A tool's output continued into a conversation: the symbol gains its
+        // plus (SPEC.md §21). An open card's turns count before the refresh.
+        const openTurns =
+          bubble?.noteId === h.noteId
+            ? bubble.conversation.length
+            : simplifyCard?.noteId === h.noteId
+              ? simplifyCard.conversation.length
+              : 0;
+        const plus =
+          tool !== undefined &&
+          tool !== "assistant" &&
+          ((stored?.conversation.length ?? 0) > 0 || openTurns > 0);
         return {
           ...h,
           kind: "anchor" as const,
           tool,
+          plus,
           leaving: removedNotes[h.noteId] === "leaving",
         };
       });
@@ -4477,6 +4845,99 @@ function blockFormatKind(
   // body scrolls (SPEC.md §6). Unmeasured (the SSR pass): no cap.
   const cardMaxHeight = paneHeight > 0 ? Math.max(200, paneHeight - 24) : undefined;
 
+  // A tool conversation's turns, under the output inside the card's scroll
+  // body (SPEC.md §21): the reader's messages as chat bubbles, the assistant's
+  // as markdown, the same shapes as the assistant card.
+  const toolChatTurns = (card: ToolChat) =>
+    card.conversation.length > 0 || card.busy ? (
+      <div className="mt-3 flex flex-col gap-2 border-t border-line pt-3">
+        {card.conversation.map((message, i) =>
+          message.role === "user" ? (
+            <p
+              key={i}
+              className="ml-6 self-end rounded-2xl bg-clay-100 px-3 py-1.5 text-[12.5px] text-clay-800"
+            >
+              {message.content}
+            </p>
+          ) : (
+            <div key={i} className="text-[13px]">
+              <Markdown>{message.content}</Markdown>
+            </div>
+          ),
+        )}
+        {card.busy && <ThinkingIndicator className="py-0.5 text-[12px]" />}
+      </div>
+    ) : null;
+  // The card's foot: Continue, which opens the box, or the box itself once
+  // it is open. A card still streaming, failed, or unsaved has no foot.
+  const toolChatFoot = (
+    kind: "explain" | "simplify",
+    card: ToolChat & { noteId: string | null; streaming: boolean; error: string | null },
+    tool: ToolKind,
+  ) => {
+    if (!card.noteId || card.streaming || card.error) return null;
+    if (!card.chatOpen) {
+      return (
+        <button
+          onClick={() => openToolChat(kind)}
+          data-track={`${tool}-continue`}
+          data-tip={t("reader.continueConversationTitle")}
+          className="mt-2.5 flex items-center gap-1.5 self-start rounded-full border border-line px-2.5 py-1 text-[11px] font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800"
+        >
+          <ToolSymbol tool={tool} plus size={11} />
+          {t("reader.continueConversation")}
+        </button>
+      );
+    }
+    return (
+      <form
+        className="mt-2 flex items-end gap-1.5"
+        onSubmit={(e) => {
+          e.preventDefault();
+          void sendToolMessage(kind);
+        }}
+      >
+        <textarea
+          autoFocus
+          value={card.input}
+          rows={1}
+          onChange={(e) => {
+            const value = e.target.value;
+            setToolChat(kind, () => ({ input: value }));
+          }}
+          {...ime.props}
+          onKeyDown={(e) => {
+            if (ime.isImeEnter(e)) return;
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              void sendToolMessage(kind);
+            }
+          }}
+          placeholder={t("reader.continuePlaceholder")}
+          aria-label={t("reader.messageAssistant")}
+          className="field-sizing-content max-h-40 min-h-8 flex-1 resize-none rounded-xl bg-sand-100 px-3 py-1.5 text-[12.5px] outline-none placeholder:text-sand-500"
+        />
+        <button
+          type="submit"
+          data-track={`${tool}-continue-send`}
+          onClick={(e) => {
+            if (!card.busy) return;
+            e.preventDefault();
+            stopToolChat(kind);
+          }}
+          disabled={!card.busy && !card.input.trim()}
+          data-tip={card.busy ? t("reader.stopAssistant") : t("reader.sendTitle")}
+          aria-label={card.busy ? t("reader.stopAssistant") : undefined}
+          className="rounded-full bg-clay px-3 py-1.5 text-[11px] font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
+        >
+          {card.busy ? <StopIcon size={11} /> : t("reader.send")}
+        </button>
+      </form>
+    );
+  };
+  // The card's title once its output continued into a conversation.
+  const toolPlus = (card: ToolChat) => card.chatOpen || card.conversation.length > 0;
+
   // The article menu: frequent asks go to the assistant at document scope;
   // Distill opens the distilled page, Extract the extract page; the search icon beside the assistant
   // button expands the project search bubble. In Normal view it floats open
@@ -4660,7 +5121,13 @@ function blockFormatKind(
           {paneHeader}
           {!transcript && articleMenu}
           {!transcript && (
-            <div className="ml-auto flex shrink-0 items-center gap-2">{distillButton}</div>
+            <div className="relative ml-auto flex shrink-0 items-center gap-2">
+              {distillButton}
+              {/* The article's errors: under the buttons, over the text. */}
+              <div className="absolute top-full right-0 mt-2">
+                <ArticleErrors documentId={documentId} />
+              </div>
+            </div>
           )}
         </div>
       )}
@@ -4687,7 +5154,13 @@ function blockFormatKind(
     >
       {!split && !transcript && articleMenu}
 
-      <div className="sticky top-4 z-10 float-right mr-4 flex items-center gap-2 print:hidden">
+      {/* The controls float over the article at the top right of the pane
+          and stay there as it scrolls: a sticky block with no height, so the
+          text runs under them and never wraps around them. The article's
+          errors sit under the controls. */}
+      <div className="pointer-events-none sticky top-4 z-10 h-0 print:hidden">
+      <div className="absolute top-0 right-4 flex flex-col items-end gap-2">
+      <div className="pointer-events-auto flex items-center gap-2">
         {extractBusy && (
           <span className="rounded-full bg-card px-3 py-1.5 text-xs shadow-soft">
             <ThinkingIndicator label={t("reader.extracting")} onStop={stopExtract} />
@@ -4735,6 +5208,9 @@ function blockFormatKind(
           </button>
         )}
         {!split && !transcript && distillButton}
+      </div>
+      {!split && !transcript && <ArticleErrors documentId={documentId} />}
+      </div>
       </div>
 
       {/* Not in a split pane: the card would sit over the title. Not on a
@@ -5104,6 +5580,22 @@ function blockFormatKind(
               {t("reader.simplify")}
             </button>
           )}
+          {has("visualize") && (
+            <button
+              onClick={() => void visualize()}
+              data-track="visualize"
+              data-tip={t("reader.visualizeTitle")}
+              className={`flex w-full items-center justify-between gap-2 rounded-full ${toolRow} text-left text-sand-800 hover:bg-clay-100 hover:text-clay-800`}
+            >
+              <span className="flex items-center gap-1.5">
+                <VisualizeIcon size={coarse ? 14 : 12} />
+                {t("reader.visualize")}
+              </span>
+              <span className="text-[9px] font-bold tracking-[0.06em] text-sand-500 uppercase">
+                {t("reader.ultra")}
+              </span>
+            </button>
+          )}
           {has("extract") && !popover.term && (
             <button
               onClick={() => void extract()}
@@ -5342,14 +5834,20 @@ function blockFormatKind(
             className="mb-2 flex cursor-move items-center justify-between"
           >
             <span className="flex items-center gap-1.5 text-[11px] font-bold tracking-[0.08em] text-clay-800 uppercase">
-              {bubble.kind === "analyze" ? <ChartIcon size={12} /> : <QuestionIcon size={12} />}
-              {bubble.kind === "analyze"
-                ? bubble.streaming
-                  ? t("reader.analyzing")
-                  : t("reader.analysis")
-                : bubble.streaming
-                  ? t("reader.explaining")
-                  : t("reader.explanation")}
+              <ToolSymbol tool={bubble.kind} plus={toolPlus(bubble)} size={12} />
+              {toolPlus(bubble)
+                ? t(TOOL_PLUS_KEY[bubble.kind])
+                : bubble.kind === "analyze"
+                  ? bubble.streaming
+                    ? t("reader.analyzing")
+                    : t("reader.analysis")
+                  : bubble.kind === "visualize"
+                    ? bubble.streaming
+                      ? t("reader.visualizing")
+                      : t("reader.visualization")
+                    : bubble.streaming
+                      ? t("reader.explaining")
+                      : t("reader.explanation")}
             </span>
             <span className="flex items-center gap-3">
               {bubble.streaming && (
@@ -5362,15 +5860,29 @@ function blockFormatKind(
                   {t("common.stop")}
                 </button>
               )}
+              {bubble.kind === "visualize" && !bubble.streaming && visualizationImage(bubble.text) && (
+                <a
+                  href={visualizationImage(bubble.text)!}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  data-track="visualize-open"
+                  className="text-xs font-semibold text-sand-700 hover:text-clay-800"
+                  data-tip={t("reader.openVisualizationTitle")}
+                >
+                  {t("reader.openVisualization")}
+                </a>
+              )}
               {bubble.noteId && !bubble.streaming && (
                 <button
                   onClick={() => void deleteExplain()}
-                  data-track={bubble.kind === "analyze" ? "analyze-delete" : "explain-delete"}
+                  data-track={`${bubble.kind}-delete`}
                   className="text-xs font-semibold text-red-500 hover:text-red-700"
                   data-tip={t(
                     bubble.kind === "analyze"
                       ? "reader.deleteAnalysisTitle"
-                      : "reader.deleteExplainTitle",
+                      : bubble.kind === "visualize"
+                        ? "reader.deleteVisualizeTitle"
+                        : "reader.deleteExplainTitle",
                   )}
                 >
                   {t("common.delete")}
@@ -5378,7 +5890,7 @@ function blockFormatKind(
               )}
               <button
                 onClick={closeExplain}
-                data-track={bubble.kind === "analyze" ? "analyze-close" : "explain-close"}
+                data-track={`${bubble.kind}-close`}
                 className="text-xs text-sand-500 hover:text-clay-700"
                 aria-label={t("common.close")}
                 data-tip={t("common.close")}
@@ -5389,13 +5901,21 @@ function blockFormatKind(
           </div>
           {bubble.error ? (
             <p className="text-sm text-red-600">{bubble.error}</p>
+          ) : bubble.declined !== null ? (
+            <div className="min-h-0 flex-1 overflow-y-auto text-sm text-sand-700">
+              <p className="font-semibold">{t("reader.visualizeDeclined")}</p>
+              {bubble.declined && <p className="mt-1">{bubble.declined}</p>}
+              <p className="mt-1 text-sand-600">{t("reader.visualizeDeclinedHint")}</p>
+            </div>
           ) : bubble.text ? (
-            <div className="min-h-0 flex-1 overflow-y-auto text-sm">
+            <div ref={explainBodyRef} className="min-h-0 flex-1 overflow-y-auto text-sm">
               <Markdown>{bubble.text}</Markdown>
+              {toolChatTurns(bubble)}
             </div>
           ) : (
             <ThinkingIndicator className="py-1 text-[12.5px]" />
           )}
+          {bubble.declined === null && toolChatFoot("explain", bubble, bubble.kind)}
         </div>
       )}
       </Presence>
@@ -5424,8 +5944,12 @@ function blockFormatKind(
             className="mb-2 flex cursor-move items-center justify-between"
           >
             <span className="flex items-center gap-1.5 text-[11px] font-bold tracking-[0.08em] text-sage-800 uppercase">
-              <SummaryIcon size={12} />
-              {simplifyCard.streaming ? t("reader.simplifying") : t("reader.simplified")}
+              <ToolSymbol tool="simplify" plus={toolPlus(simplifyCard)} size={12} />
+              {toolPlus(simplifyCard)
+                ? t(TOOL_PLUS_KEY.simplify)
+                : simplifyCard.streaming
+                  ? t("reader.simplifying")
+                  : t("reader.simplified")}
             </span>
             <span className="flex items-center gap-3">
               {simplifyCard.streaming && (
@@ -5461,8 +5985,10 @@ function blockFormatKind(
           </div>
           {simplifyCard.error ? (
             <p className="text-sm text-red-600">{simplifyCard.error}</p>
-          ) : simplifyCard.sentences ? (
-            <p className="min-h-0 flex-1 overflow-y-auto text-[13.5px] leading-relaxed whitespace-pre-wrap">
+          ) : (
+          <div ref={simplifyBodyRef} className="min-h-0 flex-1 overflow-y-auto">
+          {simplifyCard.sentences ? (
+            <p className="text-[13.5px] leading-relaxed whitespace-pre-wrap">
               {simplifyCard.sentences.map((sentence, i) => {
                 const lead = /^\s*/.exec(sentence.text)![0];
                 return (
@@ -5488,12 +6014,62 @@ function blockFormatKind(
               })}
             </p>
           ) : (
-            <p className="min-h-0 flex-1 overflow-y-auto text-[13.5px] leading-relaxed whitespace-pre-wrap">
+            <p className="text-[13.5px] leading-relaxed whitespace-pre-wrap">
               {stripSimplifyMarkers(simplifyCard.text) || (
                 <ThinkingIndicator className="py-1 text-[12.5px]" />
               )}
             </p>
           )}
+          {toolChatTurns(simplifyCard)}
+          </div>
+          )}
+          {toolChatFoot("simplify", simplifyCard, "simplify")}
+        </div>
+      )}
+      </Presence>
+
+      {/* The log card (SPEC.md §21): the conversation's condensed log, where
+          its card would open, while the pointer rests on the mark. */}
+      <Presence show={logCard !== null} exit="fade">
+      {logCard && (
+        <div
+          data-log-card="log"
+          data-selection-popover
+          className="bubble-in absolute z-20 flex flex-col rounded-[20px] border border-line bg-card/90 p-4 shadow-float backdrop-blur-md"
+          style={{ left: logCard.left, top: logCard.top, width: logCard.width, maxHeight: cardMaxHeight }}
+        >
+          <div className="mb-2 flex items-center justify-between">
+            <span className="flex items-center gap-1.5 text-[11px] font-bold tracking-[0.08em] text-clay-800 uppercase">
+              <ToolSymbol tool={logCard.tool} plus={logCard.tool !== "assistant"} size={12} />
+              {logCard.tool === "assistant" ? t("reader.assistant") : t(TOOL_PLUS_KEY[logCard.tool])}
+            </span>
+            <span className="text-[10px] font-semibold tracking-[0.08em] text-sand-500 uppercase">
+              {t("reader.log")}
+            </span>
+          </div>
+          {logCard.log ? (
+            <ol className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto">
+              {logCard.log.lines.map((line, i) =>
+                line.role === "user" ? (
+                  <li
+                    key={i}
+                    className="ml-6 self-end rounded-2xl bg-clay-100 px-2.5 py-1 text-[12px] text-clay-800"
+                  >
+                    {line.text}
+                  </li>
+                ) : (
+                  <li key={i} className="text-[12.5px] leading-snug text-sand-800">
+                    {line.text}
+                  </li>
+                ),
+              )}
+            </ol>
+          ) : logCard.failed ? (
+            <p className="text-[12.5px] text-sand-600">{t("reader.logUnavailable")}</p>
+          ) : (
+            <ThinkingIndicator className="py-1 text-[12.5px]" />
+          )}
+          <p className="mt-2 text-[11px] text-sand-500">{t("reader.logOpenHint")}</p>
         </div>
       )}
       </Presence>

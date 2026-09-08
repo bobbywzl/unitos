@@ -4,12 +4,15 @@ import { z } from "zod";
 import { passageSources, resolvePassage, segmentsSchema } from "@/lib/anchors/passage";
 import { bumpNotebook, notebookAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
+import { claude, claudeConfigured, claudeOptions } from "@/lib/claude";
 import {
   DERIVATION_EFFORT,
   DERIVATION_MODEL,
   MAX_OUTPUT_TOKENS,
   STREAM_ERROR_TOKEN,
   STREAM_NOTE_TOKEN,
+  VISUALIZE_EFFORT,
+  VISUALIZE_MODEL,
 } from "@/lib/derive/config";
 import {
   annotationsSection,
@@ -35,11 +38,13 @@ import {
 } from "@/lib/derive/json";
 import { callForJson, modelErrorMessage } from "@/lib/derive/json-call";
 import { streamTextTo } from "@/lib/derive/text-stream";
+import { renderVisual, visualizationMarkdown, visualizeOutputSchema } from "@/lib/derive/visualize";
 import { cropPageRegion, pageBlockText, renderPdfPage } from "@/lib/handwritten/pages";
 import { parseRegion } from "@/lib/video/types";
 import type { TFunc } from "@/lib/i18n/dictionaries";
 import { currentLang, serverT } from "@/lib/i18n/server";
 import { kimi, kimiConfigured, kimiOptions } from "@/lib/kimi";
+import { resolveModelId } from "@/lib/models";
 import { promptTemplates } from "@/lib/prompts";
 import { corpusDistillPrompt } from "@/lib/prompts/distill";
 import type { PromptCtx } from "@/lib/prompts/types";
@@ -68,6 +73,7 @@ import {
   timeRangeSchema,
   type VideoFindMatch,
 } from "@/lib/video/types";
+import { ultraActive } from "@/lib/tiers";
 import { recordUsage, sdkTokens } from "@/lib/usage";
 import { parseBody } from "@/lib/validate";
 
@@ -92,6 +98,7 @@ const deriveSchema = z
     "ASK",
     "COMPARE",
     "ANALYZE",
+    "VISUALIZE",
   ]),
   // Absent only for corpus-scope DISTILL, which reads every document, and for
   // COMPARE, which names its two documents in documentIds.
@@ -172,7 +179,7 @@ const deriveSchema = z
     message: "page is EXPLAIN only",
   });
 
-const ANCHOR_REQUIRED = new Set(["EXPLAIN", "SIMPLIFY", "EXTRACT", "ANALYZE"]);
+const ANCHOR_REQUIRED = new Set(["EXPLAIN", "SIMPLIFY", "EXTRACT", "ANALYZE", "VISUALIZE"]);
 
 // A model call that holds one connection for minutes dies at idle proxies, so
 // the response streams a heartbeat space while the model works and ends with
@@ -248,10 +255,19 @@ async function handle(req: Request, t: TFunc) {
   );
   if (access instanceof NextResponse) return access;
   const user = access.user;
+  // VISUALIZE is Unitos Ultra (TIERS.md) and runs on Claude (SPEC.md §20).
+  if (data.type === "VISUALIZE") {
+    if (!ultraActive(user)) {
+      return NextResponse.json({ error: t("api.visualizeNeedsUltra") }, { status: 403 });
+    }
+    if (!claudeConfigured()) {
+      return NextResponse.json({ error: t("api.visualizeNeedsKey") }, { status: 503 });
+    }
+  }
   const usageMeta = {
     userId: user.id,
     feature: data.type.toLowerCase(),
-    model: DERIVATION_MODEL[data.type],
+    model: await resolveModelId(DERIVATION_MODEL[data.type]),
   };
 
   const template = promptTemplates[data.type];
@@ -374,7 +390,7 @@ async function handle(req: Request, t: TFunc) {
         const fail = (message: string) => send(`${STREAM_ERROR_TOKEN}${message}`);
         try {
           const result = await callForJson({
-            model: kimi(DERIVATION_MODEL.DISTILL),
+            model: await kimi(DERIVATION_MODEL.DISTILL),
             messages: corpusMessages,
             maxOutputTokens: MAX_OUTPUT_TOKENS.DISTILL,
             providerOptions: kimiOptions(DERIVATION_EFFORT.DISTILL),
@@ -542,7 +558,7 @@ async function handle(req: Request, t: TFunc) {
       req,
       async () => {
         const result = await callForJson({
-          model: kimi(DERIVATION_MODEL.COMPARE),
+          model: await kimi(DERIVATION_MODEL.COMPARE),
           messages: compareMessages,
           maxOutputTokens: MAX_OUTPUT_TOKENS.COMPARE,
           providerOptions: kimiOptions(DERIVATION_EFFORT.COMPARE),
@@ -903,7 +919,65 @@ async function handle(req: Request, t: TFunc) {
         }
       : { role: "user", content: template(ctx) },
   ];
-  const model = kimi(DERIVATION_MODEL[data.type]);
+  // VISUALIZE (SPEC.md §20, Unitos Ultra): one JSON call on Claude at its
+  // highest effort. The model judges first; when it is certain a picture
+  // carries the passage's core idea it draws one, and the server lays it out
+  // (diagram) or reduces it (picture, animation), stores it as an SVG
+  // ImageAsset, and lands one annotation on the selection whose markdown
+  // points at it. When it is not certain, the run declines with the reason
+  // and persists nothing: the card says so and points at the assistant,
+  // Explain, and Simplify. Runs behind the heartbeat stream.
+  if (data.type === "VISUALIZE" && anchor) {
+    return heartbeatResponse(
+      req,
+      async () => {
+        const visualModel = await claude(VISUALIZE_MODEL);
+        const result = await callForJson({
+          model: visualModel,
+          messages,
+          maxOutputTokens: MAX_OUTPUT_TOKENS.VISUALIZE,
+          providerOptions: claudeOptions(VISUALIZE_EFFORT),
+          schema: visualizeOutputSchema,
+          label: "VISUALIZE",
+          usage: { ...usageMeta, model: await resolveModelId(VISUALIZE_MODEL) },
+          abortSignal: req.signal,
+        });
+        if (!result.ok) throw new DeriveFailure(result.error);
+        const { judgment, visual } = result.data;
+        if (!judgment.certain || !visual) {
+          return { ok: true, declined: true, reason: judgment.reason.trim() };
+        }
+        const rendered = await renderVisual(visual);
+        if ("error" in rendered) {
+          throw new DeriveFailure(t("api.visualizeNotRendered", { reason: rendered.error }));
+        }
+        const bytes = new TextEncoder().encode(rendered.svg);
+        const image = await db.imageAsset.create({
+          data: { mimeType: "image/svg+xml", size: bytes.length, data: bytes, userId: user.id },
+          select: { id: true },
+        });
+        const content = visualizationMarkdown(image.id, visual.caption.trim());
+        const section = await annotationsSection(data.notebookId);
+        const count = await db.note.count({ where: { sectionId: section.id } });
+        const note = await db.note.create({
+          data: {
+            sectionId: section.id,
+            content,
+            status: "ACCEPTED",
+            derivationType: "VISUALIZE",
+            createdById: user.id,
+            order: count,
+            sources: { create: passageSources(documentId, passage) },
+          },
+        });
+        await bumpNotebook(data.notebookId);
+        return { ok: true, noteId: note.id, kind: visual.kind, caption: visual.caption.trim(), content };
+      },
+      (reason) => t("api.visualizeFailed", { reason }),
+    );
+  }
+
+  const model = await kimi(DERIVATION_MODEL[data.type]);
   const maxOutputTokens = MAX_OUTPUT_TOKENS[data.type];
   const effort = DERIVATION_EFFORT[data.type];
 

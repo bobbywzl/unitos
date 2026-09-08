@@ -528,7 +528,7 @@ export async function layoutBlocks(input: {
     { role: "user", content: layoutPrompt(title, listed, digest, instructions) },
   ];
   const result = await callForJson({
-    model: claude(PARSE_MODEL),
+    model: await claude(PARSE_MODEL),
     messages,
     maxOutputTokens: 24576,
     providerOptions: claudeOptions(),

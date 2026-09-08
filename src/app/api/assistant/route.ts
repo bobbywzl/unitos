@@ -17,6 +17,7 @@ import { ensureAllDigests, ensureDigest } from "@/lib/digest/ensure";
 import { corporaSystem, corpusSystem } from "@/lib/digest/render";
 import { currentLang, serverT } from "@/lib/i18n/server";
 import { kimi, kimiConfigured, kimiOptions, WEB_SEARCH_TOOL, WEB_SEARCH_USD, webSearchTool } from "@/lib/kimi";
+import { resolveModelId } from "@/lib/models";
 import { computeCostUsd, recordUsage, sdkTokens } from "@/lib/usage";
 import type { TFunc } from "@/lib/i18n/dictionaries";
 import { synthesisAskPrompt, synthesisTaskPrompt } from "@/lib/prompts/synthesis";
@@ -87,11 +88,11 @@ async function handle(req: Request, t: TFunc) {
   const usageMeta = {
     userId: user.id,
     feature: "assistant",
-    model: DERIVATION_MODEL.SYNTHESIS,
+    model: await resolveModelId(DERIVATION_MODEL.SYNTHESIS),
   };
 
   const profile = await loadProfile(data.notebookId);
-  const model = kimi(DERIVATION_MODEL.SYNTHESIS);
+  const model = await kimi(DERIVATION_MODEL.SYNTHESIS);
   const maxOutputTokens = MAX_OUTPUT_TOKENS.SYNTHESIS;
 
   // The digest is the scope context: deterministic until the content changes,

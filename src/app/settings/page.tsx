@@ -9,6 +9,7 @@ import { personOf } from "@/lib/person";
 import { Logo } from "@/components/logo";
 import { AccountGuard } from "@/components/account-guard";
 import { SettingsForm } from "@/components/settings-form";
+import { tierState } from "@/lib/tiers";
 
 export const dynamic = "force-dynamic";
 
@@ -58,7 +59,10 @@ export default async function SettingsPage() {
       <SettingsForm
         account={account}
         background={background}
-        premium={authEnabled() ? user.premium : true}
+        plan={{
+          state: authEnabled() ? tierState(user) : "ultra",
+          trialEndsAt: user.trialEndsAt?.toISOString() ?? null,
+        }}
         drive={
           drive && (drive.canLink || drive.linked)
             ? { linked: drive.linked, canLink: drive.canLink, access: drive.access, grant: drive.grant }

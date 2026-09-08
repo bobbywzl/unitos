@@ -7,7 +7,9 @@ Notes-centric web app for deep reading. Documents attach to notebooks; every AI 
 - Notebooks with sections (one nesting level, drag-reorder) and markdown notes
 - PDF upload and URL ingestion, parsed to blocks (two-column PDFs handled), deduped by file hash
 - Image upload (png, jpg, gif, webp, bmp), dropped on the page or picked: the image lands as a one-page handwritten document — the page as it is, Circle & ask, and conversion to text
-- Images drop into a note, and into a paragraph while the reader is in edit mode, where they land as a figure. Unitos Free drops images up to 5 MB; larger ones need Unitos Premium
+- Images drop into a note, and into a paragraph while the reader is in edit mode, where they land as a figure. An account whose Premium trial ended drops images up to 5 MB; larger ones need Unitos Premium
+- Visualize (Unitos Ultra): the selection as a picture — a directed diagram, a drawing, or a short animation — drawn only when the model is certain the picture carries the passage's core idea, and declined with the reason otherwise. Saved as an annotation on the selection
+- Tiers (TIERS.md): every account is Unitos Premium or Unitos Ultra; a new account gets two months of Unitos Premium free. No billing yet — the operator sets the tier on the account
 - Video documents: upload an mp4 (up to 200 MB, custom player with Range streaming) or add a YouTube link (plays through the IFrame player behind the same controls); circle a spot and comment on it — annotations carry a time range and replay on an overlay whenever playback crosses it, with a marker per annotation on the scrubber and a Visual strip of frame cards underneath
 - Video transcription starts on its own when the video is added. Hour-long uploads transcribe through Gemini's file store (`GEMINI_API_KEY`); without it the cap is 25 MB, or an MP3 of any length. Provider ladder — YouTube: YouTube captions through the player API and the watch page, then the same captions read by a browser when one is configured (`BROWSER_WS_ENDPOINT` or `CHROMIUM_PATH`), then Gemini (`GEMINI_API_KEY`), then the audio stream through the upload ladder; when every rung fails, the transcript pane offers Paste transcript, which reads what YouTube's transcript panel copies; uploads: Groq Whisper (`GROQ_API_KEY`), then OpenAI Whisper (`OPENAI_API_KEY`), then Gemini. A long video splits into windows that transcribe in parallel and stitch back together. The transcript gives read-along highlight and click-to-seek; Find searches it and answers with seekable time ranges; Explain reads the actual frame cropped to the circle plus the transcript (a YouTube frame comes from the storyboard sheets, with Gemini watching the same clip at full resolution as corroboration) and saves the explanation as an annotation at that moment; transcript lines carry the same Comment and Explain tools
 - One toolbar per content kind: select text for Explain, Simplify, Match-it, Comment, Link, highlight, Add to notes, and Read aloud; select in a table or circle it for Table tools; circle a figure for Figure tools; circle an equation for Equation tools. Each kind offers its own tools and nothing else
@@ -35,7 +37,8 @@ Notes-centric web app for deep reading. Documents attach to notebooks; every AI 
 
 - Next.js (App Router, TypeScript strict, server components by default)
 - PostgreSQL (Supabase) + Prisma
-- Kimi K3 (Moonshot AI) via the AI SDK, streaming, automatic prompt caching (the parsed document — and the digest at assistant scopes — is the cached prefix); Claude Fable 5.1 (Anthropic) at its highest reasoning effort for the import: upload review, the URL core and structure passes, Import PDF's judgment, and conversion
+- Kimi K3 (Moonshot AI) via the AI SDK, streaming, automatic prompt caching (the parsed document — and the digest at assistant scopes — is the cached prefix); Claude Fable 5.1 (Anthropic) at its highest reasoning effort for the import — upload review, the URL core and structure passes, Import PDF's judgment, and conversion — and for Visualize
+- The bimonthly model update: on the 1st of every second month a cron reads each provider's published model list, moves each model to the newest version of its family after one probe call, and records the outcome on the admin page (`/api/cron/models`, `lib/model-update.ts`)
 - Tailwind
 
 ## Run it locally
@@ -57,7 +60,7 @@ Reading, notes, anchoring, and export work with no API keys. Add `MOONSHOT_API_K
 
 1. Import this repo on vercel.com.
 2. Storage → Create Database → **Neon** (Postgres) → connect it to the project. Vercel adds the database env vars; the build maps them and runs migrations (the first migration creates the `vector` extension).
-3. Settings → Environment Variables: `MOONSHOT_API_KEY` (AI features), `ANTHROPIC_API_KEY` (the import's AI passes), `GROQ_API_KEY`, `OPENAI_API_KEY`, or `GEMINI_API_KEY` (video transcription), `BROWSER_WS_ENDPOINT` (a browser service's CDP websocket, for YouTube transcripts when the server's own requests are bot-checked), `GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET` + `SESSION_SECRET` (Google sign-in; redirect URI `<origin>/api/auth/callback`), `APPLE_CLIENT_ID` + `APPLE_TEAM_ID` + `APPLE_KEY_ID` + `APPLE_PRIVATE_KEY` (Apple sign-in; return URL `<origin>/api/auth/apple/callback` on the Services ID), `RESEND_API_KEY` + `EMAIL_FROM` (email sign-in; sender on a domain verified in Resend), `ADMIN_PASSWORD` (`/admin`), `CRON_SECRET` (cleanup cron). All optional to boot; add and redeploy any time.
+3. Settings → Environment Variables: `MOONSHOT_API_KEY` (AI features), `ANTHROPIC_API_KEY` (the import's AI passes), `GROQ_API_KEY`, `OPENAI_API_KEY`, or `GEMINI_API_KEY` (video transcription), `BROWSER_WS_ENDPOINT` (a browser service's CDP websocket, for YouTube transcripts when the server's own requests are bot-checked), `GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET` + `SESSION_SECRET` (Google sign-in; redirect URI `<origin>/api/auth/callback`), `APPLE_CLIENT_ID` + `APPLE_TEAM_ID` + `APPLE_KEY_ID` + `APPLE_PRIVATE_KEY` (Apple sign-in; return URL `<origin>/api/auth/apple/callback` on the Services ID), `RESEND_API_KEY` + `EMAIL_FROM` (email sign-in; sender on a domain verified in Resend), `ADMIN_PASSWORD` (`/admin`), `CRON_SECRET` (the cleanup and model update crons). All optional to boot; add and redeploy any time.
 4. Deployments → Redeploy the latest.
 
 Vercel caps request bodies at about 4.5 MB, so PDF uploads above that fail there. Self-hosted deployments take PDFs up to 50 MB.
@@ -71,7 +74,7 @@ Supabase instead of Neon works too: enable the `vector` extension, then set `DAT
    - `DATABASE_URL` — Supabase pooled connection (port 6543, `?pgbouncer=true&connection_limit=1`)
    - `DIRECT_URL` — Supabase direct connection (port 5432), used for migrations
    - `MOONSHOT_API_KEY` — required for derivations, the assistant, and glossary (`MOONSHOT_BASE_URL` overrides the endpoint)
-   - `ANTHROPIC_API_KEY` — required for the import's AI passes: upload review, the URL core and structure passes, Import PDF's judgment, and conversion (`ANTHROPIC_BASE_URL` overrides the endpoint)
+   - `ANTHROPIC_API_KEY` — required for the import's AI passes — upload review, the URL core and structure passes, Import PDF's judgment, and conversion — and for Visualize (`ANTHROPIC_BASE_URL` overrides the endpoint)
    - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `SESSION_SECRET` — Google sign-in at `/signin`; unset = single local reader, nothing gated. Redirect URI: `<origin>/api/auth/callback` — the only one to register; Link Google Drive returns through it too
    - `GOOGLE_DRIVE_ACCESS` — what Add from Google Drive asks for: `all` (default) reads every file the account can read (`drive.readonly`: add the scope on the OAuth consent screen's Data access page; Google treats it as restricted, so until the app is verified the consent shows Google's unverified-app warning, and a consent screen in Testing status allows its test users only and expires the grant after 7 days); `picked` reads the files picked in the Google Picker only (`drive.file`, no verification). Either way, list this app's origin under the OAuth client's Authorized JavaScript origins
    - `APPLE_CLIENT_ID` (Services ID), `APPLE_TEAM_ID`, `APPLE_KEY_ID`, `APPLE_PRIVATE_KEY` (.p8 contents) — Sign in with Apple; return URL: `<origin>/api/auth/apple/callback`
@@ -81,7 +84,7 @@ Supabase instead of Neon works too: enable the `vector` extension, then set `DAT
    - `GEMINI_API_KEY` — video transcription for YouTube videos without readable captions, and the upload fallback
    - `BROWSER_WS_ENDPOINT` or `CHROMIUM_PATH` — a browser that reads YouTube's transcript panel when the server's own requests are bot-checked: a browser service's CDP websocket on Vercel, a Chromium binary on a self-hosted server (`CHROMIUM_ARGS` adds flags)
    - `ADMIN_PASSWORD` — enables `/admin` (unset = admin off)
-   - `CRON_SECRET` — enables `/api/cron/cleanup` (deletes rejected notes older than 7 days; vercel.json schedules it daily)
+   - `CRON_SECRET` — enables `/api/cron/cleanup` (deletes rejected notes older than 7 days; vercel.json schedules it daily) and `/api/cron/models` (the bimonthly model update; vercel.json schedules it on the 1st of every second month)
 3. In Supabase, enable the `vector` extension: Database → Extensions → vector.
 4. `npx prisma migrate deploy`
 5. `npm run dev`

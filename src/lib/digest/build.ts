@@ -1,4 +1,5 @@
 import type { DerivationType } from "@prisma/client";
+import { conversationTurns, renderTranscript } from "@/lib/conversation";
 import { db } from "@/lib/db";
 import { renderBlockLines, renderReferenceLines } from "@/lib/derive/context";
 import {
@@ -58,6 +59,20 @@ function noteKind(derivationType: DerivationType | null, color: string | null, h
     default:
       return hidden ? (color ? "highlight" : "comment") : "note";
   }
+}
+
+// A tool's output continued into a conversation (SPEC.md §21): the turns
+// follow the output in the digest, in the assistant conversation's transcript
+// format, so the assistant reads what the reader asked and learned.
+function withToolConversation(n: {
+  derivationType: DerivationType | null;
+  content: string;
+  conversation: unknown;
+}): string {
+  if (n.derivationType === "SYNTHESIS") return n.content;
+  const turns = conversationTurns(n);
+  if (turns.length === 0) return n.content;
+  return `${n.content}\n\nConversation continued from this ${noteKind(n.derivationType, null, true)}:\n${renderTranscript(turns)}`;
 }
 
 type SpanLike = { blockId: string; start: number; end: number; quotedText?: string; caption?: string };
@@ -156,7 +171,7 @@ export async function buildDigest(
     status: n.status === "PENDING" ? "PENDING" : "ACCEPTED",
     kind: noteKind(n.derivationType, n.color, section.hidden),
     color: n.color,
-    content: n.content,
+    content: withToolConversation(n),
     sources: n.sources.map(
       (src): DigestSource => ({
         documentId: src.documentId,

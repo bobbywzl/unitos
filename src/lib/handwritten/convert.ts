@@ -132,7 +132,7 @@ async function repairEquations(
     },
   ];
   const result = await callForJson({
-    model: claude(CONVERT_MODEL),
+    model: await claude(CONVERT_MODEL),
     messages,
     maxOutputTokens: 32768,
     providerOptions: claudeOptions(),
@@ -248,7 +248,7 @@ export async function runConversion(
           },
         ];
         const result = await callForJson({
-          model: claude(CONVERT_MODEL),
+          model: await claude(CONVERT_MODEL),
           messages,
           maxOutputTokens: 65536, // dense pages transcribe long
           providerOptions: claudeOptions(),

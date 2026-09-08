@@ -67,8 +67,10 @@ const CLICK_FUNCTIONS: Record<ClickGroup, readonly string[]> = {
     "convert-to-text",
     "convert-again",
     "convert-retry",
-    // analyze a figure or table; compare two documents; translate
+    // analyze a figure or table; visualize a selection; compare two documents; translate
     "analyze",
+    "visualize",
+    "visualize-open",
     "document-compare",
     "translate",
     // video

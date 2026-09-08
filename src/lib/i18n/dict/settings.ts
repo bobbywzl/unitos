@@ -21,9 +21,16 @@ const en = {
   backgroundPh: "e.g. Stanford student, stochastic calc + stats + quantum. Reading for due diligence.",
   singleReader:
     "Sign-in is off — this instance runs as a single reader. Set GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, and SESSION_SECRET to open Google sign-in at /signin.",
-  premium: "Unitos Premium",
-  premiumOn: "Active. Offline work — notes, non-AI annotations, edits, uploads — saves on this device and syncs when you are back online.",
-  premiumOff: "Not active on this account. Offline changes do not save.",
+  // Plan (TIERS.md): the account's tier and, on trial, when the trial ends.
+  plan: "Plan",
+  planTrial:
+    "Unitos Premium, free trial until {date}. Offline work — notes, non-AI annotations, edits, uploads — saves on this device and syncs when you are back online.",
+  planPremium:
+    "Unitos Premium. Offline work — notes, non-AI annotations, edits, uploads — saves on this device and syncs when you are back online.",
+  planUltra:
+    "Unitos Ultra. Everything in Unitos Premium, and Visualize: the selection as a picture — a diagram, a drawing, or a short animation.",
+  planExpired:
+    "The Unitos Premium trial ended on {date}. Offline changes do not save, and images over 5 MB do not drop.",
   // Connections (SPEC.md §14): the services connected to the account and what
   // each one reaches.
   connections: "Connections",
@@ -113,9 +120,12 @@ const zh: Record<keyof typeof en, string> = {
   backgroundPh: "如：斯坦福学生，修过随机微积分、统计和量子力学。为尽职调查而读。",
   singleReader:
     "此实例未开启登录——当前以单人阅读器模式运行。设置 GOOGLE_CLIENT_ID、GOOGLE_CLIENT_SECRET 和 SESSION_SECRET 即可在 /signin 开启 Google 登录。",
-  premium: "Unitos Premium",
-  premiumOn: "已开通。离线工作——笔记、非 AI 批注、编辑、上传——会保存在本设备，恢复联网后同步。",
-  premiumOff: "此账号未开通。离线更改不会保存。",
+  plan: "方案",
+  planTrial:
+    "Unitos Premium，免费试用至 {date}。离线工作——笔记、非 AI 批注、编辑、上传——会保存在本设备，恢复联网后同步。",
+  planPremium: "Unitos Premium。离线工作——笔记、非 AI 批注、编辑、上传——会保存在本设备，恢复联网后同步。",
+  planUltra: "Unitos Ultra。包含 Unitos Premium 的全部功能，以及可视化：把选中内容画成图——示意图、插画或短动画。",
+  planExpired: "Unitos Premium 试用已于 {date} 结束。离线更改不会保存，超过 5 MB 的图片无法拖入。",
   connections: "连接",
   connectionsDesc: "此账户已连接的服务，以及每项可访问的范围。",
   connectionsNone: "无。登录未开启，没有可连接的账户；Google Drive 每次访问时都会请求授权。",

@@ -28,6 +28,8 @@
 //   split 拆分 · upload instructions 上传要求 · handwritten 手写 ·
 //   conversion(手写转文本) 转换 · Circle & ask 圈选并提问 · image 图片 ·
 //   offline 离线 · sync(离线同步) 同步 · Unitos Premium 不翻译 ·
+//   Unitos Ultra 不翻译 · plan(账户方案) 方案 · trial 试用 ·
+//   visualize 可视化 · visualization(可视化生成的图) 可视化图 ·
 //   link Google Drive(账号关联) 关联 · pages(手写页面) 页面 ·
 //   lasso highlight(页面圈选高亮) 圈选高亮 ·
 //   account 账户 · notification 通知 · recipient 收件人 ·

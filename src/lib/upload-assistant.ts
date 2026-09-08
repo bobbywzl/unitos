@@ -252,7 +252,7 @@ export async function reviewUpload(
   });
   const messages: ModelMessage[] = [{ role: "user", content: prompt }];
   const result = await callForJson({
-    model: claude(UPLOAD_MODEL),
+    model: await claude(UPLOAD_MODEL),
     messages,
     maxOutputTokens: 24576,
     providerOptions: claudeOptions(),
@@ -326,7 +326,7 @@ export async function checkInstructions(
     { role: "user", content: uploadInstructionsPrompt({ lang, kind, instructions }) },
   ];
   const result = await callForJson({
-    model: claude(UPLOAD_MODEL),
+    model: await claude(UPLOAD_MODEL),
     messages,
     maxOutputTokens: 16384,
     providerOptions: claudeOptions(),

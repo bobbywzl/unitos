@@ -18,6 +18,7 @@ import {
   LocateIcon,
   QuestionIcon,
   SparkleIcon,
+  VisualizeIcon,
   SummaryIcon,
 } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
@@ -47,6 +48,30 @@ function ColorDot({ color }: { color: string | null }) {
   }
   const bg = color === "sage" ? "bg-sage-500" : "bg-clay";
   return <span className={`size-2 shrink-0 rounded-full ${bg}`} />;
+}
+
+// The conversation continued from a tool's output (SPEC.md §21), under the
+// output: the reader's messages as chat bubbles, the assistant's as markdown
+// — the same shapes as the card beside the article. Nothing scrolls inside.
+function ToolConversation({ turns }: { turns: AnnotationItem["conversation"] }) {
+  const t = useT();
+  if (turns.length === 0) return null;
+  return (
+    <div className="mt-2.5 flex flex-col gap-2 border-t border-line pt-2.5">
+      <span className={label}>{t("panels.conversation")}</span>
+      {turns.map((message, i) =>
+        message.role === "user" ? (
+          <p key={i} className="ml-6 self-end rounded-2xl bg-clay-100 px-3 py-1.5 text-[12.5px] text-clay-800">
+            {message.content}
+          </p>
+        ) : (
+          <div key={i} className="text-[13px]">
+            <Markdown>{message.content}</Markdown>
+          </div>
+        ),
+      )}
+    </div>
+  );
 }
 
 // A group's label carries the symbol of the tool that made its cards — the
@@ -296,7 +321,7 @@ function LinkAbout({
 }
 
 // Annotations tab of the reader side panel. Highlights, comments, explanations,
-// analyses, simplified rewrites, then accepted links, each group under its tool's symbol
+// analyses, visualizations, simplified rewrites, then accepted links, each group under its tool's symbol
 // — each annotation card jumps to its anchor and deletes in place. Recommended
 // links list in the graph instead.
 export function AnnotationsPanel({
@@ -325,6 +350,7 @@ export function AnnotationsPanel({
   const comments = annotations.filter((a) => a.kind === "comment");
   const explanations = annotations.filter((a) => a.kind === "explain");
   const analyses = annotations.filter((a) => a.kind === "analyze");
+  const visualizations = annotations.filter((a) => a.kind === "visualize");
   const conversations = annotations.filter((a) => a.kind === "assistant");
   const simplifications = annotations.filter((a) => a.kind === "simplify");
 
@@ -432,6 +458,7 @@ export function AnnotationsPanel({
               <div className="text-[13px]">
                 <Markdown>{a.content}</Markdown>
               </div>
+              <ToolConversation turns={a.conversation} />
               {a.orphaned && a.quotedText && (
                 <p className="mt-2 line-clamp-2 border-l-2 border-red-300 pl-2 text-xs text-sand-500">
                   {t("panels.wasAnchoredTo", { text: a.quotedText })}
@@ -451,6 +478,27 @@ export function AnnotationsPanel({
               <div className="text-[13px]">
                 <Markdown>{a.content}</Markdown>
               </div>
+              <ToolConversation turns={a.conversation} />
+              {a.orphaned && a.quotedText && (
+                <p className="mt-2 line-clamp-2 border-l-2 border-red-300 pl-2 text-xs text-sand-500">
+                  {t("panels.wasAnchoredTo", { text: a.quotedText })}
+                </p>
+              )}
+              {actionsFor(a)}
+            </AnnotationCard>
+          ))}
+        </div>
+      )}
+
+      {visualizations.length > 0 && (
+        <div className="flex flex-col gap-2">
+          <GroupLabel icon={<VisualizeIcon size={12} />}>{t("panels.visualizations")}</GroupLabel>
+          {visualizations.map((a) => (
+            <AnnotationCard key={a.id} annotation={a} view={view} summary={markdownPreview(a.content)}>
+              <div className="text-[13px]">
+                <Markdown>{a.content}</Markdown>
+              </div>
+              <ToolConversation turns={a.conversation} />
               {a.orphaned && a.quotedText && (
                 <p className="mt-2 line-clamp-2 border-l-2 border-red-300 pl-2 text-xs text-sand-500">
                   {t("panels.wasAnchoredTo", { text: a.quotedText })}
@@ -495,6 +543,7 @@ export function AnnotationsPanel({
               <div className="text-[13px]">
                 <Markdown>{stripSimplifyMarkers(a.content)}</Markdown>
               </div>
+              <ToolConversation turns={a.conversation} />
               {a.quotedText && (
                 <p className="mt-2 line-clamp-2 border-l-2 border-sage-300 pl-2 text-xs text-sand-500">
                   {a.quotedText}

@@ -1,4 +1,5 @@
 import type { DerivationType, NoteStatus } from "@prisma/client";
+import type { ChatTurn } from "@/lib/conversation";
 
 /** One reply in the discussion under a note, an edit, or a link. */
 export type ReplyView = {
@@ -220,12 +221,13 @@ export function extractionList(value: unknown): Extraction[] {
 /** One annotation on the open document, shown in the Annotations tab.
     kind: "highlight" = manual color highlight, "comment" = margin comment,
     "explain" = AI explanation, "simplify" = AI simplified rewrite, "analyze" =
-    AI analysis of a figure or table, "assistant" = assistant conversation. All
+    AI analysis of a figure or table, "visualize" = AI picture of the selection
+    (SPEC.md §20), "assistant" = assistant conversation. All
     live as notes in the hidden Annotations section; highlights carry a color,
     comments carry the user's text. */
 export type AnnotationItem = {
   id: string; // note id
-  kind: "explain" | "simplify" | "analyze" | "highlight" | "comment" | "assistant";
+  kind: "explain" | "simplify" | "analyze" | "visualize" | "highlight" | "comment" | "assistant";
   content: string;
   gist: string | null; // the phrase the collapsed row shows; null = not written yet (SPEC.md §6)
   color: string | null; // "clay" | "sage" | "gold" for highlights
@@ -237,6 +239,10 @@ export type AnnotationItem = {
   // Set when the anchor sits on a figure, table, or equation block: the label
   // ("A1", "A2", …) shown at the block in the reader and on this card.
   figureLabel: string | null;
+  // The conversation's turns (SPEC.md §21): the turns after a tool's output
+  // (Explain+, Simplify+, Analyze+, Visualize+), or the assistant
+  // conversation's own; [] for every other annotation.
+  conversation: ChatTurn[];
 };
 
 export type LinkOut = {

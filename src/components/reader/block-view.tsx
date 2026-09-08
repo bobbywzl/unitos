@@ -2,7 +2,17 @@
 
 import type { BlockType } from "@prisma/client";
 import { useState } from "react";
-import { ChartIcon, CommentIcon, LinkIcon, QuestionIcon, SparkleIcon, SummaryIcon, UnlinkIcon } from "@/components/icons";
+import {
+  ChartIcon,
+  CommentIcon,
+  LinkIcon,
+  PlusIcon,
+  QuestionIcon,
+  SparkleIcon,
+  SummaryIcon,
+  UnlinkIcon,
+  VisualizeIcon,
+} from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { Equation } from "@/components/reader/equation";
 import type { TFunc, TKey } from "@/lib/i18n/dictionaries";
@@ -62,7 +72,10 @@ export type Highlight = {
   noteId?: string; // owning note; on a regular note's mark, click jumps to the note in the tray
   // The stored AI annotation's tool symbol renders at the end of the span, in
   // every view; the symbol opens the card. Kind "anchor" only.
-  tool?: "explain" | "simplify" | "analyze" | "assistant";
+  tool?: "explain" | "simplify" | "analyze" | "visualize" | "assistant";
+  // The tool's output continued into a conversation — Explain+, Simplify+,
+  // Analyze+, Visualize+ (SPEC.md §21): the symbol carries a plus.
+  plus?: boolean;
   href?: string; // navigation target, kinds "link" and "weblink"
   linkTitle?: string; // the other end's document title, kind "link" only
   linkId?: string; // for arrival flashing via ?link=, kind "link" only
@@ -93,19 +106,43 @@ function anchorClass(color: string | null | undefined): string {
 
 // Each AI tool's symbol, at the end of its highlighted text — the glyph on
 // the toolbar button and on the group label in the Annotations tab.
-type ToolKind = "explain" | "simplify" | "analyze" | "assistant";
+type ToolKind = "explain" | "simplify" | "analyze" | "visualize" | "assistant";
 const TOOL_ICON: Record<ToolKind, (props: { size?: number }) => React.ReactNode> = {
   explain: QuestionIcon,
   simplify: SummaryIcon,
   analyze: ChartIcon,
+  visualize: VisualizeIcon,
   assistant: SparkleIcon,
 };
 const TOOL_KEY: Record<ToolKind, TKey> = {
   explain: "panes.openExplanation",
   simplify: "panes.openSimplified",
   analyze: "panes.openAnalysis",
+  visualize: "panes.openVisualization",
   assistant: "panes.openConversation",
 };
+// The same symbols with the plus: the output continued into a conversation.
+const TOOL_PLUS_KEY: Record<ToolKind, TKey> = {
+  explain: "panes.openExplanationPlus",
+  simplify: "panes.openSimplifiedPlus",
+  analyze: "panes.openAnalysisPlus",
+  visualize: "panes.openVisualizationPlus",
+  assistant: "panes.openConversation",
+};
+
+/** The tool's symbol, with the plus when its output continued into a
+    conversation (SPEC.md §21): the same glyph on the mark's chip, a figure's
+    side label, the card's title, and the Continue button. */
+export function ToolSymbol({ tool, plus, size }: { tool: ToolKind; plus?: boolean; size: number }) {
+  const ToolIcon = TOOL_ICON[tool];
+  if (!plus) return <ToolIcon size={size} />;
+  return (
+    <span className="tool-plus inline-flex items-center">
+      <ToolIcon size={size} />
+      <PlusIcon size={Math.max(6, Math.round(size * 0.7))} className="tool-plus-sign" />
+    </span>
+  );
+}
 
 function headingLevel(html: string | null): 1 | 2 | 3 {
   const m = html?.match(/^<h([1-3])/);
@@ -413,15 +450,16 @@ function markedText(text: string, highlights: Highlight[], t: TFunc) {
         (h) => h.kind === "anchor" && h.tool && h.sourceId && h.end === to,
       );
       if (toolEnding?.tool) {
-        const ToolIcon = TOOL_ICON[toolEnding.tool];
+        const tip = t((toolEnding.plus ? TOOL_PLUS_KEY : TOOL_KEY)[toolEnding.tool]);
         parts.push(
           <button
             key={`tool-${from}`}
             type="button"
             data-anchor-skip
             data-track="tool-chip"
-            aria-label={t(TOOL_KEY[toolEnding.tool])}
-            data-tip={t(TOOL_KEY[toolEnding.tool])}
+            data-hover-source={toolEnding.sourceId ?? undefined}
+            aria-label={tip}
+            data-tip={tip}
             onClick={(e) => {
               e.stopPropagation();
               window.dispatchEvent(
@@ -430,9 +468,9 @@ function markedText(text: string, highlights: Highlight[], t: TFunc) {
                 }),
               );
             }}
-            className={MARK_CHIP}
+            className={`${MARK_CHIP}${toolEnding.plus ? " mark-chip-plus" : ""}`}
           >
-            <ToolIcon size={10} />
+            <ToolSymbol tool={toolEnding.tool} plus={toolEnding.plus} size={10} />
           </button>,
         );
       }
@@ -547,13 +585,14 @@ function HighlightLabel({ anchors }: { anchors: Highlight[] }) {
   const focusable = anchors.find((h) => h.annotation && h.sourceId);
   const noteMark = anchors.find((h) => !h.annotation && h.noteId);
   const color = anchors.find((h) => h.color)?.color ?? "clay";
-  const tool = anchors.find((h) => h.tool)?.tool;
-  const ToolIcon = tool ? TOOL_ICON[tool] : null;
+  const toolAnchor = anchors.find((h) => h.tool);
+  const tool = toolAnchor?.tool;
   const labels = anchors.map((h) => h.figureLabel).filter((l): l is string => Boolean(l));
   const text = labels.length > 0 ? labels.join(" · ") : t("panes.highlighted");
   return (
     <button
       data-track="figure-label"
+      data-hover-source={focusable?.sourceId ?? undefined}
       onClick={
         focusable?.sourceId
           ? () =>
@@ -578,8 +617,8 @@ function HighlightLabel({ anchors }: { anchors: Highlight[] }) {
       }
       className="absolute top-2 right-0 z-10 flex translate-x-[calc(100%+10px)] items-center gap-1.5 rounded-full bg-card px-2.5 py-1 text-[10.5px] font-semibold text-sand-700 shadow-soft hover:text-clay-800"
     >
-      {ToolIcon ? (
-        <ToolIcon size={11} />
+      {tool ? (
+        <ToolSymbol tool={tool} plus={toolAnchor?.plus} size={11} />
       ) : (
         <span aria-hidden className="size-2 rounded-full" style={{ background: LABEL_DOT[color] ?? LABEL_DOT.clay }} />
       )}
