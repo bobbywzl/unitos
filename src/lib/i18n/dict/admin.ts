@@ -29,6 +29,7 @@ const en = {
   // Reply to feedback (SPEC.md §18): the reply reaches the account as a
   // notification. A reply's state is whether the account dismissed it.
   feedbackFrom: "from {name}",
+  feedbackPhoto: "Photo {n} on this feedback; click to open",
   reply: "Reply",
   replyPh: "Write a reply. It reaches the account as a notification. Markdown works.",
   replyNoAccount: "No account to notify.",
@@ -226,6 +227,7 @@ const zh: Record<keyof typeof en, string> = {
   feedbackEmpty: "没有反馈。",
   feedbackEmptyFiltered: "没有{filter}的反馈。",
   feedbackFrom: "来自 {name}",
+  feedbackPhoto: "此反馈的第 {n} 张图片；点击打开",
   reply: "回复",
   replyPh: "写回复。它会作为通知发送给该账户。支持 Markdown。",
   replyNoAccount: "没有可通知的账户。",

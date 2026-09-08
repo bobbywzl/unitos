@@ -28,7 +28,7 @@ Missing any of these: say which one, and stop. Never guess a URL or a password.
 ## One run
 
 1. **Sign in.** `curl -sS -c $JAR -H 'Content-Type: application/json' -d '{"password":"'"$ADMIN_PASSWORD"'"}' $UNITOS_URL/api/admin/auth`. A non-200 answer: stop and say so.
-2. **Fetch the inbox.** `curl -sS -b $JAR "$UNITOS_URL/api/admin/feedback?status=new,seen&take=2000"`. Each row: `id`, `category` (bug, idea, other), `message`, `page`, `userId`, `status`, `createdAt`.
+2. **Fetch the inbox.** `curl -sS -b $JAR "$UNITOS_URL/api/admin/feedback?status=new,seen&take=2000"`. Each row: `id`, `category` (bug, idea, other), `message`, `images` (photo ids; each opens at `$UNITOS_URL/api/images/<id>` — fetch and read the photo when the message points at it), `links` (URLs the sender attached; open them for context), `page`, `userId`, `status`, `createdAt`.
 3. **Find pipeline pull requests.** Search pull requests in `bobbywzl/unitos` whose body carries a `Feedback-Ids:` line (open, merged, and closed). Parse the ids from that line. Three sets:
    - In an open pull request: skip; a person has not decided yet.
    - In a closed, unmerged pull request: skip; a person rejected it. List it in the report.
@@ -44,7 +44,7 @@ Missing any of these: say which one, and stop. Never guess a URL or a password.
    - Commit with a message that says what changed and why, then `git push -u origin feedback/<slug>`.
    - Open the pull request against `main`. Title: `Feedback: <what changes>`. Body, in this order:
      - **What changed**: two or three sentences.
-     - **Why**: every feedback item in the cluster, one bullet each: category, date, page, the message quoted. No sender email, no user id.
+     - **Why**: every feedback item in the cluster, one bullet each: category, date, page, the message quoted, the links it attached. No sender email, no user id, no photo bytes.
      - **Review**: the checklist for the reviewer, one line each: the change does what the feedback asks; it fits SPEC.md; the text follows CLAUDE.md; no stored data is lost; a migration, if any, is additive.
      - The line `Feedback-Ids: <id>, <id>` on its own.
      - The Claude Code attribution footer.

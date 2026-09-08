@@ -606,6 +606,10 @@ model Feedback {
   id        String         @id @default(cuid())
   category  String // "bug" | "idea" | "other"
   message   String
+  // Photos attached to the feedback (SPEC.md §18): ImageAsset ids, read at
+  // /api/images/<id>. Links attached: absolute http(s) URLs as typed.
+  images    String[]       @default([])
+  links     String[]       @default([])
   page      String? // pathname where it was filed
   userAgent String?
   // The account that filed it: a soft reference like Notebook.userId ("user-1"

@@ -1,6 +1,6 @@
 # claude/notes-autosave-7de2fi
 
-**Intent:** Notes auto-save that survives a closed tab, a page change, or a lost machine, with a save state on every note being edited; every current account Unitos Ultra; the tier chip out of the reader; the AI toolbar on the article card of a video or audio document; the section's actions as visible pills; a new note at the top of its section; the grip drags a note out of the tray sideways.
+**Intent:** Notes auto-save that survives a closed tab, a page change, or a lost machine, with a save state on every note being edited; every current account Unitos Ultra; the tier chip out of the reader; the AI toolbar on the article card of a video or audio document; the section's actions as visible pills; a new note at the top of its section; the grip drags a note out of the tray sideways; photos and links on feedback.
 
 **Files:**
 - `src/lib/note-drafts.ts` — new: localStorage drafts for note editors and section composers, written with the keystroke, cleared when the server confirms.
@@ -22,7 +22,13 @@
 - `src/components/sortable.tsx` — `axis="y"`: the reorder starts on a vertical move and lets go past 12px sideways; the grip carries `data-drag-handle`.
 - `src/components/outline/note-card.tsx` — the grip is visible (70%) and drags out sideways (12px) or reorders (6px), whichever first; the floating card lands whole on screen.
 - `src/components/outline/floating-note-editor.tsx` — `floatingWidth`, `landingLeft`; a released card settles whole on screen.
-- `SPEC.md`, `TIERS.md` — §6 auto-save, save state, the composer at the top, the pills, the grip; §11 the article card; tier decisions.
+- `prisma/schema.prisma`, `prisma/migrations/20260908170000_feedback_images_links` — `Feedback.images` (ImageAsset ids) and `Feedback.links` (URLs).
+- `src/app/api/feedback/route.ts` — takes `images` (at most 6, each one this account uploaded) and `links` (at most 10, absolute http(s)).
+- `src/components/feedback-button.tsx` — Add photo (file, or a paste into the message; uploads through `POST /api/images`), Add link (Enter adds a chip), each chip with its ×.
+- `src/components/admin/feedback-inbox.tsx`, `src/app/admin/page.tsx` — the inbox shows the photos as thumbnails and the links as links.
+- `src/lib/i18n/dict/works.ts`, `admin.ts` — the strings (en, zh).
+- `.claude/skills/feedback-pipeline/SKILL.md` — the inbox rows carry `images` and `links`; the pull request's Why bullets quote the links, never photo bytes.
+- `SPEC.md`, `TIERS.md` — §6 auto-save, save state, the composer at the top, the pills, the grip; §11 the article card; §18 photos and links on feedback; tier decisions.
 
 **Decisions:**
 - A new note is created on the server after the first debounce, not on Save; the composer hides it until Save so the list never shows it twice. Cancel deletes it; Esc keeps it when it has text.
@@ -31,3 +37,4 @@
 - The reader header's tier chip and band are removed; the Ultra marks on Visualize and Continue stay, since they are gates, not the rank.
 - Only the composer's note lands at the top; notes from Find, distill, voice, and the assistant still land at the end, so the pending queue's order is unchanged.
 - The section's Delete button stays hover-only: it is destructive, not a main action.
+- Feedback photos reuse the images route and table rather than a new store; the feedback route checks each id is this account's upload with no document, so nobody attaches someone else's image or a document's figure.
