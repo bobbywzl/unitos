@@ -88,6 +88,11 @@ const en = {
   openAnalysis: "Open the analysis",
   openVisualization: "Open the visualization",
   openConversation: "Open the assistant conversation",
+  // The output continued into a conversation (SPEC.md §21)
+  openExplanationPlus: "Open the explanation and its conversation",
+  openSimplifiedPlus: "Open the simplified text and its conversation",
+  openAnalysisPlus: "Open the analysis and its conversation",
+  openVisualizationPlus: "Open the visualization and its conversation",
   extractStartedHere: "Match-it {label} started here",
   extractStartedHereDetails: "Match-it {label} started here. Click for details",
   extractJumpToOrigin: "Jump to the phrase Match-it {label} started from",
@@ -497,6 +502,11 @@ const zh: Record<keyof typeof en, string> = {
   openAnalysis: "打开分析",
   openVisualization: "打开可视化图",
   openConversation: "打开助手对话",
+  // The output continued into a conversation (SPEC.md §21)
+  openExplanationPlus: "打开解释及其对话",
+  openSimplifiedPlus: "打开简化文本及其对话",
+  openAnalysisPlus: "打开分析及其对话",
+  openVisualizationPlus: "打开可视化图及其对话",
   extractStartedHere: "匹配 {label} 始于此处",
   extractStartedHereDetails: "匹配 {label} 始于此处。点击查看详情",
   extractJumpToOrigin: "跳转到匹配 {label} 的起始短语",

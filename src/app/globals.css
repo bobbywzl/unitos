@@ -377,6 +377,20 @@ mark,
   vertical-align: -0.22em;
   box-shadow: 0 0 0 1.5px var(--paper);
 }
+/* The tool's symbol with the plus (SPEC.md §21): the output continued into a
+   conversation. The chip widens for the sign; the sign sits at the symbol's
+   shoulder wherever the symbol renders. */
+.mark-chip-plus {
+  width: auto;
+  padding: 0 3px 0 2px;
+}
+.tool-plus {
+  gap: 1px;
+}
+.tool-plus-sign {
+  margin-top: -0.35em;
+  stroke-width: 3.5;
+}
 /* Text the user changed — diffed against the document as first parsed. */
 .edited-text {
   color: var(--clay-600);

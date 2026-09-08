@@ -6,6 +6,7 @@ import { driveConfig } from "@/lib/drive/config";
 import { currentLang, serverT } from "@/lib/i18n/server";
 import { peopleByIds, roleOf } from "@/lib/collab";
 import { matchInText } from "@/lib/anchors/match";
+import { conversationTurns } from "@/lib/conversation";
 import { hasContext } from "@/lib/derive/context";
 import { editedRanges } from "@/lib/diff";
 import { definitionFor, glossaryEntries, lacksDefinitionsIn } from "@/lib/glossary";
@@ -361,6 +362,7 @@ export default async function NotebookPage(props: {
           figureLabel: figureLabelBySource.get(source.id) ?? null,
           createdById: n.createdById,
           replies: toReplyViews(n.replies),
+          conversation: conversationTurns(n),
         };
       })
       .filter((a): a is AnnotationItem => a !== null);
@@ -386,6 +388,7 @@ export default async function NotebookPage(props: {
             kind: a.kind as "explain" | "simplify" | "analyze" | "visualize" | "comment" | "assistant",
             content: a.content,
             noteId: a.id,
+            conversation: a.conversation,
           },
         ]),
     );

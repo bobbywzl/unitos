@@ -1,4 +1,5 @@
 import type { DerivationType, NoteStatus } from "@prisma/client";
+import type { ChatTurn } from "@/lib/conversation";
 
 /** One reply in the discussion under a note, an edit, or a link. */
 export type ReplyView = {
@@ -238,6 +239,10 @@ export type AnnotationItem = {
   // Set when the anchor sits on a figure, table, or equation block: the label
   // ("A1", "A2", …) shown at the block in the reader and on this card.
   figureLabel: string | null;
+  // The conversation's turns (SPEC.md §21): the turns after a tool's output
+  // (Explain+, Simplify+, Analyze+, Visualize+), or the assistant
+  // conversation's own; [] for every other annotation.
+  conversation: ChatTurn[];
 };
 
 export type LinkOut = {

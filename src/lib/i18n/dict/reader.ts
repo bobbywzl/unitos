@@ -132,6 +132,19 @@ const en = {
   messageAssistant: "Message the assistant",
   send: "Send",
   loading: "Loading",
+  // A tool's output continued into a conversation (SPEC.md §21)
+  continueConversation: "Continue in a conversation",
+  continueConversationTitle:
+    "Ask the assistant about this output to expand it and go deeper. The conversation saves with the output, under Annotations.",
+  continuePlaceholder: "Ask about this…",
+  explainPlus: "Explain+",
+  simplifyPlus: "Simplify+",
+  analyzePlus: "Analyze+",
+  visualizePlus: "Visualize+",
+  // The log card: the conversation's condensed log, shown on hover
+  log: "Log",
+  logUnavailable: "The log could not be written. Click the mark to open the conversation.",
+  logOpenHint: "Click the mark to open the conversation.",
 
   // Match-it card
   extractLabel: "Match-it {label}",
@@ -359,6 +372,18 @@ const zh: Record<keyof typeof en, string> = {
   messageAssistant: "给助手发消息",
   send: "发送",
   loading: "加载中",
+  // A tool's output continued into a conversation (SPEC.md §21)
+  continueConversation: "继续对话",
+  continueConversationTitle: "就这段输出向助手提问，扩展并深入理解。对话随输出一起保存在批注下。",
+  continuePlaceholder: "就此提问…",
+  explainPlus: "解释+",
+  simplifyPlus: "简化+",
+  analyzePlus: "分析+",
+  visualizePlus: "可视化+",
+  // The log card: the conversation's condensed log, shown on hover
+  log: "日志",
+  logUnavailable: "无法写出日志。点击标记打开对话。",
+  logOpenHint: "点击标记打开对话。",
 
   // Match-it card
   extractLabel: "匹配 {label}",
