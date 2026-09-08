@@ -442,9 +442,11 @@ export function NoteCard({
             data-track="note-edit"
             aria-label={t("outline.editTitle")}
             data-tip={t("outline.editTitle")}
-            className="flex size-[18px] items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-800"
+            // The pencil is the note's main action, so it is the big one in
+            // the row: a filled 28px button with a 16px pencil (SPEC.md §6).
+            className="flex size-7 items-center justify-center rounded-full bg-clay-100 text-clay-800 hover:bg-clay-200"
           >
-            <PencilIcon size={11} />
+            <PencilIcon size={16} />
           </button>
         )}
         {jumpSource && !editing && (

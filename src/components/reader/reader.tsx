@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { PlusIcon, RedoIcon, UndoIcon } from "@/components/icons";
 import { styleShortcut } from "@/lib/markdown-style";
 import { NOTE_WRAP_EVENT, type NoteWrapSpacer } from "@/lib/note-wrap";
@@ -632,6 +632,49 @@ export function Reader({
     return () => window.removeEventListener(NOTE_WRAP_EVENT, onWrap);
   }, []);
 
+  // Which blocks clear the gap: the ones whose place overlaps the card's
+  // height (SPEC.md §6). `clear` alone would push every figure, table, or
+  // video above the card below it — the gap's first float runs from the
+  // article's top to the card — so the blocks are measured against the gap
+  // once per gap, with no block cleared, and only the overlapping ones clear.
+  const articleRef = useRef<HTMLElement>(null);
+  const spacerKey = wrapSpacer
+    ? `${wrapSpacer.side}|${wrapSpacer.offset}|${wrapSpacer.height}|${wrapSpacer.width}`
+    : "";
+  const [wrapClears, setWrapClears] = useState<{ key: string; ids: ReadonlySet<string> }>({
+    key: "",
+    ids: new Set(),
+  });
+  const typeById = useMemo(() => new Map(blocks.map((b) => [b.id, b.type])), [blocks]);
+  useLayoutEffect(() => {
+    if (!wrapSpacer) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      if (wrapClears.key || wrapClears.ids.size > 0) setWrapClears({ key: "", ids: new Set() });
+      return;
+    }
+    if (wrapClears.key === spacerKey) return;
+    // A new gap: first a layout with no block cleared, so every block sits
+    // where the text alone puts it; then the measure.
+    if (wrapClears.ids.size > 0) {
+      setWrapClears({ key: "", ids: new Set() });
+      return;
+    }
+    const article = articleRef.current;
+    if (!article) return;
+    const contentTop = article.getBoundingClientRect().top + parseFloat(getComputedStyle(article).paddingTop);
+    const gapTop = wrapSpacer.offset;
+    const gapBottom = wrapSpacer.offset + wrapSpacer.height;
+    const ids = new Set<string>();
+    for (const [id, type] of typeById) {
+      if (WRAP_FLOW_TYPES.has(type)) continue;
+      const el = article.querySelector<HTMLElement>(`[data-block-id="${id}"]`);
+      if (!el) continue;
+      const r = el.getBoundingClientRect();
+      if (r.bottom - contentTop > gapTop && r.top - contentTop < gapBottom) ids.add(id);
+    }
+    setWrapClears({ key: spacerKey, ids });
+  }, [wrapSpacer, spacerKey, wrapClears, typeById]);
+
   // A first open reveals the blocks as the reader scrolls (reveal.tsx);
   // reading mode only, never the transcript.
   const reveal = useReveal(documentId, mode === "read" && !transcript);
@@ -652,10 +695,11 @@ export function Reader({
     applyStyle(style);
   }
 
-  // A block that does not flow around the card clears it, so it lands whole
-  // above or below the card rather than squeezed beside it.
-  const wrapClear = (type: string) =>
-    wrapSpacer && !WRAP_FLOW_TYPES.has(type)
+  // A block that does not flow around the card, and whose place overlaps the
+  // card, clears it, so it lands whole below the card rather than squeezed
+  // beside it. A block above or below the card stays where it is.
+  const wrapClear = (id: string) =>
+    wrapSpacer && wrapClears.ids.has(id)
       ? wrapSpacer.side === "left"
         ? " clear-left"
         : " clear-right"
@@ -668,7 +712,7 @@ export function Reader({
     let node: React.ReactNode;
     if (block.type === "PAGE" && pages && documentId) {
       node = (
-        <div className={wrapClear(block.type).trim()}>
+        <div className={wrapClear(block.id).trim()}>
           <PageBlock
             documentId={documentId}
             notebookId={pages.notebookId}
@@ -690,7 +734,7 @@ export function Reader({
       );
     } else if (mode === "edit") {
       node = (
-        <div className={`group/block${wrapClear(block.type)}`}>
+        <div className={`group/block${wrapClear(block.id)}`}>
           {TEXT_TYPES.has(block.type) ? (
             <EditableBlock
               block={block}
@@ -736,7 +780,7 @@ export function Reader({
       // The wrapper carries the clear; the block keeps its own margins,
       // which collapse through it, so spacing does not change.
       node = (
-        <div className={wrapClear(block.type).trim()}>
+        <div className={wrapClear(block.id).trim()}>
           <BlockView block={block} highlights={highlightsByBlock[block.id]} documentId={documentId} />
           {translationOf(block)}
         </div>
@@ -888,6 +932,7 @@ export function Reader({
       )}
 
       <article
+        ref={articleRef}
         className={`reader-prose reader-column w-full ${embedded ? "px-0 py-0" : "px-6 py-11 print:py-0"}`}
         data-font={font ?? "default"}
         data-nudge="select"
