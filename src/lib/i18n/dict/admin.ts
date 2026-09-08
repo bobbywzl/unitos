@@ -183,15 +183,20 @@ const en = {
   // Accounts page
   accounts: "Accounts",
   accountsDesc:
-    "Every account and what it holds. Reset account deletes the account's projects, documents, notes, and profile, signs it out everywhere, and puts it back at onboarding, like a new account. The account keeps its email, name, and password.",
+    "Every account, its tier, and what it holds. Tier sets the account's tier: Unitos Ultra, Unitos Premium for good, or Unitos Premium on a trial until a date. Reset account deletes the account's projects, documents, notes, and profile, signs it out everywhere, and puts it back at onboarding, like a new account. The account keeps its email, name, and password.",
   noAccounts: "No accounts yet.",
   accountCreated: "created {date}",
   accountLastSeen: "last seen {date}",
-  accountPremium: "Unitos Premium",
-  accountTrial: "Unitos Premium · trial until {date}",
-  accountExpired: "Unitos Premium · trial ended {date}",
-  accountUltra: "Unitos Ultra",
   accountDrive: "Google Drive linked",
+  // Tier control (TIERS.md): the operator sets the account's tier here.
+  tier: "Tier",
+  tierDesc:
+    "Unitos Ultra never expires. Unitos Premium is granted for good, or runs on a trial until a date; past that date the account is expired until you grant or extend. The account sees the change on its next page load.",
+  tierOptionTrial: "Unitos Premium · trial until a date",
+  tierTrialEnds: "Trial ends",
+  tierSaved: "Tier saved",
+  tierSaveFailed: "Tier save failed",
+  tierSaveFailedStatus: "Tier save failed ({status})",
   resetAccount: "Reset account",
   resetConfirmDesc:
     "Deletes every project, document, note, and setting of this account and signs it out everywhere. Type {confirm} to confirm.",
@@ -363,15 +368,19 @@ const zh: Record<keyof typeof en, string> = {
   // Accounts page
   accounts: "账户",
   accountsDesc:
-    "全部账户及其持有的内容。“重置账户”删除该账户的项目、文档、笔记和个人资料，在所有设备上退出登录，并使其回到新手引导，如同新账户。账户保留邮箱、名字和密码。",
+    "全部账户、其方案及持有的内容。“方案”设置该账户的方案：Unitos Ultra、永久 Unitos Premium，或试用至某日期的 Unitos Premium。“重置账户”删除该账户的项目、文档、笔记和个人资料，在所有设备上退出登录，并使其回到新手引导，如同新账户。账户保留邮箱、名字和密码。",
   noAccounts: "还没有账户。",
   accountCreated: "创建于 {date}",
   accountLastSeen: "最近活动 {date}",
-  accountPremium: "Unitos Premium",
-  accountTrial: "Unitos Premium · 试用至 {date}",
-  accountExpired: "Unitos Premium · 试用已于 {date} 结束",
-  accountUltra: "Unitos Ultra",
   accountDrive: "已关联 Google Drive",
+  tier: "方案",
+  tierDesc:
+    "Unitos Ultra 永不过期。Unitos Premium 可永久授予，或试用至某日期；过了该日期，账户即为已过期，直到你授予或延长。账户在下次加载页面时看到变更。",
+  tierOptionTrial: "Unitos Premium · 试用至某日期",
+  tierTrialEnds: "试用截止",
+  tierSaved: "方案已保存",
+  tierSaveFailed: "方案保存失败",
+  tierSaveFailedStatus: "方案保存失败（{status}）",
   resetAccount: "重置账户",
   resetConfirmDesc: "删除该账户的全部项目、文档、笔记和设置，并在所有设备上退出登录。输入 {confirm} 以确认。",
   resetting: "重置中…",

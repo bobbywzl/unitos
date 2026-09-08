@@ -17,8 +17,51 @@ default `PREMIUM`) and `User.trialEndsAt` (`lib/tiers.ts`): a new account gets
 it, or Ultra by setting the tier. Past `trialEndsAt` on `PREMIUM` the account
 is **expired**: Premium features gate until the operator extends or grants
 (`premiumActive`). Ultra never expires (`ultraActive`). The single local reader
-(sign-in off) is Ultra: there is no account to gate. Settings shows the state
-under Plan; the admin accounts page shows it as a chip.
+(sign-in off) is Ultra: there is no account to gate.
+
+## Where the tier is set
+
+The admin accounts page (`/admin/accounts`, `ADMIN_PASSWORD`) has a Tier
+control on every account (`components/admin/tier-control.tsx`, `POST
+/api/admin/accounts/tier`): Unitos Ultra, Unitos Premium for good, or Unitos
+Premium on a trial until a date. A past date ends the trial now. Nothing else
+writes the tier: sign-in never changes it, and Reset account puts the account
+back on a new trial like a new account.
+
+## Where the tier is read
+
+One path. Every server gate reads `User.tier` and `User.trialEndsAt` off the
+session's user row on each request (`ultraActive`, `premiumActive`), so a
+tier the admin sets holds on the very next request. Every page reads the same
+row once through `accountTier` (`lib/tiers.ts`): the reader and the notes page
+put it in `CollabState` (`tier`, `trialEndsAt`, `premium`, `ultra`), the
+dashboard and Settings read it directly. A page loaded before the change
+still carries the old tier until it reloads: the client's gate (the toast on
+Visualize or Continue) is a courtesy, the route is the gate.
+
+## How the tier shows
+
+The tier mark is one symbol per tier, drawn once (`components/tier-mark.tsx`)
+and shown at every size: **the white crystal is Unitos Premium** (a quartz
+point in white and pale sand; hollow when the trial ended and nothing was
+granted) and **the black diamond is Unitos Ultra** (a brilliant cut in
+obsidian with a gold hairline). It sits at the corner of the person's badge
+(`PersonBadge`, on a badge 24 px or larger: the dashboard header, Settings,
+presence, the share dialog, the admin accounts page), so the tier reads
+beside the profile the way a verified badge does on X or a star does on
+Telegram Premium. `Person.tier` carries it; `personOf` fills it from the
+user row.
+
+Around the mark, each tier has one material, used the same way everywhere:
+Ultra is obsidian and gold, Premium is pearl, expired is plain sand. The tier
+chip (mark and name, one pill) sits beside the badge in the dashboard header,
+in the reader header (to Settings), and on the admin accounts page; the plan
+card in Settings is the same material at full size with the tier's name as
+its title and what the tier holds under it; a hairline band in the material
+runs along the top of the dashboard and the reader. Ultra is the richer of
+the two on purpose; Premium is the same idea, toned down. Inside the reader,
+Visualize's toolbar row and the Continue button carry the black diamond
+beside the word Ultra when the account is not Ultra.
 
 ## The trial
 
@@ -82,6 +125,12 @@ until the owner makes one.
 - **Video inside a note or a paragraph.** Nothing plays inside a note today, so there is nothing to gate: a dropped video is added as a video document. Say whether video documents themselves should become Premium, or whether this was only about video inside a note.
 
 ## Decisions, as they were made
+
+- **2026-09-08** — The tier shows everywhere the account shows. Unitos
+  Premium is the white crystal, Unitos Ultra is the black diamond, beside the
+  person's badge; Ultra's surfaces feel premium (obsidian and gold), Premium's
+  the same but toned down. The admin sets any account's tier from the
+  accounts page. The tier is read through one path on every surface.
 
 - **2026-09-07** — Two tiers: Unitos Premium and Unitos Ultra. The free tier
   is gone. A new account gets Unitos Premium free for two months.

@@ -21,16 +21,20 @@ const en = {
   backgroundPh: "e.g. Stanford student, stochastic calc + stats + quantum. Reading for due diligence.",
   singleReader:
     "Sign-in is off — this instance runs as a single reader. Set GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, and SESSION_SECRET to open Google sign-in at /signin.",
-  // Plan (TIERS.md): the account's tier and, on trial, when the trial ends.
+  // Plan (TIERS.md): the plan card — the tier mark and the tier's name as the
+  // title (common.tier*), then what the tier holds and, on trial, when the
+  // trial ends.
   plan: "Plan",
   planTrial:
-    "Unitos Premium, free trial until {date}. Offline work — notes, non-AI annotations, edits, uploads — saves on this device and syncs when you are back online.",
+    "Free trial until {date}. Offline work — notes, non-AI annotations, edits, uploads — saves on this device and syncs when you are back online. Images up to 25 MB drop into notes.",
   planPremium:
-    "Unitos Premium. Offline work — notes, non-AI annotations, edits, uploads — saves on this device and syncs when you are back online.",
+    "Offline work — notes, non-AI annotations, edits, uploads — saves on this device and syncs when you are back online. Images up to 25 MB drop into notes.",
   planUltra:
-    "Unitos Ultra. Everything in Unitos Premium, and Visualize: the selection as a picture — a diagram, a drawing, or a short animation.",
+    "Everything in Unitos Premium. Visualize: the selection as a picture — a diagram, a drawing, or a short animation. Conversations: continue an Explain, Simplify, Analyze, or Visualize card into a conversation.",
   planExpired:
-    "The Unitos Premium trial ended on {date}. Offline changes do not save, and images over 5 MB do not drop.",
+    "The trial ended on {date}. Offline changes do not save, and images over 5 MB do not drop.",
+  planMark:
+    "The tier mark beside your badge says your tier everywhere: the white crystal is Unitos Premium, the black diamond is Unitos Ultra.",
   // Connections (SPEC.md §14): the services connected to the account and what
   // each one reaches.
   connections: "Connections",
@@ -122,10 +126,13 @@ const zh: Record<keyof typeof en, string> = {
     "此实例未开启登录——当前以单人阅读器模式运行。设置 GOOGLE_CLIENT_ID、GOOGLE_CLIENT_SECRET 和 SESSION_SECRET 即可在 /signin 开启 Google 登录。",
   plan: "方案",
   planTrial:
-    "Unitos Premium，免费试用至 {date}。离线工作——笔记、非 AI 批注、编辑、上传——会保存在本设备，恢复联网后同步。",
-  planPremium: "Unitos Premium。离线工作——笔记、非 AI 批注、编辑、上传——会保存在本设备，恢复联网后同步。",
-  planUltra: "Unitos Ultra。包含 Unitos Premium 的全部功能，以及可视化：把选中内容画成图——示意图、插画或短动画。",
-  planExpired: "Unitos Premium 试用已于 {date} 结束。离线更改不会保存，超过 5 MB 的图片无法拖入。",
+    "免费试用至 {date}。离线工作——笔记、非 AI 批注、编辑、上传——会保存在本设备，恢复联网后同步。最大 25 MB 的图片可拖入笔记。",
+  planPremium:
+    "离线工作——笔记、非 AI 批注、编辑、上传——会保存在本设备，恢复联网后同步。最大 25 MB 的图片可拖入笔记。",
+  planUltra:
+    "包含 Unitos Premium 的全部功能。可视化：把选中内容画成图——示意图、插画或短动画。对话：把解释、简化、分析或可视化卡片继续为对话。",
+  planExpired: "试用已于 {date} 结束。离线更改不会保存，超过 5 MB 的图片无法拖入。",
+  planMark: "徽章旁的方案标记在各处标明你的方案：白水晶是 Unitos Premium，黑钻是 Unitos Ultra。",
   connections: "连接",
   connectionsDesc: "此账户已连接的服务，以及每项可访问的范围。",
   connectionsNone: "无。登录未开启，没有可连接的账户；Google Drive 每次访问时都会请求授权。",

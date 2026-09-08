@@ -11,6 +11,7 @@ import type { TKey } from "@/lib/i18n/dictionaries";
 import { PERSON_COLORS, personOf, type Person } from "@/lib/person";
 import { api } from "@/lib/api";
 import type { TierState } from "@/lib/tiers";
+import { TierMark, tierLook } from "@/components/tier-mark";
 
 type Theme = "light" | "dark" | "system";
 
@@ -221,7 +222,7 @@ export function SettingsForm({
 
   // The badge preview mirrors what collaborators see, live.
   const preview = account
-    ? personOf({ id: account.id, name: name.trim() || account.name, symbol, color, picture })
+    ? { ...personOf({ id: account.id, name: name.trim() || account.name, symbol, color, picture }), tier: plan.state }
     : null;
 
   // The Google Drive row's text: the stored grant's access, or what a link
@@ -443,15 +444,26 @@ export function SettingsForm({
 
       <section className="space-y-3">
         <h2 className={sectionTitle}>{t("settings.plan")}</h2>
-        <p className="text-xs text-sand-600">
-          {plan.state === "ultra"
-            ? t("settings.planUltra")
-            : plan.state === "premium"
-              ? t("settings.planPremium")
-              : t(plan.state === "trial" ? "settings.planTrial" : "settings.planExpired", {
-                  date: plan.trialEndsAt ? fmtDate(plan.trialEndsAt) : "",
-                })}
-        </p>
+        {/* The plan card (TIERS.md): the tier mark and the tier's name, in
+            the tier's own material, then what the tier holds. */}
+        <div className={`flex gap-4 rounded-2xl p-5 tier-card-${tierLook(plan.state)}`}>
+          <TierMark state={plan.state} size={40} className="mt-0.5" />
+          <div className="min-w-0 space-y-1.5">
+            <div className="tier-card-title font-display text-[19px]">
+              {t(plan.state === "ultra" ? "common.tierUltra" : "common.tierPremium")}
+            </div>
+            <p className="tier-card-muted text-xs leading-relaxed">
+              {plan.state === "ultra"
+                ? t("settings.planUltra")
+                : plan.state === "premium"
+                  ? t("settings.planPremium")
+                  : t(plan.state === "trial" ? "settings.planTrial" : "settings.planExpired", {
+                      date: plan.trialEndsAt ? fmtDate(plan.trialEndsAt) : "",
+                    })}
+            </p>
+            {account && <p className="tier-card-muted text-[11px]">{t("settings.planMark")}</p>}
+          </div>
+        </div>
       </section>
 
       <section className="space-y-3">

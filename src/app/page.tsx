@@ -3,8 +3,12 @@ import { redirect } from "next/navigation";
 import { authEnabled, currentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { serverT } from "@/lib/i18n/server";
+import { personOf } from "@/lib/person";
+import { accountTier } from "@/lib/tiers";
 import { Logo } from "@/components/logo";
 import { AccountGuard } from "@/components/account-guard";
+import { PersonBadge } from "@/components/collab/person-badge";
+import { TierBand, TierChip } from "@/components/tier-mark";
 import { Notifications } from "@/components/works/notifications";
 import { WelcomeFlow } from "@/components/works/welcome-flow";
 import { WorksShelf, type WorkItem } from "@/components/works/works-shelf";
@@ -51,6 +55,10 @@ export default async function Home() {
   });
   const ownerById = new Map(owners.map((o) => [o.id, o.name]));
 
+  // The account's tier (TIERS.md): the band over the page, the tier mark on
+  // the badge, and the tier chip beside it. One read, the same as the reader's.
+  const tier = accountTier(user, authEnabled());
+
   // The account's open notifications from the admin (SPEC.md §18), newest first.
   const notifications = await db.notificationRecipient.findMany({
     where: { userId: user.id, dismissedAt: null },
@@ -87,20 +95,17 @@ export default async function Home() {
   return (
     <main className="mx-auto w-full max-w-[1080px] px-6 pb-16 sm:px-16">
       <AccountGuard userId={user.id} enabled={authEnabled()} />
+      <TierBand state={tier} />
       <header className="flex items-center gap-3 pt-[26px]">
         <Logo size={38} className="text-clay" />
         <span className="font-display text-[21px]">{t("common.appName")}</span>
         {authEnabled() && (
-          <Link href="/settings" className="ml-auto flex items-center gap-2">
-            {user.picture ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={user.picture} alt="" className="size-7 rounded-full object-cover" />
-            ) : (
-              <span className="flex size-7 items-center justify-center rounded-full bg-clay-100 text-xs font-semibold text-clay-800">
-                {user.name[0]?.toUpperCase()}
-              </span>
-            )}
-            <span className="max-w-[200px] truncate text-xs text-sand-600">{user.email}</span>
+          <Link href="/settings" className="ml-auto flex min-w-0 items-center gap-3">
+            <PersonBadge person={{ ...personOf(user), tier }} size={30} title={user.name} />
+            <span className="hidden max-w-[200px] truncate text-xs text-sand-600 sm:inline">
+              {user.email}
+            </span>
+            <TierChip state={tier} trialEndsAt={user.trialEndsAt?.toISOString() ?? null} short />
           </Link>
         )}
         <Link

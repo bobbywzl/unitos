@@ -38,3 +38,16 @@ export function premiumActive(user: TierFields, now = new Date()): boolean {
 export function ultraActive(user: TierFields): boolean {
   return user.tier === "ULTRA";
 }
+
+/** The account's state as every surface reads it — the reader, the notes
+    page, the dashboard, Settings, the admin accounts page — so no surface
+    can disagree with another. With sign-in off the local reader is Ultra:
+    there is no account to gate. */
+export function accountTier(user: TierFields, authOn: boolean, now = new Date()): TierState {
+  return authOn ? tierState(user, now) : "ultra";
+}
+
+/** The tier a state belongs to: trial and expired are Unitos Premium states. */
+export function tierOf(state: TierState): Tier {
+  return state === "ultra" ? "ULTRA" : "PREMIUM";
+}
