@@ -1,6 +1,7 @@
 import { JSDOM, VirtualConsole } from "jsdom";
 import { browserConfigured, launchBrowser, withTimeout } from "@/lib/browser";
 import { db } from "@/lib/db";
+import type { TFunc } from "@/lib/i18n/dictionaries";
 import { serverT } from "@/lib/i18n/server";
 import { captureAnimatedCharts, type CaptureResult, type CaptureStore } from "@/lib/parse/capture-animation";
 import type { FetchedPage } from "@/lib/parse/fetch-page";
@@ -87,9 +88,17 @@ export async function renderIfNeeded(
   }
   try {
     const t = await serverT();
-    onProgress?.("fetch", t("api.renderingPage"));
+    // The render is the longest part of a URL ingest. It reports each phase
+    // it enters — opening, scrolling, settling chart n of m — so the ingest
+    // card keeps moving instead of standing on one line (SPEC.md §15).
+    const report: RenderProgress = (detail) => onProgress?.("fetch", detail);
+    report(t("api.renderingPage"));
     const store: CaptureStore | null = options.store ? imageStore(options.store.userId) : null;
-    const rendered = await withTimeout(renderInBrowser(url, store), RENDER_TIMEOUT_MS, "the browser ran out of time");
+    const rendered = await withTimeout(
+      renderInBrowser(url, store, t, report),
+      RENDER_TIMEOUT_MS,
+      "the browser ran out of time",
+    );
     const render: RenderReport = { attempted: true, error: rendered.error, charts: rendered.charts };
     return { page: rendered.html.trim() ? { kind: "html", html: rendered.html } : page, render };
   } catch (err) {
@@ -127,7 +136,15 @@ function imageStore(userId: string | null): CaptureStore {
 
 type Rendered = { html: string; error: string | null; charts: CaptureResult | null };
 
-async function renderInBrowser(url: string, store: CaptureStore | null): Promise<Rendered> {
+// One line for the ingest card, sent as the render enters each phase.
+type RenderProgress = (detail: string) => void;
+
+async function renderInBrowser(
+  url: string,
+  store: CaptureStore | null,
+  t: TFunc,
+  report: RenderProgress,
+): Promise<Rendered> {
   const browser = await launchBrowser();
   try {
     const context = await browser.newContext({ locale: "en-US", viewport: { width: 1280, height: 900 } });
@@ -154,8 +171,10 @@ async function renderInBrowser(url: string, store: CaptureStore | null): Promise
           return false;
         },
       );
+      report(t("api.renderingOpening"));
       await page.goto(url, { waitUntil: "domcontentloaded", timeout: NAVIGATION_TIMEOUT_MS });
       await page.waitForLoadState("networkidle", { timeout: IDLE_TIMEOUT_MS }).catch(() => {});
+      report(t("api.renderingScrolling"));
       for (let i = 0; i < SCROLL_STEPS; i++) {
         const atBottom = await page.evaluate(() => {
           const before = window.scrollY;
@@ -174,7 +193,11 @@ async function renderInBrowser(url: string, store: CaptureStore | null): Promise
       let html = await serialize();
       if (!clock) return { html, error: clockError, charts: null };
       try {
-        const capture = captureAnimatedCharts(page, { store, deadline: Date.now() + CAPTURE_BUDGET_MS });
+        const capture = captureAnimatedCharts(page, {
+          store,
+          deadline: Date.now() + CAPTURE_BUDGET_MS,
+          onChart: (n, total) => report(t("api.renderingChart", { n, total })),
+        });
         // Past the time limit the capture keeps failing against a closing
         // page; nobody is waiting for it then.
         capture.catch(() => {});

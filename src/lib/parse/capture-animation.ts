@@ -217,7 +217,13 @@ async function replaceWithImage(chart: Locator, src: string, width: number, heig
     a chart that fails stays as it is. */
 export async function captureAnimatedCharts(
   page: Page,
-  opts: { store: CaptureStore | null; deadline: number },
+  opts: {
+    store: CaptureStore | null;
+    deadline: number;
+    // Reported as each chart is taken up, so the ingest card keeps moving
+    // while the charts settle — the longest part of a render.
+    onChart?: (n: number, total: number) => void;
+  },
 ): Promise<CaptureResult> {
   const result: CaptureResult = { still: 0, settled: 0, looped: 0, undecided: 0 };
   const count = await markCharts(page);
@@ -232,6 +238,7 @@ export async function captureAnimatedCharts(
         result.undecided += count - n;
         break;
       }
+      opts.onChart?.(n + 1, count);
       const chart = page.locator(`[${MARK}="${n}"]`);
       let kind: keyof CaptureResult = "undecided";
       try {
