@@ -7,6 +7,7 @@ import { NOTE_WRAP_GAP as GAP, announceNoteWrap, type NoteWrapSpacer } from "@/l
 import { useCollab } from "@/components/collab/collab-context";
 import { useT } from "@/components/lang-provider";
 import { NoteEditor } from "@/components/outline/note-editor";
+import { SaveStateLabel } from "@/components/outline/save-state";
 import { useImageDrop } from "@/components/use-image-drop";
 import { imageMarkdown } from "@/lib/images";
 import { useNoteDraft } from "@/components/outline/use-note-draft";
@@ -160,7 +161,7 @@ export function FloatingNoteEditor({
   const { canEdit, premium } = useCollab();
   const cardRef = useRef<HTMLDivElement>(null);
   const [dropError, setDropError] = useState<string | null>(null);
-  const { draft, setDraft, cancel, markSaved, getOriginal } = useNoteDraft({
+  const { draft, setDraft, cancel, markSaved, confirmSaved, saveState, getOriginal } = useNoteDraft({
     noteId: edit.id,
     original: edit.original,
     initial: edit.draft,
@@ -204,6 +205,7 @@ export function FloatingNoteEditor({
     markSaved(trimmed);
     actions.dockNote(false);
     await actions.saveNote(edit.id, trimmed);
+    confirmSaved(trimmed);
   }
 
   const dockRef = useRef(dock);
@@ -338,6 +340,10 @@ export function FloatingNoteEditor({
       }${imageDrop.over ? " outline-2 outline-dashed outline-clay-400" : ""}`}
     >
       {dropError && <p className="mb-1 shrink-0 text-[11px] text-red-500">{dropError}</p>}
+      {/* The save state at the top of the card (SPEC.md §6). */}
+      <div className="mb-1 flex shrink-0 justify-end">
+        <SaveStateLabel state={saveState} />
+      </div>
       <NoteEditor
         className="min-h-0 flex-1"
         value={draft}

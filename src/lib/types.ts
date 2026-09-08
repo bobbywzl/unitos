@@ -29,6 +29,9 @@ export type NoteView = {
   // Account that wrote the note; null = before attribution existed. The author
   // label renders from this when the corpus is shared.
   createdById: string | null;
+  // When the note last changed on the server (ISO). A local draft older than
+  // this lost to an edit made elsewhere and is not replayed (lib/note-drafts.ts).
+  updatedAt: string;
   sources: SourceChip[];
   replies: ReplyView[];
 };

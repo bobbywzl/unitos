@@ -18,6 +18,7 @@ import { useImageDrop } from "@/components/use-image-drop";
 import { imageMarkdown } from "@/lib/images";
 import { NoteEditor } from "@/components/outline/note-editor";
 import { NoteId } from "@/components/outline/note-id";
+import { SaveStateLabel } from "@/components/outline/save-state";
 import { useNoteDraft } from "@/components/outline/use-note-draft";
 import type { OutlineActions } from "@/components/outline/use-outline";
 
@@ -203,7 +204,7 @@ export function NoteCard({
 
   // Auto-save while the editor is open (SPEC.md §6); Cancel restores the
   // content from before this edit.
-  const { draft, setDraft, cancel: cancelDraft, markSaved, getOriginal } = useNoteDraft({
+  const { draft, setDraft, cancel: cancelDraft, markSaved, confirmSaved, saveState, getOriginal } = useNoteDraft({
     noteId: note.id,
     original: note.content,
     initial: note.content,
@@ -269,6 +270,7 @@ export function NoteCard({
     markSaved(trimmed);
     setEditing(false);
     await actions.saveNote(note.id, trimmed);
+    confirmSaved(trimmed);
   }
 
   function openEditor() {
@@ -412,6 +414,8 @@ export function NoteCard({
         </span>
       )}
       <span className="ml-auto flex shrink-0 items-center gap-1.5">
+        {/* The save state, while editing (SPEC.md §6). */}
+        {editing && <SaveStateLabel state={saveState} />}
         {canEdit && !editing && (
           <button
             onClick={openEditor}

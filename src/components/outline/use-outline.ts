@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { arrayMove } from "@dnd-kit/sortable";
 import { api } from "@/lib/api";
+import { clearNoteDraft, confirmNoteDraft, readNoteDraft, sweepStaleDrafts } from "@/lib/note-drafts";
 import type { NotebookView, NoteView, SectionView } from "@/lib/types";
 import { useCollapsedView, type CollapsedView } from "@/components/use-collapsed-view";
 
@@ -118,6 +119,50 @@ export function useOutline(notebook: NotebookView, canEdit = true) {
   }
 
   const refresh = useCallback(() => router.refresh(), [router]);
+
+  // Local drafts (SPEC.md §6, lib/note-drafts.ts): a note's editor writes every
+  // keystroke to localStorage, and the server save may not have landed before
+  // the tab, the page, or the computer went away. On load, each draft is
+  // checked against the note: the same content, or a note changed elsewhere
+  // since, clears it; anything else is the user's unsaved words, written to the
+  // note now.
+  useEffect(() => {
+    sweepStaleDrafts();
+    if (!canEdit) return;
+    const replay: { id: string; content: string }[] = [];
+    for (const note of flattenNotes(tree)) {
+      const draft = readNoteDraft(note.id);
+      if (!draft) continue;
+      const content = draft.content.trim();
+      if (!content || content === note.content || Date.parse(note.updatedAt) > draft.savedAt) {
+        clearNoteDraft(note.id);
+        continue;
+      }
+      replay.push({ id: note.id, content });
+    }
+    if (replay.length === 0) return;
+    const byId = new Map(replay.map((r) => [r.id, r.content]));
+    setTree((prev) =>
+      prev.map(function walk(s): SectionView {
+        return {
+          ...s,
+          notes: s.notes.map((n) => (byId.has(n.id) ? { ...n, content: byId.get(n.id)! } : n)),
+          children: s.children.map(walk),
+        };
+      }),
+    );
+    void Promise.all(
+      replay.map((r) =>
+        api(`/api/notes/${r.id}`, "PATCH", { content: r.content })
+          .then(() => confirmNoteDraft(r.id, r.content))
+          .catch(() => {
+            // Still unsaved: the draft stays for the next load.
+          }),
+      ),
+    ).then(refresh);
+    // Once per load: the tree at mount is the server's state.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Ticker selection, pruned against the tree so deleted or merged notes drop out.
   const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(new Set());

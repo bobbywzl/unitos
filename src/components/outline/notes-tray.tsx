@@ -11,6 +11,8 @@ import { CollapsedViewToggle } from "@/components/collapsed-view-toggle";
 import { SortableItem, SortableList } from "@/components/sortable";
 import { NoteCard } from "@/components/outline/note-card";
 import { NoteEditor } from "@/components/outline/note-editor";
+import { SaveStateLabel } from "@/components/outline/save-state";
+import { useNoteCompose } from "@/components/outline/use-note-compose";
 import { VoiceNoteButton } from "@/components/outline/voice-note";
 import { Collapse } from "@/components/presence";
 import { SelectionBar } from "@/components/outline/selection-bar";
@@ -113,10 +115,10 @@ function TraySection({
   const t = useT();
   const { canEdit } = useCollab();
   const [collapsed, setCollapsed] = useState(false);
-  const [composing, setComposing] = useState(false);
-  const [draft, setDraft] = useState("");
   const [voiceError, setVoiceError] = useState<string | null>(null);
-  const accepted = section.notes.filter((n) => n.status !== "PENDING");
+  // The composer auto-saves (use-note-compose.ts); the note it owns stays out of the list.
+  const compose = useNoteCompose({ sectionId: section.id, notes: section.notes, actions, canEdit });
+  const accepted = compose.visibleNotes.filter((n) => n.status !== "PENDING");
   const grips = reorderable && canEdit;
 
   // Reorder by the grip (SPEC.md §6). The list shows the accepted notes; the
@@ -148,7 +150,7 @@ function TraySection({
         {accepted.length > 0 && <span className="text-[11px] text-sand-500">{accepted.length}</span>}
         {!collapsed && canEdit && (
           <button
-            onClick={() => setComposing(true)}
+            onClick={compose.open}
             data-track="section-add-note"
             data-tip={t("outline.addNoteTitle")}
             className="ml-auto text-[11px] text-sand-600 opacity-0 transition-opacity group-hover/section:opacity-100 focus-visible:opacity-100 hover:text-clay-700"
@@ -184,25 +186,25 @@ function TraySection({
             ))}
           </SortableList>
 
-          {composing && (
+          {compose.composing && (
             <form
-              onSubmit={async (e) => {
+              onSubmit={(e) => {
                 e.preventDefault();
-                const trimmed = draft.trim();
-                if (!trimmed) return;
-                await actions.addNote(section.id, trimmed);
-                setDraft("");
-                setComposing(false);
+                void compose.save();
               }}
             >
+              {/* The save state at the top of the composer (SPEC.md §6). */}
+              <div className="mb-1 flex min-h-4 justify-end">
+                <SaveStateLabel state={compose.saveState} />
+              </div>
               <NoteEditor
                 className="rounded-2xl bg-card p-3 shadow-soft"
-                value={draft}
-                onChange={setDraft}
+                value={compose.draft}
+                onChange={compose.setDraft}
                 onKeyDown={(e) => {
                   if (isImeKey(e)) return;
                   if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) e.currentTarget.closest("form")?.requestSubmit();
-                  if (e.key === "Escape") setComposing(false);
+                  if (e.key === "Escape") compose.escape();
                 }}
                 placeholder={t("outline.writeNotePlaceholder")}
               />
@@ -216,7 +218,7 @@ function TraySection({
                 </button>
                 <button
                   type="button"
-                  onClick={() => setComposing(false)}
+                  onClick={() => void compose.cancel()}
                   data-track="note-compose-cancel"
                   className="rounded-full border border-line px-3 py-1 text-xs text-sand-700 hover:bg-clay-100 hover:text-clay-800"
                 >
