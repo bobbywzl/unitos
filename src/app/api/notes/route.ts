@@ -6,6 +6,7 @@ import { sourceInputSchema } from "@/lib/anchors/input";
 import { MAX_SEGMENTS, passageSources, resolvePassage } from "@/lib/anchors/passage";
 import { documentBlocks, type ResolvedAnchor } from "@/lib/anchors/resolve";
 import { serverT } from "@/lib/i18n/server";
+import { normalizeNoteOrders } from "@/lib/order";
 import { videoAnchorFor } from "@/lib/video/anchor";
 import { timeRangeSchema } from "@/lib/video/types";
 import { parseBody } from "@/lib/validate";
@@ -34,6 +35,9 @@ const createSchema = z
     // (SPEC.md §1).
     origin: z.enum(["assistant", "find", "distill", "keypoints", "ask", "voice"]).optional(),
     pending: z.boolean().optional(),
+    // A note written in a section's composer lands at the top of the section
+    // (SPEC.md §6); everything else lands at the end.
+    top: z.boolean().optional(),
   })
   .refine((d) => !(d.source && d.video), { message: "Provide source or video, not both" });
 
@@ -107,7 +111,8 @@ export async function POST(req: Request) {
       status: data.pending || alwaysPending ? "PENDING" : "ACCEPTED",
       ...(derivationType ? { derivationType } : {}),
       createdById: access.user.id,
-      order: count,
+      // Top: before every sibling; the normalize below makes the orders 0..n again.
+      order: data.top ? -1 : count,
       ...(sources.length > 0 ? { sources: { create: sources } } : {}),
       ...(videoSource
         ? {
@@ -129,6 +134,7 @@ export async function POST(req: Request) {
     },
     include: { sources: true },
   });
+  if (data.top) await normalizeNoteOrders(data.sectionId);
   await bumpNotebook(section.notebookId);
   return NextResponse.json(note, { status: 201 });
 }

@@ -89,7 +89,7 @@ export function useNoteCompose({
         "Content-Type": "application/json",
         ...(account ? { [ACCOUNT_HEADER]: account } : {}),
       },
-      body: JSON.stringify({ sectionId, content: trimmed }),
+      body: JSON.stringify({ sectionId, content: trimmed, top: true }),
     })
       .then(async (res) => {
         if (!res.ok) return;

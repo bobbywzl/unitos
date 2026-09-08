@@ -27,6 +27,19 @@ import type { FloatingEdit, OutlineActions } from "@/components/outline/use-outl
 
 const WIDTH = 460;
 const MARGIN = 16;
+
+/** The width a floating card opens at: WIDTH, or what the window leaves. */
+export function floatingWidth(): number {
+  return Math.min(WIDTH, window.innerWidth - 2 * MARGIN);
+}
+
+/** Where a card dragged out lands: whole on screen. `left` is where the
+    pointer would put it; the card shifts in from the edge when it would hang
+    off, and the caller moves the grab point by the same amount, so the card
+    keeps tracking the pointer. */
+export function landingLeft(left: number): number {
+  return Math.max(MARGIN, Math.min(left, window.innerWidth - floatingWidth() - MARGIN));
+}
 // The part of the card that stays on screen when it is dragged past an edge.
 const KEEP = 96;
 // Less room than this beside the card and the text skips below it instead.
@@ -227,7 +240,12 @@ export function FloatingNoteEditor({
       setGrab(null);
       if (inRect(e.clientX, e.clientY, trayRect()) || inRect(e.clientX, e.clientY, railRect())) {
         dockRef.current();
+        return;
       }
+      // Released over the article: the card settles whole on screen. A drag
+      // may leave it hanging off the window's edge (the pull out of the tray
+      // ends near that edge); a card the reader cannot see whole is lost.
+      if (!pane) setPos((p) => ({ left: landingLeft(p.left), top: p.top }));
     };
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);

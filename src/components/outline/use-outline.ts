@@ -325,7 +325,8 @@ export function useOutline(notebook: NotebookView, canEdit = true) {
       void api(`/api/sections/${id}`, "PATCH", { order: toIndex }).then(refresh);
     },
     async addNote(sectionId, content) {
-      await api("/api/notes", "POST", { sectionId, content });
+      // A note from the composer lands at the top of its section (SPEC.md §6).
+      await api("/api/notes", "POST", { sectionId, content, top: true });
       refresh();
     },
     async saveNote(id, content) {

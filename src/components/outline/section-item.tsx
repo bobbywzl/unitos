@@ -9,6 +9,7 @@ import { DragHandle, SortableItem, SortableList, type HandleProps } from "@/comp
 import { AddSection } from "@/components/outline/add-section";
 import { NoteCard } from "@/components/outline/note-card";
 import { NoteEditor } from "@/components/outline/note-editor";
+import { SECTION_ACTION } from "@/components/outline/section-action";
 import { SaveStateLabel } from "@/components/outline/save-state";
 import { useNoteCompose } from "@/components/outline/use-note-compose";
 import { VoiceNoteButton } from "@/components/outline/voice-note";
@@ -80,20 +81,12 @@ export function SectionItem({
         )}
         <span className="text-[13px] text-sand-600">{notes.length || ""}</span>
         {canEdit && (
-          <button
-            onClick={compose.open}
-            data-tip={t("outline.addNoteTitle")}
-            className="ml-auto text-xs text-sand-600 hover:text-clay-700"
-          >
+          <button onClick={compose.open} data-tip={t("outline.addNoteTitle")} className={`ml-auto ${SECTION_ACTION}`}>
             {t("outline.addNoteBtn")}
           </button>
         )}
         {canEdit && (
-          <VoiceNoteButton
-            sectionId={section.id}
-            onError={setVoiceError}
-            className="text-xs text-sand-600 hover:text-clay-700"
-          />
+          <VoiceNoteButton sectionId={section.id} onError={setVoiceError} className={SECTION_ACTION} />
         )}
         {canEdit && (
           <button
@@ -110,27 +103,8 @@ export function SectionItem({
 
       {voiceError && <p className="mb-2 text-xs text-red-500">{voiceError}</p>}
       <div className="flex flex-col gap-2.5">
-        <SortableList
-          id={`notes-${section.id}`}
-          ids={notes.map((n) => n.id)}
-          onMove={(id, to) => actions.reorderNote(section.id, id, to)}
-          // Dropping a note on the middle of another merges the two.
-          onCombine={canEdit ? (id, intoId) => void actions.mergeNotes(intoId, [id]) : undefined}
-          canCombine={(id, intoId) => {
-            const a = notes.find((n) => n.id === id);
-            const b = notes.find((n) => n.id === intoId);
-            return a?.status === "ACCEPTED" && b?.status === "ACCEPTED";
-          }}
-        >
-          {notes.map((note) => (
-            <SortableItem key={note.id} id={note.id}>
-              {(noteHandle) => (
-                <NoteCard note={note} actions={actions} handle={noteHandle} variant="page" />
-              )}
-            </SortableItem>
-          ))}
-        </SortableList>
-
+        {/* The composer sits above the notes: a new note lands at the top of
+            the section (SPEC.md §6). */}
         {compose.composing && (
           <form
             onSubmit={(e) => {
@@ -170,6 +144,27 @@ export function SectionItem({
             </div>
           </form>
         )}
+
+        <SortableList
+          id={`notes-${section.id}`}
+          ids={notes.map((n) => n.id)}
+          onMove={(id, to) => actions.reorderNote(section.id, id, to)}
+          // Dropping a note on the middle of another merges the two.
+          onCombine={canEdit ? (id, intoId) => void actions.mergeNotes(intoId, [id]) : undefined}
+          canCombine={(id, intoId) => {
+            const a = notes.find((n) => n.id === id);
+            const b = notes.find((n) => n.id === intoId);
+            return a?.status === "ACCEPTED" && b?.status === "ACCEPTED";
+          }}
+        >
+          {notes.map((note) => (
+            <SortableItem key={note.id} id={note.id}>
+              {(noteHandle) => (
+                <NoteCard note={note} actions={actions} handle={noteHandle} variant="page" />
+              )}
+            </SortableItem>
+          ))}
+        </SortableList>
 
         {!nested && (
           <>
