@@ -47,6 +47,7 @@ under Plan; the admin accounts page shows it as a chip.
 |---|---|
 | Everything in Premium | Whole |
 | Visualize (SPEC.md §20) | The selection as a picture — a directed diagram, a drawing, or a short animation — on Claude Fable 5.1 at its highest effort; declined with the reason when the model is not certain the picture carries the passage's core idea |
+| Tool conversations (SPEC.md §21) | Continuing an Explain, Simplify, Analyze, or Visualize card's output into a conversation (Explain+, Simplify+, …). Offered to every account at the end of the tool's output; a non-Ultra press answers with the plain Ultra message, like Visualize, and the route answers 403 |
 
 ## Expired (trial ended, nothing granted)
 
@@ -85,6 +86,11 @@ until the owner makes one.
 - **2026-09-07** — Two tiers: Unitos Premium and Unitos Ultra. The free tier
   is gone. A new account gets Unitos Premium free for two months.
 - **2026-09-07** — Visualize is Unitos Ultra (SPEC.md §20).
+- **2026-09-08** — Tool conversations are Unitos Ultra (SPEC.md §21):
+  continuing an Explain, Simplify, Analyze, or Visualize card into a
+  conversation. Gated like Visualize — offered to every account, a non-Ultra
+  account sees the mention at the end of every tool's output and gets the
+  plain Ultra message on a press, the route answers 403.
 - **2026-09-04** — Three tiers: Unitos Free, Unitos Premium, Unitos Ultra.
   Differences to be decided over time; each one lands here when it is stated.
   (Superseded on 2026-09-07: Free is gone.)

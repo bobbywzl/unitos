@@ -29,6 +29,7 @@ import { kimi, kimiConfigured, kimiOptions } from "@/lib/kimi";
 import type { TFunc } from "@/lib/i18n/dictionaries";
 import { languageName, profileLines } from "@/lib/prompts/types";
 import { parseBody } from "@/lib/validate";
+import { ultraActive } from "@/lib/tiers";
 import { formatTimeRange, regionSchema } from "@/lib/video/types";
 import type { AssistantAction, AssistantAnchor, AssistantPlan } from "@/lib/types";
 
@@ -202,6 +203,12 @@ async function handle(req: Request, t: TFunc) {
   const access = await notebookAccess(data.notebookId, "editor");
   if (access instanceof NextResponse) return access;
   const user = access.user;
+  // Continuing an AI tool's output into a conversation (SPEC.md §21) is
+  // Unitos Ultra (TIERS.md): the toolbar offers it to every account, and a
+  // non-Ultra turn answers with the plain Ultra message, like VISUALIZE.
+  if (data.toolNoteId && !ultraActive(user)) {
+    return NextResponse.json({ error: t("api.continueNeedsUltra") }, { status: 403 });
+  }
 
   const notebook = await db.notebook.findUnique({ where: { id: data.notebookId } });
   if (!notebook) return NextResponse.json({ error: t("api.corpusNotFound") }, { status: 404 });
