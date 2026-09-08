@@ -119,10 +119,16 @@ function figureOutcome(detail: string): FigureOutcome | null {
   }
 }
 
-// The figure check as one line, or null when every caption has its figure.
+// The figure check as one line, or null when every caption has its figure
+// and the browser render, if one ran, delivered. A render that failed with
+// every caption beside a figure is worth the line too: the chart the
+// scripts animate stayed as the page's static drawing.
 function figureNotice(t: TFunc, detail: string): string | null {
   const outcome = figureOutcome(detail);
-  if (!outcome || outcome.captions.length === 0) return null;
+  if (!outcome) return null;
+  if (outcome.captions.length === 0) {
+    return outcome.renderError ? t("panes.reparseRenderFailed", { reason: outcome.renderError }) : null;
+  }
   const labels = outcome.captions.map((c) => c.split(/[.:]\s/)[0].slice(0, 24)).join(", ");
   return [
     t("panes.reparseCaptionsWithoutFigure", { labels }),

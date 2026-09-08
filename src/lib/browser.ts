@@ -11,19 +11,44 @@ import type { Browser } from "playwright-core";
 const CONNECT_TIMEOUT_MS = 20_000;
 // The longest a session may run. Browserless ends a session at its `timeout`
 // query parameter — 60 s unless the endpoint sets one, shorter than a page
-// render with a chart capture (lib/parse/render-page.ts) — so an endpoint
-// there that sets none gets this one; every other endpoint is used as given.
-const SESSION_TIMEOUT_MS = 300_000;
+// render with a chart capture (lib/parse/render-page.ts) — and refuses one
+// past the plan's maximum (400; 2 minutes on the free plan), so an endpoint
+// there that sets none is tried with each of these in turn, then as given;
+// every other endpoint is used as given.
+const SESSION_TIMEOUTS_MS = [300_000, 120_000];
+const BROWSERLESS_DEFAULT_SESSION_MS = 60_000;
 
-function sessionEndpoint(endpoint: string): string {
+// An endpoint to try, and how long its session lasts: null when nothing ends
+// it that is known here.
+type Candidate = { url: string; sessionMs: number | null };
+
+function sessionEndpoints(endpoint: string): Candidate[] {
   try {
     const url = new URL(endpoint);
-    if (!/(^|\.)browserless\.io$/i.test(url.hostname) || url.searchParams.has("timeout")) return endpoint;
-    url.searchParams.set("timeout", String(SESSION_TIMEOUT_MS));
-    return url.toString();
+    if (!/(^|\.)browserless\.io$/i.test(url.hostname)) return [{ url: endpoint, sessionMs: null }];
+    const given = url.searchParams.get("timeout");
+    if (given !== null) return [{ url: endpoint, sessionMs: Number(given) > 0 ? Number(given) : null }];
+    return [
+      ...SESSION_TIMEOUTS_MS.map((ms) => {
+        const withTimeout = new URL(url);
+        withTimeout.searchParams.set("timeout", String(ms));
+        return { url: withTimeout.toString(), sessionMs: ms };
+      }),
+      { url: endpoint, sessionMs: BROWSERLESS_DEFAULT_SESSION_MS },
+    ];
   } catch {
-    return endpoint;
+    return [{ url: endpoint, sessionMs: null }];
   }
+}
+
+// The session length each connected browser got, for the render's time
+// budget (lib/parse/render-page.ts).
+const sessionLengths = new WeakMap<Browser, number>();
+
+/** How long the browser's session lasts from its connection, in ms; null
+    when nothing known ends it (a local Chromium, another service). */
+export function sessionLengthOf(browser: Browser): number | null {
+  return sessionLengths.get(browser) ?? null;
 }
 
 export function browserConfigured(): boolean {
@@ -40,16 +65,21 @@ export async function launchBrowser(): Promise<Browser> {
   }
   const { chromium } = await import("playwright-core");
   if (endpoint) {
-    const withSession = sessionEndpoint(endpoint);
-    try {
-      return await chromium.connectOverCDP(withSession, { timeout: CONNECT_TIMEOUT_MS });
-    } catch (err) {
-      // A plan that caps the session shorter answers 400 to the timeout: the
-      // endpoint as given connects, and the capture reports if the session
-      // ends before it is done.
-      if (withSession === endpoint || !/\b400\b/.test(err instanceof Error ? err.message : String(err))) throw err;
-      console.warn("[browser] the session timeout was refused; connecting as configured:", err);
-      return chromium.connectOverCDP(endpoint, { timeout: CONNECT_TIMEOUT_MS });
+    const candidates = sessionEndpoints(endpoint);
+    for (let i = 0; i < candidates.length; i++) {
+      try {
+        const { url, sessionMs } = candidates[i];
+        const browser = await chromium.connectOverCDP(url, { timeout: CONNECT_TIMEOUT_MS });
+        if (sessionMs !== null) sessionLengths.set(browser, sessionMs);
+        return browser;
+      } catch (err) {
+        // A plan that caps the session shorter answers 400 to the timeout:
+        // the next candidate asks for less; the endpoint as given is last,
+        // and the capture reports if the session ends before it is done.
+        const last = i === candidates.length - 1;
+        if (last || !/\b400\b/.test(err instanceof Error ? err.message : String(err))) throw err;
+        console.warn("[browser] the session timeout was refused; asking for less:", err);
+      }
     }
   }
   const extra = process.env.CHROMIUM_ARGS?.split(/\s+/).filter(Boolean) ?? [];
