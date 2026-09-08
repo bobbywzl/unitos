@@ -33,7 +33,10 @@ const MAX_SAMPLES = 300;
 // browser — one to step, one to read — where a step at a time cost two each.
 // Over a remote browser (Browserless) a round trip is tens of milliseconds
 // and a session is minutes at most. The first batch is the still check.
-const STILL_MS = 1_000;
+// A chart that changes nothing in STILL_MS is still — long enough that a
+// loop's pause (a chart that holds a state between movements) is not
+// mistaken for stillness when the sampling starts inside it.
+const STILL_MS = 6_000;
 const SAMPLE_BATCH = 30;
 // A chart that holds for this long has settled.
 const SETTLE_MS = 4_000;
@@ -340,12 +343,18 @@ export async function captureAnimatedCharts(
           foundPeriod = period;
           await stopSampler(page).catch(() => {});
         }
-        if (period !== null && opts.store && result.looped < MAX_CHARTS) {
-          const loop = await recordLoop(page, chart, period, opts.deadline);
-          const gif = loop ? encodeWithinCap(loop.width, loop.height, loop.frames) : null;
-          const src = gif ? await opts.store(gif) : null;
-          if (loop && src) {
-            await replaceWithImage(chart, src, loop.width, loop.height);
+        if (period !== null) {
+          if (opts.store && result.looped < MAX_CHARTS) {
+            const loop = await recordLoop(page, chart, period, opts.deadline);
+            const gif = loop ? encodeWithinCap(loop.width, loop.height, loop.frames) : null;
+            const src = gif ? await opts.store(gif) : null;
+            if (loop && src) {
+              await replaceWithImage(chart, src, loop.width, loop.height);
+              kind = "looped";
+            }
+          } else {
+            // A loop found and not recorded (the review stores nothing): the
+            // chart stays as it is, and it is no failure.
             kind = "looped";
           }
         }
