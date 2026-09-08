@@ -116,6 +116,19 @@ function buildResponse(all) {
     });
   }
 
+  // VISUALIZE (SPEC.md §20): certain, one picture — a plain SVG the server
+  // reduces and stores — so Visualize and Visualize+ run end-to-end.
+  if (all.includes('"judgment"') && all.includes('"svg"')) {
+    return JSON.stringify({
+      judgment: { structure: "one loop", certain: true, reason: "Mock: the passage is a loop, a picture shows it." },
+      visual: {
+        kind: "picture",
+        caption: "Mock picture of the passage",
+        svg: '<svg xmlns="http://www.w3.org/2000/svg" width="320" height="120" viewBox="0 0 320 120"><rect x="10" y="10" width="300" height="100" rx="12" fill="#f3e8dd" stroke="#8a5a3c"/><text x="160" y="66" text-anchor="middle" font-size="16" fill="#3b2a1e">mock picture</text></svg>',
+      },
+    });
+  }
+
   // Assistant act: plan JSON with real quotes.
   if (all.includes('"actions"') && all.includes("format_block")) {
     const p = paragraphs[0];

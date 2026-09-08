@@ -2333,11 +2333,16 @@ export function ReaderInteractions({
         return;
       }
       // A conversation continued from the output reopens with it, its box
-      // open (SPEC.md §21).
+      // open (SPEC.md §21). The turns this session sent are kept by note id:
+      // the page's copy arrives with the refresh, which can take seconds on a
+      // large document, and a card closed and reopened before then must not
+      // lose them. Whichever copy is longer is the newer one.
+      const local = toolConversationsRef.current[stored.noteId] ?? [];
+      const conversation = local.length > stored.conversation.length ? local : stored.conversation;
       const chat: ToolChat = {
         ...NO_CHAT,
-        conversation: stored.conversation,
-        chatOpen: stored.conversation.length > 0,
+        conversation,
+        chatOpen: conversation.length > 0,
       };
       if (stored.kind === "explain" || stored.kind === "analyze" || stored.kind === "visualize") {
         const slot = claimSideSlot("explain", top);
@@ -4043,6 +4048,9 @@ export function ReaderInteractions({
   // Explain+ (Simplify+, …) and every turn goes deeper on the output. The
   // turns persist on the tool's annotation, so the card reopens with them
   // and the mark's symbol gains its plus.
+  // The turns sent this session, by the tool annotation's note id: what a
+  // reopened card shows until the refresh delivers the server's copy.
+  const toolConversationsRef = useRef<Record<string, ChatTurn[]>>({});
   function setToolChat(kind: "explain" | "simplify", update: (c: ToolChat) => Partial<ToolChat>) {
     if (kind === "explain") setBubble((b) => (b ? { ...b, ...update(b) } : b));
     else setSimplifyCard((c) => (c ? { ...c, ...update(c) } : c));
@@ -4082,10 +4090,11 @@ export function ReaderInteractions({
     toolChatAbortRef.current[kind] = controller;
     try {
       const turn = await assistantTurn(text, card.anchor, history, null, controller.signal, noteId);
-      setToolChat(kind, (c) => ({
-        busy: false,
-        conversation: [...c.conversation, { role: "assistant", content: turn.reply }],
-      }));
+      setToolChat(kind, (c) => {
+        const conversation: ChatTurn[] = [...c.conversation, { role: "assistant", content: turn.reply }];
+        toolConversationsRef.current[noteId] = conversation;
+        return { busy: false, conversation };
+      });
     } catch (err) {
       // Stopped, not failed: the sent message stays, no reply lands.
       if (controller.signal.aborted) {
@@ -4592,7 +4601,9 @@ function blockFormatKind(
         const plus =
           tool !== undefined &&
           tool !== "assistant" &&
-          ((stored?.conversation.length ?? 0) > 0 || openTurns > 0);
+          ((stored?.conversation.length ?? 0) > 0 ||
+            openTurns > 0 ||
+            (toolConversationsRef.current[h.noteId]?.length ?? 0) > 0);
         return {
           ...h,
           kind: "anchor" as const,
