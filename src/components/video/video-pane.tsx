@@ -8,6 +8,7 @@ import {
   CommentIcon,
   LocateIcon,
   QuestionIcon,
+  RegenerateIcon,
   SearchIcon,
   SparkleIcon,
   SpinnerIcon,
@@ -78,6 +79,10 @@ export type ArticleLayer = {
   reader: ReaderTextProps;
 };
 
+// The moment an Explain ran on: the range and the drawn region, if any
+// (SPEC.md §11). Regenerate runs the same one again.
+type ExplainAnchor = { startTime: number; endTime: number; region: Region | null };
+
 type Composer = {
   region: Region | null;
   startTime: string;
@@ -139,10 +144,14 @@ export function VideoPane({
   const [activeLineId, setActiveLineId] = useState<string | null>(null);
   const [drawing, setDrawing] = useState(false);
   const [composer, setComposer] = useState<Composer | null>(null);
+  // anchor = the moment this explanation ran on, noteId = the annotation it
+  // saved: what Regenerate runs again and replaces (SPEC.md §4).
   const [explaining, setExplaining] = useState<{
     content: string;
     done: boolean;
     error: string | null;
+    anchor: ExplainAnchor;
+    noteId: string | null;
   } | null>(null);
   const [openNote, setOpenNote] = useState<VideoAnnotationItem | null>(null);
   const [flashSourceId, setFlashSourceId] = useState<string | null>(null);
@@ -447,10 +456,20 @@ export function VideoPane({
     explainAbortRef.current?.abort();
   }
 
-  async function runExplain(anchor: { startTime: number; endTime: number; region: Region | null }) {
+  // Regenerate: Explain runs again on the same moment, and the new explanation
+  // replaces the old (SPEC.md §4).
+  async function regenerateExplain() {
+    const card = explaining;
+    if (!card || !card.done) return;
+    await runExplain(card.anchor, card.noteId);
+  }
+
+  // replaceNoteId: the annotation this run regenerates. It goes only once the
+  // new one is stored, so a failed run never loses what stands (SPEC.md §4).
+  async function runExplain(anchor: ExplainAnchor, replaceNoteId?: string | null) {
     const { startTime, endTime, region } = anchor;
     setOpenNote(null);
-    setExplaining({ content: "", done: false, error: null });
+    setExplaining({ content: "", done: false, error: null, anchor, noteId: null });
     explainAbortRef.current?.abort();
     const controller = new AbortController();
     explainAbortRef.current = controller;
@@ -479,22 +498,30 @@ export function VideoPane({
         if (done) break;
         raw += decoder.decode(value, { stream: true });
         const text = splitStreamNote(splitStreamError(raw).text).text;
-        setExplaining({ content: text, done: false, error: null });
+        setExplaining((e) => (e ? { ...e, content: text } : e));
       }
       const { text: withoutError, error: streamError } = splitStreamError(raw);
-      const { text } = splitStreamNote(withoutError);
-      setExplaining({ content: text, done: true, error: streamError });
+      const { text, noteId } = splitStreamNote(withoutError);
+      setExplaining((e) =>
+        e ? { ...e, content: text, done: true, error: streamError, noteId } : e,
+      );
+      if (replaceNoteId && noteId) await api(`/api/notes/${replaceNoteId}`, "DELETE").catch(() => {});
       if (!streamError) router.refresh();
     } catch (err) {
       if (controller.signal.aborted) {
         setExplaining((e) => (e && e.content.trim() ? { ...e, done: true } : null));
         return;
       }
-      setExplaining({
-        content: "",
-        done: true,
-        error: err instanceof Error ? err.message : t("video.explainFailed"),
-      });
+      setExplaining((e) =>
+        e
+          ? {
+              ...e,
+              content: "",
+              done: true,
+              error: err instanceof Error ? err.message : t("video.explainFailed"),
+            }
+          : e,
+      );
     } finally {
       if (explainAbortRef.current === controller) explainAbortRef.current = null;
       setComposer((c) => (c ? { ...c, busy: false } : c));
@@ -798,6 +825,17 @@ export function VideoPane({
             )}
             {explaining.done && !explaining.error && (
               <span className="text-xs text-sand-500">{t("video.savedAsAnnotation")}</span>
+            )}
+            {explaining.done && canEdit && (
+              <button
+                onClick={() => void regenerateExplain()}
+                data-track="video-explain-regenerate"
+                aria-label={t("common.regenerate")}
+                data-tip={t("video.regenerateExplainTitle")}
+                className="text-sand-500 hover:text-clay-800"
+              >
+                <RegenerateIcon size={12} />
+              </button>
             )}
             <button
               onClick={() => {

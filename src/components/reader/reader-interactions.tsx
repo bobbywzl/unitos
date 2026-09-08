@@ -27,6 +27,7 @@ import type {
   Distillation,
   DistillationView,
   Extraction,
+  ExtractionSpan,
   ExtractionView,
   Keypoints,
   KeypointsView,
@@ -59,6 +60,7 @@ import {
   QuestionIcon,
   QuoteIcon,
   ChartIcon,
+  RegenerateIcon,
   SearchIcon,
   VisualizeIcon,
   SparkleIcon,
@@ -100,6 +102,19 @@ type Anchor = Segment & { segments?: Segment[] };
     selection stayed in one block. */
 function segmentsOf(anchor: Anchor): Segment[] {
   return anchor.segments && anchor.segments.length > 0 ? anchor.segments : [anchor];
+}
+
+/** A stored span read back as a selection: what a tool needs to run again on
+    the passage it ran on before. */
+function anchorOfSpan(span: ExtractionSpan): Anchor {
+  return {
+    blockId: span.blockId,
+    startOffset: span.start,
+    endOffset: span.end,
+    quotedText: span.quotedText,
+    prefix: span.prefix,
+    suffix: span.suffix,
+  };
 }
 
 /** The passage's text: the segments' quotes, one paragraph each. */
@@ -532,6 +547,10 @@ function dockBelowCard(articleLeft: number, articleRight: number, cw: number) {
   const left = Math.max(8, Math.min(articleLeft, cw - width - 8));
   return { left, width };
 }
+
+/** Where a side card sits: what claimSideSlot returns, and what a card keeps
+    when it regenerates in place. */
+type SideSlot = { left: number; top: number; width: number; side: "right" | "left" };
 
 /** One row of the match card: a quote that jumps to its text in the article.
     The origin phrase reads solid, a passage dashed — the same as the marks.
@@ -1286,6 +1305,17 @@ export function ReaderInteractions({
       return false;
     }
   }
+  // Regenerate replaces (SPEC.md §4): the annotation a run replaced goes once
+  // the new one is stored, so one selection never carries two of the same
+  // tool's marks. No toast — the new output is the notice.
+  async function discardNote(noteId: string) {
+    broadcastNoteRemoved(noteId);
+    try {
+      await api(`/api/notes/${noteId}`, "DELETE");
+    } catch {
+      broadcastNoteRestored(noteId);
+    }
+  }
   async function deleteExplain() {
     const card = bubble;
     if (!card?.noteId || card.streaming || card.busy) return;
@@ -1318,6 +1348,27 @@ export function ReaderInteractions({
     if (!card?.noteId || card.streaming || card.busy) return;
     setSimplifyCard(null);
     await deleteNote(card.noteId, t("reader.simplifiedRemoved"));
+  }
+  // Regenerate: the tool runs again on the same selection, in the same card,
+  // and the new output replaces the old (SPEC.md §4). Visualize regenerates
+  // like the rest, and stays Unitos Ultra.
+  async function regenerateBubble() {
+    const card = bubble;
+    if (!card || !card.anchor || card.streaming || card.busy) return;
+    if (card.kind === "visualize" && !ultra) {
+      showToast(t("reader.visualizeNeedsUltra"));
+      return;
+    }
+    const { kind, anchor, noteId } = card;
+    const slot: SideSlot = { left: card.left, top: card.top, width: card.width, side: card.side };
+    await runBubble(kind, anchor, slot, noteId);
+  }
+  async function regenerateSimplify() {
+    const card = simplifyCard;
+    if (!card || card.streaming || card.busy) return;
+    const { anchor, noteId } = card;
+    const slot: SideSlot = { left: card.left, top: card.top, width: card.width, side: card.side };
+    await runSimplify(anchor, slot, noteId);
   }
   function closeAssistantChat() {
     // A turn still in flight aborts too — closing the card means nobody will
@@ -2816,7 +2867,20 @@ export function ReaderInteractions({
     setPopover(null);
     window.getSelection()?.removeAllRanges();
     markFreshAnchor(anchor);
-    const slot = claimSideSlot("explain", yTop);
+    await runBubble(kind, anchor, claimSideSlot("explain", yTop));
+  }
+  // replaceNoteId: the annotation this run regenerates. It goes only once the
+  // new one is stored, so a failed run never loses what stands (SPEC.md §4).
+  async function runBubble(
+    kind: ExplainBubble["kind"],
+    anchor: Anchor,
+    slot: SideSlot,
+    replaceNoteId?: string | null,
+  ) {
+    if (kind === "visualize") {
+      await runVisualize(anchor, slot, replaceNoteId);
+      return;
+    }
     setBubble({ ...slot, ...NO_CHAT, kind, text: "", streaming: true, error: null, declined: null, anchor, noteId: null });
     explainAbortRef.current?.abort();
     const controller = new AbortController();
@@ -2860,6 +2924,7 @@ export function ReaderInteractions({
             }
           : b,
       );
+      if (replaceNoteId && noteId) await discardNote(replaceNoteId);
       router.refresh();
     } catch (err) {
       // Stopped, not failed: what streamed in stays; an empty card closes.
@@ -2883,7 +2948,9 @@ export function ReaderInteractions({
     setPopover(null);
     window.getSelection()?.removeAllRanges();
     markFreshAnchor(anchor);
-    const slot = claimSideSlot("simplify", yTop);
+    await runSimplify(anchor, claimSideSlot("simplify", yTop));
+  }
+  async function runSimplify(anchor: Anchor, slot: SideSlot, replaceNoteId?: string | null) {
     setSimplifyCard({
       anchor,
       ...slot,
@@ -2938,6 +3005,7 @@ export function ReaderInteractions({
             }
           : c,
       );
+      if (replaceNoteId && noteId) await discardNote(replaceNoteId);
       router.refresh();
     } catch (err) {
       // Stopped, not failed: what streamed in stays; an empty card closes.
@@ -2967,7 +3035,9 @@ export function ReaderInteractions({
     setPopover(null);
     window.getSelection()?.removeAllRanges();
     markFreshAnchor(anchor);
-    const slot = claimSideSlot("explain", yTop);
+    await runVisualize(anchor, claimSideSlot("explain", yTop));
+  }
+  async function runVisualize(anchor: Anchor, slot: SideSlot, replaceNoteId?: string | null) {
     setBubble({
       ...slot,
       ...NO_CHAT,
@@ -3020,6 +3090,7 @@ export function ReaderInteractions({
       if (!content.trim()) throw new Error(t("reader.emptyResponse"));
       if (noteId) addLocalAnchor(anchor);
       setBubble((b) => (b ? { ...b, text: content, noteId, streaming: false } : b));
+      if (replaceNoteId && noteId) await discardNote(replaceNoteId);
       router.refresh();
     } catch (err) {
       // Stopped, not failed: nothing to keep, the card closes.
@@ -3328,7 +3399,9 @@ export function ReaderInteractions({
     setDistillRun(null);
   }
 
-  async function runDistill(question: string) {
+  // replaceId: the extraction this run regenerates — it goes once the new one
+  // is stored (SPEC.md §4).
+  async function runDistill(question: string, replaceId?: string) {
     const q = question.trim();
     if (!q || distillRun) return;
     const runDocumentId = documentId;
@@ -3374,6 +3447,7 @@ export function ReaderInteractions({
       };
       setLocalDistillations((prev) => [fresh, ...prev]);
       setDistillShownId(fresh.id);
+      if (replaceId) await deleteDistillation(replaceId);
       // The page may be closed: the pill's progress bar stops, and the toast
       // says where the result is.
       if (!distillOpenRef.current) showToast(t("reader.distilledToast"));
@@ -3481,6 +3555,18 @@ export function ReaderInteractions({
     setPopover(null);
     setSubmenu(null);
     window.getSelection()?.removeAllRanges();
+    await runExtract(anchor);
+  }
+  // Regenerate: Match-it runs again on the same origin phrase, and the new
+  // match replaces the old (SPEC.md §4).
+  async function regenerateExtraction(extraction: ExtractionView) {
+    if (extractBusy) return;
+    setExtractCard(null);
+    await runExtract(anchorOfSpan(extraction.origin), extraction.id);
+  }
+  // replaceId: the match this run regenerates — it goes once the new one is
+  // stored (SPEC.md §4).
+  async function runExtract(anchor: Anchor, replaceId?: string) {
     setExtractBusy(true);
     const controller = new AbortController();
     extractAbortRef.current = controller;
@@ -3508,6 +3594,7 @@ export function ReaderInteractions({
       };
       freshExtractIdsRef.current.add(fresh.id);
       setLocalExtractions((prev) => [...prev, fresh]);
+      if (replaceId) await removeExtraction(replaceId);
       showToast(
         t("reader.extractDone", { label, n: fresh.spans.length, s: plural(fresh.spans.length) }),
       );
@@ -3522,18 +3609,26 @@ export function ReaderInteractions({
     }
   }
 
-  async function deleteExtraction(id: string) {
+  // The stored match goes; the caller says whether the reader hears about it.
+  // A regenerate removes quietly — the run that follows lands the new match.
+  async function removeExtraction(id: string) {
     try {
       await api(`/api/notebooks/${notebookId}/documents/${documentId}`, "PATCH", {
         removeExtractionId: id,
       });
       setLocalExtractions((prev) => prev.filter((x) => x.id !== id));
-      setExtractCard(null);
-      router.refresh();
-      showToast(t("reader.extractionRemoved"));
+      return true;
     } catch (err) {
       showError(err instanceof Error ? err.message : t("reader.deleteFailed"));
+      return false;
     }
+  }
+
+  async function deleteExtraction(id: string) {
+    if (!(await removeExtraction(id))) return;
+    setExtractCard(null);
+    router.refresh();
+    showToast(t("reader.extractionRemoved"));
   }
 
   // Voice: stop whatever is reading — the audio element or the browser voice.
@@ -5509,14 +5604,26 @@ function blockFormatKind(
               <div className="mt-2 flex items-center justify-between">
                 <AuthorChip createdById={extraction.createdById} />
                 {canEdit && (
-                  <button
-                    onClick={() => void deleteExtraction(extraction.id)}
-                    data-track="extract-card-delete"
-                    className="text-xs font-semibold text-red-500 hover:text-red-700"
-                    data-tip={t("reader.deleteExtractionTitle")}
-                  >
-                    {t("common.delete")}
-                  </button>
+                  <span className="flex items-center gap-3">
+                    <button
+                      onClick={() => void regenerateExtraction(extraction)}
+                      data-track="extract-card-regenerate"
+                      disabled={extractBusy}
+                      className="text-sand-500 hover:text-clay-800 disabled:opacity-40"
+                      aria-label={t("common.regenerate")}
+                      data-tip={t("reader.regenerateExtractionTitle")}
+                    >
+                      <RegenerateIcon size={12} />
+                    </button>
+                    <button
+                      onClick={() => void deleteExtraction(extraction.id)}
+                      data-track="extract-card-delete"
+                      className="text-xs font-semibold text-red-500 hover:text-red-700"
+                      data-tip={t("reader.deleteExtractionTitle")}
+                    >
+                      {t("common.delete")}
+                    </button>
+                  </span>
                 )}
               </div>
             </div>
@@ -5997,6 +6104,23 @@ function blockFormatKind(
                   {t("reader.openVisualization")}
                 </a>
               )}
+              {!bubble.streaming && !bubble.busy && bubble.anchor && (
+                <button
+                  onClick={() => void regenerateBubble()}
+                  data-track={`${bubble.kind}-regenerate`}
+                  className="text-sand-500 hover:text-clay-800"
+                  aria-label={t("common.regenerate")}
+                  data-tip={t(
+                    bubble.kind === "analyze"
+                      ? "reader.regenerateAnalysisTitle"
+                      : bubble.kind === "visualize"
+                        ? "reader.regenerateVisualizationTitle"
+                        : "reader.regenerateExplanationTitle",
+                  )}
+                >
+                  <RegenerateIcon size={12} />
+                </button>
+              )}
               {bubble.noteId && !bubble.streaming && (
                 <button
                   onClick={() => void deleteExplain()}
@@ -6085,6 +6209,17 @@ function blockFormatKind(
                 >
                   <StopIcon size={9} />
                   {t("common.stop")}
+                </button>
+              )}
+              {!simplifyCard.streaming && !simplifyCard.busy && (
+                <button
+                  onClick={() => void regenerateSimplify()}
+                  data-track="simplify-regenerate"
+                  className="text-sand-500 hover:text-clay-800"
+                  aria-label={t("common.regenerate")}
+                  data-tip={t("reader.regenerateSimplifyTitle")}
+                >
+                  <RegenerateIcon size={12} />
                 </button>
               )}
               {simplifyCard.noteId && !simplifyCard.streaming && (
@@ -6633,7 +6768,7 @@ function blockFormatKind(
               ? t("reader.addSectionFirst")
               : t("reader.addPendingNote", { section: sectionChoices[0].label })
           }
-          onRun={(question) => void runDistill(question)}
+          onRun={(question, replaceId) => void runDistill(question, replaceId)}
           onCancel={cancelDistill}
           onOpen={(id) => {
             setDistillShownId(id);

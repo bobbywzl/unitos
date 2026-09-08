@@ -39,7 +39,7 @@ export function DistillPage({
   error: string | null;
   canAddNotes: boolean;
   addNoteHint: string; // title for the Add to notes button
-  onRun: (question: string) => void;
+  onRun: (question: string, replaceId?: string) => void; // replaceId: regenerate that extraction
   onCancel: () => void; // abort the running scan; the ask view keeps the question
   onOpen: (id: string) => void;
   onAsk: () => void;
@@ -105,6 +105,16 @@ export function DistillPage({
             <span className="font-display text-[18px]">{t("panes.distill")}</span>
           )}
           <span className="ml-auto flex items-center gap-3">
+            {shown && !running && canEdit && (
+              <button
+                onClick={() => onRun(shown.question, shown.id)}
+                data-track="distill-page-regenerate"
+                className="text-xs font-semibold text-sand-600 hover:text-clay-800"
+                data-tip={t("panes.distillAgainTitle")}
+              >
+                {t("common.regenerate")}
+              </button>
+            )}
             {shown && !running && canEdit && (
               <button
                 onClick={() => onDelete(shown.id)}

@@ -6,6 +6,7 @@ import { useT } from "@/components/lang-provider";
 import { Markdown } from "@/components/markdown";
 import { ThinkingIndicator } from "@/components/thinking";
 import { HIGHLIGHT_HUES, HUE_DOT, HUE_KEY, type HighlightHue } from "@/components/reader/hues";
+import { api } from "@/lib/api";
 import { splitStreamError, splitStreamNote } from "@/lib/derive/config";
 import { regionBounds, regionPathD, type Region } from "@/lib/video/types";
 
@@ -27,7 +28,16 @@ export type PageMark = {
 
 type DrawState = { points: { x: number; y: number }[] };
 type Pending = { region: Region };
-type Answer = { content: string; done: boolean; error: string | null };
+// asked = the question this answer ran with, null when Explain ran without
+// one: what Regenerate runs again. noteId = the annotation it saved, which
+// Regenerate replaces (SPEC.md §4).
+type Answer = {
+  content: string;
+  done: boolean;
+  error: string | null;
+  asked: string | null;
+  noteId: string | null;
+};
 
 export function PageBlock({
   documentId,
@@ -139,14 +149,20 @@ export function PageBlock({
     setError(null);
   }
 
-  // Ask streams EXPLAIN with the typed question; Explain streams it without one.
+  // Ask streams EXPLAIN with the typed question; Explain streams it without
+  // one. asked is the question to run: null runs Explain.
   async function ask(withQuestion: boolean) {
-    if (!pending || busy !== null) return;
     const q = question.trim();
     if (withQuestion && !q) return;
+    await run(withQuestion ? q : null);
+  }
+  // replaceNoteId: the annotation this run regenerates. It goes only once the
+  // new one is stored, so a failed run never loses what stands (SPEC.md §4).
+  async function run(asked: string | null, replaceNoteId?: string | null) {
+    if (!pending || busy !== null) return;
     setBusy("ask");
     setError(null);
-    setAnswer({ content: "", done: false, error: null });
+    setAnswer({ content: "", done: false, error: null, asked, noteId: null });
     const controller = new AbortController();
     askAbortRef.current = controller;
     try {
@@ -161,7 +177,7 @@ export function PageBlock({
           page: {
             blockId,
             region: pending.region,
-            question: withQuestion ? q : undefined,
+            question: asked ?? undefined,
           },
         }),
       });
@@ -177,11 +193,12 @@ export function PageBlock({
         if (done) break;
         raw += decoder.decode(value, { stream: true });
         const live = splitStreamNote(splitStreamError(raw).text).text;
-        setAnswer({ content: live, done: false, error: null });
+        setAnswer({ content: live, done: false, error: null, asked, noteId: null });
       }
       const { text: withoutError, error: streamError } = splitStreamError(raw);
-      const { text: content } = splitStreamNote(withoutError);
-      setAnswer({ content, done: true, error: streamError });
+      const { text: content, noteId } = splitStreamNote(withoutError);
+      setAnswer({ content, done: true, error: streamError, asked, noteId });
+      if (replaceNoteId && noteId) await api(`/api/notes/${replaceNoteId}`, "DELETE").catch(() => {});
       if (!streamError) router.refresh();
     } catch (err) {
       setAnswer(null);
@@ -438,6 +455,15 @@ export function PageBlock({
             ) : (
               answer.done && (
                 <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => void run(answer.asked, answer.noteId)}
+                    data-track="page-answer-regenerate"
+                    disabled={busy !== null}
+                    data-tip={t("panes.pageRegenerateTitle")}
+                    className={quietButtonClass}
+                  >
+                    {t("common.regenerate")}
+                  </button>
                   <button onClick={close} data-track="page-answer-close" className={quietButtonClass}>
                     {t("common.close")}
                   </button>

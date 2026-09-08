@@ -306,6 +306,19 @@ export function RedoIcon(props: IconProps) {
   );
 }
 
+// Two arcs closing a circle: Regenerate — the tool runs again on the same
+// input and the new output replaces the old.
+export function RegenerateIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M20.5 11A8.5 8.5 0 0 0 6.3 5.7L3 9" />
+      <path d="M3 3.5V9h5.5" />
+      <path d="M3.5 13a8.5 8.5 0 0 0 14.2 5.3L21 15" />
+      <path d="M21 20.5V15h-5.5" />
+    </Icon>
+  );
+}
+
 export function CheckIcon(props: IconProps) {
   return (
     <Icon {...props}>

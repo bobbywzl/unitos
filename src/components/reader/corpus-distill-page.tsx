@@ -67,7 +67,9 @@ export function CorpusDistillPage({
   const all = [...local.filter((d) => !distillations.some((p) => p.id === d.id)), ...distillations];
   const shown = currentId ? (all.find((d) => d.id === currentId) ?? null) : null;
 
-  async function run(q: string) {
+  // replaceId: the extraction this run regenerates — it goes once the new one
+  // is stored (SPEC.md §4).
+  async function run(q: string, replaceId?: string) {
     const trimmed = q.trim();
     if (!trimmed || running) return;
     const controller = new AbortController();
@@ -116,6 +118,7 @@ export function CorpusDistillPage({
       };
       setLocal((prev) => [fresh, ...prev]);
       setCurrentId(fresh.id);
+      if (replaceId) await remove(replaceId);
       router.refresh();
     } catch (err) {
       if (controller.signal.aborted) return;
@@ -188,6 +191,16 @@ export function CorpusDistillPage({
             <span className="font-display text-[18px]">{t("panes.distillCorpus")}</span>
           )}
           <span className="ml-auto flex items-center gap-3">
+            {shown && !running && canEdit && (
+              <button
+                onClick={() => void run(shown.question, shown.id)}
+                data-track="distill-corpus-regenerate"
+                className="text-xs font-semibold text-sand-600 hover:text-clay-800"
+                data-tip={t("panes.distillAgainTitle")}
+              >
+                {t("common.regenerate")}
+              </button>
+            )}
             {shown && !running && canEdit && (
               <button
                 onClick={() => void remove(shown.id)}

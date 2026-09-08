@@ -68,10 +68,15 @@ export function AskRange({
       setError(t("video.timesInvalid"));
       return;
     }
+    await run(q, { startTime: start, endTime: end });
+  }
+  // Regenerate asks the answer's own question over its own range again, so an
+  // edited box does not change what runs (SPEC.md §4).
+  async function run(q: string, range: { startTime: number; endTime: number }) {
+    if (busy || !hasTranscript) return;
     setError(null);
     setSaved(false);
     setBusy(true);
-    const range = { startTime: start, endTime: end };
     setAnswer({ text: "", range, question: q });
     const controller = new AbortController();
     abortRef.current = controller;
@@ -231,9 +236,17 @@ export function AskRange({
               <Markdown>{answer.text}</Markdown>
             </div>
           )}
-          {!busy && answer.text.trim() && canEdit && (
-            <div className="mt-2.5">
-              {saved ? (
+          {!busy && answer.text.trim() && (
+            <div className="mt-2.5 flex items-center gap-2">
+              <button
+                onClick={() => void run(answer.question, answer.range)}
+                data-track="video-ask-regenerate"
+                data-tip={t("video.regenerateAnswerTitle")}
+                className="rounded-full border border-line px-3 py-1 text-[11.5px] font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800"
+              >
+                {t("common.regenerate")}
+              </button>
+              {!canEdit ? null : saved ? (
                 <span className="text-[11.5px] font-semibold text-sage-700">
                   {t("video.addedPending")}
                 </span>

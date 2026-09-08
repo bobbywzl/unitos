@@ -44,6 +44,8 @@ export function FindPanel({
   const [matches, setMatches] = useState<VideoFindMatch[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState<Set<number>>(new Set());
+  // The query these matches came from: what Regenerate searches again.
+  const [ran, setRan] = useState<string | null>(null);
   const [saving, setSaving] = useState<number | null>(null);
   // The running find, so Stop can abort it.
   const findAbortRef = useRef<AbortController | null>(null);
@@ -52,8 +54,13 @@ export function FindPanel({
   }
 
   async function find() {
-    const q = query.trim();
+    await run(query.trim());
+  }
+  // Regenerate searches the matches' own query again, so an edited box does
+  // not change what runs (SPEC.md §4).
+  async function run(q: string) {
     if (!q || busy) return;
+    setRan(q);
     setBusy(true);
     setError(null);
     setMatches(null);
@@ -147,6 +154,18 @@ export function FindPanel({
         <p className="mt-2 px-1 text-xs text-sand-600">
           {t(audio ? "video.findEmptyAudio" : "video.findEmpty")}
         </p>
+      )}
+      {matches !== null && ran !== null && !busy && (
+        <div className="mt-2 flex px-1">
+          <button
+            onClick={() => void run(ran)}
+            data-track="video-find-regenerate"
+            data-tip={t("video.regenerateFindTitle")}
+            className="rounded-full px-2 py-0.5 text-[11px] font-semibold text-sand-600 hover:bg-clay-100 hover:text-clay-800"
+          >
+            {t("common.regenerate")}
+          </button>
+        </div>
       )}
       {matches !== null && matches.length > 0 && (
         <div className="mt-2.5 flex flex-col gap-2">
