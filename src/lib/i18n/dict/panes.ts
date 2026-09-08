@@ -419,6 +419,9 @@ const en = {
   figureMoveNoBrowser:
     "{label} is drawn by the page's scripts. Set BROWSER_WS_ENDPOINT or CHROMIUM_PATH so Unitos can move it over.",
   figureTryAgain: "Try again",
+  // A figure's video that has not loaded (figure-media.tsx)
+  videoLoading: "Loading the video…",
+  videoNotLoading: "This figure is a video. It is not loading.",
 };
 
 const zh: Record<keyof typeof en, string> = {
@@ -785,6 +788,9 @@ const zh: Record<keyof typeof en, string> = {
   figureMoveNoBrowser:
     "{label} 由页面脚本绘制。设置 BROWSER_WS_ENDPOINT 或 CHROMIUM_PATH，Unitos 才能把它搬过来。",
   figureTryAgain: "再试一次",
+  // A figure's video that has not loaded (figure-media.tsx)
+  videoLoading: "正在加载视频…",
+  videoNotLoading: "此图为视频。视频未能加载。",
 };
 
 export const panes = { en, zh } as const;

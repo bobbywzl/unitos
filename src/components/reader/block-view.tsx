@@ -15,6 +15,7 @@ import {
 } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { Equation } from "@/components/reader/equation";
+import { MediaHtml } from "@/components/reader/figure-media";
 import type { TFunc, TKey } from "@/lib/i18n/dictionaries";
 
 const CHAIN_BUTTON =
@@ -796,11 +797,11 @@ export function BlockView({
       if (block.html) {
         return (
           <div className="relative">
-            <div
-              data-block-id={block.id}
-              data-source-id={firstSourceId}
+            <MediaHtml
+              blockId={block.id}
+              sourceId={firstSourceId}
               className={`${shared} reader-table my-3 overflow-x-auto text-sm ${htmlHighlighted}`}
-              dangerouslySetInnerHTML={{ __html: block.html }}
+              html={block.html}
             />
             {figureAnchors.length > 0 && <HighlightLabel anchors={figureAnchors} />}
           </div>
@@ -818,11 +819,11 @@ export function BlockView({
       if (block.html) {
         return (
           <div className="relative">
-            <div
-              data-block-id={block.id}
-              data-source-id={firstSourceId}
+            <MediaHtml
+              blockId={block.id}
+              sourceId={firstSourceId}
               className={`${shared} reader-figure my-4 ${htmlHighlighted}`}
-              dangerouslySetInnerHTML={{ __html: block.html }}
+              html={block.html}
             />
             {figureAnchors.length > 0 && <HighlightLabel anchors={figureAnchors} />}
           </div>
