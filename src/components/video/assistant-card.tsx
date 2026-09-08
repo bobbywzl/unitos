@@ -6,7 +6,9 @@ import { api } from "@/lib/api";
 import { useImeGuard } from "@/lib/ime";
 import { SparkleIcon, StopIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
+import { ReaderInteractions } from "@/components/reader/reader-interactions";
 import { setRevealFlag } from "@/components/reader/reveal";
+import type { ArticleLayer } from "@/components/video/video-pane";
 import { Markdown } from "@/components/markdown";
 import { ThinkingIndicator } from "@/components/thinking";
 import { runFormalize } from "@/lib/video/formalize-client";
@@ -321,11 +323,19 @@ export function ArticleSection({
   notebookId,
   documentId,
   article,
+  layer,
+  sectionChoices,
   canEdit,
 }: {
   notebookId: string;
   documentId: string;
   article: FormalizedArticle | null;
+  /** The article's own reader layer (SPEC.md §11): the card renders the
+      article's blocks through it, so every text tool works on the article in
+      place. Null for an article stored before it became a document; that one
+      renders as markdown until Open as document gives it one. */
+  layer: ArticleLayer | null;
+  sectionChoices: { id: string; label: string }[];
   canEdit: boolean;
 }) {
   const t = useT();
@@ -428,8 +438,23 @@ export function ArticleSection({
         </div>
       </div>
       <div className="rounded-2xl bg-card px-6 py-5 shadow-soft">
-        <h3 className="mb-3 text-[19px] font-bold text-sand-900">{article.title}</h3>
-        <Markdown>{article.markdown}</Markdown>
+        {layer ? (
+          <ReaderInteractions
+            embedded
+            documentId={layer.documentId}
+            notebookId={notebookId}
+            sectionChoices={sectionChoices}
+            title={layer.title}
+            blocks={layer.blocks}
+            translationAvailable={false}
+            {...layer.reader}
+          />
+        ) : (
+          <>
+            <h3 className="mb-3 text-[19px] font-bold text-sand-900">{article.title}</h3>
+            <Markdown>{article.markdown}</Markdown>
+          </>
+        )}
       </div>
       {error && <p className="mt-2 px-1 text-xs text-red-500">{error}</p>}
     </section>

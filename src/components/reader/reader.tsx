@@ -385,9 +385,12 @@ export function Reader({
   banner,
   translations,
   transcript,
+  embedded,
 }: {
   title: string;
   blocks: BlockData[];
+  /** The article card in the video pane (SPEC.md §11): no column padding, no block count. */
+  embedded?: boolean;
   /** Above the title: the Translate offer (SPEC.md §19). */
   banner?: React.ReactNode;
   /** A video document: the blocks are transcript lines (SPEC.md §11). */
@@ -885,7 +888,7 @@ export function Reader({
       )}
 
       <article
-        className="reader-prose reader-column w-full px-6 py-11 print:py-0"
+        className={`reader-prose reader-column w-full ${embedded ? "px-0 py-0" : "px-6 py-11 print:py-0"}`}
         data-font={font ?? "default"}
         style={{ ...columnStyle, fontFamily }}
         onKeyDown={mode === "edit" ? onStyleShortcut : undefined}
@@ -895,11 +898,13 @@ export function Reader({
             (lib/note-wrap.ts). */}
         {wrapSpacer && <NoteWrapGap spacer={wrapSpacer} />}
         {banner}
-        <p className="mb-2.5 text-[11px] font-bold tracking-[0.09em] text-clay-700 uppercase print:hidden">
-          {t(mode === "edit" ? "panes.documentBlocksEditing" : "panes.documentBlocks", {
-            n: blocks.length,
-          })}
-        </p>
+        {!embedded && (
+          <p className="mb-2.5 text-[11px] font-bold tracking-[0.09em] text-clay-700 uppercase print:hidden">
+            {t(mode === "edit" ? "panes.documentBlocksEditing" : "panes.documentBlocks", {
+              n: blocks.length,
+            })}
+          </p>
+        )}
         {leadKicker && renderBlock(leadKicker, 0)}
         <Reveal reveal={blockReveal} id="__title" order={leadKicker ? 0.5 : -1} kind="text">
           {documentId ? (
