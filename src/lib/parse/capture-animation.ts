@@ -1,5 +1,5 @@
 import { createCanvas, loadImage } from "@napi-rs/canvas";
-import type { Locator, Page } from "playwright-core";
+import type { CDPSession, Locator, Page } from "playwright-core";
 import { encodeGif, type GifFrame } from "@/lib/parse/gif";
 
 // A chart the page's scripts animate (lib/parse/render-page.ts). The static
@@ -129,8 +129,9 @@ function periodOf(samples: Shape[]): number | null {
 // STEP_MS of the page's time, after the frames the page drew in that step.
 const SAMPLES = "__unitosChartSamples";
 
-async function startSampler(chart: Locator): Promise<void> {
-  await chart.evaluate(
+/** Start sampling the chart; answers its shape now, the first sample. */
+function startSampler(chart: Locator): Promise<Shape> {
+  return chart.evaluate(
     // No inner named function: a bundler that keeps function names would
     // reference a helper the page does not have once this is serialized.
     (el, { key, stepMs }) => {
@@ -147,6 +148,7 @@ async function startSampler(chart: Locator): Promise<void> {
           ]),
         stepMs,
       );
+      return samples[0];
     },
     { key: SAMPLES, stepMs: STEP_MS },
   );
@@ -203,18 +205,49 @@ async function pixelsOf(png: Buffer): Promise<{ width: number; height: number; r
   return { width: image.width, height: image.height, rgba: data };
 }
 
+// A frame is one Page.captureScreenshot over the browser's own protocol:
+// page.screenshot costs five round trips a frame (a style for the caret,
+// the fonts, the layout metrics, the capture, the style's removal), and
+// over a remote browser the round trips were most of the recording.
+type Framer = () => Promise<Buffer>;
+
+/** A call that captures the chart's frame on the page, its box in the
+    page's coordinates; null when the chart has no box on screen. */
+async function framerOf(cdp: CDPSession, page: Page, chart: Locator): Promise<Framer | null> {
+  const box = await chart.boundingBox();
+  if (!box || box.width < MIN_WIDTH || box.height < MIN_HEIGHT) return null;
+  const { visualViewport } = await cdp.send("Page.getLayoutMetrics");
+  const viewport = page.viewportSize();
+  const clip = {
+    x: Math.round(box.x + visualViewport.pageX),
+    y: Math.round(box.y + visualViewport.pageY),
+    width: Math.round(box.width),
+    height: Math.round(box.height),
+  };
+  const captureBeyondViewport =
+    viewport !== null && (box.width > viewport.width || box.height > viewport.height);
+  return async () => {
+    const { data } = await cdp.send("Page.captureScreenshot", {
+      format: "png",
+      clip: { ...clip, scale: 1 },
+      captureBeyondViewport,
+    });
+    return Buffer.from(data, "base64");
+  };
+}
+
 /** One period of the chart, frame by frame from where its clock stands.
     Null when the chart has no box on screen, changes size mid-loop, or the
     deadline passes before the loop is whole. */
 async function recordLoop(
+  cdp: CDPSession,
   page: Page,
   chart: Locator,
   period: number,
   deadline: number,
 ): Promise<{ width: number; height: number; frames: GifFrame[] } | null> {
-  const box = await chart.boundingBox();
-  if (!box || box.width < MIN_WIDTH || box.height < MIN_HEIGHT) return null;
-  const clip = { x: Math.round(box.x), y: Math.round(box.y), width: Math.round(box.width), height: Math.round(box.height) };
+  const shoot = await framerOf(cdp, page, chart);
+  if (!shoot) return null;
   const frames: GifFrame[] = [];
   let width = 0;
   let height = 0;
@@ -228,8 +261,7 @@ async function recordLoop(
       const need = Math.ceil((perFrame * (period - step)) / left);
       stride = Math.min(MAX_STRIDE, Math.max(stride, need));
     }
-    const png = await page.screenshot({ type: "png", clip });
-    const pixels = await pixelsOf(png);
+    const pixels = await pixelsOf(await shoot());
     if (frames.length === 0) {
       width = pixels.width;
       height = pixels.height;
@@ -282,6 +314,9 @@ export async function captureAnimatedCharts(
   const result: CaptureResult = { still: 0, settled: 0, looped: 0, undecided: 0 };
   const count = await markCharts(page);
   if (count === 0) return result;
+  // The protocol session the frames are captured over; opened once a loop
+  // is found, so a page of still charts never pays for it.
+  let cdp: CDPSession | null = null;
   try {
     // Time stands still from here: the clock moves only by the steps below.
     await page.clock.pauseAt(Date.now() + 1000);
@@ -301,11 +336,9 @@ export async function captureAnimatedCharts(
         // In view, so an animation that waits to be seen starts.
         await chart.scrollIntoViewIfNeeded();
         await page.waitForTimeout(150);
-        await startSampler(chart);
-        const samples: Shape[] = [];
+        const samples: Shape[] = [await startSampler(chart)];
         let period: number | null = null;
         try {
-          samples.push(...(await readSamples(page, 0)));
           while (samples.length < MAX_SAMPLES && Date.now() < opts.deadline) {
             const batch = Math.min(
               samples.length <= stillSamples ? stillSamples : SAMPLE_BATCH,
@@ -334,7 +367,8 @@ export async function captureAnimatedCharts(
           await stopSampler(page).catch(() => {});
         }
         if (period !== null && opts.store && result.looped < MAX_CHARTS) {
-          const loop = await recordLoop(page, chart, period, opts.deadline);
+          cdp ??= await page.context().newCDPSession(page);
+          const loop = await recordLoop(cdp, page, chart, period, opts.deadline);
           const gif = loop ? encodeWithinCap(loop.width, loop.height, loop.frames) : null;
           const src = gif ? await opts.store(gif) : null;
           if (loop && src) {
@@ -352,6 +386,7 @@ export async function captureAnimatedCharts(
       );
     }
   } finally {
+    await cdp?.detach().catch(() => {});
     await unmarkCharts(page).catch(() => {});
   }
   return result;

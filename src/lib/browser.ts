@@ -45,6 +45,11 @@ function sessionEndpoints(endpoint: string): Candidate[] {
 // budget (lib/parse/render-page.ts).
 const sessionLengths = new WeakMap<Browser, number>();
 
+// The candidate the endpoint accepted last time, so the next connection on
+// this server skips the ones the plan refuses: the free plan refused 300 s
+// on every render before, one round trip to the service each time.
+let acceptedCandidate: string | null = null;
+
 /** How long the browser's session lasts from its connection, in ms; null
     when nothing known ends it (a local Chromium, another service). */
 export function sessionLengthOf(browser: Browser): number | null {
@@ -65,12 +70,15 @@ export async function launchBrowser(): Promise<Browser> {
   }
   const { chromium } = await import("playwright-core");
   if (endpoint) {
-    const candidates = sessionEndpoints(endpoint);
+    const all = sessionEndpoints(endpoint);
+    const known = all.findIndex((c) => c.url === acceptedCandidate);
+    const candidates = known === -1 ? all : all.slice(known);
     for (let i = 0; i < candidates.length; i++) {
       try {
         const { url, sessionMs } = candidates[i];
         const browser = await chromium.connectOverCDP(url, { timeout: CONNECT_TIMEOUT_MS });
         if (sessionMs !== null) sessionLengths.set(browser, sessionMs);
+        acceptedCandidate = url;
         return browser;
       } catch (err) {
         // A plan that caps the session shorter answers 400 to the timeout:

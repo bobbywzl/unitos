@@ -15,17 +15,25 @@ import type { OnIngestProgress } from "@/lib/parse/ingest";
 // rendered DOM parses in the static page's place. Without a browser the
 // static page stands.
 //
-// A chart the page's scripts animate settles first (lib/parse/capture-animation.ts):
+// When the render stores images (an ingest or a re-parse), a chart the
+// page's scripts animate settles first (lib/parse/capture-animation.ts):
 // the page's clock is paused and stepped, a one-shot animation is drawn to
-// its end, and a loop — when the render stores images — is recorded as a
-// GIF, stored as an ImageAsset, and takes the svg's place as an <img> of the
-// reader's own /api/images/<id> path.
+// its end, and a loop is recorded as a GIF, stored as an ImageAsset, and
+// takes the svg's place as an <img> of the reader's own /api/images/<id>
+// path. The upload assistant's review stores nothing and skips the charts:
+// its figure audit counts the svgs, and a chart mid-animation counts the
+// same as one settled.
 
 const RENDER_TIMEOUT_MS = 180_000;
 const NAVIGATION_TIMEOUT_MS = 30_000;
-const IDLE_TIMEOUT_MS = 10_000;
+// After the DOM is ready, the page's own requests (a chart's data) get this
+// long to go quiet. A page that keeps a connection open (a beacon, a
+// socket) never goes quiet; past the cap the render goes on without it.
+const IDLE_TIMEOUT_MS = 4_000;
 const STEP_TIMEOUT_MS = 15_000;
 // One viewport per step, a short wait for the charts that draw on scroll.
+// The whole scroll runs inside the page in one round trip: one per step
+// cost 40 round trips to a remote browser.
 const SCROLL_STEPS = 40;
 const SCROLL_WAIT_MS = 150;
 const SETTLE_MS = 500;
@@ -52,9 +60,10 @@ export type RenderResult = { page: FetchedPage; render: RenderReport };
 const NO_RENDER: RenderReport = { attempted: false, error: null, charts: null };
 
 export type RenderOptions = {
-  // Store the loops of animated charts as GIFs (an ingest or a re-parse);
-  // the account the images are recorded under. Absent (the upload
-  // assistant's review): animated charts settle, nothing is stored.
+  // Step the animated charts and store the loops as GIFs (an ingest or a
+  // re-parse); the account the images are recorded under. Absent (the
+  // upload assistant's review): the page renders and scrolls, the charts
+  // stay as the scroll left them, nothing is stored.
   store?: { userId: string | null };
 };
 
@@ -148,31 +157,37 @@ async function renderInBrowser(url: string, store: CaptureStore | null): Promise
       const page = await context.newPage();
       page.setDefaultTimeout(STEP_TIMEOUT_MS);
       // The page's clock, so an animated chart can be stepped after the
-      // scroll; it runs with real time until then. A browser that refuses
-      // the clock renders without it: the charts then stand as the scroll
-      // left them.
+      // scroll; it runs with real time until then. Only a render that
+      // stores images steps the charts. A browser that refuses the clock
+      // renders without it: the charts then stand as the scroll left them.
       let clockError: string | null = null;
-      const clock = await page.clock.install().then(
-        () => true,
-        (err: unknown) => {
-          console.warn("[render] the page clock is unavailable:", err);
-          clockError = `the page clock is unavailable: ${reasonOf(err)}`;
-          return false;
-        },
-      );
+      const clock = store
+        ? await page.clock.install().then(
+            () => true,
+            (err: unknown) => {
+              console.warn("[render] the page clock is unavailable:", err);
+              clockError = `the page clock is unavailable: ${reasonOf(err)}`;
+              return false;
+            },
+          )
+        : false;
       await page.goto(url, { waitUntil: "domcontentloaded", timeout: NAVIGATION_TIMEOUT_MS });
       await page.waitForLoadState("networkidle", { timeout: IDLE_TIMEOUT_MS }).catch(() => {});
-      for (let i = 0; i < SCROLL_STEPS; i++) {
-        const atBottom = await page.evaluate(() => {
-          const before = window.scrollY;
-          window.scrollBy(0, window.innerHeight);
-          return window.scrollY === before;
-        });
-        if (atBottom) break;
-        await page.waitForTimeout(SCROLL_WAIT_MS);
-      }
-      await page.evaluate(() => window.scrollTo(0, 0));
-      await page.waitForTimeout(SETTLE_MS);
+      await page.evaluate(
+        // No inner named function: a bundler that keeps function names would
+        // reference a helper the page does not have once this is serialized.
+        async ({ steps, waitMs, settleMs }) => {
+          for (let i = 0; i < steps; i++) {
+            const before = window.scrollY;
+            window.scrollBy(0, window.innerHeight);
+            if (window.scrollY === before) break;
+            await new Promise<void>((resolve) => setTimeout(resolve, waitMs));
+          }
+          window.scrollTo(0, 0);
+          await new Promise<void>((resolve) => setTimeout(resolve, settleMs));
+        },
+        { steps: SCROLL_STEPS, waitMs: SCROLL_WAIT_MS, settleMs: SETTLE_MS },
+      );
       // The page as the scroll left it is the render; the capture improves
       // on it. A capture that fails or runs out of time never costs the
       // render — the figures stay as they are.
