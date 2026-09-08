@@ -109,10 +109,19 @@ export function loggedTurns(note: {
 // The condensed log: one line per message, in message order. turns = the
 // number of messages it was written from; another count means the log is
 // stale and the next hover writes it again.
-export type ConversationLog = { turns: number; lines: { role: ChatTurn["role"]; text: string }[] };
+// v = the line rules the log was written under (LOG_VERSION in
+// lib/prompts/conversation-log.ts). A log stored under older rules is written
+// again on the next hover, so a change to the rules reaches logs already
+// stored. A log from before the field carries no v.
+export type ConversationLog = {
+  turns: number;
+  v?: number;
+  lines: { role: ChatTurn["role"]; text: string }[];
+};
 
 export const conversationLogSchema = z.object({
   turns: z.number().int().min(0),
+  v: z.number().int().optional(),
   lines: z.array(z.object({ role: z.enum(["user", "assistant"]), text: z.string() })).max(80),
 });
 
