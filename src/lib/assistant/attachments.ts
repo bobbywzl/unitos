@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { isImageFile } from "@/lib/handwritten/image";
+import { imageMarkdown } from "@/lib/images";
 
 // Attachments in the assistant conversation (SPEC.md §7): the reader adds
 // images and files to a message. This file is imported by both the client
@@ -137,3 +138,60 @@ export const conversationTurnSchema = z.object({
   files: z.array(attachedFileSchema).max(MAX_FILES_PER_MESSAGE).optional(),
 });
 export type ConversationTurn = z.infer<typeof conversationTurnSchema>;
+
+// Saving the conversation (SPEC.md §7, §21): a reader's turn persists as one
+// line of the note's markdown per attachment, after the question text — an
+// image as the same markdown a note carries an image in (lib/images.ts),
+// a file as one bracket line. Both read back naturally as plain language
+// when the digest hands the note to the model (lib/digest/build.ts), and
+// both parse back out exactly on restore (parseTurnContent below).
+const FILE_MARKER = /^\[attached file: (.+)\]$/;
+const IMAGE_MARKDOWN = /^!\[([^\]]*)\]\(\/api\/images\/([A-Za-z0-9_-]+)\)$/;
+
+export function embedAttachments(
+  content: string,
+  images: { id: string; name: string }[],
+  files: { name: string }[],
+): string {
+  const blocks = [content.trim()];
+  if (images.length > 0) blocks.push(images.map((img) => imageMarkdown(img.id, img.name)).join("\n"));
+  if (files.length > 0) blocks.push(files.map((f) => `[attached file: ${f.name}]`).join("\n"));
+  return blocks.filter((b) => b !== "").join("\n\n");
+}
+
+/** The reverse of embedAttachments: a stored turn's text, split back into its
+    typed content and the attachments trailing it — so a restored turn renders
+    exactly like the turn that was sent (SPEC.md §7). A turn with no embedded
+    attachments (an assistant's answer; an older note stored before
+    attachments existed) comes back unchanged, images and files empty. */
+export function parseTurnContent(raw: string): {
+  content: string;
+  images: { id: string; name: string }[];
+  files: { name: string }[];
+} {
+  const lines = raw.split("\n");
+  const files: { name: string }[] = [];
+  const images: { id: string; name: string }[] = [];
+  const popTrailingBlock = (test: (line: string) => boolean, onMatch: (line: string) => void) => {
+    while (lines.length > 0 && lines[lines.length - 1]!.trim() === "") lines.pop();
+    const block: string[] = [];
+    while (lines.length > 0 && test(lines[lines.length - 1]!.trim())) block.unshift(lines.pop()!.trim());
+    block.forEach(onMatch);
+  };
+  popTrailingBlock(
+    (line) => FILE_MARKER.test(line),
+    (line) => {
+      const m = FILE_MARKER.exec(line);
+      if (m) files.unshift({ name: m[1]! });
+    },
+  );
+  popTrailingBlock(
+    (line) => IMAGE_MARKDOWN.test(line),
+    (line) => {
+      const m = IMAGE_MARKDOWN.exec(line);
+      if (m) images.unshift({ id: m[2]!, name: m[1]! });
+    },
+  );
+  while (lines.length > 0 && lines[lines.length - 1]!.trim() === "") lines.pop();
+  return { content: lines.join("\n"), images, files };
+}

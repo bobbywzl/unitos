@@ -23,6 +23,7 @@ const en = {
   ask: "Ask",
   stopAsk: "Stop. Whatever answered so far stays on screen.",
   // The conversation (SPEC.md §7)
+  loadingConversation: "Loading your conversation…",
   followUpPlaceholder: "Ask a follow-up",
   send: "Send",
   newConversation: "New conversation",
@@ -80,6 +81,7 @@ const zh: Record<keyof typeof en, string> = {
   askPlaceholderCorpora: "跨全部项目提问",
   ask: "提问",
   stopAsk: "停止。已作答的部分保留在屏幕上。",
+  loadingConversation: "正在加载你的对话…",
   followUpPlaceholder: "继续提问",
   send: "发送",
   newConversation: "新对话",

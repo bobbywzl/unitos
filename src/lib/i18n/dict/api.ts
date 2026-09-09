@@ -7,6 +7,7 @@ const en = {
   // Guards and lookups
   signInRequired: "Sign in to continue.",
   corpusNotFound: "Project not found",
+  missingNotebookId: "notebookId is required",
   documentNotFound: "Document not found",
   documentNotFoundOrEmpty: "Document not found or empty",
   sectionNotFound: "Section not found",
@@ -262,6 +263,7 @@ const en = {
 const zh: Record<keyof typeof en, string> = {
   signInRequired: "请登录后继续。",
   corpusNotFound: "未找到该项目",
+  missingNotebookId: "缺少 notebookId",
   documentNotFound: "未找到文档",
   documentNotFoundOrEmpty: "未找到文档或文档为空",
   sectionNotFound: "未找到章节",

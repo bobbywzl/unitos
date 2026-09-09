@@ -37,18 +37,23 @@ type Attachment =
   | { key: string; kind: "pending"; name: string; pending: true };
 
 // One turn of the conversation as the panel holds it: the reader's message
-// with what it attached, or the assistant's answer.
+// with what it attached, or the assistant's answer. A restored turn's files
+// carry no text — the model already read it when the turn was first sent;
+// only a turn built fresh from the composer's own attachments has it.
 type Turn = {
   role: "user" | "assistant";
   content: string;
   images?: { id: string; url: string; name: string }[];
-  files?: { name: string; text: string }[];
+  files?: { name: string; text?: string }[];
 };
+type Thread = { turns: Turn[]; conversationNoteId: string | null };
 
-// The conversation survives a tab switch and a document switch: both remount
-// the panel, so the turns live outside it, per project, for the page's life.
-// A page reload starts clean — the conversation is transient (SPEC.md §7).
-const threads = new Map<string, Turn[]>();
+// The conversation survives a tab switch and a document switch within the
+// same tab (both remount the panel, so the thread lives outside it, per
+// project, for the page's life) and a reload (it is saved, SPEC.md §21: one
+// note per reader per project, loaded once per project per tab — see the
+// hydration effect below).
+const threads = new Map<string, Thread>();
 
 // Web access (SPEC.md §7): on by default, remembered in this browser. The
 // choice is read as an external store, so the server's render (on) and the
@@ -155,16 +160,59 @@ export function AssistantPanel({
   const [scope, setScope] = useState<Scope>("notebook");
   const web = useSyncExternalStore(subscribeWeb, readWeb, () => true);
   const [question, setQuestion] = useState("");
-  // The conversation (SPEC.md §7): the first question opens it; every turn
-  // after continues it. Empty = the panel's first layout.
-  const [turns, setTurnsState] = useState<Turn[]>(() => threads.get(notebookId) ?? []);
+  // The conversation (SPEC.md §7, §21): the first question opens it; every
+  // turn after continues it. Empty = the panel's first layout. The note it
+  // is saved on, once a turn has persisted; null until then, and again once
+  // New conversation clears it.
+  const cached = threads.get(notebookId);
+  const [turns, setTurnsState] = useState<Turn[]>(() => cached?.turns ?? []);
+  const [conversationNoteId, setConversationNoteId] = useState<string | null>(
+    () => cached?.conversationNoteId ?? null,
+  );
+  const [hydrated, setHydrated] = useState(() => cached !== undefined);
   function setTurns(update: (turns: Turn[]) => Turn[]) {
     setTurnsState((prev) => {
       const next = update(prev);
-      threads.set(notebookId, next);
+      threads.set(notebookId, { turns: next, conversationNoteId });
       return next;
     });
   }
+  // The panel is keyed by document, so it remounts on every document switch;
+  // the thread cache (keyed by project) means this only actually fetches the
+  // first time this project's conversation is shown in this browser tab.
+  useEffect(() => {
+    if (threads.has(notebookId)) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch(`/api/assistant/conversation?notebookId=${encodeURIComponent(notebookId)}`);
+        const json = (await res.json().catch(() => null)) as {
+          conversationNoteId?: string | null;
+          turns?: {
+            role: "user" | "assistant";
+            content: string;
+            images?: { id: string; name: string }[];
+            files?: { name: string }[];
+          }[];
+        } | null;
+        if (cancelled || !res.ok || !json) return;
+        const loaded: Turn[] = (json.turns ?? []).map((turn) => ({
+          role: turn.role,
+          content: turn.content,
+          images: turn.images?.map((img) => ({ id: img.id, name: img.name, url: imageUrl(img.id) })),
+          files: turn.files,
+        }));
+        threads.set(notebookId, { turns: loaded, conversationNoteId: json.conversationNoteId ?? null });
+        setTurnsState(loaded);
+        setConversationNoteId(json.conversationNoteId ?? null);
+      } finally {
+        if (!cancelled) setHydrated(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [notebookId]);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [issues, setIssues] = useState<Issue[] | null>(null);
   const [taskRun, setTaskRun] = useState<Task | null>(null);
@@ -196,13 +244,53 @@ export function AssistantPanel({
     setError(null);
   }
 
-  // New conversation: back to the first layout, the turns gone.
+  // New conversation: back to the first layout, the turns gone — on the
+  // server too, not only on screen (SPEC.md §21).
   function newConversation() {
     stopRun();
     reset();
+    if (conversationNoteId) {
+      void fetch("/api/assistant/conversation", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ notebookId, conversationNoteId }),
+      }).catch(() => {});
+    }
     setTurns(() => []);
+    setConversationNoteId(null);
+    threads.set(notebookId, { turns: [], conversationNoteId: null });
     setAttachments([]);
     setQuestion("");
+  }
+
+  // A completed turn saves (SPEC.md §21): the first one creates the note,
+  // every one after updates it in place. Fire-and-forget — a save that fails
+  // costs the reader nothing they would notice this session; the thread
+  // stays on screen either way, from the threads cache above.
+  async function saveConversation(savedTurns: Turn[]) {
+    try {
+      const res = await fetch("/api/assistant/conversation", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          notebookId,
+          conversationNoteId,
+          turns: savedTurns.map((turn) => ({
+            role: turn.role,
+            content: turn.content.slice(0, TURN_MAX_CHARS),
+            images: turn.images?.map((img) => ({ id: img.id, name: img.name })),
+            files: turn.files?.map((f) => ({ name: f.name })),
+          })),
+        }),
+      });
+      const json = (await res.json().catch(() => null)) as { conversationNoteId?: string } | null;
+      if (!res.ok || !json?.conversationNoteId) return;
+      setConversationNoteId(json.conversationNoteId);
+      threads.set(notebookId, { turns: savedTurns, conversationNoteId: json.conversationNoteId });
+    } catch {
+      // Offline, or the request otherwise never landed — the thread is still
+      // right here on screen; the next completed turn tries again.
+    }
   }
 
   // Recommended: open shows what exists; generating streams into the card.
@@ -412,6 +500,7 @@ export function AssistantPanel({
         throw new Error(streamError ?? t("assistant.emptyResponse"));
       }
       setAnswer(text);
+      void saveConversation([...turns, userTurn, { role: "assistant", content: text }]);
     } catch (err) {
       // Stopped, not failed: whatever streamed in already stays on screen.
       if (controller.signal.aborted) return;
@@ -668,6 +757,17 @@ export function AssistantPanel({
       </div>
     </form>
   );
+
+  // A saved conversation loads once per project per tab (the effect above);
+  // this is that wait, so the first layout never flashes before it swaps to
+  // the restored thread.
+  if (!hydrated) {
+    return (
+      <div className="flex h-32 items-center justify-center">
+        <ThinkingIndicator className="text-xs" label={t("assistant.loadingConversation")} />
+      </div>
+    );
+  }
 
   if (inConversation) {
     return (
