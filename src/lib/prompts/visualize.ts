@@ -4,8 +4,9 @@ import { languageName, profileLines, type PromptCtx } from "@/lib/prompts/types"
 // model places the passage in the whole article first — what it states, what
 // it answers, extends, or replaces — and judges whether a picture can carry
 // that core idea with certainty; only then does it draw — a diagram (a spec
-// the server lays out), a picture (an SVG drawing), or an animation (an SVG
-// with SMIL). It weighs the passage's own structure against the best analogy
+// the server lays out), a simulation (a law the server integrates and draws
+// in motion, lib/derive/simulate.ts), a picture (an SVG drawing), or an
+// animation (an SVG with SMIL). It weighs the passage's own structure against the best analogy
 // it can find, and takes whichever carries the idea; the reader's background
 // says which analogies the reader already knows. A refusal is a valid output
 // and the card shows its reason. Runs on VISUALIZE_MODEL (lib/derive/config.ts).
@@ -29,10 +30,11 @@ export function visualizePrompt(ctx: PromptCtx): string {
     "",
     "Step 1. Place the passage in the article, then find its core idea. Read the whole document above, not the passage alone. Say for yourself what the passage does there: it states a problem; it extends a problem stated earlier; it solves a problem stated earlier; it offers an alternative to a structure, a method, or an explanation given earlier; it is one step of a process the article builds up; it is an example of a claim made earlier; or it stands on its own. The core idea is the passage's point as it sits in the article, in one sentence — what the passage adds to what the article set up. When the passage answers, extends, or replaces something stated elsewhere, the picture shows both: the problem and this solution, the earlier structure and this alternative, the process and this step — because a reader who sees this passage's part alone does not see what it is for. Everything below serves that one idea; a picture that shows a side point of the passage is a wrong picture, not a partial one.",
     "",
-    "Step 2. Find every way to draw it, then take the best one. There are two:",
+    "Step 2. Find every way to draw it, then take the best one. There are three:",
+    "- The equation in motion: when the passage is a law of change — an equation with a time derivative, or a description of how a state evolves under a rule — the picture is the state evolving under that law, the way a textbook animates the heat equation or a wave packet: the state at t = 0, the boundary, the law acting, over time. The server integrates the equation from your spec (the simulation kind below), so the motion is the equation's own, not a drawing of it. This is the picture for a PDE, an ODE, a rate law, a diffusion, a wave, a population, an oscillation. Never hand-draw the frames of such a thing as an animation: a drawn curve is a guess, an integrated one is the truth.",
     "- The literal picture: the passage's own structure — a sequence, a flow, a hierarchy, a cause and its effects, parts and how they fit, one quantity changing with another, a mechanism, a physical arrangement.",
     "- The analogy: a familiar thing that shares the idea's shape, drawn in place of it.",
-    "Work out both before you choose. A passage whose own structure carries the idea takes the literal picture — an analogy there only adds a second thing to understand. A passage whose idea is abstract, unfamiliar, or has no drawable structure of its own is where the analogy earns its place: it is often the only picture that can carry such a passage, and reaching for one is the difference between a picture and a refusal.",
+    "Work out all three before you choose. A law of change takes the equation in motion. A passage whose own structure carries the idea takes the literal picture — an analogy there only adds a second thing to understand. A passage whose idea is abstract, unfamiliar, or has no drawable structure of its own is where the analogy earns its place: it is often the only picture that can carry such a passage, and reaching for one is the difference between a picture and a refusal. A formula that is not a law of change — a definition, an identity, a closed form — is drawn as what it does, never as its symbols: the shape it describes, the quantity it conserves, the state before and after.",
     "",
     "Step 3. When an analogy is in play, find the best one, not the first one. Name three candidates to yourself, then take the one that passes all five:",
     "1. Every part of the picture maps to a part of the passage, and you can say which to which.",
@@ -50,9 +52,19 @@ export function visualizePrompt(ctx: PromptCtx): string {
     "When any one does not hold: set certain to false, set visual to null, and write in reason why a picture would not carry the passage's core idea — name what you tried, the literal picture and the analogies, so the reader knows the passage was worked on and not skipped. Do not draw a weak picture to have something to show. A refusal is the right output for a passage of opinion, of definitions, of narrative without structure, or of a claim whose whole content is in its words.",
     "",
     "Step 5. Pick the one kind that fits:",
+    "- simulation: a law of change, integrated by the server and drawn as the state evolving over time — a loop of 8 seconds covering duration units of the law's time, with the state at t = 0 kept faint under the motion and a time bar. Give:",
+    "  law: heat (∂u/∂t = α ∂²u/∂x²), wave (∂²u/∂t² = c² ∂²u/∂x²), advection (∂u/∂t + c ∂u/∂x = 0), schrodinger (iħ∂ψ/∂t = −(ħ²/2m)∂²ψ/∂x² + Vψ, ħ = 1, shown as |ψ|² with Re ψ faint and V dashed), or ode (a system dv/dt = f(t, v…), up to 4 variables, drawn as curves against time).",
+    "  equation: the law as the passage writes it, at most 80 characters, shown above the plot.",
+    "  x0, x1: the domain in x (a field law). initial: the state at t = 0 as a formula in x — for schrodinger the amplitude, with momentum k giving the phase e^{ikx}. velocity: for wave, ∂u/∂t at t = 0 (default 0). potential: for schrodinger, V(x) (default 0).",
+    "  boundary: fixed (the ends hold their t = 0 values), insulated (no flux through the ends), periodic (the ends are one point). Take it from the passage: a rod with its ends in ice is fixed, a rod wrapped in insulation is insulated, a ring is periodic.",
+    "  coefficient: α, c, or ħ/2m as the passage gives it; 1 when it does not.",
+    "  variables: for ode, each with name, rate (a formula in t and every variable's name), and start.",
+    "  duration: the time the picture covers, in the law's units — long enough that the law's point shows (the heat evens out, the wave reflects, the packet meets the barrier), not so long that nothing moves for most of the loop. Choose it from the coefficient and the domain: a diffusion needs about L²/α to even out, a wave about L/c to cross.",
+    "  xLabel, uLabel: what x and u are in the passage's words — position along the rod, temperature.",
+    "  Formulas: numbers, x (or t and the variable names), + − * / ^, parentheses, pi, e, and sin cos tan exp log sqrt abs tanh sinh cosh floor ceil round sign min max step(x) pulse(x, a, b), with comparisons giving 1 or 0. A Gaussian is exp(-(x-0.5)^2/0.01); a square pulse is pulse(x, 0.2, 0.4); a plucked string is sin(pi*x).",
     "- diagram: named things and the relations between them — a directed map. Give nodes and edges; the server lays them out. 3 to 12 nodes. A node label is at most 6 words; its detail, when it helps, at most 12 words. An edge label is at most 4 words. direction is right for a sequence or a flow, down for a hierarchy or a cause and its effects. Every node has a role: passage for what the passage itself states, article for what the article states elsewhere and the picture needs — the problem, the earlier structure, the step before. The server draws the passage's nodes strong and the article's nodes faint, so the reader sees at a glance what this passage adds. In an analogy the node label is the analogue's part and its detail is what that part stands for in the passage, so the mapping reads off the picture itself.",
     "- picture: a physical arrangement, a mechanism, a construction, or the shape a formula describes — one still drawing as SVG.",
-    "- animation: a process whose steps happen over time and whose order is the point — a loop of at most 8 seconds as SVG with SMIL (animate, animateTransform, animateMotion, set; repeatCount=\"indefinite\"). Every step of the loop is a step the passage states.",
+    "- animation: a process whose steps happen over time and whose order is the point — a mechanism turning, a message passing, a cycle — as a loop of at most 8 seconds in SVG with SMIL (animate, animateTransform, animateMotion, set; repeatCount=\"indefinite\"). Every step of the loop is a step the passage states. Not for a law of change: that is a simulation.",
     "",
     "SVG rules for picture and animation:",
     "- viewBox=\"0 0 480 H\" with H between 280 and 480; no width or height attributes on the root; xmlns=\"http://www.w3.org/2000/svg\". The picture shows in a card 320 px wide, so draw for that size. Under 300000 characters, animation included.",
@@ -76,12 +88,13 @@ export function visualizePrompt(ctx: PromptCtx): string {
     '    "reason": "<one or two sentences: why this picture is, or why no picture is, the best way to show this passage>"',
     "  },",
     '  "visual": null | {',
-    '    "kind": "diagram" | "picture" | "animation",',
+    '    "kind": "diagram" | "simulation" | "picture" | "animation",',
     '    "caption": "<one sentence>",',
     '    "diagram": { "direction": "right" | "down", "nodes": [{ "id": "n1", "label": "…", "detail": "…", "role": "passage" | "article" }], "edges": [{ "from": "n1", "to": "n2", "label": "…" }] },',
+    '    "simulation": { "law": "heat" | "wave" | "advection" | "schrodinger" | "ode", "equation": "…", "x0": 0, "x1": 1, "initial": "…", "velocity": "…", "potential": "…", "momentum": 0, "boundary": "fixed" | "insulated" | "periodic", "coefficient": 1, "variables": [{ "name": "…", "rate": "…", "start": 0 }], "duration": 1, "xLabel": "…", "uLabel": "…" },',
     '    "svg": "<svg …>…</svg>"',
     "  }",
     "}",
-    "diagram is present only for kind diagram; svg only for kind picture or animation. visual is null whenever certain is false.",
+    "diagram is present only for kind diagram; simulation only for kind simulation; svg only for kind picture or animation. visual is null whenever certain is false.",
   ].join("\n");
 }

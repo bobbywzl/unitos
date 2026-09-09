@@ -1,13 +1,27 @@
 import { JSDOM } from "jsdom";
 import { z } from "zod";
 import { imageUrl } from "@/lib/images";
+import { renderSimulation, simulationSchema } from "@/lib/derive/simulate";
+import {
+  ACCENT,
+  CHIP_LINE,
+  DARK_RULES,
+  escapeXml,
+  FILL,
+  INK,
+  MUTED,
+  PAPER,
+  THEME_STYLE,
+} from "@/lib/derive/visual-palette";
 
 // VISUALIZE (SPEC.md §20, Unitos Ultra): the model's output contract, the
 // diagram layout, and the SVG the reader sees. A diagram arrives as nodes and
 // edges and is laid out here with measured text, so no label overflows; a
-// picture or an animation arrives as SVG source and is reduced to the
-// elements and attributes the prompt allows before it is stored. Either way
-// the result is one SVG ImageAsset the annotation's markdown points at.
+// simulation arrives as a law and its conditions and is integrated and drawn
+// here (lib/derive/simulate.ts); a picture or an animation arrives as SVG
+// source and is reduced to the elements and attributes the prompt allows
+// before it is stored. Either way the result is one SVG ImageAsset the
+// annotation's markdown points at.
 
 // ── Output contract ────────────────────────────────────────────────────────
 
@@ -38,9 +52,10 @@ export const diagramSchema = z.object({
 });
 
 const visualSchema = z.object({
-  kind: z.enum(["diagram", "picture", "animation"]),
+  kind: z.enum(["diagram", "simulation", "picture", "animation"]),
   caption: z.string().min(1).max(400),
   diagram: diagramSchema.nullish(),
+  simulation: simulationSchema.nullish(),
   // The same ceiling the reduction checks (MAX_SVG_BYTES below), so an SVG
   // past it is caught by validation and retried with the reason, never
   // sanitized and then thrown away.
@@ -79,12 +94,17 @@ export function visualizationMarkdown(imageId: string, caption: string): string 
   return `![${alt}](${imageUrl(imageId)})\n\n*${caption.replace(/\n+/g, " ").trim()}*`;
 }
 
-/** The SVG of one visual: laid out for a diagram, reduced for a picture or
-    an animation. error: what made it unusable, for the reader's card. */
+/** The SVG of one visual: laid out for a diagram, integrated for a
+    simulation, reduced for a picture or an animation. error: what made it
+    unusable, for the reader's card. */
 export async function renderVisual(visual: Visual): Promise<{ svg: string } | { error: string }> {
   if (visual.kind === "diagram") {
     if (!visual.diagram) return { error: "The diagram has no nodes." };
     return { svg: await renderDiagram(visual.diagram) };
+  }
+  if (visual.kind === "simulation") {
+    if (!visual.simulation) return { error: "The simulation has no law." };
+    return renderSimulation(visual.simulation);
   }
   if (!visual.svg) return { error: "The picture has no SVG." };
   return sanitizeSvg(visual.svg);
@@ -148,41 +168,6 @@ function wrap(text: string, size: number, bold: boolean, maxWidth: number, measu
   return lines.length ? lines : [""];
 }
 
-// ── The stored picture's palette ───────────────────────────────────────────
-
-const INK = "#2b2622";
-const MUTED = "#6b625a";
-const FILL = "#f3ede4";
-const ACCENT = "#b5563c";
-const PAPER = "#ffffff";
-const CHIP_LINE = "#e5ddd0";
-
-// The reader has a dark theme (globals.css), and a visualization shows in an
-// `<img>`, where the page's tokens do not reach it. So the stored SVG carries
-// its own dark palette: one style block that re-points the exact values the
-// diagram draws with and the prompt gives the model. Anything drawn in
-// another color stays as drawn, and the light picture is untouched.
-const DARK: Record<string, string> = {
-  [PAPER]: "#221e1a",
-  [INK]: "#f2e9dc",
-  [MUTED]: "#a2988a",
-  [FILL]: "#332d26",
-  [CHIP_LINE]: "#3d372e",
-  [ACCENT]: "#e08a6e",
-  "#5f7d5a": "#9dba97",
-  "#b8912e": "#dcb85e",
-  "#6b5b95": "#a596cf",
-};
-
-const DARK_RULES = `@media (prefers-color-scheme:dark){${Object.entries(DARK)
-  .map(
-    ([light, dark]) =>
-      `[fill="${light}"]{fill:${dark}}[stroke="${light}"]{stroke:${dark}}[stop-color="${light}"]{stop-color:${dark}}`,
-  )
-  .join("")}}`;
-
-const THEME_STYLE = `<style>${DARK_RULES}</style>`;
-
 // ── Diagram layout ─────────────────────────────────────────────────────────
 
 const LABEL_SIZE = 15;
@@ -221,10 +206,6 @@ type Box = {
 type Edge = { from: string; to: string; label: string | null; back: boolean };
 
 type Point = { x: number; y: number };
-
-function escapeXml(text: string): string {
-  return text.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
-}
 
 const at = (p: Point) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`;
 
