@@ -37,7 +37,8 @@
 //   account 账户 · notification 通知 · recipient 收件人 ·
 //   dismiss(通知) 关闭 · update(通知类型) 更新 · account change 账户变更 ·
 //   gist 要旨 · checklist 清单 · dash list 短横线列表 ·
-//   quote(笔记格式，> 行) 引用 · notes full page 整页笔记
+//   quote(笔记格式，> 行) 引用 · notes full page 整页笔记 ·
+//   conversation 对话 · attachment 附件 · file 文件
 // highlight 高亮 仅指高亮功能；表示选取文字一律用 选中。
 
 const en = {
