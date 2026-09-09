@@ -166,6 +166,15 @@ export function GraphIcon(props: IconProps) {
   );
 }
 
+// The composer's attach button (assistant-panel.tsx).
+export function PaperclipIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="m20.5 11.5-8.2 8.2a5.2 5.2 0 0 1-7.4-7.4l8.9-8.9a3.4 3.4 0 0 1 4.8 4.8l-8.9 8.9a1.6 1.6 0 0 1-2.3-2.3l8.2-8.2" />
+    </Icon>
+  );
+}
+
 export function StopIcon(props: IconProps) {
   return (
     <Icon {...props}>
