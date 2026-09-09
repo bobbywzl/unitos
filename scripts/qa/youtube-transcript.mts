@@ -6,7 +6,11 @@
 //   npx tsx scripts/qa/youtube-transcript.mts --pure     (no network)
 import { parseJson3, parseXml, pickTrack, trackUrl } from "@/lib/video/captions";
 import { parsePastedTranscript } from "@/lib/video/paste";
+import { normalizeSegments } from "@/lib/video/segments";
+import { settleSpeakers } from "@/lib/video/speakers";
+import { linesAreSound } from "@/lib/video/tidy";
 import { transcribe } from "@/lib/video/transcribe";
+import { activeLineAt, parseSpeakers } from "@/lib/video/types";
 import { pickAudioFormat } from "@/lib/video/youtube-audio";
 
 const results: string[] = [];
@@ -108,6 +112,87 @@ try {
   noTimes = err instanceof Error ? err.message : String(err);
 }
 check("plain prose is refused", noTimes === "the pasted text has no times", noTimes);
+
+// ── Line ranges and read-along ───────────────────────────────────────────────
+// YouTube's auto-captions are written for a rolling two-line caption, so a cue
+// runs seconds past the next cue's start. Stored as-is, the ranges overlap and
+// the read-along highlight lights the earlier line while the later one is
+// being spoken.
+const overlapping = normalizeSegments([
+  { start: 0, end: 8, text: "first" },
+  { start: 5, end: 12, text: "second" },
+  { start: 16, end: 20, text: "after a pause" },
+]);
+check(
+  "an overlapping range ends where the next one starts",
+  overlapping[0].end === 5 && overlapping[1].end === 12,
+  JSON.stringify(overlapping),
+);
+check("a real gap is left alone", overlapping[1].end === 12 && overlapping[2].start === 16);
+const sameStart = normalizeSegments([
+  { start: 4, end: 9, text: "one" },
+  { start: 4, end: 7, text: "two" },
+]);
+check("two segments at the same start keep their ranges", sameStart[0].end === 9 || sameStart[1].end === 9, JSON.stringify(sameStart));
+
+// activeLineAt reads the line being spoken: the last one that has started.
+const lines = [
+  { id: "a", startTime: 0, endTime: 8, text: "a" },
+  { id: "b", startTime: 5, endTime: 12, text: "b" }, // overlaps a, as stored transcripts do
+  { id: "c", startTime: 16, endTime: 20, text: "c" }, // a pause before it
+];
+const at = (t: number) => activeLineAt(lines, t)?.id ?? null;
+check("before the first line nothing is lit", at(-1) === null);
+check("the first line lights at its start", at(0) === "a" && at(4.9) === "a");
+check("an overlapped line lights the moment it starts", at(5) === "b" && at(7.9) === "b", `got ${at(6)}`);
+check("the line stays lit past its own end", at(13) === "b");
+check("a pause holds the line before it", at(15.9) === "b");
+check("the line after the pause lights at its start", at(16) === "c");
+check("the last line goes out after its end", at(24) === "c" && at(26) === null);
+
+// ── Cleanup keeps every line its own ─────────────────────────────────────────
+const rawLines = [
+  "um so we've been looking at all the successful projects that anima has been doing",
+  "and then we figured the thing that has happened in language you know",
+  "like we had a spell checking model there was a translation model",
+  "uh yeah",
+];
+const cleanedWell = [
+  "We've been looking at all the successful projects that Anima has been doing.",
+  "And then we figured the thing that has happened in language.",
+  "Like we had a spell-checking model. There was a translation model.",
+  "",
+];
+check("a real cleanup passes the guard", linesAreSound(rawLines, cleanedWell));
+// The same cleanup shifted by one line: the count is right and every line is
+// now under the wrong time.
+const shifted = [cleanedWell[1], cleanedWell[2], cleanedWell[3], cleanedWell[0]];
+check("a cleanup whose lines moved is caught", !linesAreSound(rawLines, shifted));
+check("empty output is cleanup dropping filler, not a mismatch", linesAreSound(rawLines, ["", "", "", ""]));
+
+// ── Speakers ─────────────────────────────────────────────────────────────────
+const heard = new Map([
+  ["S1", { id: "S1", name: "RJ" }],
+  ["S2", { id: "S2", name: "" }],
+  ["S9", { id: "S9", name: "Nobody" }], // found, but says no line
+]);
+const settled = settleSpeakers(heard, ["S1", "S1", "S2", "S1"]);
+check(
+  "only voices that speak are kept",
+  settled.speakers.length === 2 && settled.speakers.every((s) => s.id !== "S9"),
+  JSON.stringify(settled.speakers),
+);
+check(
+  "a voice nobody names is numbered by where it first speaks",
+  settled.speakers[0].name === "RJ" && settled.speakers[1].name === "Speaker 2",
+  JSON.stringify(settled.speakers),
+);
+check(
+  "one voice throughout gets no names at all",
+  settleSpeakers(new Map([["S1", { id: "S1", name: "RJ" }]]), ["S1", "S1"]).speakers.length === 0,
+);
+check("a stored roster reads back", parseSpeakers([{ id: "S1", name: "RJ" }]).length === 1);
+check("anything else is no roster", parseSpeakers({ nope: true }).length === 0);
 
 // ── The live ladder ──────────────────────────────────────────────────────────
 const pure = process.argv.includes("--pure");

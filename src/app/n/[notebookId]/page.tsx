@@ -54,6 +54,7 @@ import { VideoPane } from "@/components/video/video-pane";
 import { deeplConfigured } from "@/lib/translate/deepl";
 import {
   parseRegion,
+  parseSpeakers,
   transcriptIsStale,
   type TranscriptLine,
   type VideoAnnotationItem,
@@ -749,11 +750,18 @@ export default async function NotebookPage(props: {
             document.video.transcriptStatus,
             document.video.transcriptStartedAt,
           ),
+          speakers: parseSpeakers(document.video.speakers),
         }
       : null;
     const transcript: TranscriptLine[] = document.blocks
       .filter((b) => b.type === "TRANSCRIPT" && b.startTime !== null && b.endTime !== null)
-      .map((b) => ({ id: b.id, text: b.text, startTime: b.startTime!, endTime: b.endTime! }));
+      .map((b) => ({
+        id: b.id,
+        text: b.text,
+        startTime: b.startTime!,
+        endTime: b.endTime!,
+        speaker: b.speaker,
+      }));
     const videoAnnotations: VideoAnnotationItem[] = notebook!.sections
       .filter((s) => s.hidden)
       .flatMap((s) => s.notes)

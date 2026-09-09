@@ -45,8 +45,8 @@ export const GEMINI_FILE_MAX_BYTES = MAX_VIDEO_BYTES;
 // runs past the 1M context window in a single call (and its transcript would
 // crowd the output cap). Past this many tokens the video transcribes in
 // windows that are stitched back together.
-const GEMINI_SINGLE_CALL_TOKENS = 700_000;
-const CHUNK_SECONDS = 900; // 15 minutes per window — a longer one invites a partial answer
+export const GEMINI_SINGLE_CALL_TOKENS = 700_000;
+export const CHUNK_SECONDS = 900; // 15 minutes per window — a longer one invites a partial answer
 const MAX_CHUNKS = 16; // 4 hours; past that the run cannot finish inside one request
 // Windows run together, so a long video costs about one window of wall clock
 // rather than the sum — the request has to finish inside the function timeout.
@@ -351,7 +351,64 @@ function youtubeVideoPart(
 
 // The media as a Gemini part, whole or windowed: a YouTube URL and a file in
 // Gemini's store are the same shape, so one windowing path serves both.
-type MediaPart = (window?: { start: number; end: number; last?: boolean }) => unknown;
+export type MediaWindow = { start: number; end: number; last?: boolean };
+export type MediaPart = (window?: MediaWindow) => unknown;
+
+/** The media as something Gemini can read (SPEC.md §11): a YouTube URL, the
+    bytes inline when they fit one request, or the file in Gemini's store —
+    uploaded now when it is not there yet. One media path for every pass that
+    reads the media: transcription, and the speakers pass over its lines.
+    `windowable` says whether it can be asked for by time range; only video
+    can. `inline` media is one call and is never counted or windowed. */
+export async function geminiMediaPart(
+  source: TranscribeSource,
+  opts: TranscribeOptions = {},
+): Promise<{ part: MediaPart; windowable: boolean; inline: boolean; label: string }> {
+  if (source.kind === "youtube") {
+    return {
+      part: (w) => youtubeVideoPart(source.youtubeId, w),
+      windowable: true,
+      inline: false,
+      label: "video",
+    };
+  }
+  const mimeType = source.mimeType ?? "video/mp4";
+  const kind = mimeType.startsWith("video/") ? "video" : "audio";
+  if (source.bytes.length <= GEMINI_INLINE_MAX_BYTES && !opts.geminiFile) {
+    const data = Buffer.from(source.bytes).toString("base64");
+    return {
+      part: () => ({ inlineData: { mimeType, data } }),
+      windowable: false,
+      inline: true,
+      label: kind,
+    };
+  }
+  const file =
+    opts.geminiFile ??
+    (await uploadGeminiFile(source.bytes, mimeType, {
+      displayName: `unitos-media.${EXTENSION[mimeType] ?? "mp4"}`,
+      deadline: opts.deadline,
+    }));
+  if (!opts.geminiFile) opts.onGeminiFile?.(file);
+  console.log(`[transcribe] ${source.bytes.length} bytes in Gemini's store as ${file.name}`);
+  const video = file.mimeType.startsWith("video/");
+  return {
+    part: (w) => ({
+      fileData: { fileUri: file.uri, mimeType: file.mimeType },
+      ...(video && w
+        ? {
+            videoMetadata: {
+              startOffset: `${Math.floor(w.start)}s`,
+              ...(w.last ? {} : { endOffset: `${Math.ceil(w.end)}s` }),
+            },
+          }
+        : {}),
+    }),
+    windowable: video,
+    inline: false,
+    label: video ? "video" : "audio",
+  };
+}
 
 // One window of a long video, on the video's own clock.
 function transcribeWindow(
@@ -494,45 +551,18 @@ function geminiYouTube(youtubeId: string): Promise<TranscriptSegment[]> {
   });
 }
 
-// An uploaded file. Small enough goes inline, in one request. Anything bigger —
-// an hour of media is far past every other rung's cap — is put in Gemini's file
-// store and read from there, which is where the long context is: the same
-// windowing the YouTube path uses then applies. The stored file is handed back
-// so a retry inside its 48 hours skips the upload.
+// An uploaded file, read through the shared media part: small enough goes
+// inline in one request; anything bigger — an hour of media is far past every
+// other rung's cap — goes in Gemini's file store, which is where the long
+// context is, and takes the same windowing the YouTube path uses.
 async function geminiUpload(
   bytes: Uint8Array<ArrayBuffer>,
   mimeType: string,
   opts: TranscribeOptions = {},
 ): Promise<TranscriptSegment[]> {
-  if (bytes.length <= GEMINI_INLINE_MAX_BYTES && !opts.geminiFile) {
-    return geminiSegments([
-      { inlineData: { mimeType, data: Buffer.from(bytes).toString("base64") } },
-      { text: GEMINI_TRANSCRIPT_PROMPT },
-    ]);
+  const media = await geminiMediaPart({ kind: "upload", bytes, mimeType }, opts);
+  if (media.inline) {
+    return geminiSegments([media.part(), { text: GEMINI_TRANSCRIPT_PROMPT }]);
   }
-  const file =
-    opts.geminiFile ??
-    (await uploadGeminiFile(bytes, mimeType, {
-      displayName: `unitos-media.${EXTENSION[mimeType] ?? "mp4"}`,
-      deadline: opts.deadline,
-    }));
-  if (!opts.geminiFile) opts.onGeminiFile?.(file);
-  console.log(`[transcribe] ${bytes.length} bytes in Gemini's store as ${file.name}`);
-  // Only video can be asked for by time range; audio has to fit one call, and
-  // an audio file long enough not to is past the upload cap anyway.
-  const video = file.mimeType.startsWith("video/");
-  return geminiWindowed(
-    (w) => ({
-      fileData: { fileUri: file.uri, mimeType: file.mimeType },
-      ...(video && w
-        ? {
-            videoMetadata: {
-              startOffset: `${Math.floor(w.start)}s`,
-              ...(w.last ? {} : { endOffset: `${Math.ceil(w.end)}s` }),
-            },
-          }
-        : {}),
-    }),
-    { windowable: video, label: video ? "video" : "audio" },
-  );
+  return geminiWindowed(media.part, { windowable: media.windowable, label: media.label });
 }

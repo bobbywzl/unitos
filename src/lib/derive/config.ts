@@ -8,6 +8,7 @@ import { translate } from "@/lib/i18n/dictionaries";
 // lib/claude.ts, not here: client components import this file.
 export const KIMI_K3 = "kimi-k3";
 export const CLAUDE_FABLE_5_1 = "claude-fable-5-1";
+export const CLAUDE_OPUS_5 = "claude-opus-5";
 // Gemini's flash model reads video (SPEC.md §11): transcription and clip
 // descriptions. The client is lib/video/gemini.ts.
 export const GEMINI_FLASH = "gemini-3.7-flash";
@@ -47,7 +48,7 @@ export const DERIVATION_MODEL: Record<DerivationType, string> = {
   COMPARE: KIMI_K3,
   ANALYZE: KIMI_K3,
   VOICE: KIMI_K3, // no model call of its own: the transcription ladder does the work
-  VISUALIZE: CLAUDE_FABLE_5_1, // the most capable model: the picture has to be faithful or refused (SPEC.md §20)
+  VISUALIZE: CLAUDE_OPUS_5, // the strongest model at drawing: the picture has to be faithful or refused (SPEC.md §20)
 };
 
 export const DERIVATION_EFFORT: Record<DerivationType, KimiEffort> = {
@@ -68,10 +69,12 @@ export const DERIVATION_EFFORT: Record<DerivationType, KimiEffort> = {
   VISUALIZE: "max", // not a Kimi call: VISUALIZE_EFFORT below is the effort used
 };
 
-// VISUALIZE (SPEC.md §20, Unitos Ultra) runs on Claude Fable 5.1 at its
-// highest reasoning effort: the model first judges whether a picture can
-// carry the passage's core idea with certainty, and draws only then.
-export const VISUALIZE_MODEL = CLAUDE_FABLE_5_1;
+// VISUALIZE (SPEC.md §20, Unitos Ultra) runs on Claude Opus 5 at its highest
+// reasoning effort: the model first judges whether a picture can carry the
+// passage's core idea with certainty, and draws only then. Opus 5 leads the
+// board for vector graphics written as code, which is what a visualization
+// is, and costs half of Claude Fable 5.1 for the same drawing.
+export const VISUALIZE_MODEL = CLAUDE_OPUS_5;
 export const VISUALIZE_EFFORT: ClaudeEffort = "max";
 
 // The check (SPEC.md §20): a second call on the same model and effort, after

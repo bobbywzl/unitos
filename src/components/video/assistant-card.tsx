@@ -18,9 +18,9 @@ import type { AssistantPlan, FormalizedArticle, FormalizeFormat } from "@/lib/ty
 // The assistant on the media pane (SPEC.md §11): a chat card under the tool
 // bar, document scope — the model reads the whole timed transcript. Facing
 // video and audio it carries two skills as suggestion chips: Formalize into an
-// article (stores on the attachment, renders under the transcript) and
-// Formalize into bullet-point notes (PENDING notes with time sources). Typed
-// commands go to /api/assistant/act like the reader's chat.
+// article (stores on the attachment, shows under the player as the article
+// view) and Formalize into bullet-point notes (PENDING notes with time
+// sources). Typed commands go to /api/assistant/act like the reader's chat.
 
 type ChatMessage = { role: "user" | "assistant"; content: string };
 
@@ -31,12 +31,15 @@ export function MediaAssistant({
   sectionChoices,
   spot,
   captureFrame,
+  onArticle,
   onClose,
 }: {
   notebookId: string;
   documentId: string;
   hasTranscript: boolean;
   sectionChoices: { id: string; label: string }[];
+  /** A formalized article landed: the pane switches to the article view. */
+  onArticle: () => void;
   // The circled spot on the player, if one is open: commands carry it — the
   // frame, the time range, the drawn region — so the model sees what the
   // reader circled. The chip's ✕ sends commands without it.
@@ -111,12 +114,9 @@ export function MediaAssistant({
               }),
       });
       router.refresh();
-      // The article is a document now (SPEC.md §11) — open it, ready to work on.
-      if (format === "article" && result.article?.documentId) {
-        // A generated article opens with the first-open reveal (reveal.tsx).
-        setRevealFlag(result.article.documentId);
-        router.push(`/n/${notebookId}?doc=${result.article.documentId}`);
-      }
+      // The article shows under the player, where the reader is (SPEC.md §11):
+      // the view bar switches to it. Open as document opens its own document.
+      if (format === "article") onArticle();
     } catch (err) {
       // Stopped, not failed: the skill line stays, no outcome lands.
       if (controller.signal.aborted) return;
@@ -315,27 +315,20 @@ export function MediaAssistant({
   );
 }
 
-// The formalized article, under the transcript (SPEC.md §11). Open as
-// document is the lead action: the article lives as a document in the corpus,
-// with every reader tool. Copy takes the markdown out for publishing;
+// The formalized article's actions, for the view bar over it (SPEC.md §11):
+// the article is one of the views under the player, and its actions sit on
+// the bar that switches views. Open as document opens the article's own
+// document in the corpus; Copy takes the markdown out for publishing;
 // Regenerate overwrites, like summaries — the same document's blocks rewrite.
-export function ArticleSection({
+export function useArticleActions({
   notebookId,
   documentId,
   article,
-  layer,
-  sectionChoices,
   canEdit,
 }: {
   notebookId: string;
   documentId: string;
   article: FormalizedArticle | null;
-  /** The article's own reader layer (SPEC.md §11): the card renders the
-      article's blocks through it, so every text tool works on the article in
-      place. Null for an article stored before it became a document; that one
-      renders as markdown until Open as document gives it one. */
-  layer: ArticleLayer | null;
-  sectionChoices: { id: string; label: string }[];
   canEdit: boolean;
 }) {
   const t = useT();
@@ -344,8 +337,6 @@ export function ArticleSection({
   const [opening, setOpening] = useState(false);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  if (!article) return null;
 
   async function regenerate() {
     if (busy) return;
@@ -403,59 +394,84 @@ export function ArticleSection({
   const action =
     "rounded-full px-2 py-0.5 text-[11px] font-semibold text-sand-600 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40";
 
+  const actions = article ? (
+    <>
+      {(article.documentId || canEdit) && (
+        <button
+          onClick={() => void open()}
+          data-track="video-article-open"
+          disabled={opening}
+          className="rounded-full px-2 py-0.5 text-[11px] font-bold text-clay-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40"
+          data-tip={t("video.openArticleTitle")}
+        >
+          {opening ? t("common.working") : t("video.openArticle")}
+        </button>
+      )}
+      <button
+        onClick={() => void copy()}
+        data-track="video-article-copy"
+        className={action}
+        data-tip={t("video.copyMarkdownTitle")}
+      >
+        {copied ? t("video.copied") : t("video.copyMarkdown")}
+      </button>
+      {canEdit && (
+        <button
+          onClick={() => void regenerate()}
+          data-track="video-article-regenerate"
+          disabled={busy}
+          className={action}
+          data-tip={t("video.regenerateArticleTitle")}
+        >
+          {busy ? t("common.working") : t("common.regenerate")}
+        </button>
+      )}
+    </>
+  ) : null;
+
+  return { actions, error };
+}
+
+// The formalized article's body, under the player when the view bar picks it
+// (SPEC.md §11). It renders through the article's own reader layer, in the
+// same article form as the transcript, so the selection toolbar, marks,
+// links, and edit mode work on it in place.
+export function ArticleBody({
+  notebookId,
+  article,
+  layer,
+  sectionChoices,
+  error,
+}: {
+  notebookId: string;
+  article: FormalizedArticle | null;
+  /** The article's own reader layer (SPEC.md §11). Null for an article stored
+      before it became a document; that one renders as markdown until Open as
+      document gives it one. */
+  layer: ArticleLayer | null;
+  sectionChoices: { id: string; label: string }[];
+  error: string | null;
+}) {
+  if (!article) return null;
   return (
-    <section className="mt-6">
-      <div className="mb-2.5 flex items-center gap-2">
-        <span className="text-[11px] font-bold tracking-[0.08em] text-sand-600 uppercase">
-          {t("video.article")}
-        </span>
-        <div className="ml-auto flex items-center gap-1">
-          {(article.documentId || canEdit) && (
-            <button
-              onClick={() => void open()}
-              data-track="video-article-open"
-              disabled={opening}
-              className="rounded-full px-2 py-0.5 text-[11px] font-bold text-clay-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40"
-              data-tip={t("video.openArticleTitle")}
-            >
-              {opening ? t("common.working") : t("video.openArticle")}
-            </button>
-          )}
-          <button onClick={() => void copy()} data-track="video-article-copy" className={action} data-tip={t("video.copyMarkdownTitle")}>
-            {copied ? t("video.copied") : t("video.copyMarkdown")}
-          </button>
-          {canEdit && (
-            <button
-              onClick={() => void regenerate()}
-              data-track="video-article-regenerate"
-              disabled={busy}
-              className={action}
-              data-tip={t("video.regenerateArticleTitle")}
-            >
-              {busy ? t("common.working") : t("common.regenerate")}
-            </button>
-          )}
+    <section>
+      {layer ? (
+        <ReaderInteractions
+          embedded
+          documentId={layer.documentId}
+          notebookId={notebookId}
+          sectionChoices={sectionChoices}
+          title={layer.title}
+          blocks={layer.blocks}
+          translationAvailable={false}
+          {...layer.reader}
+        />
+      ) : (
+        <div className="mx-auto w-full max-w-[720px]">
+          <h3 className="mb-3 text-[26px] font-display text-sand-900">{article.title}</h3>
+          <Markdown>{article.markdown}</Markdown>
         </div>
-      </div>
-      <div className="rounded-2xl bg-card px-6 py-5 shadow-soft">
-        {layer ? (
-          <ReaderInteractions
-            embedded
-            documentId={layer.documentId}
-            notebookId={notebookId}
-            sectionChoices={sectionChoices}
-            title={layer.title}
-            blocks={layer.blocks}
-            translationAvailable={false}
-            {...layer.reader}
-          />
-        ) : (
-          <>
-            <h3 className="mb-3 text-[19px] font-bold text-sand-900">{article.title}</h3>
-            <Markdown>{article.markdown}</Markdown>
-          </>
-        )}
-      </div>
+      )}
       {error && <p className="mt-2 px-1 text-xs text-red-500">{error}</p>}
     </section>
   );

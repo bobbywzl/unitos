@@ -30,14 +30,14 @@ const en = {
   // Pane: header, tool caption, tool bar
   kindVideo: "Video",
   kindAudio: "Audio",
-  hintCaption: "Circle a spot to comment · Search the video · Click a transcript line to seek",
-  hintCaptionAudio: "Comment on a moment · Search the audio · Click a transcript line to seek",
+  hintCaption: "Circle a spot to comment · Search the video · Click a line to seek",
+  hintCaptionAudio: "Comment on a moment · Search the audio · Click a line to seek",
   circleComment: "Circle & comment",
   circleCommentTitle:
     "Pause and circle a spot on the frame — or take the whole frame — then comment or explain",
   audioCommentTitle: "Pause on this moment, then comment or explain",
   linesCount: "{n} lines",
-  transcriptFailedChip: "Transcript failed",
+  transcriptFailedChip: "Transcription failed",
   transcribing: "Transcribing…",
   drawHelp:
     "Draw around a spot on the frame — the loop closes itself — or use the whole frame. Esc cancels.",
@@ -45,8 +45,8 @@ const en = {
   // Find
   findPlaceholder: "Find in this video…",
   findPlaceholderAudio: "Find in this audio…",
-  findPlaceholderNeedsTranscript: "Find in this video (needs the transcript)…",
-  findPlaceholderNeedsTranscriptAudio: "Find in this audio (needs the transcript)…",
+  findPlaceholderNeedsTranscript: "Find in this video (needs the transcription)…",
+  findPlaceholderNeedsTranscriptAudio: "Find in this audio (needs the transcription)…",
   findAria: "Find in this video",
   findAriaAudio: "Find in this audio",
   findEmpty: "Nothing in the video answers that.",
@@ -76,9 +76,9 @@ const en = {
   explainCircled: "Explain the circled spot",
   explainThisMoment: "Explain this moment",
   explainButtonTitle:
-    "The model reads the frame and the transcript; the explanation saves as an annotation here",
+    "The model reads the frame and the transcription; the explanation saves as an annotation here",
   audioExplainButtonTitle:
-    "The model reads the transcript at this range; the explanation saves as an annotation here",
+    "The model reads the transcription at this range; the explanation saves as an annotation here",
   explanation: "Explanation",
   comment: "Comment",
   savedAsAnnotation: "Saved as an annotation",
@@ -88,8 +88,8 @@ const en = {
   regenerateFindTitle: "Search this query again. The new matches replace these.",
   requestFailedStatus: "Request failed ({status})",
 
-  // Transcript
-  transcript: "Transcript",
+  // Transcription
+  transcript: "Transcription",
   transcribeAgain: "Transcribe again",
   transcribeAgainTitle: "Transcribe the video again; the lines are replaced",
   transcribeAgainTitleAudio: "Transcribe the audio again; the lines are replaced",
@@ -102,16 +102,16 @@ const en = {
     "Transcribing… takes a minute or two. Read along, click a line to seek, and search the video once it lands.",
   transcribingLongAudio:
     "Transcribing… takes a minute or two. Read along, click a line to seek, and search the audio once it lands.",
-  transcriptFailedBody: "The transcript did not land. It powers read-along, click-to-seek, and Find.",
+  transcriptFailedBody: "The transcription did not land. It powers read-along, click-to-seek, and Find.",
   transcriptionFailed: "Transcription failed",
   lastRunUnfinished: "The last run did not finish.",
-  pasteTranscript: "Paste transcript",
-  pasteTranscriptTitle: "Paste the transcript YouTube shows; it becomes this video's transcript",
+  pasteTranscript: "Paste transcription",
+  pasteTranscriptTitle: "Paste the transcription YouTube shows; it becomes this video's transcription",
   pasteHelpYoutube:
     "Open the video on YouTube, click ...more under it, click Show transcript, select all the lines, copy, and paste them here.",
-  pasteHelpFile: "Paste a timed transcript: a time on one line and its words on the next, or an SRT or WebVTT file.",
+  pasteHelpFile: "Paste a timed transcription: a time on one line and its words on the next, or an SRT or WebVTT file.",
   pastePlaceholder: "0:33\nfirst line\n0:35\nnext line",
-  savePastedTranscript: "Save transcript",
+  savePastedTranscript: "Save transcription",
   // Known transcription failure classes; unknown ones show the raw diagnostic.
   errNoSpeech: "No speech was found in the recording.",
   errTooLarge: "The file is larger than the transcription cap. Try a smaller file.",
@@ -126,18 +126,18 @@ const en = {
 
   // Ask about a range
   askRange: "Ask about a range",
-  askButtonTitle: "Ask a question about a stretch of the video; the model answers from the transcript in that range",
-  askButtonTitleAudio: "Ask a question about a stretch of the audio; the model answers from the transcript in that range",
+  askButtonTitle: "Ask a question about a stretch of the video; the model answers from the transcription in that range",
+  askButtonTitleAudio: "Ask a question about a stretch of the audio; the model answers from the transcription in that range",
   askPlaceholder: "What is said in this range?",
   askPlaceholderAudio: "What is said in this range?",
   ask: "Ask",
-  askTitle: "Answer from the transcript in this range",
+  askTitle: "Answer from the transcription in this range",
   stopAsk: "Stop. Whatever answered so far stays on screen.",
   askFailed: "Ask failed",
 
   // Assistant on the media pane, with the two formalize skills
   assistant: "Assistant",
-  assistantButtonTitle: "Ask the assistant; it reads the whole transcript",
+  assistantButtonTitle: "Ask the assistant; it reads the whole transcription",
   assistantPlaceholder: "Ask the assistant…",
   assistantSend: "Send",
   stopAssistant: "Stop the assistant. Your message stays; no reply lands.",
@@ -149,15 +149,26 @@ const en = {
     "Document actions from this chat are not available on video and audio yet.",
   skillArticle: "Formalize into an article",
   skillArticleTitle:
-    "Rewrite the transcript as a formal article; it becomes a document in this project, with every reader tool",
+    "Rewrite the transcription as a formal article; it shows under the player and becomes a document in this project, with every reader tool",
   skillNotes: "Formalize into bullet-point notes",
   skillNotesTitle:
-    "Turn the transcript into bullet-point notes; they land pending in the notes tray",
-  skillNeedsTranscript: "Needs the transcript",
-  articleReady: "The article is ready — opening it as a document.",
+    "Turn the transcription into bullet-point notes; they land pending in the notes tray",
+  skillNeedsTranscript: "Needs the transcription",
+  articleReady: "The article is ready — it shows under the player.",
   notesReady: "{n} notes are pending in {section}. Accept them in the notes tray.",
 
-  // The formalized article under the transcript
+  // Speakers on the transcription
+  detectSpeakers: "Detect speakers",
+  detectSpeakersTitle:
+    "Read the recording again and say who speaks each line; names come from the introductions",
+  detectingSpeakers: "Listening for speakers…",
+  speakersFound: "{n} speakers",
+  oneSpeaker: "One voice — nothing to name",
+  speakersFailed: "Detecting speakers failed",
+  renameSpeaker: "Speaker name",
+  renameSpeakerTitle: "Rename this speaker; every line they say follows",
+
+  // The formalized article, the view bar's other view under the player
   article: "Article",
   openArticle: "Open as document",
   openArticleTitle:
@@ -166,7 +177,7 @@ const en = {
   copyMarkdownTitle: "Copy the article as markdown, for publishing",
   copied: "Copied",
   copyFailed: "Copy failed",
-  regenerateArticleTitle: "Formalize the transcript into an article again; this one is replaced",
+  regenerateArticleTitle: "Formalize the transcription into an article again; this one is replaced",
 };
 
 const zh: Record<keyof typeof en, string> = {
@@ -248,7 +259,7 @@ const zh: Record<keyof typeof en, string> = {
   regenerateFindTitle: "重新搜索这个查询。新的结果会替换这些。",
   requestFailedStatus: "请求失败（{status}）",
 
-  // Transcript
+  // Transcription
   transcript: "逐字稿",
   transcribeAgain: "重新转写",
   transcribeAgainTitle: "重新转写视频；逐字稿行会被替换",
@@ -308,10 +319,20 @@ const zh: Record<keyof typeof en, string> = {
   skillNotes: "整理成分条笔记",
   skillNotesTitle: "把逐字稿提炼成分条笔记；笔记会以待定状态进入笔记栏",
   skillNeedsTranscript: "需要逐字稿",
-  articleReady: "文章已生成——正在以文档形式打开。",
+  articleReady: "文章已生成——已显示在播放器下方。",
   notesReady: "{section} 中有 {n} 条待定笔记。请在笔记栏接受。",
 
-  // The formalized article under the transcript
+  // Speakers on the transcription
+  detectSpeakers: "识别说话人",
+  detectSpeakersTitle: "重新听一遍录音，标出每行由谁所说；名字取自录音中的自我介绍",
+  detectingSpeakers: "正在识别说话人……",
+  speakersFound: "{n} 位说话人",
+  oneSpeaker: "只有一个声音——无需命名",
+  speakersFailed: "识别说话人失败",
+  renameSpeaker: "说话人名字",
+  renameSpeakerTitle: "重命名这位说话人；其所说的每一行都会同步更新",
+
+  // The formalized article, the view bar's other view under the player
   article: "文章",
   openArticle: "以文档形式打开",
   openArticleTitle: "把文章作为本项目中的文档打开——像任何文档一样高亮、评论、编辑、提炼",
