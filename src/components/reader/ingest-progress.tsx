@@ -81,15 +81,20 @@ export function completeIngestSteps(steps: IngestStep[]): IngestStep[] {
 }
 
 // Count details travel as JSON: the extract step carries the parse counts
-// ({blocks, figures, equations, references, captionsWithoutFigure}), the save
-// step the final figure check ({figures, captionsWithoutFigure}; SPEC.md §15).
-// They render in the UI language; any other detail renders as sent.
+// ({blocks, figures, equations, references, captionsWithoutFigure, media,
+// mediaLost}), the save step the final figure check ({figures,
+// captionsWithoutFigure, media, mediaLost}; SPEC.md §15). They render in the
+// UI language; any other detail renders as sent.
 export type IngestCounts = {
   blocks: number;
   figures: number;
   equations: number;
   references: number;
   captionsWithoutFigure: number;
+  // The media check: images, videos, and charts in the page's content, and
+  // the names of those the parse did not load.
+  media: number;
+  mediaLost: string[];
 };
 
 /** The counts in a JSON detail; null for a detail that is not counts. A
@@ -108,6 +113,8 @@ export function ingestCounts(detail: string): IngestCounts | null {
       equations: count("equations"),
       references: count("references"),
       captionsWithoutFigure: count("captionsWithoutFigure"),
+      media: count("media"),
+      mediaLost: Array.isArray(raw.mediaLost) ? raw.mediaLost.filter((n): n is string => typeof n === "string") : [],
     };
   } catch {
     return null;
@@ -117,6 +124,20 @@ export function ingestCounts(detail: string): IngestCounts | null {
 /** "1 caption without a figure" / "3 captions without a figure". */
 export function captionsWithoutFigureText(t: TFunc, n: number): string {
   return t(n === 1 ? "panes.detailCaptionsWithoutFigure1" : "panes.detailCaptionsWithoutFigureN", { n });
+}
+
+// Media names listed in one line at most; the rest are counted.
+const MEDIA_NAMES_MAX = 4;
+
+/** "2 of 6 images and videos on the page not loaded: a.png, b.mp4". */
+export function mediaLostText(t: TFunc, counts: Pick<IngestCounts, "media" | "mediaLost">): string {
+  const names = counts.mediaLost.slice(0, MEDIA_NAMES_MAX);
+  const rest = counts.mediaLost.length - names.length;
+  return t("panes.detailMediaLost", {
+    n: counts.mediaLost.length,
+    total: counts.media,
+    names: rest > 0 ? `${names.join(", ")} +${rest}` : names.join(", "),
+  });
 }
 
 function detailText(t: TFunc, detail: string): string {
@@ -130,6 +151,7 @@ function detailText(t: TFunc, detail: string): string {
     ...(counts.captionsWithoutFigure > 0
       ? [captionsWithoutFigureText(t, counts.captionsWithoutFigure)]
       : []),
+    ...(counts.mediaLost.length > 0 ? [mediaLostText(t, counts)] : []),
   ].join(" · ");
 }
 

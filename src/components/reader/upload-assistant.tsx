@@ -24,6 +24,7 @@ import {
   IngestProgress,
   advanceIngestSteps,
   captionsWithoutFigureText,
+  mediaLostText,
   completeIngestSteps,
   ingestCounts,
   initialIngestSteps,
@@ -123,6 +124,7 @@ const EARLY_OPEN_FIGURE_SHARE = 0.9;
 function readsWell(saveDetail: string | null): boolean {
   const counts = saveDetail ? ingestCounts(saveDetail) : null;
   if (!counts) return true;
+  if (counts.mediaLost.length > 0) return false;
   const captions = counts.figures + counts.captionsWithoutFigure;
   return captions === 0 || counts.figures / captions >= EARLY_OPEN_FIGURE_SHARE;
 }
@@ -763,7 +765,8 @@ export function UploadAssistant({
   const saveDetail = steps?.find((s) => s.key === "save")?.detail;
   const verification =
     phase === "done" && selectedCount === 1 && saveDetail ? ingestCounts(saveDetail) : null;
-  const lostFigures = (verification?.captionsWithoutFigure ?? 0) > 0;
+  const lostFigures =
+    (verification?.captionsWithoutFigure ?? 0) > 0 || (verification?.mediaLost.length ?? 0) > 0;
   // The review's figure check passes: every caption has its figure and no
   // figure waits on a browser render.
   const figuresOk =
@@ -856,7 +859,7 @@ export function UploadAssistant({
                     captions: review.captions,
                   })}
                 </p>
-                {(review.captionsWithoutFigure.length > 0 || review.scriptedFigures) && (
+                {(review.captionsWithoutFigure.length > 0 || review.mediaLost.length > 0 || review.scriptedFigures) && (
                   <ul className={`flex flex-col gap-1 ${amberNote}`}>
                     {review.captionsWithoutFigure.map((caption, i) => (
                       <li key={i}>
@@ -865,10 +868,16 @@ export function UploadAssistant({
                         })}
                       </li>
                     ))}
+                    {review.mediaLost.length > 0 && (
+                      <li>{mediaLostText(t, { media: review.media, mediaLost: review.mediaLost })}</li>
+                    )}
                     {review.scriptedFigures && <li>{t("panes.uploadScriptedFigures")}</li>}
                   </ul>
                 )}
                 {figuresOk && <p className="text-xs text-sand-500">{t("panes.uploadFiguresOk")}</p>}
+                {review.media > 0 && review.mediaLost.length === 0 && (
+                  <p className="text-xs text-sand-500">{t("panes.uploadMediaOk", { n: review.media })}</p>
+                )}
                 {review.summary && (
                   <p className="text-[13px] leading-relaxed text-sand-700">{review.summary}</p>
                 )}
@@ -1091,9 +1100,14 @@ export function UploadAssistant({
               <p className={lostFigures ? amberNote : "text-xs text-sand-500"}>
                 {[
                   t("panes.uploadFiguresLoaded", { n: verification.figures }),
-                  lostFigures
+                  verification.captionsWithoutFigure > 0
                     ? captionsWithoutFigureText(t, verification.captionsWithoutFigure)
                     : t("panes.uploadEveryCaptionHasFigure"),
+                  ...(verification.mediaLost.length > 0
+                    ? [mediaLostText(t, verification)]
+                    : verification.media > 0
+                      ? [t("panes.uploadEveryMediaLoaded", { n: verification.media })]
+                      : []),
                 ].join(" · ")}
               </p>
             )}

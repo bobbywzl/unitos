@@ -5,6 +5,7 @@ import { classifyPdf } from "@/lib/handwritten/classify";
 import { pageBlockText, pdfPageCount } from "@/lib/handwritten/pages";
 import { parsePdf } from "@/lib/parse/pdf";
 import { auditFigures } from "@/lib/parse/figure-audit";
+import { restoreFigures } from "@/lib/parse/figures";
 import { layoutBlocks } from "@/lib/parse/layout";
 import { pruneReferences } from "@/lib/parse/references";
 import { browserConfigured } from "@/lib/browser";
@@ -16,6 +17,7 @@ import { parseFetchedPage, parseHtmlContent, resolveContentsLinks } from "@/lib/
 import {
   PARSER_VERSION,
   type DocumentReference,
+  type MediaCheck,
   type ParsedBlock,
   type ParsedDocument,
 } from "@/lib/parse/types";
@@ -109,6 +111,9 @@ async function refineUrlBlocks(
     blocks = laid.blocks;
     font = laid.font;
   } else blocks = await structureBlocks(blocks, parsed.title, instructions, signal);
+  // The passes reference blocks by index: a figure dropped between two
+  // blocks that survived is restored (lib/parse/figures.ts restoreFigures).
+  blocks = restoreFigures(parsed.blocks, blocks);
   const references = pruneReferences(
     blocks,
     parsed.references ?? [],
@@ -120,16 +125,24 @@ async function refineUrlBlocks(
 // The final figure check, reported with the save stage so the upload
 // assistant and the document bar can show it: how many figures, the captions
 // whose figure the parse did not load, whether the page draws figures with
-// scripts that no configured browser could render, and why a browser
-// render that ran did not deliver (the reasons a caption stands alone;
-// lib/parse/render-page.ts).
-function saveDetail(blocks: ParsedBlock[], scriptedFigures = false, render: RenderReport | null = null): string {
+// scripts that no configured browser could render, why a browser render
+// that ran did not deliver (the reasons a caption stands alone;
+// lib/parse/render-page.ts), and the media check (SPEC.md §15): how many
+// images, videos, and charts the page's content holds and the names of
+// those no block carries.
+function saveDetail(
+  blocks: ParsedBlock[],
+  scriptedFigures = false,
+  render: RenderReport | null = null,
+  media: MediaCheck | undefined = undefined,
+): string {
   const audit = auditFigures(blocks);
   return JSON.stringify({
     figures: audit.figures,
     captionsWithoutFigure: audit.captionsWithoutFigure,
     scriptedFigures,
     renderError: render?.error ?? null,
+    ...(media ? { media: media.onPage, mediaLost: media.lost } : {}),
   });
 }
 
@@ -347,7 +360,7 @@ export async function ingestMarkdown(
   const blocks = opts.instructions?.trim()
     ? await structureBlocks(parsed.blocks, title, opts.instructions)
     : parsed.blocks;
-  onProgress?.("save", saveDetail(blocks));
+  onProgress?.("save", saveDetail(blocks, false, null, parsed.mediaCheck));
   const document = await createDocumentWithBlocks({
     title,
     sourceUrl: opts.sourceUrl,
@@ -431,7 +444,7 @@ export async function ingestUrl(
     const chars = blocks.reduce((n, b) => n + b.text.length, 0);
     const parts = splitBlocks(title, blocks, splitPartCount(chars));
     if (parts.length > 1) {
-      onProgress?.("save", saveDetail(blocks, unrenderedScripts(fetched), render));
+      onProgress?.("save", saveDetail(blocks, unrenderedScripts(fetched), render, parsed.mediaCheck));
       const documents = [];
       for (let i = 0; i < parts.length; i++) {
         documents.push(
@@ -450,7 +463,7 @@ export async function ingestUrl(
     }
   }
 
-  onProgress?.("save", saveDetail(blocks, unrenderedScripts(fetched), render));
+  onProgress?.("save", saveDetail(blocks, unrenderedScripts(fetched), render, parsed.mediaCheck));
   const document = await createDocumentWithBlocks({
     title,
     sourceUrl: url,
@@ -521,6 +534,7 @@ export async function reparseDocument(
   let columnWidth: number | undefined;
   let scriptedFigures = false;
   let render: RenderReport | null = null;
+  let mediaCheck: MediaCheck | undefined;
   if (document.fileData) {
     onProgress?.("parse");
     const bytes = new Uint8Array(document.fileData);
@@ -530,6 +544,7 @@ export async function reparseDocument(
       const parsed = await parseMarkdownDocument(new TextDecoder("utf-8").decode(bytes), document.title);
       blocks = parsed.blocks;
       references = parsed.references;
+      mediaCheck = parsed.mediaCheck;
     }
   } else if (document.sourceUrl) {
     const url = document.sourceUrl;
@@ -551,13 +566,14 @@ export async function reparseDocument(
     references = refined.references;
     blocks = refined.blocks;
     columnWidth = parsed.columnWidth;
+    mediaCheck = parsed.mediaCheck;
   } else {
     throw new Error("Document has no stored file and no source URL");
   }
 
   // The figure check rides with the save stage, as on an add: the document
   // bar reports a caption left without its figure.
-  onProgress?.("save", saveDetail(blocks, scriptedFigures, render));
+  onProgress?.("save", saveDetail(blocks, scriptedFigures, render, mediaCheck));
   const rows = resolveContentsLinks(blocks);
   await db.$transaction(async (tx) => {
     await tx.block.deleteMany({ where: { documentId } });

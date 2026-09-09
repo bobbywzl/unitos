@@ -3,7 +3,7 @@ import { hasDirectText, normalizeText, separateBlocks, spacedText, withReadableM
 import { isFigureCaption } from "@/lib/parse/figure-audit";
 import { stripCitationTokens } from "@/lib/parse/references";
 import { sanitizeHtml, sanitizeSvgElement } from "@/lib/parse/sanitize";
-import type { ParsedBlock } from "@/lib/parse/types";
+import type { MediaCheck, ParsedBlock } from "@/lib/parse/types";
 
 // Figures in the URL walk (lib/parse/url.ts): which media is content, what
 // a figure's caption is, and the FIGURE block an element becomes. Nothing is
@@ -24,6 +24,10 @@ export type WalkCtx = {
   url: string;
   blocks: ParsedBlock[];
   seenMedia: Set<string>;
+  // Every media element of the page a block carries (figureBlock marks the
+  // media under the element it built from; the table and list cases mark
+  // theirs). The media check reads what is left (checkMedia).
+  consumed: WeakSet<Element>;
 };
 
 // A caption without a "Figure N" label is at most this long; longer text
@@ -57,10 +61,21 @@ function isMedia(el: Element): boolean {
 
 /** Meaningful media in or at an element: a chart svg, a video, an iframe,
     a content image. */
+// An iframe the page hides is a tracker or a widget's plumbing, not content:
+// no size, or hidden by its own style.
+function isHiddenFrame(el: Element): boolean {
+  const width = el.getAttribute("width") ?? "";
+  const height = el.getAttribute("height") ?? "";
+  if ((width !== "" && Number(width) <= 1) || (height !== "" && Number(height) <= 1)) return true;
+  if (el.hasAttribute("hidden") || el.getAttribute("aria-hidden") === "true") return true;
+  return /display\s*:\s*none|visibility\s*:\s*hidden/i.test(el.getAttribute("style") ?? "");
+}
+
 function isMeaningfulMedia(el: Element): boolean {
   const tag = el.tagName.toLowerCase();
   if (tag === "svg") return isChartSvg(el);
-  if (tag === "video" || tag === "iframe") return el.hasAttribute("src");
+  if (tag === "iframe") return el.hasAttribute("src") && !isHiddenFrame(el);
+  if (tag === "video") return el.hasAttribute("src");
   if (tag === "img") return el.hasAttribute("src") && isContentImage(el);
   return false;
 }
@@ -70,6 +85,37 @@ export function hasMeaningfulMedia(el: Element): boolean {
   if ([...el.querySelectorAll("svg")].some(isChartSvg)) return true;
   if (el.querySelector("video[src], iframe[src]")) return true;
   return [...el.querySelectorAll("img[src]")].some(isContentImage);
+}
+
+// An image the page lays out narrower than this share of the text column
+// inside a paragraph of text is an inline icon (an emoji, a flag, a badge),
+// not a figure. Read from the width the page-style bake wrote.
+const INLINE_ICON_PCT = 10;
+
+/** An image set inline in prose at an icon's width. */
+export function isInlineIcon(img: Element): boolean {
+  const pct = Number(img.getAttribute("data-width-pct") ?? "");
+  return pct > 0 && pct < INLINE_ICON_PCT;
+}
+
+/** The meaningful media elements under an element, in document order: the
+    content images, the videos and iframes with a src, the chart svgs. A
+    media element inside another (an svg in an svg) counts once, as the
+    outer one. */
+export function meaningfulMediaIn(root: Element): Element[] {
+  const out: Element[] = [];
+  for (const el of root.querySelectorAll(MEDIA_SELECTOR)) {
+    if (!isMeaningfulMedia(el)) continue;
+    if (el.parentElement?.closest("svg, video, iframe")) continue;
+    out.push(el);
+  }
+  if (isMeaningfulMedia(root)) out.unshift(root);
+  return out;
+}
+
+/** Mark the media under an element as carried by a block. */
+export function consumeMedia(el: Element, ctx: WalkCtx) {
+  for (const media of meaningfulMediaIn(el)) ctx.consumed.add(media);
 }
 
 /** An svg the page's scripts draw later: a viewBox and nothing inside. */
@@ -341,13 +387,17 @@ export function figureBlock(el: Element, ctx: WalkCtx): ParsedBlock | null {
   // The same asset appearing again (repeated hero, shared illustration) is not
   // a second figure.
   const keys = mediaKeys(html);
-  if (keys.length > 0 && keys.every((k) => ctx.seenMedia.has(k))) return null;
+  if (keys.length > 0 && keys.every((k) => ctx.seenMedia.has(k))) {
+    consumeMedia(el, ctx);
+    return null;
+  }
   for (const key of keys) ctx.seenMedia.add(key);
+  consumeMedia(el, ctx);
 
   return { type: "FIGURE", text: caption || alt || "Figure", html };
 }
 
-export function svgBlock(svg: Element): ParsedBlock | null {
+export function svgBlock(svg: Element, ctx?: WalkCtx): ParsedBlock | null {
   if (!isChartSvg(svg)) return null;
   const clone = svg.cloneNode(true) as Element;
   if (!sanitizeSvgElement(clone)) return null;
@@ -356,6 +406,7 @@ export function svgBlock(svg: Element): ParsedBlock | null {
   const label = normalizeText(
     svg.getAttribute("aria-label") ?? svg.querySelector("title")?.textContent ?? "",
   );
+  ctx?.consumed.add(svg);
   return { type: "FIGURE", text: label || "Figure", html: `<figure>${html}</figure>` };
 }
 
@@ -485,5 +536,210 @@ export function repairFigures(blocks: ParsedBlock[], root: Element, ctx: WalkCtx
     out.splice(i, 1);
     i -= 1;
   }
+  return out;
+}
+
+// ── The media check ─────────────────────────────────────────────────────────
+// The walk builds figures from what it recognizes; what it does not
+// recognize it must not lose. After the walk and the figure repair, every
+// image, video, iframe, and chart in the page's content is checked against
+// the blocks: a media element no block carries is built into a FIGURE and
+// set where the page set it. The counts travel with the document
+// (ParsedDocument.mediaCheck) to the upload assistant, the progress card,
+// and the document bar (SPEC.md §15).
+
+// The shortest text worth matching a block by.
+const PROBE_MIN_CHARS = 8;
+// The longest probe: a text node's tail or head.
+const PROBE_MAX_CHARS = 60;
+// How many text nodes before or after a media element are tried.
+const PROBE_NODES = 20;
+
+/** A media element's name for a report: an image's or a video's file name,
+    an iframe's host, else its kind. */
+export function mediaName(el: Element): string {
+  const src = el.getAttribute("src") ?? "";
+  const tag = el.tagName.toLowerCase();
+  if (!src) return tag === "svg" ? "chart" : tag;
+  try {
+    const url = new URL(src, "https://x/");
+    if (tag === "iframe") return url.hostname === "x" ? tag : url.hostname;
+    const file = decodeURIComponent(url.pathname.split("/").filter(Boolean).pop() ?? "");
+    return file || tag;
+  } catch {
+    return tag;
+  }
+}
+
+// The shortest text node worth a probe at all: a heading of one word
+// ("Gallery") still names its block, matched whole.
+const PROBE_WHOLE_MIN_CHARS = 3;
+// A container with more text than this is a section, not the block that
+// holds the media.
+const CONTAINER_TEXT_MAX = 600;
+
+/** The text nodes of the root in document order, with their normalized
+    text; nodes shorter than PROBE_WHOLE_MIN_CHARS are skipped. */
+function textNodesOf(root: Element): { node: Node; text: string }[] {
+  const out: { node: Node; text: string }[] = [];
+  const walker = root.ownerDocument.createTreeWalker(root, 4 /* SHOW_TEXT */);
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    const text = normalizeText(node.textContent ?? "");
+    if (text.length >= PROBE_WHOLE_MIN_CHARS) out.push({ node, text });
+  }
+  return out;
+}
+
+/** The block at or past `from` whose text holds the probe — a probe
+    shorter than PROBE_MIN_CHARS must be the block's whole text — else -1. */
+function blockHolding(blocks: ParsedBlock[], from: number, probe: string): number {
+  const whole = probe.length < PROBE_MIN_CHARS;
+  for (let i = from; i < blocks.length; i++) {
+    const text = normalizeText(blocks[i].text);
+    if (whole ? text === probe : text.includes(probe)) return i;
+  }
+  return -1;
+}
+
+/** The block that holds the text of the element the media sits in: the
+    nearest ancestor with text of its own outside the media, when that text
+    is a block's worth and a block holds it. A media element set inside a
+    list item or a table cell follows that list or table. */
+function containerBlock(blocks: ParsedBlock[], cursor: number, el: Element, root: Element): number {
+  for (let node = el.parentElement; node && node !== root; node = node.parentElement) {
+    const text = textOutsideMedia(node);
+    if (!text) continue;
+    if (text.length > CONTAINER_TEXT_MAX) return -1;
+    return blockHolding(blocks, cursor, text.slice(0, PROBE_MAX_CHARS));
+  }
+  return -1;
+}
+
+/** Where a figure built for a media element goes in the block list: after
+    the block holding its container's text (containerBlock), else after the
+    block holding the text nearest before the element on the page, else
+    before the block holding the text nearest after it, else the end. Only
+    blocks at or past `cursor` are considered, so figures keep the page's
+    order. */
+function figureSlot(
+  blocks: ParsedBlock[],
+  cursor: number,
+  el: Element,
+  root: Element,
+  texts: { node: Node; text: string }[],
+  at: number,
+): number {
+  const container = containerBlock(blocks, cursor, el, root);
+  if (container !== -1) return container + 1;
+  // Text before the element: the nearest node first, its tail as the probe.
+  for (let i = at - 1, tried = 0; i >= 0 && tried < PROBE_NODES; i--) {
+    const { node, text } = texts[i];
+    if (el.contains(node)) continue;
+    tried += 1;
+    const found = blockHolding(blocks, cursor, text.slice(-PROBE_MAX_CHARS));
+    if (found !== -1) return found + 1;
+  }
+  for (let i = at, tried = 0; i < texts.length && tried < PROBE_NODES; i++) {
+    const { node, text } = texts[i];
+    if (el.contains(node)) continue;
+    tried += 1;
+    const found = blockHolding(blocks, cursor, text.slice(0, PROBE_MAX_CHARS));
+    if (found !== -1) return found;
+  }
+  return blocks.length;
+}
+
+/** After the walk: every media element in the page's content against the
+    blocks. A media element no block carries becomes a FIGURE where the page
+    set it (figureSlot). What cannot be built (a video the sanitizer refuses)
+    is reported by name. Inline icons are not media. */
+export function checkMedia(
+  blocks: ParsedBlock[],
+  root: Element,
+  ctx: WalkCtx,
+): { blocks: ParsedBlock[]; check: MediaCheck } {
+  const media = meaningfulMediaIn(root).filter((el) => !(el.tagName.toLowerCase() === "img" && isInlineIcon(el)));
+  const check: MediaCheck = { onPage: media.length, kept: 0, lost: [] };
+  if (media.length === 0) return { blocks, check };
+  const out = [...blocks];
+  const texts = textNodesOf(root);
+  // The index in `texts` of the first text node after each media element.
+  let at = 0;
+  let cursor = 0;
+  for (const el of media) {
+    while (at < texts.length && !(el.compareDocumentPosition(texts[at].node) & 4 /* FOLLOWING */)) at += 1;
+    if (ctx.consumed.has(el)) {
+      check.kept += 1;
+      continue;
+    }
+    const figure = figureBlock(el, ctx);
+    // A duplicate of an asset a figure already carries is kept by that figure.
+    if (ctx.consumed.has(el) && (figure === null || figure.type !== "FIGURE")) {
+      check.kept += 1;
+      continue;
+    }
+    if (figure === null || figure.type !== "FIGURE") {
+      check.lost.push(mediaName(el));
+      continue;
+    }
+    const slot = figureSlot(out, cursor, el, root, texts, at);
+    out.splice(slot, 0, figure);
+    cursor = slot + 1;
+    check.kept += 1;
+  }
+  return { blocks: out, check };
+}
+
+/** A figure's identity across the model passes: its media keys, else the
+    opening of its svg. */
+function figureIdentity(block: ParsedBlock): string[] {
+  const html = block.html ?? "";
+  const keys = mediaKeys(html);
+  if (keys.length > 0) return keys;
+  const svg = /<svg\b[^>]*>[\s\S]{0,200}/.exec(html)?.[0];
+  return svg ? [svg] : [];
+}
+
+/** Is the figure's media carried by one of these blocks? */
+function figureCarried(identity: string[], blocks: ParsedBlock[]): boolean {
+  return identity.some((key) => blocks.some((b) => b.type === "FIGURE" && (b.html ?? "").includes(key)));
+}
+
+/** The block among `blocks` at or past `from` that holds this text block's
+    text (the passes join and merge text, never rewrite it), else -1. */
+function textBlockIn(blocks: ParsedBlock[], from: number, block: ParsedBlock): number {
+  const probe = normalizeText(block.text).slice(0, PROBE_MAX_CHARS);
+  if (probe.length < PROBE_WHOLE_MIN_CHARS) return -1;
+  return blockHolding(blocks, from, probe);
+}
+
+/** After the model passes (SPEC.md §2): the passes reference blocks by index
+    and may drop a figure with the chrome around it, or by mistake between
+    two blocks of the article. A figure the walk built whose media no block
+    carries any more is restored when the blocks beside it survived — the
+    article kept its place, so the figure keeps its place — and left out when
+    they went too: it was chrome. */
+export function restoreFigures(walked: ParsedBlock[], refined: ParsedBlock[]): ParsedBlock[] {
+  const out = [...refined];
+  let restored = 0;
+  for (let i = 0; i < walked.length; i++) {
+    const figure = walked[i];
+    if (figure.type !== "FIGURE") continue;
+    const identity = figureIdentity(figure);
+    if (identity.length === 0 || figureCarried(identity, out)) continue;
+    let before: ParsedBlock | undefined;
+    for (let j = i - 1; j >= 0 && !before; j--) if (walked[j].type !== "FIGURE") before = walked[j];
+    let after: ParsedBlock | undefined;
+    for (let j = i + 1; j < walked.length && !after; j++) if (walked[j].type !== "FIGURE") after = walked[j];
+    const beforeAt = before ? textBlockIn(out, 0, before) : -1;
+    if (before && beforeAt === -1) continue;
+    const afterAt = after ? textBlockIn(out, Math.max(0, beforeAt), after) : -1;
+    if (after && afterAt === -1) continue;
+    if (!before && !after) continue;
+    const slot = before ? beforeAt + 1 : afterAt;
+    out.splice(slot, 0, figure);
+    restored += 1;
+  }
+  if (restored > 0) console.log(`[ingest] restored ${restored} figures the passes dropped between kept blocks`);
   return out;
 }
