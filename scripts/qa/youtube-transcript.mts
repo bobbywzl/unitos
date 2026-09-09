@@ -7,9 +7,10 @@
 import { parseJson3, parseXml, pickTrack, trackUrl } from "@/lib/video/captions";
 import { parsePastedTranscript } from "@/lib/video/paste";
 import { normalizeSegments } from "@/lib/video/segments";
+import { settleSpeakers } from "@/lib/video/speakers";
 import { linesAreSound } from "@/lib/video/tidy";
 import { transcribe } from "@/lib/video/transcribe";
-import { activeLineAt } from "@/lib/video/types";
+import { activeLineAt, parseSpeakers } from "@/lib/video/types";
 import { pickAudioFormat } from "@/lib/video/youtube-audio";
 
 const results: string[] = [];
@@ -168,6 +169,30 @@ check("a real cleanup passes the guard", linesAreSound(rawLines, cleanedWell));
 const shifted = [cleanedWell[1], cleanedWell[2], cleanedWell[3], cleanedWell[0]];
 check("a cleanup whose lines moved is caught", !linesAreSound(rawLines, shifted));
 check("empty output is cleanup dropping filler, not a mismatch", linesAreSound(rawLines, ["", "", "", ""]));
+
+// ── Speakers ─────────────────────────────────────────────────────────────────
+const heard = new Map([
+  ["S1", { id: "S1", name: "RJ" }],
+  ["S2", { id: "S2", name: "" }],
+  ["S9", { id: "S9", name: "Nobody" }], // found, but says no line
+]);
+const settled = settleSpeakers(heard, ["S1", "S1", "S2", "S1"]);
+check(
+  "only voices that speak are kept",
+  settled.speakers.length === 2 && settled.speakers.every((s) => s.id !== "S9"),
+  JSON.stringify(settled.speakers),
+);
+check(
+  "a voice nobody names is numbered by where it first speaks",
+  settled.speakers[0].name === "RJ" && settled.speakers[1].name === "Speaker 2",
+  JSON.stringify(settled.speakers),
+);
+check(
+  "one voice throughout gets no names at all",
+  settleSpeakers(new Map([["S1", { id: "S1", name: "RJ" }]]), ["S1", "S1"]).speakers.length === 0,
+);
+check("a stored roster reads back", parseSpeakers([{ id: "S1", name: "RJ" }]).length === 1);
+check("anything else is no roster", parseSpeakers({ nope: true }).length === 0);
 
 // ── The live ladder ──────────────────────────────────────────────────────────
 const pure = process.argv.includes("--pure");

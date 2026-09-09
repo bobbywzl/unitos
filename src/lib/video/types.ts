@@ -124,6 +124,8 @@ export type VideoInfo = {
   transcriptStatus: TranscriptStatusName;
   transcriptError: string | null;
   transcriptStale: boolean; // PENDING but the run is dead; Transcribe may start again
+  /** The voices heard (SPEC.md §11); empty = one voice, or never detected. */
+  speakers: Speaker[];
 };
 
 // A PENDING older than this is a dead run: the transcribe function timed out
@@ -141,12 +143,26 @@ export function transcriptIsStale(
   );
 }
 
+/** One voice in a recording (SPEC.md §11): the id its lines carry, and the
+    name the recording gave it — or "Speaker 2" when nobody named it. */
+export type Speaker = { id: string; name: string };
+
+export const speakerSchema = z.object({ id: z.string(), name: z.string() });
+
+/** The stored roster, or [] for anything else (never detected, one voice). */
+export function parseSpeakers(value: unknown): Speaker[] {
+  const parsed = z.array(speakerSchema).safeParse(value);
+  return parsed.success ? parsed.data : [];
+}
+
 /** One transcript line: a TRANSCRIPT block with its time range. */
 export type TranscriptLine = {
   id: string;
   text: string;
   startTime: number;
   endTime: number;
+  /** Which voice says it — a Speaker id. Null = one voice, or not detected. */
+  speaker: string | null;
 };
 
 // Past the last line, the line stays lit this long before the highlight goes

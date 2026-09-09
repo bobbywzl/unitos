@@ -66,6 +66,7 @@ function parseGemini(id: string): Parsed | null {
 
 const PARSERS: Record<ModelRole, (id: string) => Parsed | null> = {
   claude: parseClaude,
+  opus: parseClaude,
   kimi: parseKimi,
   gemini: parseGemini,
 };
@@ -153,12 +154,14 @@ async function listGemini(): Promise<string[]> {
 const LISTS: Record<ModelRole, () => Promise<string[]>> = {
   kimi: listKimi,
   claude: listClaude,
+  opus: listClaude,
   gemini: listGemini,
 };
 
 const CONFIGURED: Record<ModelRole, () => boolean> = {
   kimi: kimiConfigured,
   claude: claudeConfigured,
+  opus: claudeConfigured,
   gemini: () => Boolean(process.env.GEMINI_API_KEY),
 };
 

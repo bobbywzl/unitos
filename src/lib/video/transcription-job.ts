@@ -1,17 +1,22 @@
+import { Prisma } from "@prisma/client";
 import { bumpDocument } from "@/lib/collab";
 import { db } from "@/lib/db";
+import { parseSpeakers, type Speaker } from "@/lib/video/types";
 import { parsePastedTranscript } from "@/lib/video/paste";
 import { tidyTranscript } from "@/lib/video/tidy";
 import { GEMINI_FILE_TTL_MS, geminiFileFresh, type GeminiFile } from "@/lib/video/gemini-files";
 import {
+  geminiMediaPart,
   GEMINI_FILE_MAX_BYTES,
   groupSegments,
   normalizeSegments,
   transcribe,
   TRANSCRIBE_MAX_BYTES,
+  type TranscribeOptions,
   type TranscribeSource,
   type TranscriptSegment,
 } from "@/lib/video/transcribe";
+import { detectSpeakers } from "@/lib/video/speakers";
 
 // The transcription job (SPEC.md §11): guards, the provider ladder, the
 // cleanup pass, and the TRANSCRIPT block writes. Transcription starts on its
@@ -24,9 +29,15 @@ export type TranscriptionResult =
   | { ok: false; status: number; error: string };
 
 // The ladder's time budget. Vercel ends the function at 300 seconds (the
-// routes' maxDuration, which after() work shares); the cleanup pass and the
-// block writes need the rest.
-const LADDER_BUDGET_MS = 240_000;
+// routes' maxDuration, which after() work shares); the cleanup pass, the
+// speakers pass, and the block writes need the rest.
+const LADDER_BUDGET_MS = 200_000;
+// The speakers pass runs on what is left, and only when there is enough of
+// it to be worth starting (SPEC.md §11). A run that skips it leaves the
+// transcript without names; Detect speakers runs it on its own afterwards.
+const SPEAKERS_MIN_MS = 30_000;
+// Detect speakers on its own gets the whole function, less the writes.
+const SPEAKERS_BUDGET_MS = 260_000;
 
 export async function runTranscription(documentId: string): Promise<TranscriptionResult> {
   const asset = await db.videoAsset.findUnique({
@@ -143,7 +154,13 @@ export async function runTranscription(documentId: string): Promise<Transcriptio
           .catch(() => {});
       },
     });
-    const lines = await storeTranscript(documentId, asset.id, segments, `${asset.kind} via ${provider}`);
+    const deadline = startedAt + LADDER_BUDGET_MS + SPEAKERS_MIN_MS + 30_000;
+    const lines = await storeTranscript(documentId, asset.id, segments, `${asset.kind} via ${provider}`, {
+      // The speakers pass reads the media again, so it takes the same stored
+      // file the ladder used. Skipped when the ladder left it no time.
+      source: Date.now() < deadline - SPEAKERS_MIN_MS ? source : null,
+      transcribeOptions: { deadline, geminiFile: stored },
+    });
     return { ok: true, lines, provider };
   } catch (err) {
     const message = err instanceof Error ? err.message : "Transcription failed";
@@ -157,13 +174,17 @@ export async function runTranscription(documentId: string): Promise<Transcriptio
   }
 }
 
-// Cleanup, grouping, and the block writes — every transcript, whatever rung
-// produced it, lands through here. Returns the line count.
+// Cleanup, grouping, speakers, and the block writes — every transcript,
+// whatever rung produced it, lands through here. Returns the line count.
 async function storeTranscript(
   documentId: string,
   assetId: string,
   segments: TranscriptSegment[],
   origin: string,
+  speakers: { source: TranscribeSource | null; transcribeOptions: TranscribeOptions } = {
+    source: null,
+    transcribeOptions: {},
+  },
 ): Promise<number> {
   // Cleanup before anything stores: fillers, stutters, and false starts out,
   // punctuation and casing fixed — the transcript reads like an article.
@@ -174,6 +195,19 @@ async function storeTranscript(
   const tidied = await tidyTranscript(grouped);
   const lines = tidied.lines.length > 0 ? tidied.lines : grouped;
   console.log(`[transcribe] ${origin}, cleaned by ${tidied.provider}: ${lines.length} lines`);
+  // Who says each line (SPEC.md §11). It reads the media again, so it runs
+  // after the lines are settled and never blocks them: a pass that fails
+  // leaves an unnamed transcript, which is what stored before it existed.
+  const voices = speakers.source
+    ? await detectSpeakers(
+        await geminiMediaPart(speakers.source, speakers.transcribeOptions),
+        lines,
+        speakers.transcribeOptions,
+      ).catch(() => null)
+    : null;
+  if (voices) {
+    console.log(`[speakers] ${origin}: ${voices.speakers.length} voices`);
+  }
   await db.$transaction(async (tx) => {
     await tx.block.deleteMany({ where: { documentId, type: "TRANSCRIPT" } });
     await tx.block.createMany({
@@ -184,15 +218,131 @@ async function storeTranscript(
         text: line.text,
         startTime: line.start,
         endTime: line.end,
+        speaker: voices?.byLine[i] ?? null,
       })),
     });
     await tx.videoAsset.update({
       where: { id: assetId },
-      data: { transcriptStatus: "READY", transcriptError: null },
+      data: {
+        transcriptStatus: "READY",
+        transcriptError: null,
+        speakers: voices && voices.speakers.length > 0 ? voices.speakers : undefined,
+      },
     });
   });
   await bumpDocument(documentId);
   return lines.length;
+}
+
+/** Speakers for a transcript that already exists (SPEC.md §11): Detect
+    speakers on the pane, and the one path a pasted transcript takes to get
+    names. Reads the media again and rewrites the lines' speaker, nothing
+    else — the words, the times, and the block ids all stand, so every note,
+    mark, and link anchored to a line survives. */
+export async function runSpeakers(
+  documentId: string,
+): Promise<{ ok: true; speakers: Speaker[] } | { ok: false; status: number; error: string }> {
+  if (!process.env.GEMINI_API_KEY) {
+    return { ok: false, status: 503, error: "Set GEMINI_API_KEY. Detecting speakers needs it." };
+  }
+  const asset = await db.videoAsset.findUnique({
+    where: { documentId },
+    select: {
+      id: true,
+      kind: true,
+      youtubeId: true,
+      mimeType: true,
+      geminiFileUri: true,
+      geminiFileExpiresAt: true,
+    },
+  });
+  if (!asset) return { ok: false, status: 404, error: "This document has no video or audio" };
+  const blocks = await db.block.findMany({
+    where: { documentId, type: "TRANSCRIPT" },
+    orderBy: { order: "asc" },
+    select: { id: true, text: true, startTime: true, endTime: true },
+  });
+  const lines = blocks.filter((b) => b.startTime !== null && b.endTime !== null);
+  if (lines.length === 0) {
+    return { ok: false, status: 400, error: "Transcribe first — speakers are found on the lines" };
+  }
+
+  const startedAt = Date.now();
+  try {
+    const source = await mediaSource(asset);
+    const voices = await detectSpeakers(
+      await geminiMediaPart(source, { deadline: startedAt + SPEAKERS_BUDGET_MS }),
+      lines.map((b) => ({ start: b.startTime!, end: b.endTime!, text: b.text })),
+      { deadline: startedAt + SPEAKERS_BUDGET_MS },
+    );
+    await db.$transaction(async (tx) => {
+      await Promise.all(
+        lines.map((block, i) =>
+          tx.block.update({ where: { id: block.id }, data: { speaker: voices.byLine[i] ?? null } }),
+        ),
+      );
+      await tx.videoAsset.update({
+        where: { id: asset.id },
+        data: { speakers: voices.speakers.length > 0 ? voices.speakers : Prisma.DbNull },
+      });
+    });
+    await bumpDocument(documentId);
+    return { ok: true, speakers: voices.speakers };
+  } catch (err) {
+    console.error("[speakers] failed:", err);
+    return {
+      ok: false,
+      status: 502,
+      error: err instanceof Error ? err.message : "Detecting speakers failed",
+    };
+  }
+}
+
+/** Rename one voice (SPEC.md §11). The id stays, so every line it says
+    follows the new name at once. */
+export async function renameSpeaker(
+  documentId: string,
+  speakerId: string,
+  name: string,
+): Promise<{ ok: true; speakers: Speaker[] } | { ok: false; status: number; error: string }> {
+  const asset = await db.videoAsset.findUnique({
+    where: { documentId },
+    select: { id: true, speakers: true },
+  });
+  if (!asset) return { ok: false, status: 404, error: "This document has no video or audio" };
+  const speakers = parseSpeakers(asset.speakers);
+  if (!speakers.some((s) => s.id === speakerId)) {
+    return { ok: false, status: 404, error: "This recording has no such speaker" };
+  }
+  const renamed = speakers.map((s) => (s.id === speakerId ? { ...s, name } : s));
+  await db.videoAsset.update({ where: { id: asset.id }, data: { speakers: renamed } });
+  await bumpDocument(documentId);
+  return { ok: true, speakers: renamed };
+}
+
+// The media as the ladder's source, for a pass that reads it again.
+async function mediaSource(asset: {
+  id: string;
+  kind: string;
+  youtubeId: string | null;
+  mimeType: string | null;
+}): Promise<TranscribeSource> {
+  if (asset.kind === "YOUTUBE") {
+    if (!asset.youtubeId) throw new Error("This video has no YouTube id");
+    return { kind: "youtube", youtubeId: asset.youtubeId };
+  }
+  const chunks = await db.videoChunk.findMany({
+    where: { videoId: asset.id },
+    orderBy: { index: "asc" },
+    select: { data: true },
+  });
+  const bytes = new Uint8Array(chunks.reduce((n, c) => n + c.data.length, 0));
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk.data, offset);
+    offset += chunk.data.length;
+  }
+  return { kind: "upload", bytes, mimeType: asset.mimeType };
 }
 
 // A transcript the reader pasted (SPEC.md §11): parsed, then stored exactly

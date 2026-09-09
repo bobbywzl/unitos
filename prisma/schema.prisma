@@ -459,6 +459,9 @@ model Block {
   // TRANSCRIPT blocks: seconds into the video (SPEC.md §11).
   startTime    Float?
   endTime      Float?
+  // TRANSCRIPT blocks: which speaker says this line — a speaker id from
+  // VideoAsset.speakers (SPEC.md §11). Null = one voice, or not detected.
+  speaker      String?
   links        Json? // link spans: [{start, end, quotedText, targetOrder?, href?}] — Contents entries and PDF hyperlinks
   // 1-based PDF page. FIGURE blocks: for the figure image route. PAGE blocks:
   // the page the block renders. Converted text blocks: the page it came from.
@@ -516,6 +519,10 @@ model VideoAsset {
   // When the running transcription started. A PENDING older than 10 minutes is
   // a dead run and may start again.
   transcriptStartedAt DateTime?
+  // The voices heard in this media (SPEC.md §11): [{id, name}], the id on
+  // each TRANSCRIPT block's speaker. Names come from the introductions; a
+  // voice nobody names keeps "Speaker 2". Null = never detected.
+  speakers            Json?
   // The file this media was uploaded to in Gemini's store, and when it stops
   // being readable (48 hours). A retry inside that window reuses it instead of
   // sending the bytes again — an hour-long file is the slow part of the run.

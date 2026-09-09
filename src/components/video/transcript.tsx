@@ -51,24 +51,57 @@ export function ViewBar({
   );
 }
 
-// Transcribe again: the view bar's action while the transcription shows.
-export function TranscribeAgain({
+// The view bar's actions while the transcription shows: Detect speakers, then
+// Transcribe again. Detect speakers reads the recording again and says who
+// speaks each line; a transcription finds them on its own, so this is for a
+// transcript that landed before, or one that was pasted.
+export function TranscriptActions({
   audio,
+  busy,
+  note,
   onTranscribe,
+  onDetectSpeakers,
 }: {
   audio: boolean;
+  /** The speakers pass is running: its own label stands in for the button. */
+  busy: boolean;
+  /** What the last speakers run said — the count, or why it found nothing. */
+  note: string | null;
   onTranscribe: () => void;
+  onDetectSpeakers: (() => void) | null;
 }) {
   const t = useT();
+  const action =
+    "rounded-full px-2 py-0.5 text-[11px] font-semibold text-sand-600 hover:bg-clay-100 hover:text-clay-800";
   return (
-    <button
-      onClick={onTranscribe}
-      data-track="video-transcribe-again"
-      className="rounded-full px-2 py-0.5 text-[11px] font-semibold text-sand-600 hover:bg-clay-100 hover:text-clay-800"
-      data-tip={t(audio ? "video.transcribeAgainTitleAudio" : "video.transcribeAgainTitle")}
-    >
-      {t("video.transcribeAgain")}
-    </button>
+    <>
+      {note && <span className="px-1 text-[11px] text-sand-500">{note}</span>}
+      {busy ? (
+        <span className="flex items-center gap-1.5 px-2 text-[11px] font-semibold text-sand-600">
+          <SpinnerIcon size={11} className="text-clay motion-safe:animate-spin" />
+          {t("video.detectingSpeakers")}
+        </span>
+      ) : (
+        onDetectSpeakers && (
+          <button
+            onClick={onDetectSpeakers}
+            data-track="video-detect-speakers"
+            className={action}
+            data-tip={t("video.detectSpeakersTitle")}
+          >
+            {t("video.detectSpeakers")}
+          </button>
+        )
+      )}
+      <button
+        onClick={onTranscribe}
+        data-track="video-transcribe-again"
+        className={action}
+        data-tip={t(audio ? "video.transcribeAgainTitleAudio" : "video.transcribeAgainTitle")}
+      >
+        {t("video.transcribeAgain")}
+      </button>
+    </>
   );
 }
 
