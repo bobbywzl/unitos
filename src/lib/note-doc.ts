@@ -87,6 +87,9 @@ function collectInline(node: Node, styles: InlineStyle[], href: string | undefin
   if (node.nodeType !== ELEMENT_NODE) return;
   const el = node as HTMLElement;
   const tag = el.tagName;
+  // The editor's own furniture: a task's box and an image's resize handle
+  // carry no text (lib/note-markup.ts).
+  if (el.classList.contains("note-box") || el.classList.contains("note-resize")) return;
   if (tag === "BR") {
     out.push({ text: "\n", styles: [] });
     return;
@@ -277,8 +280,29 @@ function hasBlockChild(el: Element): boolean {
   return Array.from(el.childNodes).some(isBlock);
 }
 
-function listItem(li: Element, tag: "ul" | "ol", index: number, depth: number, prefix: string, lines: string[]) {
-  const marker = "  ".repeat(depth) + (tag === "ul" ? "- " : `${index}. `);
+// The list kinds the editor draws (lib/note-markup.ts): a list's class names
+// a dash list or a checklist; an item's class and data-checked name a task.
+type ListKind = "ul" | "ol" | "dash" | "task";
+
+function listKind(list: Element): ListKind {
+  if (list.tagName === "OL") return "ol";
+  if (list.classList.contains("note-dash")) return "dash";
+  if (list.classList.contains("note-tasks")) return "task";
+  return "ul";
+}
+
+function itemMarker(li: Element, kind: ListKind, index: number): string {
+  if (kind === "ol") return `${index}. `;
+  if (kind === "dash") return "+ ";
+  // A task item in any list, and any item in a checklist, is a task.
+  if (kind === "task" || li.classList.contains("note-task")) {
+    return li.hasAttribute("data-checked") ? "- [x] " : "- [ ] ";
+  }
+  return "- ";
+}
+
+function listItem(li: Element, kind: ListKind, index: number, depth: number, prefix: string, lines: string[]) {
+  const marker = "  ".repeat(depth) + itemMarker(li, kind, index);
   const buffer: InlineRun[] = [];
   const nested: Element[] = [];
   for (const child of Array.from(li.childNodes)) {
@@ -294,7 +318,7 @@ function listItem(li: Element, tag: "ul" | "ol", index: number, depth: number, p
 }
 
 function walkList(list: Element, depth: number, prefix: string, lines: string[]) {
-  const tag = list.tagName === "OL" ? "ol" : "ul";
+  const kind = listKind(list);
   let index = 0;
   for (const child of Array.from(list.children)) {
     if (child.tagName === "UL" || child.tagName === "OL") {
@@ -302,7 +326,7 @@ function walkList(list: Element, depth: number, prefix: string, lines: string[])
       continue;
     }
     index += 1;
-    listItem(child, tag, index, depth, prefix, lines);
+    listItem(child, kind, index, depth, prefix, lines);
   }
 }
 
@@ -374,7 +398,7 @@ export function lineElements(root: ParentNode): Element[] {
   return Array.from(root.querySelectorAll(LINE_SELECTOR));
 }
 
-/** A line's own leaves in order: text nodes and chips, nested lists left out. */
+/** A line's own leaves in order: text nodes, chips, and images, nested lists left out. */
 export function ownLeaves(line: Element): (Text | Element)[] {
   const leaves: (Text | Element)[] = [];
   const walk = (node: Node) => {
@@ -383,7 +407,8 @@ export function ownLeaves(line: Element): (Text | Element)[] {
       else if (child.nodeType === ELEMENT_NODE) {
         const el = child as Element;
         if (el.tagName === "UL" || el.tagName === "OL") continue;
-        if (el.hasAttribute("data-block")) leaves.push(el);
+        if (el.classList.contains("note-box")) continue;
+        if (el.hasAttribute("data-block") || el.hasAttribute("data-image")) leaves.push(el);
         else walk(el);
       }
     }
@@ -392,7 +417,7 @@ export function ownLeaves(line: Element): (Text | Element)[] {
   return leaves;
 }
 
-/** Visible length of a leaf: a chip is one ¶. */
+/** Visible length of a leaf: a chip or an image is one ¶. */
 export function leafLength(leaf: Text | Element): number {
   return leaf.nodeType === TEXT_NODE ? (leaf as Text).data.length : 1;
 }

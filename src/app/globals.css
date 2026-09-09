@@ -1836,13 +1836,98 @@ ellipse.anchor-flash {
 }
 
 /* An image dropped into a note (SPEC.md §16): in the note editor it is one
-   atom the caret steps over, sized like the image in the rendered note. */
-.note-doc .note-image {
+   atom the caret steps over — the figure — sized like the image in the
+   rendered note. An image sizes itself to its column unless the reader set a
+   width (the width rides in the url); the handle at the figure's corner
+   sets it (lib/note-editable.ts). A GIF plays as it does anywhere. */
+.note-doc .note-figure {
+  position: relative;
+  display: inline-block;
+  max-width: 100%;
+  margin: 0.4rem 0;
+  vertical-align: top;
+}
+.note-doc .note-image,
+.prose .note-image {
   display: block;
   max-width: 100%;
-  max-height: 320px;
-  margin: 0.4rem 0;
+  height: auto;
+  margin: 0;
   border-radius: 12px;
+}
+.note-doc .note-resize {
+  position: absolute;
+  right: -5px;
+  bottom: -5px;
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--card);
+  border-radius: 999px;
+  background: var(--clay-500);
+  opacity: 0;
+  cursor: nwse-resize;
+  transition: opacity 120ms;
+}
+.note-doc .note-figure:hover .note-resize {
+  opacity: 1;
+}
+.prose .note-image {
+  margin: 0.4rem 0;
+}
+
+/* A dash list ("+ " lines, lib/note-markup.ts): the same list, a dash for a
+   marker, in the editor and in the rendered note alike. */
+.note-doc ul.note-dash,
+.prose ul.note-dash {
+  list-style-type: "–  ";
+}
+
+/* A checklist ("- [ ] " lines): no marker; a box the reader ticks — in the
+   editor by a click (lib/note-editable.ts), in the rendered note by a click
+   that saves the note (markdown.tsx). */
+.note-doc ul.note-tasks,
+.prose ul.contains-task-list {
+  list-style: none;
+  padding-left: 0.25em;
+}
+.note-doc ul.note-tasks > li,
+.prose ul.contains-task-list > li.task-list-item {
+  padding-left: 0;
+}
+.note-box {
+  display: inline-flex;
+  width: 15px;
+  height: 15px;
+  margin: 0 0.5em 0 0;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px solid var(--sand-400);
+  border-radius: 4px;
+  background: var(--card);
+  color: var(--sage-fg, #fff);
+  font-size: 11px;
+  line-height: 1;
+  vertical-align: -2px;
+  cursor: pointer;
+  user-select: none;
+}
+.note-box:hover {
+  border-color: var(--sage-600);
+}
+.note-box[data-checked],
+li[data-checked] > .note-box {
+  border-color: var(--sage-600);
+  background: var(--sage-600);
+}
+.note-box[data-checked]::before,
+li[data-checked] > .note-box::before {
+  content: "✓";
+}
+.note-doc li[data-checked],
+.prose li.task-list-item:has(> .note-box[data-checked]) {
+  color: var(--sand-500);
+  text-decoration: line-through;
+  text-decoration-color: var(--sand-400);
 }
 
 /* List markers by level, as a document editor draws them (SPEC.md §6): a

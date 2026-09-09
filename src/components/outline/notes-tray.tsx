@@ -219,6 +219,7 @@ function TraySection({
                   if (e.key === "Escape") compose.escape();
                 }}
                 placeholder={t("outline.writeNotePlaceholder")}
+                moreHref={`/n/${actions.notebookId}/notes`}
               />
               <div className="mt-2 flex gap-2">
                 <button

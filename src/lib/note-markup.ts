@@ -7,10 +7,11 @@
 // into markdown — is lib/note-doc.ts.
 //
 // The grammar is the subset the Markdown component renders (markdown.tsx):
-// "# " headings, "- " and "N. " lists nested by two-space indents, "> "
-// quotes, ``` fences, **bold**, *italic*, ~~strike~~, `code`, <u>, the four
-// color tags, [block id] chips, ![alt](url) images, and [text](url) links.
-// Anything else is plain text.
+// "# " headings, "- " (or "* ") bulleted lists, "+ " dash lists, "N. "
+// numbered lists, "- [ ] " and "- [x] " checklists — every list nested by
+// two-space indents — "> " quotes, ``` fences, **bold**, *italic*,
+// ~~strike~~, `code`, <u>, the four color tags, [block id] chips,
+// ![alt](url) images, and [text](url) links. Anything else is plain text.
 //
 // A chip and an image are atoms: the whole tag shows as one thing the caret
 // steps over, so every offset that walks runs treats them alike (isAtom).
@@ -20,8 +21,22 @@ export type TextColor = "clay" | "sage" | "gold" | "plum";
 export const TEXT_COLORS: readonly TextColor[] = ["clay", "sage", "gold", "plum"];
 
 /** A dropped image (SPEC.md §16): the url the reader loads it from and the
-    alt the markdown carries. */
+    alt the markdown carries. The width the reader set, if any, rides in the
+    url ("?w=320", lib/images.ts), so the markdown stays standard. */
 export type NoteImage = { url: string; alt: string };
+
+/** The width an image's url carries, or null: the image sizes itself. */
+export function imageWidth(url: string): number | null {
+  const m = /[?&]w=(\d{2,4})(?:&|$)/.exec(url);
+  return m ? Number(m[1]) : null;
+}
+
+/** The url with its width set, or cleared when width is null. */
+export function withImageWidth(url: string, width: number | null): string {
+  const bare = url.replace(/([?&])w=\d+(&|$)/, (_m, lead, tail) => (tail ? lead : "")).replace(/[?&]$/, "");
+  if (width === null) return bare;
+  return `${bare}${bare.includes("?") ? "&" : "?"}w=${Math.round(width)}`;
+}
 
 export type Run = {
   /** The visible text. */
@@ -53,7 +68,9 @@ export type LineKind =
   | "h5"
   | "h6"
   | "bullet"
+  | "dash"
   | "numbered"
+  | "task"
   | "quote"
   | "code";
 
@@ -61,6 +78,8 @@ export type NoteLine = {
   kind: LineKind;
   /** Leading spaces before a list marker: two per nesting level. */
   indent: number;
+  /** A task line: whether its box is ticked. */
+  checked?: boolean;
   runs: Run[];
   /** Source offsets: the line's first character, its body after the marker, and its end before the newline. */
   src: number;
@@ -177,6 +196,9 @@ function inline(text: string, base: number, styles: InlineStyle[], href: string 
 // is typed — and any further spaces stay in the text, so a space typed at
 // the start of an item survives the round trip.
 const HEADING = /^(\s*)(#{1,6})(\s)/;
+// A checklist item: a bullet sign, a space, the box, a space. Before BULLET,
+// which would read the box as the item's text.
+const TASK = /^(\s*)([-*+])(\s)\[([ xX])\](\s)/;
 const BULLET = /^(\s*)([-*+])(\s)/;
 const NUMBERED = /^(\s*)(\d{1,3}[.)])(\s)/;
 const QUOTE = /^(\s*)(>)(\s?)/;
@@ -184,11 +206,11 @@ const FENCE = /^\s*```/;
 
 function parseLine(raw: string, src: number, inFence: boolean): NoteLine {
   const end = src + raw.length;
-  const line = (kind: LineKind, indent: number, markerLength: number): NoteLine => {
+  const line = (kind: LineKind, indent: number, markerLength: number, checked?: boolean): NoteLine => {
     const bodySrc = src + markerLength;
     const runs: Run[] = [];
     inline(raw.slice(markerLength), bodySrc, [], undefined, runs);
-    return { kind, indent, runs, src, bodySrc, end };
+    return checked === undefined ? { kind, indent, runs, src, bodySrc, end } : { kind, indent, checked, runs, src, bodySrc, end };
   };
   if (inFence || FENCE.test(raw)) {
     const runs: Run[] = raw ? [{ text: raw, styles: [], src, srcLen: raw.length, openLen: 0, closeLen: 0 }] : [];
@@ -196,13 +218,33 @@ function parseLine(raw: string, src: number, inFence: boolean): NoteLine {
   }
   const heading = HEADING.exec(raw);
   if (heading) return line(`h${heading[2].length}` as LineKind, 0, heading[0].length);
+  const task = TASK.exec(raw);
+  if (task) return line("task", task[1].length, task[0].length, task[4] !== " ");
   const bullet = BULLET.exec(raw);
-  if (bullet) return line("bullet", bullet[1].length, bullet[0].length);
+  if (bullet) return line(bullet[2] === "+" ? "dash" : "bullet", bullet[1].length, bullet[0].length);
   const numbered = NUMBERED.exec(raw);
   if (numbered) return line("numbered", numbered[1].length, numbered[0].length);
   const quote = QUOTE.exec(raw);
   if (quote) return line("quote", 0, quote[0].length);
   return line("p", 0, 0);
+}
+
+/** The kinds that nest by indent and continue on Enter. */
+export function isListKind(kind: LineKind): boolean {
+  return kind === "bullet" || kind === "dash" || kind === "numbered" || kind === "task";
+}
+
+/** The note with one task line's box ticked or cleared. lineIndex counts the
+    note's lines from 0; a line that is no task is left alone. */
+export function setTaskChecked(text: string, lineIndex: number, checked: boolean): string {
+  const lines = text.split("\n");
+  const raw = lines[lineIndex];
+  if (raw === undefined) return text;
+  const task = TASK.exec(raw);
+  if (!task) return text;
+  const box = task[1].length + task[2].length + task[3].length + 1;
+  lines[lineIndex] = `${raw.slice(0, box)}${checked ? "x" : " "}${raw.slice(box + 1)}`;
+  return lines.join("\n");
 }
 
 /** The note's lines: one per newline, with their runs and source offsets. */
@@ -289,7 +331,11 @@ function runHtml(run: Run): string {
   if (run.image) {
     const url = escapeHtml(run.image.url);
     const alt = escapeHtml(run.image.alt);
-    return `<img class="note-image" data-image="${url}" data-alt="${alt}" src="${url}" alt="${alt}" contenteditable="false">`;
+    const width = imageWidth(run.image.url);
+    // The figure is the atom: the image, and at its corner the handle that
+    // sets its width (lib/note-editable.ts). The width rides in the url.
+    const style = width === null ? "" : ` style="width:${width}px"`;
+    return `<span class="note-figure" data-image="${url}" data-alt="${alt}" contenteditable="false"><img class="note-image" src="${url}" alt="${alt}"${style}><span class="note-resize" aria-hidden="true"></span></span>`;
   }
   let html = escapeHtml(run.text);
   // The tags the Markdown component renders, so the prose classes style both alike.
@@ -298,7 +344,9 @@ function runHtml(run: Run): string {
   if (run.styles.includes("bold")) html = `<strong>${html}</strong>`;
   if (run.styles.includes("strike")) html = `<del>${html}</del>`;
   if (run.styles.includes("underline")) html = `<u>${html}</u>`;
-  const color = run.styles.find((s): s is TextColor => (TEXT_COLORS as readonly string[]).includes(s));
+  // The innermost color paints: the same rule the reader applies when it reads
+  // nested color spans back (lib/note-doc.ts), so a round trip keeps it.
+  const color = [...run.styles].reverse().find((s): s is TextColor => (TEXT_COLORS as readonly string[]).includes(s));
   if (color) html = `<span class="text-color-${color}">${html}</span>`;
   if (run.href !== undefined) html = `<span class="note-link" data-href="${escapeHtml(run.href)}">${html}</span>`;
   return html;
@@ -312,7 +360,9 @@ function inner(line: NoteLine): string {
 /** The lines as document HTML: headings, nested lists, quotes, code lines, paragraphs. */
 export function noteDocHtml(lines: NoteLine[]): string {
   let html = "";
-  const lists: { tag: "ul" | "ol"; level: number }[] = [];
+  // One list per kind: a bulleted list, a dash list, a numbered list, and a
+  // checklist are four lists, so a dash item after a bullet starts its own.
+  const lists: { kind: LineKind; tag: "ul" | "ol"; level: number }[] = [];
   const closeLists = (downTo: number) => {
     while (lists.length > downTo) html += `</li></${lists.pop()!.tag}>`;
   };
@@ -321,23 +371,28 @@ export function noteDocHtml(lines: NoteLine[]): string {
     if (quote) html += "</blockquote>";
     quote = false;
   };
+  const item = (line: NoteLine) =>
+    line.kind === "task"
+      ? `<li class="note-task"${line.checked ? ' data-checked=""' : ""}><span class="note-box" contenteditable="false"></span>${inner(line)}`
+      : `<li>${inner(line)}`;
   for (const line of lines) {
-    if (line.kind === "bullet" || line.kind === "numbered") {
+    if (isListKind(line.kind)) {
       closeQuote();
-      const tag = line.kind === "bullet" ? "ul" : "ol";
+      const tag = line.kind === "numbered" ? "ol" : "ul";
       // Nesting follows the indent, one level per two spaces, never skipping a level.
       const level = Math.min(Math.floor(line.indent / 2), lists.length);
       while (lists.length > 0) {
         const top = lists[lists.length - 1];
-        if (top.level > level || (top.level === level && top.tag !== tag)) closeLists(lists.length - 1);
+        if (top.level > level || (top.level === level && top.kind !== line.kind)) closeLists(lists.length - 1);
         else break;
       }
       const top = lists[lists.length - 1];
       if (top && top.level === level) {
-        html += `</li><li>${inner(line)}`;
+        html += `</li>${item(line)}`;
       } else {
-        html += `<${tag}><li>${inner(line)}`;
-        lists.push({ tag, level });
+        const cls = line.kind === "dash" ? ' class="note-dash"' : line.kind === "task" ? ' class="note-tasks"' : "";
+        html += `<${tag}${cls}>${item(line)}`;
+        lists.push({ kind: line.kind, tag, level });
       }
       continue;
     }

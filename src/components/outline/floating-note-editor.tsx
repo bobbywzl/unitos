@@ -375,6 +375,7 @@ export function FloatingNoteEditor({
           if (e.key === "Escape") close();
         }}
         handle={{ onPointerDown: startDrag, title: t("reader.dragToMove"), label: t("outline.floatingTitle") }}
+        moreHref={`/n/${actions.notebookId}/notes`}
       />
       <div className="mt-2 flex shrink-0 items-center gap-2">
         <button
