@@ -89,6 +89,7 @@ import { ProjectSearch } from "@/components/reader/project-search";
 import { PANE_HEADER } from "@/components/reader/reader-panes";
 import type { FigureRenderInfo } from "@/components/reader/figure-capture";
 import { Reader, type TranscriptVariant } from "@/components/reader/reader";
+import { openVisualization } from "@/components/reader/visualization-viewer";
 
 // One block's span of a selection (SPEC.md §5).
 type Segment = Omit<SourceInput, "documentId">;
@@ -433,10 +434,11 @@ type AssistantChat = {
   busy: boolean;
 };
 
-// The picture a stored visualization's markdown points at (SPEC.md §20):
-// the card's Open link shows it full size in a new tab.
-function visualizationImage(markdown: string): string | null {
-  return /!\[[^\]]*\]\((\/api\/images\/[A-Za-z0-9_-]+)\)/.exec(markdown)?.[1] ?? null;
+// The picture a stored visualization's markdown points at, and its caption
+// (SPEC.md §20): the card's Open button shows them in the viewer.
+function visualizationImage(markdown: string): { src: string; caption: string } | null {
+  const m = /!\[([^\]]*)\]\((\/api\/images\/[A-Za-z0-9_-]+)\)/.exec(markdown);
+  return m ? { src: m[2], caption: m[1] } : null;
 }
 
 // SIMPLIFY output: a translucent bubble beside the article, level with the
@@ -6093,16 +6095,14 @@ function blockFormatKind(
                 </button>
               )}
               {bubble.kind === "visualize" && !bubble.streaming && visualizationImage(bubble.text) && (
-                <a
-                  href={visualizationImage(bubble.text)!}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                <button
+                  onClick={() => openVisualization(visualizationImage(bubble.text)!)}
                   data-track="visualize-open"
                   className="text-xs font-semibold text-sand-700 hover:text-clay-800"
                   data-tip={t("reader.openVisualizationTitle")}
                 >
                   {t("reader.openVisualization")}
-                </a>
+                </button>
               )}
               {!bubble.streaming && !bubble.busy && bubble.anchor && (
                 <button

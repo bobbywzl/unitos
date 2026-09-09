@@ -11,10 +11,15 @@ import { imageUrl } from "@/lib/images";
 
 // ── Output contract ────────────────────────────────────────────────────────
 
+// role: passage = what the passage itself states, article = what the article
+// states elsewhere and the picture needs (the problem this passage solves,
+// the structure it replaces). The layout draws the passage's nodes strong
+// and the article's faint when a diagram holds both.
 const nodeSchema = z.object({
   id: z.string().min(1).max(40),
   label: z.string().min(1).max(120),
   detail: z.string().max(240).nullish(),
+  role: z.enum(["passage", "article"]).nullish(),
 });
 
 const edgeSchema = z.object({
@@ -205,6 +210,9 @@ type Box = {
   x: number;
   y: number;
   rank: number;
+  // What the article states elsewhere, drawn faint beside the passage's own
+  // nodes (nodeSchema.role).
+  article: boolean;
   // A waypoint on an edge that skips ranks: it orders and places like a box,
   // takes a lane of its rank, and draws nothing.
   waypoint: boolean;
@@ -339,9 +347,13 @@ function drawDiagram(
       x: 0,
       y: 0,
       rank: rank.get(n.id)!,
+      article: n.role === "article",
       waypoint: false,
     };
   });
+  // The passage's nodes stand out only against the article's: a diagram of
+  // the passage alone is drawn plain, with no one node louder than another.
+  const mixed = boxes.some((b) => b.article) && boxes.some((b) => !b.article);
   const byId = new Map(boxes.map((b) => [b.id, b]));
 
   // An edge's label is measured with the nodes, so the layout can keep room
@@ -381,6 +393,7 @@ function drawDiagram(
         x: 0,
         y: 0,
         rank: r,
+        article: false,
         waypoint: true,
       };
       boxes.push(box);
@@ -577,10 +590,11 @@ function drawDiagram(
     .filter((b) => !b.waypoint)
     .map((b) => {
       const lines: string[] = [];
+      const faint = mixed && b.article;
       let y = b.y + PAD_Y + LABEL_SIZE - 1;
       for (const l of b.label) {
         lines.push(
-          `<text x="${(b.x + b.w / 2).toFixed(1)}" y="${y.toFixed(1)}" font-size="${LABEL_SIZE}" font-weight="700" fill="${INK}" text-anchor="middle" font-family="system-ui, sans-serif">${escapeXml(l)}</text>`,
+          `<text x="${(b.x + b.w / 2).toFixed(1)}" y="${y.toFixed(1)}" font-size="${LABEL_SIZE}" font-weight="700" fill="${faint ? MUTED : INK}" text-anchor="middle" font-family="system-ui, sans-serif">${escapeXml(l)}</text>`,
         );
         y += LABEL_LINE;
       }
@@ -591,8 +605,16 @@ function drawDiagram(
         );
         y += DETAIL_LINE;
       }
+      // Mixed: the passage's nodes in the accent on the fill, the article's
+      // faint — a muted dashed outline on the paper. Plain otherwise, the
+      // sources marked.
+      const outline = mixed
+        ? b.article
+          ? `fill="${PAPER}" stroke="${MUTED}" stroke-width="1.5" stroke-dasharray="5 4"`
+          : `fill="${FILL}" stroke="${ACCENT}" stroke-width="2"`
+        : `fill="${FILL}" stroke="${b.rank === 0 ? ACCENT : INK}" stroke-width="1.5"`;
       return (
-        `<rect x="${b.x.toFixed(1)}" y="${b.y.toFixed(1)}" width="${b.w}" height="${b.h}" rx="10" fill="${FILL}" stroke="${b.rank === 0 ? ACCENT : INK}" stroke-width="1.5"/>` +
+        `<rect x="${b.x.toFixed(1)}" y="${b.y.toFixed(1)}" width="${b.w}" height="${b.h}" rx="10" ${outline}/>` +
         lines.join("")
       );
     });

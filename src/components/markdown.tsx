@@ -3,6 +3,7 @@
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useT } from "@/components/lang-provider";
+import { isVisualizationImage, openVisualization } from "@/components/reader/visualization-viewer";
 
 // AI text cites document blocks as [block <id>] — the tags the model sees in
 // its document context. They render as ¶ chips that scroll the reader to the
@@ -145,6 +146,27 @@ export function Markdown({ children, breaks = false }: { children: string; break
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
+          // A visualization's image opens the viewer (SPEC.md §20): the
+          // picture large, in the app, with its caption — the alt text, which
+          // the annotation's markdown sets to the caption.
+          img: ({ src, alt }) => {
+            const source = typeof src === "string" ? src : undefined;
+            // A stored SVG, served immutable: next/image has nothing to add.
+            // eslint-disable-next-line @next/next/no-img-element
+            if (!isVisualizationImage(source)) return <img src={source} alt={alt ?? ""} />;
+            return (
+              <button
+                type="button"
+                onClick={() => openVisualization({ src: source, caption: alt ?? "" })}
+                data-track="visualization-open"
+                data-tip={t("reader.openVisualizationTitle")}
+                className="block w-full cursor-zoom-in rounded-xl bg-card"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={source} alt={alt ?? ""} className="my-0 w-full rounded-xl" />
+              </button>
+            );
+          },
           a: ({ href, children: linkChildren, ...props }) => {
             // One link carries every style over its run, innermost last.
             const styleTags = href?.startsWith(STYLE_HREF) ? href.slice(STYLE_HREF.length).split("+") : null;

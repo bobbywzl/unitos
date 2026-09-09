@@ -1,13 +1,14 @@
 import { languageName, profileLines, type PromptCtx } from "@/lib/prompts/types";
 
 // VISUALIZE (SPEC.md §20, Unitos Ultra): the selection as a picture. The
-// model judges first whether a picture can carry the passage's core idea
-// with certainty; only then does it draw — a diagram (a spec the server lays
-// out), a picture (an SVG drawing), or an animation (an SVG with SMIL). It
-// weighs the passage's own structure against the best analogy it can find,
-// and takes whichever carries the idea; the reader's background says which
-// analogies the reader already knows. A refusal is a valid output and the
-// card shows its reason. Runs on VISUALIZE_MODEL (lib/derive/config.ts).
+// model places the passage in the whole article first — what it states, what
+// it answers, extends, or replaces — and judges whether a picture can carry
+// that core idea with certainty; only then does it draw — a diagram (a spec
+// the server lays out), a picture (an SVG drawing), or an animation (an SVG
+// with SMIL). It weighs the passage's own structure against the best analogy
+// it can find, and takes whichever carries the idea; the reader's background
+// says which analogies the reader already knows. A refusal is a valid output
+// and the card shows its reason. Runs on VISUALIZE_MODEL (lib/derive/config.ts).
 export function visualizePrompt(ctx: PromptCtx): string {
   const lang = languageName(ctx.lang);
   return [
@@ -26,7 +27,7 @@ export function visualizePrompt(ctx: PromptCtx): string {
     "",
     "Task: turn the selected passage into one picture that delivers its core idea at a glance — or refuse.",
     "",
-    "Step 1. Find the passage's core idea. Write it for yourself in one sentence. Everything below serves that one idea; a picture that shows a side point of the passage is a wrong picture, not a partial one.",
+    "Step 1. Place the passage in the article, then find its core idea. Read the whole document above, not the passage alone. Say for yourself what the passage does there: it states a problem; it extends a problem stated earlier; it solves a problem stated earlier; it offers an alternative to a structure, a method, or an explanation given earlier; it is one step of a process the article builds up; it is an example of a claim made earlier; or it stands on its own. The core idea is the passage's point as it sits in the article, in one sentence — what the passage adds to what the article set up. When the passage answers, extends, or replaces something stated elsewhere, the picture shows both: the problem and this solution, the earlier structure and this alternative, the process and this step — because a reader who sees this passage's part alone does not see what it is for. Everything below serves that one idea; a picture that shows a side point of the passage is a wrong picture, not a partial one.",
     "",
     "Step 2. Find every way to draw it, then take the best one. There are two:",
     "- The literal picture: the passage's own structure — a sequence, a flow, a hierarchy, a cause and its effects, parts and how they fit, one quantity changing with another, a mechanism, a physical arrangement.",
@@ -43,13 +44,13 @@ export function visualizePrompt(ctx: PromptCtx): string {
     "",
     "Step 4. Decide whether to draw at all. Draw only when all four hold for the picture you chose:",
     "1. A picture shows this better than words do.",
-    "2. You can draw it without inventing anything: every element and every relation is stated in the passage or its context, or is the analogy's own and maps to something stated.",
+    "2. You can draw it without inventing anything: every element and every relation is stated in the passage, in its context, or elsewhere in the document, or is the analogy's own and maps to something stated. What the article states elsewhere is there to be drawn — the problem this passage solves, the structure it replaces — and drawing it is not inventing.",
     "3. A reader who sees the picture without the passage takes away the passage's core idea, and not a different point.",
     "4. You are certain this picture is the best way to show it, not merely a possible way.",
     "When any one does not hold: set certain to false, set visual to null, and write in reason why a picture would not carry the passage's core idea — name what you tried, the literal picture and the analogies, so the reader knows the passage was worked on and not skipped. Do not draw a weak picture to have something to show. A refusal is the right output for a passage of opinion, of definitions, of narrative without structure, or of a claim whose whole content is in its words.",
     "",
     "Step 5. Pick the one kind that fits:",
-    "- diagram: named things and the relations between them — a directed map. Give nodes and edges; the server lays them out. 3 to 12 nodes. A node label is at most 6 words; its detail, when it helps, at most 12 words. An edge label is at most 4 words. direction is right for a sequence or a flow, down for a hierarchy or a cause and its effects. In an analogy the node label is the analogue's part and its detail is what that part stands for in the passage, so the mapping reads off the picture itself.",
+    "- diagram: named things and the relations between them — a directed map. Give nodes and edges; the server lays them out. 3 to 12 nodes. A node label is at most 6 words; its detail, when it helps, at most 12 words. An edge label is at most 4 words. direction is right for a sequence or a flow, down for a hierarchy or a cause and its effects. Every node has a role: passage for what the passage itself states, article for what the article states elsewhere and the picture needs — the problem, the earlier structure, the step before. The server draws the passage's nodes strong and the article's nodes faint, so the reader sees at a glance what this passage adds. In an analogy the node label is the analogue's part and its detail is what that part stands for in the passage, so the mapping reads off the picture itself.",
     "- picture: a physical arrangement, a mechanism, a construction, or the shape a formula describes — one still drawing as SVG.",
     "- animation: a process whose steps happen over time and whose order is the point — a loop of at most 8 seconds as SVG with SMIL (animate, animateTransform, animateMotion, set; repeatCount=\"indefinite\"). Every step of the loop is a step the passage states.",
     "",
@@ -58,9 +59,10 @@ export function visualizePrompt(ctx: PromptCtx): string {
     "- Only these elements: svg, g, rect, circle, ellipse, line, polyline, polygon, path, text, tspan, title, desc, defs, marker, linearGradient, radialGradient, stop, clipPath, animate, animateTransform, animateMotion, mpath, set. No script, no foreignObject, no image, no style element, no reference outside the file, no event attribute. Anything else is removed.",
     "- First element: a white rect over the whole viewBox. Ink #2b2622. Accents: #b5563c, #5f7d5a, #b8912e, #6b5b95. Light fill #f3ede4. Write every color as one of these exact values: the stored picture re-tints itself for dark reading by matching them, and a color written any other way stays light on a dark page.",
     "- Legible at 320 px wide: stroke-width 2 to 3, text font-size 14 to 20, font-family=\"system-ui, sans-serif\", at most 36 characters per text line, 16 px margin from the edges, nothing overlapping.",
-    "- Label every element the passage names. Labels use the passage's own words.",
+    "- Label every element the passage names. Labels use the passage's own words; what comes from elsewhere in the article uses the article's words.",
+    "- When the picture shows the passage against what the article set up, the passage's own part is drawn in the accents and the rest in ink, so the reader sees at a glance what this passage adds.",
     "",
-    "Step 6. Write the caption: one sentence, the picture's point, so the reader knows what they are looking at. When the picture is an analogy the caption says so and says what stands for what.",
+    "Step 6. Write the caption: one sentence, the picture's point, so the reader knows what they are looking at. When the picture shows the passage against what the article set up, the caption says the relation — the fix this passage gives to the problem above, the alternative it offers to the method before. When the picture is an analogy the caption says so and says what stands for what.",
     "",
     "Step 7. Check your own picture before you write it out. Read it as a reader who has not seen the passage: does it deliver the core idea from Step 1, does every part map to something stated, does any part overlap, run off the viewBox, or go unlabeled? Fix what fails. When it cannot be fixed, refuse instead — a refusal with a reason is a better answer than a picture that misleads.",
     "",
@@ -69,14 +71,14 @@ export function visualizePrompt(ctx: PromptCtx): string {
     "Return ONLY this JSON, no other text:",
     "{",
     '  "judgment": {',
-    '    "structure": "<one sentence: the core idea and the picture you chose for it — literal or the analogy, named — or none>",',
+    '    "structure": "<one sentence: what the passage does in the article, its core idea, and the picture you chose for it — literal or the analogy, named — or none>",',
     '    "certain": true | false,',
     '    "reason": "<one or two sentences: why this picture is, or why no picture is, the best way to show this passage>"',
     "  },",
     '  "visual": null | {',
     '    "kind": "diagram" | "picture" | "animation",',
     '    "caption": "<one sentence>",',
-    '    "diagram": { "direction": "right" | "down", "nodes": [{ "id": "n1", "label": "…", "detail": "…" }], "edges": [{ "from": "n1", "to": "n2", "label": "…" }] },',
+    '    "diagram": { "direction": "right" | "down", "nodes": [{ "id": "n1", "label": "…", "detail": "…", "role": "passage" | "article" }], "edges": [{ "from": "n1", "to": "n2", "label": "…" }] },',
     '    "svg": "<svg …>…</svg>"',
     "  }",
     "}",
