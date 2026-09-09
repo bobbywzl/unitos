@@ -967,8 +967,10 @@ async function handle(req: Request, t: TFunc) {
         let rendered = first;
         // The check. A failed check leaves the picture as drawn: the draft is
         // the work, and losing it to a second call that did not answer would
-        // be the worse outcome.
-        if (VISUALIZE_CHECK && rendered.svg.length <= VISUALIZE_CHECK_MAX_SVG) {
+        // be the worse outcome. A simulation is checked on its spec — its
+        // frames are the server's, and too long to read back.
+        const simulation = drawn.kind === "simulation";
+        if (VISUALIZE_CHECK && (simulation || rendered.svg.length <= VISUALIZE_CHECK_MAX_SVG)) {
           const checked = await callForJson({
             model: visualModel,
             // The document prefix again, so the cache holds; the draft is
@@ -982,8 +984,12 @@ async function handle(req: Request, t: TFunc) {
                   passage: ctx.anchoredText,
                   kind: drawn.kind,
                   caption: drawn.caption.trim(),
-                  spec: drawn.diagram ? JSON.stringify(drawn.diagram) : null,
-                  svg: rendered.svg,
+                  spec: drawn.diagram
+                    ? JSON.stringify(drawn.diagram)
+                    : drawn.simulation
+                      ? JSON.stringify(drawn.simulation)
+                      : null,
+                  svg: simulation ? null : rendered.svg,
                 }),
               },
             ],

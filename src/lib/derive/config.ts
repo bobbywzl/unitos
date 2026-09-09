@@ -81,8 +81,10 @@ export const VISUALIZE_EFFORT: ClaudeEffort = "max";
 // reduction cut into, a caption that says more than the picture does. It
 // keeps the picture, replaces it, or withdraws it. One place to turn off.
 export const VISUALIZE_CHECK = true;
-// Past this the picture is kept as drawn: reading back an SVG this large
-// costs more than the check is worth, and a picture that big is rare.
+// Past this a picture or an animation is kept as drawn: reading back an SVG
+// this large costs more than the check is worth, and one that big is rare. A
+// simulation is checked on its spec whatever its size — its frames are the
+// server's.
 export const VISUALIZE_CHECK_MAX_SVG = 40_000;
 
 // Kimi K3 counts its reasoning tokens against this ceiling too (Moonshot asks
