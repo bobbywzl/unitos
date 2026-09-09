@@ -1994,6 +1994,9 @@ export function ReaderInteractions({
   const keepCardInPane = useCallback((grown: string | null) => {
     const container = containerRef.current;
     if (!container || !grown) return;
+    // A page over the pane scrolls it to the top while it is open; that is not
+    // where the cards under it sit, so nothing moves until it closes.
+    if (distillOpenRef.current || keypointsOpenRef.current || conversationViewRef.current) return;
     const el = container.querySelector<HTMLElement>(`[data-side-card="${grown}"]`);
     if (!el || el.closest(".presence-exit")) return;
     const top = parseFloat(el.style.top) || el.offsetTop;

@@ -4,20 +4,26 @@ import Link from "next/link";
 import { useState } from "react";
 import { isImeKey } from "@/lib/ime";
 import type { NoteView, SectionView } from "@/lib/types";
-import { ChevronDownIcon, ChevronRightIcon } from "@/components/icons";
+import { ChevronDownIcon, ChevronRightIcon, PlusIcon } from "@/components/icons";
 import { useCollab } from "@/components/collab/collab-context";
 import { useT } from "@/components/lang-provider";
 import { CollapsedViewToggle } from "@/components/collapsed-view-toggle";
-import { SortableItem, SortableList } from "@/components/sortable";
+import { SortableBoard, SortableGroup, SortableItem } from "@/components/sortable";
+import { notesList, parseListId } from "@/components/outline/board-lists";
 import { NoteCard } from "@/components/outline/note-card";
 import { NoteEditor } from "@/components/outline/note-editor";
 import { SaveStateLabel } from "@/components/outline/save-state";
-import { SECTION_ACTION } from "@/components/outline/section-action";
+import { SECTION_ACTION, SECTION_ADD_NOTE } from "@/components/outline/section-action";
 import { useNoteCompose } from "@/components/outline/use-note-compose";
 import { VoiceNoteButton } from "@/components/outline/voice-note";
 import { Collapse } from "@/components/presence";
 import { SelectionBar } from "@/components/outline/selection-bar";
-import { filterSections, noteMatches, type OutlineActions } from "@/components/outline/use-outline";
+import {
+  filterSections,
+  findSection,
+  noteMatches,
+  type OutlineActions,
+} from "@/components/outline/use-outline";
 
 // The tray is for triage first: pending notes hoist to the top as one queue,
 // accepted notes sit under their section label (design 1a) and reorder by
@@ -38,6 +44,30 @@ export function NotesTray({
   const shown = filterSections(tree, query);
   const needle = query.trim().toLowerCase();
   const shownPending = pending.filter((n) => noteMatches(n, query));
+
+  // A drop lands the note where the note under the pointer sits in the whole
+  // section, pending notes included — the index reorderNote and the server
+  // count with. The tray's lists show the accepted notes only, so the drop's
+  // own index cannot be used.
+  function onDrop(
+    fromListId: string,
+    toListId: string,
+    itemId: string,
+    _toIndex: number,
+    overId: string | null,
+  ) {
+    const from = parseListId(fromListId);
+    const to = parseListId(toListId);
+    if (from.kind !== "notes" || to.kind !== "notes" || !from.parentId || !to.parentId) return;
+    const target = findSection(tree, to.parentId);
+    if (!target) return;
+    const index = overId
+      ? target.notes.findIndex((n) => n.id === overId)
+      : target.notes.length;
+    if (index === -1) return;
+    if (from.parentId === to.parentId) actions.reorderNote(from.parentId, itemId, index);
+    else void actions.moveNoteToSection(itemId, to.parentId, index);
+  }
 
   return (
     <div className="flex flex-col gap-3.5">
@@ -67,15 +97,21 @@ export function NotesTray({
         </div>
       )}
 
-      {shown.map((section) => (
-        <TraySection
-          key={section.id}
-          section={section}
-          actions={actions}
-          labelClass={label}
-          reorderable={!needle}
-        />
-      ))}
+      {/* One drag across the tray (SPEC.md §6): a note dragged out of its
+          section drops into another, the same as on the notes full page. */}
+      <SortableBoard id="tray-board" onDrop={onDrop} axis="y">
+        <div className="flex flex-col gap-3.5">
+          {shown.map((section) => (
+            <TraySection
+              key={section.id}
+              section={section}
+              actions={actions}
+              labelClass={label}
+              reorderable={!needle}
+            />
+          ))}
+        </div>
+      </SortableBoard>
 
       {needle && shown.length === 0 && shownPending.length === 0 && (
         <p className="text-[13px] text-sand-600">
@@ -122,17 +158,6 @@ function TraySection({
   const accepted = compose.visibleNotes.filter((n) => n.status !== "PENDING");
   const grips = reorderable && canEdit;
 
-  // Reorder by the grip (SPEC.md §6). The list shows the accepted notes; the
-  // drop lands the note where the note under the pointer sits in the whole
-  // section, pending notes included — the index reorderNote and the server
-  // count with.
-  function moveNote(id: string, to: number) {
-    const overId = accepted[to]?.id;
-    const toIndex = overId ? section.notes.findIndex((n) => n.id === overId) : -1;
-    if (toIndex === -1) return;
-    actions.reorderNote(section.id, id, toIndex);
-  }
-
   return (
     <div className={`group/section flex flex-col gap-2 ${nested ? "pl-3" : ""}`}>
       <div className="flex items-baseline gap-2">
@@ -156,8 +181,9 @@ function TraySection({
             onClick={compose.open}
             data-track="section-add-note"
             data-tip={t("outline.addNoteTitle")}
-            className={`ml-auto ${SECTION_ACTION}`}
+            className={`ml-auto ${SECTION_ADD_NOTE}`}
           >
+            <PlusIcon size={14} />
             {t("outline.addNoteBtn")}
           </button>
         )}
@@ -214,7 +240,11 @@ function TraySection({
             </form>
           )}
 
-          <SortableList id={`tray-notes-${section.id}`} ids={accepted.map((n) => n.id)} onMove={moveNote} axis="y">
+          <SortableGroup
+            id={notesList(section.id)}
+            ids={accepted.map((n) => n.id)}
+            className="flex flex-col gap-2"
+          >
             {accepted.map((note) => (
               <SortableItem key={note.id} id={note.id}>
                 {(handle) => (
@@ -227,7 +257,7 @@ function TraySection({
                 )}
               </SortableItem>
             ))}
-          </SortableList>
+          </SortableGroup>
 
           {section.children.map((child) => (
             <TraySection

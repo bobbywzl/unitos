@@ -33,7 +33,7 @@ export type OutlineActions = {
   saveNote: (id: string, content: string) => Promise<void>;
   deleteNote: (id: string) => Promise<void>;
   reorderNote: (sectionId: string, id: string, toIndex: number) => void;
-  moveNoteToSection: (id: string, sectionId: string) => Promise<void>;
+  moveNoteToSection: (id: string, sectionId: string, toIndex?: number) => Promise<void>;
   mergeNotes: (targetId: string, sourceIds: string[]) => Promise<void>;
   setPinned: (id: string, pinned: boolean) => Promise<void>;
   acceptNote: (id: string) => Promise<void>;
@@ -73,6 +73,24 @@ function updateSection(
   return sections.map((s) =>
     s.id === id ? fn(s) : { ...s, children: updateSection(s.children, id, fn) },
   );
+}
+
+// Every section in the tree through the same change.
+function mapSections(
+  sections: SectionView[],
+  fn: (s: SectionView) => SectionView,
+): SectionView[] {
+  return sections.map((s) => fn({ ...s, children: mapSections(s.children, fn) }));
+}
+
+/** The section with this id, anywhere in the tree; null when there is none. */
+export function findSection(sections: SectionView[], id: string): SectionView | null {
+  for (const s of sections) {
+    if (s.id === id) return s;
+    const child = findSection(s.children, id);
+    if (child) return child;
+  }
+  return null;
 }
 
 export function flattenNotes(sections: SectionView[]): NoteView[] {
@@ -354,8 +372,25 @@ export function useOutline(notebook: NotebookView, canEdit = true) {
       );
       void api(`/api/notes/${id}`, "PATCH", { order: toIndex }).then(refresh);
     },
-    async moveNoteToSection(id, sectionId) {
-      await api(`/api/notes/${id}`, "PATCH", { sectionId });
+    async moveNoteToSection(id, sectionId, toIndex) {
+      // The card lands where it was dropped before the server answers: the
+      // note leaves its section and takes its place in the new one.
+      setTree((prev) => {
+        let moved: NoteView | null = null;
+        const taken = mapSections(prev, (s) => {
+          const note = s.notes.find((n) => n.id === id);
+          if (!note) return s;
+          moved = note;
+          return { ...s, notes: s.notes.filter((n) => n.id !== id) };
+        });
+        if (!moved) return prev;
+        const note: NoteView = moved;
+        return updateSection(taken, sectionId, (s) => {
+          const at = toIndex === undefined ? s.notes.length : Math.max(0, Math.min(toIndex, s.notes.length));
+          return { ...s, notes: [...s.notes.slice(0, at), note, ...s.notes.slice(at)] };
+        });
+      });
+      await api(`/api/notes/${id}`, "PATCH", { sectionId, ...(toIndex === undefined ? {} : { order: toIndex }) });
       refresh();
     },
     async mergeNotes(targetId, sourceIds) {

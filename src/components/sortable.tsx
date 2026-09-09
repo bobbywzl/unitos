@@ -1,12 +1,15 @@
 "use client";
 
-import { createContext, useContext, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
 import {
   DndContext,
   PointerSensor,
   closestCenter,
+  pointerWithin,
+  useDroppable,
   useSensor,
   useSensors,
+  type CollisionDetection,
   type DragEndEvent,
   type DragMoveEvent,
 } from "@dnd-kit/core";
@@ -36,27 +39,78 @@ export function useCombineTarget() {
   return useContext(CombineTargetContext);
 }
 
-// One vertical drag-reorder list. Nested lists each get their own SortableList.
-// `id` keeps DndContext aria ids stable across server and client renders.
-// With `onCombine`, dropping an item on the middle band of another combines the
-// two instead of reordering; the edges still reorder. `canCombine` gates pairs.
-export function SortableList({
+// One drag across many lists (SPEC.md §6). Every list is a SortableGroup
+// inside a SortableBoard, and the board owns the one DndContext, so a drag
+// that starts in one list ends in any of them. A list also takes a drop on its
+// own space, which is how an item lands in a list holding none.
+const DROP_PREFIX = "drop:";
+const dropId = (listId: string) => `${DROP_PREFIX}${listId}`;
+
+// The pointer decides: an item under it wins, then a list's own space, then
+// the nearest item. Without this a long list's box beat the item the pointer
+// was on, and every drop landed at the end of the list.
+const boardCollision: CollisionDetection = (args) => {
+  const items = args.droppableContainers.filter((c) => !String(c.id).startsWith(DROP_PREFIX));
+  const lists = args.droppableContainers.filter((c) => String(c.id).startsWith(DROP_PREFIX));
+  const onItem = pointerWithin({ ...args, droppableContainers: items });
+  if (onItem.length > 0) return onItem;
+  const onList = pointerWithin({ ...args, droppableContainers: lists });
+  if (onList.length > 0) return onList;
+  return closestCenter({ ...args, droppableContainers: items });
+};
+
+// The item the pointer rests on the middle of, or null: the item a drop
+// combines into. Read from the items' visual rects, not dnd-kit's `over` —
+// the sorting strategy shifts items live, which keeps `over` pinned to the
+// dragged item itself.
+function combineTargetAt(
+  ids: string[],
+  activeId: string,
+  x: number,
+  y: number,
+  canCombine?: (id: string, intoId: string) => boolean,
+): string | null {
+  for (const itemId of ids) {
+    if (itemId === activeId) continue;
+    if (canCombine && !canCombine(activeId, itemId)) continue;
+    const el = document.querySelector(`[data-sortable-id="${itemId}"]`);
+    if (!(el instanceof HTMLElement)) continue;
+    const rect = el.getBoundingClientRect();
+    // Middle band of the target: 30% margins top and bottom.
+    const margin = rect.height * 0.3;
+    if (x >= rect.left && x <= rect.right && y > rect.top + margin && y < rect.bottom - margin) {
+      return itemId;
+    }
+  }
+  return null;
+}
+
+// The lists a board holds, by list id, as they render: a group reports its
+// ids so the board can place a drop without the page repeating the tree.
+type Registry = Map<string, string[]>;
+const BoardContext = createContext<{ current: Registry } | null>(null);
+
+export function SortableBoard({
   id,
-  ids,
-  onMove,
+  onDrop,
   onCombine,
   canCombine,
   axis,
   children,
 }: {
   id: string;
-  ids: string[];
-  onMove: (id: string, toIndex: number) => void;
+  /** The item left `fromListId` and landed in `toListId` at `toIndex`, where
+      `overId` is the item it landed on — null when it landed on the list's own
+      space, past its last item. The same list on both sides is a reorder. */
+  onDrop: (
+    fromListId: string,
+    toListId: string,
+    itemId: string,
+    toIndex: number,
+    overId: string | null,
+  ) => void;
   onCombine?: (id: string, intoId: string) => void;
   canCombine?: (id: string, intoId: string) => boolean;
-  // "y": the reorder starts on a vertical move only, and a sideways move first
-  // (past 12px) lets the sensor go — the notes tray's cards drag out of the
-  // tray sideways by the same grip (SPEC.md §6, note-card.tsx).
   axis?: "y";
   children: React.ReactNode;
 }) {
@@ -66,17 +120,14 @@ export function SortableList({
     }),
   );
   const [combineTarget, setCombineTarget] = useState<string | null>(null);
-  // The ring must match the drop: handleDragEnd reads the ref, not the state.
   const combineRef = useRef<string | null>(null);
+  const registry = useRef<Registry>(new Map());
 
   function setCombine(target: string | null) {
     combineRef.current = target;
     setCombineTarget((prev) => (prev === target ? prev : target));
   }
 
-  // The combine target comes from the pointer against the items' visual rects,
-  // not dnd-kit's `over`: the sorting strategy shifts items live, which keeps
-  // `over` pinned to the dragged item itself.
   function handleDragMove({ active, activatorEvent, delta }: DragMoveEvent) {
     if (!onCombine) return;
     const start = getEventCoordinates(activatorEvent);
@@ -84,52 +135,83 @@ export function SortableList({
       setCombine(null);
       return;
     }
-    const x = start.x + delta.x;
-    const y = start.y + delta.y;
-    const activeId = String(active.id);
-    for (const itemId of ids) {
-      if (itemId === activeId) continue;
-      if (canCombine && !canCombine(activeId, itemId)) continue;
-      const el = document.querySelector(`[data-sortable-id="${itemId}"]`);
-      if (!(el instanceof HTMLElement)) continue;
-      const rect = el.getBoundingClientRect();
-      // Middle band of the target: 30% margins top and bottom.
-      const margin = rect.height * 0.3;
-      if (x >= rect.left && x <= rect.right && y > rect.top + margin && y < rect.bottom - margin) {
-        setCombine(itemId);
-        return;
-      }
-    }
-    setCombine(null);
+    const allIds = [...registry.current.values()].flat();
+    setCombine(combineTargetAt(allIds, String(active.id), start.x + delta.x, start.y + delta.y, canCombine));
   }
 
-  function handleDragEnd(event: DragEndEvent) {
-    const { active, over } = event;
+  function handleDragEnd({ active, over }: DragEndEvent) {
+    const activeId = String(active.id);
     const target = combineRef.current;
     setCombine(null);
-    if (onCombine && target && target !== String(active.id)) {
-      onCombine(String(active.id), target);
+    if (onCombine && target && target !== activeId) {
+      onCombine(activeId, target);
       return;
     }
-    if (!over || active.id === over.id) return;
-    const to = ids.indexOf(String(over.id));
-    if (to === -1) return;
-    onMove(String(active.id), to);
+    if (!over) return;
+    const lists = [...registry.current.entries()];
+    const from = lists.find(([, ids]) => ids.includes(activeId));
+    if (!from) return;
+    const overId = String(over.id);
+    const onList = lists.find(([listId]) => dropId(listId) === overId);
+    const to = onList ?? lists.find(([, ids]) => ids.includes(overId));
+    if (!to) return;
+    const toIndex = onList ? onList[1].length : to[1].indexOf(overId);
+    if (to[0] === from[0] && (overId === activeId || toIndex === -1)) return;
+    onDrop(from[0], to[0], activeId, toIndex, onList ? null : overId);
   }
 
   return (
     <DndContext
       id={id}
       sensors={sensors}
-      collisionDetection={closestCenter}
+      collisionDetection={boardCollision}
       onDragMove={onCombine ? handleDragMove : undefined}
       onDragEnd={handleDragEnd}
       onDragCancel={() => setCombine(null)}
     >
-      <SortableContext items={ids} strategy={onCombine ? holdStillStrategy : verticalListSortingStrategy}>
+      <BoardContext.Provider value={registry}>
         <CombineTargetContext.Provider value={combineTarget}>{children}</CombineTargetContext.Provider>
-      </SortableContext>
+      </BoardContext.Provider>
     </DndContext>
+  );
+}
+
+// One list inside a board. It holds no DndContext of its own — the board's
+// drag runs through every group — and takes a drop on its own space, so a
+// section holding no notes is still a target.
+export function SortableGroup({
+  id,
+  ids,
+  combine,
+  className,
+  children,
+}: {
+  id: string;
+  ids: string[];
+  /** The board combines on a drop in the middle of an item: items hold still. */
+  combine?: boolean;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  const registry = useContext(BoardContext);
+  registry?.current.set(id, ids);
+  useEffect(() => () => void registry?.current.delete(id), [registry, id]);
+  const { setNodeRef, isOver } = useDroppable({ id: dropId(id) });
+  const empty = ids.length === 0;
+  return (
+    <SortableContext items={ids} strategy={combine ? holdStillStrategy : verticalListSortingStrategy}>
+      <div
+        ref={setNodeRef}
+        data-drop-list={id}
+        className={`${className ?? ""}${
+          empty
+            ? ` min-h-9 rounded-2xl border-[1.5px] border-dashed ${isOver ? "border-clay bg-clay-100/60" : "border-transparent"}`
+            : ""
+        }`}
+      >
+        {children}
+      </div>
+    </SortableContext>
   );
 }
 

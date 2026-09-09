@@ -1,18 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { SECTION_ACTION } from "@/components/outline/section-action";
 import { isImeKey, useImeGuard } from "@/lib/ime";
 import { PlusIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 
-export function AddSection({
-  onAdd,
-  small,
-}: {
-  onAdd: (title: string) => Promise<void>;
-  small?: boolean;
-}) {
+export function AddSection({ onAdd }: { onAdd: (title: string) => Promise<void> }) {
   const t = useT();
   const ime = useImeGuard();
   const [open, setOpen] = useState(false);
@@ -23,20 +16,10 @@ export function AddSection({
       <button
         onClick={() => setOpen(true)}
         data-tip={t("outline.addSectionTitle")}
-        className={
-          small
-            ? `self-start ${SECTION_ACTION}`
-            : "flex items-center gap-2 self-start rounded-full border-[1.5px] border-dashed border-sand-400 px-[18px] py-2 text-[13px] text-sand-600 hover:bg-clay-100 hover:text-clay-800"
-        }
+        className="flex items-center gap-2 self-start rounded-full border-[1.5px] border-dashed border-sand-400 px-[18px] py-2 text-[13px] text-sand-600 hover:bg-clay-100 hover:text-clay-800"
       >
-        {small ? (
-          t("outline.addSectionSmall")
-        ) : (
-          <>
-            <PlusIcon size={14} />
-            {t("outline.addSection")}
-          </>
-        )}
+        <PlusIcon size={14} />
+        {t("outline.addSection")}
       </button>
     );
   }

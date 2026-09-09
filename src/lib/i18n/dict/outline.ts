@@ -20,14 +20,13 @@ const en = {
 
   // Sections
   addSection: "Add section",
-  addSectionSmall: "+ Add section",
   sectionTitle: "Section title",
   renameSection: "Rename section",
   reorderSection: "Drag to reorder section {title}",
   confirmDeleteSection: "Delete this section and its notes?",
 
   // Note cards
-  addNoteBtn: "+ note",
+  addNoteBtn: "Note",
   writeNotePlaceholder: "Write a note (markdown)",
   // The save state at the top of a note being edited (SPEC.md §6)
   saving: "Saving…",
@@ -50,8 +49,6 @@ const en = {
   copy: "Copy",
   copied: "Copied",
   copyTitle: "Copy the note text",
-  moveTo: "Move to…",
-  moveNoteAria: "Move this note to another section",
   confirmDeleteNote: "Delete this note?",
   anchorUnresolvedTitle: "Anchor unresolved. Quoted text: {quote}",
   unresolvedLabel: "unresolved:",
@@ -134,13 +131,12 @@ const zh: Record<keyof typeof en, string> = {
   emptyTraySuffix: "添加一个。",
 
   addSection: "添加章节",
-  addSectionSmall: "+ 添加章节",
   sectionTitle: "章节标题",
   renameSection: "重命名章节",
   reorderSection: "拖动以调整章节 {title} 的顺序",
   confirmDeleteSection: "删除此章节及其笔记？",
 
-  addNoteBtn: "+ 笔记",
+  addNoteBtn: "笔记",
   writeNotePlaceholder: "写一条笔记（markdown）",
   saving: "保存中…",
   saved: "已保存",
@@ -161,8 +157,6 @@ const zh: Record<keyof typeof en, string> = {
   copy: "复制",
   copied: "已复制",
   copyTitle: "复制笔记文本",
-  moveTo: "移到…",
-  moveNoteAria: "把此笔记移到其他章节",
   confirmDeleteNote: "删除此笔记？",
   anchorUnresolvedTitle: "锚点无法定位。引文：{quote}",
   unresolvedLabel: "无法定位：",
