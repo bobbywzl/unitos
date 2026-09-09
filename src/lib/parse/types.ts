@@ -61,9 +61,21 @@ export type ParsedBlock = {
   fragment?: string;
 };
 
+// The media check (lib/parse/figures.ts checkMedia): the images, videos,
+// iframes, and charts in the page's content, how many a block carries, and
+// the names of those none does. Travels with a URL parse to the upload
+// assistant, the progress card, and the document bar (SPEC.md §15).
+export type MediaCheck = {
+  onPage: number;
+  kept: number;
+  lost: string[];
+};
+
 export type ParsedDocument = {
   title: string | null;
   blocks: ParsedBlock[];
+  // URL parses: the media check.
+  mediaCheck?: MediaCheck;
   references?: DocumentReference[];
   // How many leading references came from the article's own reference list.
   // The rest came from hyperlinks; pruneReferences drops the uncited ones
@@ -185,4 +197,10 @@ export type UrlParseProgress = (stage: "extract", detail?: string) => void;
 //     box, the words carry their font size, weight, color, and alignment,
 //     a legend swatch its size and color, and the box its background and
 //     padding; a Markdown file imports through the URL walk.
-export const PARSER_VERSION = 18;
+// 19: nothing lost — an image, video, or chart set inside a paragraph of text
+//     is a figure between the text's parts; two uncaptioned figures in the
+//     document head are two figures; the media check reads every image,
+//     video, iframe, and chart of the page against the blocks after the walk
+//     and rebuilds what no block carries where the page set it; a figure the
+//     model passes dropped between two kept blocks is restored.
+export const PARSER_VERSION = 19;

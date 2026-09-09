@@ -411,8 +411,14 @@ const en = {
   uploadReviewAgainNote: "Review again re-checks the figures.",
   uploadFiguresLoaded: "{n} figures loaded",
   uploadEveryCaptionHasFigure: "every caption has its figure",
+  // The media check (SPEC.md §15): every image, video, and chart in the
+  // page's content against the blocks.
+  detailMediaLost: "{n} of {total} images and videos on the page not loaded: {names}",
+  uploadMediaOk: "Every image and video on the page loaded ({n}).",
+  uploadEveryMediaLoaded: "every image and video on the page loaded ({n})",
   // The document bar, after the automatic re-parse (document-bar.tsx)
   reparseCaptionsWithoutFigure: "No figure loaded for {labels} after the re-parse.",
+  reparseMediaLost: "Not loaded from the page after the re-parse: {names}.",
   reparseRenderFailed: "The browser render failed: {reason}",
   // The figure's place in the reader (figure-capture.tsx)
   figureMoving: "Unitos is moving {label} over…",
@@ -784,7 +790,11 @@ const zh: Record<keyof typeof en, string> = {
   uploadReviewAgainNote: "重新审阅会再次检查插图。",
   uploadFiguresLoaded: "已加载 {n} 张插图",
   uploadEveryCaptionHasFigure: "每条说明都有插图",
+  detailMediaLost: "页面上 {total} 个图片和视频中有 {n} 个没有加载：{names}",
+  uploadMediaOk: "页面上的每个图片和视频都已加载（{n} 个）。",
+  uploadEveryMediaLoaded: "页面上的每个图片和视频都已加载（{n} 个）",
   reparseCaptionsWithoutFigure: "重新解析后，{labels} 没有加载插图。",
+  reparseMediaLost: "重新解析后，页面上没有加载：{names}。",
   reparseRenderFailed: "浏览器渲染失败：{reason}",
   figureMoving: "Unitos 正在把 {label} 搬过来…",
   figureMoveFailed: "Unitos 无法把 {label} 搬过来：{reason}",

@@ -22,6 +22,8 @@ export type UploadReviewCtx = {
   captions: number; // blocks that open like a caption, figure or text
   captionsWithoutFigure: string[]; // caption texts the parse found no figure beside; [] = none
   figuresWithoutCaption: number;
+  media: number; // images, videos, and charts in the page's content
+  mediaLost: string[]; // names of those the parse did not load; [] = none
   scriptedFigures: boolean; // the page draws figures with scripts and no browser is configured to render them
   excerptHead: string; // opening text of the parsed content
   excerptTail: string; // closing text; "" when the content is short
@@ -44,6 +46,9 @@ function figureFacts(ctx: UploadReviewCtx): string[] {
           ...(rest > 0 ? [`- and ${rest} more`] : []),
         ]
       : []),
+    `Media check: ${ctx.media} images, videos, and charts in the page's content, not loaded: ${
+      ctx.mediaLost.length === 0 ? "none" : ctx.mediaLost.slice(0, MAX_LISTED_CAPTIONS).join(", ")
+    }.`,
     ...(ctx.scriptedFigures
       ? ["The page draws some figures with scripts; the upload cannot render them without a browser."]
       : []),
@@ -74,7 +79,7 @@ export function uploadReviewPrompt(ctx: UploadReviewCtx): string {
     '1. kind: "article" when the page\'s own text is the content. "index" when the page mainly points at other pages — a table of contents, a series overview, a publications list. "other" when neither fits.',
     `2. summary: one or two plain sentences on what the page is. In ${name}.`,
     `3. advice: up to 6 lines. The figure check (rule 4) and the structure check (rule 5) come first; then short recommendations for adding this content — formatting to watch for, what to keep or drop, where the parse may struggle. Only advice that changes what the reader would do; an empty array is a valid answer. In ${name}.`,
-    `4. Figure check: every caption listed above with no figure is a figure the parse did not load. Put one line in advice per caption with no figure: name the figure label ("Figure 4") and ${verdict}. When more than 4 captions have no figure, put one line that names every figure label instead. No figure line when no caption is listed with no figure. A figure with no caption needs no line.`,
+    `4. Figure check: every caption listed above with no figure is a figure the parse did not load. Put one line in advice per caption with no figure: name the figure label ("Figure 4") and ${verdict}. When more than 4 captions have no figure, put one line that names every figure label instead. No figure line when no caption is listed with no figure. A figure with no caption needs no line. Every media name listed as not loaded in the media check is an image, video, or chart the parse did not load: put one line in advice that names them and says they will not load. No media line when none is listed.`,
     "5. Structure check: read the opening text for structure that looks off — a title repeated, a byline split into fragments, a contents list missing while the headings are numbered. Put one line in advice when the structure looks off, naming what is off. No line when the structure looks right.",
     "6. pages: the linked pages that are parts of the same work as this page — chapters, series parts, sections of one essay. Reading order. Reference by link number exactly as given. Not related articles, not other posts. An empty array is a valid answer. recommended: whether the reader likely wants that part added.",
     `7. title per page: the part's clean title, from its anchor text. In the content's language.`,

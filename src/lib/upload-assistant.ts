@@ -56,6 +56,10 @@ export type UploadReview = {
   captions: number;
   captionsWithoutFigure: string[]; // caption texts the parse found no figure beside
   figuresWithoutCaption: number;
+  // The media check (SPEC.md §15): the images, videos, and charts in the
+  // page's content, and the names of those the parse did not load.
+  media: number;
+  mediaLost: string[];
   // The page draws figures with scripts and no browser is configured to
   // render them: those figures will not load.
   scriptedFigures: boolean;
@@ -214,6 +218,8 @@ export async function reviewUpload(
     captions: audit.captions,
     captionsWithoutFigure: audit.captionsWithoutFigure.map((c) => c.slice(0, MAX_CAPTION_CHARS)),
     figuresWithoutCaption: audit.figuresWithoutCaption,
+    media: parsed.mediaCheck?.onPage ?? 0,
+    mediaLost: parsed.mediaCheck?.lost ?? [],
     scriptedFigures:
       page.kind === "html" && needsBrowserRender(page.html) && !browserConfigured(),
     pageEstimate: pages,
@@ -241,6 +247,8 @@ export async function reviewUpload(
     captions: review.captions,
     captionsWithoutFigure: review.captionsWithoutFigure,
     figuresWithoutCaption: review.figuresWithoutCaption,
+    media: review.media,
+    mediaLost: review.mediaLost,
     scriptedFigures: review.scriptedFigures,
     excerptHead: excerpt(texts, EXCERPT_HEAD_CHARS),
     excerptTail:
