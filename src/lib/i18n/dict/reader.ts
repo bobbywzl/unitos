@@ -141,6 +141,10 @@ const en = {
   continueConversationTitle:
     "Ask the assistant about this output to expand it and go deeper. The conversation saves with the output, under Annotations.",
   continuePlaceholder: "Ask about this…",
+  // The full conversation view (SPEC.md §21)
+  expandConversation: "Expand the conversation",
+  expandConversationTitle: "Read the whole conversation over the article, with the box at the foot.",
+  collapseConversationTitle: "Close the conversation and go back to the card.",
   // Continuing into a conversation is Unitos Ultra (TIERS.md)
   continueNeedsUltra: "Continue in a conversation is Unitos Ultra.",
   explainPlus: "Explain+",
@@ -386,6 +390,10 @@ const zh: Record<keyof typeof en, string> = {
   continueConversation: "继续对话",
   continueConversationTitle: "就这段输出向助手提问，扩展并深入理解。对话随输出一起保存在批注下。",
   continuePlaceholder: "就此提问…",
+  // The full conversation view (SPEC.md §21)
+  expandConversation: "展开对话",
+  expandConversationTitle: "在文章上方通读整段对话，输入框固定在底部。",
+  collapseConversationTitle: "关闭对话，回到卡片。",
   // Continuing into a conversation is Unitos Ultra (TIERS.md)
   continueNeedsUltra: "继续对话是 Unitos Ultra 功能。",
   explainPlus: "解释+",

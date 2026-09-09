@@ -644,25 +644,6 @@ export function NoteCard({
             {copied ? t("outline.copied") : t("outline.copy")}
           </button>
           {canEdit && (
-            <select
-              value=""
-              onChange={(e) => {
-                if (e.target.value) void actions.moveNoteToSection(note.id, e.target.value);
-              }}
-              className="rounded-full border-none bg-transparent text-xs text-sand-600 outline-none hover:text-clay-700"
-              aria-label={t("outline.moveNoteAria")}
-            >
-              <option value="" disabled>
-                {t("outline.moveTo")}
-              </option>
-              {actions.sectionChoices.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.label}
-                </option>
-              ))}
-            </select>
-          )}
-          {canEdit && (
             <button
               onClick={() => {
                 if (confirm(t("outline.confirmDeleteNote"))) void actions.deleteNote(note.id);

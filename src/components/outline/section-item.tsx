@@ -4,12 +4,13 @@ import { useState } from "react";
 import { isImeKey, useImeGuard } from "@/lib/ime";
 import type { SectionView } from "@/lib/types";
 import { useCollab } from "@/components/collab/collab-context";
+import { PlusIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
-import { DragHandle, SortableItem, SortableList, type HandleProps } from "@/components/sortable";
-import { AddSection } from "@/components/outline/add-section";
+import { DragHandle, SortableGroup, SortableItem, type HandleProps } from "@/components/sortable";
+import { notesList, sectionsList } from "@/components/outline/board-lists";
 import { NoteCard } from "@/components/outline/note-card";
 import { NoteEditor } from "@/components/outline/note-editor";
-import { SECTION_ACTION } from "@/components/outline/section-action";
+import { SECTION_ACTION, SECTION_ADD_NOTE } from "@/components/outline/section-action";
 import { SaveStateLabel } from "@/components/outline/save-state";
 import { useNoteCompose } from "@/components/outline/use-note-compose";
 import { VoiceNoteButton } from "@/components/outline/voice-note";
@@ -81,7 +82,13 @@ export function SectionItem({
         )}
         <span className="text-[13px] text-sand-600">{notes.length || ""}</span>
         {canEdit && (
-          <button onClick={compose.open} data-tip={t("outline.addNoteTitle")} className={`ml-auto ${SECTION_ACTION}`}>
+          <button
+            onClick={compose.open}
+            data-track="section-add-note"
+            data-tip={t("outline.addNoteTitle")}
+            className={`ml-auto ${SECTION_ADD_NOTE}`}
+          >
+            <PlusIcon size={15} />
             {t("outline.addNoteBtn")}
           </button>
         )}
@@ -145,17 +152,14 @@ export function SectionItem({
           </form>
         )}
 
-        <SortableList
-          id={`notes-${section.id}`}
+        {/* The page's one board holds every section's notes, so a note
+            dragged out of this section drops into another; a drop on the
+            middle of a note merges the two (SPEC.md §6). */}
+        <SortableGroup
+          id={notesList(section.id)}
           ids={notes.map((n) => n.id)}
-          onMove={(id, to) => actions.reorderNote(section.id, id, to)}
-          // Dropping a note on the middle of another merges the two.
-          onCombine={canEdit ? (id, intoId) => void actions.mergeNotes(intoId, [id]) : undefined}
-          canCombine={(id, intoId) => {
-            const a = notes.find((n) => n.id === id);
-            const b = notes.find((n) => n.id === intoId);
-            return a?.status === "ACCEPTED" && b?.status === "ACCEPTED";
-          }}
+          combine={canEdit}
+          className="flex flex-col gap-2.5"
         >
           {notes.map((note) => (
             <SortableItem key={note.id} id={note.id}>
@@ -164,25 +168,22 @@ export function SectionItem({
               )}
             </SortableItem>
           ))}
-        </SortableList>
+        </SortableGroup>
 
         {!nested && (
-          <>
-            <SortableList
-              id={`children-${section.id}`}
-              ids={section.children.map((c) => c.id)}
-              onMove={(id, to) => actions.reorderSection(section.id, id, to)}
-            >
-              {section.children.map((child) => (
-                <SortableItem key={child.id} id={child.id}>
-                  {(childHandle) => (
-                    <SectionItem section={child} actions={actions} handle={childHandle} nested />
-                  )}
-                </SortableItem>
-              ))}
-            </SortableList>
-            {canEdit && <AddSection small onAdd={(t) => actions.addSection(section.id, t)} />}
-          </>
+          <SortableGroup
+            id={sectionsList(section.id)}
+            ids={section.children.map((c) => c.id)}
+            className="flex flex-col gap-2.5"
+          >
+            {section.children.map((child) => (
+              <SortableItem key={child.id} id={child.id}>
+                {(childHandle) => (
+                  <SectionItem section={child} actions={actions} handle={childHandle} nested />
+                )}
+              </SortableItem>
+            ))}
+          </SortableGroup>
         )}
       </div>
     </section>

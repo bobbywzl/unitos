@@ -1,19 +1,25 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { isImeKey } from "@/lib/ime";
 import type { NotebookView } from "@/lib/types";
 import { useCollab } from "@/components/collab/collab-context";
 import { useT } from "@/components/lang-provider";
 import { CollapsedViewToggle } from "@/components/collapsed-view-toggle";
 import { Presence } from "@/components/presence";
-import { SortableItem, SortableList } from "@/components/sortable";
+import { SortableBoard, SortableGroup, SortableItem } from "@/components/sortable";
 import { AddSection } from "@/components/outline/add-section";
+import { parseListId, SECTIONS_LIST } from "@/components/outline/board-lists";
 import { CompareView } from "@/components/outline/compare-view";
 import { NoteCard } from "@/components/outline/note-card";
 import { SectionItem } from "@/components/outline/section-item";
 import { SelectionBar } from "@/components/outline/selection-bar";
-import { filterSections, useOutline } from "@/components/outline/use-outline";
+import {
+  filterSections,
+  findSection,
+  flattenNotes,
+  useOutline,
+} from "@/components/outline/use-outline";
 
 // The notes full page (design 2b): the reorganizing view. Sections carry drag
 // grips, notes are flat cards, and pending ones stay in place with Accept/Reject
@@ -29,6 +35,39 @@ export function Outline({ notebook }: { notebook: NotebookView }) {
   const results = searching ? filterSections(tree, query) : tree;
   // The notes in the compare view, in pane order; null = closed.
   const [compare, setCompare] = useState<string[] | null>(null);
+  // Every note by id: the drag asks per item on every pointer move whether the
+  // two can merge.
+  const notesById = useMemo(() => new Map(flattenNotes(tree).map((n) => [n.id, n])), [tree]);
+
+  // Where a drop landed. A note dropped in its own section reorders; dropped
+  // in another it moves there, at the place it was dropped. A section
+  // reorders among its siblings; it never lands in a notes list.
+  function onDrop(
+    fromListId: string,
+    toListId: string,
+    itemId: string,
+    toIndex: number,
+    overId: string | null,
+  ) {
+    const from = parseListId(fromListId);
+    const to = parseListId(toListId);
+    if (from.kind !== to.kind) return;
+    if (from.kind === "sections") {
+      if (from.parentId !== to.parentId) return;
+      actions.reorderSection(from.parentId, itemId, toIndex);
+      return;
+    }
+    if (!from.parentId || !to.parentId) return;
+    // The list a composer owns a note in shows one note fewer than the
+    // section holds, so the place comes from the note dropped on, not from
+    // the drop's own index — the index reorderNote and the server count with.
+    const target = findSection(tree, to.parentId);
+    if (!target) return;
+    const index = overId ? target.notes.findIndex((n) => n.id === overId) : target.notes.length;
+    if (index === -1) return;
+    if (from.parentId === to.parentId) actions.reorderNote(from.parentId, itemId, index);
+    else void actions.moveNoteToSection(itemId, to.parentId, index);
+  }
 
   return (
     <div className="flex flex-col">
@@ -89,17 +128,30 @@ export function Outline({ notebook }: { notebook: NotebookView }) {
           </>
         ) : (
           <>
-            <SortableList
-              id="sections-root"
-              ids={tree.map((s) => s.id)}
-              onMove={(id, to) => actions.reorderSection(null, id, to)}
+            {/* One drag across the whole page (SPEC.md §6): a note dragged
+                out of its section drops into any other, and a section
+                reorders among its siblings. */}
+            <SortableBoard
+              id="notes-board"
+              onDrop={onDrop}
+              onCombine={canEdit ? (id, intoId) => void actions.mergeNotes(intoId, [id]) : undefined}
+              canCombine={(id, intoId) =>
+                notesById.get(id)?.status === "ACCEPTED" &&
+                notesById.get(intoId)?.status === "ACCEPTED"
+              }
             >
-              {tree.map((section) => (
-                <SortableItem key={section.id} id={section.id}>
-                  {(handle) => <SectionItem section={section} actions={actions} handle={handle} />}
-                </SortableItem>
-              ))}
-            </SortableList>
+              <SortableGroup
+                id={SECTIONS_LIST}
+                ids={tree.map((s) => s.id)}
+                className="flex flex-col gap-[30px]"
+              >
+                {tree.map((section) => (
+                  <SortableItem key={section.id} id={section.id}>
+                    {(handle) => <SectionItem section={section} actions={actions} handle={handle} />}
+                  </SortableItem>
+                ))}
+              </SortableGroup>
+            </SortableBoard>
 
             {canEdit && <AddSection onAdd={(title) => actions.addSection(null, title)} />}
 

@@ -53,6 +53,7 @@ import { useLang, useT } from "@/components/lang-provider";
 import {
   CommentIcon,
   DistillIcon,
+  ExpandIcon,
   ExtractIcon,
   LinkIcon,
   MicIcon,
@@ -83,6 +84,7 @@ import { useCollab } from "@/components/collab/collab-context";
 import { TierMark } from "@/components/tier-mark";
 import { useImageDrop, type DroppedImage } from "@/components/use-image-drop";
 import { AuthorChip } from "@/components/collab/person-badge";
+import { ConversationView } from "@/components/reader/conversation-view";
 import { DistillPage } from "@/components/reader/distill-page";
 import { KeypointsPage } from "@/components/reader/keypoints-page";
 import { ProjectSearch } from "@/components/reader/project-search";
@@ -794,6 +796,15 @@ export function ReaderInteractions({
   const [localKeypoints, setLocalKeypoints] = useState<KeypointsView | null | "deleted">(null);
   const keypointsAbortRef = useRef<AbortController | null>(null);
   const keypointsReturnScroll = useRef<number | null>(null);
+  // The full conversation view (SPEC.md §21): which open card's conversation
+  // is read whole over the pane. The card stays open under it, so the same
+  // box sends from either place.
+  const [conversationView, setConversationView] = useState<
+    "assistant" | "explain" | "simplify" | null
+  >(null);
+  const conversationViewRef = useRef(false);
+  conversationViewRef.current = conversationView !== null;
+  const conversationReturnScroll = useRef<number | null>(null);
   // The reading position survives a full page load and a remount: a note, an
   // annotation, or an AI tool refreshes the page, and when the refresh turns
   // into a full load (a new deploy, a dropped response) the reader came back
@@ -881,7 +892,13 @@ export function ReaderInteractions({
       // The distilled page and the extract page scroll the pane to the top while open; that
       // is not a reading position. While the hold above keeps the stored
       // position, the stored one stands.
-      if (distillOpenRef.current || keypointsOpenRef.current || positionHeld.current) return;
+      if (
+        distillOpenRef.current ||
+        keypointsOpenRef.current ||
+        conversationViewRef.current ||
+        positionHeld.current
+      )
+        return;
       try {
         sessionStorage.setItem(positionStoreKey, JSON.stringify(readReadingPosition(container)));
       } catch {
@@ -1966,6 +1983,36 @@ export function ReaderInteractions({
     if (moved.comment !== undefined) setCommentCard(lift<NonNullable<typeof commentCard>>("comment"));
     if (moved.link !== undefined) setLinkCard(lift<LinkCard>("link"));
   }, []);
+  // A card grows with its content up to the pane's height, then its body
+  // scrolls (SPEC.md §6). A card anchored low in the pane still grows past the
+  // pane's bottom edge, and the box at its foot goes out of reach — a long
+  // conversation kept pushing it further down. So a card that grew is lifted
+  // until its foot is back inside the pane; a card taller than the pane sits
+  // at the pane's top and scrolls inside. Only a card the reader can see
+  // moves: one scrolled away stays at its anchor.
+  const PANE_EDGE_GAP = 8;
+  const keepCardInPane = useCallback((grown: string | null) => {
+    const container = containerRef.current;
+    if (!container || !grown) return;
+    // A page over the pane scrolls it to the top while it is open; that is not
+    // where the cards under it sit, so nothing moves until it closes.
+    if (distillOpenRef.current || keypointsOpenRef.current || conversationViewRef.current) return;
+    const el = container.querySelector<HTMLElement>(`[data-side-card="${grown}"]`);
+    if (!el || el.closest(".presence-exit")) return;
+    const top = parseFloat(el.style.top) || el.offsetTop;
+    const viewTop = container.scrollTop + PANE_EDGE_GAP;
+    const viewBottom = container.scrollTop + container.clientHeight - PANE_EDGE_GAP;
+    if (top >= viewBottom || top + el.offsetHeight <= viewTop) return;
+    const lifted = Math.max(viewTop, Math.min(top, viewBottom - el.offsetHeight));
+    if (Math.abs(lifted - top) < 1) return;
+    const move = <T extends { top: number }>(c: T | null): T | null =>
+      c ? { ...c, top: lifted } : c;
+    if (grown === "explain") setBubble(move<ExplainBubble>);
+    else if (grown === "simplify") setSimplifyCard(move<SimplifyCard>);
+    else if (grown === "assistant") setAssistantChat(move<AssistantChat>);
+    else if (grown === "comment") setCommentCard(move<NonNullable<typeof commentCard>>);
+    else if (grown === "link") setLinkCard(move<LinkCard>);
+  }, []);
   const openCards = `${bubble !== null}${simplifyCard !== null}${assistantChat !== null}${commentCard !== null}${linkCard !== null}`;
   useEffect(() => {
     const container = containerRef.current;
@@ -1983,13 +2030,14 @@ export function ReaderInteractions({
         cardSizesRef.current[kind] = size;
         if (before !== undefined && before !== size) grown = kind;
       }
+      keepCardInPane(grown);
       settleSideCards(grown);
     });
     for (const el of container.querySelectorAll<HTMLElement>("[data-side-card]")) {
       if (!el.closest(".presence-exit")) observer.observe(el);
     }
     return () => observer.disconnect();
-  }, [openCards, settleSideCards]);
+  }, [openCards, keepCardInPane, settleSideCards]);
 
   const chatMessageCount = assistantChat?.messages.length ?? 0;
   useEffect(() => {
@@ -5046,6 +5094,9 @@ function blockFormatKind(
     kind: "explain" | "simplify",
     card: ToolChat & { noteId: string | null; streaming: boolean; error: string | null },
     tool: ToolKind,
+    // In the full conversation view the foot is a row of its own, so it takes
+    // none of the space the card's foot leaves under the output.
+    inView = false,
   ) => {
     if (!card.noteId || card.streaming || card.error) return null;
     if (!card.chatOpen) {
@@ -5057,7 +5108,7 @@ function blockFormatKind(
           onClick={() => openToolChat(kind)}
           data-track={`${tool}-continue`}
           data-tip={ultra ? t("reader.continueConversationTitle") : t("reader.continueNeedsUltra")}
-          className="mt-2.5 flex w-full items-center justify-between gap-2 self-start rounded-full border border-line px-2.5 py-1 text-[11px] font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800"
+          className={`${inView ? "" : "mt-2.5"} flex w-full items-center justify-between gap-2 self-start rounded-full border border-line px-2.5 py-1 text-[11px] font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800`}
         >
           <span className="flex items-center gap-1.5">
             <ToolSymbol tool={tool} plus size={11} />
@@ -5076,7 +5127,7 @@ function blockFormatKind(
       // A conversation started while the account was Ultra, since downgraded:
       // the turns above stay readable; no more can be sent.
       return (
-        <p className="mt-2 flex items-center gap-1.5 text-[11px] text-sand-500">
+        <p className={`${inView ? "" : "mt-2"} flex items-center gap-1.5 text-[11px] text-sand-500`}>
           <ToolSymbol tool={tool} plus size={11} />
           {t("reader.continueNeedsUltra")}
         </p>
@@ -5084,7 +5135,7 @@ function blockFormatKind(
     }
     return (
       <form
-        className="mt-2 flex items-end gap-1.5"
+        className={`${inView ? "" : "mt-2"} flex items-end gap-1.5`}
         onSubmit={(e) => {
           e.preventDefault();
           void sendToolMessage(kind);
@@ -5128,8 +5179,83 @@ function blockFormatKind(
       </form>
     );
   };
+  // The assistant card's foot: the box that sends the next turn. The card
+  // beside the article and the full conversation view render the same one.
+  const assistantChatFoot = (chat: AssistantChat, className: string) => (
+    <form
+      className={className}
+      onSubmit={(e) => {
+        e.preventDefault();
+        void sendChatMessage();
+      }}
+    >
+      <textarea
+        value={chat.input}
+        rows={1}
+        onChange={(e) => setAssistantChat((c) => (c ? { ...c, input: e.target.value } : c))}
+        {...ime.props}
+        onKeyDown={(e) => {
+          if (ime.isImeEnter(e)) return;
+          if (e.key === "Enter" && !e.shiftKey) {
+            e.preventDefault();
+            void sendChatMessage();
+          }
+        }}
+        placeholder={t("reader.replyPlaceholder")}
+        aria-label={t("reader.messageAssistant")}
+        className="field-sizing-content max-h-40 min-h-8 flex-1 resize-none rounded-xl bg-sand-100 px-3 py-1.5 text-[12.5px] outline-none placeholder:text-sand-500"
+      />
+      <button
+        type="submit"
+        data-track="assistant-card-send"
+        onClick={(e) => {
+          if (!chat.busy) return;
+          e.preventDefault();
+          stopAssistantChat();
+        }}
+        disabled={!chat.busy && !chat.input.trim()}
+        data-tip={chat.busy ? t("reader.stopAssistant") : t("reader.sendTitle")}
+        aria-label={chat.busy ? t("reader.stopAssistant") : undefined}
+        className="rounded-full bg-clay px-3 py-1.5 text-[11px] font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
+      >
+        {chat.busy ? <StopIcon size={11} /> : t("reader.send")}
+      </button>
+    </form>
+  );
   // The card's title once its output continued into a conversation.
   const toolPlus = (card: ToolChat) => card.chatOpen || card.conversation.length > 0;
+
+  // Expand: the conversation read whole over the pane (SPEC.md §21). The card
+  // stays open under the view, so closing it puts the reader back where the
+  // card was, at the scroll position the pane left.
+  function openConversationView(kind: "assistant" | "explain" | "simplify") {
+    const container = containerRef.current;
+    if (container && !conversationViewRef.current) {
+      conversationReturnScroll.current = container.scrollTop;
+      container.scrollTo({ top: 0 });
+    }
+    setConversationView(kind);
+  }
+  function closeConversationView() {
+    setConversationView(null);
+    const container = containerRef.current;
+    if (container && conversationReturnScroll.current !== null) {
+      container.scrollTo({ top: conversationReturnScroll.current });
+      conversationReturnScroll.current = null;
+    }
+  }
+  // Expand, on the header of every card that holds a conversation.
+  const expandButton = (kind: "assistant" | "explain" | "simplify") => (
+    <button
+      onClick={() => openConversationView(kind)}
+      data-track={`${kind}-expand`}
+      className="text-sand-500 hover:text-clay-800"
+      aria-label={t("reader.expandConversation")}
+      data-tip={t("reader.expandConversationTitle")}
+    >
+      <ExpandIcon size={12} />
+    </button>
+  );
 
   // The article menu: frequent asks go to the assistant at document scope;
   // Distill opens the distilled page, Extract the extract page; the search icon beside the assistant
@@ -5346,7 +5472,9 @@ function blockFormatKind(
         embedded
           ? "relative min-w-0"
           : `relative min-h-0 min-w-0 flex-1 print:overflow-visible ${
-              distillOpen || keypointsOpen ? "overflow-hidden" : "overflow-y-auto"
+              distillOpen || keypointsOpen || conversationView
+                ? "overflow-hidden"
+                : "overflow-y-auto"
             }`
       }
     >
@@ -6104,6 +6232,7 @@ function blockFormatKind(
                   {t("reader.openVisualization")}
                 </button>
               )}
+              {(bubble.text || bubble.conversation.length > 0) && expandButton("explain")}
               {!bubble.streaming && !bubble.busy && bubble.anchor && (
                 <button
                   onClick={() => void regenerateBubble()}
@@ -6211,6 +6340,7 @@ function blockFormatKind(
                   {t("common.stop")}
                 </button>
               )}
+              {simplifyCard.conversation.length > 0 && expandButton("simplify")}
               {!simplifyCard.streaming && !simplifyCard.busy && (
                 <button
                   onClick={() => void regenerateSimplify()}
@@ -6541,6 +6671,7 @@ function blockFormatKind(
               {t("reader.assistant")}
             </span>
             <span className="flex items-center gap-3">
+              {assistantChat.messages.length > 0 && expandButton("assistant")}
               {assistantChat.noteId && (
                 <button
                   onClick={() => void deleteAssistantConversation()}
@@ -6579,47 +6710,7 @@ function blockFormatKind(
             )}
             {assistantChat.busy && <ThinkingIndicator className="py-0.5 text-[12px]" />}
           </div>
-          <form
-            className="flex items-end gap-1.5 px-3 pb-3"
-            onSubmit={(e) => {
-              e.preventDefault();
-              void sendChatMessage();
-            }}
-          >
-            <textarea
-              value={assistantChat.input}
-              rows={1}
-              onChange={(e) =>
-                setAssistantChat((c) => (c ? { ...c, input: e.target.value } : c))
-              }
-              {...ime.props}
-              onKeyDown={(e) => {
-                if (ime.isImeEnter(e)) return;
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  void sendChatMessage();
-                }
-              }}
-              placeholder={t("reader.replyPlaceholder")}
-              aria-label={t("reader.messageAssistant")}
-              className="field-sizing-content max-h-40 min-h-8 flex-1 resize-none rounded-xl bg-sand-100 px-3 py-1.5 text-[12.5px] outline-none placeholder:text-sand-500"
-            />
-            <button
-              type="submit"
-              data-track="assistant-card-send"
-              onClick={(e) => {
-                if (!assistantChat.busy) return;
-                e.preventDefault();
-                stopAssistantChat();
-              }}
-              disabled={!assistantChat.busy && !assistantChat.input.trim()}
-              data-tip={assistantChat.busy ? t("reader.stopAssistant") : t("reader.sendTitle")}
-              aria-label={assistantChat.busy ? t("reader.stopAssistant") : undefined}
-              className="rounded-full bg-clay px-3 py-1.5 text-[11px] font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
-            >
-              {assistantChat.busy ? <StopIcon size={11} /> : t("reader.send")}
-            </button>
-          </form>
+          {assistantChatFoot(assistantChat, "flex items-end gap-1.5 px-3 pb-3")}
         </div>
       )}
       </Presence>
@@ -6752,6 +6843,55 @@ function blockFormatKind(
             </button>
           </div>
         </div>
+      )}
+      </Presence>
+
+      {/* The conversation read whole, over the pane (SPEC.md §21). The card
+          stays open under it and the same box sends from either place. */}
+      <Presence show={conversationView !== null} exit="fade">
+      {conversationView === "assistant" && assistantChat && (
+        <ConversationView
+          title={t("reader.assistant")}
+          icon={<SparkleIcon size={12} />}
+          messages={assistantChat.messages}
+          busy={assistantChat.busy}
+          foot={assistantChatFoot(assistantChat, "flex items-end gap-1.5")}
+          onClose={closeConversationView}
+        />
+      )}
+      {conversationView === "explain" && bubble && (
+        <ConversationView
+          title={
+            toolPlus(bubble)
+              ? t(TOOL_PLUS_KEY[bubble.kind])
+              : t(
+                  bubble.kind === "analyze"
+                    ? "reader.analysis"
+                    : bubble.kind === "visualize"
+                      ? "reader.visualization"
+                      : "reader.explanation",
+                )
+          }
+          icon={<ToolSymbol tool={bubble.kind} plus={toolPlus(bubble)} size={12} />}
+          output={bubble.text}
+          messages={bubble.conversation}
+          busy={bubble.busy}
+          foot={
+            bubble.declined === null ? toolChatFoot("explain", bubble, bubble.kind, true) : null
+          }
+          onClose={closeConversationView}
+        />
+      )}
+      {conversationView === "simplify" && simplifyCard && (
+        <ConversationView
+          title={toolPlus(simplifyCard) ? t(TOOL_PLUS_KEY.simplify) : t("reader.simplified")}
+          icon={<ToolSymbol tool="simplify" plus={toolPlus(simplifyCard)} size={12} />}
+          output={stripSimplifyMarkers(simplifyCard.text)}
+          messages={simplifyCard.conversation}
+          busy={simplifyCard.busy}
+          foot={toolChatFoot("simplify", simplifyCard, "simplify", true)}
+          onClose={closeConversationView}
+        />
       )}
       </Presence>
 

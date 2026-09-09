@@ -14,6 +14,7 @@ import {
   ChevronDownIcon,
   ChevronRightIcon,
   CommentIcon,
+  ExpandIcon,
   LinkIcon,
   LocateIcon,
   QuestionIcon,
@@ -22,6 +23,10 @@ import {
   SummaryIcon,
 } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
+import type { TKey } from "@/lib/i18n/dictionaries";
+import { TOOL_KINDS, type ToolKind } from "@/lib/conversation";
+import { ToolSymbol } from "@/components/reader/block-view";
+import { ConversationView } from "@/components/reader/conversation-view";
 import { Markdown } from "@/components/markdown";
 import { markdownPreview } from "@/lib/markdown-preview";
 import { useGist } from "@/lib/gist-client";
@@ -72,6 +77,20 @@ function ToolConversation({ turns }: { turns: AnnotationItem["conversation"] }) 
       )}
     </div>
   );
+}
+
+// The title the full conversation view carries, one per kind (SPEC.md §21).
+const CONVERSATION_TITLE: Record<string, TKey> = {
+  assistant: "panels.assistant",
+  explain: "reader.explainPlus",
+  simplify: "reader.simplifyPlus",
+  analyze: "reader.analyzePlus",
+  visualize: "reader.visualizePlus",
+};
+// An annotation the reader can read as a conversation: the assistant's own,
+// or a tool's output continued into one.
+function hasConversation(a: AnnotationItem) {
+  return a.kind === "assistant" || a.conversation.length > 0;
 }
 
 // A group's label carries the symbol of the tool that made its cards — the
@@ -158,11 +177,13 @@ function AnnotationActions({
   notebookId,
   documentId,
   onDelete,
+  onExpand,
 }: {
   annotation: AnnotationItem;
   notebookId: string;
   documentId: string | null;
   onDelete: (id: string) => Promise<void>;
+  onExpand: (id: string) => void;
 }) {
   const router = useRouter();
   const t = useT();
@@ -204,6 +225,17 @@ function AnnotationActions({
         </span>
       )}
       <span className="ml-auto flex items-center gap-3">
+        {hasConversation(annotation) && (
+          <button
+            onClick={() => onExpand(annotation.id)}
+            data-track="annotation-expand"
+            aria-label={t("reader.expandConversation")}
+            data-tip={t("reader.expandConversationTitle")}
+            className="text-sand-500 hover:text-clay-800"
+          >
+            <ExpandIcon size={12} />
+          </button>
+        )}
         <AuthorChip createdById={annotation.createdById} nameless />
         {canEdit && (
           <button
@@ -343,6 +375,9 @@ export function AnnotationsPanel({
   const view = useCollapsedView(`${ANNOTATIONS_VIEW_STORE}:${notebookId}`);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [errorText, setErrorText] = useState<string | null>(null);
+  // The annotation read as a full conversation over the page (SPEC.md §21).
+  // The id, not the annotation: a refresh replaces the list.
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   const highlights = annotations.filter((a) => a.kind === "highlight");
   // Recommended links list in the graph (SPEC.md §13); only accepted ones here.
   const acceptedOut = linksOut.filter((l) => !l.recommended);
@@ -403,11 +438,44 @@ export function AnnotationsPanel({
       notebookId={notebookId}
       documentId={documentId}
       onDelete={deleteAnnotation}
+      onExpand={setExpandedId}
     />
+  );
+
+  // Expand: the annotation's conversation read whole, over the page. A tool's
+  // output is its first message; the assistant's own conversation is its turns.
+  const expanded = annotations.find((a) => a.id === expandedId && hasConversation(a)) ?? null;
+  const expandedTool =
+    expanded && (TOOL_KINDS as readonly string[]).includes(expanded.kind)
+      ? (expanded.kind as ToolKind)
+      : null;
+  const conversationOverlay = expanded && (
+    <div className="fixed inset-0 z-50">
+      <ConversationView
+        title={t(CONVERSATION_TITLE[expanded.kind] ?? "panels.conversation")}
+        icon={
+          expandedTool ? (
+            <ToolSymbol tool={expandedTool} plus size={12} />
+          ) : (
+            <SparkleIcon size={12} />
+          )
+        }
+        output={
+          expandedTool
+            ? expandedTool === "simplify"
+              ? stripSimplifyMarkers(expanded.content)
+              : expanded.content
+            : null
+        }
+        messages={expanded.conversation}
+        onClose={() => setExpandedId(null)}
+      />
+    </div>
   );
 
   return (
     <div className="flex flex-col gap-3.5">
+      {conversationOverlay}
       {errorText && <p className="text-[13px] text-red-600">{errorText}</p>}
       {annotations.length > 0 && (
         <div className="flex justify-end">
