@@ -7,6 +7,7 @@ import { appleEnabled, authEnabled, currentUser, emailEnabled, googleEnabled } f
 import { serverT } from "@/lib/i18n/server";
 import type { TKey } from "@/lib/i18n/dictionaries";
 import { BetaNotice } from "./beta-notice";
+import { HeroPitch, type PitchRow } from "./hero-pitch";
 import { HeroReel } from "./hero-reel";
 import { ReaderShowcase } from "./reader-showcase";
 
@@ -241,6 +242,13 @@ export default async function SignInPage({
   // The hero's first line splits at {item}, where the reel goes.
   const [heroBefore = "", heroAfter = ""] = t("signin.heroA").split("{item}");
   const heroItems = t("signin.heroItems").split("|");
+  // The pitch: three rows each stamped Done, then the closer (hero-pitch.tsx).
+  const pitchRows: PitchRow[] = [
+    { text: t("signin.heroPitchRow1"), done: true },
+    { text: t("signin.heroPitchRow2"), done: true },
+    { text: t("signin.heroPitchRow3"), done: true },
+    { text: t("signin.heroPitchClose"), done: false },
+  ];
 
   return (
     <div
@@ -286,9 +294,7 @@ export default async function SignInPage({
                 {t("signin.heroB")}
               </span>
             </h1>
-            <p className="mt-5 max-w-xl text-base leading-relaxed text-sand-600 sm:text-lg">
-              {t("signin.heroSub")}
-            </p>
+            <HeroPitch rows={pitchRows} doneLabel={t("common.done")} />
 
             {error && (
               <p className="relative mt-6 max-w-md rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-2.5 text-sm text-red-300">

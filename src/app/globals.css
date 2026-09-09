@@ -1420,6 +1420,59 @@ ellipse.anchor-flash {
   transition: none;
 }
 
+/* Sign-in hero pitch (signin/hero-pitch.tsx): a typing caret at the row
+   being typed, and the Done stamp landing like ink hitting paper — a quick
+   overshoot in from an angle, not a fade. Reduced motion cuts the stamp in
+   at full size with no motion; the caret still blinks (it carries no motion,
+   only opacity, and keeps typed vs. not-yet-typed legible without the JS
+   timer needing to know the OS setting). */
+.hero-caret {
+  display: inline-block;
+  width: 0.09em;
+  height: 0.95em;
+  margin-left: 0.06em;
+  vertical-align: -0.12em;
+  background: var(--clay);
+  animation: hero-caret-blink 0.9s step-end infinite;
+}
+@keyframes hero-caret-blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hero-caret {
+    animation: none;
+    opacity: 0;
+  }
+}
+.hero-stamp {
+  transform-origin: left center;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .hero-stamp {
+    animation: hero-stamp-land 0.32s cubic-bezier(0.2, 1.4, 0.4, 1) both;
+  }
+}
+@keyframes hero-stamp-land {
+  0% {
+    opacity: 0;
+    transform: scale(1.9) rotate(-8deg);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(0.94) rotate(2deg);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) rotate(-2deg);
+  }
+}
+
 /* Sign-in backdrop: layered clay/sage glows + a dot lattice, covering the
    whole page. The page wrapper carries .dark, so the tokens here resolve to
    the dark ramp. */
