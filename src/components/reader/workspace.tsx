@@ -31,6 +31,7 @@ import { ShareControl } from "@/components/collab/share-control";
 import { OfflineStatus } from "@/components/offline-status";
 import { useNotebookSync } from "@/components/collab/use-sync";
 import { GraphOverlay } from "@/components/graph/graph-overlay";
+import { VisualizationViewer } from "@/components/reader/visualization-viewer";
 import { CorpusDistillPage } from "@/components/reader/corpus-distill-page";
 import { ContextTab, type ContextValues } from "@/components/context-tab";
 import { GuideDialog } from "@/components/guide-dialog";
@@ -864,6 +865,7 @@ export function Workspace({
         />
       )}
       </Presence>
+      <VisualizationViewer />
       <Presence show={graphOpen} exit="fade">
       {graphOpen && (
         <GraphOverlay
