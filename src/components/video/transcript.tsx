@@ -4,45 +4,71 @@ import { useState } from "react";
 import { SpinnerIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 
-// The transcript under the player (SPEC.md §11), shaped like an article. The
-// lines themselves render through the reader (reader.tsx TranscriptBody): they
-// are the document's blocks, so every text tool of an article works on them —
-// the selection toolbar, marks, links. This file keeps the transcript's frame:
-// the header above the lines, and the states shown when there are no lines.
+// The transcript under the player (SPEC.md §11), in article form. The lines
+// themselves render through the reader (reader.tsx TranscriptBody): they are
+// the document's blocks, so every text tool of an article works on them — the
+// selection toolbar, marks, links. This file keeps the transcript's frame: the
+// view bar above the lines, and the states shown when there are no lines.
 
 // When every transcription rung failed, the pane offers Paste transcript
 // beside Retry: the reader copies the transcript YouTube shows them and hands
 // it over — the one rung that never depends on the server's network.
 
-export function TranscriptHeader({
-  count,
+// The view bar over the text under the player (SPEC.md §11): one tab per view
+// — the transcription, and the formalized article once there is one — and the
+// active view's actions on the right. The tabs are the text's title: whichever
+// tab is lit names what is under the bar.
+export function ViewBar({
+  views,
+  view,
+  onView,
+  actions,
+}: {
+  views: { id: string; label: string }[];
+  view: string;
+  onView: (id: string) => void;
+  actions: React.ReactNode;
+}) {
+  return (
+    <div className="mt-7 mb-3 flex items-center gap-1">
+      {views.map((v) => (
+        <button
+          key={v.id}
+          onClick={() => onView(v.id)}
+          data-track={`media-view-${v.id}`}
+          aria-pressed={v.id === view}
+          className={
+            v.id === view
+              ? "rounded-full bg-clay-100 px-3 py-1 text-[12px] font-bold text-clay-800"
+              : "rounded-full px-3 py-1 text-[12px] font-semibold text-sand-600 hover:bg-sand-100 hover:text-clay-800"
+          }
+        >
+          {v.label}
+        </button>
+      ))}
+      <div className="ml-auto flex items-center gap-1">{actions}</div>
+    </div>
+  );
+}
+
+// Transcribe again: the view bar's action while the transcription shows.
+export function TranscribeAgain({
   audio,
-  pending,
   onTranscribe,
 }: {
-  count: number;
   audio: boolean;
-  pending: boolean;
   onTranscribe: () => void;
 }) {
   const t = useT();
   return (
-    <div className="mt-6 mb-2.5 flex items-center gap-2">
-      <span className="text-[11px] font-bold tracking-[0.08em] text-sand-600 uppercase">
-        {t("video.transcript")}
-      </span>
-      {count > 0 && <span className="text-[13px] text-sand-600">{count}</span>}
-      {count > 0 && !pending && (
-        <button
-          onClick={onTranscribe}
-          data-track="video-transcribe-again"
-          className="ml-auto rounded-full px-2 py-0.5 text-[11px] font-semibold text-sand-600 hover:bg-clay-100 hover:text-clay-800"
-          data-tip={t(audio ? "video.transcribeAgainTitleAudio" : "video.transcribeAgainTitle")}
-        >
-          {t("video.transcribeAgain")}
-        </button>
-      )}
-    </div>
+    <button
+      onClick={onTranscribe}
+      data-track="video-transcribe-again"
+      className="rounded-full px-2 py-0.5 text-[11px] font-semibold text-sand-600 hover:bg-clay-100 hover:text-clay-800"
+      data-tip={t(audio ? "video.transcribeAgainTitleAudio" : "video.transcribeAgainTitle")}
+    >
+      {t("video.transcribeAgain")}
+    </button>
   );
 }
 

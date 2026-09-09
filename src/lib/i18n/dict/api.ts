@@ -75,9 +75,9 @@ const en = {
   findRequiresQuery: "FIND requires a query",
   distillRequiresQuestion: "DISTILL requires a question",
   formalizeRequiresFormat: "FORMALIZE requires a format",
-  findNeedsTranscript: "Transcribe the video first — Find searches the transcript",
-  formalizeNeedsTranscript: "Transcribe first — Formalize rewrites the transcript",
-  noStoredArticle: "This document has no article yet. Formalize the transcript first.",
+  findNeedsTranscript: "Transcribe the video first — Find searches the transcription",
+  formalizeNeedsTranscript: "Transcribe first — Formalize rewrites the transcription",
+  noStoredArticle: "This document has no article yet. Formalize the transcription first.",
   pastedTranscriptNoTimes:
     "The pasted text has no times. Copy the lines from YouTube's transcript panel, each with its time.",
   pastedTranscriptNoWords: "The pasted text has times but no words under them.",

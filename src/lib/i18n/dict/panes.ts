@@ -244,9 +244,9 @@ const en = {
   uploadNuanceDrive:
     "Google Docs, Sheets, Slides, and Drawings import as PDF through Drive's own conversion; PDFs, video, and audio import as they are.",
   uploadNuanceVideoFile:
-    "Video or audio up to 200 MB. The file is stored and transcribed; the transcript arrives shortly after the add.",
+    "Video or audio up to 200 MB. The file is stored and transcribed; the transcription arrives shortly after the add.",
   uploadNuanceVideoUrl:
-    "A YouTube link or a direct media file link stores as a video document. The transcript arrives shortly after the add.",
+    "A YouTube link or a direct media file link stores as a video document. The transcription arrives shortly after the add.",
   uploadPagesFound:
     "This page links to {n} pages that look like parts of the same work. Pick the pages to add:",
   uploadThisPage: "This page",
@@ -369,7 +369,7 @@ const en = {
   documentIsIn: "This document is in {language}.",
   documentOtherLanguage: "This document is in another language.",
   translateTo: "Translate to {language}",
-  translateTitle: "DeepL translates every paragraph and transcript line into {language}; each translation reads under its original",
+  translateTitle: "DeepL translates every paragraph and transcription line into {language}; each translation reads under its original",
   translating: "Translating…",
   translatedBy: "Translated by DeepL",
   hideTranslation: "Hide translation",

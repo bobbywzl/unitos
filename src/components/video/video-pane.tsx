@@ -17,7 +17,7 @@ import { useT } from "@/components/lang-provider";
 import { Markdown } from "@/components/markdown";
 import { ThinkingIndicator } from "@/components/thinking";
 import { AskRange } from "@/components/video/ask-panel";
-import { ArticleSection, MediaAssistant } from "@/components/video/assistant-card";
+import { ArticleBody, MediaAssistant, useArticleActions } from "@/components/video/assistant-card";
 import { Visual } from "@/components/video/visual";
 import type { ThumbnailSource } from "@/components/video/use-thumbnails";
 import { useCollab } from "@/components/collab/collab-context";
@@ -25,7 +25,7 @@ import { DocumentTitle } from "@/components/reader/document-title";
 import { ReaderInteractions } from "@/components/reader/reader-interactions";
 import type { TranscriptVariant } from "@/components/reader/reader";
 import { FindPanel } from "@/components/video/find-panel";
-import { TranscriptEmpty, TranscriptHeader } from "@/components/video/transcript";
+import { TranscribeAgain, TranscriptEmpty, ViewBar } from "@/components/video/transcript";
 import {
   VideoPlayer,
   type VideoPlayerHandle,
@@ -35,6 +35,7 @@ import { splitStreamError, splitStreamNote } from "@/lib/derive/config";
 import type { FormalizedArticle } from "@/lib/types";
 import { captureStoryboardFrame } from "@/lib/video/frame-client";
 import {
+  activeLineAt,
   formatTime,
   formatTimeRange,
   isAudioMime,
@@ -52,7 +53,9 @@ import {
 // scrolling. The pane is the reader's interaction layer with the transcript
 // lines as its blocks: the player and the video tools render above the lines,
 // and every text tool of an article — the selection toolbar, marks, links —
-// works on the lines through the same code path.
+// works on the lines through the same code path. Under the player one text
+// view shows at a time — the transcription, or a formalized article once
+// there is one — and the view bar over it switches between them.
 
 // The text layer's props, as the page builds them for any document.
 export type ReaderTextProps = Omit<
@@ -78,6 +81,9 @@ export type ArticleLayer = {
   blocks: React.ComponentProps<typeof ReaderInteractions>["blocks"];
   reader: ReaderTextProps;
 };
+
+/** The text views under the player (SPEC.md §11), one showing at a time. */
+type MediaView = "transcript" | "article";
 
 // The moment an Explain ran on: the range and the drawn region, if any
 // (SPEC.md §11). Regenerate runs the same one again.
@@ -160,6 +166,13 @@ export function VideoPane({
   const [hint, setHint] = useState(true);
   // The assistant chat card under the tool bar (SPEC.md §11).
   const [assistantOpen, setAssistantOpen] = useState(false);
+  // The text view under the player (SPEC.md §11): the transcription, or the
+  // formalized article. The article view only exists once an article does.
+  const [view, setView] = useState<MediaView>("transcript");
+  const activeView: MediaView = formalized ? view : "transcript";
+  // The article view's actions, for the view bar: Open as document, Copy
+  // markdown, Regenerate.
+  const articleActions = useArticleActions({ notebookId, documentId, article: formalized, canEdit });
   // Ask about a range (SPEC.md §11): the card opens on the current moment,
   // five minutes ahead or to the end, whichever comes first.
   const [askRange, setAskRange] = useState<{ start: number; end: number } | null>(null);
@@ -663,9 +676,12 @@ export function VideoPane({
           onMetadata={onMetadata}
           onTime={(t) => {
             currentTimeRef.current = t;
-            // The transcript follows playback: one state change per line, not
-            // one per tick.
-            const line = transcript.find((l) => t >= l.startTime && t < l.endTime) ?? null;
+            // The transcription follows playback: one state change per line,
+            // not one per tick. activeLineAt reads the line being spoken —
+            // the last one that started, never the first range containing t,
+            // which lights the wrong line wherever the provider's ranges
+            // overlap (lib/video/types.ts).
+            const line = activeLineAt(transcript, t);
             setActiveLineId((prev) => (prev === (line?.id ?? null) ? prev : (line?.id ?? null)));
           }}
           onAnnotate={toggleAnnotate}
@@ -783,6 +799,7 @@ export function VideoPane({
           sectionChoices={sectionChoices}
           spot={assistantSpot}
           captureFrame={captureFrame}
+          onArticle={() => setView("article")}
           onClose={() => setAssistantOpen(false)}
         />
       )}
@@ -947,43 +964,58 @@ export function VideoPane({
         onDelete={onVisualDelete}
       />
 
-      <TranscriptHeader
-        count={transcript.length}
-        audio={audio}
-        pending={transcriptPending}
-        onTranscribe={() => void transcribe()}
+      {/* The view bar: the title of the text under the player, and the
+          switch to the other views of it. */}
+      <ViewBar
+        views={[
+          { id: "transcript", label: t("video.transcript") },
+          ...(formalized ? [{ id: "article", label: t("video.article") }] : []),
+        ]}
+        view={activeView}
+        onView={(id) => setView(id as MediaView)}
+        actions={
+          activeView === "article" ? (
+            articleActions.actions
+          ) : transcript.length > 0 && !transcriptPending ? (
+            <TranscribeAgain audio={audio} onTranscribe={() => void transcribe()} />
+          ) : null
+        }
       />
     </>
   );
 
-  // Below the lines: the failed state when there are none, the article.
-  const epilogue = (
-    <>
-      {transcript.length === 0 && (
-        <TranscriptEmpty
-          audio={audio}
-          pending={transcriptPending}
-          failedMessage={transcriptFailedMessage}
-          onTranscribe={() => void transcribe()}
-          onPaste={pasteTranscript}
-          pasteHelp={t(video.kind === "YOUTUBE" ? "video.pasteHelpYoutube" : "video.pasteHelpFile")}
-        />
-      )}
-      {transcript.length > 0 && transcriptFailedMessage && (
-        <p className="mt-2 px-1 text-xs text-red-500">{transcriptFailedMessage}</p>
-      )}
-      <ArticleSection
+  // Under the bar: the transcription's own states, or the article — whichever
+  // view the bar has lit. The transcription's lines render between the
+  // prelude and this, through the reader.
+  const epilogue =
+    activeView === "article" ? (
+      <ArticleBody
         notebookId={notebookId}
-        documentId={documentId}
         article={formalized}
         layer={article}
         sectionChoices={sectionChoices}
-        canEdit={canEdit}
+        error={articleActions.error}
       />
-    </>
-  );
+    ) : (
+      <>
+        {transcript.length === 0 && (
+          <TranscriptEmpty
+            audio={audio}
+            pending={transcriptPending}
+            failedMessage={transcriptFailedMessage}
+            onTranscribe={() => void transcribe()}
+            onPaste={pasteTranscript}
+            pasteHelp={t(video.kind === "YOUTUBE" ? "video.pasteHelpYoutube" : "video.pasteHelpFile")}
+          />
+        )}
+        {transcript.length > 0 && transcriptFailedMessage && (
+          <p className="mt-2 px-1 text-xs text-red-500">{transcriptFailedMessage}</p>
+        )}
+      </>
+    );
 
   const transcriptView: TranscriptVariant = {
+    showLines: activeView === "transcript",
     lines: transcript,
     activeLineId,
     onSeek: (line) => {
