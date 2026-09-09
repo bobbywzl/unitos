@@ -3,6 +3,7 @@ import { z } from "zod";
 import { bumpNotebook, noteAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
 import { serverT } from "@/lib/i18n/server";
+import { recordNoteEdit } from "@/lib/notes/edits";
 import { normalizeNoteOrders } from "@/lib/order";
 import { parseBody } from "@/lib/validate";
 
@@ -57,6 +58,8 @@ export async function POST(req: Request) {
     db.note.deleteMany({ where: { id: { in: sourceIds } } }),
   ]);
 
+  // The merge is an edit of the target's text (SPEC.md §12).
+  if (content !== target.content) await recordNoteEdit(target.id, access.user.id || null, content);
   const sectionIds = new Set(notes.map((n) => n.section.id));
   for (const sectionId of sectionIds) await normalizeNoteOrders(sectionId);
   await bumpNotebook(target.section.notebookId);

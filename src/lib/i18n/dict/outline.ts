@@ -113,6 +113,41 @@ const en = {
   deleteSelectedTitle: "Delete the selected notes",
   deleteNoteTitle: "Delete this note",
   undoRejectTitle: "Put the rejected note back as pending",
+
+  // The note editor's bar (note-editor.tsx): every tool's tooltip names the
+  // tool on the first line and the key or the typed shortcut on the second.
+  // {mod} is ⌘ on a Mac and Ctrl elsewhere.
+  tipUndo: "Undo\n{mod}+Z",
+  tipRedo: "Redo\nShift+{mod}+Z",
+  tipParagraph: "Paragraph\nBackspace at the start of a line drops its marker",
+  tipHeading1: "Heading 1\nType # and a space",
+  tipHeading2: "Heading 2\nType ## and a space",
+  tipHeading3: "Heading 3\nType ### and a space",
+  tipBulletedList: "Bulleted list\nType - or * (Shift+8) and a space",
+  tipDashList: "Dash list\nType + and a space",
+  tipNumberedList: "Numbered list\nType 1. and a space",
+  tipChecklist: "Checklist\nType [ ] and a space. Click the box to tick it.",
+  tipQuote: "Quote\nType > and a space",
+  tipBold: "Bold\n{mod}+B",
+  tipItalic: "Italic\n{mod}+I",
+  tipUnderline: "Underline\n{mod}+U",
+  tipColor: "Color the text {color}\nSelect text first, or click before typing",
+  tipOutdent: "Outdent\nShift+Tab",
+  tipIndent: "Indent\nTab",
+  tipImage: "Add an image or GIF\nPick a file, drop it on the note, or paste it. Drag the corner to resize.",
+  // The tray's editor has the core tools; the notes full page has them all.
+  moreOnFullPage: "More tools on the notes full page",
+  // The note's history (SPEC.md §12): who wrote and edited this note, and when.
+  history: "History",
+  historyTitle: "Who wrote and edited this note, and when",
+  historyCreated: "wrote the note",
+  historyEdited: "edited the note",
+  historyRestore: "Restore",
+  historyRestoreTitle: "Make this version the note's text again",
+  historyShow: "Show text",
+  historyHide: "Hide text",
+  repliesTitle: "{n} replies under this note",
+  taskToggleTitle: "Tick or clear this item",
 };
 
 const zh: Record<keyof typeof en, string> = {
@@ -214,6 +249,36 @@ const zh: Record<keyof typeof en, string> = {
   deleteSelectedTitle: "删除选中的笔记",
   deleteNoteTitle: "删除此笔记",
   undoRejectTitle: "把已拒绝的笔记恢复为待定",
+
+  tipUndo: "撤销\n{mod}+Z",
+  tipRedo: "重做\nShift+{mod}+Z",
+  tipParagraph: "段落\n在行首按 Backspace 去掉标记",
+  tipHeading1: "标题 1\n输入 # 和一个空格",
+  tipHeading2: "标题 2\n输入 ## 和一个空格",
+  tipHeading3: "标题 3\n输入 ### 和一个空格",
+  tipBulletedList: "无序列表\n输入 - 或 *（Shift+8）和一个空格",
+  tipDashList: "短横线列表\n输入 + 和一个空格",
+  tipNumberedList: "有序列表\n输入 1. 和一个空格",
+  tipChecklist: "清单\n输入 [ ] 和一个空格。点击方框打勾。",
+  tipQuote: "引用\n输入 > 和一个空格",
+  tipBold: "加粗\n{mod}+B",
+  tipItalic: "斜体\n{mod}+I",
+  tipUnderline: "下划线\n{mod}+U",
+  tipColor: "把文字染成{color}\n先选中文字，或在输入前点击",
+  tipOutdent: "减少缩进\nShift+Tab",
+  tipIndent: "增加缩进\nTab",
+  tipImage: "添加图片或 GIF\n选择文件、拖到笔记上或粘贴。拖动右下角调整大小。",
+  moreOnFullPage: "整页笔记有更多工具",
+  history: "历史",
+  historyTitle: "谁在何时写了和编辑了这条笔记",
+  historyCreated: "写了笔记",
+  historyEdited: "编辑了笔记",
+  historyRestore: "恢复",
+  historyRestoreTitle: "把这个版本恢复为笔记的内容",
+  historyShow: "显示内容",
+  historyHide: "隐藏内容",
+  repliesTitle: "这条笔记下有 {n} 条回复",
+  taskToggleTitle: "打勾或取消",
 };
 
 export const outline = { en, zh } as const;

@@ -213,10 +213,27 @@ model Note {
   createdById    String?
   sources        Source[]
   replies        Reply[]
+  edits          NoteEdit[]
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
 
   @@index([sectionId])
+}
+
+// One edit of a note's text, for the note's own history (SPEC.md §12): who
+// changed the note, when, and the text after the change. A save within ten
+// minutes of the same person's last edit updates that edit instead of adding
+// one, so one sitting is one entry (lib/notes/edits.ts).
+model NoteEdit {
+  id        String   @id @default(cuid())
+  noteId    String
+  note      Note     @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  userId    String? // account that edited; null = the local reader
+  content   String // the note's text after this edit
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([noteId, createdAt])
 }
 
 // One reply in the discussion under a note (notes and annotations alike),

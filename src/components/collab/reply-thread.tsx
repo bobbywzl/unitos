@@ -24,16 +24,17 @@ export function ReplyThread({
   const t = useT();
   const lang = useLang();
   const ime = useImeGuard();
-  const { authOn, canEdit, myId, role, shared, people } = useCollab();
+  const { authOn, canEdit, myId, role, people } = useCollab();
   const [composing, setComposing] = useState(false);
   const [showResolved, setShowResolved] = useState(false);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Replies are a collaboration surface: the Reply affordance appears once the
-  // corpus is shared. Existing threads still render wherever they exist.
-  if (replies.length === 0 && (!authOn || !shared || !canEdit)) return null;
+  // Replies need an account to sign them: with sign-in off there is no Reply.
+  // Any editor replies, on a shared corpus or their own — a reply on one's
+  // own note is a dated update under it.
+  if (replies.length === 0 && (!authOn || !canEdit)) return null;
 
   const dateLocale = lang === "zh" ? "zh-CN" : undefined;
   const openReplies = replies.filter((r) => r.resolvedById === null);

@@ -1,19 +1,27 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { attachNoteEditable, type NoteEditable } from "@/lib/note-editable";
-import { wrapSelection, type Patch } from "@/lib/markdown-style";
+import { attachNoteEditable, type NoteEditable, type StyleCommand } from "@/lib/note-editable";
+import type { Patch } from "@/lib/markdown-style";
+import { IMAGE_ACCEPT, imageMarkdown, refuseImage, uploadImage } from "@/lib/images";
 import { RedoIcon, UndoIcon } from "@/components/icons";
+import { useCollab } from "@/components/collab/collab-context";
 import { useT } from "@/components/lang-provider";
-import type { TKey } from "@/lib/i18n/dictionaries";
+import type { TFunc, TKey } from "@/lib/i18n/dictionaries";
 
 // The note editor: the same editing functions as the document text toolbar
 // (reader.tsx), applied as markdown. Format buttons rewrite the selected
-// lines' markers; style buttons wrap the selection; colors use the note style
-// tags the Markdown component renders (<clay>…</clay> etc.). The text is
-// edited as the document it renders to (lib/note-editable.ts): bold reads
-// bold, a heading reads large, a list line carries its bullet — the same
-// prose classes as the rendered note, so the two look alike.
+// lines' markers; style buttons and colors go through the editable, which
+// styles a selection or what is typed next. The text is edited as the
+// document it renders to (lib/note-editable.ts): bold reads bold, a heading
+// reads large, a list line carries its bullet — the same prose classes as the
+// rendered note, so the two look alike.
+//
+// Two bars (SPEC.md §6): the tray's editor carries the core tools and a link
+// to the notes full page, whose editor carries them all — the dash list, the
+// checklist, the quote, and the image picker. Every typed shortcut works in
+// both, and every tool's tooltip names its key or its typed shortcut.
 
 type TextColor = "clay" | "sage" | "gold" | "plum";
 const TEXT_COLORS: { tag: TextColor; dot: string; nameKey: TKey }[] = [
@@ -22,21 +30,6 @@ const TEXT_COLORS: { tag: TextColor; dot: string; nameKey: TKey }[] = [
   { tag: "gold", dot: "#d9a54a", nameKey: "reader.colorGold" },
   { tag: "plum", dot: "#a78bfa", nameKey: "reader.colorPlum" },
 ];
-
-const HUE_TAG = /^<(clay|sage|gold|plum)>([\s\S]*)<\/\1>$/;
-
-/** One color per selection: same color toggles off, another color replaces. */
-function colorSelection(value: string, s: number, e: number, tag: TextColor): Patch {
-  const selected = value.slice(s, e);
-  const wrapped = HUE_TAG.exec(selected);
-  if (wrapped) {
-    const inner = wrapped[2];
-    const next =
-      wrapped[1] === tag ? inner : `<${tag}>${inner}</${tag}>`;
-    return { value: value.slice(0, s) + next + value.slice(e), start: s, end: s + next.length };
-  }
-  return wrapSelection(value, s, e, `<${tag}>`, `</${tag}>`);
-}
 
 /** Rewrite the lines the selection touches. */
 function mapSelectedLines(
@@ -56,9 +49,10 @@ function mapSelectedLines(
   };
 }
 
-// Line markers, matching the reader's conventions: "# " headings, "- " lists,
-// "N. " numbered lists, "> " quotes stay untouched by inline styles.
-const LINE_MARKER = /^(\s*)(?:#{1,6}|-|\d{1,3}[.)])\s+/;
+// Line markers, matching the note grammar (lib/note-markup.ts): "# " headings,
+// "- " and "* " bullets, "+ " dashes, "- [ ] " tasks, "N. " numbers, "> "
+// quotes. Inline styles never touch them.
+const LINE_MARKER = /^(\s*)(?:(?:#{1,6}|[-*+](?:\s\[[ xX]\])?|\d{1,3}[.)])\s+|>\s*)/;
 
 function setLinePrefix(lines: string[], prefix: (i: number) => string, active: RegExp): string[] {
   const bodies = lines.map((l) => l.replace(LINE_MARKER, "$1"));
@@ -73,59 +67,93 @@ function setLinePrefix(lines: string[], prefix: (i: number) => string, active: R
   });
 }
 
-// track names the format in click telemetry (SPEC.md §7).
-const FORMATS: { label: string; titleKey: TKey; track: string; map: (lines: string[]) => string[] }[] = [
+// track names the format in click telemetry (SPEC.md §7). full: the notes
+// full page only; the tray's bar leaves it out.
+const FORMATS: { label: string; tipKey: TKey; track: string; full?: boolean; map: (lines: string[]) => string[] }[] = [
   {
     label: "¶",
-    titleKey: "panes.formatParagraph",
+    tipKey: "outline.tipParagraph",
     track: "paragraph",
     map: (ls) => ls.map((l) => l.replace(LINE_MARKER, "$1")),
   },
   {
     label: "H1",
-    titleKey: "panes.formatHeading1",
+    tipKey: "outline.tipHeading1",
     track: "h1",
     map: (ls) => setLinePrefix(ls, () => "# ", /^\s*#\s/),
   },
   {
     label: "H2",
-    titleKey: "panes.formatHeading2",
+    tipKey: "outline.tipHeading2",
     track: "h2",
     map: (ls) => setLinePrefix(ls, () => "## ", /^\s*##\s/),
   },
   {
     label: "H3",
-    titleKey: "panes.formatHeading3",
+    tipKey: "outline.tipHeading3",
     track: "h3",
     map: (ls) => setLinePrefix(ls, () => "### ", /^\s*###\s/),
   },
   {
     label: "•",
-    titleKey: "panes.formatBulletedList",
+    tipKey: "outline.tipBulletedList",
     track: "list",
-    map: (ls) => setLinePrefix(ls, () => "- ", /^\s*-\s/),
+    map: (ls) => setLinePrefix(ls, () => "- ", /^\s*[-*]\s(?!\[[ xX]\]\s)/),
+  },
+  {
+    label: "–",
+    tipKey: "outline.tipDashList",
+    track: "dash",
+    full: true,
+    map: (ls) => setLinePrefix(ls, () => "+ ", /^\s*\+\s(?!\[[ xX]\]\s)/),
   },
   {
     label: "1.",
-    titleKey: "panes.formatNumberedList",
+    tipKey: "outline.tipNumberedList",
     track: "numbered",
     map: (ls) => setLinePrefix(ls, (i) => `${i + 1}. `, /^\s*\d{1,3}[.)]\s/),
   },
+  {
+    label: "☐",
+    tipKey: "outline.tipChecklist",
+    track: "checklist",
+    full: true,
+    map: (ls) => setLinePrefix(ls, () => "- [ ] ", /^\s*[-*+]\s\[[ xX]\]\s/),
+  },
+  {
+    label: "❝",
+    tipKey: "outline.tipQuote",
+    track: "quote",
+    full: true,
+    map: (ls) => setLinePrefix(ls, () => "> ", /^\s*>/),
+  },
 ];
 
-// Bold, italic, underline are the browser's own editing commands: with a
-// selection they style it, with a bare caret they style what is typed next.
-// The editor reads the result back. Cmd+B/I/U reach the same command inside
-// the editable (lib/note-editable.ts), so the keys and the bar do one thing —
-// handling them here too would toggle each press twice.
-const STYLES: { label: string; command: "bold" | "italic" | "underline"; titleKey: TKey; track: string; cls: string }[] = [
-  { label: "B", command: "bold", titleKey: "panes.bold", track: "bold", cls: "font-bold" },
-  { label: "I", command: "italic", titleKey: "panes.italic", track: "italic", cls: "italic" },
-  { label: "U", command: "underline", titleKey: "panes.underline", track: "underline", cls: "underline" },
+// Bold, italic, underline go through the editable: with a selection they
+// style it, with a bare caret they style what is typed next. Cmd+B/I/U reach
+// the same command inside the editable (lib/note-editable.ts), so the keys
+// and the bar do one thing — handling them here too would toggle each press
+// twice.
+const STYLES: { label: string; command: StyleCommand; tipKey: TKey; track: string; cls: string }[] = [
+  { label: "B", command: "bold", tipKey: "outline.tipBold", track: "bold", cls: "font-bold" },
+  { label: "I", command: "italic", tipKey: "outline.tipItalic", track: "italic", cls: "italic" },
+  { label: "U", command: "underline", tipKey: "outline.tipUnderline", track: "underline", cls: "underline" },
 ];
 
 const indentLines = (ls: string[]) => ls.map((l) => `  ${l}`);
 const outdentLines = (ls: string[]) => ls.map((l) => l.replace(/^ {1,2}/, ""));
+
+/** The modifier key as the tooltips name it: ⌘ on a Mac, Ctrl elsewhere.
+    Read after mount, so the server's markup and the browser's agree. */
+function useModKey(): string {
+  const [mod, setMod] = useState("Ctrl");
+  useEffect(() => {
+    const mac = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (mac) setMod("⌘");
+  }, []);
+  return mod;
+}
 
 function GripIcon() {
   return (
@@ -140,6 +168,23 @@ function GripIcon() {
   );
 }
 
+function ImageIcon({ size = 13 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <rect x="3" y="3" width="18" height="18" rx="3" />
+      <circle cx="9" cy="9" r="2" />
+      <path d="m21 15-5-5L5 21" />
+    </svg>
+  );
+}
+
+// Why a picked or pasted image cannot be added, in the reader's words.
+const REFUSAL_KEY = {
+  "not-image": "panes.dropImageOnly",
+  premium: "api.imageNeedsPremium",
+  "too-large": "api.imageTooLarge",
+} as const satisfies Record<string, Parameters<TFunc>[0]>;
+
 export function NoteEditor({
   value,
   onChange,
@@ -147,6 +192,8 @@ export function NoteEditor({
   placeholder,
   className = "",
   handle,
+  full = false,
+  moreHref,
 }: {
   value: string;
   onChange: (next: string) => void;
@@ -158,12 +205,20 @@ export function NoteEditor({
   /** When set, a slim row above the bar — a grip and a label — is the drag
       handle: pointerdown on it goes here. */
   handle?: { onPointerDown: (e: React.PointerEvent<HTMLDivElement>) => void; title: string; label: string };
+  /** The whole bar (the notes full page); false: the core tools (the tray). */
+  full?: boolean;
+  /** With the core bar: where the whole bar is — the notes full page. */
+  moreHref?: string;
 }) {
   const t = useT();
+  const mod = useModKey();
+  const { premium } = useCollab();
   const ref = useRef<HTMLDivElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
   const core = useRef<NoteEditable | null>(null);
   const onChangeRef = useRef(onChange);
   const valueRef = useRef(value);
+  const [imageError, setImageError] = useState<string | null>(null);
   // What the undo and redo buttons can do, read back after every edit — the
   // editable owns the history (lib/note-editable.ts) and Cmd+Z reaches it
   // there, so the buttons are the same two steps under a symbol.
@@ -173,6 +228,31 @@ export function NoteEditor({
   useEffect(() => {
     onChangeRef.current = onChange;
   }, [onChange]);
+
+  // A picked or pasted image goes into the note at the caret (SPEC.md §16):
+  // refused before anything leaves the browser when the tier does not allow
+  // it, stored, and inserted as its markdown on its own line.
+  const insertImages = async (files: File[]) => {
+    setImageError(null);
+    const refusal = files.map((f) => refuseImage(f, premium)).find((r) => r !== null);
+    if (refusal) {
+      setImageError(t(REFUSAL_KEY[refusal]));
+      return;
+    }
+    try {
+      for (const file of files) {
+        const stored = await uploadImage(file);
+        core.current?.insertBlock(imageMarkdown(stored.id, file.name));
+      }
+      readHistory();
+    } catch (err) {
+      setImageError(err instanceof Error ? err.message : t("common.requestFailed"));
+    }
+  };
+  const insertImagesRef = useRef(insertImages);
+  useEffect(() => {
+    insertImagesRef.current = insertImages;
+  });
 
   // Mount: the editable takes the text, caret at the end — on a quote note
   // the addition starts underneath the quote.
@@ -185,6 +265,7 @@ export function NoteEditor({
         onChangeRef.current(text);
         setHistory(editable.history());
       },
+      onImageFiles: (files) => void insertImagesRef.current(files),
     });
     core.current = editable;
     editable.focusEnd();
@@ -201,21 +282,17 @@ export function NoteEditor({
     core.current?.setText(value);
   }, [value]);
 
-  /** A markdown command on the selection. rangeOnly: nothing happens on a bare caret. */
-  function apply(patch: (value: string, s: number, e: number) => Patch, rangeOnly = false) {
+  /** A markdown command on the selection's lines. */
+  function apply(patch: (value: string, s: number, e: number) => Patch) {
     const editable = core.current;
     if (!editable) return;
     const { start, end } = editable.getSelection();
-    if (rangeOnly && start === end) {
-      editable.setText(editable.getText(), { start, end });
-      return;
-    }
     const next = patch(editable.getText(), start, end);
     editable.setText(next.value, { start: next.start, end: next.end });
     onChange(next.value);
   }
 
-  function command(name: "bold" | "italic" | "underline") {
+  function command(name: StyleCommand) {
     core.current?.toggleStyle(name);
     readHistory();
   }
@@ -227,8 +304,8 @@ export function NoteEditor({
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
-    const mod = e.metaKey || e.ctrlKey;
-    if (e.key === "Tab" && !mod && !e.altKey) {
+    const modified = e.metaKey || e.ctrlKey;
+    if (e.key === "Tab" && !modified && !e.altKey) {
       e.preventDefault();
       apply((v, s, en) => mapSelectedLines(v, s, en, e.shiftKey ? outdentLines : indentLines));
       return;
@@ -239,6 +316,7 @@ export function NoteEditor({
   const keep = (e: React.MouseEvent) => e.preventDefault();
   const barButton =
     "inline-flex items-center rounded-full px-2 py-0.5 text-[11.5px] font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800";
+  const formats = full ? FORMATS : FORMATS.filter((f) => !f.full);
 
   return (
     <div className={`flex min-h-0 flex-col gap-1.5 ${className}`}>
@@ -262,8 +340,8 @@ export function NoteEditor({
           onMouseDown={keep}
           onClick={() => step(true)}
           disabled={!history.canUndo}
-          aria-label={t("panes.undoEdit")}
-          data-tip={t("panes.undoEdit")}
+          aria-label={t("outline.tipUndo", { mod })}
+          data-tip={t("outline.tipUndo", { mod })}
           className={`${barButton} disabled:opacity-30`}
         >
           <UndoIcon size={13} />
@@ -274,35 +352,37 @@ export function NoteEditor({
           onMouseDown={keep}
           onClick={() => step(false)}
           disabled={!history.canRedo}
-          aria-label={t("panes.redoEdit")}
-          data-tip={t("panes.redoEdit")}
+          aria-label={t("outline.tipRedo", { mod })}
+          data-tip={t("outline.tipRedo", { mod })}
           className={`${barButton} disabled:opacity-30`}
         >
           <RedoIcon size={13} />
         </button>
         <span aria-hidden className="mx-1 h-4 w-px bg-line" />
-        {FORMATS.map(({ label, titleKey, track, map }) => (
+        {formats.map(({ label, tipKey, track, map }) => (
           <button
             key={label}
             type="button"
             data-track={`note-format:${track}`}
             onMouseDown={keep}
             onClick={() => apply((v, s, e) => mapSelectedLines(v, s, e, map))}
-            data-tip={t(titleKey)}
+            aria-label={t(tipKey)}
+            data-tip={t(tipKey)}
             className={barButton}
           >
             {label}
           </button>
         ))}
         <span aria-hidden className="mx-1 h-4 w-px bg-line" />
-        {STYLES.map(({ label, command: name, titleKey, track, cls }) => (
+        {STYLES.map(({ label, command: name, tipKey, track, cls }) => (
           <button
             key={label}
             type="button"
             data-track={`note-style:${track}`}
             onMouseDown={keep}
             onClick={() => command(name)}
-            data-tip={t(titleKey)}
+            aria-label={t(tipKey, { mod })}
+            data-tip={t(tipKey, { mod })}
             className={`${barButton} ${cls}`}
           >
             {label}
@@ -314,10 +394,10 @@ export function NoteEditor({
             key={tag}
             type="button"
             onMouseDown={keep}
-            onClick={() => apply((v, s, e) => colorSelection(v, s, e, tag), true)}
+            onClick={() => command(tag)}
             data-track="note-text-color"
-            aria-label={t("panes.textColorIn", { color: t(nameKey) })}
-            data-tip={t("panes.textColorIn", { color: t(nameKey) })}
+            aria-label={t("outline.tipColor", { color: t(nameKey) })}
+            data-tip={t("outline.tipColor", { color: t(nameKey) })}
             className="mx-0.5 size-[13px] rounded-full transition-transform hover:scale-110"
             style={{ background: dot }}
           />
@@ -328,7 +408,8 @@ export function NoteEditor({
           onMouseDown={keep}
           onClick={() => apply((v, s, e) => mapSelectedLines(v, s, e, outdentLines))}
           data-track="note-outdent"
-          data-tip={t("panes.outdentLine")}
+          aria-label={t("outline.tipOutdent")}
+          data-tip={t("outline.tipOutdent")}
           className={barButton}
         >
           ⇤
@@ -338,12 +419,51 @@ export function NoteEditor({
           onMouseDown={keep}
           onClick={() => apply((v, s, e) => mapSelectedLines(v, s, e, indentLines))}
           data-track="note-indent"
-          data-tip={t("panes.indentLine")}
+          aria-label={t("outline.tipIndent")}
+          data-tip={t("outline.tipIndent")}
           className={barButton}
         >
           ⇥
         </button>
+        {full && (
+          <>
+            <span aria-hidden className="mx-1 h-4 w-px bg-line" />
+            <button
+              type="button"
+              onMouseDown={keep}
+              onClick={() => fileRef.current?.click()}
+              data-track="note-image"
+              aria-label={t("outline.tipImage")}
+              data-tip={t("outline.tipImage")}
+              className={barButton}
+            >
+              <ImageIcon />
+            </button>
+            <input
+              ref={fileRef}
+              type="file"
+              accept={IMAGE_ACCEPT}
+              multiple
+              hidden
+              onChange={(e) => {
+                const files = Array.from(e.target.files ?? []);
+                e.target.value = "";
+                if (files.length > 0) void insertImages(files);
+              }}
+            />
+          </>
+        )}
       </div>
+      {!full && moreHref && (
+        <Link
+          href={moreHref}
+          data-track="notes-full-page-tools"
+          className="shrink-0 self-start text-[11px] text-sand-500 hover:text-clay-700"
+        >
+          {t("outline.moreOnFullPage")} →
+        </Link>
+      )}
+      {imageError && <p className="shrink-0 text-[11px] text-red-500">{imageError}</p>}
       <div
         ref={ref}
         role="textbox"

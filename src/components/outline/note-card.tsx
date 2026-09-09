@@ -6,9 +6,9 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { isImeKey } from "@/lib/ime";
 import type { NoteView, SourceChip } from "@/lib/types";
 import { useCollab } from "@/components/collab/collab-context";
-import { AuthorChip } from "@/components/collab/person-badge";
+import { PersonBadge } from "@/components/collab/person-badge";
 import { ReplyThread } from "@/components/collab/reply-thread";
-import { ChevronDownIcon, ChevronRightIcon, LocateIcon, PencilIcon } from "@/components/icons";
+import { ChevronDownIcon, ChevronRightIcon, CommentIcon, LocateIcon, PencilIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { Markdown } from "@/components/markdown";
 import { markdownPreview } from "@/lib/markdown-preview";
@@ -16,7 +16,9 @@ import { useGist } from "@/lib/gist-client";
 import { DragHandle, useCombineTarget, type HandleProps } from "@/components/sortable";
 import { useImageDrop } from "@/components/use-image-drop";
 import { imageMarkdown } from "@/lib/images";
+import { setTaskChecked } from "@/lib/note-markup";
 import { NoteEditor } from "@/components/outline/note-editor";
+import { NoteHistory } from "@/components/outline/note-history";
 import { NoteId } from "@/components/outline/note-id";
 import { SaveStateLabel } from "@/components/outline/save-state";
 import { landingLeft } from "@/components/outline/floating-note-editor";
@@ -169,9 +171,11 @@ export function NoteCard({
 }) {
   const t = useT();
   const router = useRouter();
-  const { canEdit, premium } = useCollab();
+  const { canEdit, premium, shared, people } = useCollab();
   const [editing, setEditing] = useState(false);
   const [copied, setCopied] = useState(false);
+  // The note's own history, open under the note (note-history.tsx).
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [dropError, setDropError] = useState<string | null>(null);
   const [handledEdit, setHandledEdit] = useState<{ id: string } | null>(null);
   const cardRef = useRef<HTMLDivElement>(null);
@@ -305,6 +309,9 @@ export function NoteCard({
   const dropTip = imageDrop.over ? t("panes.dropImageIntoNote") : undefined;
 
   const collapseLabel = collapsed ? t("outline.expandNote") : t("outline.collapseNote");
+  // Who wrote the note, on a shared project (SPEC.md §12): every note says
+  // it, one's own included, so a collaborator reads the author at a glance.
+  const author = shared && note.createdById ? people[note.createdById] : undefined;
 
   // Jump to the source: the reader opens on the document and flashes the
   // quote — the link between note and quote works both ways.
@@ -433,6 +440,16 @@ export function NoteCard({
           {note.sources.length}
         </span>
       )}
+      {collapsed && note.replies.length > 0 && (
+        <span
+          className="flex shrink-0 items-center gap-1 text-[11px] text-sand-500"
+          data-tip={t("outline.repliesTitle", { n: note.replies.length })}
+        >
+          <CommentIcon size={11} />
+          {note.replies.length}
+        </span>
+      )}
+      {collapsed && author && <PersonBadge person={author} size={14} />}
       <span className="ml-auto flex shrink-0 items-center gap-1.5">
         {/* The save state, while editing (SPEC.md §6). */}
         {editing && <SaveStateLabel state={saveState} />}
@@ -540,6 +557,8 @@ export function NoteCard({
               ? { onPointerDown: startDragOut, title: t("outline.dragOut"), label: t("outline.floatingTitle") }
               : undefined
           }
+          full={!tray}
+          moreHref={tray ? `/n/${actions.notebookId}/notes` : undefined}
         />
         <div className="mt-2 flex shrink-0 items-center gap-2">
           <button
@@ -596,13 +615,30 @@ export function NoteCard({
 
       {!collapsed && (
         <div className="note-body mt-1">
-          <Markdown breaks>{note.content}</Markdown>
+          {/* A checklist item's box ticks without opening the editor. */}
+          <Markdown
+            breaks
+            onToggleTask={
+              canEdit
+                ? (line, checked) => void actions.saveNote(note.id, setTaskChecked(note.content, line, checked))
+                : undefined
+            }
+          >
+            {note.content}
+          </Markdown>
           {note.sources.length > 0 && (tray || !pending) && (
             <div className="mt-2.5">
               <SourceChips sources={note.sources} notebookId={actions.notebookId} />
             </div>
           )}
-          <AuthorLine createdById={note.createdById} />
+          {author && (
+            <div className="mt-1.5">
+              <span className="inline-flex max-w-40 items-center gap-1 text-[11px] text-sand-600" data-tip={author.name}>
+                <PersonBadge person={author} size={15} />
+                <span className="truncate">{author.name}</span>
+              </span>
+            </div>
+          )}
           <ReplyThread target={{ noteId: note.id }} replies={note.replies} />
         </div>
       )}
@@ -643,6 +679,15 @@ export function NoteCard({
           >
             {copied ? t("outline.copied") : t("outline.copy")}
           </button>
+          <button
+            onClick={() => setHistoryOpen(!historyOpen)}
+            data-track="note-history"
+            aria-expanded={historyOpen}
+            data-tip={t("outline.historyTitle")}
+            className={`text-xs hover:text-clay-700 ${historyOpen ? "text-clay-700" : "text-sand-600"}`}
+          >
+            {t("outline.history")}
+          </button>
           {canEdit && (
             <button
               onClick={() => {
@@ -657,17 +702,14 @@ export function NoteCard({
           )}
         </div>
       )}
-    </div>
-  );
-}
-
-// The author label under a note's content, on shared corpora only.
-function AuthorLine({ createdById }: { createdById: string | null }) {
-  const { shared, people, myId } = useCollab();
-  if (!shared || !createdById || createdById === myId || !people[createdById]) return null;
-  return (
-    <div className="mt-1.5">
-      <AuthorChip createdById={createdById} />
+      {historyOpen && !collapsed && note.status === "ACCEPTED" && (
+        <NoteHistory
+          noteId={note.id}
+          content={note.content}
+          updatedAt={note.updatedAt}
+          onRestore={canEdit ? (content) => actions.saveNote(note.id, content) : undefined}
+        />
+      )}
     </div>
   );
 }

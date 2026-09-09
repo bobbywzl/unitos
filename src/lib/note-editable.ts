@@ -12,15 +12,20 @@
 // markdown — so the editor's line commands patch the markdown directly.
 
 import {
+  TEXT_COLORS,
   isAtom,
+  isListKind,
   lineVisibleStart,
   noteDocHtml,
   parseNote,
+  setTaskChecked,
   sourceOffset,
   visibleOffset,
+  withImageWidth,
   type InlineStyle,
   type NoteLine,
   type Run,
+  type TextColor,
 } from "@/lib/note-markup";
 import {
   SELECTION_END,
@@ -34,7 +39,10 @@ import {
 } from "@/lib/note-doc";
 
 export type TextSelection = { start: number; end: number };
-export type StyleCommand = "bold" | "italic" | "underline";
+// Bold, italic, underline, and the four text colors: a selection is styled
+// or unstyled; a bare caret styles what is typed next. One color at a time:
+// the color chosen replaces the one the text had.
+export type StyleCommand = "bold" | "italic" | "underline" | TextColor;
 
 export type NoteEditable = {
   getText(): string;
@@ -42,8 +50,10 @@ export type NoteEditable = {
   getSelection(): TextSelection;
   /** Replace the text. With a selection: focus and select it. Without: keep the caret where it was. */
   setText(text: string, selection?: TextSelection): void;
-  /** Bold, italic, underline: a selection is styled or unstyled; a bare caret styles what is typed next. */
+  /** Bold, italic, underline, a color: a selection is styled or unstyled; a bare caret styles what is typed next. */
   toggleStyle(command: StyleCommand): void;
+  /** Put markdown on its own line at the caret (a dropped, pasted, or picked image); the caret lands after it. */
+  insertBlock(markdown: string): void;
   /** Step back through the editor's own history, and forward again. */
   undo(): void;
   redo(): void;
@@ -60,7 +70,18 @@ const COALESCE_MS = 400;
 const HISTORY_MAX = 200;
 const TEXT_NODE = 3;
 
-const STYLE_OF: Record<StyleCommand, InlineStyle> = { bold: "bold", italic: "italic", underline: "underline" };
+const STYLE_OF: Record<StyleCommand, InlineStyle> = {
+  bold: "bold",
+  italic: "italic",
+  underline: "underline",
+  clay: "clay",
+  sage: "sage",
+  gold: "gold",
+  plum: "plum",
+};
+const isColor = (style: InlineStyle): style is TextColor => (TEXT_COLORS as readonly string[]).includes(style);
+// An image is never narrower than this, and never wider than its column.
+const IMAGE_MIN_WIDTH = 60;
 const STYLE_KEYS: Record<string, StyleCommand> = { b: "bold", i: "italic", u: "underline" };
 const CARET_KEYS = new Set(["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End", "PageUp", "PageDown"]);
 const MARKERS: Record<InlineStyle, [string, string]> = {
@@ -205,9 +226,10 @@ function readSelection(el: HTMLElement): { text: string; selection: TextSelectio
 // --- The markdown around a source offset.
 
 // Enter continues the line's structure: a list item starts the next item
-// ("- ", "N. "), a quote line the next quote line, an indented line keeps its
-// indent. Enter on an empty item ends the list instead.
-const LINE_LEAD = /^(\s*)(?:([-*+])|(\d{1,3})([.)])|(>))(\s+|$)/;
+// ("- ", "+ ", "N. ", "- [ ] " with an empty box), a quote line the next quote
+// line, an indented line keeps its indent. Enter on an empty item ends the
+// list instead.
+const LINE_LEAD = /^(\s*)(?:([-*+])(\s\[[ xX]\])?|(\d{1,3})([.)])|(>))(\s+|$)/;
 
 export function newlineFor(text: string, caret: number): { insert: string; from: number } {
   const lineStart = text.lastIndexOf("\n", caret - 1) + 1;
@@ -225,9 +247,17 @@ export function newlineFor(text: string, caret: number): { insert: string; from:
     // An empty item: the marker goes, the caret stays on a plain line.
     return { insert: lead[1], from: lineStart };
   }
-  const marker = lead[2] ? `${lead[2]} ` : lead[5] ? "> " : `${Number(lead[3]) + 1}${lead[4]} `;
+  const marker = lead[2]
+    ? `${lead[2]} ${lead[3] ? "[ ] " : ""}`
+    : lead[6]
+      ? "> "
+      : `${Number(lead[4]) + 1}${lead[5]} `;
   return { insert: `\n${lead[1]}${marker}`, from: caret };
 }
+
+// "[ ] " or "[] " typed at the start of a line (after any list marker)
+// becomes a checklist item; "[x] " a ticked one.
+const TYPED_BOX = /^(\s*)(?:[-*+]\s)?\[( |x|X)?\]$/;
 
 function lineAt(lines: NoteLine[], src: number): NoteLine | null {
   return lines.find((line) => src >= line.src && src <= line.end) ?? null;
@@ -289,6 +319,8 @@ function toggledRuns(line: NoteLine, from: number, to: number, style: InlineStyl
   }
   const on = selected.some((r) => !r.styles.includes(style));
   for (const r of selected) {
+    // One color per run: the color chosen replaces the one the run had.
+    if (on && isColor(style)) r.styles = r.styles.filter((s) => !isColor(s));
     if (on && !r.styles.includes(style)) r.styles.push(style);
     if (!on) r.styles = r.styles.filter((s) => s !== style);
   }
@@ -297,7 +329,12 @@ function toggledRuns(line: NoteLine, from: number, to: number, style: InlineStyl
 
 export function attachNoteEditable(
   el: HTMLElement,
-  opts: { text: string; onChange: (text: string) => void },
+  opts: {
+    text: string;
+    onChange: (text: string) => void;
+    /** Image files pasted into the editable; the editor stores them and inserts them (insertBlock). */
+    onImageFiles?: (files: File[]) => void;
+  },
 ): NoteEditable {
   const first = render(el, opts.text);
   let text = first.text;
@@ -408,8 +445,17 @@ export function attachNoteEditable(
         }
       }
     }
-    const next = text.slice(0, from) + insert + text.slice(to);
-    const caret = from + insert.length - closeLen;
+    let next = text.slice(0, from) + insert + text.slice(to);
+    let caret = from + insert.length - closeLen;
+    if (str === " ") {
+      const lineStart = text.lastIndexOf("\n", from - 1) + 1;
+      const box = TYPED_BOX.exec(text.slice(lineStart, from));
+      if (box) {
+        const marker = `${box[1]}- [${box[2] && box[2] !== " " ? "x" : " "}] `;
+        next = text.slice(0, lineStart) + marker + text.slice(to);
+        caret = lineStart + marker.length;
+      }
+    }
     commit(next, { start: caret, end: caret }, true);
   }
 
@@ -459,7 +505,7 @@ export function attachNoteEditable(
     if (!line || line.kind === "p" || line.kind === "code") return false;
     let next: string;
     let caret: number;
-    if ((line.kind === "bullet" || line.kind === "numbered") && line.indent >= 2) {
+    if (isListKind(line.kind) && line.indent >= 2) {
       next = text.slice(0, line.src) + text.slice(line.src + 2);
       caret = line.bodySrc - 2;
     } else {
@@ -509,7 +555,97 @@ export function attachNoteEditable(
     const run = runAt(lines, sel.start) ?? runEdge(lines, sel.start);
     const inside = run ? run.styles.includes(style) : false;
     intent[command] = !(intent[command] ?? inside);
+    if (isColor(style) && intent[command]) {
+      for (const other of TEXT_COLORS) {
+        if (other === style) continue;
+        if (run?.styles.includes(other)) intent[other] = false;
+        else delete intent[other];
+      }
+    }
     paint(sel);
+  }
+
+  /** Markdown on its own line at the caret: a blank line before it when the
+      caret's line has text, and a fresh line after it to keep typing on. */
+  function insertBlock(markdown: string) {
+    el.focus({ preventScroll: true });
+    const sel = currentSelection();
+    const from = Math.min(sel.start, sel.end);
+    const to = Math.max(sel.start, sel.end);
+    const before = text.slice(0, from);
+    const after = text.slice(to);
+    const lead = before === "" || before.endsWith("\n\n") ? "" : before.endsWith("\n") ? "\n" : "\n\n";
+    const tail = after.startsWith("\n") ? "\n" : "\n\n";
+    const insert = `${lead}${markdown}${tail}`;
+    const caret = from + lead.length + markdown.length + 1;
+    commit(before + insert + after, { start: caret, end: caret }, false);
+  }
+
+  /** A click on a task's box ticks or clears it; the caret stays where it was. */
+  function toggleTaskBox(box: Element) {
+    const li = box.closest("li");
+    if (!li) return;
+    const index = lineElements(el).indexOf(li);
+    const line = lines[index];
+    if (!line || line.kind !== "task") return;
+    const sel = document.activeElement === el ? currentSelection() : { start: line.bodySrc, end: line.bodySrc };
+    commit(setTaskChecked(text, index, !line.checked), sel, false);
+  }
+
+  /** A drag on an image's corner handle sets its width; the width rides in
+      the image's url (lib/note-markup.ts). Past the column's width the image
+      sizes itself again. */
+  function resizeImage(handle: Element, e: PointerEvent) {
+    const figure = handle.closest("[data-image]") as HTMLElement | null;
+    const img = figure?.querySelector("img");
+    if (!figure || !img) return;
+    e.preventDefault();
+    const fromX = e.clientX;
+    const startWidth = img.getBoundingClientRect().width;
+    const column = el.clientWidth;
+    let width = startWidth;
+    const onMove = (ev: PointerEvent) => {
+      width = Math.max(IMAGE_MIN_WIDTH, Math.min(column, startWidth + ev.clientX - fromX));
+      img.style.width = `${width}px`;
+    };
+    const onUp = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+      const url = figure.getAttribute("data-image") ?? "";
+      const next = withImageWidth(url, width >= column - 1 ? null : Math.round(width));
+      if (next === url) return;
+      // The figure is one atom in the text: swap the url in its markdown.
+      const at = text.indexOf(`](${url})`);
+      if (at === -1) return;
+      const nextText = `${text.slice(0, at)}](${next})${text.slice(at + url.length + 3)}`;
+      const caret = at + next.length + 3;
+      commit(nextText, { start: caret, end: caret }, false);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+  }
+
+  function onPointerDown(e: PointerEvent) {
+    clearIntent();
+    const target = e.target instanceof Element ? e.target : null;
+    if (!target) return;
+    const box = target.closest(".note-box");
+    if (box && el.contains(box)) {
+      e.preventDefault();
+      toggleTaskBox(box);
+      return;
+    }
+    const handle = target.closest(".note-resize");
+    if (handle && el.contains(handle) && e.button === 0) resizeImage(handle, e);
+  }
+
+  function onPaste(e: ClipboardEvent) {
+    const files = Array.from(e.clipboardData?.files ?? []).filter((f) => f.type.startsWith("image/"));
+    if (files.length === 0 || !opts.onImageFiles) return;
+    e.preventDefault();
+    opts.onImageFiles(files);
   }
 
   function historyState() {
@@ -617,7 +753,8 @@ export function attachNoteEditable(
   el.addEventListener("beforeinput", onBeforeInput);
   el.addEventListener("input", onInput);
   el.addEventListener("keydown", onKeyDown);
-  el.addEventListener("pointerdown", clearIntent);
+  el.addEventListener("pointerdown", onPointerDown);
+  el.addEventListener("paste", onPaste);
   el.addEventListener("compositionstart", onCompositionStart);
   el.addEventListener("compositionend", onCompositionEnd);
 
@@ -640,6 +777,7 @@ export function attachNoteEditable(
       if (text !== next) opts.onChange(text);
     },
     toggleStyle,
+    insertBlock,
     undo,
     redo,
     history: historyState,
@@ -652,7 +790,8 @@ export function attachNoteEditable(
       el.removeEventListener("beforeinput", onBeforeInput);
       el.removeEventListener("input", onInput);
       el.removeEventListener("keydown", onKeyDown);
-      el.removeEventListener("pointerdown", clearIntent);
+      el.removeEventListener("pointerdown", onPointerDown);
+      el.removeEventListener("paste", onPaste);
       el.removeEventListener("compositionstart", onCompositionStart);
       el.removeEventListener("compositionend", onCompositionEnd);
     },

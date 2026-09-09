@@ -1,9 +1,12 @@
 "use client";
 
+import type { List, Root } from "mdast";
+import { createContext, useContext } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useT } from "@/components/lang-provider";
 import { isVisualizationImage, openVisualization } from "@/components/reader/visualization-viewer";
+import { imageWidth } from "@/lib/note-markup";
 
 // AI text cites document blocks as [block <id>] — the tags the model sees in
 // its document context. They render as ¶ chips that scroll the reader to the
@@ -136,24 +139,86 @@ function hardBreaks(text: string): string {
     .join("\n");
 }
 
-/** breaks: single newlines render as line breaks (notes). */
-export function Markdown({ children, breaks = false }: { children: string; breaks?: boolean }) {
+// A dash list (SPEC.md §6): "+ " items, drawn with a dash for a marker, the
+// way the note editor draws them (lib/note-markup.ts). Markdown reads "+"
+// like "-", so the marker is read back from the source at the first item.
+type MdNode = { type: string; children?: MdNode[] };
+
+function remarkDashLists() {
+  return (tree: Root, file: { value?: unknown }) => {
+    const source = String(file.value ?? "");
+    const walk = (node: MdNode) => {
+      if (node.type === "list") {
+        const list = node as List;
+        const at = list.children[0]?.position?.start.offset;
+        if (!list.ordered && at !== undefined && source[at] === "+") {
+          list.data = { ...list.data, hProperties: { className: ["note-dash"] } };
+        }
+      }
+      for (const child of node.children ?? []) walk(child);
+    };
+    walk(tree as unknown as MdNode);
+  };
+}
+
+// The line a checklist item sits on, handed from the item to its box: the
+// box's own node carries no position.
+const TaskLine = createContext(-1);
+
+/** breaks: single newlines render as line breaks (notes). onToggleTask: a
+    checklist item's box is a control; a click reports the item's line (from
+    0) and its new state, and the caller saves the note (note-card.tsx). */
+export function Markdown({
+  children,
+  breaks = false,
+  onToggleTask,
+}: {
+  children: string;
+  breaks?: boolean;
+  onToggleTask?: (line: number, checked: boolean) => void;
+}) {
   const t = useT();
   // Lists line up first: hardBreaks reads the lines as they will be nested.
+  // Both keep every line, so a line counted here is the same line in children.
   const text = breaks ? hardBreaks(alignListIndents(children)) : alignListIndents(children);
   return (
     <div className="prose prose-sm max-w-none prose-p:my-1.5 prose-headings:my-2 prose-ul:my-1.5 prose-ol:my-1.5">
       <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
+        remarkPlugins={[remarkGfm, remarkDashLists]}
         components={{
+          li: ({ node, children: itemChildren, ...props }) => {
+            const offset = node?.position?.start.offset;
+            const line = offset === undefined ? -1 : text.slice(0, offset).split("\n").length - 1;
+            return (
+              <li {...props}>
+                <TaskLine.Provider value={line}>{itemChildren}</TaskLine.Provider>
+              </li>
+            );
+          },
+          input: ({ type, checked }) => {
+            if (type !== "checkbox") return null;
+            return <TaskBox checked={Boolean(checked)} onToggle={onToggleTask} />;
+          },
           // A visualization's image opens the viewer (SPEC.md §20): the
           // picture large, in the app, with its caption — the alt text, which
           // the annotation's markdown sets to the caption.
           img: ({ src, alt }) => {
             const source = typeof src === "string" ? src : undefined;
             // A stored SVG, served immutable: next/image has nothing to add.
-            // eslint-disable-next-line @next/next/no-img-element
-            if (!isVisualizationImage(source)) return <img src={source} alt={alt ?? ""} />;
+            if (!isVisualizationImage(source)) {
+              // An image in a note sizes itself to the column unless the
+              // reader set a width in the editor; the width rides in the url.
+              const width = source ? imageWidth(source) : null;
+              return (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={source}
+                  alt={alt ?? ""}
+                  className="note-image"
+                  style={width === null ? undefined : { width }}
+                />
+              );
+            }
             return (
               <button
                 type="button"
@@ -214,5 +279,25 @@ export function Markdown({ children, breaks = false }: { children: string; break
         {linkifyStyleTags(linkifyBlockTags(text))}
       </ReactMarkdown>
     </div>
+  );
+}
+
+// A checklist item's box in a rendered note: ticked or clear as the note
+// says, and a control when the reader may edit the note.
+function TaskBox({ checked, onToggle }: { checked: boolean; onToggle?: (line: number, checked: boolean) => void }) {
+  const t = useT();
+  const line = useContext(TaskLine);
+  if (!onToggle || line < 0) return <span className="note-box" data-checked={checked ? "" : undefined} />;
+  return (
+    <button
+      type="button"
+      role="checkbox"
+      aria-checked={checked}
+      onClick={() => onToggle(line, !checked)}
+      data-track="note-task"
+      data-tip={t("outline.taskToggleTitle")}
+      className="note-box"
+      data-checked={checked ? "" : undefined}
+    />
   );
 }

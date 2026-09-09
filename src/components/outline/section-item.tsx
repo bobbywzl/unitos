@@ -133,6 +133,7 @@ export function SectionItem({
                 if (e.key === "Escape") compose.escape();
               }}
               placeholder={t("outline.writeNotePlaceholder")}
+              full
             />
             <div className="mt-2 flex gap-2">
               <button
