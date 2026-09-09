@@ -6,6 +6,7 @@ import { GEMINI_FILE_TTL_MS, geminiFileFresh, type GeminiFile } from "@/lib/vide
 import {
   GEMINI_FILE_MAX_BYTES,
   groupSegments,
+  normalizeSegments,
   transcribe,
   TRANSCRIBE_MAX_BYTES,
   type TranscribeSource,
@@ -167,7 +168,9 @@ async function storeTranscript(
   // Cleanup before anything stores: fillers, stutters, and false starts out,
   // punctuation and casing fixed — the transcript reads like an article.
   // Cleanup emptying every line means it misfired; the raw lines stand.
-  const grouped = groupSegments(segments);
+  // Normalize before grouping: the ranges have to be in order and pulled
+  // apart before lines are cut out of them (lib/video/segments.ts).
+  const grouped = groupSegments(normalizeSegments(segments));
   const tidied = await tidyTranscript(grouped);
   const lines = tidied.lines.length > 0 ? tidied.lines : grouped;
   console.log(`[transcribe] ${origin}, cleaned by ${tidied.provider}: ${lines.length} lines`);

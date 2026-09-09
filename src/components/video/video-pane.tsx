@@ -35,6 +35,7 @@ import { splitStreamError, splitStreamNote } from "@/lib/derive/config";
 import type { FormalizedArticle } from "@/lib/types";
 import { captureStoryboardFrame } from "@/lib/video/frame-client";
 import {
+  activeLineAt,
   formatTime,
   formatTimeRange,
   isAudioMime,
@@ -675,9 +676,12 @@ export function VideoPane({
           onMetadata={onMetadata}
           onTime={(t) => {
             currentTimeRef.current = t;
-            // The transcript follows playback: one state change per line, not
-            // one per tick.
-            const line = transcript.find((l) => t >= l.startTime && t < l.endTime) ?? null;
+            // The transcription follows playback: one state change per line,
+            // not one per tick. activeLineAt reads the line being spoken —
+            // the last one that started, never the first range containing t,
+            // which lights the wrong line wherever the provider's ranges
+            // overlap (lib/video/types.ts).
+            const line = activeLineAt(transcript, t);
             setActiveLineId((prev) => (prev === (line?.id ?? null) ? prev : (line?.id ?? null)));
           }}
           onAnnotate={toggleAnnotate}

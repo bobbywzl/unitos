@@ -149,6 +149,48 @@ export type TranscriptLine = {
   endTime: number;
 };
 
+// Past the last line, the line stays lit this long before the highlight goes
+// out — a video whose speech ends before the video does.
+const TAIL_GRACE_SECONDS = 5;
+
+/** The line being spoken at `t`: the last line that has started (SPEC.md §11).
+
+    Not the first line whose range contains `t`. Provider ranges overlap — a
+    YouTube auto-caption cue routinely runs seconds past the next cue's start,
+    so grouped lines overlap too — and they leave gaps at pauses. Reading the
+    first range containing `t` lights the earlier line while the later one is
+    being spoken, and lights nothing inside a gap. The last start at or before
+    `t` is right in both cases: a line stays lit until the next line starts.
+
+    `lines` must be in start order, which is the order they are stored in. */
+export function activeLineAt<T extends { startTime: number; endTime: number }>(
+  lines: T[],
+  t: number,
+): T | null {
+  let low = 0;
+  let high = lines.length - 1;
+  let found = -1;
+  while (low <= high) {
+    const mid = (low + high) >> 1;
+    if (lines[mid].startTime <= t) {
+      found = mid;
+      low = mid + 1;
+    } else {
+      high = mid - 1;
+    }
+  }
+  if (found === -1) return null;
+  const line = lines[found];
+  // The last line holds to its own end, not forever.
+  if (
+    found === lines.length - 1 &&
+    t > Math.max(line.endTime, line.startTime) + TAIL_GRACE_SECONDS
+  ) {
+    return null;
+  }
+  return line;
+}
+
 /** One FIND match, resolved server-side from the model's block ids. */
 export type VideoFindMatch = {
   startTime: number;
