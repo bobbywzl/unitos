@@ -25,7 +25,7 @@ import { DocumentTitle } from "@/components/reader/document-title";
 import { ReaderInteractions } from "@/components/reader/reader-interactions";
 import type { TranscriptVariant } from "@/components/reader/reader";
 import { FindPanel } from "@/components/video/find-panel";
-import { TranscribeAgain, TranscriptEmpty, ViewBar } from "@/components/video/transcript";
+import { TranscriptActions, TranscriptEmpty, ViewBar } from "@/components/video/transcript";
 import {
   VideoPlayer,
   type VideoPlayerHandle,
@@ -173,6 +173,40 @@ export function VideoPane({
   // The article view's actions, for the view bar: Open as document, Copy
   // markdown, Regenerate.
   const articleActions = useArticleActions({ notebookId, documentId, article: formalized, canEdit });
+  // Detect speakers (SPEC.md §11): the run, and what it found. The names come
+  // back on the server props, so the run only reports its outcome here.
+  const [speakersBusy, setSpeakersBusy] = useState(false);
+  const [speakersNote, setSpeakersNote] = useState<string | null>(null);
+  async function detectSpeakers() {
+    if (speakersBusy) return;
+    setSpeakersBusy(true);
+    setSpeakersNote(null);
+    try {
+      const result = await api<{ speakers: { id: string; name: string }[] }>(
+        `/api/documents/${documentId}/speakers`,
+        "POST",
+        {},
+      );
+      setSpeakersNote(
+        result.speakers.length > 0
+          ? t("video.speakersFound", { n: result.speakers.length })
+          : t("video.oneSpeaker"),
+      );
+      router.refresh();
+    } catch (err) {
+      setSpeakersNote(err instanceof Error ? err.message : t("video.speakersFailed"));
+    } finally {
+      setSpeakersBusy(false);
+    }
+  }
+  async function renameSpeaker(speakerId: string, name: string) {
+    try {
+      await api(`/api/documents/${documentId}/speakers`, "PATCH", { speakerId, name });
+      router.refresh();
+    } catch (err) {
+      setSpeakersNote(err instanceof Error ? err.message : t("common.requestFailed"));
+    }
+  }
   // Ask about a range (SPEC.md §11): the card opens on the current moment,
   // five minutes ahead or to the end, whichever comes first.
   const [askRange, setAskRange] = useState<{ start: number; end: number } | null>(null);
@@ -977,7 +1011,13 @@ export function VideoPane({
           activeView === "article" ? (
             articleActions.actions
           ) : transcript.length > 0 && !transcriptPending ? (
-            <TranscribeAgain audio={audio} onTranscribe={() => void transcribe()} />
+            <TranscriptActions
+              audio={audio}
+              busy={speakersBusy}
+              note={speakersNote}
+              onTranscribe={() => void transcribe()}
+              onDetectSpeakers={canEdit ? () => void detectSpeakers() : null}
+            />
           ) : null
         }
       />
@@ -1017,6 +1057,8 @@ export function VideoPane({
   const transcriptView: TranscriptVariant = {
     showLines: activeView === "transcript",
     lines: transcript,
+    speakers: video.speakers,
+    onRenameSpeaker: canEdit ? renameSpeaker : undefined,
     activeLineId,
     onSeek: (line) => {
       playerRef.current?.seek(line.startTime);

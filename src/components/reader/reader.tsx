@@ -2,6 +2,7 @@
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { PlusIcon, RedoIcon, UndoIcon } from "@/components/icons";
+import { isImeKey } from "@/lib/ime";
 import { styleShortcut } from "@/lib/markdown-style";
 import { NOTE_WRAP_EVENT, type NoteWrapSpacer } from "@/lib/note-wrap";
 import { NoteWrapGap } from "@/components/reader/note-wrap-gap";
@@ -22,7 +23,7 @@ import type { TKey } from "@/lib/i18n/dictionaries";
 import { ConversionStrip, type ConversionInfo } from "@/components/reader/conversion-strip";
 import { PageBlock, type PageMark } from "@/components/reader/page-block";
 import { DocumentTitle } from "@/components/reader/document-title";
-import { formatTime, type TranscriptLine } from "@/lib/video/types";
+import { formatTime, type Speaker, type TranscriptLine } from "@/lib/video/types";
 
 const TEXT_TYPES = new Set(["PARAGRAPH", "HEADING", "LIST", "CODE", "EQUATION"]);
 // The article's horizontal padding (px-6 on both sides), added to the
@@ -37,6 +38,11 @@ const ARTICLE_PADDING_PX = 48;
 export type TranscriptVariant = {
   lines: TranscriptLine[];
   activeLineId: string | null;
+  // The voices heard (SPEC.md §11): every row is headed by the name of the
+  // voice speaking it. Empty = one voice, and the rows carry the time alone.
+  speakers: Speaker[];
+  /** Rename one voice, from its name on a row. Absent for a viewer. */
+  onRenameSpeaker?: (speakerId: string, name: string) => Promise<void>;
   onSeek: (line: TranscriptLine) => void;
   // Lines covered by a time-anchored annotation: underlined, like a
   // highlighted span in an article.
@@ -56,9 +62,9 @@ export type TranscriptVariant = {
   columnStyle?: React.CSSProperties;
 };
 
-// A paragraph closes at a clear speech gap, or once it is long enough and the
-// line before it finished a sentence. The hard cap keeps a gapless monologue
-// from becoming one wall.
+// A paragraph closes when the speaker changes, at a clear speech gap, or once
+// it is long enough and the line before it finished a sentence. The hard cap
+// keeps a gapless monologue from becoming one wall.
 const PARAGRAPH_GAP_SECONDS = 2.5;
 const PARAGRAPH_BREAK_CHARS = 700;
 const PARAGRAPH_MAX_CHARS = 1400;
@@ -71,7 +77,8 @@ export function transcriptParagraphs(transcript: TranscriptLine[]): TranscriptLi
     const last = open[open.length - 1];
     const breaks =
       last !== undefined &&
-      (line.startTime - last.endTime > PARAGRAPH_GAP_SECONDS ||
+      (line.speaker !== last.speaker ||
+        line.startTime - last.endTime > PARAGRAPH_GAP_SECONDS ||
         chars > PARAGRAPH_MAX_CHARS ||
         (chars > PARAGRAPH_BREAK_CHARS && /[.!?。！？…”"]$/.test(last.text)));
     if (breaks) {
@@ -124,9 +131,14 @@ function TranscriptBody({
   const listRef = useRef<HTMLDivElement>(null);
   // A hand on the wheel stops the follow until this moment passes.
   const pausedUntilRef = useRef(0);
-  const { lines, activeLineId, onSeek, annotatedLineIds, lineTools } = transcript;
+  const { lines, activeLineId, onSeek, annotatedLineIds, lineTools, speakers } = transcript;
   const paragraphs = useMemo(() => transcriptParagraphs(lines), [lines]);
   const blockById = useMemo(() => new Map(blocks.map((b) => [b.id, b])), [blocks]);
+  const speakerById = useMemo(() => new Map(speakers.map((s) => [s.id, s])), [speakers]);
+  // The name being edited: which row it was opened on, and what it is being
+  // renamed to. Keyed by the row, not by the speaker — a voice heads many
+  // rows, and an editor on each would take focus from the one just opened.
+  const [renaming, setRenaming] = useState<{ row: number; name: string } | null>(null);
 
   useEffect(() => {
     const pause = () => {
@@ -167,7 +179,9 @@ function TranscriptBody({
 
   return (
     <div ref={listRef} className="mx-auto w-full max-w-[720px]">
-      {paragraphs.map((paragraph, pi) => (
+      {paragraphs.map((paragraph, pi) => {
+        const speaker = speakerById.get(paragraph[0].speaker ?? "");
+        return (
         <div key={paragraph[0].id} className={pi === 0 ? "" : "mt-5"}>
           <p className="text-sand-800">
             <button
@@ -179,6 +193,45 @@ function TranscriptBody({
             >
               {formatTime(paragraph[0].startTime)}
             </button>
+            {/* Who is speaking, at the head of the row (SPEC.md §11). The
+                name renames every row this voice says; the head is
+                [data-anchor-skip], so the block's DOM text stays the stored
+                text (SPEC.md §5). */}
+            {speaker &&
+              (renaming?.row === pi ? (
+                <input
+                  autoFocus
+                  data-anchor-skip
+                  value={renaming.name}
+                  onChange={(e) => setRenaming({ row: pi, name: e.target.value })}
+                  onBlur={() => setRenaming(null)}
+                  onKeyDown={(e) => {
+                    if (isImeKey(e)) return;
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      const name = renaming.name.trim();
+                      setRenaming(null);
+                      if (name !== "" && name !== speaker.name) {
+                        void transcript.onRenameSpeaker?.(speaker.id, name);
+                      }
+                    }
+                    if (e.key === "Escape") setRenaming(null);
+                  }}
+                  aria-label={t("video.renameSpeaker")}
+                  className="mr-1.5 w-32 rounded-md bg-sand-100 px-1.5 py-[1px] align-middle text-[15px] font-semibold outline-none"
+                />
+              ) : (
+                <button
+                  data-anchor-skip
+                  data-track="video-speaker"
+                  disabled={!transcript.onRenameSpeaker}
+                  onClick={() => setRenaming({ row: pi, name: speaker.name })}
+                  data-tip={transcript.onRenameSpeaker ? t("video.renameSpeakerTitle") : undefined}
+                  className="mr-1.5 align-middle font-semibold text-clay-800 enabled:hover:underline"
+                >
+                  {speaker.name}:
+                </button>
+              ))}
             {paragraph.map((line) => {
               const block = blockById.get(line.id) ?? {
                 id: line.id,
@@ -233,7 +286,8 @@ function TranscriptBody({
               return text ? <TranslationLine text={text} lang={uiLang} /> : null;
             })()}
         </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

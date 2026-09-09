@@ -157,6 +157,17 @@ const en = {
   articleReady: "The article is ready — it shows under the player.",
   notesReady: "{n} notes are pending in {section}. Accept them in the notes tray.",
 
+  // Speakers on the transcription
+  detectSpeakers: "Detect speakers",
+  detectSpeakersTitle:
+    "Read the recording again and say who speaks each line; names come from the introductions",
+  detectingSpeakers: "Listening for speakers…",
+  speakersFound: "{n} speakers",
+  oneSpeaker: "One voice — nothing to name",
+  speakersFailed: "Detecting speakers failed",
+  renameSpeaker: "Speaker name",
+  renameSpeakerTitle: "Rename this speaker; every line they say follows",
+
   // The formalized article, the view bar's other view under the player
   article: "Article",
   openArticle: "Open as document",
@@ -310,6 +321,16 @@ const zh: Record<keyof typeof en, string> = {
   skillNeedsTranscript: "需要逐字稿",
   articleReady: "文章已生成——已显示在播放器下方。",
   notesReady: "{section} 中有 {n} 条待定笔记。请在笔记栏接受。",
+
+  // Speakers on the transcription
+  detectSpeakers: "识别说话人",
+  detectSpeakersTitle: "重新听一遍录音，标出每行由谁所说；名字取自录音中的自我介绍",
+  detectingSpeakers: "正在识别说话人……",
+  speakersFound: "{n} 位说话人",
+  oneSpeaker: "只有一个声音——无需命名",
+  speakersFailed: "识别说话人失败",
+  renameSpeaker: "说话人名字",
+  renameSpeakerTitle: "重命名这位说话人；其所说的每一行都会同步更新",
 
   // The formalized article, the view bar's other view under the player
   article: "文章",

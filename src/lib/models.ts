@@ -1,4 +1,4 @@
-import { CLAUDE_FABLE_5_1, GEMINI_FLASH, KIMI_K3 } from "@/lib/derive/config";
+import { CLAUDE_FABLE_5_1, CLAUDE_OPUS_5, GEMINI_FLASH, KIMI_K3 } from "@/lib/derive/config";
 import { db } from "@/lib/db";
 
 // The model per role (SPEC.md §2). Each role has a default id, the constant
@@ -8,15 +8,16 @@ import { db } from "@/lib/db";
 // clients call resolveModelId on every call, so a default id follows the
 // row; an id that is not a role's default is called as written.
 
-export type ModelRole = "kimi" | "claude" | "gemini";
+export type ModelRole = "kimi" | "claude" | "opus" | "gemini";
 
 export const MODEL_ROLES: Record<ModelRole, { provider: string; defaultId: string }> = {
   kimi: { provider: "Moonshot AI", defaultId: KIMI_K3 },
   claude: { provider: "Anthropic", defaultId: CLAUDE_FABLE_5_1 },
+  opus: { provider: "Anthropic", defaultId: CLAUDE_OPUS_5 },
   gemini: { provider: "Google", defaultId: GEMINI_FLASH },
 };
 
-export const ROLE_ORDER: ModelRole[] = ["kimi", "claude", "gemini"];
+export const ROLE_ORDER: ModelRole[] = ["kimi", "claude", "opus", "gemini"];
 
 /** The role whose default this id is, or null. */
 export function roleOfDefault(modelId: string): ModelRole | null {
