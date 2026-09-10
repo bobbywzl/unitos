@@ -8,7 +8,7 @@ import type { DriveConfig } from "@/lib/drive/config";
 import type { MultiUploadSummary } from "@/lib/types";
 import { pickDriveFiles } from "@/lib/drive/picker-client";
 import { parseDriveFileId, type DrivePickedFile } from "@/lib/drive/types";
-import { isImageFile } from "@/lib/handwritten/image";
+import { IMAGE_ACCEPT, isImageFile } from "@/lib/handwritten/image";
 import { isImeKey } from "@/lib/ime";
 import { useCollab } from "@/components/collab/collab-context";
 import { reportError } from "@/lib/error-log";
@@ -26,7 +26,6 @@ import { MEDIA_EXTENSIONS, isMediaUrl } from "@/lib/video/types";
 import { parseYouTubeId } from "@/lib/video/youtube";
 import {
   AddDocumentDialog,
-  type AddTab,
   type LibraryDocument,
 } from "@/components/reader/add-document-dialog";
 import {
@@ -44,7 +43,7 @@ import {
 } from "@/components/reader/figure-capture";
 import { setRevealFlag } from "@/components/reader/reveal";
 import { UploadAssistant, type UploadRequest } from "@/components/reader/upload-assistant";
-import { isMarkdownFile } from "@/lib/markdown-file";
+import { isMarkdownFile, MARKDOWN_ACCEPT } from "@/lib/markdown-file";
 
 export type AttachedDocument = {
   id: string;
@@ -168,6 +167,13 @@ function isMediaFile(file: File): boolean {
     MEDIA_EXTENSIONS.test(file.name)
   );
 }
+
+// Every file the add-document dialog's drop zone takes: PDF, image, video and
+// audio, Markdown — one accept list, since the dialog does not ask which kind
+// is coming in.
+const VIDEO_ACCEPT =
+  "video/mp4,video/webm,video/ogg,video/quicktime,audio/mpeg,audio/mp4,audio/aac,audio/wav,audio/flac,audio/ogg,.mp4,.m4v,.webm,.ogv,.ogg,.mov,.mp3,.m4a,.m4b,.aac,.wav,.flac,.oga,.opus";
+const UPLOAD_FILE_ACCEPT = `application/pdf,.pdf,${IMAGE_ACCEPT},${MARKDOWN_ACCEPT},${VIDEO_ACCEPT}`;
 
 // Documents in the header: one pill showing the open document, expanding a
 // vertical document list on hover or click. Everything that adds one opens
@@ -703,9 +709,8 @@ export function DocumentBar({
 
   // Back from Link Google Drive: the callback returns here with ?drive=linked
   // or ?drive=link-failed. Linked, the picker opens at once — the add the
-  // reader started; failed, the dialog opens on the Drive tab with the reason.
-  // The param leaves the URL so a reload does not repeat it.
-  const [dialogTab, setDialogTab] = useState<AddTab | null>(null);
+  // reader started; failed, the dialog opens with the reason. The param
+  // leaves the URL so a reload does not repeat it.
   const driveResult = searchParams.get("drive");
   const driveResultHandled = useRef(false);
   useEffect(() => {
@@ -715,10 +720,11 @@ export function DocumentBar({
     params.delete("drive");
     router.replace(`/n/${notebookId}${params.size > 0 ? `?${params}` : ""}`);
     /* eslint-disable react-hooks/set-state-in-effect */
-    setDialogTab("drive");
-    setDialog(true);
     if (driveResult === "linked") void importFromDrive();
-    else setError(t("panes.driveAuthFailed"));
+    else {
+      setDialog(true);
+      setError(t("panes.driveAuthFailed"));
+    }
     /* eslint-enable react-hooks/set-state-in-effect */
     // importFromDrive and t are stable for the life of this mount.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -736,7 +742,6 @@ export function DocumentBar({
     params.delete("add");
     router.replace(`/n/${notebookId}${params.size > 0 ? `?${params}` : ""}`);
     setError(null);
-    setDialogTab(null);
     setDialog(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [addParam, canEdit]);
@@ -1121,7 +1126,6 @@ export function DocumentBar({
         <button
           onClick={() => {
             setError(null);
-            setDialogTab(null);
             setDialog(true);
           }}
           data-track="add-document"
@@ -1158,6 +1162,7 @@ export function DocumentBar({
         error={error}
         onError={setError}
         onSubmit={openAssistant}
+        fileAccept={UPLOAD_FILE_ACCEPT}
         onImportDrive={drive ? () => void importFromDrive() : null}
         driveLink={
           drive
@@ -1170,7 +1175,6 @@ export function DocumentBar({
         onOpenLibrary={() => void openLibrary()}
         onAttach={(id) => void attach(id)}
         onRemoveFromLibrary={(id) => void removeFromLibrary(id)}
-        initialTab={dialogTab}
       />
 
       {/* The add running on behind a hidden box (SPEC.md §15). */}

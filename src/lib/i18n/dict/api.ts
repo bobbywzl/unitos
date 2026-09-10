@@ -176,9 +176,6 @@ const en = {
   shapeSwitchNeedsPdf: "This document has no stored PDF to switch from",
   noStoredPdf: "This document has no stored PDF",
 
-  // Upload assistant (SPEC.md §15)
-  reviewFailed: "Could not review this URL",
-
   // Uploads
   emptyChunk: "Empty chunk",
   chunkTooLarge: "Chunk is larger than 4 MB",
@@ -415,8 +412,6 @@ const zh: Record<keyof typeof en, string> = {
   reparseRunning: "此文档正在重新解析",
   shapeSwitchNeedsPdf: "此文档没有存储的 PDF，无法切换",
   noStoredPdf: "此文档没有存储的 PDF",
-
-  reviewFailed: "无法审阅此 URL",
 
   emptyChunk: "分块为空",
   chunkTooLarge: "分块超过 4 MB",

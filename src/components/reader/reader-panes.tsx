@@ -312,9 +312,16 @@ export function ReaderPanes({
       latest = clampSplit(along);
       setSplit(latest);
     };
+    // A held-down drag that never gets a clean pointerup — the pointer is
+    // canceled by the browser, or the window loses focus while the button is
+    // still down (alt-tab, a native dialog) — left the whole page unable to
+    // select or copy text: nothing else ever cleared body.style.userSelect.
+    // pointercancel and blur are both a release too.
     const onUp = () => {
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+      window.removeEventListener("blur", onUp);
       document.body.style.userSelect = "";
       document.body.style.cursor = "";
       setResizing(false);
@@ -322,6 +329,8 @@ export function ReaderPanes({
     };
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+    window.addEventListener("blur", onUp);
   }
 
   useEffect(() => {
