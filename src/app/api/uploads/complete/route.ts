@@ -31,11 +31,8 @@ const bodySchema = z.object({
   filename: z.string().min(1),
   notebookId: z.string().min(1),
   kind: z.enum(["pdf", "video"]).default("pdf"),
-  // Feasible upload instructions from the upload assistant's check (SPEC.md
-  // §15). PDFs thread them into the structure pass; video ingest has no lever
-  // for them and ignores them. pages and convert are the PDF directives
-  // (SPEC.md §16).
-  instructions: z.string().max(2_000).default(""),
+  // pages and convert are the PDF directives (SPEC.md §16), set by the
+  // upload assistant's import pick; video ignores them.
   pages: z.boolean().default(false),
   convert: z.boolean().default(true),
   // Who runs the glossary and recommended-links scans after the save:
@@ -122,9 +119,7 @@ export async function POST(req: Request) {
     // A Markdown file (SPEC.md §2): the URL walk reads it, no judgment.
     return progressResponse(async (onProgress) => {
       try {
-        const { document, deduped } = await parse.ingestMarkdown(bytes, filename, onProgress, {
-          instructions: data.instructions.trim() || undefined,
-        });
+        const { document, deduped } = await parse.ingestMarkdown(bytes, filename, onProgress);
         await attachDocument(data.notebookId, document.id);
         await bumpNotebook(data.notebookId);
         if (data.scans === "server") {
@@ -147,11 +142,7 @@ export async function POST(req: Request) {
         bytes,
         filename,
         onProgress,
-        {
-          instructions: data.instructions.trim() || undefined,
-          pages,
-          convert: data.convert,
-        },
+        { pages, convert: data.convert },
         user?.id ?? null,
       );
       await attachDocument(data.notebookId, document.id);

@@ -28,7 +28,6 @@ export type UploadReviewCtx = {
   excerptHead: string; // opening text of the parsed content
   excerptTail: string; // closing text; "" when the content is short
   links: string; // linked pages, one per line: [link <n>] "anchor text" — url; "" = none
-  instructions: string; // the reader's upload instructions; "" = none
 };
 
 function figureFacts(ctx: UploadReviewCtx): string[] {
@@ -85,17 +84,7 @@ export function uploadReviewPrompt(ctx: UploadReviewCtx): string {
     `7. title per page: the part's clean title, from its anchor text. In the content's language.`,
     "8. pasteThisPage: whether this page's own text is worth adding as a document. false for a bare table of contents.",
     `9. split: recommended true when this content reads better as multiple documents — very long, or clearly separable parts. reason: one plain sentence. In ${name}.`,
-    ...(ctx.instructions
-      ? [
-          "10. The reader gave instructions for this upload, below. Split them into individual instructions and answer each: willFollow true when adding the content can honor it — keeping or dropping sections, fixing block types, merging fragments, picking pages, splitting. willFollow false when it needs something the upload cannot do — rewriting, translating, or summarizing text; OCR of scanned images; signing in; bypassing paywalls; running page scripts; editing figures or tables; fetching pages not listed.",
-          `11. reply per instruction: one plain sentence saying what will be done, or honestly that the upload cannot do it. In ${name}.`,
-          "12. feasible: the instructions the upload will honor, restated as blunt imperatives for the parser, in English. \"\" when none.",
-          "",
-          "The reader's instructions:",
-          ctx.instructions,
-        ]
-      : []),
     "",
-    'Return ONLY JSON: {"kind": "article", "summary": "…", "advice": ["…"], "pages": [{"link": 3, "title": "…", "recommended": true}], "pasteThisPage": true, "split": {"recommended": false, "reason": ""}, "replies": [{"instruction": "…", "willFollow": true, "reply": "…"}], "feasible": ""}',
+    'Return ONLY JSON: {"kind": "article", "summary": "…", "advice": ["…"], "pages": [{"link": 3, "title": "…", "recommended": true}], "pasteThisPage": true, "split": {"recommended": false, "reason": ""}}',
   ].join("\n");
 }

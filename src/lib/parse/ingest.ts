@@ -39,14 +39,12 @@ export type IngestStage =
   | "review";
 export type OnIngestProgress = (stage: IngestStage, detail?: string) => void;
 
-// Upload instructions and the choices from the upload assistant (SPEC.md §15).
-// instructions is the feasible text the assistant agreed to follow; it steers
-// the AI passes and never writes content. pages and convert are the PDF
-// directives the instruction check reads out of the instructions (SPEC.md
-// §16): pages imports the PDF as handwritten pages without judging it;
-// convert false keeps conversion off — the pages stay as they are.
+// The choices from the upload assistant (SPEC.md §15). pages and convert are
+// the PDF directives the box's import pick sets (SPEC.md §16): pages imports
+// the PDF as handwritten pages without judging it; convert false keeps
+// conversion off — the pages stay as they are. The import is faithful: no
+// option steers what the parse keeps or drops.
 export type IngestOptions = {
-  instructions?: string;
   split?: boolean;
   pages?: boolean;
   convert?: boolean;
@@ -93,24 +91,24 @@ export const SPLIT_URL_MARKER = "#unitos-part-";
 async function refineUrlBlocks(
   parsed: ParsedDocument,
   onProgress: OnIngestProgress | undefined,
-  opts: { instructions?: string; deadline?: number; pageHtml: string | null; url: string },
+  opts: { deadline?: number; pageHtml: string | null; url: string },
 ) {
-  const { instructions, deadline, pageHtml, url } = opts;
+  const { deadline, pageHtml, url } = opts;
   let blocks = parsed.blocks;
   let font: ParsedDocument["font"] | undefined;
   onProgress?.("select");
   const coreSignal = modelPassSignal(deadline);
   if (coreSignal === null) console.warn("[ingest] core pass skipped: the time budget is spent");
-  else blocks = await selectCoreBlocks(blocks, parsed.title, instructions, coreSignal);
+  else blocks = await selectCoreBlocks(blocks, parsed.title, coreSignal);
   onProgress?.("structure");
   const signal = modelPassSignal(deadline);
   if (signal === null) console.warn("[ingest] layout pass skipped: the time budget is spent");
   else if (pageHtml) {
     onProgress?.("layout");
-    const laid = await layoutBlocks({ blocks, title: parsed.title, pageHtml, url, instructions, signal });
+    const laid = await layoutBlocks({ blocks, title: parsed.title, pageHtml, url, signal });
     blocks = laid.blocks;
     font = laid.font;
-  } else blocks = await structureBlocks(blocks, parsed.title, instructions, signal);
+  } else blocks = await structureBlocks(blocks, parsed.title, signal);
   // The passes reference blocks by index: a figure dropped between two
   // blocks that survived is restored (lib/parse/figures.ts restoreFigures).
   blocks = restoreFigures(parsed.blocks, blocks);
@@ -321,9 +319,7 @@ export async function ingestPdf(
     return { document, deduped: false };
   }
   const title = parsed.title ?? filename.replace(/\.pdf$/i, "");
-  const blocks = opts.instructions?.trim()
-    ? await structureBlocks(parsed.blocks, title, opts.instructions)
-    : parsed.blocks;
+  const blocks = parsed.blocks;
   onProgress?.("save");
   const document = await createDocumentWithBlocks({
     title,
@@ -343,7 +339,7 @@ export function isPdfBytes(bytes: Uint8Array): boolean {
 
 // Markdown upload path (SPEC.md §2). Dedupe by fileHash like a PDF; the
 // bytes are kept for re-parse. The file parses through the URL walk, no
-// model pass; with instructions, the structure pass runs over the blocks.
+// model pass.
 export async function ingestMarkdown(
   bytes: Uint8Array<ArrayBuffer>,
   filename: string,
@@ -357,9 +353,7 @@ export async function ingestMarkdown(
   onProgress?.("parse");
   const parsed = await parseMarkdownDocument(new TextDecoder("utf-8").decode(bytes), filename);
   const title = parsed.title ?? filename;
-  const blocks = opts.instructions?.trim()
-    ? await structureBlocks(parsed.blocks, title, opts.instructions)
-    : parsed.blocks;
+  const blocks = parsed.blocks;
   onProgress?.("save", saveDetail(blocks, false, null, parsed.mediaCheck));
   const document = await createDocumentWithBlocks({
     title,
@@ -430,7 +424,6 @@ export async function ingestUrl(
   onProgress?.("extract");
   const parsed = await parseHtmlContent(pageHtml, url, onProgress);
   const { blocks, references, font: laidFont } = await refineUrlBlocks(parsed, onProgress, {
-    instructions: opts.instructions,
     deadline: opts.deadline,
     pageHtml,
     url,

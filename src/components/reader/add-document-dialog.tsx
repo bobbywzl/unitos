@@ -1,14 +1,17 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { isImeKey } from "@/lib/ime";
 import { useT } from "@/components/lang-provider";
 import { Presence } from "@/components/presence";
-import type { DriveAccess } from "@/lib/drive/types";
+import { parseDriveFileId, type DriveAccess } from "@/lib/drive/types";
+import { IMAGE_ACCEPT } from "@/lib/handwritten/image";
+import { MARKDOWN_ACCEPT } from "@/lib/markdown-file";
 import {
   IngestProgress,
   type IngestStep,
 } from "@/components/reader/ingest-progress";
+import type { UploadItem, UploadRequest } from "@/components/reader/upload-assistant";
 import { isMediaUrl } from "@/lib/video/types";
 import { parseYouTubeId } from "@/lib/video/youtube";
 
@@ -16,12 +19,48 @@ export type LibraryDocument = { id: string; title: string; _count: { blocks: num
 
 export type AddTab = "pdf" | "video" | "drive" | "url" | "library";
 
+// The file kinds the PDF tab and the video tab accept (document-bar.tsx
+// drag-and-drop accepts the same).
+const PDF_ACCEPT = `application/pdf,.pdf,${IMAGE_ACCEPT},${MARKDOWN_ACCEPT}`;
+const VIDEO_ACCEPT =
+  "video/mp4,video/webm,video/ogg,video/quicktime,audio/mpeg,audio/mp4,audio/aac,audio/wav,audio/flac,audio/ogg,.mp4,.m4v,.webm,.ogv,.ogg,.mov,.mp3,.m4a,.m4b,.aac,.wav,.flac,.oga,.opus";
+
+// The links in a typed or pasted text: one per line or per space. A token
+// that is not an http(s) link is dropped.
+function parseLinks(raw: string): string[] {
+  const out: string[] = [];
+  for (const token of raw.split(/\s+/)) {
+    const trimmed = token.trim();
+    if (!trimmed) continue;
+    try {
+      const url = new URL(trimmed);
+      if (url.protocol === "http:" || url.protocol === "https:") out.push(trimmed);
+    } catch {
+      // not a link
+    }
+  }
+  return out;
+}
+
+// One request for the queue (SPEC.md §22): a lone link keeps the URL review,
+// files alone keep the files box, everything else is a batch.
+function requestFor(items: UploadItem[]): UploadRequest {
+  if (items.length === 1 && items[0].kind !== "file") return items[0];
+  if (items.every((item) => item.kind === "file")) {
+    return { kind: "files", files: items.flatMap((item) => (item.kind === "file" ? [item.file] : [])) };
+  }
+  return { kind: "batch", items };
+}
+
 // The add-document dialog: one centered window for everything that adds a
 // document, opened by the dashed +. The upload types span the top panel as
 // tabs; under them sits the upload space for the chosen type — replaced by
-// the progress card while an ingest runs — then the upload assistant note.
-// Choosing content hands off to the upload assistant box (SPEC.md §15),
-// which reviews it and drives the add; Google Drive and Library skip the box.
+// the progress card while an ingest runs — then the list of what is queued
+// and the upload assistant note. Links and files of every kind queue
+// together (SPEC.md §22): Enter after a link queues it, choosing files
+// queues them, and Continue hands the queue to the upload assistant box
+// (SPEC.md §15), which reviews it and drives the add. Google Drive and
+// Library skip the box.
 export function AddDocumentDialog({
   open,
   onClose,
@@ -29,11 +68,10 @@ export function AddDocumentDialog({
   phase,
   error,
   onError,
-  onChoosePdf,
-  onChooseVideo,
+  onSubmit,
   onImportDrive,
   driveLink,
-  onIngestUrl,
+  onDriveLink,
   library,
   attachedIds,
   onOpenLibrary,
@@ -47,15 +85,17 @@ export function AddDocumentDialog({
   phase: { fileLabel: string; steps: IngestStep[] } | null;
   error: string | null;
   onError: (message: string | null) => void;
-  onChoosePdf: () => void;
-  onChooseVideo: () => void;
+  // The queue goes to the upload assistant box.
+  onSubmit: (request: UploadRequest) => void;
   onImportDrive: (() => void) | null; // null: Google Drive is not configured, no tab
   // Link Google Drive (SPEC.md §14): linked shows the state — the grant's
   // access, and Link again when it reaches picked files only while the
   // deployment asks for all; canLink offers the link flow. null when Drive is
   // not configured.
   driveLink: { linked: boolean; canLink: boolean; access: DriveAccess; grant: DriveAccess | null } | null;
-  onIngestUrl: (url: string) => Promise<boolean>; // true: document added and opened
+  // A pasted Google Drive link imports on its own, outside the queue
+  // (SPEC.md §14). Returns whether the import started.
+  onDriveLink: (url: string) => Promise<boolean>;
   library: LibraryDocument[] | null;
   attachedIds: Set<string>;
   onOpenLibrary: () => void;
@@ -77,6 +117,34 @@ export function AddDocumentDialog({
   }
   const [url, setUrl] = useState("");
   const [videoUrl, setVideoUrl] = useState("");
+  // The queue: what Continue hands to the box, in the order it was added.
+  const [items, setItems] = useState<UploadItem[]>([]);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const videoFileRef = useRef<HTMLInputElement>(null);
+
+  function queue(next: UploadItem[]) {
+    if (next.length === 0) return;
+    onError(null);
+    setItems((current) => [...current, ...next]);
+  }
+
+  function removeItem(index: number) {
+    setItems((current) => current.filter((_, i) => i !== index));
+  }
+
+  function queueFiles(files: File[]) {
+    queue(files.map((file) => ({ kind: "file" as const, file })));
+    if (fileRef.current) fileRef.current.value = "";
+    if (videoFileRef.current) videoFileRef.current.value = "";
+  }
+
+  function submit() {
+    if (items.length === 0) return;
+    onSubmit(requestFor(items));
+    setItems([]);
+    setUrl("");
+    setVideoUrl("");
+  }
 
   useEffect(() => {
     if (!open) return;
@@ -96,22 +164,40 @@ export function AddDocumentDialog({
     if (next === "library") onOpenLibrary();
   }
 
+  // Enter after a link queues it (several links at once queue each). A
+  // Google Drive link imports on its own. A video link queues as a video.
   async function addUrl(e: React.FormEvent) {
     e.preventDefault();
-    if (await onIngestUrl(url)) setUrl("");
+    const links = parseLinks(url);
+    if (links.length === 0) {
+      if (url.trim()) onError(t("panes.notLink"));
+      return;
+    }
+    if (links.length === 1 && parseDriveFileId(links[0])) {
+      if (await onDriveLink(links[0])) setUrl("");
+      return;
+    }
+    queue(
+      links.map((link) =>
+        parseYouTubeId(link) || isMediaUrl(link)
+          ? { kind: "video-url" as const, url: link }
+          : { kind: "url" as const, url: link },
+      ),
+    );
+    setUrl("");
   }
 
   // Takes a YouTube link or a direct video or audio file link; files go
   // through the choose button above.
-  async function addVideo(e: React.FormEvent) {
+  function addVideo(e: React.FormEvent) {
     e.preventDefault();
-    const trimmed = videoUrl.trim();
-    if (!trimmed) return;
-    if (!parseYouTubeId(trimmed) && !isMediaUrl(trimmed)) {
+    const links = parseLinks(videoUrl);
+    if (links.length === 0 || links.some((link) => !parseYouTubeId(link) && !isMediaUrl(link))) {
       onError(t("panes.notVideoLink"));
       return;
     }
-    if (await onIngestUrl(trimmed)) setVideoUrl("");
+    queue(links.map((link) => ({ kind: "video-url" as const, url: link })));
+    setVideoUrl("");
   }
 
   // Tab order: URL, PDF or image, Video or audio, Google Drive, Library.
@@ -126,7 +212,7 @@ export function AddDocumentDialog({
   ];
   const chooseArea =
     "flex flex-1 flex-col items-center justify-center gap-2 rounded-[20px] border-2 border-dashed border-sand-300 px-6 py-8 text-sm font-semibold text-sand-800 hover:border-clay hover:bg-clay-100/40 hover:text-clay-800 disabled:opacity-40";
-  const submit =
+  const submitButton =
     "shrink-0 rounded-full bg-clay px-4 py-2 text-xs font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40";
   const urlInput =
     "min-w-0 flex-1 rounded-full bg-sand-100 px-4 py-2 text-sm outline-none placeholder:text-sand-500";
@@ -189,18 +275,18 @@ export function AddDocumentDialog({
             </div>
           ) : tab === "pdf" ? (
             <div className="flex flex-1 flex-col gap-2">
-              <button onClick={onChoosePdf} data-track="add-choose-pdf" disabled={busy} className={chooseArea}>
+              <button onClick={() => fileRef.current?.click()} data-track="add-choose-pdf" disabled={busy} className={chooseArea}>
                 {t("panes.choosePdf")}
               </button>
               <span className="text-center text-[11px] text-sand-500">{t("panes.pdfHint")}</span>
             </div>
           ) : tab === "video" ? (
             <div className="flex flex-1 flex-col gap-2">
-              <button onClick={onChooseVideo} data-track="add-choose-video" disabled={busy} className={chooseArea}>
+              <button onClick={() => videoFileRef.current?.click()} data-track="add-choose-video" disabled={busy} className={chooseArea}>
                 {t("panes.chooseVideoFile")}
               </button>
               <span className="text-center text-[11px] text-sand-500">{t("panes.videoHint")}</span>
-              <form className="flex items-center gap-2" onSubmit={(e) => void addVideo(e)}>
+              <form className="flex items-center gap-2" onSubmit={addVideo}>
                 <input
                   autoFocus
                   value={videoUrl}
@@ -209,8 +295,8 @@ export function AddDocumentDialog({
                   aria-label={t("panes.youtubeLink")}
                   className={urlInput}
                 />
-                <button type="submit" data-track="add-video-url" disabled={busy} className={submit}>
-                  {t("panes.addVideo")}
+                <button type="submit" data-track="add-video-url" disabled={busy} className={submitButton}>
+                  {t("panes.queueLink")}
                 </button>
               </form>
             </div>
@@ -247,8 +333,8 @@ export function AddDocumentDialog({
                   aria-label={t("panes.documentUrl")}
                   className={urlInput}
                 />
-                <button type="submit" data-track="add-url" disabled={busy} className={submit}>
-                  {t("panes.ingest")}
+                <button type="submit" data-track="add-url" disabled={busy} className={submitButton}>
+                  {t("panes.queueLink")}
                 </button>
               </div>
               <span className="text-[11px] text-sand-500">{t("panes.urlHint")}</span>
@@ -295,12 +381,67 @@ export function AddDocumentDialog({
 
         {error && <p className="text-xs text-red-500">{error}</p>}
 
-        <div className="flex flex-col gap-2 border-t border-line pt-4">
-          <span className="text-[13px] font-semibold text-sand-800">
-            {t("panes.uploadAssistant")}
-          </span>
-          <p className="text-xs text-sand-500">{t("panes.uploadAssistantHint")}</p>
+        {/* The queue (SPEC.md §22): every link and file waiting for Continue. */}
+        {items.length > 0 && (
+          <div className="flex flex-col gap-2 border-t border-line pt-4">
+            <span className="text-[13px] font-semibold text-sand-800">
+              {t("panes.queuedCount", { n: items.length })}
+            </span>
+            <ul className="flex max-h-40 flex-col gap-0.5 overflow-y-auto rounded-2xl bg-sand-100 p-2">
+              {items.map((item, i) => (
+                <li key={i} className="flex items-center gap-2 px-2 py-1 text-[13px] text-sand-800">
+                  <span className="min-w-0 flex-1 truncate">
+                    {item.kind === "file" ? item.file.name : item.url}
+                  </span>
+                  <button
+                    onClick={() => removeItem(i)}
+                    data-track="add-queue-remove"
+                    aria-label={t("common.remove")}
+                    data-tip={t("common.remove")}
+                    className="shrink-0 rounded-full px-2 py-0.5 text-xs text-sand-400 hover:text-red-500"
+                  >
+                    ✕
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <p className="text-xs text-sand-500">{t("panes.queueHint")}</p>
+          </div>
+        )}
+
+        <div className="flex items-center gap-3 border-t border-line pt-4">
+          <div className="flex min-w-0 flex-1 flex-col gap-1">
+            <span className="text-[13px] font-semibold text-sand-800">
+              {t("panes.uploadAssistant")}
+            </span>
+            <p className="text-xs text-sand-500">{t("panes.uploadAssistantHint")}</p>
+          </div>
+          <button
+            onClick={submit}
+            data-track="add-continue"
+            disabled={busy || items.length === 0}
+            className={submitButton}
+          >
+            {items.length > 1 ? t("panes.continueWithCount", { n: items.length }) : t("panes.continue")}
+          </button>
         </div>
+
+        <input
+          ref={fileRef}
+          type="file"
+          accept={PDF_ACCEPT}
+          multiple
+          className="hidden"
+          onChange={(e) => queueFiles([...(e.target.files ?? [])])}
+        />
+        <input
+          ref={videoFileRef}
+          type="file"
+          accept={VIDEO_ACCEPT}
+          multiple
+          className="hidden"
+          onChange={(e) => queueFiles([...(e.target.files ?? [])])}
+        />
       </div>
     </div>
     )}

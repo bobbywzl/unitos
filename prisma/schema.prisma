@@ -91,6 +91,7 @@ model Notebook {
   sections      Section[]
   documents     NotebookDocument[]
   digest        NotebookDigest?
+  multiUploads  MultiUpload[]
   collaborators NotebookCollaborator[]
   presence      NotebookPresence[]
   events        NotebookEvent[]
@@ -387,7 +388,42 @@ model Document {
   references    Json? // the article's reference list, extracted at ingest: [{id, label, text, url}]
   video         VideoAsset? // set = video document; the reader renders the video pane (SPEC.md §11)
   images        ImageAsset[] // images the parse captured (chart animations)
+  // A generated document (SPEC.md §22): the Stitch assistant wrote it from
+  // the members of a multi upload. generatedCommand is the command that made it.
+  generatedFromId  String?
+  generatedFrom    MultiUpload? @relation("GeneratedFrom", fields: [generatedFromId], references: [id], onDelete: SetNull)
+  generatedCommand String?
+  multiUploads     MultiUploadMember[]
   createdAt     DateTime           @default(now())
+
+  @@index([generatedFromId])
+}
+
+// A multi upload (SPEC.md §22): two or more documents of a project added
+// together onto one page. Two members read side by side; three or more read
+// as a graph or a list. The Stitch assistant works over the members.
+model MultiUpload {
+  id          String              @id @default(cuid())
+  notebookId  String
+  notebook    Notebook            @relation(fields: [notebookId], references: [id], onDelete: Cascade)
+  title       String
+  createdById String?
+  members     MultiUploadMember[]
+  generated   Document[]          @relation("GeneratedFrom")
+  createdAt   DateTime            @default(now())
+
+  @@index([notebookId])
+}
+
+model MultiUploadMember {
+  multiUploadId String
+  multiUpload   MultiUpload @relation(fields: [multiUploadId], references: [id], onDelete: Cascade)
+  documentId    String
+  document      Document    @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  order         Int
+
+  @@id([multiUploadId, documentId])
+  @@index([documentId])
 }
 
 // One row per user change to a document: block text edits and link add/remove.

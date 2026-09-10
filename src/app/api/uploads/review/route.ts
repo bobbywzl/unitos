@@ -10,20 +10,13 @@ import { parseBody } from "@/lib/validate";
 
 export const maxDuration = 120;
 
-// The upload assistant (SPEC.md §15). With url: review the page in a private
-// sandbox before anything is saved — stream fetch, extract, review stages,
-// then the review. With kind alone: answer the upload instructions for a PDF
-// or video add, plain JSON. Neither writes anything.
-const bodySchema = z
-  .object({
-    notebookId: z.string().min(1),
-    url: z.url().optional(),
-    kind: z.enum(["url", "pdf", "video"]).optional(),
-    instructions: z.string().max(2_000).default(""),
-  })
-  .refine((d) => d.url !== undefined || d.kind !== undefined, {
-    message: "url or kind is required",
-  });
+// The upload assistant (SPEC.md §15): review the page in a private sandbox
+// before anything is saved — stream fetch, extract, review stages, then the
+// review. Writes nothing.
+const bodySchema = z.object({
+  notebookId: z.string().min(1),
+  url: z.url(),
+});
 
 export async function POST(req: Request) {
   const user = await currentUser();
@@ -48,12 +41,6 @@ export async function POST(req: Request) {
     );
   }
 
-  const instructions = data.instructions.trim();
-  if (data.url === undefined) {
-    const check = await assistant.checkInstructions(data.kind!, instructions, user?.id ?? null);
-    return NextResponse.json({ check });
-  }
-
   const url = data.url;
   // The review's model call stops at the route's limit less a margin, so a
   // slow review degrades to the parsed facts instead of a cut stream; Cancel
@@ -61,13 +48,7 @@ export async function POST(req: Request) {
   const budget = AbortSignal.any([req.signal, AbortSignal.timeout((maxDuration - 30) * 1000)]);
   return progressResponse(async (onProgress) => {
     try {
-      const review = await assistant.reviewUpload(
-        url,
-        instructions,
-        user?.id ?? null,
-        onProgress,
-        budget,
-      );
+      const review = await assistant.reviewUpload(url, user?.id ?? null, onProgress, budget);
       return { review };
     } catch (err) {
       console.error("Upload review failed:", err);

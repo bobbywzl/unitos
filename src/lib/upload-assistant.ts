@@ -3,7 +3,7 @@ import type { ModelMessage } from "ai";
 import { z } from "zod";
 import { UPLOAD_MODEL } from "@/lib/derive/config";
 import { callForJson } from "@/lib/derive/json-call";
-import { currentLang, serverT } from "@/lib/i18n/server";
+import { currentLang } from "@/lib/i18n/server";
 import { claude, claudeConfigured, claudeOptions } from "@/lib/claude";
 import type { OnIngestProgress } from "@/lib/parse/ingest";
 import { pageEstimate, SPLIT_ASK_PAGES, splitPartCount } from "@/lib/parse/split";
@@ -11,7 +11,6 @@ import { fetchPage } from "@/lib/parse/fetch-page";
 import { auditFigures } from "@/lib/parse/figure-audit";
 import { needsBrowserRender, renderIfNeeded } from "@/lib/parse/render-page";
 import { parseFetchedPage } from "@/lib/parse/url";
-import { uploadInstructionsPrompt } from "@/lib/prompts/upload-instructions";
 import { uploadReviewPrompt } from "@/lib/prompts/upload-review";
 import { browserConfigured } from "@/lib/video/browser-transcript";
 
@@ -34,11 +33,9 @@ const MAX_CAPTION_CHARS = 200;
 // content this short.
 const SPLIT_MODEL_FLOOR_PAGES = 15;
 
-export type InstructionReply = { instruction: string; willFollow: boolean; reply: string };
-
-// PDF directives read out of the instructions (SPEC.md §16): pages imports the
-// PDF as handwritten pages without judging it; convert false keeps conversion
-// off. The defaults leave Import PDF judging as always.
+// PDF directives (SPEC.md §16), set by the box's import pick: pages imports
+// the PDF as handwritten pages without judging it; convert false keeps
+// conversion off. The defaults leave Import PDF judging as always.
 export type PdfDirectives = { pages: boolean; convert: boolean };
 export const PDF_DIRECTIVE_DEFAULTS: PdfDirectives = { pages: false, convert: true };
 
@@ -69,21 +66,7 @@ export type UploadReview = {
   splitProposed: boolean;
   splitReason: string;
   splitParts: number;
-  replies: InstructionReply[];
-  feasible: string;
 };
-
-export type InstructionCheck = {
-  replies: InstructionReply[];
-  feasible: string;
-  pdf?: PdfDirectives; // present for PDF checks; absent for url and video
-};
-
-const replySchema = z.object({
-  instruction: z.string().min(1).max(600),
-  willFollow: z.boolean(),
-  reply: z.string().min(1).max(600),
-});
 
 const reviewSchema = z.object({
   kind: z.enum(["article", "index", "other"]),
@@ -100,14 +83,6 @@ const reviewSchema = z.object({
     .max(60),
   pasteThisPage: z.boolean(),
   split: z.object({ recommended: z.boolean(), reason: z.string().max(400) }),
-  replies: z.array(replySchema).max(16).optional(),
-  feasible: z.string().max(2_000).optional(),
-});
-
-const checkSchema = z.object({
-  replies: z.array(replySchema).max(16),
-  feasible: z.string().max(2_000),
-  pdf: z.object({ pages: z.boolean(), convert: z.boolean() }).optional(),
 });
 
 type LinkCandidate = { url: string; text: string };
@@ -182,17 +157,14 @@ function tailExcerpt(texts: string[], budget: number): string {
 }
 
 /** Review a URL before anything is saved. Never throws on model trouble: a
-    failed or keyless model call degrades to the parsed facts, with instructions
-    answered honestly as uncheckable. */
+    failed or keyless model call degrades to the parsed facts. */
 export async function reviewUpload(
   url: string,
-  instructions: string,
   userId: string | null,
   onProgress?: OnIngestProgress,
   signal?: AbortSignal,
 ): Promise<UploadReview> {
   const lang = await currentLang();
-  const t = await serverT();
 
   onProgress?.("fetch");
   // The same page ingest would parse: a page whose figures its scripts draw
@@ -228,10 +200,6 @@ export async function reviewUpload(
     splitProposed: pages >= SPLIT_ASK_PAGES,
     splitReason: "",
     splitParts: splitPartCount(chars),
-    replies: instructions
-      ? [{ instruction: instructions, willFollow: false, reply: t("api.instructionsUnchecked") }]
-      : [],
-    feasible: "",
   };
   if (!claudeConfigured()) return review;
 
@@ -256,7 +224,6 @@ export async function reviewUpload(
         ? tailExcerpt(texts, EXCERPT_TAIL_CHARS)
         : "",
     links: links.map((l, i) => `[link ${i + 1}] "${l.text}" — ${l.url}`).join("\n"),
-    instructions,
   });
   const messages: ModelMessage[] = [{ role: "user", content: prompt }];
   const result = await callForJson({
@@ -296,66 +263,5 @@ export async function reviewUpload(
     review.splitProposed ||
     (result.data.split.recommended && pages >= SPLIT_MODEL_FLOOR_PAGES);
   review.splitReason = result.data.split.reason;
-  review.replies = result.data.replies ?? review.replies;
-  review.feasible = result.data.feasible ?? "";
   return review;
-}
-
-/** Answer upload instructions without a page review — the check before a PDF
-    or a re-stated URL upload. Video is deterministic: nothing in a media
-    ingest can follow upload instructions, and the assistant says so. PDF
-    checks also read the PDF directives out of the instructions (SPEC.md §16);
-    every fallback answers the defaults, so ingest never guesses. */
-export async function checkInstructions(
-  kind: "url" | "pdf" | "video",
-  instructions: string,
-  userId: string | null,
-): Promise<InstructionCheck> {
-  const pdf = kind === "pdf" ? { pdf: PDF_DIRECTIVE_DEFAULTS } : {};
-  if (!instructions) return { replies: [], feasible: "", ...pdf };
-  const t = await serverT();
-  if (kind === "video") {
-    return {
-      replies: [{ instruction: instructions, willFollow: false, reply: t("api.instructionsVideo") }],
-      feasible: "",
-    };
-  }
-  if (!claudeConfigured()) {
-    return {
-      replies: [
-        { instruction: instructions, willFollow: false, reply: t("api.instructionsUnchecked") },
-      ],
-      feasible: "",
-      ...pdf,
-    };
-  }
-  const lang = await currentLang();
-  const messages: ModelMessage[] = [
-    { role: "user", content: uploadInstructionsPrompt({ lang, kind, instructions }) },
-  ];
-  const result = await callForJson({
-    model: await claude(UPLOAD_MODEL),
-    messages,
-    maxOutputTokens: 16384,
-    providerOptions: claudeOptions(),
-    schema: checkSchema,
-    label: "UPLOAD_INSTRUCTIONS",
-    usage: { userId, feature: "upload", model: UPLOAD_MODEL },
-  });
-  if (!result.ok) {
-    console.warn("[upload] instruction check failed:", result.error);
-    return {
-      replies: [
-        { instruction: instructions, willFollow: false, reply: t("api.instructionsUnchecked") },
-      ],
-      feasible: "",
-      ...pdf,
-    };
-  }
-  if (kind !== "pdf") return { replies: result.data.replies, feasible: result.data.feasible };
-  return {
-    replies: result.data.replies,
-    feasible: result.data.feasible,
-    pdf: result.data.pdf ?? PDF_DIRECTIVE_DEFAULTS,
-  };
 }

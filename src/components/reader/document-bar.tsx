@@ -7,7 +7,7 @@ import { runDerivation } from "@/lib/derive/heartbeat-client";
 import type { DriveConfig } from "@/lib/drive/config";
 import { pickDriveFiles } from "@/lib/drive/picker-client";
 import { parseDriveFileId, type DrivePickedFile } from "@/lib/drive/types";
-import { IMAGE_ACCEPT, isImageFile } from "@/lib/handwritten/image";
+import { isImageFile } from "@/lib/handwritten/image";
 import { isImeKey } from "@/lib/ime";
 import { useCollab } from "@/components/collab/collab-context";
 import { reportError } from "@/lib/error-log";
@@ -43,7 +43,7 @@ import {
 } from "@/components/reader/figure-capture";
 import { setRevealFlag } from "@/components/reader/reveal";
 import { UploadAssistant, type UploadRequest } from "@/components/reader/upload-assistant";
-import { isMarkdownFile, MARKDOWN_ACCEPT } from "@/lib/markdown-file";
+import { isMarkdownFile } from "@/lib/markdown-file";
 
 export type AttachedDocument = {
   id: string;
@@ -193,8 +193,6 @@ export function DocumentBar({
   const t = useT();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const fileRef = useRef<HTMLInputElement>(null);
-  const videoFileRef = useRef<HTMLInputElement>(null);
   const [phase, setPhase] = useState<IngestPhase | null>(null);
   const [dialog, setDialog] = useState(false);
   // The document list: opens on hover or click, closes on leave (after a
@@ -546,7 +544,9 @@ export function DocumentBar({
     ? ""
     : assistant.kind === "files" || assistant.kind === "drive"
       ? assistant.files.map((f) => f.name).join(" · ")
-      : assistant.url;
+      : assistant.kind === "batch"
+        ? assistant.items.map((item) => (item.kind === "file" ? item.file.name : item.url)).join(" · ")
+        : assistant.url;
 
   function openAssistant(request: UploadRequest) {
     setError(null);
@@ -563,48 +563,43 @@ export function DocumentBar({
         setError(t("common.offlineReadOnly"));
         return;
       }
-      const queued =
+      // A batch queues item by item; a multi upload needs the server and is
+      // not offered offline — every item opens on its own page after the sync.
+      const items =
         request.kind === "files"
-          ? Promise.all(request.files.map((f) => queueUpload(f, notebookId))).then(
-              () => request.files.length,
-            )
-          : queueWrite("/api/documents", "POST", { url: request.url, notebookId }).then(() => 1);
+          ? request.files.map((file) => ({ kind: "file" as const, file }))
+          : request.kind === "batch"
+            ? request.items
+            : [request];
+      const queued = Promise.all(
+        items.map((item) =>
+          item.kind === "file"
+            ? queueUpload(item.file, notebookId)
+            : queueWrite("/api/documents", "POST", { url: item.url, notebookId }),
+        ),
+      ).then(() => items.length);
       void queued.then((n) => {
         setConnectNotice(t("panes.uploadQueuedOffline", { n }));
         setTimeout(() => setConnectNotice(null), 4000);
       });
-      if (fileRef.current) fileRef.current.value = "";
-      if (videoFileRef.current) videoFileRef.current.value = "";
       setDialog(false);
       return;
     }
     setAssistant(request);
     setAssistantHidden(false);
     setDialog(false);
-    if (fileRef.current) fileRef.current.value = "";
-    if (videoFileRef.current) videoFileRef.current.value = "";
   }
 
-  // The dialog's URL and video forms route through the assistant, like every
-  // other add path. The media-figure toast keeps the direct ingest path.
   // A pasted Google Drive link is not a readable page: with Drive linked it
   // imports server-side through the linked grant; otherwise the reader is
-  // pointed at Add from Google Drive (SPEC.md §14).
-  async function assistantFromUrl(raw: string): Promise<boolean> {
-    const trimmed = raw.trim();
-    if (!trimmed) return false;
-    const driveFileId = parseDriveFileId(trimmed);
-    if (driveFileId) {
-      if (drive?.linked) return importDriveLink(driveFileId);
-      setError(t("panes.driveLinkUseDrive"));
-      return false;
-    }
-    openAssistant(
-      parseYouTubeId(trimmed) || isMediaUrl(trimmed)
-        ? { kind: "video-url", url: trimmed }
-        : { kind: "url", url: trimmed },
-    );
-    return true;
+  // pointed at Add from Google Drive (SPEC.md §14). Every other link goes
+  // through the dialog's queue and the upload assistant box.
+  async function driveLinkFromUrl(raw: string): Promise<boolean> {
+    const driveFileId = parseDriveFileId(raw.trim());
+    if (!driveFileId) return false;
+    if (drive?.linked) return importDriveLink(driveFileId);
+    setError(t("panes.driveLinkUseDrive"));
+    return false;
   }
 
   // A pasted Drive link on a linked account: no picker, no token in the
@@ -1075,15 +1070,14 @@ export function DocumentBar({
         phase={phase}
         error={error}
         onError={setError}
-        onChoosePdf={() => fileRef.current?.click()}
-        onChooseVideo={() => videoFileRef.current?.click()}
+        onSubmit={openAssistant}
         onImportDrive={drive ? () => void importFromDrive() : null}
         driveLink={
           drive
             ? { linked: drive.linked, canLink: drive.canLink, access: drive.access, grant: drive.grant }
             : null
         }
-        onIngestUrl={assistantFromUrl}
+        onDriveLink={driveLinkFromUrl}
         library={library}
         attachedIds={attachedIds}
         onOpenLibrary={() => void openLibrary()}
@@ -1134,29 +1128,6 @@ export function DocumentBar({
         </span>
       )}
 
-      <input
-        ref={fileRef}
-        type="file"
-        accept={`application/pdf,.pdf,${IMAGE_ACCEPT},${MARKDOWN_ACCEPT}`}
-        multiple
-        className="hidden"
-        onChange={(e) => {
-          const files = [...(e.target.files ?? [])];
-          if (files.length > 0) openAssistant({ kind: "files", files });
-        }}
-      />
-      <input
-        ref={videoFileRef}
-        type="file"
-        accept="video/mp4,video/webm,video/ogg,video/quicktime,audio/mpeg,audio/mp4,audio/aac,audio/wav,audio/flac,audio/ogg,.mp4,.m4v,.webm,.ogv,.ogg,.mov,.mp3,.m4a,.m4b,.aac,.wav,.flac,.oga,.opus"
-        multiple
-        className="hidden"
-        onChange={(e) => {
-          const files = [...(e.target.files ?? [])];
-          if (files.length > 0) openAssistant({ kind: "files", files });
-        }}
-      />
-
       {assistant && (
         <UploadAssistant
           notebookId={notebookId}
@@ -1169,15 +1140,19 @@ export function DocumentBar({
             setAssistantHidden(true);
             openAdded(docId);
           }}
-          onClose={(docId) => {
+          onClose={(target) => {
             const opened = assistantOpened;
             setAssistant(null);
             setAssistantHidden(false);
             setAssistantOpened(null);
-            if (docId && docId !== opened) openAdded(docId);
+            // A multi upload (SPEC.md §22) opens on its own page.
+            if (target?.kind === "multi") {
+              startOpening(() => router.push(`/n/${notebookId}/multi/${target.id}`));
+              router.refresh();
+            } else if (target && target.id !== opened) openAdded(target.id);
             // Opened early: the glossary and links the finishing step wrote
             // arrive with a refresh.
-            else if (docId) router.refresh();
+            else if (target) router.refresh();
           }}
         />
       )}
