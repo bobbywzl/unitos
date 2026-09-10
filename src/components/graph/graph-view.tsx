@@ -274,12 +274,15 @@ function GraphCanvas({
   nodes,
   edges,
   onOpenDocument,
+  docHref,
 }: {
   notebookId: string;
   activeDocumentId: string | null;
   nodes: GraphNode[];
   edges: GraphEdge[];
   onOpenDocument: () => void;
+  // Where a node click goes. Default: the reader on that document.
+  docHref?: (documentId: string) => string;
 }) {
   const router = useRouter();
   const t = useT();
@@ -463,7 +466,7 @@ function GraphCanvas({
         onNodesChange={onNodesChange}
         onNodeDragStop={onNodeDragStop}
         onNodeClick={(_, node) => {
-          router.push(`/n/${notebookId}?doc=${node.id}`);
+          router.push(docHref ? docHref(node.id) : `/n/${notebookId}?doc=${node.id}`);
           onOpenDocument();
         }}
         onNodeMouseEnter={(_, node) => hoverNode(node.id)}
@@ -520,6 +523,7 @@ export default function GraphView(props: {
   nodes: GraphNode[];
   edges: GraphEdge[];
   onOpenDocument: () => void;
+  docHref?: (documentId: string) => string;
 }) {
   return (
     <ReactFlowProvider>

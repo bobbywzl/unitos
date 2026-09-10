@@ -5,6 +5,7 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { api } from "@/lib/api";
 import { runDerivation } from "@/lib/derive/heartbeat-client";
 import type { DriveConfig } from "@/lib/drive/config";
+import type { MultiUploadSummary } from "@/lib/types";
 import { pickDriveFiles } from "@/lib/drive/picker-client";
 import { parseDriveFileId, type DrivePickedFile } from "@/lib/drive/types";
 import { isImageFile } from "@/lib/handwritten/image";
@@ -178,11 +179,15 @@ export function DocumentBar({
   drive,
   figureGaps,
   browserConfigured,
+  multiUploads,
 }: {
   notebookId: string;
   documents: AttachedDocument[];
   activeId: string | null;
   drive: DriveConfig | null;
+  // The project's multi uploads (SPEC.md §22), newest first: the list opens
+  // each on its own page.
+  multiUploads: MultiUploadSummary[];
   // The open document's captions left without their figure, by label
   // (lib/parse/figure-audit.ts captionGaps), and whether this deployment
   // has a browser to render them with (SPEC.md §15).
@@ -212,6 +217,24 @@ export function DocumentBar({
   }, [error, activeId]);
   // Opening a document is a server round trip; the pill shows it is on its way.
   const [opening, startOpening] = useTransition();
+
+  // A multi upload from documents already attached (SPEC.md §22): the page
+  // opens once the server has it.
+  const [makingMulti, setMakingMulti] = useState(false);
+  async function makeMulti(documentIds: string[]) {
+    if (makingMulti) return;
+    setMakingMulti(true);
+    setError(null);
+    try {
+      const made = await api<{ id: string }>("/api/multi", "POST", { notebookId, documentIds });
+      startOpening(() => router.push(`/n/${notebookId}/multi/${made.id}`));
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t("common.requestFailed"));
+    } finally {
+      setMakingMulti(false);
+    }
+  }
 
   // Hover keeps the list open across the gap between pill and list; leaving
   // both closes it after a grace period.
@@ -262,14 +285,17 @@ export function DocumentBar({
       ?.scrollIntoView({ block: "nearest" });
   }, [listOpen]);
 
-  // Opening a document keeps the reader view: view and doc2 ride along.
+  // Opening a document keeps the reader view: view and doc2 ride along, and
+  // so does the open multi upload (SPEC.md §22).
   function open(docId: string) {
     const params = new URLSearchParams();
     params.set("doc", docId);
     const view = searchParams.get("view");
     const doc2 = searchParams.get("doc2");
+    const multi = searchParams.get("multi");
     if (view) params.set("view", view);
     if (doc2) params.set("doc2", doc2);
+    if (multi) params.set("multi", multi);
     startOpening(() => router.push(`/n/${notebookId}?${params.toString()}`));
   }
 
@@ -979,6 +1005,22 @@ export function DocumentBar({
                           {comparing === d.id ? t("common.working") : t("panes.compareWithOpen")}
                         </button>
                       )}
+                      {/* A multi upload from documents already here (SPEC.md
+                          §22): this document and the open one on one page. */}
+                      {canEdit && activeId && d.id !== activeId && (
+                        <button
+                          onClick={() => {
+                            closeList();
+                            void makeMulti([activeId, d.id]);
+                          }}
+                          data-track="document-multi-with-open"
+                          disabled={makingMulti}
+                          className={`${rowAction} disabled:opacity-40`}
+                          data-tip={t("multi.withOpenTitle", { title: active?.title ?? "" })}
+                        >
+                          {t("multi.withOpen")}
+                        </button>
+                      )}
                       {canEdit && (
                         <button
                           onClick={() => {
@@ -1024,6 +1066,51 @@ export function DocumentBar({
                   </Collapse>
                 </div>
               ))}
+              {/* Multi uploads (SPEC.md §22): each opens on its own page, and
+                  every document of the project can go on one page together. */}
+              {(multiUploads.length > 0 || (canEdit && documents.length > 2)) && (
+                <>
+                  <div className="mx-4 mt-1.5 mb-1 border-t border-line pt-2 text-[11px] font-semibold text-sand-500">
+                    {t("multi.multiUploads")}
+                  </div>
+                  {canEdit && documents.length > 2 && (
+                    <button
+                      onClick={() => {
+                        closeList();
+                        void makeMulti(documents.map((d) => d.id));
+                      }}
+                      data-track="multi-all"
+                      disabled={makingMulti}
+                      className="px-4 py-2 text-left text-[13px] text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40"
+                      data-tip={t("multi.allTitle")}
+                    >
+                      {t("multi.all", { n: documents.length })}
+                    </button>
+                  )}
+                  {multiUploads.map((m) => (
+                    <button
+                      key={m.id}
+                      onClick={() => {
+                        closeList();
+                        startOpening(() => router.push(`/n/${notebookId}/multi/${m.id}`));
+                      }}
+                      data-track="multi-open"
+                      data-active-row={m.id === searchParams.get("multi") || undefined}
+                      className={`flex min-w-0 items-center gap-2 overflow-hidden px-4 py-2 text-left text-[13px] whitespace-nowrap ${
+                        m.id === searchParams.get("multi")
+                          ? "font-semibold text-ink"
+                          : "text-sand-700 hover:bg-clay-100 hover:text-clay-800"
+                      }`}
+                      data-tip={m.title}
+                    >
+                      <span className="min-w-0 flex-1 truncate">{clipWords(m.title, 40)}</span>
+                      <span className="shrink-0 rounded-full bg-sand-100 px-1.5 text-[11px] tabular-nums text-sand-600">
+                        {m.memberCount}
+                      </span>
+                    </button>
+                  ))}
+                </>
+              )}
             </div>
           )}
           </Presence>

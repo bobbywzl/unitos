@@ -511,6 +511,11 @@ export function UploadAssistant({
     return result.documents ?? [{ id: result.id, title: result.title }];
   }
 
+  // Documents the add will land: the split's parts, else the requests sent.
+  const splitEligible =
+    request.kind === "url" && review !== null && review.splitProposed && selectedCount === 1 && selected.has(SELF);
+  const addCount = splitEligible && split ? review.splitParts : selectedCount;
+
   async function add() {
     setError(null);
     // The PDF directives (SPEC.md §16): the import pick in the box sets them;
@@ -528,7 +533,7 @@ export function UploadAssistant({
     setAddStartedAt(addStartedAtRef.current);
     // A multi upload opens as one page once every member is in: no member
     // opens early on its own.
-    const multi = layout === "multi" && selectedCount > 1;
+    const multi = layout === "multi" && addCount > 1;
     earlyOpenRef.current = multi ? "off" : "pending";
 
     if (request.kind === "url") {
@@ -738,9 +743,6 @@ export function UploadAssistant({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, hidden]);
 
-  const splitEligible =
-    request.kind === "url" && review !== null && review.splitProposed && selectedCount === 1 && selected.has(SELF);
-  const addCount = splitEligible && split ? review.splitParts : selectedCount;
   const subject =
     request.kind === "files"
       ? files.map((f) => f.name).join(" · ")

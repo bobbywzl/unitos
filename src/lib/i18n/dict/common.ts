@@ -38,7 +38,9 @@
 //   dismiss(通知) 关闭 · update(通知类型) 更新 · account change 账户变更 ·
 //   gist 要旨 · checklist 清单 · dash list 短横线列表 ·
 //   quote(笔记格式，> 行) 引用 · notes full page 整页笔记 ·
-//   conversation 对话 · attachment 附件 · file 文件
+//   conversation 对话 · attachment 附件 · file 文件 ·
+//   multi upload 多文档上传 · member(多文档上传的成员) 成员 · stitch 缝合 ·
+//   generated document 生成文档
 // highlight 高亮 仅指高亮功能；表示选取文字一律用 选中。
 
 const en = {

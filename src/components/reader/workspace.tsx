@@ -7,6 +7,8 @@ import type {
   GraphEdge,
   GraphNode,
   HistoryEntry,
+  MultiUploadSummary,
+  MultiUploadView,
   NotebookView,
   RecommendedLinkView,
 } from "@/lib/types";
@@ -31,6 +33,7 @@ import { ShareControl } from "@/components/collab/share-control";
 import { OfflineStatus } from "@/components/offline-status";
 import { useNotebookSync } from "@/components/collab/use-sync";
 import { GraphOverlay } from "@/components/graph/graph-overlay";
+import { StitchBox } from "@/components/multi/stitch-box";
 import { VisualizationViewer } from "@/components/reader/visualization-viewer";
 import { CorpusDistillPage } from "@/components/reader/corpus-distill-page";
 import { ContextTab, type ContextValues } from "@/components/context-tab";
@@ -105,6 +108,8 @@ export function Workspace({
   graph,
   history,
   corpusDistillations,
+  multi,
+  multiUploads,
 }: {
   notebook: NotebookView;
   documents: AttachedDocument[];
@@ -130,6 +135,11 @@ export function Workspace({
   graph: { nodes: GraphNode[]; edges: GraphEdge[]; recommended: RecommendedLinkView[] };
   history: HistoryEntry[];
   corpusDistillations: CorpusDistillationView[];
+  // The open multi upload (?multi=, SPEC.md §22): the Stitch box docks at
+  // the bottom of the reader. Null = none open.
+  multi: MultiUploadView | null;
+  // The project's multi uploads, for the document list.
+  multiUploads: MultiUploadSummary[];
 }) {
   const t = useT();
   const canEdit = collab.canEdit;
@@ -525,6 +535,7 @@ export function Workspace({
             drive={drive}
             figureGaps={figureGaps}
             browserConfigured={browserConfigured}
+            multiUploads={multiUploads}
           />
         </div>
         <OfflineStatus />
@@ -866,6 +877,9 @@ export function Workspace({
       )}
       </Presence>
       <VisualizationViewer />
+      {/* The Stitch assistant docked over the reader while a multi upload is
+          open (SPEC.md §22): every command works across its members. */}
+      {multi && <StitchBox notebookId={notebook.id} multiId={multi.id} docked />}
       <Presence show={graphOpen} exit="fade">
       {graphOpen && (
         <GraphOverlay
