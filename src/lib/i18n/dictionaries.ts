@@ -3,6 +3,7 @@ import { api } from "@/lib/i18n/dict/api";
 import { assistant } from "@/lib/i18n/dict/assistant";
 import { common } from "@/lib/i18n/dict/common";
 import { legal } from "@/lib/i18n/dict/legal";
+import { multi } from "@/lib/i18n/dict/multi";
 import { outline } from "@/lib/i18n/dict/outline";
 import { panels } from "@/lib/i18n/dict/panels";
 import { panes } from "@/lib/i18n/dict/panes";
@@ -28,6 +29,7 @@ const NAMESPACES = {
   assistant,
   panels,
   panes,
+  multi,
   video,
   settings,
   admin,

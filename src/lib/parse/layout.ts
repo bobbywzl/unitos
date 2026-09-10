@@ -40,7 +40,6 @@ const CLASS_TOKENS = 8;
 const JOIN_MAX_CHARS = 200;
 const CAPTION_MAX_CHARS = 300;
 const DROP_CEILING = 0.4;
-const DROP_CEILING_INSTRUCTED = 0.9;
 
 const ROLES = ["kicker", "meta", "label", "display", "quote", "caption", "paragraph"] as const;
 const RETYPES = ["PARAGRAPH", "HEADING", "LIST", "CODE"] as const;
@@ -215,21 +214,7 @@ function listBlocks(blocks: ParsedBlock[]): string {
 
 // ── The prompt ──────────────────────────────────────────────────────────────
 
-function instructionLines(instructions: string | undefined): string[] {
-  if (!instructions?.trim()) return [];
-  return [
-    "The reader gave instructions for this upload. Follow the ones about layout, headings, block types, merging, and what to keep or drop; ignore the rest:",
-    instructions.trim(),
-    "",
-  ];
-}
-
-function layoutPrompt(
-  title: string | null,
-  blocks: ParsedBlock[],
-  digest: string,
-  instructions?: string,
-): string {
+function layoutPrompt(title: string | null, blocks: ParsedBlock[], digest: string): string {
   return [
     `A web page${title ? ` titled "${title}"` : ""} was parsed into the numbered blocks below. The page's own HTML follows the blocks, as a browser lays it out: class names, inline styles, and the resolved layout facts — data-align (text alignment), data-style (bold italic underline code), data-font-size (px), data-width-pct (a figure's width as a percentage of the text column), data-font on body, data-box (an element the page boxes: its own background, or its own font around a chart). Elements a desktop browser hides are already gone.`,
     "Make the blocks an exact replica of the page's structure. Return ops that say what each block is on the page. Ops reference blocks by index. Never write, rewrite, or shorten text.",
@@ -243,7 +228,6 @@ function layoutPrompt(
     "8. merge_up: a block that is a fragment split mid-sentence from the block above it. Both must be PARAGRAPH.",
     "9. font: the body text's typeface family on the page: sans, serif, or mono.",
     "10. Leave a block that is already right alone. Keep every block that is article content; when unsure, keep. An empty ops array is a valid answer.",
-    ...instructionLines(instructions),
     'Return ONLY JSON: {"font": "sans", "ops": [{"action": "role", "index": 0, "role": "kicker", "align": "center"}, {"action": "join", "indexes": [1, 2, 3, 4], "separator": " · "}, {"action": "role", "index": 1, "role": "meta", "align": "center"}, {"action": "contents", "index": 5}, {"action": "heading", "index": 9, "level": 2}, {"action": "figure_row", "indexes": [40, 41, 42]}, {"action": "drop", "index": 98}, {"action": "retype", "index": 61, "type": "LIST"}, {"action": "merge_up", "index": 63}]}',
     "",
     "Blocks:",
@@ -380,7 +364,6 @@ function figureRow(parts: ParsedBlock[]): ParsedBlock | null {
 export function applyLayoutOps(
   blocks: ParsedBlock[],
   result: LayoutResult,
-  instructions?: string,
 ): { blocks: ParsedBlock[]; applied: number } {
   const listed = Math.min(blocks.length, MAX_LISTED_BLOCKS);
   const inRange = (i: number) => i >= 0 && i < listed;
@@ -428,8 +411,7 @@ export function applyLayoutOps(
   for (const op of result.ops) {
     if (op.action === "drop" && inRange(op.index) && !claimed.has(op.index)) drops.add(op.index);
   }
-  const ceiling = instructions?.trim() ? DROP_CEILING_INSTRUCTED : DROP_CEILING;
-  if (drops.size > blocks.length * ceiling) {
+  if (drops.size > blocks.length * DROP_CEILING) {
     console.warn(`[ingest] layout pass wanted ${drops.size}/${blocks.length} drops, drops ignored`);
     drops.clear();
   } else applied += drops.size;
@@ -514,18 +496,17 @@ export async function layoutBlocks(input: {
   title: string | null;
   pageHtml: string | null;
   url: string;
-  instructions?: string;
   // The pass's time budget (lib/parse/ingest.ts modelPassSignal): past it the
   // call aborts and the blocks stand.
   signal?: AbortSignal;
 }): Promise<{ blocks: ParsedBlock[]; font?: PageFont }> {
-  const { blocks, title, pageHtml, url, instructions, signal } = input;
+  const { blocks, title, pageHtml, url, signal } = input;
   if (!claudeConfigured() || !pageHtml || blocks.length < 3) return { blocks };
   const digest = pageDigest(pageHtml, url);
   if (!digest) return { blocks };
   const listed = blocks.slice(0, MAX_LISTED_BLOCKS);
   const messages: ModelMessage[] = [
-    { role: "user", content: layoutPrompt(title, listed, digest, instructions) },
+    { role: "user", content: layoutPrompt(title, listed, digest) },
   ];
   const result = await callForJson({
     model: await claude(PARSE_MODEL),
@@ -541,7 +522,7 @@ export async function layoutBlocks(input: {
     console.warn(`[ingest] layout pass failed, keeping blocks as they are: ${result.error}`);
     return { blocks };
   }
-  const { blocks: laid, applied } = applyLayoutOps(blocks, result.data, instructions);
+  const { blocks: laid, applied } = applyLayoutOps(blocks, result.data);
   console.log(`[ingest] layout: ${applied} of ${result.data.ops.length} ops applied`);
   return { blocks: laid, font: result.data.font };
 }

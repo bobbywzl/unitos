@@ -116,6 +116,13 @@ export const MAX_OUTPUT_TOKENS: Record<DerivationType, number> = {
 // DerivationType — it runs as a background job, not through /api/derive.
 export const CONNECT_MODEL = KIMI_K3;
 
+// Stitch (SPEC.md §22): the assistant over a multi upload's members. It reads
+// every member whole and answers one command with links, a generated
+// document, or both. Not a DerivationType — it runs through /api/multi.
+export const STITCH_MODEL = KIMI_K3;
+export const STITCH_EFFORT: KimiEffort = "high";
+export const STITCH_MAX_OUTPUT_TOKENS = 65536; // a gathered page of passages is long
+
 // The gist of a note — the phrase its collapsed row shows (SPEC.md §6): a
 // five-word label from a short text, so the lowest effort.
 export const GIST_MODEL = KIMI_K3;

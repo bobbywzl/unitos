@@ -17,7 +17,17 @@ export async function runDerivation<T extends object>(
   body: Record<string, unknown>,
   signal?: AbortSignal,
 ): Promise<T> {
-  const res = await fetch("/api/derive", {
+  return runHeartbeat<T>("/api/derive", body, signal);
+}
+
+// The same read for any route that answers over the heartbeat stream:
+// Stitch (/api/multi/[multiId]/stitch, SPEC.md §22) answers this way too.
+export async function runHeartbeat<T extends object>(
+  path: string,
+  body: Record<string, unknown>,
+  signal?: AbortSignal,
+): Promise<T> {
+  const res = await fetch(path, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     signal,

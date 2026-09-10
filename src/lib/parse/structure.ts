@@ -40,23 +40,7 @@ function clip(s: string, n = 160): string {
   return t.length > n ? `${t.slice(0, n)}…` : t;
 }
 
-// Upload instructions (SPEC.md §15): the reader's instructions for this upload,
-// already filtered to what these passes can do. Repeated exact wording in both
-// prompts (CLAUDE.md rule 3).
-function instructionLines(instructions: string | undefined, scope: string): string[] {
-  if (!instructions?.trim()) return [];
-  return [
-    `The reader gave instructions for this upload. Follow the ones about ${scope}; ignore the rest:`,
-    instructions.trim(),
-    "",
-  ];
-}
-
-function structurePrompt(
-  title: string | null,
-  blocks: ParsedBlock[],
-  instructions?: string,
-): string {
+function structurePrompt(title: string | null, blocks: ParsedBlock[]): string {
   const listing = blocks.map((b, i) => `[${i}] ${b.type}: ${clip(b.text)}`).join("\n");
   return [
     `A document${title ? ` titled "${title}"` : ""} was parsed into the numbered blocks below.`,
@@ -72,7 +56,6 @@ function structurePrompt(
     "Keep every block that is article content. When unsure, keep.",
     "A contents list of this article (entries that point at its own headings), the kicker, the",
     "byline, the date, and the metadata line are article content: keep them.",
-    ...instructionLines(instructions, "dropping, retyping, or merging blocks"),
     'Return ONLY JSON: {"ops": [{"index": 0, "action": "drop"}, {"index": 4, "action": "retype", "type": "HEADING"}]}',
     "An empty ops array is a valid answer.",
     "",
@@ -81,7 +64,7 @@ function structurePrompt(
   ].join("\n");
 }
 
-function corePrompt(title: string | null, blocks: ParsedBlock[], instructions?: string): string {
+function corePrompt(title: string | null, blocks: ParsedBlock[]): string {
   const listing = blocks.map((b, i) => `[${i}] ${b.type}: ${clip(b.text)}`).join("\n");
   return [
     `A web page${title ? ` titled "${title}"` : ""} was parsed into the numbered blocks below.`,
@@ -96,7 +79,6 @@ function corePrompt(title: string | null, blocks: ParsedBlock[], instructions?: 
     "When unsure about a block, keep it inside a range.",
     "A contents list of this article (entries that point at its own headings), the kicker, the",
     "byline, the date, and the metadata line are article content: keep them.",
-    ...instructionLines(instructions, "what counts as content to keep or drop"),
     'Return ONLY JSON: {"ranges": [{"start": 2, "end": 41}]}',
     "",
     "Blocks:",
@@ -112,7 +94,6 @@ function corePrompt(title: string | null, blocks: ParsedBlock[], instructions?: 
 export async function selectCoreBlocks(
   blocks: ParsedBlock[],
   title: string | null,
-  instructions?: string,
   // The pass's time budget (lib/parse/ingest.ts modelPassSignal): past it the
   // call aborts and the blocks stand.
   signal?: AbortSignal,
@@ -120,9 +101,7 @@ export async function selectCoreBlocks(
   if (!claudeConfigured() || blocks.length < 5) return blocks;
   const listed = blocks.slice(0, MAX_LISTED_BLOCKS);
 
-  const messages: ModelMessage[] = [
-    { role: "user", content: corePrompt(title, listed, instructions) },
-  ];
+  const messages: ModelMessage[] = [{ role: "user", content: corePrompt(title, listed) }];
   const result = await callForJson({
     model: await claude(PARSE_MODEL),
     messages,
@@ -180,15 +159,12 @@ function shifted<T extends { start: number; end: number }>(spans: T[] | undefine
 export async function structureBlocks(
   blocks: ParsedBlock[],
   title: string | null,
-  instructions?: string,
   signal?: AbortSignal,
 ): Promise<ParsedBlock[]> {
   if (!claudeConfigured() || blocks.length < 5) return blocks;
   const listed = blocks.slice(0, MAX_LISTED_BLOCKS);
 
-  const messages: ModelMessage[] = [
-    { role: "user", content: structurePrompt(title, listed, instructions) },
-  ];
+  const messages: ModelMessage[] = [{ role: "user", content: structurePrompt(title, listed) }];
   const result = await callForJson({
     model: await claude(PARSE_MODEL),
     messages,
@@ -215,9 +191,7 @@ export async function structureBlocks(
     } else if (op.action === "merge_up") merges.add(op.index);
   }
   // Overreach guard: a pass that wants to drop much of the document is wrong.
-  // Instructions raise the ceiling — "keep only the appendix" is a big drop the
-  // reader asked for — but never remove it entirely.
-  const dropCeiling = instructions?.trim() ? 0.9 : 0.4;
+  const dropCeiling = 0.4;
   if (drops.size > blocks.length * dropCeiling) {
     console.warn(`[ingest] structure pass wanted ${drops.size}/${blocks.length} drops, ignored`);
     return blocks;

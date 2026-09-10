@@ -5,7 +5,8 @@ Notes-centric web app for deep reading. Documents attach to notebooks; every AI 
 ## Features
 
 - Notebooks with sections (one nesting level, drag-reorder) and markdown notes
-- PDF upload and URL ingestion, parsed to blocks (two-column PDFs handled), deduped by file hash
+- PDF upload and URL ingestion, parsed to blocks (two-column PDFs handled), deduped by file hash. The add dialog queues links and files of every kind together — Enter after a link queues it — and the upload assistant imports each faithfully, whole and as it is
+- Multi upload: two or more documents added together onto one page — two read side by side, three or more as a graph (default) or a list — with the Stitch assistant at the bottom, ready for any command across the members: gather every passage on a topic into a new page, connect the passages that answer a question, find where the documents contradict each other, write one page that combines them. Links land as recommended links awaiting Accept; a written page is a generated document of the project, every paragraph linked back to its source
 - Image upload (png, jpg, gif, webp, bmp), dropped on the page or picked: the image lands as a one-page handwritten document — the page as it is, Circle & ask, and conversion to text
 - Images drop into a note, and into a paragraph while the reader is in edit mode, where they land as a figure. An account whose Premium trial ended drops images up to 5 MB; larger ones need Unitos Premium
 - Visualize (Unitos Ultra): the selection as a picture — a directed diagram, a drawing, or a short animation — drawn only when the model is certain the picture carries the passage's core idea, and declined with the reason otherwise. Saved as an annotation on the selection
