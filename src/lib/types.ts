@@ -301,6 +301,49 @@ export type HistoryEntry = {
   createdAt: string; // ISO
 };
 
+// ── Multi upload (SPEC.md §22): documents added together onto one page ──
+
+/** One member of a multi upload, as the multi upload page lists it. */
+export type MultiMemberView = {
+  id: string; // document id
+  title: string;
+  hasVideo: boolean;
+  blockCount: number;
+  sourceUrl: string | null;
+  order: number;
+};
+
+/** One generated document of a multi upload (SPEC.md §22): the Stitch
+    assistant wrote it from the members. */
+export type GeneratedDocumentView = {
+  id: string; // document id
+  title: string;
+  command: string | null;
+  createdAt: string; // ISO
+  blockCount: number;
+};
+
+export type MultiUploadView = {
+  id: string;
+  notebookId: string;
+  title: string;
+  createdAt: string; // ISO
+  members: MultiMemberView[];
+  generated: GeneratedDocumentView[]; // newest first
+};
+
+/** A multi upload as the document bar lists it. */
+export type MultiUploadSummary = { id: string; title: string; memberCount: number };
+
+/** What one Stitch command produced (SPEC.md §22): the reply, how many links
+    it proposed (each a recommended link awaiting Accept), and the generated
+    document when it wrote one. */
+export type StitchResult = {
+  reply: string;
+  linkCount: number;
+  document: { id: string; title: string } | null;
+};
+
 // ── Graph view (SPEC.md §13): documents as nodes, links as weighted edges ──
 
 export type GraphNode = {
