@@ -9,6 +9,10 @@
 
 const en = {
   // Selection popover
+  copySelection: "Copy",
+  copySelectionTitle: "Copy the selected text. Ctrl/Cmd+C works too, while the toolbar is open.",
+  copied: "Copied",
+  copyFailed: "Could not copy. Your browser blocked it.",
   assistant: "Assistant",
   explain: "Explain",
   simplify: "Simplify",
@@ -266,6 +270,10 @@ const en = {
 
 const zh: Record<keyof typeof en, string> = {
   // Selection popover
+  copySelection: "复制",
+  copySelectionTitle: "复制选中的文字。工具栏打开时，Ctrl/Cmd+C 也可以。",
+  copied: "已复制",
+  copyFailed: "无法复制。浏览器阻止了此操作。",
   assistant: "助手",
   explain: "解释",
   simplify: "简化",

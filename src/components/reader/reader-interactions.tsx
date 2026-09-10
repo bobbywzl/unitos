@@ -52,6 +52,7 @@ import type { TFunc, TKey } from "@/lib/i18n/dictionaries";
 import { useLang, useT } from "@/components/lang-provider";
 import {
   CommentIcon,
+  CopyIcon,
   DistillIcon,
   ExpandIcon,
   ExtractIcon,
@@ -770,6 +771,9 @@ export function ReaderInteractions({
   const ime = useImeGuard();
   const containerRef = useRef<HTMLDivElement>(null);
   const [popover, setPopover] = useState<Popover | null>(null);
+  // Read by the Ctrl/Cmd+C handler below, a mount-time effect with no deps.
+  const popoverRef = useRef(popover);
+  popoverRef.current = popover;
   // The popover's submenus (section list, link targets) are custom lists, not
   // native selects: the popover preventDefaults mousedown to keep the text
   // selection alive, which also keeps a native select from ever opening.
@@ -1408,6 +1412,46 @@ export function ReaderInteractions({
   function closeLinkCard() {
     setLinkCard(null);
   }
+
+  // Copy the popover's selection (SPEC.md §6): the toolbar keeps the tint on
+  // the selected text but, opening it, replaces the block's marks — the
+  // browser's own selection goes the same moment (the comment on
+  // highlightsByBlock's "selection" kind explains why), so there is nothing
+  // left for the system Copy to act on. quotedText is the same text the
+  // anchor already carries, so this always matches what a working native
+  // copy would have produced.
+  async function copySelection() {
+    // Read through the ref, not the popover variable: the Ctrl/Cmd+C effect
+    // below closes over this function once, at mount, so a direct read of
+    // popover would stay the initial null forever.
+    const quote = popoverRef.current?.anchor.quotedText;
+    if (!quote) return;
+    try {
+      await navigator.clipboard.writeText(quote);
+      showToast(t("reader.copied"));
+    } catch {
+      showToast(t("reader.copyFailed"));
+    }
+  }
+
+  // Ctrl/Cmd+C reaches for the same text while the toolbar is open: the
+  // reader should not have to notice the Copy button exists. A real native
+  // selection (rare here, but Explain's bubble and others keep their own)
+  // takes priority and is left to the browser as normal.
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== "c") return;
+      if (!popoverRef.current) return;
+      const active = document.activeElement;
+      if (active instanceof HTMLTextAreaElement || active instanceof HTMLInputElement) return;
+      if (window.getSelection()?.toString()) return;
+      e.preventDefault();
+      void copySelection();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Cards are freely moveable: drag the header. Buttons and inputs still work.
   function dragCard(
@@ -5803,6 +5847,15 @@ function blockFormatKind(
               {t("reader.keyTerm")}
             </p>
           )}
+          <button
+            onClick={() => void copySelection()}
+            data-track="selection-copy"
+            data-tip={t("reader.copySelectionTitle")}
+            className={`flex w-full items-center gap-1.5 rounded-full ${toolRow} text-left text-sand-800 hover:bg-clay-100 hover:text-clay-800`}
+          >
+            <CopyIcon size={coarse ? 14 : 12} />
+            {t("reader.copySelection")}
+          </button>
           {pendingLink && (
             <button
               disabled={busy}
