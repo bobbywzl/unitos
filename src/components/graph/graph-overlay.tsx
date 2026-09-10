@@ -116,7 +116,7 @@ export function GraphOverlay({
 // The folded list: every recommended link of the project, newest first. A
 // link becomes real on Accept; Dismiss deletes it without a history entry —
 // it never was one. Both refresh the page, so the curves redraw.
-function RecommendedLinkList({
+export function RecommendedLinkList({
   notebookId,
   links,
   onOpenDocument,

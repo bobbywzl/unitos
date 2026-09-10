@@ -1,14 +1,17 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { api } from "@/lib/api";
 import { isImeKey } from "@/lib/ime";
 import { useT } from "@/components/lang-provider";
 import { CheckIcon } from "@/components/icons";
-import type { TFunc } from "@/lib/i18n/dictionaries";
+import type { TFunc, TKey } from "@/lib/i18n/dictionaries";
 import { readNdjson } from "@/lib/ndjson";
 import { type FinishPlan, warmImages } from "@/lib/finish";
 import { classifyDriveFile, type DrivePickedFile } from "@/lib/drive/types";
-import { MAX_VIDEO_BYTES, MEDIA_EXTENSIONS, UPLOAD_CHUNK_BYTES } from "@/lib/video/types";
+import { isImageFile } from "@/lib/handwritten/image";
+import { isMarkdownFile } from "@/lib/markdown-file";
+import { isMediaUrl, MAX_VIDEO_BYTES, MEDIA_EXTENSIONS, UPLOAD_CHUNK_BYTES } from "@/lib/video/types";
 import { parseYouTubeId } from "@/lib/video/youtube";
 import {
   IngestProgress,
@@ -24,7 +27,16 @@ import {
 // The upload box: files or a URL are the only two ways in (SPEC.md §15). It
 // takes what it is given and imports it right away — no kind to pick, no
 // format to choose, no review before anything is saved. It shows the
-// progress in place and ends on the final figure check.
+// progress in place and ends on the final figure check. When an add will
+// land two or more documents, the box asks first whether they go on
+// separate pages or on one page as a multi upload (SPEC.md §22).
+
+// One item of a batch add (SPEC.md §22): the add dialog queues links and
+// files of every kind together, and the box adds them one after another.
+export type UploadItem =
+  | { kind: "url"; url: string }
+  | { kind: "video-url"; url: string }
+  | { kind: "file"; file: File };
 
 export type UploadRequest =
   | { kind: "url"; url: string }
@@ -32,9 +44,18 @@ export type UploadRequest =
   | { kind: "files"; files: File[] }
   // Files picked in the Google Drive picker (SPEC.md §14): the box imports
   // each pick with the token.
-  | { kind: "drive"; token: string; files: DrivePickedFile[] };
+  | { kind: "drive"; token: string; files: DrivePickedFile[] }
+  | { kind: "batch"; items: UploadItem[] };
 
-type Phase = "adding" | "done";
+// Where the documents of an add go (SPEC.md §22): each on its own page, as
+// ever, or together on one page as a multi upload.
+export type UploadLayout = "separate" | "multi";
+
+// What the box opens when it is done: the first added document, or the
+// multi upload it made.
+export type OpenTarget = { kind: "document"; id: string } | { kind: "multi"; id: string };
+
+type Phase = "ready" | "adding" | "done";
 type Added = { id: string; title: string };
 type IngestEvent =
   | { stage: string; detail?: string }
@@ -52,6 +73,16 @@ function isMediaFile(file: File): boolean {
     file.type.startsWith("audio/") ||
     MEDIA_EXTENSIONS.test(file.name)
   );
+}
+
+// The kind label of a queued item: a web page, a video link, or the file's kind.
+function uploadItemKindKey(item: UploadItem): TKey {
+  if (item.kind === "url") return "panes.uploadItemPage";
+  if (item.kind === "video-url") return "panes.uploadItemVideoLink";
+  if (isMediaFile(item.file)) return "panes.uploadItemMediaFile";
+  if (isImageFile(item.file)) return "panes.uploadItemImage";
+  if (isMarkdownFile(item.file)) return "panes.uploadItemMarkdown";
+  return "panes.uploadItemPdf";
 }
 
 function megabytes(bytes: number): string {
@@ -110,37 +141,48 @@ export function UploadAssistant({
   // now and hide the box; the finishing step runs on. onClose follows with
   // the same id once the box is done.
   onOpenEarly: (docId: string) => void;
-  // Called once the box is done: the first added document to open, or null.
-  onClose: (openDocId: string | null) => void;
+  // Called once the box is done: the first added document or the multi
+  // upload to open, or null.
+  onClose: (target: OpenTarget | null) => void;
 }) {
   const t = useT();
   const hiddenRef = useRef(hidden);
   useEffect(() => {
     hiddenRef.current = hidden;
   }, [hidden]);
-  const [phase, setPhase] = useState<Phase>("adding");
-  const [steps, setSteps] = useState<IngestStep[] | null>(null);
-  const [headline, setHeadline] = useState<string | null>(null);
-  const [added, setAdded] = useState<Added[]>([]);
-  const [failures, setFailures] = useState<string[]>([]);
-  const [error, setError] = useState<string | null>(null);
-
+  const items: UploadItem[] = request.kind === "batch" ? request.items : [];
   const files = request.kind === "files" ? request.files : [];
   const driveFiles = request.kind === "drive" ? request.files : [];
   const driveKindOf = (f: DrivePickedFile) => classifyDriveFile(f.mimeType, f.name);
-  // What this add creates: one document per file or Drive pick, one for a URL.
+  // What this add creates: one document per file, Drive pick, or queued
+  // item, one for a URL.
   const itemCount =
     request.kind === "drive"
       ? Math.max(1, driveFiles.length)
       : request.kind === "files"
         ? Math.max(1, files.length)
-        : 1;
+        : request.kind === "batch"
+          ? Math.max(1, items.length)
+          : 1;
+  // Two or more documents ask where they go before anything imports
+  // (SPEC.md §22); one imports right away.
+  const [phase, setPhase] = useState<Phase>(itemCount > 1 ? "ready" : "adding");
+  const [layout, setLayout] = useState<UploadLayout>("separate");
+  const [steps, setSteps] = useState<IngestStep[] | null>(null);
+  const [headline, setHeadline] = useState<string | null>(null);
+  const [added, setAdded] = useState<Added[]>([]);
+  // What Close opens once the add is done: the first document, or the multi upload.
+  const [openTarget, setOpenTarget] = useState<OpenTarget | null>(null);
+  const [failures, setFailures] = useState<string[]>([]);
+  const [error, setError] = useState<string | null>(null);
   const subject =
     request.kind === "files"
       ? files.map((f) => f.name).join(" · ")
       : request.kind === "drive"
         ? driveFiles.map((f) => f.name).join(" · ")
-        : request.url;
+        : request.kind === "batch"
+          ? items.map((item) => (item.kind === "file" ? item.file.name : item.url)).join(" · ")
+          : request.url;
   // The save stage detail of the last add — the final figure check (SPEC.md
   // §15) — read at the end of the add: a lost figure keeps the box open.
   const saveDetailRef = useRef<string | null>(null);
@@ -292,35 +334,102 @@ export function UploadAssistant({
     });
   }
 
-  // ── The add itself: runs once, automatically, as soon as the box mounts ──
+  // One file's add: a media file uploads in chunks as a video; a PDF over
+  // the single-request size uploads in chunks; anything else goes in one
+  // multipart request. Every path lands one document.
+  async function addFile(file: File): Promise<Added> {
+    const media = isMediaFile(file);
+    if (media && file.size > MAX_VIDEO_BYTES) {
+      throw new Error(t("panes.fileTooLarge", { name: file.name, mb: 200 }));
+    }
+    if (!media && file.size > MAX_PDF_BYTES) {
+      throw new Error(t("panes.fileTooLarge", { name: file.name, mb: 50 }));
+    }
+    setSteps(initialIngestSteps(media ? "video" : "pdf"));
+    const result = await ingestAndFinish(
+      media
+        ? await uploadChunked(file, "video")
+        : file.size > SINGLE_REQUEST_BYTES
+          ? await uploadChunked(file, "pdf")
+          : await (() => {
+              const form = new FormData();
+              form.set("file", file);
+              form.set("notebookId", notebookId);
+              // The box runs the scans itself, in the finishing step.
+              form.set("scans", "client");
+              return fetch("/api/documents", { method: "POST", body: form });
+            })(),
+    );
+    return { id: result.id, title: result.title };
+  }
+
+  // One link's add: the server routes YouTube links and direct media links
+  // to video documents, everything else to the article parse.
+  async function addLink(url: string): Promise<Added[]> {
+    const video = parseYouTubeId(url) || isMediaUrl(url);
+    setSteps(initialIngestSteps(video ? (parseYouTubeId(url) ? "youtube" : "media") : "url"));
+    const result = await ingestAndFinish(
+      await fetch("/api/documents", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(
+          video
+            ? { url, notebookId }
+            : // The box runs the scans itself, in the finishing step.
+              { url, notebookId, scans: "client" },
+        ),
+      }),
+    );
+    return result.documents ?? [{ id: result.id, title: result.title }];
+  }
+
+  // ── The add itself: runs at once for one document; after the layout
+  // question for two or more ──────────────────────────────────────────────
   const startedRef = useRef(false);
   async function runAdd() {
     setError(null);
+    setPhase("adding");
     const collected: Added[] = [];
     const failed: string[] = [];
     saveDetailRef.current = null;
     addStartedAtRef.current = Date.now();
     setAddStartedAt(addStartedAtRef.current);
-    earlyOpenRef.current = "pending";
+    // A multi upload opens as one page once every member is in: no member
+    // opens early on its own.
+    const multi = layout === "multi" && itemCount > 1;
+    earlyOpenRef.current = multi ? "off" : "pending";
 
-    if (request.kind === "url") {
-      setSteps(initialIngestSteps("url"));
+    if (request.kind === "url" || request.kind === "video-url") {
       try {
-        const result = await ingestAndFinish(
-          await fetch("/api/documents", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              url: request.url,
-              notebookId,
-              // The box runs the scans itself, in the finishing step.
-              scans: "client",
-            }),
+        collected.push(...(await addLink(request.url)));
+      } catch (err) {
+        failed.push(
+          t("panes.uploadPageFailed", {
+            title: request.url,
+            reason: err instanceof Error ? err.message : t("panes.ingestFailed"),
           }),
         );
-        collected.push(...(result.documents ?? [{ id: result.id, title: result.title }]));
-      } catch (err) {
-        failed.push(err instanceof Error ? err.message : t("panes.ingestFailed"));
+      }
+    } else if (request.kind === "batch") {
+      // A batch (SPEC.md §22): links and files of every kind, one request
+      // each, in the order the dialog queued them.
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        const title = item.kind === "file" ? item.file.name : item.url;
+        setHeadline(
+          items.length > 1 ? t("panes.uploadFileProgress", { i: i + 1, total: items.length, title }) : null,
+        );
+        try {
+          if (item.kind === "file") collected.push(await addFile(item.file));
+          else collected.push(...(await addLink(item.url)));
+        } catch (err) {
+          failed.push(
+            t("panes.uploadPageFailed", {
+              title,
+              reason: err instanceof Error ? err.message : t("panes.uploadFailed"),
+            }),
+          );
+        }
       }
     } else if (request.kind === "drive") {
       // One import per pick, like multiple local files (SPEC.md §14). The
@@ -374,59 +483,16 @@ export function UploadAssistant({
           );
         }
       }
-    } else if (request.kind === "video-url") {
-      setSteps(initialIngestSteps(parseYouTubeId(request.url) ? "youtube" : "media"));
-      try {
-        const result = await ingestAndFinish(
-          await fetch("/api/documents", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ url: request.url, notebookId }),
-          }),
-        );
-        collected.push({ id: result.id, title: result.title });
-      } catch (err) {
-        failed.push(
-          t("panes.uploadPageFailed", {
-            title: request.url,
-            reason: err instanceof Error ? err.message : t("panes.ingestFailed"),
-          }),
-        );
-      }
     } else {
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
-        const media = isMediaFile(file);
         setHeadline(
           files.length > 1
             ? t("panes.uploadFileProgress", { i: i + 1, total: files.length, title: file.name })
             : null,
         );
-        if (media && file.size > MAX_VIDEO_BYTES) {
-          failed.push(t("panes.fileTooLarge", { name: file.name, mb: 200 }));
-          continue;
-        }
-        if (!media && file.size > MAX_PDF_BYTES) {
-          failed.push(t("panes.fileTooLarge", { name: file.name, mb: 50 }));
-          continue;
-        }
-        setSteps(initialIngestSteps(media ? "video" : "pdf"));
         try {
-          const result = await ingestAndFinish(
-            media
-              ? await uploadChunked(file, "video")
-              : file.size > SINGLE_REQUEST_BYTES
-                ? await uploadChunked(file, "pdf")
-                : await (() => {
-                    const form = new FormData();
-                    form.set("file", file);
-                    form.set("notebookId", notebookId);
-                    // The box runs the scans itself, in the finishing step.
-                    form.set("scans", "client");
-                    return fetch("/api/documents", { method: "POST", body: form });
-                  })(),
-          );
-          collected.push({ id: result.id, title: result.title });
+          collected.push(await addFile(file));
         } catch (err) {
           failed.push(
             t("panes.uploadPageFailed", {
@@ -435,6 +501,23 @@ export function UploadAssistant({
             }),
           );
         }
+      }
+    }
+
+    // A multi upload (SPEC.md §22): the documents that landed become one
+    // page. With one document there is nothing to put together, so it opens
+    // on its own like every add.
+    let multiId: string | null = null;
+    if (multi && collected.length > 1) {
+      setHeadline(t("panes.uploadMakingMulti"));
+      try {
+        const made = await api<{ id: string }>("/api/multi", "POST", {
+          notebookId,
+          documentIds: collected.map((d) => d.id),
+        });
+        multiId = made.id;
+      } catch (err) {
+        failed.push(err instanceof Error ? err.message : t("panes.uploadFailed"));
       }
     }
 
@@ -449,6 +532,10 @@ export function UploadAssistant({
       return;
     }
     setPhase("done");
+    const target: OpenTarget = multiId
+      ? { kind: "multi", id: multiId }
+      : { kind: "document", id: collected[0].id };
+    setOpenTarget(target);
     // Clean adds close themselves; failures stay visible until Close, and so
     // does a lost figure: a single add whose figure check found a caption
     // without a figure. A clean figure check line shows long enough to read.
@@ -456,10 +543,7 @@ export function UploadAssistant({
       itemCount === 1 &&
       (ingestCounts(saveDetailRef.current ?? "")?.captionsWithoutFigure ?? 0) > 0;
     if (failed.length === 0 && !lost) {
-      setTimeout(
-        () => onClose(collected[0].id),
-        collected.length > 1 || saveDetailRef.current ? 900 : 300,
-      );
+      setTimeout(() => onClose(target), collected.length > 1 || saveDetailRef.current ? 900 : 300);
     } else if (hiddenRef.current) {
       // A hidden box comes back with the failure or the lost figure to read.
       onShow();
@@ -467,10 +551,11 @@ export function UploadAssistant({
   }
 
   useEffect(() => {
-    if (startedRef.current) return;
+    if (startedRef.current || itemCount > 1) return;
     startedRef.current = true;
     void runAdd();
-    // Runs once, for the request this box was opened with.
+    // Runs once, for the request this box was opened with; two or more
+    // documents wait for the layout question's Add.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -499,6 +584,8 @@ export function UploadAssistant({
 
   const amberNote =
     "rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-950 dark:text-amber-200";
+  const sectionLabel = "text-[12px] font-semibold text-sand-600";
+  const pill = "rounded-full px-3.5 py-1.5 text-xs font-semibold";
 
   if (hidden) return null;
 
@@ -535,6 +622,65 @@ export function UploadAssistant({
         <p className="truncate text-xs text-sand-500" data-tip={subject}>
           {subject}
         </p>
+
+        {phase === "ready" && (
+          <div className="flex flex-col gap-3">
+            {request.kind === "batch" && (
+              <ul className="flex max-h-48 flex-col gap-0.5 overflow-y-auto rounded-2xl bg-sand-100 p-2">
+                {items.map((item, i) => (
+                  <li key={i} className="truncate px-2 py-1 text-[13px] text-sand-800">
+                    <span className="mr-2 rounded-full bg-sand-200 px-2 py-0.5 text-[11px] font-semibold text-sand-600">
+                      {t(uploadItemKindKey(item))}
+                    </span>
+                    {item.kind === "file" ? item.file.name : item.url}
+                  </li>
+                ))}
+              </ul>
+            )}
+            {/* The layout question (SPEC.md §22): an add that lands two or more
+                documents puts each on its own page, or all on one page as a
+                multi upload. */}
+            <div className="flex flex-col gap-1.5">
+              <span className={sectionLabel}>{t("panes.uploadLayoutQuestion", { n: itemCount })}</span>
+              <div className="flex flex-wrap items-center gap-2">
+                {(["separate", "multi"] as const).map((choice) => (
+                  <button
+                    key={choice}
+                    type="button"
+                    onClick={() => setLayout(choice)}
+                    data-track={`upload-layout:${choice}`}
+                    aria-pressed={layout === choice}
+                    className={`${pill} ${layout === choice ? "bg-clay text-clay-fg" : "bg-sand-100 text-sand-700 hover:bg-clay-100"}`}
+                  >
+                    {t(choice === "separate" ? "panes.uploadLayoutSeparate" : "panes.uploadLayoutMulti")}
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs text-sand-500">
+                {t(layout === "separate" ? "panes.uploadLayoutSeparateNote" : "panes.uploadLayoutMultiNote")}
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => {
+                  startedRef.current = true;
+                  void runAdd();
+                }}
+                data-track="upload-add"
+                className="rounded-full bg-clay px-5 py-2 text-xs font-semibold text-clay-fg hover:bg-clay-600"
+              >
+                {t("panes.uploadAddCount", { n: itemCount })}
+              </button>
+              <button
+                onClick={() => onClose(null)}
+                data-track="upload-cancel"
+                className="ml-auto rounded-full px-3.5 py-1.5 text-xs text-sand-600 hover:bg-clay-100 hover:text-clay-800"
+              >
+                {t("common.cancel")}
+              </button>
+            </div>
+          </div>
+        )}
 
         {phase === "adding" && (
           <div className="flex flex-col gap-2.5">
@@ -577,7 +723,7 @@ export function UploadAssistant({
                   </ul>
                 )}
                 <button
-                  onClick={() => onClose(added[0]?.id ?? null)}
+                  onClick={() => onClose(openTarget)}
                   data-track="upload-done"
                   className="self-start rounded-full bg-clay px-5 py-2 text-xs font-semibold text-clay-fg hover:bg-clay-600"
                 >

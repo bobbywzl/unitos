@@ -25,7 +25,7 @@
 //   selection 选中内容 · bullet-point notes 分条笔记 · gaps(检查) 疏漏 ·
 //   anchor unresolved 无法定位 · app tab 页签 · browser tab 标签页 ·
 //   upload assistant 上传助手 · review(上传审阅) 审阅 · page 页面 ·
-//   split 拆分 · upload instructions 上传要求 · handwritten 手写 ·
+//   split 拆分 · handwritten 手写 ·
 //   conversion(手写转文本) 转换 · Circle & ask 圈选并提问 · image 图片 ·
 //   offline 离线 · sync(离线同步) 同步 · Unitos Premium 不翻译 ·
 //   Unitos Ultra 不翻译 · plan(账户方案) 方案 · trial 试用 ·
@@ -38,7 +38,9 @@
 //   dismiss(通知) 关闭 · update(通知类型) 更新 · account change 账户变更 ·
 //   gist 要旨 · checklist 清单 · dash list 短横线列表 ·
 //   quote(笔记格式，> 行) 引用 · notes full page 整页笔记 ·
-//   conversation 对话 · attachment 附件 · file 文件
+//   conversation 对话 · attachment 附件 · file 文件 ·
+//   multi upload 多文档上传 · member(多文档上传的成员) 成员 · stitch 缝合 ·
+//   generated document 生成文档
 // highlight 高亮 仅指高亮功能；表示选取文字一律用 选中。
 
 const en = {

@@ -42,7 +42,6 @@ const bodySchema = z.object({
   fileId: z.string().min(1),
   name: z.string().min(1).optional(),
   mimeType: z.string().min(1).optional(),
-  instructions: z.string().max(2_000).default(""),
   pages: z.boolean().default(false),
   convert: z.boolean().default(true),
   // Who runs the glossary and recommended-links scans after the save:
@@ -161,11 +160,7 @@ export async function POST(req: Request) {
         bytes,
         filename,
         onProgress,
-        {
-          instructions: data.instructions.trim() || undefined,
-          pages: data.pages,
-          convert: data.convert,
-        },
+        { pages: data.pages, convert: data.convert },
         user?.id ?? null,
       );
     } catch (err) {

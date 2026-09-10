@@ -72,17 +72,15 @@ const scansSchema = z.enum(["server", "client"]).default("server");
 const urlSchema = z.object({
   url: z.url(),
   notebookId: z.string().min(1),
-  instructions: z.string().max(2_000).default(""),
   split: z.boolean().default(false),
   scans: scansSchema,
 });
 
-// pages and convert are the PDF directives from the instruction check
-// (SPEC.md §16), "1"/"0" as form fields.
+// pages and convert are the PDF directives (SPEC.md §16), set by the upload
+// assistant's import pick, "1"/"0" as form fields.
 const fileFieldsSchema = z.object({
   notebookId: z.string().min(1),
   filename: z.string().min(1),
-  instructions: z.string().max(2_000),
   pages: z.enum(["0", "1"]).default("0"),
   convert: z.enum(["0", "1"]).default("1"),
   scans: scansSchema,
@@ -120,7 +118,6 @@ export async function POST(req: Request) {
     const fields = fileFieldsSchema.safeParse({
       notebookId: form.get("notebookId"),
       filename: file instanceof File ? file.name : "document.pdf",
-      instructions: form.get("instructions") ?? "",
       pages: form.get("pages") ?? "0",
       convert: form.get("convert") ?? "1",
       scans: form.get("scans") ?? "server",
@@ -155,9 +152,7 @@ export async function POST(req: Request) {
       // model pass. The scans run as they do for a computer-text PDF.
       return progressResponse(async (onProgress) => {
         try {
-          const { document, deduped } = await parse.ingestMarkdown(bytes, filename, onProgress, {
-            instructions: fields.data.instructions.trim() || undefined,
-          });
+          const { document, deduped } = await parse.ingestMarkdown(bytes, filename, onProgress);
           await attachDocument(fields.data.notebookId, document.id);
           await bumpNotebook(fields.data.notebookId);
           if (fields.data.scans === "server") {
@@ -183,11 +178,7 @@ export async function POST(req: Request) {
           bytes,
           filename,
           onProgress,
-          {
-            instructions: fields.data.instructions.trim() || undefined,
-            pages,
-            convert: fields.data.convert === "1",
-          },
+          { pages, convert: fields.data.convert === "1" },
           user?.id ?? null,
         );
         await attachDocument(fields.data.notebookId, document.id);
@@ -315,7 +306,6 @@ export async function POST(req: Request) {
         data.url,
         onProgress,
         {
-          instructions: data.instructions.trim() || undefined,
           split: data.split,
           // The model passes must finish inside the route's time; past the
           // budget a pass is skipped and the mechanical parse stands (SPEC.md §2).

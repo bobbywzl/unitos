@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { useT } from "@/components/lang-provider";
 import { clipWords } from "@/lib/markdown-preview";
@@ -49,12 +49,14 @@ function storeSplit(view: ReaderViewKind, split: number) {
 }
 
 // One URL per reader view: ?doc= for the first pane; a split view adds
-// ?view= and ?doc2= for the second (page.tsx reads them).
+// ?view= and ?doc2= for the second (page.tsx reads them). An open multi
+// upload (?multi=, SPEC.md §22) rides along, so the Stitch box stays.
 export function viewHref(
   notebookId: string,
   view: ReaderViewKind,
   paneOneId: string,
   paneTwoId: string | null,
+  multiId: string | null = null,
 ): string {
   const params = new URLSearchParams();
   params.set("doc", paneOneId);
@@ -62,6 +64,7 @@ export function viewHref(
     params.set("view", view);
     params.set("doc2", paneTwoId ?? paneOneId);
   }
+  if (multiId) params.set("multi", multiId);
   return `/n/${notebookId}?${params.toString()}`;
 }
 
@@ -93,6 +96,7 @@ export function PaneDocumentSelect({
 }) {
   const t = useT();
   const router = useRouter();
+  const multiId = useSearchParams().get("multi");
   const value = pane === "one" ? paneOneId : (paneTwoId ?? paneOneId);
   return (
     <select
@@ -100,8 +104,8 @@ export function PaneDocumentSelect({
       onChange={(e) =>
         router.push(
           pane === "one"
-            ? viewHref(notebookId, view, e.target.value, paneTwoId)
-            : viewHref(notebookId, view, paneOneId, e.target.value),
+            ? viewHref(notebookId, view, e.target.value, paneTwoId, multiId)
+            : viewHref(notebookId, view, paneOneId, e.target.value, multiId),
         )
       }
       data-track={`pane-document:${pane}`}
@@ -267,6 +271,7 @@ export function ReaderPanes({
 }) {
   const t = useT();
   const router = useRouter();
+  const multiId = useSearchParams().get("multi");
   const [menu, setMenu] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -352,6 +357,7 @@ export function ReaderPanes({
         next,
         paneOneId,
         paneTwoId ?? documents.find((d) => d.id !== paneOneId)?.id ?? paneOneId,
+        multiId,
       ),
     );
   }
