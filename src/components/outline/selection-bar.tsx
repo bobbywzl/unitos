@@ -50,9 +50,21 @@ export function SelectionBar({
       )}
       {selected.length >= 2 && (
         <button
+          onClick={() =>
+            void actions.mergeNotes(selected[0].id, selected.slice(1).map((n) => n.id), "ai")
+          }
+          data-track="notes-merge-ai"
+          className="rounded-full bg-sage-600 px-3.5 py-1 text-xs font-semibold text-sage-fg hover:bg-sage-700"
+          data-tip={t("outline.mergeWithAiTitle")}
+        >
+          {t("outline.mergeWithAi")}
+        </button>
+      )}
+      {selected.length >= 2 && (
+        <button
           onClick={() => void actions.mergeNotes(selected[0].id, selected.slice(1).map((n) => n.id))}
           data-track="notes-merge"
-          className="rounded-full bg-sage-600 px-3.5 py-1 text-xs font-semibold text-sage-fg hover:bg-sage-700"
+          className="rounded-full border border-line px-3 py-1 text-xs text-sand-700 hover:bg-clay-100 hover:text-clay-800"
           data-tip={t("outline.mergeTitle")}
         >
           {t("outline.merge")}

@@ -81,7 +81,7 @@ const en = {
   guideDistill: "Distill",
   guidePanelHeader: "Side panel",
   guidePanelNotesBody:
-    "Your sections and the pending queue. Drag a note by its grip to reorder it. Select notes with the circle at their top right to merge, pin, or delete them together.",
+    "Your sections and the pending queue. Drag a note by its grip to reorder it; a line says where it lands. Hold it on the middle of another note for two seconds to merge the two — Merge with AI writes the one note that takes their place. Select notes with the circle at their top right to merge, pin, or delete them together.",
   guidePanelAssistantBody:
     "Ask questions at document, project, or projects scope, and run checks (contradictions, gaps).",
   guidePanelDistillBody: "The distillation and every extraction of the open document; open one to read it.",
@@ -89,7 +89,8 @@ const en = {
   guidePanelSummaryBody:
     "The whole document summarized at the depth you pick: layman, intermediate, or professional. Each depth is kept once generated.",
   guidePanelAnnotations: "Annotations",
-  guidePanelAnnotationsBody: "Highlights, comments, explanations, links; Jump scrolls to the source.",
+  guidePanelAnnotationsBody:
+    "Highlights, comments, explanations, links; Jump scrolls to the source. While a note floats over the article, drag an annotation by its grip onto the floating card to put it in the note.",
   guidePanelEdits: "Edits",
   guidePanelEditsBody: "The edit history.",
   // Feedback button
@@ -201,13 +202,14 @@ const zh: Record<keyof typeof en, string> = {
   guideDistill: "提炼",
   guidePanelHeader: "侧栏",
   guidePanelNotesBody:
-    "你的章节与待定队列。拖动笔记的把手可调整顺序。点击笔记右上角的圆圈选择笔记，可一起合并、置顶或删除。",
+    "你的章节与待定队列。拖动笔记的把手可调整顺序，落位线会显示落点。把笔记按在另一条笔记中部停留两秒即可合并两条——用 AI 合并会写出取代两条的那一条。点击笔记右上角的圆圈选择笔记，可一起合并、置顶或删除。",
   guidePanelAssistantBody: "在文档、项目或全部项目范围提问，并运行检查（矛盾、疏漏）。",
   guidePanelDistillBody: "当前文档的提炼和每次提取；打开一条即可阅读。",
   guidePanelSummary: "摘要",
   guidePanelSummaryBody: "整篇文档按你选的深度摘要：通俗、进阶或专业。每个深度生成后即保留。",
   guidePanelAnnotations: "批注",
-  guidePanelAnnotationsBody: "高亮、评论、解释、链接；“跳转”滚动到出处。",
+  guidePanelAnnotationsBody:
+    "高亮、评论、解释、链接；“跳转”滚动到出处。当有笔记浮动在文章上时，拖动批注的把手放到浮动卡片上，即可把批注放进该笔记。",
   guidePanelEdits: "编辑记录",
   guidePanelEditsBody: "编辑历史。",
   // Feedback button

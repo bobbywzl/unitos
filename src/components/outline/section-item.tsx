@@ -154,12 +154,11 @@ export function SectionItem({
         )}
 
         {/* The page's one board holds every section's notes, so a note
-            dragged out of this section drops into another; a drop on the
-            middle of a note merges the two (SPEC.md §6). */}
+            dragged out of this section drops into another; a hold on the
+            middle of a note surfaces the merge strip (SPEC.md §6). */}
         <SortableGroup
           id={notesList(section.id)}
           ids={notes.map((n) => n.id)}
-          combine={canEdit}
           className="flex flex-col gap-2.5"
         >
           {notes.map((note) => (

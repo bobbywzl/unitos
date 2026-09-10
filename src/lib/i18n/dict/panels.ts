@@ -57,6 +57,8 @@ const en = {
   restoreFailed: "Restore failed",
   revertTitle: "Put the paragraph back to the text before this edit",
   restoreTitle: "Put the removed paragraph back",
+  dragAnnotationTitle:
+    "Drag this annotation onto the floating note card to put it in the note",
   deleteAnnotationTitle: "Delete this annotation and its mark in the reader",
   removeLinkTitle: "Remove this link from both documents",
   linkAbout: "About this link",
@@ -146,6 +148,7 @@ const zh: Record<keyof typeof en, string> = {
   restoreFailed: "恢复失败",
   revertTitle: "把段落还原为此次编辑之前的文本",
   restoreTitle: "恢复被移除的段落",
+  dragAnnotationTitle: "把这条批注拖到悬浮笔记卡片上，即可放进该笔记",
   deleteAnnotationTitle: "删除此批注及其在阅读器中的标记",
   removeLinkTitle: "从两个文档中移除此链接",
   linkAbout: "链接说明",

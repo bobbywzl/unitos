@@ -13,10 +13,11 @@ import { useT } from "@/components/lang-provider";
 import { Markdown } from "@/components/markdown";
 import { markdownPreview } from "@/lib/markdown-preview";
 import { useGist } from "@/lib/gist-client";
-import { DragHandle, useCombineTarget, type HandleProps } from "@/components/sortable";
+import { DragHandle, useMergeTarget, type HandleProps } from "@/components/sortable";
 import { useImageDrop } from "@/components/use-image-drop";
 import { imageMarkdown } from "@/lib/images";
 import { setTaskChecked } from "@/lib/note-markup";
+import { startCardDrag } from "@/lib/card-drag";
 import { NoteEditor } from "@/components/outline/note-editor";
 import { NoteHistory } from "@/components/outline/note-history";
 import { NoteId } from "@/components/outline/note-id";
@@ -179,7 +180,7 @@ export function NoteCard({
   const [dropError, setDropError] = useState<string | null>(null);
   const [handledEdit, setHandledEdit] = useState<{ id: string } | null>(null);
   const cardRef = useRef<HTMLDivElement>(null);
-  const combineTarget = useCombineTarget();
+  const mergeTarget = useMergeTarget();
   const pending = note.status === "PENDING";
   const focused = pending && actions.focusedPendingId === note.id;
   const tray = variant === "tray";
@@ -189,7 +190,9 @@ export function NoteCard({
   // The ticker: accepted notes can be selected for bulk delete, merge, pin, and compare.
   const selectable = note.status === "ACCEPTED" && canEdit && !pane;
   const isSelected = actions.selected.has(note.id);
-  const isCombineTarget = combineTarget === note.id && note.status === "ACCEPTED";
+  const isMergeTarget = mergeTarget === note.id && note.status === "ACCEPTED";
+  // The AI is writing the note that takes this one and the merged notes' place.
+  const merging = actions.merging.has(note.id);
   // Accepted notes collapse to one line; pending notes are read before they are
   // accepted, and a compare pane exists to show the note whole.
   const foldable = note.status === "ACCEPTED" && !pane;
@@ -341,6 +344,22 @@ export function NoteCard({
   // that would follow the release is swallowed, so a chevron or the id chip
   // under the pointer does not fire too.
   const dragOutEnabled = tray && canEdit && !floating;
+  // Another note's card floats over the article right now.
+  const floatingElsewhere = Boolean(actions.floating && actions.floating.id !== note.id);
+  // Where the pointer was when a card drag ended: the release is the card
+  // drag's, so the note floats there when it landed on no target.
+  const pointerNow = useRef({ x: 0, y: 0 });
+  useEffect(() => {
+    const track = (e: PointerEvent) => {
+      pointerNow.current = { x: e.clientX, y: e.clientY };
+    };
+    window.addEventListener("pointermove", track);
+    window.addEventListener("pointerup", track);
+    return () => {
+      window.removeEventListener("pointermove", track);
+      window.removeEventListener("pointerup", track);
+    };
+  }, []);
   function startDragOut(e: React.PointerEvent) {
     if (e.button !== 0) return;
     if ((e.target as Element).closest("[data-no-drag-out], [contenteditable], textarea, input, select")) return;
@@ -379,9 +398,32 @@ export function NoteCard({
       // near the tray's right edge) shifts in whole, and the grab point moves
       // with it, so the card stays under the pointer as the drag goes on.
       const grab = { dx: Math.min(fromX - rect.left, 200), dy: fromY - rect.top };
-      const left = landingLeft(ev.clientX - grab.dx);
-      grab.dx = ev.clientX - left;
-      popOut({ left, top: ev.clientY - grab.dy, grab });
+      const float = (x: number, y: number) => {
+        const left = landingLeft(x - grab.dx);
+        popOut({ left, top: y - grab.dy, grab: { dx: x - left, dy: grab.dy } });
+      };
+      // A card already floats over the article: this note is dragged toward
+      // it. Dropped on it the two merge (SPEC.md §6); dropped anywhere else
+      // this note floats there instead, and the other card docks.
+      if (floatingElsewhere) {
+        // One of the selected notes carries the whole selection, the dragged
+        // note first: several notes land in the floating card in one drop.
+        const withIt = [...actions.selected].filter((id) => id !== note.id);
+        const ids = actions.selected.has(note.id) ? [note.id, ...withIt] : [note.id];
+        startCardDrag(
+          { clientX: ev.clientX, clientY: ev.clientY },
+          {
+            kind: "note",
+            ids,
+            label: ids.length > 1 ? t("outline.selectedCount", { n: ids.length }) : gist,
+          },
+          (end) => {
+            if (end.targetId === null) float(pointerNow.current.x, pointerNow.current.y);
+          },
+        );
+        return;
+      }
+      float(ev.clientX, ev.clientY);
     };
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", stop);
@@ -453,6 +495,9 @@ export function NoteCard({
       <span className="ml-auto flex shrink-0 items-center gap-1.5">
         {/* The save state, while editing (SPEC.md §6). */}
         {editing && <SaveStateLabel state={saveState} />}
+        {/* The AI is writing the note that takes this one and the merged
+            notes' place (SPEC.md §6). */}
+        {merging && <span className="text-[11px] text-sand-500">{t("outline.merging")}</span>}
         {canEdit && !editing && (
           <button
             onClick={openEditor}
@@ -588,7 +633,7 @@ export function NoteCard({
     PADDING[variant],
     focused ? "outline-2 outline-clay-400" : "",
     pending && !focused ? (tray ? "opacity-82" : "opacity-85") : "",
-    isCombineTarget ? "outline-2 outline-sage-500" : isSelected ? "outline-2 outline-clay-300" : "",
+    isMergeTarget ? "outline-2 outline-sage-500" : isSelected ? "outline-2 outline-clay-300" : "",
     imageDrop.over ? "outline-2 outline-dashed outline-clay-400" : "",
   ]
     .filter(Boolean)
@@ -608,7 +653,7 @@ export function NoteCard({
       onDoubleClick={jumpToSource}
       {...imageDrop.handlers}
       className={surface}
-      data-tip={dropTip ?? (isCombineTarget ? t("outline.dropToMerge") : undefined)}
+      data-tip={dropTip ?? (isMergeTarget ? t("outline.holdToMerge") : undefined)}
     >
       {header}
       {dropError && <p className="mt-1 text-[11px] text-red-500">{dropError}</p>}

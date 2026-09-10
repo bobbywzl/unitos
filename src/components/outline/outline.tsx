@@ -9,7 +9,7 @@ import { CollapsedViewToggle } from "@/components/collapsed-view-toggle";
 import { Presence } from "@/components/presence";
 import { SortableBoard, SortableGroup, SortableItem } from "@/components/sortable";
 import { AddSection } from "@/components/outline/add-section";
-import { parseListId, SECTIONS_LIST } from "@/components/outline/board-lists";
+import { dropIndex, parseListId, SECTIONS_LIST } from "@/components/outline/board-lists";
 import { CompareView } from "@/components/outline/compare-view";
 import { NoteCard } from "@/components/outline/note-card";
 import { SectionItem } from "@/components/outline/section-item";
@@ -42,29 +42,26 @@ export function Outline({ notebook }: { notebook: NotebookView }) {
   // Where a drop landed. A note dropped in its own section reorders; dropped
   // in another it moves there, at the place it was dropped. A section
   // reorders among its siblings; it never lands in a notes list.
-  function onDrop(
-    fromListId: string,
-    toListId: string,
-    itemId: string,
-    toIndex: number,
-    overId: string | null,
-  ) {
+  function onDrop(fromListId: string, toListId: string, itemId: string, beforeId: string | null) {
     const from = parseListId(fromListId);
     const to = parseListId(toListId);
     if (from.kind !== to.kind) return;
     if (from.kind === "sections") {
       if (from.parentId !== to.parentId) return;
-      actions.reorderSection(from.parentId, itemId, toIndex);
+      const siblings = from.parentId ? (findSection(tree, from.parentId)?.children ?? []) : tree;
+      const index = dropIndex(siblings, itemId, beforeId, true);
+      if (index === null) return;
+      actions.reorderSection(from.parentId, itemId, index);
       return;
     }
     if (!from.parentId || !to.parentId) return;
     // The list a composer owns a note in shows one note fewer than the
-    // section holds, so the place comes from the note dropped on, not from
-    // the drop's own index — the index reorderNote and the server count with.
+    // section holds, so the place is counted in the section's own list
+    // (board-lists.ts) — the index reorderNote and the server count with.
     const target = findSection(tree, to.parentId);
     if (!target) return;
-    const index = overId ? target.notes.findIndex((n) => n.id === overId) : target.notes.length;
-    if (index === -1) return;
+    const index = dropIndex(target.notes, itemId, beforeId, from.parentId === to.parentId);
+    if (index === null) return;
     if (from.parentId === to.parentId) actions.reorderNote(from.parentId, itemId, index);
     else void actions.moveNoteToSection(itemId, to.parentId, index);
   }
@@ -134,11 +131,32 @@ export function Outline({ notebook }: { notebook: NotebookView }) {
             <SortableBoard
               id="notes-board"
               onDrop={onDrop}
-              onCombine={canEdit ? (id, intoId) => void actions.mergeNotes(intoId, [id]) : undefined}
-              canCombine={(id, intoId) =>
+              canDrop={(from, to) => parseListId(from).kind === parseListId(to).kind}
+              onMerge={
+                canEdit
+                  ? (id, intoId, mode) => void actions.mergeNotes(intoId, [id], mode)
+                  : undefined
+              }
+              canMerge={(id, intoId) =>
                 notesById.get(id)?.status === "ACCEPTED" &&
                 notesById.get(intoId)?.status === "ACCEPTED"
               }
+              mergeLabels={{
+                ai: t("outline.mergeWithAi"),
+                aiTitle: t("outline.mergeWithAiTitle"),
+                join: t("outline.joinText"),
+                joinTitle: t("outline.joinTextTitle"),
+              }}
+              overlay={(itemId) => {
+                const note = notesById.get(itemId);
+                if (note) return <NoteCard note={note} actions={actions} variant="page" />;
+                const section = findSection(tree, itemId);
+                return section ? (
+                  <span className="rounded-full bg-card px-4 py-2 font-display text-[18px] shadow-float">
+                    {section.title}
+                  </span>
+                ) : null;
+              }}
             >
               <SortableGroup
                 id={SECTIONS_LIST}

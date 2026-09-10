@@ -40,7 +40,9 @@
 //   quote(笔记格式，> 行) 引用 · notes full page 整页笔记 ·
 //   conversation 对话 · attachment 附件 · file 文件 ·
 //   multi upload 多文档上传 · member(多文档上传的成员) 成员 · stitch 缝合 ·
-//   generated document 生成文档
+//   generated document 生成文档 · merge(两条笔记合为一条) 合并 ·
+//   Merge with AI 用 AI 合并 · Join text 拼接文本 ·
+//   merge strip(合并选项条) 合并选项条 · drop line(落位线) 落位线
 // highlight 高亮 仅指高亮功能；表示选取文字一律用 选中。
 
 const en = {

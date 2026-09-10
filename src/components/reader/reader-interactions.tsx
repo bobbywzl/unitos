@@ -3447,6 +3447,56 @@ export function ReaderInteractions({
     }
   }
 
+  // Text highlighted on the distilled page or the extract page (SPEC.md §6):
+  // it lands as a pending note, anchored to the point or the quote it was
+  // highlighted inside. Highlighted anywhere else on those pages it lands
+  // without an anchor — the words are the note.
+  async function addSelectionNote(
+    text: string,
+    anchor: {
+      blockId: string;
+      start: number;
+      end: number;
+      quotedText: string;
+      prefix: string;
+      suffix: string;
+      orphaned: boolean;
+    } | null,
+  ): Promise<boolean> {
+    const section = sectionChoices[0];
+    if (!section) {
+      showToast(t("reader.addSectionFirstDot"));
+      return false;
+    }
+    const source = anchor && !anchor.orphaned ? anchor : null;
+    try {
+      await api("/api/notes", "POST", {
+        sectionId: section.id,
+        content: text,
+        origin: "distill",
+        ...(source
+          ? {
+              source: {
+                documentId,
+                blockId: source.blockId,
+                startOffset: source.start,
+                endOffset: source.end,
+                quotedText: source.quotedText,
+                prefix: source.prefix,
+                suffix: source.suffix,
+              },
+            }
+          : {}),
+      });
+      if (source) markFreshSpan(source.blockId, source.start, source.end);
+      router.refresh();
+      return true;
+    } catch (err) {
+      showError(err instanceof Error ? err.message : t("reader.addFailed"));
+      return false;
+    }
+  }
+
   // Jump from the distilled page: close it, then land on the point's passage.
   function jumpToKeypoint(point: { blockId: string; start: number; end: number; orphaned: boolean }) {
     if (point.orphaned) return;
@@ -6972,6 +7022,7 @@ function blockFormatKind(
           onDelete={(id) => void deleteDistillation(id)}
           onJump={jumpToQuote}
           onAddNote={addQuoteNote}
+          onAddSelection={(text, quote) => addSelectionNote(text, quote)}
         />
       )}
       </Presence>
@@ -6995,6 +7046,7 @@ function blockFormatKind(
           onDelete={() => void deleteKeypoints()}
           onJump={jumpToKeypoint}
           onAddNote={addKeypointNote}
+          onAddSelection={(text, point) => addSelectionNote(text, point)}
         />
       )}
       </Presence>

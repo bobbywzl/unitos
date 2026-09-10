@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { isImeKey } from "@/lib/ime";
 import type { KeypointsView } from "@/lib/types";
 import { useCollab } from "@/components/collab/collab-context";
 import { AuthorChip } from "@/components/collab/person-badge";
 import { useLang, useT } from "@/components/lang-provider";
+import { jumpUnlessSelecting as jump, SelectionNotes } from "@/components/reader/selection-notes";
 import { ThinkingIndicator } from "@/components/thinking";
 
 type KeypointView = KeypointsView["points"][number];
@@ -29,6 +30,7 @@ export function KeypointsPage({
   onDelete,
   onJump,
   onAddNote,
+  onAddSelection,
 }: {
   title: string; // the document's title
   keypoints: KeypointsView | null; // null = none yet
@@ -42,12 +44,16 @@ export function KeypointsPage({
   onDelete: () => void;
   onJump: (point: KeypointView) => void;
   onAddNote: (point: KeypointView) => Promise<boolean>;
+  /** Text highlighted on this page: it lands as a pending note, anchored to
+      the point it was highlighted inside when there is one (SPEC.md §6). */
+  onAddSelection: (text: string, point: KeypointView | null) => Promise<boolean>;
 }) {
   const t = useT();
   const { canEdit } = useCollab();
   const lang = useLang();
   // Dates follow the app language; English keeps the browser default.
   const dateLocale = lang === "zh" ? "zh-CN" : undefined;
+  const surfaceRef = useRef<HTMLDivElement>(null);
   const [saved, setSaved] = useState<Set<string>>(new Set());
   const [savingKey, setSavingKey] = useState<string | null>(null);
 
@@ -78,9 +84,23 @@ export function KeypointsPage({
     // onto the article. overscroll-contain keeps the wheel from chaining into
     // the article scroll at the ends.
     <div
+      ref={surfaceRef}
       data-selection-popover
       className="content-in absolute inset-0 z-30 overflow-y-auto overscroll-contain bg-paper print:hidden"
     >
+      <SelectionNotes
+        surface={surfaceRef}
+        canAdd={canAddNotes && canEdit}
+        hint={addNoteHint}
+        onAdd={(text, quoteKey) =>
+          onAddSelection(
+            text,
+            keypoints && quoteKey
+              ? (keypoints.points[Number(quoteKey.split(":")[1])] ?? null)
+              : null,
+          )
+        }
+      />
       <div className="mx-auto max-w-2xl px-8 py-8">
         <div className="mb-6 flex items-center gap-2">
           <span className="font-display text-[18px]">{t("panes.keypoints")}</span>
@@ -142,17 +162,21 @@ export function KeypointsPage({
               {keypoints.points.map((point, i) => {
                 const key = `${keypoints.id}:${i}`;
                 return (
-                  <li key={key} className="group flex gap-3 rounded-2xl bg-card px-4 py-3 shadow-soft">
+                  <li
+                    key={key}
+                    data-quote-key={key}
+                    className="group flex gap-3 rounded-2xl bg-card px-4 py-3 shadow-soft"
+                  >
                     <span aria-hidden className="mt-[9px] size-1.5 shrink-0 rounded-full bg-clay-500" />
                     <div className="min-w-0 flex-1">
                       {point.orphaned ? (
                         <p className="text-[14.5px] leading-relaxed text-sand-700">{point.text}</p>
                       ) : (
                         <button
-                          onClick={() => onJump(point)}
+                          onClick={(e) => jump(e, () => onJump(point))}
                           data-track="keypoints-page-jump"
                           data-tip={t("panes.jumpToPassage")}
-                          className="block w-full text-left text-[14.5px] leading-relaxed text-sand-800 hover:text-ink"
+                          className="block w-full cursor-text text-left text-[14.5px] leading-relaxed text-sand-800 select-text hover:text-ink"
                         >
                           {point.text}
                         </button>

@@ -4,12 +4,14 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { isImeKey } from "@/lib/ime";
 import { NOTE_WRAP_GAP as GAP, announceNoteWrap, type NoteWrapSpacer } from "@/lib/note-wrap";
+import { CARD_DROP_TARGET, type CardDragEndDetail } from "@/lib/card-drag";
 import { useCollab } from "@/components/collab/collab-context";
 import { useT } from "@/components/lang-provider";
 import { NoteEditor } from "@/components/outline/note-editor";
 import { SaveStateLabel } from "@/components/outline/save-state";
 import { useImageDrop } from "@/components/use-image-drop";
 import { imageMarkdown } from "@/lib/images";
+import { useCardDropTarget } from "@/components/outline/use-card-drop";
 import { useNoteDraft } from "@/components/outline/use-note-draft";
 import type { FloatingEdit, OutlineActions } from "@/components/outline/use-outline";
 
@@ -18,6 +20,12 @@ import type { FloatingEdit, OutlineActions } from "@/components/outline/use-outl
 // away (workspace.tsx folds it while a card floats). Its handle drags it (a
 // drop on the tray or the rail docks it back), the corner resizes it (native
 // handle), and the tray's auto-save carries on inside it (use-note-draft.ts).
+//
+// The card takes drops (SPEC.md §6): a note from the notes tray or an
+// annotation from the Annotations tab, dragged onto it. Two pills say what the
+// drop does — Merge with AI writes the one note that takes their place, Join
+// text lands the card's words as they are. A note merged in is consumed; an
+// annotation is copied, so its mark stays in the article.
 //
 // Wrap text, a toggle on the card remembered per browser: the card leaves the
 // viewport and joins the article's scroll pane at a spot in the text, so it
@@ -198,6 +206,37 @@ export function FloatingNoteEditor({
   });
   const [grab, setGrab] = useState<{ dx: number; dy: number } | null>(edit.grab ?? null);
 
+  // A note or an annotation dropped on the card. The card's own words are
+  // saved first, so the merge reads what is on screen; the merged text then
+  // takes the card's place, saved and ready to keep editing.
+  const [merging, setMerging] = useState(false);
+  const [mergeError, setMergeError] = useState<string | null>(null);
+  async function takeDrop(end: CardDragEndDetail) {
+    if (!canEdit || merging) return;
+    setMergeError(null);
+    setMerging(true);
+    try {
+      const current = draft.trim();
+      if (current && current !== getOriginal()) {
+        markSaved(current);
+        await actions.saveNote(edit.id, current);
+        confirmSaved(current);
+      }
+      const merged = await actions.mergeNotes(edit.id, end.drag.ids, end.mode);
+      if (merged) {
+        markSaved(merged);
+        setDraft(merged);
+        actions.floatingDraftChanged(merged);
+        confirmSaved(merged);
+      }
+    } catch (err) {
+      setMergeError(err instanceof Error ? err.message : t("common.requestFailed"));
+    } finally {
+      setMerging(false);
+    }
+  }
+  const cardDrop = useCardDropTarget(edit.id, (end) => void takeDrop(end));
+
   function dock() {
     onDock();
     actions.dockNote(true);
@@ -300,6 +339,17 @@ export function FloatingNoteEditor({
   // The card leaves: the gap closes.
   useEffect(() => () => announceNoteWrap(null), []);
 
+  // The panels that can drag a card onto this one show their grips while it
+  // is open (lib/card-drag.ts).
+  useEffect(() => {
+    const say = (open: boolean) =>
+      window.dispatchEvent(new CustomEvent(CARD_DROP_TARGET, { detail: { open } }));
+    say(canEdit);
+    return () => {
+      say(false);
+    };
+  }, [canEdit]);
+
   // An image dropped on the card goes into the note, like a drop on its tray
   // card (SPEC.md §16).
   const imageDrop = useImageDrop({
@@ -352,14 +402,19 @@ export function FloatingNoteEditor({
           : { left: pos.left, top: pos.top, width, maxHeight: Math.max(180, window.innerHeight - pos.top - MARGIN) }
       }
       {...imageDrop.handlers}
+      data-note-drop-target={canEdit ? edit.id : undefined}
       data-tip={imageDrop.over ? t("panes.dropImageIntoNote") : undefined}
       className={`${pane ? "absolute z-20" : "fixed z-30"} flex max-w-[calc(100vw-32px)] min-h-[180px] min-w-[300px] resize flex-col overflow-hidden rounded-[20px] border border-line bg-card/95 p-3 shadow-float backdrop-blur-md ${
         grab ? "select-none" : ""
-      }${imageDrop.over ? " outline-2 outline-dashed outline-clay-400" : ""}`}
+      }${imageDrop.over ? " outline-2 outline-dashed outline-clay-400" : ""}${
+        cardDrop.over ? " outline-2 outline-sage-500" : ""
+      }`}
     >
       {dropError && <p className="mb-1 shrink-0 text-[11px] text-red-500">{dropError}</p>}
+      {mergeError && <p className="mb-1 shrink-0 text-[11px] text-red-500">{mergeError}</p>}
       {/* The save state at the top of the card (SPEC.md §6). */}
-      <div className="mb-1 flex shrink-0 justify-end">
+      <div className="mb-1 flex shrink-0 items-center justify-end gap-2">
+        {merging && <span className="text-[11px] text-sand-500">{t("outline.merging")}</span>}
         <SaveStateLabel state={saveState} />
       </div>
       <NoteEditor
@@ -377,6 +432,29 @@ export function FloatingNoteEditor({
         handle={{ onPointerDown: startDrag, title: t("reader.dragToMove"), label: t("outline.floatingTitle") }}
         moreHref={`/n/${actions.notebookId}/notes`}
       />
+      {/* A card is being dragged onto this one: the two pills say what the
+          drop does, and the pill under the pointer at the release wins. */}
+      {cardDrop.drag && canEdit ? (
+        <div className="mt-2 flex shrink-0 items-center gap-1.5">
+          <span className="mr-auto text-[11px] text-sand-600">
+            {t(cardDrop.drag.kind === "annotation" ? "outline.dropAnnotation" : "outline.dropNote")}
+          </span>
+          <span
+            data-merge-choice="ai"
+            data-tip={t("outline.mergeWithAiTitle")}
+            className="rounded-full bg-sage-600 px-3 py-1 text-xs font-semibold text-sage-fg"
+          >
+            {t("outline.mergeWithAi")}
+          </span>
+          <span
+            data-merge-choice="join"
+            data-tip={t("outline.joinTextTitle")}
+            className="rounded-full border border-line px-3 py-1 text-xs font-semibold text-sand-700"
+          >
+            {t("outline.joinText")}
+          </span>
+        </div>
+      ) : (
       <div className="mt-2 flex shrink-0 items-center gap-2">
         <button
           onClick={() => void done()}
@@ -413,6 +491,7 @@ export function FloatingNoteEditor({
           {t("outline.dockBack")}
         </button>
       </div>
+      )}
     </div>
   );
 

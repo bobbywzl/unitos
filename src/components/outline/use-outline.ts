@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { arrayMove } from "@dnd-kit/sortable";
 import { api } from "@/lib/api";
+import type { MergeMode } from "@/lib/card-drag";
 import { clearNoteDraft, confirmNoteDraft, readNoteDraft, sweepStaleDrafts } from "@/lib/note-drafts";
 import type { NotebookView, NoteView, SectionView } from "@/lib/types";
 import { useCollapsedView, type CollapsedView } from "@/components/use-collapsed-view";
@@ -34,7 +35,13 @@ export type OutlineActions = {
   deleteNote: (id: string) => Promise<void>;
   reorderNote: (sectionId: string, id: string, toIndex: number) => void;
   moveNoteToSection: (id: string, sectionId: string, toIndex?: number) => Promise<void>;
-  mergeNotes: (targetId: string, sourceIds: string[]) => Promise<void>;
+  /** Merge notes into the target (SPEC.md §6). join: the sources' text lands
+      in the target as it is. ai: the model writes the one note that takes
+      their place. An annotation source is copied, never consumed. Returns the
+      merged text, or null when the merge did not run. */
+  mergeNotes: (targetId: string, sourceIds: string[], mode?: MergeMode) => Promise<string | null>;
+  /** Notes the AI is merging right now: their cards say so while it runs. */
+  merging: ReadonlySet<string>;
   setPinned: (id: string, pinned: boolean) => Promise<void>;
   acceptNote: (id: string) => Promise<void>;
   rejectNote: (id: string) => Promise<void>;
@@ -181,6 +188,9 @@ export function useOutline(notebook: NotebookView, canEdit = true) {
     // Once per load: the tree at mount is the server's state.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // The notes the AI is merging right now: their cards say so while it runs.
+  const [merging, setMergingIds] = useState<ReadonlySet<string>>(new Set());
 
   // Ticker selection, pruned against the tree so deleted or merged notes drop out.
   const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(new Set());
@@ -393,19 +403,28 @@ export function useOutline(notebook: NotebookView, canEdit = true) {
       await api(`/api/notes/${id}`, "PATCH", { sectionId, ...(toIndex === undefined ? {} : { order: toIndex }) });
       refresh();
     },
-    async mergeNotes(targetId, sourceIds) {
+    async mergeNotes(targetId, sourceIds, mode = "join") {
       const byId = new Map(flattenNotes(tree).map((n) => [n.id, n]));
       const target = byId.get(targetId);
-      const sources = sourceIds.map((id) => byId.get(id)).filter((n): n is NoteView => n !== undefined);
-      if (!target || sources.length === 0) return;
-      // Accepted notes only — pending notes go through Accept/Reject first.
-      if (target.status !== "ACCEPTED" || sources.some((n) => n.status !== "ACCEPTED")) return;
-      const content = [target.content, ...sources.map((n) => n.content)]
+      if (!target || target.status !== "ACCEPTED") return null;
+      // A source in the tree is a note of a section; a source that is not is an
+      // annotation, which lives in the hidden Annotations section and is copied
+      // into the note rather than consumed. Accepted notes only — pending notes
+      // go through Accept/Reject first.
+      const notes = sourceIds
+        .map((id) => byId.get(id))
+        .filter((n): n is NoteView => n !== undefined);
+      if (notes.some((n) => n.status !== "ACCEPTED")) return null;
+      const ids = sourceIds.filter((id) => id !== targetId);
+      if (ids.length === 0) return null;
+      // Optimistic: the notes fold into the target instantly. The AI merge
+      // writes text the client cannot know, so the target says it is merging
+      // until the answer lands; a join lands its text at once.
+      const joined = [target.content, ...notes.map((n) => n.content)]
         .map((c) => c.trim())
         .filter(Boolean)
         .join("\n\n");
-      const gone = new Set(sources.map((n) => n.id));
-      // Optimistic: the sources fold into the target instantly.
+      const gone = new Set(notes.map((n) => n.id));
       setTree((prev) =>
         prev.map(function walk(s): SectionView {
           return {
@@ -413,8 +432,8 @@ export function useOutline(notebook: NotebookView, canEdit = true) {
             notes: s.notes
               .filter((n) => !gone.has(n.id))
               .map((n) =>
-                n.id === targetId
-                  ? { ...n, content, sources: [...n.sources, ...sources.flatMap((x) => x.sources)] }
+                n.id === targetId && mode === "join"
+                  ? { ...n, content: joined, sources: [...n.sources, ...notes.flatMap((x) => x.sources)] }
                   : n,
               ),
             children: s.children.map(walk),
@@ -422,9 +441,26 @@ export function useOutline(notebook: NotebookView, canEdit = true) {
         }),
       );
       setSelectedIds(new Set());
-      await api("/api/notes/merge", "POST", { targetId, sourceIds: sources.map((n) => n.id) });
-      refresh();
+      if (mode === "ai") setMergingIds((prev) => new Set(prev).add(targetId));
+      try {
+        const merged = await api<{ content?: string }>("/api/notes/merge", "POST", {
+          targetId,
+          sourceIds: ids,
+          mode,
+        });
+        refresh();
+        return merged?.content ?? null;
+      } finally {
+        if (mode === "ai") {
+          setMergingIds((prev) => {
+            const next = new Set(prev);
+            next.delete(targetId);
+            return next;
+          });
+        }
+      }
     },
+    merging,
     async setPinned(id, pinned) {
       // Optimistic: pinning also moves the note to the top of its section.
       setTree((prev) =>

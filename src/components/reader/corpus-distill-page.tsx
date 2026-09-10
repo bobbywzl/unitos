@@ -10,6 +10,7 @@ import { useCollab } from "@/components/collab/collab-context";
 import { AuthorChip } from "@/components/collab/person-badge";
 import { ChevronLeftIcon } from "@/components/icons";
 import { useLang, useT } from "@/components/lang-provider";
+import { jumpUnlessSelecting as onQuoteClick, SelectionNotes } from "@/components/reader/selection-notes";
 import { ThinkingIndicator } from "@/components/thinking";
 
 type CorpusQuoteView = CorpusDistillationView["quotes"][number];
@@ -48,6 +49,7 @@ export function CorpusDistillPage({
   const [saved, setSaved] = useState<Set<string>>(new Set());
   const [savingKey, setSavingKey] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const surfaceRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -174,8 +176,55 @@ export function CorpusDistillPage({
     }
   }
 
+  // Text highlighted on this page lands as a pending note, anchored to the
+  // quote it was highlighted inside when there is one (SPEC.md §6).
+  async function addSelectionNote(text: string, quoteKey: string | null): Promise<boolean> {
+    if (sectionChoices.length === 0) return false;
+    const quote = shown && quoteKey ? (shown.quotes[Number(quoteKey.split(":")[1])] ?? null) : null;
+    try {
+      await api("/api/notes", "POST", {
+        sectionId: sectionChoices[0].id,
+        content: text,
+        origin: "distill",
+        ...(quote && !quote.orphaned
+          ? {
+              source: {
+                documentId: quote.documentId,
+                blockId: quote.blockId,
+                startOffset: quote.start,
+                endOffset: quote.end,
+                quotedText: quote.quotedText,
+                prefix: quote.prefix,
+                suffix: quote.suffix,
+              },
+            }
+          : {}),
+      });
+      router.refresh();
+      return true;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t("common.requestFailed"));
+      return false;
+    }
+  }
+
   return (
-    <div data-selection-popover data-track-surface="tray" className="content-in fixed inset-0 z-50 overflow-y-auto bg-paper">
+    <div
+      ref={surfaceRef}
+      data-selection-popover
+      data-track-surface="tray"
+      className="content-in fixed inset-0 z-50 overflow-y-auto bg-paper"
+    >
+      <SelectionNotes
+        surface={surfaceRef}
+        canAdd={canEdit && sectionChoices.length > 0}
+        hint={
+          sectionChoices.length === 0
+            ? t("reader.addSectionFirst")
+            : t("reader.addPendingNote", { section: sectionChoices[0].label })
+        }
+        onAdd={addSelectionNote}
+      />
       <div className="mx-auto max-w-2xl px-8 py-8">
         <div className="mb-6 flex items-center gap-2">
           {shown && !running ? (
@@ -249,7 +298,7 @@ export function CorpusDistillPage({
               {shown.quotes.map((quote, i) => {
                 const key = `${shown.id}:${i}`;
                 return (
-                  <div key={key} className="rounded-2xl bg-card p-4 shadow-soft">
+                  <div key={key} data-quote-key={key} className="rounded-2xl bg-card p-4 shadow-soft">
                     {quote.documentTitle && (
                       <span className="mb-2 inline-block max-w-full truncate rounded-full bg-clay-100 px-2.5 py-0.5 text-[11px] font-semibold text-clay-800">
                         {quote.documentTitle}
@@ -261,10 +310,10 @@ export function CorpusDistillPage({
                       </blockquote>
                     ) : (
                       <button
-                        onClick={() => jump(quote)}
+                        onClick={(e) => onQuoteClick(e, () => jump(quote))}
                         data-track="distill-corpus-jump"
                         data-tip={t("panes.jumpToPassage")}
-                        className="group block w-full text-left"
+                        className="group block w-full cursor-text text-left select-text"
                       >
                         <blockquote className="border-l-2 border-clay-300 pl-3 text-[14px] leading-relaxed text-sand-800 group-hover:border-clay-500 group-hover:text-ink">
                           “{quote.quotedText}”

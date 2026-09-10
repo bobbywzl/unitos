@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { isImeKey } from "@/lib/ime";
 import type { NoteView, SectionView } from "@/lib/types";
 import { ChevronDownIcon, ChevronRightIcon, PlusIcon } from "@/components/icons";
@@ -9,7 +9,7 @@ import { useCollab } from "@/components/collab/collab-context";
 import { useT } from "@/components/lang-provider";
 import { CollapsedViewToggle } from "@/components/collapsed-view-toggle";
 import { SortableBoard, SortableGroup, SortableItem } from "@/components/sortable";
-import { notesList, parseListId } from "@/components/outline/board-lists";
+import { dropIndex, notesList, parseListId } from "@/components/outline/board-lists";
 import { NoteCard } from "@/components/outline/note-card";
 import { NoteEditor } from "@/components/outline/note-editor";
 import { SaveStateLabel } from "@/components/outline/save-state";
@@ -21,6 +21,7 @@ import { SelectionBar } from "@/components/outline/selection-bar";
 import {
   filterSections,
   findSection,
+  flattenNotes,
   noteMatches,
   type OutlineActions,
 } from "@/components/outline/use-outline";
@@ -39,32 +40,29 @@ export function NotesTray({
   actions: OutlineActions;
 }) {
   const t = useT();
+  const { canEdit } = useCollab();
   const [query, setQuery] = useState("");
   const label = "text-[11px] font-bold tracking-[0.08em] uppercase";
   const shown = filterSections(tree, query);
   const needle = query.trim().toLowerCase();
   const shownPending = pending.filter((n) => noteMatches(n, query));
 
-  // A drop lands the note where the note under the pointer sits in the whole
-  // section, pending notes included — the index reorderNote and the server
-  // count with. The tray's lists show the accepted notes only, so the drop's
-  // own index cannot be used.
-  function onDrop(
-    fromListId: string,
-    toListId: string,
-    itemId: string,
-    _toIndex: number,
-    overId: string | null,
-  ) {
+  // Every note by id: the drag asks per card on every pointer move whether the
+  // two can merge, and the overlay draws the card under the pointer.
+  const notesById = useMemo(() => new Map(flattenNotes(tree).map((n) => [n.id, n])), [tree]);
+
+  // A drop lands the note where the line stood in the whole section, pending
+  // notes included — the index reorderNote and the server count with. The
+  // tray's lists show the accepted notes only, so the place is counted in the
+  // section's own list (board-lists.ts).
+  function onDrop(fromListId: string, toListId: string, itemId: string, beforeId: string | null) {
     const from = parseListId(fromListId);
     const to = parseListId(toListId);
     if (from.kind !== "notes" || to.kind !== "notes" || !from.parentId || !to.parentId) return;
     const target = findSection(tree, to.parentId);
     if (!target) return;
-    const index = overId
-      ? target.notes.findIndex((n) => n.id === overId)
-      : target.notes.length;
-    if (index === -1) return;
+    const index = dropIndex(target.notes, itemId, beforeId, from.parentId === to.parentId);
+    if (index === null) return;
     if (from.parentId === to.parentId) actions.reorderNote(from.parentId, itemId, index);
     else void actions.moveNoteToSection(itemId, to.parentId, index);
   }
@@ -98,8 +96,27 @@ export function NotesTray({
       )}
 
       {/* One drag across the tray (SPEC.md §6): a note dragged out of its
-          section drops into another, the same as on the notes full page. */}
-      <SortableBoard id="tray-board" onDrop={onDrop} axis="y">
+          section drops into another, and a hold on the middle of another note
+          surfaces the merge strip — the same as on the notes full page. */}
+      <SortableBoard
+        id="tray-board"
+        onDrop={onDrop}
+        onMerge={canEdit ? (id, intoId, mode) => void actions.mergeNotes(intoId, [id], mode) : undefined}
+        canMerge={(id, intoId) =>
+          notesById.get(id)?.status === "ACCEPTED" && notesById.get(intoId)?.status === "ACCEPTED"
+        }
+        mergeLabels={{
+          ai: t("outline.mergeWithAi"),
+          aiTitle: t("outline.mergeWithAiTitle"),
+          join: t("outline.joinText"),
+          joinTitle: t("outline.joinTextTitle"),
+        }}
+        overlay={(itemId) => {
+          const note = notesById.get(itemId);
+          return note ? <NoteCard note={note} actions={actions} variant="tray" /> : null;
+        }}
+        axis="y"
+      >
         <div className="flex flex-col gap-3.5">
           {shown.map((section) => (
             <TraySection

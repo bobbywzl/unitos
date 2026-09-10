@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { isImeKey, useImeGuard } from "@/lib/ime";
 import type { DistillationView } from "@/lib/types";
 import { useCollab } from "@/components/collab/collab-context";
 import { AuthorChip } from "@/components/collab/person-badge";
 import { ChevronLeftIcon } from "@/components/icons";
 import { useLang, useT } from "@/components/lang-provider";
+import { jumpUnlessSelecting as jump, SelectionNotes } from "@/components/reader/selection-notes";
 import { ThinkingIndicator } from "@/components/thinking";
 
 type DistillQuoteView = DistillationView["quotes"][number];
@@ -32,6 +33,7 @@ export function DistillPage({
   onDelete,
   onJump,
   onAddNote,
+  onAddSelection,
 }: {
   distillations: DistillationView[];
   shownId: string | null; // null = ask view
@@ -47,6 +49,9 @@ export function DistillPage({
   onDelete: (id: string) => void;
   onJump: (quote: DistillQuoteView) => void;
   onAddNote: (distillation: DistillationView, quote: DistillQuoteView) => Promise<boolean>;
+  /** Text highlighted on this page: it lands as a pending note, anchored to
+      the quote it was highlighted inside when there is one (SPEC.md §6). */
+  onAddSelection: (text: string, quote: DistillQuoteView | null) => Promise<boolean>;
 }) {
   const t = useT();
   const { canEdit } = useCollab();
@@ -54,6 +59,7 @@ export function DistillPage({
   const ime = useImeGuard();
   // Dates follow the app language; English keeps the browser default.
   const dateLocale = lang === "zh" ? "zh-CN" : undefined;
+  const surfaceRef = useRef<HTMLDivElement>(null);
   const [question, setQuestion] = useState("");
   const [saved, setSaved] = useState<Set<string>>(new Set());
   const [savingKey, setSavingKey] = useState<string | null>(null);
@@ -87,9 +93,21 @@ export function DistillPage({
     // onto the article. overscroll-contain keeps the wheel from chaining into
     // the article scroll at the ends.
     <div
+      ref={surfaceRef}
       data-selection-popover
       className="content-in absolute inset-0 z-30 overflow-y-auto overscroll-contain bg-paper print:hidden"
     >
+      <SelectionNotes
+        surface={surfaceRef}
+        canAdd={canAddNotes && canEdit}
+        hint={addNoteHint}
+        onAdd={(text, quoteKey) =>
+          onAddSelection(
+            text,
+            shown && quoteKey ? (shown.quotes[Number(quoteKey.split(":")[1])] ?? null) : null,
+          )
+        }
+      />
       <div className="mx-auto max-w-2xl px-8 py-8">
         <div className="mb-6 flex items-center gap-2">
           {shown && !running ? (
@@ -163,17 +181,17 @@ export function DistillPage({
               {shown.quotes.map((quote, i) => {
                 const key = `${shown.id}:${i}`;
                 return (
-                  <div key={key} className="rounded-2xl bg-card p-4 shadow-soft">
+                  <div key={key} data-quote-key={key} className="rounded-2xl bg-card p-4 shadow-soft">
                     {quote.orphaned ? (
                       <blockquote className="border-l-2 border-sand-300 pl-3 text-[14px] leading-relaxed text-sand-600">
                         “{quote.quotedText}”
                       </blockquote>
                     ) : (
                       <button
-                        onClick={() => onJump(quote)}
+                        onClick={(e) => jump(e, () => onJump(quote))}
                         data-track="distill-page-jump"
                         data-tip={t("panes.jumpToPassage")}
-                        className="group block w-full text-left"
+                        className="group block w-full cursor-text text-left select-text"
                       >
                         <blockquote className="border-l-2 border-clay-300 pl-3 text-[14px] leading-relaxed text-sand-800 group-hover:border-clay-500 group-hover:text-ink">
                           “{quote.quotedText}”

@@ -244,6 +244,13 @@ function buildResponse(all) {
     return JSON.stringify({ gists });
   }
 
+  // Merge with AI: the listed notes as one note, each note's text a paragraph,
+  // the target's first — what the real merge returns, minus the rewriting.
+  if (all.includes('"note"') && all.includes("the one note that takes their place")) {
+    const parts = [...all.matchAll(/\[note [^\]]+\]\n([\s\S]*?)(?=\n\n\[note |\n\nWrite the one note)/g)];
+    return JSON.stringify({ note: parts.map((m) => m[1].trim()).filter(Boolean).join("\n\n") });
+  }
+
   if (all.includes('"issues"')) return JSON.stringify({ issues: [] });
 
   // Ingest core pass: keep ranges around everything that does not look like page

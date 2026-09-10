@@ -2213,3 +2213,52 @@ li[data-checked] > .note-box::before {
 .tier-card-expired .tier-card-muted {
   color: var(--sand-600);
 }
+
+/* The drag board (components/sortable.tsx). Cards hold still while a drag
+   runs; this line says where the dragged card would land. It sits in the gap
+   above the card it would land before, so nothing in the list moves. */
+.drop-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -5px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--clay);
+  z-index: 5;
+  pointer-events: none;
+}
+.drop-line-end {
+  top: auto;
+  bottom: -5px;
+}
+
+/* The dragged card under the pointer. It carries the card's own look, lifted
+   and tilted a little so it reads as picked up. */
+.card-drag-overlay {
+  cursor: grabbing;
+  transform: rotate(-1.2deg);
+  filter: drop-shadow(0 12px 28px rgb(46 43 37 / 0.22));
+}
+
+/* The card drag across surfaces (lib/card-drag.ts): an annotation or a note
+   dragged onto the floating note card. The ghost is the label alone. */
+.card-drag-ghost {
+  position: fixed;
+  z-index: 60;
+  max-width: 260px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  border-radius: 999px;
+  background: var(--card);
+  box-shadow: var(--shadow-float);
+  padding: 6px 12px;
+  font-size: 12.5px;
+  color: var(--sand-800);
+  pointer-events: none;
+}
+.card-drag-ghost-over {
+  background: var(--sage-600);
+  color: var(--sage-fg);
+}
