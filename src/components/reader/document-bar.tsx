@@ -25,7 +25,6 @@ import { MEDIA_EXTENSIONS, isMediaUrl } from "@/lib/video/types";
 import { parseYouTubeId } from "@/lib/video/youtube";
 import {
   AddDocumentDialog,
-  type AddTab,
   type LibraryDocument,
 } from "@/components/reader/add-document-dialog";
 import {
@@ -168,6 +167,13 @@ function isMediaFile(file: File): boolean {
   );
 }
 
+// Every file the add-document dialog's drop zone takes: PDF, image, video and
+// audio, Markdown — one accept list, since the dialog does not ask which kind
+// is coming in.
+const VIDEO_ACCEPT =
+  "video/mp4,video/webm,video/ogg,video/quicktime,audio/mpeg,audio/mp4,audio/aac,audio/wav,audio/flac,audio/ogg,.mp4,.m4v,.webm,.ogv,.ogg,.mov,.mp3,.m4a,.m4b,.aac,.wav,.flac,.oga,.opus";
+const UPLOAD_FILE_ACCEPT = `application/pdf,.pdf,${IMAGE_ACCEPT},${MARKDOWN_ACCEPT},${VIDEO_ACCEPT}`;
+
 // Documents in the header: one pill showing the open document, expanding a
 // vertical document list on hover or click. Everything that adds one opens
 // from the dashed + as the add-document dialog.
@@ -193,8 +199,6 @@ export function DocumentBar({
   const t = useT();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const fileRef = useRef<HTMLInputElement>(null);
-  const videoFileRef = useRef<HTMLInputElement>(null);
   const [phase, setPhase] = useState<IngestPhase | null>(null);
   const [dialog, setDialog] = useState(false);
   // The document list: opens on hover or click, closes on leave (after a
@@ -573,23 +577,20 @@ export function DocumentBar({
         setConnectNotice(t("panes.uploadQueuedOffline", { n }));
         setTimeout(() => setConnectNotice(null), 4000);
       });
-      if (fileRef.current) fileRef.current.value = "";
-      if (videoFileRef.current) videoFileRef.current.value = "";
       setDialog(false);
       return;
     }
     setAssistant(request);
     setAssistantHidden(false);
     setDialog(false);
-    if (fileRef.current) fileRef.current.value = "";
-    if (videoFileRef.current) videoFileRef.current.value = "";
   }
 
-  // The dialog's URL and video forms route through the assistant, like every
-  // other add path. The media-figure toast keeps the direct ingest path.
-  // A pasted Google Drive link is not a readable page: with Drive linked it
-  // imports server-side through the linked grant; otherwise the reader is
-  // pointed at Add from Google Drive (SPEC.md §14).
+  // The dialog's one URL box routes through the upload box, like every other
+  // add path — a YouTube link or a direct media file link becomes a video
+  // document, a page becomes a readable one. A pasted Google Drive link is
+  // not a readable page: with Drive linked it imports server-side through
+  // the linked grant; otherwise the reader is pointed at Add from Google
+  // Drive (SPEC.md §14).
   async function assistantFromUrl(raw: string): Promise<boolean> {
     const trimmed = raw.trim();
     if (!trimmed) return false;
@@ -682,9 +683,8 @@ export function DocumentBar({
 
   // Back from Link Google Drive: the callback returns here with ?drive=linked
   // or ?drive=link-failed. Linked, the picker opens at once — the add the
-  // reader started; failed, the dialog opens on the Drive tab with the reason.
-  // The param leaves the URL so a reload does not repeat it.
-  const [dialogTab, setDialogTab] = useState<AddTab | null>(null);
+  // reader started; failed, the dialog opens with the reason. The param
+  // leaves the URL so a reload does not repeat it.
   const driveResult = searchParams.get("drive");
   const driveResultHandled = useRef(false);
   useEffect(() => {
@@ -694,10 +694,11 @@ export function DocumentBar({
     params.delete("drive");
     router.replace(`/n/${notebookId}${params.size > 0 ? `?${params}` : ""}`);
     /* eslint-disable react-hooks/set-state-in-effect */
-    setDialogTab("drive");
-    setDialog(true);
     if (driveResult === "linked") void importFromDrive();
-    else setError(t("panes.driveAuthFailed"));
+    else {
+      setDialog(true);
+      setError(t("panes.driveAuthFailed"));
+    }
     /* eslint-enable react-hooks/set-state-in-effect */
     // importFromDrive and t are stable for the life of this mount.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -715,7 +716,6 @@ export function DocumentBar({
     params.delete("add");
     router.replace(`/n/${notebookId}${params.size > 0 ? `?${params}` : ""}`);
     setError(null);
-    setDialogTab(null);
     setDialog(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [addParam, canEdit]);
@@ -1039,7 +1039,6 @@ export function DocumentBar({
         <button
           onClick={() => {
             setError(null);
-            setDialogTab(null);
             setDialog(true);
           }}
           data-track="add-document"
@@ -1075,8 +1074,8 @@ export function DocumentBar({
         phase={phase}
         error={error}
         onError={setError}
-        onChoosePdf={() => fileRef.current?.click()}
-        onChooseVideo={() => videoFileRef.current?.click()}
+        onAddFiles={(files) => openAssistant({ kind: "files", files })}
+        fileAccept={UPLOAD_FILE_ACCEPT}
         onImportDrive={drive ? () => void importFromDrive() : null}
         driveLink={
           drive
@@ -1089,7 +1088,6 @@ export function DocumentBar({
         onOpenLibrary={() => void openLibrary()}
         onAttach={(id) => void attach(id)}
         onRemoveFromLibrary={(id) => void removeFromLibrary(id)}
-        initialTab={dialogTab}
       />
 
       {/* The add running on behind a hidden box (SPEC.md §15). */}
@@ -1133,29 +1131,6 @@ export function DocumentBar({
           {connectNotice}
         </span>
       )}
-
-      <input
-        ref={fileRef}
-        type="file"
-        accept={`application/pdf,.pdf,${IMAGE_ACCEPT},${MARKDOWN_ACCEPT}`}
-        multiple
-        className="hidden"
-        onChange={(e) => {
-          const files = [...(e.target.files ?? [])];
-          if (files.length > 0) openAssistant({ kind: "files", files });
-        }}
-      />
-      <input
-        ref={videoFileRef}
-        type="file"
-        accept="video/mp4,video/webm,video/ogg,video/quicktime,audio/mpeg,audio/mp4,audio/aac,audio/wav,audio/flac,audio/ogg,.mp4,.m4v,.webm,.ogv,.ogg,.mov,.mp3,.m4a,.m4b,.aac,.wav,.flac,.oga,.opus"
-        multiple
-        className="hidden"
-        onChange={(e) => {
-          const files = [...(e.target.files ?? [])];
-          if (files.length > 0) openAssistant({ kind: "files", files });
-        }}
-      />
 
       {assistant && (
         <UploadAssistant

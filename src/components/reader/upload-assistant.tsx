@@ -1,23 +1,13 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { api } from "@/lib/api";
 import { isImeKey } from "@/lib/ime";
 import { useT } from "@/components/lang-provider";
-import { CheckIcon, SparkleIcon, SpinnerIcon } from "@/components/icons";
-import type { TFunc, TKey } from "@/lib/i18n/dictionaries";
+import { CheckIcon } from "@/components/icons";
+import type { TFunc } from "@/lib/i18n/dictionaries";
 import { readNdjson } from "@/lib/ndjson";
 import { type FinishPlan, warmImages } from "@/lib/finish";
 import { classifyDriveFile, type DrivePickedFile } from "@/lib/drive/types";
-import { isImageFile } from "@/lib/handwritten/image";
-import { isMarkdownFile } from "@/lib/markdown-file";
-import { captionLabel } from "@/lib/parse/figure-audit";
-import type {
-  InstructionCheck,
-  InstructionReply,
-  PdfDirectives,
-  UploadReview,
-} from "@/lib/upload-assistant";
 import { MAX_VIDEO_BYTES, MEDIA_EXTENSIONS, UPLOAD_CHUNK_BYTES } from "@/lib/video/types";
 import { parseYouTubeId } from "@/lib/video/youtube";
 import {
@@ -31,25 +21,21 @@ import {
   type IngestStep,
 } from "@/components/reader/ingest-progress";
 
-// The upload assistant (SPEC.md §15): the box that opens on every add. For a
-// URL it reviews the page in a private sandbox first — what the content is,
-// which caption has no figure, which linked pages are parts of the same work,
-// whether to split — and for every kind it takes upload instructions and
-// answers each one honestly before anything is saved. The box drives the adds
-// itself, one request per page or file, shows the progress in place, and ends
-// on the final figure check.
+// The upload box: files or a URL are the only two ways in (SPEC.md §15). It
+// takes what it is given and imports it right away — no kind to pick, no
+// format to choose, no review before anything is saved. It shows the
+// progress in place and ends on the final figure check.
 
 export type UploadRequest =
   | { kind: "url"; url: string }
   | { kind: "video-url"; url: string }
   | { kind: "files"; files: File[] }
-  // Files picked in the Google Drive picker (SPEC.md §14): the box takes
-  // instructions like every add, then imports each pick with the token.
+  // Files picked in the Google Drive picker (SPEC.md §14): the box imports
+  // each pick with the token.
   | { kind: "drive"; token: string; files: DrivePickedFile[] };
 
-type Phase = "review" | "ready" | "adding" | "done";
+type Phase = "adding" | "done";
 type Added = { id: string; title: string };
-type CheckState = InstructionCheck & { text: string };
 type IngestEvent =
   | { stage: string; detail?: string }
   | { id: string; title: string; deduped: boolean; documents?: Added[] }
@@ -59,34 +45,6 @@ type IngestResult = Extract<IngestEvent, { id: string }>;
 const MAX_PDF_BYTES = 50 * 1024 * 1024;
 const SINGLE_REQUEST_BYTES = 4 * 1024 * 1024;
 const CHUNK_BYTES = UPLOAD_CHUNK_BYTES;
-// The sentinel for "this page" in the selected set — never a real URL.
-const SELF = "this-page";
-
-// The PDF import, picked in the box (SPEC.md §16). judge: Import PDF decides —
-// computer text parses to blocks, rough handwriting imports as pages and
-// converts. pages: the whole PDF imports as its pages, exactly as they look,
-// no text added. convert: the pages import as they are, then conversion
-// writes the handwriting as text after them.
-type PdfFormat = "judge" | "pages" | "convert";
-const PDF_FORMATS: PdfFormat[] = ["judge", "pages", "convert"];
-// An image is one page whatever it shows (SPEC.md §16): no judgment to make,
-// so its pick is pages as they are, or pages + convert.
-const IMAGE_FORMATS: PdfFormat[] = ["pages", "convert"];
-const PDF_FORMAT_LABEL: Record<PdfFormat, TKey> = {
-  judge: "panes.uploadPdfJudge",
-  pages: "panes.uploadPdfPages",
-  convert: "panes.uploadPdfConvert",
-};
-const PDF_FORMAT_NOTE: Record<PdfFormat, TKey> = {
-  judge: "panes.uploadPdfJudgeNote",
-  pages: "panes.uploadPdfPagesNote",
-  convert: "panes.uploadPdfConvertNote",
-};
-const IMAGE_FORMAT_NOTE: Record<PdfFormat, TKey> = {
-  judge: "panes.uploadImageConvertNote",
-  pages: "panes.uploadImagePagesNote",
-  convert: "panes.uploadImageConvertNote",
-};
 
 function isMediaFile(file: File): boolean {
   return (
@@ -104,12 +62,6 @@ function statusMessage(t: TFunc, status: number): string {
   if (status === 413) return t("panes.uploadTooLarge");
   return t("panes.requestFailedStatus", { status });
 }
-
-const REVIEW_STEPS: IngestStep[] = [
-  { key: "fetch", labelKey: "panes.stepFetchingPage", status: "active" },
-  { key: "extract", labelKey: "panes.stepReadingPage", status: "pending" },
-  { key: "review", labelKey: "panes.stepReviewing", status: "pending" },
-];
 
 // An add that has run this long opens its document as soon as the document
 // reads well — saved, with this share of its captions carrying their figure —
@@ -136,60 +88,6 @@ const FINISH_STEPS: IngestStep[] = [
   { key: "links", labelKey: "panes.stepLinks", status: "pending" },
   { key: "figures", labelKey: "panes.stepFigures", status: "pending" },
 ];
-
-function StepList({ steps }: { steps: IngestStep[] }) {
-  const t = useT();
-  return (
-    <ul className="flex flex-col gap-1.5">
-      {steps.map((s) => (
-        <li key={s.key} className="flex items-center gap-2 text-xs">
-          {s.status === "done" ? (
-            <CheckIcon size={12} className="shrink-0 text-sage" />
-          ) : s.status === "active" ? (
-            <SpinnerIcon size={12} className="shrink-0 text-clay motion-safe:animate-spin" />
-          ) : (
-            <span aria-hidden className="mx-[3px] size-1.5 shrink-0 rounded-full bg-sand-300" />
-          )}
-          <span className={s.status === "pending" ? "text-sand-500" : "font-medium text-sand-700"}>
-            {t(s.labelKey)}
-          </span>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-// One reply per instruction: what the assistant will do, or honestly cannot.
-function ReplyList({ replies }: { replies: InstructionReply[] }) {
-  if (replies.length === 0) return null;
-  return (
-    <ul className="flex flex-col gap-1.5">
-      {replies.map((r, i) => (
-        <li key={i} className="flex items-start gap-2 text-xs" data-tip={r.instruction}>
-          {r.willFollow ? (
-            <CheckIcon size={12} className="mt-0.5 shrink-0 text-sage" />
-          ) : (
-            <svg
-              width="12"
-              height="12"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="3"
-              strokeLinecap="round"
-              aria-hidden
-              className="mt-0.5 shrink-0 text-sand-400"
-            >
-              <path d="M6 6l12 12" />
-              <path d="M18 6L6 18" />
-            </svg>
-          )}
-          <span className={r.willFollow ? "text-sand-700" : "text-sand-500"}>{r.reply}</span>
-        </li>
-      ))}
-    </ul>
-  );
-}
 
 export function UploadAssistant({
   notebookId,
@@ -220,18 +118,7 @@ export function UploadAssistant({
   useEffect(() => {
     hiddenRef.current = hidden;
   }, [hidden]);
-  const [phase, setPhase] = useState<Phase>(request.kind === "url" ? "review" : "ready");
-  const [review, setReview] = useState<UploadReview | null>(null);
-  const [reviewSteps, setReviewSteps] = useState<IngestStep[]>(REVIEW_STEPS);
-  const [reviewError, setReviewError] = useState<string | null>(null);
-  const [selected, setSelected] = useState<Set<string>>(new Set([SELF]));
-  const [split, setSplit] = useState(false);
-  const [pdfFormat, setPdfFormat] = useState<PdfFormat>("judge");
-  const [instructions, setInstructions] = useState("");
-  const [check, setCheck] = useState<CheckState | null>(null);
-  const [checking, setChecking] = useState(false);
-  // The instructions text whose replies the reader has already seen.
-  const [acknowledged, setAcknowledged] = useState("");
+  const [phase, setPhase] = useState<Phase>("adding");
   const [steps, setSteps] = useState<IngestStep[] | null>(null);
   const [headline, setHeadline] = useState<string | null>(null);
   const [added, setAdded] = useState<Added[]>([]);
@@ -241,30 +128,19 @@ export function UploadAssistant({
   const files = request.kind === "files" ? request.files : [];
   const driveFiles = request.kind === "drive" ? request.files : [];
   const driveKindOf = (f: DrivePickedFile) => classifyDriveFile(f.mimeType, f.name);
-  // A Drive pick that ends up as PDF bytes (a PDF, or a Doc/Sheet/Slide/Drawing
-  // exported to PDF) takes the same instructions a PDF upload takes.
-  const hasPdf =
-    files.some((f) => !isMediaFile(f) && !isImageFile(f) && !isMarkdownFile(f)) ||
-    driveFiles.some((f) => driveKindOf(f) === "pdf" || driveKindOf(f) === "export");
-  // An image imports as one handwritten page (SPEC.md §16): it takes the
-  // instructions and the pages pick a PDF takes, never the judgment.
-  const hasImage = files.some(isImageFile);
-  const hasPages = hasPdf || hasImage;
-  // With images alone the pick has no judge: judge reads as pages + convert.
-  const shownFormat: PdfFormat = !hasPdf && pdfFormat === "judge" ? "convert" : pdfFormat;
-  const hasMedia =
-    request.kind === "video-url" ||
-    files.some(isMediaFile) ||
-    driveFiles.some((f) => driveKindOf(f) === "media");
-  const busy = phase === "adding" || checking;
-  // Requests the add sends: pages picked, files picked, or the one link.
-  const selectedCount =
-    request.kind === "url"
-      ? (selected.has(SELF) ? 1 : 0) +
-        (review?.pages ?? []).filter((p) => selected.has(p.url)).length
+  // What this add creates: one document per file or Drive pick, one for a URL.
+  const itemCount =
+    request.kind === "drive"
+      ? Math.max(1, driveFiles.length)
+      : request.kind === "files"
+        ? Math.max(1, files.length)
+        : 1;
+  const subject =
+    request.kind === "files"
+      ? files.map((f) => f.name).join(" · ")
       : request.kind === "drive"
-        ? Math.max(1, driveFiles.length)
-        : Math.max(1, files.length);
+        ? driveFiles.map((f) => f.name).join(" · ")
+        : request.url;
   // The save stage detail of the last add — the final figure check (SPEC.md
   // §15) — read at the end of the add: a lost figure keeps the box open.
   const saveDetailRef = useRef<string | null>(null);
@@ -275,109 +151,7 @@ export function UploadAssistant({
   const addStartedAtRef = useRef(0);
   const earlyOpenRef = useRef<"pending" | "opened" | "off">("off");
 
-  // ── Review (url kind): the sandbox read, on open and on Review again ──────
-  // The running review, so Cancel can abort it: the box goes to ready with
-  // the page itself selected, and Add still works.
-  const reviewAbortRef = useRef<AbortController | null>(null);
-  function stopReview() {
-    reviewAbortRef.current?.abort();
-  }
-  async function runReview(withInstructions: string) {
-    if (request.kind !== "url") return;
-    setPhase("review");
-    setReviewError(null);
-    setError(null);
-    setReviewSteps(REVIEW_STEPS);
-    const controller = new AbortController();
-    reviewAbortRef.current = controller;
-    try {
-      const res = await fetch("/api/uploads/review", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        signal: controller.signal,
-        body: JSON.stringify({
-          notebookId,
-          url: request.url,
-          instructions: withInstructions,
-        }),
-      });
-      if (!res.ok) {
-        const detail = (await res.json().catch(() => null)) as { error?: string } | null;
-        throw new Error(detail?.error ?? statusMessage(t, res.status));
-      }
-      let result: { review?: UploadReview; error?: string } | null = null;
-      for await (const event of readNdjson<{ stage?: string; review?: UploadReview; error?: string }>(res)) {
-        if (event.stage) {
-          setReviewSteps((s) => advanceIngestSteps(s, event.stage!));
-        } else {
-          result = event;
-        }
-      }
-      if (!result?.review) throw new Error(result?.error ?? t("panes.uploadCutOff"));
-      const next = result.review;
-      setReview(next);
-      const sel = new Set<string>();
-      if (next.pages.length === 0 || next.pasteThisPage) sel.add(SELF);
-      for (const page of next.pages) if (page.recommended) sel.add(page.url);
-      setSelected(sel);
-      setSplit(next.splitProposed);
-      if (withInstructions) {
-        // The replies render with the review, so the reader has seen them.
-        setCheck({ text: withInstructions, replies: next.replies, feasible: next.feasible });
-        setAcknowledged(withInstructions);
-      }
-    } catch (err) {
-      // Cancelled, not failed: no review, the page itself stays selected.
-      if (!controller.signal.aborted) {
-        setReviewError(err instanceof Error ? err.message : t("api.reviewFailed"));
-      }
-      setSelected(new Set([SELF]));
-    } finally {
-      if (reviewAbortRef.current === controller) reviewAbortRef.current = null;
-    }
-    setPhase("ready");
-  }
-
-  const reviewedOnce = useRef(false);
-  useEffect(() => {
-    if (request.kind !== "url" || reviewedOnce.current) return;
-    reviewedOnce.current = true;
-    void runReview("");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [request]);
-
-  // ── Instructions check: before any content is added, each instruction gets
-  // an honest answer; only the feasible part travels to ingest ──────────────
-  async function ensureCheck(): Promise<CheckState | null> {
-    const text = instructions.trim();
-    if (!text) return null;
-    if (check && check.text === text) return check;
-    setChecking(true);
-    try {
-      const kind =
-        request.kind === "url" ? "url" : request.kind === "video-url" || !hasPages ? "video" : "pdf";
-      const result = await api<{ check: InstructionCheck }>("/api/uploads/review", "POST", {
-        notebookId,
-        kind,
-        instructions: text,
-      });
-      const next: CheckState = { text, ...result.check };
-      setCheck(next);
-      return next;
-    } catch {
-      const fallback: CheckState = {
-        text,
-        replies: [{ instruction: text, willFollow: false, reply: t("api.instructionsUnchecked") }],
-        feasible: "",
-      };
-      setCheck(fallback);
-      return fallback;
-    } finally {
-      setChecking(false);
-    }
-  }
-
-  // ── The adds: one streamed request per page or file, progress in the box ──
+  // ── The adds: one streamed request per file or Drive pick, progress in the box ──
   async function streamIngest(res: Response): Promise<IngestResult> {
     if (!res.ok) {
       const detail = (await res.json().catch(() => null)) as { error?: string } | null;
@@ -418,18 +192,36 @@ export function UploadAssistant({
     const finishSteps = FINISH_STEPS.filter((s) => (s.key === "figures" ? visuals : scan));
     setSteps((s) => [...completeIngestSteps(s ?? []), ...finishSteps]);
     if (scan) {
+      try {
+        await Promise.all([
+          fetch(`/api/documents/${id}/finish`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ scan: "glossary" }),
+          }),
+          fetch(`/api/documents/${id}/finish`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ scan: "links" }),
+          }),
+        ]);
+      } catch {
+        // Best-effort: the document stands as it is.
+      }
       setSteps((s) => (s ? advanceIngestSteps(s, "glossary") : s));
-      await api(`/api/documents/${id}/glossary`, "POST", {}).catch(() => {});
       setSteps((s) => (s ? advanceIngestSteps(s, "links") : s));
-      await api(`/api/documents/${id}/connect`, "POST", { notebookId }).catch(() => {});
     }
     if (visuals) {
-      const progress = (done: number) =>
-        setSteps((s) => (s ? advanceIngestSteps(s, "figures", `${done}/${plan.images.length}`) : s));
-      progress(0);
-      await warmImages(plan.images, progress);
+      let done = 0;
+      await warmImages(plan.images, () => {
+        done++;
+        setSteps((s) =>
+          s
+            ? advanceIngestSteps(s, "figures", `${done}/${plan.images.length}`)
+            : s,
+        );
+      });
     }
-    setSteps((s) => (s ? completeIngestSteps(s) : s));
   }
 
   async function ingestAndFinish(res: Response): Promise<IngestResult> {
@@ -460,12 +252,7 @@ export function UploadAssistant({
     return result;
   }
 
-  async function uploadChunked(
-    file: File,
-    kind: "pdf" | "video",
-    instructionsText: string,
-    pdf: PdfDirectives,
-  ) {
+  async function uploadChunked(file: File, kind: "pdf" | "video"): Promise<Response> {
     const uploadId = crypto.randomUUID();
     const totalLabel = megabytes(file.size);
     for (let sent = 0; sent < file.size; sent += CHUNK_BYTES) {
@@ -499,34 +286,16 @@ export function UploadAssistant({
         filename: file.name,
         notebookId,
         kind,
-        instructions: kind === "pdf" ? instructionsText : "",
-        ...(kind === "pdf" ? { pages: pdf.pages, convert: pdf.convert } : {}),
         // The box runs the scans itself, in the finishing step.
         scans: "client",
       }),
     });
   }
 
-  async function add() {
+  // ── The add itself: runs once, automatically, as soon as the box mounts ──
+  const startedRef = useRef(false);
+  async function runAdd() {
     setError(null);
-    const checked = await ensureCheck();
-    const feasible = checked?.feasible ?? "";
-    // The PDF directives (SPEC.md §16): an explicit pick in the box sets them
-    // outright, no model call; judge leaves the instruction check's reading in
-    // force, and the defaults when there was nothing to check.
-    const pdfDirectives: PdfDirectives =
-      pdfFormat === "pages"
-        ? { pages: true, convert: false }
-        : pdfFormat === "convert"
-          ? { pages: true, convert: true }
-          : (checked?.pdf ?? { pages: false, convert: true });
-    // An instruction the assistant cannot follow stops the first Add: the
-    // honest replies show before anything is added, and the reader decides —
-    // edit the instructions, or press Add again to proceed without them.
-    if (checked && checked.replies.some((r) => !r.willFollow) && acknowledged !== checked.text) {
-      setAcknowledged(checked.text);
-      return;
-    }
     const collected: Added[] = [];
     const failed: string[] = [];
     saveDetailRef.current = null;
@@ -535,57 +304,27 @@ export function UploadAssistant({
     earlyOpenRef.current = "pending";
 
     if (request.kind === "url") {
-      const pages: { url: string; title: string }[] = [
-        ...(selected.has(SELF) ? [{ url: request.url, title: review?.title ?? request.url }] : []),
-        ...(review?.pages ?? [])
-          .filter((p) => selected.has(p.url))
-          .map((p) => ({ url: p.url, title: p.title })),
-      ];
-      if (pages.length === 0) {
-        setError(t("panes.uploadNoPagesPicked"));
-        return;
-      }
-      setPhase("adding");
-      for (let i = 0; i < pages.length; i++) {
-        const page = pages[i];
-        setHeadline(
-          pages.length > 1
-            ? t("panes.uploadPageProgress", { i: i + 1, total: pages.length, title: page.title })
-            : null,
+      setSteps(initialIngestSteps("url"));
+      try {
+        const result = await ingestAndFinish(
+          await fetch("/api/documents", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              url: request.url,
+              notebookId,
+              // The box runs the scans itself, in the finishing step.
+              scans: "client",
+            }),
+          }),
         );
-        setSteps(initialIngestSteps("url"));
-        try {
-          const result = await ingestAndFinish(
-            await fetch("/api/documents", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                url: page.url,
-                notebookId,
-                instructions: feasible,
-                // Split answers the question asked about this page — never a
-                // lone part page picked from the list.
-                split: pages.length === 1 && selected.has(SELF) && split,
-                // The box runs the scans itself, in the finishing step.
-                scans: "client",
-              }),
-            }),
-          );
-          collected.push(...(result.documents ?? [{ id: result.id, title: result.title }]));
-        } catch (err) {
-          failed.push(
-            t("panes.uploadPageFailed", {
-              title: page.title,
-              reason: err instanceof Error ? err.message : t("panes.ingestFailed"),
-            }),
-          );
-        }
+        collected.push(...(result.documents ?? [{ id: result.id, title: result.title }]));
+      } catch (err) {
+        failed.push(err instanceof Error ? err.message : t("panes.ingestFailed"));
       }
     } else if (request.kind === "drive") {
       // One import per pick, like multiple local files (SPEC.md §14). The
-      // token rides each request; instructions and the PDF directives travel
-      // like every PDF add.
-      setPhase("adding");
+      // token rides each request.
       for (let i = 0; i < driveFiles.length; i++) {
         const file = driveFiles[i];
         const kind = driveKindOf(file);
@@ -620,9 +359,6 @@ export function UploadAssistant({
                 fileId: file.id,
                 name: file.name,
                 mimeType: file.mimeType,
-                instructions: feasible,
-                pages: pdfDirectives.pages,
-                convert: pdfDirectives.convert,
                 // The box runs the scans itself, in the finishing step.
                 scans: "client",
               }),
@@ -639,7 +375,6 @@ export function UploadAssistant({
         }
       }
     } else if (request.kind === "video-url") {
-      setPhase("adding");
       setSteps(initialIngestSteps(parseYouTubeId(request.url) ? "youtube" : "media"));
       try {
         const result = await ingestAndFinish(
@@ -659,7 +394,6 @@ export function UploadAssistant({
         );
       }
     } else {
-      setPhase("adding");
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
         const media = isMediaFile(file);
@@ -680,16 +414,13 @@ export function UploadAssistant({
         try {
           const result = await ingestAndFinish(
             media
-              ? await uploadChunked(file, "video", feasible, pdfDirectives)
+              ? await uploadChunked(file, "video")
               : file.size > SINGLE_REQUEST_BYTES
-                ? await uploadChunked(file, "pdf", feasible, pdfDirectives)
+                ? await uploadChunked(file, "pdf")
                 : await (() => {
                     const form = new FormData();
                     form.set("file", file);
                     form.set("notebookId", notebookId);
-                    form.set("instructions", feasible);
-                    form.set("pages", pdfDirectives.pages ? "1" : "0");
-                    form.set("convert", pdfDirectives.convert ? "1" : "0");
                     // The box runs the scans itself, in the finishing step.
                     form.set("scans", "client");
                     return fetch("/api/documents", { method: "POST", body: form });
@@ -711,10 +442,9 @@ export function UploadAssistant({
     setFailures(failed);
     setHeadline(null);
     if (collected.length === 0) {
-      setPhase("ready");
+      setPhase("done");
       setSteps(null);
       setError(failed.join(" ") || t("panes.uploadFailed"));
-      // A hidden box comes back with the failure to read.
       if (hiddenRef.current) onShow();
       return;
     }
@@ -723,7 +453,7 @@ export function UploadAssistant({
     // does a lost figure: a single add whose figure check found a caption
     // without a figure. A clean figure check line shows long enough to read.
     const lost =
-      selectedCount === 1 &&
+      itemCount === 1 &&
       (ingestCounts(saveDetailRef.current ?? "")?.captionsWithoutFigure ?? 0) > 0;
     if (failed.length === 0 && !lost) {
       setTimeout(
@@ -735,6 +465,14 @@ export function UploadAssistant({
       onShow();
     }
   }
+
+  useEffect(() => {
+    if (startedRef.current) return;
+    startedRef.current = true;
+    void runAdd();
+    // Runs once, for the request this box was opened with.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Escape and the backdrop close the box; while an add runs they hide it
   // instead — the add runs on, the document bar shows it running.
@@ -751,32 +489,14 @@ export function UploadAssistant({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, hidden]);
 
-  const splitEligible =
-    request.kind === "url" && review !== null && review.splitProposed && selectedCount === 1 && selected.has(SELF);
-  const addCount = splitEligible && split ? review.splitParts : selectedCount;
-  const subject =
-    request.kind === "files"
-      ? files.map((f) => f.name).join(" · ")
-      : request.kind === "drive"
-        ? driveFiles.map((f) => f.name).join(" · ")
-        : request.url;
   // The final figure check (SPEC.md §15): the save step's counts of a single
   // add. A batch's last page would stand for the whole batch, so none shows.
   const saveDetail = steps?.find((s) => s.key === "save")?.detail;
   const verification =
-    phase === "done" && selectedCount === 1 && saveDetail ? ingestCounts(saveDetail) : null;
+    phase === "done" && itemCount === 1 && saveDetail ? ingestCounts(saveDetail) : null;
   const lostFigures =
     (verification?.captionsWithoutFigure ?? 0) > 0 || (verification?.mediaLost.length ?? 0) > 0;
-  // The review's figure check passes: every caption has its figure and no
-  // figure waits on a browser render.
-  const figuresOk =
-    review !== null &&
-    review.captions > 0 &&
-    review.captionsWithoutFigure.length === 0 &&
-    !review.scriptedFigures;
 
-  const sectionLabel = "text-[12px] font-semibold text-sand-600";
-  const pill = "rounded-full px-3.5 py-1.5 text-xs font-semibold";
   const amberNote =
     "rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-950 dark:text-amber-200";
 
@@ -792,10 +512,9 @@ export function UploadAssistant({
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="flex max-h-[85vh] w-[560px] max-w-full flex-col gap-3 overflow-y-auto rounded-[24px] bg-card p-5 shadow-float"
+        className="flex max-h-[85vh] w-[480px] max-w-full flex-col gap-3 overflow-y-auto rounded-[24px] bg-card p-5 shadow-float"
       >
         <div className="flex items-center gap-2">
-          <SparkleIcon size={16} className="shrink-0 text-clay" />
           <span className="font-display text-[17px]">{t("panes.uploadAssistant")}</span>
           <button
             onClick={() => {
@@ -803,7 +522,6 @@ export function UploadAssistant({
                 onHide();
                 return;
               }
-              reviewAbortRef.current?.abort();
               onClose(null);
             }}
             data-track={phase === "adding" ? "upload-hide" : "upload-close"}
@@ -818,272 +536,10 @@ export function UploadAssistant({
           {subject}
         </p>
 
-        {phase === "review" && (
-          <div className="flex flex-col gap-2.5">
-            <p className="text-[13px] text-sand-700">{t("panes.uploadSandboxNote")}</p>
-            <StepList steps={reviewSteps} />
-            <button
-              onClick={stopReview}
-              className="self-start rounded-full border border-line px-3.5 py-1 text-xs font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800"
-            >
-              {t("common.cancel")}
-            </button>
-          </div>
-        )}
-
-        {phase === "ready" && (
-          <div className="flex flex-col gap-3">
-            {reviewError && (
-              <p className={amberNote}>{t("panes.uploadReviewFailed", { reason: reviewError })}</p>
-            )}
-
-            {request.kind === "url" && review && (
-              <div className="flex flex-col gap-1.5">
-                {review.title && (
-                  <p className="text-[13px] font-semibold text-sand-800">{review.title}</p>
-                )}
-                <p className="text-xs text-sand-500">
-                  {review.pageEstimate > 1
-                    ? t("panes.uploadPageFacts", {
-                        pages: review.pageEstimate,
-                        blocks: review.blockCount,
-                      })
-                    : t("panes.detailBlocks", { n: review.blockCount })}
-                </p>
-                {/* The figure check (SPEC.md §15): the audit's counts, one line
-                    per caption with no figure, one when figures wait on a
-                    browser render, one when every caption has its figure. */}
-                <p className="text-xs text-sand-500">
-                  {t("panes.uploadFigureCheck", {
-                    figures: review.figures,
-                    captions: review.captions,
-                  })}
-                </p>
-                {(review.captionsWithoutFigure.length > 0 || review.mediaLost.length > 0 || review.scriptedFigures) && (
-                  <ul className={`flex flex-col gap-1 ${amberNote}`}>
-                    {review.captionsWithoutFigure.map((caption, i) => (
-                      <li key={i}>
-                        {t("panes.uploadCaptionWithoutFigure", {
-                          label: captionLabel(caption) ?? caption,
-                        })}
-                      </li>
-                    ))}
-                    {review.mediaLost.length > 0 && (
-                      <li>{mediaLostText(t, { media: review.media, mediaLost: review.mediaLost })}</li>
-                    )}
-                    {review.scriptedFigures && <li>{t("panes.uploadScriptedFigures")}</li>}
-                  </ul>
-                )}
-                {figuresOk && <p className="text-xs text-sand-500">{t("panes.uploadFiguresOk")}</p>}
-                {review.media > 0 && review.mediaLost.length === 0 && (
-                  <p className="text-xs text-sand-500">{t("panes.uploadMediaOk", { n: review.media })}</p>
-                )}
-                {review.summary && (
-                  <p className="text-[13px] leading-relaxed text-sand-700">{review.summary}</p>
-                )}
-                {review.advice.length > 0 && (
-                  <ul className="flex list-disc flex-col gap-1 pl-4 text-[13px] leading-relaxed text-sand-700">
-                    {review.advice.map((line, i) => (
-                      <li key={i}>{line}</li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            )}
-            {request.kind === "url" && !review && !reviewError && (
-              <p className="text-[13px] text-sand-700">{t("panes.uploadNuanceUrl")}</p>
-            )}
-
-            {request.kind === "url" && review && review.pages.length > 0 && (
-              <div className="flex flex-col gap-1.5">
-                <span className={sectionLabel}>
-                  {t("panes.uploadPagesFound", { n: review.pages.length })}
-                </span>
-                <div className="flex max-h-48 flex-col gap-0.5 overflow-y-auto rounded-2xl bg-sand-100 p-2">
-                  <label className="flex cursor-pointer items-start gap-2 rounded-lg px-2 py-1 text-[13px] text-sand-800 hover:bg-clay-100">
-                    <input
-                      type="checkbox"
-                      className="mt-0.5 accent-clay"
-                      checked={selected.has(SELF)}
-                      onChange={(e) => {
-                        const next = new Set(selected);
-                        if (e.target.checked) next.add(SELF);
-                        else next.delete(SELF);
-                        setSelected(next);
-                      }}
-                    />
-                    <span>
-                      {t("panes.uploadThisPage")}
-                      {review.title ? ` · ${review.title}` : ""}
-                    </span>
-                  </label>
-                  {review.pages.map((page) => (
-                    <label
-                      key={page.url}
-                      data-tip={page.url}
-                      className="flex cursor-pointer items-start gap-2 rounded-lg px-2 py-1 text-[13px] text-sand-800 hover:bg-clay-100"
-                    >
-                      <input
-                        type="checkbox"
-                        className="mt-0.5 accent-clay"
-                        checked={selected.has(page.url)}
-                        onChange={(e) => {
-                          const next = new Set(selected);
-                          if (e.target.checked) next.add(page.url);
-                          else next.delete(page.url);
-                          setSelected(next);
-                        }}
-                      />
-                      <span>{page.title}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {splitEligible && (
-              <div className="flex flex-col gap-1.5">
-                <span className={sectionLabel}>
-                  {t("panes.uploadSplitQuestion", {
-                    pages: review.pageEstimate,
-                    parts: review.splitParts,
-                  })}
-                </span>
-                {review.splitReason && (
-                  <p className="text-xs text-sand-500">{review.splitReason}</p>
-                )}
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setSplit(true)}
-                    data-track="upload-split-yes"
-                    className={`${pill} ${split ? "bg-clay text-clay-fg" : "bg-sand-100 text-sand-700 hover:bg-clay-100"}`}
-                  >
-                    {t("panes.uploadSplitYes", { parts: review.splitParts })}
-                  </button>
-                  <button
-                    onClick={() => setSplit(false)}
-                    data-track="upload-split-no"
-                    className={`${pill} ${split ? "bg-sand-100 text-sand-700 hover:bg-clay-100" : "bg-clay text-clay-fg"}`}
-                  >
-                    {t("panes.uploadSplitNo")}
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {(request.kind === "files" || request.kind === "drive") && (
-              <div className="flex flex-col gap-1.5">
-                {request.kind === "drive" && (
-                  <p className="text-[13px] text-sand-700">{t("panes.uploadNuanceDrive")}</p>
-                )}
-                {hasPdf && <p className="text-[13px] text-sand-700">{t("panes.uploadNuancePdf")}</p>}
-                {hasImage && (
-                  <p className="text-[13px] text-sand-700">{t("panes.uploadNuanceImage")}</p>
-                )}
-                {hasMedia && (
-                  <p className="text-[13px] text-sand-700">{t("panes.uploadNuanceVideoFile")}</p>
-                )}
-              </div>
-            )}
-
-            {hasPages && (
-              <div className="flex flex-col gap-1.5">
-                <span className={sectionLabel}>
-                  {t(hasPdf ? "panes.uploadPdfFormat" : "panes.uploadImageFormat")}
-                </span>
-                <div className="flex flex-wrap items-center gap-2">
-                  {(hasPdf ? PDF_FORMATS : IMAGE_FORMATS).map((format) => (
-                    <button
-                      key={format}
-                      type="button"
-                      onClick={() => setPdfFormat(format)}
-                      data-track={`upload-format:${format}`}
-                      aria-pressed={shownFormat === format}
-                      className={`${pill} ${shownFormat === format ? "bg-clay text-clay-fg" : "bg-sand-100 text-sand-700 hover:bg-clay-100"}`}
-                    >
-                      {t(PDF_FORMAT_LABEL[format])}
-                    </button>
-                  ))}
-                </div>
-                <p className="text-xs text-sand-500">
-                  {t((hasPdf ? PDF_FORMAT_NOTE : IMAGE_FORMAT_NOTE)[shownFormat])}
-                </p>
-              </div>
-            )}
-            {request.kind === "video-url" && (
-              <p className="text-[13px] text-sand-700">{t("panes.uploadNuanceVideoUrl")}</p>
-            )}
-
-            <div className="flex flex-col gap-1.5">
-              <label className={sectionLabel} htmlFor="upload-instructions">
-                {t("panes.uploadInstructionsLabel")}
-              </label>
-              <textarea
-                id="upload-instructions"
-                value={instructions}
-                onChange={(e) => setInstructions(e.target.value)}
-                placeholder={t("panes.uploadInstructionsPlaceholder")}
-                rows={2}
-                className="w-full resize-y rounded-2xl bg-sand-100 px-4 py-2.5 text-sm outline-none placeholder:text-sand-500"
-              />
-              {hasMedia && !hasPages && request.kind !== "url" && (
-                <p className="text-xs text-sand-500">{t("api.instructionsVideo")}</p>
-              )}
-              {check && <ReplyList replies={check.replies} />}
-            </div>
-
-            {error && <p className="text-xs text-red-500">{error}</p>}
-
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => void add()}
-                data-track="upload-add"
-                disabled={busy}
-                className="rounded-full bg-clay px-5 py-2 text-xs font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
-              >
-                {checking
-                  ? t("panes.uploadInstructionsChecking")
-                  : addCount > 1
-                    ? t("panes.uploadAddCount", { n: addCount })
-                    : t("common.add")}
-              </button>
-              {request.kind === "url" && (
-                <>
-                  <button
-                    onClick={() => void runReview(instructions.trim())}
-                    data-track="upload-review-again"
-                    disabled={busy}
-                    className="rounded-full border border-line px-3.5 py-1.5 text-xs text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40"
-                  >
-                    {t("panes.uploadReviewAgain")}
-                  </button>
-                  <span className="text-xs text-sand-500">{t("panes.uploadReviewAgainNote")}</span>
-                </>
-              )}
-              <button
-                onClick={() => onClose(null)}
-                data-track="upload-cancel"
-                disabled={busy}
-                className="ml-auto rounded-full px-3.5 py-1.5 text-xs text-sand-600 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40"
-              >
-                {t("common.cancel")}
-              </button>
-            </div>
-          </div>
-        )}
-
         {phase === "adding" && (
           <div className="flex flex-col gap-2.5">
             {steps && (
               <IngestProgress inline fileLabel={headline ?? subject} steps={steps} startedAt={addStartedAt} />
-            )}
-            {check && <ReplyList replies={check.replies} />}
-            {failures.length > 0 && (
-              <ul className="flex flex-col gap-1 text-xs text-red-500">
-                {failures.map((line, i) => (
-                  <li key={i}>{line}</li>
-                ))}
-              </ul>
             )}
           </div>
         )}
@@ -1129,6 +585,7 @@ export function UploadAssistant({
                 </button>
               </>
             )}
+            {error && failures.length === 0 && <p className="text-xs text-red-500">{error}</p>}
           </div>
         )}
       </div>
