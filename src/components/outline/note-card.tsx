@@ -68,6 +68,14 @@ const PADDING: Record<Variant, string> = {
   pane: "px-5 py-4",
 };
 
+// A drag that never gets a clean pointerup — the browser takes the pointer, or
+// the window loses focus with the button still down — left the swallow below
+// on the window, and every click in the app died until a reload (reader
+// report). pointercancel and blur are both a release too, and the timer is the
+// last resort: the swallow is for one click after a release, never for the
+// rest of the session. Longer than any drag, so it never ends a live one.
+const SWALLOW_MAX_MS = 30_000;
+
 // The click that follows a release lands on whatever control the drag began
 // on. Swallow that one click — and only that one: the listener leaves with the
 // release, whether or not a click came.
@@ -77,11 +85,20 @@ function swallowNextClick() {
     e.preventDefault();
   };
   window.addEventListener("click", swallow, { capture: true });
+  let released = false;
   const release = () => {
+    if (released) return;
+    released = true;
+    clearTimeout(timer);
     window.removeEventListener("pointerup", release);
+    window.removeEventListener("pointercancel", release);
+    window.removeEventListener("blur", release);
     setTimeout(() => window.removeEventListener("click", swallow, { capture: true }), 0);
   };
   window.addEventListener("pointerup", release);
+  window.addEventListener("pointercancel", release);
+  window.addEventListener("blur", release);
+  const timer = setTimeout(release, SWALLOW_MAX_MS);
 }
 
 function PinIcon({ size = 12 }: { size?: number }) {

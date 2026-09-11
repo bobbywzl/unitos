@@ -33,6 +33,9 @@ const en = {
   nudgeTools:
     "Distill writes the article as bullet points. Extract answers one question with quotes. Assistant, top left, takes any command.",
   nudgeFloat: "Hold a note's header and drag it left. The note floats over the article while you read.",
+  nudgeMerge: "Drag another note onto this card and hold: the two merge — Join text, or Merge with AI.",
+  nudgeSettings: "Settings live under More. Open it to connect Google Drive.",
+  nudgeDrive: "Link Google Drive: add a file straight from your Drive, no download.",
   nudgeDone: "Got it",
   // Guide dialog
   guideLabel: "Guide",
@@ -160,6 +163,9 @@ const zh: Record<keyof typeof en, string> = {
   nudgeRail: "侧栏：助手、图谱、笔记、批注、提炼、编辑记录。打开一个，开始探索。",
   nudgeTools: "提炼把文章写成分条要点。提取用引文回答一个问题。左上角的助手接受任何指令。",
   nudgeFloat: "按住笔记的标题行向左拖。笔记会浮在文章上，边读边写。",
+  nudgeMerge: "把另一条笔记拖到这张卡片上并按住：两条合并——拼接文本，或用 AI 合并。",
+  nudgeSettings: "设置在“更多”里。打开它，连接 Google Drive。",
+  nudgeDrive: "连接 Google Drive：直接从云端硬盘添加文件，无需下载。",
   nudgeDone: "知道了",
   guideLabel: "指南",
   guideTitle: "如何拆解一篇文档",

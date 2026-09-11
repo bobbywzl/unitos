@@ -1,7 +1,7 @@
 import { generateText, type ModelMessage } from "ai";
 import type { LanguageModel } from "ai";
 import type { z } from "zod";
-import { extractJson } from "@/lib/derive/json";
+import { extractJson, parseJson } from "@/lib/derive/json";
 import { serverT } from "@/lib/i18n/server";
 import { recordUsage, sdkTokens, type UsageMeta } from "@/lib/usage";
 
@@ -78,8 +78,16 @@ export async function callForJson<S extends z.ZodType>(params: {
     return { ok: false, error: modelErrorMessage(err) };
   }
   // Kimi K3 counts its reasoning against maxOutputTokens: a budget spent
-  // before the JSON ends reports as the budget, not as cut-off JSON.
-  if (first.finishReason === "length") return { ok: false, error: await outputBudgetSpent() };
+  // before the JSON ends reports as the budget, not as cut-off JSON. What the
+  // model did write before the cut is still worth keeping — extractJson
+  // closes a truncated object back into valid JSON — so the budget is a
+  // failure only when nothing usable came back. Retrying is pointless here:
+  // the same budget cuts the second answer in the same place.
+  if (first.finishReason === "length") {
+    const salvaged = parseJson(params.schema, first.text);
+    if (salvaged !== null) return { ok: true, data: salvaged };
+    return { ok: false, error: await outputBudgetSpent() };
+  }
   const firstJson = extractJson(first.text);
   const firstParsed = params.schema.safeParse(firstJson);
   if (firstParsed.success) return { ok: true, data: firstParsed.data };
@@ -103,9 +111,16 @@ export async function callForJson<S extends z.ZodType>(params: {
     console.error(`[derive] ${params.label} model call failed on retry:`, err);
     return { ok: false, error: modelErrorMessage(err) };
   }
-  if (second.finishReason === "length") return { ok: false, error: await outputBudgetSpent() };
+  if (second.finishReason === "length") {
+    const salvaged = parseJson(params.schema, second.text);
+    if (salvaged !== null) return { ok: true, data: salvaged };
+    return { ok: false, error: await outputBudgetSpent() };
+  }
   const secondJson = extractJson(second.text);
   const secondParsed = params.schema.safeParse(secondJson);
   if (secondParsed.success) return { ok: true, data: secondParsed.data };
+  // Neither answer parsed whole. What the second one did write still counts.
+  const salvaged = parseJson(params.schema, second.text);
+  if (salvaged !== null) return { ok: true, data: salvaged };
   return { ok: false, error };
 }
