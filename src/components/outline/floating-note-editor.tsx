@@ -403,6 +403,9 @@ export function FloatingNoteEditor({
       }
       {...imageDrop.handlers}
       data-note-drop-target={canEdit ? edit.id : undefined}
+      // The onboarding nudge on the floating card: drag a second note onto it
+      // and hold, and the two merge (components/nudges.tsx).
+      data-nudge={canEdit ? "merge" : undefined}
       data-tip={imageDrop.over ? t("panes.dropImageIntoNote") : undefined}
       className={`${pane ? "absolute z-20" : "fixed z-30"} flex max-w-[calc(100vw-32px)] min-h-[180px] min-w-[300px] resize flex-col overflow-hidden rounded-[20px] border border-line bg-card/95 p-3 shadow-float backdrop-blur-md ${
         grab ? "select-none" : ""

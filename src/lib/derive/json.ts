@@ -3,27 +3,106 @@ import { z } from "zod";
 // Tolerant extraction, strict validation. On failure the caller retries once with the
 // error appended, then surfaces failure (SPEC.md §4). Malformed output never reaches the DB.
 export function extractJson(text: string): unknown | null {
-  const tryParse = (s: string): unknown | null => {
-    try {
-      return JSON.parse(s.trim());
-    } catch {
-      return null;
-    }
-  };
+  for (const candidate of jsonCandidates(text)) return candidate;
+  return null;
+}
+
+/** The first reading of the output that the schema accepts, or null. Output cut
+    off mid-write — the model spent its budget before the JSON ended — is read
+    back one cut at a time, longest first, so a derivation that returns a list
+    keeps the items that arrived instead of failing whole. */
+export function parseJson<S extends z.ZodType>(schema: S, text: string): z.infer<S> | null {
+  for (const candidate of jsonCandidates(text)) {
+    const parsed = schema.safeParse(candidate);
+    if (parsed.success) return parsed.data;
+  }
+  return null;
+}
+
+function tryParse(s: string): unknown | null {
+  try {
+    return JSON.parse(s.trim());
+  } catch {
+    return null;
+  }
+}
+
+// Every reading of the output, best first: the fenced block, the whole text,
+// the text from its first brace to its last, then the truncation cuts.
+function* jsonCandidates(text: string): Generator<unknown> {
   const fence = text.match(/```(?:json)?\s*([\s\S]*?)```/);
   if (fence?.[1]) {
     const r = tryParse(fence[1]);
-    if (r !== null) return r;
+    if (r !== null) yield r;
   }
   const whole = tryParse(text);
-  if (whole !== null) return whole;
+  if (whole !== null) yield whole;
   const o1 = text.indexOf("{");
   const o2 = text.lastIndexOf("}");
   if (o1 !== -1 && o2 > o1) {
     const r = tryParse(text.slice(o1, o2 + 1));
-    if (r !== null) return r;
+    if (r !== null) yield r;
   }
-  return null;
+  yield* truncatedReadings(text);
+}
+
+// The output closed back into valid JSON at each place it could have ended:
+// everything up to that point, with the brackets still open closed in order.
+// Longest first — the most of the answer that parses wins — and a cut that
+// leaves a half-written object behind is one the caller's schema rejects, so
+// the next cut is tried.
+function* truncatedReadings(text: string): Generator<unknown> {
+  const start = text.indexOf("{");
+  if (start === -1) return;
+  const body = text.slice(start);
+  // Cut points, in order: right after a value closed, and right before a
+  // comma. Cutting at one of these never leaves half a value behind.
+  const cuts: number[] = [];
+  let inString = false;
+  let escaped = false;
+  for (let i = 0; i < body.length; i++) {
+    const c = body[i];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (c === "\\") escaped = true;
+      else if (c === '"') {
+        inString = false;
+        cuts.push(i + 1);
+      }
+      continue;
+    }
+    if (c === '"') inString = true;
+    else if (c === "}" || c === "]") cuts.push(i + 1);
+    else if (c === ",") cuts.push(i);
+  }
+  for (const cut of cuts.slice(-400).reverse()) {
+    const closed = closeBrackets(body.slice(0, cut));
+    if (closed === null) continue;
+    const parsed = tryParse(closed);
+    if (parsed !== null) yield parsed;
+  }
+}
+
+/** The prefix with every bracket it left open closed, or null when it ends
+    inside a string. */
+function closeBrackets(prefix: string): string | null {
+  const stack: string[] = [];
+  let inString = false;
+  let escaped = false;
+  for (const c of prefix) {
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (c === "\\") escaped = true;
+      else if (c === '"') inString = false;
+      continue;
+    }
+    if (c === '"') inString = true;
+    else if (c === "{") stack.push("}");
+    else if (c === "[") stack.push("]");
+    else if (c === "}" || c === "]") stack.pop();
+  }
+  if (inString || stack.length === 0) return null;
+  return prefix + stack.reverse().join("");
 }
 
 export const spanSchema = z.object({

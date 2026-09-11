@@ -1453,6 +1453,33 @@ ellipse.anchor-flash {
 .hero-stamp {
   transform-origin: left center;
 }
+
+/* The closing line's underline (signin/hero-pitch.tsx): a clay rule drawn
+   left to right the moment the line has typed in. A background, not a
+   pseudo-element, so a line that wraps carries the rule on every row. */
+.hero-rule {
+  padding-bottom: 0.12em;
+  background-image: linear-gradient(var(--clay), var(--clay));
+  background-repeat: no-repeat;
+  background-position: 0 100%;
+  background-size: 0% 2px;
+}
+.hero-rule-on {
+  background-size: 100% 2px;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .hero-rule-on {
+    animation: hero-rule-draw 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+}
+@keyframes hero-rule-draw {
+  from {
+    background-size: 0% 2px;
+  }
+  to {
+    background-size: 100% 2px;
+  }
+}
 @media (prefers-reduced-motion: no-preference) {
   .hero-stamp {
     animation: hero-stamp-land 0.32s cubic-bezier(0.2, 1.4, 0.4, 1) both;
