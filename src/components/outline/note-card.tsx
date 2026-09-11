@@ -17,7 +17,8 @@ import { DragHandle, useMergeTarget, type HandleProps } from "@/components/sorta
 import { useImageDrop } from "@/components/use-image-drop";
 import { imageMarkdown } from "@/lib/images";
 import { setTaskChecked } from "@/lib/note-markup";
-import { startCardDrag } from "@/lib/card-drag";
+import { startCardDrag, type CardDragEndDetail } from "@/lib/card-drag";
+import { useCardDropTarget } from "@/components/outline/use-card-drop";
 import { ThinkingIndicator } from "@/components/thinking";
 import { NoteEditor } from "@/components/outline/note-editor";
 import { NoteHistory } from "@/components/outline/note-history";
@@ -214,6 +215,21 @@ export function NoteCard({
   // place. The card blooms as the merge starts and settles as the text lands
   // (SPEC.md §6, globals.css .note-absorb / .note-merging / .note-merged).
   const merging = actions.merging.has(note.id);
+  // An annotation dragged out of the Annotations tab, or off its card over the
+  // article, lands here: dropped on the note it is copied in — its text into
+  // the note, its anchors as sources — and it stays painted in the article
+  // (SPEC.md §6). A note the reader cannot edit, and one not accepted yet,
+  // take no drop: the merge is for the notes being kept.
+  const takesDrop = canEdit && note.status === "ACCEPTED" && !floating;
+  async function takeDrop(end: CardDragEndDetail) {
+    if (!takesDrop) return;
+    try {
+      await actions.mergeNotes(note.id, end.drag.ids, "ai");
+    } catch (err) {
+      setDropError(err instanceof Error ? err.message : t("common.requestFailed"));
+    }
+  }
+  const cardDrop = useCardDropTarget(note.id, (end) => void takeDrop(end), takesDrop);
   const [wasMerging, setWasMerging] = useState(false);
   const [merged, setMerged] = useState(false);
   if (merging !== wasMerging) {
@@ -673,6 +689,7 @@ export function NoteCard({
     merging ? "note-merging note-absorb" : "",
     merged ? "note-merged" : "",
     imageDrop.over ? "outline-2 outline-dashed outline-clay-400" : "",
+    cardDrop.over ? "outline-2 outline-sage-500" : "",
   ]
     .filter(Boolean)
     .join(" ");
@@ -688,10 +705,18 @@ export function NoteCard({
     <div
       ref={cardRef}
       data-note-id={note.id}
+      data-note-drop-target={takesDrop ? note.id : undefined}
       onDoubleClick={jumpToSource}
       {...imageDrop.handlers}
       className={surface}
-      data-tip={dropTip ?? (isMergeTarget ? t("outline.holdToMerge") : undefined)}
+      data-tip={
+        dropTip ??
+        (cardDrop.over
+          ? t(cardDrop.drag?.kind === "annotation" ? "outline.dropAnnotation" : "outline.dropNote")
+          : isMergeTarget
+            ? t("outline.holdToMerge")
+            : undefined)
+      }
     >
       {header}
       {dropError && <p className="mt-1 text-[11px] text-red-500">{dropError}</p>}

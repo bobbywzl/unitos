@@ -50,6 +50,9 @@ import { isOffline, offlinePremium, queueWrite } from "@/lib/offline/queue";
 import { parseYouTubeId, youtubeWatchUrl } from "@/lib/video/youtube";
 import type { TFunc, TKey } from "@/lib/i18n/dictionaries";
 import { useLang, useT } from "@/components/lang-provider";
+import { clipWords, markdownPreview } from "@/lib/markdown-preview";
+import { AnnotationGrip } from "@/components/outline/annotation-grip";
+import { useCardDropOpen } from "@/components/outline/use-card-drop";
 import {
   CommentIcon,
   DistillIcon,
@@ -1131,6 +1134,21 @@ export function ReaderInteractions({
   } | null>(null);
   const closeLinkRef = useRef(closeLink);
   closeLinkRef.current = closeLink;
+
+  // A card over the article holds an annotation once it is persisted, and an
+  // annotation goes into a note by its grip (SPEC.md §6): the same grip the
+  // Annotations tab's rows carry, on the card the reader is reading. It shows
+  // while there is a note to drop it on — a note card of the tray, or the
+  // floating card.
+  const dropOpen = useCardDropOpen();
+  const annotationGrip = (noteId: string | null | undefined, text: string, fallback: string) =>
+    dropOpen && noteId ? (
+      <AnnotationGrip
+        noteId={noteId}
+        label={clipWords(markdownPreview(text), 60) || fallback}
+        className="-ml-1"
+      />
+    ) : null;
 
   function broadcastPendingLink(next: PendingLink | null) {
     setPendingLink(next);
@@ -5743,7 +5761,12 @@ function blockFormatKind(
           style={{ top: annotationCard.top, left: annotationCard.left }}
         >
           <div className="mb-2 flex items-center justify-between">
-            <span className="text-[11px] font-bold tracking-[0.08em] text-sand-600 uppercase">
+            <span className="flex items-center gap-1.5 text-[11px] font-bold tracking-[0.08em] text-sand-600 uppercase">
+              {annotationGrip(
+                annotationCard.noteId,
+                annotationCard.saved,
+                t(annotationCard.kind === "highlight" ? "reader.highlight" : "reader.comment"),
+              )}
               {annotationCard.kind === "highlight" ? t("reader.highlight") : t("reader.comment")}
             </span>
             <button
@@ -6335,6 +6358,7 @@ function blockFormatKind(
             className="mb-2 flex cursor-move items-center justify-between"
           >
             <span className="flex items-center gap-1.5 text-[11px] font-bold tracking-[0.08em] text-clay-800 uppercase">
+              {!bubble.streaming && annotationGrip(bubble.noteId, bubble.text, t("reader.explanation"))}
               <ToolSymbol tool={bubble.kind} plus={toolPlus(bubble)} size={12} />
               {toolPlus(bubble)
                 ? t(TOOL_PLUS_KEY[bubble.kind])
@@ -6461,6 +6485,8 @@ function blockFormatKind(
             className="mb-2 flex cursor-move items-center justify-between"
           >
             <span className="flex items-center gap-1.5 text-[11px] font-bold tracking-[0.08em] text-sage-800 uppercase">
+              {!simplifyCard.streaming &&
+                annotationGrip(simplifyCard.noteId, simplifyCard.text, t("reader.simplified"))}
               <ToolSymbol tool="simplify" plus={toolPlus(simplifyCard)} size={12} />
               {toolPlus(simplifyCard)
                 ? t(TOOL_PLUS_KEY.simplify)
@@ -6806,6 +6832,11 @@ function blockFormatKind(
             className="flex cursor-move items-center justify-between px-4 pt-3 pb-1"
           >
             <span className="flex items-center gap-1.5 text-[11px] font-bold tracking-[0.08em] text-clay-800 uppercase">
+              {annotationGrip(
+                assistantChat.noteId,
+                assistantChat.messages.map((m) => m.content).join(" "),
+                t("reader.assistant"),
+              )}
               <SparkleIcon size={12} />
               {t("reader.assistant")}
             </span>
