@@ -159,6 +159,13 @@ function isTextEntry(el: HTMLElement): boolean {
   );
 }
 
+// The layer the reader's tools sit on, over the article: the toolbar a
+// selection opens, and every card it opens. Above the floating note card
+// (z-30) — the tools are what the reader just asked for, and a note card left
+// over the article must never cover them — and below the surfaces that take
+// the whole window (z-50: the dialogs, the graph, the distilled page).
+const TOOL_LAYER = "z-40";
+
 // One toolbar per content kind (SPEC.md §6). The popover shows the tools of
 // the kind under the selection and nothing else: a tool missing from a
 // kind's list is not offered there. The first tool of a kind after the
@@ -5757,7 +5764,7 @@ function blockFormatKind(
       {annotationCard && (
         <div
           data-selection-popover
-          className="pop-in absolute z-30 w-[300px] rounded-2xl bg-card p-3 shadow-float"
+          className={`pop-in absolute ${TOOL_LAYER} w-[300px] rounded-2xl bg-card p-3 shadow-float`}
           style={{ top: annotationCard.top, left: annotationCard.left }}
         >
           <div className="mb-2 flex items-center justify-between">
@@ -5846,7 +5853,7 @@ function blockFormatKind(
           return (
             <div
               data-selection-popover
-              className="pop-in absolute z-30 w-[300px] rounded-2xl bg-card p-3 shadow-float"
+              className={`pop-in absolute ${TOOL_LAYER} w-[300px] rounded-2xl bg-card p-3 shadow-float`}
               style={{ top: extractCard.top, left: extractCard.left }}
             >
               <div className="mb-2 flex items-center justify-between">
@@ -5947,7 +5954,7 @@ function blockFormatKind(
             if (target.closest("textarea, input")) return;
             e.preventDefault();
           }}
-          className="pop-in absolute z-20 flex flex-col gap-0.5 rounded-2xl bg-card p-1.5 shadow-float"
+          className={`pop-in absolute ${TOOL_LAYER} flex flex-col gap-0.5 rounded-2xl bg-card p-1.5 shadow-float`}
           style={popoverBox}
         >
           {popover.truncated && (
@@ -6327,7 +6334,7 @@ function blockFormatKind(
           data-tip={t("reader.closeLinkTitle")}
           onMouseDown={(e) => e.preventDefault()} // keep the highlight alive under the press
           onClick={() => void completeCloseLink()}
-          className="absolute z-20 flex -translate-y-1/2 items-center gap-1.5 rounded-full bg-sage-600 px-2.5 py-1 text-[11.5px] font-semibold text-sage-fg shadow-float hover:bg-sage-700 disabled:opacity-40"
+          className={`absolute ${TOOL_LAYER} flex -translate-y-1/2 items-center gap-1.5 rounded-full bg-sage-600 px-2.5 py-1 text-[11.5px] font-semibold text-sage-fg shadow-float hover:bg-sage-700 disabled:opacity-40`}
           style={{ left: closeLink.left, top: closeLink.top }}
         >
           {busy ? (
@@ -6345,7 +6352,7 @@ function blockFormatKind(
         <div
           data-selection-popover
           data-side-card="explain"
-          className="bubble-in absolute z-20 flex flex-col rounded-[20px] border border-line bg-card/90 p-4 shadow-float backdrop-blur-md"
+          className={`bubble-in absolute ${TOOL_LAYER} flex flex-col rounded-[20px] border border-line bg-card/90 p-4 shadow-float backdrop-blur-md`}
           style={{ left: bubble.left, top: bubble.top, width: bubble.width, maxHeight: cardMaxHeight }}
         >
           <div
@@ -6467,7 +6474,7 @@ function blockFormatKind(
           key={`${simplifyCard.anchor.blockId}:${simplifyCard.anchor.startOffset}`}
           data-selection-popover
           data-side-card="simplify"
-          className="bubble-in absolute z-20 flex flex-col rounded-[20px] border border-line bg-card/80 p-4 shadow-float backdrop-blur-md"
+          className={`bubble-in absolute ${TOOL_LAYER} flex flex-col rounded-[20px] border border-line bg-card/80 p-4 shadow-float backdrop-blur-md`}
           style={{
             top: simplifyCard.top,
             left: simplifyCard.left,
@@ -6590,7 +6597,7 @@ function blockFormatKind(
         <div
           data-log-card="log"
           data-selection-popover
-          className="bubble-in absolute z-20 flex flex-col rounded-[20px] border border-line bg-card/90 p-4 shadow-float backdrop-blur-md"
+          className={`bubble-in absolute ${TOOL_LAYER} flex flex-col rounded-[20px] border border-line bg-card/90 p-4 shadow-float backdrop-blur-md`}
           style={{ left: logCard.left, top: logCard.top, width: logCard.width, maxHeight: cardMaxHeight }}
         >
           <div className="mb-2 flex items-center justify-between">
@@ -6634,7 +6641,7 @@ function blockFormatKind(
         <div
           data-selection-popover
           data-side-card="comment"
-          className="bubble-in absolute z-20 flex flex-col rounded-[20px] border border-line bg-card/90 p-4 shadow-float backdrop-blur-md"
+          className={`bubble-in absolute ${TOOL_LAYER} flex flex-col rounded-[20px] border border-line bg-card/90 p-4 shadow-float backdrop-blur-md`}
           style={{
             left: commentCard.left,
             top: commentCard.top,
@@ -6733,7 +6740,7 @@ function blockFormatKind(
         <div
           data-selection-popover
           data-side-card="link"
-          className="bubble-in absolute z-20 flex flex-col rounded-[20px] border border-line bg-card/90 p-4 shadow-float backdrop-blur-md"
+          className={`bubble-in absolute ${TOOL_LAYER} flex flex-col rounded-[20px] border border-line bg-card/90 p-4 shadow-float backdrop-blur-md`}
           style={{ left: linkCard.left, top: linkCard.top, width: linkCard.width, maxHeight: cardMaxHeight }}
         >
           <div
@@ -6812,7 +6819,7 @@ function blockFormatKind(
         <div
           data-selection-popover
           data-side-card="assistant"
-          className="bubble-in absolute z-20 flex resize flex-col overflow-hidden rounded-[20px] border border-line bg-card/95 shadow-float backdrop-blur-md"
+          className={`bubble-in absolute ${TOOL_LAYER} flex resize flex-col overflow-hidden rounded-[20px] border border-line bg-card/95 shadow-float backdrop-blur-md`}
           style={{
             left: assistantChat.left,
             top: assistantChat.top,
