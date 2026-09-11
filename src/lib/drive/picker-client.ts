@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  DRIVE_FOLDER_MIME_TYPE,
   DRIVE_PICKER_MIME_TYPES,
   DRIVE_SCOPES,
   type DriveAccess,
@@ -132,6 +133,18 @@ async function requestAccessToken(clientId: string, access: DriveAccess): Promis
   });
 }
 
+// One tab of the picker: the reader's own Drive (My Drive and everything
+// shared with them), or the shared drives they are a member of. Folders show
+// so the reader can walk into them, and stay unselectable — a folder is not a
+// document to import.
+function docsView(picker: GooglePickerNamespace, sharedDrives: boolean): PickerDocsView {
+  const view = new picker.DocsView(picker.ViewId.DOCS)
+    .setIncludeFolders(true)
+    .setSelectFolderEnabled(false)
+    .setMimeTypes(DRIVE_PICKER_MIME_TYPES);
+  return sharedDrives ? view.setEnableDrives(true) : view;
+}
+
 // Get a Drive token, open the picker, resolve with whatever the reader picked
 // (empty = closed the picker without picking — not an error) plus the token
 // to import with. A linked account's token comes from the server; otherwise
@@ -151,15 +164,15 @@ export async function pickDriveFiles(opts: {
     loadPicker(),
   ]);
   const picker = window.google!.picker!;
-  // Shared drives show beside My Drive (SUPPORT_DRIVES + setEnableDrives).
-  const view = new picker.DocsView(picker.ViewId.DOCS)
-    .setIncludeFolders(true)
-    .setSelectFolderEnabled(false)
-    .setEnableDrives(true)
-    .setMimeTypes(DRIVE_PICKER_MIME_TYPES);
   const files = await new Promise<DrivePickedFile[]>((resolve) => {
+    // Two views, so the picker opens on the reader's own Drive and shows
+    // shared drives in a second tab. One view with setEnableDrives(true) is
+    // not both: Google's rule is that with it set, only shared drives are in
+    // the view. That one view is what an account with no shared drive saw as
+    // an empty picker, with its own Drive nowhere.
     const builder = new picker.PickerBuilder()
-      .addView(view)
+      .addView(docsView(picker, false))
+      .addView(docsView(picker, true))
       .setOAuthToken(token)
       .enableFeature(picker.Feature.MULTISELECT_ENABLED)
       .enableFeature(picker.Feature.SUPPORT_DRIVES);
@@ -173,12 +186,15 @@ export async function pickDriveFiles(opts: {
       .setCallback((response) => {
         if (response.action === picker.Action.PICKED) {
           resolve(
-            (response.docs ?? []).map((d) => ({
-              id: d.id,
-              name: d.name,
-              mimeType: d.mimeType,
-              sizeBytes: d.sizeBytes != null ? Number(d.sizeBytes) : null,
-            })),
+            (response.docs ?? [])
+              // Folders are in the view to walk into, never to import.
+              .filter((d) => d.mimeType !== DRIVE_FOLDER_MIME_TYPE)
+              .map((d) => ({
+                id: d.id,
+                name: d.name,
+                mimeType: d.mimeType,
+                sizeBytes: d.sizeBytes != null ? Number(d.sizeBytes) : null,
+              })),
           );
         } else if (response.action === picker.Action.CANCEL) {
           resolve([]);
