@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { isImeKey } from "@/lib/ime";
 import { NOTE_WRAP_GAP as GAP, announceNoteWrap, type NoteWrapSpacer } from "@/lib/note-wrap";
-import { CARD_DROP_TARGET, type CardDragEndDetail } from "@/lib/card-drag";
+import type { CardDragEndDetail } from "@/lib/card-drag";
 import { useCollab } from "@/components/collab/collab-context";
 import { useT } from "@/components/lang-provider";
 import { ThinkingIndicator } from "@/components/thinking";
@@ -229,6 +229,11 @@ export function FloatingNoteEditor({
         setDraft(merged);
         actions.floatingDraftChanged(merged);
         confirmSaved(merged);
+      } else {
+        // The merge never ran: this note is not one that takes a drop — a note
+        // still pending goes through Accept first. Saying so beats a drop that
+        // looks taken and changes nothing.
+        setMergeError(t("api.mergeAcceptedOnly"));
       }
     } catch (err) {
       setMergeError(err instanceof Error ? err.message : t("common.requestFailed"));
@@ -236,7 +241,7 @@ export function FloatingNoteEditor({
       setMerging(false);
     }
   }
-  const cardDrop = useCardDropTarget(edit.id, (end) => void takeDrop(end));
+  const cardDrop = useCardDropTarget(edit.id, (end) => void takeDrop(end), canEdit);
 
   function dock() {
     onDock();
@@ -339,17 +344,6 @@ export function FloatingNoteEditor({
 
   // The card leaves: the gap closes.
   useEffect(() => () => announceNoteWrap(null), []);
-
-  // The panels that can drag a card onto this one show their grips while it
-  // is open (lib/card-drag.ts).
-  useEffect(() => {
-    const say = (open: boolean) =>
-      window.dispatchEvent(new CustomEvent(CARD_DROP_TARGET, { detail: { open } }));
-    say(canEdit);
-    return () => {
-      say(false);
-    };
-  }, [canEdit]);
 
   // An image dropped on the card goes into the note, like a drop on its tray
   // card (SPEC.md §16).

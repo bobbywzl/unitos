@@ -5,7 +5,6 @@ import {
   CARD_DRAG_END,
   CARD_DRAG_OVER,
   CARD_DRAG_START,
-  CARD_DROP_TARGET,
   type CardDrag,
   type CardDragEndDetail,
   type CardDragOverDetail,
@@ -18,9 +17,24 @@ import {
 export function useCardDropTarget(
   id: string,
   onDrop: (detail: CardDragEndDetail) => void,
+  /** False while this card cannot take a drop — a viewer's card, a note that
+      is not accepted yet. It then counts for nothing in useCardDropOpen. */
+  enabled = true,
 ): { drag: CardDrag | null; over: boolean } {
   const [drag, setDrag] = useState<CardDrag | null>(null);
   const [over, setOver] = useState(false);
+
+  // One more place an annotation can be dropped, for as long as this card is
+  // on screen: the grips show while there is at least one.
+  useEffect(() => {
+    if (!enabled) return;
+    openTargets += 1;
+    announceTargets();
+    return () => {
+      openTargets -= 1;
+      announceTargets();
+    };
+  }, [enabled]);
 
   useEffect(() => {
     const onStart = (e: Event) => {
@@ -51,17 +65,16 @@ export function useCardDropTarget(
   return { drag, over };
 }
 
-/** True while a note card floats over the article: the surface a card can be
-    dragged onto (lib/card-drag.ts). A panel shows its grips only then. The
-    floating card says when it opens and when it goes; the state is kept here,
-    so a panel that mounts later reads it without asking the DOM. */
-let dropOpen = false;
+/** How many cards can take a drop right now: every note card of the tray that
+    is the reader's to edit, and the floating card while it is open
+    (lib/card-drag.ts). A grip shows while there is at least one — with none
+    there is nowhere to drop, and the grip would be a gesture that goes
+    nowhere. The count is kept here, outside React, so a card that mounts
+    later reads it without asking the DOM. */
+let openTargets = 0;
 const openListeners = new Set<() => void>();
-if (typeof window !== "undefined") {
-  window.addEventListener(CARD_DROP_TARGET, (e) => {
-    dropOpen = (e as CustomEvent<{ open: boolean }>).detail.open;
-    for (const listener of openListeners) listener();
-  });
+function announceTargets() {
+  for (const listener of openListeners) listener();
 }
 
 export function useCardDropOpen(): boolean {
@@ -70,7 +83,7 @@ export function useCardDropOpen(): boolean {
       openListeners.add(onChange);
       return () => void openListeners.delete(onChange);
     },
-    () => dropOpen,
+    () => openTargets > 0,
     () => false,
   );
 }

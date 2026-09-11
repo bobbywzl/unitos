@@ -330,6 +330,10 @@ export function sanitizeHtml(html: string, baseUrl?: string): string {
         // The width the page gave the image, as a share of the text column.
         if (widthStyle) declarations.push(widthStyle);
         if (declarations.length > 0) child.setAttribute("style", declarations.join(";"));
+        // The browser skips an image far from the viewport and decodes off the
+        // main thread: an article of gifs then loads the one being read first.
+        child.setAttribute("loading", "lazy");
+        child.setAttribute("decoding", "async");
       }
       if (tag === "video") {
         const hasSrc = resolveUrl(child, "src");
@@ -341,8 +345,19 @@ export function sanitizeHtml(html: string, baseUrl?: string): string {
         // Never autoplay with sound; the reader is a library, not a billboard.
         child.setAttribute("muted", "");
         if (!child.hasAttribute("autoplay")) child.setAttribute("controls", "");
-        child.setAttribute("preload", "metadata");
         child.setAttribute("playsinline", "");
+        // Nothing is asked for before the reader comes to it: the request
+        // waits for the viewport, and the reader starts it there
+        // (components/reader/figure-media.tsx). An article's clips are the
+        // page's own files, often megabytes each, and a browser given them
+        // all at once starts them all at once — the figure on screen then
+        // arrives last. An autoplay loop keeps its autoplay here, so the
+        // reader can put it back when it starts the video.
+        child.setAttribute("preload", "none");
+        if (child.hasAttribute("autoplay")) {
+          child.removeAttribute("autoplay");
+          child.setAttribute("data-autoplay", "");
+        }
       }
     }
   };

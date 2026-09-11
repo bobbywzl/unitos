@@ -1,16 +1,18 @@
-// One drag that crosses surfaces (SPEC.md §6): a note card in the notes tray
-// or an annotation card in the Annotations tab, dragged onto the floating
-// note card over the article. The board drag (components/sortable.tsx) moves
-// notes inside one list; this moves a card out of its panel and onto a target
-// that is not in that list, and lives outside React so the two panels and the
-// floating card never need one shared tree.
+// One drag that crosses surfaces (SPEC.md §6): a note card of the notes tray,
+// a row of the Annotations tab, or one of the reader's own cards over the
+// article, dragged onto a note — a note card of the tray, or the floating
+// card. The board drag (components/sortable.tsx) moves notes inside one list;
+// this moves a card onto a target that is not in that list, and lives outside
+// React so the panels, the reader, and the floating card never need one
+// shared tree.
 //
 // A drop target marks itself with data-note-drop-target="<id>" and listens
 // with useCardDropTarget (components/outline/use-card-drop.ts). The gesture
 // dispatches three events on the window: start, over (the target under the
 // pointer, or null), and end (the target it was released on, or null).
 
-/** The cards being dragged: notes of the tray, or an annotation of the panel.
+/** The cards being dragged: notes of the tray, or an annotation — a row of
+    the Annotations tab, or a card of the reader over the article.
     A note that is one of the selected notes carries the whole selection, so
     several notes land in one drop. */
 export type CardDrag = {
@@ -30,22 +32,20 @@ export type MergeMode = "join" | "ai";
 export const CARD_DRAG_START = "dissect:card-drag-start";
 export const CARD_DRAG_OVER = "dissect:card-drag-over";
 export const CARD_DRAG_END = "dissect:card-drag-end";
-// The floating note card says while it is open, so panels that can drag a card
-// onto it show their grips only then.
-export const CARD_DROP_TARGET = "dissect:card-drop-target";
 
 export type CardDragOverDetail = { drag: CardDrag; targetId: string | null };
 export type CardDragEndDetail = { drag: CardDrag; targetId: string | null };
 
 /** The drop target under a point, or null. Targets mark themselves with
-    data-note-drop-target; the ghost never takes the hit test (it is not in
-    the document flow of a target and carries pointer-events: none). */
+    data-note-drop-target; the ghost never takes the hit test (it carries
+    pointer-events: none). The point is asked of the document rather than
+    measured against every target's box: a note card scrolled out of its
+    panel still has a box, and the floating card sits over cards it must win
+    against. What the reader can see and press is what takes the drop. */
 function targetAt(x: number, y: number): string | null {
-  for (const el of document.querySelectorAll<HTMLElement>("[data-note-drop-target]")) {
-    const r = el.getBoundingClientRect();
-    if (r.width > 0 && x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) {
-      return el.dataset.noteDropTarget ?? null;
-    }
+  for (const el of document.elementsFromPoint(x, y)) {
+    const target = el.closest<HTMLElement>("[data-note-drop-target]");
+    if (target) return target.dataset.noteDropTarget ?? null;
   }
   return null;
 }

@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import type { AnnotationItem, LinkIn, LinkOut } from "@/lib/types";
 import { api } from "@/lib/api";
-import { startCardDrag } from "@/lib/card-drag";
 import { useCollab } from "@/components/collab/collab-context";
 import { AuthorChip } from "@/components/collab/person-badge";
 import { ReplyThread } from "@/components/collab/reply-thread";
@@ -32,6 +31,7 @@ import { Markdown } from "@/components/markdown";
 import { markdownPreview } from "@/lib/markdown-preview";
 import { useGist } from "@/lib/gist-client";
 import { NoteId } from "@/components/outline/note-id";
+import { AnnotationGrip } from "@/components/outline/annotation-grip";
 import { useCardDropOpen } from "@/components/outline/use-card-drop";
 import { useCollapsedView, type CollapsedViewModel } from "@/components/use-collapsed-view";
 import { stripSimplifyMarkers } from "@/lib/sentences";
@@ -107,66 +107,6 @@ function GroupLabel({ icon, children }: { icon?: React.ReactNode; children: Reac
   );
 }
 
-// The grip that drags an annotation onto the floating note card
-// (lib/card-drag.ts). A short hold and a move starts the drag; a shorter
-// press is an ordinary press and the card keeps it.
-const DRAG_PX = 6;
-
-function AnnotationGrip({ annotation, gist }: { annotation: AnnotationItem; gist: string }) {
-  const t = useT();
-  function onPointerDown(e: React.PointerEvent) {
-    if (e.button !== 0) return;
-    const fromX = e.clientX;
-    const fromY = e.clientY;
-    const stop = () => {
-      window.removeEventListener("pointermove", onMove);
-      window.removeEventListener("pointerup", stop);
-      window.removeEventListener("pointercancel", stop);
-    };
-    const onMove = (ev: PointerEvent) => {
-      if (Math.abs(ev.clientX - fromX) < DRAG_PX && Math.abs(ev.clientY - fromY) < DRAG_PX) return;
-      stop();
-      window.getSelection()?.removeAllRanges();
-      startCardDrag(
-        { clientX: ev.clientX, clientY: ev.clientY },
-        { kind: "annotation", ids: [annotation.id], label: gist },
-        () => {},
-      );
-    };
-    window.addEventListener("pointermove", onMove);
-    window.addEventListener("pointerup", stop);
-    window.addEventListener("pointercancel", stop);
-  }
-  return (
-    <button
-      type="button"
-      onPointerDown={onPointerDown}
-      data-track="annotation-drag"
-      aria-label={t("panels.dragAnnotationTitle")}
-      data-tip={t("panels.dragAnnotationTitle")}
-      className="flex cursor-grab touch-none items-center rounded-full p-0.5 text-sand-500 hover:bg-clay-100 hover:text-clay-800"
-    >
-      <svg
-        width="14"
-        height="14"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2.75"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        <circle cx="9" cy="5" r="1" />
-        <circle cx="15" cy="5" r="1" />
-        <circle cx="9" cy="12" r="1" />
-        <circle cx="15" cy="12" r="1" />
-        <circle cx="9" cy="19" r="1" />
-        <circle cx="15" cy="19" r="1" />
-      </svg>
-    </button>
-  );
-}
-
 // One annotation card, the note card's structure (outline/note-card.tsx): a
 // header row — collapse chevron, the highlight's color, the id at the left —
 // then the body. Collapsed, the header row is the whole card: the id and the
@@ -184,8 +124,9 @@ function AnnotationCard({
   children: React.ReactNode;
 }) {
   const t = useT();
-  // A note card floats over the article: this annotation can be dragged onto
-  // it (SPEC.md §6). The grip shows only then — there is nowhere else to drop.
+  // Somewhere to drop: a note of the tray, or the floating card over the
+  // article (SPEC.md §6). The grip shows only then — with no note to drop on,
+  // the gesture goes nowhere.
   const droppable = useCardDropOpen();
   const collapsed = view.isCollapsed(annotation.id);
   const gist = useGist(annotation.id, annotation.gist, summary, collapsed);
@@ -206,7 +147,7 @@ function AnnotationCard({
       <div className="flex min-h-[18px] items-center gap-1.5">
         {droppable && (
           <div className="-ml-1 opacity-70 transition-opacity group-hover/annotation:opacity-100 focus-within:opacity-100">
-            <AnnotationGrip annotation={annotation} gist={gist} />
+            <AnnotationGrip noteId={annotation.id} label={gist} />
           </div>
         )}
         <button
