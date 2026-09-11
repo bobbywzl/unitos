@@ -4,8 +4,25 @@ import { z } from "zod";
 import { bumpNotebook, notebookAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
 import { serverT } from "@/lib/i18n/server";
-import { distillationList, extractionList } from "@/lib/types";
+import { distillationList, extractionList, keypointsStored } from "@/lib/types";
 import { parseBody } from "@/lib/validate";
+
+// The stored distillation (KEYPOINTS, the reader's Distill) of one attachment.
+// Distill persists before it answers, so a run whose response was cut short
+// may still have finished: the reader asks here before calling it a failure.
+export async function GET(
+  _req: Request,
+  ctx: { params: Promise<{ notebookId: string; documentId: string }> },
+) {
+  const { notebookId, documentId } = await ctx.params;
+  const access = await notebookAccess(notebookId, "viewer");
+  if (access instanceof NextResponse) return access;
+  const attachment = await db.notebookDocument.findUnique({
+    where: { notebookId_documentId: { notebookId, documentId } },
+    select: { keypoints: true },
+  });
+  return NextResponse.json({ keypoints: keypointsStored(attachment?.keypoints) });
+}
 
 // Delete one stored distillation (DISTILL, the reader's Extract) or extraction
 // (EXTRACT, the reader's Match-it), or the keypoints (KEYPOINTS, the reader's

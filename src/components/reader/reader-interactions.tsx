@@ -3317,6 +3317,8 @@ export function ReaderInteractions({
   // overwrites. The fresh result stands until the refresh delivers it.
   const currentKeypoints: KeypointsView | null =
     localKeypoints === "deleted" ? null : (localKeypoints ?? keypoints);
+  const currentKeypointsRef = useRef(currentKeypoints);
+  currentKeypointsRef.current = currentKeypoints;
 
   function openKeypointsPage() {
     const container = containerRef.current;
@@ -3347,9 +3349,31 @@ export function ReaderInteractions({
     setKeypointsRun(false);
   }
 
+  // The distillation the server stored for this document, if the run that just
+  // ran is the one that wrote it. Read after a run whose answer never arrived:
+  // the work may be done and only the response lost. Each run writes a new id,
+  // so an id the page already showed is the run before this one — a failure,
+  // not a recovery.
+  async function storedKeypoints(forDocumentId: string, wasId: string | null) {
+    try {
+      const res = await fetch(`/api/notebooks/${notebookId}/documents/${forDocumentId}`, {
+        cache: "no-store",
+      });
+      if (!res.ok) return null;
+      const data = (await res.json()) as { keypoints?: Keypoints | null };
+      const stored = data.keypoints ?? null;
+      return stored && stored.id !== wasId ? stored : null;
+    } catch {
+      return null;
+    }
+  }
+
   async function runKeypoints() {
     if (keypointsRun) return;
     const runDocumentId = documentId;
+    // What the page shows now, so a recovered distillation can be told from
+    // the one this run would replace.
+    const wasId = currentKeypointsRef.current?.id ?? null;
     const controller = new AbortController();
     keypointsAbortRef.current = controller;
     setKeypointsRun(true);
@@ -3383,11 +3407,16 @@ export function ReaderInteractions({
       } catch {
         payload = null;
       }
-      if (!payload?.keypoints) throw new Error(t("reader.keypointsUnfinished"));
+      // The run writes the distillation before it answers, so a response cut
+      // short — the platform ending the request, a proxy dropping the
+      // connection — can still have finished the work. Ask for what is stored
+      // before calling it a failure.
+      const keypoints = payload?.keypoints ?? (await storedKeypoints(runDocumentId, wasId));
+      if (!keypoints) throw new Error(t("reader.keypointsUnfinished"));
       if (controller.signal.aborted || documentIdRef.current !== runDocumentId) return;
       setLocalKeypoints({
-        ...payload.keypoints,
-        points: payload.keypoints.points.map((point) => ({ ...point, orphaned: false })),
+        ...keypoints,
+        points: keypoints.points.map((point) => ({ ...point, orphaned: false })),
       });
       // The page may be closed: the pill's progress bar stops, and the toast
       // says where the result is.

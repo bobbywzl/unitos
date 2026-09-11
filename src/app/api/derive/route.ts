@@ -229,6 +229,36 @@ function heartbeatResponse(
   return new Response(stream, { headers: { "Content-Type": "text/plain; charset=utf-8" } });
 }
 
+// The time one model call may take inside a request: the route's limit less
+// the margin the answer needs — resolving the spans, the write, the payload —
+// and the request's own cancellation folded in, so Cancel still stops the
+// call. spent() tells the two apart afterwards: the budget ran out, or the
+// reader closed the connection. Every caller calls done() when the call
+// returns, so the timer never outlives it.
+const DERIVE_MARGIN_SECONDS = 25;
+
+function deriveBudget(req: Request, maxDurationSeconds: number) {
+  const controller = new AbortController();
+  let timedOut = false;
+  const onAbort = () => controller.abort();
+  req.signal.addEventListener("abort", onAbort);
+  const timer = setTimeout(
+    () => {
+      timedOut = true;
+      controller.abort();
+    },
+    Math.max(30, maxDurationSeconds - DERIVE_MARGIN_SECONDS) * 1000,
+  );
+  return {
+    signal: controller.signal,
+    done: () => {
+      clearTimeout(timer);
+      req.signal.removeEventListener("abort", onAbort);
+    },
+    spent: () => timedOut,
+  };
+}
+
 // A failed JSON call throws with the reason; heartbeatResponse reports it.
 class DeriveFailure extends Error {}
 
@@ -1557,17 +1587,34 @@ async function handle(req: Request, t: TFunc) {
     return heartbeatResponse(
       req,
       async () => {
-        const result = await callForJson({
-          model,
-          messages,
-          maxOutputTokens,
-          providerOptions: kimiOptions(effort),
-          schema: keypointsOutputSchema,
-          label: "KEYPOINTS",
-          usage: usageMeta,
-          abortSignal: req.signal,
-        });
-        if (!result.ok) throw new DeriveFailure(result.error);
+        // The longest call the reader makes: the whole document read at once.
+        // Left alone it can outlive the request itself, and a request the
+        // platform kills mid-call answers with nothing at all — no points, no
+        // reason, the reader's "Distill did not finish". So the call carries
+        // the request's own budget (the same discipline the import's model
+        // passes keep, lib/parse/ingest.ts): it stops before the request does,
+        // and the reader is told what happened.
+        const budget = deriveBudget(req, maxDuration);
+        const started = Date.now();
+        let result;
+        try {
+          result = await callForJson({
+            model,
+            messages,
+            maxOutputTokens,
+            providerOptions: kimiOptions(effort),
+            schema: keypointsOutputSchema,
+            label: "KEYPOINTS",
+            usage: usageMeta,
+            abortSignal: budget.signal,
+          });
+        } finally {
+          budget.done();
+        }
+        console.log(`[derive] KEYPOINTS took ${Date.now() - started}ms`);
+        if (!result.ok) {
+          throw new DeriveFailure(budget.spent() ? t("api.keypointsOutOfTime") : result.error);
+        }
         const orderByBlock = new Map(document.blocks.map((b, i) => [b.id, i]));
         const points = result.data.points
           .flatMap((p) => {

@@ -23,10 +23,15 @@ export const GEMINI_FLASH = "gemini-3.7-flash";
 // Reasoning effort per call. Kimi K3 always reasons; "max" is its default and
 // its slowest. The reader's tools answer at "high"; ANALYZE reads a figure or
 // table at "max": a misread number is worse than a slow answer. KEYPOINTS
-// (the reader's Distill) reads the whole document at "high": a distillation is
-// careful bullet pointing of what the document says, not a problem to reason
-// through, and Kimi counts its reasoning against the output budget — at "max"
-// a long document spent the budget thinking and the run failed with no points.
+// (the reader's Distill) reads the whole document at "low", the one tool that
+// does: a distillation is careful bullet pointing of what the document says,
+// not a problem to reason through. Kimi counts its reasoning against the
+// output budget, and the budget is the clock — a call free to think for tens
+// of thousands of tokens takes minutes and outlives the request that made it.
+// At "max" a long document spent the budget thinking and the run failed with
+// no points; at "high" with a budget large enough to cover the thinking, the
+// run outran the request instead and the reader got nothing back at all.
+// Thinking short is what makes Distill answer.
 export type KimiEffort = "low" | "high" | "max";
 export const DEFAULT_EFFORT: KimiEffort = "high";
 
@@ -62,7 +67,7 @@ export const DERIVATION_EFFORT: Record<DerivationType, KimiEffort> = {
   SYNTHESIS: DEFAULT_EFFORT,
   FIND: DEFAULT_EFFORT,
   DISTILL: DEFAULT_EFFORT,
-  KEYPOINTS: DEFAULT_EFFORT,
+  KEYPOINTS: "low",
   FORMALIZE: DEFAULT_EFFORT,
   ASK: DEFAULT_EFFORT,
   COMPARE: DEFAULT_EFFORT,
@@ -105,7 +110,7 @@ export const MAX_OUTPUT_TOKENS: Record<DerivationType, number> = {
   SYNTHESIS: 32768,
   FIND: 24576,
   DISTILL: 24576,
-  KEYPOINTS: 49152, // a long document's points, with room for the reasoning before them
+  KEYPOINTS: 32768, // a long document's points, with room for the short reasoning before them
   FORMALIZE: 65536, // a long transcript's article is long
   ASK: 16384,
   COMPARE: 32768, // two documents' points, each with its spans
