@@ -3,11 +3,14 @@
 import { useEffect, useState } from "react";
 
 // The hero's pitch (signin/page.tsx): what Unitos does, typed out on load —
-// three rows, each landing a "Done" stamp the moment its last character
-// types in, then a fourth line, the closer, larger and un-stamped, as the
-// take-away. Every row starts empty, on the server and on the first client
-// render alike, so there is no flash of the full text before typing starts;
-// the effect below is what fills it in.
+// a lead line, three rows that each land a "Done" stamp the moment their last
+// character types in, then the closer, larger, which underlines itself as the
+// take-away.
+//
+// The block reserves its full height before the first character types: every
+// row renders its whole text at once, hidden, under the typed copy in the
+// same grid cell. Typing then fills a box that never changes size, so the
+// sign-in card below it never moves down the page.
 //
 // Reduced motion: the effect skips straight to every row and stamp shown at
 // once (read once on mount — a user's OS setting, not something that changes
@@ -19,7 +22,13 @@ const CHAR_MS = 16; // one character per beat while a row types
 const STAMP_DELAY_MS = 180; // pause after the row's last character before the stamp lands
 const ROW_GAP_MS = 500; // pause after a row (its stamp, if any) before the next starts
 
-export type PitchRow = { text: string; done: boolean };
+export type PitchRow = {
+  text: string;
+  /** The row lands a Done stamp, right after its last word. */
+  done: boolean;
+  /** The closing line: larger, and it underlines itself once it has typed in. */
+  close?: boolean;
+};
 
 export function HeroPitch({ rows, doneLabel }: { rows: PitchRow[]; doneLabel: string }) {
   // shown[r] = characters of row r's text on screen; stamped[r] = its Done
@@ -79,34 +88,48 @@ export function HeroPitch({ rows, doneLabel }: { rows: PitchRow[]; doneLabel: st
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // The stamp sits in the text's own flow, right after the last word, so it
+  // keeps the line instead of dropping to one of its own.
+  const stamp = (visible: boolean) => (
+    <span
+      className={`${visible ? "hero-stamp " : ""}ml-2.5 inline-block rounded-md border-2 border-sage-500/80 px-2 py-0.5 align-[0.12em] text-[10px] font-bold tracking-[0.14em] whitespace-nowrap text-sage-500 uppercase sm:text-[11px]`}
+    >
+      {doneLabel}
+    </span>
+  );
+
   return (
     <>
       <p className="sr-only">
         {rows.map((r) => r.text + (r.done ? ` ${doneLabel}.` : "")).join(" ")}
       </p>
-      <div aria-hidden className="mt-5 max-w-xl space-y-2.5">
+      <div aria-hidden className="mt-4 max-w-xl space-y-2">
         {rows.map((r, i) => {
           const text = r.text.slice(0, shown[i] ?? 0);
-          if (!text) return null;
-          const isClose = !r.done;
+          const typed = (shown[i] ?? 0) === r.text.length;
           return (
             <p
               key={i}
               className={
-                isClose
-                  ? "flex flex-wrap items-baseline gap-2 pt-1 text-xl leading-snug font-semibold text-ink sm:text-2xl"
-                  : "flex flex-wrap items-center gap-x-2.5 gap-y-1 text-base leading-relaxed font-medium text-sand-800 sm:text-lg"
+                r.close
+                  ? "grid pt-1 text-lg leading-snug font-semibold text-ink sm:text-xl"
+                  : "grid text-[13.5px] leading-relaxed font-medium text-sand-800 sm:text-[15px]"
               }
             >
-              <span>
-                {text}
-                {typing === i && <span className="hero-caret" />}
+              {/* The sizer: the finished row, hidden. It holds the space the
+                  typed copy grows into, so nothing below moves. */}
+              <span className="invisible col-start-1 row-start-1">
+                {r.text}
+                <span className="hero-caret" />
+                {r.done && stamp(false)}
               </span>
-              {r.done && stamped[i] && (
-                <span className="hero-stamp shrink-0 rounded-md border-2 border-sage-500/80 px-2 py-0.5 text-[11px] font-bold tracking-[0.14em] text-sage-500 uppercase sm:text-xs">
-                  {doneLabel}
+              <span className="col-start-1 row-start-1">
+                <span className={r.close ? `hero-rule${typed ? " hero-rule-on" : ""}` : undefined}>
+                  {text}
                 </span>
-              )}
+                {typing === i && <span className="hero-caret" />}
+                {r.done && stamped[i] && stamp(true)}
+              </span>
             </p>
           );
         })}

@@ -507,7 +507,13 @@ export function SettingsForm({
                     {t("settings.driveUnlink")}
                   </button>
                 ) : drive.canLink ? (
-                  <a href="/api/drive/link?next=/settings" className={primaryButton}>
+                  // The onboarding nudge's last step points here
+                  // (components/nudges.tsx).
+                  <a
+                    href="/api/drive/link?next=/settings"
+                    data-nudge="drive"
+                    className={primaryButton}
+                  >
                     {t("settings.driveLink")}
                   </a>
                 ) : null}

@@ -242,12 +242,14 @@ export default async function SignInPage({
   // The hero's first line splits at {item}, where the reel goes.
   const [heroBefore = "", heroAfter = ""] = t("signin.heroA").split("{item}");
   const heroItems = t("signin.heroItems").split("|");
-  // The pitch: three rows each stamped Done, then the closer (hero-pitch.tsx).
+  // The pitch: the lead line, three rows each stamped Done, then the closer
+  // (hero-pitch.tsx).
   const pitchRows: PitchRow[] = [
+    { text: t("signin.heroPitchLead"), done: false },
     { text: t("signin.heroPitchRow1"), done: true },
     { text: t("signin.heroPitchRow2"), done: true },
     { text: t("signin.heroPitchRow3"), done: true },
-    { text: t("signin.heroPitchClose"), done: false },
+    { text: t("signin.heroPitchClose"), done: false, close: true },
   ];
 
   return (
@@ -287,10 +289,10 @@ export default async function SignInPage({
                 takes the line above it. One line under them on what Unitos
                 is. */}
             <h1 className="font-hero text-ink uppercase">
-              <span className="block text-[length:clamp(2rem,9.8cqw,4.75rem)] leading-[1.05]">
+              <span className="block text-[length:clamp(1.75rem,7.6cqw,3.5rem)] leading-[1.05]">
                 <HeroReel before={heroBefore} items={heroItems} after={heroAfter} />
               </span>
-              <span className="mt-3 block text-[length:clamp(1.5rem,7.4cqw,3.6rem)] leading-[1.05]">
+              <span className="mt-2 block text-[length:clamp(1.25rem,5.7cqw,2.6rem)] leading-[1.05]">
                 {t("signin.heroB")}
               </span>
             </h1>

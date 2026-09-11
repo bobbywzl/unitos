@@ -841,6 +841,7 @@ export function Workspace({
             <button
               onClick={() => setMenuOpen(!menuOpen)}
               data-track="more"
+              data-nudge="settings"
               aria-label={t("panes.more")}
               data-tip={t("panes.moreTitle")}
               aria-expanded={menuOpen}

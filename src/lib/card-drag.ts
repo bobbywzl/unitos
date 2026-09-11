@@ -92,6 +92,7 @@ export function startCardDrag(
     window.removeEventListener("pointermove", onMove);
     window.removeEventListener("pointerup", onUp);
     window.removeEventListener("pointercancel", onCancel);
+    window.removeEventListener("blur", onCancel);
     window.removeEventListener("keydown", onKey, true);
     ghost.remove();
     window.dispatchEvent(new CustomEvent<CardDragEndDetail>(CARD_DRAG_END, { detail }));
@@ -109,5 +110,9 @@ export function startCardDrag(
   window.addEventListener("pointermove", onMove);
   window.addEventListener("pointerup", onUp);
   window.addEventListener("pointercancel", onCancel);
+  // The window losing focus with the button still down is a release too: a
+  // release the page never hears (the pointer went up over the browser's own
+  // chrome) otherwise left the ghost following the pointer for good.
+  window.addEventListener("blur", onCancel);
   window.addEventListener("keydown", onKey, true);
 }

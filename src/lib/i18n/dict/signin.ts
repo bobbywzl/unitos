@@ -9,14 +9,14 @@ const en = {
   heroItems:
     "a video|an audio file|an article|a research paper|a legal document|a PDF assignment",
   heroB: "Put it in Unitos Notebook.",
-  // The pitch, typed out on load (signin/hero-pitch.tsx): three rows, each
-  // stamped Done (common.done) once it finishes typing, then a closing line
-  // with no stamp.
-  heroPitchRow1:
-    "An AI-assisted notebook to dissect your work. Understand your stuff and break it down fast. Figures, text, audio notes.",
+  // The pitch, typed out on load (signin/hero-pitch.tsx): the lead line on
+  // what Unitos is, then three rows, each stamped Done (common.done) once it
+  // finishes typing, then a closing line that underlines itself.
+  heroPitchLead: "An AI-assisted notebook to dissect your work.",
+  heroPitchRow1: "Understand your stuff and break it down fast. Figures, text, audio notes.",
   heroPitchRow2: "Record and organize your thoughts, right next to your work.",
   heroPitchRow3: "Share your thoughts and brainstorm.",
-  heroPitchClose: "Your style, your pace.",
+  heroPitchClose: "Your understanding, your pace.",
   ctaTitle: "New here? Start your first project",
   signinTitle: "Welcome back",
   forgotTitle: "Reset your password",
@@ -134,10 +134,11 @@ const zh: Record<keyof typeof en, string> = {
   heroA: "搞不懂的{item}？",
   heroItems: "视频|音频|文章|研究论文|法律文件|PDF 作业",
   heroB: "就用 Unitos Notebook。",
-  heroPitchRow1: "AI 辅助笔记本，帮你拆解内容。看懂内容，快速拆解。插图、文字、语音笔记。",
+  heroPitchLead: "AI 辅助笔记本，帮你拆解内容。",
+  heroPitchRow1: "看懂内容，快速拆解。插图、文字、语音笔记。",
   heroPitchRow2: "把想法记录整理好，就在你的内容旁边。",
   heroPitchRow3: "分享想法，一起头脑风暴。",
-  heroPitchClose: "你的风格，你的节奏。",
+  heroPitchClose: "你的理解，你的节奏。",
   ctaTitle: "第一次来？创建你的第一个项目",
   signinTitle: "欢迎回来",
   forgotTitle: "重置密码",

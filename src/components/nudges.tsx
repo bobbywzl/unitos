@@ -15,7 +15,9 @@ import type { TKey } from "@/lib/i18n/dictionaries";
 //
 // The order: New project on the dashboard → + after the first document →
 // select a passage → the side panel → Distill and Extract → drag the first
-// note out of the tray (a ghost card slides out to show the move).
+// note out of the tray (a ghost card slides out to show the move) → drag a
+// second note onto the floating card and hold, which merges the two → More,
+// where Settings live → Link Google Drive on the settings page.
 
 const NUDGE_KEY = "unitos-nudge-step";
 
@@ -62,6 +64,21 @@ const STEPS: Step[] = [
     ghost: true,
     doneWhen: () => document.querySelector("[data-note-floating]") !== null,
   },
+  {
+    // The floating card is the target: the next gesture is dragging a second
+    // note onto it. Docking the card takes the target away, so this one skips.
+    id: "merge",
+    textKey: "works.nudgeMerge",
+    skip: true,
+    glow: "target",
+    side: "below",
+    doneWhen: () => document.querySelector("[data-merge-strip]") !== null,
+  },
+  // Google Drive (SPEC.md §14): More carries Settings, and the settings page
+  // carries Link Google Drive. Both skip — a reader who never opens Settings
+  // is not held there.
+  { id: "settings", textKey: "works.nudgeSettings", skip: true, glow: "target", side: "rail" },
+  { id: "drive", textKey: "works.nudgeDrive", skip: true, glow: "target", side: "below" },
 ];
 
 const GLOW_CLASS = "nudge-glow";
@@ -214,6 +231,10 @@ export function Nudges() {
   const side: "below" | "left" | "above" | "pane" =
     def.side === "below" ? "below" : def.side === "pane" ? "pane" : r.width > r.height ? "above" : "left";
   const centerX = Math.max(150, Math.min(r.left + r.width / 2, vw - 150));
+  // Beside a target near the foot of the window — the rail's More button — the
+  // caption would run off the bottom. It rides up to stay whole on screen, and
+  // its tip stays on the target's row.
+  const besideTop = Math.max(12, Math.min(r.top + 20, window.innerHeight - 130));
   const style =
     side === "below"
       ? { top: r.bottom + 14, left: centerX, transform: "translateX(-50%)" }
@@ -221,15 +242,20 @@ export function Nudges() {
         ? { top: r.top - 14, left: centerX, transform: "translate(-50%, -100%)" }
         : side === "pane"
           ? { top: r.bottom - 24, left: centerX, transform: "translate(-50%, -100%)" }
-          : { top: r.top + 20, left: r.left - 14, transform: "translateX(-100%)" };
+          : { top: besideTop, left: r.left - 14, transform: "translateX(-100%)" };
   const tip =
     side === "below"
       ? "-top-1.5 left-1/2 -translate-x-1/2"
       : side === "above"
         ? "-bottom-1.5 left-1/2 -translate-x-1/2"
         : side === "left"
-          ? "top-5 -right-1.5"
+          ? "-right-1.5"
           : null;
+  // The left tip sits on the target's middle, inside the caption's own box.
+  const tipStyle =
+    side === "left"
+      ? { top: Math.max(14, Math.min(r.top + r.height / 2 - besideTop, 96)) }
+      : undefined;
 
   function dismiss() {
     if (!shownRef.current) return;
@@ -271,7 +297,9 @@ export function Nudges() {
             def.glow === "caption" ? GLOW_CLASS : ""
           }`}
         >
-          {tip && <span aria-hidden className={`absolute size-3 rotate-45 bg-card/85 ${tip}`} />}
+          {tip && (
+            <span aria-hidden style={tipStyle} className={`absolute size-3 rotate-45 bg-card/85 ${tip}`} />
+          )}
           <span className="relative flex-1">{t(def.textKey)}</span>
           <button
             onClick={dismiss}
