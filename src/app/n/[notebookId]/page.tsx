@@ -1330,7 +1330,6 @@ export default async function NotebookPage(props: {
         <DistillPanel
           documentId={paneOne && !paneOne.video ? paneOne.document.id : null}
           distillations={paneOne?.distillations ?? []}
-          keypoints={paneOne?.keypoints ?? null}
           corpusDistillations={corpusDistillations}
           hasDocuments={attached.length > 0}
         />

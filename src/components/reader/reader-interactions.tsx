@@ -52,7 +52,6 @@ import type { TFunc, TKey } from "@/lib/i18n/dictionaries";
 import { useLang, useT } from "@/components/lang-provider";
 import {
   CommentIcon,
-  CopyIcon,
   DistillIcon,
   ExpandIcon,
   ExtractIcon,
@@ -146,6 +145,16 @@ type Popover = {
   rightBase: number;
   cw: number;
 };
+
+// Where the browser's own editing commands belong: a text box, or any
+// editable the reader is typing in. Copy, undo, and redo leave these alone —
+// the field undoes its own typing, the article's history answers everywhere
+// else.
+function isTextEntry(el: HTMLElement): boolean {
+  return (
+    el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || el.isContentEditable
+  );
+}
 
 // One toolbar per content kind (SPEC.md §6). The popover shows the tools of
 // the kind under the selection and nothing else: a tool missing from a
@@ -1120,6 +1129,8 @@ export function ReaderInteractions({
     left: number;
     top: number;
   } | null>(null);
+  const closeLinkRef = useRef(closeLink);
+  closeLinkRef.current = closeLink;
 
   function broadcastPendingLink(next: PendingLink | null) {
     setPendingLink(next);
@@ -1413,18 +1424,20 @@ export function ReaderInteractions({
     setLinkCard(null);
   }
 
-  // Copy the popover's selection (SPEC.md §6): the toolbar keeps the tint on
-  // the selected text but, opening it, replaces the block's marks — the
-  // browser's own selection goes the same moment (the comment on
-  // highlightsByBlock's "selection" kind explains why), so there is nothing
-  // left for the system Copy to act on. quotedText is the same text the
-  // anchor already carries, so this always matches what a working native
-  // copy would have produced.
+  // Ctrl/Cmd+C copies the highlighted text (SPEC.md §6). The article tints the
+  // highlighted text itself while a tool is open on it — the toolbar or the
+  // Close link chip — and painting that tint replaces the block's marks, which
+  // takes the browser's own selection with it (the comment on
+  // highlightsByBlock's "selection" kind explains why), so the system copy
+  // would have nothing left to act on. The anchor's quotedText is the same
+  // text, so this copies exactly what a working native copy would have.
+  // Everywhere else — a real native selection anywhere on the page, any text
+  // box — the browser's own copy runs, untouched.
   async function copySelection() {
-    // Read through the ref, not the popover variable: the Ctrl/Cmd+C effect
-    // below closes over this function once, at mount, so a direct read of
-    // popover would stay the initial null forever.
-    const quote = popoverRef.current?.anchor.quotedText;
+    // Read through the refs, not the state: the Ctrl/Cmd+C effect below closes
+    // over this function once, at mount, so a direct read would stay the
+    // initial null forever.
+    const quote = (popoverRef.current ?? closeLinkRef.current)?.anchor.quotedText;
     if (!quote) return;
     try {
       await navigator.clipboard.writeText(quote);
@@ -1434,16 +1447,14 @@ export function ReaderInteractions({
     }
   }
 
-  // Ctrl/Cmd+C reaches for the same text while the toolbar is open: the
-  // reader should not have to notice the Copy button exists. A real native
-  // selection (rare here, but Explain's bubble and others keep their own)
-  // takes priority and is left to the browser as normal.
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== "c") return;
-      if (!popoverRef.current) return;
-      const active = document.activeElement;
-      if (active instanceof HTMLTextAreaElement || active instanceof HTMLInputElement) return;
+      if (!(e.metaKey || e.ctrlKey) || e.altKey || e.key.toLowerCase() !== "c") return;
+      if (!popoverRef.current && !closeLinkRef.current) return;
+      const active = document.activeElement as HTMLElement | null;
+      if (active && !active.closest("[data-edit-block]") && isTextEntry(active)) return;
+      // A real native selection anywhere — the article's own editable while
+      // editing, Explain's bubble, a card's text — is the browser's to copy.
       if (window.getSelection()?.toString()) return;
       e.preventDefault();
       void copySelection();
@@ -2735,16 +2746,9 @@ export function ReaderInteractions({
       if (forDocument !== documentIdRef.current) return;
       openDistillPage(distillationId);
     };
-    const onOpenKeypoints = (e: Event) => {
-      const { documentId: forDocument } = (e as CustomEvent<{ documentId: string }>).detail;
-      if (forDocument !== documentIdRef.current) return;
-      openKeypointsPage();
-    };
     window.addEventListener("dissect:open-distillation", onOpen);
-    window.addEventListener("dissect:open-keypoints", onOpenKeypoints);
     return () => {
       window.removeEventListener("dissect:open-distillation", onOpen);
-      window.removeEventListener("dissect:open-keypoints", onOpenKeypoints);
     };
      
   }, []);
@@ -4593,16 +4597,23 @@ export function ReaderInteractions({
   // can settle it first.
   const flushEditRef = useRef<(() => Promise<void>) | null>(null);
 
-  // Cmd+Z and Shift+Cmd+Z while editing (Ctrl elsewhere). The article's
-  // editable is the browser's, so its own undo would fight this one: the
-  // article's history is the one that answers, and it holds the typing too.
+  // Cmd+Z and Shift+Cmd+Z, Ctrl elsewhere (Ctrl+Y too). The article's history
+  // answers in edit mode and after it: leaving the mode is not a reason for
+  // the last change to stop being undoable. Two things keep their own undo and
+  // are left to the browser: a text box or an editable the reader is typing in
+  // — a note, the assistant's box, any input — and every key with nothing in
+  // the stack to take back, which the browser then handles as it always would.
+  // The article's own editable is the exception: its typing is recorded here,
+  // so the browser's undo of the same typing would fight this one.
   useEffect(() => {
-    if (!editMode) return;
     const onKey = (e: KeyboardEvent) => {
       if (!(e.metaKey || e.ctrlKey) || e.altKey) return;
       const key = e.key.toLowerCase();
       const redo = key === "y" || (key === "z" && e.shiftKey);
       if (key !== "z" && !redo) return;
+      const active = document.activeElement as HTMLElement | null;
+      if (active && !active.closest("[data-edit-block]") && isTextEntry(active)) return;
+      if ((redo ? redoStack.current : undoStack.current).length === 0) return;
       e.preventDefault();
       e.stopPropagation();
       void runStep(!redo);
@@ -4610,15 +4621,20 @@ export function ReaderInteractions({
     document.addEventListener("keydown", onKey, true);
     return () => document.removeEventListener("keydown", onKey, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editMode]);
+  }, []);
+
+  // The history belongs to the open document: its steps name that document's
+  // blocks. Opening another document starts an empty one; entering and leaving
+  // edit mode does not, so Cmd+Z still takes back what the last session typed.
+  useEffect(() => {
+    undoStack.current = [];
+    redoStack.current = [];
+    syncHistory();
+  }, [documentId]);
 
   // Edit mode: the whole body is editable in place. Every change goes through
   // the same routes as the assistant's, so history and healing stay uniform.
   function toggleEditMode() {
-    // A fresh session of editing starts with an empty history.
-    undoStack.current = [];
-    redoStack.current = [];
-    syncHistory();
     setPopover(null);
     setSubmenu(null);
     setBubble(null);
@@ -5897,15 +5913,6 @@ function blockFormatKind(
               {t("reader.keyTerm")}
             </p>
           )}
-          <button
-            onClick={() => void copySelection()}
-            data-track="selection-copy"
-            data-tip={t("reader.copySelectionTitle")}
-            className={`flex w-full items-center gap-1.5 rounded-full ${toolRow} text-left text-sand-800 hover:bg-clay-100 hover:text-clay-800`}
-          >
-            <CopyIcon size={coarse ? 14 : 12} />
-            {t("reader.copySelection")}
-          </button>
           {pendingLink && (
             <button
               disabled={busy}

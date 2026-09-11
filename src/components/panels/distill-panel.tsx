@@ -1,24 +1,22 @@
 "use client";
 
-import type { CorpusDistillationView, DistillationView, KeypointsView } from "@/lib/types";
+import type { CorpusDistillationView, DistillationView } from "@/lib/types";
 import { useCollab } from "@/components/collab/collab-context";
 import { AuthorChip } from "@/components/collab/person-badge";
 import { useLang, useT } from "@/components/lang-provider";
 
-// The Distill tab: the distillation (KEYPOINTS, the reader's Distill) and
-// every extraction (DISTILL, the reader's Extract) of the open document, for
-// reference. The distillation row opens the distilled page; an extraction row
-// opens the extract page on that extraction; the buttons open the pages on
-// their run views. The pages themselves delete what they show.
+// The Extract tab: every extraction (DISTILL, the reader's Extract) of the
+// open document, and the project's extractions, for reference. An extraction
+// row opens the extract page on that extraction; the buttons open the pages on
+// their run views. The pages themselves delete what they show. Distill lives
+// at the top of the article, not here.
 export function DistillPanel({
   documentId,
-  keypoints,
   distillations,
   corpusDistillations,
   hasDocuments,
 }: {
   documentId: string | null; // null = no text document open
-  keypoints: KeypointsView | null;
   distillations: DistillationView[];
   corpusDistillations: CorpusDistillationView[];
   hasDocuments: boolean;
@@ -28,11 +26,6 @@ export function DistillPanel({
   // Dates follow the app language; English keeps the browser default.
   const dateLocale = lang === "zh" ? "zh-CN" : undefined;
   const { canEdit } = useCollab();
-
-  function openKeypoints() {
-    if (!documentId) return;
-    window.dispatchEvent(new CustomEvent("dissect:open-keypoints", { detail: { documentId } }));
-  }
 
   function open(distillationId: string | null) {
     if (!documentId) return;
@@ -106,41 +99,6 @@ export function DistillPanel({
 
   return (
     <div className="space-y-6">
-      <div className="space-y-3">
-        {heading(t("panes.keypoints"))}
-        {canEdit && (
-          <button
-            onClick={openKeypoints}
-            data-track="keypoints-article"
-            className={button}
-            data-tip={t("panels.keypointsButtonTitle")}
-          >
-            {t("panels.keypointsArticle")}
-          </button>
-        )}
-        {keypoints ? (
-          <button
-            onClick={openKeypoints}
-            data-track="keypoints-open"
-            className={`${row} block w-full`}
-            data-tip={t("panels.openKeypoints")}
-          >
-            <span className="block text-[13.5px] leading-snug font-semibold text-sand-800">
-              {keypoints.points[0]?.text ?? ""}
-            </span>
-            <span className="mt-0.5 flex items-center gap-1.5 text-[11px] text-sand-500">
-              {t(keypoints.points.length === 1 ? "panels.pointCountOne" : "panels.pointCountMany", {
-                n: keypoints.points.length,
-              })}{" "}
-              · {new Date(keypoints.createdAt).toLocaleDateString(dateLocale)}
-              <AuthorChip createdById={keypoints.createdById} nameless size={13} />
-            </span>
-          </button>
-        ) : (
-          <p className="text-sm text-sand-600">{t("panels.keypointsEmpty")}</p>
-        )}
-      </div>
-
       <div className="space-y-3">
         {heading(t("panes.distill"))}
         {corpusSection}
