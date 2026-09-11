@@ -2270,3 +2270,155 @@ li[data-checked] > .note-box::before {
   transform: rotate(-1.2deg) scale(0.94);
   filter: drop-shadow(0 16px 34px rgb(46 43 37 / 0.3));
 }
+
+/* ── Merging two notes (SPEC.md §6) ────────────────────────────────────────
+   The hold ring draws itself around the covered note over the two seconds of
+   the hold; at the full circle the merge runs. Then the held note falls into
+   the covered one, which takes it in and works: a sheen crosses the card
+   while the model writes the note that replaces both, and the new text
+   arrives on a settle. Reduced motion keeps all of it still — the ring fills
+   in one step, the fall is a fade, and the working card says so in words. */
+
+/* The hold ring: a rounded outline that draws around the covered note. */
+.merge-ring {
+  position: fixed;
+  z-index: 45;
+  overflow: visible;
+  pointer-events: none;
+}
+.merge-ring rect {
+  fill: none;
+  stroke: var(--sage-600);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .merge-ring rect {
+    animation: merge-ring-draw var(--merge-dwell, 2000ms) linear forwards;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .merge-ring rect {
+    stroke-dashoffset: 0;
+    opacity: 0.5;
+  }
+}
+@keyframes merge-ring-draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* The fall: the held note drops into the note it covers and is taken in. It
+   starts on the held note's box and lands on the covered note's, given as
+   --merge-dx, --merge-dy, and --merge-scale. */
+.merge-fall {
+  position: fixed;
+  z-index: 46;
+  border-radius: 16px;
+  background: var(--card);
+  box-shadow: var(--shadow-float);
+  outline: 2px solid var(--sage-600);
+  outline-offset: -2px;
+  pointer-events: none;
+  animation: merge-fall 0.42s cubic-bezier(0.34, 0.9, 0.3, 1) forwards;
+}
+@media (prefers-reduced-motion: reduce) {
+  .merge-fall {
+    animation: fade-out 0.2s linear forwards;
+  }
+}
+@keyframes merge-fall {
+  from {
+    transform: none;
+    opacity: 1;
+  }
+  70% {
+    opacity: 0.55;
+  }
+  to {
+    transform: translate(var(--merge-dx), var(--merge-dy)) scale(var(--merge-scale));
+    opacity: 0;
+  }
+}
+
+/* The note that takes the other in: one bloom as it lands. */
+@media (prefers-reduced-motion: no-preference) {
+  .note-absorb {
+    animation: note-absorb 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+}
+@keyframes note-absorb {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--sage-600) 55%, transparent);
+  }
+  35% {
+    transform: scale(1.025);
+    box-shadow: 0 0 0 10px color-mix(in srgb, var(--sage-600) 0%, transparent);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--sage-600) 0%, transparent);
+  }
+}
+
+/* The note while the model writes the one that replaces both: a sheen crosses
+   it, the same sweep the thinking label uses. */
+.note-merging {
+  position: relative;
+  overflow: hidden;
+  outline: 2px solid color-mix(in srgb, var(--sage-600) 45%, transparent);
+}
+.note-merging .note-body,
+.note-merging .note-merging-under {
+  opacity: 0.45;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .note-merging::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: linear-gradient(
+      100deg,
+      transparent 34%,
+      color-mix(in srgb, var(--sage-600) 16%, transparent) 50%,
+      transparent 66%
+    );
+    background-size: 260% 100%;
+    animation: merge-sheen 1.6s linear infinite;
+  }
+}
+@keyframes merge-sheen {
+  from {
+    background-position: 160% 0;
+  }
+  to {
+    background-position: -160% 0;
+  }
+}
+
+/* The merged text arriving: it settles in place of the two. */
+@media (prefers-reduced-motion: no-preference) {
+  .note-merged {
+    animation: note-merged 0.42s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+}
+@keyframes note-merged {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+    filter: blur(2px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
+}

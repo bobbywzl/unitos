@@ -21,8 +21,10 @@ export type CardDrag = {
   label: string;
 };
 
-/** What the drop does. join: the card's text lands in the note as it is.
-    ai: the model writes the one note that takes their place (SPEC.md §6). */
+/** What a merge does to the text. join: the sources' text lands in the target
+    as it is. ai: the model writes the one note that takes their place
+    (SPEC.md §6). A drag always merges with AI; the ticker's bulk action is
+    where join lives. */
 export type MergeMode = "join" | "ai";
 
 export const CARD_DRAG_START = "dissect:card-drag-start";
@@ -33,7 +35,7 @@ export const CARD_DRAG_END = "dissect:card-drag-end";
 export const CARD_DROP_TARGET = "dissect:card-drop-target";
 
 export type CardDragOverDetail = { drag: CardDrag; targetId: string | null };
-export type CardDragEndDetail = { drag: CardDrag; targetId: string | null; mode: MergeMode };
+export type CardDragEndDetail = { drag: CardDrag; targetId: string | null };
 
 /** The drop target under a point, or null. Targets mark themselves with
     data-note-drop-target; the ghost never takes the hit test (it is not in
@@ -46,18 +48,6 @@ function targetAt(x: number, y: number): string | null {
     }
   }
   return null;
-}
-
-/** The merge choice under a point: the pill of the strip the target draws,
-    or "join" when the pointer is on the target but on no pill. */
-function modeAt(x: number, y: number): MergeMode {
-  for (const el of document.querySelectorAll<HTMLElement>("[data-merge-choice]")) {
-    const r = el.getBoundingClientRect();
-    if (r.width > 0 && x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) {
-      return el.dataset.mergeChoice === "ai" ? "ai" : "join";
-    }
-  }
-  return "join";
 }
 
 function ghostFor(label: string): HTMLElement {
@@ -108,10 +98,9 @@ export function startCardDrag(
     onEnd(detail);
   };
   const onUp = (e: PointerEvent) => {
-    const landed = targetAt(e.clientX, e.clientY);
-    finish({ drag, targetId: landed, mode: landed ? modeAt(e.clientX, e.clientY) : "join" });
+    finish({ drag, targetId: targetAt(e.clientX, e.clientY) });
   };
-  const onCancel = () => finish({ drag, targetId: null, mode: "join" });
+  const onCancel = () => finish({ drag, targetId: null });
   const onKey = (e: KeyboardEvent) => {
     if (e.key !== "Escape") return;
     e.stopPropagation();

@@ -1,5 +1,5 @@
 // Drives the built app: the drag board (components/sortable.tsx) — the drop
-// line, the reorder it lands, the hold that surfaces the merge strip, and the
+// line, the reorder it lands, the hold that draws the ring and merges, and the
 // drop of an annotation onto the floating note card. Prints PASS/FAIL.
 //
 // The run merges and moves notes, so it wants a fresh fixture: seed first
@@ -72,7 +72,7 @@ for (let i = 1; i <= 14; i++) {
 }
 check("drop line shows while dragging", (await page.locator(".drop-line").count()) === 1);
 check("cards hold still", (await page.locator(".card-drag-overlay").count()) === 1);
-check("no merge strip while passing", (await page.locator("[data-merge-strip]").count()) === 0);
+check("no ring while passing", (await page.locator(".merge-ring").count()) === 0);
 const line = (await lineBefore())[0];
 await page.mouse.up();
 await page.waitForTimeout(2000);
@@ -86,10 +86,10 @@ check(
   `landed ${landed}, line before ${line} at ${lineAt}`,
 );
 
-// 2. Laying the dragged card over another card and holding it there surfaces
-// the merge strip. The card is drawn under the pointer at the offset it was
-// picked up by, so the pointer goes to where that offset puts the card on the
-// target — not to the target's middle.
+// 2. Laying the dragged card over another card and holding it there draws the
+// ring, which closes and merges on its own. The card is drawn under the pointer
+// at the offset it was picked up by, so the pointer goes to where that offset
+// puts the card on the target — not to the target's middle.
 const now = await listIds();
 const trayNow = await trayIds();
 const src = await page.locator(`[data-sortable-id="${now[0]}"]`).boundingBox();
@@ -104,20 +104,27 @@ for (let i = 1; i <= 10; i++) {
   await page.mouse.move(from.x + ((to.x - from.x) * i) / 10, from.y + ((to.y - from.y) * i) / 10);
   await page.waitForTimeout(30);
 }
-check("no strip before the hold", (await page.locator("[data-merge-strip]").count()) === 0);
-check("the covered card rings before the hold finishes", (await page.locator(".outline-sage-500").count()) > 0);
-await page.waitForTimeout(2400);
-check("the hold surfaces the merge strip", (await page.locator("[data-merge-strip]").count()) === 1);
-check("the line is gone while the strip is up", (await page.locator(".drop-line").count()) === 0);
-check("two choices on the strip", (await page.locator("[data-merge-choice]").count()) === 2);
+check("the ring draws around the covered card", (await page.locator(".merge-ring").count()) === 1);
+check("the covered card rings", (await page.locator(".outline-sage-500").count()) > 0);
+check("the line is gone while the ring draws", (await page.locator(".drop-line").count()) === 0);
 check("the dragged card draws back over the card it covers", (await page.locator(".card-drag-overlay-merging").count()) === 1);
-await page.screenshot({ path: `${SHOT}/merge-strip.png` });
-const join = await page.locator('[data-merge-choice="join"]').boundingBox();
-await page.mouse.move(join.x + join.width / 2, join.y + join.height / 2, { steps: 8 });
-await page.waitForTimeout(150);
+await page.screenshot({ path: `${SHOT}/merge-ring.png` });
+// The ring closes on its own: the merge runs without a release, the held card
+// falls into the card it merges into, and that card works while the model writes.
+let fell = false;
+for (let i = 0; i < 90 && !fell; i++) {
+  if (await page.locator(".merge-fall").count()) {
+    fell = true;
+    await page.screenshot({ path: `${SHOT}/merge-fall.png` });
+  }
+  await page.waitForTimeout(40);
+}
+check("the held card falls into the card it merges into", fell);
+check("the ring is gone once the merge runs", (await page.locator(".merge-ring").count()) === 0);
+await page.waitForTimeout(400);
+check("the merge took one note away", (await trayIds()).length === trayNow.length - 1);
 await page.mouse.up();
 await page.waitForTimeout(2500);
-check("the merge took one note away", (await trayIds()).length === trayNow.length - 1);
 
 // 3. A note pulled sideways floats; an annotation dropped on it lands in it,
 // and the annotation stays where it is.
@@ -152,11 +159,8 @@ if (grips > 0) {
   }
   await page.waitForTimeout(200);
   check("the ghost follows the pointer", (await page.locator(".card-drag-ghost").count()) === 1);
-  check("the floating card offers both choices", (await page.locator("[data-merge-choice]").count()) === 2);
+  check("the floating card says what the drop does", (await page.locator("[data-floating-note] .outline-sage-500, [data-floating-note]").count()) > 0);
   await page.screenshot({ path: `${SHOT}/merge-drop.png` });
-  const pill = await page.locator('[data-merge-choice="join"]').first().boundingBox();
-  await page.mouse.move(pill.x + pill.width / 2, pill.y + pill.height / 2, { steps: 8 });
-  await page.waitForTimeout(150);
   await page.mouse.up();
   await page.waitForTimeout(3000);
   check("the annotation stays in the panel", (await page.locator("[data-annotation-source-id]").count()) === anns);

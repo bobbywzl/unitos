@@ -7,6 +7,7 @@ import { NOTE_WRAP_GAP as GAP, announceNoteWrap, type NoteWrapSpacer } from "@/l
 import { CARD_DROP_TARGET, type CardDragEndDetail } from "@/lib/card-drag";
 import { useCollab } from "@/components/collab/collab-context";
 import { useT } from "@/components/lang-provider";
+import { ThinkingIndicator } from "@/components/thinking";
 import { NoteEditor } from "@/components/outline/note-editor";
 import { SaveStateLabel } from "@/components/outline/save-state";
 import { useImageDrop } from "@/components/use-image-drop";
@@ -222,7 +223,7 @@ export function FloatingNoteEditor({
         await actions.saveNote(edit.id, current);
         confirmSaved(current);
       }
-      const merged = await actions.mergeNotes(edit.id, end.drag.ids, end.mode);
+      const merged = await actions.mergeNotes(edit.id, end.drag.ids, "ai");
       if (merged) {
         markSaved(merged);
         setDraft(merged);
@@ -408,13 +409,13 @@ export function FloatingNoteEditor({
         grab ? "select-none" : ""
       }${imageDrop.over ? " outline-2 outline-dashed outline-clay-400" : ""}${
         cardDrop.over ? " outline-2 outline-sage-500" : ""
-      }`}
+      }${merging ? " note-merging note-absorb" : ""}`}
     >
       {dropError && <p className="mb-1 shrink-0 text-[11px] text-red-500">{dropError}</p>}
       {mergeError && <p className="mb-1 shrink-0 text-[11px] text-red-500">{mergeError}</p>}
       {/* The save state at the top of the card (SPEC.md §6). */}
       <div className="mb-1 flex shrink-0 items-center justify-end gap-2">
-        {merging && <span className="text-[11px] text-sand-500">{t("outline.merging")}</span>}
+        {merging && <ThinkingIndicator label={t("outline.merging")} className="text-[11px]" />}
         <SaveStateLabel state={saveState} />
       </div>
       <NoteEditor
@@ -432,26 +433,13 @@ export function FloatingNoteEditor({
         handle={{ onPointerDown: startDrag, title: t("reader.dragToMove"), label: t("outline.floatingTitle") }}
         moreHref={`/n/${actions.notebookId}/notes`}
       />
-      {/* A card is being dragged onto this one: the two pills say what the
-          drop does, and the pill under the pointer at the release wins. */}
+      {/* A card is being dragged onto this one: one line says what the drop
+          does. The drop itself is the merge — the card then works while the
+          model writes the note that replaces both. */}
       {cardDrop.drag && canEdit ? (
         <div className="mt-2 flex shrink-0 items-center gap-1.5">
-          <span className="mr-auto text-[11px] text-sand-600">
+          <span className="text-[11px] font-semibold text-sage-700">
             {t(cardDrop.drag.kind === "annotation" ? "outline.dropAnnotation" : "outline.dropNote")}
-          </span>
-          <span
-            data-merge-choice="ai"
-            data-tip={t("outline.mergeWithAiTitle")}
-            className="rounded-full bg-sage-600 px-3 py-1 text-xs font-semibold text-sage-fg"
-          >
-            {t("outline.mergeWithAi")}
-          </span>
-          <span
-            data-merge-choice="join"
-            data-tip={t("outline.joinTextTitle")}
-            className="rounded-full border border-line px-3 py-1 text-xs font-semibold text-sand-700"
-          >
-            {t("outline.joinText")}
           </span>
         </div>
       ) : (

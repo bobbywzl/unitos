@@ -15,7 +15,6 @@ import {
 } from "@dnd-kit/core";
 import { SortableContext, useSortable, type SortingStrategy } from "@dnd-kit/sortable";
 import { getEventCoordinates } from "@dnd-kit/utilities";
-import type { MergeMode } from "@/lib/card-drag";
 
 // One drag across many lists (SPEC.md §6). Every list is a SortableGroup
 // inside a SortableBoard, and the board owns the one DndContext, so a drag
@@ -28,11 +27,12 @@ import type { MergeMode } from "@/lib/card-drag";
 // over cards that hold still says the same thing and never moves the target.
 //
 // Merge is a hold, not a pass, and it reads the cards, not the pointer: once
-// the dragged card covers more than MERGE_COVER of another card the target
-// rings, and holding it there for MERGE_DWELL_MS surfaces the merge strip on
-// it — Merge with AI, or Join text. Releasing on a pill runs it; releasing on
-// the card runs Join text; moving on puts the line back. A drag that passes
-// over a card on its way somewhere else never merges anything.
+// the dragged card covers more than MERGE_COVER of another card, a ring draws
+// itself around that card over MERGE_DWELL_MS, and at the full ring the merge
+// runs — the held card falls into the other one, which takes it in and works
+// while the model writes the note that replaces both. Moving on before the
+// ring closes puts the line back. A drag that passes over a card on its way
+// somewhere else never merges anything.
 //
 // The pointer is not the card. A card picked up by its grip hangs below and
 // right of the pointer, so a pointer that is on a card means the dragged card
@@ -43,13 +43,14 @@ import type { MergeMode } from "@/lib/card-drag";
     them. The smaller of the two: a one-line card dropped on a long one covers
     little of it and all of itself, and either way it is over that card. */
 const MERGE_COVER = 0.8;
-/** The hold that surfaces the merge strip once the cards cover. */
+/** How long the ring takes to draw once the cards cover. At the full ring
+    the merge runs. */
 export const MERGE_DWELL_MS = 2000;
 // The pointer may drift this far and still count as holding.
 const DWELL_DRIFT_PX = 6;
-// How far past the card, the strip, and where the hold began the pointer may
-// go and still be on them.
-const MERGE_REACH_PX = 16;
+// How long the held card takes to fall into the card it merges into
+// (globals.css, .merge-fall). The card it lands on blooms at the same time.
+const MERGE_FALL_MS = 420;
 
 // Cards hold still: the strategy moves nothing while a drag runs.
 const holdStillStrategy: SortingStrategy = () => null;
@@ -60,7 +61,7 @@ export type HandleProps = {
   listeners: SortableHook["listeners"];
 };
 
-/** The card the merge strip is open on, or null. Cards read it to draw the ring. */
+/** The card the dragged card covers, or null. Cards read it to draw their ring. */
 const MergeTargetContext = createContext<string | null>(null);
 export function useMergeTarget() {
   return useContext(MergeTargetContext);
@@ -86,32 +87,6 @@ function rectOf(id: string): DOMRect | null {
 
 function inRect(x: number, y: number, r: DOMRect | null): boolean {
   return !!r && x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
-}
-
-/** The box that holds both, or the first alone when there is no second. */
-function union(a: DOMRect, b: DOMRect | null): DOMRect {
-  if (!b || b.width === 0) return a;
-  const left = Math.min(a.left, b.left);
-  const top = Math.min(a.top, b.top);
-  return new DOMRect(left, top, Math.max(a.right, b.right) - left, Math.max(a.bottom, b.bottom) - top);
-}
-
-/** The box grown by `px` on every side. */
-function grow(r: DOMRect, px: number): DOMRect {
-  return new DOMRect(r.left - px, r.top - px, r.width + 2 * px, r.height + 2 * px);
-}
-
-/** Where the merge strip stays open: the card it is on, the strip itself, and
-    where the hold began, with room around all three. Reaching a pill moves
-    the dragged card off the card it covers, so the cover cannot be what keeps
-    the strip open; leaving this region is what closes it. The release reads
-    the same region, so the strip being open always means a release merges. */
-function armReach(armed: { rect: DOMRect; anchor: DOMRect }): DOMRect {
-  const strip = document.querySelector<HTMLElement>("[data-merge-strip]");
-  return grow(
-    union(union(armed.rect, armed.anchor), strip?.getBoundingClientRect() ?? null),
-    MERGE_REACH_PX,
-  );
 }
 
 /** One point as a box, so a point unions with the boxes around it. */
@@ -207,7 +182,6 @@ export function SortableBoard({
   onMerge,
   canMerge,
   canDrop,
-  mergeLabels,
   overlay,
   axis,
   children,
@@ -217,16 +191,14 @@ export function SortableBoard({
       `beforeId` — null when it landed at the end of that list. The same list
       on both sides is a reorder. */
   onDrop: (fromListId: string, toListId: string, itemId: string, beforeId: string | null) => void;
-  /** A hold on another card, then a release on one of the strip's pills. */
-  onMerge?: (id: string, intoId: string, mode: MergeMode) => void;
+  /** The ring closed on another card: the two merge. */
+  onMerge?: (id: string, intoId: string) => void;
   canMerge?: (id: string, intoId: string) => boolean;
   /** Whether a card of `fromListId` can land in `toListId`. Without it every
       list takes every card. A page holding lists of two kinds — a section's
       notes and a section's children — says here which take which, so a drag
       never draws a line where the drop would do nothing. */
   canDrop?: (fromListId: string, toListId: string) => boolean;
-  /** The strip's two pills, in order: Merge with AI, then Join text. */
-  mergeLabels?: { ai: string; aiTitle: string; join: string; joinTitle: string };
   /** The card the overlay carries under the pointer while it is dragged. */
   overlay?: (itemId: string) => React.ReactNode;
   axis?: "y";
@@ -243,31 +215,28 @@ export function SortableBoard({
   // its own size, and the merge reads where it is drawn.
   const [active, setActive] = useState<{ id: string; width: number } | null>(null);
   const [line, setLine] = useState<DropLine | null>(null);
-  // The card the dragged card covers: it rings, and holding there arms it.
-  const [covered, setCovered] = useState<string | null>(null);
-  // Armed: the merge strip is open on this card. rect is the card's box and
-  // anchor is where the pointer was when the hold finished — the strip sits
-  // below the card, and the pointer reaches it through both.
-  const [armed, setArmed] = useState<{ id: string; rect: DOMRect; anchor: DOMRect } | null>(null);
+  // The card the dragged card covers: the ring draws around it, and at the
+  // full ring the merge runs. rect is the card's box, for the ring.
+  const [covered, setCovered] = useState<{ id: string; rect: DOMRect } | null>(null);
+  // The held card falling into the card it merges into: where it starts and
+  // where it lands. It clears itself when the fall is done.
+  const [fall, setFall] = useState<{ from: DOMRect; to: DOMRect } | null>(null);
   const registry = useRef<Registry>(new Map());
   // The live values the release reads: state lands a render too late for it.
   const lineRef = useRef<DropLine | null>(null);
-  const armedRef = useRef<{ id: string; rect: DOMRect; anchor: DOMRect } | null>(null);
+  // The merge already ran on the hold, so the release is not a drop.
+  const mergedRef = useRef(false);
   // Where the pointer sits inside the dragged card, and the card's size: the
   // card is drawn under the pointer at this offset, so this is where it is.
   const held = useRef<{ dx: number; dy: number; width: number; height: number } | null>(null);
   const dwell = useRef<{ id: string; x: number; y: number; timer: ReturnType<typeof setTimeout> } | null>(
     null,
   );
+  const fallTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   function clearDwell() {
     if (dwell.current) clearTimeout(dwell.current.timer);
     dwell.current = null;
-  }
-
-  function setArm(next: { id: string; rect: DOMRect; anchor: DOMRect } | null) {
-    armedRef.current = next;
-    setArmed(next);
   }
 
   function setDropLine(next: DropLine | null) {
@@ -279,11 +248,34 @@ export function SortableBoard({
 
   function reset() {
     clearDwell();
-    setArm(null);
     setCovered(null);
     setDropLine(null);
     setActive(null);
     held.current = null;
+  }
+
+  /** The ring closed: the merge runs, and the held card falls into the card it
+      merges into. The drag is over — the release that follows is not a drop.
+
+      The fall lands on where the card ends up, not where it was: the merge
+      takes the held note out of the list at once, so the card it merges into
+      moves up a row. The landing is measured after that move has painted. */
+  function runMerge(itemId: string, intoId: string, card: DOMRect) {
+    mergedRef.current = true;
+    clearDwell();
+    setCovered(null);
+    setDropLine(null);
+    setActive(null);
+    onMerge?.(itemId, intoId);
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        const target = rectOf(intoId);
+        if (!target) return;
+        setFall({ from: card, to: target });
+        if (fallTimer.current) clearTimeout(fallTimer.current);
+        fallTimer.current = setTimeout(() => setFall(null), MERGE_FALL_MS);
+      }),
+    );
   }
 
   function handleDragStart({ active: dragged, activatorEvent }: DragStartEvent) {
@@ -304,14 +296,8 @@ export function SortableBoard({
     const y = start.y + delta.y;
     const dragged = String(active.id);
 
-    // The strip is open: it stays open while the pointer is on the card, on
-    // the strip, or on the way between them — reaching a pill moves the card
-    // off the one it covers, and that is not moving on. It closes when the
-    // pointer leaves all three, and the line comes back.
-    if (armedRef.current) {
-      if (inRect(x, y, armReach(armedRef.current))) return;
-      setArm(null);
-    }
+    // The merge already ran on the hold: the drag has nothing left to do.
+    if (mergedRef.current) return;
 
     // Only the lists this card can land in.
     const from = [...registry.current.entries()].find(([, ids]) => ids.includes(dragged));
@@ -328,11 +314,13 @@ export function SortableBoard({
       ? new DOMRect(x - grab.dx, y - grab.dy, grab.width, grab.height)
       : pointRect(x, y);
     const candidate = mergeCandidateAt(lists, dragged, card, canMerge);
-    setCovered(candidate);
     if (!candidate) {
+      setCovered(null);
       clearDwell();
       return;
     }
+    // The ring is one drawing, from the first frame of the cover to the last.
+    // A hold that stays on the same card keeps the ring it started.
     const holding =
       dwell.current &&
       dwell.current.id === candidate &&
@@ -340,32 +328,28 @@ export function SortableBoard({
       Math.abs(y - dwell.current.y) <= DWELL_DRIFT_PX;
     if (holding) return;
     clearDwell();
+    const rect = rectOf(candidate);
+    setCovered(rect ? { id: candidate, rect } : null);
     dwell.current = {
       id: candidate,
       x,
       y,
       timer: setTimeout(() => {
-        const rect = rectOf(candidate);
-        if (!rect) return;
         dwell.current = null;
-        setArm({ id: candidate, rect, anchor: pointRect(x, y) });
+        runMerge(dragged, candidate, card);
       }, MERGE_DWELL_MS),
     };
   }
 
   function handleDragEnd({ active }: DragEndEvent) {
     const itemId = String(active.id);
-    const armedOn = armedRef.current;
     const landing = lineRef.current;
-    // The strip is up: a release on a pill runs it, a release on the card runs
-    // Join text, and a release anywhere else is not a merge — the card lands
-    // where the line stood.
-    const mode = armedOn ? pickedMode(armedOn) : null;
+    const merged = mergedRef.current;
+    mergedRef.current = false;
     reset();
-    if (onMerge && mode && armedOn && armedOn.id !== itemId) {
-      onMerge(itemId, armedOn.id, mode);
-      return;
-    }
+    // The ring closed and the merge already ran: the card is gone from the
+    // list, and this release is only the hand letting go.
+    if (merged) return;
     if (!landing) return;
     const lists = [...registry.current.entries()];
     const from = lists.find(([, ids]) => ids.includes(itemId));
@@ -374,61 +358,69 @@ export function SortableBoard({
     onDrop(from[0], landing.listId, itemId, landing.beforeId);
   }
 
-  // Which pill the release landed on. The pointer is the drag's, so the pill
-  // takes no click of its own: its box decides.
-  const pointer = useRef({ x: 0, y: 0 });
   useEffect(() => {
-    const track = (e: PointerEvent) => {
-      pointer.current = { x: e.clientX, y: e.clientY };
+    return () => {
+      clearDwell();
+      if (fallTimer.current) clearTimeout(fallTimer.current);
     };
-    window.addEventListener("pointermove", track);
-    return () => window.removeEventListener("pointermove", track);
   }, []);
-  function pickedMode(armedOn: { rect: DOMRect; anchor: DOMRect }): MergeMode | null {
-    const { x, y } = pointer.current;
-    for (const el of document.querySelectorAll<HTMLElement>("[data-merge-choice]")) {
-      if (inRect(x, y, el.getBoundingClientRect())) {
-        return el.dataset.mergeChoice === "ai" ? "ai" : "join";
-      }
-    }
-    // Anywhere else the strip is still open: Join text. Past it the strip has
-    // already closed, and the release is the drop the line shows.
-    return inRect(x, y, armReach(armedOn)) ? "join" : null;
-  }
 
-  useEffect(() => () => clearDwell(), []);
+  // The hold ring: it draws itself around the covered card over the hold, and
+  // at the full ring the merge runs. Keyed by the card, so moving to another
+  // card starts a new ring rather than carrying on with the old one's.
+  const ring =
+    covered && typeof document !== "undefined"
+      ? createPortal(
+          <svg
+            key={covered.id}
+            className="merge-ring"
+            style={
+              {
+                left: Math.round(covered.rect.left) - 3,
+                top: Math.round(covered.rect.top) - 3,
+                width: Math.round(covered.rect.width) + 6,
+                height: Math.round(covered.rect.height) + 6,
+                "--merge-dwell": `${MERGE_DWELL_MS}ms`,
+              } as React.CSSProperties
+            }
+            aria-hidden
+          >
+            <rect
+              x="1.5"
+              y="1.5"
+              width={Math.round(covered.rect.width) + 3}
+              height={Math.round(covered.rect.height) + 3}
+              rx="17"
+              pathLength={1}
+            />
+          </svg>,
+          document.body,
+        )
+      : null;
 
-  // The strip sits under the card it would merge into, or over it when the
-  // card is near the bottom of the window.
-  const strip =
-    armed && mergeLabels && typeof document !== "undefined"
+  // The fall: the held card drops into the card it merges into.
+  const falling =
+    fall && typeof document !== "undefined"
       ? createPortal(
           <div
-            data-merge-strip
-            style={{
-              left: Math.round(armed.rect.left + armed.rect.width / 2),
-              top:
-                armed.rect.bottom + 52 > window.innerHeight
-                  ? Math.round(armed.rect.top - 44)
-                  : Math.round(armed.rect.bottom + 8),
-            }}
-            className="pointer-events-none fixed z-50 flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-card px-1.5 py-1.5 shadow-float"
-          >
-            <span
-              data-merge-choice="ai"
-              data-tip={mergeLabels.aiTitle}
-              className="rounded-full bg-sage-600 px-3 py-1 text-xs font-semibold text-sage-fg"
-            >
-              {mergeLabels.ai}
-            </span>
-            <span
-              data-merge-choice="join"
-              data-tip={mergeLabels.joinTitle}
-              className="rounded-full border border-line px-3 py-1 text-xs font-semibold text-sand-700"
-            >
-              {mergeLabels.join}
-            </span>
-          </div>,
+            className="merge-fall"
+            style={
+              {
+                left: Math.round(fall.from.left),
+                top: Math.round(fall.from.top),
+                width: Math.round(fall.from.width),
+                height: Math.round(fall.from.height),
+                "--merge-dx": `${Math.round(
+                  fall.to.left + fall.to.width / 2 - (fall.from.left + fall.from.width / 2),
+                )}px`,
+                "--merge-dy": `${Math.round(
+                  fall.to.top + fall.to.height / 2 - (fall.from.top + fall.from.height / 2),
+                )}px`,
+                "--merge-scale": (fall.to.height / Math.max(1, fall.from.height)).toFixed(3),
+              } as React.CSSProperties
+            }
+            aria-hidden
+          />,
           document.body,
         )
       : null;
@@ -445,13 +437,14 @@ export function SortableBoard({
       <BoardContext.Provider value={registry}>
         {/* The card rings as soon as the dragged card covers it — the reader
             sees the hold is lined up and has only to keep still. */}
-        <MergeTargetContext.Provider value={armed?.id ?? covered}>
-          <DropLineContext.Provider value={armed ? null : line}>
+        <MergeTargetContext.Provider value={covered?.id ?? null}>
+          <DropLineContext.Provider value={covered ? null : line}>
             {children}
           </DropLineContext.Provider>
         </MergeTargetContext.Provider>
       </BoardContext.Provider>
-      {strip}
+      {ring}
+      {falling}
       {overlay &&
         typeof document !== "undefined" &&
         createPortal(
@@ -459,7 +452,7 @@ export function SortableBoard({
           // in its new place when the overlay goes. The overlay is drawn on
           // the body: inside the tray's scroll box it would be clipped.
           <DragOverlay dropAnimation={null}>
-            {active ? (
+            {active && !fall ? (
               // Over a card it would merge into, the dragged card draws back
               // a little, so the ring on the card underneath shows around it.
               <div

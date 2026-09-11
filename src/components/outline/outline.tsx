@@ -133,20 +133,12 @@ export function Outline({ notebook }: { notebook: NotebookView }) {
               onDrop={onDrop}
               canDrop={(from, to) => parseListId(from).kind === parseListId(to).kind}
               onMerge={
-                canEdit
-                  ? (id, intoId, mode) => void actions.mergeNotes(intoId, [id], mode)
-                  : undefined
+                canEdit ? (id, intoId) => void actions.mergeNotes(intoId, [id], "ai") : undefined
               }
               canMerge={(id, intoId) =>
                 notesById.get(id)?.status === "ACCEPTED" &&
                 notesById.get(intoId)?.status === "ACCEPTED"
               }
-              mergeLabels={{
-                ai: t("outline.mergeWithAi"),
-                aiTitle: t("outline.mergeWithAiTitle"),
-                join: t("outline.joinText"),
-                joinTitle: t("outline.joinTextTitle"),
-              }}
               overlay={(itemId) => {
                 const note = notesById.get(itemId);
                 if (note) return <NoteCard note={note} actions={actions} variant="page" />;

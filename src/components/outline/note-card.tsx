@@ -18,6 +18,7 @@ import { useImageDrop } from "@/components/use-image-drop";
 import { imageMarkdown } from "@/lib/images";
 import { setTaskChecked } from "@/lib/note-markup";
 import { startCardDrag } from "@/lib/card-drag";
+import { ThinkingIndicator } from "@/components/thinking";
 import { NoteEditor } from "@/components/outline/note-editor";
 import { NoteHistory } from "@/components/outline/note-history";
 import { NoteId } from "@/components/outline/note-id";
@@ -192,8 +193,21 @@ export function NoteCard({
   const isSelected = actions.selected.has(note.id);
   // The dragged card covers this one: the ring says a hold here merges them.
   const isMergeTarget = mergeTarget === note.id && note.status === "ACCEPTED";
-  // The AI is writing the note that takes this one and the merged notes' place.
+  // The AI is writing the note that takes this one and the merged notes'
+  // place. The card blooms as the merge starts and settles as the text lands
+  // (SPEC.md §6, globals.css .note-absorb / .note-merging / .note-merged).
   const merging = actions.merging.has(note.id);
+  const [wasMerging, setWasMerging] = useState(false);
+  const [merged, setMerged] = useState(false);
+  if (merging !== wasMerging) {
+    setWasMerging(merging);
+    setMerged(!merging);
+  }
+  useEffect(() => {
+    if (!merged) return;
+    const timer = setTimeout(() => setMerged(false), 500);
+    return () => clearTimeout(timer);
+  }, [merged]);
   // Accepted notes collapse to one line; pending notes are read before they are
   // accepted, and a compare pane exists to show the note whole.
   const foldable = note.status === "ACCEPTED" && !pane;
@@ -446,12 +460,12 @@ export function NoteCard({
     >
       {/* The grip stays visible: it is how a note reorders, and in the tray how
           it drags out over the article (SPEC.md §6). */}
-      {handle && !editing && (
+      {handle && !editing && !merging && (
         <div className="-ml-1 opacity-70 transition-opacity group-hover/note:opacity-100 focus-within:opacity-100">
           <DragHandle handle={handle} label={t(tray ? "outline.gripTitle" : "outline.reorderNote")} />
         </div>
       )}
-      {foldable && !editing && (
+      {foldable && !editing && !merging && (
         <button
           onClick={() => actions.toggleCollapsed(note.id)}
           data-track="note-collapse"
@@ -464,12 +478,19 @@ export function NoteCard({
         </button>
       )}
       <NoteId id={note.id} />
-      {collapsed && (
+      {/* The AI is writing the note that takes this one and the merged notes'
+          place (SPEC.md §6). It takes the row: the gist is about to be
+          rewritten, and every control here acts on a note still being
+          written. */}
+      {merging && (
+        <ThinkingIndicator label={t("outline.merging")} className="min-w-0 flex-1 text-[11px]" />
+      )}
+      {collapsed && !merging && (
         <button
           onClick={() => actions.toggleCollapsed(note.id)}
           data-track="note-collapse"
           data-tip={t("outline.expandNote")}
-          className="min-w-0 flex-1 overflow-hidden text-left text-[13px] leading-[18px] whitespace-nowrap text-sand-800 hover:text-clay-800"
+          className="note-merging-under min-w-0 flex-1 overflow-hidden text-left text-[13px] leading-[18px] whitespace-nowrap text-sand-800 hover:text-clay-800"
         >
           {gist}
         </button>
@@ -496,10 +517,7 @@ export function NoteCard({
       <span className="ml-auto flex shrink-0 items-center gap-1.5">
         {/* The save state, while editing (SPEC.md §6). */}
         {editing && <SaveStateLabel state={saveState} />}
-        {/* The AI is writing the note that takes this one and the merged
-            notes' place (SPEC.md §6). */}
-        {merging && <span className="text-[11px] text-sand-500">{t("outline.merging")}</span>}
-        {canEdit && !editing && (
+        {canEdit && !editing && !merging && (
           <button
             onClick={openEditor}
             data-track="note-edit"
@@ -512,7 +530,7 @@ export function NoteCard({
             <PencilIcon size={16} />
           </button>
         )}
-        {jumpSource && !editing && (
+        {jumpSource && !editing && !merging && (
           <button
             onClick={() => jumpTo(jumpSource)}
             data-track="note-jump"
@@ -523,7 +541,7 @@ export function NoteCard({
             <LocateIcon size={11} />
           </button>
         )}
-        {note.pinned && (
+        {note.pinned && !merging && (
           <button
             onClick={() => canEdit && void actions.setPinned(note.id, false)}
             data-track="note-unpin"
@@ -534,7 +552,7 @@ export function NoteCard({
             <PinIcon />
           </button>
         )}
-        {selectable && !editing && (
+        {selectable && !editing && !merging && (
           <button
             onClick={() => actions.toggleSelect(note.id)}
             data-track="note-select"
@@ -635,6 +653,8 @@ export function NoteCard({
     focused ? "outline-2 outline-clay-400" : "",
     pending && !focused ? (tray ? "opacity-82" : "opacity-85") : "",
     isMergeTarget ? "outline-2 outline-sage-500" : isSelected ? "outline-2 outline-clay-300" : "",
+    merging ? "note-merging note-absorb" : "",
+    merged ? "note-merged" : "",
     imageDrop.over ? "outline-2 outline-dashed outline-clay-400" : "",
   ]
     .filter(Boolean)

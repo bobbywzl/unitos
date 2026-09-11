@@ -96,21 +96,15 @@ export function NotesTray({
       )}
 
       {/* One drag across the tray (SPEC.md §6): a note dragged out of its
-          section drops into another, and a hold on the middle of another note
-          surfaces the merge strip — the same as on the notes full page. */}
+          section drops into another, and a note held over another until the
+          ring closes merges the two — the same as on the notes full page. */}
       <SortableBoard
         id="tray-board"
         onDrop={onDrop}
-        onMerge={canEdit ? (id, intoId, mode) => void actions.mergeNotes(intoId, [id], mode) : undefined}
+        onMerge={canEdit ? (id, intoId) => void actions.mergeNotes(intoId, [id], "ai") : undefined}
         canMerge={(id, intoId) =>
           notesById.get(id)?.status === "ACCEPTED" && notesById.get(intoId)?.status === "ACCEPTED"
         }
-        mergeLabels={{
-          ai: t("outline.mergeWithAi"),
-          aiTitle: t("outline.mergeWithAiTitle"),
-          join: t("outline.joinText"),
-          joinTitle: t("outline.joinTextTitle"),
-        }}
         overlay={(itemId) => {
           const note = notesById.get(itemId);
           return note ? <NoteCard note={note} actions={actions} variant="tray" /> : null;

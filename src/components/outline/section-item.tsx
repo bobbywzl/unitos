@@ -154,8 +154,8 @@ export function SectionItem({
         )}
 
         {/* The page's one board holds every section's notes, so a note
-            dragged out of this section drops into another; a hold on the
-            middle of a note surfaces the merge strip (SPEC.md §6). */}
+            dragged out of this section drops into another; a note held over
+            another until the ring closes merges the two (SPEC.md §6). */}
         <SortableGroup
           id={notesList(section.id)}
           ids={notes.map((n) => n.id)}
