@@ -190,6 +190,7 @@ export function NoteCard({
   // The ticker: accepted notes can be selected for bulk delete, merge, pin, and compare.
   const selectable = note.status === "ACCEPTED" && canEdit && !pane;
   const isSelected = actions.selected.has(note.id);
+  // The dragged card covers this one: the ring says a hold here merges them.
   const isMergeTarget = mergeTarget === note.id && note.status === "ACCEPTED";
   // The AI is writing the note that takes this one and the merged notes' place.
   const merging = actions.merging.has(note.id);

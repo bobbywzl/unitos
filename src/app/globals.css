@@ -2262,3 +2262,11 @@ li[data-checked] > .note-box::before {
   background: var(--sage-600);
   color: var(--sage-fg);
 }
+
+/* The dragged card over a card it would merge into: it draws back a little so
+   the ring on the card underneath shows on all four sides. Not translucent —
+   two cards' text through each other reads as neither. */
+.card-drag-overlay-merging {
+  transform: rotate(-1.2deg) scale(0.94);
+  filter: drop-shadow(0 16px 34px rgb(46 43 37 / 0.3));
+}

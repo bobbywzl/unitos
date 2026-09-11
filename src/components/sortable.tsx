@@ -27,20 +27,28 @@ import type { MergeMode } from "@/lib/card-drag";
 // are what made the old preview flicker between a reorder and a merge; a line
 // over cards that hold still says the same thing and never moves the target.
 //
-// Merge is a hold, not a pass: resting the card on the middle of another card
-// for MERGE_DWELL_MS surfaces the merge strip on that card — Merge with AI, or
-// Join text. Releasing on a pill runs it; releasing on the card runs Join
-// text; moving on puts the line back. A drag that passes over a card on its
-// way somewhere else never merges anything.
+// Merge is a hold, not a pass, and it reads the cards, not the pointer: once
+// the dragged card covers more than MERGE_COVER of another card the target
+// rings, and holding it there for MERGE_DWELL_MS surfaces the merge strip on
+// it — Merge with AI, or Join text. Releasing on a pill runs it; releasing on
+// the card runs Join text; moving on puts the line back. A drag that passes
+// over a card on its way somewhere else never merges anything.
+//
+// The pointer is not the card. A card picked up by its grip hangs below and
+// right of the pointer, so a pointer that is on a card means the dragged card
+// is somewhere above it — reading the pointer merged the wrong card, or none.
+// What the reader sees is one card covering another, so that is what decides.
 
-/** The rest that surfaces the merge strip. */
+/** How much of the smaller card the two have to share before a hold merges
+    them. The smaller of the two: a one-line card dropped on a long one covers
+    little of it and all of itself, and either way it is over that card. */
+const MERGE_COVER = 0.8;
+/** The hold that surfaces the merge strip once the cards cover. */
 export const MERGE_DWELL_MS = 2000;
-// The pointer may drift this far and still count as resting.
+// The pointer may drift this far and still count as holding.
 const DWELL_DRIFT_PX = 6;
-// The middle band of a card that merges: 30% margins top and bottom, so the
-// top and bottom thirds always reorder.
-const MERGE_BAND = 0.3;
-// How far past the card and its strip the pointer may go and still be on them.
+// How far past the card, the strip, and where the hold began the pointer may
+// go and still be on them.
 const MERGE_REACH_PX = 16;
 
 // Cards hold still: the strategy moves nothing while a drag runs.
@@ -93,6 +101,33 @@ function grow(r: DOMRect, px: number): DOMRect {
   return new DOMRect(r.left - px, r.top - px, r.width + 2 * px, r.height + 2 * px);
 }
 
+/** Where the merge strip stays open: the card it is on, the strip itself, and
+    where the hold began, with room around all three. Reaching a pill moves
+    the dragged card off the card it covers, so the cover cannot be what keeps
+    the strip open; leaving this region is what closes it. The release reads
+    the same region, so the strip being open always means a release merges. */
+function armReach(armed: { rect: DOMRect; anchor: DOMRect }): DOMRect {
+  const strip = document.querySelector<HTMLElement>("[data-merge-strip]");
+  return grow(
+    union(union(armed.rect, armed.anchor), strip?.getBoundingClientRect() ?? null),
+    MERGE_REACH_PX,
+  );
+}
+
+/** One point as a box, so a point unions with the boxes around it. */
+function pointRect(x: number, y: number): DOMRect {
+  return new DOMRect(x, y, 0, 0);
+}
+
+/** How much of the smaller of the two boxes the two share, 0 to 1. */
+function coverage(a: DOMRect, b: DOMRect): number {
+  const w = Math.min(a.right, b.right) - Math.max(a.left, b.left);
+  const h = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
+  if (w <= 0 || h <= 0) return 0;
+  const smaller = Math.min(a.width * a.height, b.width * b.height);
+  return smaller <= 0 ? 0 : (w * h) / smaller;
+}
+
 /** The item under the pointer, innermost first: a section's box holds its
     notes' boxes, so the smallest box that holds the pointer is the item the
     pointer is really on. Lists the drag cannot land in are left out. */
@@ -142,28 +177,25 @@ function dropLineAt(lists: [string, string[]][], x: number, y: number): DropLine
   return { listId: best.listId, beforeId: null };
 }
 
-/** The card the pointer rests on the middle of, or null: the card a hold
-    would merge into. Innermost first, like the line. */
+/** The card the dragged card covers, or null: the card a hold would merge
+    into. The one it covers most, so a card lying over two takes the nearer. */
 function mergeCandidateAt(
   lists: [string, string[]][],
   activeId: string,
-  x: number,
-  y: number,
+  card: DOMRect,
   canMerge?: (id: string, intoId: string) => boolean,
 ): string | null {
-  let best: { id: string; area: number } | null = null;
+  let best: { id: string; cover: number } | null = null;
   for (const [, ids] of lists) {
     for (const id of ids) {
       if (id === activeId) continue;
       if (canMerge && !canMerge(activeId, id)) continue;
       const rect = rectOf(id);
       if (!rect) continue;
-      const margin = rect.height * MERGE_BAND;
-      if (x < rect.left || x > rect.right) continue;
-      if (y <= rect.top + margin || y >= rect.bottom - margin) continue;
-      const area = rect.width * rect.height;
-      if (best && best.area <= area) continue;
-      best = { id, area };
+      const cover = coverage(card, rect);
+      if (cover < MERGE_COVER) continue;
+      if (best && best.cover >= cover) continue;
+      best = { id, cover };
     }
   }
   return best?.id ?? null;
@@ -206,16 +238,24 @@ export function SortableBoard({
         axis === "y" ? { distance: { y: 6 }, tolerance: { x: 12 } } : { distance: 4 },
     }),
   );
-  // The card under the pointer, and the width it had in its list: the overlay
-  // is drawn in a portal on the body, out of the tray's scroll box, so it
-  // carries its own width.
+  // The card being dragged, and the size it had in its list: the overlay is
+  // drawn in a portal on the body, out of the tray's scroll box, so it carries
+  // its own size, and the merge reads where it is drawn.
   const [active, setActive] = useState<{ id: string; width: number } | null>(null);
   const [line, setLine] = useState<DropLine | null>(null);
-  const [mergeTarget, setMergeTarget] = useState<{ id: string; rect: DOMRect } | null>(null);
+  // The card the dragged card covers: it rings, and holding there arms it.
+  const [covered, setCovered] = useState<string | null>(null);
+  // Armed: the merge strip is open on this card. rect is the card's box and
+  // anchor is where the pointer was when the hold finished — the strip sits
+  // below the card, and the pointer reaches it through both.
+  const [armed, setArmed] = useState<{ id: string; rect: DOMRect; anchor: DOMRect } | null>(null);
   const registry = useRef<Registry>(new Map());
   // The live values the release reads: state lands a render too late for it.
   const lineRef = useRef<DropLine | null>(null);
-  const mergeRef = useRef<{ id: string; rect: DOMRect } | null>(null);
+  const armedRef = useRef<{ id: string; rect: DOMRect; anchor: DOMRect } | null>(null);
+  // Where the pointer sits inside the dragged card, and the card's size: the
+  // card is drawn under the pointer at this offset, so this is where it is.
+  const held = useRef<{ dx: number; dy: number; width: number; height: number } | null>(null);
   const dwell = useRef<{ id: string; x: number; y: number; timer: ReturnType<typeof setTimeout> } | null>(
     null,
   );
@@ -225,9 +265,9 @@ export function SortableBoard({
     dwell.current = null;
   }
 
-  function setMerge(next: { id: string; rect: DOMRect } | null) {
-    mergeRef.current = next;
-    setMergeTarget(next);
+  function setArm(next: { id: string; rect: DOMRect; anchor: DOMRect } | null) {
+    armedRef.current = next;
+    setArmed(next);
   }
 
   function setDropLine(next: DropLine | null) {
@@ -239,14 +279,22 @@ export function SortableBoard({
 
   function reset() {
     clearDwell();
-    setMerge(null);
+    setArm(null);
+    setCovered(null);
     setDropLine(null);
     setActive(null);
+    held.current = null;
   }
 
-  function handleDragStart({ active: dragged }: DragStartEvent) {
+  function handleDragStart({ active: dragged, activatorEvent }: DragStartEvent) {
     const id = String(dragged.id);
-    setActive({ id, width: Math.round(rectOf(id)?.width ?? 0) });
+    const rect = rectOf(id);
+    const start = getEventCoordinates(activatorEvent);
+    setActive({ id, width: Math.round(rect?.width ?? 0) });
+    held.current =
+      rect && start
+        ? { dx: start.x - rect.left, dy: start.y - rect.top, width: rect.width, height: rect.height }
+        : null;
   }
 
   function handleDragMove({ active, activatorEvent, delta }: DragMoveEvent) {
@@ -256,15 +304,13 @@ export function SortableBoard({
     const y = start.y + delta.y;
     const dragged = String(active.id);
 
-    // The strip is open: it stays open while the pointer is anywhere on the
-    // card, on the strip, or on the way between them, and closes the moment
-    // the drag moves off. The gap between the card and its strip is part of
-    // the way there — a pointer crossing it has not moved on.
-    if (mergeRef.current) {
-      const strip = document.querySelector<HTMLElement>("[data-merge-strip]");
-      const reach = union(mergeRef.current.rect, strip?.getBoundingClientRect() ?? null);
-      if (inRect(x, y, grow(reach, MERGE_REACH_PX))) return;
-      setMerge(null);
+    // The strip is open: it stays open while the pointer is on the card, on
+    // the strip, or on the way between them — reaching a pill moves the card
+    // off the one it covers, and that is not moving on. It closes when the
+    // pointer leaves all three, and the line comes back.
+    if (armedRef.current) {
+      if (inRect(x, y, armReach(armedRef.current))) return;
+      setArm(null);
     }
 
     // Only the lists this card can land in.
@@ -275,17 +321,24 @@ export function SortableBoard({
     setDropLine(dropLineAt(lists, x, y));
 
     if (!onMerge) return;
-    const candidate = mergeCandidateAt(lists, dragged, x, y, canMerge);
+    // Where the dragged card is drawn: under the pointer, at the offset it was
+    // picked up by.
+    const grab = held.current;
+    const card = grab
+      ? new DOMRect(x - grab.dx, y - grab.dy, grab.width, grab.height)
+      : pointRect(x, y);
+    const candidate = mergeCandidateAt(lists, dragged, card, canMerge);
+    setCovered(candidate);
     if (!candidate) {
       clearDwell();
       return;
     }
-    const resting =
+    const holding =
       dwell.current &&
       dwell.current.id === candidate &&
       Math.abs(x - dwell.current.x) <= DWELL_DRIFT_PX &&
       Math.abs(y - dwell.current.y) <= DWELL_DRIFT_PX;
-    if (resting) return;
+    if (holding) return;
     clearDwell();
     dwell.current = {
       id: candidate,
@@ -295,20 +348,22 @@ export function SortableBoard({
         const rect = rectOf(candidate);
         if (!rect) return;
         dwell.current = null;
-        setDropLine(null);
-        setMerge({ id: candidate, rect });
+        setArm({ id: candidate, rect, anchor: pointRect(x, y) });
       }, MERGE_DWELL_MS),
     };
   }
 
   function handleDragEnd({ active }: DragEndEvent) {
     const itemId = String(active.id);
-    const target = mergeRef.current?.id ?? null;
+    const armedOn = armedRef.current;
     const landing = lineRef.current;
-    const mode = pickedMode();
+    // The strip is up: a release on a pill runs it, a release on the card runs
+    // Join text, and a release anywhere else is not a merge — the card lands
+    // where the line stood.
+    const mode = armedOn ? pickedMode(armedOn) : null;
     reset();
-    if (onMerge && target && target !== itemId) {
-      onMerge(itemId, target, mode);
+    if (onMerge && mode && armedOn && armedOn.id !== itemId) {
+      onMerge(itemId, armedOn.id, mode);
       return;
     }
     if (!landing) return;
@@ -329,14 +384,16 @@ export function SortableBoard({
     window.addEventListener("pointermove", track);
     return () => window.removeEventListener("pointermove", track);
   }, []);
-  function pickedMode(): MergeMode {
+  function pickedMode(armedOn: { rect: DOMRect; anchor: DOMRect }): MergeMode | null {
     const { x, y } = pointer.current;
     for (const el of document.querySelectorAll<HTMLElement>("[data-merge-choice]")) {
       if (inRect(x, y, el.getBoundingClientRect())) {
         return el.dataset.mergeChoice === "ai" ? "ai" : "join";
       }
     }
-    return "join";
+    // Anywhere else the strip is still open: Join text. Past it the strip has
+    // already closed, and the release is the drop the line shows.
+    return inRect(x, y, armReach(armedOn)) ? "join" : null;
   }
 
   useEffect(() => () => clearDwell(), []);
@@ -344,16 +401,16 @@ export function SortableBoard({
   // The strip sits under the card it would merge into, or over it when the
   // card is near the bottom of the window.
   const strip =
-    mergeTarget && mergeLabels && typeof document !== "undefined"
+    armed && mergeLabels && typeof document !== "undefined"
       ? createPortal(
           <div
             data-merge-strip
             style={{
-              left: Math.round(mergeTarget.rect.left + mergeTarget.rect.width / 2),
+              left: Math.round(armed.rect.left + armed.rect.width / 2),
               top:
-                mergeTarget.rect.bottom + 52 > window.innerHeight
-                  ? Math.round(mergeTarget.rect.top - 44)
-                  : Math.round(mergeTarget.rect.bottom + 8),
+                armed.rect.bottom + 52 > window.innerHeight
+                  ? Math.round(armed.rect.top - 44)
+                  : Math.round(armed.rect.bottom + 8),
             }}
             className="pointer-events-none fixed z-50 flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-card px-1.5 py-1.5 shadow-float"
           >
@@ -386,8 +443,10 @@ export function SortableBoard({
       onDragCancel={reset}
     >
       <BoardContext.Provider value={registry}>
-        <MergeTargetContext.Provider value={mergeTarget?.id ?? null}>
-          <DropLineContext.Provider value={mergeTarget ? null : line}>
+        {/* The card rings as soon as the dragged card covers it — the reader
+            sees the hold is lined up and has only to keep still. */}
+        <MergeTargetContext.Provider value={armed?.id ?? covered}>
+          <DropLineContext.Provider value={armed ? null : line}>
             {children}
           </DropLineContext.Provider>
         </MergeTargetContext.Provider>
@@ -401,7 +460,12 @@ export function SortableBoard({
           // the body: inside the tray's scroll box it would be clipped.
           <DragOverlay dropAnimation={null}>
             {active ? (
-              <div className="card-drag-overlay" style={active.width ? { width: active.width } : undefined}>
+              // Over a card it would merge into, the dragged card draws back
+              // a little, so the ring on the card underneath shows around it.
+              <div
+                className={`card-drag-overlay${covered ? " card-drag-overlay-merging" : ""}`}
+                style={active.width ? { width: active.width } : undefined}
+              >
                 {overlay(active.id)}
               </div>
             ) : null}

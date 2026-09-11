@@ -86,22 +86,31 @@ check(
   `landed ${landed}, line before ${line} at ${lineAt}`,
 );
 
-// 2. A hold on the middle of another card surfaces the merge strip.
+// 2. Laying the dragged card over another card and holding it there surfaces
+// the merge strip. The card is drawn under the pointer at the offset it was
+// picked up by, so the pointer goes to where that offset puts the card on the
+// target — not to the target's middle.
 const now = await listIds();
 const trayNow = await trayIds();
+const src = await page.locator(`[data-sortable-id="${now[0]}"]`).boundingBox();
 const g2 = await page.locator(`[data-sortable-id="${now[0]}"] [data-drag-handle]`).first().boundingBox();
-const mid = await page.locator(`[data-sortable-id="${now[now.length - 1]}"]`).boundingBox();
-await page.mouse.move(g2.x + g2.width / 2, g2.y + g2.height / 2);
+const cover = await page.locator(`[data-sortable-id="${now[now.length - 1]}"]`).boundingBox();
+const from = { x: g2.x + g2.width / 2, y: g2.y + g2.height / 2 };
+// The pointer's offset inside the card, carried onto the target's top left.
+const to = { x: from.x + (cover.x - src.x), y: from.y + (cover.y - src.y) };
+await page.mouse.move(from.x, from.y);
 await page.mouse.down();
 for (let i = 1; i <= 10; i++) {
-  await page.mouse.move(g2.x + g2.width / 2, g2.y + ((mid.y + mid.height / 2 - g2.y) * i) / 10);
+  await page.mouse.move(from.x + ((to.x - from.x) * i) / 10, from.y + ((to.y - from.y) * i) / 10);
   await page.waitForTimeout(30);
 }
 check("no strip before the hold", (await page.locator("[data-merge-strip]").count()) === 0);
+check("the covered card rings before the hold finishes", (await page.locator(".outline-sage-500").count()) > 0);
 await page.waitForTimeout(2400);
 check("the hold surfaces the merge strip", (await page.locator("[data-merge-strip]").count()) === 1);
 check("the line is gone while the strip is up", (await page.locator(".drop-line").count()) === 0);
 check("two choices on the strip", (await page.locator("[data-merge-choice]").count()) === 2);
+check("the dragged card draws back over the card it covers", (await page.locator(".card-drag-overlay-merging").count()) === 1);
 await page.screenshot({ path: `${SHOT}/merge-strip.png` });
 const join = await page.locator('[data-merge-choice="join"]').boundingBox();
 await page.mouse.move(join.x + join.width / 2, join.y + join.height / 2, { steps: 8 });
