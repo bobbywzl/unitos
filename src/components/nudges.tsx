@@ -15,9 +15,9 @@ import type { TKey } from "@/lib/i18n/dictionaries";
 //
 // The order: New project on the dashboard → + after the first document →
 // select a passage → the side panel → Distill and Extract → drag the first
-// note out of the tray (a ghost card slides out to show the move) → drag a
-// second note onto the floating card and hold, which merges the two → More,
-// where Settings live → Link Google Drive on the settings page.
+// note out of the tray (a ghost card slides out to show the move) → drop a
+// second note on the floating card, which merges the two → More, where
+// Settings live → Link Google Drive on the settings page.
 
 const NUDGE_KEY = "unitos-nudge-step";
 
@@ -72,7 +72,9 @@ const STEPS: Step[] = [
     skip: true,
     glow: "target",
     side: "below",
-    doneWhen: () => document.querySelector("[data-merge-strip]") !== null,
+    // Done when the card is working on the merge: the drop is the merge, and
+    // the card says so while the model writes (SPEC.md §6).
+    doneWhen: () => document.querySelector(".note-merging") !== null,
   },
   // Google Drive (SPEC.md §14): More carries Settings, and the settings page
   // carries Link Google Drive. Both skip — a reader who never opens Settings
