@@ -42,7 +42,8 @@
 //   multi upload 多文档上传 · member(多文档上传的成员) 成员 · stitch 缝合 ·
 //   generated document 生成文档 · merge(两条笔记合为一条) 合并 ·
 //   Merge with AI 用 AI 合并 · Join text 拼接文本 ·
-//   hold ring(合并进度环) 合并环 · drop line(落位线) 落位线
+//   hold ring(合并进度环) 合并环 · drop line(落位线) 落位线 ·
+//   companion(仪表板上的外部网页应用) 配套应用
 // highlight 高亮 仅指高亮功能；表示选取文字一律用 选中。
 
 const en = {

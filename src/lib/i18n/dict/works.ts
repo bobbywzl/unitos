@@ -34,6 +34,26 @@ const en = {
     "Distill writes the article as bullet points. Extract answers one question with quotes. Assistant, top left, takes any command.",
   nudgeFloat: "Hold a note's header and drag it left. The note floats over the article while you read.",
   nudgeMerge: "Drag another note onto this card and drop it. The AI merges the two into one note.",
+
+  // Companions (SPEC.md §23): the web apps for the steps around dissecting a
+  // document that Unitos does not do, under Projects on the dashboard.
+  companions: "Companions",
+  companionsIntro:
+    "Web apps for the steps around a document that Unitos does not do. Each opens in a new tab.",
+  companionsBefore: "Before the reading",
+  companionsAfter: "After the reading",
+  companionSponsored: "Sponsored",
+  companionMathpix:
+    "A photo of handwriting or maths becomes text and LaTeX. Unitos converts a whole handwritten PDF; this is for one formula.",
+  companionPdf24:
+    "Split, merge, rotate, and OCR a PDF before it goes into a project. Unitos takes a PDF whole.",
+  companionConnectedPapers:
+    "The papers around one paper, for deciding what is worth dissecting in the first place.",
+  companionDeepl:
+    "Translate loose text and whole files. Unitos translates an open document's blocks, not a file you are sending on.",
+  companionOverleaf: "Write the LaTeX the notes feed, with the notes beside it.",
+  companionZotero: "Keep and cite the references a project's documents rest on.",
+  companionAnki: "Turn the notes into cards that come back until they stick.",
   nudgeSettings: "Settings live under More. Open it to connect Google Drive.",
   nudgeDrive: "Link Google Drive: add a file straight from your Drive, no download.",
   nudgeDone: "Got it",
@@ -164,6 +184,21 @@ const zh: Record<keyof typeof en, string> = {
   nudgeTools: "提炼把文章写成分条要点。提取用引文回答一个问题。左上角的助手接受任何指令。",
   nudgeFloat: "按住笔记的标题行向左拖。笔记会浮在文章上，边读边写。",
   nudgeMerge: "把另一条笔记拖到这张卡片上松开。AI 会把两条合并成一条。",
+
+  companions: "配套应用",
+  companionsIntro: "围绕文档、但 Unitos 不做的那些环节所用的网页应用。每个都在新标签页打开。",
+  companionsBefore: "阅读之前",
+  companionsAfter: "阅读之后",
+  companionSponsored: "赞助",
+  companionMathpix:
+    "把手写或数学公式的照片变成文本和 LaTeX。Unitos 转换整份手写 PDF；这个用来处理单个公式。",
+  companionPdf24: "在 PDF 加入项目之前拆分、合并、旋转、OCR。Unitos 整份接收 PDF。",
+  companionConnectedPapers: "围绕某篇论文的相关论文，用来先判断值得剖析哪一篇。",
+  companionDeepl:
+    "翻译零散文本和整个文件。Unitos 翻译已打开文档的块，不翻译你要转发出去的文件。",
+  companionOverleaf: "把笔记支撑的 LaTeX 写出来，笔记就在旁边。",
+  companionZotero: "保存并引用项目文档所依据的参考文献。",
+  companionAnki: "把笔记变成反复出现、直到记住的卡片。",
   nudgeSettings: "设置在“更多”里。打开它，连接 Google Drive。",
   nudgeDrive: "连接 Google Drive：直接从云端硬盘添加文件，无需下载。",
   nudgeDone: "知道了",

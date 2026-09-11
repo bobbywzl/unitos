@@ -9,6 +9,7 @@ import { Logo } from "@/components/logo";
 import { AccountGuard } from "@/components/account-guard";
 import { PersonBadge } from "@/components/collab/person-badge";
 import { TierBand, TierChip } from "@/components/tier-mark";
+import { Companions } from "@/components/works/companions";
 import { Notifications } from "@/components/works/notifications";
 import { WelcomeFlow } from "@/components/works/welcome-flow";
 import { WorksShelf, type WorkItem } from "@/components/works/works-shelf";
@@ -157,6 +158,8 @@ export default async function Home() {
           )}
           myEmail={user.email}
         />
+        {/* The steps around the dissection that Unitos does not do (SPEC.md §23). */}
+        <Companions />
       </div>
     </main>
   );
