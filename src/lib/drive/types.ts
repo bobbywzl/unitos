@@ -66,11 +66,20 @@ export function classifyDriveFile(mimeType: string, name: string): DriveFileKind
   return "unsupported";
 }
 
+// A Drive folder. It is in the picker's filter so folders survive it: the
+// filter is a whitelist over every item the view lists, folders included, and
+// a picker filtered to documents alone shows a Drive of folders as empty. It
+// never reaches an import — the picker does not let a folder be selected
+// (setSelectFolderEnabled(false)), and classifyDriveFile calls it
+// unsupported.
+export const DRIVE_FOLDER_MIME_TYPE = "application/vnd.google-apps.folder";
+
 // The picker's own filter: images, Forms, Drawings, raw .docx/.xlsx/.pptx,
 // plain text, and everything else stay greyed out before the reader ever
 // selects them.
 export const DRIVE_PICKER_MIME_TYPES = [
   ...EXPORTABLE_MIME_TYPES,
+  DRIVE_FOLDER_MIME_TYPE,
   "application/pdf",
   "video/mp4",
   "video/webm",
