@@ -12,6 +12,11 @@ import { PERSON_COLORS, personOf, type Person } from "@/lib/person";
 import { api } from "@/lib/api";
 import type { TierState } from "@/lib/tiers";
 import { TierMark, tierLook } from "@/components/tier-mark";
+import { PortalButton } from "@/components/billing/portal-button";
+
+// The links under the plan card, in the card's material.
+const planLink =
+  "rounded-full bg-card px-3 py-1 text-xs font-semibold text-sand-700 shadow-soft hover:text-clay-800 disabled:opacity-40";
 
 type Theme = "light" | "dark" | "system";
 
@@ -93,6 +98,7 @@ export function SettingsForm({
   account,
   background,
   plan,
+  billing,
   drive,
   data,
 }: {
@@ -102,6 +108,9 @@ export function SettingsForm({
   // The account's tier (TIERS.md, lib/tiers.ts) and, on trial or expired,
   // the trial's end as an ISO date.
   plan: { state: TierState; trialEndsAt: string | null };
+  // Billing (SPEC.md §24): the links under the plan card — Plans, Receipts,
+  // and Manage subscription when the account has one. null = billing off.
+  billing: { subscribed: boolean } | null;
   // Google Drive under Connections (SPEC.md §14): access is what a link asks
   // for, grant what this account's stored grant reaches. null = Drive linking
   // not available.
@@ -462,6 +471,17 @@ export function SettingsForm({
                     })}
             </p>
             {account && <p className="tier-card-muted text-[11px]">{t("settings.planMark")}</p>}
+            {billing && (
+              <div className="flex flex-wrap items-center gap-2 pt-1">
+                <Link href="/billing" className={planLink}>
+                  {t("billing.plans")}
+                </Link>
+                <Link href="/billing/receipts" className={planLink}>
+                  {t("billing.receipts")}
+                </Link>
+                {billing.subscribed && <PortalButton className={planLink} />}
+              </div>
+            )}
           </div>
         </div>
       </section>

@@ -61,6 +61,7 @@ import {
   type VideoAnnotationItem,
   type VideoInfo,
 } from "@/lib/video/types";
+import { billingLinks } from "@/lib/billing/switch";
 import { accountTier } from "@/lib/tiers";
 
 export const dynamic = "force-dynamic";
@@ -1188,6 +1189,7 @@ export default async function NotebookPage(props: {
     trialEndsAt: user.trialEndsAt?.toISOString() ?? null,
     premium: tier !== "expired",
     ultra: tier === "ultra",
+    billing: await billingLinks(),
   };
 
   // The text layer over a document's blocks: marks, links, terms, and the

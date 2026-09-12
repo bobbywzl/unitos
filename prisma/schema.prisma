@@ -38,9 +38,59 @@ model User {
   // per visit.
   driveRefreshToken String @default("")
   driveScope        String @default("")
+  // Billing (SPEC.md §24): the account's Stripe customer, and the
+  // subscription that pays for its tier. "" = none. subscriptionTier is the
+  // tier the subscription buys; subscriptionEndsAt is the paid period's end.
+  // The gates still read tier and trialEndsAt only: the webhook writes them.
+  stripeCustomerId   String    @default("")
+  subscriptionId     String    @default("")
+  subscriptionTier   Tier?
+  subscriptionEndsAt DateTime?
   createdAt    DateTime  @default(now())
   lastSeenAt   DateTime  @default(now())
   sessions     Session[]
+  purchases    Purchase[]
+}
+
+// Billing (SPEC.md §24): one purchase per paid Stripe invoice — the first
+// payment of a subscription and every renewal. The receipt page shows one
+// row; the receipts page lists the account's rows.
+model Purchase {
+  id              String         @id @default(cuid())
+  userId          String
+  user            User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tier            Tier
+  stripeInvoiceId String         @unique
+  subscriptionId  String         @default("")
+  // Stripe's invoice number, e.g. "A1B2C3D4-0001"; "" when Stripe gave none.
+  number          String         @default("")
+  // Minor units (cents) and the ISO currency code, as Stripe reports them.
+  amount          Int
+  currency        String
+  status          PurchaseStatus @default(PAID)
+  // The paid period.
+  periodStart     DateTime
+  periodEnd       DateTime
+  // Stripe's hosted invoice page and PDF; "" when Stripe gave none.
+  hostedInvoiceUrl String        @default("")
+  invoicePdfUrl    String        @default("")
+  paidAt          DateTime
+  createdAt       DateTime       @default(now())
+
+  @@index([userId, paidAt])
+}
+
+enum PurchaseStatus {
+  PAID
+  REFUNDED
+}
+
+// One operator setting per row (lib/settings.ts). Billing's switch is the
+// row "billing": "on" or "off"; no row = off.
+model AppSetting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
 }
 
 // The tiers (TIERS.md): every account is Premium (on trial or granted) or

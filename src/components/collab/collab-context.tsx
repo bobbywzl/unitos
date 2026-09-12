@@ -25,6 +25,9 @@ export type CollabState = {
   // Unitos Ultra (TIERS.md): Visualize (SPEC.md §20) and tool conversations
   // (SPEC.md §21). The local reader always has it.
   ultra: boolean;
+  // Billing (SPEC.md §24) is on: the Ultra message offers the plan page. Off
+  // (the switch, or sign-in off), the message stands alone.
+  billing: boolean;
 };
 
 export const SOLO_COLLAB: CollabState = {
@@ -38,6 +41,7 @@ export const SOLO_COLLAB: CollabState = {
   trialEndsAt: null,
   premium: true,
   ultra: true,
+  billing: false,
 };
 
 const CollabContext = createContext<CollabState>(SOLO_COLLAB);

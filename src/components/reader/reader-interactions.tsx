@@ -770,7 +770,11 @@ export function ReaderInteractions({
   const tCtx = useT();
   // Viewers on a shared corpus read only: no selection tools, no edit mode,
   // no assistant. The server rejects their writes; this keeps the surface honest.
-  const { canEdit, premium, ultra } = useCollab();
+  const { canEdit, premium, ultra, billing } = useCollab();
+  // Billing on (SPEC.md §24): the Ultra message offers the plan page.
+  const plansAction = billing
+    ? { label: tCtx("billing.plans"), run: () => window.open("/billing", "_blank", "noopener") }
+    : null;
   const canEditRef = useRef(canEdit);
   canEditRef.current = canEdit;
   const tRef = useRef(tCtx);
@@ -1408,7 +1412,7 @@ export function ReaderInteractions({
     const card = bubble;
     if (!card || !card.anchor || card.streaming || card.busy) return;
     if (card.kind === "visualize" && !ultra) {
-      showToast(t("reader.visualizeNeedsUltra"));
+      showToast(t("reader.visualizeNeedsUltra"), plansAction);
       return;
     }
     const { kind, anchor, noteId } = card;
@@ -3143,7 +3147,7 @@ export function ReaderInteractions({
   async function visualize() {
     if (!popover || busy) return;
     if (!ultra) {
-      showToast(t("reader.visualizeNeedsUltra"));
+      showToast(t("reader.visualizeNeedsUltra"), plansAction);
       return;
     }
     const { anchor, yTop } = popover;
@@ -4350,7 +4354,7 @@ export function ReaderInteractions({
   // press answers with the plain Ultra message, like Visualize.
   function openToolChat(kind: "explain" | "simplify") {
     if (!ultra) {
-      showToast(t("reader.continueNeedsUltra"));
+      showToast(t("reader.continueNeedsUltra"), plansAction);
       return;
     }
     setToolChat(kind, () => ({ chatOpen: true }));
@@ -4362,7 +4366,7 @@ export function ReaderInteractions({
   }
   async function sendToolMessage(kind: "explain" | "simplify") {
     if (!ultra) {
-      showToast(t("reader.continueNeedsUltra"));
+      showToast(t("reader.continueNeedsUltra"), plansAction);
       return;
     }
     const card = kind === "explain" ? bubble : simplifyCard;

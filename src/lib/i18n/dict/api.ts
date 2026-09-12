@@ -256,6 +256,13 @@ const en = {
   renderingOpening: "Rendering the page: opening it",
   renderingScrolling: "Rendering the page: scrolling through it",
   renderingChart: "Rendering the page: settling chart {n} of {total}",
+  // Billing (SPEC.md §24).
+  billingNotFound: "Not found",
+  billingNotConfigured: "Billing is not configured.",
+  billingAlreadySubscribed: "This account already has a subscription. Change it from Manage subscription.",
+  billingNoSubscription: "This account has no subscription.",
+  billingCheckoutFailed: "Stripe could not open checkout.",
+  billingPortalFailed: "Stripe could not open the subscription page.",
 };
 
 const zh: Record<keyof typeof en, string> = {
@@ -481,6 +488,12 @@ const zh: Record<keyof typeof en, string> = {
   renderingOpening: "渲染页面：正在打开",
   renderingScrolling: "渲染页面：正在滚动浏览",
   renderingChart: "渲染页面：正在稳定第 {n}/{total} 个图表",
+  billingNotFound: "未找到",
+  billingNotConfigured: "付费未配置。",
+  billingAlreadySubscribed: "该账户已有订阅。在“管理订阅”中更改。",
+  billingNoSubscription: "该账户没有订阅。",
+  billingCheckoutFailed: "Stripe 无法打开结账。",
+  billingPortalFailed: "Stripe 无法打开订阅页面。",
 };
 
 export const api = { en, zh } as const;

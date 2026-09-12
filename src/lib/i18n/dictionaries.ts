@@ -1,6 +1,7 @@
 import { admin } from "@/lib/i18n/dict/admin";
 import { api } from "@/lib/i18n/dict/api";
 import { assistant } from "@/lib/i18n/dict/assistant";
+import { billing } from "@/lib/i18n/dict/billing";
 import { common } from "@/lib/i18n/dict/common";
 import { legal } from "@/lib/i18n/dict/legal";
 import { multi } from "@/lib/i18n/dict/multi";
@@ -27,6 +28,7 @@ const NAMESPACES = {
   outline,
   reader,
   assistant,
+  billing,
   panels,
   panes,
   multi,

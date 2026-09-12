@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { authEnabled, currentUser } from "@/lib/auth";
+import { billingLinks } from "@/lib/billing/switch";
 import { db } from "@/lib/db";
 import { serverT } from "@/lib/i18n/server";
 import { personOf } from "@/lib/person";
@@ -59,6 +60,9 @@ export default async function Home() {
   // The account's tier (TIERS.md): the band over the page, the tier mark on
   // the badge, and the tier chip beside it. One read, the same as the reader's.
   const tier = accountTier(user, authEnabled());
+  // Billing (SPEC.md §24): the Plans link beside the tier chip, only while
+  // the switch is on.
+  const billing = await billingLinks();
 
   // The account's open notifications from the admin (SPEC.md §18), newest first.
   const notifications = await db.notificationRecipient.findMany({
@@ -107,6 +111,14 @@ export default async function Home() {
               {user.email}
             </span>
             <TierChip state={tier} trialEndsAt={user.trialEndsAt?.toISOString() ?? null} short />
+          </Link>
+        )}
+        {billing && (
+          <Link
+            href="/billing"
+            className="rounded-full bg-card px-3 py-1 text-xs font-semibold text-sand-600 shadow-soft hover:text-clay-800"
+          >
+            {t("billing.plans")}
           </Link>
         )}
         <Link

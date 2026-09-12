@@ -11,13 +11,14 @@ here is a plan or a proposal: each line is either a decision the owner stated
 nobody has assigned to a tier is listed under **Unassigned** rather than
 guessed at.
 
-Today there is no billing. The columns are `User.tier` (`PREMIUM` | `ULTRA`,
-default `PREMIUM`) and `User.trialEndsAt` (`lib/tiers.ts`): a new account gets
-`trialEndsAt` two months out; the operator grants Premium for good by clearing
-it, or Ultra by setting the tier. Past `trialEndsAt` on `PREMIUM` the account
-is **expired**: Premium features gate until the operator extends or grants
-(`premiumActive`). Ultra never expires (`ultraActive`). The single local reader
-(sign-in off) is Ultra: there is no account to gate.
+Billing is built and off (SPEC.md §24, below). The columns are `User.tier`
+(`PREMIUM` | `ULTRA`, default `PREMIUM`) and `User.trialEndsAt`
+(`lib/tiers.ts`): a new account gets `trialEndsAt` two months out; the
+operator grants Premium for good by clearing it, or Ultra by setting the
+tier. Past `trialEndsAt` on `PREMIUM` the account is **expired**: Premium
+features gate until the operator extends or grants (`premiumActive`). Ultra
+never expires (`ultraActive`). The single local reader (sign-in off) is
+Ultra: there is no account to gate.
 
 ## Where the tier is set
 
@@ -27,6 +28,27 @@ control on every account (`components/admin/tier-control.tsx`, `POST
 Premium on a trial until a date. A past date ends the trial now. Nothing else
 writes the tier: sign-in never changes it, and Reset account puts the account
 back on a new trial like a new account.
+
+## Billing
+
+The payment pipeline (SPEC.md §24) sells both tiers through Stripe as
+subscriptions, on its own pages under `/billing`: the plan page, the order
+page, Stripe Checkout, the confirmation page, and the receipts. It is
+**off**: the admin billing page (`/admin/billing`) has the switch, and until
+it is on the pages answer 404 and the app shows no link to them (the admin
+sees them as a preview). On needs sign-in on, `STRIPE_SECRET_KEY`,
+`STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_PREMIUM`, and `STRIPE_PRICE_ULTRA`
+set, and both prices readable from Stripe. Prices live in Stripe, not here:
+the pages show whatever the two prices say.
+
+A payment writes the same two columns the gates read. A paid subscription
+sets `tier` to the tier bought and clears `trialEndsAt`; the subscription's
+id, tier, and paid period's end sit beside them for the billing pages. An
+ended subscription sets `tier` to PREMIUM and `trialEndsAt` to the paid
+period's end: Premium until then, expired after, whatever the operator had
+granted before. The admin's Tier control still works on every account and
+still wins until the next Stripe event. Every paid invoice is one receipt
+(`Purchase`).
 
 ## Where the tier is read
 
@@ -127,6 +149,12 @@ until the owner makes one.
 
 ## Decisions, as they were made
 
+- **2026-09-12** — Billing is built and off. Both tiers sell through Stripe
+  as subscriptions on their own pages under `/billing` (plan page, order
+  page, Stripe Checkout, confirmation, receipts), with the switch on the
+  admin billing page. Off, the pages 404 and the app shows no link; the
+  admin previews them. A paid subscription sets the tier bought; an ended
+  one sets Premium until the paid period's end, expired after.
 - **2026-09-08** — Every current account is Unitos Ultra: they have access to
   everything. One migration sets `tier = ULTRA` and clears `trialEndsAt` on
   every account row (`prisma/migrations/20260908160000_all_accounts_ultra`).

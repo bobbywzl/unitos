@@ -205,6 +205,36 @@ const en = {
   resetDone: "Reset. {projects} projects, {documents} documents, {notes} notes deleted.",
   resetFailed: "Reset failed",
   resetFailedStatus: "Reset failed ({status})",
+  // Billing page (SPEC.md §24): the switch, the Stripe values, the prices,
+  // and every receipt.
+  billing: "Billing",
+  billingDesc:
+    "The payment pipeline: the plan page, Stripe Checkout, the confirmation page, and the receipts, all under /billing. Off, the pages answer 404 and the app shows no link to them; you see them as a preview. On, every account sees the links and can pay.",
+  billingSwitch: "Billing",
+  billingOn: "On",
+  billingOff: "Off",
+  billingTurnOn: "Turn on",
+  billingTurnOff: "Turn off",
+  billingSaved: "Saved",
+  billingSaveFailed: "Save failed",
+  billingSaveFailedStatus: "Save failed ({status})",
+  billingNeedsSignIn: "Sign-in is off. Billing needs accounts.",
+  billingNeedsEnv:
+    "Set STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, STRIPE_PRICE_PREMIUM, and STRIPE_PRICE_ULTRA first.",
+  billingNeedsPrices: "A price could not be read from Stripe. See Prices below.",
+  billingPreview: "Preview the plan page",
+  billingWebhook: "Webhook endpoint",
+  billingWebhookDesc:
+    "Register this URL in Stripe with the events checkout.session.completed, invoice.paid, customer.subscription.created, customer.subscription.updated, customer.subscription.deleted, and charge.refunded. Its signing secret is STRIPE_WEBHOOK_SECRET.",
+  billingPrices: "Prices",
+  billingPriceError: "Not readable: {reason}",
+  billingSubscribed: "{n} subscribed accounts",
+  billingReceipts: "Receipts",
+  billingReceiptsEmpty: "No payments yet.",
+  svcStripe: "Stripe client: checkout, the billing portal, prices",
+  svcStripeWebhook: "Stripe webhook signing",
+  svcPricePremium: "The Stripe price Unitos Premium sells at",
+  svcPriceUltra: "The Stripe price Unitos Ultra sells at",
 };
 
 const zh: Record<keyof typeof en, string> = {
@@ -389,6 +419,33 @@ const zh: Record<keyof typeof en, string> = {
   resetDone: "已重置。删除了 {projects} 个项目、{documents} 份文档、{notes} 条笔记。",
   resetFailed: "重置失败",
   resetFailedStatus: "重置失败（{status}）",
+  billing: "付费",
+  billingDesc:
+    "付款流程：方案页、Stripe 结账、确认页和收据，全部在 /billing 下。关闭时，这些页面返回 404，应用中不显示指向它们的链接；你以预览方式查看。开启后，每个账户都能看到链接并付款。",
+  billingSwitch: "付费",
+  billingOn: "已开启",
+  billingOff: "已关闭",
+  billingTurnOn: "开启",
+  billingTurnOff: "关闭",
+  billingSaved: "已保存",
+  billingSaveFailed: "保存失败",
+  billingSaveFailedStatus: "保存失败（{status}）",
+  billingNeedsSignIn: "登录已关闭。付费需要账户。",
+  billingNeedsEnv: "请先设置 STRIPE_SECRET_KEY、STRIPE_WEBHOOK_SECRET、STRIPE_PRICE_PREMIUM 和 STRIPE_PRICE_ULTRA。",
+  billingNeedsPrices: "无法从 Stripe 读取某个价格。见下方“价格”。",
+  billingPreview: "预览方案页",
+  billingWebhook: "Webhook 端点",
+  billingWebhookDesc:
+    "在 Stripe 中注册此 URL，事件为 checkout.session.completed、invoice.paid、customer.subscription.created、customer.subscription.updated、customer.subscription.deleted 和 charge.refunded。其签名密钥是 STRIPE_WEBHOOK_SECRET。",
+  billingPrices: "价格",
+  billingPriceError: "无法读取：{reason}",
+  billingSubscribed: "{n} 个已订阅账户",
+  billingReceipts: "收据",
+  billingReceiptsEmpty: "还没有付款。",
+  svcStripe: "Stripe 客户端：结账、订阅门户、价格",
+  svcStripeWebhook: "Stripe webhook 签名",
+  svcPricePremium: "Unitos Premium 的 Stripe 价格",
+  svcPriceUltra: "Unitos Ultra 的 Stripe 价格",
 };
 
 export const admin = { en, zh } as const;

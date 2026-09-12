@@ -85,6 +85,7 @@ Supabase instead of Neon works too: enable the `vector` extension, then set `DAT
    - `GEMINI_API_KEY` — video transcription for YouTube videos without readable captions, and the upload fallback
    - `BROWSER_WS_ENDPOINT` or `CHROMIUM_PATH` — a browser that reads YouTube's transcript panel when the server's own requests are bot-checked: a browser service's CDP websocket on Vercel, a Chromium binary on a self-hosted server (`CHROMIUM_ARGS` adds flags)
    - `ADMIN_PASSWORD` — enables `/admin` (unset = admin off)
+   - `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET` + `STRIPE_PRICE_PREMIUM` + `STRIPE_PRICE_ULTRA` — billing (SPEC.md §24): the tiers sold through Stripe under `/billing`; off until the admin billing page (`/admin/billing`) turns it on
    - `CRON_SECRET` — enables `/api/cron/cleanup` (deletes rejected notes older than 7 days; vercel.json schedules it daily) and `/api/cron/models` (the bimonthly model update; vercel.json schedules it on the 1st of every second month)
 3. In Supabase, enable the `vector` extension: Database → Extensions → vector.
 4. `npx prisma migrate deploy`

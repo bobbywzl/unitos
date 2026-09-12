@@ -44,6 +44,10 @@
 //   Merge with AI 用 AI 合并 · Join text 拼接文本 ·
 //   hold ring(合并进度环) 合并环 · drop line(落位线) 落位线 ·
 //   companion(仪表板上的外部网页应用) 配套应用
+//   billing(付款流程与开关) 付费 · plan page 方案页 · order(付款前的订单页) 订单 ·
+//   checkout(Stripe 结账) 结账 · receipt(一次付款; code Purchase) 收据 ·
+//   subscription 订阅 · Manage subscription 管理订阅 · confirmation 确认 ·
+//   billing switch 付费开关 · Stripe 不翻译
 // highlight 高亮 仅指高亮功能；表示选取文字一律用 选中。
 
 const en = {

@@ -7,6 +7,7 @@ import { authEnabled, currentUser } from "@/lib/auth";
 import { peopleByIds, roleOf } from "@/lib/collab";
 import { db } from "@/lib/db";
 import { documentsGraph, loadMultiUpload } from "@/lib/multi/view";
+import { billingLinks } from "@/lib/billing/switch";
 import { accountTier } from "@/lib/tiers";
 
 export const dynamic = "force-dynamic";
@@ -57,6 +58,7 @@ export default async function MultiUploadPage(props: {
     trialEndsAt: user.trialEndsAt?.toISOString() ?? null,
     premium: tier !== "expired",
     ultra: tier === "ultra",
+    billing: await billingLinks(),
   };
 
   return (

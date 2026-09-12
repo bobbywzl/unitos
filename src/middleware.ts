@@ -51,14 +51,17 @@ export function middleware(request: NextRequest) {
   if (!authOn) return NextResponse.next();
 
   // Public doors: the sign-in page, the password reset page, the auth
-  // callbacks, the cron endpoint, and the two legal documents — those are
+  // callbacks, the cron endpoint, the two legal documents — those are
   // linked from Google's consent screen, so a signed-out reader must reach
-  // them without hitting the gate.
+  // them without hitting the gate — the plan page (SPEC.md §24; it 404s
+  // while billing is off), and the Stripe webhook, which has no session.
   if (
     pathname === "/signin" ||
     pathname === "/reset" ||
     pathname === "/privacy" ||
     pathname === "/terms" ||
+    pathname === "/billing" ||
+    pathname === "/api/billing/webhook" ||
     pathname.startsWith("/api/auth/") ||
     pathname.startsWith("/api/cron/")
   ) {

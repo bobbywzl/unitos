@@ -36,6 +36,7 @@
     "reactflow": "^11.11.4",
     "remark-gfm": "^4.0.1",
     "remark-parse": "^11.0.0",
+    "stripe": "^22.6.2",
     "undici": "^8.10.0",
     "unified": "^11.0.5",
     "unpdf": "^1.8.0",
