@@ -137,11 +137,15 @@ async function requestAccessToken(clientId: string, access: DriveAccess): Promis
 // shared with them), or the shared drives they are a member of. Folders show
 // so the reader can walk into them, and stay unselectable — a folder is not a
 // document to import.
-function docsView(picker: GooglePickerNamespace, sharedDrives: boolean): PickerDocsView {
+function docsView(
+  picker: GooglePickerNamespace,
+  sharedDrives: boolean,
+  mimeTypes: string,
+): PickerDocsView {
   const view = new picker.DocsView(picker.ViewId.DOCS)
     .setIncludeFolders(true)
     .setSelectFolderEnabled(false)
-    .setMimeTypes(DRIVE_PICKER_MIME_TYPES);
+    .setMimeTypes(mimeTypes);
   return sharedDrives ? view.setEnableDrives(true) : view;
 }
 
@@ -156,6 +160,9 @@ export async function pickDriveFiles(opts: {
   apiKey: string | null;
   linked: boolean;
   access: DriveAccess;
+  // The picker's mime filter; the document filter by default. The assistant
+  // passes its own (DRIVE_ASSISTANT_MIME_TYPES).
+  mimeTypes?: string;
 }): Promise<{ token: string; files: DrivePickedFile[] }> {
   const [token] = await Promise.all([
     (async () =>
@@ -170,9 +177,10 @@ export async function pickDriveFiles(opts: {
     // not both: Google's rule is that with it set, only shared drives are in
     // the view. That one view is what an account with no shared drive saw as
     // an empty picker, with its own Drive nowhere.
+    const mimeTypes = opts.mimeTypes ?? DRIVE_PICKER_MIME_TYPES;
     const builder = new picker.PickerBuilder()
-      .addView(docsView(picker, false))
-      .addView(docsView(picker, true))
+      .addView(docsView(picker, false, mimeTypes))
+      .addView(docsView(picker, true, mimeTypes))
       .setOAuthToken(token)
       .enableFeature(picker.Feature.MULTISELECT_ENABLED)
       .enableFeature(picker.Feature.SUPPORT_DRIVES);

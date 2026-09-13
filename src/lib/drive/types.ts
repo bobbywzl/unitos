@@ -94,6 +94,34 @@ export const DRIVE_PICKER_MIME_TYPES = [
   "audio/ogg",
 ].join(",");
 
+// The assistant's own picker filter (SPEC.md §7): what an attachment takes —
+// the exportable formats and PDF (text), video and audio (transcribed),
+// images (shown to the model), and plain text.
+export const DRIVE_ASSISTANT_MIME_TYPES = [
+  DRIVE_PICKER_MIME_TYPES,
+  "image/png",
+  "image/jpeg",
+  "image/gif",
+  "image/webp",
+  "image/bmp",
+  "text/plain",
+  "text/markdown",
+  "text/csv",
+].join(",");
+
+// What a picked file becomes as an attachment (classifyDriveFile, then the
+// kinds an attachment adds): an image is stored and shown to the model, a
+// text file rides as its text.
+export type DriveAttachmentKind = DriveFileKind | "image" | "text";
+
+export function classifyDriveAttachment(mimeType: string, name: string): DriveAttachmentKind {
+  const kind = classifyDriveFile(mimeType, name);
+  if (kind !== "unsupported") return kind;
+  if (/^image\//i.test(mimeType)) return "image";
+  if (/^text\//i.test(mimeType) || /\.(txt|md|markdown|csv|tsv)$/i.test(name)) return "text";
+  return "unsupported";
+}
+
 // One file the reader selected in the picker.
 export type DrivePickedFile = {
   id: string;

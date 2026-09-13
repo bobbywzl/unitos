@@ -1,18 +1,17 @@
 import { after, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { authEnabled, currentUser } from "@/lib/auth";
+import { currentUser } from "@/lib/auth";
 import { bumpNotebook, notebookAccess } from "@/lib/collab";
 import { buildConnections } from "@/lib/connect";
-import { driveAccess } from "@/lib/drive/config";
-import { classifyDriveFile, type DriveAccess, driveGrant } from "@/lib/drive/types";
+import { requestDriveToken } from "@/lib/drive/request-token";
+import { classifyDriveFile } from "@/lib/drive/types";
 import {
   driveDownloadUrl,
   fetchDriveMetadata,
   fetchDrivePdf,
   fetchExportedPdf,
 } from "@/lib/drive/fetch";
-import { mintDriveAccessToken } from "@/lib/drive/link";
 import { buildGlossary } from "@/lib/glossary";
 import { runConversion } from "@/lib/handwritten/convert";
 import { currentLang, serverT } from "@/lib/i18n/server";
@@ -64,27 +63,7 @@ export async function POST(req: Request) {
   const access = await notebookAccess(data.notebookId, "editor");
   if (access instanceof NextResponse) return access;
 
-  const authHeader = req.headers.get("authorization") ?? "";
-  let token = authHeader.startsWith("Bearer ") ? authHeader.slice("Bearer ".length) : "";
-  let grant: DriveAccess = driveAccess();
-  if (authEnabled() && user) {
-    const row = await db.user.findUnique({
-      where: { id: user.id },
-      select: { driveRefreshToken: true, driveScope: true },
-    });
-    if (row?.driveRefreshToken) {
-      // A linked account's token — on the request or minted here — reaches
-      // what the stored grant reaches.
-      grant = driveGrant(row.driveScope);
-      if (!token) {
-        // No per-visit grant on the request: mint from the linked account
-        // (SPEC.md §14). A revoked grant clears itself on the token route;
-        // here it just fails the mint.
-        const minted = await mintDriveAccessToken(row.driveRefreshToken);
-        if (minted !== null && minted !== "revoked") token = minted.token;
-      }
-    }
-  }
+  const { token, grant } = await requestDriveToken(req, user);
   if (!token) return NextResponse.json({ error: t("api.driveTokenMissing") }, { status: 401 });
 
   let name = data.name;

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { isImageFile } from "@/lib/handwritten/image";
 import { imageMarkdown } from "@/lib/images";
+import { MAX_VIDEO_BYTES, MEDIA_EXTENSIONS } from "@/lib/video/types";
 
 // Attachments in the assistant conversation (SPEC.md §7): the reader adds
 // images and files to a message. This file is imported by both the client
@@ -16,6 +17,10 @@ import { imageMarkdown } from "@/lib/images";
 export const FILE_MAX_CHARS = 120_000;
 // The largest file the attach route reads.
 export const FILE_MAX_BYTES = 20 * 1024 * 1024;
+// The largest video or audio file an attachment takes: the upload's own cap.
+// It stages in chunks (POST /api/uploads) and transcribes through
+// POST /api/assistant/attach-media; the transcript rides as the file's text.
+export const MEDIA_MAX_BYTES = MAX_VIDEO_BYTES;
 // Per message.
 export const MAX_FILES_PER_MESSAGE = 5;
 export const MAX_IMAGES_PER_MESSAGE = 4;
@@ -34,8 +39,27 @@ export const TEXT_EXTENSIONS =
   /\.(txt|md|markdown|csv|tsv|json|jsonl|xml|html?|yaml|yml|tex|bib|log|rst|org|py|js|jsx|ts|tsx|java|c|h|cpp|hpp|cs|go|rs|rb|php|swift|kt|sql|sh|bash|zsh|toml|ini|cfg|conf)$/i;
 export const PDF_EXTENSION = /\.pdf$/i;
 
-// The file input's accept list: images, PDF, and the text files above.
+// Video and audio the composer takes: transcribed, the transcript rides as text.
+const MEDIA_MIME_RX = /^(?:video|audio)\//i;
+
+// The file input's accept list: images, PDF, video, audio, and the text files
+// above.
 export const FILE_ACCEPT = [
+  "video/*",
+  "audio/*",
+  ".mp4",
+  ".m4v",
+  ".webm",
+  ".ogv",
+  ".mov",
+  ".mp3",
+  ".m4a",
+  ".m4b",
+  ".aac",
+  ".wav",
+  ".flac",
+  ".oga",
+  ".opus",
   "image/png",
   "image/jpeg",
   "image/gif",
@@ -92,15 +116,24 @@ export const FILE_ACCEPT = [
   ".conf",
 ].join(",");
 
-export type AttachmentKind = "image" | "pdf" | "text";
+export type AttachmentKind = "image" | "pdf" | "text" | "media";
 
 /** What a picked file is to the composer; null for a file it does not take. */
 export function attachmentKind(file: { type: string; name: string }): AttachmentKind | null {
   if (isImageFile(file)) return "image";
   if (file.type === "application/pdf" || PDF_EXTENSION.test(file.name)) return "pdf";
+  if (MEDIA_MIME_RX.test(file.type) || MEDIA_EXTENSIONS.test(file.name)) return "media";
   if (file.type.startsWith("text/") || TEXT_EXTENSIONS.test(file.name)) return "text";
   return null;
 }
+
+// The chunked staging of a media attachment (the upload's own path,
+// /api/uploads), then the transcription. The browser's half.
+export const mediaAttachSchema = z.object({
+  uploadId: z.string().regex(/^[a-zA-Z0-9-]{8,64}$/),
+  name: z.string().min(1).max(FILE_NAME_MAX),
+  mimeType: z.string().max(100).optional(),
+});
 
 /** The file's text as the message carries it: cut at FILE_MAX_CHARS with a
     marker, never silently. */
