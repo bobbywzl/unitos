@@ -120,8 +120,11 @@ export const MAX_OUTPUT_TOKENS: Record<DerivationType, number> = {
 };
 
 // The ingest-time corpus scan for recommended links (SPEC.md §13). Not a
-// DerivationType — it runs as a background job, not through /api/derive.
+// DerivationType — it runs as a background job, not through /api/derive. Two
+// passes, the scan and the check, both at the reader's effort: the scan
+// reads the whole project, and "max" over that much text outruns the request.
 export const CONNECT_MODEL = KIMI_K3;
+export const CONNECT_EFFORT: KimiEffort = DEFAULT_EFFORT;
 
 // Stitch (SPEC.md §22): the assistant over a multi upload's members. It reads
 // every member whole and answers one command with links, a generated

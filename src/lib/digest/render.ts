@@ -292,3 +292,50 @@ export function corporaSystem(all: DigestParts[], budget: RenderBudget = corpora
     renderCorporaDigest(all, budget),
   ].join("\n");
 }
+
+// One document of a project, rendered from the project's digest: the
+// project header, the document with its layers, and the notes of the
+// project that cite it. Deterministic like the whole: same parts, same text.
+export function renderDocumentDigest(
+  parts: DigestParts,
+  documentId: string,
+  budget: RenderBudget = unlimitedBudget(),
+): string | null {
+  const doc = parts.documents.find((d) => d.id === documentId);
+  if (!doc) return null;
+  const chunks: string[] = [
+    [
+      `# Project: ${parts.corpusTitle} [project ${parts.corpusId}]`,
+      `Sections: ${parts.sections.join("; ") || "(none)"}`,
+      `This is one document of the project. The project holds ${parts.documents.length} document${parts.documents.length === 1 ? "" : "s"}.`,
+    ].join("\n"),
+    renderDocument(doc, budget, new Map(), parts.corpusTitle),
+  ];
+  const citing = parts.notes.filter((n) => n.sources.some((s) => s.documentId === documentId));
+  const notes = spend(citing.map(noteBlock), budget, "notes");
+  chunks.push(
+    [
+      "## Notes in this project that cite this document",
+      notes.length > 0 ? notes.join("\n\n") : "(no notes)",
+    ].join("\n\n"),
+  );
+  return chunks.join("\n\n");
+}
+
+// The assistant's system prefix at This page scope (SPEC.md §7):
+// instructions + the one document from the digest. Null = the document is
+// not in the digest.
+export function documentSystem(
+  parts: DigestParts,
+  documentId: string,
+  budget: RenderBudget = corpusBudget(),
+): string | null {
+  const rendered = renderDocumentDigest(parts, documentId, budget);
+  if (rendered === null) return null;
+  return [
+    "You assist a reader working through one document of their project: the document in full, and every note, annotation, distillation, extraction, and summary they made on it. All of it follows.",
+    ...SHARED_INSTRUCTIONS,
+    "",
+    rendered,
+  ].join("\n");
+}
