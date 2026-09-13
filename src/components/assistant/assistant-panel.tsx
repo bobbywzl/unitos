@@ -24,7 +24,7 @@ import type { TFunc, TKey } from "@/lib/i18n/dictionaries";
 import { Markdown } from "@/components/markdown";
 import { LoadingDots, ThinkingIndicator } from "@/components/thinking";
 
-type Scope = "notebook" | "corpus";
+type Scope = "document" | "notebook";
 type Task = "contradictions" | "gaps" | "unsourced";
 type Issue = { noteIds: string[]; issue: string; explanation: string };
 
@@ -86,11 +86,11 @@ function subscribeWeb(onChange: () => void) {
 }
 
 // Two scopes, both reading the digest (SPEC.md §7). Scope ids stay as wire
-// values; the labels say Corpus for this binding of documents and Corpora for
-// all of them. Tables hold dictionary keys, translated at render.
+// values: document = This page (the open document whole), notebook = Project
+// (this project whole). Tables hold dictionary keys, translated at render.
 const SCOPES: { id: Scope; labelKey: TKey; hintKey: TKey }[] = [
-  { id: "notebook", labelKey: "assistant.scopeCorpusLabel", hintKey: "assistant.scopeCorpusHint" },
-  { id: "corpus", labelKey: "assistant.scopeCorporaLabel", hintKey: "assistant.scopeCorporaHint" },
+  { id: "document", labelKey: "assistant.scopeDocumentLabel", hintKey: "assistant.scopeDocumentHint" },
+  { id: "notebook", labelKey: "assistant.scopeProjectLabel", hintKey: "assistant.scopeProjectHint" },
 ];
 
 // Recommended functions for the open document, in this order. Insiders
@@ -157,7 +157,9 @@ export function AssistantPanel({
   const t = useT();
   const ime = useImeGuard();
   const { premium } = useCollab();
-  const [scope, setScope] = useState<Scope>("notebook");
+  // This page while a document is open, else Project: the panel remounts on
+  // every document switch, so the default follows the open document.
+  const [scope, setScope] = useState<Scope>(documentId ? "document" : "notebook");
   const web = useSyncExternalStore(subscribeWeb, readWeb, () => true);
   const [question, setQuestion] = useState("");
   // The conversation (SPEC.md §7, §21): the first question opens it; every
@@ -465,6 +467,7 @@ export function AssistantPanel({
       const body = {
         notebookId,
         scope,
+        documentId: scope === "document" ? documentId : undefined,
         task: "ask",
         question: q,
         web,
@@ -586,7 +589,10 @@ export function AssistantPanel({
           key={s.id}
           onClick={() => setScope(s.id)}
           data-track={`assistant-scope:${s.id}`}
-          data-tip={t(s.hintKey)}
+          // This page needs an open document; without one the pill stays,
+          // disabled, and says why.
+          disabled={s.id === "document" && !documentId}
+          data-tip={t(s.id === "document" && !documentId ? "assistant.scopeDocumentNoDocument" : s.hintKey)}
           className={`rounded-full px-3 py-1 text-xs font-semibold disabled:opacity-40 ${
             scope === s.id
               ? "bg-ink text-paper"
@@ -709,9 +715,9 @@ export function AssistantPanel({
         placeholder={t(
           inConversation
             ? "assistant.followUpPlaceholder"
-            : scope === "corpus"
-              ? "assistant.askPlaceholderCorpora"
-              : "assistant.askPlaceholderCorpus",
+            : scope === "document"
+              ? "assistant.askPlaceholderDocument"
+              : "assistant.askPlaceholderProject",
         )}
         className="block max-h-40 w-full resize-none bg-transparent px-2 py-1.5 text-sm outline-none placeholder:text-sand-500"
       />

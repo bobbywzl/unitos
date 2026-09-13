@@ -7,7 +7,8 @@ import { serverT } from "@/lib/i18n/server";
 import { kimiConfigured } from "@/lib/kimi";
 import { parseBody } from "@/lib/validate";
 
-export const maxDuration = 120;
+// Two passes over whole documents (lib/connect.ts): the ingest routes' budget.
+export const maxDuration = 300;
 
 const bodySchema = z.object({ notebookId: z.string().min(1) });
 
