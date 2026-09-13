@@ -402,6 +402,9 @@ export function FloatingNoteEditor({
       // and hold, and the two merge (components/nudges.tsx).
       data-nudge={canEdit ? "merge" : undefined}
       data-tip={imageDrop.over ? t("panes.dropImageIntoNote") : undefined}
+      // The card sits over the article, under the reader's tools (TOOL_LAYER,
+      // z-40 in reader-interactions.tsx): a selection's toolbar and the cards
+      // it opens come out on top of the note, never under it.
       className={`${pane ? "absolute z-20" : "fixed z-30"} flex max-w-[calc(100vw-32px)] min-h-[180px] min-w-[300px] resize flex-col overflow-hidden rounded-[20px] border border-line bg-card/95 p-3 shadow-float backdrop-blur-md ${
         grab ? "select-none" : ""
       }${imageDrop.over ? " outline-2 outline-dashed outline-clay-400" : ""}${
