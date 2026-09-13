@@ -42,6 +42,16 @@ run(["prisma", "generate"]);
 if (process.env.VERCEL_ENV && process.env.VERCEL_ENV !== "production") {
   console.log(`Preview build (${process.env.VERCEL_ENV}): skipping prisma migrate deploy.`);
 } else {
+  // The first production run of 20260912120000_billing stopped on a column a
+  // preview build of an earlier branch had already added, and Prisma keeps a
+  // failed migration on record until it is resolved. Mark that one rolled
+  // back so deploy applies its guarded rewrite; once it is applied, resolve
+  // exits non-zero on every later deploy and that is ignored. Delete this
+  // block once a production deploy has passed.
+  spawnSync("npx", ["prisma", "migrate", "resolve", "--rolled-back", "20260912120000_billing"], {
+    stdio: "inherit",
+    env: process.env,
+  });
   run(["prisma", "migrate", "deploy"]);
 }
 run(["next", "build"]);
