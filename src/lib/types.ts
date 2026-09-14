@@ -335,13 +335,43 @@ export type MultiUploadView = {
 /** A multi upload as the document bar lists it. */
 export type MultiUploadSummary = { id: string; title: string; memberCount: number };
 
+/** What Stitch read of one member (SPEC.md §22). read: every block went to
+    the model. cut: the first `blocks` of `total` did, the rest cut for
+    length. leftOut: none did, the member past the members budget. empty:
+    the member has nothing to read, and `reason` says why — a video or
+    audio member reads as its transcript lines, a handwritten member as its
+    converted text, so a transcript or conversion that has not landed is an
+    empty member. `detail` is the stored transcription or conversion error. */
+export type StitchMember = {
+  id: string;
+  title: string;
+  kind: "text" | "video" | "audio" | "handwritten";
+  status: "read" | "cut" | "leftOut" | "empty";
+  blocks: number;
+  total: number;
+  reason:
+    | "transcriptPending"
+    | "transcriptStale"
+    | "transcriptFailed"
+    | "transcriptNone"
+    | "conversionPending"
+    | "conversionFailed"
+    | "conversionNone"
+    | "noText"
+    | null;
+  detail: string | null;
+};
+
 /** What one Stitch command produced (SPEC.md §22): the reply, how many links
-    it proposed (each a recommended link awaiting Accept), and the generated
-    document when it wrote one. */
+    it proposed (each a recommended link awaiting Accept), the generated
+    document when it wrote one, and what was read of each member. With
+    fewer than two members read, the command did not run: reply is empty,
+    nothing is stored, and members says why. */
 export type StitchResult = {
   reply: string;
   linkCount: number;
   document: { id: string; title: string } | null;
+  members: StitchMember[];
 };
 
 // ── Graph view (SPEC.md §13): documents as nodes, links as weighted edges ──

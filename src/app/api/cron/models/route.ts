@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { cronAuthorized, cronSecret } from "@/lib/cron-auth";
 import { updateModels } from "@/lib/model-update";
 
 // The bimonthly model update (SPEC.md §2, lib/model-update.ts): every role
@@ -8,11 +9,10 @@ import { updateModels } from "@/lib/model-update";
 export const maxDuration = 300;
 
 export async function GET(req: Request) {
-  const secret = process.env.CRON_SECRET;
-  if (!secret) {
+  if (!cronSecret()) {
     return NextResponse.json({ error: "CRON_SECRET is not set" }, { status: 503 });
   }
-  if (req.headers.get("authorization") !== `Bearer ${secret}`) {
+  if (!cronAuthorized(req, "cron")) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const results = await updateModels();
