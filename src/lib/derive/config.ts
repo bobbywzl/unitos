@@ -144,6 +144,12 @@ export const STITCH_MAX_OUTPUT_TOKENS = 32768; // a page of whole-block referenc
 // told to narrow the command instead of reading a stream that ended empty.
 export const STITCH_DEADLINE_MS = 270_000;
 
+// The title of a multi upload (SPEC.md §22): a short phrase for what the
+// members are about together, from their titles and openings — a label, so
+// the lowest effort, like the gist.
+export const MULTI_TITLE_MODEL = KIMI_K3;
+export const MULTI_TITLE_EFFORT: KimiEffort = "low";
+
 // The merge of notes (SPEC.md §6): the reader drops a note on another and
 // picks Merge with AI, and the model writes the one note that replaces both.
 // It rewrites the reader's own words, so it reasons at the reader's effort.

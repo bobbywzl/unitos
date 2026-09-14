@@ -287,6 +287,14 @@ function buildResponse(all) {
 
   // Notebook tasks: no issues found.
   // Gists: the first five words of each listed note.
+  // The title of a multi upload (SPEC.md §22): the first member's first two
+  // words and the member count.
+  if (all.includes('"title": "<phrase>"') && all.includes("[member 1]")) {
+    const first = all.match(/\[member 1\] "([^"]*)"/)?.[1] ?? "Members";
+    const count = [...all.matchAll(/\[member \d+\]/g)].length;
+    return JSON.stringify({ title: `${first.split(/\s+/).slice(0, 2).join(" ")} set of ${count}` });
+  }
+
   if (all.includes('"gists"')) {
     const gists = [...all.matchAll(/\[note ([^\]]+)\]\n([^\n]*)/g)].map((m) => ({
       id: m[1],

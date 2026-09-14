@@ -242,6 +242,35 @@ export function DocumentBar({
     }
   }
 
+  // Rename and delete a multi upload from its row (SPEC.md §22), the same
+  // actions as its page header.
+  const [multiRename, setMultiRename] = useState<{ id: string; draft: string } | null>(null);
+  async function renameMulti() {
+    if (!multiRename) return;
+    const current = multiUploads.find((m) => m.id === multiRename.id);
+    const title = multiRename.draft.trim();
+    setMultiRename(null);
+    if (!current || !title || title === current.title) return;
+    setError(null);
+    try {
+      await api(`/api/multi/${current.id}`, "PATCH", { title });
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t("common.requestFailed"));
+    }
+  }
+  async function deleteMulti(multiId: string) {
+    if (!confirm(t("multi.confirmDelete"))) return;
+    setError(null);
+    try {
+      await api(`/api/multi/${multiId}`, "DELETE");
+      if (searchParams.get("multi") === multiId) router.push(`/n/${notebookId}`);
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t("common.requestFailed"));
+    }
+  }
+
   // Hover keeps the list open across the gap between pill and list; leaving
   // both closes it after a grace period.
   function openList() {
@@ -1093,26 +1122,89 @@ export function DocumentBar({
                     </button>
                   )}
                   {multiUploads.map((m) => (
-                    <button
-                      key={m.id}
-                      onClick={() => {
-                        closeList();
-                        startOpening(() => router.push(`/n/${notebookId}/multi/${m.id}`));
-                      }}
-                      data-track="multi-open"
-                      data-active-row={m.id === searchParams.get("multi") || undefined}
-                      className={`flex min-w-0 items-center gap-2 overflow-hidden px-4 py-2 text-left text-[13px] whitespace-nowrap ${
-                        m.id === searchParams.get("multi")
-                          ? "font-semibold text-ink"
-                          : "text-sand-700 hover:bg-clay-100 hover:text-clay-800"
-                      }`}
-                      data-tip={m.title}
-                    >
-                      <span className="min-w-0 flex-1 truncate">{clipWords(m.title, 40)}</span>
-                      <span className="shrink-0 rounded-full bg-sand-100 px-1.5 text-[11px] tabular-nums text-sand-600">
-                        {m.memberCount}
-                      </span>
-                    </button>
+                    <div key={m.id} className="flex flex-col">
+                      <div className="flex items-center">
+                        {multiRename?.id === m.id ? (
+                          <input
+                            autoFocus
+                            value={multiRename.draft}
+                            onChange={(e) => setMultiRename({ id: m.id, draft: e.target.value })}
+                            onBlur={() => void renameMulti()}
+                            onKeyDown={(e) => {
+                              if (isImeKey(e)) return;
+                              if (e.key === "Enter") void renameMulti();
+                              if (e.key === "Escape") setMultiRename(null);
+                            }}
+                            aria-label={t("multi.renameTitle")}
+                            className="mx-2 my-1 min-w-0 flex-1 rounded-full bg-sand-100 px-3 py-1 text-[13px] outline-none"
+                          />
+                        ) : (
+                          <button
+                            onClick={() => {
+                              closeList();
+                              startOpening(() => router.push(`/n/${notebookId}/multi/${m.id}`));
+                            }}
+                            data-track="multi-open"
+                            data-active-row={m.id === searchParams.get("multi") || undefined}
+                            className={`flex min-w-0 flex-1 items-center gap-2 overflow-hidden px-4 py-2 text-left text-[13px] whitespace-nowrap ${
+                              m.id === searchParams.get("multi")
+                                ? "font-semibold text-ink"
+                                : "text-sand-700 hover:bg-clay-100 hover:text-clay-800"
+                            }`}
+                            data-tip={m.title}
+                          >
+                            <span className="min-w-0 flex-1 truncate">{clipWords(m.title, 40)}</span>
+                            <span className="shrink-0 rounded-full bg-sand-100 px-1.5 text-[11px] tabular-nums text-sand-600">
+                              {m.memberCount}
+                            </span>
+                          </button>
+                        )}
+                        {canEdit && (
+                          <button
+                            onClick={() => setPillMenu(pillMenu === `multi:${m.id}` ? null : `multi:${m.id}`)}
+                            data-track="multi-actions"
+                            aria-label={t("multi.actionsFor", { title: m.title })}
+                            aria-expanded={pillMenu === `multi:${m.id}`}
+                            data-tip={t("multi.actions")}
+                            className="mr-2 flex size-6 shrink-0 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-800"
+                          >
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                              <circle cx="12" cy="5" r="2" />
+                              <circle cx="12" cy="12" r="2" />
+                              <circle cx="12" cy="19" r="2" />
+                            </svg>
+                          </button>
+                        )}
+                      </div>
+                      <Collapse open={pillMenu === `multi:${m.id}`}>
+                        {pillMenu === `multi:${m.id}` && (
+                          <div className="mx-2 mb-1.5 flex flex-col rounded-xl bg-sand-100 py-1">
+                            <button
+                              onClick={() => {
+                                setPillMenu(null);
+                                setMultiRename({ id: m.id, draft: m.title });
+                              }}
+                              data-track="multi-rename"
+                              className={rowAction}
+                              data-tip={t("multi.renameTitle")}
+                            >
+                              {t("multi.rename")}
+                            </button>
+                            <button
+                              onClick={() => {
+                                closeList();
+                                void deleteMulti(m.id);
+                              }}
+                              data-track="multi-delete"
+                              className="px-4 py-1.5 text-left text-[12.5px] text-red-600 hover:bg-red-50 dark:hover:bg-red-950"
+                              data-tip={t("multi.deleteTitle")}
+                            >
+                              {t("multi.delete")}
+                            </button>
+                          </div>
+                        )}
+                      </Collapse>
+                    </div>
                   ))}
                 </>
               )}
