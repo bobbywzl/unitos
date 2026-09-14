@@ -45,7 +45,7 @@ const en = {
   stitchTitle: "Stitch: the assistant works across the members — gathers passages, draws links, finds contradictions, writes a new page",
   stitchPlaceholder: "What should the assistant do across these documents?",
   stitchHint:
-    "The assistant reads every member whole. It draws links between passages, or writes a new page from them, or both. Links await Accept in the graph; a page lands under Generated content.",
+    "The assistant reads every member whole; a video or audio member as its transcript. It draws links between passages, or writes a new page from them, or both. Links await Accept in the graph; a page lands under Generated content. Every reply says what was read of each member.",
   stitchSend: "Send",
   stitchRunning: "Reading the members…",
   stitchStop: "Stop",
@@ -63,6 +63,24 @@ const en = {
   stitchNothingStored: "Nothing was stored.",
   stitchFailed: "Stitch failed. {reason}",
   stitchViewer: "Viewers can read the members. Ask an editor to run Stitch.",
+  // What was read of each member (StitchMember). A member not read shows
+  // why; a transcript that failed shows the stored reason.
+  stitchMembersRead: "Read {read} of {total} members",
+  stitchNotEnoughRead: "Stitch did not run. It needs two members it can read.",
+  stitchUnitText: "blocks",
+  stitchUnitTranscript: "transcript lines",
+  stitchUnitConverted: "converted blocks",
+  stitchMemberRead: "{n} {unit} read",
+  stitchMemberCut: "{n} of {total} {unit} read, the rest cut for length",
+  stitchMemberLeftOut: "Not read: left out for length",
+  stitchMemberTranscriptPending: "Not read: the transcript is still being written",
+  stitchMemberTranscriptStale: "Not read: the last transcription run did not finish",
+  stitchMemberTranscriptFailed: "Not read: transcription failed. {detail}",
+  stitchMemberTranscriptNone: "Not read: no transcript yet. Open the document to transcribe it",
+  stitchMemberConversionPending: "Not read: conversion to text is still running",
+  stitchMemberConversionFailed: "Not read: conversion to text failed. {detail}",
+  stitchMemberConversionNone: "Not read: handwritten and not converted to text yet",
+  stitchMemberNoText: "Not read: no text",
 };
 
 const zh: Record<keyof typeof en, string> = {
@@ -107,7 +125,7 @@ const zh: Record<keyof typeof en, string> = {
   stitchTitle: "缝合：助手在成员之间工作——汇集片段、绘制链接、找出矛盾、写新页面",
   stitchPlaceholder: "助手应在这些文档之间做什么？",
   stitchHint:
-    "助手完整阅读每个成员。它在片段之间绘制链接，或根据片段写一个新页面，或两者都做。链接在图谱中等待接受；页面放在生成内容下。",
+    "助手完整阅读每个成员；视频或音频成员读其逐字稿。它在片段之间绘制链接，或根据片段写一个新页面，或两者都做。链接在图谱中等待接受；页面放在生成内容下。每条回复都说明从每个成员读了什么。",
   stitchSend: "发送",
   stitchRunning: "正在阅读成员…",
   stitchStop: "停止",
@@ -125,6 +143,22 @@ const zh: Record<keyof typeof en, string> = {
   stitchNothingStored: "没有存储任何内容。",
   stitchFailed: "缝合失败。{reason}",
   stitchViewer: "查看者可以阅读成员。请让编辑者运行缝合。",
+  stitchMembersRead: "已读 {read} / {total} 个成员",
+  stitchNotEnoughRead: "缝合没有运行。它需要两个可读的成员。",
+  stitchUnitText: "个块",
+  stitchUnitTranscript: "行逐字稿",
+  stitchUnitConverted: "个转换后的块",
+  stitchMemberRead: "已读 {n} {unit}",
+  stitchMemberCut: "已读 {n} / {total} {unit}，其余因长度截断",
+  stitchMemberLeftOut: "未读：因长度略过",
+  stitchMemberTranscriptPending: "未读：逐字稿仍在转写中",
+  stitchMemberTranscriptStale: "未读：上一次转写没有完成",
+  stitchMemberTranscriptFailed: "未读：转写失败。{detail}",
+  stitchMemberTranscriptNone: "未读：还没有逐字稿。打开文档以转写",
+  stitchMemberConversionPending: "未读：转换为文本仍在进行中",
+  stitchMemberConversionFailed: "未读：转换为文本失败。{detail}",
+  stitchMemberConversionNone: "未读：手写文档还没有转换为文本",
+  stitchMemberNoText: "未读：没有文本",
 };
 
 export const multi = { en, zh } as const;

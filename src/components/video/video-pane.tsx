@@ -41,6 +41,7 @@ import {
   isAudioMime,
   parseTimeInput,
   type Region,
+  transcriptErrorKey,
   type TranscriptLine,
   type VideoAnnotationItem,
   type VideoInfo,
@@ -320,11 +321,8 @@ export function VideoPane({
   // Stored transcription errors are language-neutral English diagnostics; the
   // known classes render in the UI language, the rest as stored.
   const describeTranscriptError = (message: string): string => {
-    if (/no speech found/i.test(message)) return t("video.errNoSpeech");
-    if (/transcription cap/i.test(message)) return t("video.errTooLarge");
-    if (/caption/i.test(message)) return t("video.errCaptions");
-    if (/is not set/i.test(message)) return t("video.errNotConfigured");
-    return message;
+    const key = transcriptErrorKey(message);
+    return key ? t(key) : message;
   };
   const transcriptFailedMessage =
     transcribeError ??

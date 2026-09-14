@@ -133,6 +133,24 @@ export type VideoInfo = {
 // shows Transcribe again instead of a spinner.
 export const TRANSCRIBE_STALE_MS = 10 * 60 * 1000;
 
+// Stored transcription errors are language-neutral English diagnostics
+// (lib/video/transcribe.ts). The known classes have a UI string under
+// video.err*; the rest show as stored. The transcript pane and the Stitch
+// box describe a failed transcript through this one map.
+export type TranscriptErrorKey =
+  | "video.errNoSpeech"
+  | "video.errTooLarge"
+  | "video.errCaptions"
+  | "video.errNotConfigured";
+
+export function transcriptErrorKey(message: string): TranscriptErrorKey | null {
+  if (/no speech found/i.test(message)) return "video.errNoSpeech";
+  if (/transcription cap/i.test(message)) return "video.errTooLarge";
+  if (/caption/i.test(message)) return "video.errCaptions";
+  if (/is not set/i.test(message)) return "video.errNotConfigured";
+  return null;
+}
+
 export function transcriptIsStale(
   status: TranscriptStatusName,
   startedAt: Date | null,
