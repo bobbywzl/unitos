@@ -54,7 +54,10 @@ export function middleware(request: NextRequest) {
   // callbacks, the cron endpoint, the two legal documents — those are
   // linked from Google's consent screen, so a signed-out reader must reach
   // them without hitting the gate — the plan page (SPEC.md §24; it 404s
-  // while billing is off), and the Stripe webhook, which has no session.
+  // while billing is off), the Stripe webhook, which has no session, and
+  // the transcription job's next leg (SPEC.md §11): the app calling its own
+  // transcribe route with no session and CRON_SECRET as the bearer. The
+  // header only opens the door; the route refuses without the secret.
   if (
     pathname === "/signin" ||
     pathname === "/reset" ||
@@ -63,7 +66,10 @@ export function middleware(request: NextRequest) {
     pathname === "/billing" ||
     pathname === "/api/billing/webhook" ||
     pathname.startsWith("/api/auth/") ||
-    pathname.startsWith("/api/cron/")
+    pathname.startsWith("/api/cron/") ||
+    (pathname.startsWith("/api/documents/") &&
+      pathname.endsWith("/transcribe") &&
+      request.headers.get("x-transcribe-leg") === "1")
   ) {
     return NextResponse.next();
   }
