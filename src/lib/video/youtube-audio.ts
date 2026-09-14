@@ -2,12 +2,14 @@ import { outboundFetch } from "@/lib/outbound-fetch";
 import { adaptiveFormatsOf, playerResponses, type AdaptiveFormat } from "@/lib/video/innertube";
 import type { TranscriptSegment } from "@/lib/video/segments";
 
-// The audio rung (SPEC.md §11), the last resort for a YouTube video: no
-// caption track anywhere and Gemini could not read the video. The audio-only
+// The audio rung (SPEC.md §11): no caption track anywhere. The audio-only
 // stream downloads through the player API's app clients — the same ones that
 // serve the captions — and takes the upload ladder like a file the reader
-// uploaded. Bounded by the upload cap: the best stream that fits it, and a
-// video whose smallest stream is over the cap says so.
+// uploaded. The smallest stream that fits the cap: a transcript reads the
+// words, and 48 kbps carries them as well as 128, at a third of the bytes
+// and a third of the download time. An indexed MP4 stream is preferred, so
+// one over the Whisper cap can split at its segment boundaries; a video
+// whose smallest stream is over the cap says so.
 
 const DOWNLOAD_TIMEOUT_MS = 90_000;
 
@@ -23,11 +25,30 @@ function audioStreams(formats: AdaptiveFormat[]): AdaptiveFormat[] {
   );
 }
 
-/** The best audio-only stream under the cap: the highest bitrate that fits. */
+/** The smallest audio-only stream under the cap, an indexed MP4 stream
+    first (it splits for Whisper), then by bitrate, lowest first. */
 export function pickAudioFormat(formats: AdaptiveFormat[], maxBytes: number): AdaptiveFormat | null {
   const fitting = audioStreams(formats).filter((f) => Number(f.contentLength) <= maxBytes);
-  fitting.sort((a, b) => (b.bitrate ?? 0) - (a.bitrate ?? 0));
+  const indexed = (f: AdaptiveFormat) =>
+    f.mimeType.startsWith("audio/mp4") && f.initRange !== undefined && f.indexRange !== undefined;
+  fitting.sort((a, b) => {
+    const byIndex = Number(indexed(b)) - Number(indexed(a));
+    return byIndex !== 0 ? byIndex : (a.bitrate ?? 0) - (b.bitrate ?? 0);
+  });
   return fitting[0] ?? null;
+}
+
+/** The DASH byte ranges of a stream, as the splitter reads them; null when
+    the stream carries none. */
+export function streamRanges(
+  format: AdaptiveFormat,
+): { init: { start: number; end: number }; index: { start: number; end: number } } | null {
+  if (!format.initRange || !format.indexRange) return null;
+  const range = (r: { start: string; end: string }) => ({ start: Number(r.start), end: Number(r.end) });
+  const init = range(format.initRange);
+  const index = range(format.indexRange);
+  if ([init.start, init.end, index.start, index.end].some((n) => !Number.isFinite(n))) return null;
+  return { init, index };
 }
 
 async function download(
@@ -62,8 +83,14 @@ async function download(
 export type YouTubeAudioOptions = {
   /** The upload cap of the providers configured: 25 MB with a Whisper key, 14 MB with Gemini alone. */
   maxBytes: number;
-  /** The upload ladder: the same rungs a file the reader uploaded takes. */
-  transcribeBytes: (bytes: Uint8Array<ArrayBuffer>, mimeType: string) => Promise<TranscriptSegment[]>;
+  /** The upload ladder: the same rungs a file the reader uploaded takes,
+      with the stream's DASH ranges when it has them, so a Whisper rung can
+      split it. */
+  transcribeBytes: (
+    bytes: Uint8Array<ArrayBuffer>,
+    mimeType: string,
+    ranges: ReturnType<typeof streamRanges>,
+  ) => Promise<TranscriptSegment[]>;
 };
 
 /** Download the smallest good audio stream and transcribe it. Throws with
@@ -93,7 +120,7 @@ export async function youtubeAudio(
       console.log(
         `[transcribe] YouTube audio via ${label}: itag ${pick.itag} ${mimeType}, ${bytes.length} bytes`,
       );
-      return await opts.transcribeBytes(bytes, mimeType);
+      return await opts.transcribeBytes(bytes, mimeType, streamRanges(pick));
     } catch (err) {
       failures.push(`${label}: ${reason(err)}`);
     }
