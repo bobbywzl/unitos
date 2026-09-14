@@ -5,8 +5,6 @@
 const en = {
   multiUpload: "Multi upload",
   multiUploads: "Multi uploads",
-  withOpen: "One page with the open document",
-  withOpenTitle: "Put this document and {title} on one page as a multi upload",
   all: "Every document on one page ({n})",
   allTitle: "Put every document of the project on one page as a multi upload",
   backToProject: "Back to the project",
@@ -88,8 +86,6 @@ const en = {
 const zh: Record<keyof typeof en, string> = {
   multiUpload: "多文档上传",
   multiUploads: "多文档上传",
-  withOpen: "与打开的文档放在同一页面",
-  withOpenTitle: "把此文档和 {title} 作为多文档上传放在同一页面",
   all: "全部文档放在同一页面（{n}）",
   allTitle: "把项目的全部文档作为多文档上传放在同一页面",
   backToProject: "返回项目",

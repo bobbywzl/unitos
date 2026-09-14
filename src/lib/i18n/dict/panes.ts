@@ -131,6 +131,9 @@ const en = {
     "This is a Google Drive link. Add it from the Google Drive tab, or link Google Drive in Settings to add links directly.",
   confirmDeleteFromLibrary: "Delete this document from the library?",
   deleteFailed: "Delete failed",
+  deleteDocument: "Delete document",
+  deleteDocumentTitle: "Delete this document from the project and the library",
+  confirmDeleteDocument: "Delete this document? It leaves the project and the library.",
   documentActions: "Document actions",
   documentList: "Documents in this project",
   documentActionsFor: "Document actions: {title}",
@@ -140,12 +143,6 @@ const en = {
   reparseNoSource: "This document has no file or URL to parse again",
 
   // Handwritten documents (SPEC.md §16): pages, conversion, Circle & ask.
-  parseAsArticle: "Parse as text article",
-  parseAsArticleTitle:
-    "Treat this PDF as a computer-text article: parse its text, drop the pages",
-  openAsHandwritten: "Open as handwritten pages",
-  openAsHandwrittenTitle:
-    "Treat this PDF as handwritten notes: show its pages, convert to text, Circle & ask",
   circleAsk: "Circle & ask",
   pageDrawHint:
     "Hold the mouse and circle a spot on the page — then ask, explain, comment, or pick a color to highlight",
@@ -169,8 +166,6 @@ const en = {
   printDocument: "Print document",
   printDocumentTitle: "Print this document, article only",
   printDocumentOpenFirst: "Open the document to print it",
-  detachDocument: "Detach document",
-  detachDocumentTitle: "Detach this document from this project",
   addDocument: "Add a document",
   dropOrChoose: "Drop files here, or click to choose",
   dropZoneHint: "PDF, image, video, audio, or Markdown — up to 200 MB",
@@ -339,11 +334,6 @@ const en = {
   hideTranslation: "Hide translation",
   showTranslation: "Show translation",
   translateFailed: "Translation failed",
-  compareWithOpen: "Compare with the open document",
-  compareWithOpenTitle:
-    "Compare this document with “{title}”: agreements, disagreements, and what only one covers land as one pending note",
-  compareRunning: "Comparing…",
-  compareDone: "Comparison added — pending in {section}",
 
   // Project search (project-search.tsx)
   searchProject: "Search the project",
@@ -510,6 +500,9 @@ const zh: Record<keyof typeof en, string> = {
     "这是 Google Drive 链接。请从“Google Drive”页签添加；或在设置中关联 Google Drive 后直接粘贴链接添加。",
   confirmDeleteFromLibrary: "从文档库删除此文档？",
   deleteFailed: "删除失败",
+  deleteDocument: "删除文档",
+  deleteDocumentTitle: "从项目和文档库中删除此文档",
+  confirmDeleteDocument: "删除此文档？它将从项目和文档库中移除。",
   documentActions: "文档操作",
   documentList: "此项目的文档",
   documentActionsFor: "文档操作：{title}",
@@ -518,10 +511,6 @@ const zh: Record<keyof typeof en, string> = {
   reparseVideoTitle: "重新转写此视频或音频；逐字稿行会被替换",
   reparseNoSource: "此文档没有可重新解析的文件或网址",
 
-  parseAsArticle: "按文字文章解析",
-  parseAsArticleTitle: "将此 PDF 作为电脑文字文章：解析其文字，去掉页面",
-  openAsHandwritten: "作为手写页面打开",
-  openAsHandwrittenTitle: "将此 PDF 作为手写笔记：显示页面、转换为文本、圈选并提问",
   circleAsk: "圈选并提问",
   pageDrawHint: "按住鼠标在页面上圈选一处——即可提问、解释、评论，或选颜色圈选高亮",
   pageAskPlaceholder: "询问圈选的内容",
@@ -544,8 +533,6 @@ const zh: Record<keyof typeof en, string> = {
   printDocument: "打印文档",
   printDocumentTitle: "打印此文档，仅正文",
   printDocumentOpenFirst: "先打开文档再打印",
-  detachDocument: "移出文档",
-  detachDocumentTitle: "把此文档移出此项目",
   addDocument: "添加文档",
   dropOrChoose: "把文件拖到这里，或点击选择",
   dropZoneHint: "PDF、图片、视频、音频或 Markdown，最大 200 MB",
@@ -693,10 +680,6 @@ const zh: Record<keyof typeof en, string> = {
   hideTranslation: "隐藏译文",
   showTranslation: "显示译文",
   translateFailed: "翻译失败",
-  compareWithOpen: "与打开的文档对比",
-  compareWithOpenTitle: "将此文档与《{title}》对比：一致、分歧和仅一方涉及的内容会成为一条待定笔记",
-  compareRunning: "正在对比……",
-  compareDone: "对比已加入——在{section}中待定",
 
   searchProject: "搜索项目",
   searchProjectTitle: "按语义搜索项目中的每篇文档",

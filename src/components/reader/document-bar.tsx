@@ -3,7 +3,6 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { api } from "@/lib/api";
-import { runDerivation } from "@/lib/derive/heartbeat-client";
 import type { DriveConfig } from "@/lib/drive/config";
 import type { MultiUploadSummary } from "@/lib/types";
 import { pickDriveFiles } from "@/lib/drive/picker-client";
@@ -373,35 +372,6 @@ export function DocumentBar({
   // Compare two documents (SPEC.md §4): the open document against this one.
   // One PENDING note of agreements, disagreements, and what only one covers
   // lands in the notes tray; the notice says where.
-  const [comparing, setComparing] = useState<string | null>(null);
-  const compareAbortRef = useRef<AbortController | null>(null);
-  function stopCompare() {
-    compareAbortRef.current?.abort();
-  }
-  async function compare(doc: AttachedDocument) {
-    if (comparing || !activeId || doc.id === activeId) return;
-    setComparing(doc.id);
-    setNotice(null);
-    setError(null);
-    const controller = new AbortController();
-    compareAbortRef.current = controller;
-    try {
-      const result = await runDerivation<{ noteId: string; sectionTitle: string; pointCount: number }>(
-        { type: "COMPARE", notebookId, documentIds: [activeId, doc.id] },
-        controller.signal,
-      );
-      setNotice(t("panes.compareDone", { section: result.sectionTitle }));
-      setTimeout(() => setNotice(null), 6000);
-      router.refresh();
-    } catch (err) {
-      // Stopped, not failed: no note, no notice.
-      if (controller.signal.aborted) return;
-      setError(err instanceof Error ? err.message : t("common.requestFailed"));
-    } finally {
-      if (compareAbortRef.current === controller) compareAbortRef.current = null;
-      setComparing(null);
-    }
-  }
   // A video or audio document re-parses by transcribing again (SPEC.md
   // §11): the lines are replaced. The pane shows the run once the refresh
   // lands; a 409 is a run already going.
@@ -429,21 +399,17 @@ export function DocumentBar({
     return doc.hasVideo || doc.hasFile || doc.sourceUrl !== null;
   }
 
-  // `as` flips a PDF between article and handwritten pages (SPEC.md §16) —
-  // the escape hatch when Import PDF judged it wrong. Absent = plain re-parse.
-  async function reparse(doc: AttachedDocument, as?: "article" | "handwritten") {
+  // Manual re-parse in the document's own shape: the progress card shows,
+  // errors show.
+  async function reparse(doc: AttachedDocument) {
     setError(null);
     // The figure's place in the reader moves while the re-parse runs; the
     // refresh brings the outcome the document stores.
     const figures = activeGap && doc.id === active?.id;
     if (figures) setFigureCapture({ documentId: doc.id, status: "running", error: null });
     try {
-      await runIngest(doc.title, doc.sourceUrl && !as ? "url" : "pdf", () =>
-        fetch(`/api/documents/${doc.id}/reparse`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(as ? { as } : {}),
-        }),
+      await runIngest(doc.title, doc.sourceUrl ? "url" : "pdf", () =>
+        fetch(`/api/documents/${doc.id}/reparse`, { method: "POST" }),
       );
       router.refresh();
       if (figures) setFigureCapture(null);
@@ -872,11 +838,19 @@ export function DocumentBar({
     router.refresh();
   }
 
-  async function detach(documentId: string) {
+  // Delete document: the document leaves the project and the library
+  // (DELETE /api/documents/[documentId]; refused while notes cite it).
+  async function deleteDocument(documentId: string) {
     closeList();
-    await api(`/api/notebooks/${notebookId}/documents/${documentId}`, "DELETE");
-    if (documentId === activeId) router.push(`/n/${notebookId}`);
-    router.refresh();
+    if (!confirm(t("panes.confirmDeleteDocument"))) return;
+    setError(null);
+    try {
+      await api(`/api/documents/${documentId}`, "DELETE");
+      if (documentId === activeId) router.push(`/n/${notebookId}`);
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t("panes.deleteFailed"));
+    }
   }
 
   async function removeFromLibrary(documentId: string) {
@@ -995,66 +969,6 @@ export function DocumentBar({
                           {t("panes.reparseDocument")}
                         </button>
                       )}
-                      {/* The shape switch (SPEC.md §16): the escape hatch when
-                          Import PDF judged this PDF wrong. */}
-                      {canEdit && d.handwritten && (
-                        <button
-                          onClick={() => {
-                            closeList();
-                            void reparse(d, "article");
-                          }}
-                          data-track="document-parse-as-article"
-                          disabled={phase !== null}
-                          className={`${rowAction} disabled:opacity-40`}
-                          data-tip={t("panes.parseAsArticleTitle")}
-                        >
-                          {t("panes.parseAsArticle")}
-                        </button>
-                      )}
-                      {canEdit && !d.hasVideo && !d.handwritten && d.hasFile && (
-                        <button
-                          onClick={() => {
-                            closeList();
-                            void reparse(d, "handwritten");
-                          }}
-                          data-track="document-open-as-handwritten"
-                          disabled={phase !== null}
-                          className={`${rowAction} disabled:opacity-40`}
-                          data-tip={t("panes.openAsHandwrittenTitle")}
-                        >
-                          {t("panes.openAsHandwritten")}
-                        </button>
-                      )}
-                      {canEdit && activeId && d.id !== activeId && (
-                        <button
-                          onClick={() => {
-                            closeList();
-                            void compare(d);
-                          }}
-                          data-track="document-compare"
-                          disabled={comparing !== null}
-                          className={`${rowAction} disabled:opacity-40`}
-                          data-tip={t("panes.compareWithOpenTitle", { title: active?.title ?? "" })}
-                        >
-                          {comparing === d.id ? t("common.working") : t("panes.compareWithOpen")}
-                        </button>
-                      )}
-                      {/* A multi upload from documents already here (SPEC.md
-                          §22): this document and the open one on one page. */}
-                      {canEdit && activeId && d.id !== activeId && (
-                        <button
-                          onClick={() => {
-                            closeList();
-                            void makeMulti([activeId, d.id]);
-                          }}
-                          data-track="document-multi-with-open"
-                          disabled={makingMulti}
-                          className={`${rowAction} disabled:opacity-40`}
-                          data-tip={t("multi.withOpenTitle", { title: active?.title ?? "" })}
-                        >
-                          {t("multi.withOpen")}
-                        </button>
-                      )}
                       <button
                         onClick={() => {
                           closeList();
@@ -1073,12 +987,12 @@ export function DocumentBar({
                       </button>
                       {canEdit && (
                         <button
-                          onClick={() => void detach(d.id)}
-                          data-track="document-detach"
+                          onClick={() => void deleteDocument(d.id)}
+                          data-track="document-delete"
                           className="px-4 py-1.5 text-left text-[12.5px] text-red-600 hover:bg-red-50 dark:hover:bg-red-950"
-                          data-tip={t("panes.detachDocumentTitle")}
+                          data-tip={t("panes.deleteDocumentTitle")}
                         >
-                          {t("panes.detachDocument")}
+                          {t("panes.deleteDocument")}
                         </button>
                       )}
                     </div>
@@ -1274,11 +1188,6 @@ export function DocumentBar({
       {transcribing && (
         <span className="shrink-0 rounded-full bg-card px-3 py-1 text-xs shadow-soft">
           <ThinkingIndicator label={t("video.transcribing")} />
-        </span>
-      )}
-      {comparing && (
-        <span className="shrink-0 rounded-full bg-card px-3 py-1 text-xs shadow-soft">
-          <ThinkingIndicator label={t("panes.compareRunning")} onStop={stopCompare} />
         </span>
       )}
       {notice && capture?.status !== "running" && (
