@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { notebookAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
-import { STREAM_ERROR_TOKEN } from "@/lib/derive/config";
+import { STITCH_DEADLINE_MS, STREAM_ERROR_TOKEN } from "@/lib/derive/config";
 import { modelErrorMessage } from "@/lib/derive/json-call";
 import { currentLang, serverT } from "@/lib/i18n/server";
 import { kimiConfigured } from "@/lib/kimi";
@@ -14,7 +14,9 @@ export const maxDuration = 300;
 // Stitch (SPEC.md §22): one command over a multi upload's members. Answers
 // over the heartbeat stream (the DISTILL pattern): spaces while the model
 // works, then the result JSON or the in-band error token. Stop aborts the
-// request; a stopped run stores nothing more.
+// request; a stopped run stores nothing more. The model passes get
+// STITCH_DEADLINE_MS together: past it the run is cut and the reader is told
+// so in-band, never left with a stream that ended empty.
 const requestSchema = z.object({
   command: z.string().trim().min(1).max(4_000),
   history: z
@@ -59,6 +61,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ multiId: strin
         if (!cancelled) controller.enqueue(encoder.encode(text));
       };
       heartbeat = setInterval(() => send(" "), 5_000);
+      const deadline = AbortSignal.timeout(STITCH_DEADLINE_MS);
       try {
         const result = await stitch({
           multiUploadId: multi.id,
@@ -67,7 +70,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ multiId: strin
           lang,
           command: data.command,
           history: data.history,
-          signal: req.signal,
+          signal: AbortSignal.any([req.signal, deadline]),
           onFailure: (reason) => new StitchFailure(reason),
         });
         if (cancelled || req.signal.aborted) return;
@@ -75,8 +78,12 @@ export async function POST(req: Request, ctx: { params: Promise<{ multiId: strin
       } catch (err) {
         if (!cancelled && !req.signal.aborted) {
           console.error("[stitch] failed:", err);
-          const reason = err instanceof StitchFailure ? err.message : modelErrorMessage(err);
-          send(`${STREAM_ERROR_TOKEN}${t("api.stitchFailed", { reason })}`);
+          if (deadline.aborted) {
+            send(`${STREAM_ERROR_TOKEN}${t("api.stitchTimedOut")}`);
+          } else {
+            const reason = err instanceof StitchFailure ? err.message : modelErrorMessage(err);
+            send(`${STREAM_ERROR_TOKEN}${t("api.stitchFailed", { reason })}`);
+          }
         }
       } finally {
         if (heartbeat) clearInterval(heartbeat);

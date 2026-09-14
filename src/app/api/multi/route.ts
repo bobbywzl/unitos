@@ -3,6 +3,7 @@ import { z } from "zod";
 import { bumpNotebook, notebookAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
 import { serverT } from "@/lib/i18n/server";
+import { multiUploadTitle } from "@/lib/multi/title";
 import { parseBody } from "@/lib/validate";
 
 // A multi upload (SPEC.md §22): two or more documents of a project on one
@@ -26,19 +27,16 @@ export async function POST(req: Request) {
   }
   const attached = await db.notebookDocument.findMany({
     where: { notebookId: data.notebookId, documentId: { in: ids } },
-    select: { documentId: true, document: { select: { title: true } } },
+    select: { documentId: true },
   });
   if (attached.length !== ids.length) {
     return NextResponse.json({ error: t("api.documentNotAttachedToCorpus") }, { status: 404 });
   }
-  const titleById = new Map(attached.map((a) => [a.documentId, a.document.title]));
+  // The title: given, else written by AI from the members, else the
+  // project's next number (lib/multi/title.ts).
   const title =
     data.title ??
-    ids
-      .map((id) => titleById.get(id) ?? "")
-      .filter(Boolean)
-      .join(" · ")
-      .slice(0, 200);
+    (await multiUploadTitle({ notebookId: data.notebookId, documentIds: ids, userId: access.user.id }));
   const multi = await db.multiUpload.create({
     data: {
       notebookId: data.notebookId,

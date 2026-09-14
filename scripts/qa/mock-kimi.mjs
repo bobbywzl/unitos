@@ -82,6 +82,57 @@ function buildResponse(all) {
     return JSON.stringify({ quotes: p1 ? [quoteOf(p1, "The passage answers the question directly in the document's own terms.")] : [] });
   }
 
+  // Stitch (SPEC.md §22), the select pass: the first three paragraphs of
+  // every member, ids only.
+  if (all.includes('"blockIds"') && all.includes("A second read will do what the command asks")) {
+    const headers = [...all.matchAll(/\[document ([^\]]+)\] "/g)];
+    const blockIds = [];
+    headers.forEach((h, i) => {
+      const end = i + 1 < headers.length ? headers[i + 1].index : all.length;
+      parseBlocks(all.slice(h.index, end))
+        .filter((b) => b.type === "PARAGRAPH")
+        .slice(0, 3)
+        .forEach((b) => blockIds.push(b.id));
+    });
+    console.log("[mock stitch select]", blockIds.length, "blocks");
+    return JSON.stringify({ blockIds });
+  }
+
+  // Stitch, the answer pass: one link between the first two members (one end
+  // a verbatim quote, one end the whole block), a page of one whole-block
+  // quote part per member and one text part with sources, and a reply.
+  if (all.includes('"reply"') && all.includes('"parts"') && /\[document [^\]]+\] "/.test(all)) {
+    const headers = [...all.matchAll(/\[document ([^\]]+)\] "/g)];
+    const firstParagraph = headers.map((h, i) => {
+      const end = i + 1 < headers.length ? headers[i + 1].index : all.length;
+      return parseBlocks(all.slice(h.index, end)).find((b) => b.type === "PARAGRAPH" && b.text.length > 40);
+    });
+    const [one, two] = firstParagraph;
+    const links =
+      one && two
+        ? [{ fromBlockId: one.id, fromQuote: one.text.slice(0, 60), toBlockId: two.id, reason: "Mock: both passages make the same claim." }]
+        : [];
+    const parts = [];
+    firstParagraph.forEach((b, i) => {
+      if (!b) return;
+      parts.push({ kind: "heading", text: `Member ${i + 1}` });
+      parts.push({ kind: "quote", blockId: b.id });
+    });
+    if (one) {
+      parts.push({
+        kind: "text",
+        markdown: "**Mock summary.** The members agree on the point above.",
+        sources: [{ blockId: one.id, quote: one.text.slice(0, 40) }],
+      });
+    }
+    console.log("[mock stitch]", links.length, "links,", parts.length, "parts");
+    return JSON.stringify({
+      reply: `Mock: ${links.length} link proposed and a page of ${parts.length} parts written.`,
+      links,
+      document: parts.length > 0 ? { title: "Mock stitched page", parts } : null,
+    });
+  }
+
   // Recommended links (connect scan): one valid link from the new document to
   // the first other document, quotes copied verbatim from real blocks.
   if (all.includes('"fromQuote"') && /\[document [^\]]+\] "/.test(all)) {
@@ -236,6 +287,14 @@ function buildResponse(all) {
 
   // Notebook tasks: no issues found.
   // Gists: the first five words of each listed note.
+  // The title of a multi upload (SPEC.md §22): the first member's first two
+  // words and the member count.
+  if (all.includes('"title": "<phrase>"') && all.includes("[member 1]")) {
+    const first = all.match(/\[member 1\] "([^"]*)"/)?.[1] ?? "Members";
+    const count = [...all.matchAll(/\[member \d+\]/g)].length;
+    return JSON.stringify({ title: `${first.split(/\s+/).slice(0, 2).join(" ")} set of ${count}` });
+  }
+
   if (all.includes('"gists"')) {
     const gists = [...all.matchAll(/\[note ([^\]]+)\]\n([^\n]*)/g)].map((m) => ({
       id: m[1],
@@ -349,7 +408,8 @@ const usage = () => ({ prompt_tokens: 100, completion_tokens: 50, total_tokens: 
 // Moonshot's invalid-key error. MOCK_KIMI_FAIL=length streams reasoning alone
 // and ends with finish_reason length: the output budget spent before the
 // answer. MOCK_KIMI_DELAY_MS holds the first content delta that long: Kimi
-// K3's silent reasoning, the text stream heartbeat's case.
+// K3's silent reasoning, the text stream heartbeat's case; a JSON call's
+// whole answer that long, the deadline's case.
 const FAIL = process.env.MOCK_KIMI_FAIL ?? "";
 const DELAY_MS = Number(process.env.MOCK_KIMI_DELAY_MS ?? 0);
 const REASONING = "The mock reasons until the output budget is spent.";
@@ -416,6 +476,7 @@ async function chatCompletion(body, res) {
     return;
   }
 
+  if (DELAY_MS) await sleep(DELAY_MS);
   res.writeHead(200, { "content-type": "application/json" });
   res.end(
     JSON.stringify({
