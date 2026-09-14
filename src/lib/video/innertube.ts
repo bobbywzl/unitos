@@ -42,12 +42,18 @@ const captionTrackSchema = z.object({
 export type CaptionTrack = z.infer<typeof captionTrackSchema>;
 
 // One stream in streamingData.adaptiveFormats. Same one-at-a-time validation.
+const byteRangeSchema = z.object({ start: z.string(), end: z.string() });
 const adaptiveFormatSchema = z.object({
   itag: z.number(),
   mimeType: z.string(),
   bitrate: z.number().optional(),
   contentLength: z.string().optional(),
   url: z.string().optional(),
+  // A DASH stream's init segment and its segment index (lib/video/fmp4.ts):
+  // with both, an audio stream over the Whisper cap splits at its own
+  // segment boundaries.
+  initRange: byteRangeSchema.optional(),
+  indexRange: byteRangeSchema.optional(),
 });
 export type AdaptiveFormat = z.infer<typeof adaptiveFormatSchema>;
 

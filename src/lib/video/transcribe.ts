@@ -4,8 +4,9 @@ import { recordUsage } from "@/lib/usage";
 import { browserCaptions } from "@/lib/video/browser-transcript";
 import { youtubeCaptions } from "@/lib/video/captions";
 import { geminiCall, geminiCountTokens } from "@/lib/video/gemini";
+import { splitFmp4, type ByteRange } from "@/lib/video/fmp4";
 import { uploadGeminiFile, type GeminiFile } from "@/lib/video/gemini-files";
-import { splitMp3 } from "@/lib/video/mp3";
+import { type Mp3Chunk, splitMp3 } from "@/lib/video/mp3";
 import { normalizeSegments, type TranscriptSegment } from "@/lib/video/segments";
 import { MAX_VIDEO_BYTES, parseTimeInput } from "@/lib/video/types";
 import { youtubeWatchUrl } from "@/lib/video/youtube";
@@ -17,9 +18,13 @@ export { groupSegments, normalizeSegments, type TranscriptSegment } from "@/lib/
 //   YouTube video:  caption tracks from YouTube's player API — the transcript
 //                   YouTube itself shows (ANDROID, IOS, then ANDROID_VR
 //                   client, then the watch page) → the same captions read by
-//                   a real browser, where one is configured → Gemini reads
-//                   the video by URL → the audio stream downloads and takes
-//                   the upload ladder.
+//                   a real browser, where one is configured → the audio
+//                   stream downloads and takes the upload ladder (the
+//                   smallest stream, split for Whisper at its segment
+//                   boundaries: $0.04 an hour, no video tokens) → Gemini
+//                   reads the video by URL, last: about 100 tokens a second
+//                   of video, three times the audio's, and one call over an
+//                   hour of video outruns the ladder's clock.
 //   Uploaded video or audio: Groq Whisper (best quality per dollar; free tier)
 //                   → OpenAI Whisper → Gemini, with the bytes inline when they
 //                   are small enough and through Gemini's file store when they
@@ -31,10 +36,12 @@ export { groupSegments, normalizeSegments, type TranscriptSegment } from "@/lib/
 // writes them as TRANSCRIPT blocks.
 
 export const TRANSCRIBE_MAX_BYTES = 25 * 1024 * 1024; // Whisper-family upload cap
-// An MP3 past the cap splits at frame boundaries and transcribes in chunks
-// (lib/video/mp3.ts); other containers cannot be cut safely and keep the cap.
-const MP3_CHUNK_BYTES = 24 * 1024 * 1024;
-const MP3_CHUNK_CONCURRENCY = 3;
+// An MP3 past the cap splits at frame boundaries (lib/video/mp3.ts), an
+// indexed MP4 stream at its segment boundaries (lib/video/fmp4.ts), and the
+// chunks transcribe a few at a time; other containers cannot be cut safely
+// and keep the cap.
+const WHISPER_CHUNK_BYTES = 24 * 1024 * 1024;
+const WHISPER_CHUNK_CONCURRENCY = 3;
 // Inline bytes reach Gemini base64-encoded inside a 20 MB request; past that
 // the file goes in Gemini's store, which takes 2 GB — more than this app
 // accepts, so the app's own upload ceiling is the real cap (lib/video/types.ts).
@@ -78,24 +85,29 @@ export async function transcribe(
       ? [
           ["YouTube captions", () => youtubeCaptions(source.youtubeId)],
           ["YouTube captions (browser)", () => browserCaptions(source.youtubeId)],
-          ["Gemini", () => geminiYouTube(source.youtubeId)],
           ["YouTube audio", () => youtubeAudioRung(source.youtubeId, opts)],
+          ["Gemini", () => geminiYouTube(source.youtubeId)],
         ]
       : uploadRungs(source.bytes, source.mimeType ?? "video/mp4", opts);
   return runLadder(rungs, opts);
 }
 
+// ranges: a DASH stream's init and index ranges (the YouTube audio rung),
+// so a Whisper rung can split it past the cap.
 function uploadRungs(
   bytes: Uint8Array<ArrayBuffer>,
   mimeType: string,
   opts: TranscribeOptions = {},
+  ranges: StreamRanges = null,
 ): Rung[] {
   return [
-    ["Groq Whisper", () => whisperFamily(GROQ_WHISPER, bytes, mimeType)],
-    ["OpenAI Whisper", () => whisperFamily(OPENAI_WHISPER, bytes, mimeType)],
+    ["Groq Whisper", () => whisperFamily(GROQ_WHISPER, bytes, mimeType, ranges)],
+    ["OpenAI Whisper", () => whisperFamily(OPENAI_WHISPER, bytes, mimeType, ranges)],
     ["Gemini", () => geminiUpload(bytes, mimeType, opts)],
   ];
 }
+
+type StreamRanges = { init: ByteRange; index: ByteRange } | null;
 
 async function runLadder(
   rungs: Rung[],
@@ -134,8 +146,8 @@ function youtubeAudioRung(youtubeId: string, opts: TranscribeOptions): Promise<T
       : whisper
         ? TRANSCRIBE_MAX_BYTES
         : GEMINI_INLINE_MAX_BYTES,
-    transcribeBytes: (bytes, mimeType) =>
-      runLadder(uploadRungs(bytes, mimeType, opts), opts).then((result) => {
+    transcribeBytes: (bytes, mimeType, ranges) =>
+      runLadder(uploadRungs(bytes, mimeType, opts, ranges), opts).then((result) => {
         console.log(`[transcribe] YouTube audio transcribed by ${result.provider}`);
         return result.segments;
       }),
@@ -235,30 +247,44 @@ async function whisperCall(
   return segments;
 }
 
-// A file under the cap goes in one call. A bigger MP3 splits at frame
-// boundaries (chunks decode cleanly), each chunk transcribes on its own clock,
-// and the segments shift back onto the audio's. Chunks run a few at a time; a
-// chunk that fails twice leaves a gap rather than losing the transcript, like
-// the YouTube windows.
+// The chunks a file over the cap splits into: an MP3 at frame boundaries,
+// an indexed MP4 stream at segment boundaries. Throws with the reason when
+// the file cannot be split.
+function splitForWhisper(bytes: Uint8Array, mimeType: string, ranges: StreamRanges): Mp3Chunk[] {
+  if (mimeType === "audio/mpeg") {
+    const chunks = splitMp3(bytes, WHISPER_CHUNK_BYTES);
+    if (!chunks) throw new Error("MP3 frames did not parse; the file cannot be split");
+    return chunks;
+  }
+  if (mimeType === "audio/mp4" && ranges) {
+    const chunks = splitFmp4(bytes, ranges, WHISPER_CHUNK_BYTES);
+    if (!chunks) throw new Error("the MP4 stream's segment index did not parse; the stream cannot be split");
+    return chunks;
+  }
+  throw new Error("file is larger than the 25 MB transcription cap for this format");
+}
+
+// A file under the cap goes in one call. A bigger file splits (chunks decode
+// cleanly), each chunk transcribes on its own clock, and the segments shift
+// back onto the audio's. Chunks run a few at a time; a chunk that fails
+// twice leaves a gap rather than losing the transcript, like the YouTube
+// windows.
 async function whisperFamily(
   provider: WhisperProvider,
   bytes: Uint8Array,
   mimeType: string,
+  ranges: StreamRanges = null,
 ): Promise<TranscriptSegment[]> {
   const key = process.env[provider.keyEnv];
   if (!key) throw new Error(`${provider.keyEnv} is not set`);
   const opts = { ...provider, key };
   if (bytes.length <= TRANSCRIBE_MAX_BYTES) return whisperCall(opts, bytes, mimeType);
-  if (mimeType !== "audio/mpeg") {
-    throw new Error("file is larger than the 25 MB transcription cap for this format");
-  }
-  const chunks = splitMp3(bytes, MP3_CHUNK_BYTES);
-  if (!chunks) throw new Error("MP3 frames did not parse; the file cannot be split");
-  console.log(`[transcribe] ${bytes.length} bytes → ${chunks.length} MP3 chunks`);
+  const chunks = splitForWhisper(bytes, mimeType, ranges);
+  console.log(`[transcribe] ${bytes.length} bytes ${mimeType} → ${chunks.length} chunks`);
 
   const results: TranscriptSegment[][] = new Array(chunks.length).fill([]);
-  for (let i = 0; i < chunks.length; i += MP3_CHUNK_CONCURRENCY) {
-    const batch = chunks.slice(i, i + MP3_CHUNK_CONCURRENCY);
+  for (let i = 0; i < chunks.length; i += WHISPER_CHUNK_CONCURRENCY) {
+    const batch = chunks.slice(i, i + WHISPER_CHUNK_CONCURRENCY);
     await Promise.all(
       batch.map(async (chunk, j) => {
         for (let attempt = 0; attempt < 2; attempt++) {
@@ -272,7 +298,7 @@ async function whisperFamily(
             return;
           } catch (err) {
             console.warn(
-              `[transcribe] MP3 chunk ${i + j} attempt ${attempt + 1} failed:`,
+              `[transcribe] chunk ${i + j} attempt ${attempt + 1} failed:`,
               err instanceof Error ? err.message : err,
             );
           }
@@ -281,7 +307,7 @@ async function whisperFamily(
     );
   }
   const segments = normalizeSegments(results.flat());
-  if (segments.length === 0) throw new Error("every MP3 chunk failed to transcribe");
+  if (segments.length === 0) throw new Error("every chunk failed to transcribe");
   return segments;
 }
 
