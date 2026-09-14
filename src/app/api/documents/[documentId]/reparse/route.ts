@@ -53,7 +53,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ documentId: st
 
   const document = await db.document.findUnique({
     where: { id: documentId },
-    select: { id: true, fileHash: true, video: { select: { id: true } } },
+    select: { id: true, fileHash: true, handwritten: true, video: { select: { id: true } } },
   });
   if (!document) return NextResponse.json({ error: t("api.documentNotFound") }, { status: 404 });
   // A video document's blocks are its player and transcript — re-parsing its
@@ -107,9 +107,10 @@ export async function POST(req: Request, ctx: { params: Promise<{ documentId: st
         if (!updated) send({ error: t("api.documentNotFound") });
         else {
           await bumpDocument(documentId);
-          // A switch to handwritten starts conversion on its own, like a
-          // fresh import (SPEC.md §16).
-          if (as === "handwritten") {
+          // Handwritten pages — a switch to them, or a re-parse in that
+          // shape — start conversion on their own, like a fresh import
+          // (SPEC.md §16).
+          if (as === "handwritten" || (as === undefined && document.handwritten)) {
             after(() =>
               runConversion(documentId, userId)
                 .then((r) => (r.ok ? buildGlossary(documentId, userId, lang) : undefined))

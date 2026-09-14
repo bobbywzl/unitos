@@ -136,6 +136,8 @@ const en = {
   documentActionsFor: "Document actions: {title}",
   reparseDocument: "Re-parse document",
   reparseDocumentTitle: "Parse this document again with the current parser",
+  reparseVideoTitle: "Transcribe this video or audio again; the transcript lines are replaced",
+  reparseNoSource: "This document has no file or URL to parse again",
 
   // Handwritten documents (SPEC.md §16): pages, conversion, Circle & ask.
   parseAsArticle: "Parse as text article",
@@ -342,11 +344,6 @@ const en = {
     "Compare this document with “{title}”: agreements, disagreements, and what only one covers land as one pending note",
   compareRunning: "Comparing…",
   compareDone: "Comparison added — pending in {section}",
-  recommendLinks: "Recommend links",
-  recommendLinksTitle: "Scan this document against the project for recommended links",
-  recommendLinksRunning: "Finding links…",
-  recommendLinksDone: "{n} recommended link(s) found — open the graph to accept them",
-  recommendLinksNone: "No new connections found",
 
   // Project search (project-search.tsx)
   searchProject: "Search the project",
@@ -518,6 +515,8 @@ const zh: Record<keyof typeof en, string> = {
   documentActionsFor: "文档操作：{title}",
   reparseDocument: "重新解析文档",
   reparseDocumentTitle: "用当前解析器重新解析此文档",
+  reparseVideoTitle: "重新转写此视频或音频；逐字稿行会被替换",
+  reparseNoSource: "此文档没有可重新解析的文件或网址",
 
   parseAsArticle: "按文字文章解析",
   parseAsArticleTitle: "将此 PDF 作为电脑文字文章：解析其文字，去掉页面",
@@ -698,11 +697,6 @@ const zh: Record<keyof typeof en, string> = {
   compareWithOpenTitle: "将此文档与《{title}》对比：一致、分歧和仅一方涉及的内容会成为一条待定笔记",
   compareRunning: "正在对比……",
   compareDone: "对比已加入——在{section}中待定",
-  recommendLinks: "扫描推荐链接",
-  recommendLinksTitle: "将此文档与项目比对，寻找推荐链接",
-  recommendLinksRunning: "正在查找链接……",
-  recommendLinksDone: "找到 {n} 条推荐链接——打开图谱即可接受",
-  recommendLinksNone: "没有发现新的链接",
 
   searchProject: "搜索项目",
   searchProjectTitle: "按语义搜索项目中的每篇文档",
