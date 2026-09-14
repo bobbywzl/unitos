@@ -126,12 +126,23 @@ export const MAX_OUTPUT_TOKENS: Record<DerivationType, number> = {
 export const CONNECT_MODEL = KIMI_K3;
 export const CONNECT_EFFORT: KimiEffort = DEFAULT_EFFORT;
 
-// Stitch (SPEC.md §22): the assistant over a multi upload's members. It reads
-// every member whole and answers one command with links, a generated
-// document, or both. Not a DerivationType — it runs through /api/multi.
+// Stitch (SPEC.md §22): the assistant over a multi upload's members. Two
+// passes. The select pass reads every member whole and names the blocks the
+// command needs — ids only, at "low": a reading, the same as KEYPOINTS, and
+// the one pass over the whole text. The answer pass reads the selected
+// blocks at the reader's effort and answers with links, a generated
+// document, or both. One pass at "high" over every member whole outran the
+// request every time the members were long. Not a DerivationType — it runs
+// through /api/multi.
 export const STITCH_MODEL = KIMI_K3;
+export const STITCH_SELECT_EFFORT: KimiEffort = "low";
+export const STITCH_SELECT_MAX_OUTPUT_TOKENS = 16384; // a list of ids, with the short reasoning before it
 export const STITCH_EFFORT: KimiEffort = "high";
-export const STITCH_MAX_OUTPUT_TOKENS = 65536; // a gathered page of passages is long
+export const STITCH_MAX_OUTPUT_TOKENS = 32768; // a page of whole-block references and the model's own writing
+// The model passes together get this long; the route's limit (300 s) keeps
+// the rest for storing the answer. Past it the run stops and the reader is
+// told to narrow the command instead of reading a stream that ended empty.
+export const STITCH_DEADLINE_MS = 270_000;
 
 // The merge of notes (SPEC.md §6): the reader drops a note on another and
 // picks Merge with AI, and the model writes the one note that replaces both.

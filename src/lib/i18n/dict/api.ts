@@ -134,6 +134,7 @@ const en = {
   multiNotFound: "Multi upload not found",
   multiNeedsTwo: "A multi upload needs two or more documents",
   stitchFailed: "Stitch failed. {reason}",
+  stitchTimedOut: "Stitch ran out of time before the answer ended. Narrow the command to one topic or question, or try again.",
   analyzeNeedsFigureOrTable: "Analyze works on a figure or a table",
   // Note text of COMPARE (SPEC.md §4)
   comparisonTitle: "Compare: {first} vs {second}",
@@ -388,6 +389,7 @@ const zh: Record<keyof typeof en, string> = {
   multiNotFound: "未找到该多文档上传",
   multiNeedsTwo: "多文档上传需要两个或更多文档",
   stitchFailed: "缝合失败。{reason}",
+  stitchTimedOut: "缝合在回答结束前超时。请把命令缩小到一个主题或问题，或重试。",
   analyzeNeedsFigureOrTable: "分析只用于插图或表格",
   comparisonTitle: "对比：{first} 与 {second}",
   compareAgree: "一致",

@@ -76,7 +76,12 @@ export function StitchBox({
     if (!text || running) return;
     setError(null);
     setCommand("");
-    const history = turns.slice(-20).map((turn) => ({ role: turn.role, content: turn.content }));
+    // A turn with no text (an answer that was only links or a page) has
+    // nothing for the model to read, and the route refuses an empty one.
+    const history = turns
+      .filter((turn) => turn.content.trim())
+      .slice(-20)
+      .map((turn) => ({ role: turn.role, content: turn.content }));
     setTurns((prev) => [...prev, { role: "user", content: text }]);
     setRunning(true);
     const controller = new AbortController();
