@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { bumpDocument } from "@/lib/collab";
+import { cronSecret } from "@/lib/cron-auth";
 import { db } from "@/lib/db";
 import { parseSpeakers, parseTried, type Speaker } from "@/lib/video/types";
 import { parsePastedTranscript } from "@/lib/video/paste";
@@ -254,7 +255,7 @@ export async function runTranscription(
 // here as well: the function may end under it, and the run then reads as
 // stale, which offers Retry — never as FAILED with rungs untried.
 async function continueTranscription(documentId: string, tried: string[]): Promise<TranscriptionResult> {
-  const secret = process.env.CRON_SECRET;
+  const secret = cronSecret();
   const origin = process.env.APP_URL?.replace(/\/$/, "") ?? (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null);
   if (process.env.VERCEL && secret && origin) {
     try {

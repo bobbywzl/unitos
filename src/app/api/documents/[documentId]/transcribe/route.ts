@@ -1,5 +1,6 @@
 import { after, NextResponse } from "next/server";
 import { bumpDocument, documentAccess } from "@/lib/collab";
+import { cronAuthorized } from "@/lib/cron-auth";
 import { runTranscription } from "@/lib/video/transcription-job";
 
 // Transcription can take minutes on a long video.
@@ -14,8 +15,7 @@ export const maxDuration = 300;
 export async function POST(req: Request, ctx: { params: Promise<{ documentId: string }> }) {
   const { documentId } = await ctx.params;
   if (req.headers.get("x-transcribe-leg") === "1") {
-    const secret = process.env.CRON_SECRET;
-    if (!secret || req.headers.get("authorization") !== `Bearer ${secret}`) {
+    if (!cronAuthorized(req, "transcribe leg")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     after(() => runTranscription(documentId, { leg: true }).catch(() => {}));
