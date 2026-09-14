@@ -428,3 +428,16 @@ export function LocateIcon(props: IconProps) {
     </Icon>
   );
 }
+
+// The Drive glyph: a triangle of three strokes, the assistant's Add from
+// Google Drive button.
+export function DriveIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M8.5 4h7l6 10.5-3.5 6h-12l-3.5-6z" />
+      <path d="M8.5 4l6.5 11.5" />
+      <path d="M15.5 4l-6 10.5h12.5" />
+      <path d="M2.5 14.5h13" />
+    </Icon>
+  );
+}

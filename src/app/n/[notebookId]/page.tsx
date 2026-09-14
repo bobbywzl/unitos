@@ -1326,6 +1326,7 @@ export default async function NotebookPage(props: {
           notebookId={notebook.id}
           documentId={paneOne?.document.id ?? null}
           summaries={paneOne?.summaries ?? {}}
+          drive={driveConfig(user)}
         />
       }
       distillPanel={
