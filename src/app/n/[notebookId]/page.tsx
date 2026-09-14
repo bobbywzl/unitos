@@ -56,6 +56,7 @@ import { deeplConfigured } from "@/lib/translate/deepl";
 import {
   parseRegion,
   parseSpeakers,
+  parseTried,
   transcriptIsStale,
   type TranscriptLine,
   type VideoAnnotationItem,
@@ -752,6 +753,8 @@ export default async function NotebookPage(props: {
             document.video.transcriptStatus,
             document.video.transcriptStartedAt,
           ),
+          transcriptTried:
+            document.video.transcriptStatus === "PENDING" ? parseTried(document.video.transcriptTried) : [],
           speakers: parseSpeakers(document.video.speakers),
         }
       : null;

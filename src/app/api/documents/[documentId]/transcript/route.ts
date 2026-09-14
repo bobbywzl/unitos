@@ -32,5 +32,5 @@ export async function POST(req: Request, ctx: { params: Promise<{ documentId: st
         : result.error;
     return NextResponse.json({ error }, { status: result.status });
   }
-  return NextResponse.json({ ok: true, lines: result.lines });
+  return NextResponse.json({ ok: true, lines: result.continuing ? 0 : result.lines });
 }

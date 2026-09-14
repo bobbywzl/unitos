@@ -18,16 +18,24 @@ import { attachDocument } from "@/lib/parse/attach";
 import { parseMarkdown } from "@/lib/parse/markdown";
 import { PARSER_VERSION, type ParsedBlock } from "@/lib/parse/types";
 import { stitchPrompt, stitchSelectPrompt } from "@/lib/prompts/stitch";
-import type { StitchResult } from "@/lib/types";
+import type { StitchMember, StitchResult } from "@/lib/types";
+import { transcriptIsStale } from "@/lib/video/types";
 
 // Stitch (SPEC.md §22): one command over the members of a multi upload. Two
 // passes. The select pass reads every member whole — one cacheable system
 // message, byte-identical from turn to turn: every member rendered
-// `[document <id>] "title"` then block lines, later members cut whole with a
-// declared marker past the budget — and names the blocks the command needs.
-// The answer pass reads those blocks, in member order with the gaps
-// declared, and answers with links, a generated document, or both. Short
-// members skip the select pass: the answer pass reads them whole.
+// `[document <id>] "title"` then block lines, a long member cut at a block
+// boundary, later members left out whole with a declared marker past the
+// budget — and names the blocks the command needs. The answer pass reads
+// those blocks, in member order with the gaps declared, and answers with
+// links, a generated document, or both. Short members skip the select
+// pass: the answer pass reads them whole.
+// A video or audio member reads as its transcript lines and a handwritten
+// member as its converted text; a member with nothing to read is declared
+// as such to the model, with the reason. The result says what was read of
+// every member (StitchMember), so the reader sees which members the answer
+// rests on and why one was not read. With fewer than two members read the
+// command does not run.
 // Every block id and every quote resolves against the real block text
 // before anything is stored: a quote the model did not copy verbatim falls
 // back to its whole block, and an id that names no block drops. Links land
@@ -140,7 +148,8 @@ export function resolveQuote(
   return resolvedAt(named, 0, named.text.length);
 }
 
-/** The members of a multi upload with their blocks, in member order. */
+/** The members of a multi upload with their blocks, in member order, and
+    the state of each member's transcript or conversion. */
 export async function loadMembers(multiUploadId: string) {
   const rows = await db.multiUploadMember.findMany({
     where: { multiUploadId },
@@ -150,6 +159,17 @@ export async function loadMembers(multiUploadId: string) {
         select: {
           id: true,
           title: true,
+          handwritten: true,
+          conversionStatus: true,
+          conversionError: true,
+          video: {
+            select: {
+              mimeType: true,
+              transcriptStatus: true,
+              transcriptError: true,
+              transcriptStartedAt: true,
+            },
+          },
           blocks: {
             orderBy: { order: "asc" },
             select: { id: true, type: true, text: true, startTime: true, endTime: true },
@@ -163,50 +183,179 @@ export async function loadMembers(multiUploadId: string) {
 
 type Member = Awaited<ReturnType<typeof loadMembers>>[number];
 
+// The blocks of a member the model can read: blocks with text. The VIDEO
+// block holds the title and a PAGE block its page number — neither is
+// content — so a video or audio member reads as its transcript lines and a
+// handwritten member as its converted text.
+function readableBlocks(member: Member): Member["blocks"] {
+  return member.blocks.filter(
+    (b) => b.type !== "VIDEO" && b.type !== "PAGE" && b.text.trim().length > 0,
+  );
+}
+
+function memberKind(member: Member): StitchMember["kind"] {
+  if (member.video) return member.video.mimeType?.startsWith("audio/") ? "audio" : "video";
+  return member.handwritten ? "handwritten" : "text";
+}
+
+// Why a member has nothing to read: its transcript or its conversion has
+// not landed, or the document holds no text. detail is the stored error.
+function emptyReason(member: Member): Pick<StitchMember, "reason" | "detail"> {
+  if (member.video) {
+    switch (member.video.transcriptStatus) {
+      case "PENDING":
+        return {
+          reason: transcriptIsStale("PENDING", member.video.transcriptStartedAt)
+            ? "transcriptStale"
+            : "transcriptPending",
+          detail: null,
+        };
+      case "FAILED":
+        return { reason: "transcriptFailed", detail: member.video.transcriptError };
+      case "NONE":
+        return { reason: "transcriptNone", detail: null };
+      case "READY":
+        return { reason: "noText", detail: null };
+    }
+  }
+  if (member.handwritten) {
+    switch (member.conversionStatus) {
+      case "PENDING":
+        return { reason: "conversionPending", detail: null };
+      case "FAILED":
+        return { reason: "conversionFailed", detail: member.conversionError };
+      case "READY":
+        return { reason: "noText", detail: null };
+      case "NONE":
+      case "OFF":
+        return { reason: "conversionNone", detail: null };
+    }
+  }
+  return { reason: "noText", detail: null };
+}
+
+// The reason as the model reads it, in the system message and the prompt.
+const EMPTY_NOTE: Record<NonNullable<StitchMember["reason"]>, string> = {
+  transcriptPending: "its transcript is still being written",
+  transcriptStale: "its last transcription run did not finish",
+  transcriptFailed: "its transcription failed",
+  transcriptNone: "it has no transcript yet",
+  conversionPending: "its conversion to text is still running",
+  conversionFailed: "its conversion to text failed",
+  conversionNone: "it is handwritten and not converted to text yet",
+  noText: "it holds no text",
+};
+
+const UNIT: Record<StitchMember["kind"], string> = {
+  text: "blocks",
+  video: "transcript lines",
+  audio: "transcript lines",
+  handwritten: "converted blocks",
+};
+
+/** One member's coverage as the prompt states it beside the member's title. */
+export function coverageNote(m: StitchMember): string {
+  switch (m.status) {
+    case "read":
+      return `${m.kind}, ${m.blocks} ${UNIT[m.kind]} read`;
+    case "cut":
+      return `${m.kind}, the first ${m.blocks} of ${m.total} ${UNIT[m.kind]} read, the rest cut for length`;
+    case "leftOut":
+      return `${m.kind}, not read: left out for length`;
+    case "empty":
+      return `${m.kind}, not read: ${EMPTY_NOTE[m.reason ?? "noText"]}`;
+  }
+}
+
 const CONTEXT_HEAD = [
   "You assist a reader working across the members of a multi upload.",
   "Each document starts with its id as [document <id>]; each block starts with its id as [block <id>]. Block ids are unique across all members. Reference block ids exactly as given.",
+  "A video or audio member is its transcript: every line is a TRANSCRIPT block tagged with its seconds. A member marked (nothing to read: …) has no text here: never cite it and never guess what it says.",
   "",
 ];
 
+function emptySection(member: Member, reason: StitchMember["reason"]): string {
+  return `[document ${member.id}] "${member.title}"\n(nothing to read: ${EMPTY_NOTE[reason ?? "noText"]})`;
+}
+
 // Every member whole, as one system message — byte-identical from turn to
-// turn so the prefix caches (SPEC.md §2). Cut at the budgets, the cut declared.
-function wholeSystem(members: Member[]): { text: string; length: number } {
+// turn so the prefix caches (SPEC.md §2) — and what went into it of every
+// member. A long member cuts at a block boundary, so the blocks the model
+// saw are known exactly. A member with nothing to read is declared with its
+// reason, so the model knows the member exists and never guesses at its
+// text. length: the chars of member text sent.
+function wholeSystem(members: Member[]): {
+  system: string;
+  coverage: StitchMember[];
+  length: number;
+} {
   const rendered: string[] = [];
+  const coverage: StitchMember[] = [];
   let used = 0;
-  let cut = 0;
+  let leftOut = 0;
   for (const member of members) {
-    const lines = renderBlockLines(member.blocks);
-    const body =
-      lines.length > PER_MEMBER_BUDGET
-        ? `${lines.slice(0, PER_MEMBER_BUDGET)}\n\n(document cut for length)`
-        : lines;
+    const kind = memberKind(member);
+    const blocks = readableBlocks(member);
+    const base = { id: member.id, title: member.title, kind, total: blocks.length };
+    if (blocks.length === 0) {
+      const empty = emptyReason(member);
+      coverage.push({ ...base, status: "empty", blocks: 0, ...empty });
+      const section = emptySection(member, empty.reason);
+      used += section.length;
+      rendered.push(section);
+      continue;
+    }
+    // Blocks in order until the member's budget is spent.
+    let kept = 0;
+    let length = 0;
+    for (const block of blocks) {
+      const lineLength = block.text.length + block.id.length + 40;
+      if (kept > 0 && length + lineLength > PER_MEMBER_BUDGET) break;
+      length += lineLength;
+      kept++;
+    }
+    const lines = renderBlockLines(blocks.slice(0, kept));
+    const body = kept < blocks.length ? `${lines}\n\n(document cut for length)` : lines;
     const section = `[document ${member.id}] "${member.title}"\n${body}`;
     if (used + section.length > MEMBERS_BUDGET) {
-      cut++;
+      leftOut++;
+      coverage.push({ ...base, status: "leftOut", blocks: 0, reason: null, detail: null });
       continue;
     }
     used += section.length;
     rendered.push(section);
+    coverage.push({
+      ...base,
+      status: kept < blocks.length ? "cut" : "read",
+      blocks: kept,
+      reason: null,
+      detail: null,
+    });
   }
-  const text = [
+  const system = [
     ...CONTEXT_HEAD,
     "Every member follows.",
     "",
     rendered.join("\n\n"),
-    ...(cut > 0 ? ["", `(${cut} more member(s) left out for length)`] : []),
+    ...(leftOut > 0 ? ["", `(${leftOut} more member(s) left out for length)`] : []),
   ].join("\n");
-  return { text, length: used };
+  return { system, coverage, length: used };
 }
 
 /** The selected blocks as one system message: every member in order, its
     header saying how many of its blocks are shown, the blocks in reading
-    order, a gap between two shown blocks declared. */
+    order, a gap between two shown blocks declared. A member with nothing
+    to read is declared with its reason, as in the whole rendering. */
 export function selectedSystem(members: Member[], selectedIds: Set<string>): string {
   const rendered: string[] = [];
   for (const member of members) {
-    const shown = member.blocks.filter((b) => selectedIds.has(b.id));
-    const header = `[document ${member.id}] "${member.title}" (${shown.length} of ${member.blocks.length} blocks shown)`;
+    const blocks = readableBlocks(member);
+    if (blocks.length === 0) {
+      rendered.push(emptySection(member, emptyReason(member).reason));
+      continue;
+    }
+    const shown = blocks.filter((b) => selectedIds.has(b.id));
+    const header = `[document ${member.id}] "${member.title}" (${shown.length} of ${blocks.length} blocks shown)`;
     if (shown.length === 0) {
       rendered.push(header);
       continue;
@@ -214,7 +363,7 @@ export function selectedSystem(members: Member[], selectedIds: Set<string>): str
     const lines: string[] = [];
     let last = -1;
     for (const block of shown) {
-      const at = member.blocks.indexOf(block);
+      const at = blocks.indexOf(block);
       if (last !== -1 && at - last > 1) lines.push(`(${at - last - 1} blocks not shown)`);
       lines.push(renderBlockLines([block]));
       last = at;
@@ -248,7 +397,7 @@ function openings(members: Member[]): Set<string> {
   const picked = new Set<string>();
   for (const member of members) {
     let used = 0;
-    for (const block of member.blocks) {
+    for (const block of readableBlocks(member)) {
       const cost = block.text.length + 40;
       if (used + cost > share) break;
       used += cost;
@@ -270,29 +419,41 @@ export async function stitch(input: {
   onFailure: (reason: string) => Error;
 }): Promise<StitchResult> {
   const members = await loadMembers(input.multiUploadId);
+  const whole = wholeSystem(members);
+  const { coverage } = whole;
+  // Fewer than two members read: no links can be drawn and no page can rest
+  // on the members, so nothing runs and nothing is stored. The result says
+  // what was read of every member and why the rest were not.
+  const read = coverage.filter((m) => m.status === "read" || m.status === "cut");
+  if (read.length < 2) return { reply: "", linkCount: 0, document: null, members: coverage };
+
   const blockById = new Map<string, MemberBlock>();
   for (const member of members) {
-    for (const b of member.blocks) {
+    for (const b of readableBlocks(member)) {
       blockById.set(b.id, { id: b.id, type: b.type, text: b.text, documentId: member.id });
     }
   }
   const profile = await loadProfile(input.notebookId);
-  const memberList = members.map((m) => ({ id: m.id, title: m.title }));
+  const memberList = coverage.map((m) => ({
+    id: m.id,
+    title: m.title,
+    note: coverageNote(m),
+    read: m.status === "read" || m.status === "cut",
+  }));
   const history: ModelMessage[] = input.history
     .slice(-MAX_HISTORY)
     .filter((turn) => turn.content.trim())
     .map((turn) => ({ role: turn.role, content: turn.content }));
   const model = await kimi(STITCH_MODEL);
-  const whole = wholeSystem(members);
 
   // ── The select pass: the blocks the command needs, out of every member ───
-  let context = whole.text;
+  let context = whole.system;
   let selected = false;
   if (whole.length > WHOLE_THRESHOLD) {
     const pick = await callForJson({
       model,
       messages: [
-        { role: "system", content: whole.text },
+        { role: "system", content: whole.system },
         ...history,
         {
           role: "user",
@@ -398,7 +559,7 @@ export async function stitch(input: {
   }
 
   if (linkCount > 0 || document) await bumpNotebook(input.notebookId);
-  return { reply: result.data.reply.trim(), linkCount, document };
+  return { reply: result.data.reply.trim(), linkCount, document, members: coverage };
 }
 
 type Part = z.infer<typeof partSchema>;

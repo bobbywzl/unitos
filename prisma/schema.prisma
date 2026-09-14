@@ -622,6 +622,11 @@ model VideoAsset {
   // When the running transcription started. A PENDING older than 10 minutes is
   // a dead run and may start again.
   transcriptStartedAt DateTime?
+  // The rungs the running attempt has tried and their reasons,
+  // [{rung, reason}] (lib/video/transcription-job.ts): one attempt runs in
+  // legs across functions, each past the rungs the last one tried. Null when
+  // no attempt is between legs.
+  transcriptTried     Json?
   // The voices heard in this media (SPEC.md §11): [{id, name}], the id on
   // each TRANSCRIPT block's speaker. Names come from the introductions; a
   // voice nobody names keeps "Speaker 2". Null = never detected.

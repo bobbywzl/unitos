@@ -15,14 +15,19 @@ const DOWNLOAD_TIMEOUT_MS = 90_000;
 
 const reason = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
+// The audio streams of the track the player plays. A video with several
+// audio tracks (a dub, described audio) marks the original one default; a
+// transcript of any other track would not match what the reader hears.
 function audioStreams(formats: AdaptiveFormat[]): AdaptiveFormat[] {
-  return formats.filter(
+  const audio = formats.filter(
     (f) =>
       f.mimeType.startsWith("audio/") &&
       typeof f.url === "string" &&
       typeof f.contentLength === "string" &&
       Number(f.contentLength) > 0,
   );
+  const original = audio.filter((f) => f.audioTrack?.audioIsDefault === true);
+  return original.length > 0 ? original : audio;
 }
 
 /** The smallest audio-only stream under the cap, an indexed MP4 stream

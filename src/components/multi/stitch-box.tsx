@@ -9,14 +9,18 @@ import { Markdown } from "@/components/markdown";
 import { ThinkingIndicator } from "@/components/thinking";
 import { runHeartbeat } from "@/lib/derive/heartbeat-client";
 import { useImeGuard } from "@/lib/ime";
-import type { StitchResult } from "@/lib/types";
+import type { StitchMember, StitchResult } from "@/lib/types";
+import { transcriptErrorKey } from "@/lib/video/types";
 
 // The Stitch assistant (SPEC.md §22): the box under a multi upload, ready
 // for any command across the members — gather every passage on a topic,
 // connect the passages that answer a question, find the contradictions,
 // write a new page. Every turn is one command; the reply says what was
 // done, links await Accept in the graph, and a written page opens from
-// Generated content. The conversation is kept per multi upload for the
+// Generated content. Under every reply, what was read of each member: a
+// video or audio member reads as its transcript, and a member with nothing
+// to read says why (the transcript still being written, or failed with the
+// stored reason). The conversation is kept per multi upload for the
 // browser tab, so leaving and coming back keeps it.
 
 type Turn = { role: "user" | "assistant"; content: string; result?: StitchResult };
@@ -250,15 +254,19 @@ export function StitchBox({
   );
 }
 
-// What one command stored: the links proposed, the page written, or nothing.
+// What one command stored — the links proposed, the page written, or
+// nothing — and what was read of each member.
 function ResultLine({ result, openHref }: { result: StitchResult; openHref: (id: string) => string }) {
   const t = useT();
   const router = useRouter();
-  if (result.linkCount === 0 && !result.document) {
-    return <p className="text-xs text-sand-500">{t("multi.stitchNothingStored")}</p>;
-  }
+  const readCount = result.members.filter((m) => m.status === "read" || m.status === "cut").length;
+  const ran = readCount >= 2;
   return (
     <div className="flex flex-col gap-1 text-xs text-sand-600">
+      {!ran && <p className="text-red-500">{t("multi.stitchNotEnoughRead")}</p>}
+      {ran && result.linkCount === 0 && !result.document && (
+        <p className="text-sand-500">{t("multi.stitchNothingStored")}</p>
+      )}
       {result.linkCount > 0 && (
         <p>{t(result.linkCount === 1 ? "multi.stitchLinksMade1" : "multi.stitchLinksMadeN", { n: result.linkCount })}</p>
       )}
@@ -275,6 +283,77 @@ function ResultLine({ result, openHref }: { result: StitchResult; openHref: (id:
           </button>
         </p>
       )}
+      <MembersRead members={result.members} readCount={readCount} />
     </div>
   );
+}
+
+// One row per member: what of it went to the model, or why nothing did.
+function MembersRead({ members, readCount }: { members: StitchMember[]; readCount: number }) {
+  const t = useT();
+  return (
+    <div className="mt-0.5 flex flex-col gap-0.5">
+      <p className="text-sand-500">{t("multi.stitchMembersRead", { read: readCount, total: members.length })}</p>
+      <ul className="flex flex-col gap-0.5">
+        {members.map((m) => {
+          const unread = m.status === "leftOut" || m.status === "empty";
+          return (
+            <li key={m.id} className="flex min-w-0 gap-1.5">
+              <span className="min-w-0 max-w-[45%] truncate text-sand-700" title={m.title}>
+                {m.title}
+              </span>
+              <span className={`min-w-0 flex-1 ${unread ? "text-red-500" : "text-sand-500"}`}>
+                {memberLine(m, t)}
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
+function memberLine(m: StitchMember, t: ReturnType<typeof useT>): string {
+  const unit = t(
+    m.kind === "text"
+      ? "multi.stitchUnitText"
+      : m.kind === "handwritten"
+        ? "multi.stitchUnitConverted"
+        : "multi.stitchUnitTranscript",
+  );
+  switch (m.status) {
+    case "read":
+      return t("multi.stitchMemberRead", { n: m.blocks, unit });
+    case "cut":
+      return t("multi.stitchMemberCut", { n: m.blocks, total: m.total, unit });
+    case "leftOut":
+      return t("multi.stitchMemberLeftOut");
+    case "empty":
+      return emptyLine(m, t);
+  }
+}
+
+// A stored transcription error is an English diagnostic; the known classes
+// render in the UI language (lib/video/types.ts), the rest as stored.
+function emptyLine(m: StitchMember, t: ReturnType<typeof useT>): string {
+  switch (m.reason) {
+    case "transcriptPending":
+      return t("multi.stitchMemberTranscriptPending");
+    case "transcriptStale":
+      return t("multi.stitchMemberTranscriptStale");
+    case "transcriptFailed": {
+      const key = m.detail ? transcriptErrorKey(m.detail) : null;
+      return t("multi.stitchMemberTranscriptFailed", { detail: key ? t(key) : (m.detail ?? "") }).trim();
+    }
+    case "transcriptNone":
+      return t("multi.stitchMemberTranscriptNone");
+    case "conversionPending":
+      return t("multi.stitchMemberConversionPending");
+    case "conversionFailed":
+      return t("multi.stitchMemberConversionFailed", { detail: m.detail ?? "" }).trim();
+    case "conversionNone":
+      return t("multi.stitchMemberConversionNone");
+    default:
+      return t("multi.stitchMemberNoText");
+  }
 }

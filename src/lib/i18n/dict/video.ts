@@ -103,6 +103,7 @@ const en = {
   transcribingLongAudio:
     "Transcribing… takes a minute or two. Read along, click a line to seek, and search the audio once it lands.",
   transcriptFailedBody: "The transcription did not land. It powers read-along, click-to-seek, and Find.",
+  triedSoFar: "Tried so far: {list}. Now on the next provider.",
   transcriptionFailed: "Transcription failed",
   lastRunUnfinished: "The last run did not finish.",
   pasteTranscript: "Paste transcription",
@@ -272,6 +273,7 @@ const zh: Record<keyof typeof en, string> = {
   transcribingLong: "转写中…需要一两分钟。完成后可以跟读、点击行跳转、查找视频内容。",
   transcribingLongAudio: "转写中…需要一两分钟。完成后可以跟读、点击行跳转、查找音频内容。",
   transcriptFailedBody: "逐字稿没有生成。跟读、点击跳转和查找都依赖它。",
+  triedSoFar: "已尝试：{list}。正在尝试下一个提供方。",
   transcriptionFailed: "转写失败",
   lastRunUnfinished: "上一次转写没有完成。",
   pasteTranscript: "粘贴逐字稿",

@@ -1,7 +1,9 @@
 // Transcript segments (SPEC.md §11): the unit every transcription rung
 // returns and every consumer reads. One definition here, so the rungs, the
 // browser reader, and the job import it without importing each other.
-export type TranscriptSegment = { start: number; end: number; text: string };
+// speaker: the voice's id ("S1") when the rung told the voices apart
+// (Deepgram does); unset when it did not, and the speakers pass runs after.
+export type TranscriptSegment = { start: number; end: number; text: string; speaker?: string };
 
 // Every rung's segments land here before anything else reads them: trimmed,
 // in start order, and with the ranges pulled apart. A segment that runs past
@@ -13,7 +15,7 @@ export type TranscriptSegment = { start: number; end: number; text: string };
 // real gap between two segments is left alone — nothing is spoken in it.
 export function normalizeSegments(segments: TranscriptSegment[]): TranscriptSegment[] {
   const ordered = segments
-    .map((s) => ({ start: s.start, end: Math.max(s.end, s.start), text: s.text.trim() }))
+    .map((s) => ({ ...s, start: s.start, end: Math.max(s.end, s.start), text: s.text.trim() }))
     .filter((s) => s.text !== "")
     .sort((a, b) => a.start - b.start);
   return ordered.map((s, i) => {
@@ -26,7 +28,8 @@ export function normalizeSegments(segments: TranscriptSegment[]): TranscriptSegm
 }
 
 // Group segments into transcript lines: one line reads like a sentence or two.
-// A line closes at ~280 characters, at a speech gap over 1.5s, or at 30s.
+// A line closes at ~280 characters, at a speech gap over 1.5s, at 30s, or
+// where the speaker changes — one line is one voice.
 export function groupSegments(segments: TranscriptSegment[]): TranscriptSegment[] {
   const lines: TranscriptSegment[] = [];
   let open: TranscriptSegment | null = null;
@@ -35,13 +38,14 @@ export function groupSegments(segments: TranscriptSegment[]): TranscriptSegment[
       open &&
       (open.text.length + segment.text.length > 280 ||
         segment.start - open.end > 1.5 ||
-        segment.end - open.start > 30)
+        segment.end - open.start > 30 ||
+        open.speaker !== segment.speaker)
     ) {
       lines.push(open);
       open = null;
     }
     open = open
-      ? { start: open.start, end: segment.end, text: `${open.text} ${segment.text}` }
+      ? { start: open.start, end: segment.end, text: `${open.text} ${segment.text}`, speaker: open.speaker }
       : { ...segment };
   }
   if (open) lines.push(open);

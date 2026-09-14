@@ -105,10 +105,12 @@ export function TranscriptActions({
   );
 }
 
-// No lines yet: transcribing, or failed with Retry and Paste transcript.
+// No lines yet: transcribing (with the rungs tried so far, when a run has
+// moved past its first), or failed with Retry and Paste transcript.
 export function TranscriptEmpty({
   audio,
   pending,
+  tried = [],
   failedMessage,
   onTranscribe,
   onPaste,
@@ -116,6 +118,8 @@ export function TranscriptEmpty({
 }: {
   audio: boolean;
   pending: boolean;
+  /** The rungs the running attempt tried and why each failed, described. */
+  tried?: { rung: string; reason: string }[];
   failedMessage: string | null;
   onTranscribe: () => void;
   /** Stores a pasted transcript; resolves true when it landed. */
@@ -143,10 +147,17 @@ export function TranscriptEmpty({
   return (
     <div className="rounded-2xl bg-card px-4 py-4 shadow-soft">
       {pending ? (
-        <p className="flex items-center gap-2 text-[13px] text-sand-600">
-          <SpinnerIcon size={14} className="shrink-0 text-clay motion-safe:animate-spin" />
-          {t(audio ? "video.transcribingLongAudio" : "video.transcribingLong")}
-        </p>
+        <div className="flex flex-col gap-1.5">
+          <p className="flex items-center gap-2 text-[13px] text-sand-600">
+            <SpinnerIcon size={14} className="shrink-0 text-clay motion-safe:animate-spin" />
+            {t(audio ? "video.transcribingLongAudio" : "video.transcribingLong")}
+          </p>
+          {tried.length > 0 && (
+            <p className="text-xs text-sand-500">
+              {t("video.triedSoFar", { list: tried.map((r) => `${r.rung} (${r.reason})`).join(" · ") })}
+            </p>
+          )}
+        </div>
       ) : (
         <div className="flex flex-col gap-2.5">
           <p className="text-[13px] leading-relaxed text-sand-600">
