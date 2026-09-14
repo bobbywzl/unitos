@@ -257,7 +257,8 @@ export async function POST(req: Request) {
       if (!deduped) {
         after(() =>
           runTranscription(document.id)
-            .then(() => buildConnections(data.notebookId, document.id, user?.id ?? null, lang))
+            // A run that continues on another function scans there.
+            .then((r) => (r.ok && !r.continuing ? buildConnections(data.notebookId, document.id, user?.id ?? null, lang) : undefined))
             .catch(() => {}),
         );
       } else {
@@ -288,7 +289,8 @@ export async function POST(req: Request) {
       if (!deduped) {
         after(() =>
           runTranscription(document.id)
-            .then(() => buildConnections(data.notebookId, document.id, user?.id ?? null, lang))
+            // A run that continues on another function scans there.
+            .then((r) => (r.ok && !r.continuing ? buildConnections(data.notebookId, document.id, user?.id ?? null, lang) : undefined))
             .catch(() => {}),
         );
       } else {

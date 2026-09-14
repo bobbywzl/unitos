@@ -25,18 +25,18 @@ const TIDY_PROMPT = [
 const tidyResponseSchema = z.object({ lines: z.array(z.string()) });
 
 // A cleaned line has to be the same line: cleanup removes fillers and fixes
-// punctuation, so nearly every word it returns was in the line it was given.
-// A model that quietly moves words between lines keeps the line count and
-// still breaks the transcript — the words then sit under the wrong time, and
-// the read-along highlight lands on text nobody is saying. Below this share
-// of kept words a line is not its input's.
-const KEPT_WORDS_FLOOR = 0.5;
-// And below this share of judged lines the batch is not a cleanup of what was
-// sent; the rules pass takes it instead. One odd line is cleanup doing its
-// job — a line rewritten around a stutter, a contraction spelled out.
-const SOUND_LINES_FLOOR = 0.9;
-// Shorter lines are not judged: on three words, one rewritten word is half
-// the line. A batch that moved its lines mismatches the long ones too.
+// punctuation, so the words it returns are the line's own words, in the
+// line's own order, with some taken out. A model that quietly moves words
+// between lines keeps the line count and still breaks the transcript — the
+// words then sit under the wrong time, and the read-along highlight lands
+// on text nobody is saying. So every line is checked on its own: the
+// cleaned words must read as a subsequence of the input's words, with a
+// small allowance for a spelling the model normalized ("ok" → "okay", a
+// number written as digits). A line that fails keeps the rules cleanup of
+// its input instead; the rest of the batch stands.
+const MISSES_ALLOWED = 0.15; // share of cleaned words not found in order
+// Shorter lines are not judged: on three words, one normalized word is a
+// third of the line.
 const JUDGED_WORDS_MIN = 4;
 
 function words(text: string): string[] {
@@ -47,21 +47,29 @@ function words(text: string): string[] {
     .filter((w) => w !== "");
 }
 
-/** Whether cleaned lines are still their own input's words — the guard on a
-    cleanup pass moving words between lines. Empty cleaned lines are cleanup
-    dropping filler, not a mismatch, and short ones are not judged. */
-export function linesAreSound(before: string[], after: string[]): boolean {
-  let judged = 0;
-  let sound = 0;
-  for (let i = 0; i < after.length; i++) {
-    const cleaned = words(after[i] ?? "");
-    if (cleaned.length < JUDGED_WORDS_MIN) continue;
-    judged += 1;
-    const source = new Set(words(before[i] ?? ""));
-    const kept = cleaned.filter((w) => source.has(w)).length;
-    if (kept / cleaned.length >= KEPT_WORDS_FLOOR) sound += 1;
+/** Whether one cleaned line is still its input's words in its input's
+    order. An empty cleaned line is cleanup dropping filler, not a mismatch,
+    and a short one is not judged. */
+export function lineIsSound(before: string, after: string): boolean {
+  const cleaned = words(after);
+  if (cleaned.length < JUDGED_WORDS_MIN) return true;
+  const source = words(before);
+  // Cleanup takes words out; it never adds a run of them.
+  if (cleaned.length > source.length * 1.1 + 2) return false;
+  let at = 0;
+  let misses = 0;
+  for (const w of cleaned) {
+    const found = source.indexOf(w, at);
+    if (found === -1) misses += 1;
+    else at = found + 1;
   }
-  return judged === 0 || sound / judged >= SOUND_LINES_FLOOR;
+  return misses <= Math.max(1, Math.floor(cleaned.length * MISSES_ALLOWED));
+}
+
+/** Whether every cleaned line is its own input's (lineIsSound over the
+    batch). Kept for callers that judge a batch whole. */
+export function linesAreSound(before: string[], after: string[]): boolean {
+  return after.every((line, i) => lineIsSound(before[i] ?? "", line));
 }
 
 async function tidyBatch(texts: string[]): Promise<string[]> {
@@ -80,8 +88,16 @@ async function tidyBatch(texts: string[]): Promise<string[]> {
           `line count moved (${texts.length} in, ${parsed.data.lines.length} out)`,
         );
       }
-      const lines = parsed.data.lines.map((line) => line.trim());
-      if (!linesAreSound(texts, lines)) throw new Error("the cleaned lines are not the lines sent");
+      // A cleaned line that is not its input's words keeps the rules
+      // cleanup of its input; the rest of the batch stands.
+      let unsound = 0;
+      const lines = parsed.data.lines.map((line, i) => {
+        const cleaned = line.trim();
+        if (lineIsSound(texts[i], cleaned)) return cleaned;
+        unsound += 1;
+        return stripFillers(texts[i]);
+      });
+      if (unsound > 0) console.warn(`[tidy] ${unsound} of ${texts.length} cleaned lines were not their input's; kept the rules cleanup for those`);
       return lines;
     },
   );

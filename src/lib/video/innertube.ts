@@ -54,6 +54,12 @@ const adaptiveFormatSchema = z.object({
   // segment boundaries.
   initRange: byteRangeSchema.optional(),
   indexRange: byteRangeSchema.optional(),
+  // A video with several audio tracks (dubs, described audio) marks the
+  // original one default; the transcript must read the track the player
+  // plays (lib/video/youtube-audio.ts).
+  audioTrack: z
+    .object({ id: z.string().optional(), audioIsDefault: z.boolean().optional() })
+    .optional(),
 });
 export type AdaptiveFormat = z.infer<typeof adaptiveFormatSchema>;
 

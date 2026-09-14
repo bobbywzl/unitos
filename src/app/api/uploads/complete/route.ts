@@ -274,7 +274,8 @@ async function completeVideo(data: Body, userId: string | null, t: TFunc) {
       // recommended-links scan follows it, so it reads the transcript.
       after(() =>
         runTranscription(document.id)
-          .then(() => buildConnections(data.notebookId, document.id, userId))
+          // A run that continues on another function scans there.
+          .then((r) => (r.ok && !r.continuing ? buildConnections(data.notebookId, document.id, userId) : undefined))
           .catch(() => {}),
       );
     } catch (err) {

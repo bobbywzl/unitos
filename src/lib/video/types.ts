@@ -124,6 +124,9 @@ export type VideoInfo = {
   transcriptStatus: TranscriptStatusName;
   transcriptError: string | null;
   transcriptStale: boolean; // PENDING but the run is dead; Transcribe may start again
+  /** PENDING: the rungs the running attempt has tried so far and why each
+      failed (SPEC.md §11); the pane shows them under Transcribing…. */
+  transcriptTried: RungTried[];
   /** The voices heard (SPEC.md §11); empty = one voice, or never detected. */
   speakers: Speaker[];
 };
@@ -170,6 +173,16 @@ export const speakerSchema = z.object({ id: z.string(), name: z.string() });
 /** The stored roster, or [] for anything else (never detected, one voice). */
 export function parseSpeakers(value: unknown): Speaker[] {
   const parsed = z.array(speakerSchema).safeParse(value);
+  return parsed.success ? parsed.data : [];
+}
+
+/** One rung the running transcription attempt tried, and why it failed. */
+export type RungTried = { rung: string; reason: string };
+const rungTriedSchema = z.object({ rung: z.string(), reason: z.string() });
+
+/** VideoAsset.transcriptTried as stored: [{rung, reason}], or nothing. */
+export function parseTried(value: unknown): RungTried[] {
+  const parsed = z.array(rungTriedSchema).safeParse(value);
   return parsed.success ? parsed.data : [];
 }
 

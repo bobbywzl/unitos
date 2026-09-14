@@ -1,32 +1,47 @@
 import { Prisma } from "@prisma/client";
 import { bumpDocument } from "@/lib/collab";
 import { db } from "@/lib/db";
-import { parseSpeakers, type Speaker } from "@/lib/video/types";
+import { parseSpeakers, parseTried, type Speaker } from "@/lib/video/types";
 import { parsePastedTranscript } from "@/lib/video/paste";
 import { tidyTranscript } from "@/lib/video/tidy";
 import { GEMINI_FILE_TTL_MS, geminiFileFresh, type GeminiFile } from "@/lib/video/gemini-files";
+import { buildConnections } from "@/lib/connect";
 import {
   geminiMediaPart,
   GEMINI_FILE_MAX_BYTES,
   groupSegments,
+  LadderExhausted,
+  LadderOutOfTime,
   normalizeSegments,
+  type RungFailure,
   transcribe,
   TRANSCRIBE_MAX_BYTES,
   type TranscribeOptions,
   type TranscribeSource,
   type TranscriptSegment,
 } from "@/lib/video/transcribe";
-import { detectSpeakers } from "@/lib/video/speakers";
+import { detectSpeakers, nameSpeakers } from "@/lib/video/speakers";
 
 // The transcription job (SPEC.md §11): guards, the provider ladder, the
 // cleanup pass, and the TRANSCRIPT block writes. Transcription starts on its
 // own when a video or audio is added — the transcript is the point — and
 // /api/documents/[documentId]/transcribe runs the same job for Retry and
-// Transcribe again. A pasted transcript (/api/documents/[documentId]/transcript)
-// skips the ladder and takes the same cleanup and writes.
+// Transcribe again: every attempt is the whole ladder from its first rung.
+// A pasted transcript (/api/documents/[documentId]/transcript) skips the
+// ladder and takes the same cleanup and writes.
+//
+// One attempt can take more than one function. The ladder stops before the
+// function's clock runs out (LadderOutOfTime); the job then stores the rungs
+// tried so far on VideoAsset.transcriptTried, keeps the status PENDING, and
+// starts its next leg on a fresh function — on Vercel a request to its own
+// transcribe route carrying CRON_SECRET, elsewhere the same job in this
+// process — which runs the rungs left. FAILED, with every rung's reason, is
+// written only after every rung has actually run.
 export type TranscriptionResult =
-  | { ok: true; lines: number; provider: string }
+  | { ok: true; continuing: false; lines: number; provider: string }
+  | { ok: true; continuing: true; tried: string[] }
   | { ok: false; status: number; error: string };
+
 
 // The ladder's time budget. Vercel ends the function at 300 seconds (the
 // routes' maxDuration, which after() work shares); the cleanup pass, the
@@ -39,7 +54,12 @@ const SPEAKERS_MIN_MS = 30_000;
 // Detect speakers on its own gets the whole function, less the writes.
 const SPEAKERS_BUDGET_MS = 260_000;
 
-export async function runTranscription(documentId: string): Promise<TranscriptionResult> {
+export async function runTranscription(
+  documentId: string,
+  // leg: the running attempt's next leg — the rungs left, past the ones
+  // transcriptTried names. Never a new attempt.
+  opts: { leg?: boolean } = {},
+): Promise<TranscriptionResult> {
   const asset = await db.videoAsset.findUnique({
     where: { documentId },
     select: {
@@ -50,6 +70,7 @@ export async function runTranscription(documentId: string): Promise<Transcriptio
       mimeType: true,
       transcriptStatus: true,
       transcriptStartedAt: true,
+      transcriptTried: true,
       geminiFileUri: true,
       geminiFileExpiresAt: true,
     },
@@ -62,19 +83,25 @@ export async function runTranscription(documentId: string): Promise<Transcriptio
     }
   } else {
     // Uploads need a provider key; the YouTube ladder has a keyless rung.
-    if (!process.env.GROQ_API_KEY && !process.env.OPENAI_API_KEY && !process.env.GEMINI_API_KEY) {
+    if (
+      !process.env.DEEPGRAM_API_KEY &&
+      !process.env.GROQ_API_KEY &&
+      !process.env.OPENAI_API_KEY &&
+      !process.env.GEMINI_API_KEY
+    ) {
       return {
         ok: false,
         status: 503,
-        error: "Set GROQ_API_KEY, OPENAI_API_KEY, or GEMINI_API_KEY. Transcription needs one.",
+        error:
+          "Set DEEPGRAM_API_KEY, GROQ_API_KEY, OPENAI_API_KEY, or GEMINI_API_KEY. Transcription needs one.",
       };
     }
-    // What a big file can still be transcribed by: an MP3 past the Whisper cap
-    // splits at frame boundaries, and any format at all goes through Gemini's
-    // file store, which is what makes an hour-long upload work. Only without
-    // both is the 25 MB cap the end of it.
+    // What a big file can still be transcribed by: Deepgram takes the whole
+    // file, an MP3 past the Whisper cap splits at frame boundaries, and any
+    // format at all goes through Gemini's file store. Only without all of
+    // them is the 25 MB cap the end of it.
     const chunkable = asset.mimeType === "audio/mpeg";
-    const store = Boolean(process.env.GEMINI_API_KEY);
+    const store = Boolean(process.env.GEMINI_API_KEY || process.env.DEEPGRAM_API_KEY);
     if (asset.size === null) {
       return { ok: false, status: 400, error: "This file has no recorded size" };
     }
@@ -86,24 +113,36 @@ export async function runTranscription(documentId: string): Promise<Transcriptio
         ok: false,
         status: 413,
         error:
-          "File is larger than 25 MB, the transcription cap for this format. Set GEMINI_API_KEY to transcribe longer media.",
+          "File is larger than 25 MB, the transcription cap for this format. Set DEEPGRAM_API_KEY or GEMINI_API_KEY to transcribe longer media.",
       };
     }
   }
   // A PENDING older than 10 minutes is a dead run (the function timed out or
-  // crashed before writing FAILED) and may start again.
+  // crashed before writing FAILED) and may start again. A leg is the running
+  // attempt itself, so it passes.
   const running =
     asset.transcriptStatus === "PENDING" &&
     asset.transcriptStartedAt !== null &&
     Date.now() - asset.transcriptStartedAt.getTime() < 10 * 60 * 1000;
-  if (running) {
+  if (running && !opts.leg) {
     return { ok: false, status: 409, error: "Transcription is already running" };
   }
+  if (opts.leg && asset.transcriptStatus !== "PENDING") {
+    return { ok: false, status: 409, error: "No transcription is running" };
+  }
 
+  // The rungs an earlier leg of this attempt tried; a new attempt starts
+  // with none — every attempt is the whole ladder.
+  const tried: RungFailure[] = opts.leg ? parseTried(asset.transcriptTried) : [];
   const startedAt = Date.now();
   await db.videoAsset.update({
     where: { id: asset.id },
-    data: { transcriptStatus: "PENDING", transcriptError: null, transcriptStartedAt: new Date(startedAt) },
+    data: {
+      transcriptStatus: "PENDING",
+      transcriptError: null,
+      transcriptStartedAt: new Date(startedAt),
+      transcriptTried: opts.leg ? tried : Prisma.DbNull,
+    },
   });
   // Every status change bumps: open workspaces see the run start, the
   // transcript land, or the failure — whoever started it.
@@ -140,6 +179,7 @@ export async function runTranscription(documentId: string): Promise<Transcriptio
         : null;
     const { segments, provider } = await transcribe(source, {
       deadline: startedAt + LADDER_BUDGET_MS,
+      skip: tried.map((f) => f.rung),
       geminiFile: stored,
       onGeminiFile: (file) => {
         // Fire and forget: the run must not wait on remembering the file.
@@ -161,17 +201,81 @@ export async function runTranscription(documentId: string): Promise<Transcriptio
       source: Date.now() < deadline - SPEAKERS_MIN_MS ? source : null,
       transcribeOptions: { deadline, geminiFile: stored },
     });
-    return { ok: true, lines, provider };
+    if (opts.leg) {
+      // The add's own follow-up ran on the first leg's caller; the leg that
+      // lands the transcript runs the recommended-links scan itself, for
+      // every project the document is in.
+      const rows = await db.notebookDocument.findMany({
+        where: { documentId },
+        select: { notebookId: true },
+      });
+      for (const row of rows) {
+        await buildConnections(row.notebookId, documentId, null).catch(() => {});
+      }
+    }
+    return { ok: true, continuing: false, lines, provider };
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Transcription failed";
+    if (err instanceof LadderOutOfTime) {
+      // Rungs left, no clock left: store what this leg tried and run the
+      // rest on a fresh function. The status stays PENDING.
+      const allTried = [...tried, ...err.failures];
+      console.log(
+        `[transcribe] leg ended with ${err.remaining.length} rung(s) left (${err.remaining.join(", ")}); continuing`,
+      );
+      await db.videoAsset.update({
+        where: { id: asset.id },
+        data: { transcriptTried: allTried, transcriptStartedAt: new Date() },
+      });
+      await bumpDocument(documentId);
+      return continueTranscription(documentId, allTried.map((f) => f.rung));
+    }
+    const failures =
+      err instanceof LadderExhausted ? [...tried, ...err.failures] : [...tried];
+    const message =
+      err instanceof LadderExhausted
+        ? failures.map((f) => `${f.rung}: ${f.reason}`).join(" · ")
+        : [...failures.map((f) => `${f.rung}: ${f.reason}`), err instanceof Error ? err.message : "Transcription failed"].join(" · ");
     console.error("[transcribe] failed:", err);
     await db.videoAsset.update({
       where: { id: asset.id },
-      data: { transcriptStatus: "FAILED", transcriptError: message },
+      data: { transcriptStatus: "FAILED", transcriptError: message, transcriptTried: Prisma.DbNull },
     });
     await bumpDocument(documentId);
     return { ok: false, status: 502, error: message };
   }
+}
+
+// The next leg of the running attempt, on a fresh function. On Vercel the
+// function ends at maxDuration, so the leg is a request to this app's own
+// transcribe route (APP_URL, or the deployment's VERCEL_URL; CRON_SECRET is
+// the credential, as for the cron routes), which answers at once and runs
+// the leg in after(). Off Vercel there is no clock to escape, so the leg
+// runs right here. When the request cannot be made or fails, the leg runs
+// here as well: the function may end under it, and the run then reads as
+// stale, which offers Retry — never as FAILED with rungs untried.
+async function continueTranscription(documentId: string, tried: string[]): Promise<TranscriptionResult> {
+  const secret = process.env.CRON_SECRET;
+  const origin = process.env.APP_URL?.replace(/\/$/, "") ?? (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null);
+  if (process.env.VERCEL && secret && origin) {
+    try {
+      const res = await fetch(`${origin}/api/documents/${documentId}/transcribe`, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${secret}`,
+          "x-transcribe-leg": "1",
+          ...(process.env.VERCEL_AUTOMATION_BYPASS_SECRET
+            ? { "x-vercel-protection-bypass": process.env.VERCEL_AUTOMATION_BYPASS_SECRET }
+            : {}),
+        },
+        signal: AbortSignal.timeout(15_000),
+      });
+      if (res.ok) return { ok: true, continuing: true, tried };
+      console.warn(`[transcribe] next leg request answered ${res.status}; running the leg here`);
+    } catch (err) {
+      console.warn("[transcribe] next leg request failed; running the leg here:", err instanceof Error ? err.message : err);
+    }
+  }
+  return runTranscription(documentId, { leg: true });
 }
 
 // Cleanup, grouping, speakers, and the block writes — every transcript,
@@ -195,16 +299,21 @@ async function storeTranscript(
   const tidied = await tidyTranscript(grouped);
   const lines = tidied.lines.length > 0 ? tidied.lines : grouped;
   console.log(`[transcribe] ${origin}, cleaned by ${tidied.provider}: ${lines.length} lines`);
-  // Who says each line (SPEC.md §11). It reads the media again, so it runs
-  // after the lines are settled and never blocks them: a pass that fails
-  // leaves an unnamed transcript, which is what stored before it existed.
-  const voices = speakers.source
-    ? await detectSpeakers(
-        await geminiMediaPart(speakers.source, speakers.transcribeOptions),
-        lines,
-        speakers.transcribeOptions,
-      ).catch(() => null)
-    : null;
+  // Who says each line (SPEC.md §11). Lines whose rung told the voices apart
+  // (Deepgram) only need names, from the text. Any other transcript takes
+  // the pass that reads the media again; it runs after the lines are
+  // settled and never blocks them: a pass that fails leaves an unnamed
+  // transcript, which is what stored before it existed.
+  const diarized = lines.some((line) => line.speaker !== undefined);
+  const voices = diarized
+    ? await nameSpeakers(lines).catch(() => null)
+    : speakers.source
+      ? await detectSpeakers(
+          await geminiMediaPart(speakers.source, speakers.transcribeOptions),
+          lines,
+          speakers.transcribeOptions,
+        ).catch(() => null)
+      : null;
   if (voices) {
     console.log(`[speakers] ${origin}: ${voices.speakers.length} voices`);
   }
@@ -226,6 +335,7 @@ async function storeTranscript(
       data: {
         transcriptStatus: "READY",
         transcriptError: null,
+        transcriptTried: Prisma.DbNull,
         speakers: voices && voices.speakers.length > 0 ? voices.speakers : undefined,
       },
     });
@@ -365,7 +475,7 @@ export async function storePastedTranscript(
   }
   try {
     const lines = await storeTranscript(documentId, asset.id, segments, "pasted");
-    return { ok: true, lines, provider: "pasted" };
+    return { ok: true, continuing: false, lines, provider: "pasted" };
   } catch (err) {
     console.error("[transcribe] pasted transcript failed to store:", err);
     return { ok: false, status: 500, error: "the transcript could not be stored" };

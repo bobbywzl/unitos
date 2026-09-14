@@ -1040,6 +1040,7 @@ export function VideoPane({
           <TranscriptEmpty
             audio={audio}
             pending={transcriptPending}
+            tried={video.transcriptTried.map((r) => ({ rung: r.rung, reason: describeTranscriptError(r.reason) }))}
             failedMessage={transcriptFailedMessage}
             onTranscribe={() => void transcribe()}
             onPaste={pasteTranscript}

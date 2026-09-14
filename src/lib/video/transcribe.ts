@@ -3,6 +3,7 @@ import { extractJson } from "@/lib/derive/json";
 import { recordUsage } from "@/lib/usage";
 import { browserCaptions } from "@/lib/video/browser-transcript";
 import { youtubeCaptions } from "@/lib/video/captions";
+import { deepgramTranscribe } from "@/lib/video/deepgram";
 import { geminiCall, geminiCountTokens } from "@/lib/video/gemini";
 import { splitFmp4, type ByteRange } from "@/lib/video/fmp4";
 import { uploadGeminiFile, type GeminiFile } from "@/lib/video/gemini-files";
@@ -25,15 +26,22 @@ export { groupSegments, normalizeSegments, type TranscriptSegment } from "@/lib/
 //                   reads the video by URL, last: about 100 tokens a second
 //                   of video, three times the audio's, and one call over an
 //                   hour of video outruns the ladder's clock.
-//   Uploaded video or audio: Groq Whisper (best quality per dollar; free tier)
-//                   → OpenAI Whisper → Gemini, with the bytes inline when they
-//                   are small enough and through Gemini's file store when they
-//                   are not — an hour of media is far past every other rung's
-//                   cap, and the store takes 2 GB.
+//   Uploaded video or audio: Deepgram Nova-3 (one call over the whole file,
+//                   2 GB allowed; timestamps and the voice on every utterance
+//                   from the audio itself, $0.26 an hour) → Groq Whisper (best
+//                   quality per dollar among the rest; free tier) → OpenAI
+//                   Whisper → Gemini, with the bytes inline when they are small
+//                   enough and through Gemini's file store when they are not
+//                   — an hour of media is far past every other rung's cap,
+//                   and the store takes 2 GB.
 // Each rung throws a plain reason; the ladder tries the next and reports every
-// reason when all fail. A rung never starts with under 20 seconds left of the
-// caller's deadline. Segments group into transcript lines at the end; the job
-// writes them as TRANSCRIPT blocks.
+// reason when all have run. A rung never starts with under 20 seconds left of
+// the caller's deadline: the ladder then stops with LadderOutOfTime, which
+// names the rungs that failed and the rungs left, and the transcription job
+// runs the rest on a fresh function (its next leg, `skip` naming the rungs
+// already tried) — FAILED is written only after every rung has actually run.
+// Segments group into transcript lines at the end; the job writes them as
+// TRANSCRIPT blocks.
 
 export const TRANSCRIBE_MAX_BYTES = 25 * 1024 * 1024; // Whisper-family upload cap
 // An MP3 past the cap splits at frame boundaries (lib/video/mp3.ts), an
@@ -50,9 +58,17 @@ export const GEMINI_FILE_MAX_BYTES = MAX_VIDEO_BYTES;
 
 // A video costs Gemini roughly 100 tokens per second, so a feature-length one
 // runs past the 1M context window in a single call (and its transcript would
-// crowd the output cap). Past this many tokens the video transcribes in
-// windows that are stitched back together.
+// crowd the output cap). Past this many tokens a pass over the video runs in
+// windows that are stitched back together. The speakers pass keeps this
+// ceiling: it hears every voice at once, which is what keeps one id per
+// voice honest.
 export const GEMINI_SINGLE_CALL_TOKENS = 700_000;
+// Transcription windows far sooner: Gemini's timestamps drift with the
+// length of what it reads, minutes late by the end of an hour in one call,
+// and every line then sits under the wrong moment. A window of fifteen
+// minutes keeps them within seconds. About fifteen minutes of video at low
+// resolution, so anything longer windows.
+export const GEMINI_TRANSCRIBE_SINGLE_CALL_TOKENS = 100_000;
 export const CHUNK_SECONDS = 900; // 15 minutes per window — a longer one invites a partial answer
 const MAX_CHUNKS = 16; // 4 hours; past that the run cannot finish inside one request
 // Windows run together, so a long video costs about one window of wall clock
@@ -66,6 +82,9 @@ export type TranscribeSource =
 export type TranscribeOptions = {
   /** Epoch ms. A rung does not start with under RUNG_MIN_MS left before it. */
   deadline?: number;
+  /** Rungs already tried by an earlier leg of the same attempt, by name; the
+      ladder starts past them. */
+  skip?: string[];
   /** A file already in Gemini's store for this media: the upload is skipped. */
   geminiFile?: GeminiFile | null;
   /** Called when a file lands in the store, so a retry can reuse it. */
@@ -75,6 +94,39 @@ export type TranscribeOptions = {
 const RUNG_MIN_MS = 20_000;
 
 type Rung = [string, () => Promise<TranscriptSegment[]>];
+
+export type RungFailure = { rung: string; reason: string };
+
+/** The ladder stopped before its deadline with rungs left to run. `failures`
+    are the rungs that ran and failed in this leg; `remaining` the rungs not
+    run, first the one that was about to start. */
+export class LadderOutOfTime extends Error {
+  constructor(
+    public failures: RungFailure[],
+    public remaining: string[],
+  ) {
+    super(
+      [
+        ...failures.map((f) => `${f.rung}: ${f.reason}`),
+        `out of time before ${remaining.join(", ")}`,
+      ].join(" · "),
+    );
+  }
+}
+
+/** Every rung ran and failed. */
+export class LadderExhausted extends Error {
+  constructor(public failures: RungFailure[]) {
+    super(failures.map((f) => `${f.rung}: ${f.reason}`).join(" · "));
+  }
+}
+
+// The abort signal a rung's request takes, so a call cannot outlive the
+// caller's deadline.
+function deadlineSignal(opts: TranscribeOptions): AbortSignal | undefined {
+  if (opts.deadline === undefined) return undefined;
+  return AbortSignal.timeout(Math.max(1_000, opts.deadline - Date.now()));
+}
 
 export async function transcribe(
   source: TranscribeSource,
@@ -101,6 +153,7 @@ function uploadRungs(
   ranges: StreamRanges = null,
 ): Rung[] {
   return [
+    ["Deepgram", () => deepgramTranscribe(bytes, mimeType, { signal: deadlineSignal(opts) })],
     ["Groq Whisper", () => whisperFamily(GROQ_WHISPER, bytes, mimeType, ranges)],
     ["OpenAI Whisper", () => whisperFamily(OPENAI_WHISPER, bytes, mimeType, ranges)],
     ["Gemini", () => geminiUpload(bytes, mimeType, opts)],
@@ -109,25 +162,31 @@ function uploadRungs(
 
 type StreamRanges = { init: ByteRange; index: ByteRange } | null;
 
+// The rungs in order, past the ones an earlier leg tried. A rung that runs
+// out of time inside its own work (the YouTube audio rung runs the upload
+// ladder inside it) counts as not run: the next leg runs it again.
 async function runLadder(
   rungs: Rung[],
   opts: TranscribeOptions,
 ): Promise<{ segments: TranscriptSegment[]; provider: string }> {
-  const failures: string[] = [];
-  for (const [name, run] of rungs) {
+  const pending = rungs.filter(([name]) => !opts.skip?.includes(name));
+  const failures: RungFailure[] = [];
+  for (let i = 0; i < pending.length; i++) {
+    const [name, run] = pending[i];
+    const remaining = () => pending.slice(i).map(([n]) => n);
     if (opts.deadline !== undefined && Date.now() > opts.deadline - RUNG_MIN_MS) {
-      failures.push(`${name}: skipped, out of time`);
-      continue;
+      throw new LadderOutOfTime(failures, remaining());
     }
     try {
       return { segments: await run(), provider: name };
     } catch (err) {
+      if (err instanceof LadderOutOfTime) throw new LadderOutOfTime(failures, remaining());
       const message = err instanceof Error ? err.message : String(err);
       console.warn(`[transcribe] ${name} failed:`, message);
-      failures.push(`${name}: ${message}`);
+      failures.push({ rung: name, reason: message });
     }
   }
-  throw new Error(failures.join(" · "));
+  throw new LadderExhausted(failures);
 }
 
 // The audio stream takes the upload ladder, so it needs an upload provider
@@ -135,19 +194,22 @@ async function runLadder(
 // for Gemini alone.
 function youtubeAudioRung(youtubeId: string, opts: TranscribeOptions): Promise<TranscriptSegment[]> {
   const whisper = Boolean(process.env.GROQ_API_KEY || process.env.OPENAI_API_KEY);
-  if (!whisper && !process.env.GEMINI_API_KEY) {
-    return Promise.reject(new Error("GROQ_API_KEY, OPENAI_API_KEY, or GEMINI_API_KEY is not set"));
+  if (!whisper && !process.env.GEMINI_API_KEY && !process.env.DEEPGRAM_API_KEY) {
+    return Promise.reject(
+      new Error("DEEPGRAM_API_KEY, GROQ_API_KEY, OPENAI_API_KEY, or GEMINI_API_KEY is not set"),
+    );
   }
   return youtubeAudio(youtubeId, {
-    // Gemini's file store takes what the Whisper rungs cannot: with a key
-    // set, the stream only has to fit the app's own upload ceiling.
-    maxBytes: process.env.GEMINI_API_KEY
+    // Deepgram and Gemini's file store take what the Whisper rungs cannot:
+    // with either key set, the stream only has to fit the app's own upload
+    // ceiling.
+    maxBytes: process.env.GEMINI_API_KEY || process.env.DEEPGRAM_API_KEY
       ? GEMINI_FILE_MAX_BYTES
       : whisper
         ? TRANSCRIBE_MAX_BYTES
         : GEMINI_INLINE_MAX_BYTES,
     transcribeBytes: (bytes, mimeType, ranges) =>
-      runLadder(uploadRungs(bytes, mimeType, opts, ranges), opts).then((result) => {
+      runLadder(uploadRungs(bytes, mimeType, opts, ranges), { ...opts, skip: undefined }).then((result) => {
         console.log(`[transcribe] YouTube audio transcribed by ${result.provider}`);
         return result.segments;
       }),
@@ -313,11 +375,14 @@ async function whisperFamily(
 
 // ── Gemini ──────────────────────────────────────────────────────────────────
 
+// Timestamps are asked for as a clock ("M:SS", "H:MM:SS"): that is how
+// Gemini refers to moments of the media it reads, and a clock it reads off
+// lands closer to the moment than a count of seconds it works out.
 const GEMINI_TRANSCRIPT_PROMPT = [
-  "Transcribe this video's speech with timestamps.",
-  'Return ONLY JSON: {"segments": [{"start": <seconds>, "end": <seconds>, "text": "…"}]}',
+  "Transcribe this recording's speech with timestamps.",
+  'Return ONLY JSON: {"segments": [{"start": "M:SS", "end": "M:SS", "text": "…"}]}',
   "1. One segment per sentence or phrase, 5–15 seconds each.",
-  "2. start and end are plain numbers of SECONDS from the start of what you were given — never milliseconds, never a formatted clock.",
+  '2. start and end are the clock of the recording you were given, as "M:SS" or "H:MM:SS" (for example "4:07", "1:02:05"), the moment the words are spoken — read from the recording, never estimated from the text. Segments follow the recording in order and never overlap.',
   "3. Transcribe the spoken words exactly; no summaries, no speaker labels.",
   '4. No speech: return {"segments": []}.',
 ].join("\n");
@@ -460,17 +525,23 @@ function transcribeWindow(
 
     // Then the clock: a window answers on its own clock or on the video's, and
     // which one varies per call. Past the first window the two ranges cannot
-    // overlap — a window starting at 30:00 is either 0..30:00 or 30:00..60:00 —
-    // so the largest timestamp says which came back, and only a window clock
-    // gets shifted onto the video's.
-    const aligned =
-      latest > span * 1.15
-        ? scaled
-        : scaled.map((s) => ({
-            ...s,
-            start: s.start + w.start,
-            end: Math.min(s.end + w.start, w.end),
-          }));
+    // overlap — a window starting at 30:00 is either 0..30:00 or 30:00..60:00.
+    // The earliest timestamp decides: an answer on the video's clock never
+    // starts before the window does, so one that starts well before it is
+    // on the window's own clock. The last window's span is an estimate, so
+    // its answer can run past it on either clock; the earliest timestamp
+    // still tells them apart. Only a window clock gets shifted onto the
+    // video's.
+    const earliest = Math.min(...scaled.map((s) => s.start));
+    const ownClock =
+      earliest < w.start * 0.5 || (latest <= span * 1.15 && earliest < w.start - 30);
+    const aligned = ownClock
+      ? scaled.map((s) => ({
+          ...s,
+          start: s.start + w.start,
+          end: Math.min(s.end + w.start, w.end),
+        }))
+      : scaled;
 
     return aligned;
   });
@@ -526,7 +597,7 @@ async function geminiWindowed(
 ): Promise<TranscriptSegment[]> {
   const whole = [part(), { text: GEMINI_TRANSCRIPT_PROMPT }];
   const total = await geminiCountTokens(whole);
-  if (total === null || total <= GEMINI_SINGLE_CALL_TOKENS) {
+  if (total === null || total <= GEMINI_TRANSCRIBE_SINGLE_CALL_TOKENS) {
     return geminiSegments(whole);
   }
   if (!opts.windowable) {
