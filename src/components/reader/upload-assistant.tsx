@@ -112,11 +112,9 @@ function readsWell(saveDetail: string | null): boolean {
   return captions === 0 || counts.figures / captions >= EARLY_OPEN_FIGURE_SHARE;
 }
 
-// The finishing step (SPEC.md §15), after the save: the scans the box runs
-// itself, then the visuals loaded into the browser's cache.
+// The finishing step (SPEC.md §15), after the save: the visuals loaded into
+// the browser's cache, so the document opens painted.
 const FINISH_STEPS: IngestStep[] = [
-  { key: "glossary", labelKey: "panes.stepGlossary", status: "pending" },
-  { key: "links", labelKey: "panes.stepLinks", status: "pending" },
   { key: "figures", labelKey: "panes.stepFigures", status: "pending" },
 ];
 
@@ -214,11 +212,10 @@ export function UploadAssistant({
   }
 
   // ── The finishing step (SPEC.md §15): the document opens complete ─────────
-  // What the server left to this box — the glossary and recommended-links
-  // scans of a text document — runs now, then every visual the reader will
-  // request loads once into the browser's cache. A scan that fails leaves the
-  // add standing: the document is saved, and the scan can run again from the
-  // document list.
+  // Every visual the reader will request loads once into the browser's cache,
+  // so the page paints whole instead of filling in. Nothing else is left: the
+  // glossary is built when the reader opens it and links when the reader asks
+  // for them in the graph (SPEC.md §13).
   async function finishDocument(id: string) {
     let plan: FinishPlan;
     try {
@@ -228,32 +225,10 @@ export function UploadAssistant({
     } catch {
       return;
     }
-    const scan = plan.scans === "client";
     const visuals = plan.images.length > 0;
-    if (!scan && !visuals) return;
-    const finishSteps = FINISH_STEPS.filter((s) => (s.key === "figures" ? visuals : scan));
-    setSteps((s) => [...completeIngestSteps(s ?? []), ...finishSteps]);
-    if (scan) {
-      try {
-        await Promise.all([
-          fetch(`/api/documents/${id}/finish`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ scan: "glossary" }),
-          }),
-          fetch(`/api/documents/${id}/finish`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ scan: "links" }),
-          }),
-        ]);
-      } catch {
-        // Best-effort: the document stands as it is.
-      }
-      setSteps((s) => (s ? advanceIngestSteps(s, "glossary") : s));
-      setSteps((s) => (s ? advanceIngestSteps(s, "links") : s));
-    }
-    if (visuals) {
+    if (!visuals) return;
+    setSteps((s) => [...completeIngestSteps(s ?? []), ...FINISH_STEPS]);
+    {
       let done = 0;
       await warmImages(plan.images, () => {
         done++;
@@ -328,8 +303,6 @@ export function UploadAssistant({
         filename: file.name,
         notebookId,
         kind,
-        // The box runs the scans itself, in the finishing step.
-        scans: "client",
       }),
     });
   }
@@ -355,8 +328,6 @@ export function UploadAssistant({
               const form = new FormData();
               form.set("file", file);
               form.set("notebookId", notebookId);
-              // The box runs the scans itself, in the finishing step.
-              form.set("scans", "client");
               return fetch("/api/documents", { method: "POST", body: form });
             })(),
     );
@@ -375,8 +346,7 @@ export function UploadAssistant({
         body: JSON.stringify(
           video
             ? { url, notebookId }
-            : // The box runs the scans itself, in the finishing step.
-              { url, notebookId, scans: "client" },
+            : { url, notebookId },
         ),
       }),
     );
@@ -468,8 +438,6 @@ export function UploadAssistant({
                 fileId: file.id,
                 name: file.name,
                 mimeType: file.mimeType,
-                // The box runs the scans itself, in the finishing step.
-                scans: "client",
               }),
             }),
           );

@@ -3,7 +3,6 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { currentUser } from "@/lib/auth";
 import { bumpNotebook, notebookAccess } from "@/lib/collab";
-import { buildConnections } from "@/lib/connect";
 import { requestDriveToken } from "@/lib/drive/request-token";
 import { classifyDriveFile } from "@/lib/drive/types";
 import {
@@ -12,10 +11,9 @@ import {
   fetchDrivePdf,
   fetchExportedPdf,
 } from "@/lib/drive/fetch";
-import { buildGlossary } from "@/lib/glossary";
 import { runConversion } from "@/lib/handwritten/convert";
 import { renderPageImages } from "@/lib/handwritten/page-images";
-import { currentLang, serverT } from "@/lib/i18n/server";
+import { serverT } from "@/lib/i18n/server";
 import { progressResponse } from "@/lib/ingest-response";
 import { attachDocument } from "@/lib/parse/attach";
 import { describeIngestError } from "@/lib/parse/ingest-error";
@@ -44,18 +42,11 @@ const bodySchema = z.object({
   mimeType: z.string().min(1).optional(),
   pages: z.boolean().default(false),
   convert: z.boolean().default(true),
-  // Who runs the glossary and recommended-links scans after the save:
-  // "server" in after(), "client" in the upload assistant's finishing step,
-  // before the document opens (SPEC.md §15). Conversion and transcription
-  // keep their own chains.
-  scans: z.enum(["server", "client"]).default("server"),
 });
 
 export async function POST(req: Request) {
   const user = await currentUser();
   const t = await serverT();
-  // Captured now: the after() scans below outlive the request and its cookies.
-  const lang = await currentLang();
   const { data, error } = await parseBody(req, bodySchema);
   if (error) return error;
 
@@ -99,18 +90,7 @@ export async function POST(req: Request) {
       await bumpNotebook(data.notebookId);
       // Transcription starts on its own — the transcript is the point. The
       // recommended-links scan follows it, so it reads the transcript.
-      if (!deduped) {
-        after(() =>
-          runTranscription(document.id)
-            // A run that continues on another function scans there.
-            .then((r) => (r.ok && !r.continuing ? buildConnections(data.notebookId, document.id, user?.id ?? null, lang) : undefined))
-            .catch(() => {}),
-        );
-      } else {
-        after(() =>
-          buildConnections(data.notebookId, document.id, user?.id ?? null, lang).catch(() => {}),
-        );
-      }
+      if (!deduped) after(() => runTranscription(document.id).catch(() => {}));
       return { id: document.id, title: document.title, deduped };
     });
   }
@@ -162,24 +142,7 @@ export async function POST(req: Request) {
       // the text is the point. Glossary and the recommended-links scan follow
       // it, so they read the converted text. conversionStatus OFF = the
       // reader said not to convert; nothing starts.
-      after(() =>
-        runConversion(document.id, user?.id ?? null)
-          .then((r) =>
-            r.ok ? buildGlossary(document.id, user?.id ?? null, lang).catch(() => {}) : undefined,
-          )
-          .then(() => buildConnections(data.notebookId, document.id, user?.id ?? null, lang))
-          .catch(() => {}),
-      );
-    } else if (
-      data.scans === "server" &&
-      (!document.handwritten || document.conversionStatus === "READY")
-    ) {
-      // A handwritten document without converted text has nothing to read —
-      // both scans skip.
-      if (!deduped) after(() => buildGlossary(document.id, user?.id ?? null, lang).catch(() => {}));
-      after(() =>
-        buildConnections(data.notebookId, document.id, user?.id ?? null, lang).catch(() => {}),
-      );
+      after(() => runConversion(document.id, user?.id ?? null).catch(() => {}));
     }
     return { id: document.id, title: document.title, deduped };
   });

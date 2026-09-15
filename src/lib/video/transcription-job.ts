@@ -6,7 +6,6 @@ import { parseSpeakers, parseTried, type Speaker } from "@/lib/video/types";
 import { parsePastedTranscript } from "@/lib/video/paste";
 import { tidyTranscript } from "@/lib/video/tidy";
 import { GEMINI_FILE_TTL_MS, geminiFileFresh, type GeminiFile } from "@/lib/video/gemini-files";
-import { buildConnections } from "@/lib/connect";
 import {
   geminiMediaPart,
   GEMINI_FILE_MAX_BYTES,
@@ -59,7 +58,11 @@ export async function runTranscription(
   documentId: string,
   // leg: the running attempt's next leg — the rungs left, past the ones
   // transcriptTried names. Never a new attempt.
-  opts: { leg?: boolean } = {},
+  // userId: the reader who asked for this run, for the admin usage page.
+  // Null when nothing asked: transcription starts on its own when media is
+  // added, and that cost is the app's, not a reader's (SPEC.md §11). Retry
+  // and Transcribe again pass the reader who pressed them.
+  opts: { leg?: boolean; userId?: string | null } = {},
 ): Promise<TranscriptionResult> {
   const asset = await db.videoAsset.findUnique({
     where: { documentId },
@@ -181,6 +184,7 @@ export async function runTranscription(
     const { segments, provider } = await transcribe(source, {
       deadline: startedAt + LADDER_BUDGET_MS,
       skip: tried.map((f) => f.rung),
+      userId: opts.userId ?? null,
       geminiFile: stored,
       onGeminiFile: (file) => {
         // Fire and forget: the run must not wait on remembering the file.
@@ -196,24 +200,12 @@ export async function runTranscription(
       },
     });
     const deadline = startedAt + LADDER_BUDGET_MS + SPEAKERS_MIN_MS + 30_000;
-    const lines = await storeTranscript(documentId, asset.id, segments, `${asset.kind} via ${provider}`, {
+    const lines = await storeTranscript(documentId, asset.id, segments, `${asset.kind} via ${provider}`, opts.userId ?? null, {
       // The speakers pass reads the media again, so it takes the same stored
       // file the ladder used. Skipped when the ladder left it no time.
       source: Date.now() < deadline - SPEAKERS_MIN_MS ? source : null,
       transcribeOptions: { deadline, geminiFile: stored },
     });
-    if (opts.leg) {
-      // The add's own follow-up ran on the first leg's caller; the leg that
-      // lands the transcript runs the recommended-links scan itself, for
-      // every project the document is in.
-      const rows = await db.notebookDocument.findMany({
-        where: { documentId },
-        select: { notebookId: true },
-      });
-      for (const row of rows) {
-        await buildConnections(row.notebookId, documentId, null).catch(() => {});
-      }
-    }
     return { ok: true, continuing: false, lines, provider };
   } catch (err) {
     if (err instanceof LadderOutOfTime) {
@@ -286,6 +278,7 @@ async function storeTranscript(
   assetId: string,
   segments: TranscriptSegment[],
   origin: string,
+  userId: string | null,
   speakers: { source: TranscribeSource | null; transcribeOptions: TranscribeOptions } = {
     source: null,
     transcribeOptions: {},
@@ -297,7 +290,7 @@ async function storeTranscript(
   // Normalize before grouping: the ranges have to be in order and pulled
   // apart before lines are cut out of them (lib/video/segments.ts).
   const grouped = groupSegments(normalizeSegments(segments));
-  const tidied = await tidyTranscript(grouped);
+  const tidied = await tidyTranscript(grouped, userId);
   const lines = tidied.lines.length > 0 ? tidied.lines : grouped;
   console.log(`[transcribe] ${origin}, cleaned by ${tidied.provider}: ${lines.length} lines`);
   // Who says each line (SPEC.md §11). Lines whose rung told the voices apart
@@ -307,12 +300,12 @@ async function storeTranscript(
   // transcript, which is what stored before it existed.
   const diarized = lines.some((line) => line.speaker !== undefined);
   const voices = diarized
-    ? await nameSpeakers(lines).catch(() => null)
+    ? await nameSpeakers(lines, userId).catch(() => null)
     : speakers.source
       ? await detectSpeakers(
           await geminiMediaPart(speakers.source, speakers.transcribeOptions),
           lines,
-          speakers.transcribeOptions,
+          { ...speakers.transcribeOptions, userId },
         ).catch(() => null)
       : null;
   if (voices) {
@@ -352,6 +345,8 @@ async function storeTranscript(
     mark, and link anchored to a line survives. */
 export async function runSpeakers(
   documentId: string,
+  // The reader who pressed Detect speakers, for the admin usage page.
+  userId: string | null = null,
 ): Promise<{ ok: true; speakers: Speaker[] } | { ok: false; status: number; error: string }> {
   if (!process.env.GEMINI_API_KEY) {
     return { ok: false, status: 503, error: "Set GEMINI_API_KEY. Detecting speakers needs it." };
@@ -384,7 +379,7 @@ export async function runSpeakers(
     const voices = await detectSpeakers(
       await geminiMediaPart(source, { deadline: startedAt + SPEAKERS_BUDGET_MS }),
       lines.map((b) => ({ start: b.startTime!, end: b.endTime!, text: b.text })),
-      { deadline: startedAt + SPEAKERS_BUDGET_MS },
+      { deadline: startedAt + SPEAKERS_BUDGET_MS, userId },
     );
     await db.$transaction(async (tx) => {
       await Promise.all(
@@ -462,6 +457,8 @@ async function mediaSource(asset: {
 export async function storePastedTranscript(
   documentId: string,
   text: string,
+  // The reader who pasted it: the cleanup pass is their call.
+  userId: string | null = null,
 ): Promise<TranscriptionResult> {
   const asset = await db.videoAsset.findUnique({
     where: { documentId },
@@ -475,7 +472,7 @@ export async function storePastedTranscript(
     return { ok: false, status: 400, error: err instanceof Error ? err.message : "unreadable" };
   }
   try {
-    const lines = await storeTranscript(documentId, asset.id, segments, "pasted");
+    const lines = await storeTranscript(documentId, asset.id, segments, "pasted", userId);
     return { ok: true, continuing: false, lines, provider: "pasted" };
   } catch (err) {
     console.error("[transcribe] pasted transcript failed to store:", err);

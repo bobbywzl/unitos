@@ -47,7 +47,7 @@ export async function POST(req: Request) {
   }
 
   try {
-    const text = await mediaAttachmentText(bytes, data.mimeType ?? null, data.name, startedAt + LADDER_BUDGET_MS);
+    const text = await mediaAttachmentText(bytes, data.mimeType ?? null, data.name, startedAt + LADDER_BUDGET_MS, user?.id ?? null);
     return NextResponse.json({ text });
   } catch (err) {
     console.error("[assistant] attach-media: transcription failed:", err);

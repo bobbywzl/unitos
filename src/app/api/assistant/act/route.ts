@@ -33,6 +33,7 @@ import { parseBody } from "@/lib/validate";
 import { ultraActive } from "@/lib/tiers";
 import { formatTimeRange, regionSchema } from "@/lib/video/types";
 import type { AssistantAction, AssistantAnchor, AssistantPlan } from "@/lib/types";
+import { resolveModelId } from "@/lib/models";
 
 export const maxDuration = 120;
 
@@ -434,7 +435,7 @@ async function handle(req: Request, t: TFunc) {
     providerOptions: kimiOptions(DERIVATION_EFFORT.SYNTHESIS),
     schema: planSchema,
     label: "assistant:act",
-    usage: { userId: user.id, feature: "act", model: DERIVATION_MODEL.SYNTHESIS },
+    usage: { userId: user.id, feature: "act", model: await resolveModelId(DERIVATION_MODEL.SYNTHESIS) },
     // Stop aborts here too (SPEC.md §6): the client disconnecting stops the
     // model call, not just the response the client would have read.
     abortSignal: req.signal,

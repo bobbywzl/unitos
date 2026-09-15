@@ -85,6 +85,9 @@ export type TranscribeOptions = {
   /** Rungs already tried by an earlier leg of the same attempt, by name; the
       ladder starts past them. */
   skip?: string[];
+  /** The reader who asked, for the admin usage page; null = the app's own
+      automatic run (SPEC.md §11). */
+  userId?: string | null;
   /** A file already in Gemini's store for this media: the upload is skipped. */
   geminiFile?: GeminiFile | null;
   /** Called when a file lands in the store, so a retry can reuse it. */
@@ -138,7 +141,7 @@ export async function transcribe(
           ["YouTube captions", () => youtubeCaptions(source.youtubeId)],
           ["YouTube captions (browser)", () => browserCaptions(source.youtubeId)],
           ["YouTube audio", () => youtubeAudioRung(source.youtubeId, opts)],
-          ["Gemini", () => geminiYouTube(source.youtubeId)],
+          ["Gemini", () => geminiYouTube(source.youtubeId, opts.userId ?? null)],
         ]
       : uploadRungs(source.bytes, source.mimeType ?? "video/mp4", opts);
   return runLadder(rungs, opts);
@@ -153,9 +156,16 @@ function uploadRungs(
   ranges: StreamRanges = null,
 ): Rung[] {
   return [
-    ["Deepgram", () => deepgramTranscribe(bytes, mimeType, { signal: deadlineSignal(opts) })],
-    ["Groq Whisper", () => whisperFamily(GROQ_WHISPER, bytes, mimeType, ranges)],
-    ["OpenAI Whisper", () => whisperFamily(OPENAI_WHISPER, bytes, mimeType, ranges)],
+    [
+      "Deepgram",
+      () =>
+        deepgramTranscribe(bytes, mimeType, {
+          signal: deadlineSignal(opts),
+          userId: opts.userId ?? null,
+        }),
+    ],
+    ["Groq Whisper", () => whisperFamily(GROQ_WHISPER, bytes, mimeType, ranges, opts.userId ?? null)],
+    ["OpenAI Whisper", () => whisperFamily(OPENAI_WHISPER, bytes, mimeType, ranges, opts.userId ?? null)],
     ["Gemini", () => geminiUpload(bytes, mimeType, opts)],
   ];
 }
@@ -272,7 +282,7 @@ const OPENAI_WHISPER: WhisperProvider = {
 
 // One OpenAI-compatible transcription call.
 async function whisperCall(
-  opts: { endpoint: string; key: string; model: string; usdPerMinute: number },
+  opts: { endpoint: string; key: string; model: string; usdPerMinute: number; userId: string | null },
   bytes: Uint8Array,
   mimeType: string,
 ): Promise<TranscriptSegment[]> {
@@ -302,7 +312,7 @@ async function whisperCall(
   // Whisper bills per minute; tokens do not apply.
   const minutes = (segments.at(-1)?.end ?? 0) / 60;
   recordUsage(
-    { userId: null, feature: "transcribe", model: opts.model },
+    { userId: opts.userId, feature: "transcribe", model: opts.model },
     { inputTokens: Math.ceil(minutes * 60) },
     minutes * opts.usdPerMinute,
   );
@@ -336,10 +346,11 @@ async function whisperFamily(
   bytes: Uint8Array,
   mimeType: string,
   ranges: StreamRanges = null,
+  userId: string | null = null,
 ): Promise<TranscriptSegment[]> {
   const key = process.env[provider.keyEnv];
   if (!key) throw new Error(`${provider.keyEnv} is not set`);
-  const opts = { ...provider, key };
+  const opts = { ...provider, key, userId };
   if (bytes.length <= TRANSCRIBE_MAX_BYTES) return whisperCall(opts, bytes, mimeType);
   const chunks = splitForWhisper(bytes, mimeType, ranges);
   console.log(`[transcribe] ${bytes.length} bytes ${mimeType} → ${chunks.length} chunks`);
@@ -404,11 +415,16 @@ const geminiSegmentsSchema = z.object({
 
 function geminiSegments(
   parts: unknown[],
-  opts: { allowEmpty?: boolean } = {},
+  opts: { allowEmpty?: boolean; userId?: string | null } = {},
 ): Promise<TranscriptSegment[]> {
   return geminiCall(
     parts,
-    { json: true, maxOutputTokens: 65536, lowResolution: true, usage: { userId: null, feature: "transcribe" } },
+    {
+      json: true,
+      maxOutputTokens: 65536,
+      lowResolution: true,
+      usage: { userId: opts.userId ?? null, feature: "transcribe" },
+    },
     (text) => {
       const parsed = geminiSegmentsSchema.safeParse(extractJson(text));
       if (!parsed.success) throw new Error("output was not timed segments");
@@ -505,10 +521,11 @@ export async function geminiMediaPart(
 function transcribeWindow(
   part: MediaPart,
   w: { start: number; end: number; last?: boolean },
+  userId: string | null,
 ): Promise<TranscriptSegment[]> {
   return geminiSegments(
     [part(w), { text: GEMINI_TRANSCRIPT_PROMPT }],
-    { allowEmpty: true },
+    { allowEmpty: true, userId },
   ).then((segments) => {
     if (segments.length === 0) return segments;
     const span = w.end - w.start;
@@ -561,12 +578,13 @@ function windowCoverage(segments: TranscriptSegment[], w: { start: number }): nu
 async function transcribeWindowBest(
   part: MediaPart,
   w: { start: number; end: number; last?: boolean },
+  userId: string | null,
 ): Promise<TranscriptSegment[]> {
   const span = w.end - w.start;
   let best: TranscriptSegment[] = [];
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
-      const segments = await transcribeWindow(part, w);
+      const segments = await transcribeWindow(part, w, userId);
       if (windowCoverage(segments, w) > windowCoverage(best, w)) best = segments;
     } catch (err) {
       console.warn(
@@ -593,12 +611,12 @@ async function transcribeWindowBest(
 // metadata), which then has to fit one call.
 async function geminiWindowed(
   part: MediaPart,
-  opts: { windowable: boolean; label: string },
+  opts: { windowable: boolean; label: string; userId: string | null },
 ): Promise<TranscriptSegment[]> {
   const whole = [part(), { text: GEMINI_TRANSCRIPT_PROMPT }];
   const total = await geminiCountTokens(whole);
   if (total === null || total <= GEMINI_TRANSCRIBE_SINGLE_CALL_TOKENS) {
-    return geminiSegments(whole);
+    return geminiSegments(whole, { userId: opts.userId });
   }
   if (!opts.windowable) {
     throw new Error(`${opts.label} is too long to transcribe in one call`);
@@ -632,7 +650,7 @@ async function geminiWindowed(
     const batch = windows.slice(i, i + CHUNK_CONCURRENCY);
     results.push(
       ...(await Promise.all(
-        batch.map((w) => transcribeWindowBest(part, w)),
+        batch.map((w) => transcribeWindowBest(part, w, opts.userId)),
       )),
     );
   }
@@ -641,10 +659,11 @@ async function geminiWindowed(
   return segments;
 }
 
-function geminiYouTube(youtubeId: string): Promise<TranscriptSegment[]> {
+function geminiYouTube(youtubeId: string, userId: string | null): Promise<TranscriptSegment[]> {
   return geminiWindowed((w) => youtubeVideoPart(youtubeId, w), {
     windowable: true,
     label: "video",
+    userId,
   });
 }
 
@@ -658,8 +677,13 @@ async function geminiUpload(
   opts: TranscribeOptions = {},
 ): Promise<TranscriptSegment[]> {
   const media = await geminiMediaPart({ kind: "upload", bytes, mimeType }, opts);
+  const userId = opts.userId ?? null;
   if (media.inline) {
-    return geminiSegments([media.part(), { text: GEMINI_TRANSCRIPT_PROMPT }]);
+    return geminiSegments([media.part(), { text: GEMINI_TRANSCRIPT_PROMPT }], { userId });
   }
-  return geminiWindowed(media.part, { windowable: media.windowable, label: media.label });
+  return geminiWindowed(media.part, {
+    windowable: media.windowable,
+    label: media.label,
+    userId,
+  });
 }

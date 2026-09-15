@@ -77,7 +77,7 @@ import {
   type VideoFindMatch,
 } from "@/lib/video/types";
 import { ultraActive } from "@/lib/tiers";
-import { recordUsage, sdkTokens } from "@/lib/usage";
+import { addTokens, recordUsage, sdkTokens, type TokenCounts } from "@/lib/usage";
 import { parseBody } from "@/lib/validate";
 
 // FORMALIZE holds the connection for minutes on a long transcript (heartbeat
@@ -1030,6 +1030,14 @@ async function handle(req: Request, t: TFunc) {
       messages,
       // Stop aborts the model call too (SPEC.md §6), not just the response.
       abortSignal: req.signal,
+      // Stopped: the steps that finished were billed, so they are recorded.
+      // A step cut off mid-answer reports no usage at all.
+      onAbort: ({ steps }) => {
+        recordUsage(
+          usageMeta,
+          steps.reduce<TokenCounts>((sum, step) => addTokens(sum, sdkTokens(step.usage)), {}),
+        );
+      },
       onEnd: async ({ text, usage }) => {
         console.log(
           `[derive] ${data.type} cacheRead=${usage.inputTokenDetails.cacheReadTokens ?? 0} ` +

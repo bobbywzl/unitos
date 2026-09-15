@@ -23,7 +23,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ documentId: st
   }
   const access = await documentAccess(documentId, "editor");
   if (access instanceof NextResponse) return access;
-  const result = await runTranscription(documentId);
+  const result = await runTranscription(documentId, { userId: access.user.id });
   if (!result.ok) {
     return NextResponse.json({ error: result.error }, { status: result.status });
   }

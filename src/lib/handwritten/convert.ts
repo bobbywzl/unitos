@@ -10,6 +10,7 @@ import { texError } from "@/lib/katex";
 import { claude, claudeConfigured, claudeOptions } from "@/lib/claude";
 import { convertPrompt } from "@/lib/prompts/convert";
 import { fixTexPrompt } from "@/lib/prompts/fix-tex";
+import { resolveModelId } from "@/lib/models";
 
 // The conversion job (SPEC.md §16): guards, page rendering, the model batches,
 // and the text block writes. Conversion starts on its own when a handwritten
@@ -138,7 +139,7 @@ async function repairEquations(
     providerOptions: claudeOptions(),
     schema: fixTexOutputSchema,
     label: "CONVERT_FIX_TEX",
-    usage: { userId, feature: "convert", model: CONVERT_MODEL },
+    usage: { userId, feature: "convert", model: await resolveModelId(CONVERT_MODEL) },
   });
   if (!result.ok) {
     console.warn(`[convert] TeX repair failed, keeping raw TeX: ${result.error}`);
@@ -254,7 +255,7 @@ export async function runConversion(
           providerOptions: claudeOptions(),
           schema: convertOutputSchema,
           label: "CONVERT",
-          usage: { userId, feature: "convert", model: CONVERT_MODEL },
+          usage: { userId, feature: "convert", model: await resolveModelId(CONVERT_MODEL) },
         });
         if (!result.ok) {
           throw new Error(

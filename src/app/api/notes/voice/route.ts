@@ -56,10 +56,10 @@ export async function POST(req: Request) {
   try {
     const result = await transcribe(
       { kind: "upload", bytes, mimeType },
-      { deadline: Date.now() + 100_000 },
+      { deadline: Date.now() + 100_000, userId: access.user.id },
     );
     provider = result.provider;
-    const { lines } = await tidyTranscript(result.segments);
+    const { lines } = await tidyTranscript(result.segments, access.user.id);
     // Paragraphs at pauses, so a spoken note keeps its shape.
     const paragraphs: string[] = [];
     let open = "";

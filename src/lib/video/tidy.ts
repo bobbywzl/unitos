@@ -72,14 +72,14 @@ export function linesAreSound(before: string[], after: string[]): boolean {
   return after.every((line, i) => lineIsSound(before[i] ?? "", line));
 }
 
-async function tidyBatch(texts: string[]): Promise<string[]> {
+async function tidyBatch(texts: string[], userId: string | null): Promise<string[]> {
   const prompt = [
     TIDY_PROMPT,
     ...texts.map((text, i) => `${i}. ${text.replace(/\n/g, " ")}`),
   ].join("\n");
   return geminiCall(
     [{ text: prompt }],
-    { json: true, maxOutputTokens: 65536, usage: { userId: null, feature: "transcribe" } },
+    { json: true, maxOutputTokens: 65536, usage: { userId, feature: "transcribe" } },
     (text) => {
       const parsed = tidyResponseSchema.safeParse(extractJson(text));
       if (!parsed.success) throw new Error("output was not lines");
@@ -130,6 +130,7 @@ export function stripFillers(text: string): string {
     cleaned down to nothing drop out; every kept line keeps its time range. */
 export async function tidyTranscript(
   lines: TranscriptSegment[],
+  userId: string | null = null,
 ): Promise<{ lines: TranscriptSegment[]; provider: "Gemini" | "rules" }> {
   if (lines.length === 0) return { lines, provider: "rules" };
 
@@ -138,7 +139,7 @@ export async function tidyTranscript(
       const cleaned: string[] = [];
       for (let i = 0; i < lines.length; i += BATCH_LINES) {
         const batch = lines.slice(i, i + BATCH_LINES);
-        cleaned.push(...(await tidyBatch(batch.map((l) => l.text))));
+        cleaned.push(...(await tidyBatch(batch.map((l) => l.text), userId)));
       }
       return {
         lines: lines

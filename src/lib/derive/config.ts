@@ -3,9 +3,9 @@ import { isLang, LANG_COOKIE } from "@/lib/i18n/config";
 import { translate } from "@/lib/i18n/dictionaries";
 
 // Two models (SPEC.md §2). Kimi K3, Moonshot AI's flagship, is behind every AI
-// feature but the import; Claude Fable 5.1, Anthropic's most capable model, is
-// the import's model (PARSE_MODEL below). The clients live in lib/kimi.ts and
-// lib/claude.ts, not here: client components import this file.
+// feature but the import; Claude Opus 5 is the import's model (PARSE_MODEL
+// below) and Visualize's. The clients live in lib/kimi.ts and lib/claude.ts,
+// not here: client components import this file.
 export const KIMI_K3 = "kimi-k3";
 export const CLAUDE_FABLE_5_1 = "claude-fable-5-1";
 export const CLAUDE_OPUS_5 = "claude-opus-5";
@@ -161,12 +161,15 @@ export const MERGE_EFFORT: KimiEffort = DEFAULT_EFFORT;
 export const GIST_MODEL = KIMI_K3;
 export const GIST_EFFORT: KimiEffort = "low";
 
-// The import runs on the most capable model at its highest reasoning effort:
-// what the parse gets wrong, every later tool inherits. One constant for the
+// The import runs on Claude Opus 5 at its highest reasoning effort. What the
+// parse gets wrong every later tool inherits, so the effort stays at max;
+// Opus 5 reads a page's structure as well as Claude Fable 5.1 does and costs
+// half as much per token, and the import is the app's largest single spend —
+// three passes over a whole document, on every add. One constant for the
 // upload assistant's review and instruction check (SPEC.md §15), the URL core
 // and structure passes (SPEC.md §2), Import PDF's judgment, and conversion
 // (SPEC.md §16). The client is lib/claude.ts.
-export const PARSE_MODEL = CLAUDE_FABLE_5_1;
+export const PARSE_MODEL = CLAUDE_OPUS_5;
 export const PARSE_EFFORT: ClaudeEffort = "max";
 
 // The upload assistant's review and instruction check (SPEC.md §15). Not a

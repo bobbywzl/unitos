@@ -65,6 +65,7 @@ import {
 } from "@/lib/video/types";
 import { billingLinks } from "@/lib/billing/switch";
 import { accountTier } from "@/lib/tiers";
+import { linkScanRunsLeft } from "@/lib/connect";
 
 export const dynamic = "force-dynamic";
 
@@ -1321,7 +1322,12 @@ export default async function NotebookPage(props: {
       browserConfigured={browserConfigured()}
       collab={collab}
       rev={notebook.rev}
-      graph={{ nodes: graphNodes, edges: graphEdges, recommended: recommendedLinks }}
+      graph={{
+        nodes: graphNodes,
+        edges: graphEdges,
+        recommended: recommendedLinks,
+        linkScansLeft: await linkScanRunsLeft(user?.id ?? null),
+      }}
       multi={multi}
       multiUploads={multiUploads}
       history={history}

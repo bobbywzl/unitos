@@ -135,6 +135,9 @@ const en = {
   compareNoPoints: "Compare found no points",
   compareFailed: "Compare failed. {reason}",
   multiNotFound: "Multi upload not found",
+  // Recommend links (SPEC.md §13): the runs an account gets a calendar month.
+  linkScanQuotaSpent:
+    "Recommend links runs {n} times a month and this month's runs are used. It comes back at the start of next month.",
   multiNeedsTwo: "A multi upload needs two or more documents",
   multiUploadN: "Multi upload {n}",
   stitchFailed: "Stitch failed. {reason}",
@@ -393,6 +396,7 @@ const zh: Record<keyof typeof en, string> = {
   compareNoPoints: "对比未找到要点",
   compareFailed: "对比失败。{reason}",
   multiNotFound: "未找到该多文档上传",
+  linkScanQuotaSpent: "推荐链接每月可运行 {n} 次，本月的次数已用完。下月初恢复。",
   multiNeedsTwo: "多文档上传需要两个或更多文档",
   multiUploadN: "多文档上传 {n}",
   stitchFailed: "缝合失败。{reason}",

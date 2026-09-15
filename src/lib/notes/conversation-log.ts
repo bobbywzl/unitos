@@ -12,6 +12,7 @@ import {
   LOG_VERSION,
 } from "@/lib/prompts/conversation-log";
 import type { UsageMeta } from "@/lib/usage";
+import { resolveModelId } from "@/lib/models";
 
 // The condensed log of a conversation (SPEC.md §21): one line per message,
 // written by AI the first time the reader hovers the conversation's mark and
@@ -102,7 +103,7 @@ export async function ensureConversationLog(
     providerOptions: kimiOptions(GIST_EFFORT),
     schema: logSchema,
     label: "LOG",
-    usage: { userId, feature: "log", model: GIST_MODEL } satisfies UsageMeta,
+    usage: { userId, feature: "log", model: await resolveModelId(GIST_MODEL) } satisfies UsageMeta,
   });
   if (!result.ok) {
     console.error(`[log] ${result.error}`);

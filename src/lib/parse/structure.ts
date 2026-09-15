@@ -5,6 +5,7 @@ import { callForJson } from "@/lib/derive/json-call";
 import { claude, claudeConfigured, claudeOptions } from "@/lib/claude";
 import type { UsageMeta } from "@/lib/usage";
 import type { LinkSpan, ParsedBlock, StyleSpan } from "@/lib/parse/types";
+import { resolveModelId } from "@/lib/models";
 
 // AI structure pass: after the mechanical parse, the model tidies the block
 // list — drop residual junk, fix a wrong type, merge a split fragment. It
@@ -109,7 +110,7 @@ export async function selectCoreBlocks(
     providerOptions: claudeOptions(),
     schema: coreSchema,
     label: "INGEST_CORE",
-    usage: { userId: null, feature: "parse", model: PARSE_MODEL } satisfies UsageMeta,
+    usage: { userId: null, feature: "parse", model: await resolveModelId(PARSE_MODEL) } satisfies UsageMeta,
     abortSignal: signal,
   });
   if (!result.ok) {
@@ -172,7 +173,7 @@ export async function structureBlocks(
     providerOptions: claudeOptions(),
     schema: structureSchema,
     label: "INGEST_STRUCTURE",
-    usage: { userId: null, feature: "parse", model: PARSE_MODEL } satisfies UsageMeta,
+    usage: { userId: null, feature: "parse", model: await resolveModelId(PARSE_MODEL) } satisfies UsageMeta,
     abortSignal: signal,
   });
   if (!result.ok) {

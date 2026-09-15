@@ -20,7 +20,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ documentId: st
   if (access instanceof NextResponse) return access;
   const body = await parseBody(req, bodySchema);
   if (body.error) return body.error;
-  const result = await storePastedTranscript(documentId, body.data.text);
+  const result = await storePastedTranscript(documentId, body.data.text, access.user.id);
   if (!result.ok) {
     const error =
       result.status === 400

@@ -14,7 +14,7 @@ export async function POST(_req: Request, ctx: { params: Promise<{ documentId: s
   const { documentId } = await ctx.params;
   const access = await documentAccess(documentId, "editor");
   if (access instanceof NextResponse) return access;
-  const result = await runSpeakers(documentId);
+  const result = await runSpeakers(documentId, access.user.id);
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
   await bumpDocument(documentId);
   return NextResponse.json({ ok: true, speakers: result.speakers });

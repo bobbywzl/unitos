@@ -7,6 +7,7 @@ import { kimi, kimiConfigured, kimiOptions } from "@/lib/kimi";
 import { clipWords } from "@/lib/markdown-preview";
 import { MULTI_TITLE_MAX_CHARS, multiTitlePrompt } from "@/lib/prompts/multi-title";
 import type { UsageMeta } from "@/lib/usage";
+import { resolveModelId } from "@/lib/models";
 
 // The title of a multi upload (SPEC.md §22): AI writes one short phrase for
 // what the members are about together, from their titles and openings. With
@@ -63,7 +64,7 @@ async function writeTitle(input: {
     providerOptions: kimiOptions(MULTI_TITLE_EFFORT),
     schema: titleSchema,
     label: "MULTI_TITLE",
-    usage: { userId: input.userId, feature: "multi-title", model: MULTI_TITLE_MODEL } satisfies UsageMeta,
+    usage: { userId: input.userId, feature: "multi-title", model: await resolveModelId(MULTI_TITLE_MODEL) } satisfies UsageMeta,
     abortSignal: AbortSignal.timeout(TITLE_TIMEOUT_MS),
   });
   if (!result.ok) {

@@ -6,6 +6,7 @@ import { CLASSIFY_IMAGE_WIDTH, renderPdfPage } from "@/lib/handwritten/pages";
 import { claude, claudeConfigured, claudeOptions } from "@/lib/claude";
 import type { ParsedBlock } from "@/lib/parse/types";
 import { classifyPrompt } from "@/lib/prompts/classify";
+import { resolveModelId } from "@/lib/models";
 
 // Import PDF classification (SPEC.md §16): article or handwritten. A PDF whose
 // text layer yielded article-scale text that reads like language is an article
@@ -89,7 +90,7 @@ export async function classifyPdf(
     providerOptions: claudeOptions(),
     schema: classifyOutputSchema,
     label: "CLASSIFY",
-    usage: { userId, feature: "classify", model: CLASSIFY_MODEL },
+    usage: { userId, feature: "classify", model: await resolveModelId(CLASSIFY_MODEL) },
   });
   return result.ok ? result.data.kind : fallback;
 }
