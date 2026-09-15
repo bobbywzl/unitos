@@ -90,42 +90,6 @@ function AnchorIcon({ size = 11 }: { size?: number }) {
   );
 }
 
-export function SourceChips({ sources, notebookId }: { sources: SourceChip[]; notebookId: string }) {
-  const t = useT();
-  if (sources.length === 0) return null;
-  return (
-    <div className="flex flex-wrap gap-1.5">
-      {sources.map((source) =>
-        source.orphaned ? (
-          <span
-            key={source.id}
-            data-tip={t("outline.anchorUnresolvedTitle", { quote: source.quotedText })}
-            className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-dashed border-red-400 px-2.5 py-0.5 text-[11px] font-semibold text-red-500"
-          >
-            <AnchorIcon />
-            <span className="shrink-0">
-              {source.documentTitle} · {t("outline.unresolvedLabel")}
-            </span>
-            <span className="truncate font-normal text-sand-500">“{source.quotedText}”</span>
-          </span>
-        ) : (
-          <Link
-            key={source.id}
-            href={`/n/${notebookId}?doc=${source.documentId}&src=${source.id}`}
-            data-track="note-source"
-            data-tip={source.quotedText}
-            draggable={false}
-            className="inline-flex max-w-52 items-center gap-1.5 truncate rounded-full bg-clay-100 px-2.5 py-0.5 text-[11px] font-semibold text-clay-800 hover:bg-clay-200"
-          >
-            <AnchorIcon />
-            {source.documentTitle}
-          </Link>
-        ),
-      )}
-    </div>
-  );
-}
-
 // One note. Every state shares one structure: the header row — collapse
 // chevron and id at the left; edit, jump, pin, and select at the right — then
 // the title, the body, and the actions. Collapsed, the header row is the whole
@@ -607,11 +571,11 @@ export function NoteCard({
     .filter(Boolean)
     .join(" ");
 
-  // Double-click the card jumps to the source too. Clicks on controls and text
-  // selection inside fields stay theirs.
-  function jumpToSource(e: React.MouseEvent) {
+  // Double-click the card opens its editor (SPEC.md §6). Clicks on controls
+  // and text selection inside fields stay theirs.
+  function editOnDoubleClick(e: React.MouseEvent) {
     if ((e.target as Element).closest("button, a, textarea, input, select")) return;
-    if (jumpSource) jumpTo(jumpSource);
+    if (canEdit) openEditor();
   }
 
   // The body's line a checklist item is on, counted in the whole note: the
@@ -627,7 +591,7 @@ export function NoteCard({
       // ghost card slides onto the note below and joins it, then one slides
       // out of the tray onto the article.
       data-nudge={nudge && draggable ? "merge float" : undefined}
-      onDoubleClick={jumpToSource}
+      onDoubleClick={editOnDoubleClick}
       {...noteDrop.handlers}
       {...dragProps}
       className={surface}
@@ -667,11 +631,6 @@ export function NoteCard({
               {parts.body}
             </Markdown>
           )}
-          {note.sources.length > 0 && (tray || !pending) && (
-            <div className="mt-2.5">
-              <SourceChips sources={note.sources} notebookId={actions.notebookId} />
-            </div>
-          )}
           {author && (
             <div className="mt-1.5">
               <span className="inline-flex max-w-40 items-center gap-1 text-[11px] text-sand-600" data-tip={author.name}>
@@ -685,10 +644,10 @@ export function NoteCard({
       )}
 
       {collapsed || (pending && !canEdit) ? null : pending ? (
-        // Tray: chips above, buttons on their own row (design 1a). Page: chips and
-        // buttons share one row, Accept pushed right (design 2b).
+        // Tray: buttons on their own row (design 1a). Page: Accept pushed right
+        // (design 2b). No source chips: the header's jump button reaches the
+        // source, and a quote in the note carries its own.
         <div className={`${tray ? "mt-3" : "mt-2.5"} flex flex-wrap items-center gap-2`}>
-          {!tray && <SourceChips sources={note.sources} notebookId={actions.notebookId} />}
           <button
             onClick={() => void actions.acceptNote(note.id)}
             data-track="note-accept"
