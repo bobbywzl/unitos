@@ -575,8 +575,25 @@ model Block {
   // Semantic search vector (text-embedding-3-small, 1024 dims). Null = not
   // embedded yet; the search route backfills lazily, a text edit clears it.
   embedding    Unsupported("vector(1024)")?
+  // PAGE blocks: the page rendered once and kept (SPEC.md §16).
+  pageImage    PageImage?
 
   @@index([documentId, order])
+}
+
+// Handwritten document (SPEC.md §16): a PAGE block's page rendered once and
+// kept, so the page image route serves stored bytes instead of rendering the
+// PDF on every request. width and height are the stored image's pixels: the
+// reader lays the page out from them before the bytes arrive. data null =
+// the size is known but the page is not rendered yet; the route renders it
+// on its first request and fills the row.
+model PageImage {
+  blockId   String   @id
+  block     Block    @relation(fields: [blockId], references: [id], onDelete: Cascade)
+  width     Int
+  height    Int
+  data      Bytes? // JPEG at PAGE_IMAGE_WIDTH
+  updatedAt DateTime @updatedAt
 }
 
 enum BlockType {

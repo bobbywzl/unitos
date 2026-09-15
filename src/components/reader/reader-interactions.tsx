@@ -81,6 +81,7 @@ import { Bibliography } from "@/components/reader/bibliography";
 import type { ConversionInfo } from "@/components/reader/conversion-strip";
 import { HIGHLIGHT_HUES, HUE_DOT, HUE_KEY } from "@/components/reader/hues";
 import type { PageMark } from "@/components/reader/page-block";
+import type { PageSize } from "@/lib/handwritten/pages";
 import { useCollab } from "@/components/collab/collab-context";
 import { TierMark } from "@/components/tier-mark";
 import { useNoteDrop, type DroppedImage } from "@/components/use-note-drop";
@@ -624,6 +625,7 @@ export function ReaderInteractions({
   citationsByBlock,
   references,
   pageMarksByBlock,
+  pageSizeByBlock,
   conversion,
   font,
   columnWidth,
@@ -743,6 +745,9 @@ export function ReaderInteractions({
   // conversion status for the strip under the pages. conversion null = not a
   // handwritten document.
   pageMarksByBlock: Record<string, PageMark[]>;
+  // The stored page image's pixels per PAGE block: the page's shape before
+  // its image arrives. Missing = the size is not known yet.
+  pageSizeByBlock: Record<string, PageSize>;
   conversion: ConversionInfo | null;
   font: string | null;
   // The page's text column width in px (Document.columnWidth): the article
@@ -5633,7 +5638,7 @@ function blockFormatKind(
         editedByBlock={editedByBlock}
         pages={
           conversion
-            ? { notebookId, canEdit, marksByBlock: pageMarksByBlock, conversion }
+            ? { notebookId, canEdit, marksByBlock: pageMarksByBlock, sizeByBlock: pageSizeByBlock, conversion }
             : null
         }
         onSaveText={saveBlockEdit}

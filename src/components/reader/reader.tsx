@@ -22,6 +22,7 @@ import { CircleGlow } from "@/components/reader/circle-glow";
 import type { TKey } from "@/lib/i18n/dictionaries";
 import { ConversionStrip, type ConversionInfo } from "@/components/reader/conversion-strip";
 import { PageBlock, type PageMark } from "@/components/reader/page-block";
+import type { PageSize } from "@/lib/handwritten/pages";
 import { DocumentTitle } from "@/components/reader/document-title";
 import { formatTime, type Speaker, type TranscriptLine } from "@/lib/video/types";
 
@@ -508,6 +509,8 @@ export function Reader({
     notebookId: string;
     canEdit: boolean;
     marksByBlock: Record<string, PageMark[]>;
+    // The stored page image's pixels per PAGE block; missing = not known yet.
+    sizeByBlock: Record<string, PageSize>;
     conversion: ConversionInfo;
   } | null;
   onSaveText: (blockId: string, text: string) => Promise<void>;
@@ -811,6 +814,7 @@ export function Reader({
             blockId={block.id}
             text={block.text}
             marks={pages.marksByBlock[block.id] ?? []}
+            size={pages.sizeByBlock[block.id] ?? null}
             canEdit={pages.canEdit && mode === "read"}
             hint={i === firstPageIndex}
           />

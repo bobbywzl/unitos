@@ -11,6 +11,7 @@ import { hasContext } from "@/lib/derive/context";
 import { editedRanges } from "@/lib/diff";
 import { definitionFor, glossaryEntries, lacksDefinitionsIn } from "@/lib/glossary";
 import { conversionIsStale } from "@/lib/handwritten/convert";
+import { pageSizesFor } from "@/lib/handwritten/page-images";
 import { captionGaps } from "@/lib/parse/figure-audit";
 import { documentReferences } from "@/lib/parse/types";
 import { resolveDocumentSources } from "@/lib/anchors/resolve";
@@ -797,6 +798,11 @@ export default async function NotebookPage(props: {
     // the resolved sources, so a mark healed onto a rebuilt page paints in the
     // same render.
     const pageMarksByBlock: Record<string, PageMark[]> = {};
+    // The stored page sizes: the reader lays each page out before its image
+    // arrives, so the pages load lazily instead of all at once.
+    const pageSizeByBlock = document.handwritten
+      ? await pageSizesFor(documentId, document.blocks.filter((b) => b.type === "PAGE"))
+      : {};
     if (document.handwritten) {
       for (const r of resolved) {
         if (r.orphaned || !annotationNoteIds.has(r.noteId)) continue;
@@ -855,6 +861,7 @@ export default async function NotebookPage(props: {
       videoAnnotations,
       videoSeekBySource,
       pageMarksByBlock,
+      pageSizeByBlock,
       conversion,
     };
   }
@@ -1214,6 +1221,7 @@ export default async function NotebookPage(props: {
     citationsByBlock: pane.citationsByBlock,
     references: pane.references,
     pageMarksByBlock: pane.pageMarksByBlock,
+    pageSizeByBlock: pane.pageSizeByBlock,
     conversion: pane.conversion,
     font: pane.document.font,
     columnWidth: pane.document.columnWidth,
