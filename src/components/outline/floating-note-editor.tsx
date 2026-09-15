@@ -116,11 +116,27 @@ function trayRect(): DOMRect | null {
   const rect = tray.getBoundingClientRect();
   return rect.width > 0 ? rect : null;
 }
-/** The rail's box: the drop target that docks a card while the tray is folded. */
+/** The rail's box: the sidebar's column of buttons at the right edge. */
 const railRect = () => surfaceRect("sidebar");
 
 function inRect(x: number, y: number, r: DOMRect | null): boolean {
   return !!r && x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
+}
+
+/** Whether a point is in the sidebar (SPEC.md §6): the card dragged in here
+    and let go goes back into the tray. On md and up the sidebar is the right
+    column — the rail, and the tray when it is open — taken at its full
+    height, so the whole right edge takes the drop, not the rail's 52px
+    alone. Below md the rail is a bar along the bottom and the tray a sheet
+    over it: their own boxes take the drop. */
+function inSidebar(x: number, y: number): boolean {
+  const rail = railRect();
+  const tray = trayRect();
+  if (!rail && !tray) return false;
+  const column = rail ? rail.height > rail.width : true;
+  if (!column) return inRect(x, y, rail) || inRect(x, y, tray);
+  const left = Math.min(rail?.left ?? Infinity, tray?.left ?? Infinity);
+  return x >= left && y >= 0 && y <= window.innerHeight;
 }
 
 /** Where the card lands: where the drag left it, else beside the tray. */
@@ -234,6 +250,9 @@ export function FloatingNoteEditor({
   });
   // Lifted by a hold: where the pointer sits inside the card while it moves.
   const [grab, setGrab] = useState<{ dx: number; dy: number } | null>(null);
+  // The lifted card is over the sidebar: let go, and the note goes back
+  // into the tray. The card says so meanwhile.
+  const [overSidebar, setOverSidebar] = useState(false);
 
   // The note is gone (deleted elsewhere): the card closes.
   const gone = note === null;
@@ -321,7 +340,8 @@ export function FloatingNoteEditor({
   });
 
   // Lifted (by a hold anywhere on the card): the card follows the pointer;
-  // released over the tray or the rail, it docks.
+  // dragged into the sidebar and let go, it docks — the note goes back into
+  // the tray (SPEC.md §6).
   useEffect(() => {
     if (!grab) return;
     const onMove = (e: PointerEvent) => {
@@ -329,10 +349,12 @@ export function FloatingNoteEditor({
       const w = cardRef.current?.offsetWidth ?? width;
       if (pane) setAt(clampContent(toContent(next, pane), pane, w));
       else setPos(clampPos(next, w));
+      setOverSidebar(inSidebar(e.clientX, e.clientY));
     };
     const onUp = (e: PointerEvent) => {
       setGrab(null);
-      if (inRect(e.clientX, e.clientY, trayRect()) || inRect(e.clientX, e.clientY, railRect())) {
+      setOverSidebar(false);
+      if (inSidebar(e.clientX, e.clientY)) {
         dockRef.current();
         return;
       }
@@ -487,12 +509,16 @@ export function FloatingNoteEditor({
       // it opens come out on top of the note, never under it.
       className={`${pane ? "absolute z-20" : "fixed z-30"} flex max-w-[calc(100vw-32px)] min-h-[180px] min-w-[300px] resize flex-col overflow-hidden rounded-[20px] border border-line bg-card/95 p-3 shadow-float backdrop-blur-md ${
         grab ? "note-lifted select-none" : ""
-      }${noteDrop.over ? " outline-2 outline-dashed outline-clay-400" : ""}${
+      }${overSidebar ? " note-docking" : ""}${noteDrop.over ? " outline-2 outline-dashed outline-clay-400" : ""}${
         cardDrop.over ? " outline-2 outline-sage-500" : ""
       }${merging ? " note-absorb" : ""}`}
     >
       {dropError && <p className="mb-1 shrink-0 text-[11px] text-red-500">{dropError}</p>}
       {mergeError && <p className="mb-1 shrink-0 text-[11px] text-red-500">{mergeError}</p>}
+      {/* Over the sidebar: one line says what letting go does. */}
+      {overSidebar && (
+        <p className="mb-1 shrink-0 text-[11px] font-semibold text-sage-700">{t("outline.dropToDock")}</p>
+      )}
       {/* The header row: the note's id at the left; the save state while
           editing, else the pencil, at the right (SPEC.md §6). */}
       <div className="mb-1 flex shrink-0 items-center gap-1.5">

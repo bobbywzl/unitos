@@ -54,6 +54,7 @@ const en = {
   // The note floats: dragged out of the tray, over the article, and back.
   dockBack: "Back to the tray",
   dockBackTitle: "Put the note back in the notes tray",
+  dropToDock: "Let go to put the note back in the tray",
   floatingLabel: "In a floating card over the article",
   floatingTitle: "Note",
   dropLinkIntoNote: "Drop the link into this note",
@@ -218,6 +219,7 @@ const zh: Record<keyof typeof en, string> = {
   noteTitleLabel: "笔记标题",
   dockBack: "放回笔记栏",
   dockBackTitle: "把笔记放回笔记栏",
+  dropToDock: "松开即把笔记放回笔记栏",
   floatingLabel: "在文章上方的浮动卡片里",
   floatingTitle: "笔记",
   dropLinkIntoNote: "把链接拖入这条笔记",
