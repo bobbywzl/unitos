@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { Prisma } from "@prisma/client";
 import { isAdmin } from "@/lib/admin-auth";
 import { db } from "@/lib/db";
+import { providerOf } from "@/lib/usage";
 import { serverT } from "@/lib/i18n/server";
 import type { TFunc } from "@/lib/i18n/dictionaries";
 import { AdminNav } from "@/components/admin/admin-nav";
@@ -116,7 +117,7 @@ export default async function AdminUsagePage() {
   const since90 = new Date(now - 90 * 86_400_000);
   const since30 = new Date(now - 30 * 86_400_000);
 
-  const [totals, cost30, byProvider, byFeature, byModel, byUser, byDayRaw, users] = await Promise.all([
+  const [totals, cost30, byFeature, byModel, byUser, byDayRaw, users] = await Promise.all([
     db.usageEvent.aggregate({
       where: { createdAt: { gte: since90 } },
       _count: true,
@@ -125,15 +126,6 @@ export default async function AdminUsagePage() {
     db.usageEvent.aggregate({
       where: { createdAt: { gte: since30 } },
       _sum: { costUsd: true },
-    }),
-    // Every model call stamps its provider (anthropic, moonshot, google, groq, openai),
-    // so the cost of each API account is one row here.
-    db.usageEvent.groupBy({
-      by: ["provider"],
-      where: { createdAt: { gte: since90 } },
-      _count: true,
-      _sum: { inputTokens: true, outputTokens: true, costUsd: true },
-      orderBy: { _sum: { costUsd: "desc" } },
     }),
     db.usageEvent.groupBy({
       by: ["feature"],
@@ -162,6 +154,22 @@ export default async function AdminUsagePage() {
       GROUP BY 1 ORDER BY 1`),
     db.user.findMany({ select: { id: true, email: true } }),
   ]);
+
+  // The provider of each row is read from its model (lib/usage.ts), not from
+  // the provider column it was written with: a row stamped before a provider
+  // was named would otherwise sit under the wrong one forever.
+  const byProvider = [...byModel
+    .reduce((acc, r) => {
+      const key = providerOf(r.model);
+      const row = acc.get(key) ?? { label: key, _count: 0, _sum: { inputTokens: 0, outputTokens: 0, costUsd: 0 } };
+      row._count += r._count;
+      row._sum.inputTokens += r._sum.inputTokens ?? 0;
+      row._sum.outputTokens += r._sum.outputTokens ?? 0;
+      row._sum.costUsd += r._sum.costUsd ?? 0;
+      acc.set(key, row);
+      return acc;
+    }, new Map<string, { label: string; _count: number; _sum: { inputTokens: number; outputTokens: number; costUsd: number } }>())
+    .values()].sort((a, b) => b._sum.costUsd - a._sum.costUsd);
 
   const emailOf = new Map(users.map((u) => [u.id, u.email]));
   const calls = totals._count;
@@ -210,7 +218,7 @@ export default async function AdminUsagePage() {
             <BarList
               t={t}
               title={t("admin.usageByProvider")}
-              rows={rowsOf(byProvider.map((r) => ({ ...r, label: r.provider })))}
+              rows={rowsOf(byProvider)}
             />
             <BarList
               t={t}

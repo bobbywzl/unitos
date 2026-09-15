@@ -81,6 +81,7 @@ import { Bibliography } from "@/components/reader/bibliography";
 import type { ConversionInfo } from "@/components/reader/conversion-strip";
 import { HIGHLIGHT_HUES, HUE_DOT, HUE_KEY } from "@/components/reader/hues";
 import type { PageMark } from "@/components/reader/page-block";
+import type { PageSize } from "@/lib/handwritten/pages";
 import { useCollab } from "@/components/collab/collab-context";
 import { TierMark } from "@/components/tier-mark";
 import { useNoteDrop, type DroppedImage } from "@/components/use-note-drop";
@@ -93,6 +94,7 @@ import { PANE_HEADER } from "@/components/reader/reader-panes";
 import type { FigureRenderInfo } from "@/components/reader/figure-capture";
 import { Reader, type TranscriptVariant } from "@/components/reader/reader";
 import { openVisualization } from "@/components/reader/visualization-viewer";
+import { setQuoteDragImage, writeQuoteDrag } from "@/lib/quote-drag";
 
 // One block's span of a selection (SPEC.md §5).
 type Segment = Omit<SourceInput, "documentId">;
@@ -624,6 +626,7 @@ export function ReaderInteractions({
   citationsByBlock,
   references,
   pageMarksByBlock,
+  pageSizeByBlock,
   conversion,
   font,
   columnWidth,
@@ -743,6 +746,9 @@ export function ReaderInteractions({
   // conversion status for the strip under the pages. conversion null = not a
   // handwritten document.
   pageMarksByBlock: Record<string, PageMark[]>;
+  // The stored page image's pixels per PAGE block: the page's shape before
+  // its image arrives. Missing = the size is not known yet.
+  pageSizeByBlock: Record<string, PageSize>;
   conversion: ConversionInfo | null;
   font: string | null;
   // The page's text column width in px (Document.columnWidth): the article
@@ -2189,7 +2195,25 @@ export function ReaderInteractions({
       tracking = null;
     };
     const onDragStart = (e: DragEvent) => {
-      if (figureAt(e.target as Element)) e.preventDefault();
+      if (figureAt(e.target as Element)) {
+        e.preventDefault();
+        return;
+      }
+      // A drag that starts on the selection carries the passage as a quote
+      // (lib/quote-drag.ts): let go in a note, it lands there as a quote
+      // with the same source Add to notes gives it, pointing back here.
+      const anchor = popoverRef.current?.anchor;
+      const sel = window.getSelection();
+      if (!anchor || !e.dataTransfer || !sel || sel.isCollapsed) return;
+      const docId = documentIdRef.current;
+      const segments = segmentsOf(anchor).map((segment) => ({ documentId: docId, ...anchorBody(segment) }));
+      const text = passageText(anchor);
+      writeQuoteDrag(e.dataTransfer, {
+        source: segments[0],
+        ...(segments.length > 1 ? { segments } : {}),
+        text,
+      });
+      setQuoteDragImage(e.dataTransfer, text);
     };
     container.addEventListener("pointerdown", onDown);
     container.addEventListener("pointermove", onMove);
@@ -2207,17 +2231,18 @@ export function ReaderInteractions({
   }, []);
 
   // Scroll to an anchor and flash it. Retries while the refreshed tree paints.
+  // The mark may not be painted yet — the document is still rendering, or the
+  // reader arrived here from a note in another document — so the look-up
+  // retries for a while, reading the container fresh each time.
   const flashSource = useCallback((sourceId: string) => {
-    const container = containerRef.current;
-    if (!container) return;
     let attempts = 0;
     const tryScroll = () => {
-      const el = container.querySelector<HTMLElement>(`[data-source-id="${sourceId}"]`);
+      const el = containerRef.current?.querySelector<HTMLElement>(`[data-source-id="${sourceId}"]`);
       if (el) {
         el.scrollIntoView({ behavior: "smooth", block: "center" });
         el.classList.add("anchor-flash");
         setTimeout(() => el.classList.remove("anchor-flash"), 2000);
-      } else if (attempts++ < 10) {
+      } else if (attempts++ < 30) {
         setTimeout(tryScroll, 200);
       }
     };
@@ -5633,7 +5658,7 @@ function blockFormatKind(
         editedByBlock={editedByBlock}
         pages={
           conversion
-            ? { notebookId, canEdit, marksByBlock: pageMarksByBlock, conversion }
+            ? { notebookId, canEdit, marksByBlock: pageMarksByBlock, sizeByBlock: pageSizeByBlock, conversion }
             : null
         }
         onSaveText={saveBlockEdit}

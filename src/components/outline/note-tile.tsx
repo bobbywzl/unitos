@@ -138,7 +138,11 @@ export function NoteTile({
       </div>
       {parts.title && <h3 className="note-title note-tile-title mt-2 shrink-0">{parts.title}</h3>}
       <div className="note-tile-body mt-1.5 min-h-0 flex-1 overflow-hidden">
-        {parts.body.trim() !== "" && <Markdown breaks>{parts.body}</Markdown>}
+        {parts.body.trim() !== "" && (
+          <Markdown breaks sources={note.sources} notebookId={actions.notebookId}>
+            {parts.body}
+          </Markdown>
+        )}
       </div>
       {(note.sources.length > 0 || note.replies.length > 0 || author) && (
         <div className="mt-2 flex shrink-0 items-center gap-2.5 text-[11px] text-sand-500">

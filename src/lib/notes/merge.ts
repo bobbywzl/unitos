@@ -6,6 +6,7 @@ import type { Lang } from "@/lib/i18n/config";
 import { kimi, kimiConfigured, kimiOptions } from "@/lib/kimi";
 import { mergePrompt } from "@/lib/prompts/merge";
 import type { UsageMeta } from "@/lib/usage";
+import { resolveModelId } from "@/lib/models";
 
 // Merge with AI (SPEC.md §6): the notes rewritten as one note — every point
 // kept, repetition written once, the reader's own words left alone. The plain
@@ -34,7 +35,7 @@ export async function mergeNoteText(
     providerOptions: kimiOptions(MERGE_EFFORT),
     schema: mergeSchema,
     label: "MERGE",
-    usage: { userId, feature: "merge", model: MERGE_MODEL } satisfies UsageMeta,
+    usage: { userId, feature: "merge", model: await resolveModelId(MERGE_MODEL) } satisfies UsageMeta,
   });
   if (!result.ok) {
     console.error(`[merge] ${result.error}`);

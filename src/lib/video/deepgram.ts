@@ -48,7 +48,7 @@ const speakerId = (n: number | undefined) => (n === undefined ? undefined : `S${
 export async function deepgramTranscribe(
   bytes: Uint8Array,
   mimeType: string,
-  opts: { signal?: AbortSignal } = {},
+  opts: { signal?: AbortSignal; userId?: string | null } = {},
 ): Promise<TranscriptSegment[]> {
   const key = process.env.DEEPGRAM_API_KEY;
   if (!key) throw new Error("DEEPGRAM_API_KEY is not set");
@@ -105,7 +105,7 @@ export async function deepgramTranscribe(
   // Deepgram bills per second of audio; tokens do not apply.
   const seconds = parsed.data.metadata?.duration ?? segments[segments.length - 1].end;
   recordUsage(
-    { userId: null, feature: "transcribe", model: MODEL },
+    { userId: opts.userId ?? null, feature: "transcribe", model: MODEL },
     { inputTokens: Math.ceil(seconds) },
     (seconds / 60) * USD_PER_MINUTE,
   );

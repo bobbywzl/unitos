@@ -148,7 +148,7 @@ async function renderInBrowser(
   t: TFunc,
   report: RenderProgress,
 ): Promise<Rendered> {
-  const browser = await launchBrowser();
+  const browser = await launchBrowser("parse");
   const connectedAt = Date.now();
   const sessionMs = sessionLengthOf(browser);
   const sessionEnd = sessionMs === null ? Infinity : connectedAt + sessionMs - SESSION_MARGIN_MS;

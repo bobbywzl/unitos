@@ -9,6 +9,9 @@
 // and zh templates simply omit it.
 
 const en = {
+  // The bookmark on a hovered block (SPEC.md §6): drag it into a note, and
+  // the block lands there as a quote that points back here.
+  bookmarkBlock: "Drag into a note as a quote",
   // Selection popover
   copied: "Copied",
   copyFailed: "Could not copy. Your browser blocked it.",
@@ -254,6 +257,7 @@ const en = {
 };
 
 const zh: Record<keyof typeof en, string> = {
+  bookmarkBlock: "拖入笔记，作为引用",
   // Selection popover
   copied: "已复制",
   copyFailed: "无法复制。浏览器阻止了此操作。",

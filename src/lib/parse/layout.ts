@@ -7,6 +7,7 @@ import { callForJson } from "@/lib/derive/json-call";
 import { isFigureCaption } from "@/lib/parse/figure-audit";
 import type { CitationSpan, LinkSpan, ParsedBlock, StyleSpan } from "@/lib/parse/types";
 import type { UsageMeta } from "@/lib/usage";
+import { resolveModelId } from "@/lib/models";
 
 // The layout pass for URL ingest (SPEC.md §2): the second AI pass, after the
 // core pass, and it does the structure pass's work too (drop residual junk,
@@ -515,7 +516,7 @@ export async function layoutBlocks(input: {
     providerOptions: claudeOptions(),
     schema: layoutSchema,
     label: "INGEST_LAYOUT",
-    usage: { userId: null, feature: "parse", model: PARSE_MODEL } satisfies UsageMeta,
+    usage: { userId: null, feature: "parse", model: await resolveModelId(PARSE_MODEL) } satisfies UsageMeta,
     abortSignal: signal,
   });
   if (!result.ok) {

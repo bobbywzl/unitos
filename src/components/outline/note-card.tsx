@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { isImeKey } from "@/lib/ime";
@@ -16,6 +15,7 @@ import { markdownPreview } from "@/lib/markdown-preview";
 import { useGist } from "@/lib/gist-client";
 import { useMergeTarget, type HandleProps } from "@/components/sortable";
 import { useNoteDrop } from "@/components/use-note-drop";
+import { quoteMarkdown } from "@/lib/quote-drag";
 import { imageMarkdown } from "@/lib/images";
 import { linkMarkdown } from "@/lib/note-links";
 import { setTaskChecked } from "@/lib/note-markup";
@@ -322,6 +322,13 @@ export function NoteCard({
     onError: setDropError,
     onImages: (images) => addToNote(images.map((i) => imageMarkdown(i.id, i.name)).join("\n\n")),
     onLinks: (links) => addToNote(links.map(linkMarkdown).join("\n\n")),
+    // A quote dropped on the card outside its editor: added at the end, its
+    // source attached, so it points back (lib/quote-drag.ts). Inside the
+    // editor the text takes the drop itself, at the caret.
+    onQuote: async (drag) => {
+      await addToNote(quoteMarkdown(drag.text));
+      await actions.attachSource(note.id, drag);
+    },
   });
   const dropRing = noteDrop.over ? " outline-2 outline-dashed outline-clay-400" : "";
   const dropTip =
@@ -329,8 +336,12 @@ export function NoteCard({
       ? t("panes.dropImageIntoNote")
       : noteDrop.over === "links"
         ? t("outline.dropLinkIntoNote")
-        : undefined;
+        : noteDrop.over === "quote"
+          ? t("outline.dropQuoteIntoNote")
+          : undefined;
 
+  // The chips under the note: only the sources no quote in the body points
+  // back to (lib/notes/quote-sources.ts); a quote carries its own source.
   const collapseLabel = collapsed ? t("outline.expandNote") : t("outline.collapseNote");
   // Who wrote the note, on a shared project (SPEC.md §12): every note says
   // it, one's own included, so a collaborator reads the author at a glance.
@@ -514,16 +525,9 @@ export function NoteCard({
       >
         {header}
         {dropError && <p className="mt-1 text-[11px] text-red-500">{dropError}</p>}
-        {/* The title field, then the body's editor (SPEC.md §6). */}
-        <NoteTitleField
-          value={edit.title}
-          onChange={editTitle}
-          onEnter={() => focusBodyEditor(editCardRef.current)}
-          onEscape={cancel}
-          className="mt-2 shrink-0"
-        />
+        {/* The bar, then the title field, then the body (SPEC.md §6). */}
         <NoteEditor
-          className="mt-1.5 min-h-0 flex-1"
+          className="mt-2 min-h-0 flex-1"
           value={edit.body}
           onChange={editBody}
           onKeyDown={(e) => {
@@ -533,6 +537,16 @@ export function NoteCard({
           }}
           full={!tray}
           moreHref={tray ? `/n/${actions.notebookId}/notes` : undefined}
+          onQuoteDrop={(drag) => actions.attachSource(note.id, drag)}
+          title={
+            <NoteTitleField
+              value={edit.title}
+              onChange={editTitle}
+              onEnter={() => focusBodyEditor(editCardRef.current)}
+              onEscape={cancel}
+              className="shrink-0"
+            />
+          }
         />
         <div className="mt-2 flex shrink-0 items-center gap-2">
           <button
@@ -621,6 +635,8 @@ export function NoteCard({
             <Markdown
               breaks
               highlight={hit}
+              sources={note.sources}
+              notebookId={actions.notebookId}
               onToggleTask={
                 canEdit
                   ? (line, checked) =>

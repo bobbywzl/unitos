@@ -2,9 +2,9 @@ import { after, NextResponse } from "next/server";
 import { z } from "zod";
 import { bumpDocument, documentAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
-import { buildGlossary } from "@/lib/glossary";
 import { runConversion } from "@/lib/handwritten/convert";
-import { currentLang, serverT } from "@/lib/i18n/server";
+import { renderPageImages } from "@/lib/handwritten/page-images";
+import { serverT } from "@/lib/i18n/server";
 import { ndjsonHeartbeat, ndjsonWriter } from "@/lib/ndjson";
 import { modelPassDeadline } from "@/lib/parse/ingest";
 import { describeIngestError } from "@/lib/parse/ingest-error";
@@ -26,8 +26,6 @@ const bodySchema = z.object({ as: z.enum(["article", "handwritten"]).optional() 
 // /api/documents so the client shows the same progress card.
 export async function POST(req: Request, ctx: { params: Promise<{ documentId: string }> }) {
   const t = await serverT();
-  // Captured now: the after() scans below outlive the request and its cookies.
-  const lang = await currentLang();
   const { documentId } = await ctx.params;
   const access = await documentAccess(documentId, "editor");
   if (access instanceof NextResponse) return access;
@@ -111,11 +109,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ documentId: st
           // shape — start conversion on their own, like a fresh import
           // (SPEC.md §16).
           if (as === "handwritten" || (as === undefined && document.handwritten)) {
-            after(() =>
-              runConversion(documentId, userId)
-                .then((r) => (r.ok ? buildGlossary(documentId, userId, lang) : undefined))
-                .catch(() => {}),
-            );
+            // The rebuilt pages render and store after the response (SPEC.md §16).
+            after(() => renderPageImages(documentId).catch(() => {}));
+            after(() => runConversion(documentId, userId).catch(() => {}));
           }
           send({ id: updated.id, title: updated.title, deduped: false });
         }

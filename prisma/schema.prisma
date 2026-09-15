@@ -50,6 +50,7 @@ model User {
   lastSeenAt   DateTime  @default(now())
   sessions     Session[]
   purchases    Purchase[]
+  linkScanRuns LinkScanRun[]
 }
 
 // Billing (SPEC.md §24): one purchase per paid Stripe invoice — the first
@@ -145,6 +146,7 @@ model Notebook {
   collaborators NotebookCollaborator[]
   presence      NotebookPresence[]
   events        NotebookEvent[]
+  linkScanRuns  LinkScanRun[]
   createdAt     DateTime               @default(now())
   updatedAt     DateTime               @updatedAt
 
@@ -331,6 +333,22 @@ enum DerivationType {
   ANALYZE // a figure or table read by the vision model: values verbatim, estimates marked; one PENDING note on the block (SPEC.md §4)
   VOICE // a spoken note: transcribed, cleaned, landed PENDING for the reader to accept (SPEC.md §6)
   VISUALIZE // Unitos Ultra: the selection as a picture — a diagram, a drawing, or a short animation — stored as an SVG ImageAsset and one annotation on the selection; declined when the model is not certain the picture is faithful (SPEC.md §20)
+}
+
+// One press of Recommend links (SPEC.md §13): the project-wide scan the
+// reader asks for. The rows are the monthly quota — an account gets a few
+// runs a calendar month, and the scan reads every document of a project
+// whole, so it never starts on its own.
+model LinkScanRun {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  notebookId String
+  notebook   Notebook @relation(fields: [notebookId], references: [id], onDelete: Cascade)
+  linkCount  Int      @default(0)
+  createdAt  DateTime @default(now())
+
+  @@index([userId, createdAt])
 }
 
 model Source {
@@ -575,8 +593,25 @@ model Block {
   // Semantic search vector (text-embedding-3-small, 1024 dims). Null = not
   // embedded yet; the search route backfills lazily, a text edit clears it.
   embedding    Unsupported("vector(1024)")?
+  // PAGE blocks: the page rendered once and kept (SPEC.md §16).
+  pageImage    PageImage?
 
   @@index([documentId, order])
+}
+
+// Handwritten document (SPEC.md §16): a PAGE block's page rendered once and
+// kept, so the page image route serves stored bytes instead of rendering the
+// PDF on every request. width and height are the stored image's pixels: the
+// reader lays the page out from them before the bytes arrive. data null =
+// the size is known but the page is not rendered yet; the route renders it
+// on its first request and fills the row.
+model PageImage {
+  blockId   String   @id
+  block     Block    @relation(fields: [blockId], references: [id], onDelete: Cascade)
+  width     Int
+  height    Int
+  data      Bytes? // JPEG at PAGE_IMAGE_WIDTH
+  updatedAt DateTime @updatedAt
 }
 
 enum BlockType {

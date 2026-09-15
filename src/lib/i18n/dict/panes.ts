@@ -137,6 +137,12 @@ const en = {
   documentActions: "Document actions",
   documentList: "Documents in this project",
   documentActionsFor: "Document actions: {title}",
+  // A document parsed by an older importer (SPEC.md §2). It is left as it
+  // is until the reader asks: a re-parse is a full import on the import's
+  // model, and a parser release would otherwise re-import the whole library.
+  reparseStale: "older import",
+  reparseStaleTitle:
+    "Imported by an older version of the importer. Re-parse this document in its actions to bring it up to date.",
   reparseDocument: "Re-parse document",
   reparseDocumentTitle: "Parse this document again with the current parser",
   reparseVideoTitle: "Transcribe this video or audio again; the transcript lines are replaced",
@@ -191,8 +197,6 @@ const en = {
   stepSaving: "Saving",
   // The finishing step (SPEC.md §15): the scans and the visuals, before the
   // document opens.
-  stepGlossary: "Building the glossary",
-  stepLinks: "Finding links",
   stepFigures: "Preparing figures",
   uploadHide: "Hide — the add keeps running",
   uploadRunning: "Adding {title}…",
@@ -313,6 +317,18 @@ const en = {
   graphCounts: "{docs} documents · {links} link(s)",
 
   // Recommended links (annotations-panel.tsx)
+  // Recommend links (SPEC.md §13): the scan the reader asks for, from the
+  // graph. It reads every document of the project whole against the others,
+  // so it runs a few times a month and never on its own.
+  recommendScan: "Recommend links",
+  recommendScanRunning: "Reading the project…",
+  recommendScanTitle:
+    "Read this project's documents against each other and propose links. {left} left this month.",
+  recommendScanSpentTitle: "This month's runs are used. It comes back at the start of next month.",
+  recommendScanDone: "{n} link(s) proposed. Open Recommended links to accept them.",
+  recommendScanPartial:
+    "{n} link(s) proposed. {left} document(s) were not read this run — run it again to reach them.",
+  recommendScanNone: "No links to propose between these documents.",
   recommendedLinks: "Recommended links",
   recommendedLinksDesc:
     "The AI scanned the documents against each other. Accept a link to make it real; dismiss what does not hold.",
@@ -505,6 +521,8 @@ const zh: Record<keyof typeof en, string> = {
   documentActions: "文档操作",
   documentList: "此项目的文档",
   documentActionsFor: "文档操作：{title}",
+  reparseStale: "旧版导入",
+  reparseStaleTitle: "由旧版导入器导入。在该文档的操作中重新解析，即可更新。",
   reparseDocument: "重新解析文档",
   reparseDocumentTitle: "用当前解析器重新解析此文档",
   reparseVideoTitle: "重新转写此视频或音频；逐字稿行会被替换",
@@ -553,8 +571,6 @@ const zh: Record<keyof typeof en, string> = {
   stepUploading: "上传",
   stepParsing: "解析",
   stepSaving: "保存",
-  stepGlossary: "生成术语表",
-  stepLinks: "查找链接",
   stepFigures: "准备插图",
   uploadHide: "隐藏——添加继续进行",
   uploadRunning: "正在添加 {title}……",
@@ -660,6 +676,13 @@ const zh: Record<keyof typeof en, string> = {
   graphEmpty: "至少添加两个文档——图谱会画出它们之间的链接。",
   graphCounts: "{docs} 个文档 · {links} 条链接",
 
+  recommendScan: "推荐链接",
+  recommendScanRunning: "正在阅读项目…",
+  recommendScanTitle: "让项目中的文档互相对照并提出链接。本月还剩 {left} 次。",
+  recommendScanSpentTitle: "本月的次数已用完。下月初恢复。",
+  recommendScanDone: "已提出 {n} 条链接。打开推荐链接以接受。",
+  recommendScanPartial: "已提出 {n} 条链接。本次还有 {left} 个文档未读——再运行一次即可读到。",
+  recommendScanNone: "这些文档之间没有可提出的链接。",
   recommendedLinks: "推荐链接",
   recommendedLinksDesc: "AI 已将项目中的文档相互比对。接受即成为正式链接；不成立的可忽略。",
   recommendedLinksToggleTitle: "整个项目中待接受的推荐链接",

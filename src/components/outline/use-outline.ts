@@ -7,7 +7,9 @@ import { api } from "@/lib/api";
 import type { MergeMode } from "@/lib/card-drag";
 import { clearNoteDraft, confirmNoteDraft, readNoteDraft, sweepStaleDrafts } from "@/lib/note-drafts";
 import { joinNoteContents } from "@/lib/notes/join";
+import type { QuoteDrag } from "@/lib/quote-drag";
 import type { NotebookView, NoteView, SectionView } from "@/lib/types";
+import { useT } from "@/components/lang-provider";
 import { useCollapsedView, type CollapsedView } from "@/components/use-collapsed-view";
 
 // The floating card: one note taken out of the tray, over the article
@@ -46,6 +48,9 @@ export type OutlineActions = {
   reorderSection: (parentId: string | null, id: string, toIndex: number) => void;
   addNote: (sectionId: string, content: string) => Promise<void>;
   saveNote: (id: string, content: string) => Promise<void>;
+  /** A quote dropped into the note (lib/quote-drag.ts): its anchor becomes
+      a source of the note, so the quote points back to the reader. */
+  attachSource: (id: string, drag: QuoteDrag) => Promise<void>;
   deleteNote: (id: string) => Promise<void>;
   reorderNote: (sectionId: string, id: string, toIndex: number) => void;
   moveNoteToSection: (id: string, sectionId: string, toIndex?: number) => Promise<void>;
@@ -149,6 +154,7 @@ export function filterSections(sections: SectionView[], query: string): SectionV
 // one optimistic tree, one pending queue, one set of keyboard bindings (SPEC.md §6).
 // canEdit false (a viewer on a shared corpus): keys still navigate, never write.
 export function useOutline(notebook: NotebookView, canEdit = true) {
+  const t = useT();
   const router = useRouter();
   const [tree, setTree] = useState(notebook.sections);
   const [prevSections, setPrevSections] = useState(notebook.sections);
@@ -402,6 +408,12 @@ export function useOutline(notebook: NotebookView, canEdit = true) {
       await api(`/api/notes/${id}`, "PATCH", { content });
       refresh();
     },
+    async attachSource(id, drag) {
+      await api(`/api/notes/${id}`, "PATCH", {
+        addSource: { source: drag.source, ...(drag.segments ? { segments: drag.segments } : {}) },
+      });
+      refresh();
+    },
     async deleteNote(id) {
       // The reader fades the note's marks at once (reader-interactions.tsx),
       // and puts them back if the delete fails.
@@ -466,7 +478,7 @@ export function useOutline(notebook: NotebookView, canEdit = true) {
       // merging until the answer lands.
       const gone = new Set(notes.map((n) => n.id));
       const ordered = all.filter((n) => n.id === targetId || gone.has(n.id));
-      const joined = joinNoteContents(ordered.map((n) => n.content));
+      const joined = joinNoteContents(ordered.map((n) => n.content), t("outline.mergedNote"));
       setTree((prev) =>
         prev.map(function walk(s): SectionView {
           return {

@@ -9,14 +9,11 @@ const paramsSchema = z.object({ documentId: z.string().min(1) });
 
 // The finishing step of an add (SPEC.md §15): what is left before the
 // document opens complete.
-// scans: who runs the glossary and recommended-links scans after the save —
-// "client" when the upload assistant runs them now (a text document), "server"
-// when a job the server owns runs them after its own work (a handwritten
-// document's conversion, a video's transcription) or nothing reads the
-// document (handwritten, conversion off or failed).
 // images: every visual the reader requests on open — PDF figure and page
 // renders, and the images inside figure and table html — so the client loads
 // each one into the browser's cache first and the page paints complete.
+// Nothing else is left: the glossary is built when the reader opens it and
+// links when the reader asks for them (SPEC.md §13).
 
 const IMG_SRC_RX = /<img\b[^>]*?\ssrc="([^"]+)"/gi;
 
@@ -42,9 +39,6 @@ export async function GET(_req: Request, ctx: { params: Promise<{ documentId: st
   const document = await db.document.findUnique({
     where: { id: documentId },
     select: {
-      handwritten: true,
-      conversionStatus: true,
-      video: { select: { id: true } },
       blocks: {
         orderBy: { order: "asc" },
         select: { id: true, type: true, page: true, html: true },
@@ -53,8 +47,6 @@ export async function GET(_req: Request, ctx: { params: Promise<{ documentId: st
   });
   if (!document) return NextResponse.json({ error: t("api.documentNotFound") }, { status: 404 });
 
-  const readable =
-    document.video === null && (!document.handwritten || document.conversionStatus === "READY");
   const images = new Set<string>();
   for (const block of document.blocks) {
     if (block.type === "PAGE" && block.page !== null) {
@@ -71,6 +63,6 @@ export async function GET(_req: Request, ctx: { params: Promise<{ documentId: st
       }
     }
   }
-  const plan: FinishPlan = { scans: readable ? "client" : "server", images: [...images] };
+  const plan: FinishPlan = { images: [...images] };
   return NextResponse.json(plan);
 }

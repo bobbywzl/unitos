@@ -7,11 +7,12 @@ import { Markdown } from "@/components/markdown";
 import { ThinkingIndicator } from "@/components/thinking";
 import { HIGHLIGHT_HUES, HUE_DOT, HUE_KEY, type HighlightHue } from "@/components/reader/hues";
 import { api } from "@/lib/api";
+import type { PageSize } from "@/lib/handwritten/pages";
 import { splitStreamError, splitStreamNote } from "@/lib/derive/config";
 import { regionBounds, regionPathD, type Region } from "@/lib/video/types";
 
-// One page of a handwritten document (SPEC.md §16): the PDF page rendered by
-// the page image route, the stored marks drawn over it, and Circle & ask —
+// One page of a handwritten document (SPEC.md §16): the page image the page
+// image route serves, the stored marks drawn over it, and Circle & ask —
 // drag a loop on the page, then ask, comment, or pick a color to lasso
 // highlight the circled spot. Ask streams through /api/derive (EXPLAIN with a
 // page payload and the question) and persists as an annotation with a region
@@ -44,6 +45,7 @@ export function PageBlock({
   blockId,
   text,
   marks,
+  size,
   canEdit,
   hint,
 }: {
@@ -52,6 +54,9 @@ export function PageBlock({
   blockId: string;
   text: string; // the stored block text ("Page N") — the page label
   marks: PageMark[];
+  // The stored image's pixels: the page keeps its shape before the image
+  // arrives, so the browser loads pages lazily. Null = not known yet.
+  size: PageSize | null;
   canEdit: boolean;
   hint: boolean; // first page only: the fading Circle & ask hint
 }) {
@@ -269,9 +274,12 @@ export function PageBlock({
         <img
           src={`/api/documents/${documentId}/page/${blockId}`}
           alt=""
+          width={size?.width}
+          height={size?.height}
           loading="lazy"
+          decoding="async"
           draggable={false}
-          className="block w-full select-none"
+          className="block h-auto w-full select-none"
         />
         {/* Draw layer: the drag draws the loop; a plain click opens the mark
             under it. Viewers draw nothing; their click still opens marks. */}

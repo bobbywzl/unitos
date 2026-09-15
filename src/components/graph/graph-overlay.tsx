@@ -2,13 +2,13 @@
 
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { GraphEdge, GraphNode, RecommendedLinkView } from "@/lib/types";
 import { api } from "@/lib/api";
 import { useCollab } from "@/components/collab/collab-context";
 import { AuthorChip } from "@/components/collab/person-badge";
 import { ReplyThread } from "@/components/collab/reply-thread";
-import { UnlinkIcon } from "@/components/icons";
+import { SparkleIcon, UnlinkIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { Presence } from "@/components/presence";
 
@@ -28,6 +28,7 @@ export function GraphOverlay({
   nodes,
   edges,
   recommended,
+  linkScansLeft,
   onClose,
 }: {
   notebookId: string;
@@ -35,10 +36,56 @@ export function GraphOverlay({
   nodes: GraphNode[];
   edges: GraphEdge[];
   recommended: RecommendedLinkView[];
+  /** Runs of Recommend links this account has left this month. */
+  linkScansLeft: number;
   onClose: () => void;
 }) {
   const t = useT();
+  const router = useRouter();
+  const { canEdit } = useCollab();
   const [listOpen, setListOpen] = useState(false);
+  // Recommend links (SPEC.md §13): the scan the reader asks for. It reads
+  // every document of the project whole against the others, so it runs only
+  // here and only a few times a month; the button says how many are left.
+  const [scanning, setScanning] = useState(false);
+  const [scanLeft, setScanLeft] = useState(linkScansLeft);
+  const [scanNotice, setScanNotice] = useState<string | null>(null);
+  const scanAbort = useRef<AbortController | null>(null);
+
+  async function scan() {
+    if (scanning || scanLeft <= 0) return;
+    setScanning(true);
+    setScanNotice(null);
+    const controller = new AbortController();
+    scanAbort.current = controller;
+    try {
+      const result = await api<{ linkCount: number; documentsLeft: number; runsLeft: number }>(
+        `/api/notebooks/${notebookId}/connect`,
+        "POST",
+        {},
+        { signal: controller.signal },
+      );
+      setScanLeft(result.runsLeft);
+      setScanNotice(
+        result.linkCount === 0
+          ? t("panes.recommendScanNone")
+          : result.documentsLeft > 0
+            ? t("panes.recommendScanPartial", { n: result.linkCount, left: result.documentsLeft })
+            : t("panes.recommendScanDone", { n: result.linkCount }),
+      );
+      if (result.linkCount > 0) {
+        setListOpen(true);
+        router.refresh();
+      }
+    } catch (err) {
+      if (!controller.signal.aborted) {
+        setScanNotice(err instanceof Error ? err.message : t("common.requestFailed"));
+      }
+    } finally {
+      if (scanAbort.current === controller) scanAbort.current = null;
+      setScanning(false);
+    }
+  }
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -54,18 +101,37 @@ export function GraphOverlay({
     <div data-track-surface="sidebar" className="graph-overlay-in fixed inset-0 z-50 flex flex-col bg-paper">
       <div className="flex items-center gap-3 border-b border-line px-5 py-3">
         <span className="font-display text-[18px]">{t("panes.graph")}</span>
-        <span className="text-[13px] text-sand-600">
+        <span className="mr-auto text-[13px] text-sand-600">
           {t("panes.graphCounts", {
             docs: nodes.length,
             links: edges.reduce((sum, e) => sum + e.accepted + e.recommended, 0),
           })}
         </span>
+        {canEdit && nodes.length >= 2 && (
+          <button
+            onClick={() => void scan()}
+            data-track="graph-recommend-links"
+            disabled={scanning || scanLeft <= 0}
+            data-tip={
+              scanLeft > 0
+                ? t("panes.recommendScanTitle", { left: scanLeft })
+                : t("panes.recommendScanSpentTitle")
+            }
+            className="ml-auto flex items-center gap-1.5 rounded-full border border-line px-3.5 py-1.5 text-[13px] text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40"
+          >
+            <SparkleIcon size={13} />
+            {scanning ? t("panes.recommendScanRunning") : t("panes.recommendScan")}
+            <span className="rounded-full bg-sand-200 px-1.5 text-[11px] font-semibold tabular-nums text-sand-700">
+              {scanLeft}
+            </span>
+          </button>
+        )}
         <button
           onClick={() => setListOpen((v) => !v)}
           data-track="graph-recommended-links"
           aria-expanded={listOpen}
           data-tip={t("panes.recommendedLinksToggleTitle")}
-          className={`ml-auto flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-[13px] hover:bg-clay-100 hover:text-clay-800 ${
+          className={`flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-[13px] hover:bg-clay-100 hover:text-clay-800 ${
             listOpen
               ? "border-line bg-clay-100 text-clay-800"
               : recommended.length > 0
@@ -89,6 +155,9 @@ export function GraphOverlay({
           ✕
         </button>
       </div>
+      {scanNotice && (
+        <p className="border-b border-line px-5 py-2 text-xs text-sand-600">{scanNotice}</p>
+      )}
       <div className="relative min-h-0 flex-1">
         {nodes.length < 2 ? (
           <p className="flex h-full items-center justify-center px-8 text-center text-sm text-sand-600">

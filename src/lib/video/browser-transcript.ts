@@ -34,7 +34,7 @@ function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promi
 /** The transcript YouTube shows, read by a browser. Throws with the reason
     when no browser is configured, the page is a captcha, or nothing loads. */
 export async function browserCaptions(youtubeId: string): Promise<TranscriptSegment[]> {
-  const browser: Browser = await launchBrowser();
+  const browser: Browser = await launchBrowser("transcribe");
   try {
     return await withTimeout(
       readInBrowser(browser, youtubeId),

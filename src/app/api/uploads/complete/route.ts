@@ -4,12 +4,11 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { currentUser } from "@/lib/auth";
 import { bumpNotebook, notebookAccess } from "@/lib/collab";
-import { buildConnections } from "@/lib/connect";
-import { buildGlossary } from "@/lib/glossary";
 import { runConversion } from "@/lib/handwritten/convert";
+import { renderPageImages } from "@/lib/handwritten/page-images";
 import { IMAGE_EXTENSIONS, sniffImage } from "@/lib/handwritten/image";
 import { imageToPdf } from "@/lib/handwritten/image-pdf";
-import { currentLang, serverT } from "@/lib/i18n/server";
+import { serverT } from "@/lib/i18n/server";
 import type { TFunc } from "@/lib/i18n/dictionaries";
 import { progressResponse } from "@/lib/ingest-response";
 import { describeIngestError } from "@/lib/parse/ingest-error";
@@ -35,11 +34,6 @@ const bodySchema = z.object({
   // upload assistant's import pick; video ignores them.
   pages: z.boolean().default(false),
   convert: z.boolean().default(true),
-  // Who runs the glossary and recommended-links scans after the save:
-  // "server" in after(), "client" in the upload assistant's finishing step,
-  // before the document opens (SPEC.md §15). Conversion and transcription
-  // keep their own chains.
-  scans: z.enum(["server", "client"]).default("server"),
 });
 
 type Body = z.infer<typeof bodySchema>;
@@ -53,8 +47,6 @@ type Body = z.infer<typeof bodySchema>;
 export async function POST(req: Request) {
   const user = await currentUser();
   const t = await serverT();
-  // Captured now: the after() scans below outlive the request and its cookies.
-  const lang = await currentLang();
   const { data, error } = await parseBody(req, bodySchema);
   if (error) return error;
   const notebook = await db.notebook.findUnique({ where: { id: data.notebookId } });
@@ -122,10 +114,6 @@ export async function POST(req: Request) {
         const { document, deduped } = await parse.ingestMarkdown(bytes, filename, onProgress);
         await attachDocument(data.notebookId, document.id);
         await bumpNotebook(data.notebookId);
-        if (data.scans === "server") {
-          if (!deduped) after(() => buildGlossary(document.id, user?.id ?? null, lang).catch(() => {}));
-          after(() => buildConnections(data.notebookId, document.id, user?.id ?? null, lang).catch(() => {}));
-        }
         return { id: document.id, title: document.title, deduped };
       } catch (err) {
         console.error("Markdown ingest failed:", err);
@@ -147,28 +135,17 @@ export async function POST(req: Request) {
       );
       await attachDocument(data.notebookId, document.id);
       await bumpNotebook(data.notebookId);
+      if (!deduped && document.handwritten) {
+        // The pages render and store after the response (SPEC.md §16); the
+        // reader loads them as they land, and the page image route renders
+        // any page still missing on request.
+        after(() => renderPageImages(document.id).catch(() => {}));
+      }
       if (!deduped && document.handwritten && document.conversionStatus === "NONE") {
         // A handwritten document (SPEC.md §16): conversion starts on its own —
-        // the text is the point. Glossary and the recommended-links scan
-        // follow it, so they read the converted text. conversionStatus OFF =
-        // the reader said not to convert; nothing starts.
-        after(() =>
-          runConversion(document.id, user?.id ?? null)
-            .then((r) =>
-              r.ok ? buildGlossary(document.id, user?.id ?? null, lang).catch(() => {}) : undefined,
-            )
-            .then(() => buildConnections(data.notebookId, document.id, user?.id ?? null, lang))
-            .catch(() => {}),
-        );
-      } else if (
-        data.scans === "server" &&
-        (!document.handwritten || document.conversionStatus === "READY")
-      ) {
-        // On-ingest glossary extraction (SPEC.md §8 Phase 7). Best-effort; after() keeps it
-        // alive past the response on serverless. A handwritten document
-        // without converted text has nothing to read — both scans skip.
-        if (!deduped) after(() => buildGlossary(document.id, user?.id ?? null, lang).catch(() => {}));
-        after(() => buildConnections(data.notebookId, document.id, user?.id ?? null, lang).catch(() => {}));
+        // the text is the point. conversionStatus OFF = the reader said not
+        // to convert; nothing starts.
+        after(() => runConversion(document.id, user?.id ?? null).catch(() => {}));
       }
       return { id: document.id, title: document.title, deduped };
     } catch (err) {
@@ -229,7 +206,6 @@ async function completeVideo(data: Body, userId: string | null, t: TFunc) {
     await db.uploadChunk.deleteMany({ where: { uploadId: data.uploadId } });
     await attachDocument(data.notebookId, existing.id);
     await bumpNotebook(data.notebookId);
-    after(() => buildConnections(data.notebookId, existing.id, userId).catch(() => {}));
     return progressResponse(async () => ({
       id: existing.id,
       title: existing.title,
@@ -273,10 +249,7 @@ async function completeVideo(data: Body, userId: string | null, t: TFunc) {
       // Transcription starts on its own — the transcript is the point. The
       // recommended-links scan follows it, so it reads the transcript.
       after(() =>
-        runTranscription(document.id)
-          // A run that continues on another function scans there.
-          .then((r) => (r.ok && !r.continuing ? buildConnections(data.notebookId, document.id, userId) : undefined))
-          .catch(() => {}),
+        runTranscription(document.id).catch(() => {}),
       );
     } catch (err) {
       // A half-saved video document must not survive; chunks cascade with it.

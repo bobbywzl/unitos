@@ -118,7 +118,7 @@ export async function POST(req: Request) {
   // Join text puts the notes in the order they stand in: the note on top
   // first (SPEC.md §6).
   const ordered = [target, ...sources].sort(byDisplayOrder);
-  const joined = joinNoteContents(ordered.map((n) => n.content));
+  const joined = joinNoteContents(ordered.map((n) => n.content), t("outline.mergedNote"));
   const written =
     data.mode === "ai"
       ? await mergeNoteText(

@@ -3,13 +3,12 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { authEnabled, currentUser } from "@/lib/auth";
 import { bumpNotebook, notebookAccess } from "@/lib/collab";
-import { buildConnections } from "@/lib/connect";
-import { buildGlossary } from "@/lib/glossary";
 import { runConversion } from "@/lib/handwritten/convert";
+import { renderPageImages } from "@/lib/handwritten/page-images";
 import { IMAGE_EXTENSIONS, sniffImage } from "@/lib/handwritten/image";
 import { imageToPdf } from "@/lib/handwritten/image-pdf";
 import { parseDriveFileId } from "@/lib/drive/types";
-import { currentLang, serverT } from "@/lib/i18n/server";
+import { serverT } from "@/lib/i18n/server";
 import { progressResponse } from "@/lib/ingest-response";
 import { attachDocument } from "@/lib/parse/attach";
 import { describeIngestError } from "@/lib/parse/ingest-error";
@@ -63,17 +62,14 @@ export async function GET() {
 // check, threaded into the AI passes. split: save one very long page as
 // multiple documents (SPEC.md §15). The upload assistant's box sends both; a
 // multi-page add sends one request per page.
-// scans: who runs the glossary and recommended-links scans after the save.
 // "server" runs them in after(); "client" leaves them to the upload
 // assistant's finishing step, which runs them before the document opens
 // (SPEC.md §15). Conversion and transcription keep their own chains.
-const scansSchema = z.enum(["server", "client"]).default("server");
 
 const urlSchema = z.object({
   url: z.url(),
   notebookId: z.string().min(1),
   split: z.boolean().default(false),
-  scans: scansSchema,
 });
 
 // pages and convert are the PDF directives (SPEC.md §16), set by the upload
@@ -83,15 +79,12 @@ const fileFieldsSchema = z.object({
   filename: z.string().min(1),
   pages: z.enum(["0", "1"]).default("0"),
   convert: z.enum(["0", "1"]).default("1"),
-  scans: scansSchema,
 });
 
 // PDF upload (multipart) or URL ingestion (JSON). Both attach to the notebook.
 export async function POST(req: Request) {
   const user = await currentUser();
   const t = await serverT();
-  // Captured now: the after() scans below outlive the request and its cookies.
-  const lang = await currentLang();
   // The parse chain (jsdom, unpdf) loads per request. Loading it with the route module
   // broke every response on Vercel; loading it here keeps GET working and turns a load
   // failure into a readable error.
@@ -120,7 +113,6 @@ export async function POST(req: Request) {
       filename: file instanceof File ? file.name : "document.pdf",
       pages: form.get("pages") ?? "0",
       convert: form.get("convert") ?? "1",
-      scans: form.get("scans") ?? "server",
     });
     if (!fields.success) {
       return NextResponse.json({ error: t("api.validationFailed"), issues: fields.error.issues }, { status: 400 });
@@ -149,20 +141,11 @@ export async function POST(req: Request) {
       pages = true;
     } else if (isMarkdownFile({ type: file.type, name: filename })) {
       // A Markdown file (SPEC.md §2): the URL walk reads it, no judgment, no
-      // model pass. The scans run as they do for a computer-text PDF.
       return progressResponse(async (onProgress) => {
         try {
           const { document, deduped } = await parse.ingestMarkdown(bytes, filename, onProgress);
           await attachDocument(fields.data.notebookId, document.id);
           await bumpNotebook(fields.data.notebookId);
-          if (fields.data.scans === "server") {
-            if (!deduped) after(() => buildGlossary(document.id, user?.id ?? null, lang).catch(() => {}));
-            after(() =>
-              buildConnections(fields.data.notebookId, document.id, user?.id ?? null, lang).catch(
-                () => {},
-              ),
-            );
-          }
           return { id: document.id, title: document.title, deduped };
         } catch (err) {
           console.error("Markdown ingest failed:", err);
@@ -183,35 +166,17 @@ export async function POST(req: Request) {
         );
         await attachDocument(fields.data.notebookId, document.id);
         await bumpNotebook(fields.data.notebookId);
+        if (!deduped && document.handwritten) {
+          // The pages render and store after the response (SPEC.md §16); the
+          // reader loads them as they land, and the page image route renders
+          // any page still missing on request.
+          after(() => renderPageImages(document.id).catch(() => {}));
+        }
         if (!deduped && document.handwritten && document.conversionStatus === "NONE") {
           // A handwritten document (SPEC.md §16): conversion starts on its own
-          // — the text is the point. Glossary and the recommended-links scan
-          // follow it, so they read the converted text. conversionStatus OFF =
-          // the reader said not to convert; nothing starts.
-          after(() =>
-            runConversion(document.id, user?.id ?? null)
-              .then((r) =>
-                r.ok ? buildGlossary(document.id, user?.id ?? null, lang).catch(() => {}) : undefined,
-              )
-              .then(() =>
-                buildConnections(fields.data.notebookId, document.id, user?.id ?? null, lang),
-              )
-              .catch(() => {}),
-          );
-        } else if (
-          fields.data.scans === "server" &&
-          (!document.handwritten || document.conversionStatus === "READY")
-        ) {
-          // On-ingest glossary extraction (SPEC.md §8 Phase 7). Best-effort; after() keeps it
-          // alive past the response on serverless. A handwritten document
-          // without converted text has nothing to read — both scans skip.
-          if (!deduped) after(() => buildGlossary(document.id, user?.id ?? null, lang).catch(() => {}));
-          // Recommended links (SPEC.md §13): scan the document against the corpus.
-          after(() =>
-            buildConnections(fields.data.notebookId, document.id, user?.id ?? null, lang).catch(
-              () => {},
-            ),
-          );
+          // — the text is the point. conversionStatus OFF = the reader said
+          // not to convert; nothing starts.
+          after(() => runConversion(document.id, user?.id ?? null).catch(() => {}));
         }
         return { id: document.id, title: document.title, deduped };
       } catch (err) {
@@ -252,20 +217,9 @@ export async function POST(req: Request) {
       await bumpNotebook(data.notebookId);
       // Transcription starts on its own — the transcript is the point.
       // after() keeps it alive past the response on serverless; the pane
-      // polls the status in. Recommended links scan once the transcript is
-      // there — the transcript is the text the scan reads.
-      if (!deduped) {
-        after(() =>
-          runTranscription(document.id)
-            // A run that continues on another function scans there.
-            .then((r) => (r.ok && !r.continuing ? buildConnections(data.notebookId, document.id, user?.id ?? null, lang) : undefined))
-            .catch(() => {}),
-        );
-      } else {
-        after(() =>
-          buildConnections(data.notebookId, document.id, user?.id ?? null, lang).catch(() => {}),
-        );
-      }
+      // polls the status in. Recommended links are the reader's to ask for
+      // (SPEC.md §13), from the graph.
+      if (!deduped) after(() => runTranscription(document.id).catch(() => {}));
       return { id: document.id, title: document.title, deduped };
     });
   }
@@ -284,20 +238,11 @@ export async function POST(req: Request) {
       const { document, deduped } = ingested;
       await attachDocument(data.notebookId, document.id);
       await bumpNotebook(data.notebookId);
-      // Transcription starts on its own — the transcript is the point. The
-      // recommended-links scan follows it, so it reads the transcript.
-      if (!deduped) {
-        after(() =>
-          runTranscription(document.id)
-            // A run that continues on another function scans there.
-            .then((r) => (r.ok && !r.continuing ? buildConnections(data.notebookId, document.id, user?.id ?? null, lang) : undefined))
-            .catch(() => {}),
-        );
-      } else {
-        after(() =>
-          buildConnections(data.notebookId, document.id, user?.id ?? null, lang).catch(() => {}),
-        );
-      }
+      // Transcription starts on its own — the transcript is the point.
+      // after() keeps it alive past the response on serverless; the pane
+      // polls the status in. Recommended links are the reader's to ask for
+      // (SPEC.md §13), from the graph.
+      if (!deduped) after(() => runTranscription(document.id).catch(() => {}));
       return { id: document.id, title: document.title, deduped };
     });
   }
@@ -315,16 +260,12 @@ export async function POST(req: Request) {
         },
         user?.id ?? null,
       );
-      // A split add saves several documents; every one attaches, gets its
-      // glossary, and gets its recommended-links scan, like any document.
+      // A split add saves several documents; every one attaches like any
+      // document. The glossary is built when the reader opens it and links
+      // when the reader asks for them, so nothing else starts here.
       const documents = [document, ...(extra ?? [])];
       for (const doc of documents) {
         await attachDocument(data.notebookId, doc.id);
-        if (data.scans !== "server") continue;
-        if (!deduped) after(() => buildGlossary(doc.id, user?.id ?? null, lang).catch(() => {}));
-        after(() =>
-          buildConnections(data.notebookId, doc.id, user?.id ?? null, lang).catch(() => {}),
-        );
       }
       await bumpNotebook(data.notebookId);
       return {
