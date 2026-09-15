@@ -114,6 +114,7 @@ export function NotesTray({
         <Link
           href={`/n/${actions.notebookId}/notes`}
           data-track="notes-full-page"
+          data-nudge="fullPage"
           aria-label={t("panes.notesFullPage")}
           data-tip={t("panes.notesFullPageTitle")}
           className="flex size-8 shrink-0 items-center justify-center rounded-full bg-card text-sand-700 shadow-soft hover:bg-clay-100 hover:text-clay-800"

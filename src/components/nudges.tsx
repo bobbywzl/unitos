@@ -14,10 +14,14 @@ import type { TKey } from "@/lib/i18n/dictionaries";
 // starts it (startNudges); accounts that saw the old welcome never see nudges.
 //
 // The order: New project on the dashboard → + after the first document →
-// select a passage → the side panel → Distill and Extract → hold the first
-// note and drag it onto the article (a ghost card slides out to show the
-// move) → hold a second note over the floating card, which joins the two →
-// More, where Settings live → Link Google Drive on the settings page.
+// select a passage → the side panel → Distill and Extract → hold a note over
+// the note below it until the ring closes, and the two join (a ghost card
+// slides onto the next note, the ring draws, and the ghost falls in) → hold
+// the first note and drag it onto the article (a ghost card slides out to
+// show the move) → the four arrows that open the notes full page → a
+// section's title, which opens its board → More, where Settings live → Link
+// Google Drive on the settings page. A target carries data-nudge="<id>", or
+// several ids with spaces between when two steps share it.
 
 const NUDGE_KEY = "unitos-nudge-step";
 
@@ -38,9 +42,21 @@ type Step = {
   // Where the caption sits. "pane": at the bottom of the target's pane,
   // centered — the article step, where a caption on the text would cover it.
   side: "below" | "pane" | "rail";
-  // The float step: a ghost card slides out of the target's card.
-  ghost?: boolean;
+  // A ghost card plays the gesture: "float" slides out of the target's card
+  // toward the article; "merge" slides onto the note below the target, the
+  // ring draws around that note, and the ghost falls in.
+  ghost?: "float" | "merge";
+  // Set: the step also needs this of its target, else the target counts as
+  // absent — the merge step needs a note below the target to merge into.
+  present?: (el: HTMLElement) => boolean;
 };
+
+/** The note card below a note card in its list, or null: the merge ghost's
+    landing. The cards sit in the board's item wrappers (sortable.tsx). */
+function nextNoteCard(el: HTMLElement): HTMLElement | null {
+  const wrapper = el.closest("[data-sortable-id]");
+  return wrapper?.nextElementSibling?.querySelector<HTMLElement>("[data-note-id]") ?? null;
+}
 
 // Targets carry data-nudge="<id>". Order: the dashboard first, then the project.
 const STEPS: Step[] = [
@@ -57,25 +73,33 @@ const STEPS: Step[] = [
   { id: "rail", textKey: "works.nudgeRail", glow: "target", side: "rail" },
   { id: "tools", textKey: "works.nudgeTools", skip: true, glow: "target", side: "below" },
   {
-    id: "float",
-    textKey: "works.nudgeFloat",
-    glow: "target",
-    side: "below",
-    ghost: true,
-    doneWhen: () => document.querySelector("[data-note-floating]") !== null,
-  },
-  {
-    // The floating card is the target: the next gesture is dragging a second
-    // note onto it. Docking the card takes the target away, so this one skips.
+    // The first note of the tray is the target; the ghost slides onto the
+    // note below it. One note alone has nothing to merge into, so this skips.
     id: "merge",
     textKey: "works.nudgeMerge",
     skip: true,
     glow: "target",
     side: "below",
-    // Done when the card takes the merge in: the hold is the merge, and the
-    // card blooms as the notes join (SPEC.md §6).
-    doneWhen: () => document.querySelector(".note-absorb, .note-merging") !== null,
+    ghost: "merge",
+    present: (el) => nextNoteCard(el) !== null,
+    // Done when a hold ring draws or a merge lands: the hold is the merge,
+    // and the note blooms as it takes the other in (SPEC.md §6).
+    doneWhen: () =>
+      document.querySelector(".merge-ring, .merge-fall, .note-absorb, .note-merging") !== null,
   },
+  {
+    id: "float",
+    textKey: "works.nudgeFloat",
+    glow: "target",
+    side: "below",
+    ghost: "float",
+    doneWhen: () => document.querySelector("[data-note-floating]") !== null,
+  },
+  // The notes full page (SPEC.md §6): the four arrows in the tray open it,
+  // and there a section's title opens its board. Both skip: a reader who
+  // stays in the tray is not held here.
+  { id: "fullPage", textKey: "works.nudgeFullPage", skip: true, glow: "target", side: "below" },
+  { id: "board", textKey: "works.nudgeBoard", skip: true, glow: "target", side: "below" },
   // Google Drive (SPEC.md §14): More carries Settings, and the settings page
   // carries Link Google Drive. Both skip — a reader who never opens Settings
   // is not held there.
@@ -113,7 +137,7 @@ function writeStep(n: number) {
 }
 
 function targetOf(index: number): HTMLElement | null {
-  return document.querySelector<HTMLElement>(`[data-nudge="${STEPS[index].id}"]`);
+  return document.querySelector<HTMLElement>(`[data-nudge~="${STEPS[index].id}"]`);
 }
 
 // The frame a step measures: the float step's whole note card, not its
@@ -129,7 +153,9 @@ function sameRect(a: DOMRect, b: DOMRect): boolean {
   return a.top === b.top && a.left === b.left && a.width === b.width && a.height === b.height;
 }
 
-type Shown = { index: number; rect: DOMRect };
+/** The step on screen: its target's box, and for the merge ghost the box of
+    the note it lands on. */
+type Shown = { index: number; rect: DOMRect; to: DOMRect | null };
 
 export function Nudges() {
   const t = useT();
@@ -171,7 +197,13 @@ export function Nudges() {
         const el = targetOf(i);
         const frame = el ? frameOf(i, el) : null;
         const rect = frame?.getBoundingClientRect() ?? null;
-        if (!el || !frame || !rect || (rect.width === 0 && rect.height === 0)) {
+        if (
+          !el ||
+          !frame ||
+          !rect ||
+          (rect.width === 0 && rect.height === 0) ||
+          (def.present && !def.present(el))
+        ) {
           // Absent, or hidden at this width.
           if (def.skip) continue;
           hide();
@@ -179,9 +211,18 @@ export function Nudges() {
         }
         if (i !== step) writeStep(i);
         glow(def.glow === "target" ? frame : null);
+        const to = def.ghost === "merge" ? (nextNoteCard(el)?.getBoundingClientRect() ?? null) : null;
         const prev = shownRef.current;
-        if (prev && prev.index === i && sameRect(prev.rect, rect)) return;
-        shownRef.current = { index: i, rect };
+        if (
+          prev &&
+          prev.index === i &&
+          sameRect(prev.rect, rect) &&
+          (prev.to === null) === (to === null) &&
+          (!prev.to || !to || sameRect(prev.to, to))
+        ) {
+          return;
+        }
+        shownRef.current = { index: i, rect, to };
         setShown(shownRef.current);
         return;
       }
@@ -269,7 +310,7 @@ export function Nudges() {
 
   return (
     <>
-      {def.ghost && (
+      {def.ghost === "float" && (
         // The ghost: a translucent copy of the note card's shape that slides
         // out of the tray toward the article, on a loop (globals.css
         // .nudge-ghost). Decorative — the caption carries the words.
@@ -291,6 +332,53 @@ export function Nudges() {
           <span className="h-2 w-5/6 rounded-full bg-sand-300" />
           <span className="h-2 w-2/3 rounded-full bg-sand-300" />
         </div>
+      )}
+      {def.ghost === "merge" && shown.to && (
+        // The merge ghost: a copy of the note card's shape lifts, slides onto
+        // the note below, draws back while the ring draws around that note,
+        // and falls in — the hold it stands for (globals.css .nudge-ghost-merge,
+        // .nudge-ring), on a loop.
+        <>
+          <div
+            aria-hidden
+            key={`ghost-${shown.index}`}
+            style={
+              {
+                top: r.top,
+                left: r.left,
+                width: r.width,
+                height: Math.max(64, Math.min(r.height, 120)),
+                "--ghost-dx": `${Math.round(shown.to.left - r.left)}px`,
+                "--ghost-dy": `${Math.round(shown.to.top - r.top)}px`,
+              } as React.CSSProperties
+            }
+            className="nudge-ghost-merge pointer-events-none fixed z-[59] flex flex-col gap-2 rounded-2xl border-[1.5px] border-dashed border-clay bg-card/80 p-3.5 shadow-float backdrop-blur-sm print:hidden"
+          >
+            <span className="h-2 w-1/3 rounded-full bg-clay-300" />
+            <span className="h-2 w-5/6 rounded-full bg-sand-300" />
+            <span className="h-2 w-2/3 rounded-full bg-sand-300" />
+          </div>
+          <svg
+            aria-hidden
+            key={`ring-${shown.index}`}
+            className="nudge-ring pointer-events-none fixed z-[58] print:hidden"
+            style={{
+              left: Math.round(shown.to.left) - 3,
+              top: Math.round(shown.to.top) - 3,
+              width: Math.round(shown.to.width) + 6,
+              height: Math.round(shown.to.height) + 6,
+            }}
+          >
+            <rect
+              x="1.5"
+              y="1.5"
+              width={Math.round(shown.to.width) + 3}
+              height={Math.round(shown.to.height) + 3}
+              rx="17"
+              pathLength={1}
+            />
+          </svg>
+        </>
       )}
       <div key={shown.index} style={style} className="fixed z-[60] print:hidden">
         <div

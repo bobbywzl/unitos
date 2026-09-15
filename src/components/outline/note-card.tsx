@@ -623,9 +623,10 @@ export function NoteCard({
       ref={cardRef}
       data-note-id={note.id}
       data-note-drop-target={takesDrop ? note.id : undefined}
-      // The onboarding nudge on the first note: a ghost card slides out of
-      // the tray (components/nudges.tsx).
-      data-nudge={nudge && draggable ? "float" : undefined}
+      // The onboarding nudges on the first note (components/nudges.tsx): a
+      // ghost card slides onto the note below and joins it, then one slides
+      // out of the tray onto the article.
+      data-nudge={nudge && draggable ? "merge float" : undefined}
       onDoubleClick={jumpToSource}
       {...noteDrop.handlers}
       {...dragProps}

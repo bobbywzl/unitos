@@ -493,9 +493,6 @@ export function FloatingNoteEditor({
       // the hold.
       onDragStart={editing ? undefined : (e) => e.preventDefault()}
       data-note-drop-target={canEdit ? edit.id : undefined}
-      // The onboarding nudge on the floating card: hold a second note over
-      // it, and the two merge (components/nudges.tsx).
-      data-nudge={canEdit ? "merge" : undefined}
       data-tip={
         dropTip ??
         (cardDrop.drag && canEdit

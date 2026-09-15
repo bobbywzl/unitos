@@ -21,6 +21,7 @@ export function SectionItem({
   handle,
   search = "",
   onOpenBoard,
+  nudge,
   nested,
 }: {
   section: SectionView;
@@ -31,6 +32,8 @@ export function SectionItem({
   search?: string;
   /** A click on the section's title: its board opens (section-board.tsx). */
   onOpenBoard: (sectionId: string) => void;
+  /** The onboarding nudge's target: the first section of the page. */
+  nudge?: boolean;
   nested?: boolean;
 }) {
   const t = useT();
@@ -89,6 +92,7 @@ export function SectionItem({
             <button
               onClick={() => onOpenBoard(section.id)}
               data-track="section-board"
+              data-nudge={nudge ? "board" : undefined}
               className={`text-left font-display hover:text-clay-800 ${nested ? "text-lg" : "text-[22px]"}`}
               data-tip={t("outline.openBoardTitle")}
             >

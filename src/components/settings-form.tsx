@@ -10,7 +10,9 @@ import type { DriveAccess } from "@/lib/drive/types";
 import type { TKey } from "@/lib/i18n/dictionaries";
 import { PERSON_COLORS, personOf, type Person } from "@/lib/person";
 import { api } from "@/lib/api";
-import type { TierState } from "@/lib/tiers";
+import type { AccountStorage } from "@/lib/storage";
+import { storageLimit, type TierState } from "@/lib/tiers";
+import { StorageBar } from "@/components/storage-bar";
 import { TierMark, tierLook } from "@/components/tier-mark";
 import { PortalButton } from "@/components/billing/portal-button";
 
@@ -101,6 +103,7 @@ export function SettingsForm({
   billing,
   drive,
   data,
+  storage,
 }: {
   // The signed-in account; null = sign-in off (single-reader mode).
   account: (Person & { email: string; storedSymbol: string; storedColor: string }) | null;
@@ -117,6 +120,8 @@ export function SettingsForm({
   drive: { linked: boolean; canLink: boolean; access: DriveAccess; grant: DriveAccess | null } | null;
   // Your data: what Unitos holds about this account (lib/account-data.ts).
   data: AccountData;
+  // Storage (TIERS.md): the account's files, shown against the tier's limit.
+  storage: AccountStorage;
 }) {
   const t = useT();
   const lang = useLang();
@@ -484,6 +489,12 @@ export function SettingsForm({
             )}
           </div>
         </div>
+        {/* Storage (TIERS.md): the account's files against the tier's limit. */}
+        <StorageBar
+          storage={storage}
+          limit={storageLimit(plan.state)}
+          tierName={t(plan.state === "ultra" ? "common.tierUltra" : "common.tierPremium")}
+        />
       </section>
 
       <section className="space-y-3">

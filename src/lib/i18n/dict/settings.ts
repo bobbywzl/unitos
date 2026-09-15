@@ -58,6 +58,14 @@ const en = {
   driveUnlink: "Unlink",
   // Your data: every stored field and count about the account
   // (lib/account-data.ts), read-only.
+  // Storage (TIERS.md): the account's files against the tier's limit
+  storage: "Storage",
+  storageUsed: "{used} used",
+  storageOf: "{used} of {limit} used",
+  storageNoLimit: "No storage limit is set for {tier} yet.",
+  storageDocuments: "Documents",
+  storageImages: "Images",
+  storageVideos: "Videos",
   data: "Your data",
   dataDesc: "Everything Unitos holds about this account. The Privacy Policy says where each part goes:",
   dataEmail: "Email",
@@ -150,6 +158,13 @@ const zh: Record<keyof typeof en, string> = {
   driveLink: "关联 Google Drive",
   driveRelink: "重新关联以访问全部文件",
   driveUnlink: "取消关联",
+  storage: "存储空间",
+  storageUsed: "已用 {used}",
+  storageOf: "已用 {used}，共 {limit}",
+  storageNoLimit: "{tier} 的存储上限尚未设定。",
+  storageDocuments: "文档",
+  storageImages: "图片",
+  storageVideos: "视频",
   data: "你的数据",
   dataDesc: "Unitos 保存的关于此账户的全部数据。隐私政策说明每项数据的去向：",
   dataEmail: "邮箱",
