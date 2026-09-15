@@ -19,7 +19,8 @@ import { HoldSensor } from "@/components/hold-sensor";
 
 // One drag across many lists (SPEC.md §6). Every list is a SortableGroup
 // inside a SortableBoard, and the board owns the one DndContext, so a drag
-// that starts in one list ends in any of them.
+// that starts in one list ends in any of them. A list is a column of cards,
+// or, on a section's board, a grid of tiles.
 //
 // Hold to drag (lib/hold-drag.ts, hold-sensor.ts): a hold anywhere on a card
 // picks it up — the card lifts and tilts under the pointer — and from then on
@@ -68,6 +69,11 @@ export type HandleProps = {
   listeners: SortableHook["listeners"];
 };
 
+/** How a list lays its cards out: a column, where the line lands a card
+    above or below another; or a grid of tiles, where it lands one to the
+    left or the right. */
+export type ListLayout = "column" | "grid";
+
 /** The card the dragged card covers, or null. Cards read it to draw their ring. */
 const MergeTargetContext = createContext<string | null>(null);
 export function useMergeTarget() {
@@ -82,16 +88,27 @@ const HeldContext = createContext<string | null>(null);
 type DropLine = { listId: string; beforeId: string | null };
 const DropLineContext = createContext<DropLine | null>(null);
 
+/** The list an item is in: its id, its ids, and its layout, so the item
+    draws the line the layout calls for. */
+type Group = { id: string; ids: string[]; layout: ListLayout };
+const GroupContext = createContext<Group | null>(null);
+
 const DROP_PREFIX = "drop:";
 const dropId = (listId: string) => `${DROP_PREFIX}${listId}`;
 
 // The lists a board holds, by list id, as they render: a group reports its
-// ids so the board can place a drop without the page repeating the tree.
-type Registry = Map<string, string[]>;
+// ids and its layout so the board can place a drop without the page
+// repeating the tree.
+type ListEntry = { ids: string[]; layout: ListLayout };
+type Registry = Map<string, ListEntry>;
+type Lists = [string, ListEntry][];
 const BoardContext = createContext<{ current: Registry } | null>(null);
 
-function rectOf(id: string): DOMRect | null {
-  const el = document.querySelector(`[data-sortable-id="${CSS.escape(id)}"]`);
+/** The box of a card of this board. Scoped to the board's root: the page's
+    board and a section's board can hold the same note at once, and each
+    must measure its own card. */
+function rectOf(root: ParentNode, id: string): DOMRect | null {
+  const el = root.querySelector(`[data-sortable-id="${CSS.escape(id)}"]`);
   return el instanceof HTMLElement ? el.getBoundingClientRect() : null;
 }
 
@@ -126,48 +143,56 @@ function coverage(a: DOMRect, b: DOMRect): number {
     notes' boxes, so the smallest box that holds the pointer is the item the
     pointer is really on. Lists the drag cannot land in are left out. */
 function itemAt(
-  lists: [string, string[]][],
+  root: ParentNode,
+  lists: Lists,
   x: number,
   y: number,
-): { listId: string; ids: string[]; index: number; rect: DOMRect } | null {
-  let best: { listId: string; ids: string[]; index: number; rect: DOMRect } | null = null;
-  for (const [listId, ids] of lists) {
-    for (let i = 0; i < ids.length; i++) {
-      const rect = rectOf(ids[i]);
+): { listId: string; entry: ListEntry; index: number; rect: DOMRect } | null {
+  let best: { listId: string; entry: ListEntry; index: number; rect: DOMRect } | null = null;
+  for (const [listId, entry] of lists) {
+    for (let i = 0; i < entry.ids.length; i++) {
+      const rect = rectOf(root, entry.ids[i]);
       if (!inRect(x, y, rect) || !rect) continue;
       const area = rect.width * rect.height;
       if (best && best.rect.width * best.rect.height <= area) continue;
-      best = { listId, ids, index: i, rect };
+      best = { listId, entry, index: i, rect };
     }
   }
   return best;
 }
 
-/** The line the pointer asks for: the card it is on decides — its top half
-    lands the drag before it, its bottom half after it. Off every card, the
-    list under the pointer takes it at the end, and a list holding nothing
-    takes it on its own space. */
-function dropLineAt(lists: [string, string[]][], x: number, y: number): DropLine | null {
-  const on = itemAt(lists, x, y);
+/** The line the pointer asks for: the card it is on decides — in a column
+    its top half lands the drag before it and its bottom half after it; in a
+    grid its left half and its right half. Off every card, the list under the
+    pointer takes it at the end, and a list holding nothing takes it on its
+    own space. */
+function dropLineAt(root: ParentNode, lists: Lists, x: number, y: number): DropLine | null {
+  const on = itemAt(root, lists, x, y);
   if (on) {
-    const after = y > on.rect.top + on.rect.height / 2;
-    return { listId: on.listId, beforeId: after ? (on.ids[on.index + 1] ?? null) : on.ids[on.index] };
+    const after =
+      on.entry.layout === "grid"
+        ? x > on.rect.left + on.rect.width / 2
+        : y > on.rect.top + on.rect.height / 2;
+    return { listId: on.listId, beforeId: after ? (on.entry.ids[on.index + 1] ?? null) : on.entry.ids[on.index] };
   }
   // Off every card: the innermost list whose own space holds the pointer.
-  let best: { listId: string; ids: string[]; area: number } | null = null;
-  for (const [listId, ids] of lists) {
-    const el = document.querySelector(`[data-drop-list="${CSS.escape(listId)}"]`);
+  let best: { listId: string; entry: ListEntry; area: number } | null = null;
+  for (const [listId, entry] of lists) {
+    const el = root.querySelector(`[data-drop-list="${CSS.escape(listId)}"]`);
     if (!(el instanceof HTMLElement)) continue;
     const rect = el.getBoundingClientRect();
     if (!inRect(x, y, rect)) continue;
     const area = rect.width * rect.height;
     if (best && best.area <= area) continue;
-    best = { listId, ids, area };
+    best = { listId, entry, area };
   }
   if (!best) return null;
-  // Above the first card of the list: the drag lands at its top.
-  const first = best.ids[0] ? rectOf(best.ids[0]) : null;
-  if (first && y < first.top) return { listId: best.listId, beforeId: best.ids[0] };
+  // Above the first card of the list — or, in a grid, before the first tile
+  // of the first row: the drag lands at its top.
+  const first = best.entry.ids[0] ? rectOf(root, best.entry.ids[0]) : null;
+  if (first && (y < first.top || (best.entry.layout === "grid" && y < first.bottom && x < first.left))) {
+    return { listId: best.listId, beforeId: best.entry.ids[0] };
+  }
   return { listId: best.listId, beforeId: null };
 }
 
@@ -175,7 +200,8 @@ function dropLineAt(lists: [string, string[]][], x: number, y: number): DropLine
     into. The one it covers most, so a card lying over two takes the nearer.
     The floating card over the article counts as one more card. */
 function mergeCandidateAt(
-  lists: [string, string[]][],
+  root: ParentNode,
+  lists: Lists,
   activeId: string,
   card: DOMRect,
   canMerge?: (id: string, intoId: string) => boolean,
@@ -189,7 +215,7 @@ function mergeCandidateAt(
     if (best && best.cover >= cover) return;
     best = { id, rect, cover };
   };
-  for (const [, ids] of lists) for (const id of ids) consider(id, rectOf(id));
+  for (const [, entry] of lists) for (const id of entry.ids) consider(id, rectOf(root, id));
   const floating = floatingCard();
   if (floating) consider(floating.id, floating.rect);
   return best;
@@ -248,6 +274,9 @@ export function SortableBoard({
   // where it lands. It clears itself when the fall is done.
   const [fall, setFall] = useState<{ from: DOMRect; to: DOMRect } | null>(null);
   const registry = useRef<Registry>(new Map());
+  // The board's own element: every card of this board is measured inside it.
+  const rootRef = useRef<HTMLDivElement>(null);
+  const root = () => rootRef.current ?? document;
   // The live values the release reads: state lands a render too late for it.
   const lineRef = useRef<DropLine | null>(null);
   // The merge already ran on the hold, so the release is not a drop.
@@ -296,7 +325,7 @@ export function SortableBoard({
     onMerge?.(itemId, intoId);
     requestAnimationFrame(() =>
       requestAnimationFrame(() => {
-        const target = rectOf(intoId) ?? (floatingCard()?.id === intoId ? floatingCard()!.rect : null);
+        const target = rectOf(root(), intoId) ?? (floatingCard()?.id === intoId ? floatingCard()!.rect : null);
         if (!target) return;
         setFall({ from: card, to: target });
         if (fallTimer.current) clearTimeout(fallTimer.current);
@@ -315,7 +344,7 @@ export function SortableBoard({
 
   function handleDragStart({ active: dragged, activatorEvent }: DragStartEvent) {
     const id = String(dragged.id);
-    const rect = rectOf(id);
+    const rect = rectOf(root(), id);
     const start = getEventCoordinates(activatorEvent);
     setHeld(null);
     setActive({ id, width: Math.round(rect?.width ?? 0) });
@@ -330,6 +359,10 @@ export function SortableBoard({
     return start ? { x: start.x + delta.x, y: start.y + delta.y } : null;
   }
 
+  function listOf(itemId: string): [string, ListEntry] | undefined {
+    return [...registry.current.entries()].find(([, entry]) => entry.ids.includes(itemId));
+  }
+
   function handleDragMove({ active, activatorEvent, delta }: DragMoveEvent) {
     const at = pointerAt(activatorEvent, delta);
     if (!at) return;
@@ -340,11 +373,11 @@ export function SortableBoard({
     if (mergedRef.current) return;
 
     // Only the lists this card can land in.
-    const from = [...registry.current.entries()].find(([, ids]) => ids.includes(dragged));
-    const lists = [...registry.current.entries()].filter(
+    const from = listOf(dragged);
+    const lists: Lists = [...registry.current.entries()].filter(
       ([listId]) => !from || !canDrop || canDrop(from[0], listId),
     );
-    setDropLine(dropLineAt(lists, x, y));
+    setDropLine(dropLineAt(root(), lists, x, y));
 
     if (!onMerge) return;
     // Where the dragged card is drawn: under the pointer, at the offset it was
@@ -353,7 +386,7 @@ export function SortableBoard({
     const card = grab
       ? new DOMRect(x - grab.dx, y - grab.dy, grab.width, grab.height)
       : pointRect(x, y);
-    const candidate = mergeCandidateAt(lists, dragged, card, canMerge);
+    const candidate = mergeCandidateAt(root(), lists, dragged, card, canMerge);
     if (!candidate) {
       setCovered(null);
       clearDwell();
@@ -391,8 +424,7 @@ export function SortableBoard({
     // The ring closed and the merge already ran: the card is gone from the
     // list, and this release is only the hand letting go.
     if (merged) return;
-    const lists = [...registry.current.entries()];
-    const from = lists.find(([, ids]) => ids.includes(itemId));
+    const from = listOf(itemId);
     if (!from) return;
     if (!landing) {
       // Off every list, over the article: the note leaves the list.
@@ -485,11 +517,14 @@ export function SortableBoard({
     >
       <BoardContext.Provider value={registry}>
         {/* The card rings as soon as the dragged card covers it — the reader
-            sees the hold is lined up and has only to keep still. */}
+            sees the hold is lined up and has only to keep still. The root
+            takes no space of its own: the board is measured inside it. */}
         <MergeTargetContext.Provider value={covered?.id ?? null}>
           <HeldContext.Provider value={held}>
             <DropLineContext.Provider value={covered ? null : line}>
-              {children}
+              <div ref={rootRef} data-sortable-board={id} className="contents">
+                {children}
+              </div>
             </DropLineContext.Provider>
           </HeldContext.Provider>
         </MergeTargetContext.Provider>
@@ -523,41 +558,48 @@ export function SortableBoard({
 
 // One list inside a board. It holds no DndContext of its own — the board's
 // drag runs through every group — and takes a drop on its own space, so a
-// section holding no notes is still a target.
+// section holding no notes is still a target. A column by default; a grid
+// lays tiles side by side and draws its lines between them.
 export function SortableGroup({
   id,
   ids,
+  layout = "column",
   className,
   children,
 }: {
   id: string;
   ids: string[];
+  layout?: ListLayout;
   className?: string;
   children: React.ReactNode;
 }) {
   const registry = useContext(BoardContext);
-  registry?.current.set(id, ids);
+  registry?.current.set(id, { ids, layout });
   useEffect(() => () => void registry?.current.delete(id), [registry, id]);
   const { setNodeRef, isOver } = useDroppable({ id: dropId(id) });
   const line = useContext(DropLineContext);
   const empty = ids.length === 0;
-  const endLine = line?.listId === id && line.beforeId === null && !empty;
+  // The line at the end of a column sits under its last card; in a grid the
+  // last tile draws it at its right (SortableItem).
+  const endLine = layout === "column" && line?.listId === id && line.beforeId === null && !empty;
   return (
     <SortableContext items={ids} strategy={holdStillStrategy}>
-      <div
-        ref={setNodeRef}
-        data-drop-list={id}
-        className={`relative ${className ?? ""}${
-          empty
-            ? ` min-h-9 rounded-2xl border-[1.5px] border-dashed ${
-                isOver || line?.listId === id ? "border-clay bg-clay-100/60" : "border-transparent"
-              }`
-            : ""
-        }`}
-      >
-        {children}
-        {endLine && <span aria-hidden className="drop-line drop-line-end" />}
-      </div>
+      <GroupContext.Provider value={{ id, ids, layout }}>
+        <div
+          ref={setNodeRef}
+          data-drop-list={id}
+          className={`relative ${className ?? ""}${
+            empty
+              ? ` min-h-9 rounded-2xl border-[1.5px] border-dashed ${
+                  isOver || line?.listId === id ? "border-clay bg-clay-100/60" : "border-transparent"
+                }`
+              : ""
+          }`}
+        >
+          {children}
+          {endLine && <span aria-hidden className="drop-line drop-line-end" />}
+        </div>
+      </GroupContext.Provider>
     </SortableContext>
   );
 }
@@ -571,14 +613,21 @@ export function SortableItem({
 }) {
   const { attributes, listeners, setNodeRef, isDragging } = useSortable({ id });
   const line = useContext(DropLineContext);
+  const group = useContext(GroupContext);
   const held = useContext(HeldContext) === id;
+  const grid = group?.layout === "grid";
+  const before = line?.beforeId === id;
+  // In a grid the last tile also draws the line for a drop at the end.
+  const after =
+    grid && group && line?.listId === group.id && line.beforeId === null && group.ids[group.ids.length - 1] === id;
   return (
     <div
       ref={setNodeRef}
       data-sortable-id={id}
       className={`relative${isDragging ? " opacity-40" : ""}${held ? " card-held" : ""}`}
     >
-      {line?.beforeId === id && <span aria-hidden className="drop-line" />}
+      {before && <span aria-hidden className={grid ? "drop-line-grid" : "drop-line"} />}
+      {after && <span aria-hidden className="drop-line-grid drop-line-grid-end" />}
       {children({ attributes, listeners })}
     </div>
   );

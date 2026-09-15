@@ -5,7 +5,7 @@ import { useMemo, useState } from "react";
 import { dropCardOn } from "@/lib/card-drag";
 import { isImeKey } from "@/lib/ime";
 import type { NoteView, SectionView } from "@/lib/types";
-import { ChevronDownIcon, ChevronRightIcon, PlusIcon } from "@/components/icons";
+import { ChevronDownIcon, ChevronRightIcon, MaximizeIcon, PlusIcon } from "@/components/icons";
 import { useCollab } from "@/components/collab/collab-context";
 import { useT } from "@/components/lang-provider";
 import { CollapsedViewToggle } from "@/components/collapsed-view-toggle";
@@ -109,6 +109,17 @@ export function NotesTray({
           className="min-w-0 flex-1 rounded-full bg-card px-4 py-2 text-[13px] shadow-soft outline-none placeholder:text-sand-500"
         />
         <CollapsedViewToggle view={actions.notesView} onChange={actions.setNotesView} track="notes-view" />
+        {/* The notes full page, one press away (SPEC.md §6): the four arrows
+            say the notes open out to fill the screen. */}
+        <Link
+          href={`/n/${actions.notebookId}/notes`}
+          data-track="notes-full-page"
+          aria-label={t("panes.notesFullPage")}
+          data-tip={t("panes.notesFullPageTitle")}
+          className="flex size-8 shrink-0 items-center justify-center rounded-full bg-card text-sand-700 shadow-soft hover:bg-clay-100 hover:text-clay-800"
+        >
+          <MaximizeIcon size={15} />
+        </Link>
       </div>
 
       {shownPending.length > 0 && (

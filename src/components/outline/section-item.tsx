@@ -4,7 +4,7 @@ import { useState } from "react";
 import { isImeKey, useImeGuard } from "@/lib/ime";
 import type { SectionView } from "@/lib/types";
 import { useCollab } from "@/components/collab/collab-context";
-import { PlusIcon } from "@/components/icons";
+import { PencilIcon, PlusIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { DragHandle, SortableGroup, SortableItem, type HandleProps } from "@/components/sortable";
 import { notesList, sectionsList } from "@/components/outline/board-lists";
@@ -20,6 +20,7 @@ export function SectionItem({
   actions,
   handle,
   search = "",
+  onOpenBoard,
   nested,
 }: {
   section: SectionView;
@@ -28,6 +29,8 @@ export function SectionItem({
   /** The search the notes are found by: the section shows the notes it found
       whole, and hides itself when it found none. */
   search?: string;
+  /** A click on the section's title: its board opens (section-board.tsx). */
+  onOpenBoard: (sectionId: string) => void;
   nested?: boolean;
 }) {
   const t = useT();
@@ -80,13 +83,29 @@ export function SectionItem({
             className={`rounded-full bg-card px-4 py-1 font-display shadow-soft outline-none ${nested ? "text-lg" : "text-[22px]"}`}
           />
         ) : (
-          <button
-            onClick={() => canEdit && setEditing(true)}
-            className={`text-left font-display ${nested ? "text-lg" : "text-[22px]"}`}
-            data-tip={canEdit ? t("outline.renameSection") : undefined}
-          >
-            {section.title}
-          </button>
+          <>
+            {/* The title opens the section's board (SPEC.md §6); the pencil
+                beside it renames the section. */}
+            <button
+              onClick={() => onOpenBoard(section.id)}
+              data-track="section-board"
+              className={`text-left font-display hover:text-clay-800 ${nested ? "text-lg" : "text-[22px]"}`}
+              data-tip={t("outline.openBoardTitle")}
+            >
+              {section.title}
+            </button>
+            {canEdit && (
+              <button
+                onClick={() => setEditing(true)}
+                data-track="section-rename"
+                aria-label={t("outline.renameSection")}
+                data-tip={t("outline.renameSection")}
+                className="flex size-6 shrink-0 items-center justify-center self-center rounded-full text-sand-500 opacity-0 transition-opacity group-hover:opacity-100 hover:bg-clay-100 hover:text-clay-800 focus-visible:opacity-100"
+              >
+                <PencilIcon size={13} />
+              </button>
+            )}
+          </>
         )}
         <span className="text-[13px] text-sand-600">{notes.length || ""}</span>
         {canEdit && (
@@ -148,7 +167,14 @@ export function SectionItem({
             {childrenShown.map((child) => (
               <SortableItem key={child.id} id={child.id}>
                 {(childHandle) => (
-                  <SectionItem section={child} actions={actions} handle={childHandle} search={search} nested />
+                  <SectionItem
+                    section={child}
+                    actions={actions}
+                    handle={childHandle}
+                    search={search}
+                    onOpenBoard={onOpenBoard}
+                    nested
+                  />
                 )}
               </SortableItem>
             ))}

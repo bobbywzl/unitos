@@ -2624,3 +2624,53 @@ li[data-checked] > .note-box::before {
   margin-right: auto;
   width: fit-content;
 }
+
+/* ── A section's board (SPEC.md §6, section-board.tsx) ─────────────────────
+   The section's notes as square tiles in one grid, side by side, so they
+   line up as one board. A tile shows as much of its body as fits and fades
+   out at the bottom; the line between tiles says where a dragged tile lands. */
+.note-board {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 14px;
+}
+.note-tile {
+  aspect-ratio: 1 / 1;
+  cursor: pointer;
+  transition: box-shadow 140ms, transform 140ms;
+}
+.note-tile:hover {
+  box-shadow: var(--shadow-float);
+}
+.note-tile-title {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+.note-tile-body {
+  -webkit-mask-image: linear-gradient(to bottom, #000 72%, transparent 100%);
+  mask-image: linear-gradient(to bottom, #000 72%, transparent 100%);
+}
+.note-tile-body .prose {
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.note-tile-body .prose > :first-child {
+  margin-top: 0;
+}
+.drop-line-grid {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -8px;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--clay);
+  z-index: 5;
+  pointer-events: none;
+}
+.drop-line-grid-end {
+  left: auto;
+  right: -8px;
+}

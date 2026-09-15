@@ -13,6 +13,7 @@ import { dropIndex, parseListId, SECTIONS_LIST } from "@/components/outline/boar
 import { CompareView } from "@/components/outline/compare-view";
 import { MergeUndoBar } from "@/components/outline/merge-undo";
 import { NoteCard } from "@/components/outline/note-card";
+import { SectionBoard } from "@/components/outline/section-board";
 import { SectionItem } from "@/components/outline/section-item";
 import { SelectionBar } from "@/components/outline/selection-bar";
 import {
@@ -38,6 +39,8 @@ export function Outline({ notebook }: { notebook: NotebookView }) {
   const found = needle ? filterSections(tree, query) : tree;
   // The notes in the compare view, in pane order; null = closed.
   const [compare, setCompare] = useState<string[] | null>(null);
+  // The section whose board fills the screen (section-board.tsx); null = none.
+  const [board, setBoard] = useState<string | null>(null);
   // Every note by id: the drag asks per item on every pointer move whether the
   // two can merge.
   const notesById = useMemo(() => new Map(flattenNotes(tree).map((n) => [n.id, n])), [tree]);
@@ -125,7 +128,15 @@ export function Outline({ notebook }: { notebook: NotebookView }) {
           >
             {tree.map((section) => (
               <SortableItem key={section.id} id={section.id}>
-                {(handle) => <SectionItem section={section} actions={actions} handle={handle} search={query} />}
+                {(handle) => (
+                  <SectionItem
+                    section={section}
+                    actions={actions}
+                    handle={handle}
+                    search={query}
+                    onOpenBoard={setBoard}
+                  />
+                )}
               </SortableItem>
             ))}
           </SortableGroup>
@@ -151,6 +162,18 @@ export function Outline({ notebook }: { notebook: NotebookView }) {
         }}
       />
       <MergeUndoBar actions={actions} />
+
+      <Presence show={board !== null} exit="fade">
+        {board && (
+          <SectionBoard
+            tree={tree}
+            sectionId={board}
+            actions={actions}
+            onChange={setBoard}
+            onClose={() => setBoard(null)}
+          />
+        )}
+      </Presence>
 
       <Presence show={compare !== null} exit="fade">
         {compare && (

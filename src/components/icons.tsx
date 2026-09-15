@@ -94,6 +94,22 @@ export function ChevronDownIcon(props: IconProps) {
   );
 }
 
+/** Four arrows to the corners: the notes full page, opened from the tray. */
+export function MaximizeIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M15 3h6v6" />
+      <path d="m21 3-6 6" />
+      <path d="M9 21H3v-6" />
+      <path d="m3 21 6-6" />
+      <path d="M3 9V3h6" />
+      <path d="m3 3 6 6" />
+      <path d="M21 15v6h-6" />
+      <path d="m21 21-6-6" />
+    </Icon>
+  );
+}
+
 export function ExpandIcon(props: IconProps) {
   return (
     <Icon {...props}>
