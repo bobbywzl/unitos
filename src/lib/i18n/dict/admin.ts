@@ -184,7 +184,7 @@ const en = {
   // Accounts page
   accounts: "Accounts",
   accountsDesc:
-    "Every account, its tier, and what it holds. Tier sets the account's tier: Unitos Ultra, Unitos Premium for good, or Unitos Premium on a trial until a date. Reset account deletes the account's projects, documents, notes, and profile, signs it out everywhere, and puts it back at onboarding, like a new account. The account keeps its email, name, and password.",
+    "Every account, its tier, and what it holds. Tier sets the account's tier: Unitos Ultra, Unitos Premium for good, or Unitos Premium on a trial until a date. Block puts the account's email on the block list: it is signed out everywhere and cannot sign in until Unblock. Reset account deletes the account's projects, documents, notes, and profile, signs it out everywhere, and puts it back at onboarding, like a new account. The account keeps its email, name, and password.",
   noAccounts: "No accounts yet.",
   accountCreated: "created {date}",
   accountLastSeen: "last seen {date}",
@@ -198,6 +198,22 @@ const en = {
   tierSaved: "Tier saved",
   tierSaveFailed: "Tier save failed",
   tierSaveFailedStatus: "Tier save failed ({status})",
+  // Block list (lib/block.ts): blocked emails; Block and Unblock on each
+  // account, and a form for an email with no account yet.
+  block: "Block",
+  unblock: "Unblock",
+  blocked: "Blocked",
+  unblocked: "Unblocked",
+  blockedChip: "Blocked",
+  blockDesc: "Signs the account out everywhere. It cannot sign in until Unblock.",
+  unblockDesc: "This email is blocked. Unblock lets it sign in again.",
+  blockList: "Block list",
+  blockListDesc:
+    "Every blocked email. A blocked email cannot sign in through any provider, and its account is signed out everywhere. An email with no account yet can be blocked here; it cannot create one until Unblock.",
+  blockEmailPh: "Email to block",
+  blockListEmpty: "No blocked emails.",
+  blockFailed: "Block failed",
+  blockFailedStatus: "Block failed ({status})",
   resetAccount: "Reset account",
   resetConfirmDesc:
     "Deletes every project, document, note, and setting of this account and signs it out everywhere. Type {confirm} to confirm.",
@@ -400,7 +416,7 @@ const zh: Record<keyof typeof en, string> = {
   // Accounts page
   accounts: "账户",
   accountsDesc:
-    "全部账户、其方案及持有的内容。“方案”设置该账户的方案：Unitos Ultra、永久 Unitos Premium，或试用至某日期的 Unitos Premium。“重置账户”删除该账户的项目、文档、笔记和个人资料，在所有设备上退出登录，并使其回到新手引导，如同新账户。账户保留邮箱、名字和密码。",
+    "全部账户、其方案及持有的内容。“方案”设置该账户的方案：Unitos Ultra、永久 Unitos Premium，或试用至某日期的 Unitos Premium。“封禁”把该账户的邮箱加入封禁名单：在所有设备上退出登录，且在“解封”之前无法登录。“重置账户”删除该账户的项目、文档、笔记和个人资料，在所有设备上退出登录，并使其回到新手引导，如同新账户。账户保留邮箱、名字和密码。",
   noAccounts: "还没有账户。",
   accountCreated: "创建于 {date}",
   accountLastSeen: "最近活动 {date}",
@@ -413,6 +429,20 @@ const zh: Record<keyof typeof en, string> = {
   tierSaved: "方案已保存",
   tierSaveFailed: "方案保存失败",
   tierSaveFailedStatus: "方案保存失败（{status}）",
+  block: "封禁",
+  unblock: "解封",
+  blocked: "已封禁",
+  unblocked: "已解封",
+  blockedChip: "已封禁",
+  blockDesc: "在所有设备上退出登录。在“解封”之前无法登录。",
+  unblockDesc: "该邮箱已被封禁。“解封”后可再次登录。",
+  blockList: "封禁名单",
+  blockListDesc:
+    "全部被封禁的邮箱。被封禁的邮箱无法通过任何方式登录，其账户在所有设备上退出登录。还没有账户的邮箱也可以在这里封禁；在“解封”之前无法创建账户。",
+  blockEmailPh: "要封禁的邮箱",
+  blockListEmpty: "没有被封禁的邮箱。",
+  blockFailed: "封禁失败",
+  blockFailedStatus: "封禁失败（{status}）",
   resetAccount: "重置账户",
   resetConfirmDesc: "删除该账户的全部项目、文档、笔记和设置，并在所有设备上退出登录。输入 {confirm} 以确认。",
   resetting: "重置中…",

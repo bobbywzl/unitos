@@ -22,6 +22,12 @@ export async function GET(req: Request) {
 
   // The email local part is the standing fallback when the form left name empty.
   const name = pending.name || pending.email.split("@")[0];
-  const { session } = await signIn({ email: pending.email, name, picture: "" });
-  return sessionRedirect(origin, session, "/welcome");
+  const signed = await signIn({ email: pending.email, name, picture: "" });
+  if (signed === "blocked") {
+    return NextResponse.redirect(
+      new URL(`/signin?error=${encodeURIComponent("This email is blocked")}`, origin),
+      303,
+    );
+  }
+  return sessionRedirect(origin, signed.session, "/welcome");
 }

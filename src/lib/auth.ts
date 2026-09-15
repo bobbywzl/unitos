@@ -10,6 +10,7 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import type { User } from "@prisma/client";
 import { ACCOUNT_COOKIE, APPLE_STATE_COOKIE, SESSION_COOKIE, STATE_COOKIE, USER_ID } from "@/lib/constants";
+import { emailBlocked } from "@/lib/block";
 import { db } from "@/lib/db";
 import { sendConfirmationEmail, sendResetEmail } from "@/lib/email";
 import type { Lang } from "@/lib/i18n/config";
@@ -20,6 +21,9 @@ import { trialEnd } from "@/lib/tiers";
 // authorization-code flows plus an email confirmation flow, no dependencies;
 // sessions in the database, token in an httpOnly cookie. Accounts key on the
 // email, so one person signing in through any provider lands in one account.
+// A blocked email (lib/block.ts, the admin accounts page) is refused at every
+// door here: signIn, passwordLogin, startEmailConfirmation,
+// startPasswordReset, resetPassword.
 //
 // DUAL MODE: with SESSION_SECRET plus any provider's credentials set,
 // /signin gates the app and corpora belong to accounts. Unset, sign-in is off
@@ -335,7 +339,8 @@ export async function startEmailConfirmation(
   email: string,
   name: string,
   lang: Lang,
-): Promise<boolean> {
+): Promise<boolean | "blocked"> {
+  if (await emailBlocked(email)) return "blocked";
   const token = await createEmailToken(email, name, "signup");
   if (!token) return true; // one is already on its way
   return sendConfirmationEmail(email, `${origin}/api/auth/email/confirm?token=${token}`, lang);
@@ -384,11 +389,13 @@ export function verifyPassword(password: string, stored: string): boolean {
 
 // Email + password → session. "bad" = unknown email or wrong password (one
 // answer, no account enumeration); "nopass" = the account exists but has no
-// password — the UI points that at Forgot password.
+// password — the UI points that at Forgot password; "blocked" = the email is
+// on the block list.
 export async function passwordLogin(
   email: string,
   password: string,
-): Promise<{ token: string; userId: string; expiresAt: Date } | "bad" | "nopass"> {
+): Promise<{ token: string; userId: string; expiresAt: Date } | "bad" | "nopass" | "blocked"> {
+  if (await emailBlocked(email)) return "blocked";
   const user = await db.user.findUnique({ where: { email } });
   if (!user) return "bad";
   if (!user.passwordHash) return "nopass";
@@ -400,9 +407,11 @@ export async function setPassword(userId: string, password: string): Promise<voi
   await db.user.update({ where: { id: userId }, data: { passwordHash: hashPassword(password) } });
 }
 
-// Create the pending reset and send the email — only when the account exists.
-// The caller answers the same either way (no account enumeration).
+// Create the pending reset and send the email — only when the account exists
+// and the email is not blocked. The caller answers the same either way (no
+// account enumeration).
 export async function startPasswordReset(origin: string, email: string, lang: Lang): Promise<void> {
+  if (await emailBlocked(email)) return;
   const user = await db.user.findUnique({ where: { email }, select: { id: true } });
   if (!user) return;
   const token = await createEmailToken(email, "", "reset");
@@ -418,6 +427,7 @@ export async function resetPassword(
 ): Promise<{ token: string; userId: string; expiresAt: Date } | null> {
   const pending = await confirmEmailToken(token, "reset");
   if (!pending) return null;
+  if (await emailBlocked(pending.email)) return null;
   const user = await db.user.findUnique({ where: { email: pending.email }, select: { id: true } });
   if (!user) return null;
   await setPassword(user.id, password);
@@ -512,8 +522,14 @@ export async function createSession(
   return { token, userId, expiresAt };
 }
 
-// Sign the profile in: upsert the account, mint a session.
-export async function signIn(profile: { email: string; name: string; picture: string }) {
+// Sign the profile in: upsert the account, mint a session. "blocked" = the
+// email is on the block list; no account is created or touched.
+export async function signIn(profile: {
+  email: string;
+  name: string;
+  picture: string;
+}): Promise<{ user: User; session: { token: string; userId: string; expiresAt: Date } } | "blocked"> {
+  if (await emailBlocked(profile.email)) return "blocked";
   const user = await upsertUser(profile);
   const session = await createSession(user.id);
   return { user, session };

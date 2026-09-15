@@ -1,6 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 import { appOrigin, authEnabled, createSession, sessionRedirect, upsertUser } from "@/lib/auth";
+import { emailBlocked } from "@/lib/block";
 import { db } from "@/lib/db";
 
 // Token-gated test login for QA runs (Scalae pattern). Sealed unless the
@@ -29,9 +30,14 @@ export async function GET(req: Request) {
   }
 
   const reader = Math.min(4, Math.max(1, Number(url.searchParams.get("reader")) || 1));
+  const email = `test-reader-${reader}@test.local`;
+  // The block list (lib/block.ts) holds at this door too.
+  if (await emailBlocked(email)) {
+    return NextResponse.json({ error: "This email is blocked" }, { status: 403 });
+  }
   const first = (await db.user.count()) === 0;
   const user = await upsertUser({
-    email: `test-reader-${reader}@test.local`,
+    email,
     name: `Test reader ${reader}`,
     picture: "",
   });

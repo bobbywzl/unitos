@@ -29,6 +29,7 @@ export async function POST(req: Request) {
   if (!parsed.success) return fail("Enter a valid email");
 
   const result = await passwordLogin(parsed.data.email, parsed.data.password);
+  if (result === "blocked") return fail("This email is blocked");
   if (result === "bad") return fail("Wrong email or password");
   if (result === "nopass") {
     return fail("This account has no password yet — use Forgot password to set one");

@@ -27,6 +27,7 @@ export async function POST(req: Request) {
 
   const { email, name } = parsed.data;
   const sent = await startEmailConfirmation(origin, email, name, await currentLang());
+  if (sent === "blocked") return fail("This email is blocked");
   if (!sent) return fail("Could not send the confirmation email — try again");
   return NextResponse.redirect(
     new URL(`/signin?sent=${encodeURIComponent(email)}`, origin),

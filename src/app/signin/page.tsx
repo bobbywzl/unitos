@@ -209,6 +209,7 @@ export default async function SignInPage({
     "Wrong email or password": t("signin.errBadLogin"),
     "This account has no password yet — use Forgot password to set one":
       t("signin.errNoPassword"),
+    "This email is blocked": t("signin.errBlocked"),
   };
 
   const inputCls =
