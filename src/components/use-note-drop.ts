@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import type { TFunc } from "@/lib/i18n/dictionaries";
 import { refuseImage, uploadImage, type ImageRefusal } from "@/lib/images";
 import { hasDroppedLinks, readDroppedLinks, type DroppedLink } from "@/lib/note-links";
+import { hasQuoteDrag, readQuoteDrag, type QuoteDrag } from "@/lib/quote-drag";
 
 // Dropping something into a note (SPEC.md §6, §16): an image on a note card,
 // the floating card, or a paragraph in the reader's edit mode, and a link —
@@ -25,8 +26,9 @@ const REFUSAL_KEY: Record<ImageRefusal, Parameters<TFunc>[0]> = {
 
 export type DroppedImage = { id: string; url: string; name: string };
 
-/** What the drag over the surface carries: images, links, or nothing it takes. */
-export type DropKind = "images" | "links" | null;
+/** What the drag over the surface carries: images, links, a quote from the
+    reader (lib/quote-drag.ts), or nothing it takes. */
+export type DropKind = "images" | "links" | "quote" | null;
 
 export function useNoteDrop({
   premium,
@@ -34,6 +36,7 @@ export function useNoteDrop({
   t,
   onImages,
   onLinks,
+  onQuote,
   onError,
 }: {
   premium: boolean;
@@ -42,6 +45,8 @@ export function useNoteDrop({
   onImages: (images: DroppedImage[]) => void | Promise<void>;
   /** Links dropped on the surface. Unset: the surface takes no links. */
   onLinks?: (links: DroppedLink[]) => void | Promise<void>;
+  /** A quote dragged from the reader. Unset: the surface takes no quotes. */
+  onQuote?: (drag: QuoteDrag) => void | Promise<void>;
   onError: (message: string) => void;
 }) {
   const [over, setOver] = useState<DropKind>(null);
@@ -51,6 +56,7 @@ export function useNoteDrop({
   const kindOf = (e: React.DragEvent): DropKind => {
     if (!enabled) return null;
     if (hasFiles(e)) return "images";
+    if (onQuote && hasQuoteDrag(e.dataTransfer)) return "quote";
     if (onLinks && hasDroppedLinks(e.dataTransfer)) return "links";
     return null;
   };
@@ -71,6 +77,19 @@ export function useNoteDrop({
   async function onDrop(e: React.DragEvent) {
     const kind = kindOf(e);
     if (!kind) return;
+    if (kind === "quote") {
+      const drag = readQuoteDrag(e.dataTransfer);
+      setOver(null);
+      if (!drag) return;
+      e.preventDefault();
+      e.stopPropagation();
+      try {
+        await onQuote?.(drag);
+      } catch (err) {
+        onError(err instanceof Error ? err.message : t("common.requestFailed"));
+      }
+      return;
+    }
     if (kind === "links") {
       const links = readDroppedLinks(e.dataTransfer);
       setOver(null);

@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { PlusIcon, RedoIcon, UndoIcon } from "@/components/icons";
+import { BookmarkIcon, PlusIcon, RedoIcon, UndoIcon } from "@/components/icons";
+import { setQuoteDragImage, writeQuoteDrag } from "@/lib/quote-drag";
 import { isImeKey } from "@/lib/ime";
 import { styleShortcut } from "@/lib/markdown-style";
 import { NOTE_WRAP_EVENT, type NoteWrapSpacer } from "@/lib/note-wrap";
@@ -121,11 +122,14 @@ function TranscriptBody({
   blocks,
   highlightsByBlock,
   translations,
+  documentId,
 }: {
   transcript: TranscriptVariant;
   blocks: BlockData[];
   highlightsByBlock: Record<string, Highlight[]>;
   translations?: Record<string, string> | null;
+  /** The document, for the bookmark on each line; absent in an embedded layer. */
+  documentId?: string;
 }) {
   const t = useT();
   const uiLang = useLang();
@@ -243,6 +247,9 @@ function TranscriptBody({
               const annotated = annotatedLineIds.has(line.id);
               return (
                 <span key={line.id} className="group/line relative">
+                  {documentId && (
+                    <BlockBookmark documentId={documentId} blockId={line.id} text={line.text} inline />
+                  )}
                   <span
                     onClick={() => seek(line)}
                     role="button"
@@ -298,6 +305,62 @@ function TranscriptBody({
 // object that would be squeezed to a sliver beside the card, so it clears the
 // card instead and takes its place above or below it.
 const WRAP_FLOW_TYPES = new Set(["PARAGRAPH", "HEADING", "LIST", "TRANSCRIPT"]);
+
+// A quoted block keeps its first characters when it is longer than a
+// source's quote may be (lib/anchors/input.ts).
+const BOOKMARK_QUOTE_MAX = 10_000;
+
+// The bookmark beside a hovered block (SPEC.md §6): drag it into a note and
+// the whole block lands there as a quote, its source the block, so the quote
+// points back to it. A transcript line carries its own, inline. The handle
+// takes the press itself, so the reader's selection never starts under it.
+function BlockBookmark({
+  documentId,
+  blockId,
+  text,
+  inline = false,
+}: {
+  documentId: string;
+  blockId: string;
+  text: string;
+  inline?: boolean;
+}) {
+  const t = useT();
+  if (!text.trim()) return null;
+  const quoted = text.length > BOOKMARK_QUOTE_MAX ? text.slice(0, BOOKMARK_QUOTE_MAX) : text;
+  return (
+    <span
+      draggable
+      data-anchor-skip
+      data-track="block-bookmark"
+      onMouseDown={(e) => e.stopPropagation()}
+      onDragStart={(e) => {
+        e.stopPropagation();
+        writeQuoteDrag(e.dataTransfer, {
+          source: {
+            documentId,
+            blockId,
+            startOffset: 0,
+            endOffset: quoted.length,
+            quotedText: quoted,
+            prefix: "",
+            suffix: "",
+          },
+          text: quoted,
+        });
+        setQuoteDragImage(e.dataTransfer, quoted);
+      }}
+      data-tip={t("reader.bookmarkBlock")}
+      className={
+        inline
+          ? "mr-1 inline-flex size-5 cursor-grab items-center justify-center rounded-full align-middle text-sand-400 opacity-0 transition-opacity group-hover/line:opacity-100 hover:bg-clay-100 hover:text-clay-700 print:hidden"
+          : "absolute top-0.5 -left-8 flex size-6 cursor-grab items-center justify-center rounded-full text-sand-400 opacity-0 transition-opacity group-hover/block:opacity-100 hover:bg-clay-100 hover:text-clay-700 print:hidden"
+      }
+    >
+      <BookmarkIcon size={13} />
+    </span>
+  );
+}
 
 const FONT_STACK: Record<string, string | undefined> = {
   default: undefined,
@@ -866,17 +929,21 @@ export function Reader({
         </div>
       );
     } else if (WRAP_FLOW_TYPES.has(block.type)) {
+      // The wrapper holds the bookmark beside the block; the block keeps its
+      // own margins, which collapse through it, so spacing does not change.
       node = (
-        <>
+        <div className="group/block relative">
+          {documentId && <BlockBookmark documentId={documentId} blockId={block.id} text={block.text} />}
           <BlockView block={block} highlights={highlightsByBlock[block.id]} documentId={documentId} />
           {translationOf(block)}
-        </>
+        </div>
       );
     } else {
-      // The wrapper carries the clear; the block keeps its own margins,
-      // which collapse through it, so spacing does not change.
+      // The wrapper carries the clear and holds the bookmark; the block keeps
+      // its own margins, which collapse through it, so spacing does not change.
       node = (
-        <div className={wrapClear(block.id).trim()}>
+        <div className={`group/block relative ${wrapClear(block.id).trim()}`}>
+          {documentId && <BlockBookmark documentId={documentId} blockId={block.id} text={block.text} />}
           <BlockView block={block} highlights={highlightsByBlock[block.id]} documentId={documentId} />
           {translationOf(block)}
         </div>
@@ -911,6 +978,7 @@ export function Reader({
                 blocks={blocks}
                 highlightsByBlock={highlightsByBlock}
                 translations={translations}
+                documentId={documentId}
               />
             </>
           )}

@@ -94,6 +94,7 @@ import { PANE_HEADER } from "@/components/reader/reader-panes";
 import type { FigureRenderInfo } from "@/components/reader/figure-capture";
 import { Reader, type TranscriptVariant } from "@/components/reader/reader";
 import { openVisualization } from "@/components/reader/visualization-viewer";
+import { setQuoteDragImage, writeQuoteDrag } from "@/lib/quote-drag";
 
 // One block's span of a selection (SPEC.md §5).
 type Segment = Omit<SourceInput, "documentId">;
@@ -2194,7 +2195,25 @@ export function ReaderInteractions({
       tracking = null;
     };
     const onDragStart = (e: DragEvent) => {
-      if (figureAt(e.target as Element)) e.preventDefault();
+      if (figureAt(e.target as Element)) {
+        e.preventDefault();
+        return;
+      }
+      // A drag that starts on the selection carries the passage as a quote
+      // (lib/quote-drag.ts): let go in a note, it lands there as a quote
+      // with the same source Add to notes gives it, pointing back here.
+      const anchor = popoverRef.current?.anchor;
+      const sel = window.getSelection();
+      if (!anchor || !e.dataTransfer || !sel || sel.isCollapsed) return;
+      const docId = documentIdRef.current;
+      const segments = segmentsOf(anchor).map((segment) => ({ documentId: docId, ...anchorBody(segment) }));
+      const text = passageText(anchor);
+      writeQuoteDrag(e.dataTransfer, {
+        source: segments[0],
+        ...(segments.length > 1 ? { segments } : {}),
+        text,
+      });
+      setQuoteDragImage(e.dataTransfer, text);
     };
     container.addEventListener("pointerdown", onDown);
     container.addEventListener("pointermove", onMove);

@@ -2,6 +2,7 @@
 
 import type { Element as HastElement, ElementContent, Root as HastRoot, Text as HastText } from "hast";
 import type { List, Root } from "mdast";
+import { useRouter } from "next/navigation";
 import { createContext, useContext, useMemo } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -10,7 +11,9 @@ import { useT } from "@/components/lang-provider";
 import { isVisualizationImage, openVisualization } from "@/components/reader/visualization-viewer";
 import { imageWidth } from "@/lib/note-markup";
 import { linkHost } from "@/lib/note-links";
+import { sourceOfQuote } from "@/lib/notes/quote-sources";
 import { splitHits } from "@/lib/search-hits";
+import type { SourceChip } from "@/lib/types";
 
 // AI text cites document blocks as [block <id>] — the tags the model sees in
 // its document context. They render as ¶ chips that scroll the reader to the
@@ -258,22 +261,49 @@ function LinkCard({ href, children }: { href: string; children: React.ReactNode 
 // box's own node carries no position.
 const TaskLine = createContext(-1);
 
+// The words of a rendered node, for matching a quote to its source.
+function hastText(node: { type: string; value?: string; children?: unknown[] } | undefined): string {
+  if (!node) return "";
+  if (node.type === "text" && typeof node.value === "string") return node.value;
+  if (Array.isArray(node.children)) {
+    return node.children.map((child) => hastText(child as { type: string })).join("");
+  }
+  return "";
+}
+
+function AnchorGlyph() {
+  return (
+    <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <circle cx="12" cy="5" r="2.5" />
+      <path d="M12 7.5v13M5 12H2a10 10 0 0 0 20 0h-3" />
+    </svg>
+  );
+}
+
 /** breaks: single newlines render as line breaks (notes). onToggleTask: a
     checklist item's box is a control; a click reports the item's line (from
     0) and its new state, and the caller saves the note (note-card.tsx).
-    highlight: the text a search looks for; every match lights up. */
+    highlight: the text a search looks for; every match lights up.
+    sources, with notebookId: the note's sources; a quote whose words are a
+    source's points back to the reader (SPEC.md §6) — a click jumps to the
+    source, and the line under the words names the document. */
 export function Markdown({
   children,
   breaks = false,
   onToggleTask,
   highlight,
+  sources,
+  notebookId,
 }: {
   children: string;
   breaks?: boolean;
   onToggleTask?: (line: number, checked: boolean) => void;
   highlight?: string;
+  sources?: SourceChip[];
+  notebookId?: string;
 }) {
   const t = useT();
+  const router = useRouter();
   // Lists line up first: hardBreaks reads the lines as they will be nested.
   // Both keep every line, so a line counted here is the same line in children.
   const text = breaks ? hardBreaks(alignListIndents(children)) : alignListIndents(children);
@@ -288,6 +318,35 @@ export function Markdown({
         remarkPlugins={[remarkGfm, remarkDashLists]}
         rehypePlugins={rehypePlugins}
         components={{
+          blockquote: ({ node, children: quoteChildren, ...props }) => {
+            const source =
+              sources && sources.length > 0 && notebookId ? sourceOfQuote(hastText(node), sources) : null;
+            if (!source) return <blockquote {...props}>{quoteChildren}</blockquote>;
+            const href = `/n/${notebookId}?doc=${source.documentId}&src=${source.id}`;
+            const jump = () => {
+              // A click that ends a selection belongs to the selection.
+              if (!window.getSelection()?.isCollapsed) return;
+              if (!source.orphaned) router.push(href);
+            };
+            return (
+              <blockquote
+                {...props}
+                className={source.orphaned ? "note-quote-orphaned" : "note-quote-linked"}
+                onClick={jump}
+                data-tip={source.orphaned ? t("outline.quoteUnresolved") : t("outline.quoteJump")}
+                data-track="note-quote-jump"
+              >
+                {quoteChildren}
+                <span className="note-quote-source">
+                  <AnchorGlyph />
+                  <span className="truncate">
+                    {source.documentTitle}
+                    {source.orphaned ? ` · ${t("outline.unresolvedLabel")}` : ""}
+                  </span>
+                </span>
+              </blockquote>
+            );
+          },
           li: ({ node, children: itemChildren, ...props }) => {
             const offset = node?.position?.start.offset;
             const line = offset === undefined ? -1 : text.slice(0, offset).split("\n").length - 1;

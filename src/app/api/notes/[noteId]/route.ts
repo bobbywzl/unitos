@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { sourceInputSchema } from "@/lib/anchors/input";
+import { MAX_SEGMENTS, passageSources, resolvePassage } from "@/lib/anchors/passage";
+import { documentBlocks } from "@/lib/anchors/resolve";
 import { bumpNotebook, noteAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
 import { serverT } from "@/lib/i18n/server";
@@ -9,6 +12,15 @@ import { parseBody } from "@/lib/validate";
 
 const patchSchema = z.object({
   content: z.string().min(1).max(50_000).optional(),
+  // A quote dropped into the note (SPEC.md §6): its anchor, one segment per
+  // block of a passage over several. Resolved through the ladder like a
+  // source on a new note (/api/notes), and added to the note's sources.
+  addSource: z
+    .object({
+      source: sourceInputSchema,
+      segments: z.array(sourceInputSchema.omit({ documentId: true })).min(1).max(MAX_SEGMENTS).optional(),
+    })
+    .optional(),
   color: z.enum(["clay", "sage", "gold", "plum"]).optional(), // highlight hue
   order: z.number().int().min(0).optional(),
   sectionId: z.string().min(1).optional(),
@@ -28,6 +40,20 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ noteId: strin
   if (access instanceof NextResponse) return access;
 
   const fromSectionId = note.sectionId;
+
+  if (data.addSource) {
+    const { source, segments } = data.addSource;
+    if (source.endOffset <= source.startOffset) {
+      return NextResponse.json({ error: t("api.anchorOffsetsInvalid") }, { status: 400 });
+    }
+    const passage = resolvePassage(await documentBlocks(source.documentId), source, segments);
+    if (passage.length === 0) {
+      return NextResponse.json({ error: t("api.anchorNotResolvedInDocument") }, { status: 400 });
+    }
+    await db.source.createMany({
+      data: passageSources(source.documentId, passage).map((row) => ({ ...row, noteId })),
+    });
+  }
 
   if (data.sectionId && data.sectionId !== note.sectionId) {
     const target = await db.section.findUnique({ where: { id: data.sectionId } });

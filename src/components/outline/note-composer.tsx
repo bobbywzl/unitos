@@ -51,6 +51,7 @@ export function NoteComposer({
           full={full}
           moreHref={moreHref}
           autoFocus={false}
+          onQuoteDrop={compose.attachQuote}
           title={
             <NoteTitleField
               value={parts.title}

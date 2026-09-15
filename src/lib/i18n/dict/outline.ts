@@ -75,6 +75,15 @@ const en = {
     "Select this note. Merge, pin, compare, or delete the selected notes together.",
   selectedCount: "{n} selected",
   merge: "Merge",
+  // A merged note's seam (lib/notes/join.ts): the subtitle over a note's
+  // text when the note had no title. Dimmed, and deleted like any line.
+  mergedNote: "Merged note",
+  // A quote in a note points back to the reader (SPEC.md §6).
+  quoteJump: "Jump to this quote in the reader",
+  quoteUnresolved: "This quote's place in the document is gone",
+  // A quote dragged from the reader (lib/quote-drag.ts): the caret says where it lands.
+  dropQuoteHere: "Let go to put the quote here",
+  dropQuoteIntoNote: "Let go to add the quote to this note",
   mergeTitle: "Merge the selected notes into one: their text as it is, the note on top first",
   // Merging (SPEC.md §6): a note held over another until the ring closes, or
   // a card dropped on the floating note card, joins the text as it is. Merge
@@ -236,6 +245,11 @@ const zh: Record<keyof typeof en, string> = {
   selectNoteTitleCompare: "选择此笔记。选中的笔记可一起合并、置顶、对比或删除。",
   selectedCount: "已选 {n} 条",
   merge: "合并",
+  mergedNote: "合并的笔记",
+  quoteJump: "跳到阅读器中这段引用的位置",
+  quoteUnresolved: "这段引用在文档中的位置已不存在",
+  dropQuoteHere: "松开即把引用放在这里",
+  dropQuoteIntoNote: "松开即把引用加入此笔记",
   mergeTitle: "把选中的笔记合并为一条：文本原样保留，上面的笔记在前",
   mergeWithAi: "用 AI 合并",
   mergeWithAiTitle: "写出取代两条笔记的那一条：保留每个要点，重复的只写一次",

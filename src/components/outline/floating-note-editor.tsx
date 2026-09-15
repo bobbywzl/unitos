@@ -20,6 +20,8 @@ import { NoteTitleField, focusBodyEditor, useNoteParts } from "@/components/outl
 import { SourceChips } from "@/components/outline/note-card";
 import { SaveStateLabel } from "@/components/outline/save-state";
 import { useNoteDrop } from "@/components/use-note-drop";
+import { uncoveredSources } from "@/lib/notes/quote-sources";
+import { quoteMarkdown } from "@/lib/quote-drag";
 import { useCardDropTarget } from "@/components/outline/use-card-drop";
 import { useNoteDraft } from "@/components/outline/use-note-draft";
 import type { FloatingEdit, OutlineActions } from "@/components/outline/use-outline";
@@ -439,6 +441,10 @@ export function FloatingNoteEditor({
     onError: setDropError,
     onImages: (images) => addToNote(images.map((i) => imageMarkdown(i.id, i.name)).join("\n\n")),
     onLinks: (links) => addToNote(links.map(linkMarkdown).join("\n\n")),
+    onQuote: async (drag) => {
+      await addToNote(quoteMarkdown(drag.text));
+      if (note) await actions.attachSource(note.id, drag);
+    },
   });
 
   // Hold to drag (lib/hold-drag.ts): in the draggable mode a hold anywhere
@@ -554,6 +560,7 @@ export function FloatingNoteEditor({
               if (e.key === "Escape") cancelEdit();
             }}
             moreHref={`/n/${actions.notebookId}/notes`}
+            onQuoteDrop={(drag) => (note ? actions.attachSource(note.id, drag) : undefined)}
             title={
               <NoteTitleField
                 value={parts.title}
@@ -570,10 +577,14 @@ export function FloatingNoteEditor({
       ) : (
         <div className="note-body min-h-0 flex-1 overflow-y-auto">
           {shown.title && <h3 className="note-title mb-1">{shown.title}</h3>}
-          {shown.body.trim() !== "" && <Markdown breaks>{shown.body}</Markdown>}
-          {note && note.sources.length > 0 && (
+          {shown.body.trim() !== "" && (
+            <Markdown breaks sources={note?.sources} notebookId={actions.notebookId}>
+              {shown.body}
+            </Markdown>
+          )}
+          {note && uncoveredSources(shown.body, note.sources).length > 0 && (
             <div className="mt-2.5">
-              <SourceChips sources={note.sources} notebookId={actions.notebookId} />
+              <SourceChips sources={uncoveredSources(shown.body, note.sources)} notebookId={actions.notebookId} />
             </div>
           )}
         </div>

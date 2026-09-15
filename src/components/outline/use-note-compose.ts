@@ -6,6 +6,7 @@ import { ACCOUNT_HEADER } from "@/lib/constants";
 import { clearComposeDraft, readComposeDraft, writeComposeDraft } from "@/lib/note-drafts";
 import { isOffline } from "@/lib/offline/queue";
 import { tabAccount } from "@/lib/tab-account";
+import type { QuoteDrag } from "@/lib/quote-drag";
 import type { NoteView } from "@/lib/types";
 import type { SaveState } from "@/components/outline/save-state";
 import type { OutlineActions } from "@/components/outline/use-outline";
@@ -41,6 +42,9 @@ export function useNoteCompose({
   // The create in flight: Save and Cancel wait for it, so the note is never
   // created twice or left behind.
   const creatingRef = useRef<Promise<void> | null>(null);
+  // Quotes dropped into the composer before it owns a note (lib/quote-drag.ts):
+  // their sources attach the moment the note exists.
+  const pendingQuotesRef = useRef<QuoteDrag[]>([]);
   // The content the server confirmed, and the content whose save failed: the
   // save state at the top of the composer reads against the draft (save-state.tsx).
   const [confirmed, setConfirmed] = useState("");
@@ -100,6 +104,7 @@ export function useNoteCompose({
         writeComposeDraft(sectionId, draftRef.current, note.id);
         setNoteId(note.id);
         setConfirmed(trimmed);
+        await flushQuotes(note.id);
       })
       .catch(() => {
         // Not created: the next keystroke tries again; Save creates it itself.
@@ -110,6 +115,21 @@ export function useNoteCompose({
       });
     creatingRef.current = run;
     return run;
+  }
+
+  async function flushQuotes(id: string) {
+    const quotes = pendingQuotesRef.current;
+    pendingQuotesRef.current = [];
+    for (const drag of quotes) await actions.attachSource(id, drag).catch(() => {});
+  }
+
+  /** A quote dropped into the composer: its source attaches to the note the
+      composer owns, or waits for the one it creates. */
+  async function attachQuote(drag: QuoteDrag) {
+    if (creatingRef.current) await creatingRef.current;
+    const id = noteIdRef.current;
+    if (id) await actions.attachSource(id, drag);
+    else pendingQuotesRef.current.push(drag);
   }
 
   // The server save, after the last keystroke.
@@ -168,6 +188,7 @@ export function useNoteCompose({
   }, [composing, canEdit]);
 
   function reset() {
+    pendingQuotesRef.current = [];
     clearComposeDraft(sectionId);
     noteIdRef.current = null;
     lastSavedRef.current = "";
@@ -192,6 +213,13 @@ export function useNoteCompose({
     if (id) {
       lastSavedRef.current = trimmed;
       await actions.saveNote(id, trimmed);
+    } else if (pendingQuotesRef.current.length > 0) {
+      // Quotes wait on the note's id: create it here, attach them, then the
+      // save that lists it.
+      await create(trimmed);
+      const created = noteIdRef.current;
+      if (created) await actions.saveNote(created, trimmed);
+      else await actions.addNote(sectionId, trimmed);
     } else {
       await actions.addNote(sectionId, trimmed);
     }
@@ -226,6 +254,7 @@ export function useNoteCompose({
     save,
     cancel,
     escape,
+    attachQuote,
     /** The section's notes without the one the composer owns. */
     visibleNotes: noteId ? notes.filter((n) => n.id !== noteId) : notes,
   };
