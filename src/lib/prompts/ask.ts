@@ -1,4 +1,4 @@
-import { answerLanguage, profileLines, STYLE_RULE, type PromptCtx } from "@/lib/prompts/types";
+import { answerLanguage, profileLines, SPECIFICITY_RULE, STYLE_RULE, type PromptCtx } from "@/lib/prompts/types";
 
 // ASK: a question about a time range of a video or audio document (SPEC.md
 // §11). The full timed transcript is the cached prefix; the range's lines are
@@ -19,10 +19,12 @@ export function askPrompt(ctx: PromptCtx): string {
     ctx.question ?? "",
     "",
     "Answer the question from the transcript at that range.",
-    "1. Answer from what is said inside the range. Quote the speaker's words where they carry the answer, and give the time of each quote as m:ss.",
-    "2. When the range does not answer the question, say so plainly. When another part of the transcript does, name its time and answer from there, and say that it is outside the range.",
-    "3. Never add facts the transcript does not state. Never guess what a speaker meant beyond their words.",
-    "Keep it under 150 words. Use markdown. Start with the answer.",
+    "1. Start with the answer in one sentence. Then the evidence: quote the speaker's words where they carry the answer, and give the time of each quote as m:ss.",
+    "2. When the range does not answer the question, say so plainly in one sentence. When another part of the transcript does, name its time and answer from there, and say that it is outside the range.",
+    "3. Never add facts the transcript does not state. Never guess what a speaker meant beyond their words. Never fill a gap with what is generally known.",
+    "4. Connect the answer to the reader's purpose when the connection is real. Skip forced connections.",
+    "Keep it under 150 words. Use markdown.",
+    SPECIFICITY_RULE,
     STYLE_RULE,
     answerLanguage(ctx.lang),
   ].join("\n");

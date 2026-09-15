@@ -1,8 +1,9 @@
 // UI strings of the reader surfaces. zh glossary: dict/common.ts. Every key
 // exists in both languages — zh's type enforces it.
 // Key names are code identifiers: keypoints* = the reader's Distill
-// (KEYPOINTS), distill* = the reader's Extract (DISTILL), extract* = the
-// reader's Match-it (EXTRACT).
+// (KEYPOINTS), distill* = the reader's Extract (DISTILL), extract* = a
+// stored match of the old Match-it tool (EXTRACT; the assistant does that
+// work now, SPEC.md §7).
 //
 // Count phrases interpolate {n}; {s} is the English plural suffix ("" or "s")
 // and zh templates simply omit it.
@@ -12,14 +13,12 @@ const en = {
   copied: "Copied",
   copyFailed: "Could not copy. Your browser blocked it.",
   assistant: "Assistant",
-  explain: "Explain",
   simplify: "Simplify",
   visualize: "Visualize",
   visualizeTitle:
     "The AI turns the selection into a picture — a diagram, a drawing, or a short animation — when it is certain the picture carries the passage's core idea. Unitos Ultra. Saved under Annotations.",
   ultra: "Ultra",
   visualizeNeedsUltra: "Visualize is Unitos Ultra.",
-  extract: "Match-it",
   comment: "Comment",
   highlight: "Highlight",
   addToNotes: "Add to notes",
@@ -41,10 +40,6 @@ const en = {
   speakCommand: "Speak the command",
   commentPlaceholder: "Comment on this passage — or pick a color to attach it to a highlight",
   addCommentPlaceholder: "Add a comment",
-  extractTermTitle:
-    "Recommended for this key term: highlight the passages across the article that match it",
-  extractTitle: "Highlight the passages across the article that match what this focuses on",
-  explainFigureTitle: "The AI deciphers what the visualization shows",
   analyzeFigure: "Analyze figure",
   analyzeTable: "Analyze table",
   analyzeFigureTitle:
@@ -58,8 +53,6 @@ const en = {
   stopReading: "Stop reading",
   assistantTitle:
     "Tell the assistant what to do with the selection. It proposes a plan or replies beside the article.",
-  explainTitle:
-    "The AI explains the selection in plain words, tuned to your background. Saved under Annotations.",
   simplifyTitle:
     "The AI rewrites the selection in plain words beside the article. Press a sentence to see the original it restates.",
   commentTitle: "Attach a comment to the selection, without a highlight",
@@ -109,7 +102,6 @@ const en = {
   renameDocumentTitle: "Click to edit the title",
 
   // Side cards
-  explaining: "Explaining…",
   explanation: "Explanation",
   analyzing: "Analyzing…",
   analysis: "Analysis",
@@ -163,7 +155,6 @@ const en = {
   extractCardOrigin: "Origin",
   extractCardPassages: "{n} passage{s}",
   deleteExtractionTitle: "Remove this match and its highlights",
-  regenerateExtractionTitle: "Match this phrase again. The new match replaces this one.",
 
   // Plan card
   assistantPlan: "Assistant plan",
@@ -227,10 +218,6 @@ const en = {
   addSectionFirstDot: "Add a section first.",
   addSectionFirst: "Add a section first",
   addPendingNote: "Add as a pending note in {section}",
-  extracting: "Matching…",
-  extractDone: "Match-it {label}: {n} passage{s} highlighted",
-  extractFailed: "Match-it failed",
-  extractFailedStatus: "Match-it failed ({status})",
   blockNotOpen: "That block is not in the open document.",
   figureNoCaption: "This figure has no caption to anchor to.",
   voiceUnavailable: "Voice is not available in this browser.",
@@ -271,13 +258,11 @@ const zh: Record<keyof typeof en, string> = {
   copied: "已复制",
   copyFailed: "无法复制。浏览器阻止了此操作。",
   assistant: "助手",
-  explain: "解释",
   simplify: "简化",
   visualize: "可视化",
   visualizeTitle: "AI 在确定图能传达选中内容的核心思想时，把它画成图——示意图、插画或短动画。Unitos Ultra 功能。保存在批注下。",
   ultra: "Ultra",
   visualizeNeedsUltra: "可视化是 Unitos Ultra 功能。",
-  extract: "匹配",
   comment: "评论",
   highlight: "高亮",
   addToNotes: "添加到笔记",
@@ -299,9 +284,6 @@ const zh: Record<keyof typeof en, string> = {
   speakCommand: "说出指令",
   commentPlaceholder: "评论此片段——或选一种颜色，把评论附到高亮上",
   addCommentPlaceholder: "添加评论",
-  extractTermTitle: "推荐用于此关键术语：高亮全文中与它匹配的片段",
-  extractTitle: "高亮全文中与此处主题匹配的片段",
-  explainFigureTitle: "AI 解读这幅图展示的内容",
   analyzeFigure: "分析插图",
   analyzeTable: "分析表格",
   analyzeFigureTitle: "AI 在文章旁解读插图：洞见、支撑它们的数据，以及它与文档其余部分和项目的关联。保存在批注下。",
@@ -312,7 +294,6 @@ const zh: Record<keyof typeof en, string> = {
   readAloud: "朗读选中内容",
   stopReading: "停止朗读",
   assistantTitle: "告诉助手要对选中内容做什么。它会提出计划，或在文章旁回复。",
-  explainTitle: "AI 结合你的背景，用通俗的语言解释选中内容。保存在批注下。",
   simplifyTitle: "AI 在文章旁用通俗的语言改写选中内容。点击一句可查看它对应的原文。",
   commentTitle: "给选中内容附上评论，不加高亮",
   closeLinkTitle: "把选中内容作为你已开始的链接的另一端",
@@ -361,7 +342,6 @@ const zh: Record<keyof typeof en, string> = {
   renameDocumentTitle: "点击编辑标题",
 
   // Side cards
-  explaining: "解释中…",
   explanation: "解释",
   analyzing: "分析中…",
   analysis: "分析",
@@ -414,7 +394,6 @@ const zh: Record<keyof typeof en, string> = {
   extractCardOrigin: "起点",
   extractCardPassages: "{n} 个片段",
   deleteExtractionTitle: "移除此匹配及其高亮",
-  regenerateExtractionTitle: "重新匹配此短语。新的匹配会替换当前这条。",
 
   // Plan card
   assistantPlan: "助手计划",
@@ -478,10 +457,6 @@ const zh: Record<keyof typeof en, string> = {
   addSectionFirstDot: "请先添加章节。",
   addSectionFirst: "请先添加章节",
   addPendingNote: "添加为 {section} 中的待定笔记",
-  extracting: "匹配中…",
-  extractDone: "匹配 {label}：已高亮 {n} 个片段",
-  extractFailed: "匹配失败",
-  extractFailedStatus: "匹配失败（{status}）",
   blockNotOpen: "该块不在当前打开的文档中。",
   figureNoCaption: "此插图没有可锚定的说明。",
   voiceUnavailable: "此浏览器不支持朗读。",

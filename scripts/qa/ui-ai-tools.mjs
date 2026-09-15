@@ -69,7 +69,7 @@ async function run() {
   // ── Analyze a table from the selection popover ──
   await page.goto(`${base}/n/${NB}?doc=${DOC}`, { waitUntil: "networkidle" });
   await page.waitForSelector("article.reader-prose [data-block-id]", { timeout: 20000 });
-  // The text toolbar: no Analyze; Simplify, Extract, Read aloud present.
+  // The text toolbar: no Analyze; Simplify and Read aloud present.
   const paragraphId = await page.evaluate(() => {
     for (const el of document.querySelectorAll("article.reader-prose [data-block-id]")) {
       const prose = el.tagName === "P" || el.querySelector("p");
@@ -83,19 +83,20 @@ async function run() {
   await selectIn(paragraphId, 30);
   const textPopover = page.locator("[data-selection-popover]");
   check("text selection opens the text toolbar without Analyze", (await textPopover.count()) === 1 && (await textPopover.locator('button[data-track="analyze"]').count()) === 0);
-  check("the text toolbar has Simplify, Extract, and Read aloud", (await textPopover.locator('button[data-track="simplify"]').count()) === 1 && (await textPopover.locator('button[data-track="extract"]').count()) === 1 && (await textPopover.locator('button[data-track="read-aloud"]').count()) === 1);
+  check("the text toolbar has Simplify and Read aloud", (await textPopover.locator('button[data-track="simplify"]').count()) === 1 && (await textPopover.locator('button[data-track="read-aloud"]').count()) === 1);
+  check("the text toolbar has no Explain and no Match-it", (await textPopover.locator('button[data-track="explain"]').count()) === 0 && (await textPopover.locator('button[data-track="extract"]').count()) === 0);
   check("the text toolbar carries no kind label", !(await textPopover.innerText()).includes("tools"));
   await page.keyboard.press("Escape");
   await page.waitForTimeout(300);
 
-  // The table toolbar: Analyze leads; no Simplify, Extract, or Read aloud.
+  // The table toolbar: Analyze leads; no Simplify or Read aloud.
   await selectIn(TABLE, 5);
   const tablePopover = page.locator("[data-selection-popover]");
   const analyzeButton = tablePopover.locator('button[data-track="analyze"]');
   check("table selection offers Analyze table", (await analyzeButton.count()) === 1);
   check("table Analyze reads 'Analyze table'", (await analyzeButton.textContent())?.includes("Analyze table") === true);
   check("the table toolbar is labeled Table tools", (await tablePopover.innerText()).includes("Table tools"));
-  check("the table toolbar has no Simplify, Extract, or Read aloud", (await tablePopover.locator('button[data-track="simplify"]').count()) === 0 && (await tablePopover.locator('button[data-track="extract"]').count()) === 0 && (await tablePopover.locator('button[data-track="read-aloud"]').count()) === 0);
+  check("the table toolbar has no Simplify or Read aloud", (await tablePopover.locator('button[data-track="simplify"]').count()) === 0 && (await tablePopover.locator('button[data-track="read-aloud"]').count()) === 0);
   check("Analyze leads the table toolbar as recommended", (await analyzeButton.innerText()).toLowerCase().includes("recommended"));
   await analyzeButton.click();
   // The analysis streams into the card beside the article — the same card as

@@ -20,7 +20,7 @@ const en = {
   ultraFeature1: "Everything in Unitos Premium",
   ultraFeature2: "Visualize: the selection as a picture — a diagram, a drawing, or a short animation",
   ultraFeature3:
-    "Tool conversations: continue an Explain, Simplify, Analyze, or Visualize card into a conversation",
+    "Tool conversations: continue a Simplify, Analyze, or Visualize card into a conversation",
   // The price line: "{price} / month", "{price} / 3 months".
   priceInterval: "{price} / {interval}",
   priceIntervalN: "{price} / {n} {interval}s",
@@ -95,7 +95,7 @@ const zh: Record<keyof typeof en, string> = {
   premiumFeature6: "笔记中可放入最大 25 MB 的图片",
   ultraFeature1: "Unitos Premium 的全部",
   ultraFeature2: "可视化：把选中内容画成图——示意图、绘图或短动画",
-  ultraFeature3: "工具对话：把解释、简化、分析或可视化卡片继续为对话",
+  ultraFeature3: "工具对话：把简化、分析或可视化卡片继续为对话",
   priceInterval: "{price} / {interval}",
   priceIntervalN: "{price} / {n} 个{interval}",
   intervalDay: "天",

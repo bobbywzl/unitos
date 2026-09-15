@@ -145,12 +145,10 @@ const en = {
   // Handwritten documents (SPEC.md §16): pages, conversion, Circle & ask.
   circleAsk: "Circle & ask",
   pageDrawHint:
-    "Hold the mouse and circle a spot on the page — then ask, explain, comment, or pick a color to highlight",
+    "Hold the mouse and circle a spot on the page — then ask, comment, or pick a color to highlight",
   pageAskPlaceholder: "Ask about the circled spot",
   pageAsk: "Ask",
   pageAskTitle: "Ask the question about the circled spot",
-  pageExplain: "Explain",
-  pageExplainTitle: "Explain the circled spot",
   pageRegenerateTitle: "Run this again on the circled spot. The new answer replaces this one.",
   pageComment: "Comment",
   pageCommentTitle: "Comment on the circled spot",
@@ -517,8 +515,6 @@ const zh: Record<keyof typeof en, string> = {
   pageAskPlaceholder: "询问圈选的内容",
   pageAsk: "提问",
   pageAskTitle: "就圈选的内容提问",
-  pageExplain: "解释",
-  pageExplainTitle: "解释圈选的内容",
   pageRegenerateTitle: "在圈选处重新运行。新的回答会替换当前这条。",
   pageComment: "评论",
   pageCommentTitle: "评论圈选的内容",

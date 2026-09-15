@@ -8,14 +8,12 @@ import {
   CommentIcon,
   LocateIcon,
   QuestionIcon,
-  RegenerateIcon,
   SearchIcon,
   SparkleIcon,
   SpinnerIcon,
 } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { Markdown } from "@/components/markdown";
-import { ThinkingIndicator } from "@/components/thinking";
 import { AskRange } from "@/components/video/ask-panel";
 import { ArticleBody, MediaAssistant, useArticleActions } from "@/components/video/assistant-card";
 import { Visual } from "@/components/video/visual";
@@ -31,7 +29,6 @@ import {
   type VideoPlayerHandle,
   type VideoSource,
 } from "@/components/video/video-player";
-import { splitStreamError, splitStreamNote } from "@/lib/derive/config";
 import type { FormalizedArticle } from "@/lib/types";
 import { captureStoryboardFrame } from "@/lib/video/frame-client";
 import {
@@ -85,10 +82,6 @@ export type ArticleLayer = {
 
 /** The text views under the player (SPEC.md §11), one showing at a time. */
 type MediaView = "transcript" | "article";
-
-// The moment an Explain ran on: the range and the drawn region, if any
-// (SPEC.md §11). Regenerate runs the same one again.
-type ExplainAnchor = { startTime: number; endTime: number; region: Region | null };
 
 type Composer = {
   region: Region | null;
@@ -151,15 +144,6 @@ export function VideoPane({
   const [activeLineId, setActiveLineId] = useState<string | null>(null);
   const [drawing, setDrawing] = useState(false);
   const [composer, setComposer] = useState<Composer | null>(null);
-  // anchor = the moment this explanation ran on, noteId = the annotation it
-  // saved: what Regenerate runs again and replaces (SPEC.md §4).
-  const [explaining, setExplaining] = useState<{
-    content: string;
-    done: boolean;
-    error: string | null;
-    anchor: ExplainAnchor;
-    noteId: string | null;
-  } | null>(null);
   const [openNote, setOpenNote] = useState<VideoAnnotationItem | null>(null);
   const [flashSourceId, setFlashSourceId] = useState<string | null>(null);
   const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -238,7 +222,7 @@ export function VideoPane({
   }, [annotations, added, removed]);
 
   // Audio document: no frame, so no circling, no Visual thumbnails, no frame
-  // capture on Explain. Everything else is the same surface (SPEC.md §11).
+  // capture for the assistant. Everything else is the same surface (SPEC.md §11).
   const audio = video.kind === "UPLOAD" && isAudioMime(video.mimeType);
   const source: VideoSource =
     video.kind === "YOUTUBE" && video.youtubeId
@@ -393,15 +377,14 @@ export function VideoPane({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [drawing]);
 
-  // ── Annotate: circle a spot or take the whole frame, then comment or explain.
-  // Audio has no frame to circle: the button opens the composer on the current
+  // ── Annotate: circle a spot or take the whole frame, then comment. Audio
+  // has no frame to circle: the button opens the composer on the current
   // moment directly.
   function toggleAnnotate() {
     if (!canEdit) return;
-    if (drawing || composer || explaining) {
+    if (drawing || composer) {
       setDrawing(false);
       setComposer(null);
-      setExplaining(null);
       return;
     }
     playerRef.current?.pause();
@@ -468,109 +451,15 @@ export function VideoPane({
     }
   }
 
-  // Explain the circled spot (SPEC.md §11): capture the paused frame cropped
-  // toward the loop, stream EXPLAIN with the time anchor. The server persists
-  // the output as an annotation at that range, so it joins Visual.
-  async function explainComposer() {
-    if (!composer || composer.busy) return;
-    const startTime = parseTimeInput(composer.startTime);
-    const endTime = parseTimeInput(composer.endTime);
-    if (startTime === null || endTime === null || endTime <= startTime) {
-      setComposer({ ...composer, error: t("video.timesInvalid") });
-      return;
-    }
-    setComposer({ ...composer, busy: true, error: null });
-    await runExplain({ startTime, endTime, region: composer.region });
-  }
-
   // The frame at a moment, cropped to what was circled: drawn from the file
   // for an upload, pulled from the storyboard sheets for a YouTube video.
-  // Audio has no frame; Explain works from the transcript alone.
+  // Audio has no frame; the assistant works from the transcript alone.
   async function captureFrame(region: Region | null, time: number) {
     if (audio) return undefined;
     if (source.kind === "upload") {
       return (await playerRef.current?.captureAt(time, region)) ?? undefined;
     }
     return (await captureStoryboardFrame(documentId, time, region)) ?? undefined;
-  }
-
-  // The running Explain, so Stop can abort it: what streamed in stays, an
-  // empty card closes, nothing persists.
-  const explainAbortRef = useRef<AbortController | null>(null);
-  function stopExplain() {
-    explainAbortRef.current?.abort();
-  }
-
-  // Regenerate: Explain runs again on the same moment, and the new explanation
-  // replaces the old (SPEC.md §4).
-  async function regenerateExplain() {
-    const card = explaining;
-    if (!card || !card.done) return;
-    await runExplain(card.anchor, card.noteId);
-  }
-
-  // replaceNoteId: the annotation this run regenerates. It goes only once the
-  // new one is stored, so a failed run never loses what stands (SPEC.md §4).
-  async function runExplain(anchor: ExplainAnchor, replaceNoteId?: string | null) {
-    const { startTime, endTime, region } = anchor;
-    setOpenNote(null);
-    setExplaining({ content: "", done: false, error: null, anchor, noteId: null });
-    explainAbortRef.current?.abort();
-    const controller = new AbortController();
-    explainAbortRef.current = controller;
-    try {
-      const frame = await captureFrame(region, startTime);
-      const res = await fetch("/api/derive", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        signal: controller.signal,
-        body: JSON.stringify({
-          type: "EXPLAIN",
-          documentId,
-          notebookId,
-          video: { startTime, endTime, region: region ?? undefined, frame },
-        }),
-      });
-      if (!res.ok || !res.body) {
-        const detail = (await res.json().catch(() => null)) as { error?: string } | null;
-        throw new Error(detail?.error ?? t("video.requestFailedStatus", { status: res.status }));
-      }
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let raw = "";
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        raw += decoder.decode(value, { stream: true });
-        const text = splitStreamNote(splitStreamError(raw).text).text;
-        setExplaining((e) => (e ? { ...e, content: text } : e));
-      }
-      const { text: withoutError, error: streamError } = splitStreamError(raw);
-      const { text, noteId } = splitStreamNote(withoutError);
-      setExplaining((e) =>
-        e ? { ...e, content: text, done: true, error: streamError, noteId } : e,
-      );
-      if (replaceNoteId && noteId) await api(`/api/notes/${replaceNoteId}`, "DELETE").catch(() => {});
-      if (!streamError) router.refresh();
-    } catch (err) {
-      if (controller.signal.aborted) {
-        setExplaining((e) => (e && e.content.trim() ? { ...e, done: true } : null));
-        return;
-      }
-      setExplaining((e) =>
-        e
-          ? {
-              ...e,
-              content: "",
-              done: true,
-              error: err instanceof Error ? err.message : t("video.explainFailed"),
-            }
-          : e,
-      );
-    } finally {
-      if (explainAbortRef.current === controller) explainAbortRef.current = null;
-      setComposer((c) => (c ? { ...c, busy: false } : c));
-    }
   }
 
   // A transcript line is an anchor like a circled spot: same tools, same time
@@ -580,7 +469,6 @@ export function VideoPane({
     playerRef.current?.seek(line.startTime);
     setActiveLineId(line.id);
     setDrawing(false);
-    setExplaining(null);
     setOpenNote(null);
     setComposer({
       region: null,
@@ -592,25 +480,12 @@ export function VideoPane({
     });
   }
 
-  function explainLine(line: TranscriptLine) {
-    if (!canEdit) return;
-    playerRef.current?.seek(line.startTime);
-    setActiveLineId(line.id);
-    setDrawing(false);
-    setComposer(null);
-    void runExplain({
-      startTime: line.startTime,
-      endTime: Math.ceil(line.endTime),
-      region: null,
-    });
-  }
-
   async function onVisualDelete(noteId: string) {
     setRemoved((prev) => new Set(prev).add(noteId));
     router.refresh();
   }
 
-  const annotateOn = drawing || composer !== null || explaining !== null;
+  const annotateOn = drawing || composer !== null;
 
   // The circled spot the assistant reads (SPEC.md §11): the open composer's
   // range and region, once the times parse. Null while nothing is circled.
@@ -652,17 +527,6 @@ export function VideoPane({
             {t("video.comment")}
           </button>
         )}
-        {canEdit && (
-          <button
-            onClick={() => explainLine(line)}
-            data-track="video-line-explain"
-            className={lineAction}
-            data-tip={t("video.explainThisMoment")}
-          >
-            <QuestionIcon size={11} />
-            {t("video.explain")}
-          </button>
-        )}
         {annotated && (
           <button
             onClick={() => openAnnotation(annotated)}
@@ -680,7 +544,6 @@ export function VideoPane({
   function openAnnotation(a: VideoAnnotationItem) {
     playerRef.current?.seek(a.startTime);
     flash(a.sourceId);
-    setExplaining(null);
     setOpenNote(a);
   }
 
@@ -840,7 +703,7 @@ export function VideoPane({
         <p className="mt-3 text-[13px] text-sand-600">{t("video.drawHelp")}</p>
       )}
 
-      {openNote && !explaining && (
+      {openNote && (
         <div className="mt-4 rounded-2xl bg-card p-4 shadow-float">
           <div className="mb-2 flex items-center gap-2">
             <span className="text-[11px] font-bold tracking-[0.08em] text-sand-600 uppercase">
@@ -863,49 +726,7 @@ export function VideoPane({
         </div>
       )}
 
-      {explaining && (
-        <div className="mt-4 rounded-2xl bg-card p-4 shadow-float">
-          <div className="mb-2 flex items-center gap-2">
-            <span className="text-[11px] font-bold tracking-[0.08em] text-sand-600 uppercase">
-              {t("video.explanation")}
-            </span>
-            {!explaining.done && (
-              <ThinkingIndicator className="text-xs" onStop={stopExplain} />
-            )}
-            {explaining.done && !explaining.error && (
-              <span className="text-xs text-sand-500">{t("video.savedAsAnnotation")}</span>
-            )}
-            {explaining.done && canEdit && (
-              <button
-                onClick={() => void regenerateExplain()}
-                data-track="video-explain-regenerate"
-                aria-label={t("common.regenerate")}
-                data-tip={t("video.regenerateExplainTitle")}
-                className="text-sand-500 hover:text-clay-800"
-              >
-                <RegenerateIcon size={12} />
-              </button>
-            )}
-            <button
-              onClick={() => {
-                explainAbortRef.current?.abort();
-                setExplaining(null);
-                setComposer(null);
-              }}
-              data-track="video-explain-close"
-              aria-label={t("common.close")}
-              data-tip={t("common.close")}
-              className="ml-auto rounded-full px-1.5 text-sand-500 hover:text-clay-800"
-            >
-              ✕
-            </button>
-          </div>
-          {explaining.content && <Markdown>{explaining.content}</Markdown>}
-          {explaining.error && <p className="mt-1.5 text-xs text-red-500">{explaining.error}</p>}
-        </div>
-      )}
-
-      {composer && !explaining && (
+      {composer && (
         <div className="mt-4 rounded-2xl bg-card p-4 shadow-float">
           <div className="mb-2.5 flex items-center gap-2">
             <span className="text-[11px] font-bold tracking-[0.08em] text-sand-600 uppercase">
@@ -967,15 +788,6 @@ export function VideoPane({
               className="rounded-full bg-clay px-4 py-1.5 text-xs font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
             >
               {composer.busy ? t("common.saving") : t("video.saveAnnotation")}
-            </button>
-            <button
-              onClick={() => void explainComposer()}
-              data-track="video-explain"
-              disabled={composer.busy}
-              data-tip={audio ? t("video.audioExplainButtonTitle") : t("video.explainButtonTitle")}
-              className="rounded-full border border-line px-3.5 py-1.5 text-xs font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40"
-            >
-              {composer.region ? t("video.explainCircled") : t("video.explainThisMoment")}
             </button>
             <button
               onClick={() => setComposer(null)}

@@ -798,3 +798,25 @@ model ReaderProfile {
   purpose     String // "due diligence" | "exam prep" | "replicate results" | free text
   application String // "investment decision for Bough Capital" etc.
 }
+
+// A rating of one AI tool's output (SPEC.md §25): the reader's thumb on a
+// card, a page, or an answer, with the input the tool ran on and the output
+// it gave, so the tool quality loop (scripts/eval) can turn a poor answer
+// into an eval case. Fire-and-forget from the client; never blocks a card.
+model ToolRating {
+  id         String   @id @default(cuid())
+  userId     String? // null = no signed-in reader
+  notebookId String?
+  documentId String?
+  noteId     String? // the annotation or conversation note the output lives on, when it has one
+  tool       String // simplify | analyze | visualize | assistant | act | distill | keypoints | summarize | ask | find | formalize | stitch
+  rating     String // "up" | "down"
+  lang       String // the reader's UI language at the time
+  input      String // what the tool ran on: the selection, the question, the command (cut at 4000)
+  output     String // what the tool answered (cut at 12000)
+  comment    String? // what the reader typed after a thumb down, if anything
+  createdAt  DateTime @default(now())
+
+  @@index([tool, rating, createdAt])
+  @@index([createdAt])
+}
