@@ -2681,3 +2681,79 @@ li[data-checked] > .note-box::before {
   left: auto;
   right: -8px;
 }
+
+/* The merge ghost (the merge nudge, components/nudges.tsx): a translucent
+   card lifts, slides onto the note below (--ghost-dx, --ghost-dy), draws
+   back while the ring draws around that note, and falls in — on a loop, the
+   hold it stands for. Under reduced motion the ghost rests over the note
+   with the ring drawn. */
+@keyframes nudge-ghost-merge {
+  0% {
+    opacity: 0;
+    transform: none;
+  }
+  10% {
+    opacity: 1;
+    transform: rotate(-2deg) scale(1.02);
+  }
+  38% {
+    opacity: 1;
+    transform: translate(var(--ghost-dx), var(--ghost-dy)) rotate(-2deg) scale(0.94);
+  }
+  64% {
+    opacity: 1;
+    transform: translate(var(--ghost-dx), var(--ghost-dy)) rotate(-2deg) scale(0.94);
+  }
+  78% {
+    opacity: 0;
+    transform: translate(var(--ghost-dx), calc(var(--ghost-dy) + 8px)) rotate(0deg) scale(0.6);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(var(--ghost-dx), calc(var(--ghost-dy) + 8px)) rotate(0deg) scale(0.6);
+  }
+}
+.nudge-ghost-merge {
+  opacity: 0.7;
+  transform: translate(var(--ghost-dx), var(--ghost-dy)) rotate(-2deg) scale(0.94);
+}
+.nudge-ring {
+  overflow: visible;
+}
+.nudge-ring rect {
+  fill: none;
+  stroke: var(--sage-600);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 0;
+  opacity: 0.6;
+}
+@keyframes nudge-ring-draw {
+  0%,
+  36% {
+    opacity: 0;
+    stroke-dashoffset: 1;
+  }
+  40% {
+    opacity: 1;
+    stroke-dashoffset: 1;
+  }
+  64% {
+    opacity: 1;
+    stroke-dashoffset: 0;
+  }
+  72%,
+  100% {
+    opacity: 0;
+    stroke-dashoffset: 0;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .nudge-ghost-merge {
+    animation: nudge-ghost-merge 3.2s ease-in-out infinite;
+  }
+  .nudge-ring rect {
+    animation: nudge-ring-draw 3.2s linear infinite;
+  }
+}

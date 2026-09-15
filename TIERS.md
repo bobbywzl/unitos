@@ -123,13 +123,28 @@ Ultra when the account is not Ultra.
 | Offline work | Not available: an offline write fails with the plain offline message |
 | Images dropped into a note or into the reader's edit mode | Up to 5 MB per image (`FREE_IMAGE_BYTES`, `lib/images.ts`) |
 
+## Storage
+
+Each tier will have a storage limit per account: the bytes the account's
+files take — the documents attached to its projects (their stored bytes),
+the images it dropped or its parses captured, and the videos of its
+documents (`lib/storage.ts`). Settings shows the used amount as a bar against
+the limit (`components/storage-bar.tsx`). The limits are **not set**: both
+are `null` in `STORAGE_LIMIT_BYTES` (`lib/tiers.ts`), the one place to set
+them, and nothing gates on them until they are.
+
+| Tier | Storage limit |
+|---|---|
+| Unitos Premium | not set |
+| Unitos Ultra | not set |
+
 ## Unassigned
 
 Everything not named above is ungated today because that is what the code
 does. Naming a tier for any of it is a decision, not a cleanup: leave it here
 until the owner makes one.
 
-- Document count per project, project count per account, storage in total
+- Document count per project, project count per account
 - AI usage: calls per day, which model answers, the digest's size budget
 - Video length and transcription minutes
 - Google Drive import

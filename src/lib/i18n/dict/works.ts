@@ -32,8 +32,10 @@ const en = {
     "The side panel: Assistant, Graph, Notes, Annotations, Distill, Edit history. Open one and explore.",
   nudgeTools:
     "Distill writes the article as bullet points. Extract answers one question with quotes. Assistant, top left, takes any command.",
+  nudgeMerge: "Hold a note over another note until the ring closes. The two join into one note.",
   nudgeFloat: "Hold a note and drag it onto the article. The note floats there while you read.",
-  nudgeMerge: "Hold another note over this card until the ring closes. The two join into one note.",
+  nudgeFullPage: "The four arrows open the notes full page: every note of the project, and each section as a board.",
+  nudgeBoard: "Click a section's title to open it as a board: its notes side by side, filling the screen.",
 
   // Companions (SPEC.md §23): the web apps for the steps around dissecting a
   // document that Unitos does not do, under Projects on the dashboard.
@@ -176,8 +178,10 @@ const zh: Record<keyof typeof en, string> = {
   nudgeSelect: "选中正文中的任意一段。工具栏随即出现：助手、简化、评论和颜色。",
   nudgeRail: "侧栏：助手、图谱、笔记、批注、提炼、编辑记录。打开一个，开始探索。",
   nudgeTools: "提炼把文章写成分条要点。提取用引文回答一个问题。左上角的助手接受任何指令。",
+  nudgeMerge: "把一条笔记压在另一条上按住，直到合并环合拢。两条会合并成一条。",
   nudgeFloat: "按住一条笔记，拖到文章上。笔记会浮在文章上，边读边写。",
-  nudgeMerge: "按住另一条笔记压在这张卡片上，直到合并环合拢。两条会合并成一条。",
+  nudgeFullPage: "四向箭头打开整页笔记：项目的每条笔记，以及每个章节的看板。",
+  nudgeBoard: "点击章节标题即以看板打开它：笔记并排铺满屏幕。",
 
   companions: "配套应用",
   companionsIntro: "围绕文档、但 Unitos 不做的那些环节所用的网页应用。每个都在新标签页打开。",

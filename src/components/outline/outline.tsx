@@ -126,7 +126,7 @@ export function Outline({ notebook }: { notebook: NotebookView }) {
             ids={tree.map((s) => s.id)}
             className="flex flex-col gap-[30px]"
           >
-            {tree.map((section) => (
+            {tree.map((section, i) => (
               <SortableItem key={section.id} id={section.id}>
                 {(handle) => (
                   <SectionItem
@@ -135,6 +135,7 @@ export function Outline({ notebook }: { notebook: NotebookView }) {
                     handle={handle}
                     search={query}
                     onOpenBoard={setBoard}
+                    nudge={i === 0}
                   />
                 )}
               </SortableItem>

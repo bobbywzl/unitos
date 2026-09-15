@@ -10,6 +10,7 @@ import { personOf } from "@/lib/person";
 import { Logo } from "@/components/logo";
 import { AccountGuard } from "@/components/account-guard";
 import { SettingsForm } from "@/components/settings-form";
+import { accountStorage } from "@/lib/storage";
 import { tierState } from "@/lib/tiers";
 
 export const dynamic = "force-dynamic";
@@ -18,10 +19,11 @@ export default async function SettingsPage() {
   const t = await serverT();
   const user = await currentUser();
   if (!user) redirect("/signin");
-  const [profile, data, billing] = await Promise.all([
+  const [profile, data, billing, storage] = await Promise.all([
     db.readerProfile.findUnique({ where: { userId: user.id } }),
     accountData(user, authEnabled()),
     billingLinks(),
+    accountStorage(user.id),
   ]);
 
   // The profile is one Background field. Older purpose and application values
@@ -72,6 +74,7 @@ export default async function SettingsPage() {
             : null
         }
         data={data}
+        storage={storage}
       />
     </main>
   );
