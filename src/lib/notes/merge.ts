@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { db } from "@/lib/db";
+import { quotesOf } from "@/lib/notes/quote-sources";
 import { MERGE_EFFORT, MERGE_MODEL } from "@/lib/derive/config";
 import { callForJson } from "@/lib/derive/json-call";
 import type { Lang } from "@/lib/i18n/config";
@@ -42,7 +43,36 @@ export async function mergeNoteText(
     return null;
   }
   const text = result.data.note.trim();
-  return text === "" ? null : text;
+  if (text === "") return null;
+  return withEveryQuote(text, listed.map((n) => n.text));
+}
+
+// Every quote of the notes stays in the merged note: the quotes are what the
+// sources point back to, and the sources move to the target. A quote the
+// model dropped or rewrote is added at the end, as it was.
+function normalizeQuote(text: string): string {
+  return text.replace(/\s+/g, " ").trim().toLowerCase();
+}
+export function withEveryQuote(written: string, noteTexts: string[]): string {
+  const have = new Set(quotesOf(written).map(normalizeQuote));
+  const missing: string[] = [];
+  const seen = new Set<string>();
+  for (const text of noteTexts) {
+    for (const quote of quotesOf(text)) {
+      const key = normalizeQuote(quote);
+      if (key === "" || have.has(key) || seen.has(key)) continue;
+      seen.add(key);
+      missing.push(quote);
+    }
+  }
+  if (missing.length === 0) return written;
+  const asBlockquotes = missing.map((q) =>
+    q
+      .split("\n")
+      .map((line) => (line ? `> ${line}` : ">"))
+      .join("\n"),
+  );
+  return `${written}\n\n${asBlockquotes.join("\n\n")}`;
 }
 
 /** The note ids of a project's hidden Annotations section, from a set of ids.

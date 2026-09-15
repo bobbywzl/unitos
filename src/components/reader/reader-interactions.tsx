@@ -937,6 +937,7 @@ export function ReaderInteractions({
   const [distillRun, setDistillRun] = useState<{ question: string } | null>(null);
   const [distillError, setDistillError] = useState<string | null>(null);
   const [localDistillations, setLocalDistillations] = useState<DistillationView[]>([]);
+  const [goneDistillations, setGoneDistillations] = useState<Set<string>>(new Set());
   // The running request, so Cancel can abort it. Cancel keeps the question in
   // the ask view for editing; nothing persists from an aborted run.
   const distillAbortRef = useRef<AbortController | null>(null);
@@ -2231,17 +2232,18 @@ export function ReaderInteractions({
   }, []);
 
   // Scroll to an anchor and flash it. Retries while the refreshed tree paints.
+  // The mark may not be painted yet — the document is still rendering, or the
+  // reader arrived here from a note in another document — so the look-up
+  // retries for a while, reading the container fresh each time.
   const flashSource = useCallback((sourceId: string) => {
-    const container = containerRef.current;
-    if (!container) return;
     let attempts = 0;
     const tryScroll = () => {
-      const el = container.querySelector<HTMLElement>(`[data-source-id="${sourceId}"]`);
+      const el = containerRef.current?.querySelector<HTMLElement>(`[data-source-id="${sourceId}"]`);
       if (el) {
         el.scrollIntoView({ behavior: "smooth", block: "center" });
         el.classList.add("anchor-flash");
         setTimeout(() => el.classList.remove("anchor-flash"), 2000);
-      } else if (attempts++ < 10) {
+      } else if (attempts++ < 30) {
         setTimeout(tryScroll, 200);
       }
     };
@@ -3331,10 +3333,12 @@ export function ReaderInteractions({
 
   // DISTILL: one question, the whole article, the quotes that answer it
   // (SPEC.md §4). The page opens on the ask view; Run scans the article.
+  // A deleted or replaced extraction leaves the list at once; the page's
+  // next load carries the same.
   const allDistillations = [
     ...localDistillations.filter((d) => !distillations.some((p) => p.id === d.id)),
     ...distillations,
-  ];
+  ].filter((d) => !goneDistillations.has(d.id));
 
   // KEYPOINTS — the reader's Distill: the article's most important points as
   // bullets, each anchored (SPEC.md §4). One per document; Distill again
@@ -3616,7 +3620,7 @@ export function ReaderInteractions({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         signal: controller.signal,
-        body: JSON.stringify({ type: "DISTILL", documentId, notebookId, question: q }),
+        body: JSON.stringify({ type: "DISTILL", documentId, notebookId, question: q, replaceId }),
       });
       if (!res.ok || !res.body) {
         const detail = (await res.json().catch(() => null)) as { error?: string } | null;
@@ -3648,7 +3652,8 @@ export function ReaderInteractions({
       };
       setLocalDistillations((prev) => [fresh, ...prev]);
       setDistillShownId(fresh.id);
-      if (replaceId) await deleteDistillation(replaceId);
+      // The route dropped the replaced extraction with the new one's arrival.
+      if (replaceId) setGoneDistillations((prev) => new Set(prev).add(replaceId));
       // The page may be closed: the pill's progress bar stops, and the toast
       // says where the result is.
       if (!distillOpenRef.current) showToast(t("reader.distilledToast"));
@@ -3668,12 +3673,23 @@ export function ReaderInteractions({
   }
 
   async function deleteDistillation(id: string) {
+    await deleteDistillations([id]);
+  }
+
+  // The selected extractions go in one call (SPEC.md §4).
+  async function deleteDistillations(ids: string[]) {
+    if (ids.length === 0) return;
     try {
       await api(`/api/notebooks/${notebookId}/documents/${documentId}`, "PATCH", {
-        removeDistillationId: id,
+        removeDistillationIds: ids,
       });
-      setLocalDistillations((prev) => prev.filter((d) => d.id !== id));
-      if (distillShownId === id) setDistillShownId(null);
+      setLocalDistillations((prev) => prev.filter((d) => !ids.includes(d.id)));
+      setGoneDistillations((prev) => {
+        const next = new Set(prev);
+        for (const id of ids) next.add(id);
+        return next;
+      });
+      if (distillShownId && ids.includes(distillShownId)) setDistillShownId(null);
       router.refresh();
     } catch (err) {
       showError(err instanceof Error ? err.message : t("reader.deleteFailed"));
@@ -7000,6 +7016,7 @@ function blockFormatKind(
           onAsk={() => setDistillShownId(null)}
           onClose={closeDistillPage}
           onDelete={(id) => void deleteDistillation(id)}
+          onDeleteMany={(ids) => void deleteDistillations(ids)}
           onJump={jumpToQuote}
           onAddNote={addQuoteNote}
           onAddSelection={(text, quote) => addSelectionNote(text, quote)}

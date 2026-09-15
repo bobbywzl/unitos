@@ -50,6 +50,7 @@ export type AttachedDocument = {
   sourceUrl: string | null;
   parserVersion: number;
   hasFile: boolean;
+  pdf: boolean; // the stored file is a PDF: Re-parse asks which shape (SPEC.md §16)
   hasVideo: boolean; // re-parses by transcribing again (SPEC.md §11)
   handwritten: boolean; // pages, not text blocks; the menu flips the shape (SPEC.md §16)
   // The browser render for scripted figures (Document.figureRenderAt,
@@ -398,9 +399,13 @@ export function DocumentBar({
     return doc.hasVideo || doc.hasFile || doc.sourceUrl !== null;
   }
 
-  // Manual re-parse in the document's own shape: the progress card shows,
-  // errors show.
-  async function reparse(doc: AttachedDocument) {
+  // Re-parse on a PDF asks which shape first (SPEC.md §16): the row folds
+  // open to the two choices for this document.
+  const [reparseChoice, setReparseChoice] = useState<string | null>(null);
+
+  // Manual re-parse: in the document's own shape, or as the shape the reader
+  // chose for a PDF (`as`). The progress card shows, errors show.
+  async function reparse(doc: AttachedDocument, as?: "article" | "handwritten") {
     setError(null);
     // The figure's place in the reader moves while the re-parse runs; the
     // refresh brings the outcome the document stores.
@@ -408,7 +413,12 @@ export function DocumentBar({
     if (figures) setFigureCapture({ documentId: doc.id, status: "running", error: null });
     try {
       await runIngest(doc.title, doc.sourceUrl ? "url" : "pdf", () =>
-        fetch(`/api/documents/${doc.id}/reparse`, { method: "POST" }),
+        fetch(`/api/documents/${doc.id}/reparse`, {
+          method: "POST",
+          ...(as
+            ? { headers: { "Content-Type": "application/json" }, body: JSON.stringify({ as }) }
+            : {}),
+        }),
       );
       router.refresh();
       if (figures) setFigureCapture(null);
@@ -956,11 +966,18 @@ export function DocumentBar({
                       {canEdit && (
                         <button
                           onClick={() => {
+                            // A PDF asks which shape first: the row opens
+                            // the two choices instead of running.
+                            if (d.pdf && !d.hasVideo) {
+                              setReparseChoice(reparseChoice === d.id ? null : d.id);
+                              return;
+                            }
                             closeList();
                             void (d.hasVideo ? transcribeAgain(d) : reparse(d));
                           }}
                           data-track="document-reparse"
                           disabled={phase !== null || transcribing !== null || !canReparse(d)}
+                          aria-expanded={d.pdf && !d.hasVideo ? reparseChoice === d.id : undefined}
                           className={`${rowAction} disabled:opacity-40`}
                           data-tip={
                             d.hasVideo
@@ -972,6 +989,37 @@ export function DocumentBar({
                         >
                           {t("panes.reparseDocument")}
                         </button>
+                      )}
+                      {canEdit && d.pdf && !d.hasVideo && reparseChoice === d.id && (
+                        <div className="flex flex-col border-y border-line bg-sand-50/60 py-1">
+                          <p className="px-4 pb-0.5 text-[11px] text-sand-500">{t("panes.reparseChoose")}</p>
+                          {(["handwritten", "article"] as const).map((as) => {
+                            const current = as === "handwritten" ? d.handwritten : !d.handwritten;
+                            return (
+                              <button
+                                key={as}
+                                onClick={() => {
+                                  setReparseChoice(null);
+                                  closeList();
+                                  void reparse(d, as);
+                                }}
+                                data-track={`document-reparse-${as}`}
+                                disabled={phase !== null || transcribing !== null}
+                                className={`${rowAction} flex items-center gap-2 pl-6 disabled:opacity-40`}
+                                data-tip={t(
+                                  as === "handwritten" ? "panes.reparseAsHandwrittenTitle" : "panes.reparseAsArticleTitle",
+                                )}
+                              >
+                                <span>{t(as === "handwritten" ? "panes.reparseAsHandwritten" : "panes.reparseAsArticle")}</span>
+                                {current && (
+                                  <span className="rounded-full border border-line px-1.5 text-[10px] text-sand-500">
+                                    {t("panes.reparseCurrentShape")}
+                                  </span>
+                                )}
+                              </button>
+                            );
+                          })}
+                        </div>
                       )}
                       <button
                         onClick={() => {

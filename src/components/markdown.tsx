@@ -323,10 +323,25 @@ export function Markdown({
               sources && sources.length > 0 && notebookId ? sourceOfQuote(hastText(node), sources) : null;
             if (!source) return <blockquote {...props}>{quoteChildren}</blockquote>;
             const href = `/n/${notebookId}?doc=${source.documentId}&src=${source.id}`;
-            const jump = () => {
-              // A click that ends a selection belongs to the selection.
-              if (!window.getSelection()?.isCollapsed) return;
-              if (!source.orphaned) router.push(href);
+            const jump = (e: { currentTarget: Element }) => {
+              if (source.orphaned) return;
+              // A click that ends a selection of the quote's own words belongs
+              // to the selection. A selection left elsewhere on the page does
+              // not hold the jump.
+              const selection = window.getSelection();
+              if (
+                selection &&
+                !selection.isCollapsed &&
+                selection.toString().trim() !== "" &&
+                e.currentTarget.contains(selection.anchorNode)
+              )
+                return;
+              selection?.removeAllRanges();
+              // The reader opens on the source's document (another document
+              // remounts the reader, which flashes ?src on mount) and, when it
+              // is already open on it, the event flashes the mark at once.
+              router.push(href);
+              window.dispatchEvent(new CustomEvent("dissect:flash-source", { detail: { sourceId: source.id } }));
             };
             return (
               <blockquote

@@ -17,10 +17,8 @@ import { Markdown } from "@/components/markdown";
 import { NoteEditor } from "@/components/outline/note-editor";
 import { NoteId } from "@/components/outline/note-id";
 import { NoteTitleField, focusBodyEditor, useNoteParts } from "@/components/outline/note-title-field";
-import { SourceChips } from "@/components/outline/note-card";
 import { SaveStateLabel } from "@/components/outline/save-state";
 import { useNoteDrop } from "@/components/use-note-drop";
-import { uncoveredSources } from "@/lib/notes/quote-sources";
 import { quoteMarkdown } from "@/lib/quote-drag";
 import { useCardDropTarget } from "@/components/outline/use-card-drop";
 import { useNoteDraft } from "@/components/outline/use-note-draft";
@@ -495,6 +493,15 @@ export function FloatingNoteEditor({
       }
       {...noteDrop.handlers}
       onPointerDown={editing ? undefined : startHold}
+      // Double-click opens the editor (SPEC.md §6); a control keeps its click.
+      onDoubleClick={
+        editing
+          ? undefined
+          : (e) => {
+              if (skipsDrag(e.target) || (e.target as Element).closest("button, a")) return;
+              openEditor();
+            }
+      }
       // The browser's own drag of a link or a picture in the note would take
       // the hold.
       onDragStart={editing ? undefined : (e) => e.preventDefault()}
@@ -581,11 +588,6 @@ export function FloatingNoteEditor({
             <Markdown breaks sources={note?.sources} notebookId={actions.notebookId}>
               {shown.body}
             </Markdown>
-          )}
-          {note && uncoveredSources(shown.body, note.sources).length > 0 && (
-            <div className="mt-2.5">
-              <SourceChips sources={uncoveredSources(shown.body, note.sources)} notebookId={actions.notebookId} />
-            </div>
           )}
         </div>
       )}

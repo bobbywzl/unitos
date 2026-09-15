@@ -74,12 +74,17 @@ export type DistillQuote = {
   caption: string;
 };
 
+/** How many times one extraction may run again (Regenerate). The count
+    rides on the extraction that replaces it. */
+export const DISTILL_REGENERATE_MAX = 2;
+
 /** Stored on NotebookDocument.distillations, newest first. */
 export type Distillation = {
   id: string;
   question: string;
   createdAt: string; // ISO
   createdById?: string; // account that ran the distillation; absent = before attribution
+  regenerations?: number; // times this question ran again to make this one; absent = 0
   quotes: DistillQuote[];
 };
 
@@ -142,6 +147,7 @@ export type CorpusDistillation = {
   question: string;
   createdAt: string; // ISO
   createdById?: string;
+  regenerations?: number; // as on Distillation
   quotes: CorpusDistillQuote[];
 };
 
@@ -389,9 +395,16 @@ export type GraphNode = {
 export type GraphEdgeLink = {
   id: string;
   fromDocumentId: string;
+  fromTitle: string;
   toDocumentId: string;
+  toTitle: string;
   quotedText: string; // the from end
   toQuotedText: string | null; // the to end; null = document-level
+  // The block each end's quote sits in, whole: the passage the expanded link
+  // shows around the quote. Null when the block is gone or the end is
+  // document-level.
+  fromBlockText: string | null;
+  toBlockText: string | null;
   reason: string | null;
   recommended: boolean;
 };
@@ -417,6 +430,8 @@ export type RecommendedLinkView = {
   toTitle: string;
   quotedText: string; // the from end
   toQuotedText: string | null; // the to end; null = document-level
+  fromBlockText: string | null; // the block around each end's quote, as on GraphEdgeLink
+  toBlockText: string | null;
   reason: string | null;
   createdById: string | null;
   replies: ReplyView[];

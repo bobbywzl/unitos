@@ -24,19 +24,26 @@ export async function GET(
   return NextResponse.json({ keypoints: keypointsStored(attachment?.keypoints) });
 }
 
-// Delete one stored distillation (DISTILL, the reader's Extract) or extraction
-// (EXTRACT, the reader's Match-it), or the keypoints (KEYPOINTS, the reader's
-// Distill) from the attachment. Exactly one of the three.
+// Delete one stored distillation (DISTILL, the reader's Extract) — or several
+// selected at once — or one extraction (EXTRACT, the reader's Match-it), or
+// the keypoints (KEYPOINTS, the reader's Distill) from the attachment.
+// Exactly one of the four.
 const patchSchema = z
   .object({
     removeDistillationId: z.string().min(1).optional(),
+    removeDistillationIds: z.array(z.string().min(1)).min(1).max(50).optional(),
     removeExtractionId: z.string().min(1).optional(),
     removeKeypoints: z.literal(true).optional(),
   })
   .refine(
     (d) =>
-      [d.removeDistillationId, d.removeExtractionId, d.removeKeypoints].filter(Boolean).length === 1,
-    { message: "Provide exactly one of removeDistillationId, removeExtractionId, removeKeypoints" },
+      [d.removeDistillationId, d.removeDistillationIds, d.removeExtractionId, d.removeKeypoints].filter(
+        Boolean,
+      ).length === 1,
+    {
+      message:
+        "Provide exactly one of removeDistillationId, removeDistillationIds, removeExtractionId, removeKeypoints",
+    },
   );
 
 export async function PATCH(
@@ -59,10 +66,10 @@ export async function PATCH(
     where: { notebookId_documentId: { notebookId, documentId } },
     data: data.removeKeypoints
       ? { keypoints: Prisma.DbNull }
-      : data.removeDistillationId
+      : data.removeDistillationId || data.removeDistillationIds
         ? {
             distillations: distillationList(attachment.distillations).filter(
-              (d) => d.id !== data.removeDistillationId,
+              (d) => d.id !== data.removeDistillationId && !data.removeDistillationIds?.includes(d.id),
             ),
           }
         : {
