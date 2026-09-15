@@ -10,6 +10,7 @@ import type { Lang } from "@/lib/i18n/config";
 import { currentLang } from "@/lib/i18n/server";
 import { kimi, kimiConfigured, kimiOptions } from "@/lib/kimi";
 import { connectPrompt, connectVerifyPrompt } from "@/lib/prompts/connect";
+import { resolveModelId } from "@/lib/models";
 
 // Recommended links (SPEC.md §13): when a document joins a corpus, scan it
 // against the corpus's other documents and store the connections as DocLink
@@ -193,7 +194,7 @@ export async function buildConnections(
     providerOptions: kimiOptions(CONNECT_EFFORT),
     schema: outputSchema,
     label: "CONNECT",
-    usage: { userId, feature: "connect", model: CONNECT_MODEL },
+    usage: { userId, feature: "connect", model: await resolveModelId(CONNECT_MODEL) },
     abortSignal: signal,
   });
   if (!result.ok) {
@@ -268,7 +269,7 @@ export async function buildConnections(
       providerOptions: kimiOptions(CONNECT_EFFORT),
       schema: verifySchema,
       label: "CONNECT:check",
-      usage: { userId, feature: "connect", model: CONNECT_MODEL },
+      usage: { userId, feature: "connect", model: await resolveModelId(CONNECT_MODEL) },
       abortSignal: signal,
     });
     if (!verify.ok) {

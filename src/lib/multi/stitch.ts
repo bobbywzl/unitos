@@ -20,6 +20,7 @@ import { PARSER_VERSION, type ParsedBlock } from "@/lib/parse/types";
 import { stitchPrompt, stitchSelectPrompt } from "@/lib/prompts/stitch";
 import type { StitchMember, StitchResult } from "@/lib/types";
 import { transcriptIsStale } from "@/lib/video/types";
+import { resolveModelId } from "@/lib/models";
 
 // Stitch (SPEC.md §22): one command over the members of a multi upload. Two
 // passes. The select pass reads every member whole — one cacheable system
@@ -469,7 +470,7 @@ export async function stitch(input: {
       providerOptions: kimiOptions(STITCH_SELECT_EFFORT),
       schema: selectSchema,
       label: "STITCH_SELECT",
-      usage: { userId: input.userId, feature: "stitch", model: STITCH_MODEL },
+      usage: { userId: input.userId, feature: "stitch", model: await resolveModelId(STITCH_MODEL) },
       abortSignal: input.signal,
     });
     if (input.signal?.aborted) throw input.onFailure(pick.ok ? "aborted" : pick.error);
@@ -500,7 +501,7 @@ export async function stitch(input: {
     providerOptions: kimiOptions(STITCH_EFFORT),
     schema: outputSchema,
     label: "STITCH",
-    usage: { userId: input.userId, feature: "stitch", model: STITCH_MODEL },
+    usage: { userId: input.userId, feature: "stitch", model: await resolveModelId(STITCH_MODEL) },
     abortSignal: input.signal,
   });
   if (!result.ok) throw input.onFailure(result.error);
