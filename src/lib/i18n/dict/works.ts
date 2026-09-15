@@ -98,7 +98,7 @@ const en = {
   guideDistill: "Distill",
   guidePanelHeader: "Side panel",
   guidePanelNotesBody:
-    "Your sections and the pending queue. Drag a note by its grip to reorder it; a line says where it lands. Lay it over another note and hold: a ring draws around that note, and at the full ring the two merge — the AI writes the one note that takes their place. Select notes with the circle at their top right to merge, pin, or delete them together.",
+    "Your sections and the pending queue. Hold a note to pick it up and drag it; a line says where it lands. Hold it over another note: a ring draws around that note, and at the full ring the two join into one note. Drop a note on the article to float it there. Select notes with the circle at their top right to merge, pin, or delete them together.",
   guidePanelAssistantBody:
     "Ask questions at document, project, or projects scope, and run checks (contradictions, gaps).",
   guidePanelDistillBody: "The distillation and every extraction of the open document; open one to read it.",
@@ -232,7 +232,7 @@ const zh: Record<keyof typeof en, string> = {
   guideDistill: "提炼",
   guidePanelHeader: "侧栏",
   guidePanelNotesBody:
-    "你的章节与待定队列。拖动笔记的把手可调整顺序，落位线会显示落点。把笔记压在另一条上按住：那条笔记周围会画出一圈环，环合拢时两条即合并——AI 会写出取代两条的那一条。点击笔记右上角的圆圈选择笔记，可一起合并、置顶或删除。",
+    "你的章节和待定队列。按住一条笔记即可拿起并拖动；落位线说明它会落在哪里。把它压在另一条笔记上按住：那条笔记周围会画出合并环，合拢时两条合并为一条。把笔记放到文章上即浮动。用笔记右上角的圆圈选中笔记，可一起合并、置顶或删除。",
   guidePanelAssistantBody: "在文档、项目或全部项目范围提问，并运行检查（矛盾、疏漏）。",
   guidePanelDistillBody: "当前文档的提炼和每次提取；打开一条即可阅读。",
   guidePanelSummary: "摘要",
