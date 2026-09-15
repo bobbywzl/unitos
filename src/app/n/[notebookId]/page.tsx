@@ -1347,6 +1347,7 @@ export default async function NotebookPage(props: {
           annotations={paneOne?.annotations ?? []}
           linksOut={paneOne?.linksOut ?? []}
           linksIn={paneOne?.linksIn ?? []}
+          sections={view.sections}
         />
       }
       editsPanel={
