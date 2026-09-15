@@ -5,39 +5,46 @@ import { createPortal } from "react-dom";
 import {
   DndContext,
   DragOverlay,
-  PointerSensor,
   useDroppable,
   useSensor,
   useSensors,
   type DragEndEvent,
   type DragMoveEvent,
+  type DragPendingEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
 import { SortableContext, useSortable, type SortingStrategy } from "@dnd-kit/sortable";
 import { getEventCoordinates } from "@dnd-kit/utilities";
+import { HoldSensor } from "@/components/hold-sensor";
 
 // One drag across many lists (SPEC.md §6). Every list is a SortableGroup
 // inside a SortableBoard, and the board owns the one DndContext, so a drag
 // that starts in one list ends in any of them.
 //
-// Nothing in a list moves while a card is dragged. The card itself rides in a
-// drag overlay under the pointer, its place in the list left dimmed, and a
-// line shows where it would land. Cards that slide out from under the pointer
-// are what made the old preview flicker between a reorder and a merge; a line
-// over cards that hold still says the same thing and never moves the target.
+// Hold to drag (lib/hold-drag.ts, hold-sensor.ts): a hold anywhere on a card
+// picks it up — the card lifts and tilts under the pointer — and from then on
+// it follows the pointer. Nothing in a list moves while a card is dragged.
+// The card itself rides in a drag overlay under the pointer, its place in the
+// list left dimmed, and a line shows where it would land. Cards that slide
+// out from under the pointer are what made the old preview flicker between a
+// reorder and a merge; a line over cards that hold still says the same thing
+// and never moves the target.
 //
 // Merge is a hold, not a pass, and it reads the cards, not the pointer: once
 // the dragged card covers more than MERGE_COVER of another card, a ring draws
 // itself around that card over MERGE_DWELL_MS, and at the full ring the merge
-// runs — the held card falls into the other one, which takes it in and works
-// while the model writes the note that replaces both. Moving on before the
-// ring closes puts the line back. A drag that passes over a card on its way
-// somewhere else never merges anything.
+// runs — the held card falls into the other one, which takes it in. Moving on
+// before the ring closes puts the line back. A drag that passes over a card
+// on its way somewhere else never merges anything. The floating card over the
+// article is one more card a hold can merge into.
 //
-// The pointer is not the card. A card picked up by its grip hangs below and
-// right of the pointer, so a pointer that is on a card means the dragged card
-// is somewhere above it — reading the pointer merged the wrong card, or none.
-// What the reader sees is one card covering another, so that is what decides.
+// The pointer is not the card. A card picked up near its edge hangs off to
+// one side of the pointer, so a pointer that is on a card does not mean the
+// dragged card is. What the reader sees is one card covering another, so that
+// is what decides.
+//
+// A card let go off every list, over the article, leaves the list: the board
+// reports the drop (onDropOutside) and the tray floats the note there.
 
 /** How much of the smaller card the two have to share before a hold merges
     them. The smaller of the two: a one-line card dropped on a long one covers
@@ -45,7 +52,7 @@ import { getEventCoordinates } from "@dnd-kit/utilities";
 const MERGE_COVER = 0.8;
 /** How long the ring takes to draw once the cards cover. At the full ring
     the merge runs. */
-export const MERGE_DWELL_MS = 2000;
+export const MERGE_DWELL_MS = 1000;
 // The pointer may drift this far and still count as holding.
 const DWELL_DRIFT_PX = 6;
 // How long the held card takes to fall into the card it merges into
@@ -67,6 +74,9 @@ export function useMergeTarget() {
   return useContext(MergeTargetContext);
 }
 
+/** The card a hold is on, before it lifts: it presses down a little. */
+const HeldContext = createContext<string | null>(null);
+
 /** Where the dragged card would land: before this card, or at the end of this
     list. Items and groups read it to draw the line. */
 type DropLine = { listId: string; beforeId: string | null };
@@ -83,6 +93,15 @@ const BoardContext = createContext<{ current: Registry } | null>(null);
 function rectOf(id: string): DOMRect | null {
   const el = document.querySelector(`[data-sortable-id="${CSS.escape(id)}"]`);
   return el instanceof HTMLElement ? el.getBoundingClientRect() : null;
+}
+
+/** The floating card over the article (floating-note-editor.tsx), when one
+    is open: its note's id and its box. A hold on it merges into it. */
+function floatingCard(): { id: string; rect: DOMRect } | null {
+  const el = document.querySelector<HTMLElement>("[data-floating-note]");
+  const id = el?.dataset.floatingNote;
+  if (!el || !id) return null;
+  return { id, rect: el.getBoundingClientRect() };
 }
 
 function inRect(x: number, y: number, r: DOMRect | null): boolean {
@@ -153,37 +172,44 @@ function dropLineAt(lists: [string, string[]][], x: number, y: number): DropLine
 }
 
 /** The card the dragged card covers, or null: the card a hold would merge
-    into. The one it covers most, so a card lying over two takes the nearer. */
+    into. The one it covers most, so a card lying over two takes the nearer.
+    The floating card over the article counts as one more card. */
 function mergeCandidateAt(
   lists: [string, string[]][],
   activeId: string,
   card: DOMRect,
   canMerge?: (id: string, intoId: string) => boolean,
-): string | null {
-  let best: { id: string; cover: number } | null = null;
-  for (const [, ids] of lists) {
-    for (const id of ids) {
-      if (id === activeId) continue;
-      if (canMerge && !canMerge(activeId, id)) continue;
-      const rect = rectOf(id);
-      if (!rect) continue;
-      const cover = coverage(card, rect);
-      if (cover < MERGE_COVER) continue;
-      if (best && best.cover >= cover) continue;
-      best = { id, cover };
-    }
-  }
-  return best?.id ?? null;
+): { id: string; rect: DOMRect } | null {
+  let best: { id: string; rect: DOMRect; cover: number } | null = null;
+  const consider = (id: string, rect: DOMRect | null) => {
+    if (!rect || id === activeId) return;
+    if (canMerge && !canMerge(activeId, id)) return;
+    const cover = coverage(card, rect);
+    if (cover < MERGE_COVER) return;
+    if (best && best.cover >= cover) return;
+    best = { id, rect, cover };
+  };
+  for (const [, ids] of lists) for (const id of ids) consider(id, rectOf(id));
+  const floating = floatingCard();
+  if (floating) consider(floating.id, floating.rect);
+  return best;
+}
+
+/** Whether a point is over an open document: a reader pane's box. */
+function overReader(x: number, y: number): boolean {
+  return Array.from(document.querySelectorAll<HTMLElement>("[data-reader-root]")).some((pane) =>
+    inRect(x, y, pane.getBoundingClientRect()),
+  );
 }
 
 export function SortableBoard({
   id,
   onDrop,
+  onDropOutside,
   onMerge,
   canMerge,
   canDrop,
   overlay,
-  axis,
   children,
 }: {
   id: string;
@@ -191,6 +217,10 @@ export function SortableBoard({
       `beforeId` — null when it landed at the end of that list. The same list
       on both sides is a reorder. */
   onDrop: (fromListId: string, toListId: string, itemId: string, beforeId: string | null) => void;
+  /** The card was let go off every list, over the article: where the pointer
+      was, and where the pointer sat inside the card, so the card can land
+      where it was seen. */
+  onDropOutside?: (itemId: string, at: { x: number; y: number; grab: { dx: number; dy: number } }) => void;
   /** The ring closed on another card: the two merge. */
   onMerge?: (id: string, intoId: string) => void;
   canMerge?: (id: string, intoId: string) => boolean;
@@ -201,19 +231,15 @@ export function SortableBoard({
   canDrop?: (fromListId: string, toListId: string) => boolean;
   /** The card the overlay carries under the pointer while it is dragged. */
   overlay?: (itemId: string) => React.ReactNode;
-  axis?: "y";
   children: React.ReactNode;
 }) {
-  const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint:
-        axis === "y" ? { distance: { y: 6 }, tolerance: { x: 12 } } : { distance: 4 },
-    }),
-  );
+  const sensors = useSensors(useSensor(HoldSensor));
   // The card being dragged, and the size it had in its list: the overlay is
   // drawn in a portal on the body, out of the tray's scroll box, so it carries
   // its own size, and the merge reads where it is drawn.
   const [active, setActive] = useState<{ id: string; width: number } | null>(null);
+  // The card a hold is on, before it lifts.
+  const [held, setHeld] = useState<string | null>(null);
   const [line, setLine] = useState<DropLine | null>(null);
   // The card the dragged card covers: the ring draws around it, and at the
   // full ring the merge runs. rect is the card's box, for the ring.
@@ -228,7 +254,7 @@ export function SortableBoard({
   const mergedRef = useRef(false);
   // Where the pointer sits inside the dragged card, and the card's size: the
   // card is drawn under the pointer at this offset, so this is where it is.
-  const held = useRef<{ dx: number; dy: number; width: number; height: number } | null>(null);
+  const grabbed = useRef<{ dx: number; dy: number; width: number; height: number } | null>(null);
   const dwell = useRef<{ id: string; x: number; y: number; timer: ReturnType<typeof setTimeout> } | null>(
     null,
   );
@@ -251,7 +277,8 @@ export function SortableBoard({
     setCovered(null);
     setDropLine(null);
     setActive(null);
-    held.current = null;
+    setHeld(null);
+    grabbed.current = null;
   }
 
   /** The ring closed: the merge runs, and the held card falls into the card it
@@ -269,7 +296,7 @@ export function SortableBoard({
     onMerge?.(itemId, intoId);
     requestAnimationFrame(() =>
       requestAnimationFrame(() => {
-        const target = rectOf(intoId);
+        const target = rectOf(intoId) ?? (floatingCard()?.id === intoId ? floatingCard()!.rect : null);
         if (!target) return;
         setFall({ from: card, to: target });
         if (fallTimer.current) clearTimeout(fallTimer.current);
@@ -278,22 +305,35 @@ export function SortableBoard({
     );
   }
 
+  function handleDragPending({ id: pendingId }: DragPendingEvent) {
+    setHeld((prev) => (prev === String(pendingId) ? prev : String(pendingId)));
+  }
+
+  function handleDragAbort() {
+    setHeld(null);
+  }
+
   function handleDragStart({ active: dragged, activatorEvent }: DragStartEvent) {
     const id = String(dragged.id);
     const rect = rectOf(id);
     const start = getEventCoordinates(activatorEvent);
+    setHeld(null);
     setActive({ id, width: Math.round(rect?.width ?? 0) });
-    held.current =
+    grabbed.current =
       rect && start
         ? { dx: start.x - rect.left, dy: start.y - rect.top, width: rect.width, height: rect.height }
         : null;
   }
 
+  function pointerAt(activatorEvent: Event | null, delta: { x: number; y: number }) {
+    const start = activatorEvent ? getEventCoordinates(activatorEvent) : null;
+    return start ? { x: start.x + delta.x, y: start.y + delta.y } : null;
+  }
+
   function handleDragMove({ active, activatorEvent, delta }: DragMoveEvent) {
-    const start = getEventCoordinates(activatorEvent);
-    if (!start) return;
-    const x = start.x + delta.x;
-    const y = start.y + delta.y;
+    const at = pointerAt(activatorEvent, delta);
+    if (!at) return;
+    const { x, y } = at;
     const dragged = String(active.id);
 
     // The merge already ran on the hold: the drag has nothing left to do.
@@ -309,7 +349,7 @@ export function SortableBoard({
     if (!onMerge) return;
     // Where the dragged card is drawn: under the pointer, at the offset it was
     // picked up by.
-    const grab = held.current;
+    const grab = grabbed.current;
     const card = grab
       ? new DOMRect(x - grab.dx, y - grab.dy, grab.width, grab.height)
       : pointRect(x, y);
@@ -323,37 +363,44 @@ export function SortableBoard({
     // A hold that stays on the same card keeps the ring it started.
     const holding =
       dwell.current &&
-      dwell.current.id === candidate &&
+      dwell.current.id === candidate.id &&
       Math.abs(x - dwell.current.x) <= DWELL_DRIFT_PX &&
       Math.abs(y - dwell.current.y) <= DWELL_DRIFT_PX;
     if (holding) return;
     clearDwell();
-    const rect = rectOf(candidate);
-    setCovered(rect ? { id: candidate, rect } : null);
+    setCovered(candidate);
     dwell.current = {
-      id: candidate,
+      id: candidate.id,
       x,
       y,
       timer: setTimeout(() => {
         dwell.current = null;
-        runMerge(dragged, candidate, card);
+        runMerge(dragged, candidate.id, card);
       }, MERGE_DWELL_MS),
     };
   }
 
-  function handleDragEnd({ active }: DragEndEvent) {
+  function handleDragEnd({ active, activatorEvent, delta }: DragEndEvent) {
     const itemId = String(active.id);
     const landing = lineRef.current;
     const merged = mergedRef.current;
+    const grab = grabbed.current;
+    const at = pointerAt(activatorEvent, delta);
     mergedRef.current = false;
     reset();
     // The ring closed and the merge already ran: the card is gone from the
     // list, and this release is only the hand letting go.
     if (merged) return;
-    if (!landing) return;
     const lists = [...registry.current.entries()];
     const from = lists.find(([, ids]) => ids.includes(itemId));
     if (!from) return;
+    if (!landing) {
+      // Off every list, over the article: the note leaves the list.
+      if (onDropOutside && at && overReader(at.x, at.y)) {
+        onDropOutside(itemId, { x: at.x, y: at.y, grab: grab ? { dx: grab.dx, dy: grab.dy } : { dx: 0, dy: 0 } });
+      }
+      return;
+    }
     if (landing.listId === from[0] && landing.beforeId === itemId) return;
     onDrop(from[0], landing.listId, itemId, landing.beforeId);
   }
@@ -429,6 +476,8 @@ export function SortableBoard({
     <DndContext
       id={id}
       sensors={sensors}
+      onDragPending={handleDragPending}
+      onDragAbort={handleDragAbort}
       onDragStart={handleDragStart}
       onDragMove={handleDragMove}
       onDragEnd={handleDragEnd}
@@ -438,9 +487,11 @@ export function SortableBoard({
         {/* The card rings as soon as the dragged card covers it — the reader
             sees the hold is lined up and has only to keep still. */}
         <MergeTargetContext.Provider value={covered?.id ?? null}>
-          <DropLineContext.Provider value={covered ? null : line}>
-            {children}
-          </DropLineContext.Provider>
+          <HeldContext.Provider value={held}>
+            <DropLineContext.Provider value={covered ? null : line}>
+              {children}
+            </DropLineContext.Provider>
+          </HeldContext.Provider>
         </MergeTargetContext.Provider>
       </BoardContext.Provider>
       {ring}
@@ -453,8 +504,9 @@ export function SortableBoard({
           // the body: inside the tray's scroll box it would be clipped.
           <DragOverlay dropAnimation={null}>
             {active && !fall ? (
-              // Over a card it would merge into, the dragged card draws back
-              // a little, so the ring on the card underneath shows around it.
+              // The lifted card: it tilts as it is picked up (globals.css,
+              // .card-drag-overlay). Over a card it would merge into it draws
+              // back a little, so the ring on the card underneath shows.
               <div
                 className={`card-drag-overlay${covered ? " card-drag-overlay-merging" : ""}`}
                 style={active.width ? { width: active.width } : undefined}
@@ -519,11 +571,12 @@ export function SortableItem({
 }) {
   const { attributes, listeners, setNodeRef, isDragging } = useSortable({ id });
   const line = useContext(DropLineContext);
+  const held = useContext(HeldContext) === id;
   return (
     <div
       ref={setNodeRef}
       data-sortable-id={id}
-      className={`relative${isDragging ? " opacity-40" : ""}`}
+      className={`relative${isDragging ? " opacity-40" : ""}${held ? " card-held" : ""}`}
     >
       {line?.beforeId === id && <span aria-hidden className="drop-line" />}
       {children({ attributes, listeners })}
@@ -531,6 +584,7 @@ export function SortableItem({
   );
 }
 
+/** The grip a section is dragged by (a note is dragged by a hold anywhere on it). */
 export function DragHandle({ handle, label }: { handle: HandleProps; label: string }) {
   return (
     <button

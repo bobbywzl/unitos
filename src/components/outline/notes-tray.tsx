@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import { dropCardOn } from "@/lib/card-drag";
 import { isImeKey } from "@/lib/ime";
 import type { NoteView, SectionView } from "@/lib/types";
 import { ChevronDownIcon, ChevronRightIcon, PlusIcon } from "@/components/icons";
@@ -10,9 +11,10 @@ import { useT } from "@/components/lang-provider";
 import { CollapsedViewToggle } from "@/components/collapsed-view-toggle";
 import { SortableBoard, SortableGroup, SortableItem } from "@/components/sortable";
 import { dropIndex, notesList, parseListId } from "@/components/outline/board-lists";
+import { landingLeft } from "@/components/outline/floating-note-editor";
+import { MergeUndoBar } from "@/components/outline/merge-undo";
 import { NoteCard } from "@/components/outline/note-card";
-import { NoteEditor } from "@/components/outline/note-editor";
-import { SaveStateLabel } from "@/components/outline/save-state";
+import { NoteComposer } from "@/components/outline/note-composer";
 import { SECTION_ACTION, SECTION_ADD_NOTE } from "@/components/outline/section-action";
 import { useNoteCompose } from "@/components/outline/use-note-compose";
 import { VoiceNoteButton } from "@/components/outline/voice-note";
@@ -27,9 +29,10 @@ import {
 } from "@/components/outline/use-outline";
 
 // The tray is for triage first: pending notes hoist to the top as one queue,
-// accepted notes sit under their section label (design 1a) and reorder by
-// their grip, as on the notes full page. Renaming sections and composing at
-// length live on the notes full page.
+// accepted notes sit under their section label (design 1a), collapsed to one
+// line each, and move by a hold anywhere on the card — as on the notes full
+// page. A search shows the notes it found whole, with the words it found lit
+// up. Renaming sections and composing at length live on the notes full page.
 export function NotesTray({
   tree,
   pending,
@@ -44,7 +47,7 @@ export function NotesTray({
   const [query, setQuery] = useState("");
   const label = "text-[11px] font-bold tracking-[0.08em] uppercase";
   const shown = filterSections(tree, query);
-  const needle = query.trim().toLowerCase();
+  const needle = query.trim();
   const shownPending = pending.filter((n) => noteMatches(n, query));
 
   // Every note by id: the drag asks per card on every pointer move whether the
@@ -53,8 +56,8 @@ export function NotesTray({
 
   // A drop lands the note where the line stood in the whole section, pending
   // notes included — the index reorderNote and the server count with. The
-  // tray's lists show the accepted notes only, so the place is counted in the
-  // section's own list (board-lists.ts).
+  // tray's lists show the accepted notes only, and a search fewer still, so
+  // the place is counted in the section's own list (board-lists.ts).
   function onDrop(fromListId: string, toListId: string, itemId: string, beforeId: string | null) {
     const from = parseListId(fromListId);
     const to = parseListId(toListId);
@@ -67,6 +70,32 @@ export function NotesTray({
     else void actions.moveNoteToSection(itemId, to.parentId, index);
   }
 
+  // A note let go over the article floats there (SPEC.md §6): the floating
+  // card lands where the card was seen, in its draggable mode.
+  function onDropOutside(itemId: string, at: { x: number; y: number; grab: { dx: number; dy: number } }) {
+    const note = notesById.get(itemId);
+    if (!note || !canEdit) return;
+    actions.floatNote({
+      id: note.id,
+      draft: note.content,
+      original: note.content,
+      left: landingLeft(at.x - at.grab.dx),
+      top: Math.max(8, at.y - at.grab.dy),
+    });
+  }
+
+  // The ring closed: the held note joins the note it covers. The floating
+  // card takes its drop itself, so its own words are saved first.
+  function onMerge(id: string, intoId: string) {
+    const note = notesById.get(id);
+    if (!note) return;
+    if (actions.floating?.id === intoId) {
+      dropCardOn(intoId, { kind: "note", ids: [id], label: "" });
+      return;
+    }
+    void actions.mergeNotes(intoId, [id], "join");
+  }
+
   return (
     <div className="flex flex-col gap-3.5">
       <div className="flex items-center gap-1.5">
@@ -76,6 +105,7 @@ export function NotesTray({
           onKeyDown={(e) => e.key === "Escape" && !isImeKey(e) && setQuery("")}
           placeholder={t("outline.searchNotes")}
           aria-label={t("outline.searchNotes")}
+          type="search"
           className="min-w-0 flex-1 rounded-full bg-card px-4 py-2 text-[13px] shadow-soft outline-none placeholder:text-sand-500"
         />
         <CollapsedViewToggle view={actions.notesView} onChange={actions.setNotesView} track="notes-view" />
@@ -90,35 +120,37 @@ export function NotesTray({
             <span className="ml-auto text-[11px] text-sand-500">{t("outline.trayKeyHint")}</span>
           </div>
           {shownPending.map((note) => (
-            <NoteCard key={note.id} note={note} actions={actions} variant="tray" />
+            <NoteCard key={note.id} note={note} actions={actions} variant="tray" search={query} />
           ))}
         </div>
       )}
 
-      {/* One drag across the tray (SPEC.md §6): a note dragged out of its
-          section drops into another, and a note held over another until the
-          ring closes merges the two — the same as on the notes full page. */}
+      {/* One drag across the tray (SPEC.md §6): a hold anywhere on a note
+          picks it up; a note dropped in another section moves there, a note
+          held over another until the ring closes joins it, and a note let go
+          over the article floats there. */}
       <SortableBoard
         id="tray-board"
         onDrop={onDrop}
-        onMerge={canEdit ? (id, intoId) => void actions.mergeNotes(intoId, [id], "ai") : undefined}
+        onDropOutside={canEdit ? onDropOutside : undefined}
+        onMerge={canEdit ? onMerge : undefined}
         canMerge={(id, intoId) =>
           notesById.get(id)?.status === "ACCEPTED" && notesById.get(intoId)?.status === "ACCEPTED"
         }
         overlay={(itemId) => {
           const note = notesById.get(itemId);
-          return note ? <NoteCard note={note} actions={actions} variant="tray" /> : null;
+          return note ? <NoteCard note={note} actions={actions} variant="tray" search={query} /> : null;
         }}
-        axis="y"
       >
         <div className="flex flex-col gap-3.5">
-          {shown.map((section) => (
+          {shown.map((section, i) => (
             <TraySection
               key={section.id}
               section={section}
               actions={actions}
               labelClass={label}
-              reorderable={!needle}
+              search={query}
+              nudgeFirst={i === 0}
             />
           ))}
         </div>
@@ -126,7 +158,7 @@ export function NotesTray({
 
       {needle && shown.length === 0 && shownPending.length === 0 && (
         <p className="text-[13px] text-sand-600">
-          {t("outline.noNotesMatch", { query: query.trim() })}
+          {t("outline.noNotesMatch", { query: needle })}
         </p>
       )}
 
@@ -141,6 +173,7 @@ export function NotesTray({
       )}
 
       <SelectionBar tree={tree} actions={actions} />
+      <MergeUndoBar actions={actions} />
     </div>
   );
 }
@@ -149,15 +182,17 @@ function TraySection({
   section,
   actions,
   labelClass,
-  reorderable,
+  search,
+  nudgeFirst,
   nested,
 }: {
   section: SectionView;
   actions: OutlineActions;
   labelClass: string;
-  // False while a search filters the list: a drop then could not land on the
-  // whole section, the list the order counts in.
-  reorderable: boolean;
+  /** The search the section's notes were found by. */
+  search: string;
+  /** The first section of the tray: its first note is the onboarding nudge's target. */
+  nudgeFirst?: boolean;
   nested?: boolean;
 }) {
   const t = useT();
@@ -167,7 +202,6 @@ function TraySection({
   // The composer auto-saves (use-note-compose.ts); the note it owns stays out of the list.
   const compose = useNoteCompose({ sectionId: section.id, notes: section.notes, actions, canEdit });
   const accepted = compose.visibleNotes.filter((n) => n.status !== "PENDING");
-  const grips = reorderable && canEdit;
 
   return (
     <div className={`group/section flex flex-col gap-2 ${nested ? "pl-3" : ""}`}>
@@ -210,46 +244,12 @@ function TraySection({
           {/* The composer sits above the notes: a new note lands at the top of
               the section (SPEC.md §6). */}
           {compose.composing && (
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                void compose.save();
-              }}
-            >
-              {/* The save state at the top of the composer (SPEC.md §6). */}
-              <div className="mb-1 flex min-h-4 justify-end">
-                <SaveStateLabel state={compose.saveState} />
-              </div>
-              <NoteEditor
-                className="rounded-2xl bg-card p-3 shadow-soft"
-                value={compose.draft}
-                onChange={compose.setDraft}
-                onKeyDown={(e) => {
-                  if (isImeKey(e)) return;
-                  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) e.currentTarget.closest("form")?.requestSubmit();
-                  if (e.key === "Escape") compose.escape();
-                }}
-                placeholder={t("outline.writeNotePlaceholder")}
-                moreHref={`/n/${actions.notebookId}/notes`}
-              />
-              <div className="mt-2 flex gap-2">
-                <button
-                  type="submit"
-                  data-track="note-compose-save"
-                  className="rounded-full bg-sage-600 px-3.5 py-1 text-xs font-semibold text-sage-fg hover:bg-sage-700"
-                >
-                  {t("common.save")}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void compose.cancel()}
-                  data-track="note-compose-cancel"
-                  className="rounded-full border border-line px-3 py-1 text-xs text-sand-700 hover:bg-clay-100 hover:text-clay-800"
-                >
-                  {t("common.cancel")}
-                </button>
-              </div>
-            </form>
+            <NoteComposer
+              compose={compose}
+              full={false}
+              moreHref={`/n/${actions.notebookId}/notes`}
+              padding="p-3"
+            />
           )}
 
           <SortableGroup
@@ -257,14 +257,16 @@ function TraySection({
             ids={accepted.map((n) => n.id)}
             className="flex flex-col gap-2"
           >
-            {accepted.map((note) => (
+            {accepted.map((note, i) => (
               <SortableItem key={note.id} id={note.id}>
                 {(handle) => (
                   <NoteCard
                     note={note}
                     actions={actions}
-                    handle={grips ? handle : undefined}
+                    handle={canEdit ? handle : undefined}
                     variant="tray"
+                    search={search}
+                    nudge={nudgeFirst && i === 0}
                   />
                 )}
               </SortableItem>
@@ -277,7 +279,7 @@ function TraySection({
               section={child}
               actions={actions}
               labelClass={labelClass}
-              reorderable={reorderable}
+              search={search}
               nested
             />
           ))}

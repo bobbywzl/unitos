@@ -44,7 +44,7 @@ import { NotebookTitle } from "@/components/notebook-title";
 import { FloatingNoteEditor } from "@/components/outline/floating-note-editor";
 import { NotesTray } from "@/components/outline/notes-tray";
 import { Presence } from "@/components/presence";
-import { useOutline } from "@/components/outline/use-outline";
+import { flattenNotes, useOutline } from "@/components/outline/use-outline";
 import { DocumentBar, type AttachedDocument } from "@/components/reader/document-bar";
 import type { ReaderViewKind } from "@/components/reader/reader-panes";
 import type { DriveConfig } from "@/lib/drive/config";
@@ -583,12 +583,13 @@ export function Workspace({
         </button>
       </header>
 
-      {/* A note's editor taken out of the tray, over the article. Docking it
-          opens the tray on notes, where the note's card reopens the editor. */}
+      {/* A note taken out of the tray, over the article. Docking it opens the
+          tray on notes, where the note's card takes it back. */}
       {actions.floating && (
         <FloatingNoteEditor
           key={actions.floating.id}
           edit={actions.floating}
+          note={flattenNotes(tree).find((n) => n.id === actions.floating?.id) ?? null}
           actions={actions}
           onDock={() => show("notes")}
         />

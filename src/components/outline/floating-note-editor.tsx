@@ -3,30 +3,44 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { isImeKey } from "@/lib/ime";
+import { skipsDrag, watchHold } from "@/lib/hold-drag";
 import { NOTE_WRAP_GAP as GAP, announceNoteWrap, type NoteWrapSpacer } from "@/lib/note-wrap";
 import type { CardDragEndDetail } from "@/lib/card-drag";
-import { useCollab } from "@/components/collab/collab-context";
-import { useT } from "@/components/lang-provider";
-import { ThinkingIndicator } from "@/components/thinking";
-import { NoteEditor } from "@/components/outline/note-editor";
-import { SaveStateLabel } from "@/components/outline/save-state";
-import { useImageDrop } from "@/components/use-image-drop";
 import { imageMarkdown } from "@/lib/images";
+import { linkMarkdown } from "@/lib/note-links";
+import { editDraft, splitNote } from "@/lib/note-title";
+import type { NoteView } from "@/lib/types";
+import { useCollab } from "@/components/collab/collab-context";
+import { PencilIcon } from "@/components/icons";
+import { useT } from "@/components/lang-provider";
+import { Markdown } from "@/components/markdown";
+import { NoteEditor } from "@/components/outline/note-editor";
+import { NoteId } from "@/components/outline/note-id";
+import { NoteTitleField, focusBodyEditor, useNoteParts } from "@/components/outline/note-title-field";
+import { SourceChips } from "@/components/outline/note-card";
+import { SaveStateLabel } from "@/components/outline/save-state";
+import { useNoteDrop } from "@/components/use-note-drop";
 import { useCardDropTarget } from "@/components/outline/use-card-drop";
 import { useNoteDraft } from "@/components/outline/use-note-draft";
 import type { FloatingEdit, OutlineActions } from "@/components/outline/use-outline";
 
 // The floating card: a note dragged out of the tray and put over the article,
-// so the note is edited against the document it is about, with the tray folded
-// away (workspace.tsx folds it while a card floats). Its handle drags it (a
-// drop on the tray or the rail docks it back), the corner resizes it (native
-// handle), and the tray's auto-save carries on inside it (use-note-draft.ts).
+// so the note is read and edited against the document it is about, with the
+// tray folded away (workspace.tsx folds it while a card floats). The card has
+// the note's two modes, and only ever one of them (SPEC.md §6):
+// - Draggable, the default: the note rendered — its title, its body, its
+//   sources — and a hold anywhere on the card lifts it and moves it. A drop
+//   on the tray or the rail docks it back.
+// - Editing: the pencil opens the editor in the card — the title field and
+//   the body's editor — with the tray's auto-save (use-note-draft.ts). Done
+//   and Cancel return to the draggable mode; nothing drags meanwhile.
+// The corner resizes the card (native handle) in both modes.
 //
-// The card takes drops (SPEC.md §6): a note from the notes tray or an
-// annotation from the Annotations tab, dragged onto it. Two pills say what the
-// drop does — Merge with AI writes the one note that takes their place, Join
-// text lands the card's words as they are. A note merged in is consumed; an
-// annotation is copied, so its mark stays in the article.
+// The card takes drops (SPEC.md §6): a note from the notes tray held over it
+// until the ring closes, or an annotation from the Annotations tab dropped on
+// it, joins its text into the note. A note merged in is consumed; an
+// annotation is copied, so its mark stays in the article. A link or an image
+// dropped on the card goes into the note.
 //
 // Wrap text, a toggle on the card remembered per browser: the card leaves the
 // viewport and joins the article's scroll pane at a spot in the text, so it
@@ -44,8 +58,7 @@ export function floatingWidth(): number {
 
 /** Where a card dragged out lands: whole on screen. `left` is where the
     pointer would put it; the card shifts in from the edge when it would hang
-    off, and the caller moves the grab point by the same amount, so the card
-    keeps tracking the pointer. */
+    off. */
 export function landingLeft(left: number): number {
   return Math.max(MARGIN, Math.min(left, window.innerWidth - floatingWidth() - MARGIN));
 }
@@ -171,25 +184,39 @@ function measureWrap(id: string, card: HTMLElement, pane: HTMLElement): NoteWrap
 
 export function FloatingNoteEditor({
   edit,
+  note,
   actions,
   onDock,
 }: {
   edit: FloatingEdit;
+  /** The note as the project holds it; null once it is gone (deleted elsewhere). */
+  note: NoteView | null;
   actions: OutlineActions;
-  /** Docking opens the tray on notes, where the note's card takes the editor back. */
+  /** Docking opens the tray on notes, where the note's card takes the note back. */
   onDock: () => void;
 }) {
   const t = useT();
   const { canEdit, premium } = useCollab();
   const cardRef = useRef<HTMLDivElement>(null);
+  const [editing, setEditing] = useState(Boolean(edit.editing) && canEdit);
   const [dropError, setDropError] = useState<string | null>(null);
+  const content = note?.content ?? edit.original;
   const { draft, setDraft, cancel, markSaved, confirmSaved, saveState, getOriginal } = useNoteDraft({
     noteId: edit.id,
-    original: edit.original,
+    original: content,
     initial: edit.draft,
-    active: true,
+    active: editing,
     canEdit,
   });
+  // The draft as the editor holds it: the title field and the body's editor
+  // each edit their own part (note-title-field.tsx).
+  const { parts, setTitle, setBody } = useNoteParts(draft, (next) => {
+    setDraft(next);
+    // The draft as typed, so docking can carry it (use-outline.ts).
+    actions.floatingDraftChanged(next);
+  });
+  // The note as it reads in the draggable mode.
+  const shown = splitNote(content);
   // The width is set once; after that the corner handle owns the card's size.
   const [width] = useState(() => Math.min(WIDTH, window.innerWidth - 2 * MARGIN));
   // Over the article: the card's place on screen.
@@ -205,11 +232,20 @@ export function FloatingNoteEditor({
     const p = readWrapPreference() ? findPane(start.left + width / 2, start.top + 40) : null;
     return p ? clampContent(toContent(start, p), p, width) : start;
   });
-  const [grab, setGrab] = useState<{ dx: number; dy: number } | null>(edit.grab ?? null);
+  // Lifted by a hold: where the pointer sits inside the card while it moves.
+  const [grab, setGrab] = useState<{ dx: number; dy: number } | null>(null);
 
-  // A note or an annotation dropped on the card. The card's own words are
-  // saved first, so the merge reads what is on screen; the merged text then
-  // takes the card's place, saved and ready to keep editing.
+  // The note is gone (deleted elsewhere): the card closes.
+  const gone = note === null;
+  useEffect(() => {
+    if (gone) actions.dockNote(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gone]);
+
+  // A note or an annotation dropped on the card joins its text into the note
+  // (SPEC.md §6). The card's own words are saved first, so the merge reads
+  // what is on screen; while editing, the merged text then takes the draft's
+  // place, saved and ready to keep editing.
   const [merging, setMerging] = useState(false);
   const [mergeError, setMergeError] = useState<string | null>(null);
   async function takeDrop(end: CardDragEndDetail) {
@@ -218,22 +254,22 @@ export function FloatingNoteEditor({
     setMerging(true);
     try {
       const current = draft.trim();
-      if (current && current !== getOriginal()) {
+      if (editing && current && current !== getOriginal()) {
         markSaved(current);
         await actions.saveNote(edit.id, current);
         confirmSaved(current);
       }
-      const merged = await actions.mergeNotes(edit.id, end.drag.ids, "ai");
-      if (merged) {
-        markSaved(merged);
-        setDraft(merged);
-        actions.floatingDraftChanged(merged);
-        confirmSaved(merged);
-      } else {
+      const merged = await actions.mergeNotes(edit.id, end.drag.ids, "join");
+      if (!merged) {
         // The merge never ran: this note is not one that takes a drop — a note
         // still pending goes through Accept first. Saying so beats a drop that
         // looks taken and changes nothing.
         setMergeError(t("api.mergeAcceptedOnly"));
+      } else if (editing) {
+        markSaved(merged.content);
+        setDraft(merged.content);
+        actions.floatingDraftChanged(merged.content);
+        confirmSaved(merged.content);
       }
     } catch (err) {
       setMergeError(err instanceof Error ? err.message : t("common.requestFailed"));
@@ -245,7 +281,7 @@ export function FloatingNoteEditor({
 
   function dock() {
     onDock();
-    actions.dockNote(true);
+    actions.dockNote(editing);
   }
 
   function close() {
@@ -253,15 +289,28 @@ export function FloatingNoteEditor({
     actions.dockNote(false);
   }
 
-  // Done closes the card; the content is already saved by then.
+  function openEditor() {
+    if (!canEdit) return;
+    setDraft(editDraft(content));
+    setEditing(true);
+  }
+
+  // Cancel: the draft goes back; the card returns to its draggable mode.
+  function cancelEdit() {
+    cancel();
+    setEditing(false);
+  }
+
+  // Done: the content is already saved by then; the card returns to its
+  // draggable mode and stays where it is.
   async function done() {
     const trimmed = draft.trim();
     if (!trimmed || trimmed === getOriginal()) {
-      close();
+      cancelEdit();
       return;
     }
     markSaved(trimmed);
-    actions.dockNote(false);
+    setEditing(false);
     await actions.saveNote(edit.id, trimmed);
     confirmSaved(trimmed);
   }
@@ -271,8 +320,8 @@ export function FloatingNoteEditor({
     dockRef.current = dock;
   });
 
-  // Grabbed (by the handle, or on the way out of the tray): the card follows
-  // the pointer; released over the tray or the rail, it docks.
+  // Lifted (by a hold anywhere on the card): the card follows the pointer;
+  // released over the tray or the rail, it docks.
   useEffect(() => {
     if (!grab) return;
     const onMove = (e: PointerEvent) => {
@@ -288,8 +337,8 @@ export function FloatingNoteEditor({
         return;
       }
       // Released over the article: the card settles whole on screen. A drag
-      // may leave it hanging off the window's edge (the pull out of the tray
-      // ends near that edge); a card the reader cannot see whole is lost.
+      // may leave it hanging off the window's edge; a card the reader cannot
+      // see whole is lost.
       if (!pane) setPos((p) => ({ left: landingLeft(p.left), top: p.top }));
     };
     window.addEventListener("pointermove", onMove);
@@ -345,28 +394,40 @@ export function FloatingNoteEditor({
   // The card leaves: the gap closes.
   useEffect(() => () => announceNoteWrap(null), []);
 
-  // An image dropped on the card goes into the note, like a drop on its tray
-  // card (SPEC.md §16).
-  const imageDrop = useImageDrop({
+  // An image or a link dropped on the card goes into the note, like a drop
+  // on its tray card (SPEC.md §6, §16): into the draft while editing, else
+  // added and saved.
+  async function addToNote(markdown: string) {
+    setDropError(null);
+    if (editing) {
+      const base = parts.body.replace(/\s+$/, "");
+      const next = base ? `${base}\n\n${markdown}\n` : `${markdown}\n`;
+      setBody(next);
+      actions.floatingDraftChanged(next);
+      return;
+    }
+    const base = shown.body.replace(/\s+$/, "");
+    const body = base ? `${base}\n\n${markdown}` : markdown;
+    await actions.saveNote(edit.id, shown.title ? `# ${shown.title}\n\n${body}` : body);
+  }
+  const noteDrop = useNoteDrop({
     premium,
     enabled: canEdit,
     t,
     onError: setDropError,
-    onImages: (images) => {
-      setDropError(null);
-      const added = images.map((i) => imageMarkdown(i.id, i.name)).join("\n\n");
-      const next = `${draft.replace(/\s+$/, "")}\n\n${added}\n`;
-      setDraft(next);
-      actions.floatingDraftChanged(next);
-    },
+    onImages: (images) => addToNote(images.map((i) => imageMarkdown(i.id, i.name)).join("\n\n")),
+    onLinks: (links) => addToNote(links.map(linkMarkdown).join("\n\n")),
   });
 
-  function startDrag(e: React.PointerEvent) {
-    if (e.button !== 0) return;
-    const rect = cardRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    e.preventDefault();
-    setGrab({ dx: e.clientX - rect.left, dy: e.clientY - rect.top });
+  // Hold to drag (lib/hold-drag.ts): in the draggable mode a hold anywhere
+  // on the card — not on a control that keeps its press — lifts it.
+  function startHold(e: React.PointerEvent) {
+    if (editing || e.button !== 0 || skipsDrag(e.target)) return;
+    watchHold(e, (at) => {
+      const rect = cardRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      setGrab({ dx: at.x - rect.left, dy: at.y - rect.top });
+    });
   }
 
   // Wrap on: the card keeps its place on screen while it joins the pane's
@@ -387,6 +448,14 @@ export function FloatingNoteEditor({
     storeWrapPreference(true);
   }
 
+  const dropTip =
+    noteDrop.over === "images"
+      ? t("panes.dropImageIntoNote")
+      : noteDrop.over === "links"
+        ? t("outline.dropLinkIntoNote")
+        : undefined;
+  const pill = "rounded-full px-2.5 py-1 text-xs text-sand-600 hover:bg-clay-100 hover:text-clay-800";
+
   const card = (
     <div
       ref={cardRef}
@@ -396,89 +465,153 @@ export function FloatingNoteEditor({
           ? { left: at.left, top: at.top, width, maxHeight: Math.round(window.innerHeight * 0.7) }
           : { left: pos.left, top: pos.top, width, maxHeight: Math.max(180, window.innerHeight - pos.top - MARGIN) }
       }
-      {...imageDrop.handlers}
+      {...noteDrop.handlers}
+      onPointerDown={editing ? undefined : startHold}
+      // The browser's own drag of a link or a picture in the note would take
+      // the hold.
+      onDragStart={editing ? undefined : (e) => e.preventDefault()}
       data-note-drop-target={canEdit ? edit.id : undefined}
-      // The onboarding nudge on the floating card: drag a second note onto it
-      // and hold, and the two merge (components/nudges.tsx).
+      // The onboarding nudge on the floating card: hold a second note over
+      // it, and the two merge (components/nudges.tsx).
       data-nudge={canEdit ? "merge" : undefined}
-      data-tip={imageDrop.over ? t("panes.dropImageIntoNote") : undefined}
+      data-tip={
+        dropTip ??
+        (cardDrop.drag && canEdit
+          ? t(cardDrop.drag.kind === "annotation" ? "outline.dropAnnotation" : "outline.dropNote")
+          : editing
+            ? undefined
+            : t("outline.holdToMoveCard"))
+      }
       // The card sits over the article, under the reader's tools (TOOL_LAYER,
       // z-40 in reader-interactions.tsx): a selection's toolbar and the cards
       // it opens come out on top of the note, never under it.
       className={`${pane ? "absolute z-20" : "fixed z-30"} flex max-w-[calc(100vw-32px)] min-h-[180px] min-w-[300px] resize flex-col overflow-hidden rounded-[20px] border border-line bg-card/95 p-3 shadow-float backdrop-blur-md ${
-        grab ? "select-none" : ""
-      }${imageDrop.over ? " outline-2 outline-dashed outline-clay-400" : ""}${
+        grab ? "note-lifted select-none" : ""
+      }${noteDrop.over ? " outline-2 outline-dashed outline-clay-400" : ""}${
         cardDrop.over ? " outline-2 outline-sage-500" : ""
-      }${merging ? " note-merging note-absorb" : ""}`}
+      }${merging ? " note-absorb" : ""}`}
     >
       {dropError && <p className="mb-1 shrink-0 text-[11px] text-red-500">{dropError}</p>}
       {mergeError && <p className="mb-1 shrink-0 text-[11px] text-red-500">{mergeError}</p>}
-      {/* The save state at the top of the card (SPEC.md §6). */}
-      <div className="mb-1 flex shrink-0 items-center justify-end gap-2">
-        {merging && <ThinkingIndicator label={t("outline.merging")} className="text-[11px]" />}
-        <SaveStateLabel state={saveState} />
+      {/* The header row: the note's id at the left; the save state while
+          editing, else the pencil, at the right (SPEC.md §6). */}
+      <div className="mb-1 flex shrink-0 items-center gap-1.5">
+        <NoteId id={edit.id} />
+        <span className="ml-auto flex shrink-0 items-center gap-1.5">
+          {editing ? (
+            <SaveStateLabel state={saveState} />
+          ) : (
+            canEdit && (
+              <button
+                onClick={openEditor}
+                data-track="note-edit"
+                data-no-drag
+                aria-label={t("outline.editTitle")}
+                data-tip={t("outline.editTitle")}
+                className="flex size-7 items-center justify-center rounded-full bg-clay-100 text-clay-800 hover:bg-clay-200"
+              >
+                <PencilIcon size={16} />
+              </button>
+            )
+          )}
+        </span>
       </div>
-      <NoteEditor
-        className="min-h-0 flex-1"
-        value={draft}
-        onChange={(text) => {
-          setDraft(text);
-          actions.floatingDraftChanged(text);
-        }}
-        onKeyDown={(e) => {
-          if (isImeKey(e)) return;
-          if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void done();
-          if (e.key === "Escape") close();
-        }}
-        handle={{ onPointerDown: startDrag, title: t("reader.dragToMove"), label: t("outline.floatingTitle") }}
-        moreHref={`/n/${actions.notebookId}/notes`}
-      />
+
+      {editing ? (
+        <div data-note-editing="" className="flex min-h-0 flex-1 flex-col">
+          <NoteTitleField
+            value={parts.title}
+            onChange={(title) => {
+              setTitle(title);
+            }}
+            onEnter={() => focusBodyEditor(cardRef.current)}
+            onEscape={cancelEdit}
+            className="shrink-0"
+          />
+          <NoteEditor
+            className="mt-1.5 min-h-0 flex-1"
+            value={parts.body}
+            onChange={(text) => {
+              setBody(text);
+            }}
+            onKeyDown={(e) => {
+              if (isImeKey(e)) return;
+              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void done();
+              if (e.key === "Escape") cancelEdit();
+            }}
+            moreHref={`/n/${actions.notebookId}/notes`}
+          />
+        </div>
+      ) : (
+        <div className="note-body min-h-0 flex-1 overflow-y-auto">
+          {shown.title && <h3 className="note-title mb-1">{shown.title}</h3>}
+          {shown.body.trim() !== "" && <Markdown breaks>{shown.body}</Markdown>}
+          {note && note.sources.length > 0 && (
+            <div className="mt-2.5">
+              <SourceChips sources={note.sources} notebookId={actions.notebookId} />
+            </div>
+          )}
+        </div>
+      )}
+
       {/* A card is being dragged onto this one: one line says what the drop
-          does. The drop itself is the merge — the card then works while the
-          model writes the note that replaces both. */}
+          does. The drop itself is the merge. */}
       {cardDrop.drag && canEdit ? (
         <div className="mt-2 flex shrink-0 items-center gap-1.5">
           <span className="text-[11px] font-semibold text-sage-700">
             {t(cardDrop.drag.kind === "annotation" ? "outline.dropAnnotation" : "outline.dropNote")}
           </span>
         </div>
+      ) : editing ? (
+        <div className="mt-2 flex shrink-0 items-center gap-2">
+          <button
+            onClick={() => void done()}
+            data-track="note-save"
+            className="rounded-full bg-sage-600 px-3.5 py-1 text-xs font-semibold text-sage-fg hover:bg-sage-700"
+          >
+            {t("common.done")}
+          </button>
+          <button
+            onClick={cancelEdit}
+            data-track="note-cancel"
+            className="rounded-full border border-line px-3 py-1 text-xs text-sand-700 hover:bg-clay-100 hover:text-clay-800"
+          >
+            {t("common.cancel")}
+          </button>
+          <button
+            onClick={close}
+            data-track="note-close"
+            data-tip={t("outline.dockBackTitle")}
+            className={`ml-auto ${pill}`}
+          >
+            {t("outline.dockBack")}
+          </button>
+        </div>
       ) : (
-      <div className="mt-2 flex shrink-0 items-center gap-2">
-        <button
-          onClick={() => void done()}
-          data-track="note-save"
-          className="rounded-full bg-sage-600 px-3.5 py-1 text-xs font-semibold text-sage-fg hover:bg-sage-700"
-        >
-          {t("common.done")}
-        </button>
-        <button
-          onClick={close}
-          data-track="note-cancel"
-          className="rounded-full border border-line px-3 py-1 text-xs text-sand-700 hover:bg-clay-100 hover:text-clay-800"
-        >
-          {t("common.cancel")}
-        </button>
-        <button
-          type="button"
-          onClick={toggleWrap}
-          data-track="note-wrap"
-          aria-pressed={pane !== null}
-          data-tip={t("outline.wrapTextTitle")}
-          className={`ml-auto rounded-full px-2.5 py-1 text-xs ${
-            pane ? "bg-clay-100 font-semibold text-clay-800" : "text-sand-600 hover:bg-clay-100 hover:text-clay-800"
-          }`}
-        >
-          {t("outline.wrapText")}
-        </button>
-        <button
-          onClick={dock}
-          data-track="note-dock"
-          data-tip={t("outline.dockBackTitle")}
-          className="text-xs text-sand-600 hover:text-clay-700"
-        >
-          {t("outline.dockBack")}
-        </button>
-      </div>
+        <div className="mt-2 flex shrink-0 items-center gap-2">
+          <button
+            type="button"
+            onClick={toggleWrap}
+            data-track="note-wrap"
+            data-no-drag
+            aria-pressed={pane !== null}
+            data-tip={t("outline.wrapTextTitle")}
+            className={`rounded-full px-2.5 py-1 text-xs ${
+              pane ? "bg-clay-100 font-semibold text-clay-800" : "text-sand-600 hover:bg-clay-100 hover:text-clay-800"
+            }`}
+          >
+            {t("outline.wrapText")}
+          </button>
+          <button
+            onClick={dock}
+            data-track="note-dock"
+            data-no-drag
+            data-tip={t("outline.dockBackTitle")}
+            className={`ml-auto ${pill}`}
+          >
+            {t("outline.dockBack")}
+          </button>
+        </div>
       )}
     </div>
   );

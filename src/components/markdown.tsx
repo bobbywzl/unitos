@@ -1,12 +1,16 @@
 "use client";
 
+import type { Element as HastElement, ElementContent, Root as HastRoot, Text as HastText } from "hast";
 import type { List, Root } from "mdast";
-import { createContext, useContext } from "react";
+import { createContext, useContext, useMemo } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { LinkIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { isVisualizationImage, openVisualization } from "@/components/reader/visualization-viewer";
 import { imageWidth } from "@/lib/note-markup";
+import { linkHost } from "@/lib/note-links";
+import { splitHits } from "@/lib/search-hits";
 
 // AI text cites document blocks as [block <id>] — the tags the model sees in
 // its document context. They render as ¶ chips that scroll the reader to the
@@ -161,30 +165,128 @@ function remarkDashLists() {
   };
 }
 
+// A search lights up the words it found (SPEC.md §6): every run of text that
+// matches the needle is wrapped in a mark, wherever it sits — a paragraph, a
+// list item, a heading, a link, code. The same splitter paints the title row
+// and the collapsed line (lib/search-hits.ts), so the whole note lights up
+// the same way.
+function markHits(children: ElementContent[], needle: string): ElementContent[] {
+  const next: ElementContent[] = [];
+  for (const child of children) {
+    if (child.type === "text") {
+      const runs = splitHits(child.value, needle);
+      if (runs.length === 1 && !runs[0].hit) {
+        next.push(child);
+        continue;
+      }
+      for (const run of runs) {
+        const text: HastText = { type: "text", value: run.text };
+        next.push(
+          run.hit
+            ? { type: "element", tagName: "mark", properties: { className: ["search-hit"] }, children: [text] }
+            : text,
+        );
+      }
+      continue;
+    }
+    if (child.type === "element") child.children = markHits(child.children, needle);
+    next.push(child);
+  }
+  return next;
+}
+
+function rehypeSearchHits(needle: string) {
+  return (tree: HastRoot) => {
+    tree.children = tree.children.map((child) => {
+      if (child.type === "element") child.children = markHits(child.children, needle);
+      return child;
+    });
+  };
+}
+
+// A link on a line of its own — a link dropped into the note, or written as
+// its own paragraph — draws as a link card: the link's text, the site under
+// it, the whole row a target (SPEC.md §6). A link inside a sentence stays a
+// link in the sentence. The paragraph is read here, where the paragraph is
+// known; the a override draws the card.
+const LINK_CARD = "dataLinkCard";
+
+function rehypeLinkCards() {
+  return (tree: HastRoot) => {
+    const walk = (node: HastRoot | HastElement) => {
+      for (const child of node.children) {
+        if (child.type !== "element") continue;
+        if (child.tagName === "p") {
+          const kept = child.children.filter((c) => !(c.type === "text" && c.value.trim() === ""));
+          const only = kept.length === 1 ? kept[0] : null;
+          const href = only?.type === "element" && only.tagName === "a" ? only.properties.href : undefined;
+          if (only?.type === "element" && typeof href === "string" && /^https?:\/\//.test(href)) {
+            only.properties[LINK_CARD] = "";
+            child.properties.className = ["note-link-card-p"];
+          }
+        }
+        walk(child);
+      }
+    };
+    walk(tree);
+  };
+}
+
+function LinkCard({ href, children }: { href: string; children: React.ReactNode }) {
+  const host = linkHost(href);
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      draggable={false}
+      data-track="note-link-open"
+      className="note-link-card"
+    >
+      <span className="note-link-card-icon">
+        <LinkIcon size={14} />
+      </span>
+      <span className="note-link-card-text">
+        <span className="note-link-card-title">{children}</span>
+        {host && <span className="note-link-card-host">{host}</span>}
+      </span>
+    </a>
+  );
+}
+
 // The line a checklist item sits on, handed from the item to its box: the
 // box's own node carries no position.
 const TaskLine = createContext(-1);
 
 /** breaks: single newlines render as line breaks (notes). onToggleTask: a
     checklist item's box is a control; a click reports the item's line (from
-    0) and its new state, and the caller saves the note (note-card.tsx). */
+    0) and its new state, and the caller saves the note (note-card.tsx).
+    highlight: the text a search looks for; every match lights up. */
 export function Markdown({
   children,
   breaks = false,
   onToggleTask,
+  highlight,
 }: {
   children: string;
   breaks?: boolean;
   onToggleTask?: (line: number, checked: boolean) => void;
+  highlight?: string;
 }) {
   const t = useT();
   // Lists line up first: hardBreaks reads the lines as they will be nested.
   // Both keep every line, so a line counted here is the same line in children.
   const text = breaks ? hardBreaks(alignListIndents(children)) : alignListIndents(children);
+  const needle = highlight?.trim() ?? "";
+  const rehypePlugins = useMemo(
+    () => (needle ? [rehypeLinkCards, () => rehypeSearchHits(needle)] : [rehypeLinkCards]),
+    [needle],
+  );
   return (
     <div className="prose prose-sm max-w-none prose-p:my-1.5 prose-headings:my-2 prose-ul:my-1.5 prose-ol:my-1.5">
       <ReactMarkdown
         remarkPlugins={[remarkGfm, remarkDashLists]}
+        rehypePlugins={rehypePlugins}
         components={{
           li: ({ node, children: itemChildren, ...props }) => {
             const offset = node?.position?.start.offset;
@@ -215,6 +317,10 @@ export function Markdown({
                   src={source}
                   alt={alt ?? ""}
                   className="note-image"
+                  // A note is picked up by a hold anywhere on it: the
+                  // browser's own drag of the picture would take the hold.
+                  draggable={false}
+                  loading="lazy"
                   style={width === null ? undefined : { width }}
                 />
               );
@@ -232,7 +338,7 @@ export function Markdown({
               </button>
             );
           },
-          a: ({ href, children: linkChildren, ...props }) => {
+          a: ({ node, href, children: linkChildren, ...props }) => {
             // One link carries every style over its run, innermost last.
             const styleTags = href?.startsWith(STYLE_HREF) ? href.slice(STYLE_HREF.length).split("+") : null;
             if (styleTags) {
@@ -262,12 +368,17 @@ export function Markdown({
               );
             }
             // An outside link (a web source the assistant cites) opens in a
-            // new tab; the reader's page stays.
+            // new tab; the reader's page stays. A link on a line of its own
+            // is a link card (rehypeLinkCards).
             const external = /^https?:\/\//.test(href ?? "");
+            if (external && href && node?.properties[LINK_CARD] !== undefined) {
+              return <LinkCard href={href}>{linkChildren}</LinkCard>;
+            }
             return (
               <a
                 href={href}
                 {...props}
+                draggable={false}
                 {...(external ? { target: "_blank", rel: "noopener noreferrer" } : {})}
               >
                 {linkChildren}

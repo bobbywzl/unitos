@@ -155,19 +155,6 @@ function useModKey(): string {
   return mod;
 }
 
-function GripIcon() {
-  return (
-    <svg width="10" height="14" viewBox="0 0 10 14" fill="currentColor" aria-hidden>
-      <circle cx="2.5" cy="2.5" r="1.4" />
-      <circle cx="7.5" cy="2.5" r="1.4" />
-      <circle cx="2.5" cy="7" r="1.4" />
-      <circle cx="7.5" cy="7" r="1.4" />
-      <circle cx="2.5" cy="11.5" r="1.4" />
-      <circle cx="7.5" cy="11.5" r="1.4" />
-    </svg>
-  );
-}
-
 function ImageIcon({ size = 13 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -191,9 +178,9 @@ export function NoteEditor({
   onKeyDown,
   placeholder,
   className = "",
-  handle,
   full = false,
   moreHref,
+  autoFocus = true,
 }: {
   value: string;
   onChange: (next: string) => void;
@@ -202,13 +189,13 @@ export function NoteEditor({
   /** Extra classes on the root: a flex column, the bar above the text. Give it
       a height (min-h-0 flex-1 under a capped parent) and the text scrolls. */
   className?: string;
-  /** When set, a slim row above the bar — a grip and a label — is the drag
-      handle: pointerdown on it goes here. */
-  handle?: { onPointerDown: (e: React.PointerEvent<HTMLDivElement>) => void; title: string; label: string };
   /** The whole bar (the notes full page); false: the core tools (the tray). */
   full?: boolean;
   /** With the core bar: where the whole bar is — the notes full page. */
   moreHref?: string;
+  /** The caret lands at the end of the text on mount. False: the title field
+      above takes the focus (note-title-field.tsx). */
+  autoFocus?: boolean;
 }) {
   const t = useT();
   const mod = useModKey();
@@ -218,6 +205,8 @@ export function NoteEditor({
   const core = useRef<NoteEditable | null>(null);
   const onChangeRef = useRef(onChange);
   const valueRef = useRef(value);
+  // Read once, on mount: whether the caret lands in the text.
+  const autoFocusRef = useRef(autoFocus);
   const [imageError, setImageError] = useState<string | null>(null);
   // What the undo and redo buttons can do, read back after every edit — the
   // editable owns the history (lib/note-editable.ts) and Cmd+Z reaches it
@@ -268,7 +257,7 @@ export function NoteEditor({
       onImageFiles: (files) => void insertImagesRef.current(files),
     });
     core.current = editable;
-    editable.focusEnd();
+    if (autoFocusRef.current) editable.focusEnd();
     return () => {
       editable.destroy();
       core.current = null;
@@ -320,19 +309,6 @@ export function NoteEditor({
 
   return (
     <div className={`flex min-h-0 flex-col gap-1.5 ${className}`}>
-      {handle && (
-        <div
-          onPointerDown={handle.onPointerDown}
-          style={{ touchAction: "pan-y" }}
-          data-tip={handle.title}
-          className="flex shrink-0 cursor-grab items-center gap-1.5 text-[11px] font-bold tracking-[0.08em] text-sand-500 uppercase select-none active:cursor-grabbing"
-        >
-          <span className="flex text-sand-400">
-            <GripIcon />
-          </span>
-          {handle.label}
-        </div>
-      )}
       <div className="flex shrink-0 flex-wrap items-center gap-0.5">
         <button
           type="button"
