@@ -1,6 +1,7 @@
 import type { ModelMessage } from "ai";
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { matchInText } from "@/lib/anchors/match";
 import { passageSources, resolvePassage, segmentsSchema } from "@/lib/anchors/passage";
 import { bumpNotebook, notebookAccess } from "@/lib/collab";
 import {
@@ -27,7 +28,7 @@ import { callForJson, modelErrorMessage } from "@/lib/derive/json-call";
 import { currentLang, serverT } from "@/lib/i18n/server";
 import { kimi, kimiConfigured, kimiOptions } from "@/lib/kimi";
 import type { TFunc } from "@/lib/i18n/dictionaries";
-import { languageName, profileLines } from "@/lib/prompts/types";
+import { actPrompt, textSelectionBlock } from "@/lib/prompts/act";
 import { parseBody } from "@/lib/validate";
 import { ultraActive } from "@/lib/tiers";
 import { formatTimeRange, regionSchema } from "@/lib/video/types";
@@ -158,10 +159,25 @@ const actionSchema = z.discriminatedUnion("type", [
   }),
 ]);
 
+// The matches (SPEC.md §7): the passages across the document that deal
+// with the selection's topic, the work the old Match-it tool did. Each is a
+// verbatim quote of one block; the server resolves every quote against the
+// real block text before it reaches the reader.
+const matchSchema = z.object({
+  blockId: z.string().min(1),
+  quote: z.string().min(1).max(600),
+  why: z.string().min(1).max(300),
+});
+
 const planSchema = z.object({
   reply: z.string().max(8000).nullable(),
   actions: z.array(actionSchema).max(20),
+  matches: z.array(matchSchema).max(12).optional(),
 });
+
+// The most matches a reply lists, and the longest a listed quote gets.
+const MATCHES_MAX = 8;
+const MATCH_QUOTE_MAX = 220;
 
 const TEXT_TYPES = new Set(["PARAGRAPH", "HEADING", "LIST", "CODE", "EQUATION"]);
 
@@ -324,7 +340,7 @@ async function handle(req: Request, t: TFunc) {
         "The command applies to this figure unless it says otherwise.",
       ].join("\n");
     } else {
-      selectionBlock = `The reader has selected this text in block ${anchor.blockId}:\n"${anchored.anchoredText.slice(0, 2000)}"\nThe command applies to this selection unless it says otherwise.`;
+      selectionBlock = textSelectionBlock(anchor.blockId, anchored.anchoredText);
     }
   } else if (data.video) {
     // A circled spot of a video document: the frame is attached when the
@@ -380,60 +396,20 @@ async function handle(req: Request, t: TFunc) {
   const priorTurns: ChatTurn[] = toolNote ? toolNote.turns : (data.history ?? []);
   const history = priorTurns.slice(-20);
 
-  const userPrompt = [
-    "Convert the reader's command into a plan of actions on this document and notebook. The reader approves the plan before anything runs.",
-    "",
-    profileLines(profile),
-    "",
-    selectionBlock || "The reader has no text selected. The command applies to the document.",
-    ...(toolBlock ? ["", toolBlock] : []),
-    "",
-    `Sections in the corpus (id — title):\n${sections.length > 0 ? sections.map((s) => `${s.id} — ${s.parentTitle ? `${s.parentTitle} / ` : ""}${s.title}`).join("\n") : "none yet"}`,
-    "",
-    `Other attached documents (id — title):\n${otherDocs.length > 0 ? otherDocs.map((d) => `${d.id} — ${d.title}`).join("\n") : "none"}`,
-    "",
-    `The reader's notes across the corpus (section: note):\n${
-      notes.filter((n) => !n.section.hidden).length > 0
-        ? notes
-            .filter((n) => !n.section.hidden)
-            .map((n) => `${n.section.title}: ${n.content.slice(0, 200)}`)
-            .join("\n")
-        : "none yet"
-    }`,
-    "",
-    "Action types:",
-    '- edit_block {blockId, newText, description} — replace a block\'s text.',
-    '- insert_paragraph {afterBlockId, text, description} — add a paragraph after a block.',
-    '- remove_block {blockId, description} — delete a block.',
-    '- highlight {blockId, quote, color: "clay"|"sage"|"gold"|"plum", comment?, description} — highlight exact text.',
-    '- comment {blockId, quote, comment, description} — annotate exact text with a note.',
-    '- add_note {content, sectionId? or sectionTitle?, blockId?, quote?, description} — a note in the notebook. Cite the passage via blockId + quote when the note comes from the text. A new sectionTitle creates the section.',
-    '- add_section {title, description} — an empty section.',
-    '- link {blockId, quote, toDocumentId, description} — hyperlink exact text to another attached document.',
-    '- format_block {blockId, kind: "paragraph"|"h1"|"h2"|"h3", description} — change a block\'s heading level.',
-    '- style {blockId, quote, style: "bold"|"italic", description} — bold or italicize exact text.',
-    "",
-    "Rules:",
-    "1. Use block ids exactly as given. Every quote must be an exact substring of the named block's text.",
-    "2. A command that only asks for analysis, an answer, or a summary: put it in reply and return no actions.",
-    "3. Use the smallest set of actions that fulfils the command. Never change text the command did not ask to change.",
-    "4. description: one plain sentence of what the action does, for the reader's approval list.",
-    "5. TABLE and FIGURE blocks cannot be edited or removed.",
-    "6. In reply, cite blocks as [block <id>] when you point at specific parts of the document — the tags render as links the reader can click.",
-    `7. Write reply and every description in ${languageName(await currentLang())}.`,
-    "8. reply: short sentences, plain words, one point per sentence, under 150 words. No preamble, no filler, no closing summary.",
-    "",
-    ...(history.length > 0
-      ? [
-          "Conversation so far. The command continues it:",
-          ...history.map((m) => `${m.role === "user" ? "Reader" : "Assistant"}: ${m.content}`),
-          "",
-        ]
-      : []),
-    `Command: ${data.command}`,
-    "",
-    'Return ONLY JSON: {"reply": string or null, "actions": [...]}',
-  ].join("\n");
+  const userPrompt = actPrompt({
+    profile,
+    lang: await currentLang(),
+    selectionBlock,
+    toolBlock,
+    hasSelection: Boolean(anchored),
+    sections,
+    otherDocuments: otherDocs,
+    notes: notes
+      .filter((n) => !n.section.hidden)
+      .map((n) => ({ sectionTitle: n.section.title, content: n.content })),
+    history,
+    command: data.command,
+  });
 
   const messages: ModelMessage[] = [
     {
@@ -555,15 +531,71 @@ async function handle(req: Request, t: TFunc) {
     }
   }
 
-  // An anchored conversation persists like EXPLAIN output: one note in the
+  // The matches (SPEC.md §7): every quote resolves in its named block — exact,
+  // then the whitespace-tolerant match (SPEC.md §5) — else in any block; a
+  // quote that resolves nowhere drops, and so does one overlapping the
+  // selection or a match already kept. The list joins the reply as its
+  // Passages section: one row per match, the quote, the why, and the block's
+  // tag, which renders as the ¶ chip that jumps to the block. The reply is
+  // what the client shows and what the conversation note stores, so the
+  // passages ride with the answer everywhere it goes.
+  const selectionSpans = passage.map((s) => ({
+    blockId: s.blockId,
+    start: s.startOffset,
+    end: s.endOffset,
+  }));
+  const kept: { blockId: string; start: number; end: number; quote: string; why: string }[] = [];
+  for (const match of result.data.matches ?? []) {
+    const selector = { quotedText: match.quote.trim(), prefix: "", suffix: "" };
+    if (!selector.quotedText) continue;
+    let block = blockById.get(match.blockId);
+    let hit = block ? matchInText(block.text, selector) : null;
+    if (!hit) {
+      block = undefined;
+      for (const candidate of document.blocks) {
+        const found = matchInText(candidate.text, selector);
+        if (found) {
+          block = candidate;
+          hit = found;
+          break;
+        }
+      }
+    }
+    if (!block || !hit) continue;
+    const overlaps = (s: { blockId: string; start: number; end: number }) =>
+      s.blockId === block!.id && hit!.start < s.end && hit!.end > s.start;
+    if (selectionSpans.some(overlaps) || kept.some(overlaps)) continue;
+    kept.push({
+      blockId: block.id,
+      start: hit.start,
+      end: hit.end,
+      quote: block.text.slice(hit.start, hit.end),
+      why: match.why.trim(),
+    });
+    if (kept.length >= MATCHES_MAX) break;
+  }
+  const matchLines =
+    kept.length > 0
+      ? [
+          "",
+          `**${t("api.assistantMatches")}**`,
+          ...kept.map((m) => {
+            const quote = m.quote.length > MATCH_QUOTE_MAX ? `${m.quote.slice(0, MATCH_QUOTE_MAX - 1)}…` : m.quote;
+            return `- “${quote.replace(/\s+/g, " ")}” — ${m.why} [block ${m.blockId}]`;
+          }),
+        ]
+      : [];
+
+  // An anchored conversation persists like the tools' output: one note in the
   // hidden Annotations section, anchored to the selection, updated per turn.
   // Clicking the mark reopens the conversation; the Annotations tab deletes it.
   let conversationNoteId: string | null = data.conversationNoteId ?? null;
-  const replyText =
+  const answer =
     result.data.reply ??
     (actions.length > 0
       ? `Applied ${actions.length} action${actions.length === 1 ? "" : "s"}.`
       : "No actions proposed.");
+  const replyText = [answer, ...matchLines].join("\n");
   const turns: ChatTurn[] = [
     ...priorTurns,
     { role: "user", content: data.command },
@@ -612,6 +644,11 @@ async function handle(req: Request, t: TFunc) {
     }
   }
 
-  const plan: AssistantPlan = { reply: result.data.reply, actions, warnings, conversationNoteId };
+  const plan: AssistantPlan = {
+    reply: result.data.reply === null && kept.length === 0 ? null : replyText,
+    actions,
+    warnings,
+    conversationNoteId,
+  };
   return NextResponse.json(plan);
 }

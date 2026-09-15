@@ -13,8 +13,13 @@ import { Markdown } from "@/components/markdown";
 export type HistoryConversation = {
   id: string;
   kind: "assistant" | ToolKind;
-  // The highlighted text the conversation started from; null = the sidebar
-  // assistant's own conversation, anchored nowhere.
+  // Where the conversation comes from (SPEC.md §7): the sidebar assistant
+  // (the assistant tab of the side panel, anchored nowhere), the selection
+  // chat (the popover's assistant on a highlighted text), or a tool card
+  // continued into a conversation (SPEC.md §21).
+  origin: "sidebar" | "selection" | "tool";
+  // The highlighted text the conversation started from; null for the
+  // sidebar assistant's own conversation.
   anchor: {
     documentId: string;
     documentTitle: string;
@@ -44,6 +49,19 @@ const KIND_TITLE: Record<HistoryConversation["kind"], TKey> = {
   visualize: "reader.visualizePlus",
 };
 
+// The origin line each conversation carries: where it comes from, in the
+// reader's words, and what the reader can do with it.
+const ORIGIN_LABEL: Record<HistoryConversation["origin"], TKey> = {
+  sidebar: "assistant.historyOriginSidebar",
+  selection: "assistant.historyOriginSelection",
+  tool: "assistant.historyOriginTool",
+};
+const ORIGIN_HINT: Record<HistoryConversation["origin"], TKey> = {
+  sidebar: "assistant.historyOriginSidebarHint",
+  selection: "assistant.historyOriginSelectionHint",
+  tool: "assistant.historyOriginToolHint",
+};
+
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleString(undefined, {
     year: "numeric",
@@ -55,8 +73,11 @@ function formatDate(iso: string): string {
 }
 
 // Every conversation as its own panel, newest first: the kind, where it
-// started, and its turns whole — the reader's messages as chat bubbles, the
-// assistant's as markdown, the same shapes as the card beside the article.
+// comes from, and its turns whole — the reader's messages as chat bubbles,
+// the assistant's as markdown, the same shapes as the card beside the
+// article. A conversation anchored in a document opens the reader at its
+// highlighted text; the sidebar assistant's conversation is not anchored
+// anywhere, so its panel says where it lives and carries no link.
 export function AssistantHistory({
   notebookId,
   conversations,
@@ -73,7 +94,7 @@ export function AssistantHistory({
       {conversations.map((c) => {
         const href = c.anchor
           ? `/n/${notebookId}?doc=${c.anchor.documentId}&src=${c.anchor.sourceId}`
-          : `/n/${notebookId}`;
+          : null;
         return (
           <section key={c.id} className="rounded-2xl bg-card p-5 shadow-soft">
             <header className="mb-3 flex flex-wrap items-start gap-x-3 gap-y-1.5 border-b border-line pb-3">
@@ -82,40 +103,46 @@ export function AssistantHistory({
                   <span className="text-[11px] font-bold tracking-[0.08em] text-clay-800 uppercase">
                     {t(KIND_TITLE[c.kind])}
                   </span>
+                  <span
+                    data-origin={c.origin}
+                    className="rounded-full bg-sand-100 px-2 py-0.5 text-[10.5px] font-semibold tracking-[0.04em] text-sand-700 uppercase"
+                  >
+                    {t(ORIGIN_LABEL[c.origin])}
+                  </span>
                   <span className="text-[12px] text-sand-500">{formatDate(c.updatedAt)}</span>
                   <span className="text-[12px] text-sand-500">
                     {t("assistant.historyTurns", { n: String(c.turns.length) })}
                   </span>
                 </div>
-                {c.anchor ? (
-                  <p className="mt-1 text-[13px] text-sand-700">
-                    <span className="font-semibold text-sand-800">{c.anchor.documentTitle}</span>
-                    {c.anchor.quotedText && (
-                      <>
-                        {" · "}
-                        <span className="line-clamp-2 inline text-sand-600">“{c.anchor.quotedText}”</span>
-                      </>
-                    )}
-                    {c.anchor.orphaned && (
-                      <span className="ml-2 text-[12px] text-red-600">{t("assistant.historyAnchorOrphaned")}</span>
-                    )}
-                  </p>
-                ) : (
-                  <p className="mt-1 text-[13px] text-sand-700">
-                    <span className="font-semibold text-sand-800">{t("assistant.historyProjectConversation")}</span>
-                    {" · "}
-                    <span className="text-sand-600">{t("assistant.historyProjectConversationHint")}</span>
-                  </p>
-                )}
+                <p className="mt-1 text-[13px] text-sand-700">
+                  {c.anchor ? (
+                    <>
+                      <span className="font-semibold text-sand-800">{c.anchor.documentTitle}</span>
+                      {c.anchor.quotedText && (
+                        <>
+                          {" · "}
+                          <span className="line-clamp-2 inline text-sand-600">“{c.anchor.quotedText}”</span>
+                        </>
+                      )}
+                      {c.anchor.orphaned && (
+                        <span className="ml-2 text-[12px] text-red-600">{t("assistant.historyAnchorOrphaned")}</span>
+                      )}
+                    </>
+                  ) : (
+                    <span className="text-sand-600">{t(ORIGIN_HINT[c.origin])}</span>
+                  )}
+                </p>
               </div>
-              <Link
-                href={href}
-                data-track="assistant-history-open"
-                data-tip={t(c.anchor ? "assistant.historyOpenAnchorTitle" : "assistant.historyOpenProjectTitle")}
-                className="shrink-0 rounded-full bg-clay-100 px-3 py-1 text-xs font-semibold text-clay-800 hover:bg-clay-200"
-              >
-                {t("assistant.historyOpenInReader")}
-              </Link>
+              {href && (
+                <Link
+                  href={href}
+                  data-track="assistant-history-open"
+                  data-tip={t("assistant.historyOpenAnchorTitle")}
+                  className="shrink-0 rounded-full bg-clay-100 px-3 py-1 text-xs font-semibold text-clay-800 hover:bg-clay-200"
+                >
+                  {t("assistant.historyOpenInReader")}
+                </Link>
+              )}
             </header>
             <div className="flex flex-col gap-2.5">
               {c.turns.map((turn, i) =>

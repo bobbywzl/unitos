@@ -113,7 +113,7 @@ Ultra when the account is not Ultra.
 |---|---|
 | Everything in Premium | Whole |
 | Visualize (SPEC.md §20) | The selection as a picture — a directed diagram, a drawing, or a short animation — on Claude Fable 5.1 at its highest effort; declined with the reason when the model is not certain the picture carries the passage's core idea |
-| Tool conversations (SPEC.md §21) | Continuing an Explain, Simplify, Analyze, or Visualize card's output into a conversation (Explain+, Simplify+, …). Offered to every account at the end of the tool's output; a non-Ultra press answers with the plain Ultra message, like Visualize, and the route answers 403 |
+| Tool conversations (SPEC.md §21) | Continuing a Simplify, Analyze, or Visualize card's output into a conversation (Simplify+, Analyze+, …). Offered to every account at the end of the tool's output; a non-Ultra press answers with the plain Ultra message, like Visualize, and the route answers 403 |
 
 ## Expired (trial ended, nothing granted)
 

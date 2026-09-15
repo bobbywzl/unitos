@@ -18,13 +18,13 @@ import {
 export const dynamic = "force-dynamic";
 
 // Assistant history (SPEC.md §7): every assistant conversation the reader had
-// in this project, newest first, each on its own panel — the ones anchored in
-// a document (the selection popover's assistant, and a tool's output
-// continued into a conversation), and the sidebar assistant's own. An
-// anchored panel links back to the highlighted text it started from; the
-// sidebar's links to the reader, where the conversation sits in the
-// assistant tab. Conversations are notes in the hidden Annotations section
-// (SPEC.md §21), so this page reads that section alone.
+// in this project, newest first, each on its own panel, each saying where it
+// comes from — the selection chat (the popover's assistant on a highlighted
+// text), a tool's output continued into a conversation, or the sidebar
+// assistant's own. An anchored panel links back to the highlighted text it
+// started from; the sidebar's says it lives in the assistant tab of the side
+// panel and links nowhere. Conversations are notes in the hidden Annotations
+// section (SPEC.md §21), so this page reads that section alone.
 export default async function AssistantHistoryPage(props: { params: Promise<{ notebookId: string }> }) {
   const { notebookId } = await props.params;
   const user = await currentUser();
@@ -77,9 +77,12 @@ export default async function AssistantHistoryPage(props: { params: Promise<{ no
             orphaned: source.orphaned,
           }
         : null;
+      const origin: HistoryConversation["origin"] =
+        kind !== "assistant" ? "tool" : anchor ? "selection" : "sidebar";
       return {
         id: n.id,
         kind,
+        origin,
         anchor,
         updatedAt: n.updatedAt.toISOString(),
         turns: turns.map((turn) =>

@@ -27,6 +27,7 @@ import { useT } from "@/components/lang-provider";
 import { DriveIcon, PaperclipIcon, StopIcon } from "@/components/icons";
 import type { TFunc, TKey } from "@/lib/i18n/dictionaries";
 import { Markdown } from "@/components/markdown";
+import { RatingButtons } from "@/components/rating-buttons";
 import { LoadingDots, ThinkingIndicator } from "@/components/thinking";
 
 type Scope = "document" | "notebook";
@@ -1032,7 +1033,21 @@ export function AssistantPanel({
             ) : (
               <div key={i} className="rounded-2xl bg-card p-4 text-sm shadow-soft">
                 {turn.content ? (
-                  <Markdown>{turn.content}</Markdown>
+                  <>
+                    <Markdown>{turn.content}</Markdown>
+                    {/* The rating (SPEC.md §25): the question it answered and
+                        the answer, once the answer is whole. */}
+                    {!(busy && i === turns.length - 1) && (
+                      <RatingButtons
+                        tool="assistant"
+                        input={turns[i - 1]?.content ?? ""}
+                        output={turn.content}
+                        notebookId={notebookId}
+                        documentId={documentId ?? undefined}
+                        className="mt-2"
+                      />
+                    )}
+                  </>
                 ) : (
                   <ThinkingIndicator className="text-xs" onStop={stopRun} />
                 )}

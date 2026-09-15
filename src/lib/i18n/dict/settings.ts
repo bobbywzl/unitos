@@ -30,7 +30,7 @@ const en = {
   planPremium:
     "Offline work — notes, non-AI annotations, edits, uploads — saves on this device and syncs when you are back online. Images up to 25 MB drop into notes.",
   planUltra:
-    "Everything in Unitos Premium. Visualize: the selection as a picture — a diagram, a drawing, or a short animation. Conversations: continue an Explain, Simplify, Analyze, or Visualize card into a conversation.",
+    "Everything in Unitos Premium. Visualize: the selection as a picture — a diagram, a drawing, or a short animation. Conversations: continue a Simplify, Analyze, or Visualize card into a conversation.",
   planExpired:
     "The trial ended on {date}. Offline changes do not save, and images over 5 MB do not drop.",
   planMark:
@@ -130,7 +130,7 @@ const zh: Record<keyof typeof en, string> = {
   planPremium:
     "离线工作——笔记、非 AI 批注、编辑、上传——会保存在本设备，恢复联网后同步。最大 25 MB 的图片可拖入笔记。",
   planUltra:
-    "包含 Unitos Premium 的全部功能。可视化：把选中内容画成图——示意图、插画或短动画。对话：把解释、简化、分析或可视化卡片继续为对话。",
+    "包含 Unitos Premium 的全部功能。可视化：把选中内容画成图——示意图、插画或短动画。对话：把简化、分析或可视化卡片继续为对话。",
   planExpired: "试用已于 {date} 结束。离线更改不会保存，超过 5 MB 的图片无法拖入。",
   planMark: "徽章旁的方案标记在各处标明你的方案：白水晶是 Unitos Premium，黑钻是 Unitos Ultra。",
   connections: "连接",

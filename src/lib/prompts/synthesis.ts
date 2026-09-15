@@ -1,5 +1,13 @@
 import type { Lang } from "@/lib/i18n/config";
-import { answerLanguage, languageName, profileLines, STYLE_RULE, type ReaderProfileCtx } from "@/lib/prompts/types";
+import {
+  answerLanguage,
+  GROUNDING_RULE,
+  languageName,
+  profileLines,
+  SPECIFICITY_RULE,
+  STYLE_RULE,
+  type ReaderProfileCtx,
+} from "@/lib/prompts/types";
 
 // SYNTHESIS: notebook-scope assistant output (SPEC.md §7). Free questions stream text;
 // contradiction/gap/unsourced tasks return JSON issue cards.
@@ -15,6 +23,11 @@ import { answerLanguage, languageName, profileLines, STYLE_RULE, type ReaderProf
 //
 // files and images: what the reader attached to this message. A file's text
 // is in the prompt; an image is a part of the same message.
+//
+// What makes an answer worth reading: it answers the question in its first
+// sentence, every claim in it rests on a cited block or note the reader can
+// open, it says what the material does not answer instead of filling the
+// gap, and nothing in it could have been written without this material.
 export function synthesisAskPrompt(params: {
   profile: ReaderProfileCtx;
   lang: Lang;
@@ -59,10 +72,15 @@ export function synthesisAskPrompt(params: {
       ? `Question: ${params.question}`
       : "The reader sent the attachments without a question. Say what they contain and how they relate to the material.",
     "",
-    "Answer from the material above. Reference notes by their [note <id>] markers and",
-    "blocks by their [block <id>] markers when they ground a claim. Say plainly when the",
-    "material does not answer the question. Use markdown. Start with the answer.",
-    "Keep it under 250 words unless the question needs more.",
+    "Answer from the material above.",
+    "1. Start with the answer, in one or two sentences. Then the evidence: the passages the answer rests on, each cited as [block <id>] with the exact words quoted, and the notes it rests on as [note <id>]. Then, when the question asks for it, the reasoning that joins them.",
+    "2. A question about a passage, a term, or a claim: first gather the passages across the material that deal with it, from anywhere in the material, then answer from them. A passage that disagrees with the others is named as disagreeing, never dropped.",
+    "3. A question the material answers only in part: answer the part it answers, then say in one sentence what it does not answer. Never fill the gap with what is generally known unless the reader asked for that, and then say which sentences come from outside the material.",
+    "4. A question about counts, spread, or absence (how many, where, does it ever): the material is complete except where a cut is declared, so answer with the count and cite each instance.",
+    "5. Fit the answer to the reader context above: explain what the reader is least likely to know, skip what they know, connect to their purpose when the connection is real.",
+    "Use markdown. Keep it under 250 words unless the question needs more.",
+    GROUNDING_RULE,
+    SPECIFICITY_RULE,
     ...(files.length > 0 || imageCount > 0
       ? [
           "An attached file or image is material too: answer from it together with the material above, and name the file when you cite it.",

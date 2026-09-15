@@ -3,7 +3,7 @@
 // web-search tool uses, and Anthropic's Messages API on /v1/messages for the
 // import's model (lib/claude.ts). Sniffs each prompt and returns valid,
 // context-aware output: real block ids, real quotes, schema-exact JSON — so
-// every AI flow (EXPLAIN, SIMPLIFY, EXTRACT, SALIENCE, assistant ask and act,
+// every AI flow (SIMPLIFY, SALIENCE, DISTILL, assistant ask and act with matches,
 // the import's passes) runs end-to-end with zero external calls. Point the app
 // at it with
 //   MOONSHOT_API_KEY=mock MOONSHOT_BASE_URL=http://localhost:3399/v1
@@ -21,7 +21,8 @@ function textOf(content) {
 function parseBlocks(all) {
   // [block <id>] (TYPE)\n<text until blank line before next [block or end>
   const blocks = [];
-  const re = /\[block ([^\]]+)\] \(([A-Z]+)\)\n([\s\S]*?)(?=\n\n\[block |\n\nDocument title:|$)/g;
+  // A timed block's tag carries its seconds: (TRANSCRIPT 0.0s–14.0s).
+  const re = /\[block ([^\]]+)\] \(([A-Z]+)[^)]*\)\n([\s\S]*?)(?=\n\n\[block |\n\nDocument title:|$)/g;
   let m;
   while ((m = re.exec(all))) blocks.push({ id: m[1], type: m[2], text: m[3] });
   return blocks;
@@ -185,8 +186,18 @@ function buildResponse(all) {
     const p = paragraphs[0];
     if (!p) return JSON.stringify({ reply: "No paragraphs found.", actions: [] });
     const quote = p.text.slice(0, Math.min(48, p.text.length)).trim();
+    // The matches (SPEC.md §7): with a selection, two verbatim passages from
+    // paragraphs after the first, each with a why; none without a selection.
+    const matches = all.includes("The reader has selected")
+      ? paragraphs.slice(1, 4).map((b, i) => ({
+          blockId: b.id,
+          quote: b.text.slice(0, Math.min(70, b.text.length)).trim(),
+          why: `Mock match ${i + 1}: this passage states the topic's claim.`,
+        }))
+      : [];
     return JSON.stringify({
-      reply: "Mock plan: one highlight and one note.",
+      reply: `Mock plan: one highlight and one note. The opening claim is in [block ${p.id}].`,
+      matches,
       actions: [
         {
           type: "highlight",
@@ -218,6 +229,25 @@ function buildResponse(all) {
     }));
     return JSON.stringify({
       spans: spans.length > 0 ? spans : [{ blockId: blocks[0]?.id ?? "x", start: 0, end: 10 }],
+    });
+  }
+
+  // KEYPOINTS (the reader's Distill): one point per paragraph, in order.
+  if (all.includes('"points"') && all.includes("distilled")) {
+    const points = paragraphs.slice(0, 6).map((b) => ({
+      text: `Mock point: ${b.text.slice(0, 50).trim()}.`,
+      blockId: b.id,
+      start: 0,
+      end: Math.min(90, b.text.length),
+    }));
+    return JSON.stringify({ points });
+  }
+
+  // FIND (SPEC.md §11): the first two transcript blocks as one match.
+  if (all.includes('"blockIds"') && all.includes("Their search:")) {
+    const timed = blocks.filter((b) => b.type === "TRANSCRIPT").slice(0, 2);
+    return JSON.stringify({
+      matches: timed.length > 0 ? [{ blockIds: timed.map((b) => b.id), explanation: "Mock match: the speaker says it here." }] : [],
     });
   }
 

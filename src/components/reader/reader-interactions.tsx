@@ -26,8 +26,6 @@ import type {
   AssistantPlan,
   Distillation,
   DistillationView,
-  Extraction,
-  ExtractionSpan,
   ExtractionView,
   Keypoints,
   KeypointsView,
@@ -61,7 +59,6 @@ import {
   LinkIcon,
   MicIcon,
   NotesIcon,
-  QuestionIcon,
   QuoteIcon,
   ChartIcon,
   RegenerateIcon,
@@ -75,6 +72,7 @@ import {
   VolumeIcon,
 } from "@/components/icons";
 import { Markdown } from "@/components/markdown";
+import { RatingButtons } from "@/components/rating-buttons";
 import { Collapse, Presence } from "@/components/presence";
 import { ThinkingIndicator } from "@/components/thinking";
 import { type BlockData, type Highlight, ToolSymbol } from "@/components/reader/block-view";
@@ -108,19 +106,6 @@ type Anchor = Segment & { segments?: Segment[] };
     selection stayed in one block. */
 function segmentsOf(anchor: Anchor): Segment[] {
   return anchor.segments && anchor.segments.length > 0 ? anchor.segments : [anchor];
-}
-
-/** A stored span read back as a selection: what a tool needs to run again on
-    the passage it ran on before. */
-function anchorOfSpan(span: ExtractionSpan): Anchor {
-  return {
-    blockId: span.blockId,
-    startOffset: span.start,
-    endOffset: span.end,
-    quotedText: span.quotedText,
-    prefix: span.prefix,
-    suffix: span.suffix,
-  };
 }
 
 /** The passage's text: the segments' quotes, one paragraph each. */
@@ -174,10 +159,8 @@ type ContentKind = "text" | "table" | "figure" | "equation";
 type Tool =
   | "assistant"
   | "analyze"
-  | "explain"
   | "simplify"
   | "visualize"
-  | "extract"
   | "comment"
   | "link"
   | "highlight"
@@ -185,10 +168,10 @@ type Tool =
   | "readAloud";
 
 const TOOLBARS: Record<ContentKind, readonly Tool[]> = {
-  text: ["assistant", "explain", "simplify", "visualize", "extract", "comment", "link", "highlight", "addToNotes", "readAloud"],
-  table: ["assistant", "analyze", "explain", "comment", "link", "highlight", "addToNotes"],
-  figure: ["assistant", "analyze", "explain", "comment", "link", "highlight", "addToNotes"],
-  equation: ["assistant", "explain", "visualize", "comment", "link", "highlight", "addToNotes"],
+  text: ["assistant", "simplify", "visualize", "comment", "link", "highlight", "addToNotes", "readAloud"],
+  table: ["assistant", "analyze", "comment", "link", "highlight", "addToNotes"],
+  figure: ["assistant", "analyze", "comment", "link", "highlight", "addToNotes"],
+  equation: ["assistant", "visualize", "comment", "link", "highlight", "addToNotes"],
 };
 
 // The blocks the hold-and-circle gesture opens a toolbar on, whole.
@@ -956,7 +939,6 @@ export function ReaderInteractions({
   // stopped stream keeps what arrived; nothing persists (SPEC.md §6).
   const explainAbortRef = useRef<AbortController | null>(null);
   const simplifyAbortRef = useRef<AbortController | null>(null);
-  const extractAbortRef = useRef<AbortController | null>(null);
   // The span a jump landed on (a distilled quote, an extract origin): tinted
   // while the reader arrives.
   const [spanFlash, setSpanFlash] = useState<{
@@ -965,10 +947,9 @@ export function ReaderInteractions({
     end: number;
   } | null>(null);
   const spanFlashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // EXTRACT: the highlighted phrase's topic → labeled passages (SPEC.md §4).
-  // A fresh extraction shows from local state until the refresh delivers it.
+  // Stored extractions of the old Match-it tool (SPEC.md §4): the layer and
+  // its card still show, and Delete still removes one; nothing makes new ones.
   const [localExtractions, setLocalExtractions] = useState<ExtractionView[]>([]);
-  const [extractBusy, setExtractBusy] = useState(false);
   // The document's translation (SPEC.md §19), one text per block, shown
   // under each block while the reader has it on.
   const [translations, setTranslations] = useState<Record<string, string> | null>(null);
@@ -996,10 +977,8 @@ export function ReaderInteractions({
   // Spans made in this session: their marks sweep in left to right the first
   // time they paint (block-view.tsx mark-sweep). Keyed `${blockId}:${start}:${end}`,
   // so the server's copy of a span matches the optimistic one and the class
-  // survives the refresh swap without restarting. Extractions sweep whole,
-  // their spans staggered, tracked by extraction id.
+  // survives the refresh swap without restarting.
   const freshSpansRef = useRef(new Set<string>());
-  const freshExtractIdsRef = useRef(new Set<string>());
   function markFreshSpan(blockId: string, start: number, end: number) {
     freshSpansRef.current.add(`${blockId}:${start}:${end}`);
   }
@@ -1403,9 +1382,6 @@ export function ReaderInteractions({
   function stopSimplify() {
     simplifyAbortRef.current?.abort();
   }
-  function stopExtract() {
-    extractAbortRef.current?.abort();
-  }
   async function deleteSimplify() {
     const card = simplifyCard;
     if (!card?.noteId || card.streaming || card.busy) return;
@@ -1565,7 +1541,6 @@ export function ReaderInteractions({
     setLocalLinks([]);
     setRemovedNotes({});
     freshSpansRef.current = new Set();
-    freshExtractIdsRef.current = new Set();
     setDistillOpen(false);
     setDistillShownId(null);
     setDistillRun(null);
@@ -1584,8 +1559,6 @@ export function ReaderInteractions({
     distillAbortRef.current?.abort();
     explainAbortRef.current?.abort();
     simplifyAbortRef.current?.abort();
-    extractAbortRef.current?.abort();
-    setExtractBusy(false);
     distillReturnScroll.current = null;
     voiceRunRef.current += 1;
     voiceAudioRef.current?.pause();
@@ -2978,12 +2951,10 @@ export function ReaderInteractions({
     return JSON.stringify({ type, documentId, notebookId, anchor: anchorBody(anchor), ...segmentsBody(anchor) });
   }
 
-  // EXPLAIN and ANALYZE stream into the same card beside the article (SPEC.md
-  // §4, §6): an explanation of the selection, or the three-section analysis
-  // of a figure or table. Both persist in the hidden Annotations section.
-  async function explain() {
-    await streamBubble("explain");
-  }
+  // ANALYZE streams into the card beside the article (SPEC.md §4, §6): the
+  // three-section analysis of a figure or table. It persists in the hidden
+  // Annotations section. The card's kind "explain" is kept for stored
+  // explanations of the old Explain tool, which still reopen from their mark.
   async function analyze() {
     await streamBubble("analyze");
   }
@@ -3751,72 +3722,7 @@ export function ReaderInteractions({
     flashSpan(quote.blockId, quote.start, quote.end);
   }
 
-  // EXTRACT: the highlighted phrase's topic → the passages across the article
-  // that reveal it, painted with a label chip that jumps back to the origin
-  // (SPEC.md §4).
-  async function extract() {
-    if (!popover || extractBusy) return;
-    const { anchor } = popover;
-    await flushLiveBlock(anchor.blockId);
-    setPopover(null);
-    setSubmenu(null);
-    window.getSelection()?.removeAllRanges();
-    await runExtract(anchor);
-  }
-  // Regenerate: Match-it runs again on the same origin phrase, and the new
-  // match replaces the old (SPEC.md §4).
-  async function regenerateExtraction(extraction: ExtractionView) {
-    if (extractBusy) return;
-    setExtractCard(null);
-    await runExtract(anchorOfSpan(extraction.origin), extraction.id);
-  }
-  // replaceId: the match this run regenerates — it goes once the new one is
-  // stored (SPEC.md §4).
-  async function runExtract(anchor: Anchor, replaceId?: string) {
-    setExtractBusy(true);
-    const controller = new AbortController();
-    extractAbortRef.current = controller;
-    try {
-      const res = await fetch("/api/derive", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        signal: controller.signal,
-        body: deriveBody("EXTRACT", anchor),
-      });
-      const json = (await res.json().catch(() => null)) as {
-        extraction?: Extraction;
-        error?: string;
-      } | null;
-      if (!res.ok || !json?.extraction) {
-        throw new Error(json?.error ?? t("reader.extractFailedStatus", { status: res.status }));
-      }
-      const label = `E${allExtractionsRef.current.length + 1}`;
-      const fresh: ExtractionView = {
-        id: json.extraction.id,
-        createdAt: json.extraction.createdAt,
-        label,
-        origin: { ...json.extraction.origin, orphaned: false },
-        spans: json.extraction.spans.map((s) => ({ ...s, orphaned: false })),
-      };
-      freshExtractIdsRef.current.add(fresh.id);
-      setLocalExtractions((prev) => [...prev, fresh]);
-      if (replaceId) await removeExtraction(replaceId);
-      showToast(
-        t("reader.extractDone", { label, n: fresh.spans.length, s: plural(fresh.spans.length) }),
-      );
-      router.refresh();
-    } catch (err) {
-      // Stopped, not failed: nothing was extracted, nothing to say.
-      if (controller.signal.aborted) return;
-      showError(err instanceof Error ? err.message : t("reader.extractFailed"));
-    } finally {
-      if (extractAbortRef.current === controller) extractAbortRef.current = null;
-      setExtractBusy(false);
-    }
-  }
-
   // The stored match goes; the caller says whether the reader hears about it.
-  // A regenerate removes quietly — the run that follows lands the new match.
   async function removeExtraction(id: string) {
     try {
       await api(`/api/notebooks/${notebookId}/documents/${documentId}`, "PATCH", {
@@ -5091,15 +4997,12 @@ function blockFormatKind(
   }
   // Extraction layers: the origin phrase and its revealing passages, each
   // carrying the extraction's label chip. Unresolvable spans stay unpainted.
-  // A fresh extraction sweeps in staggered: the origin first, then its
-  // passages down the document, one after the other.
   for (const extraction of allExtractions) {
-    const freshExtract = freshExtractIdsRef.current.has(extraction.id);
     const entries = [
       ...(!extraction.origin.orphaned ? [{ span: extraction.origin, isOrigin: true }] : []),
       ...extraction.spans.filter((s) => !s.orphaned).map((span) => ({ span, isOrigin: false })),
     ];
-    entries.forEach(({ span, isOrigin }, i) => {
+    entries.forEach(({ span, isOrigin }) => {
       const existing = highlightsByBlock[span.blockId] ?? [];
       highlightsByBlock[span.blockId] = [
         ...existing,
@@ -5111,8 +5014,6 @@ function blockFormatKind(
           extractId: extraction.id,
           extractLabel: extraction.label,
           extractOrigin: isOrigin,
-          fresh: freshExtract,
-          freshDelay: freshExtract && i > 0 ? i * 90 : undefined,
         },
       ];
     });
@@ -5658,11 +5559,6 @@ function blockFormatKind(
         className="pointer-events-auto flex items-center gap-2 rounded-full"
         data-nudge={!split && !transcript ? "tools" : undefined}
       >
-        {extractBusy && (
-          <span className="rounded-full bg-card px-3 py-1.5 text-xs shadow-soft">
-            <ThinkingIndicator label={t("reader.extracting")} onStop={stopExtract} />
-          </span>
-        )}
       <Presence show={toast !== null} exit="fade">
         {toast && (
           <span className="flex items-center gap-2 rounded-full bg-ink/90 px-3 py-1.5 text-xs text-paper">
@@ -5909,16 +5805,6 @@ function blockFormatKind(
                 {canEdit && (
                   <span className="flex items-center gap-3">
                     <button
-                      onClick={() => void regenerateExtraction(extraction)}
-                      data-track="extract-card-regenerate"
-                      disabled={extractBusy}
-                      className="text-sand-500 hover:text-clay-800 disabled:opacity-40"
-                      aria-label={t("common.regenerate")}
-                      data-tip={t("reader.regenerateExtractionTitle")}
-                    >
-                      <RegenerateIcon size={12} />
-                    </button>
-                    <button
                       onClick={() => void deleteExtraction(extraction.id)}
                       data-track="extract-card-delete"
                       className="text-xs font-semibold text-red-500 hover:text-red-700"
@@ -6056,24 +5942,6 @@ function blockFormatKind(
           )}
           </Collapse>
 
-          {popover.term && (
-            <button
-              onClick={() => void extract()}
-              data-track="extract-term"
-              disabled={extractBusy}
-              data-tip={t("reader.extractTermTitle")}
-              className={`flex w-full items-center justify-between gap-2 rounded-full bg-clay-100 ${toolRow} text-left font-semibold text-clay-800 hover:bg-clay-200 disabled:opacity-40`}
-            >
-              <span className="flex items-center gap-1.5">
-                <ExtractIcon size={coarse ? 14 : 12} />
-                {t("reader.extract")}
-              </span>
-              <span className="text-[9px] font-bold tracking-[0.06em] text-clay-700 uppercase">
-                {t("reader.recommended")}
-              </span>
-            </button>
-          )}
-
           {/* Analyze leads the table and figure toolbars (SPEC.md §4): the
               three-section analysis beside the article. Never on text. */}
           {has("analyze") && (
@@ -6091,17 +5959,6 @@ function blockFormatKind(
                 {t("reader.recommended")}
               </span>
             </button>
-          )}
-          {has("explain") && (
-          <button
-            onClick={() => void explain()}
-            data-track="explain"
-            data-tip={popoverKind === "figure" ? t("reader.explainFigureTitle") : t("reader.explainTitle")}
-            className={`flex w-full items-center gap-1.5 rounded-full ${toolRow} text-left text-sand-800 hover:bg-clay-100 hover:text-clay-800`}
-          >
-            <QuestionIcon size={coarse ? 14 : 12} />
-            {t("reader.explain")}
-          </button>
           )}
           {has("simplify") && (
             <button
@@ -6129,18 +5986,6 @@ function blockFormatKind(
                 <TierMark state="ultra" size={10} />
                 {t("reader.ultra")}
               </span>
-            </button>
-          )}
-          {has("extract") && !popover.term && (
-            <button
-              onClick={() => void extract()}
-              data-track="extract"
-              disabled={extractBusy}
-              data-tip={t("reader.extractTitle")}
-              className={`flex w-full items-center gap-1.5 rounded-full ${toolRow} text-left text-sand-800 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40`}
-            >
-              <ExtractIcon size={coarse ? 14 : 12} />
-              {t("reader.extract")}
             </button>
           )}
 
@@ -6381,9 +6226,7 @@ function blockFormatKind(
                     ? bubble.streaming
                       ? t("reader.visualizing")
                       : t("reader.visualization")
-                    : bubble.streaming
-                      ? t("reader.explaining")
-                      : t("reader.explanation")}
+                    : t("reader.explanation")}
             </span>
             <span className="flex items-center gap-3">
               {bubble.streaming && (
@@ -6423,6 +6266,16 @@ function blockFormatKind(
                 >
                   <RegenerateIcon size={12} />
                 </button>
+              )}
+              {bubble.noteId && !bubble.streaming && !bubble.error && (
+                <RatingButtons
+                  tool={bubble.kind}
+                  input={bubble.anchor?.quotedText ?? ""}
+                  output={bubble.text}
+                  notebookId={notebookId}
+                  documentId={documentId}
+                  noteId={bubble.noteId}
+                />
               )}
               {bubble.noteId && !bubble.streaming && (
                 <button
@@ -6527,6 +6380,16 @@ function blockFormatKind(
                 >
                   <RegenerateIcon size={12} />
                 </button>
+              )}
+              {simplifyCard.noteId && !simplifyCard.streaming && !simplifyCard.error && (
+                <RatingButtons
+                  tool="simplify"
+                  input={simplifyCard.anchor.quotedText}
+                  output={simplifyCard.text}
+                  notebookId={notebookId}
+                  documentId={documentId}
+                  noteId={simplifyCard.noteId}
+                />
               )}
               {simplifyCard.noteId && !simplifyCard.streaming && (
                 <button
@@ -6886,6 +6749,21 @@ function blockFormatKind(
               ) : (
                 <div key={i} className="text-[13px]">
                   <Markdown>{message.content}</Markdown>
+                  {/* The rating (SPEC.md §25): the question and the selection
+                      it ran on, the answer it gave. */}
+                  {!assistantChat.busy && (
+                    <RatingButtons
+                      tool="act"
+                      input={[assistantChat.anchor?.quotedText ?? "", assistantChat.messages[i - 1]?.content ?? ""]
+                        .filter(Boolean)
+                        .join("\n\n")}
+                      output={message.content}
+                      notebookId={notebookId}
+                      documentId={documentId}
+                      noteId={assistantChat.noteId}
+                      className="mt-1"
+                    />
+                  )}
                 </div>
               ),
             )}

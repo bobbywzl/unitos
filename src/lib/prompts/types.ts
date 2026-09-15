@@ -79,6 +79,18 @@ export type PromptCtx = {
 export const STYLE_RULE =
   "Style: short sentences, plain words, one point per sentence. No preamble, no filler, no closing summary. Say only what the reader needs.";
 
+// The one grounding line every assistant-voice template carries: what the
+// tool says rests on the document, and the reader can check it. Repeated
+// exact wording across templates (CLAUDE.md rule 7).
+export const GROUNDING_RULE =
+  "Grounding: every claim rests on the document. Cite the block a claim rests on as [block <id>], exactly as tagged above; the tag renders as a link the reader can click. Never add a fact the document does not state. When the document does not answer, say so in one sentence, then say what the document does say about it.";
+
+// The one specificity line every assistant-voice template carries: the
+// output is about this document, not about documents like it. Repeated
+// exact wording across templates (CLAUDE.md rule 7).
+export const SPECIFICITY_RULE =
+  "Specificity: name the number, the term, the entity, the mechanism, the finding. Before you answer, read each sentence you wrote: a sentence that could be written about any other document on this subject is deleted. A sentence that restates the passage in other words is deleted.";
+
 // The one language line appended to assistant-voice templates. Repeated exact
 // wording across templates (CLAUDE.md rule 3).
 export function answerLanguage(lang: Lang): string {
