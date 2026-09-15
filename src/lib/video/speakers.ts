@@ -89,6 +89,7 @@ async function speakersOf(
   lines: TranscriptSegment[],
   offset: number,
   known: Speaker[],
+  userId: string | null,
 ): Promise<z.infer<typeof responseSchema>> {
   const roster =
     known.length > 0
@@ -104,7 +105,7 @@ async function speakersOf(
       json: true,
       maxOutputTokens: 65536,
       lowResolution: true,
-      usage: { userId: null, feature: "transcribe" },
+      usage: { userId, feature: "transcribe" },
     },
     (text) => {
       const parsed = responseSchema.safeParse(extractJson(text));
@@ -120,7 +121,7 @@ async function speakersOf(
 export async function detectSpeakers(
   media: { part: MediaPart; windowable: boolean; inline: boolean },
   lines: TranscriptSegment[],
-  opts: { deadline?: number } = {},
+  opts: { deadline?: number; userId?: string | null } = {},
 ): Promise<SpeakerLines> {
   if (lines.length === 0 || !process.env.GEMINI_API_KEY) return EMPTY;
 
@@ -143,7 +144,7 @@ export async function detectSpeakers(
     const whole = [media.part(), { text: SPEAKER_PROMPT }];
     const total = media.inline ? 0 : await geminiCountTokens(whole);
     if (total === null || total <= GEMINI_SINGLE_CALL_TOKENS || !media.windowable) {
-      take(await speakersOf(media.part, undefined, lines, 0, []));
+      take(await speakersOf(media.part, undefined, lines, 0, [], opts.userId ?? null));
     } else {
       // Too long for one call: windows in order, each carrying the roster
       // forward so a voice heard in the first window keeps its id in the
@@ -164,6 +165,7 @@ export async function detectSpeakers(
             lines.slice(first, after),
             first,
             [...roster.values()],
+            opts.userId ?? null,
           ),
         );
       }
@@ -181,7 +183,10 @@ export async function detectSpeakers(
     speaking, named where the conversation names them. Answers an empty
     roster when one voice speaks throughout, and unnamed voices without a
     key or when the pass fails. */
-export async function nameSpeakers(lines: TranscriptSegment[]): Promise<SpeakerLines> {
+export async function nameSpeakers(
+  lines: TranscriptSegment[],
+  userId: string | null = null,
+): Promise<SpeakerLines> {
   const byLine = lines.map((line) => line.speaker ?? null);
   const roster = new Map<string, Speaker>();
   for (const id of byLine) {
@@ -204,7 +209,7 @@ export async function nameSpeakers(lines: TranscriptSegment[]): Promise<SpeakerL
         ].join("\n");
         const answer = await geminiCall(
           [{ text: prompt }],
-          { json: true, maxOutputTokens: 4096, usage: { userId: null, feature: "transcribe" } },
+          { json: true, maxOutputTokens: 4096, usage: { userId, feature: "transcribe" } },
           (text) => {
             const parsed = nameResponseSchema.safeParse(extractJson(text));
             if (!parsed.success) throw new Error("output was not speakers");

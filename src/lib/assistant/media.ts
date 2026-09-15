@@ -11,8 +11,10 @@ export async function mediaAttachmentText(
   mimeType: string | null,
   name: string,
   deadline: number,
+  // The reader who attached it, for the admin usage page.
+  userId: string | null = null,
 ): Promise<string> {
-  const { segments } = await transcribe({ kind: "upload", bytes, mimeType }, { deadline });
+  const { segments } = await transcribe({ kind: "upload", bytes, mimeType }, { deadline, userId });
   const kind = (mimeType ?? "").startsWith("audio/") ? "audio" : "video";
   const lines = groupSegments(segments).map((s) => `[${formatTime(s.start)}] ${s.text}`);
   return capFileText(

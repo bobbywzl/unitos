@@ -85,7 +85,7 @@ export async function POST(req: Request) {
     if (kind === "media") {
       const bytes = await download(MEDIA_MAX_BYTES);
       try {
-        const text = await mediaAttachmentText(bytes, data.mimeType, name, startedAt + LADDER_BUDGET_MS);
+        const text = await mediaAttachmentText(bytes, data.mimeType, name, startedAt + LADDER_BUDGET_MS, user?.id ?? null);
         return NextResponse.json({ kind: "file", name, text });
       } catch (err) {
         console.error("[assistant] attach-drive: transcription failed:", err);

@@ -1,4 +1,5 @@
 import type { Browser } from "playwright-core";
+import { recordUsage } from "@/lib/usage";
 
 // The browser every rung that needs a real page shares (SPEC.md §11): the
 // transcript rung (lib/video/browser-transcript.ts) and the page render for
@@ -56,13 +57,20 @@ export function browserConfigured(): boolean {
 }
 
 /** The configured browser, connected or launched. Throws with the reason
-    when none is configured or it will not start. The caller closes it. */
-export async function launchBrowser(): Promise<Browser> {
+    when none is configured or it will not start. The caller closes it.
+    `feature` is what the session is for, on the admin usage page: a browser
+    service bills per session, so the page counts them (lib/usage.ts records
+    the call at $0 — the price depends on a plan this app cannot read). A
+    local Chromium costs nothing and is counted the same way, so the two
+    read alike. */
+export async function launchBrowser(feature: string): Promise<Browser> {
   const endpoint = process.env.BROWSER_WS_ENDPOINT;
   const executable = process.env.CHROMIUM_PATH;
   if (!endpoint && !executable) {
     throw new Error("BROWSER_WS_ENDPOINT and CHROMIUM_PATH are not set");
   }
+  const session = () =>
+    recordUsage({ userId: null, feature, model: "browser-session" }, {}, 0);
   const { chromium } = await import("playwright-core");
   if (endpoint) {
     const candidates = sessionEndpoints(endpoint);
@@ -71,6 +79,7 @@ export async function launchBrowser(): Promise<Browser> {
         const { url, sessionMs } = candidates[i];
         const browser = await chromium.connectOverCDP(url, { timeout: CONNECT_TIMEOUT_MS });
         if (sessionMs !== null) sessionLengths.set(browser, sessionMs);
+        session();
         return browser;
       } catch (err) {
         // A plan that caps the session shorter answers 400 to the timeout:
@@ -83,11 +92,13 @@ export async function launchBrowser(): Promise<Browser> {
     }
   }
   const extra = process.env.CHROMIUM_ARGS?.split(/\s+/).filter(Boolean) ?? [];
-  return chromium.launch({
+  const launched = await chromium.launch({
     executablePath: executable,
     headless: true,
     args: ["--no-sandbox", "--disable-dev-shm-usage", "--mute-audio", ...proxyArgs(extra), ...extra],
   });
+  session();
+  return launched;
 }
 
 /** The egress proxy every outbound fetch takes (HTTPS_PROXY,

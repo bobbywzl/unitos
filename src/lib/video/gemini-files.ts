@@ -70,8 +70,9 @@ export async function uploadGeminiFile(
   const file = body.file;
   if (!file?.uri || !file.name) throw new Error("file upload returned no file");
   // The bytes are billed as input on the call that reads them; the upload
-  // itself is free. Record the size so the admin page shows the traffic.
-  recordUsage({ userId: null, feature: "transcribe-upload", model: "gemini-files" }, { inputTokens: 0 }, 0);
+  // itself is free. The row counts the upload at $0, so the admin page says
+  // how many ran without claiming a cost that is not there.
+  recordUsage({ userId: null, feature: "transcribe-upload", model: "gemini-files" }, {}, 0);
 
   const ready = await waitForActive(file.name, file.state ?? "PROCESSING", opts.deadline);
   return { uri: file.uri, name: file.name, mimeType: ready.mimeType ?? mimeType };

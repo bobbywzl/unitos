@@ -26,7 +26,7 @@ import { corpusSystem, documentSystem } from "@/lib/digest/render";
 import { currentLang, serverT } from "@/lib/i18n/server";
 import { kimi, kimiConfigured, kimiOptions, WEB_SEARCH_TOOL, WEB_SEARCH_USD, webSearchTool } from "@/lib/kimi";
 import { resolveModelId } from "@/lib/models";
-import { computeCostUsd, recordUsage, sdkTokens } from "@/lib/usage";
+import { addTokens, computeCostUsd, recordUsage, sdkTokens, type TokenCounts } from "@/lib/usage";
 import type { TFunc } from "@/lib/i18n/dictionaries";
 import { synthesisAskPrompt, synthesisHistoryTurn, synthesisTaskPrompt } from "@/lib/prompts/synthesis";
 import { parseBody } from "@/lib/validate";
@@ -239,6 +239,17 @@ async function handle(req: Request, t: TFunc) {
             `cacheWrite=${usage.inputTokenDetails.cacheWriteTokens ?? 0} output=${usage.outputTokens ?? 0}`,
         );
         const tokens = sdkTokens(usage);
+        recordUsage(usageMeta, tokens, computeCostUsd(usageMeta.model, tokens) + searches * WEB_SEARCH_USD);
+      },
+      // Stop (SPEC.md §6): the steps that finished were billed, so they are
+      // recorded. A step cut off mid-answer reports no usage at all — the
+      // provider billed it and the page cannot know, so a stopped answer
+      // reads a little under what it cost.
+      onAbort: ({ steps }) => {
+        const tokens = steps.reduce<TokenCounts>(
+          (sum, step) => addTokens(sum, sdkTokens(step.usage)),
+          {},
+        );
         recordUsage(usageMeta, tokens, computeCostUsd(usageMeta.model, tokens) + searches * WEB_SEARCH_USD);
       },
     });
