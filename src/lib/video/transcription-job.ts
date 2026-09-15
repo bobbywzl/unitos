@@ -6,7 +6,6 @@ import { parseSpeakers, parseTried, type Speaker } from "@/lib/video/types";
 import { parsePastedTranscript } from "@/lib/video/paste";
 import { tidyTranscript } from "@/lib/video/tidy";
 import { GEMINI_FILE_TTL_MS, geminiFileFresh, type GeminiFile } from "@/lib/video/gemini-files";
-import { buildConnections } from "@/lib/connect";
 import {
   geminiMediaPart,
   GEMINI_FILE_MAX_BYTES,
@@ -207,18 +206,6 @@ export async function runTranscription(
       source: Date.now() < deadline - SPEAKERS_MIN_MS ? source : null,
       transcribeOptions: { deadline, geminiFile: stored },
     });
-    if (opts.leg) {
-      // The add's own follow-up ran on the first leg's caller; the leg that
-      // lands the transcript runs the recommended-links scan itself, for
-      // every project the document is in.
-      const rows = await db.notebookDocument.findMany({
-        where: { documentId },
-        select: { notebookId: true },
-      });
-      for (const row of rows) {
-        await buildConnections(row.notebookId, documentId, null).catch(() => {});
-      }
-    }
     return { ok: true, continuing: false, lines, provider };
   } catch (err) {
     if (err instanceof LadderOutOfTime) {

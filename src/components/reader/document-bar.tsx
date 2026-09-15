@@ -342,17 +342,16 @@ export function DocumentBar({
     router.refresh();
   }
 
-  // Re-parse with the current parser. Runs automatically when the open document
-  // was parsed by an older pipeline, and manually from the document's actions
-  // in the document list.
+  // Re-parse with the current parser: the reader asks for it, from the
+  // document's actions in the document list. A document parsed by an older
+  // pipeline is marked in the list and left as it is until then — a re-parse
+  // is a full import on the import's model, and a parser release would
+  // otherwise re-import the whole library as the reader opened it, at no
+  // request of theirs.
   const reparseAttempted = useRef(new Set<string>());
   const active = documents.find((d) => d.id === activeId) ?? null;
-  const activeStale =
-    active !== null &&
-    !active.hasVideo &&
-    !active.handwritten &&
-    (active.sourceUrl !== null || active.hasFile) &&
-    active.parserVersion < PARSER_VERSION;
+  const isStale = (d: AttachedDocument) =>
+    !d.hasVideo && !d.handwritten && (d.sourceUrl !== null || d.hasFile) && d.parserVersion < PARSER_VERSION;
   // The open document's figures a browser render can bring over: captions
   // left without their figure on a page, while a browser is configured. One
   // run on open when no render has run for the document yet — a browser
@@ -368,14 +367,9 @@ export function DocumentBar({
   const capture = useFigureCapture(active?.id);
   const captureRunning = useRef(false);
 
-  // Manual re-parse: the progress card shows, errors show.
-  const [connecting, setConnecting] = useState<string | null>(null);
+  // Manual re-parse: the progress card shows, errors show. The notice line
+  // also carries Compare's result and the offline upload queue's.
   const [connectNotice, setConnectNotice] = useState<string | null>(null);
-  // The running scan, so Stop can abort it.
-  const connectAbortRef = useRef<AbortController | null>(null);
-  function stopConnect() {
-    connectAbortRef.current?.abort();
-  }
   // Compare two documents (SPEC.md §4): the open document against this one.
   // One PENDING note of agreements, disagreements, and what only one covers
   // lands in the notes tray; the notice says where.
@@ -408,39 +402,6 @@ export function DocumentBar({
       setComparing(null);
     }
   }
-  // The recommended-links scan, on demand — for documents added before the
-  // scan existed (SPEC.md §13).
-  async function recommendLinks(doc: AttachedDocument) {
-    if (connecting) return;
-    setConnecting(doc.id);
-    setConnectNotice(null);
-    setError(null);
-    const controller = new AbortController();
-    connectAbortRef.current = controller;
-    try {
-      const result = await api<{ linkCount: number }>(
-        `/api/documents/${doc.id}/connect`,
-        "POST",
-        { notebookId },
-        { signal: controller.signal },
-      );
-      setConnectNotice(
-        result.linkCount > 0
-          ? t("panes.recommendLinksDone", { n: result.linkCount })
-          : t("panes.recommendLinksNone"),
-      );
-      setTimeout(() => setConnectNotice(null), 4000);
-      router.refresh();
-    } catch (err) {
-      // Stopped, not failed: no links, no notice.
-      if (controller.signal.aborted) return;
-      setError(err instanceof Error ? err.message : t("common.requestFailed"));
-    } finally {
-      if (connectAbortRef.current === controller) connectAbortRef.current = null;
-      setConnecting(null);
-    }
-  }
-
   // `as` flips a PDF between article and handwritten pages (SPEC.md §16) —
   // the escape hatch when Import PDF judged it wrong. Absent = plain re-parse.
   async function reparse(doc: AttachedDocument, as?: "article" | "handwritten") {
@@ -533,18 +494,18 @@ export function DocumentBar({
 
   useEffect(() => {
     if (active === null || phase !== null) return;
-    if (!activeStale && !activeNeedsCapture) return;
+    if (!activeNeedsCapture) return;
     if (reparseAttempted.current.has(active.id)) return;
     if (isOffline() || !reparseDue(active.id)) {
       // A figure run held back: the figure's place says so, with Try again.
-      if (activeNeedsCapture) setFigureCapture({ documentId: active.id, status: "failed", error: null });
+      setFigureCapture({ documentId: active.id, status: "failed", error: null });
       return;
     }
     reparseAttempted.current.add(active.id);
     markReparse(active.id);
-    void reparseSilently(active, activeGap);
+    void reparseSilently(active, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeId, activeStale, activeNeedsCapture]);
+  }, [activeId, activeNeedsCapture]);
 
   // The reader's Try again, at the figure's place.
   useEffect(() => {
@@ -953,9 +914,14 @@ export function DocumentBar({
                           ? "font-semibold text-ink"
                           : "text-sand-700 hover:bg-clay-100 hover:text-clay-800"
                       }`}
-                      data-tip={d.title}
+                      data-tip={isStale(d) ? t("panes.reparseStaleTitle") : d.title}
                     >
                       {clipWords(d.title, 44)}
+                      {isStale(d) && (
+                        <span className="ml-1.5 text-[11px] font-normal text-sand-500">
+                          {t("panes.reparseStale")}
+                        </span>
+                      )}
                     </button>
                     <button
                       onClick={() => setPillMenu(pillMenu === d.id ? null : d.id)}
@@ -1053,20 +1019,6 @@ export function DocumentBar({
                           data-tip={t("multi.withOpenTitle", { title: active?.title ?? "" })}
                         >
                           {t("multi.withOpen")}
-                        </button>
-                      )}
-                      {canEdit && (
-                        <button
-                          onClick={() => {
-                            closeList();
-                            void recommendLinks(d);
-                          }}
-                          data-track="document-recommend-links"
-                          disabled={connecting !== null}
-                          className={`${rowAction} disabled:opacity-40`}
-                          data-tip={t("panes.recommendLinksTitle")}
-                        >
-                          {connecting === d.id ? t("common.working") : t("panes.recommendLinks")}
                         </button>
                       )}
                       <button
@@ -1285,11 +1237,6 @@ export function DocumentBar({
       )}
       {/* While the dialog is open it shows the progress and the error itself. */}
       {phase && !dialog && <IngestProgress fileLabel={phase.fileLabel} steps={phase.steps} />}
-      {connecting && (
-        <span className="shrink-0 rounded-full bg-card px-3 py-1 text-xs shadow-soft">
-          <ThinkingIndicator label={t("panes.recommendLinksRunning")} onStop={stopConnect} />
-        </span>
-      )}
       {comparing && (
         <span className="shrink-0 rounded-full bg-card px-3 py-1 text-xs shadow-soft">
           <ThinkingIndicator label={t("panes.compareRunning")} onStop={stopCompare} />

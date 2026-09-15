@@ -1,9 +1,7 @@
 // The finishing step of an add (SPEC.md §15). The plan comes from
-// GET /api/documents/{id}/finish: scans says who runs the glossary and
-// recommended-links scans after the save — "client", the upload assistant,
-// now, or "server", a job the server owns after its own work (conversion,
-// transcription); images lists every visual the reader will request on open.
-export type FinishPlan = { scans: "client" | "server"; images: string[] };
+// GET /api/documents/{id}/finish: images, every visual the reader will
+// request on open.
+export type FinishPlan = { images: string[] };
 
 // The browser half: load every visual the reader will request on open — a PDF's figure and page renders,
 // a page's remote figures — once, now, so the document opens with all of them

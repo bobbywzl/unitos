@@ -133,7 +133,13 @@ export function Workspace({
   context: { initial: ContextValues | null; hasOverride: boolean; isSet: boolean };
   collab: CollabState;
   rev: number;
-  graph: { nodes: GraphNode[]; edges: GraphEdge[]; recommended: RecommendedLinkView[] };
+  graph: {
+    nodes: GraphNode[];
+    edges: GraphEdge[];
+    recommended: RecommendedLinkView[];
+    // Runs of Recommend links this account has left this month (SPEC.md §13).
+    linkScansLeft: number;
+  };
   history: HistoryEntry[];
   corpusDistillations: CorpusDistillationView[];
   // The open multi upload (?multi=, SPEC.md §22): the Stitch box docks at
@@ -912,6 +918,7 @@ export function Workspace({
           nodes={graph.nodes}
           edges={graph.edges}
           recommended={graph.recommended}
+          linkScansLeft={graph.linkScansLeft}
           onClose={() => setGraphOpen(false)}
         />
       )}

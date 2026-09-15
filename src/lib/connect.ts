@@ -12,17 +12,22 @@ import { kimi, kimiConfigured, kimiOptions } from "@/lib/kimi";
 import { connectPrompt, connectVerifyPrompt } from "@/lib/prompts/connect";
 import { resolveModelId } from "@/lib/models";
 
-// Recommended links (SPEC.md §13): when a document joins a corpus, scan it
-// against the corpus's other documents and store the connections as DocLink
-// rows with recommended: true. Two passes, both reading whole documents: the
-// scan reads the new document whole against every other document whole, with
-// the reader's notes and background as project context, and proposes links;
-// the check then reads each pair of documents whole and keeps only the links
-// that hold. The model reads the content only — block text, transcript
-// included — never a document title, so a link rests on what the documents
-// say, not on what they are called. Nothing paints in the text until the
-// reader accepts a link — the user approves everything (SPEC.md §1).
-// Best-effort like the glossary: a failure never breaks ingest.
+// Recommended links (SPEC.md §13): the connections between a project's
+// documents, stored as DocLink rows with recommended: true. The reader asks
+// for them — Recommend links in the graph runs scanProject below — and
+// nothing runs on its own: the scan reads whole documents against whole
+// documents, which is the most expensive thing the app can do to a project,
+// and a document joining a project is not a request for it.
+//
+// Two passes per document, both reading whole documents: the scan reads one
+// document whole against every other document whole, with the reader's notes
+// and background as project context, and proposes links; the check then
+// reads each pair of documents whole and keeps only the links that hold. The
+// model reads the content only — block text, transcript included — never a
+// document title, so a link rests on what the documents say, not on what
+// they are called. Nothing paints in the text until the reader accepts a
+// link — the user approves everything (SPEC.md §1). Best-effort: a failed
+// pass is a pass that proposed nothing, never an error to the reader.
 
 const MAX_LINKS = 6;
 const MAX_CANDIDATES = 8;
@@ -317,4 +322,74 @@ export async function buildConnections(
   if (created > 0) await bumpNotebook(notebookId);
   console.log(`[connect] ${document.title}: ${candidates.length} candidate(s), ${created} recommended link(s)`);
   return created;
+}
+
+// ── The project scan (SPEC.md §13) ───────────────────────────────────────────
+
+/** How many runs an account gets in a calendar month. The scan reads every
+    document of a project whole against every other, so the quota is the
+    ceiling on what one account can spend on it. */
+export const LINK_SCAN_RUNS_PER_MONTH = 3;
+// Documents scanned in one run. Each is one scan call plus up to a few check
+// calls, so a run over a large project is capped rather than unbounded; the
+// deadline below usually ends it first.
+const MAX_DOCUMENTS_PER_RUN = 8;
+// One run's own clock, under the route's 300 seconds, so the run answers
+// with what it found rather than being cut off by the platform.
+const RUN_BUDGET_MS = 250_000;
+
+/** The first moment of the current calendar month, UTC. */
+export function monthStart(now = new Date()): Date {
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+}
+
+/** Runs this account has left this calendar month. */
+export async function linkScanRunsLeft(userId: string | null): Promise<number> {
+  if (!userId) return LINK_SCAN_RUNS_PER_MONTH;
+  const used = await db.linkScanRun.count({
+    where: { userId, createdAt: { gte: monthStart() } },
+  });
+  return Math.max(0, LINK_SCAN_RUNS_PER_MONTH - used);
+}
+
+/** One press of Recommend links: every document of the project scanned
+    against the others, oldest attachment first, until the run's documents or
+    its clock run out. Returns the links proposed and how many documents were
+    read. The caller records the run against the quota. */
+export async function scanProject(
+  notebookId: string,
+  userId: string | null,
+  opts: { lang?: Lang; signal?: AbortSignal } = {},
+): Promise<{ linkCount: number; documentsScanned: number; documentsLeft: number }> {
+  // Oldest document first: the attachment row carries no time of its own,
+  // and a run that stops short should have read the project's settled
+  // documents rather than whatever the database returned first.
+  const attachments = await db.notebookDocument.findMany({
+    where: { notebookId },
+    orderBy: { document: { createdAt: "asc" } },
+    select: { documentId: true },
+  });
+  if (attachments.length < 2) {
+    return { linkCount: 0, documentsScanned: 0, documentsLeft: 0 };
+  }
+  const deadline = Date.now() + RUN_BUDGET_MS;
+  let linkCount = 0;
+  let scanned = 0;
+  for (const { documentId } of attachments) {
+    if (scanned >= MAX_DOCUMENTS_PER_RUN) break;
+    if (Date.now() > deadline) break;
+    if (opts.signal?.aborted) break;
+    try {
+      linkCount += await buildConnections(notebookId, documentId, userId, opts.lang, opts.signal);
+    } catch (err) {
+      console.warn("[connect] a document's scan failed:", err instanceof Error ? err.message : err);
+    }
+    scanned++;
+  }
+  console.log(`[connect] project ${notebookId}: ${scanned} document(s), ${linkCount} recommended link(s)`);
+  return {
+    linkCount,
+    documentsScanned: scanned,
+    documentsLeft: Math.max(0, attachments.length - scanned),
+  };
 }

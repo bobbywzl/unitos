@@ -29,7 +29,8 @@ export function claudeBaseUrl(): string {
 let provider: AnthropicProvider | null = null;
 
 /** The model to call. The provider is built once per process, on first use.
-    A role's default id (CLAUDE_FABLE_5_1) resolves to the role's current id
+    A role's default id (CLAUDE_OPUS_5 for the import, lib/models.ts) resolves
+    to the role's current id
     — the newest version the bimonthly model update found (lib/models.ts);
     the returned model's modelId is the id called. */
 export async function claude(modelId: string): Promise<LanguageModel> {
@@ -38,13 +39,13 @@ export async function claude(modelId: string): Promise<LanguageModel> {
 }
 
 /** Provider options for one call: the reasoning effort (lib/derive/config.ts)
-    and the server-side fallback. Claude Fable 5.1 always reasons, so no
-    thinking setting is sent; the effort sets how long it reasons. When its
-    safety classifiers decline a request, the fallback has the API rerun the
-    same request on another Claude model in the same call, so the import
-    finishes instead of failing; usage then records the call under
-    PARSE_MODEL. Claude Fable 5.1 fixes temperature and top_p, so nothing
-    else is set. */
+    and the server-side fallback. These models always reason, so no thinking
+    setting is sent; the effort sets how long it reasons. When the safety
+    classifiers decline a request, the fallback has the API rerun the same
+    request on another Claude model in the same call, so the import finishes
+    instead of failing; usage then records the call under the model asked
+    for. Temperature and top_p are fixed by the model, so nothing else is
+    set. */
 export function claudeOptions(effort: ClaudeEffort = PARSE_EFFORT) {
   return { anthropic: { effort, fallbacks: "default" as const } };
 }
