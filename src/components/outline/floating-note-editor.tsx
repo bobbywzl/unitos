@@ -542,17 +542,8 @@ export function FloatingNoteEditor({
 
       {editing ? (
         <div data-note-editing="" className="flex min-h-0 flex-1 flex-col">
-          <NoteTitleField
-            value={parts.title}
-            onChange={(title) => {
-              setTitle(title);
-            }}
-            onEnter={() => focusBodyEditor(cardRef.current)}
-            onEscape={cancelEdit}
-            className="shrink-0"
-          />
           <NoteEditor
-            className="mt-1.5 min-h-0 flex-1"
+            className="min-h-0 flex-1"
             value={parts.body}
             onChange={(text) => {
               setBody(text);
@@ -563,6 +554,17 @@ export function FloatingNoteEditor({
               if (e.key === "Escape") cancelEdit();
             }}
             moreHref={`/n/${actions.notebookId}/notes`}
+            title={
+              <NoteTitleField
+                value={parts.title}
+                onChange={(title) => {
+                  setTitle(title);
+                }}
+                onEnter={() => focusBodyEditor(cardRef.current)}
+                onEscape={cancelEdit}
+                className="shrink-0"
+              />
+            }
           />
         </div>
       ) : (

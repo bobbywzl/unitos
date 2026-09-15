@@ -177,6 +177,7 @@ export function NoteEditor({
   full = false,
   moreHref,
   autoFocus = true,
+  title,
 }: {
   value: string;
   onChange: (next: string) => void;
@@ -190,8 +191,12 @@ export function NoteEditor({
   /** With the core bar: where the whole bar is — the notes full page. */
   moreHref?: string;
   /** The caret lands at the end of the text on mount. False: the title field
-      above takes the focus (note-title-field.tsx). */
+      takes the focus (note-title-field.tsx). */
   autoFocus?: boolean;
+  /** The note's title field, drawn under the bar and over the body: the bar
+      is the editor's own, so it sits at the top of the editor, and the title
+      reads as the first line of what it writes (SPEC.md §6). */
+  title?: React.ReactNode;
 }) {
   const t = useT();
   const mod = useModKey();
@@ -436,6 +441,7 @@ export function NoteEditor({
         </Link>
       )}
       {imageError && <p className="shrink-0 text-[11px] text-red-500">{imageError}</p>}
+      {title}
       <div
         ref={ref}
         role="textbox"

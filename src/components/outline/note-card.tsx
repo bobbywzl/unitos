@@ -550,16 +550,9 @@ export function NoteCard({
       >
         {header}
         {dropError && <p className="mt-1 text-[11px] text-red-500">{dropError}</p>}
-        {/* The title field, then the body's editor (SPEC.md §6). */}
-        <NoteTitleField
-          value={edit.title}
-          onChange={editTitle}
-          onEnter={() => focusBodyEditor(editCardRef.current)}
-          onEscape={cancel}
-          className="mt-2 shrink-0"
-        />
+        {/* The bar, then the title field, then the body (SPEC.md §6). */}
         <NoteEditor
-          className="mt-1.5 min-h-0 flex-1"
+          className="mt-2 min-h-0 flex-1"
           value={edit.body}
           onChange={editBody}
           onKeyDown={(e) => {
@@ -569,6 +562,15 @@ export function NoteCard({
           }}
           full={!tray}
           moreHref={tray ? `/n/${actions.notebookId}/notes` : undefined}
+          title={
+            <NoteTitleField
+              value={edit.title}
+              onChange={editTitle}
+              onEnter={() => focusBodyEditor(editCardRef.current)}
+              onEscape={cancel}
+              className="shrink-0"
+            />
+          }
         />
         <div className="mt-2 flex shrink-0 items-center gap-2">
           <button
