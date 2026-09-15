@@ -34,6 +34,7 @@
 //   visualize 可视化 · visualization(可视化生成的图) 可视化图 ·
 //   link Google Drive(账号关联) 关联 · pages(手写页面) 页面 ·
 //   lasso highlight(页面圈选高亮) 圈选高亮 ·
+//   account 账户 · block 封禁 · unblock 解封 · block list 封禁名单 ·
 //   account 账户 · notification 通知 · recipient 收件人 ·
 //   dismiss(通知) 关闭 · update(通知类型) 更新 · account change 账户变更 ·
 //   gist 要旨 · checklist 清单 · dash list 短横线列表 ·

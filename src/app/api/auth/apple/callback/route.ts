@@ -37,8 +37,9 @@ export async function POST(req: Request) {
   // The name arrives only on the first authorization; the email local part is
   // the standing fallback.
   const name = appleUserName(userField) ?? profile.name;
-  const { session } = await signIn({ email: profile.email, name, picture: "" });
-  const res = sessionRedirect(origin, session);
+  const signed = await signIn({ email: profile.email, name, picture: "" });
+  if (signed === "blocked") return fail("This email is blocked");
+  const res = sessionRedirect(origin, signed.session);
   res.cookies.set(APPLE_STATE_COOKIE, "", { path: "/", maxAge: 0 });
   return res;
 }

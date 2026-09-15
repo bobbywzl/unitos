@@ -8,6 +8,8 @@ import { personColor, personOf, personSymbol, type Person } from "@/lib/person";
 import { PersonBadge } from "@/components/collab/person-badge";
 import { AdminNav } from "@/components/admin/admin-nav";
 import { AccountReset } from "@/components/admin/account-reset";
+import { BlockButton, BlockList } from "@/components/admin/block-control";
+import { blockedEmails } from "@/lib/block";
 import { TierControl } from "@/components/admin/tier-control";
 import { TierChip } from "@/components/tier-mark";
 import { tierState, type TierState } from "@/lib/tiers";
@@ -16,9 +18,13 @@ export const dynamic = "force-dynamic";
 
 // Admin: every account, its tier, and what it holds — projects, documents,
 // notes — with Tier (components/admin/tier-control.tsx, TIERS.md), which sets
-// the account's tier, and Reset account (lib/account-reset.ts), which deletes
-// the account's data and puts it back at onboarding. Sign-in off: the local
-// reader is the one account; it has no row to set a tier on.
+// the account's tier, Block and Unblock (components/admin/block-control.tsx,
+// lib/block.ts), which put the account's email on the block list and take it
+// off, and Reset account (lib/account-reset.ts), which deletes the account's
+// data and puts it back at onboarding. Above the accounts, the block list:
+// every blocked email, and a form to block one with no account yet. Sign-in
+// off: the local reader is the one account; it has no row to set a tier on
+// and no email to block.
 
 type AccountRow = {
   id: string;
@@ -50,7 +56,7 @@ export default async function AdminAccountsPage() {
   if (!(await isAdmin())) redirect("/admin/login");
   const t = await serverT();
 
-  const [users, notebooks] = await Promise.all([
+  const [users, notebooks, blocked] = await Promise.all([
     db.user.findMany({ orderBy: { createdAt: "desc" } }),
     db.notebook.findMany({
       select: {
@@ -59,7 +65,9 @@ export default async function AdminAccountsPage() {
         sections: { select: { _count: { select: { notes: true } } } },
       },
     }),
+    blockedEmails(),
   ]);
+  const blockedSet = new Set(blocked);
   const held = new Map<string, Held>();
   for (const nb of notebooks) {
     const row = held.get(nb.userId) ?? { projects: 0, documents: 0, notes: 0 };
@@ -110,6 +118,7 @@ export default async function AdminAccountsPage() {
         <h1 className="text-[28px]">{t("admin.accounts")}</h1>
         <p className="text-sm text-sand-600">{t("admin.accountsDesc")}</p>
       </header>
+      {authEnabled() && <BlockList emails={blocked} />}
       {accounts.length === 0 ? (
         <p className="text-sm text-sand-600">{t("admin.noAccounts")}</p>
       ) : (
@@ -130,6 +139,11 @@ export default async function AdminAccountsPage() {
                     trialEndsAt={a.plan.trialEndsAt?.toISOString() ?? null}
                   />
                   {a.driveLinked && <Chip>{t("admin.accountDrive")}</Chip>}
+                  {a.email !== null && blockedSet.has(a.email) && (
+                    <span className="rounded-full bg-red-50 px-2 py-0.5 text-[11px] text-red-700">
+                      {t("admin.blockedChip")}
+                    </span>
+                  )}
                 </div>
                 {a.createdAt && a.lastSeenAt && (
                   <p className="mt-2 text-xs text-sand-500">
@@ -144,6 +158,7 @@ export default async function AdminAccountsPage() {
                     trialEndsAt={a.plan.trialEndsAt?.toISOString() ?? null}
                   />
                 )}
+                {a.email !== null && <BlockButton email={a.email} blocked={blockedSet.has(a.email)} />}
                 <AccountReset userId={a.id} confirm={a.email ?? a.id} />
               </li>
             );

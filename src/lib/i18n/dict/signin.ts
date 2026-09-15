@@ -121,6 +121,7 @@ const en = {
   errEmailToken: "Confirmation link expired or already used — request a new one",
   errBadLogin: "Wrong email or password",
   errNoPassword: "This account has no password yet — use Forgot password to set one",
+  errBlocked: "This email is blocked",
   errPasswordShort: "Password must be at least 8 characters",
   errPasswordMatch: "Passwords do not match",
 };
@@ -236,6 +237,7 @@ const zh: Record<keyof typeof en, string> = {
   errEmailToken: "确认链接已过期或已使用——请重新申请",
   errBadLogin: "邮箱或密码不正确",
   errNoPassword: "该账户还没有密码——请用“忘记密码”设置一个",
+  errBlocked: "该邮箱已被封禁",
   errPasswordShort: "密码至少 8 个字符",
   errPasswordMatch: "两次输入的密码不一致",
 };
