@@ -2626,8 +2626,8 @@ li[data-checked] > .note-box::before {
 }
 
 /* ── A section's board (SPEC.md §6, section-board.tsx) ─────────────────────
-   The section's notes as square tiles in one grid, side by side, so they
-   line up as one board. A tile shows as much of its body as fits and fades
+   The section's notes as 3:4 tiles — taller than wide — in one grid, side by
+   side, so they line up as one board. A tile shows as much of its body as fits and fades
    out at the bottom; the line between tiles says where a dragged tile lands. */
 .note-board {
   display: grid;
@@ -2635,7 +2635,7 @@ li[data-checked] > .note-box::before {
   gap: 14px;
 }
 .note-tile {
-  aspect-ratio: 1 / 1;
+  aspect-ratio: 3 / 4;
   cursor: pointer;
   transition: box-shadow 140ms, transform 140ms;
 }

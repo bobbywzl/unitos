@@ -30,12 +30,12 @@ function TickIcon({ size = 10 }: { size?: number }) {
   );
 }
 
-// One tile of a section's board (SPEC.md §6): the note as a square — its id,
-// its title, and as much of its body as fits, fading out at the bottom — so
-// the tiles line up as one board. A tile is in the note's draggable mode and
-// nothing else: a hold anywhere picks it up, to reorder it or to hold it over
-// another tile and merge the two; a click opens the note whole. Editing
-// happens in the opened note, never in the tile.
+// One tile of a section's board (SPEC.md §6): the note as a 3:4 tile, taller
+// than wide — its id, its title, and as much of its body as fits, fading out
+// at the bottom — so the tiles line up as one board. A tile is in the note's
+// draggable mode and nothing else: a hold anywhere picks it up, to reorder it
+// or to hold it over another tile and merge the two; a click opens the note
+// whole. Editing happens in the opened note, never in the tile.
 export function NoteTile({
   note,
   actions,

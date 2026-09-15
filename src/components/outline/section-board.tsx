@@ -19,7 +19,7 @@ import { VoiceNoteButton } from "@/components/outline/voice-note";
 import { findSection, type OutlineActions } from "@/components/outline/use-outline";
 
 // A section's board (SPEC.md §6): the section's notes filling the screen as
-// square tiles side by side, one grid, opened from the notes full page by a
+// 3:4 tiles side by side, one grid, opened from the notes full page by a
 // click on the section's title. Every tile is in the note's draggable mode: a
 // hold anywhere picks it up, to reorder it or to hold it over another tile and
 // merge the two. A click opens the note whole over the board — its card, with
