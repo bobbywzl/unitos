@@ -2583,6 +2583,13 @@ li[data-checked] > .note-box::before {
 }
 
 /* ── A search lights up its matches (SPEC.md §6) ───────────────────────── */
+/* The quote inside an expanded link's passage (components/graph/link-detail.tsx). */
+.link-detail-quote {
+  background: color-mix(in srgb, var(--clay-400) 32%, transparent);
+  color: inherit;
+  border-radius: 3px;
+  padding: 0 1px;
+}
 .search-hit {
   border-radius: 3px;
   padding: 0 1px;

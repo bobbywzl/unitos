@@ -389,9 +389,16 @@ export type GraphNode = {
 export type GraphEdgeLink = {
   id: string;
   fromDocumentId: string;
+  fromTitle: string;
   toDocumentId: string;
+  toTitle: string;
   quotedText: string; // the from end
   toQuotedText: string | null; // the to end; null = document-level
+  // The block each end's quote sits in, whole: the passage the expanded link
+  // shows around the quote. Null when the block is gone or the end is
+  // document-level.
+  fromBlockText: string | null;
+  toBlockText: string | null;
   reason: string | null;
   recommended: boolean;
 };
@@ -417,6 +424,8 @@ export type RecommendedLinkView = {
   toTitle: string;
   quotedText: string; // the from end
   toQuotedText: string | null; // the to end; null = document-level
+  fromBlockText: string | null; // the block around each end's quote, as on GraphEdgeLink
+  toBlockText: string | null;
   reason: string | null;
   createdById: string | null;
   replies: ReplyView[];

@@ -93,6 +93,8 @@ export async function documentsGraph(
         id: true,
         fromDocumentId: true,
         toDocumentId: true,
+        fromBlockId: true,
+        toBlockId: true,
         recommended: true,
         reason: true,
         quotedText: true,
@@ -109,6 +111,23 @@ export async function documentsGraph(
       },
     }),
   ]);
+  // The block each end's quote sits in: the passage an expanded link shows
+  // around the quote (SPEC.md §13). A block a re-parse replaced is gone
+  // until the reader opens the document and the link heals; the end then
+  // shows its quote alone.
+  const blockIds = [
+    ...new Set(
+      [...links, ...recommendedRows].flatMap((l) => [l.fromBlockId, l.toBlockId ?? ""]).filter(Boolean),
+    ),
+  ];
+  const blockText = new Map(
+    blockIds.length > 0
+      ? (await db.block.findMany({ where: { id: { in: blockIds } }, select: { id: true, text: true } })).map(
+          (b) => [b.id, b.text] as const,
+        )
+      : [],
+  );
+  const titleOf = new Map(documents.map((d) => [d.id, d.title]));
   const nodes: GraphNode[] = documents.map((d) => ({ id: d.id, title: d.title, hasVideo: d.hasVideo }));
   const edgeByPair = new Map<string, GraphEdge>();
   for (const link of links) {
@@ -120,9 +139,13 @@ export async function documentsGraph(
     edge.links.push({
       id: link.id,
       fromDocumentId: link.fromDocumentId,
+      fromTitle: titleOf.get(link.fromDocumentId) ?? "",
       toDocumentId: link.toDocumentId,
+      toTitle: titleOf.get(link.toDocumentId) ?? "",
       quotedText: link.quotedText,
       toQuotedText: link.toQuotedText,
+      fromBlockText: blockText.get(link.fromBlockId) ?? null,
+      toBlockText: link.toBlockId ? (blockText.get(link.toBlockId) ?? null) : null,
       reason: link.reason,
       recommended: link.recommended,
     });
@@ -136,6 +159,8 @@ export async function documentsGraph(
     toTitle: link.toDocument.title,
     quotedText: link.quotedText,
     toQuotedText: link.toQuotedText,
+    fromBlockText: blockText.get(link.fromBlockId) ?? null,
+    toBlockText: link.toBlockId ? (blockText.get(link.toBlockId) ?? null) : null,
     reason: link.reason,
     createdById: link.createdById,
     replies: link.replies.map((r) => ({

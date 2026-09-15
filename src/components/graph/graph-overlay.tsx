@@ -11,6 +11,7 @@ import { ReplyThread } from "@/components/collab/reply-thread";
 import { SparkleIcon, UnlinkIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { Presence } from "@/components/presence";
+import { LinkDetail } from "@/components/graph/link-detail";
 
 // reactflow loads only when the graph opens — the workspace bundle stays lean.
 const GraphView = dynamic(() => import("@/components/graph/graph-view"), {
@@ -183,8 +184,10 @@ export function GraphOverlay({
 }
 
 // The folded list: every recommended link of the project, newest first. A
-// link becomes real on Accept; Dismiss deletes it without a history entry —
-// it never was one. Both refresh the page, so the curves redraw.
+// click on a link expands it: why the AI made it, and the passage at each
+// end, with a button that opens the reader there. A link becomes real on
+// Accept; Dismiss deletes it without a history entry — it never was one.
+// Both refresh the page, so the curves redraw.
 export function RecommendedLinkList({
   notebookId,
   links,
@@ -199,6 +202,7 @@ export function RecommendedLinkList({
   const { canEdit } = useCollab();
   const [busyId, setBusyId] = useState<string | null>(null);
   const [errorText, setErrorText] = useState<string | null>(null);
+  const [openId, setOpenId] = useState<string | null>(null);
 
   async function mutate(id: string, run: () => Promise<unknown>) {
     if (busyId) return;
@@ -232,35 +236,56 @@ export function RecommendedLinkList({
       {links.length === 0 && (
         <p className="text-[13px] text-sand-600">{t("panes.recommendedLinksEmpty")}</p>
       )}
-      {links.map((l) => (
+      {links.map((l) => {
+        const open = openId === l.id;
+        return (
         <div key={l.id} className="rounded-2xl border border-dashed border-clay-300 bg-card p-3.5 shadow-soft">
-          {l.reason && <p className="text-[12.5px] leading-snug font-semibold">{l.reason}</p>}
-          <p className="mt-1.5 line-clamp-2 border-l-2 border-clay-300 pl-2 text-xs text-sand-600">
-            {l.quotedText}
-          </p>
-          {l.toQuotedText && (
-            <p className="mt-1 line-clamp-2 border-l-2 border-sand-300 pl-2 text-xs text-sand-500">
-              {l.toQuotedText}
-            </p>
+          <button
+            onClick={() => setOpenId(open ? null : l.id)}
+            data-track="graph-link-expand"
+            data-tip={t(open ? "panes.linkCollapse" : "panes.linkExpand")}
+            aria-expanded={open}
+            className="block w-full rounded-lg text-left hover:bg-clay-100/60"
+          >
+            <p className="text-[12.5px] leading-snug font-semibold">{l.reason ?? t("panes.linkNoReason")}</p>
+            {!open && (
+              <p className="mt-1.5 line-clamp-2 border-l-2 border-clay-300 pl-2 text-xs text-sand-600">
+                {l.quotedText}
+              </p>
+            )}
+            {!open && l.toQuotedText && (
+              <p className="mt-1 line-clamp-2 border-l-2 border-sand-300 pl-2 text-xs text-sand-500">
+                {l.toQuotedText}
+              </p>
+            )}
+          </button>
+          {open && (
+            <div className="mt-2">
+              <LinkDetail link={l} onOpen={(documentId) => openDocument(documentId, l.id)} />
+            </div>
           )}
           <div className="mt-2 flex flex-wrap items-center gap-2">
-            <button
-              onClick={() => openDocument(l.fromDocumentId, l.id)}
-              data-track="graph-link-open"
-              data-tip={t("panes.openLinkEnd", { title: l.fromTitle })}
-              className={quoteChip}
-            >
-              {l.fromTitle}
-            </button>
-            <span className="text-[11px] text-sand-500">⇄</span>
-            <button
-              onClick={() => openDocument(l.toDocumentId, l.id)}
-              data-track="graph-link-open"
-              data-tip={t("panes.openLinkEnd", { title: l.toTitle })}
-              className={quoteChip}
-            >
-              {l.toTitle}
-            </button>
+            {!open && (
+              <>
+                <button
+                  onClick={() => openDocument(l.fromDocumentId, l.id)}
+                  data-track="graph-link-open"
+                  data-tip={t("panes.openLinkEnd", { title: l.fromTitle })}
+                  className={quoteChip}
+                >
+                  {l.fromTitle}
+                </button>
+                <span className="text-[11px] text-sand-500">⇄</span>
+                <button
+                  onClick={() => openDocument(l.toDocumentId, l.id)}
+                  data-track="graph-link-open"
+                  data-tip={t("panes.openLinkEnd", { title: l.toTitle })}
+                  className={quoteChip}
+                >
+                  {l.toTitle}
+                </button>
+              </>
+            )}
             <AuthorChip createdById={l.createdById} nameless />
             {canEdit && (
               <span className="ml-auto flex items-center gap-2">
@@ -289,7 +314,8 @@ export function RecommendedLinkList({
           </div>
           <ReplyThread target={{ docLinkId: l.id }} replies={l.replies} />
         </div>
-      ))}
+        );
+      })}
     </aside>
   );
 }

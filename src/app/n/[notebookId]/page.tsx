@@ -15,8 +15,9 @@ import { pageSizesFor } from "@/lib/handwritten/page-images";
 import { captionGaps } from "@/lib/parse/figure-audit";
 import { documentReferences } from "@/lib/parse/types";
 import { resolveDocumentSources } from "@/lib/anchors/resolve";
+import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
-import { listMultiUploads, loadMultiUpload } from "@/lib/multi/view";
+import { documentsGraph, listMultiUploads, loadMultiUpload } from "@/lib/multi/view";
 import {
   corpusDistillationList,
   distillationList,
@@ -29,13 +30,10 @@ import {
   type KeypointsView,
   type EditItem,
   type ExtractionView,
-  type GraphEdge,
-  type GraphNode,
   type HistoryEntry,
   type LinkIn,
   type LinkOut,
   type NotebookView,
-  type RecommendedLinkView,
   type ReplyView,
   type SectionView,
   type SummaryLevels,
@@ -129,12 +127,28 @@ export default async function NotebookPage(props: {
   // The reader's language: glossary definitions read in it (SPEC.md §8 Phase 7).
   const lang = await currentLang();
 
+  // Which stored files are PDFs (a stored file that does not start with
+  // `%PDF-` is a Markdown file, §2): Re-parse on a PDF asks which shape
+  // (SPEC.md §16). Read from the first bytes, never the whole file.
+  const fileIds = notebook.documents.filter((nd) => nd.document.fileHash !== null).map((nd) => nd.document.id);
+  const pdfIds = new Set(
+    fileIds.length > 0
+      ? (
+          await db.$queryRaw<{ id: string }[]>`
+            SELECT id FROM "Document"
+            WHERE id IN (${Prisma.join(fileIds)})
+              AND encode(substring("fileData" from 1 for 5), 'escape') = '%PDF-'
+          `
+        ).map((r) => r.id)
+      : [],
+  );
   const attached = notebook.documents.map((nd) => ({
     id: nd.document.id,
     title: nd.document.title,
     sourceUrl: nd.document.sourceUrl,
     parserVersion: nd.document.parserVersion,
     hasFile: nd.document.fileHash !== null,
+    pdf: pdfIds.has(nd.document.id),
     hasVideo: nd.document.video !== null,
     handwritten: nd.document.handwritten,
     figureRenderAt: nd.document.figureRenderAt?.toISOString() ?? null,
@@ -932,8 +946,7 @@ export default async function NotebookPage(props: {
     editRows,
     globalProfile,
     corpusQuoteDocs,
-    graphLinks,
-    recommendedRows,
+    graph,
     events,
     allEdits,
     multiUploads,
@@ -960,36 +973,12 @@ export default async function NotebookPage(props: {
             },
           })
         : [],
-      db.docLink.findMany({
-        where: {
-          fromDocumentId: { in: attachedIdList },
-          toDocumentId: { in: attachedIdList },
-        },
-        // Accepted links first, then by age: the order the pair's list shows.
-        orderBy: [{ recommended: "asc" }, { createdAt: "asc" }],
-        select: {
-          id: true,
-          fromDocumentId: true,
-          toDocumentId: true,
-          recommended: true,
-          reason: true,
-          quotedText: true,
-          toQuotedText: true,
-        },
-      }),
-      db.docLink.findMany({
-        where: {
-          recommended: true,
-          fromDocumentId: { in: attachedIdList },
-          toDocumentId: { in: attachedIdList },
-        },
-        orderBy: { createdAt: "desc" },
-        include: {
-          fromDocument: { select: { title: true } },
-          toDocument: { select: { title: true } },
-          replies: { orderBy: { createdAt: "asc" } },
-        },
-      }),
+      // The graph (SPEC.md §13): attached documents as nodes; links between
+      // them as undirected weighted edges — thicker with more links, dashed
+      // while only recommended ones connect a pair — and the recommended
+      // links, both ends with their passages, the AI's reason, and the
+      // replies. Accept and Dismiss live in the graph.
+      documentsGraph(attached.map((d) => ({ id: d.id, title: d.title, hasVideo: d.hasVideo }))),
       db.notebookEvent.findMany({
         where: { notebookId },
         orderBy: { createdAt: "desc" },
@@ -1074,47 +1063,9 @@ export default async function NotebookPage(props: {
     }),
   }));
 
-  // The graph (SPEC.md §13): attached documents as nodes; links between them
-  // as undirected weighted edges — thicker with more links, dashed while only
-  // recommended ones connect a pair.
-  const graphNodes: GraphNode[] = attached.map((d) => ({
-    id: d.id,
-    title: d.title,
-    hasVideo: d.hasVideo,
-  }));
-  const edgeByPair = new Map<string, GraphEdge>();
-  for (const link of graphLinks) {
-    if (link.fromDocumentId === link.toDocumentId) continue;
-    const [a, b] = [link.fromDocumentId, link.toDocumentId].sort();
-    const edge = edgeByPair.get(`${a}|${b}`) ?? { a, b, accepted: 0, recommended: 0, links: [] };
-    if (link.recommended) edge.recommended++;
-    else edge.accepted++;
-    edge.links.push({
-      id: link.id,
-      fromDocumentId: link.fromDocumentId,
-      toDocumentId: link.toDocumentId,
-      quotedText: link.quotedText,
-      toQuotedText: link.toQuotedText,
-      reason: link.reason,
-      recommended: link.recommended,
-    });
-    edgeByPair.set(`${a}|${b}`, edge);
-  }
-  const graphEdges = [...edgeByPair.values()];
-  // Recommended links (SPEC.md §13) list in the graph, for the whole project:
-  // both ends, the AI's reason, and the replies. Accept and Dismiss live there.
-  const recommendedLinks: RecommendedLinkView[] = recommendedRows.map((link) => ({
-    id: link.id,
-    fromDocumentId: link.fromDocumentId,
-    fromTitle: link.fromDocument.title,
-    toDocumentId: link.toDocumentId,
-    toTitle: link.toDocument.title,
-    quotedText: link.quotedText,
-    toQuotedText: link.toQuotedText,
-    reason: link.reason,
-    createdById: link.createdById,
-    replies: toReplyViews(link.replies),
-  }));
+  const graphNodes = graph.nodes;
+  const graphEdges = graph.edges;
+  const recommendedLinks = graph.recommended;
 
   // The History panel (SPEC.md §12): corpus events (deletions, detachments)
   // merged with every attached document's edits, newest first, attributed.

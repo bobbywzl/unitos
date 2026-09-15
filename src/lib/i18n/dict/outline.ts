@@ -89,7 +89,7 @@ const en = {
   // a card dropped on the floating note card, joins the text as it is. Merge
   // with AI is the ticker's other bulk action.
   mergeWithAi: "Merge with AI",
-  mergeWithAiTitle: "Write the one note that takes both notes' place: every point kept, repetition written once",
+  mergeWithAiTitle: "Write the one note that takes both notes' place: the key points of each note, structured, each with the quotes that support it",
   joinText: "Join text",
   joinTextTitle: "Put the text into this note as it is",
   merging: "Merging with AI…",
@@ -252,7 +252,7 @@ const zh: Record<keyof typeof en, string> = {
   dropQuoteIntoNote: "松开即把引用加入此笔记",
   mergeTitle: "把选中的笔记合并为一条：文本原样保留，上面的笔记在前",
   mergeWithAi: "用 AI 合并",
-  mergeWithAiTitle: "写出取代两条笔记的那一条：保留每个要点，重复的只写一次",
+  mergeWithAiTitle: "写出取代两条笔记的那一条：提炼每条笔记的要点，分点组织，每个要点下放上支持它的引用",
   joinText: "拼接文本",
   joinTextTitle: "把文本原样放进这条笔记",
   merging: "AI 合并中…",
