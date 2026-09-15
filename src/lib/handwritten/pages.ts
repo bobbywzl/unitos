@@ -12,6 +12,11 @@ import { regionBounds, type Region } from "@/lib/video/types";
 export const PAGE_IMAGE_WIDTH = 1400;
 // The classifier only decides handwritten vs text article; smaller is enough.
 export const CLASSIFY_IMAGE_WIDTH = 900;
+// The stored page image (PageImage): JPEG, since a scanned or drawn page
+// is a photo-like picture — a fraction of the PNG's bytes at this quality.
+export const PAGE_IMAGE_QUALITY = 85;
+
+export type PageSize = { width: number; height: number };
 
 /** The PDF's page count, from a copy of the bytes (pdf.js detaches its buffer). */
 export async function pdfPageCount(bytes: Uint8Array): Promise<number> {
@@ -34,6 +39,85 @@ export async function renderPdfPage(
   // Copy into a fresh ArrayBuffer-backed array: Response and the model SDK
   // both want Uint8Array<ArrayBuffer>.
   return new Uint8Array(png instanceof Uint8Array ? png : new Uint8Array(png as ArrayBuffer));
+}
+
+/** Every page's size in pixels when rendered at width, in page order
+    (index 0 = page 1). Reads the page boxes only — no render. */
+export async function pdfPageSizes(
+  bytes: Uint8Array,
+  width: number = PAGE_IMAGE_WIDTH,
+): Promise<PageSize[]> {
+  const { getDocumentProxy } = await import("unpdf");
+  const pdf = await getDocumentProxy(new Uint8Array(bytes));
+  try {
+    const sizes: PageSize[] = [];
+    for (let n = 1; n <= pdf.numPages; n++) {
+      const page = await pdf.getPage(n);
+      const viewport = page.getViewport({ scale: 1 });
+      sizes.push(pageSizeAt(viewport.width, viewport.height, width));
+      page.cleanup();
+    }
+    return sizes;
+  } finally {
+    await pdf.loadingTask.destroy();
+  }
+}
+
+function pageSizeAt(pageWidth: number, pageHeight: number, width: number): PageSize {
+  const scale = width / Math.max(1, pageWidth);
+  return { width: Math.round(pageWidth * scale), height: Math.round(pageHeight * scale) };
+}
+
+/** Pages rendered to JPEG at width, the PDF opened once for all of them.
+    Each page goes to onPage as it finishes; onPage returning false stops the
+    run (the caller's time budget). A page whose render fails is skipped
+    with a warning — the caller still has the others. */
+export async function renderPdfPagesJpeg(
+  bytes: Uint8Array,
+  pages: number[],
+  width: number,
+  onPage: (page: number, image: Uint8Array<ArrayBuffer>, size: PageSize) => Promise<boolean | void>,
+): Promise<void> {
+  const { getDocumentProxy, createIsomorphicCanvasFactory } = await import("unpdf");
+  const CanvasFactory = await createIsomorphicCanvasFactory(() => import("@napi-rs/canvas"));
+  const pdf = await getDocumentProxy(new Uint8Array(bytes), { CanvasFactory });
+  try {
+    for (const n of pages) {
+      if (n < 1 || n > pdf.numPages) continue;
+      let image: Uint8Array<ArrayBuffer>;
+      let size: PageSize;
+      try {
+        const page = await pdf.getPage(n);
+        const base = page.getViewport({ scale: 1 });
+        size = pageSizeAt(base.width, base.height, width);
+        const viewport = page.getViewport({ scale: width / Math.max(1, base.width) });
+        const factory = new CanvasFactory();
+        const drawing = factory.create(size.width, size.height);
+        try {
+          if (!drawing.context) throw new Error("No canvas context");
+          // pdf.js types name the DOM canvas; the node canvas draws the same.
+          await page.render({
+            canvas: drawing.canvas as unknown as HTMLCanvasElement,
+            canvasContext: drawing.context as unknown as CanvasRenderingContext2D,
+            viewport,
+          }).promise;
+          if (!("toBuffer" in drawing.canvas)) throw new Error("No node canvas");
+          const jpeg = drawing.canvas.toBuffer("image/jpeg", PAGE_IMAGE_QUALITY);
+          image = new Uint8Array(jpeg.byteLength);
+          image.set(jpeg);
+        } finally {
+          factory.destroy(drawing);
+          page.cleanup();
+        }
+      } catch (err) {
+        console.warn(`[handwritten] page render failed (page ${n}):`, err);
+        continue;
+      }
+      if ((await onPage(n, image, size)) === false) return;
+    }
+  } finally {
+    await pdf.loadingTask.destroy();
+  }
 }
 
 /** The circled part of a page image, with a little context around (pad, in

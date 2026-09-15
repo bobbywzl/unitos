@@ -14,6 +14,7 @@ import {
 } from "@/lib/drive/fetch";
 import { buildGlossary } from "@/lib/glossary";
 import { runConversion } from "@/lib/handwritten/convert";
+import { renderPageImages } from "@/lib/handwritten/page-images";
 import { currentLang, serverT } from "@/lib/i18n/server";
 import { progressResponse } from "@/lib/ingest-response";
 import { attachDocument } from "@/lib/parse/attach";
@@ -150,6 +151,12 @@ export async function POST(req: Request) {
     const { document, deduped } = ingested;
     await attachDocument(data.notebookId, document.id);
     await bumpNotebook(data.notebookId);
+    if (!deduped && document.handwritten) {
+      // The pages render and store after the response (SPEC.md §16); the
+      // reader loads them as they land, and the page image route renders
+      // any page still missing on request.
+      after(() => renderPageImages(document.id).catch(() => {}));
+    }
     if (!deduped && document.handwritten && document.conversionStatus === "NONE") {
       // A handwritten document (SPEC.md §16): conversion starts on its own —
       // the text is the point. Glossary and the recommended-links scan follow

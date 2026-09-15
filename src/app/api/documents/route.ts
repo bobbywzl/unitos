@@ -6,6 +6,7 @@ import { bumpNotebook, notebookAccess } from "@/lib/collab";
 import { buildConnections } from "@/lib/connect";
 import { buildGlossary } from "@/lib/glossary";
 import { runConversion } from "@/lib/handwritten/convert";
+import { renderPageImages } from "@/lib/handwritten/page-images";
 import { IMAGE_EXTENSIONS, sniffImage } from "@/lib/handwritten/image";
 import { imageToPdf } from "@/lib/handwritten/image-pdf";
 import { parseDriveFileId } from "@/lib/drive/types";
@@ -183,6 +184,12 @@ export async function POST(req: Request) {
         );
         await attachDocument(fields.data.notebookId, document.id);
         await bumpNotebook(fields.data.notebookId);
+        if (!deduped && document.handwritten) {
+          // The pages render and store after the response (SPEC.md §16); the
+          // reader loads them as they land, and the page image route renders
+          // any page still missing on request.
+          after(() => renderPageImages(document.id).catch(() => {}));
+        }
         if (!deduped && document.handwritten && document.conversionStatus === "NONE") {
           // A handwritten document (SPEC.md §16): conversion starts on its own
           // — the text is the point. Glossary and the recommended-links scan

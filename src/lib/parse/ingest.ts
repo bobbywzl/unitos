@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import type { Document } from "@prisma/client";
 import { db } from "@/lib/db";
 import { classifyPdf } from "@/lib/handwritten/classify";
+import { storePageSizes } from "@/lib/handwritten/page-images";
 import { pageBlockText, pdfPageCount } from "@/lib/handwritten/pages";
 import { parsePdf } from "@/lib/parse/pdf";
 import { auditFigures } from "@/lib/parse/figure-audit";
@@ -270,6 +271,16 @@ async function createHandwrittenDocument(data: {
   });
 }
 
+// The page sizes are the reader's layout (SPEC.md §16); a failure here
+// leaves the pages sizeless, never the document unsaved.
+async function storePageSizesQuietly(documentId: string, bytes: Uint8Array): Promise<void> {
+  try {
+    await storePageSizes(documentId, bytes);
+  } catch (err) {
+    console.warn("[handwritten] page sizes failed:", err);
+  }
+}
+
 function pageBlockRows(documentId: string, pageCount: number) {
   return Array.from({ length: pageCount }, (_, i) => ({
     documentId,
@@ -316,6 +327,7 @@ export async function ingestPdf(
       pageCount,
       convert: opts.convert !== false,
     });
+    await storePageSizesQuietly(document.id, bytes);
     return { document, deduped: false };
   }
   const title = parsed.title ?? filename.replace(/\.pdf$/i, "");
@@ -519,6 +531,7 @@ export async function reparseDocument(
         },
       });
     });
+    await storePageSizesQuietly(documentId, new Uint8Array(document.fileData));
     return db.document.findUnique({ where: { id: documentId } });
   }
 

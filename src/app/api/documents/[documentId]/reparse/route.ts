@@ -4,6 +4,7 @@ import { bumpDocument, documentAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
 import { buildGlossary } from "@/lib/glossary";
 import { runConversion } from "@/lib/handwritten/convert";
+import { renderPageImages } from "@/lib/handwritten/page-images";
 import { currentLang, serverT } from "@/lib/i18n/server";
 import { ndjsonHeartbeat, ndjsonWriter } from "@/lib/ndjson";
 import { modelPassDeadline } from "@/lib/parse/ingest";
@@ -111,6 +112,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ documentId: st
           // shape — start conversion on their own, like a fresh import
           // (SPEC.md §16).
           if (as === "handwritten" || (as === undefined && document.handwritten)) {
+            // The rebuilt pages render and store after the response (SPEC.md §16).
+            after(() => renderPageImages(documentId).catch(() => {}));
             after(() =>
               runConversion(documentId, userId)
                 .then((r) => (r.ok ? buildGlossary(documentId, userId, lang) : undefined))
