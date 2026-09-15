@@ -229,6 +229,14 @@ export function DistillIcon(props: IconProps) {
 }
 
 // Extract (DISTILL): the quotes that answer a question.
+export function BookmarkIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M6 3h12a1 1 0 0 1 1 1v17l-7-4-7 4V4a1 1 0 0 1 1-1z" />
+    </Icon>
+  );
+}
+
 export function QuoteIcon(props: IconProps) {
   return (
     <Icon {...props}>

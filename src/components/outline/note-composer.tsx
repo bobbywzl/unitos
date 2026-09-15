@@ -39,15 +39,7 @@ export function NoteComposer({
         <SaveStateLabel state={compose.saveState} />
       </div>
       <div data-note-editing="" className={`rounded-2xl bg-card shadow-soft ${padding}`}>
-        <NoteTitleField
-          value={parts.title}
-          onChange={setTitle}
-          onEnter={() => focusBodyEditor(document.activeElement as HTMLElement | null)}
-          onEscape={compose.escape}
-          autoFocus
-        />
         <NoteEditor
-          className="mt-1.5"
           value={parts.body}
           onChange={setBody}
           onKeyDown={(e) => {
@@ -59,6 +51,16 @@ export function NoteComposer({
           full={full}
           moreHref={moreHref}
           autoFocus={false}
+          onQuoteDrop={compose.attachQuote}
+          title={
+            <NoteTitleField
+              value={parts.title}
+              onChange={setTitle}
+              onEnter={() => focusBodyEditor(document.activeElement as HTMLElement | null)}
+              onEscape={compose.escape}
+              autoFocus
+            />
+          }
         />
       </div>
       <div className="mt-2 flex gap-2">
