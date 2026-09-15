@@ -19,8 +19,9 @@ const patchSchema = z.object({
     })
     .nullable()
     .optional(),
-  // Delete one stored corpus distillation (SPEC.md §13).
+  // Delete one stored corpus distillation, or the selected ones (SPEC.md §13).
   removeDistillationId: z.string().min(1).optional(),
+  removeDistillationIds: z.array(z.string().min(1)).min(1).max(50).optional(),
 });
 
 export async function PATCH(req: Request, ctx: { params: Promise<{ notebookId: string }> }) {
@@ -41,14 +42,14 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ notebookId: s
       ? Prisma.JsonNull
       : data.profile;
   let removeDistillations: { distillations: object[] } | null = null;
-  if (data.removeDistillationId) {
+  if (data.removeDistillationId || data.removeDistillationIds) {
     const row = await db.notebook.findUnique({
       where: { id: notebookId },
       select: { distillations: true },
     });
     removeDistillations = {
       distillations: corpusDistillationList(row?.distillations).filter(
-        (d) => d.id !== data.removeDistillationId,
+        (d) => d.id !== data.removeDistillationId && !data.removeDistillationIds?.includes(d.id),
       ),
     };
   }

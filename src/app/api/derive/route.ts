@@ -57,6 +57,7 @@ import { corpusDistillPrompt } from "@/lib/prompts/distill";
 import type { PromptCtx } from "@/lib/prompts/types";
 import {
   corpusDistillationList,
+  DISTILL_REGENERATE_MAX,
   distillationList,
   FORMALIZE_FORMATS,
   formalizedArticle,
@@ -130,6 +131,10 @@ const deriveSchema = z
   depth: z.enum(SUMMARY_DEPTHS).optional(), // SUMMARIZE only
   query: z.string().min(1).max(500).optional(), // FIND only
   question: z.string().min(1).max(500).optional(), // DISTILL and ASK; DISTILL's anchor is optional focus
+  // DISTILL: the extraction this run regenerates. It goes when the new one is
+  // stored, and the new one counts the runs; at DISTILL_REGENERATE_MAX the
+  // run is refused (SPEC.md §4).
+  replaceId: z.string().min(1).optional(),
   format: z.enum(FORMALIZE_FORMATS).optional(), // FORMALIZE only
   sectionId: z.string().min(1).optional(), // FORMALIZE notes, COMPARE: where the notes land
   // EXPLAIN on a video moment (SPEC.md §11): the time range, the drawn region,
@@ -334,6 +339,15 @@ async function handle(req: Request, t: TFunc) {
   // connect scan; quotes come back as block spans and the server maps each to
   // its document — block ids are unique across the corpus.
   if (data.type === "DISTILL" && data.scope === "corpus") {
+    const notebookBefore = data.replaceId
+      ? await db.notebook.findUnique({ where: { id: data.notebookId }, select: { distillations: true } })
+      : null;
+    const replacedCorpus = data.replaceId
+      ? (corpusDistillationList(notebookBefore?.distillations).find((d) => d.id === data.replaceId) ?? null)
+      : null;
+    if (replacedCorpus && (replacedCorpus.regenerations ?? 0) >= DISTILL_REGENERATE_MAX) {
+      return NextResponse.json({ error: t("api.distillRegenerateLimit") }, { status: 400 });
+    }
     const attachments = await db.notebookDocument.findMany({
       where: { notebookId: data.notebookId },
       include: {
@@ -474,13 +488,15 @@ async function handle(req: Request, t: TFunc) {
             where: { id: data.notebookId },
             select: { distillations: true },
           });
+          if (replacedCorpus) distillation.regenerations = (replacedCorpus.regenerations ?? 0) + 1;
           await db.notebook.update({
             where: { id: data.notebookId },
             data: {
-              // Keep the newest 20; the page deletes the rest one by one.
+              // Keep the newest 20; the page deletes the rest. The replaced
+              // extraction goes with the new one's arrival.
               distillations: [
                 distillation,
-                ...corpusDistillationList(notebookRow?.distillations),
+                ...corpusDistillationList(notebookRow?.distillations).filter((d) => d.id !== data.replaceId),
               ].slice(0, 20),
             },
           });
@@ -681,6 +697,14 @@ async function handle(req: Request, t: TFunc) {
   });
   if (!attachment) {
     return NextResponse.json({ error: t("api.documentNotAttachedToCorpus") }, { status: 404 });
+  }
+  // Regenerate on a document extraction: the count rides on the replaced one.
+  const replaced =
+    data.type === "DISTILL" && data.replaceId
+      ? (distillationList(attachment.distillations).find((d) => d.id === data.replaceId) ?? null)
+      : null;
+  if (replaced && (replaced.regenerations ?? 0) >= DISTILL_REGENERATE_MAX) {
+    return NextResponse.json({ error: t("api.distillRegenerateLimit") }, { status: 400 });
   }
 
   // 1. Load document blocks (the cached prompt prefix), profile, section skeleton.
@@ -1552,13 +1576,18 @@ async function handle(req: Request, t: TFunc) {
           })),
         };
         if (cancelled || req.signal.aborted) return;
+        if (replaced) distillation.regenerations = (replaced.regenerations ?? 0) + 1;
         await db.notebookDocument.update({
           where: {
             notebookId_documentId: { notebookId: data.notebookId, documentId: documentId },
           },
           data: {
-            // Keep the newest 20; the page deletes the rest one by one.
-            distillations: [distillation, ...distillationList(attachment.distillations)].slice(0, 20),
+            // Keep the newest 20; the page deletes the rest. The replaced
+            // extraction goes with the new one's arrival.
+            distillations: [
+              distillation,
+              ...distillationList(attachment.distillations).filter((d) => d.id !== data.replaceId),
+            ].slice(0, 20),
           },
         });
         await bumpNotebook(data.notebookId);

@@ -2,9 +2,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import { isImeKey, useImeGuard } from "@/lib/ime";
-import type { DistillationView } from "@/lib/types";
+import { DISTILL_REGENERATE_MAX, type DistillationView } from "@/lib/types";
 import { useCollab } from "@/components/collab/collab-context";
 import { AuthorChip } from "@/components/collab/person-badge";
+import { ExtractionList } from "@/components/reader/extraction-list";
 import { ChevronLeftIcon } from "@/components/icons";
 import { useLang, useT } from "@/components/lang-provider";
 import { jumpUnlessSelecting as jump, SelectionNotes } from "@/components/reader/selection-notes";
@@ -31,6 +32,7 @@ export function DistillPage({
   onAsk,
   onClose,
   onDelete,
+  onDeleteMany,
   onJump,
   onAddNote,
   onAddSelection,
@@ -47,6 +49,7 @@ export function DistillPage({
   onAsk: () => void;
   onClose: () => void;
   onDelete: (id: string) => void;
+  onDeleteMany: (ids: string[]) => void; // the selected extractions, in one call
   onJump: (quote: DistillQuoteView) => void;
   onAddNote: (distillation: DistillationView, quote: DistillQuoteView) => Promise<boolean>;
   /** Text highlighted on this page: it lands as a pending note, anchored to
@@ -127,8 +130,15 @@ export function DistillPage({
               <button
                 onClick={() => onRun(shown.question, shown.id)}
                 data-track="distill-page-regenerate"
-                className="text-xs font-semibold text-sand-600 hover:text-clay-800"
-                data-tip={t("panes.distillAgainTitle")}
+                disabled={(shown.regenerations ?? 0) >= DISTILL_REGENERATE_MAX}
+                className="text-xs font-semibold text-sand-600 hover:text-clay-800 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:text-sand-600"
+                data-tip={
+                  (shown.regenerations ?? 0) >= DISTILL_REGENERATE_MAX
+                    ? t("panes.distillAgainLimit", { n: DISTILL_REGENERATE_MAX })
+                    : t("panes.distillAgainTitle", {
+                        left: DISTILL_REGENERATE_MAX - (shown.regenerations ?? 0),
+                      })
+                }
               >
                 {t("common.regenerate")}
               </button>
@@ -264,48 +274,20 @@ export function DistillPage({
             </form>
 
             {distillations.length > 0 && (
-              <div className="mt-8">
-                <span className="text-[11px] font-bold tracking-[0.08em] text-sand-600 uppercase">
-                  {t("panes.distilled")}
-                </span>
-                <div className="mt-2 flex flex-col gap-1.5">
-                  {distillations.map((d) => (
-                    <div
-                      key={d.id}
-                      className="flex items-center gap-2 rounded-2xl bg-card px-4 py-2.5 shadow-soft"
-                    >
-                      <button
-                        onClick={() => onOpen(d.id)}
-                        data-track="distill-page-open"
-                        className="min-w-0 flex-1 text-left"
-                        data-tip={t("panes.openDistillation")}
-                      >
-                        <span className="block truncate text-[13.5px] font-semibold text-sand-800 hover:text-clay-800">
-                          {d.question}
-                        </span>
-                        <span className="mt-0.5 flex items-center gap-1.5 text-[11px] text-sand-500">
-                          {t(d.quotes.length === 1 ? "panes.quoteCount1" : "panes.quoteCountN", {
-                            n: d.quotes.length,
-                          })}{" "}
-                          · {new Date(d.createdAt).toLocaleDateString(dateLocale)}
-                          <AuthorChip createdById={d.createdById} nameless size={13} />
-                        </span>
-                      </button>
-                      {canEdit && (
-                        <button
-                          onClick={() => onDelete(d.id)}
-                          data-track="distill-page-delete-item"
-                          aria-label={t("panes.deleteDistillation")}
-                          data-tip={t("panes.deleteDistillation")}
-                          className="shrink-0 rounded-full px-1.5 text-sand-400 hover:text-red-600"
-                        >
-                          ✕
-                        </button>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
+              <ExtractionList
+                rows={distillations.map((d) => ({
+                  id: d.id,
+                  question: d.question,
+                  quoteCount: d.quotes.length,
+                  createdAt: d.createdAt,
+                  createdById: d.createdById,
+                }))}
+                canEdit={canEdit}
+                openTrack="distill-page-open"
+                onOpen={onOpen}
+                onDelete={onDelete}
+                onDeleteMany={onDeleteMany}
+              />
             )}
           </div>
         )}

@@ -74,12 +74,17 @@ export type DistillQuote = {
   caption: string;
 };
 
+/** How many times one extraction may run again (Regenerate). The count
+    rides on the extraction that replaces it. */
+export const DISTILL_REGENERATE_MAX = 2;
+
 /** Stored on NotebookDocument.distillations, newest first. */
 export type Distillation = {
   id: string;
   question: string;
   createdAt: string; // ISO
   createdById?: string; // account that ran the distillation; absent = before attribution
+  regenerations?: number; // times this question ran again to make this one; absent = 0
   quotes: DistillQuote[];
 };
 
@@ -142,6 +147,7 @@ export type CorpusDistillation = {
   question: string;
   createdAt: string; // ISO
   createdById?: string;
+  regenerations?: number; // as on Distillation
   quotes: CorpusDistillQuote[];
 };
 
