@@ -145,7 +145,6 @@ const en = {
   // {mod} is ⌘ on a Mac and Ctrl elsewhere.
   tipUndo: "Undo\n{mod}+Z",
   tipRedo: "Redo\nShift+{mod}+Z",
-  tipParagraph: "Paragraph\nBackspace at the start of a line drops its marker",
   tipHeading1: "Heading 1\nType # and a space",
   tipHeading2: "Heading 2\nType ## and a space",
   tipHeading3: "Heading 3\nType ### and a space",
@@ -297,7 +296,6 @@ const zh: Record<keyof typeof en, string> = {
 
   tipUndo: "撤销\n{mod}+Z",
   tipRedo: "重做\nShift+{mod}+Z",
-  tipParagraph: "段落\n在行首按 Backspace 去掉标记",
   tipHeading1: "标题 1\n输入 # 和一个空格",
   tipHeading2: "标题 2\n输入 ## 和一个空格",
   tipHeading3: "标题 3\n输入 ### 和一个空格",

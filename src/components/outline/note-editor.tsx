@@ -69,13 +69,9 @@ function setLinePrefix(lines: string[], prefix: (i: number) => string, active: R
 
 // track names the format in click telemetry (SPEC.md §7). full: the notes
 // full page only; the tray's bar leaves it out.
+// No Paragraph button: Backspace at the start of a marked line drops its
+// marker (lib/note-editable.ts), and that is the whole of that action.
 const FORMATS: { label: string; tipKey: TKey; track: string; full?: boolean; map: (lines: string[]) => string[] }[] = [
-  {
-    label: "¶",
-    tipKey: "outline.tipParagraph",
-    track: "paragraph",
-    map: (ls) => ls.map((l) => l.replace(LINE_MARKER, "$1")),
-  },
   {
     label: "H1",
     tipKey: "outline.tipHeading1",
