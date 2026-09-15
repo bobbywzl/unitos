@@ -52,6 +52,7 @@ export default async function SettingsPage() {
         account={account}
         background={background}
         premium={authEnabled() ? hasPremium(user.tier) : true}
+        billingEnabled={authEnabled()}
         drive={(() => {
           const config = driveConfig(user);
           return config && (config.canLink || config.linked)

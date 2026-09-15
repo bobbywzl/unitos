@@ -15,13 +15,14 @@ Ultra holds everything Premium holds). Stripe sets the tier through the
 webhook (SPEC.md §20); the admin never does. The single local reader (sign-in
 off) is Ultra: there is no account to gate.
 
-Billing exists and is not visible to readers: the checkout, portal, and
-webhook routes, the `Subscription` and `Payment` tables, and the admin's
-financials page (`/admin/financials`, revenue beside AI cost). It runs when
-the Stripe keys and price ids are set (`.env.example`). The Stripe prices
-carry the numbers; this file records what the owner has stated so they can
-be recreated if a price is ever rebuilt: Unitos Premium $19.99/month, Unitos
-Ultra $39.99/month. Yearly prices are not yet stated.
+Billing runs when the Stripe keys and price ids are set (`.env.example`):
+the checkout, portal, and webhook routes, the `Subscription` and `Payment`
+tables, the admin's financials page (`/admin/financials`, revenue beside AI
+cost), and a pricing section in Settings — signed-in accounts see it, the
+local reader (sign-in off, always Ultra) does not. The Stripe prices carry
+the numbers; this file records what the owner has stated so they can be
+recreated if a price is ever rebuilt: Unitos Premium $19.99/month or
+$220/year, Unitos Ultra $39.99/month or $400/year.
 
 ## Unitos Free
 
@@ -91,3 +92,8 @@ until the owner makes one.
   Premium holds and nothing of its own yet; prices stay undecided.
 - **2026-09-15** — Monthly prices set: Unitos Premium $19.99, Unitos Ultra
   $39.99. Yearly prices not yet stated by the owner.
+- **2026-09-15** — Yearly prices set: Unitos Premium $220 (about 8% under
+  twelve months at the monthly price), Unitos Ultra $400 (about 17% under).
+  The Settings billing section shows the live discount from whatever the
+  Stripe prices say, not these numbers — this line is the record if a price
+  is ever rebuilt.

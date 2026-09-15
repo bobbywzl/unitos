@@ -1,6 +1,6 @@
 # claude/unitos-premium-stripe-setup-ka04xi
 
-**Intent:** Make the three tiers real in the data model (`User.tier`: Free, Premium, Ultra, replacing the premium boolean), add a Stripe payment layer that is connected to the backend but not visible to readers, and show the money as Financials in the admin.
+**Intent:** Make the three tiers real in the data model (`User.tier`: Free, Premium, Ultra, replacing the premium boolean), add a Stripe payment layer connected to the backend, show the money as Financials in the admin, and — added mid-round at the owner's request — a live pricing section in Settings with a monthly/yearly toggle and a flashy yearly-savings badge.
 
 **Files:**
 
@@ -19,7 +19,11 @@
 - `src/lib/auth.ts`, `src/app/api/images/route.ts`, `src/app/settings/page.tsx`, `src/app/n/[notebookId]/page.tsx`, `src/app/n/[notebookId]/notes/page.tsx` — readers of the old boolean now call `hasPremium(user.tier)`; the local reader is Ultra.
 - `src/lib/account-reset.ts` — reset no longer clears a flag; it recomputes the tier from subscriptions, so a paid tier survives a reset.
 - `src/lib/i18n/dict/admin.ts`, `src/lib/i18n/dict/api.ts`, `src/lib/i18n/dict/common.ts` — Financials and billing strings in en and zh; billing terms added to the zh glossary.
-- `SPEC.md` (§17 flag line, §7 admin line, new §20 Billing), `TIERS.md` (the tier column and the hidden billing layer recorded as facts), `README.md`, `.env.example` — the six Stripe variables and the webhook endpoint.
+- `src/lib/billing/prices.ts` — live Stripe prices for the two paid tiers, cached five minutes; computes each tier's yearly saving against twelve months at its monthly price. Never hardcodes an amount, so a price changed in the Stripe dashboard shows up with no redeploy.
+- `src/app/api/billing/route.ts` — extended to also answer `hasCustomer` and `prices`, both the Settings pricing section reads.
+- `src/app/settings/page.tsx`, `src/components/settings-form.tsx` — a Billing section: signed-in accounts on Free see a Monthly/Yearly toggle (the toggle carries the largest saving among the tiers as a badge; each tier card carries its own) and two upgrade cards that call `/api/billing/checkout`; accounts already on Premium or Ultra see their plan, price, and renewal or cancellation date, with Manage billing opening the customer portal. Sign-in off, or Stripe not configured, falls back to the old plain Unitos Premium status line.
+- `src/lib/i18n/dict/settings.ts` — the billing section's strings in en and zh.
+- `SPEC.md` (§17 flag line, §7 admin line, new §20 Billing, the Settings pricing section, the note that the beta notice's "free and unlimited" now sits beside real pricing), `TIERS.md` (the tier column and the billing layer, now partly visible, recorded as facts), `README.md`, `.env.example` — the six Stripe variables and the webhook endpoint.
 - `package.json`, `package-lock.json` — `stripe` 22.6.1.
 
 **Decisions:**
@@ -32,5 +36,8 @@
 - Billing routes are gated only by the Stripe key being set. There is no separate "billing open" flag: keeping the key in test mode, or unset, keeps billing off, and nothing in the reader's UI links to the routes.
 - Margin on the Financials page subtracts USD AI cost estimates from Stripe revenue in the subscription's currency, read as the same unit. Correct for USD prices; a non-USD price would need conversion.
 - Tier quotas are not implemented or recorded: TIERS.md holds decisions only, and the owner has not made those. Usage quotas were proposed in chat, not decided.
-- Monthly prices are now decided and recorded in TIERS.md (2026-09-15): Unitos Premium $19.99, Unitos Ultra $39.99. Yearly prices are still undecided. Nothing in code reads these numbers — they exist only as Stripe prices the operator creates in the dashboard and points at via the four `STRIPE_PRICE_*` env vars; this file and TIERS.md are the record if a price ever needs recreating.
+- Prices are decided and recorded in TIERS.md (2026-09-15): Unitos Premium $19.99/month, $220/year (about 8% under twelve months at the monthly price); Unitos Ultra $39.99/month, $400/year (about 17% under). Code never hardcodes these numbers — the Settings pricing section and its discount badges read them live from Stripe (`lib/billing/prices.ts`); TIERS.md is the record if a price ever needs recreating.
+- Ultra has no feature of its own yet (TIERS.md, unchanged this round). The owner was told this plainly when asked for Stripe product copy: the placeholder description says "Everything in Unitos Premium" rather than overclaiming. Worth a decision before this goes live to real customers — paying double for an identical product is a hard sell.
+- Billing went from backend-only to partly visible this round, at the owner's explicit request ("reflect the discount rates in flashy way in billing URL"). The beta notice at `/signin` still promises every beta account free and unlimited access, which now sits beside a real pricing page in Settings for the same account — flagged in SPEC.md §20 as a decision the owner still needs to make, not resolved here.
+- The pricing section's checkout and portal redirects use `window.location.assign(url)`, not `window.location.href = url`: the React Compiler's eslint rule (`react-hooks` package) flagged the assignment form as a disallowed external mutation in this file; `.assign()` is the same navigation, written as a method call instead.
 - Not verified against a database: this environment had no DATABASE_URL, so the migration did not run and the webhook was not exercised. `next build`, `tsc`, and `eslint` pass.
