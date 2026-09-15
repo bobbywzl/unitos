@@ -4,27 +4,33 @@ import { useState } from "react";
 import { isImeKey, useImeGuard } from "@/lib/ime";
 import type { SectionView } from "@/lib/types";
 import { useCollab } from "@/components/collab/collab-context";
-import { PlusIcon } from "@/components/icons";
+import { PencilIcon, PlusIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { DragHandle, SortableGroup, SortableItem, type HandleProps } from "@/components/sortable";
 import { notesList, sectionsList } from "@/components/outline/board-lists";
 import { NoteCard } from "@/components/outline/note-card";
-import { NoteEditor } from "@/components/outline/note-editor";
+import { NoteComposer } from "@/components/outline/note-composer";
 import { SECTION_ACTION, SECTION_ADD_NOTE } from "@/components/outline/section-action";
-import { SaveStateLabel } from "@/components/outline/save-state";
 import { useNoteCompose } from "@/components/outline/use-note-compose";
 import { VoiceNoteButton } from "@/components/outline/voice-note";
-import type { OutlineActions } from "@/components/outline/use-outline";
+import { filterSections, noteMatches, type OutlineActions } from "@/components/outline/use-outline";
 
 export function SectionItem({
   section,
   actions,
   handle,
+  search = "",
+  onOpenBoard,
   nested,
 }: {
   section: SectionView;
   actions: OutlineActions;
   handle: HandleProps;
+  /** The search the notes are found by: the section shows the notes it found
+      whole, and hides itself when it found none. */
+  search?: string;
+  /** A click on the section's title: its board opens (section-board.tsx). */
+  onOpenBoard: (sectionId: string) => void;
   nested?: boolean;
 }) {
   const t = useT();
@@ -35,7 +41,12 @@ export function SectionItem({
   const [voiceError, setVoiceError] = useState<string | null>(null);
   // The composer auto-saves (use-note-compose.ts); the note it owns stays out of the list.
   const compose = useNoteCompose({ sectionId: section.id, notes: section.notes, actions, canEdit });
-  const notes = compose.visibleNotes;
+  const searching = search.trim().length > 0;
+  const notes = searching ? compose.visibleNotes.filter((n) => noteMatches(n, search)) : compose.visibleNotes;
+  // A search that found nothing here, and nothing in the children: the
+  // section stays out of the way.
+  const childrenShown = searching ? filterSections(section.children, search) : section.children;
+  if (searching && notes.length === 0 && childrenShown.length === 0) return null;
 
   async function saveTitle() {
     const trimmed = title.trim();
@@ -72,13 +83,29 @@ export function SectionItem({
             className={`rounded-full bg-card px-4 py-1 font-display shadow-soft outline-none ${nested ? "text-lg" : "text-[22px]"}`}
           />
         ) : (
-          <button
-            onClick={() => canEdit && setEditing(true)}
-            className={`text-left font-display ${nested ? "text-lg" : "text-[22px]"}`}
-            data-tip={canEdit ? t("outline.renameSection") : undefined}
-          >
-            {section.title}
-          </button>
+          <>
+            {/* The title opens the section's board (SPEC.md §6); the pencil
+                beside it renames the section. */}
+            <button
+              onClick={() => onOpenBoard(section.id)}
+              data-track="section-board"
+              className={`text-left font-display hover:text-clay-800 ${nested ? "text-lg" : "text-[22px]"}`}
+              data-tip={t("outline.openBoardTitle")}
+            >
+              {section.title}
+            </button>
+            {canEdit && (
+              <button
+                onClick={() => setEditing(true)}
+                data-track="section-rename"
+                aria-label={t("outline.renameSection")}
+                data-tip={t("outline.renameSection")}
+                className="flex size-6 shrink-0 items-center justify-center self-center rounded-full text-sand-500 opacity-0 transition-opacity group-hover:opacity-100 hover:bg-clay-100 hover:text-clay-800 focus-visible:opacity-100"
+              >
+                <PencilIcon size={13} />
+              </button>
+            )}
+          </>
         )}
         <span className="text-[13px] text-sand-600">{notes.length || ""}</span>
         {canEdit && (
@@ -112,50 +139,11 @@ export function SectionItem({
       <div className="flex flex-col gap-2.5">
         {/* The composer sits above the notes: a new note lands at the top of
             the section (SPEC.md §6). */}
-        {compose.composing && (
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              void compose.save();
-            }}
-          >
-            {/* The save state at the top of the composer (SPEC.md §6). */}
-            <div className="mb-1 flex min-h-4 justify-end">
-              <SaveStateLabel state={compose.saveState} />
-            </div>
-            <NoteEditor
-              className="rounded-2xl bg-card p-4 shadow-soft"
-              value={compose.draft}
-              onChange={compose.setDraft}
-              onKeyDown={(e) => {
-                if (isImeKey(e)) return;
-                if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) e.currentTarget.closest("form")?.requestSubmit();
-                if (e.key === "Escape") compose.escape();
-              }}
-              placeholder={t("outline.writeNotePlaceholder")}
-              full
-            />
-            <div className="mt-2 flex gap-2">
-              <button
-                type="submit"
-                className="rounded-full bg-sage-600 px-3.5 py-1 text-xs font-semibold text-sage-fg hover:bg-sage-700"
-              >
-                {t("common.save")}
-              </button>
-              <button
-                type="button"
-                onClick={() => void compose.cancel()}
-                className="rounded-full border border-line px-3 py-1 text-xs text-sand-700 hover:bg-clay-100 hover:text-clay-800"
-              >
-                {t("common.cancel")}
-              </button>
-            </div>
-          </form>
-        )}
+        {compose.composing && <NoteComposer compose={compose} full padding="p-4" />}
 
         {/* The page's one board holds every section's notes, so a note
             dragged out of this section drops into another; a note held over
-            another until the ring closes merges the two (SPEC.md §6). */}
+            another until the ring closes joins it (SPEC.md §6). */}
         <SortableGroup
           id={notesList(section.id)}
           ids={notes.map((n) => n.id)}
@@ -164,7 +152,7 @@ export function SectionItem({
           {notes.map((note) => (
             <SortableItem key={note.id} id={note.id}>
               {(noteHandle) => (
-                <NoteCard note={note} actions={actions} handle={noteHandle} variant="page" />
+                <NoteCard note={note} actions={actions} handle={noteHandle} variant="page" search={search} />
               )}
             </SortableItem>
           ))}
@@ -173,13 +161,20 @@ export function SectionItem({
         {!nested && (
           <SortableGroup
             id={sectionsList(section.id)}
-            ids={section.children.map((c) => c.id)}
+            ids={childrenShown.map((c) => c.id)}
             className="flex flex-col gap-2.5"
           >
-            {section.children.map((child) => (
+            {childrenShown.map((child) => (
               <SortableItem key={child.id} id={child.id}>
                 {(childHandle) => (
-                  <SectionItem section={child} actions={actions} handle={childHandle} nested />
+                  <SectionItem
+                    section={child}
+                    actions={actions}
+                    handle={childHandle}
+                    search={search}
+                    onOpenBoard={onOpenBoard}
+                    nested
+                  />
                 )}
               </SortableItem>
             ))}

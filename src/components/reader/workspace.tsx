@@ -19,7 +19,6 @@ import {
   CommentIcon,
   DistillIcon,
   EditsIcon,
-  ExpandIcon,
   GraphIcon,
   HistoryIcon,
   MoreIcon,
@@ -44,7 +43,7 @@ import { NotebookTitle } from "@/components/notebook-title";
 import { FloatingNoteEditor } from "@/components/outline/floating-note-editor";
 import { NotesTray } from "@/components/outline/notes-tray";
 import { Presence } from "@/components/presence";
-import { useOutline } from "@/components/outline/use-outline";
+import { flattenNotes, useOutline } from "@/components/outline/use-outline";
 import { DocumentBar, type AttachedDocument } from "@/components/reader/document-bar";
 import type { ReaderViewKind } from "@/components/reader/reader-panes";
 import type { DriveConfig } from "@/lib/drive/config";
@@ -583,12 +582,13 @@ export function Workspace({
         </button>
       </header>
 
-      {/* A note's editor taken out of the tray, over the article. Docking it
-          opens the tray on notes, where the note's card reopens the editor. */}
+      {/* A note taken out of the tray, over the article. Docking it opens the
+          tray on notes, where the note's card takes it back. */}
       {actions.floating && (
         <FloatingNoteEditor
           key={actions.floating.id}
           edit={actions.floating}
+          note={flattenNotes(tree).find((n) => n.id === actions.floating?.id) ?? null}
           actions={actions}
           onDock={() => show("notes")}
         />
@@ -719,17 +719,6 @@ export function Workspace({
               </div>
             )}
 
-            {tab === "notes" && (
-              <Link
-                href={`/n/${notebook.id}/notes`}
-                data-track="notes-full-page"
-                data-tip={t("panes.notesFullPageTitle")}
-                className="flex shrink-0 items-center justify-center gap-2 rounded-full bg-card px-4 py-2.5 text-[13px] font-semibold text-sand-700 shadow-soft hover:bg-clay-100 hover:text-clay-800"
-              >
-                <ExpandIcon size={15} />
-                {t("panes.notesFullPage")}
-              </Link>
-            )}
           </aside>
         </div>
         </div>

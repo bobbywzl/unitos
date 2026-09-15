@@ -11,7 +11,9 @@ import { SortableBoard, SortableGroup, SortableItem } from "@/components/sortabl
 import { AddSection } from "@/components/outline/add-section";
 import { dropIndex, parseListId, SECTIONS_LIST } from "@/components/outline/board-lists";
 import { CompareView } from "@/components/outline/compare-view";
+import { MergeUndoBar } from "@/components/outline/merge-undo";
 import { NoteCard } from "@/components/outline/note-card";
+import { SectionBoard } from "@/components/outline/section-board";
 import { SectionItem } from "@/components/outline/section-item";
 import { SelectionBar } from "@/components/outline/selection-bar";
 import {
@@ -22,8 +24,10 @@ import {
 } from "@/components/outline/use-outline";
 
 // The notes full page (design 2b): the reorganizing view. Sections carry drag
-// grips, notes are flat cards, and pending ones stay in place with Accept/Reject
-// inline — unlike the tray, which hoists the whole pending queue to the top.
+// grips, notes are flat cards picked up by a hold anywhere on them, and
+// pending ones stay in place with Accept/Reject inline — unlike the tray,
+// which hoists the whole pending queue to the top. A search shows the notes
+// it found whole, with the words it found lit up, in the same sections.
 // Selecting two or more notes offers Compare: the compare view opens over the
 // page with one pane per note (compare-view.tsx).
 export function Outline({ notebook }: { notebook: NotebookView }) {
@@ -31,10 +35,12 @@ export function Outline({ notebook }: { notebook: NotebookView }) {
   const { canEdit } = useCollab();
   const { tree, pending, actions, lastRejected, undoReject } = useOutline(notebook, canEdit);
   const [query, setQuery] = useState("");
-  const searching = query.trim().length > 0;
-  const results = searching ? filterSections(tree, query) : tree;
+  const needle = query.trim();
+  const found = needle ? filterSections(tree, query) : tree;
   // The notes in the compare view, in pane order; null = closed.
   const [compare, setCompare] = useState<string[] | null>(null);
+  // The section whose board fills the screen (section-board.tsx); null = none.
+  const [board, setBoard] = useState<string | null>(null);
   // Every note by id: the drag asks per item on every pointer move whether the
   // two can merge.
   const notesById = useMemo(() => new Map(flattenNotes(tree).map((n) => [n.id, n])), [tree]);
@@ -55,9 +61,9 @@ export function Outline({ notebook }: { notebook: NotebookView }) {
       return;
     }
     if (!from.parentId || !to.parentId) return;
-    // The list a composer owns a note in shows one note fewer than the
-    // section holds, so the place is counted in the section's own list
-    // (board-lists.ts) — the index reorderNote and the server count with.
+    // The list a composer owns a note in, or a search filters, shows fewer
+    // notes than the section holds, so the place is counted in the section's
+    // own list (board-lists.ts) — the index reorderNote and the server count with.
     const target = findSection(tree, to.parentId);
     if (!target) return;
     const index = dropIndex(target.notes, itemId, beforeId, from.parentId === to.parentId);
@@ -85,90 +91,65 @@ export function Outline({ notebook }: { notebook: NotebookView }) {
           onKeyDown={(e) => e.key === "Escape" && !isImeKey(e) && setQuery("")}
           placeholder={t("outline.searchNotes")}
           aria-label={t("outline.searchNotes")}
+          type="search"
           className="w-72 rounded-full bg-card px-4 py-2 text-[13px] shadow-soft outline-none placeholder:text-sand-500"
         />
         <CollapsedViewToggle view={actions.notesView} onChange={actions.setNotesView} track="notes-view" />
       </div>
 
       <div className="flex flex-col gap-[30px] pt-[22px]">
-        {searching ? (
-          // Search results are read-only groupings: drag-reorder works on the full
-          // list, so it pauses while a filter hides part of it.
-          <>
-            {results.map((section) => (
-              <section key={section.id} className="flex flex-col gap-2.5">
-                <div className="flex items-baseline gap-2.5">
-                  <span className="font-display text-[22px]">{section.title}</span>
-                  <span className="text-[13px] text-sand-600">{section.notes.length}</span>
-                </div>
-                {section.notes.map((note) => (
-                  <NoteCard key={note.id} note={note} actions={actions} variant="page" />
-                ))}
-                {section.children.map((child) => (
-                  <div key={child.id} className="flex flex-col gap-2.5 pl-5">
-                    <div className="flex items-baseline gap-2.5">
-                      <span className="font-display text-lg">{child.title}</span>
-                      <span className="text-[13px] text-sand-600">{child.notes.length}</span>
-                    </div>
-                    {child.notes.map((note) => (
-                      <NoteCard key={note.id} note={note} actions={actions} variant="page" />
-                    ))}
-                  </div>
-                ))}
-              </section>
+        {/* One drag across the whole page (SPEC.md §6): a note dragged out
+            of its section drops into any other, a note held over another
+            joins it, and a section reorders among its siblings. */}
+        <SortableBoard
+          id="notes-board"
+          onDrop={onDrop}
+          canDrop={(from, to) => parseListId(from).kind === parseListId(to).kind}
+          onMerge={canEdit ? (id, intoId) => void actions.mergeNotes(intoId, [id], "join") : undefined}
+          canMerge={(id, intoId) =>
+            notesById.get(id)?.status === "ACCEPTED" &&
+            notesById.get(intoId)?.status === "ACCEPTED"
+          }
+          overlay={(itemId) => {
+            const note = notesById.get(itemId);
+            if (note) return <NoteCard note={note} actions={actions} variant="page" search={query} />;
+            const section = findSection(tree, itemId);
+            return section ? (
+              <span className="rounded-full bg-card px-4 py-2 font-display text-[18px] shadow-float">
+                {section.title}
+              </span>
+            ) : null;
+          }}
+        >
+          <SortableGroup
+            id={SECTIONS_LIST}
+            ids={tree.map((s) => s.id)}
+            className="flex flex-col gap-[30px]"
+          >
+            {tree.map((section) => (
+              <SortableItem key={section.id} id={section.id}>
+                {(handle) => (
+                  <SectionItem
+                    section={section}
+                    actions={actions}
+                    handle={handle}
+                    search={query}
+                    onOpenBoard={setBoard}
+                  />
+                )}
+              </SortableItem>
             ))}
-            {results.length === 0 && (
-              <p className="text-sm text-sand-600">
-                {t("outline.noNotesMatch", { query: query.trim() })}
-              </p>
-            )}
-          </>
-        ) : (
-          <>
-            {/* One drag across the whole page (SPEC.md §6): a note dragged
-                out of its section drops into any other, and a section
-                reorders among its siblings. */}
-            <SortableBoard
-              id="notes-board"
-              onDrop={onDrop}
-              canDrop={(from, to) => parseListId(from).kind === parseListId(to).kind}
-              onMerge={
-                canEdit ? (id, intoId) => void actions.mergeNotes(intoId, [id], "ai") : undefined
-              }
-              canMerge={(id, intoId) =>
-                notesById.get(id)?.status === "ACCEPTED" &&
-                notesById.get(intoId)?.status === "ACCEPTED"
-              }
-              overlay={(itemId) => {
-                const note = notesById.get(itemId);
-                if (note) return <NoteCard note={note} actions={actions} variant="page" />;
-                const section = findSection(tree, itemId);
-                return section ? (
-                  <span className="rounded-full bg-card px-4 py-2 font-display text-[18px] shadow-float">
-                    {section.title}
-                  </span>
-                ) : null;
-              }}
-            >
-              <SortableGroup
-                id={SECTIONS_LIST}
-                ids={tree.map((s) => s.id)}
-                className="flex flex-col gap-[30px]"
-              >
-                {tree.map((section) => (
-                  <SortableItem key={section.id} id={section.id}>
-                    {(handle) => <SectionItem section={section} actions={actions} handle={handle} />}
-                  </SortableItem>
-                ))}
-              </SortableGroup>
-            </SortableBoard>
+          </SortableGroup>
+        </SortableBoard>
 
-            {canEdit && <AddSection onAdd={(title) => actions.addSection(null, title)} />}
+        {needle && found.length === 0 && (
+          <p className="text-sm text-sand-600">{t("outline.noNotesMatch", { query: needle })}</p>
+        )}
 
-            {tree.length === 0 && (
-              <p className="text-sm text-sand-600">{t("outline.emptySections")}</p>
-            )}
-          </>
+        {!needle && canEdit && <AddSection onAdd={(title) => actions.addSection(null, title)} />}
+
+        {tree.length === 0 && (
+          <p className="text-sm text-sand-600">{t("outline.emptySections")}</p>
         )}
       </div>
 
@@ -180,6 +161,19 @@ export function Outline({ notebook }: { notebook: NotebookView }) {
           actions.clearSelection();
         }}
       />
+      <MergeUndoBar actions={actions} />
+
+      <Presence show={board !== null} exit="fade">
+        {board && (
+          <SectionBoard
+            tree={tree}
+            sectionId={board}
+            actions={actions}
+            onChange={setBoard}
+            onClose={() => setBoard(null)}
+          />
+        )}
+      </Presence>
 
       <Presence show={compare !== null} exit="fade">
         {compare && (

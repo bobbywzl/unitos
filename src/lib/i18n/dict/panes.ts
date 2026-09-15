@@ -299,6 +299,7 @@ const en = {
   historyNoteRemove: "removed a note",
   historySectionRemove: "removed a section",
   historyDocumentDetach: "detached a document",
+  historyNoteMerge: "merged notes into one",
 
   // Graph (graph-overlay.tsx, graph-view.tsx)
   graph: "Graph",
@@ -647,6 +648,7 @@ const zh: Record<keyof typeof en, string> = {
   historyNoteRemove: "删除了一条笔记",
   historySectionRemove: "删除了一个章节",
   historyDocumentDetach: "移出了一个文档",
+  historyNoteMerge: "把几条笔记合并为一条",
 
   graph: "图谱",
   graphTitle: "项目图谱：文档与它们之间的链接",

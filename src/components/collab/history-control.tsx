@@ -20,6 +20,7 @@ const KIND_KEY: Record<HistoryEntry["kind"], TKey> = {
   NOTE_REMOVE: "panes.historyNoteRemove",
   SECTION_REMOVE: "panes.historySectionRemove",
   DOCUMENT_DETACH: "panes.historyDocumentDetach",
+  NOTE_MERGE: "panes.historyNoteMerge",
 };
 
 const REMOVALS = new Set<HistoryEntry["kind"]>([

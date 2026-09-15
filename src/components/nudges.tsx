@@ -14,10 +14,10 @@ import type { TKey } from "@/lib/i18n/dictionaries";
 // starts it (startNudges); accounts that saw the old welcome never see nudges.
 //
 // The order: New project on the dashboard → + after the first document →
-// select a passage → the side panel → Distill and Extract → drag the first
-// note out of the tray (a ghost card slides out to show the move) → drop a
-// second note on the floating card, which merges the two → More, where
-// Settings live → Link Google Drive on the settings page.
+// select a passage → the side panel → Distill and Extract → hold the first
+// note and drag it onto the article (a ghost card slides out to show the
+// move) → hold a second note over the floating card, which joins the two →
+// More, where Settings live → Link Google Drive on the settings page.
 
 const NUDGE_KEY = "unitos-nudge-step";
 
@@ -72,9 +72,9 @@ const STEPS: Step[] = [
     skip: true,
     glow: "target",
     side: "below",
-    // Done when the card is working on the merge: the drop is the merge, and
-    // the card says so while the model writes (SPEC.md §6).
-    doneWhen: () => document.querySelector(".note-merging") !== null,
+    // Done when the card takes the merge in: the hold is the merge, and the
+    // card blooms as the notes join (SPEC.md §6).
+    doneWhen: () => document.querySelector(".note-absorb, .note-merging") !== null,
   },
   // Google Drive (SPEC.md §14): More carries Settings, and the settings page
   // carries Link Google Drive. Both skip — a reader who never opens Settings

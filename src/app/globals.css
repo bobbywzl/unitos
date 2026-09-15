@@ -2449,3 +2449,235 @@ li[data-checked] > .note-box::before {
     filter: none;
   }
 }
+
+/* ── Hold to drag (SPEC.md §6, lib/hold-drag.ts) ─────────────────────────────
+   A note is picked up by a hold anywhere on it. While the hold runs the card
+   presses down a little; when it lifts, the overlay under the pointer tilts
+   and rises as it is picked up. Reduced motion keeps the card flat. */
+[data-sortable-id],
+[data-floating-note] {
+  /* A hold on a touch screen picks the card up; the browser's own long-press
+     menu on the text would take it. */
+  -webkit-touch-callout: none;
+}
+.card-held {
+  transform: scale(0.985);
+  transition: transform 120ms ease-out;
+}
+.card-drag-overlay {
+  --lift-tilt: -2deg;
+  --lift-scale: 1.03;
+  cursor: grabbing;
+  transform: rotate(var(--lift-tilt)) scale(var(--lift-scale));
+  filter: drop-shadow(0 14px 30px rgb(46 43 37 / 0.24));
+  transition: transform 140ms ease-out;
+}
+/* The lift plays once as the card is picked up; it ends where the rule
+   above stands, so the card never jumps when the animation lets go. */
+@media (prefers-reduced-motion: no-preference) {
+  .card-drag-overlay {
+    animation: card-lift 200ms cubic-bezier(0.2, 0.9, 0.3, 1.15);
+  }
+}
+@keyframes card-lift {
+  from {
+    transform: rotate(0deg) scale(1);
+    filter: drop-shadow(0 2px 6px rgb(46 43 37 / 0.12));
+  }
+  to {
+    transform: rotate(var(--lift-tilt)) scale(var(--lift-scale));
+    filter: drop-shadow(0 14px 30px rgb(46 43 37 / 0.24));
+  }
+}
+/* Over a card it would merge into: it draws back a little so the ring on
+   the card underneath shows on all four sides. */
+.card-drag-overlay-merging {
+  --lift-scale: 0.94;
+}
+/* The floating card lifted by a hold (floating-note-editor.tsx). */
+.note-lifted {
+  transform: rotate(-1.5deg) scale(1.02);
+  transition: transform 160ms cubic-bezier(0.2, 0.9, 0.3, 1.15);
+}
+/* The lifted card over the sidebar: let go, and the note goes back into the
+   tray. It draws in a little and rings, so the drop reads before it lands. */
+.note-lifted.note-docking {
+  transform: rotate(0deg) scale(0.96);
+  outline: 2px solid var(--sage-600);
+  outline-offset: -2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .card-held,
+  .note-lifted {
+    transform: none;
+  }
+}
+
+/* ── The note's title (SPEC.md §6) ─────────────────────────────────────────
+   The first line of a note, when it is a heading, is its title: one row
+   above the body, and the whole collapsed line. The editor's title field
+   has the same look, so the note keeps its shape when the editor opens. */
+.note-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 650;
+  line-height: 1.35;
+  letter-spacing: -0.005em;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.note-title-input {
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 650;
+  line-height: 1.35;
+  letter-spacing: -0.005em;
+  color: var(--ink);
+  outline: none;
+}
+.note-title-input::placeholder {
+  color: var(--sand-500);
+  font-weight: 500;
+}
+
+/* ── A search lights up its matches (SPEC.md §6) ───────────────────────── */
+.search-hit {
+  border-radius: 3px;
+  padding: 0 1px;
+  margin: 0 -1px;
+  background: color-mix(in srgb, #f2c94c 55%, transparent);
+  color: inherit;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
+/* ── A link on a line of its own draws as a link card (SPEC.md §6) ─────── */
+.prose .note-link-card-p {
+  margin: 0.45rem 0;
+}
+.prose .note-link-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--clay-100) 45%, transparent);
+  color: var(--ink);
+  font-weight: 500;
+  text-decoration: none;
+  transition: background-color 120ms, border-color 120ms;
+}
+.prose .note-link-card:hover {
+  border-color: var(--clay-300);
+  background: var(--clay-100);
+}
+.note-link-card-icon {
+  display: flex;
+  flex: none;
+  width: 26px;
+  height: 26px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--card);
+  color: var(--clay-800);
+}
+.note-link-card-text {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+}
+.note-link-card-title {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 13px;
+  line-height: 18px;
+}
+.note-link-card-host {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 11px;
+  line-height: 15px;
+  font-weight: 400;
+  color: var(--sand-600);
+}
+
+/* A photo in a note fits the note (SPEC.md §6, §16): the note's width at
+   most, a capped height, never stretched past its own size, centered, on
+   display and in the editor alike. The reader's own width (the corner
+   handle) still wins. */
+.note-doc .note-image,
+.prose .note-image {
+  max-height: 480px;
+  width: auto;
+  object-fit: contain;
+  margin-left: auto;
+  margin-right: auto;
+  background: color-mix(in srgb, var(--ink) 4%, transparent);
+}
+.note-doc .note-figure {
+  display: block;
+  margin-left: auto;
+  margin-right: auto;
+  width: fit-content;
+}
+
+/* ── A section's board (SPEC.md §6, section-board.tsx) ─────────────────────
+   The section's notes as 3:4 tiles — taller than wide — in one grid, side by
+   side, so they line up as one board. A tile shows as much of its body as fits and fades
+   out at the bottom; the line between tiles says where a dragged tile lands. */
+.note-board {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 14px;
+}
+.note-tile {
+  aspect-ratio: 3 / 4;
+  cursor: pointer;
+  transition: box-shadow 140ms, transform 140ms;
+}
+.note-tile:hover {
+  box-shadow: var(--shadow-float);
+}
+.note-tile-title {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+.note-tile-body {
+  -webkit-mask-image: linear-gradient(to bottom, #000 72%, transparent 100%);
+  mask-image: linear-gradient(to bottom, #000 72%, transparent 100%);
+}
+.note-tile-body .prose {
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.note-tile-body .prose > :first-child {
+  margin-top: 0;
+}
+.drop-line-grid {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -8px;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--clay);
+  z-index: 5;
+  pointer-events: none;
+}
+.drop-line-grid-end {
+  left: auto;
+  right: -8px;
+}

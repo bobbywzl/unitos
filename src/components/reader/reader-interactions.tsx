@@ -83,7 +83,7 @@ import { HIGHLIGHT_HUES, HUE_DOT, HUE_KEY } from "@/components/reader/hues";
 import type { PageMark } from "@/components/reader/page-block";
 import { useCollab } from "@/components/collab/collab-context";
 import { TierMark } from "@/components/tier-mark";
-import { useImageDrop, type DroppedImage } from "@/components/use-image-drop";
+import { useNoteDrop, type DroppedImage } from "@/components/use-note-drop";
 import { AuthorChip } from "@/components/collab/person-badge";
 import { ConversationView } from "@/components/reader/conversation-view";
 import { DistillPage } from "@/components/reader/distill-page";
@@ -4721,7 +4721,7 @@ export function ReaderInteractions({
   // says where they land. Everything else keeps travelling to the window,
   // which adds dropped files as documents (document-bar.tsx).
   const dropPointRef = useRef<{ x: number; y: number } | null>(null);
-  const imageDrop = useImageDrop({
+  const imageDrop = useNoteDrop({
     premium,
     enabled: editMode && canEdit,
     t,

@@ -43,6 +43,7 @@
 //   generated document 生成文档 · merge(两条笔记合为一条) 合并 ·
 //   Merge with AI 用 AI 合并 · Join text 拼接文本 ·
 //   hold ring(合并进度环) 合并环 · drop line(落位线) 落位线 ·
+//   board(章节的笔记铺满屏幕) 看板 · tile(看板上的一条笔记) 方块 ·
 //   companion(仪表板上的外部网页应用) 配套应用
 //   billing(付款流程与开关) 付费 · plan page 方案页 · order(付款前的订单页) 订单 ·
 //   checkout(Stripe 结账) 结账 · receipt(一次付款; code Purchase) 收据 ·

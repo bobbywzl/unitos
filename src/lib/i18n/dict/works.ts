@@ -32,8 +32,8 @@ const en = {
     "The side panel: Assistant, Graph, Notes, Annotations, Distill, Edit history. Open one and explore.",
   nudgeTools:
     "Distill writes the article as bullet points. Extract answers one question with quotes. Assistant, top left, takes any command.",
-  nudgeFloat: "Hold a note's header and drag it left. The note floats over the article while you read.",
-  nudgeMerge: "Drag another note onto this card and drop it. The AI merges the two into one note.",
+  nudgeFloat: "Hold a note and drag it onto the article. The note floats there while you read.",
+  nudgeMerge: "Hold another note over this card until the ring closes. The two join into one note.",
 
   // Companions (SPEC.md §23): the web apps for the steps around dissecting a
   // document that Unitos does not do, under Projects on the dashboard.
@@ -98,7 +98,7 @@ const en = {
   guideDistill: "Distill",
   guidePanelHeader: "Side panel",
   guidePanelNotesBody:
-    "Your sections and the pending queue. Drag a note by its grip to reorder it; a line says where it lands. Lay it over another note and hold: a ring draws around that note, and at the full ring the two merge — the AI writes the one note that takes their place. Select notes with the circle at their top right to merge, pin, or delete them together.",
+    "Your sections and the pending queue. Hold a note to pick it up and drag it; a line says where it lands. Hold it over another note: a ring draws around that note, and at the full ring the two join into one note. Drop a note on the article to float it there. Select notes with the circle at their top right to merge, pin, or delete them together.",
   guidePanelAssistantBody:
     "Ask questions at document, project, or projects scope, and run checks (contradictions, gaps).",
   guidePanelDistillBody: "The distillation and every extraction of the open document; open one to read it.",
@@ -176,8 +176,8 @@ const zh: Record<keyof typeof en, string> = {
   nudgeSelect: "选中正文中的任意一段。工具栏随即出现：助手、简化、评论和颜色。",
   nudgeRail: "侧栏：助手、图谱、笔记、批注、提炼、编辑记录。打开一个，开始探索。",
   nudgeTools: "提炼把文章写成分条要点。提取用引文回答一个问题。左上角的助手接受任何指令。",
-  nudgeFloat: "按住笔记的标题行向左拖。笔记会浮在文章上，边读边写。",
-  nudgeMerge: "把另一条笔记拖到这张卡片上松开。AI 会把两条合并成一条。",
+  nudgeFloat: "按住一条笔记，拖到文章上。笔记会浮在文章上，边读边写。",
+  nudgeMerge: "按住另一条笔记压在这张卡片上，直到合并环合拢。两条会合并成一条。",
 
   companions: "配套应用",
   companionsIntro: "围绕文档、但 Unitos 不做的那些环节所用的网页应用。每个都在新标签页打开。",
@@ -232,7 +232,7 @@ const zh: Record<keyof typeof en, string> = {
   guideDistill: "提炼",
   guidePanelHeader: "侧栏",
   guidePanelNotesBody:
-    "你的章节与待定队列。拖动笔记的把手可调整顺序，落位线会显示落点。把笔记压在另一条上按住：那条笔记周围会画出一圈环，环合拢时两条即合并——AI 会写出取代两条的那一条。点击笔记右上角的圆圈选择笔记，可一起合并、置顶或删除。",
+    "你的章节和待定队列。按住一条笔记即可拿起并拖动；落位线说明它会落在哪里。把它压在另一条笔记上按住：那条笔记周围会画出合并环，合拢时两条合并为一条。把笔记放到文章上即浮动。用笔记右上角的圆圈选中笔记，可一起合并、置顶或删除。",
   guidePanelAssistantBody: "在文档、项目或全部项目范围提问，并运行检查（矛盾、疏漏）。",
   guidePanelDistillBody: "当前文档的提炼和每次提取；打开一条即可阅读。",
   guidePanelSummary: "摘要",

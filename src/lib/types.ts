@@ -293,7 +293,8 @@ export type HistoryEntry = {
     | "STYLE"
     | "NOTE_REMOVE"
     | "SECTION_REMOVE"
-    | "DOCUMENT_DETACH";
+    | "DOCUMENT_DETACH"
+    | "NOTE_MERGE";
   // The snippet the entry shows: the edited or removed text, the section or
   // document title, the linked quote.
   content: string;
