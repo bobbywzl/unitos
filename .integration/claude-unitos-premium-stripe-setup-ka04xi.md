@@ -31,5 +31,6 @@
 - The webhook records the StripeEvent id after the handler finishes, not before, so a failed handler is retried by Stripe. Every handler upserts by Stripe's id, so a concurrent duplicate is harmless.
 - Billing routes are gated only by the Stripe key being set. There is no separate "billing open" flag: keeping the key in test mode, or unset, keeps billing off, and nothing in the reader's UI links to the routes.
 - Margin on the Financials page subtracts USD AI cost estimates from Stripe revenue in the subscription's currency, read as the same unit. Correct for USD prices; a non-USD price would need conversion.
-- Tier quotas and prices are not implemented or recorded: TIERS.md holds decisions only, and the owner has not made those. They were proposed in chat.
+- Tier quotas are not implemented or recorded: TIERS.md holds decisions only, and the owner has not made those. Usage quotas were proposed in chat, not decided.
+- Monthly prices are now decided and recorded in TIERS.md (2026-09-15): Unitos Premium $19.99, Unitos Ultra $39.99. Yearly prices are still undecided. Nothing in code reads these numbers — they exist only as Stripe prices the operator creates in the dashboard and points at via the four `STRIPE_PRICE_*` env vars; this file and TIERS.md are the record if a price ever needs recreating.
 - Not verified against a database: this environment had no DATABASE_URL, so the migration did not run and the webhook was not exercised. `next build`, `tsc`, and `eslint` pass.

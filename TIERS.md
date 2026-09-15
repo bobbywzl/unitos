@@ -18,9 +18,10 @@ off) is Ultra: there is no account to gate.
 Billing exists and is not visible to readers: the checkout, portal, and
 webhook routes, the `Subscription` and `Payment` tables, and the admin's
 financials page (`/admin/financials`, revenue beside AI cost). It runs when
-the Stripe keys and price ids are set (`.env.example`). Prices are not
-decided: the Stripe prices carry them, this file does not, until the owner
-states them.
+the Stripe keys and price ids are set (`.env.example`). The Stripe prices
+carry the numbers; this file records what the owner has stated so they can
+be recreated if a price is ever rebuilt: Unitos Premium $19.99/month, Unitos
+Ultra $39.99/month. Yearly prices are not yet stated.
 
 ## Unitos Free
 
@@ -88,3 +89,5 @@ until the owner makes one.
   operator had set to premium migrates to Premium. The Stripe payment layer
   is built and hidden from readers (SPEC.md §20): Ultra holds everything
   Premium holds and nothing of its own yet; prices stay undecided.
+- **2026-09-15** — Monthly prices set: Unitos Premium $19.99, Unitos Ultra
+  $39.99. Yearly prices not yet stated by the owner.
