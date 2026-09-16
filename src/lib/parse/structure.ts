@@ -1,5 +1,6 @@
 import type { ModelMessage } from "ai";
 import { z } from "zod";
+import { hasMedia } from "@/lib/parse/figure-audit";
 import { PARSE_MODEL } from "@/lib/derive/config";
 import { callForJson } from "@/lib/derive/json-call";
 import { claude, claudeConfigured, claudeOptions } from "@/lib/claude";
@@ -125,6 +126,15 @@ export async function selectCoreBlocks(
   }
   // Blocks past the listing cap were never judged; keep them.
   for (let i = listed.length; i < blocks.length; i++) keep.add(i);
+  // A figure inside the article's span is the article's, whatever the ranges
+  // say: a chart between two kept paragraphs is never chrome. Figures before
+  // the first kept block and after the last still go — logos, share icons.
+  const keptIndexes = [...keep];
+  if (keptIndexes.length > 0) {
+    const first = Math.min(...keptIndexes);
+    const last = Math.max(...keptIndexes);
+    for (let i = first; i <= last; i++) if (hasMedia(blocks[i])) keep.add(i);
+  }
 
   const kept = blocks.filter((_, i) => keep.has(i));
   const keptChars = kept.reduce((n, b) => n + b.text.length, 0);
@@ -186,8 +196,11 @@ export async function structureBlocks(
   const merges = new Set<number>();
   for (const op of result.data.ops) {
     if (op.index >= listed.length) continue;
-    if (op.action === "drop") drops.add(op.index);
-    else if (op.action === "retype" && op.type && RETYPABLE.has(blocks[op.index].type)) {
+    // A figure with media is never dropped: the rule is the code's, not the
+    // model's, so the parse keeps its figures under any model.
+    if (op.action === "drop") {
+      if (!hasMedia(blocks[op.index])) drops.add(op.index);
+    } else if (op.action === "retype" && op.type && RETYPABLE.has(blocks[op.index].type)) {
       retypes.set(op.index, op.type);
     } else if (op.action === "merge_up") merges.add(op.index);
   }

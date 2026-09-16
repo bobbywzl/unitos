@@ -4,7 +4,7 @@ import { z } from "zod";
 import { claude, claudeConfigured, claudeOptions } from "@/lib/claude";
 import { PARSE_MODEL } from "@/lib/derive/config";
 import { callForJson } from "@/lib/derive/json-call";
-import { isFigureCaption } from "@/lib/parse/figure-audit";
+import { hasMedia, isFigureCaption } from "@/lib/parse/figure-audit";
 import type { CitationSpan, LinkSpan, ParsedBlock, StyleSpan } from "@/lib/parse/types";
 import type { UsageMeta } from "@/lib/usage";
 import { resolveModelId } from "@/lib/models";
@@ -408,9 +408,13 @@ export function applyLayoutOps(
     claim(indexes, { kind: "join", indexes, separator: " " });
   }
 
+  // A figure with media is never dropped: the rule is the code's, not the
+  // model's, so the parse keeps its figures under any model.
   const drops = new Set<number>();
   for (const op of result.ops) {
-    if (op.action === "drop" && inRange(op.index) && !claimed.has(op.index)) drops.add(op.index);
+    if (op.action === "drop" && inRange(op.index) && !claimed.has(op.index) && !hasMedia(blocks[op.index])) {
+      drops.add(op.index);
+    }
   }
   if (drops.size > blocks.length * DROP_CEILING) {
     console.warn(`[ingest] layout pass wanted ${drops.size}/${blocks.length} drops, drops ignored`);
