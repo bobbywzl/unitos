@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useT } from "@/components/lang-provider";
+import { ThumbsDownIcon, ThumbsUpIcon } from "@/components/icons";
 
 // The rating of one AI tool's output (SPEC.md §25): a thumb up or a thumb
 // down at the foot of a card, a page, or an answer. A thumb down opens one
@@ -85,11 +86,11 @@ export function RatingButtons({
       data-track={`rate:${tool}:${rating}`}
       aria-label={t(rating === "up" ? "common.rateUp" : "common.rateDown")}
       data-tip={t(rating === "up" ? "common.rateUp" : "common.rateDown")}
-      className={`rounded-full px-1 text-[13px] leading-none transition-colors ${
+      className={`rounded-full transition-colors ${
         rated === rating ? "text-clay-800" : rated ? "text-sand-300" : "text-sand-500 hover:text-clay-800"
       } disabled:cursor-default`}
     >
-      {rating === "up" ? "👍" : "👎"}
+      {rating === "up" ? <ThumbsUpIcon size={13} /> : <ThumbsDownIcon size={13} />}
     </button>
   );
 
