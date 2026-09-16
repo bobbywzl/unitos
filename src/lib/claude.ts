@@ -1,11 +1,11 @@
 import { createAnthropic, type AnthropicProvider } from "@ai-sdk/anthropic";
 import type { LanguageModel } from "ai";
-import { PARSE_EFFORT, type ClaudeEffort } from "@/lib/derive/config";
+import { HANDWRITTEN_EFFORT, type ClaudeEffort } from "@/lib/derive/config";
 import { resolveModelId } from "@/lib/models";
 
-// The Claude client (SPEC.md §2): the import's model calls go through here —
-// the upload assistant's review and instruction check, the URL core and
-// structure passes, Import PDF's judgment, and conversion. Every other model
+// The Claude client (SPEC.md §2): the handwritten passes — Import PDF's
+// judgment and conversion — and Visualize go through here, and a parse pass
+// whose model id is a claude- id (lib/parse/model.ts). Every other model
 // call goes through lib/kimi.ts. The key is ANTHROPIC_API_KEY.
 // ANTHROPIC_BASE_URL points a local run at a stand-in server (scripts/qa).
 
@@ -29,8 +29,8 @@ export function claudeBaseUrl(): string {
 let provider: AnthropicProvider | null = null;
 
 /** The model to call. The provider is built once per process, on first use.
-    A role's default id (CLAUDE_OPUS_5 for the import, lib/models.ts) resolves
-    to the role's current id
+    A role's default id (CLAUDE_OPUS_5, lib/models.ts) resolves to the
+    role's current id
     — the newest version the bimonthly model update found (lib/models.ts);
     the returned model's modelId is the id called. */
 export async function claude(modelId: string): Promise<LanguageModel> {
@@ -46,6 +46,6 @@ export async function claude(modelId: string): Promise<LanguageModel> {
     instead of failing; usage then records the call under the model asked
     for. Temperature and top_p are fixed by the model, so nothing else is
     set. */
-export function claudeOptions(effort: ClaudeEffort = PARSE_EFFORT) {
+export function claudeOptions(effort: ClaudeEffort = HANDWRITTEN_EFFORT) {
   return { anthropic: { effort, fallbacks: "default" as const } };
 }
