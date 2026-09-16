@@ -1,20 +1,22 @@
 import type { Tier } from "@prisma/client";
-import { priceIdOf, stripeConfigured, TIERS } from "@/lib/billing/config";
+import { INTERVALS, type Interval, priceEnvName, priceIdOf, stripeConfigured, TIERS } from "@/lib/billing/config";
 import { stripe } from "@/lib/billing/stripe";
 
-// The plans (SPEC.md §24): what each tier sells at, read from the Stripe
-// price STRIPE_PRICE_<TIER> names. The plan page, the review page, and the
-// admin billing page show the same read. Cached per process for five
-// minutes: a price change in Stripe shows within that.
+// The plans (SPEC.md §24): what each tier sells at, at each interval, read
+// from the Stripe prices STRIPE_PRICE_<TIER>_MONTHLY / _YEARLY name. The
+// plan page, the order page, and the admin billing page show the same read.
+// Cached per process for five minutes: a price change in Stripe shows
+// within that.
 
 export type Plan = {
   tier: Tier;
+  interval: Interval;
   priceId: string;
   // Minor units; null when the price has no fixed amount.
   amount: number | null;
   currency: string;
-  // "month" or "year", and how many of them one payment covers.
-  interval: string;
+  // Stripe's own interval count, for display ("$80.00 / 12 months" if a
+  // price is ever set up that way instead of a plain yearly price).
   intervalCount: number;
   // Why the price could not be read; "" when it could.
   error: string;
@@ -23,10 +25,10 @@ export type Plan = {
 const TTL_MS = 5 * 60_000;
 let cache: { at: number; plans: Plan[] } | null = null;
 
-async function readPlan(tier: Tier): Promise<Plan> {
-  const priceId = priceIdOf(tier);
-  const empty: Plan = { tier, priceId, amount: null, currency: "usd", interval: "month", intervalCount: 1, error: "" };
-  if (!priceId) return { ...empty, error: `STRIPE_PRICE_${tier} is not set` };
+async function readPlan(tier: Tier, interval: Interval): Promise<Plan> {
+  const priceId = priceIdOf(tier, interval);
+  const empty: Plan = { tier, interval, priceId, amount: null, currency: "usd", intervalCount: 1, error: "" };
+  if (!priceId) return { ...empty, error: `${priceEnvName(tier, interval)} is not set` };
   if (!stripeConfigured()) return { ...empty, error: "STRIPE_SECRET_KEY is not set" };
   try {
     const price = await stripe().prices.retrieve(priceId);
@@ -34,10 +36,10 @@ async function readPlan(tier: Tier): Promise<Plan> {
     if (!price.recurring) return { ...empty, error: "The price is not recurring" };
     return {
       tier,
+      interval,
       priceId,
       amount: price.unit_amount,
       currency: price.currency,
-      interval: price.recurring.interval,
       intervalCount: price.recurring.interval_count,
       error: "",
     };
@@ -46,20 +48,32 @@ async function readPlan(tier: Tier): Promise<Plan> {
   }
 }
 
+/** All four (tier × interval) plans. */
 export async function plans(): Promise<Plan[]> {
   if (cache && Date.now() - cache.at < TTL_MS) return cache.plans;
-  const read = await Promise.all(TIERS.map(readPlan));
+  const read = await Promise.all(TIERS.flatMap((tier) => INTERVALS.map((interval) => readPlan(tier, interval))));
   // A failed read is not cached: the next request tries Stripe again.
   if (read.every((p) => p.error === "")) cache = { at: Date.now(), plans: read };
   return read;
 }
 
-export async function planOf(tier: Tier): Promise<Plan> {
+export async function planOf(tier: Tier, interval: Interval): Promise<Plan> {
   const all = await plans();
-  return all.find((p) => p.tier === tier) ?? (await readPlan(tier));
+  return all.find((p) => p.tier === tier && p.interval === interval) ?? (await readPlan(tier, interval));
 }
 
-/** Both prices read from Stripe: the switch may turn billing on. */
+/** All four prices read from Stripe: the switch may turn billing on. */
 export async function plansReady(): Promise<boolean> {
   return (await plans()).every((p) => p.error === "" && p.amount !== null);
+}
+
+// The yearly saving against twelve months at the monthly price, as a whole
+// percent, floored so the badge never claims more than it delivers. null
+// when either price is missing or the monthly price is free.
+export async function yearlySavingsPercent(tier: Tier): Promise<number | null> {
+  const month = await planOf(tier, "month");
+  const year = await planOf(tier, "year");
+  if (month.amount === null || year.amount === null || month.amount <= 0) return null;
+  const percent = Math.floor((1 - year.amount / (month.amount * 12)) * 100);
+  return percent > 0 ? percent : null;
 }

@@ -11,7 +11,7 @@ import { parseBody } from "@/lib/validate";
 // Billing (SPEC.md §24): Pay on the review page. Opens a Stripe Checkout
 // session for the tier and answers its URL; the browser goes there. Off
 // (the switch), 404 — except for the admin's preview.
-const checkoutSchema = z.object({ tier: z.enum(["premium", "ultra"]) });
+const checkoutSchema = z.object({ tier: z.enum(["premium", "ultra"]), interval: z.enum(["month", "year"]) });
 
 export async function POST(req: Request) {
   const t = await serverT();
@@ -28,12 +28,12 @@ export async function POST(req: Request) {
   if (user.subscriptionId) {
     return NextResponse.json({ error: t("api.billingAlreadySubscribed") }, { status: 409 });
   }
-  const plan = await planOf(tier);
+  const plan = await planOf(tier, data.interval);
   if (plan.error || plan.amount === null) {
     return NextResponse.json({ error: t("api.billingNotConfigured") }, { status: 503 });
   }
   try {
-    const url = await createCheckout(user, tier, appOrigin(req), await currentLang());
+    const url = await createCheckout(user, tier, data.interval, appOrigin(req), await currentLang());
     return NextResponse.json({ url });
   } catch (err) {
     console.error("[billing] checkout failed", err);

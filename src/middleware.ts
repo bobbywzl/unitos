@@ -64,7 +64,7 @@ export function middleware(request: NextRequest) {
     pathname === "/privacy" ||
     pathname === "/terms" ||
     pathname === "/billing" ||
-    pathname === "/api/billing/webhook" ||
+    pathname === "/api/stripe/webhook" ||
     pathname.startsWith("/api/auth/") ||
     pathname.startsWith("/api/cron/") ||
     (pathname.startsWith("/api/documents/") &&

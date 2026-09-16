@@ -7,7 +7,7 @@ import { api } from "@/lib/api";
 
 // Pay (SPEC.md §24): asks /api/billing/checkout for the Stripe Checkout URL
 // and sends the browser there. Stripe returns to /billing/confirmed.
-export function PayButton({ tier }: { tier: "premium" | "ultra" }) {
+export function PayButton({ tier, interval }: { tier: "premium" | "ultra"; interval: "month" | "year" }) {
   const t = useT();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -17,7 +17,7 @@ export function PayButton({ tier }: { tier: "premium" | "ultra" }) {
     setBusy(true);
     setError(null);
     try {
-      const { url } = await api<{ url: string }>("/api/billing/checkout", "POST", { tier });
+      const { url } = await api<{ url: string }>("/api/billing/checkout", "POST", { tier, interval });
       window.location.assign(url);
     } catch (err) {
       setError(t("billing.payFailed", { reason: err instanceof Error ? err.message : String(err) }));

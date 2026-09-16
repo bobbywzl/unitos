@@ -26,17 +26,27 @@ const FEATURES: Record<Tier, TKey[]> = {
 export function PlanCard({
   tier,
   price,
+  // The tier's own yearly saving against twelve months at its monthly
+  // price, as a whole percent. Shown only when set and positive — the plan
+  // page passes it only while the yearly interval is selected.
+  savingsPercent,
   children,
 }: {
   tier: Tier;
   price: PlanPrice;
+  savingsPercent?: number | null;
   children?: React.ReactNode;
 }) {
   const t = useT();
   const lang = useLang();
   const look = tier === "ULTRA" ? "ultra" : "premium";
   return (
-    <section className={`flex flex-col gap-4 rounded-2xl p-6 tier-card-${look}`}>
+    <section className={`relative flex flex-col gap-4 rounded-2xl p-6 tier-card-${look}`}>
+      {savingsPercent != null && savingsPercent > 0 && (
+        <span className="absolute -top-2.5 right-4 rounded-full bg-sage-200 px-2.5 py-1 text-[10px] font-bold text-sage-800 shadow-soft">
+          {t("billing.saveBadge", { n: savingsPercent })}
+        </span>
+      )}
       <div className="flex items-center gap-3">
         <TierMark state={look} size={36} />
         <h2 className="tier-card-title font-display text-[22px]">
