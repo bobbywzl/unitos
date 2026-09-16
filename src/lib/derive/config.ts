@@ -161,16 +161,18 @@ export const MERGE_EFFORT: KimiEffort = DEFAULT_EFFORT;
 export const GIST_MODEL = KIMI_K3;
 export const GIST_EFFORT: KimiEffort = "low";
 
-// The import runs on Claude Opus 5 at its highest reasoning effort. What the
-// parse gets wrong every later tool inherits, so the effort stays at max;
-// Opus 5 reads a page's structure as well as Claude Fable 5.1 does and costs
-// half as much per token, and the import is the app's largest single spend —
-// three passes over a whole document, on every add. One constant for the
-// upload assistant's review and instruction check (SPEC.md §15), the URL core
-// and structure passes (SPEC.md §2), Import PDF's judgment, and conversion
-// (SPEC.md §16). The client is lib/claude.ts.
+// The import runs on Claude Opus 5 at high reasoning effort. What the parse
+// gets wrong every later tool inherits, so the effort stays high; Opus 5
+// reads a page's structure as well as Claude Fable 5.1 does and costs half as
+// much per token, and the import is the app's largest single spend — three
+// passes over a whole document, on every add. The passes answer with ops by
+// block index, a reading of the page rather than a problem to solve, so
+// "high" reads it as well as "max" did and answers sooner. One constant for
+// the upload assistant's review and instruction check (SPEC.md §15), the URL
+// core and structure passes (SPEC.md §2), Import PDF's judgment, and
+// conversion (SPEC.md §16). The client is lib/claude.ts.
 export const PARSE_MODEL = CLAUDE_OPUS_5;
-export const PARSE_EFFORT: ClaudeEffort = "max";
+export const PARSE_EFFORT: ClaudeEffort = "high";
 
 // The upload assistant's review and instruction check (SPEC.md §15). Not a
 // DerivationType — it runs before ingest, not through /api/derive.

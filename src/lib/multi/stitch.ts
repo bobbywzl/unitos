@@ -23,23 +23,32 @@ import { transcriptIsStale } from "@/lib/video/types";
 import { resolveModelId } from "@/lib/models";
 
 // Stitch (SPEC.md §22): one command over the members of a multi upload. Two
-// passes. The select pass reads every member whole — one cacheable system
-// message, byte-identical from turn to turn: every member rendered
-// `[document <id>] "title"` then block lines, a long member cut at a block
-// boundary, later members left out whole with a declared marker past the
-// budget — and names the blocks the command needs. The answer pass reads
-// those blocks, in member order with the gaps declared, and answers with
-// links, a generated document, or both. Short members skip the select
-// pass: the answer pass reads them whole.
+// passes. The select pass reads every member whole, one call per member, all
+// at once: each call's system message is that member alone — byte-identical
+// from turn to turn and from command to command, so the prefix caches — and
+// the call names the blocks the command needs from that member. Reading the
+// members side by side instead of one after the other takes the time of the
+// longest member, not the sum, and each read is over one member, so a pick
+// never favours the first member. The answer pass reads the picks, in member
+// order with the gaps declared, and answers with links, a generated
+// document, or both. Short members skip the select pass: the answer pass
+// reads them whole.
+// The model reads and writes short block aliases, never the stored ids: the
+// member's letter and the block's number in it (A1, B12), so a pick of 400
+// blocks is a few hundred tokens rather than thousands, a range (B10-B15)
+// names consecutive blocks at once, and an alias is copied right far more
+// often than a 25-character id. Every alias resolves to the stored block
+// here, and the reply's [block …] tags are rewritten to the stored ids
+// before the reply leaves.
 // A video or audio member reads as its transcript lines and a handwritten
 // member as its converted text; a member with nothing to read is declared
 // as such to the model, with the reason. The result says what was read of
 // every member (StitchMember), so the reader sees which members the answer
 // rests on and why one was not read. With fewer than two members read the
 // command does not run.
-// Every block id and every quote resolves against the real block text
+// Every block alias and every quote resolves against the real block text
 // before anything is stored: a quote the model did not copy verbatim falls
-// back to its whole block, and an id that names no block drops. Links land
+// back to its whole block, and an alias that names no block drops. Links land
 // as recommended links — the reader approves everything (SPEC.md §1). A
 // generated document is a real document of the project
 // (Document.generatedFromId), every quote part a verbatim passage of a
@@ -90,7 +99,9 @@ const outputSchema = z.object({
 
 export type StitchTurn = { role: "user" | "assistant"; content: string };
 
-type MemberBlock = { id: string; type: string; text: string; documentId: string };
+/** One readable block of a member: its stored id, and the alias the model
+    reads it under (the member's letter and the block's number, B12). */
+type MemberBlock = { id: string; alias: string; type: string; text: string; documentId: string };
 
 type Resolved = {
   blockId: string;
@@ -128,20 +139,23 @@ function findIn(block: MemberBlock, text: string): Resolved | null {
 /** A quote against the blocks: in the named block first; then, when the
     model named the wrong block, exact in any block; then the named block
     whole — a quote that was not copied verbatim still points at real text.
-    No quote is the named block whole. Null when the id names no block. */
+    No quote is the named block whole. Null when the alias names no block.
+    blockByRef: every block under its alias (lib/multi/stitch.ts memberLetter)
+    and under its stored id, so either form the model writes resolves. */
 export function resolveQuote(
-  blockById: Map<string, MemberBlock>,
+  blockByRef: Map<string, MemberBlock>,
   blockId: string,
   text: string | undefined,
 ): Resolved | null {
-  const named = blockById.get(blockId);
+  const ref = blockId.trim();
+  const named = blockByRef.get(ref) ?? blockByRef.get(ref.toUpperCase());
   if (!named) return null;
   const wanted = text?.trim() ?? "";
   if (!wanted || !named.text.trim()) return resolvedAt(named, 0, named.text.length);
   const inNamed = findIn(named, wanted);
   if (inNamed) return inNamed;
   if (wanted.length >= 20) {
-    for (const block of blockById.values()) {
+    for (const block of blockByRef.values()) {
       const at = block.text.indexOf(wanted);
       if (at !== -1) return resolvedAt(block, at, at + wanted.length);
     }
@@ -184,6 +198,19 @@ export async function loadMembers(multiUploadId: string) {
 
 type Member = Awaited<ReturnType<typeof loadMembers>>[number];
 
+/** The member's letter, by its place in the multi upload: A to Z, then AA,
+    AB, … — the document tag the model reads, and the first part of every
+    block alias of the member. */
+export function memberLetter(index: number): string {
+  let n = index;
+  let letters = "";
+  do {
+    letters = String.fromCharCode(65 + (n % 26)) + letters;
+    n = Math.floor(n / 26) - 1;
+  } while (n >= 0);
+  return letters;
+}
+
 // The blocks of a member the model can read: blocks with text. The VIDEO
 // block holds the title and a PAGE block its page number — neither is
 // content — so a video or audio member reads as its transcript lines and a
@@ -192,6 +219,17 @@ function readableBlocks(member: Member): Member["blocks"] {
   return member.blocks.filter(
     (b) => b.type !== "VIDEO" && b.type !== "PAGE" && b.text.trim().length > 0,
   );
+}
+
+/** The member's readable blocks under their aliases, in reading order. */
+function memberBlocks(member: Member, letter: string): MemberBlock[] {
+  return readableBlocks(member).map((b, i) => ({
+    id: b.id,
+    alias: `${letter}${i + 1}`,
+    type: b.type,
+    text: b.text,
+    documentId: member.id,
+  }));
 }
 
 function memberKind(member: Member): StitchMember["kind"] {
@@ -270,142 +308,215 @@ export function coverageNote(m: StitchMember): string {
 
 const CONTEXT_HEAD = [
   "You assist a reader working across the members of a multi upload.",
-  "Each document starts with its id as [document <id>]; each block starts with its id as [block <id>]. Block ids are unique across all members. Reference block ids exactly as given.",
+  "Each document starts with its letter as [document <letter>]; each block starts with its alias as [block <alias>]: the document's letter and the block's number in it, in reading order (A1, A2, B1). Aliases are unique across all members. Reference blocks by alias exactly as given.",
   "A video or audio member is its transcript: every line is a TRANSCRIPT block tagged with its seconds. A member marked (nothing to read: …) has no text here: never cite it and never guess what it says.",
   "",
 ];
 
-function emptySection(member: Member, reason: StitchMember["reason"]): string {
-  return `[document ${member.id}] "${member.title}"\n(nothing to read: ${EMPTY_NOTE[reason ?? "noText"]})`;
+function emptySection(letter: string, member: Member, reason: StitchMember["reason"]): string {
+  return `[document ${letter}] "${member.title}"\n(nothing to read: ${EMPTY_NOTE[reason ?? "noText"]})`;
 }
 
-// Every member whole, as one system message — byte-identical from turn to
-// turn so the prefix caches (SPEC.md §2) — and what went into it of every
-// member. A long member cuts at a block boundary, so the blocks the model
-// saw are known exactly. A member with nothing to read is declared with its
-// reason, so the model knows the member exists and never guesses at its
-// text. length: the chars of member text sent.
-function wholeSystem(members: Member[]): {
-  system: string;
-  coverage: StitchMember[];
-  length: number;
-} {
-  const rendered: string[] = [];
-  const coverage: StitchMember[] = [];
-  let used = 0;
-  let leftOut = 0;
-  for (const member of members) {
-    const kind = memberKind(member);
-    const blocks = readableBlocks(member);
-    const base = { id: member.id, title: member.title, kind, total: blocks.length };
-    if (blocks.length === 0) {
-      const empty = emptyReason(member);
-      coverage.push({ ...base, status: "empty", blocks: 0, ...empty });
-      const section = emptySection(member, empty.reason);
-      used += section.length;
-      rendered.push(section);
-      continue;
-    }
-    // Blocks in order until the member's budget is spent.
-    let kept = 0;
-    let length = 0;
-    for (const block of blocks) {
-      const lineLength = block.text.length + block.id.length + 40;
-      if (kept > 0 && length + lineLength > PER_MEMBER_BUDGET) break;
-      length += lineLength;
-      kept++;
-    }
-    const lines = renderBlockLines(blocks.slice(0, kept));
-    const body = kept < blocks.length ? `${lines}\n\n(document cut for length)` : lines;
-    const section = `[document ${member.id}] "${member.title}"\n${body}`;
-    if (used + section.length > MEMBERS_BUDGET) {
-      leftOut++;
-      coverage.push({ ...base, status: "leftOut", blocks: 0, reason: null, detail: null });
-      continue;
-    }
-    used += section.length;
-    rendered.push(section);
-    coverage.push({
+/** One member's readable blocks as the model reads them: the stored block
+    lines under their aliases. */
+function aliasedLines(blocks: MemberBlock[], source: Member["blocks"]): string {
+  const stored = new Map(source.map((b) => [b.id, b]));
+  return renderBlockLines(
+    blocks.flatMap((b) => {
+      const row = stored.get(b.id);
+      return row ? [{ ...row, id: b.alias }] : [];
+    }),
+  );
+}
+
+/** One member in the multi upload: its letter, its blocks under their
+    aliases, what went into its rendering (coverage), and the rendering
+    itself — the member whole, cut at a block boundary past the member's
+    budget, or declared with the reason it has nothing to read. The
+    rendering is byte-identical from turn to turn, so the select pass's
+    prefix caches per member. */
+type Rendered = {
+  letter: string;
+  member: Member;
+  blocks: MemberBlock[];
+  coverage: StitchMember;
+  section: string;
+};
+
+function renderMember(member: Member, index: number): Rendered {
+  const letter = memberLetter(index);
+  const kind = memberKind(member);
+  const blocks = memberBlocks(member, letter);
+  const base = { id: member.id, title: member.title, kind, total: blocks.length };
+  if (blocks.length === 0) {
+    const empty = emptyReason(member);
+    return {
+      letter,
+      member,
+      blocks,
+      coverage: { ...base, status: "empty", blocks: 0, ...empty },
+      section: emptySection(letter, member, empty.reason),
+    };
+  }
+  // Blocks in order until the member's budget is spent.
+  let kept = 0;
+  let length = 0;
+  for (const block of blocks) {
+    const lineLength = block.text.length + block.alias.length + 40;
+    if (kept > 0 && length + lineLength > PER_MEMBER_BUDGET) break;
+    length += lineLength;
+    kept++;
+  }
+  const lines = aliasedLines(blocks.slice(0, kept), member.blocks);
+  const body = kept < blocks.length ? `${lines}\n\n(document cut for length)` : lines;
+  return {
+    letter,
+    member,
+    blocks: blocks.slice(0, kept),
+    coverage: {
       ...base,
       status: kept < blocks.length ? "cut" : "read",
       blocks: kept,
       reason: null,
       detail: null,
-    });
-  }
-  const system = [
-    ...CONTEXT_HEAD,
-    "Every member follows.",
-    "",
-    rendered.join("\n\n"),
-    ...(leftOut > 0 ? ["", `(${leftOut} more member(s) left out for length)`] : []),
-  ].join("\n");
-  return { system, coverage, length: used };
+    },
+    section: `[document ${letter}] "${member.title}"\n${body}`,
+  };
+}
+
+/** Every member rendered, in order; past the members budget a member is
+    left out whole, declared as such. length: the chars of member text sent. */
+function renderMembers(members: Member[]): { rendered: Rendered[]; length: number } {
+  const rendered: Rendered[] = [];
+  let used = 0;
+  members.forEach((member, index) => {
+    const r = renderMember(member, index);
+    if (r.coverage.status !== "empty" && used + r.section.length > MEMBERS_BUDGET) {
+      rendered.push({
+        ...r,
+        blocks: [],
+        coverage: { ...r.coverage, status: "leftOut", blocks: 0, reason: null, detail: null },
+        section: `[document ${r.letter}] "${member.title}"\n(not read: left out for length)`,
+      });
+      return;
+    }
+    used += r.section.length;
+    rendered.push(r);
+  });
+  return { rendered, length: used };
+}
+
+/** Every member whole, as one system message: what the answer pass reads
+    when the members are short enough to skip the select pass. */
+function wholeSystem(rendered: Rendered[]): string {
+  return [...CONTEXT_HEAD, "Every member follows.", "", rendered.map((r) => r.section).join("\n\n")].join("\n");
+}
+
+/** One member whole, as the select pass's system message: this member and
+    nothing else, so the message is the same whatever the command and
+    whatever the other members. */
+function memberSystem(r: Rendered): string {
+  return [...CONTEXT_HEAD, "One member of the multi upload follows.", "", r.section].join("\n");
 }
 
 /** The selected blocks as one system message: every member in order, its
     header saying how many of its blocks are shown, the blocks in reading
     order, a gap between two shown blocks declared. A member with nothing
     to read is declared with its reason, as in the whole rendering. */
-export function selectedSystem(members: Member[], selectedIds: Set<string>): string {
-  const rendered: string[] = [];
-  for (const member of members) {
-    const blocks = readableBlocks(member);
-    if (blocks.length === 0) {
-      rendered.push(emptySection(member, emptyReason(member).reason));
+export function selectedSystem(rendered: Rendered[], selected: Set<string>): string {
+  const sections: string[] = [];
+  for (const r of rendered) {
+    if (r.coverage.status === "empty" || r.coverage.status === "leftOut") {
+      sections.push(r.section);
       continue;
     }
-    const shown = blocks.filter((b) => selectedIds.has(b.id));
-    const header = `[document ${member.id}] "${member.title}" (${shown.length} of ${blocks.length} blocks shown)`;
+    const shown = r.blocks.filter((b) => selected.has(b.alias));
+    const header = `[document ${r.letter}] "${r.member.title}" (${shown.length} of ${r.blocks.length} blocks shown)`;
     if (shown.length === 0) {
-      rendered.push(header);
+      sections.push(header);
       continue;
     }
     const lines: string[] = [];
     let last = -1;
     for (const block of shown) {
-      const at = blocks.indexOf(block);
+      const at = r.blocks.indexOf(block);
       if (last !== -1 && at - last > 1) lines.push(`(${at - last - 1} blocks not shown)`);
-      lines.push(renderBlockLines([block]));
+      lines.push(aliasedLines([block], r.member.blocks));
       last = at;
     }
-    rendered.push(`${header}\n${lines.join("\n\n")}`);
+    sections.push(`${header}\n${lines.join("\n\n")}`);
   }
-  return [...CONTEXT_HEAD, "The blocks a first read picked for the command follow.", "", rendered.join("\n\n")].join("\n");
+  return [...CONTEXT_HEAD, "The blocks a first read picked for the command follow.", "", sections.join("\n\n")].join("\n");
 }
 
-/** The select pass's pick cut to the budget: known ids, once each, in the
-    model's order (most relevant first) until the chars run out. */
-export function cutSelection(ids: string[], blockById: Map<string, MemberBlock>): Set<string> {
+const PICK_RX = /^([A-Z]+)(\d+)(?:\s*-\s*(?:([A-Z]+))?(\d+))?$/;
+
+/** One pick of the select pass as aliases: an alias as it is (B12), or a
+    range of consecutive blocks (B10-B15, B10-15) expanded in order. A pick
+    that is not an alias is nothing. */
+export function expandPick(pick: string): string[] {
+  const m = PICK_RX.exec(pick.trim().toUpperCase());
+  if (!m) return [];
+  const [, letter, fromText, toLetter, toText] = m;
+  if (toText === undefined) return [`${letter}${Number(fromText)}`];
+  if (toLetter !== undefined && toLetter !== letter) return [];
+  const from = Number(fromText);
+  const to = Number(toText);
+  if (to < from || to - from >= MAX_SELECTED) return [`${letter}${from}`];
+  const out: string[] = [];
+  for (let n = from; n <= to; n++) out.push(`${letter}${n}`);
+  return out;
+}
+
+/** The members' picks as one list, most relevant first across members:
+    every member's first pick, then every member's second, and so on, so
+    the budget below is spent on every member alike rather than on the
+    member listed first. */
+export function interleave(lists: string[][]): string[] {
+  const out: string[] = [];
+  const longest = Math.max(0, ...lists.map((l) => l.length));
+  for (let i = 0; i < longest; i++) for (const list of lists) if (i < list.length) out.push(list[i]);
+  return out;
+}
+
+/** The select pass's pick cut to the budget: known aliases, once each, in
+    the given order (most relevant first) until the chars run out. */
+export function cutSelection(aliases: string[], blockByRef: Map<string, MemberBlock>): Set<string> {
   const picked = new Set<string>();
   let used = 0;
-  for (const id of ids) {
-    const block = blockById.get(id);
-    if (!block || picked.has(id)) continue;
+  for (const alias of aliases) {
+    const block = blockByRef.get(alias);
+    if (!block || picked.has(block.alias)) continue;
     if (picked.size >= MAX_SELECTED) break;
     const cost = block.text.length + 40;
     if (used + cost > SELECTED_BUDGET) continue;
     used += cost;
-    picked.add(id);
+    picked.add(block.alias);
   }
   return picked;
 }
 
-// Every member's opening, cut to an equal share of the budget: what the
-// answer pass reads when the select pass picked nothing or did not answer.
-function openings(members: Member[]): Set<string> {
-  const share = Math.floor(SELECTED_BUDGET / Math.max(1, members.length));
-  const picked = new Set<string>();
-  for (const member of members) {
-    let used = 0;
-    for (const block of readableBlocks(member)) {
-      const cost = block.text.length + 40;
-      if (used + cost > share) break;
-      used += cost;
-      picked.add(block.id);
-    }
+// A member's opening, cut to its share of the budget: what the answer pass
+// reads of a member whose select call picked nothing or did not answer.
+function opening(r: Rendered, share: number): string[] {
+  const picked: string[] = [];
+  let used = 0;
+  for (const block of r.blocks) {
+    const cost = block.text.length + 40;
+    if (used + cost > share) break;
+    used += cost;
+    picked.push(block.alias);
   }
   return picked;
+}
+
+/** The reply's block tags as the stored ids: the model writes [block B12],
+    the reader's chips need [block <id>] (components/markdown.tsx). */
+export function replyWithIds(reply: string, blockByRef: Map<string, MemberBlock>): string {
+  return reply.replace(/\[block ([A-Za-z]+\d+)\]/g, (tag, alias: string) => {
+    const block = blockByRef.get(alias.toUpperCase());
+    return block ? `[block ${block.id}]` : tag;
+  });
 }
 
 /** Run one Stitch command. Throws with the reason on a failed model call. */
@@ -420,63 +531,79 @@ export async function stitch(input: {
   onFailure: (reason: string) => Error;
 }): Promise<StitchResult> {
   const members = await loadMembers(input.multiUploadId);
-  const whole = wholeSystem(members);
-  const { coverage } = whole;
+  const { rendered, length } = renderMembers(members);
+  const coverage = rendered.map((r) => r.coverage);
   // Fewer than two members read: no links can be drawn and no page can rest
   // on the members, so nothing runs and nothing is stored. The result says
   // what was read of every member and why the rest were not.
-  const read = coverage.filter((m) => m.status === "read" || m.status === "cut");
+  const read = rendered.filter((r) => r.coverage.status === "read" || r.coverage.status === "cut");
   if (read.length < 2) return { reply: "", linkCount: 0, document: null, members: coverage };
 
-  const blockById = new Map<string, MemberBlock>();
-  for (const member of members) {
-    for (const b of readableBlocks(member)) {
-      blockById.set(b.id, { id: b.id, type: b.type, text: b.text, documentId: member.id });
+  // Every block under its alias and under its stored id.
+  const blockByRef = new Map<string, MemberBlock>();
+  for (const r of rendered) {
+    for (const b of r.blocks) {
+      blockByRef.set(b.alias, b);
+      blockByRef.set(b.id, b);
     }
   }
   const profile = await loadProfile(input.notebookId);
-  const memberList = coverage.map((m) => ({
-    id: m.id,
-    title: m.title,
-    note: coverageNote(m),
-    read: m.status === "read" || m.status === "cut",
+  const memberList = rendered.map((r) => ({
+    tag: r.letter,
+    title: r.member.title,
+    note: coverageNote(r.coverage),
+    read: r.coverage.status === "read" || r.coverage.status === "cut",
   }));
   const history: ModelMessage[] = input.history
     .slice(-MAX_HISTORY)
     .filter((turn) => turn.content.trim())
     .map((turn) => ({ role: turn.role, content: turn.content }));
   const model = await kimi(STITCH_MODEL);
+  const usage = { userId: input.userId, feature: "stitch" as const, model: await resolveModelId(STITCH_MODEL) };
 
-  // ── The select pass: the blocks the command needs, out of every member ───
-  let context = whole.system;
+  // ── The select pass: the blocks the command needs, one call per member ───
+  let context = wholeSystem(rendered);
   let selected = false;
-  if (whole.length > WHOLE_THRESHOLD) {
-    const pick = await callForJson({
-      model,
-      messages: [
-        { role: "system", content: whole.system },
-        ...history,
-        {
-          role: "user",
-          content: stitchSelectPrompt({
-            profile,
-            members: memberList,
-            command: input.command,
-            maxBlocks: MAX_SELECTED,
-          }),
-        },
-      ],
-      maxOutputTokens: STITCH_SELECT_MAX_OUTPUT_TOKENS,
-      providerOptions: kimiOptions(STITCH_SELECT_EFFORT),
-      schema: selectSchema,
-      label: "STITCH_SELECT",
-      usage: { userId: input.userId, feature: "stitch", model: await resolveModelId(STITCH_MODEL) },
-      abortSignal: input.signal,
-    });
-    if (input.signal?.aborted) throw input.onFailure(pick.ok ? "aborted" : pick.error);
-    const ids = pick.ok ? cutSelection(pick.data.blockIds, blockById) : new Set<string>();
-    if (!pick.ok) console.warn("[stitch] select pass failed, reading the openings:", pick.error);
-    context = selectedSystem(members, ids.size > 0 ? ids : openings(members));
+  if (length > WHOLE_THRESHOLD) {
+    const share = Math.floor(SELECTED_BUDGET / read.length);
+    const picks = await Promise.all(
+      read.map(async (r): Promise<string[]> => {
+        const pick = await callForJson({
+          model,
+          messages: [
+            { role: "system", content: memberSystem(r) },
+            ...history,
+            {
+              role: "user",
+              content: stitchSelectPrompt({
+                profile,
+                members: memberList,
+                member: r.letter,
+                command: input.command,
+                maxBlocks: MAX_SELECTED,
+              }),
+            },
+          ],
+          maxOutputTokens: STITCH_SELECT_MAX_OUTPUT_TOKENS,
+          providerOptions: kimiOptions(STITCH_SELECT_EFFORT),
+          schema: selectSchema,
+          label: `STITCH_SELECT ${r.letter}`,
+          usage,
+          abortSignal: input.signal,
+        });
+        if (!pick.ok) {
+          if (input.signal?.aborted) throw input.onFailure(pick.error);
+          console.warn(`[stitch] select of member ${r.letter} failed, reading its opening:`, pick.error);
+          return opening(r, share);
+        }
+        // This member's blocks only: a pick that names another member's
+        // block, or none, is nothing.
+        const own = pick.data.blockIds.flatMap(expandPick).filter((a) => blockByRef.get(a)?.documentId === r.member.id);
+        return own.length > 0 ? own : opening(r, share);
+      }),
+    );
+    if (input.signal?.aborted) throw input.onFailure("aborted");
+    context = selectedSystem(rendered, cutSelection(interleave(picks), blockByRef));
     selected = true;
   }
 
@@ -501,7 +628,7 @@ export async function stitch(input: {
     providerOptions: kimiOptions(STITCH_EFFORT),
     schema: outputSchema,
     label: "STITCH",
-    usage: { userId: input.userId, feature: "stitch", model: await resolveModelId(STITCH_MODEL) },
+    usage,
     abortSignal: input.signal,
   });
   if (!result.ok) throw input.onFailure(result.error);
@@ -515,8 +642,8 @@ export async function stitch(input: {
   let linkCount = 0;
   for (const link of result.data.links) {
     if (linkCount >= MAX_LINKS) break;
-    const from = resolveQuote(blockById, link.fromBlockId, link.fromQuote);
-    const to = resolveQuote(blockById, link.toBlockId, link.toQuote);
+    const from = resolveQuote(blockByRef, link.fromBlockId, link.fromQuote);
+    const to = resolveQuote(blockByRef, link.toBlockId, link.toQuote);
     if (!from || !to || from.documentId === to.documentId) continue;
     const key = `${from.blockId}|${from.quotedText}|${to.blockId}`;
     if (seen.has(key)) continue;
@@ -555,12 +682,12 @@ export async function stitch(input: {
       command: input.command,
       title: result.data.document.title.trim(),
       parts: result.data.document.parts.slice(0, MAX_PARTS),
-      blockById,
+      blockById: blockByRef,
     });
   }
 
   if (linkCount > 0 || document) await bumpNotebook(input.notebookId);
-  return { reply: result.data.reply.trim(), linkCount, document, members: coverage };
+  return { reply: replyWithIds(result.data.reply.trim(), blockByRef), linkCount, document, members: coverage };
 }
 
 type Part = z.infer<typeof partSchema>;
