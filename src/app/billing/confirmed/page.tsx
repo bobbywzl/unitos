@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { authEnabled, currentUser } from "@/lib/auth";
-import { stripeConfigured, tierOfPriceId } from "@/lib/billing/config";
+import { intervalOfPriceId, stripeConfigured, tierOfPriceId } from "@/lib/billing/config";
 import { applyCheckoutSession } from "@/lib/billing/events";
 import { planOf } from "@/lib/billing/plans";
 import { stripe, type Stripe } from "@/lib/billing/stripe";
@@ -41,15 +41,14 @@ export default async function ConfirmedPage({
   if (session.metadata?.userId !== user.id) notFound();
   const named = session.metadata?.tier;
   const linePrice = session.line_items?.data[0]?.price;
-  const tier =
-    named === "ULTRA" || named === "PREMIUM"
-      ? named
-      : tierOfPriceId(typeof linePrice === "string" ? linePrice : (linePrice?.id ?? ""));
+  const priceId = typeof linePrice === "string" ? linePrice : (linePrice?.id ?? "");
+  const tier = named === "ULTRA" || named === "PREMIUM" ? named : tierOfPriceId(priceId);
   if (!tier) notFound();
+  const interval = intervalOfPriceId(priceId) ?? "month";
   const label = t(tier === "ULTRA" ? "common.tierUltra" : "common.tierPremium");
   const paid = session.payment_status === "paid";
   const { purchaseId } = paid ? await applyCheckoutSession(session) : { purchaseId: null };
-  const plan = await planOf(tier);
+  const plan = await planOf(tier, interval);
 
   return (
     <>

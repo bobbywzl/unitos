@@ -1,13 +1,14 @@
 import type { Tier, User } from "@prisma/client";
-import { priceIdOf, tierSlug } from "@/lib/billing/config";
+import { type Interval, priceIdOf, tierSlug } from "@/lib/billing/config";
 import { stripe } from "@/lib/billing/stripe";
 import { db } from "@/lib/db";
 import type { Lang } from "@/lib/i18n/config";
 
-// Checkout (SPEC.md §24): Pay on the review page opens a Stripe Checkout
-// session for the tier's price. Stripe returns to /billing/confirmed with
-// the session id; Cancel returns to the review page. The account's Stripe
-// customer is created on the first checkout and kept on User.stripeCustomerId.
+// Checkout (SPEC.md §24): Pay on the order page opens a Stripe Checkout
+// session for the tier's price at the chosen interval. Stripe returns to
+// /billing/confirmed with the session id; Cancel returns to the order page.
+// The account's Stripe customer is created on the first checkout and kept
+// on User.stripeCustomerId.
 
 export async function ensureCustomer(user: User): Promise<string> {
   if (user.stripeCustomerId) return user.stripeCustomerId;
@@ -25,17 +26,25 @@ function stripeLocale(lang: Lang): "zh" | "en" {
 }
 
 /** The Stripe Checkout URL to send the browser to. */
-export async function createCheckout(user: User, tier: Tier, origin: string, lang: Lang): Promise<string> {
+export async function createCheckout(
+  user: User,
+  tier: Tier,
+  interval: Interval,
+  origin: string,
+  lang: Lang,
+): Promise<string> {
   const customer = await ensureCustomer(user);
   const session = await stripe().checkout.sessions.create({
     mode: "subscription",
     customer,
-    line_items: [{ price: priceIdOf(tier), quantity: 1 }],
+    line_items: [{ price: priceIdOf(tier, interval), quantity: 1 }],
     success_url: `${origin}/billing/confirmed?session={CHECKOUT_SESSION_ID}`,
-    cancel_url: `${origin}/billing/review/${tierSlug(tier)}?canceled=1`,
+    cancel_url: `${origin}/billing/order/${tierSlug(tier)}?canceled=1&interval=${interval}`,
     client_reference_id: user.id,
     // Both carry the account and the tier: the checkout event reads the
     // session's, every invoice of the subscription reads the subscription's.
+    // The interval itself needs no metadata — the price id the subscription
+    // and every invoice carry already names it (config.ts intervalOfPriceId).
     metadata: { userId: user.id, tier },
     subscription_data: { metadata: { userId: user.id, tier } },
     allow_promotion_codes: true,

@@ -236,7 +236,7 @@ const en = {
   billingSaveFailedStatus: "Save failed ({status})",
   billingNeedsSignIn: "Sign-in is off. Billing needs accounts.",
   billingNeedsEnv:
-    "Set STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, STRIPE_PRICE_PREMIUM, and STRIPE_PRICE_ULTRA first.",
+    "Set STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, STRIPE_PRICE_PREMIUM_MONTHLY, STRIPE_PRICE_PREMIUM_YEARLY, STRIPE_PRICE_ULTRA_MONTHLY, and STRIPE_PRICE_ULTRA_YEARLY first.",
   billingNeedsPrices: "A price could not be read from Stripe. See Prices below.",
   billingPreview: "Preview the plan page",
   billingWebhook: "Webhook endpoint",
@@ -244,13 +244,17 @@ const en = {
     "Register this URL in Stripe with the events checkout.session.completed, invoice.paid, customer.subscription.created, customer.subscription.updated, customer.subscription.deleted, and charge.refunded. Its signing secret is STRIPE_WEBHOOK_SECRET.",
   billingPrices: "Prices",
   billingPriceError: "Not readable: {reason}",
+  billingIntervalMonthly: "Monthly",
+  billingIntervalYearly: "Yearly",
   billingSubscribed: "{n} subscribed accounts",
   billingReceipts: "Receipts",
   billingReceiptsEmpty: "No payments yet.",
   svcStripe: "Stripe client: checkout, the billing portal, prices",
   svcStripeWebhook: "Stripe webhook signing",
-  svcPricePremium: "The Stripe price Unitos Premium sells at",
-  svcPriceUltra: "The Stripe price Unitos Ultra sells at",
+  svcPricePremiumMonthly: "The Stripe price Unitos Premium sells at, billed monthly",
+  svcPricePremiumYearly: "The Stripe price Unitos Premium sells at, billed yearly",
+  svcPriceUltraMonthly: "The Stripe price Unitos Ultra sells at, billed monthly",
+  svcPriceUltraYearly: "The Stripe price Unitos Ultra sells at, billed yearly",
 };
 
 const zh: Record<keyof typeof en, string> = {
@@ -461,7 +465,8 @@ const zh: Record<keyof typeof en, string> = {
   billingSaveFailed: "保存失败",
   billingSaveFailedStatus: "保存失败（{status}）",
   billingNeedsSignIn: "登录已关闭。付费需要账户。",
-  billingNeedsEnv: "请先设置 STRIPE_SECRET_KEY、STRIPE_WEBHOOK_SECRET、STRIPE_PRICE_PREMIUM 和 STRIPE_PRICE_ULTRA。",
+  billingNeedsEnv:
+    "请先设置 STRIPE_SECRET_KEY、STRIPE_WEBHOOK_SECRET、STRIPE_PRICE_PREMIUM_MONTHLY、STRIPE_PRICE_PREMIUM_YEARLY、STRIPE_PRICE_ULTRA_MONTHLY 和 STRIPE_PRICE_ULTRA_YEARLY。",
   billingNeedsPrices: "无法从 Stripe 读取某个价格。见下方“价格”。",
   billingPreview: "预览方案页",
   billingWebhook: "Webhook 端点",
@@ -469,13 +474,17 @@ const zh: Record<keyof typeof en, string> = {
     "在 Stripe 中注册此 URL，事件为 checkout.session.completed、invoice.paid、customer.subscription.created、customer.subscription.updated、customer.subscription.deleted 和 charge.refunded。其签名密钥是 STRIPE_WEBHOOK_SECRET。",
   billingPrices: "价格",
   billingPriceError: "无法读取：{reason}",
+  billingIntervalMonthly: "按月",
+  billingIntervalYearly: "按年",
   billingSubscribed: "{n} 个已订阅账户",
   billingReceipts: "收据",
   billingReceiptsEmpty: "还没有付款。",
   svcStripe: "Stripe 客户端：结账、订阅门户、价格",
   svcStripeWebhook: "Stripe webhook 签名",
-  svcPricePremium: "Unitos Premium 的 Stripe 价格",
-  svcPriceUltra: "Unitos Ultra 的 Stripe 价格",
+  svcPricePremiumMonthly: "Unitos Premium 按月计费的 Stripe 价格",
+  svcPricePremiumYearly: "Unitos Premium 按年计费的 Stripe 价格",
+  svcPriceUltraMonthly: "Unitos Ultra 按月计费的 Stripe 价格",
+  svcPriceUltraYearly: "Unitos Ultra 按年计费的 Stripe 价格",
 };
 
 export const admin = { en, zh } as const;

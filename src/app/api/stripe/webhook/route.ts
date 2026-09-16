@@ -3,7 +3,7 @@ import { applyStripeEvent } from "@/lib/billing/events";
 import { stripe } from "@/lib/billing/stripe";
 
 // Billing (SPEC.md §24): the endpoint Stripe posts events to. Register it in
-// Stripe as <origin>/api/billing/webhook with the events lib/billing/events.ts
+// Stripe as <origin>/api/stripe/webhook with the events lib/billing/events.ts
 // handles; STRIPE_WEBHOOK_SECRET is its signing secret. The middleware lets
 // it through without a session: Stripe has none. It runs whatever the
 // switch says — a payment that happened is recorded.

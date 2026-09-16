@@ -1,9 +1,9 @@
 import type { Tier } from "@prisma/client";
 import Link from "next/link";
 import { authEnabled, currentUser } from "@/lib/auth";
-import { TIERS, tierSlug } from "@/lib/billing/config";
+import { intervalFromParam, TIERS, tierSlug, type Interval } from "@/lib/billing/config";
 import { formatDate } from "@/lib/billing/format";
-import { plans } from "@/lib/billing/plans";
+import { plans, yearlySavingsPercent } from "@/lib/billing/plans";
 import { billingView } from "@/lib/billing/switch";
 import { currentLang, serverT } from "@/lib/i18n/server";
 import { tierOf, tierState } from "@/lib/tiers";
@@ -14,15 +14,28 @@ export const dynamic = "force-dynamic";
 
 // The plan page (SPEC.md §24): the two tiers side by side, each with its
 // price from Stripe and what it holds, and Choose on the ones the account
-// can buy. Public: a signed-out visitor sees the plans and signs in to
-// choose. Over the cards, the account's state and, with a subscription,
-// Manage subscription and Receipts.
-export default async function PlansPage() {
+// can buy. A Monthly/Yearly toggle (?interval=) sits over the cards; Yearly
+// carries the largest saving among the tiers as a badge, and a tier whose
+// yearly price beats twelve months at its monthly price shows its own
+// saving on its card. Public: a signed-out visitor sees the plans and signs
+// in to choose. Over the cards, the account's state and, with a
+// subscription, Manage subscription and Receipts.
+export default async function PlansPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ interval?: string }>;
+}) {
   await billingView();
   const t = await serverT();
   const lang = await currentLang();
   const user = authEnabled() ? await currentUser() : null;
+  const { interval: intervalParam } = await searchParams;
+  const interval = intervalFromParam(intervalParam);
   const all = await plans();
+  const savings = Object.fromEntries(
+    await Promise.all(TIERS.map(async (tier) => [tier, await yearlySavingsPercent(tier)] as const)),
+  ) as Record<Tier, number | null>;
+  const maxSavings = Math.max(0, ...TIERS.map((tier) => savings[tier] ?? 0));
   const label = (tier: Tier) => t(tier === "ULTRA" ? "common.tierUltra" : "common.tierPremium");
 
   // The account's state, and the tier it holds: the subscription's, or the
@@ -49,7 +62,8 @@ export default async function PlansPage() {
           });
 
   // What a card offers: Choose, Your plan, Manage subscription, or nothing
-  // (a tier below the one the account holds).
+  // (a tier below the one the account holds). Choose carries the chosen
+  // interval to the order page.
   const action = (tier: Tier) => {
     if (!user) {
       return (
@@ -64,11 +78,28 @@ export default async function PlansPage() {
     if (user.subscriptionId) return <PortalButton className={planButton} />;
     if (held && rank(tier) < rank(held)) return null;
     return (
-      <Link href={`/billing/order/${tierSlug(tier)}`} className={planButton}>
+      <Link href={`/billing/order/${tierSlug(tier)}?interval=${interval}`} className={planButton}>
         {t("billing.choose", { tier: label(tier) })}
       </Link>
     );
   };
+
+  const toggleTab = (value: Interval, key: "billing.intervalToggleMonthly" | "billing.intervalToggleYearly") => (
+    <Link
+      href={`/billing?interval=${value}`}
+      aria-pressed={interval === value}
+      className={`flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-semibold ${
+        interval === value ? "bg-card text-clay-800 shadow-soft" : "text-sand-600"
+      }`}
+    >
+      {t(key)}
+      {value === "year" && maxSavings > 0 && (
+        <span className="rounded-full bg-sage-200 px-1.5 py-0.5 text-[10px] font-bold text-sage-800">
+          {t("billing.saveBadge", { n: maxSavings })}
+        </span>
+      )}
+    </Link>
+  );
 
   return (
     <>
@@ -90,14 +121,19 @@ export default async function PlansPage() {
           </span>
         </div>
       )}
+      <div className="mb-5 inline-flex items-center gap-0.5 rounded-full bg-sand-100 p-1">
+        {toggleTab("month", "billing.intervalToggleMonthly")}
+        {toggleTab("year", "billing.intervalToggleYearly")}
+      </div>
       <div className="grid gap-5 sm:grid-cols-2">
         {TIERS.map((tier) => {
-          const plan = all.find((p) => p.tier === tier);
+          const plan = all.find((p) => p.tier === tier && p.interval === interval);
           return (
             <PlanCard
               key={tier}
               tier={tier}
-              price={plan ?? { amount: null, currency: "usd", interval: "month", intervalCount: 1 }}
+              price={plan ?? { amount: null, currency: "usd", interval, intervalCount: 1 }}
+              savingsPercent={interval === "year" ? savings[tier] : null}
             >
               {action(tier)}
             </PlanCard>
