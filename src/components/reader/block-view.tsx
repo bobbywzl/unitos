@@ -1,7 +1,7 @@
 "use client";
 
 import type { BlockType } from "@prisma/client";
-import { useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   ChartIcon,
   CommentIcon,
@@ -16,6 +16,7 @@ import {
 import { useT } from "@/components/lang-provider";
 import { Equation } from "@/components/reader/equation";
 import { MediaHtml } from "@/components/reader/figure-media";
+import { bindTableMarkClicks, marksSignature, paintTableMarks } from "@/components/reader/table-marks";
 import type { TFunc, TKey } from "@/lib/i18n/dictionaries";
 
 const CHAIN_BUTTON =
@@ -641,6 +642,54 @@ function HighlightLabel({ anchors }: { anchors: Highlight[] }) {
   );
 }
 
+// A table's html with the block's marks painted inside it (table-marks.ts).
+// The html lands as one string; the marks are painted after it, on the
+// DOM, and repainted only when what they depend on changes — a paint
+// replaces the passage's text nodes, and the browser's selection with them,
+// which the selection tint stands in for (reader-interactions.tsx). When
+// the html's text is not the block text nothing paints and the block rings
+// whole, as a figure does.
+function TableHtml({
+  blockId,
+  className,
+  html,
+  text,
+  highlights,
+  ring,
+}: {
+  blockId: string;
+  className: string;
+  html: string;
+  text: string;
+  highlights: Highlight[];
+  ring: string;
+}) {
+  const t = useT();
+  const ref = useRef<HTMLDivElement>(null);
+  const [painted, setPainted] = useState(true);
+  const signature = marksSignature(highlights);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    setPainted(paintTableMarks(el, text, highlights, t));
+    // highlights is read through its signature: the same marks, the same paint.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [html, text, signature, t]);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    return bindTableMarkClicks(el);
+  }, []);
+  return (
+    <div
+      ref={ref}
+      data-block-id={blockId}
+      className={painted ? className : `${className} ${ring}`}
+      dangerouslySetInnerHTML={{ __html: html }}
+    />
+  );
+}
+
 // A PDF figure's visual: its page rendered by the figure image route. alt is
 // empty and the image hides on error (page null, old document), so the block's
 // DOM text stays exactly the caption (SPEC.md §5).
@@ -793,27 +842,25 @@ export function BlockView({
           {content}
         </p>
       );
+    // A table is text (SPEC.md §6): its marks paint on the passage inside
+    // the html (table-marks.ts), never a ring around the whole table.
     case "TABLE":
       if (block.html) {
         return (
-          <div className="relative">
-            <MediaHtml
-              blockId={block.id}
-              sourceId={firstSourceId}
-              className={`${shared} reader-table my-3 overflow-x-auto text-sm ${htmlHighlighted}`}
-              html={block.html}
-            />
-            {figureAnchors.length > 0 && <HighlightLabel anchors={figureAnchors} />}
-          </div>
+          <TableHtml
+            blockId={block.id}
+            className={`${shared} reader-table my-3 overflow-x-auto text-sm`}
+            html={block.html}
+            text={block.text}
+            highlights={highlights}
+            ring={htmlHighlighted}
+          />
         );
       }
       return (
-        <div className="relative">
-          <pre data-block-id={block.id} data-source-id={firstSourceId} className={`${shared} my-3 overflow-x-auto font-mono text-sm ${htmlHighlighted}`}>
-            {content}
-          </pre>
-          {figureAnchors.length > 0 && <HighlightLabel anchors={figureAnchors} />}
-        </div>
+        <pre data-block-id={block.id} className={`${shared} my-3 overflow-x-auto font-mono text-sm`}>
+          {content}
+        </pre>
       );
     case "FIGURE":
       if (block.html) {

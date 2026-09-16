@@ -157,7 +157,7 @@ const TOOL_LAYER = "z-40";
 // the kind under the selection and nothing else: a tool missing from a
 // kind's list is not offered there. The first tool of a kind after the
 // assistant is its lead tool and reads as recommended.
-type ContentKind = "text" | "table" | "figure" | "equation";
+type ContentKind = "text" | "figure" | "equation";
 type Tool =
   | "assistant"
   | "analyze"
@@ -171,23 +171,21 @@ type Tool =
 
 const TOOLBARS: Record<ContentKind, readonly Tool[]> = {
   text: ["assistant", "simplify", "visualize", "comment", "link", "highlight", "addToNotes", "readAloud"],
-  table: ["assistant", "analyze", "comment", "link", "highlight", "addToNotes"],
   figure: ["assistant", "analyze", "comment", "link", "highlight", "addToNotes"],
   equation: ["assistant", "visualize", "comment", "link", "highlight", "addToNotes"],
 };
 
-// The blocks the hold-and-circle gesture opens a toolbar on, whole.
-const CIRCLED_TYPES = new Set(["FIGURE", "EQUATION", "TABLE"]);
+// The blocks the hold-and-circle gesture opens a toolbar on, whole. A table
+// is text (SPEC.md §6): its cells are rendered text, selected like any.
+const CIRCLED_TYPES = new Set(["FIGURE", "EQUATION"]);
 
 function contentKindOf(type: string | undefined): ContentKind {
-  if (type === "TABLE") return "table";
   if (type === "FIGURE") return "figure";
   if (type === "EQUATION") return "equation";
   return "text";
 }
 
 const KIND_LABEL: Record<Exclude<ContentKind, "text">, TKey> = {
-  table: "reader.tableTools",
   figure: "reader.figureTools",
   equation: "reader.equationTools",
 };
@@ -5982,18 +5980,18 @@ function blockFormatKind(
           )}
           </Collapse>
 
-          {/* Analyze leads the table and figure toolbars (SPEC.md §4): the
-              three-section analysis beside the article. Never on text. */}
+          {/* Analyze leads the figure toolbar (SPEC.md §4): the three-section
+              analysis beside the article. Never on text. */}
           {has("analyze") && (
             <button
               onClick={() => void analyze()}
               data-track="analyze"
-              data-tip={t(popoverKind === "table" ? "reader.analyzeTableTitle" : "reader.analyzeFigureTitle")}
+              data-tip={t("reader.analyzeFigureTitle")}
               className={`flex w-full items-center justify-between gap-2 rounded-full bg-clay-100 ${toolRow} text-left font-semibold text-clay-800 hover:bg-clay-200 disabled:opacity-40`}
             >
               <span className="flex items-center gap-1.5">
                 <ChartIcon size={coarse ? 14 : 12} />
-                {t(popoverKind === "table" ? "reader.analyzeTable" : "reader.analyzeFigure")}
+                {t("reader.analyzeFigure")}
               </span>
               <span className="text-[9px] font-bold tracking-[0.06em] text-clay-700 uppercase">
                 {t("reader.recommended")}
