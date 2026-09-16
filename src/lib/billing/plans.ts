@@ -25,6 +25,20 @@ export type Plan = {
 const TTL_MS = 5 * 60_000;
 let cache: { at: number; plans: Plan[] } | null = null;
 
+// A Stripe SDK error carries more than .message: .type names the class
+// (StripeConnectionError, StripeAuthenticationError, StripeInvalidRequestError,
+// …) and .code and .statusCode narrow it further. None of that reaches the
+// page (the reader sees only the plain error string on Plan), but it belongs
+// in the server log — the difference between "Stripe is unreachable" and
+// "the key is wrong" is exactly what a plain message like "An error
+// occurred with our connection to Stripe" hides.
+function describeStripeError(err: unknown): string {
+  if (!(err instanceof Error)) return String(err);
+  const e = err as Error & { type?: string; code?: string; statusCode?: number };
+  const parts = [e.type, e.code, e.statusCode != null ? `HTTP ${e.statusCode}` : null].filter(Boolean);
+  return parts.length > 0 ? `${e.message} (${parts.join(", ")})` : e.message;
+}
+
 async function readPlan(tier: Tier, interval: Interval): Promise<Plan> {
   const priceId = priceIdOf(tier, interval);
   const empty: Plan = { tier, interval, priceId, amount: null, currency: "usd", intervalCount: 1, error: "" };
@@ -44,6 +58,7 @@ async function readPlan(tier: Tier, interval: Interval): Promise<Plan> {
       error: "",
     };
   } catch (err) {
+    console.error(`[billing] price ${priceId} (${tier} ${interval}) could not be read: ${describeStripeError(err)}`);
     return { ...empty, error: err instanceof Error ? err.message : String(err) };
   }
 }
