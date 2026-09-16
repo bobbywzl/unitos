@@ -2,9 +2,9 @@ import { Fragment } from "react";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { authEnabled, currentUser } from "@/lib/auth";
-import { tierFromSlug, tierSlug } from "@/lib/billing/config";
+import { intervalFromParam, tierFromSlug, tierSlug } from "@/lib/billing/config";
 import { formatMoney, priceLine, renewsLine } from "@/lib/billing/format";
-import { planOf } from "@/lib/billing/plans";
+import { planOf, yearlySavingsPercent } from "@/lib/billing/plans";
 import { billingView } from "@/lib/billing/switch";
 import { currentLang, serverT } from "@/lib/i18n/server";
 import { PlanCard } from "@/components/billing/plan-card";
@@ -14,15 +14,17 @@ import { TierChip } from "@/components/tier-mark";
 
 export const dynamic = "force-dynamic";
 
-// The order page (SPEC.md §24): the tier chosen, its price, the account it
-// goes to, what is charged now and how it renews, then Pay, which opens
-// Stripe Checkout. Cancel on Stripe returns here with ?canceled=1.
+// The order page (SPEC.md §24): the tier chosen at the interval carried
+// from the plan page (?interval=, monthly if absent), its price, the
+// account it goes to, what is charged now and how it renews, then Pay,
+// which opens Stripe Checkout. Cancel on Stripe returns here with
+// ?canceled=1. A link switches the interval without leaving the order.
 export default async function OrderPage({
   params,
   searchParams,
 }: {
   params: Promise<{ tier: string }>;
-  searchParams: Promise<{ canceled?: string }>;
+  searchParams: Promise<{ canceled?: string; interval?: string }>;
 }) {
   await billingView();
   const { tier: slug } = await params;
@@ -31,10 +33,15 @@ export default async function OrderPage({
   if (!authEnabled()) notFound();
   const user = await currentUser();
   if (!user) redirect("/signin");
-  const { canceled } = await searchParams;
+  const { canceled, interval: intervalParam } = await searchParams;
+  const interval = intervalFromParam(intervalParam);
+  const otherInterval = interval === "year" ? "month" : "year";
   const t = await serverT();
   const lang = await currentLang();
-  const plan = await planOf(tier);
+  const [plan, savingsPercent] = await Promise.all([
+    planOf(tier, interval),
+    interval === "year" ? yearlySavingsPercent(tier) : null,
+  ]);
 
   // The legal line, with the two documents as links: the placeholders come
   // back as the words "terms" and "privacy" between spaces.
@@ -62,7 +69,7 @@ export default async function OrderPage({
         </p>
       )}
       <div className="grid gap-5 sm:grid-cols-2">
-        <PlanCard tier={tier} price={plan} />
+        <PlanCard tier={tier} price={plan} savingsPercent={savingsPercent} />
         <div className="rounded-2xl bg-card p-5 shadow-soft">
           <div className={`${row} border-t-0`}>
             <span className="text-sand-600">{t("billing.orderAccount")}</span>
@@ -83,6 +90,16 @@ export default async function OrderPage({
             </span>
           </div>
           <p className="border-t border-line pt-3 text-xs text-sand-600">{renewsLine(t, plan)}</p>
+          {!user.subscriptionId && (
+            <p className="pt-1 text-xs">
+              <Link
+                href={`/billing/order/${tierSlug(tier)}?interval=${otherInterval}`}
+                className="underline text-sand-600 hover:text-clay-800"
+              >
+                {t(otherInterval === "year" ? "billing.switchToYearly" : "billing.switchToMonthly")}
+              </Link>
+            </p>
+          )}
           <div className="mt-4">
             {user.subscriptionId ? (
               <div className="space-y-3">
@@ -94,7 +111,7 @@ export default async function OrderPage({
                 <PortalButton />
               </div>
             ) : (
-              <PayButton tier={tierSlug(tier)} />
+              <PayButton tier={tierSlug(tier)} interval={interval} />
             )}
           </div>
           <p className="mt-4 text-[11px] text-sand-500">{legal}</p>

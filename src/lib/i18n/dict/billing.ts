@@ -29,6 +29,14 @@ const en = {
   intervalMonth: "month",
   intervalYear: "year",
   priceUnset: "Price not set",
+  // The Monthly/Yearly toggle on the plan page, and the badge it and each
+  // card carry: the yearly saving against twelve months at the monthly
+  // price, a whole percent, floored.
+  intervalToggleMonthly: "Monthly",
+  intervalToggleYearly: "Yearly",
+  saveBadge: "Save {n}%",
+  switchToYearly: "Switch to yearly billing",
+  switchToMonthly: "Switch to monthly billing",
   choose: "Choose {tier}",
   yourPlan: "Your plan",
   signInToChoose: "Sign in to choose a tier",
@@ -103,6 +111,11 @@ const zh: Record<keyof typeof en, string> = {
   intervalMonth: "月",
   intervalYear: "年",
   priceUnset: "未设置价格",
+  intervalToggleMonthly: "按月",
+  intervalToggleYearly: "按年",
+  saveBadge: "省 {n}%",
+  switchToYearly: "切换到按年计费",
+  switchToMonthly: "切换到按月计费",
   choose: "选择 {tier}",
   yourPlan: "你的方案",
   signInToChoose: "登录后选择方案",

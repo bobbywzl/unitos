@@ -3,12 +3,21 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { isAdmin } from "@/lib/admin-auth";
 import { authEnabled } from "@/lib/auth";
-import { billingConfigured, priceIdOf, stripeConfigured, webhookConfigured } from "@/lib/billing/config";
+import {
+  billingConfigured,
+  INTERVALS,
+  priceEnvName,
+  priceIdOf,
+  stripeConfigured,
+  TIERS,
+  webhookConfigured,
+} from "@/lib/billing/config";
 import { formatDate, formatMoney, priceLine } from "@/lib/billing/format";
 import { plans } from "@/lib/billing/plans";
 import { billingOn } from "@/lib/billing/switch";
 import { db } from "@/lib/db";
 import { currentLang, serverT } from "@/lib/i18n/server";
+import type { TKey } from "@/lib/i18n/dictionaries";
 import { AdminNav } from "@/components/admin/admin-nav";
 import { BillingSwitch } from "@/components/admin/billing-switch";
 import { TierChip } from "@/components/tier-mark";
@@ -16,8 +25,15 @@ import { TierChip } from "@/components/tier-mark";
 export const dynamic = "force-dynamic";
 
 // Admin: billing (SPEC.md §24). The switch that turns the payment pipeline
-// on, the Stripe values and whether each is set, the webhook URL to register,
-// the two prices as Stripe reports them, and every receipt.
+// on, the Stripe values and whether each is set, the webhook URL to
+// register, the four prices (two tiers × monthly and yearly) as Stripe
+// reports them, and every receipt.
+
+const SERVICE_KEY: Record<"PREMIUM" | "ULTRA", Record<"month" | "year", TKey>> = {
+  PREMIUM: { month: "admin.svcPricePremiumMonthly", year: "admin.svcPricePremiumYearly" },
+  ULTRA: { month: "admin.svcPriceUltraMonthly", year: "admin.svcPriceUltraYearly" },
+};
+
 export default async function AdminBillingPage() {
   if (!(await isAdmin())) redirect("/admin/login");
   const t = await serverT();
@@ -45,13 +61,18 @@ export default async function AdminBillingPage() {
   const h = await headers();
   const proto = h.get("x-forwarded-proto") ?? "https";
   const host = h.get("x-forwarded-host") ?? h.get("host") ?? "";
-  const webhookUrl = `${proto}://${host}/api/billing/webhook`;
+  const webhookUrl = `${proto}://${host}/api/stripe/webhook`;
 
   const services: { label: string; description: string; set: boolean }[] = [
     { label: "STRIPE_SECRET_KEY", description: t("admin.svcStripe"), set: stripeConfigured() },
     { label: "STRIPE_WEBHOOK_SECRET", description: t("admin.svcStripeWebhook"), set: webhookConfigured() },
-    { label: "STRIPE_PRICE_PREMIUM", description: t("admin.svcPricePremium"), set: priceIdOf("PREMIUM") !== "" },
-    { label: "STRIPE_PRICE_ULTRA", description: t("admin.svcPriceUltra"), set: priceIdOf("ULTRA") !== "" },
+    ...TIERS.flatMap((tier) =>
+      INTERVALS.map((interval) => ({
+        label: priceEnvName(tier, interval),
+        description: t(SERVICE_KEY[tier][interval]),
+        set: priceIdOf(tier, interval) !== "",
+      })),
+    ),
   ];
   const heading = "mb-2 text-[11px] font-bold tracking-[0.08em] text-sand-600 uppercase";
 
@@ -106,8 +127,13 @@ export default async function AdminBillingPage() {
         <h2 className={heading}>{t("admin.billingPrices")}</h2>
         <div className="rounded-2xl bg-card px-4 py-2 shadow-soft">
           {all.map((p) => (
-            <div key={p.tier} className="flex flex-wrap items-center justify-between gap-3 py-2">
-              <TierChip state={p.tier === "ULTRA" ? "ultra" : "premium"} trialEndsAt={null} />
+            <div key={`${p.tier}-${p.interval}`} className="flex flex-wrap items-center justify-between gap-3 py-2">
+              <span className="flex items-center gap-2">
+                <TierChip state={p.tier === "ULTRA" ? "ultra" : "premium"} trialEndsAt={null} />
+                <span className="text-xs text-sand-600">
+                  {t(p.interval === "year" ? "admin.billingIntervalYearly" : "admin.billingIntervalMonthly")}
+                </span>
+              </span>
               <span className="font-mono text-xs text-sand-600">{p.priceId || "—"}</span>
               <span className={`ml-auto text-sm ${p.error ? "text-red-600" : "text-sand-800"}`}>
                 {p.error ? t("admin.billingPriceError", { reason: p.error }) : priceLine(t, lang, p)}
