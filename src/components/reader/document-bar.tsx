@@ -17,6 +17,7 @@ import { clipWords } from "@/lib/markdown-preview";
 import { Logo } from "@/components/logo";
 import { Collapse, Presence } from "@/components/presence";
 import { LoadingDots, ThinkingIndicator } from "@/components/thinking";
+import { usePageFileDrop } from "@/components/reader/use-page-file-drop";
 import type { TFunc } from "@/lib/i18n/dictionaries";
 import { readNdjson } from "@/lib/ndjson";
 import { isOffline, offlinePremium, queueUpload, queueWrite } from "@/lib/offline/queue";
@@ -738,32 +739,14 @@ export function DocumentBar({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [addParam, canEdit]);
 
-  // Drag-and-drop upload — PDFs, images, video and audio files: dropping
-  // anywhere on the page adds to this work.
-  const [dragging, setDragging] = useState(false);
-  const dragDepth = useRef(0);
-  useEffect(() => {
-    const hasFiles = (e: DragEvent) => e.dataTransfer?.types.includes("Files") ?? false;
-    const onEnter = (e: DragEvent) => {
-      if (!hasFiles(e)) return;
-      e.preventDefault();
-      dragDepth.current += 1;
-      setDragging(true);
-    };
-    const onOver = (e: DragEvent) => {
-      if (hasFiles(e)) e.preventDefault();
-    };
-    const onLeave = (e: DragEvent) => {
-      if (!hasFiles(e)) return;
-      dragDepth.current = Math.max(0, dragDepth.current - 1);
-      if (dragDepth.current === 0) setDragging(false);
-    };
-    const onDrop = (e: DragEvent) => {
-      if (!hasFiles(e)) return;
-      e.preventDefault();
-      dragDepth.current = 0;
-      setDragging(false);
-      const files = [...(e.dataTransfer?.files ?? [])];
+  // Drag-and-drop upload — PDFs, images, Markdown, video and audio files:
+  // dropping anywhere on the page adds to this work (use-page-file-drop.ts).
+  // A drop of files the work cannot take opens the add-document dialog with
+  // the reason: the error shows there, and the dialog's drop zone is where
+  // the next try goes.
+  const dragging = usePageFileDrop({
+    enabled: canEdit,
+    onDrop: (files) => {
       const accepted = files.filter(
         (f) =>
           f.type === "application/pdf" ||
@@ -774,22 +757,12 @@ export function DocumentBar({
       );
       if (accepted.length === 0) {
         setError(t("panes.dropPdfOrVideo"));
+        setDialog(true);
         return;
       }
       openAssistant({ kind: "files", files: accepted });
-    };
-    window.addEventListener("dragenter", onEnter);
-    window.addEventListener("dragover", onOver);
-    window.addEventListener("dragleave", onLeave);
-    window.addEventListener("drop", onDrop);
-    return () => {
-      window.removeEventListener("dragenter", onEnter);
-      window.removeEventListener("dragover", onOver);
-      window.removeEventListener("dragleave", onLeave);
-      window.removeEventListener("drop", onDrop);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [notebookId]);
+    },
+  });
 
   // One ingest path for every link: the server routes YouTube links and
   // direct media file links to video documents, everything else to the
@@ -1287,9 +1260,11 @@ export function DocumentBar({
         />
       )}
 
+      {/* No backdrop blur: a blur over the whole page re-draws on every
+          drag frame, and the drag stutters. A tint is enough. */}
       {dragging && (
-        <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center bg-paper/90 backdrop-blur-sm">
-          <div className="flex flex-col items-center gap-3 rounded-[28px] border-2 border-dashed border-sand-400 bg-card px-14 py-10 shadow-float">
+        <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center bg-paper/85">
+          <div className="pop-in flex flex-col items-center gap-3 rounded-[28px] border-2 border-dashed border-clay bg-card px-14 py-10 shadow-float">
             <Logo size={72} className="text-clay" />
             <p className="text-sm font-semibold text-sand-800">
               {t("panes.dropToAdd")}
