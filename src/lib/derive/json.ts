@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { matchInTextLoose } from "@/lib/anchors/match";
 
 // Tolerant extraction, strict validation. On failure the caller retries once with the
 // error appended, then surfaces failure (SPEC.md §4). Malformed output never reaches the DB.
@@ -127,7 +128,16 @@ export const extractOutputSchema = z.object({
 // route resolves every span against the real block text before anything persists.
 export const distillOutputSchema = z.object({
   quotes: z
-    .array(spanSchema.extend({ caption: z.string().min(1).max(1_000) }))
+    .array(
+      spanSchema.extend({
+        // The span copied out verbatim. Offsets are what a model gets wrong —
+        // it counts from the wrong place, or mis-copies a block id — and the
+        // quote is what it gets right, so the quote is what the route resolves
+        // on (SPEC.md §5, the same ladder a reader's anchor takes).
+        quote: z.string().max(20_000).optional(),
+        caption: z.string().min(1).max(1_000),
+      }),
+    )
     .min(1)
     .max(20),
 });
@@ -192,22 +202,82 @@ export const compareOutputSchema = z.object({
 
 export type Span = z.infer<typeof spanSchema>;
 
-// Clamp a span to its block text; drop it when it does not resolve to non-empty text.
+// A span as a model returns it: the position, plus the text it copied out when
+// the derivation asks for one.
+export type ModelSpan = Span & { quote?: string };
+
+/** Resolve a model's span against the real block text (SPEC.md §5). The ladder:
+    1. The offsets, when they slice the quote the model copied — or any text at
+       all, when the derivation asks for no quote.
+    2. The quote inside the named block: the words are right, the offsets are
+       counted from the wrong place.
+    3. The quote anywhere in the document: the words are right, the block id is
+       not (mis-copied, or the model cited the wrong block).
+    4. The offsets alone, when the quote is nowhere in the document.
+    Nothing resolves → null. */
 export function resolveSpan(
-  span: Span,
+  span: ModelSpan,
   blockById: Map<string, { id: string; text: string }>,
 ): (Span & { quotedText: string; prefix: string; suffix: string }) | null {
-  const block = blockById.get(span.blockId);
-  if (!block) return null;
-  const start = Math.max(0, Math.min(span.start, block.text.length));
-  const end = Math.max(start, Math.min(span.end, block.text.length));
-  const quotedText = block.text.slice(start, end);
-  if (!quotedText.trim()) return null;
+  const block = findBlock(span.blockId, blockById);
+  const quote = span.quote?.trim() ?? "";
+  const sliced = block ? clamp(block.text, span.start, span.end) : null;
+  if (block && sliced && sliced.text.trim() && (!quote || sameWords(sliced.text, quote))) {
+    return captured(block, sliced.start, sliced.end);
+  }
+  if (quote) {
+    const selector = { quotedText: quote, prefix: "", suffix: "" };
+    if (block) {
+      const hit = matchInTextLoose(block.text, selector);
+      if (hit) return captured(block, hit.start, hit.end);
+    }
+    for (const candidate of blockById.values()) {
+      if (candidate.id === block?.id) continue;
+      const hit = matchInTextLoose(candidate.text, selector);
+      if (hit) return captured(candidate, hit.start, hit.end);
+    }
+  }
+  if (block && sliced && sliced.text.trim()) return captured(block, sliced.start, sliced.end);
+  return null;
+}
+
+// The block the span names. A model that writes the id back as it appeared in
+// the prompt — "[block abc]", "block abc" — still names a real block.
+function findBlock(
+  blockId: string,
+  blockById: Map<string, { id: string; text: string }>,
+): { id: string; text: string } | null {
+  const direct = blockById.get(blockId);
+  if (direct) return direct;
+  const cleaned = blockId
+    .trim()
+    .replace(/^\[/, "")
+    .replace(/\]$/, "")
+    .replace(/^block\s+/i, "")
+    .trim();
+  return blockById.get(cleaned) ?? null;
+}
+
+// Offsets clamped to the block text.
+function clamp(text: string, start: number, end: number) {
+  const s = Math.max(0, Math.min(start, text.length));
+  const e = Math.max(s, Math.min(end, text.length));
+  return { start: s, end: e, text: text.slice(s, e) };
+}
+
+// Two readings of the same words: whitespace is the model's to reflow.
+function sameWords(a: string, b: string): boolean {
+  return a.replace(/\s+/g, " ").trim() === b.replace(/\s+/g, " ").trim();
+}
+
+// The span as it is stored: the text the block really carries, with the 32
+// characters either side that re-find it after a re-parse (SPEC.md §5).
+function captured(block: { id: string; text: string }, start: number, end: number) {
   return {
-    blockId: span.blockId,
+    blockId: block.id,
     start,
     end,
-    quotedText,
+    quotedText: block.text.slice(start, end),
     prefix: block.text.slice(Math.max(0, start - 32), start),
     suffix: block.text.slice(end, end + 32),
   };
