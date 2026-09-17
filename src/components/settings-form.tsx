@@ -12,6 +12,7 @@ import { PERSON_COLORS, personOf, type Person } from "@/lib/person";
 import { api } from "@/lib/api";
 import type { AccountStorage } from "@/lib/storage";
 import { storageLimit, type TierState } from "@/lib/tiers";
+import { CONTACT_EMAIL } from "@/lib/contact";
 import { StorageBar } from "@/components/storage-bar";
 import { TierMark, tierLook } from "@/components/tier-mark";
 import { PortalButton } from "@/components/billing/portal-button";
@@ -27,10 +28,6 @@ const THEMES: { value: Theme; label: TKey; description: TKey }[] = [
   { value: "dark", label: "settings.themeDark", description: "settings.themeDarkDesc" },
   { value: "system", label: "settings.themeSystem", description: "settings.themeSystemDesc" },
 ];
-
-// The operator's contact for deletion requests — the address the Privacy
-// Policy names (dict/legal.ts).
-const CONTACT_EMAIL = "robertwzl311@gmail.com";
 
 // Theme lives in localStorage; the layout script applies it on load. This store
 // keeps the selected card in sync without effects.

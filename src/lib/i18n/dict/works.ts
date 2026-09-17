@@ -134,6 +134,8 @@ const en = {
   feedbackLinkLimit: "At most {n} links.",
   feedbackRemovePhoto: "Remove this photo",
   feedbackRemoveLink: "Remove this link",
+  // The contact address under the form (lib/contact.ts): any request by email.
+  feedbackEmail: "Or email {email}",
   // A reply to feedback: a notification on the dashboard (SPEC.md §18). The
   // card reads this title, the feedback's message, then the reply.
   feedbackReplyTitle: "Reply to your feedback",
@@ -267,6 +269,7 @@ const zh: Record<keyof typeof en, string> = {
   feedbackLinkLimit: "最多 {n} 个链接。",
   feedbackRemovePhoto: "移除此图片",
   feedbackRemoveLink: "移除此链接",
+  feedbackEmail: "或发邮件至 {email}",
   feedbackReplyTitle: "对你反馈的回复",
   shareAddTitle: "添加到项目",
   shareAddChoose: "选择一个项目",

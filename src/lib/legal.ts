@@ -1,3 +1,4 @@
+import { CONTACT_EMAIL } from "@/lib/contact";
 import type { TFunc, TKey } from "@/lib/i18n/dictionaries";
 
 // The two legal documents as data, so /privacy and /terms render identically
@@ -75,7 +76,8 @@ export const TERMS_SECTIONS: LegalSection[] = [
   { heading: "legal.tContactHeading", blocks: [{ p: "legal.tContact" }] },
 ];
 
-// Governing law names the jurisdiction; every other line takes no parameters.
+// Every line may name the contact address ({email}, lib/contact.ts);
+// Governing law also names the jurisdiction.
 export function legalText(t: TFunc, key: TKey): string {
-  return key === "legal.tLaw" ? t(key, { jurisdiction: t("legal.jurisdiction") }) : t(key);
+  return t(key, { email: CONTACT_EMAIL, jurisdiction: t("legal.jurisdiction") });
 }

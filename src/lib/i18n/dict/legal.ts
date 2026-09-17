@@ -4,7 +4,7 @@
 
 const en = {
   // Shared
-  updated: "Last updated: 6 September 2026",
+  updated: "Last updated: 17 September 2026",
   backToApp: "Back to Unitos",
   privacyTitle: "Privacy Policy",
   termsTitle: "Terms of Service",
@@ -17,7 +17,7 @@ const en = {
 
   pWhoHeading: "Who runs Unitos",
   pWho:
-    "Unitos is run by an independent developer, not a company. Questions about this policy, your data, or a deletion request go to robertwzl311@gmail.com.",
+    "Unitos is run by an independent developer, not a company. Questions about this policy, your data, or a deletion request go to {email}.",
 
   pCollectHeading: "What Unitos stores",
   pCollectIntro: "Unitos stores what it needs to be your notebook, and nothing else:",
@@ -63,7 +63,7 @@ const en = {
 
   pRetentionHeading: "How long it is kept",
   pRetention:
-    "Your material stays until you delete it. Deleting a project deletes its notes and annotations. Rejected notes are kept seven days so you can undo, then permanently deleted by a daily job. To delete your account and everything in it, email robertwzl311@gmail.com and it will be done.",
+    "Your material stays until you delete it. Deleting a project deletes its notes and annotations. Rejected notes are kept seven days so you can undo, then permanently deleted by a daily job. To delete your account and everything in it, email {email} and it will be done.",
 
   pRightsHeading: "Your choices",
   pRightsIntro: "It is your material, and you can:",
@@ -86,7 +86,7 @@ const en = {
     "If this policy changes, the date at the top changes with it. A change that materially affects what happens to your material will be announced in the app before it takes effect.",
 
   pContactHeading: "Contact",
-  pContact: "Email robertwzl311@gmail.com about anything on this page.",
+  pContact: "Email {email} about anything on this page.",
 
   // ── Terms ────────────────────────────────────────────────────────────────
   tIntro:
@@ -131,7 +131,7 @@ const en = {
 
   tEndHeading: "Ending your use",
   tEnd:
-    "You can stop at any time, and email robertwzl311@gmail.com to have your account and material deleted. Unitos may end or restrict access if these terms are broken, or if running the service is no longer possible.",
+    "You can stop at any time, and email {email} to have your account and material deleted. Unitos may end or restrict access if these terms are broken, or if running the service is no longer possible.",
 
   jurisdiction: "the State of California, United States",
   tLawHeading: "Governing law",
@@ -143,12 +143,12 @@ const en = {
     "If these terms change, the date at the top changes with them, and continuing to use Unitos means accepting the new version.",
 
   tContactHeading: "Contact",
-  tContact: "Email robertwzl311@gmail.com about anything on this page.",
+  tContact: "Email {email} about anything on this page.",
 };
 
 const zh: Record<keyof typeof en, string> = {
   // Shared
-  updated: "最后更新：2026年9月6日",
+  updated: "最后更新：2026年9月17日",
   backToApp: "返回 Unitos",
   privacyTitle: "隐私政策",
   termsTitle: "服务条款",
@@ -161,7 +161,7 @@ const zh: Record<keyof typeof en, string> = {
 
   pWhoHeading: "谁在运营 Unitos",
   pWho:
-    "Unitos 由一位独立开发者运营，不是公司。关于本政策、你的数据或删除请求，请联系 robertwzl311@gmail.com。",
+    "Unitos 由一位独立开发者运营，不是公司。关于本政策、你的数据或删除请求，请联系 {email}。",
 
   pCollectHeading: "Unitos 存储什么",
   pCollectIntro: "Unitos 只存储作为你的笔记本所必需的内容：",
@@ -203,7 +203,7 @@ const zh: Record<keyof typeof en, string> = {
 
   pRetentionHeading: "保留多久",
   pRetention:
-    "你的材料一直保留，直到你删除它。删除项目会同时删除其笔记和批注。被拒绝的笔记保留七天以便撤销，随后由每日任务永久删除。要删除你的账户及其中的一切，请发邮件至 robertwzl311@gmail.com，即可办妥。",
+    "你的材料一直保留，直到你删除它。删除项目会同时删除其笔记和批注。被拒绝的笔记保留七天以便撤销，随后由每日任务永久删除。要删除你的账户及其中的一切，请发邮件至 {email}，即可办妥。",
 
   pRightsHeading: "你的选择",
   pRightsIntro: "这是你的材料，你可以：",
@@ -226,7 +226,7 @@ const zh: Record<keyof typeof en, string> = {
     "本政策变更时，顶部的日期会随之更新。若变更实质影响你的材料的处理方式，会在生效前于应用内告知。",
 
   pContactHeading: "联系",
-  pContact: "本页任何事宜，请发邮件至 robertwzl311@gmail.com。",
+  pContact: "本页任何事宜，请发邮件至 {email}。",
 
   // ── Terms ────────────────────────────────────────────────────────────────
   tIntro:
@@ -270,7 +270,7 @@ const zh: Record<keyof typeof en, string> = {
 
   tEndHeading: "结束使用",
   tEnd:
-    "你可以随时停止使用，并发邮件至 robertwzl311@gmail.com 删除你的账户和材料。若违反本条款，或服务无法继续运营，Unitos 可终止或限制访问。",
+    "你可以随时停止使用，并发邮件至 {email} 删除你的账户和材料。若违反本条款，或服务无法继续运营，Unitos 可终止或限制访问。",
 
   jurisdiction: "美国加利福尼亚州",
   tLawHeading: "适用法律",
@@ -281,7 +281,7 @@ const zh: Record<keyof typeof en, string> = {
     "本条款变更时，顶部的日期会随之更新，继续使用 Unitos 即表示接受新版本。",
 
   tContactHeading: "联系",
-  tContact: "本页任何事宜，请发邮件至 robertwzl311@gmail.com。",
+  tContact: "本页任何事宜，请发邮件至 {email}。",
 };
 
 export const legal = { en, zh } as const;

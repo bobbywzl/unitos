@@ -1,5 +1,6 @@
 import type { Tier, User } from "@prisma/client";
 import { type Interval, priceIdOf, tierSlug } from "@/lib/billing/config";
+import Stripe from "stripe";
 import { stripe } from "@/lib/billing/stripe";
 import { db } from "@/lib/db";
 import type { Lang } from "@/lib/i18n/config";
@@ -8,10 +9,25 @@ import type { Lang } from "@/lib/i18n/config";
 // session for the tier's price at the chosen interval. Stripe returns to
 // /billing/confirmed with the session id; Cancel returns to the order page.
 // The account's Stripe customer is created on the first checkout and kept
-// on User.stripeCustomerId.
+// on User.stripeCustomerId. A stored id the connected Stripe account does
+// not know (Stripe answers resource_missing: the id was made under another
+// Stripe account, or the customer was deleted) is replaced by a new
+// customer, so a change of Stripe account never blocks checkout.
+
+async function customerExists(id: string): Promise<boolean> {
+  try {
+    const customer = await stripe().customers.retrieve(id);
+    return !customer.deleted;
+  } catch (err) {
+    if (err instanceof Stripe.errors.StripeError && err.code === "resource_missing") return false;
+    throw err;
+  }
+}
 
 export async function ensureCustomer(user: User): Promise<string> {
-  if (user.stripeCustomerId) return user.stripeCustomerId;
+  if (user.stripeCustomerId && (await customerExists(user.stripeCustomerId))) {
+    return user.stripeCustomerId;
+  }
   const customer = await stripe().customers.create({
     email: user.email,
     name: user.name,

@@ -1,11 +1,14 @@
 import { translatorFor, type TKey } from "@/lib/i18n/dictionaries";
 import type { Lang } from "@/lib/i18n/config";
+import { CONTACT_EMAIL } from "@/lib/contact";
 import { outboundFetch } from "@/lib/outbound-fetch";
 import { recordUsage } from "@/lib/usage";
 
 // Outbound email through Resend (https://resend.com): one POST, no SDK.
 // EMAIL_FROM must be a sender on a domain verified in Resend, e.g.
-// "Unitos <signin@unitosnotebook.com>". With EMAIL_ECHO=1 the message is
+// "Unitos <customerservice@unitosnotebook.com>". Every email carries the
+// contact address (lib/contact.ts) as its reply-to, so a reply reaches
+// customer service whatever the sender is. With EMAIL_ECHO=1 the message is
 // logged instead of sent — the QA harness reads the confirmation link from
 // the log.
 
@@ -27,6 +30,7 @@ export async function sendEmail(msg: {
     },
     body: JSON.stringify({
       from: process.env.EMAIL_FROM,
+      reply_to: CONTACT_EMAIL,
       to: [msg.to],
       subject: msg.subject,
       html: msg.html,

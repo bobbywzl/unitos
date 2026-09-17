@@ -2,6 +2,7 @@
 
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { CONTACT_EMAIL } from "@/lib/contact";
 import { IMAGE_ACCEPT, MAX_IMAGE_BYTES } from "@/lib/images";
 import { isImeKey } from "@/lib/ime";
 import { useT } from "@/components/lang-provider";
@@ -284,14 +285,22 @@ export function FeedbackButton() {
             {state === "error" && (
               <p className="text-xs text-red-600">{t("works.feedbackFailed")}</p>
             )}
-            <div className="flex justify-end gap-2">
-              <button type="button" onClick={() => setOpen(false)} className="rounded-full px-3 py-1 text-xs text-sand-600 hover:text-clay-700">
+            <div className="flex items-center justify-between gap-2">
+              {/* Any request by email: the contact address (lib/contact.ts). */}
+              <a
+                href={`mailto:${CONTACT_EMAIL}`}
+                data-track="feedback-email"
+                className="min-w-0 truncate text-[11px] text-sand-500 hover:text-clay-800"
+              >
+                {t("works.feedbackEmail", { email: CONTACT_EMAIL })}
+              </a>
+              <button type="button" onClick={() => setOpen(false)} className="shrink-0 rounded-full px-3 py-1 text-xs text-sand-600 hover:text-clay-700">
                 {t("common.close")}
               </button>
               <button
                 type="submit"
                 disabled={state === "busy" || uploading > 0 || !message.trim()}
-                className="rounded-full bg-clay px-4 py-1.5 text-xs font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
+                className="shrink-0 rounded-full bg-clay px-4 py-1.5 text-xs font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
               >
                 {state === "sent"
                   ? t("works.feedbackSent")
