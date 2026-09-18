@@ -2,11 +2,12 @@ import type { Lang } from "@/lib/i18n/config";
 import { languageName, profileLines, type ReaderProfileCtx } from "@/lib/prompts/types";
 
 // Stitch (SPEC.md §22): the assistant over the project's documents, from
-// the graph. Two passes, two prompts. The select pass reads one document
-// whole, one call per document, and names the blocks of that document the
-// command needs. The answer pass reads those blocks and answers the command
-// as links between the documents, a generated document built from them, or
-// both. Each document's note says what of it is above — its blocks or its
+// the graph. Three prompts. The route pass reads the documents' gists and
+// part summaries and names the parts the command needs; the select pass
+// reads the skeletons' lines — every document's, or the named parts' —
+// and names the blocks; the answer pass reads those blocks whole and
+// answers the command as links between the documents, a generated document
+// built from them, or both. Each document's note says what of it is above — its blocks or its
 // transcript lines, cut for length, or nothing and why. The model reads and
 // writes block aliases (the document's letter and the block's number: A1,
 // B12), never the stored ids; the route resolves every alias and every
@@ -19,13 +20,21 @@ import { languageName, profileLines, type ReaderProfileCtx } from "@/lib/prompts
     read: false when nothing of it is above. */
 export type StitchDocumentCtx = { tag: string; title: string; note: string; read: boolean };
 
+export type StitchRouteCtx = {
+  profile: ReaderProfileCtx;
+  documents: StitchDocumentCtx[];
+  command: string;
+  maxParts: number;
+};
+
 export type StitchSelectCtx = {
   profile: ReaderProfileCtx;
   documents: StitchDocumentCtx[];
-  // The tag of the one document above.
-  document: string;
   command: string;
   maxBlocks: number;
+  // True when only some parts' lines are above (the route pass, or the
+  // ranker, cut the rest).
+  partial: boolean;
 };
 
 export type StitchCtx = {
@@ -50,23 +59,47 @@ function documentLines(documents: StitchDocumentCtx[]): string[] {
   ];
 }
 
-export function stitchSelectPrompt(ctx: StitchSelectCtx): string {
-  const document = ctx.documents.find((m) => m.tag === ctx.document);
+// The route pass (SPEC.md §22): the documents' gists and part summaries
+// are above; the model names the parts whose lines the select pass reads.
+export function stitchRoutePrompt(ctx: StitchRouteCtx): string {
   return [
     profileLines(ctx.profile),
     "",
     ...documentLines(ctx.documents),
-    `Above is one document only: [document ${ctx.document}]${document ? ` "${document.title}"` : ""}. The other documents are read in calls of their own.`,
+    "Above is each document's gist and one summary per part, each part tagged [part at <alias>] with the alias of its first block. The documents' text is not above.",
     "",
     "The reader's command:",
     ctx.command,
     "",
-    "A second read will do what the command asks over every document, reading only the blocks picked here and in the other documents' reads. Pick every block of this document that bears on the command: a block that mentions the command's topic, answers its question, makes a claim the command asks to compare with the other documents, or holds a passage the command asks to gather.",
-    "For a command over the documents as a whole — the contradictions between them, a synthesis with no topic named — pick the blocks that carry claims, findings, numbers, definitions, and conclusions.",
-    "Leave out references, acknowledgements, navigation, and boilerplate. When in doubt, pick the block: a block left out here is never read again.",
-    `blockIds: the aliases, most relevant first, up to ${ctx.maxBlocks}. Copy each alias exactly as tagged. Consecutive blocks go as one range, first-last (${ctx.document}10-${ctx.document}15). An empty list means nothing in this document bears on the command.`,
+    "A second read will pick the blocks the command needs from the parts named here, reading those parts line by line, and a third will do what the command asks over the picked blocks. Name every part that bears on the command: a part that treats the command's topic, answers its question, makes a claim the command asks to compare with the other documents, or holds passages the command asks to gather.",
+    "For a command over the documents as a whole — the contradictions between them, a synthesis with no topic named — name the parts that carry claims, findings, numbers, definitions, and conclusions, in every document.",
+    "Leave out references, acknowledgements, and boilerplate. When in doubt, name the part: a part left out here is never read.",
+    `parts: the aliases, most relevant first, up to ${ctx.maxParts}, from every document that bears on the command. Copy each alias exactly as tagged. An empty list means nothing bears on the command.`,
     "Do not think longer than the reading takes: this is a reading, not a problem to solve.",
-    `Return ONLY JSON: {"blockIds": ["${ctx.document}3", "${ctx.document}10-${ctx.document}15"]}`,
+    'Return ONLY JSON: {"parts": ["A1", "B12"]}',
+  ].join("\n");
+}
+
+// The select pass (SPEC.md §22): the skeletons are above — one line per
+// block — and the model names the blocks the answer pass reads whole.
+export function stitchSelectPrompt(ctx: StitchSelectCtx): string {
+  return [
+    profileLines(ctx.profile),
+    "",
+    ...documentLines(ctx.documents),
+    ctx.partial
+      ? "Above is each document's skeleton, cut to the parts a first read named for this command: one line per block, what the block says at a tenth of its length, under the block's alias. A gap between two lines is declared. The blocks' full text is not above."
+      : "Above is each document's skeleton: one line per block, what the block says at a tenth of its length, under the block's alias. The blocks' full text is not above.",
+    "",
+    "The reader's command:",
+    ctx.command,
+    "",
+    "A second read will do what the command asks over the full text of the blocks picked here, and nothing else. Pick every block that bears on the command: a block that mentions the command's topic, answers its question, makes a claim the command asks to compare with the other documents, or holds a passage the command asks to gather.",
+    "For a command over the documents as a whole — the contradictions between them, a synthesis with no topic named — pick the blocks that carry claims, findings, numbers, definitions, and conclusions, from every document.",
+    "Leave out references, acknowledgements, navigation, and boilerplate. When in doubt, pick the block: a block left out here is never read again. Pick from every document that bears on the command: a passage in the last document counts as much as one in the first.",
+    `blockIds: the aliases, most relevant first, up to ${ctx.maxBlocks}. Copy each alias exactly as tagged. Consecutive blocks of one document go as one range, first-last (B10-B15). An empty list means nothing bears on the command.`,
+    "Do not think longer than the reading takes: this is a reading, not a problem to solve.",
+    'Return ONLY JSON: {"blockIds": ["A3", "B10-B15"]}',
   ].join("\n");
 }
 

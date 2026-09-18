@@ -128,22 +128,48 @@ export const CONNECT_MODEL = KIMI_K3;
 export const CONNECT_EFFORT: KimiEffort = DEFAULT_EFFORT;
 
 // Stitch (SPEC.md §22): the assistant over the project's documents, from the
-// graph. Two passes. The select pass reads every document whole and names
-// the blocks the command needs — ids only, at "low": a reading, the same as
-// KEYPOINTS, and the one pass over the whole text. The answer pass reads
-// the selected blocks at the reader's effort and answers with links, a
-// generated document, or both. One pass at "high" over every document whole
-// outran the request every time the documents were long. Not a
-// DerivationType — it runs through /api/notebooks/[notebookId]/stitch.
+// graph. The documents are read through their skeletons (SKELETON_* below):
+// a select pass reads every skeleton and names the blocks the command needs
+// — ids only, at "low": a reading, the same as KEYPOINTS. Past
+// STITCH_SKELETON_BUDGET of skeleton text a route pass at "low" reads the
+// gists and part summaries first and names the parts, and the select pass
+// reads only those parts' lines, ranked against the command when they
+// still run past the budget (lib/graph/rank.ts). The answer pass reads the
+// selected blocks' real text at the reader's effort and answers with links,
+// a generated document, or both. Documents under STITCH_WHOLE_THRESHOLD
+// together skip every pass but the answer: the answer pass reads them
+// whole. Not a DerivationType — it runs through
+// /api/notebooks/[notebookId]/stitch.
 export const STITCH_MODEL = KIMI_K3;
+export const STITCH_ROUTE_EFFORT: KimiEffort = "low";
 export const STITCH_SELECT_EFFORT: KimiEffort = "low";
 export const STITCH_SELECT_MAX_OUTPUT_TOKENS = 16384; // a list of ids, with the short reasoning before it
 export const STITCH_EFFORT: KimiEffort = "high";
 export const STITCH_MAX_OUTPUT_TOKENS = 32768; // a page of whole-block references and the model's own writing
+export const STITCH_WHOLE_THRESHOLD = 120_000; // chars of document text; under it the answer pass reads the documents whole
+export const STITCH_SKELETON_BUDGET = 200_000; // chars of skeleton text one select call reads; past it the route pass runs first
+export const STITCH_SELECTED_BUDGET = 200_000; // chars of real block text the answer pass reads
 // The model passes together get this long; the route's limit (300 s) keeps
 // the rest for storing the answer. Past it the run stops and the reader is
 // told to narrow the command instead of reading a stream that ended empty.
 export const STITCH_DEADLINE_MS = 270_000;
+
+// The skeleton of a document (SPEC.md §22): the document collapsed for
+// Stitch — a gist, one summary per part of the contents, one line per
+// block that keeps every claim and number and drops the wording. Built in
+// the background after an add (lib/graph/skeleton.ts), one call per window
+// of SKELETON_WINDOW_CHARS at "low": a reading, like KEYPOINTS, and the
+// lines are copied more than composed. The same model as Stitch; a cheaper
+// model would do (the pass is a reading, not reasoning) and is one constant
+// away once a second client is wired for it. Rebuilt when more than
+// SKELETON_STALE_FRACTION of the document's text has changed since; under
+// that the changed blocks read as their own first words, no model call.
+export const SKELETON_MODEL = KIMI_K3;
+export const SKELETON_EFFORT: KimiEffort = "low";
+export const SKELETON_MAX_OUTPUT_TOKENS = 32768; // a line per block of the window, with the short reasoning before them
+export const SKELETON_WINDOW_CHARS = 100_000;
+export const SKELETON_STALE_FRACTION = 0.1;
+export const SKELETON_STALE_MS = 10 * 60_000; // a build older than this is a dead run
 
 // The contents of a document (SPEC.md §26): the parts the reader jumps
 // between, each with the block it starts at. One call over the whole

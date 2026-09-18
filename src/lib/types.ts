@@ -320,19 +320,18 @@ export type GeneratedDocumentView = {
   blockCount: number;
 };
 
-/** What Stitch read of one document (SPEC.md §22). read: every block went
-    to the model. cut: the first `blocks` of `total` did, the rest cut for
-    length. leftOut: none did, the document past the documents budget.
-    empty: the document has nothing to read, and `reason` says why — a
-    video or audio document reads as its transcript lines, a handwritten
-    document as its converted text, so a transcript or conversion that has
-    not landed is an empty document. `detail` is the stored transcription
-    or conversion error. */
+/** What Stitch read of one document (SPEC.md §22). read: every block of
+    it was under the reading passes (its skeleton's lines, or the text
+    whole). empty: the document has nothing to read, and `reason` says why
+    — a video or audio document reads as its transcript lines, a
+    handwritten document as its converted text, so a transcript or
+    conversion that has not landed is an empty document. `detail` is the
+    stored transcription or conversion error. */
 export type StitchDocument = {
   id: string;
   title: string;
   kind: "text" | "video" | "audio" | "handwritten";
-  status: "read" | "cut" | "leftOut" | "empty";
+  status: "read" | "empty";
   blocks: number;
   total: number;
   reason:

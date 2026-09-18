@@ -1,8 +1,9 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { z } from "zod";
 import { diffSegments, remapAnchor, remapRange } from "@/lib/anchors/remap";
 import { bumpDocument, documentAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
+import { refreshSkeleton } from "@/lib/graph/skeleton";
 import { serverT } from "@/lib/i18n/server";
 import { parseBody } from "@/lib/validate";
 
@@ -211,6 +212,9 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ blockId: stri
     return saved;
   });
   await bumpDocument(block.documentId);
+  // The skeleton rebuilds after the response once more than a tenth of the
+  // document has changed (SPEC.md §22); under that the check is all it does.
+  after(() => refreshSkeleton(block.documentId, access.user.id).catch(() => {}));
   return NextResponse.json(updated);
 }
 
@@ -249,6 +253,7 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ blockId: st
     }),
   ]);
   await bumpDocument(block.documentId);
+  after(() => refreshSkeleton(block.documentId, access.user.id).catch(() => {}));
   // The removal's id: undo puts the block back through /api/blocks/restore,
   // with its own id, so anchors on it heal instead of orphaning.
   return NextResponse.json({ ok: true, editId: removal.id });

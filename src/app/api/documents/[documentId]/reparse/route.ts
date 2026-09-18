@@ -2,6 +2,7 @@ import { after, NextResponse } from "next/server";
 import { z } from "zod";
 import { bumpDocument, documentAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
+import { refreshSkeleton } from "@/lib/graph/skeleton";
 import { runConversion } from "@/lib/handwritten/convert";
 import { renderPageImages } from "@/lib/handwritten/page-images";
 import { serverT } from "@/lib/i18n/server";
@@ -112,6 +113,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ documentId: st
             // The rebuilt pages render and store after the response (SPEC.md §16).
             after(() => renderPageImages(documentId).catch(() => {}));
             after(() => runConversion(documentId, userId).catch(() => {}));
+          } else {
+            // The blocks are new: the skeleton builds again (SPEC.md §22).
+            after(() => refreshSkeleton(documentId, userId).catch(() => {}));
           }
           send({ id: updated.id, title: updated.title, deduped: false });
         }

@@ -476,6 +476,14 @@ model Document {
   // starts at — [{title, blockId, level, lang}]. Built when the reader first
   // opens Contents, never at ingest.
   contents      Json?
+  // The skeleton (SPEC.md §22): the document collapsed for Stitch — a gist,
+  // one summary per part of the contents, one line per block, each line
+  // with the hash of the block it stands for — {v, gist, parts, lines,
+  // chars}. Built in the background after an add, rebuilt when more than a
+  // tenth of the text has changed. skeletonStartedAt: when the running
+  // build started; a start older than 10 minutes is a dead run.
+  skeleton          Json?
+  skeletonStartedAt DateTime?
   references    Json? // the article's reference list, extracted at ingest: [{id, label, text, url}]
   video         VideoAsset? // set = video document; the reader renders the video pane (SPEC.md §11)
   images        ImageAsset[] // images the parse captured (chart animations)

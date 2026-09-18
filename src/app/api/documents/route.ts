@@ -11,6 +11,7 @@ import { parseDriveFileId } from "@/lib/drive/types";
 import { serverT } from "@/lib/i18n/server";
 import { progressResponse } from "@/lib/ingest-response";
 import { attachDocument } from "@/lib/parse/attach";
+import { refreshSkeleton } from "@/lib/graph/skeleton";
 import { describeIngestError } from "@/lib/parse/ingest-error";
 import { ingestMediaUrl } from "@/lib/video/ingest-media-url";
 import { ingestYouTube } from "@/lib/video/ingest-youtube";
@@ -146,6 +147,8 @@ export async function POST(req: Request) {
           const { document, deduped } = await parse.ingestMarkdown(bytes, filename, onProgress);
           await attachDocument(fields.data.notebookId, document.id);
           await bumpNotebook(fields.data.notebookId);
+          // The skeleton builds after the response (SPEC.md §22).
+          if (!deduped) after(() => refreshSkeleton(document.id, user?.id ?? null).catch(() => {}));
           return { id: document.id, title: document.title, deduped };
         } catch (err) {
           console.error("Markdown ingest failed:", err);
@@ -166,6 +169,9 @@ export async function POST(req: Request) {
         );
         await attachDocument(fields.data.notebookId, document.id);
         await bumpNotebook(fields.data.notebookId);
+        // The skeleton builds after the response (SPEC.md §22); a
+        // handwritten document's waits for its conversion.
+        if (!deduped && !document.handwritten) after(() => refreshSkeleton(document.id, user?.id ?? null).catch(() => {}));
         if (!deduped && document.handwritten) {
           // The pages render and store after the response (SPEC.md §16); the
           // reader loads them as they land, and the page image route renders
@@ -268,6 +274,8 @@ export async function POST(req: Request) {
         await attachDocument(data.notebookId, doc.id);
       }
       await bumpNotebook(data.notebookId);
+      // The skeletons build after the response (SPEC.md §22).
+      for (const doc of documents) after(() => refreshSkeleton(doc.id, user?.id ?? null).catch(() => {}));
       return {
         id: document.id,
         title: document.title,

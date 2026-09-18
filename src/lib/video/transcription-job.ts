@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { bumpDocument } from "@/lib/collab";
+import { refreshSkeleton } from "@/lib/graph/skeleton";
 import { cronSecret } from "@/lib/cron-auth";
 import { db } from "@/lib/db";
 import { parseSpeakers, parseTried, type Speaker } from "@/lib/video/types";
@@ -335,6 +336,9 @@ async function storeTranscript(
     });
   });
   await bumpDocument(documentId);
+  // The transcript is the document's text: its skeleton builds now
+  // (SPEC.md §22). A failure here is the skeleton's, never the transcript's.
+  await refreshSkeleton(documentId, null).catch((err: unknown) => console.warn("[transcribe] skeleton failed:", err));
   return lines.length;
 }
 

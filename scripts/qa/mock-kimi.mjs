@@ -83,18 +83,13 @@ function buildResponse(all) {
     return JSON.stringify({ quotes: p1 ? [quoteOf(p1, "The passage answers the question directly in the document's own terms.")] : [] });
   }
 
-  // Stitch (SPEC.md §22), the select pass: the first three paragraphs of
-  // every document, ids only.
+  // Stitch (SPEC.md §22), the select pass: the first three lines of every
+  // document's skeleton, aliases only.
   if (all.includes('"blockIds"') && all.includes("A second read will do what the command asks")) {
-    const headers = [...all.matchAll(/\[document ([^\]]+)\] "/g)];
     const blockIds = [];
-    headers.forEach((h, i) => {
-      const end = i + 1 < headers.length ? headers[i + 1].index : all.length;
-      parseBlocks(all.slice(h.index, end))
-        .filter((b) => b.type === "PARAGRAPH")
-        .slice(0, 3)
-        .forEach((b) => blockIds.push(b.id));
-    });
+    for (const section of all.split(/\n(?=\[document [A-Z]+\] ")/)) {
+      [...section.matchAll(/\[block ([A-Z]+\d+)\]/g)].slice(0, 3).forEach((m) => blockIds.push(m[1]));
+    }
     console.log("[mock stitch select]", blockIds.length, "blocks");
     return JSON.stringify({ blockIds });
   }
@@ -317,6 +312,23 @@ function buildResponse(all) {
 
   // Notebook tasks: no issues found.
   // Gists: the first five words of each listed note.
+  // The skeleton (SPEC.md §22): every block's first eight words as its
+  // line, every listed part's title as its summary, the title as the gist.
+  if (all.includes('"lines"') && all.includes("Write the document's skeleton")) {
+    const blocks = parseBlocks(all);
+    const lines = blocks.map((b) => ({ blockId: b.id, text: b.text.split(/\s+/).slice(0, 8).join(" ") }));
+    const parts = [...all.matchAll(/\[part ([^\]]+)\] "([^"]*)"/g)].map((m) => ({ blockId: m[1], summary: `About ${m[2]}.` }));
+    console.log("[mock skeleton]", lines.length, "lines,", parts.length, "parts");
+    return JSON.stringify({ gist: "Mock gist of the document.", parts, lines });
+  }
+
+  // Stitch, the route pass: every part named.
+  if (all.includes('"parts"') && all.includes("name the parts") ) {
+    const parts = [...all.matchAll(/\[part at ([A-Z]+\d+)\]/g)].map((m) => m[1]);
+    console.log("[mock stitch route]", parts.length, "parts");
+    return JSON.stringify({ parts });
+  }
+
   // Contents (SPEC.md §26): every HEADING block past the first as a part,
   // and the first paragraph of a document with no headings.
   if (all.includes('"parts"') && all.includes("Write the contents of this document")) {

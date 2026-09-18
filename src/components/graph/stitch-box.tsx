@@ -326,7 +326,7 @@ export function StitchBox({
 // nothing — and what was read of each document.
 function ResultLine({ result, onOpen }: { result: StitchResult; onOpen: (id: string) => void }) {
   const t = useT();
-  const readCount = result.documents.filter((d) => d.status === "read" || d.status === "cut").length;
+  const readCount = result.documents.filter((d) => d.status === "read").length;
   const ran = readCount >= 2;
   return (
     <div className="flex flex-col gap-1 text-xs text-sand-600">
@@ -363,7 +363,7 @@ function DocumentsRead({ documents, readCount }: { documents: StitchDocument[]; 
       <p className="text-sand-500">{t("stitch.stitchDocumentsRead", { read: readCount, total: documents.length })}</p>
       <ul className="flex flex-col gap-0.5">
         {documents.map((d) => {
-          const unread = d.status === "leftOut" || d.status === "empty";
+          const unread = d.status === "empty";
           return (
             <li key={d.id} className="flex min-w-0 gap-1.5">
               <span className="min-w-0 max-w-[45%] truncate text-sand-700" title={d.title}>
@@ -391,10 +391,6 @@ function documentLine(d: StitchDocument, t: ReturnType<typeof useT>): string {
   switch (d.status) {
     case "read":
       return t("stitch.stitchDocumentRead", { n: d.blocks, unit });
-    case "cut":
-      return t("stitch.stitchDocumentCut", { n: d.blocks, total: d.total, unit });
-    case "leftOut":
-      return t("stitch.stitchDocumentLeftOut");
     case "empty":
       return emptyLine(d, t);
   }
