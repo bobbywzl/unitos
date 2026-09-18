@@ -241,7 +241,7 @@ const en = {
   billingPreview: "Preview the plan page",
   billingWebhook: "Webhook endpoint",
   billingWebhookDesc:
-    "Register this URL in Stripe with the events checkout.session.completed, invoice.paid, customer.subscription.created, customer.subscription.updated, customer.subscription.deleted, and charge.refunded. Its signing secret is STRIPE_WEBHOOK_SECRET.",
+    "Register this URL in Stripe with the events checkout.session.completed, checkout.session.async_payment_succeeded, checkout.session.async_payment_failed, invoice.paid, invoice.payment_failed, customer.subscription.created, customer.subscription.updated, customer.subscription.deleted, and charge.refunded. Its signing secret is STRIPE_WEBHOOK_SECRET.",
   billingPrices: "Prices",
   billingPriceError: "Not readable: {reason}",
   billingIntervalMonthly: "Monthly",
@@ -251,6 +251,7 @@ const en = {
   billingReceiptsEmpty: "No payments yet.",
   svcStripe: "Stripe client: checkout, the billing portal, prices",
   svcStripeWebhook: "Stripe webhook signing",
+  svcStripeTax: "Stripe Tax at checkout: on needs a head office address and a registration in every jurisdiction that collects",
   svcPricePremiumMonthly: "The Stripe price Unitos Premium sells at, billed monthly",
   svcPricePremiumYearly: "The Stripe price Unitos Premium sells at, billed yearly",
   svcPriceUltraMonthly: "The Stripe price Unitos Ultra sells at, billed monthly",
@@ -471,7 +472,7 @@ const zh: Record<keyof typeof en, string> = {
   billingPreview: "预览方案页",
   billingWebhook: "Webhook 端点",
   billingWebhookDesc:
-    "在 Stripe 中注册此 URL，事件为 checkout.session.completed、invoice.paid、customer.subscription.created、customer.subscription.updated、customer.subscription.deleted 和 charge.refunded。其签名密钥是 STRIPE_WEBHOOK_SECRET。",
+    "在 Stripe 中注册此 URL，事件为 checkout.session.completed、checkout.session.async_payment_succeeded、checkout.session.async_payment_failed、invoice.paid、invoice.payment_failed、customer.subscription.created、customer.subscription.updated、customer.subscription.deleted 和 charge.refunded。其签名密钥是 STRIPE_WEBHOOK_SECRET。",
   billingPrices: "价格",
   billingPriceError: "无法读取：{reason}",
   billingIntervalMonthly: "按月",
@@ -481,6 +482,7 @@ const zh: Record<keyof typeof en, string> = {
   billingReceiptsEmpty: "还没有付款。",
   svcStripe: "Stripe 客户端：结账、订阅门户、价格",
   svcStripeWebhook: "Stripe webhook 签名",
+  svcStripeTax: "结账时的 Stripe Tax：开启需要总部地址和每个征税辖区的税务登记",
   svcPricePremiumMonthly: "Unitos Premium 按月计费的 Stripe 价格",
   svcPricePremiumYearly: "Unitos Premium 按年计费的 Stripe 价格",
   svcPriceUltraMonthly: "Unitos Ultra 按月计费的 Stripe 价格",

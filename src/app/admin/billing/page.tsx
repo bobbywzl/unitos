@@ -9,6 +9,7 @@ import {
   priceEnvName,
   priceIdOf,
   stripeConfigured,
+  taxEnabled,
   TIERS,
   webhookConfigured,
 } from "@/lib/billing/config";
@@ -66,6 +67,7 @@ export default async function AdminBillingPage() {
   const services: { label: string; description: string; set: boolean }[] = [
     { label: "STRIPE_SECRET_KEY", description: t("admin.svcStripe"), set: stripeConfigured() },
     { label: "STRIPE_WEBHOOK_SECRET", description: t("admin.svcStripeWebhook"), set: webhookConfigured() },
+    { label: "STRIPE_TAX", description: t("admin.svcStripeTax"), set: taxEnabled() },
     ...TIERS.flatMap((tier) =>
       INTERVALS.map((interval) => ({
         label: priceEnvName(tier, interval),
