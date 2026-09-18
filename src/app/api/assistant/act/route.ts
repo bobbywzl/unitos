@@ -2,6 +2,7 @@ import type { ModelMessage } from "ai";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { matchInText } from "@/lib/anchors/match";
+import { thinkingEffort, thinkingSchema } from "@/lib/assistant/thinking";
 import { passageSources, resolvePassage, segmentsSchema } from "@/lib/anchors/passage";
 import { bumpNotebook, notebookAccess } from "@/lib/collab";
 import {
@@ -15,7 +16,7 @@ import {
 } from "@/lib/conversation";
 import { stripSimplifyMarkers } from "@/lib/sentences";
 import { db } from "@/lib/db";
-import { DERIVATION_EFFORT, DERIVATION_MODEL, MAX_OUTPUT_TOKENS } from "@/lib/derive/config";
+import { DERIVATION_MODEL, MAX_OUTPUT_TOKENS } from "@/lib/derive/config";
 import {
   annotationsSection,
   documentPrefix,
@@ -77,6 +78,10 @@ const requestSchema = z.object({
         .optional(),
     })
     .optional(),
+  // How hard the model thinks about this command (SPEC.md §7): Fast Thinking
+  // or Deep Thinking. Absent = Deep, the effort every answer used before the
+  // choice existed.
+  thinking: thinkingSchema.optional(),
   // The assistant chat sends the turns so far; the command continues them.
   history: z
     .array(
@@ -432,7 +437,7 @@ async function handle(req: Request, t: TFunc) {
     model: await kimi(DERIVATION_MODEL.SYNTHESIS),
     messages,
     maxOutputTokens: MAX_OUTPUT_TOKENS.SYNTHESIS,
-    providerOptions: kimiOptions(DERIVATION_EFFORT.SYNTHESIS),
+    providerOptions: kimiOptions(thinkingEffort(data.thinking)),
     schema: planSchema,
     label: "assistant:act",
     usage: { userId: user.id, feature: "act", model: await resolveModelId(DERIVATION_MODEL.SYNTHESIS) },

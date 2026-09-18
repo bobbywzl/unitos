@@ -46,6 +46,13 @@ const en = {
   queuePlaceholder: "Queue a message",
   queued: "{n} queued",
   removeQueued: "Remove from the queue",
+  // Thinking control (SPEC.md §7): Fast Thinking, or Deep Thinking
+  thinkingFast: "Fast Thinking",
+  thinkingFastHint:
+    "Fast Thinking: the assistant reasons as little as it can before it answers. Quicker, and enough for a question the material answers directly.",
+  thinkingDeep: "Deep Thinking",
+  thinkingDeepHint:
+    "Deep Thinking: the assistant reasons the question through before it answers. Slower, and better for a question that has to be worked out across the material.",
   // Web access (SPEC.md §7)
   web: "Web",
   webOnTitle:
@@ -127,6 +134,10 @@ const zh: Record<keyof typeof en, string> = {
   queuePlaceholder: "排队一条消息",
   queued: "{n} 条排队中",
   removeQueued: "从队列中移除",
+  thinkingFast: "快速思考",
+  thinkingFastHint: "快速思考：助手作答前尽量少推理。更快，适合材料能直接回答的问题。",
+  thinkingDeep: "深度思考",
+  thinkingDeepHint: "深度思考：助手作答前把问题想透。更慢，适合需要在材料中推演的问题。",
   web: "联网",
   webOnTitle: "联网已开启：助手会用网络核对答案，并注明所用的外部来源。点击后只根据项目作答。",
   webOffTitle: "联网已关闭：助手只根据项目作答。点击后允许它搜索网络并注明外部来源。",

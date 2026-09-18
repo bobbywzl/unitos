@@ -10,10 +10,10 @@ import {
   MAX_IMAGES_PER_CONVERSATION,
   MAX_IMAGES_PER_MESSAGE,
 } from "@/lib/assistant/attachments";
+import { thinkingEffort, thinkingSchema } from "@/lib/assistant/thinking";
 import { notebookAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
 import {
-  DERIVATION_EFFORT,
   DERIVATION_MODEL,
   MAX_OUTPUT_TOKENS,
   STREAM_ERROR_TOKEN,
@@ -47,6 +47,10 @@ const assistantSchema = z.object({
   // ask only: the assistant may search the web and cite outside sources
   // (SPEC.md §7).
   web: z.boolean().optional(),
+  // How hard the model thinks about this message (SPEC.md §7): Fast Thinking
+  // or Deep Thinking. Absent = Deep, the effort every answer used before the
+  // choice existed.
+  thinking: thinkingSchema.optional(),
   // ask only: the conversation so far, oldest first (SPEC.md §7). The
   // question continues it. The prompt reads the newest MAX_HISTORY_TURNS.
   history: z.array(conversationTurnSchema).max(200).optional(),
@@ -119,6 +123,7 @@ async function handle(req: Request, t: TFunc) {
   const profile = await loadProfile(data.notebookId);
   const model = await kimi(DERIVATION_MODEL.SYNTHESIS);
   const maxOutputTokens = MAX_OUTPUT_TOKENS.SYNTHESIS;
+  const effort = thinkingEffort(data.thinking);
 
   // The digest is the scope context: deterministic until the content changes,
   // so the prompt prefix caches across questions (SPEC.md §2).
@@ -221,7 +226,7 @@ async function handle(req: Request, t: TFunc) {
     const result = streamText({
       model,
       maxOutputTokens,
-      providerOptions: kimiOptions(DERIVATION_EFFORT.SYNTHESIS),
+      providerOptions: kimiOptions(effort),
       allowSystemInMessages: true,
       messages,
       ...(web
@@ -235,7 +240,7 @@ async function handle(req: Request, t: TFunc) {
       abortSignal: req.signal,
       onEnd: ({ usage }) => {
         console.log(
-          `[assistant] ask scope=${data.scope} web=${web} turns=${turns} images=${images.length} files=${files.length} searches=${searches} chars=${system.length} cacheRead=${usage.inputTokenDetails.cacheReadTokens ?? 0} ` +
+          `[assistant] ask scope=${data.scope} thinking=${data.thinking ?? "deep"} web=${web} turns=${turns} images=${images.length} files=${files.length} searches=${searches} chars=${system.length} cacheRead=${usage.inputTokenDetails.cacheReadTokens ?? 0} ` +
             `cacheWrite=${usage.inputTokenDetails.cacheWriteTokens ?? 0} output=${usage.outputTokens ?? 0}`,
         );
         const tokens = sdkTokens(usage);
@@ -298,7 +303,7 @@ async function handle(req: Request, t: TFunc) {
     model,
     messages,
     maxOutputTokens,
-    providerOptions: kimiOptions(DERIVATION_EFFORT.SYNTHESIS),
+    providerOptions: kimiOptions(effort),
     schema: issuesSchema,
     label: `assistant:${data.task}`,
     usage: usageMeta,

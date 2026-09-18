@@ -50,6 +50,7 @@ const CLICK_FUNCTIONS: Record<ClickGroup, readonly string[]> = {
     // the assistant panel: the scope asked, the task run, the summary depth
     "assistant-ask:",
     "assistant-web:",
+    "assistant-thinking:",
     "assistant-task:",
     "assistant-recommended:",
     "assistant-regenerate",
