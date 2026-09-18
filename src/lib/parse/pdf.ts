@@ -1226,6 +1226,27 @@ function isAlignedLine(line: Line, columns: number[]): boolean {
   return columns.some((c, idx) => idx > 0 && Math.abs(line.x - c) < 12);
 }
 
+// Every cell of the line starts at one of the columns: the line is a row of
+// the table those columns came from, whatever else it looks like.
+function sitsInColumns(line: Line, columns: number[]): boolean {
+  return (
+    line.cells.length >= 2 &&
+    line.cells.every((cell) => columns.some((c) => Math.abs(cell.x - c) < 12))
+  );
+}
+
+// A two-cell line that is a table row with a wrapped first column: the page
+// carries a line of three or more cells whose first and last columns are this
+// line's two. A label line ("2008  Watchtower deployed …") has no such row.
+function isWrappedRowLine(line: Line, lines: Line[]): boolean {
+  return lines.some(
+    (row) =>
+      row.cells.length >= 3 &&
+      Math.abs(row.cells[0].x - line.cells[0].x) < 6 &&
+      Math.abs(row.cells[row.cells.length - 1].x - line.cells[1].x) < 6,
+  );
+}
+
 // Table runs, computed before segmentation. A run grows forward over
 // multi-cell lines and the single-cell lines that continue a wrapped cell
 // (aligned with a column, or indented past the first column, or a first-column
@@ -1259,7 +1280,16 @@ function findTableRuns(lines: Line[], ctx: PageContext): number[] {
       const last = lines[members[members.length - 1]];
       const gap = last.y - next.y;
       if (gap < 0 || gap > next.size * ctx.leading * 2.2) break;
-      if (isLabelLine(next, ctx) || isMonoLine(next) || lineMathShare(next) >= 0.4) break;
+      // A wrapped row line can read as a label line (a short first cell at
+      // the left edge, the rest under the last column); inside a run whose
+      // columns it sits at, it is a row.
+      if (
+        (isLabelLine(next, ctx) && !sitsInColumns(next, clusterColumns(members.map((k) => lines[k])))) ||
+        isMonoLine(next) ||
+        lineMathShare(next) >= 0.4
+      ) {
+        break;
+      }
       if (next.cells.length >= 2) {
         members.push(j);
         multi++;
@@ -2748,7 +2778,15 @@ export async function parsePdf(
     for (const l of lines) {
       if (l.cells.length !== 2 || l.x > pageMinX + 4 || l.cells[0].text.length > 12) continue;
       const bodyX = Math.round(l.cells[1].x);
-      if (bodyX - pageMinX >= 24 && prominentXs.has(bodyX)) labelXs.push(bodyX);
+      if (bodyX - pageMinX < 24 || !prominentXs.has(bodyX)) continue;
+      // A table row whose first column wrapped reads exactly like a label
+      // line: a short first cell at the left edge, the rest of the row under
+      // a column the page's lines regularly start at. It is a row, not a
+      // label — the page carries rows of three or more cells at those same
+      // columns (import compare loop finding: a three-column table whose
+      // first column wrapped broke into paragraphs at every wrapped row).
+      if (isWrappedRowLine(l, lines)) continue;
+      labelXs.push(bodyX);
     }
     let labelColumn: number | null = null;
     if (labelXs.length >= 2) {
