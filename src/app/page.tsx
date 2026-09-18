@@ -169,6 +169,8 @@ export default async function Home() {
             }),
           )}
           myEmail={user.email}
+          ultra={tier === "ultra"}
+          billing={billing}
         />
         {/* The steps around the dissection that Unitos does not do (SPEC.md §23). */}
         <Companions />

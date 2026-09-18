@@ -1,6 +1,7 @@
 "use client";
 
 import { ACCOUNT_HEADER } from "@/lib/constants";
+import { openDb, tx, UPLOADS, WRITES } from "@/lib/offline/db";
 import { tabAccount } from "@/lib/tab-account";
 import { MEDIA_EXTENSIONS, UPLOAD_CHUNK_BYTES } from "@/lib/video/types";
 
@@ -13,9 +14,6 @@ import { MEDIA_EXTENSIONS, UPLOAD_CHUNK_BYTES } from "@/lib/video/types";
 // answers, drops with a warning on a 4xx (stale by then), and stays for the
 // next attempt on a network failure.
 
-const DB_NAME = "unitos-offline";
-const WRITES = "writes";
-const UPLOADS = "uploads";
 const PREMIUM_KEY = "unitos-premium";
 const SINGLE_REQUEST_BYTES = 4 * 1024 * 1024;
 
@@ -56,36 +54,6 @@ export function rememberPremium(premium: boolean) {
 
 export function isOffline(): boolean {
   return typeof navigator !== "undefined" && !navigator.onLine;
-}
-
-function openDb(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, 1);
-    req.onupgradeneeded = () => {
-      const db = req.result;
-      if (!db.objectStoreNames.contains(WRITES)) {
-        db.createObjectStore(WRITES, { autoIncrement: true });
-      }
-      if (!db.objectStoreNames.contains(UPLOADS)) {
-        db.createObjectStore(UPLOADS, { autoIncrement: true });
-      }
-    };
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  });
-}
-
-function tx<T>(store: string, mode: IDBTransactionMode, run: (s: IDBObjectStore) => IDBRequest<T>): Promise<T> {
-  return openDb().then(
-    (db) =>
-      new Promise<T>((resolve, reject) => {
-        const t = db.transaction(store, mode);
-        const req = run(t.objectStore(store));
-        req.onsuccess = () => resolve(req.result);
-        req.onerror = () => reject(req.error);
-        t.oncomplete = () => db.close();
-      }),
-  );
 }
 
 // Queued-count listeners: the offline status pill re-renders on every change.

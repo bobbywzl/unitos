@@ -58,9 +58,13 @@ export function middleware(request: NextRequest) {
   // the transcription job's next leg (SPEC.md §11): the app calling its own
   // transcribe route with no session and CRON_SECRET as the bearer. The
   // header only opens the door; the route refuses without the secret.
+  // The offline page and the service worker (SPEC.md §17) hold no data:
+  // the worker fetches both without a session.
   if (
     pathname === "/signin" ||
     pathname === "/reset" ||
+    pathname === "/offline" ||
+    pathname === "/sw.js" ||
     pathname === "/privacy" ||
     pathname === "/terms" ||
     pathname === "/billing" ||

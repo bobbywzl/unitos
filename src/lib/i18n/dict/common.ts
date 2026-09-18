@@ -30,7 +30,8 @@
 //   upload assistant 上传助手 · review(上传审阅) 审阅 · page 页面 ·
 //   split 拆分 · handwritten 手写 ·
 //   conversion(手写转文本) 转换 · Circle & ask 圈选并提问 · image 图片 ·
-//   offline 离线 · sync(离线同步) 同步 · Unitos Premium 不翻译 ·
+//   offline 离线 · sync(离线同步) 同步 · offline copy(离线保存的项目) 离线副本 ·
+//   Save for offline 离线保存 · Unitos Premium 不翻译 ·
 //   Unitos Ultra 不翻译 · plan(账户方案) 方案 · trial 试用 ·
 //   tier(账户等级) 方案 · tier mark(方案标记) 方案标记 · black diamond 黑钻 ·
 //   white crystal 白水晶 ·
@@ -103,6 +104,13 @@ const en = {
   offlinePremium: "Offline · edits save and sync later · Unitos Premium",
   offlineReadOnly: "Offline · changes do not save. Unitos Premium saves offline work.",
   offlineSyncing: "Syncing {n} offline changes…",
+  // The offline page (SPEC.md §17, Unitos Ultra): what loads without a network
+  offlineTitle: "Offline",
+  offlinePageBody: "Only projects saved for offline are shown. Everything else needs a connection.",
+  offlineEmpty:
+    "No project is saved for offline. Online, open a project's ⋯ menu and press Save for offline. Unitos Ultra.",
+  offlineSavedAt: "Saved {date}",
+  offlineOpen: "Open",
   streamIncomplete: "The answer did not arrive whole. Try again.",
   signInToContinue: "Sign in to continue.",
   corpusNotFound: "Project not found",
@@ -181,6 +189,12 @@ const zh: Record<keyof typeof en, string> = {
   offlinePremium: "离线 · 编辑会保存并稍后同步 · Unitos Premium",
   offlineReadOnly: "离线 · 更改不会保存。Unitos Premium 可保存离线工作。",
   offlineSyncing: "正在同步 {n} 项离线更改…",
+  // The offline page (SPEC.md §17, Unitos Ultra): what loads without a network
+  offlineTitle: "离线",
+  offlinePageBody: "只显示已离线保存的项目。其他内容需要网络。",
+  offlineEmpty: "没有离线保存的项目。联网时打开项目的 ⋯ 菜单，按离线保存。Unitos Ultra 功能。",
+  offlineSavedAt: "保存于 {date}",
+  offlineOpen: "打开",
   streamIncomplete: "回答没有完整送达。请重试。",
   signInToContinue: "请登录后继续。",
   corpusNotFound: "未找到该项目",

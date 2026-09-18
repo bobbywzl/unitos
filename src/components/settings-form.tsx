@@ -10,6 +10,7 @@ import type { DriveAccess } from "@/lib/drive/types";
 import type { TKey } from "@/lib/i18n/dictionaries";
 import { PERSON_COLORS, personOf, type Person } from "@/lib/person";
 import { api } from "@/lib/api";
+import { clearSaved, listSaved, subscribeSaved } from "@/lib/offline/saved";
 import type { AccountStorage } from "@/lib/storage";
 import { storageLimit, type TierState } from "@/lib/tiers";
 import { StorageBar } from "@/components/storage-bar";
@@ -134,6 +135,13 @@ export function SettingsForm({
   const [picture, setPicture] = useState(account?.picture ?? "");
   const [backgroundText, setBackgroundText] = useState(background);
   const [status, setStatus] = useState<"idle" | "saving" | "saved">("idle");
+  // Offline copies (SPEC.md §17): how many projects this browser holds.
+  const [savedOffline, setSavedOffline] = useState(0);
+  useEffect(() => {
+    const update = () => void listSaved().then((rows) => setSavedOffline(rows.length));
+    update();
+    return subscribeSaved(update);
+  }, []);
   const [error, setError] = useState<string | null>(null);
   // What the stored Drive grant reaches; null = not linked. The page renders
   // after the link callback, so this starts current.
@@ -322,6 +330,7 @@ export function SettingsForm({
         ]
       : []),
     { label: "settings.dataBrowser", value: t("settings.dataBrowserValue") },
+    { label: "settings.dataOffline", value: String(savedOffline), desc: "settings.dataOfflineDesc" },
     { label: "settings.dataLogs", value: t("settings.dataLogsValue") },
   ];
 
@@ -430,6 +439,14 @@ export function SettingsForm({
               <span className="truncate text-xs text-sand-600">{account.email}</span>
               <a
                 href="/api/auth/logout"
+                // Sign out removes the account's offline copies first
+                // (SPEC.md §17): the next reader of this browser does not
+                // open them.
+                onClick={(e) => {
+                  e.preventDefault();
+                  const target = e.currentTarget.href;
+                  void clearSaved().finally(() => window.location.assign(target));
+                }}
                 className="ml-auto rounded-full border border-line px-3 py-1 text-xs text-sand-700 hover:bg-clay-100 hover:text-clay-800"
               >
                 {t("common.signOut")}
