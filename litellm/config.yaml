@@ -54,6 +54,10 @@ model_list:
       allowed_openai_params: ["reasoning_effort"]
       # An account on the China platform: api_base: https://api.moonshot.cn/v1
       # (and the /moonshot pass-through target below to match).
+    model_info:
+      # Check models probes a wildcard with this id, not a random one of the
+      # provider's list.
+      health_check_model: moonshot/kimi-k3
 
   # Claude — the app's own Claude calls take the /anthropic pass-through
   # below, not this route, so every Anthropic field but one survives as
@@ -64,6 +68,8 @@ model_list:
     litellm_params:
       model: "anthropic/*"
       api_key: os.environ/ANTHROPIC_API_KEY
+    model_info:
+      health_check_model: anthropic/claude-opus-5
 
   # Gemini — video reads take the /gemini pass-through below (the file store
   # is on it too). This route is for a chat call that names gemini/<id>.
@@ -71,6 +77,8 @@ model_list:
     litellm_params:
       model: "gemini/*"
       api_key: os.environ/GEMINI_API_KEY
+    model_info:
+      health_check_model: gemini/gemini-3.7-flash
 
   # Transcription: Groq Whisper first ($0.04 an hour), OpenAI Whisper next.
   # The app's own ladder (lib/video/transcribe.ts) moves from one to the
