@@ -2,28 +2,47 @@ import type { DerivationType } from "@prisma/client";
 import { isLang, LANG_COOKIE } from "@/lib/i18n/config";
 import { translate } from "@/lib/i18n/dictionaries";
 
-// Two models (SPEC.md §2). Kimi K3, Moonshot AI's flagship, is behind every AI
-// feature but the handwritten passes and Visualize, which run on Claude
-// Opus 5 (HANDWRITTEN_MODEL and VISUALIZE_MODEL below). The clients live in
-// lib/kimi.ts and lib/claude.ts, not here: client components import this
-// file.
+// The models (SPEC.md §2). GLM 5.3, Z.ai's flagship, is behind the reader's
+// tools, the assistant, Stitch's answer, and the merge of notes; GLM 5.3
+// Flash, its small sibling, behind every reading — the readings copy claims
+// into structure, and Flash reads a million tokens for a tenth of the price.
+// Both run through the gateway (lib/gateway.ts): without it, a GLM id
+// resolves to Kimi K3 (lib/models.ts). Kimi K3, Moonshot AI's flagship,
+// keeps what GLM 5.3 cannot do: it reads images (VISION_MODEL: a circled
+// figure, a picture in the assistant, a video frame) and runs Moonshot's
+// web-search tool (WEB_SEARCH_MODEL). The handwritten passes and Visualize
+// run on Claude Opus 5 (HANDWRITTEN_MODEL and VISUALIZE_MODEL below). The
+// clients live in lib/kimi.ts (the OpenAI-compatible client: Kimi, and
+// under the gateway GLM) and lib/claude.ts, not here: client components
+// import this file.
 export const KIMI_K3 = "kimi-k3";
+export const GLM_5_3 = "glm-5.3";
+export const GLM_5_3_FLASH = "glm-5.3-flash";
 export const CLAUDE_FABLE_5_1 = "claude-fable-5-1";
 export const CLAUDE_OPUS_5 = "claude-opus-5";
+// GLM 5.3 takes text alone. A call that carries an image — Circle & ask on
+// a figure, a page image, a picture attached to the assistant, a video
+// frame — goes to Kimi K3 instead, whatever the feature's model.
+export const VISION_MODEL = KIMI_K3;
+// The web-search tool is Moonshot's (lib/kimi.ts), so the assistant with
+// Web on runs on Kimi K3.
+export const WEB_SEARCH_MODEL = KIMI_K3;
 // Gemini's flash model reads video (SPEC.md §11): transcription and clip
 // descriptions. The client is lib/video/gemini.ts.
 export const GEMINI_FLASH = "gemini-3.7-flash";
 
-// The three constants above are the roles' defaults. The bimonthly model
-// update (lib/models.ts, /api/cron/models) moves each role to the newest
-// version of its family as the provider's model list publishes it; the
-// clients (lib/kimi.ts, lib/claude.ts, lib/video/gemini.ts) resolve a
-// default id to the role's current id on every call. A constant that is not
-// a role default (an alias rung like gemini-flash-latest) is called as is.
+// The constants above are the roles' defaults. The bimonthly model update
+// (lib/models.ts, /api/cron/models) moves each role to the newest version
+// of its family as the provider's model list publishes it; the clients
+// (lib/kimi.ts, lib/claude.ts, lib/video/gemini.ts) resolve a default id to
+// the role's current id on every call. A constant that is not a role
+// default (an alias rung like gemini-flash-latest) is called as is.
 
-// Reasoning effort per call. Kimi K3 always reasons; "max" is its default and
-// its slowest. The reader's tools answer at "high"; ANALYZE reads a figure or
-// table at "max": a misread number is worse than a slow answer. KEYPOINTS
+// Reasoning effort per call, for the OpenAI-compatible client's models. Kimi
+// K3 and GLM 5.3 always reason and take the same three levels; "max" is the
+// default of both and the slowest. The reader's tools answer at "high";
+// ANALYZE reads a figure or table at "max": a misread number is worse than
+// a slow answer. KEYPOINTS
 // (the reader's Distill) reads the whole document at "low", the one tool that
 // does: a distillation is careful bullet pointing of what the document says,
 // not a problem to reason through. Kimi counts its reasoning against the
@@ -40,22 +59,24 @@ export const DEFAULT_EFFORT: KimiEffort = "high";
 // its slowest and its most thorough.
 export type ClaudeEffort = "low" | "medium" | "high" | "xhigh" | "max";
 
-// Model per derivation type (SPEC.md §2). One place to change.
+// Model per derivation type (SPEC.md §2). One place to change. GLM 5.3 for
+// the tools that reason over a passage or answer the reader; GLM 5.3 Flash
+// for the readings, which find and copy passages into structure.
 export const DERIVATION_MODEL: Record<DerivationType, string> = {
-  EXPLAIN: KIMI_K3,
-  SIMPLIFY: KIMI_K3,
-  SALIENCE: KIMI_K3,
-  EXTRACT: KIMI_K3,
-  SUMMARIZE: KIMI_K3,
-  SYNTHESIS: KIMI_K3,
-  FIND: KIMI_K3,
-  DISTILL: KIMI_K3,
-  KEYPOINTS: KIMI_K3,
-  FORMALIZE: KIMI_K3,
-  ASK: KIMI_K3,
-  COMPARE: KIMI_K3,
-  ANALYZE: KIMI_K3,
-  VOICE: KIMI_K3, // no model call of its own: the transcription ladder does the work
+  EXPLAIN: GLM_5_3,
+  SIMPLIFY: GLM_5_3,
+  SALIENCE: GLM_5_3_FLASH,
+  EXTRACT: GLM_5_3_FLASH,
+  SUMMARIZE: GLM_5_3,
+  SYNTHESIS: GLM_5_3,
+  FIND: GLM_5_3_FLASH,
+  DISTILL: GLM_5_3_FLASH,
+  KEYPOINTS: GLM_5_3_FLASH,
+  FORMALIZE: GLM_5_3,
+  ASK: GLM_5_3,
+  COMPARE: GLM_5_3,
+  ANALYZE: GLM_5_3, // with a figure attached the call goes to VISION_MODEL (api/derive)
+  VOICE: GLM_5_3, // no model call of its own: the transcription ladder does the work
   VISUALIZE: CLAUDE_OPUS_5, // the strongest model at drawing: the picture has to be faithful or refused (SPEC.md §20)
 };
 
@@ -124,7 +145,7 @@ export const MAX_OUTPUT_TOKENS: Record<DerivationType, number> = {
 // DerivationType — it runs as a background job, not through /api/derive. Two
 // passes, the scan and the check, both at the reader's effort: the scan
 // reads the whole project, and "max" over that much text outruns the request.
-export const CONNECT_MODEL = KIMI_K3;
+export const CONNECT_MODEL = GLM_5_3_FLASH;
 export const CONNECT_EFFORT: KimiEffort = DEFAULT_EFFORT;
 
 // Stitch (SPEC.md §22): the assistant over the project's documents, from the
@@ -140,7 +161,8 @@ export const CONNECT_EFFORT: KimiEffort = DEFAULT_EFFORT;
 // together skip every pass but the answer: the answer pass reads them
 // whole. Not a DerivationType — it runs through
 // /api/notebooks/[notebookId]/stitch.
-export const STITCH_MODEL = KIMI_K3;
+export const STITCH_MODEL = GLM_5_3; // the answer pass
+export const STITCH_SELECT_MODEL = GLM_5_3_FLASH; // the route and select passes: readings of the skeletons
 export const STITCH_ROUTE_EFFORT: KimiEffort = "low";
 export const STITCH_SELECT_EFFORT: KimiEffort = "low";
 export const STITCH_SELECT_MAX_OUTPUT_TOKENS = 16384; // a list of ids, with the short reasoning before it
@@ -159,12 +181,10 @@ export const STITCH_DEADLINE_MS = 270_000;
 // block that keeps every claim and number and drops the wording. Built in
 // the background after an add (lib/graph/skeleton.ts), one call per window
 // of SKELETON_WINDOW_CHARS at "low": a reading, like KEYPOINTS, and the
-// lines are copied more than composed. The same model as Stitch; a cheaper
-// model would do (the pass is a reading, not reasoning) and is one constant
-// away once a second client is wired for it. Rebuilt when more than
+// lines are copied more than composed, so GLM 5.3 Flash. Rebuilt when more than
 // SKELETON_STALE_FRACTION of the document's text has changed since; under
 // that the changed blocks read as their own first words, no model call.
-export const SKELETON_MODEL = KIMI_K3;
+export const SKELETON_MODEL = GLM_5_3_FLASH;
 export const SKELETON_EFFORT: KimiEffort = "low";
 export const SKELETON_MAX_OUTPUT_TOKENS = 32768; // a line per block of the window, with the short reasoning before them
 export const SKELETON_WINDOW_CHARS = 100_000;
@@ -176,23 +196,23 @@ export const SKELETON_STALE_MS = 10 * 60_000; // a build older than this is a de
 // document at "low", like KEYPOINTS: a reading of where the parts begin,
 // not a problem to reason through, and a long document at "high" outran
 // the request.
-export const CONTENTS_MODEL = KIMI_K3;
+export const CONTENTS_MODEL = GLM_5_3_FLASH;
 export const CONTENTS_EFFORT: KimiEffort = "low";
 export const CONTENTS_MAX_OUTPUT_TOKENS = 16384; // a list of titles and block ids, with the short reasoning before it
 
 // The merge of notes (SPEC.md §6): the reader drops a note on another and
 // picks Merge with AI, and the model writes the one note that replaces both.
 // It rewrites the reader's own words, so it reasons at the reader's effort.
-export const MERGE_MODEL = KIMI_K3;
+export const MERGE_MODEL = GLM_5_3;
 export const MERGE_EFFORT: KimiEffort = DEFAULT_EFFORT;
 
 // The gist of a note — the phrase its collapsed row shows (SPEC.md §6): a
 // five-word label from a short text, so the lowest effort.
-export const GIST_MODEL = KIMI_K3;
+export const GIST_MODEL = GLM_5_3_FLASH;
 export const GIST_EFFORT: KimiEffort = "low";
 
 // The parse passes — the URL core, structure, and layout passes (SPEC.md §2)
-// — run on Kimi K3 at high effort. The passes answer with ops by block
+// — run on GLM 5.3 Flash at high effort. The passes answer with ops by block
 // index, a reading of the page rather than a problem to solve, and the
 // figure rules are the code's (lib/parse/structure.ts, layout.ts: a figure
 // with media is never dropped), so the parse keeps its figures under any
@@ -200,7 +220,7 @@ export const GIST_EFFORT: KimiEffort = "low";
 // call whichever client the id belongs to (lib/parse/model.ts), and the
 // prompts are the same either way. What the parse gets wrong every later
 // tool inherits: keep the effort high.
-export const PARSE_MODEL = KIMI_K3;
+export const PARSE_MODEL = GLM_5_3_FLASH;
 export const PARSE_EFFORT: KimiEffort = "high";
 
 // The upload assistant's review and instruction check (SPEC.md §15). Not a

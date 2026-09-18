@@ -71,6 +71,7 @@ export default async function AdminPage() {
       state: gateway ? "set" : "unset",
     },
     { label: "LITELLM_ADMIN_KEY", description: t("admin.svcGatewayAdmin"), state: gatewayAdminKey() ? "set" : "unset" },
+    { label: "ZAI_API_KEY", description: t("admin.svcGlm"), state: gateway ? "gateway" : "unset" },
     { label: "MOONSHOT_API_KEY", description: t("admin.svcKimi"), state: viaGateway(Boolean(providerKey("moonshot"))) },
     { label: "ANTHROPIC_API_KEY", description: t("admin.svcClaude"), state: viaGateway(Boolean(providerKey("anthropic"))) },
     { label: "GEMINI_API_KEY", description: t("admin.svcGemini"), state: viaGateway(Boolean(providerKey("gemini"))) },

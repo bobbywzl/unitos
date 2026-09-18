@@ -141,7 +141,8 @@ const en = {
   agoDays: "{n} d ago",
   // Services (env status; moved here from Settings — operator concern, not reader)
   services: "Services",
-  svcKimi: "Derivations, assistant, glossary",
+  svcGlm: "GLM 5.3: the reader's tools, the assistant, Stitch, Merge with AI. GLM 5.3 Flash: the readings and the parse passes. Through the gateway alone; Kimi stands in without it",
+  svcKimi: "Kimi K3: calls that carry an image, the assistant with Web on, and every GLM call without the gateway",
   svcClaude: "Import: upload review, parse, PDF judgment, conversion",
   svcSignIn: "Sign-in at /signin",
   svcAdmin: "Feedback inbox and digest at /admin",
@@ -177,7 +178,7 @@ const en = {
   gatewaySetup1:
     "Deploy the gateway from the litellm folder of the repository (its README has the steps for Railway) with a Postgres beside it.",
   gatewaySetup2:
-    "On the gateway host, set LITELLM_MASTER_KEY, DATABASE_URL, and the provider keys: MOONSHOT_API_KEY, ANTHROPIC_API_KEY, GEMINI_API_KEY, GROQ_API_KEY, OPENAI_API_KEY, DEEPL_API_KEY.",
+    "On the gateway host, set LITELLM_MASTER_KEY, DATABASE_URL, and the provider keys: ZAI_API_KEY, MOONSHOT_API_KEY, ANTHROPIC_API_KEY, GEMINI_API_KEY, GROQ_API_KEY, OPENAI_API_KEY, DEEPL_API_KEY.",
   gatewaySetup3: "On this app's host, set LITELLM_BASE_URL to the gateway's URL and LITELLM_ADMIN_KEY to the master key, then redeploy.",
   gatewaySetup4: "Open this page, set the app key's limits, and click Create app key. Put the key it shows into LITELLM_API_KEY on this app's host and redeploy.",
   gatewaySetup5:
@@ -450,7 +451,8 @@ const zh: Record<keyof typeof en, string> = {
   agoHours: "{n} 小时前",
   agoDays: "{n} 天前",
   services: "服务",
-  svcKimi: "AI 生成、助手、术语表",
+  svcGlm: "GLM 5.3：阅读器工具、助手、Stitch、AI 合并。GLM 5.3 Flash：各项读取和解析步骤。只经过网关；没有网关时由 Kimi 代替",
+  svcKimi: "Kimi K3：带图片的调用、开启联网的助手，以及没有网关时的所有 GLM 调用",
   svcClaude: "导入：上传审阅、解析、PDF 判断、转换",
   svcSignIn: "位于 /signin 的登录",
   svcAdmin: "位于 /admin 的反馈收件箱与汇编",
@@ -483,7 +485,7 @@ const zh: Record<keyof typeof en, string> = {
   gatewayNotSet: "尚未设置网关。每个 AI 调用都直接用提供商自己的密钥访问提供商。",
   gatewaySetup1: "用仓库里的 litellm 文件夹部署网关（其 README 有 Railway 的步骤），旁边配一个 Postgres。",
   gatewaySetup2:
-    "在网关主机上设置 LITELLM_MASTER_KEY、DATABASE_URL 和提供商密钥：MOONSHOT_API_KEY、ANTHROPIC_API_KEY、GEMINI_API_KEY、GROQ_API_KEY、OPENAI_API_KEY、DEEPL_API_KEY。",
+    "在网关主机上设置 LITELLM_MASTER_KEY、DATABASE_URL 和提供商密钥：ZAI_API_KEY、MOONSHOT_API_KEY、ANTHROPIC_API_KEY、GEMINI_API_KEY、GROQ_API_KEY、OPENAI_API_KEY、DEEPL_API_KEY。",
   gatewaySetup3: "在本应用的主机上，把 LITELLM_BASE_URL 设为网关地址，把 LITELLM_ADMIN_KEY 设为主密钥，然后重新部署。",
   gatewaySetup4: "打开本页面，设置应用密钥的限制，点击“创建应用密钥”。把显示的密钥填入本应用主机的 LITELLM_API_KEY 并重新部署。",
   gatewaySetup5: "从本应用主机删除这些提供商密钥。现在由网关保存它们。DEEPGRAM_API_KEY 留在这里：Deepgram 是唯一的直接调用，其请求体是媒体字节。",

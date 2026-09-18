@@ -9,17 +9,19 @@ import {
   keyFor,
   providerConfigured,
 } from "@/lib/gateway";
-import { resolveModelId } from "@/lib/models";
+import { isGlmModel, resolveModelId } from "@/lib/models";
 import { outboundFetch } from "@/lib/outbound-fetch";
 
-// The Kimi client (SPEC.md §2): every model call but the import's goes through
-// here (the import's client is lib/claude.ts).
-// Moonshot AI's API is OpenAI-compatible; the AI SDK's Moonshot provider speaks
-// it. The key is MOONSHOT_API_KEY. MOONSHOT_BASE_URL points a local run at a
-// stand-in server (scripts/qa) or at the China platform
+// The OpenAI-compatible client (SPEC.md §2): every model call but Claude's
+// and Gemini's goes through here (lib/claude.ts, lib/video/gemini.ts).
+// Moonshot AI's API is OpenAI-compatible; the AI SDK's Moonshot provider
+// speaks it. The key is MOONSHOT_API_KEY. MOONSHOT_BASE_URL points a local
+// run at a stand-in server (scripts/qa) or at the China platform
 // (https://api.moonshot.cn/v1). Under the gateway (lib/gateway.ts) the chat
-// calls go to its OpenAI-compatible route as moonshot/<id>, and the formula
-// and model-list calls to its Moonshot pass-through; the key is the app key.
+// calls go to its OpenAI-compatible route as moonshot/<id> or zai/<id> —
+// GLM 5.3 and GLM 5.3 Flash are reached through the gateway alone — and the
+// formula and model-list calls to its Moonshot pass-through; the key is the
+// app key.
 
 const DEFAULT_BASE_URL = "https://api.moonshot.ai/v1";
 
@@ -50,16 +52,19 @@ export function moonshotApiUrl(): string {
 let provider: MoonshotAIProvider | null = null;
 
 /** The model to call. The provider is built once per process, on first use.
-    A role's default id (KIMI_K3) resolves to the role's current id — the
-    newest version the bimonthly model update found (lib/models.ts); the
-    returned model's modelId is the id called. */
+    A role's default id (KIMI_K3, GLM_5_3) resolves to the role's current id
+    — the newest version the bimonthly model update found (lib/models.ts),
+    and Kimi's when a GLM id is asked for without the gateway; the returned
+    model's modelId is the id called. */
 export async function kimi(modelId: string): Promise<LanguageModel> {
   provider ??= createMoonshotAI({ apiKey: kimiApiKey(), baseURL: kimiBaseUrl() });
-  return provider(gatewayModelId("moonshot", await resolveModelId(modelId)));
+  const id = await resolveModelId(modelId);
+  return provider(gatewayModelId(isGlmModel(id) ? "zai" : "moonshot", id));
 }
 
-/** Provider options for one call: the reasoning effort (lib/derive/config.ts).
-    Kimi K3 fixes temperature and top_p, so nothing else is set. */
+/** Provider options for one call: the reasoning effort (lib/derive/config.ts),
+    the same three levels on Kimi K3 and GLM 5.3. Both fix temperature and
+    top_p, so nothing else is set. */
 export function kimiOptions(effort: KimiEffort = DEFAULT_EFFORT) {
   return { moonshotai: { reasoningEffort: effort } };
 }

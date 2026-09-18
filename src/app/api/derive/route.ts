@@ -8,6 +8,7 @@ import { claude, claudeConfigured, claudeOptions } from "@/lib/claude";
 import {
   DERIVATION_EFFORT,
   DERIVATION_MODEL,
+  VISION_MODEL,
   MAX_OUTPUT_TOKENS,
   STREAM_ERROR_TOKEN,
   STREAM_NOTE_TOKEN,
@@ -894,6 +895,10 @@ async function handle(req: Request, t: TFunc) {
   const attachedImages: { bytes: Uint8Array; mediaType: string }[] = figureImage
     ? [{ bytes: figureImage.bytes, mediaType: figureImage.mediaType }]
     : pageImages.map((bytes) => ({ bytes, mediaType: "image/png" }));
+  // A call with an image goes to the model that reads images (SPEC.md §2):
+  // the feature's model, GLM 5.3, takes text alone.
+  const chatModelId = attachedImages.length > 0 ? VISION_MODEL : DERIVATION_MODEL[data.type];
+  usageMeta.model = await resolveModelId(chatModelId);
   const messages: ModelMessage[] = [
     {
       role: "system",
@@ -1037,7 +1042,7 @@ async function handle(req: Request, t: TFunc) {
     );
   }
 
-  const model = await kimi(DERIVATION_MODEL[data.type]);
+  const model = await kimi(chatModelId);
   const maxOutputTokens = MAX_OUTPUT_TOKENS[data.type];
   const effort = DERIVATION_EFFORT[data.type];
 

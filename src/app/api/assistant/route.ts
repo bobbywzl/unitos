@@ -15,6 +15,8 @@ import { notebookAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
 import {
   DERIVATION_MODEL,
+  VISION_MODEL,
+  WEB_SEARCH_MODEL,
   MAX_OUTPUT_TOKENS,
   STREAM_ERROR_TOKEN,
 } from "@/lib/derive/config";
@@ -115,14 +117,21 @@ async function handle(req: Request, t: TFunc) {
   const access = await notebookAccess(data.notebookId, "editor");
   if (access instanceof NextResponse) return access;
   const user = access.user;
+  // Kimi K3 when the answer needs what GLM 5.3 lacks (SPEC.md §2): the
+  // web-search tool is Moonshot's, and GLM takes text alone, so a picture in
+  // the conversation — this message's or an earlier turn's — sends the whole
+  // conversation to Kimi.
+  const pictured =
+    images.length > 0 || files.length > 0 || (data.history ?? []).some((turn) => (turn.images ?? []).length > 0);
+  const chatModelId = data.web === true ? WEB_SEARCH_MODEL : pictured ? VISION_MODEL : DERIVATION_MODEL.SYNTHESIS;
   const usageMeta = {
     userId: user.id,
     feature: "assistant",
-    model: await resolveModelId(DERIVATION_MODEL.SYNTHESIS),
+    model: await resolveModelId(chatModelId),
   };
 
   const profile = await loadProfile(data.notebookId);
-  const model = await kimi(DERIVATION_MODEL.SYNTHESIS);
+  const model = await kimi(chatModelId);
   const maxOutputTokens = MAX_OUTPUT_TOKENS.SYNTHESIS;
   const effort = thinkingEffort(data.thinking);
 

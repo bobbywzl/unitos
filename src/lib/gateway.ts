@@ -1,8 +1,10 @@
 // The AI gateway (SPEC.md §2): LiteLLM, one host in front of every AI
 // provider. With LITELLM_BASE_URL and LITELLM_API_KEY set, every AI call goes
-// to the gateway — Kimi, Claude, Gemini, Groq and OpenAI Whisper, OpenAI TTS,
-// DeepL, Moonshot's web search, and the model lists the bimonthly model
-// update reads. The gateway holds the provider keys, applies the app key's
+// to the gateway — GLM, Kimi, Claude, Gemini, Groq and OpenAI Whisper, OpenAI
+// TTS, DeepL, Moonshot's web search, and the model lists the bimonthly model
+// update reads. GLM 5.3 and GLM 5.3 Flash have no direct client: they are
+// reached through the gateway alone, and without it Kimi K3 takes their
+// calls (lib/models.ts). The gateway holds the provider keys, applies the app key's
 // rate limits and budget, records spend per call, and runs the fallbacks in
 // litellm/config.yaml. The app then needs no provider key but Deepgram's
 // (lib/video/deepgram.ts: its body is the media bytes, which the gateway
@@ -14,6 +16,7 @@
 // and health, and issues the app key. No model call uses it.
 //
 // Routes on the gateway, one per provider (litellm/config.yaml):
+//   GLM           /v1/chat/completions, model zai/<id>
 //   Kimi          /v1/chat/completions, model moonshot/<id>
 //   Claude        /anthropic/v1/messages — the raw pass-through, so the
 //                 request reaches Anthropic as written but for `fallbacks`,
@@ -28,6 +31,7 @@
 //   Deepgram      never: a direct call with DEEPGRAM_API_KEY
 
 export type GatewayProvider =
+  | "zai"
   | "moonshot"
   | "anthropic"
   | "gemini"
@@ -37,6 +41,7 @@ export type GatewayProvider =
   | "deepl";
 
 const KEY_ENV: Record<GatewayProvider, string> = {
+  zai: "ZAI_API_KEY", // read on the gateway host alone
   moonshot: "MOONSHOT_API_KEY",
   anthropic: "ANTHROPIC_API_KEY",
   gemini: "GEMINI_API_KEY",
@@ -96,13 +101,14 @@ export function keyFor(provider: GatewayProvider): string | undefined {
     the gateway, so its own key decides. */
 export function providerConfigured(provider: GatewayProvider): boolean {
   if (provider === "deepgram") return Boolean(providerKey(provider));
+  if (provider === "zai") return gatewayConfigured();
   return gatewayConfigured() || Boolean(providerKey(provider));
 }
 
 /** The model id a chat, transcription, or speech call names under the
     gateway: the provider's prefix and the id, as litellm/config.yaml routes
     them. Direct calls take the id as it is. */
-export function gatewayModelId(provider: "moonshot" | "groq" | "openai", modelId: string): string {
+export function gatewayModelId(provider: "zai" | "moonshot" | "groq" | "openai", modelId: string): string {
   return gatewayConfigured() ? `${provider}/${modelId}` : modelId;
 }
 

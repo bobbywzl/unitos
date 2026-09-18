@@ -7,6 +7,7 @@ import {
   STITCH_EFFORT,
   STITCH_MAX_OUTPUT_TOKENS,
   STITCH_MODEL,
+  STITCH_SELECT_MODEL,
   STITCH_ROUTE_EFFORT,
   STITCH_SELECT_EFFORT,
   STITCH_SELECT_MAX_OUTPUT_TOKENS,
@@ -675,6 +676,9 @@ export async function stitch(input: {
     .map((turn) => ({ role: turn.role, content: turn.content }));
   const model = await kimi(STITCH_MODEL);
   const usage = { userId: input.userId, feature: "stitch" as const, model: await resolveModelId(STITCH_MODEL) };
+  // The route and select passes read the skeletons: GLM 5.3 Flash.
+  const readModel = await kimi(STITCH_SELECT_MODEL);
+  const readUsage = { ...usage, model: await resolveModelId(STITCH_SELECT_MODEL) };
 
   // ── The reading passes: the blocks the command needs, from the skeletons ──
   let context = wholeSystem(rendered);
@@ -693,7 +697,7 @@ export async function stitch(input: {
     if (skeletonLength > STITCH_SKELETON_BUDGET) {
       let routed: Set<string> | null = null;
       const route = await callForJson({
-        model,
+        model: readModel,
         messages: [
           { role: "system", content: routeSystem(views, rendered) },
           ...history,
@@ -706,7 +710,7 @@ export async function stitch(input: {
         providerOptions: kimiOptions(STITCH_ROUTE_EFFORT),
         schema: routeSchema,
         label: "STITCH_ROUTE",
-        usage,
+        usage: readUsage,
         abortSignal: input.signal,
       });
       if (!route.ok) {
@@ -721,7 +725,7 @@ export async function stitch(input: {
     }
 
     const pick = await callForJson({
-      model,
+      model: readModel,
       messages: [
         { role: "system", content: skeletonSystem(views, rendered, shown) },
         ...history,
@@ -740,7 +744,7 @@ export async function stitch(input: {
       providerOptions: kimiOptions(STITCH_SELECT_EFFORT),
       schema: selectSchema,
       label: "STITCH_SELECT",
-      usage,
+      usage: readUsage,
       abortSignal: input.signal,
     });
     if (!pick.ok) {

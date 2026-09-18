@@ -16,7 +16,8 @@ import {
 } from "@/lib/conversation";
 import { stripSimplifyMarkers } from "@/lib/sentences";
 import { db } from "@/lib/db";
-import { DERIVATION_MODEL, MAX_OUTPUT_TOKENS } from "@/lib/derive/config";
+import { DERIVATION_MODEL,
+  VISION_MODEL, MAX_OUTPUT_TOKENS } from "@/lib/derive/config";
 import {
   annotationsSection,
   documentPrefix,
@@ -439,14 +440,16 @@ async function handle(req: Request, t: TFunc) {
       : { role: "user", content: userPrompt },
   ];
 
+  // A video frame goes to the model that reads images (SPEC.md §2).
+  const chatModelId = attachedImage ? VISION_MODEL : DERIVATION_MODEL.SYNTHESIS;
   const result = await callForJson({
-    model: await kimi(DERIVATION_MODEL.SYNTHESIS),
+    model: await kimi(chatModelId),
     messages,
     maxOutputTokens: MAX_OUTPUT_TOKENS.SYNTHESIS,
     providerOptions: kimiOptions(thinkingEffort(data.thinking)),
     schema: planSchema,
     label: "assistant:act",
-    usage: { userId: user.id, feature: "act", model: await resolveModelId(DERIVATION_MODEL.SYNTHESIS) },
+    usage: { userId: user.id, feature: "act", model: await resolveModelId(chatModelId) },
     // Stop aborts here too (SPEC.md §6): the client disconnecting stops the
     // model call, not just the response the client would have read.
     abortSignal: req.signal,

@@ -1,7 +1,7 @@
 import { generateText } from "ai";
 import { claude, claudeApiKey, claudeBaseUrl, claudeConfigured, claudeOptions } from "@/lib/claude";
 import { db } from "@/lib/db";
-import { gatewayHeaders } from "@/lib/gateway";
+import { gatewayConfigured, gatewayHeaders } from "@/lib/gateway";
 import { kimi, kimiApiKey, kimiConfigured, kimiOptions, moonshotApiUrl } from "@/lib/kimi";
 import {
   currentModelId,
@@ -23,9 +23,12 @@ import { geminiApiKey, geminiBaseUrl, geminiConfigured } from "@/lib/video/gemin
 //
 // A family is the model's product line at the same shape as the role's
 // current id: claude-<name>-<version> for Anthropic, kimi-k<version> for
-// Moonshot, gemini-<version>-flash for Google. A differently shaped id — a
-// -thinking, -lite, -preview, or dated variant — is another product, and the
-// job never moves a role to one on its own.
+// Moonshot, glm-<version> and glm-<version>-flash for Z.ai,
+// gemini-<version>-flash for Google. A differently shaped id — a -thinking,
+// -lite, -preview, or dated variant — is another product, and the job never
+// moves a role to one on its own. Z.ai publishes no model list, so the two
+// GLM roles stay where they are until a new id is written into
+// lib/derive/config.ts; the run records that on the row.
 
 export type RoleUpdate = {
   role: ModelRole;
@@ -60,6 +63,18 @@ function parseKimi(id: string): Parsed | null {
   return { family: "kimi-k", version: [Number(m[1]), Number(m[2] ?? 0)], date: "" };
 }
 
+function parseGlm(id: string): Parsed | null {
+  const m = /^glm-(\d+)(?:\.(\d+))?$/.exec(id);
+  if (!m) return null;
+  return { family: "glm", version: [Number(m[1]), Number(m[2] ?? 0)], date: "" };
+}
+
+function parseGlmFlash(id: string): Parsed | null {
+  const m = /^glm-(\d+)(?:\.(\d+))?-flash$/.exec(id);
+  if (!m) return null;
+  return { family: "glm-flash", version: [Number(m[1]), Number(m[2] ?? 0)], date: "" };
+}
+
 function parseGemini(id: string): Parsed | null {
   const m = /^gemini-(\d+)(?:\.(\d+))?-flash$/.exec(id);
   if (!m) return null;
@@ -67,6 +82,8 @@ function parseGemini(id: string): Parsed | null {
 }
 
 const PARSERS: Record<ModelRole, (id: string) => Parsed | null> = {
+  glm: parseGlm,
+  glmFlash: parseGlmFlash,
   claude: parseClaude,
   opus: parseClaude,
   kimi: parseKimi,
@@ -153,7 +170,14 @@ async function listGemini(): Promise<string[]> {
   return ids;
 }
 
+// Z.ai's API has no model list. The roles keep their ids; the note says so.
+async function listZai(): Promise<string[]> {
+  throw new Error("Z.ai publishes no model list; a new GLM id is set in lib/derive/config.ts");
+}
+
 const LISTS: Record<ModelRole, () => Promise<string[]>> = {
+  glm: listZai,
+  glmFlash: listZai,
   kimi: listKimi,
   claude: listClaude,
   opus: listClaude,
@@ -161,6 +185,8 @@ const LISTS: Record<ModelRole, () => Promise<string[]>> = {
 };
 
 const CONFIGURED: Record<ModelRole, () => boolean> = {
+  glm: gatewayConfigured,
+  glmFlash: gatewayConfigured,
   kimi: kimiConfigured,
   claude: claudeConfigured,
   opus: claudeConfigured,
@@ -194,7 +220,7 @@ async function probe(role: ModelRole, id: string): Promise<void> {
   }
   // The candidate is not a role's default, so the client calls it as written.
   const result = await generateText({
-    model: role === "kimi" ? await kimi(id) : await claude(id),
+    model: role === "claude" || role === "opus" ? await claude(id) : await kimi(id),
     maxOutputTokens: 16384, // a reasoning model counts its reasoning here
     providerOptions: role === "kimi" ? kimiOptions("low") : claudeOptions("low"),
     headers: gatewayHeaders(usage),

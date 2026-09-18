@@ -10,10 +10,39 @@
 # admin console shows them.
 
 model_list:
-  # Kimi — every AI feature but the handwritten passes, Visualize, and video.
-  # Chat completions, OpenAI-compatible. rpm and tpm here cap what the
-  # gateway sends Moonshot across every app key; the app key's own limits are
-  # set from the gateway page.
+  # GLM 5.3 — the reader's tools, the assistant, Stitch's answer, Merge with
+  # AI; GLM 5.3 Flash — every reading and the parse passes. Z.ai's API is
+  # OpenAI-compatible, and the openai route with Z.ai's base URL is what
+  # forwards the app's reasoning_effort as written (LiteLLM's own zai route
+  # drops it). The prices are Z.ai's list, so the spend logs price them.
+  - model_name: zai/glm-5.3
+    litellm_params:
+      model: openai/glm-5.3
+      api_base: https://api.z.ai/api/paas/v4
+      api_key: os.environ/ZAI_API_KEY
+    model_info:
+      input_cost_per_token: 0.0000014
+      output_cost_per_token: 0.0000044
+      cache_read_input_token_cost: 0.00000026
+      max_input_tokens: 1000000
+      max_output_tokens: 128000
+      supports_reasoning: true
+  - model_name: zai/glm-5.3-flash
+    litellm_params:
+      model: openai/glm-5.3-flash
+      api_base: https://api.z.ai/api/paas/v4
+      api_key: os.environ/ZAI_API_KEY
+    model_info:
+      input_cost_per_token: 0.00000015
+      output_cost_per_token: 0.0000005
+      cache_read_input_token_cost: 0.00000003
+      max_input_tokens: 1000000
+      max_output_tokens: 128000
+      supports_reasoning: true
+      supports_vision: true
+
+  # Kimi — the calls that carry an image, the assistant with Web on, and the
+  # bimonthly model update's probes. Chat completions, OpenAI-compatible.
   - model_name: "moonshot/*"
     litellm_params:
       model: "moonshot/*"
@@ -57,11 +86,15 @@ model_list:
       api_key: os.environ/OPENAI_API_KEY
 
 router_settings:
-  # A call that fails on Kimi (an outage, a 5xx after the retries) runs
-  # again on Claude Opus 5 through the gateway's own translation. Opus costs
-  # more per token, so this only ever runs on a failure; the gateway page's
-  # spend by model shows when it did.
+  # A call that fails (an outage, a 5xx after the retries) runs again on the
+  # next model: a GLM call on Kimi K3, which takes the same effort levels
+  # and reads what GLM reads; a Kimi call on Claude Opus 5 through the
+  # gateway's own translation. Each step costs more per token, so this only
+  # ever runs on a failure; the gateway page's spend by model shows when it
+  # did.
   fallbacks:
+    - "zai/glm-5.3": ["moonshot/kimi-k3"]
+    - "zai/glm-5.3-flash": ["moonshot/kimi-k3"]
     - "moonshot/kimi-k3": ["anthropic/claude-opus-5"]
   num_retries: 2
   retry_after: 2
@@ -75,6 +108,9 @@ litellm_settings:
   # A field one provider does not take is dropped, never a 400: the Kimi
   # fallback sends Kimi's fields to Claude.
   drop_params: true
+  # A price set on a model entry above (model_info) is what the spend logs
+  # use for it.
+  custom_pricing: true
   # A long document at max effort runs for minutes; the app's routes allow
   # up to 300 s, and a transcription upload longer.
   request_timeout: 600

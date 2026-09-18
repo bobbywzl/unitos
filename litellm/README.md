@@ -5,11 +5,14 @@ reaches it with one key. The provider keys live here. The gateway applies
 the app key's rate limits and budget, records spend per call, and runs the
 fallbacks in `config.yaml`. The admin console's Gateway page reads all of it.
 
-What goes through it: Kimi (every AI feature but the ones below), Claude
-(the handwritten passes and Visualize), Gemini (video), Groq and OpenAI
-Whisper (transcription), OpenAI TTS (voice), DeepL (translation), Moonshot's
-web search, and the model lists the bimonthly model update reads.
-`src/lib/gateway.ts` names the route each client takes.
+What goes through it: GLM 5.3 and GLM 5.3 Flash (the reader's tools, the
+assistant, Stitch, the readings, the parse passes), Kimi (calls that carry
+an image, the assistant with Web on), Claude (the handwritten passes and
+Visualize), Gemini (video), Groq and OpenAI Whisper (transcription), OpenAI
+TTS (voice), DeepL (translation), Moonshot's web search, and the model lists
+the bimonthly model update reads. `src/lib/gateway.ts` names the route each
+client takes. GLM has no direct client: without the gateway, Kimi K3 takes
+its calls.
 
 What does not: Deepgram, the first transcription rung. Its request body is
 the media bytes, which the gateway's pass-through re-encodes as JSON, and

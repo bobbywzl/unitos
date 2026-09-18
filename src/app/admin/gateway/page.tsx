@@ -109,14 +109,14 @@ export default async function AdminGatewayPage() {
   // provider it knows a price for. The table shows the ones the app calls:
   // each role's current id under its provider's prefix, plus the audio
   // models; the rest is one count.
-  const prefixOf: Record<string, string> = { "Moonshot AI": "moonshot", Anthropic: "anthropic", Google: "gemini" };
+  const prefixOf: Record<string, string> = { "Z.ai": "zai", "Moonshot AI": "moonshot", Anthropic: "anthropic", Google: "gemini" };
   const appModels = new Set<string>();
   for (const role of ROLE_ORDER) {
     appModels.add(`${prefixOf[MODEL_ROLES[role].provider]}/${await currentModelId(role)}`);
   }
   appModels.add("gemini/gemini-flash-latest");
   const shownModels = models?.ok
-    ? models.data.filter((m) => appModels.has(m.name) || !m.name.match(/^(moonshot|anthropic|gemini)\//))
+    ? models.data.filter((m) => appModels.has(m.name) || !m.name.match(/^(zai|moonshot|anthropic|gemini)\//))
     : [];
   const otherModels = models?.ok ? models.data.length - shownModels.length : 0;
   const accountLabel = (id: string) =>
