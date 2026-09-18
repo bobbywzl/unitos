@@ -47,6 +47,7 @@ import { reportError } from "@/lib/error-log";
 import { isOffline, offlinePremium, queueWrite } from "@/lib/offline/queue";
 import { parseYouTubeId, youtubeWatchUrl } from "@/lib/video/youtube";
 import type { TFunc, TKey } from "@/lib/i18n/dictionaries";
+import { ThinkingChips, useThinking } from "@/components/assistant/thinking-chips";
 import { useLang, useT } from "@/components/lang-provider";
 import { clipWords, markdownPreview } from "@/lib/markdown-preview";
 import { AnnotationGrip } from "@/components/outline/annotation-grip";
@@ -1213,6 +1214,9 @@ export function ReaderInteractions({
 
   // The assistant as an actor: a command becomes a plan; the plan runs after
   // approval, or immediately when the reader toggled auto.
+  // Fast Thinking or Deep Thinking (SPEC.md §7): one choice for every
+  // assistant surface, remembered in this browser.
+  const thinking = useThinking();
   const [aiCommand, setAiCommand] = useState("");
   const [aiBusy, setAiBusy] = useState(false);
   const [aiListening, setAiListening] = useState(false);
@@ -4224,6 +4228,7 @@ export function ReaderInteractions({
         history: history.slice(-12),
         conversationNoteId: conversationNoteId ?? undefined,
         toolNoteId,
+        thinking,
       }),
     });
     const plan = (await res.json().catch(() => null)) as
@@ -5288,7 +5293,9 @@ function blockFormatKind(
   };
   // The assistant card's foot: the box that sends the next turn. The card
   // beside the article and the full conversation view render the same one.
-  const assistantChatFoot = (chat: AssistantChat, className: string) => (
+  const assistantChatFoot = (chat: AssistantChat, className: string, chipsClassName: string) => (
+    <>
+    <ThinkingChips className={chipsClassName} small />
     <form
       className={className}
       onSubmit={(e) => {
@@ -5328,6 +5335,7 @@ function blockFormatKind(
         {chat.busy ? <StopIcon size={11} /> : t("reader.send")}
       </button>
     </form>
+    </>
   );
   // The card's title once its output continued into a conversation.
   const toolPlus = (card: ToolChat) => card.chatOpen || card.conversation.length > 0;
@@ -5950,6 +5958,7 @@ function blockFormatKind(
                 rows={2}
                 className="w-full resize-none rounded-xl bg-sand-100 p-2 text-[12px] outline-none placeholder:text-sand-500"
               />
+              <ThinkingChips small />
               <div className="flex items-center gap-1.5">
                 <button
                   onClick={toggleVoice}
@@ -6807,7 +6816,7 @@ function blockFormatKind(
             )}
             {assistantChat.busy && <ThinkingIndicator className="py-0.5 text-[12px]" />}
           </div>
-          {assistantChatFoot(assistantChat, "flex items-end gap-1.5 px-3 pb-3")}
+          {assistantChatFoot(assistantChat, "flex items-end gap-1.5 px-3 pb-3", "px-3 pb-1.5")}
         </div>
       )}
       </Presence>
@@ -6952,7 +6961,7 @@ function blockFormatKind(
           icon={<SparkleIcon size={12} />}
           messages={assistantChat.messages}
           busy={assistantChat.busy}
-          foot={assistantChatFoot(assistantChat, "flex items-end gap-1.5")}
+          foot={assistantChatFoot(assistantChat, "flex items-end gap-1.5", "pb-1.5")}
           onClose={closeConversationView}
         />
       )}

@@ -22,6 +22,7 @@ import { useImeGuard } from "@/lib/ime";
 import { imageUrl, refuseImage, uploadImage } from "@/lib/images";
 import type { SummaryDepth, SummaryLevels } from "@/lib/types";
 import { UPLOAD_CHUNK_BYTES } from "@/lib/video/types";
+import { ThinkingChips, useThinking } from "@/components/assistant/thinking-chips";
 import { useCollab } from "@/components/collab/collab-context";
 import { useT } from "@/components/lang-provider";
 import { DriveIcon, PaperclipIcon, StopIcon } from "@/components/icons";
@@ -229,6 +230,9 @@ export function AssistantPanel({
   // every document switch, so the default follows the open document.
   const [scope, setScope] = useState<Scope>(documentId ? "document" : "notebook");
   const web = useSyncExternalStore(subscribeWeb, readWeb, () => true);
+  // Fast Thinking or Deep Thinking (SPEC.md §7): one choice for every
+  // assistant surface, remembered in this browser.
+  const thinking = useThinking();
   const [question, setQuestion] = useState("");
   // The conversation (SPEC.md §7, §21): the first question opens it; every
   // turn after continues it. Empty = the panel's first layout. The note it
@@ -652,6 +656,7 @@ export function AssistantPanel({
         task: "ask",
         question: q,
         web,
+        thinking,
         history,
         images: images.map((img) => ({ id: img.id, name: img.name })),
         files,
@@ -722,7 +727,7 @@ export function AssistantPanel({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         signal: controller.signal,
-        body: JSON.stringify({ notebookId, scope: "notebook", task }),
+        body: JSON.stringify({ notebookId, scope: "notebook", task, thinking }),
       });
       const json = (await res.json().catch(() => null)) as
         | { issues?: Issue[]; error?: string }
@@ -791,6 +796,7 @@ export function AssistantPanel({
           {t(s.labelKey)}
         </button>
       ))}
+      <ThinkingChips />
       <button
         onClick={() => writeWeb(!web)}
         data-track={`assistant-web:${web ? "off" : "on"}`}

@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { useImeGuard } from "@/lib/ime";
+import { ThinkingChips, useThinking } from "@/components/assistant/thinking-chips";
 import { SparkleIcon, StopIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { ReaderInteractions } from "@/components/reader/reader-interactions";
@@ -50,6 +51,9 @@ export function MediaAssistant({
   const t = useT();
   const router = useRouter();
   const ime = useImeGuard();
+  // Fast Thinking or Deep Thinking (SPEC.md §7): one choice for every
+  // assistant surface, remembered in this browser.
+  const thinking = useThinking();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
@@ -155,7 +159,7 @@ export function MediaAssistant({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         signal: controller.signal,
-        body: JSON.stringify({ notebookId, documentId, command, history, video }),
+        body: JSON.stringify({ notebookId, documentId, command, history, video, thinking }),
       });
       const plan = (await res.json().catch(() => null)) as
         | (AssistantPlan & { error?: string })
@@ -229,6 +233,7 @@ export function MediaAssistant({
         >
           {t("video.skillNotes")}
         </button>
+        <ThinkingChips className="ml-auto" small />
       </div>
 
       {activeSpot && (

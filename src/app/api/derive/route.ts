@@ -464,6 +464,10 @@ async function handle(req: Request, t: TFunc) {
                 a.start - b.start,
             );
           if (quotes.length === 0) {
+            console.error(
+              "[derive] DISTILL:corpus resolved no quotes:",
+              JSON.stringify(result.data.quotes.map((q) => ({ blockId: q.blockId, start: q.start, end: q.end, quote: q.quote?.slice(0, 80) }))),
+            );
             fail(t("api.distillNoQuotes"));
             return;
           }
@@ -1557,6 +1561,10 @@ async function handle(req: Request, t: TFunc) {
               a.start - b.start,
           );
         if (quotes.length === 0) {
+          console.error(
+            "[derive] DISTILL resolved no quotes:",
+            JSON.stringify(result.data.quotes.map((q) => ({ blockId: q.blockId, start: q.start, end: q.end, quote: q.quote?.slice(0, 80) }))),
+          );
           fail(t("api.distillNoQuotes"));
           return;
         }
