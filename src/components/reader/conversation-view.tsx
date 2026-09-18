@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import { isImeKey } from "@/lib/ime";
 import type { ChatTurn } from "@/lib/conversation";
 import { useT } from "@/components/lang-provider";
+import { ANSWER_MARK } from "@/components/assistant/answer-tools";
 import { Markdown } from "@/components/markdown";
 import { ThinkingIndicator } from "@/components/thinking";
 
@@ -92,7 +93,9 @@ export function ConversationView({
                 {message.content}
               </p>
             ) : (
-              <div key={i} className="text-[14px]">
+              // Highlighting an answer offers the side chat, the quoted
+              // question, and the comment (SPEC.md §7).
+              <div key={i} className="text-[14px]" {...{ [ANSWER_MARK]: "" }}>
                 <Markdown>{message.content}</Markdown>
               </div>
             ),

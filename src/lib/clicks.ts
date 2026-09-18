@@ -51,6 +51,13 @@ const CLICK_FUNCTIONS: Record<ClickGroup, readonly string[]> = {
     "assistant-ask:",
     "assistant-web:",
     "assistant-thinking:",
+    // highlighting an assistant answer: the side chat, the quoted question,
+    // the comment
+    "assistant-side-chat-start",
+    "assistant-side-chat-open",
+    "assistant-quote-ask",
+    "assistant-answer-comment",
+    "assistant-comment-send",
     "assistant-task:",
     "assistant-recommended:",
     "assistant-regenerate",

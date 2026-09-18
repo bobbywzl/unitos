@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { bumpDocument, bumpNotebook, documentAccess, noteAccess } from "@/lib/collab";
+import { bumpDocument, bumpNotebook, documentAccess, noteAccess, peopleByIds } from "@/lib/collab";
 import { db } from "@/lib/db";
 import { serverT } from "@/lib/i18n/server";
 import { parseBody } from "@/lib/validate";
@@ -16,6 +16,31 @@ const createSchema = z
     (d) => [d.noteId, d.blockEditId, d.docLinkId].filter(Boolean).length === 1,
     { message: "Provide exactly one of noteId, blockEditId, docLinkId" },
   );
+
+// The comments on one note, oldest first, each with its author (SPEC.md §7):
+// what the chat surfaces show under an assistant answer, where the note has
+// no page of its own to read them on.
+export async function GET(req: Request) {
+  const t = await serverT();
+  const noteId = new URL(req.url).searchParams.get("noteId");
+  if (!noteId) return NextResponse.json({ error: t("api.noteNotFound") }, { status: 400 });
+  const access = await noteAccess(noteId, "viewer");
+  if (access instanceof NextResponse) return access;
+  const replies = await db.reply.findMany({
+    where: { noteId },
+    orderBy: { createdAt: "asc" },
+  });
+  return NextResponse.json({
+    replies: replies.map((r) => ({
+      id: r.id,
+      content: r.content,
+      userId: r.userId,
+      resolvedById: r.resolvedById,
+      createdAt: r.createdAt.toISOString(),
+    })),
+    people: await peopleByIds(replies.map((r) => r.userId)),
+  });
+}
 
 // One reply under a note (notes and annotations alike), under one edit, or
 // under one link — how collaborators comment on each other's work. Editors

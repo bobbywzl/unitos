@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import type {
   CorpusDistillationView,
   GraphEdge,
@@ -41,6 +41,7 @@ import { GuideDialog } from "@/components/guide-dialog";
 import { useT } from "@/components/lang-provider";
 import { NotebookTitle } from "@/components/notebook-title";
 import { FloatingNoteEditor } from "@/components/outline/floating-note-editor";
+import { readSideChatOpen, subscribeSideChatOpen } from "@/lib/assistant/side-chat-open";
 import { NotesTray } from "@/components/outline/notes-tray";
 import { Presence } from "@/components/presence";
 import { flattenNotes, useOutline } from "@/components/outline/use-outline";
@@ -486,18 +487,22 @@ export function Workspace({
     revealTray();
   }
 
-  // A note floats over the article (dragged out of the tray): the tray folds
-  // so the card has the room, and unfolds when the card docks or closes.
-  // Docking opens the tray on notes on its own (onDock below); this undoes
-  // only the fold it made, so a tray the reader had folded stays folded.
+  // A note floats over the article (dragged out of the tray), or a side chat
+  // is open in the reader (SPEC.md §7): the tray folds so the card has the
+  // room, and unfolds when the card docks or closes and the side chat is
+  // gone. Docking opens the tray on notes on its own (onDock below); this
+  // undoes only the fold it made, so a tray the reader had folded stays
+  // folded.
   const floatingId = actions.floating?.id ?? null;
+  const sideChatOpen = useSyncExternalStore(subscribeSideChatOpen, readSideChatOpen, () => false);
+  const needsRoom = floatingId !== null || sideChatOpen;
   const collapsedRef = useRef(collapsed);
   useEffect(() => {
     collapsedRef.current = collapsed;
   }, [collapsed]);
   useEffect(() => {
     /* eslint-disable react-hooks/set-state-in-effect */
-    if (floatingId) {
+    if (needsRoom) {
       setMobileTray(false);
       if (!collapsedRef.current) {
         foldedForFloat.current = true;
@@ -508,7 +513,7 @@ export function Workspace({
       setCollapsed(false);
     }
     /* eslint-enable react-hooks/set-state-in-effect */
-  }, [floatingId]);
+  }, [needsRoom]);
 
   return (
     // print: the shell flattens to plain flow so the whole document prints,

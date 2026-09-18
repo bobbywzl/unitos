@@ -9,6 +9,8 @@
 //   Match-it/match(短语→片段; code EXTRACT) 匹配 · point(提炼的一条) 要点 ·
 //   summary 摘要 · digest 汇编 · annotation 批注 ·
 //   highlight 高亮 · comment 评论 · explain 解释 · simplify 简化 ·
+//   side chat(从回答引用分出的对话) 支线对话 ·
+//   comment on an answer(对回答引用的评论) 评论 ·
 //   assistant 助手 · thinking(助手思考档位) 思考 · Fast Thinking 快速思考 ·
 //   Deep Thinking 深度思考 · document 文档 · video 视频 · audio 音频 ·
 //   transcript 逐字稿 · formalize 整理 · article (formalized) 文章 ·

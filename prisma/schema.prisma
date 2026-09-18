@@ -272,6 +272,14 @@ model Note {
   log            Json?
   pinned         Boolean         @default(false) // pinning also moves the note to the top of its section
   order          Int
+  // A side chat (SPEC.md §7): a conversation branched off a quote of an
+  // assistant answer. It belongs to the conversation it was started from,
+  // opens from that chat box alone, and never shows in assistant history.
+  // The quote is the words it started from. Null = an ordinary note.
+  sideChatOfId   String?
+  sideChatOf     Note?           @relation("SideChats", fields: [sideChatOfId], references: [id], onDelete: Cascade)
+  sideChats      Note[]          @relation("SideChats")
+  sideChatQuote  String?
   // Account that wrote the note (or ran the derivation that produced it).
   // Soft reference like Notebook.userId; null = before attribution existed.
   createdById    String?
@@ -282,6 +290,7 @@ model Note {
   updatedAt      DateTime        @updatedAt
 
   @@index([sectionId])
+  @@index([sideChatOfId])
 }
 
 // One edit of a note's text, for the note's own history (SPEC.md §12): who

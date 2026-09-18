@@ -94,6 +94,12 @@ const requestSchema = z.object({
     .optional(),
   // The persisted conversation note; later turns update it in place.
   conversationNoteId: z.string().optional(),
+  // A side chat (SPEC.md §7): the conversation it was started from, and the
+  // words it was started on. Its turns persist on a conversation note of its
+  // own — no sources, so the side chat marks nothing in the article — and it
+  // opens from its own chat box alone, never from assistant history.
+  sideChatOf: z.string().min(1).optional(),
+  sideChatQuote: z.string().min(1).max(2000).optional(),
   // A tool conversation (SPEC.md §21): the reader continues from an AI tool's
   // output — Explain+, Simplify+, Analyze+, Visualize+. The note is the
   // tool's annotation; the selection is its sources; the turns persist on
@@ -607,7 +613,37 @@ async function handle(req: Request, t: TFunc) {
     { role: "user", content: data.command },
     { role: "assistant", content: replyText },
   ];
-  if (toolNote) {
+  if (data.sideChatOf) {
+    // A side chat persists like the conversation it came from, on a note that
+    // knows its parent. The parent's mark still opens the parent.
+    const transcript = renderTranscript(turns);
+    if (conversationNoteId) {
+      try {
+        await db.note.update({ where: { id: conversationNoteId }, data: { content: transcript } });
+        await bumpNotebook(data.notebookId);
+      } catch {
+        conversationNoteId = null; // the note was deleted; a new one starts below
+      }
+    }
+    if (!conversationNoteId) {
+      const section = await annotationsSection(data.notebookId);
+      const count = await db.note.count({ where: { sectionId: section.id } });
+      const note = await db.note.create({
+        data: {
+          sectionId: section.id,
+          content: transcript,
+          status: "ACCEPTED",
+          derivationType: "SYNTHESIS",
+          createdById: user.id,
+          order: count,
+          sideChatOfId: data.sideChatOf,
+          sideChatQuote: data.sideChatQuote ?? "",
+        },
+      });
+      conversationNoteId = note.id;
+      await bumpNotebook(data.notebookId);
+    }
+  } else if (toolNote) {
     // A tool conversation (SPEC.md §21) persists on the tool's own annotation:
     // the turns after the output, the mark gaining its plus. The log is stale
     // by its turn count; the next hover writes it again.
