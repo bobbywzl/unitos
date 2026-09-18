@@ -13,7 +13,7 @@ import {
   type SaveProgress,
 } from "@/lib/offline/saved";
 import { useT } from "@/components/lang-provider";
-import { SaveProgressBar } from "@/components/offline/save-progress-bar";
+import { ProgressBar } from "@/components/progress-bar";
 import { WorkCard, type WorkItem } from "@/components/works/work-card";
 
 export type { WorkItem };
@@ -193,7 +193,14 @@ export function WorksShelf({
         </>
       )}
 
-      {savingId && saveProgress && <SaveProgressBar title={savingTitle} progress={saveProgress} />}
+      {savingId && saveProgress && (
+        <ProgressBar
+          label={t(saveProgress.stage === "pages" ? "works.savingOfflinePages" : "works.savingOfflineFiles")}
+          title={savingTitle}
+          done={saveProgress.done}
+          total={saveProgress.total}
+        />
+      )}
 
       {toast && (
         <div className="pointer-events-none fixed inset-x-0 bottom-6 z-50 flex justify-center px-6">

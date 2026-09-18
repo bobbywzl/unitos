@@ -2,16 +2,24 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { MicIcon, SpinnerIcon, StopIcon } from "@/components/icons";
+import { MicIcon, StopIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
+import { ProgressBar } from "@/components/progress-bar";
+import { useOpenDocument } from "@/components/reader/open-document-context";
+import { readThinking } from "@/lib/assistant/thinking";
+import { readNdjson } from "@/lib/ndjson";
+import type { VoiceEvent, VoiceStage } from "@/app/api/notes/voice/route";
 
-// A voice note (SPEC.md §6): press to record, press again to stop. The
-// recording goes to /api/notes/voice, which transcribes it, cleans it, and
-// lands it as a PENDING note in the section; the tray shows it at the top of
-// the pending queue for the reader to read over and accept. Recording stops
-// on its own at five minutes; the low bitrate keeps five minutes under the
-// request cap.
+// The voice command (SPEC.md §6): press to record, press again to stop. The
+// recording goes to /api/notes/voice with the section and the open document;
+// the route transcribes it, reads it as a command over the document and the
+// section's notes, and writes the notes it asks for as PENDING notes in the
+// section, each quote a source; the tray shows them in the pending queue for
+// the reader to read over and accept. The route streams its three stages,
+// and the bottom progress bar shows them. Recording stops on its own at five
+// minutes; the low bitrate keeps five minutes under the request cap.
 const MAX_SECONDS = 300;
+const STAGES: VoiceStage[] = ["transcribe", "plan", "write"];
 const BITS_PER_SECOND = 32_000;
 
 // The first container this browser records: Chrome and Firefox give WebM/Opus,
@@ -42,7 +50,9 @@ export function VoiceNoteButton({
 }) {
   const t = useT();
   const router = useRouter();
+  const documentId = useOpenDocument();
   const [state, setState] = useState<"idle" | "recording" | "sending">("idle");
+  const [stage, setStage] = useState<VoiceStage>("transcribe");
   const [seconds, setSeconds] = useState(0);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -117,9 +127,12 @@ export function VoiceNoteButton({
 
   async function send(blob: Blob) {
     setState("sending");
+    setStage("transcribe");
     try {
       if (blob.size === 0) throw new Error(t("outline.voiceNoteEmpty"));
-      const res = await fetch(`/api/notes/voice?sectionId=${encodeURIComponent(sectionId)}`, {
+      const params = new URLSearchParams({ sectionId, thinking: readThinking() });
+      if (documentId) params.set("documentId", documentId);
+      const res = await fetch(`/api/notes/voice?${params}`, {
         method: "POST",
         headers: { "Content-Type": blob.type || "audio/webm" },
         body: blob,
@@ -127,6 +140,10 @@ export function VoiceNoteButton({
       if (!res.ok) {
         const detail = (await res.json().catch(() => null)) as { error?: string } | null;
         throw new Error(detail?.error ?? t("common.requestFailedStatus", { status: res.status }));
+      }
+      for await (const event of readNdjson<VoiceEvent>(res)) {
+        if ("error" in event) throw new Error(event.error);
+        if ("stage" in event) setStage(event.stage);
       }
       router.refresh();
     } catch (err) {
@@ -139,14 +156,21 @@ export function VoiceNoteButton({
   if (!supported) return null;
   const base = className ?? "";
   if (state === "sending") {
+    const label = t(
+      stage === "transcribe"
+        ? "outline.voiceNoteTranscribing"
+        : stage === "plan"
+          ? "outline.voiceStagePlan"
+          : "outline.voiceStageWrite",
+    );
     return (
-      <span
-        className={`${base} inline-flex items-center gap-1 text-sand-600`}
-        data-tip={t("outline.voiceNoteTranscribing")}
-      >
-        <SpinnerIcon size={11} className="text-clay motion-safe:animate-spin" />
-        {t("outline.voiceNoteTranscribing")}
-      </span>
+      <>
+        <span className={`${base} inline-flex items-center gap-1 text-sand-600 opacity-60`} data-tip={label}>
+          <MicIcon size={11} />
+          {t("outline.speakNote")}
+        </span>
+        <ProgressBar label={label} done={STAGES.indexOf(stage)} total={STAGES.length} />
+      </>
     );
   }
   if (state === "recording") {

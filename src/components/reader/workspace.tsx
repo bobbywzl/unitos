@@ -38,7 +38,8 @@ import { ContextTab, type ContextValues } from "@/components/context-tab";
 import { GuideDialog } from "@/components/guide-dialog";
 import { useT } from "@/components/lang-provider";
 import { NotebookTitle } from "@/components/notebook-title";
-import { SaveProgressBar } from "@/components/offline/save-progress-bar";
+import { ProgressBar } from "@/components/progress-bar";
+import { OpenDocumentProvider } from "@/components/reader/open-document-context";
 import {
   listSaved,
   offlineSupported,
@@ -547,6 +548,7 @@ export function Workspace({
     // print: the shell flattens to plain flow so the whole document prints,
     // not one screen of the scroll pane; chrome and trays hide.
     <CollabProvider value={collab}>
+    <OpenDocumentProvider value={activeDocumentId}>
     {/* Click telemetry (SPEC.md §7): the header, the rail, and the tray are
         the surfaces; every control in them carries data-track. */}
     <ClickTracker notebookId={notebook.id} />
@@ -900,7 +902,12 @@ export function Workspace({
       </div>
 
       {offlineSaving && offlineProgress && (
-        <SaveProgressBar title={notebook.title} progress={offlineProgress} />
+        <ProgressBar
+          label={t(offlineProgress.stage === "pages" ? "works.savingOfflinePages" : "works.savingOfflineFiles")}
+          title={notebook.title}
+          done={offlineProgress.done}
+          total={offlineProgress.total}
+        />
       )}
       {offlineToast && !offlineSaving && (
         <div className="fixed bottom-6 left-1/2 z-40 flex -translate-x-1/2 items-center gap-2 rounded-full bg-ink/90 px-3 py-1.5 text-xs text-paper">
@@ -949,6 +956,7 @@ export function Workspace({
           does not run a script React inserts. */}
       <script dangerouslySetInnerHTML={{ __html: restoreScript(notebook.id) }} />
     </div>
+    </OpenDocumentProvider>
     </CollabProvider>
   );
 }
