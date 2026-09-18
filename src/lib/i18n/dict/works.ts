@@ -21,6 +21,14 @@ const en = {
   projectActions: "Project actions",
   notes: "Notes",
   rename: "Rename",
+  // Offline copy (SPEC.md §17, Unitos Ultra): the menu item, the card's badge
+  saveOffline: "Save for offline",
+  removeOffline: "Remove offline copy",
+  savingOffline: "Saving for offline…",
+  offlineBadge: "Offline",
+  offlineNeedsUltra: "Save for offline is Unitos Ultra.",
+  offlineSaved: "Saved for offline. It opens without a connection.",
+  offlineSaveFailed: "Save for offline failed. Try again.",
   // Welcome flow (first visit): the splash, then the nudges — the onboarding
   // feature look: the target glows, one small translucent caption beside it
   welcomeName: "Welcome {name}",
@@ -170,6 +178,14 @@ const zh: Record<keyof typeof en, string> = {
   projectActions: "项目操作",
   notes: "笔记",
   rename: "重命名",
+  // Offline copy (SPEC.md §17, Unitos Ultra): the menu item, the card's badge
+  saveOffline: "离线保存",
+  removeOffline: "移除离线副本",
+  savingOffline: "正在离线保存…",
+  offlineBadge: "离线",
+  offlineNeedsUltra: "离线保存是 Unitos Ultra 功能。",
+  offlineSaved: "已离线保存。无网络时也能打开。",
+  offlineSaveFailed: "离线保存失败。请重试。",
   // Guide dialog
   welcomeName: "欢迎，{name}",
   welcomeTagline: "Unitos Notebook，你的全能笔记本",

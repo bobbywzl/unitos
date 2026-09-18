@@ -5,6 +5,7 @@ import "./globals.css";
 import { FeedbackButton } from "@/components/feedback-button";
 import { LangProvider } from "@/components/lang-provider";
 import { Nudges } from "@/components/nudges";
+import { ServiceWorker } from "@/components/offline/service-worker";
 import { TooltipLayer } from "@/components/tooltip";
 import { htmlLangOf } from "@/lib/i18n/config";
 import { currentLang, serverT } from "@/lib/i18n/server";
@@ -72,6 +73,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
           <Nudges />
           <FeedbackButton />
           <TooltipLayer />
+          <ServiceWorker />
         </LangProvider>
       </body>
     </html>
