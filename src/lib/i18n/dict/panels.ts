@@ -94,16 +94,6 @@ const en = {
   formatList: "list",
   formatNumbered: "numbered",
   documentFallback: "document",
-  // Context tab
-  context: "Context",
-  addContext: "Add context",
-  contextHint: "Injected into every AI prompt: notes, distillation, analysis.",
-  contextDesc: "Injected into every AI prompt: notes, distillation, analysis. Optional.",
-  fieldBackground: "Background",
-  fieldBackgroundPh: "e.g. Stanford student, stochastic calc + stats + quantum. Reading for due diligence.",
-  scopeEverywhere: "Everywhere",
-  scopeThisCorpus: "This project only",
-  saveFailed: "Save failed",
   // Markdown block chips
   jumpToBlock: "Jump to this block in the document",
 };
@@ -190,15 +180,6 @@ const zh: Record<keyof typeof en, string> = {
   formatList: "无序列表",
   formatNumbered: "有序列表",
   documentFallback: "文档",
-  context: "背景",
-  addContext: "添加背景",
-  contextHint: "注入到每个 AI 提示词中：笔记、提炼、分析。",
-  contextDesc: "注入到每个 AI 提示词中：笔记、提炼、分析。可选。",
-  fieldBackground: "背景",
-  fieldBackgroundPh: "如：斯坦福学生，修过随机微积分、统计和量子力学。为尽职调查而读。",
-  scopeEverywhere: "全局",
-  scopeThisCorpus: "仅此项目",
-  saveFailed: "保存失败",
   jumpToBlock: "跳转到文档中的此块",
 };
 

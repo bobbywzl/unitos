@@ -34,7 +34,6 @@ import { useNotebookSync } from "@/components/collab/use-sync";
 import { GraphOverlay } from "@/components/graph/graph-overlay";
 import { VisualizationViewer } from "@/components/reader/visualization-viewer";
 import { CorpusDistillPage } from "@/components/reader/corpus-distill-page";
-import { ContextTab, type ContextValues } from "@/components/context-tab";
 import { GuideDialog } from "@/components/guide-dialog";
 import { useT } from "@/components/lang-provider";
 import { NotebookTitle } from "@/components/notebook-title";
@@ -112,7 +111,6 @@ export function Workspace({
   editsPanel,
   annotationCount,
   distillationCount,
-  context,
   collab,
   rev,
   graph,
@@ -137,7 +135,6 @@ export function Workspace({
   editsPanel: React.ReactNode;
   annotationCount: number;
   distillationCount: number;
-  context: { initial: ContextValues | null; hasOverride: boolean; isSet: boolean };
   collab: CollabState;
   rev: number;
   graph: {
@@ -234,13 +231,20 @@ export function Workspace({
   const [guideOpen, setGuideOpen] = useState(false);
   // Save for offline (SPEC.md §17, Unitos Ultra), from the rail: whether this
   // browser already holds a copy, a save under way, and the one-line result.
+  // True once this browser is known to hold a cache: set after mount, so the
+  // server render and the first client render agree (no window on the server).
+  const [offlineOn, setOfflineOn] = useState(false);
   const [offlineSaved, setOfflineSaved] = useState(false);
   const [offlineSaving, setOfflineSaving] = useState(false);
   const [offlineProgress, setOfflineProgress] = useState<SaveProgress | null>(null);
   const [offlineToast, setOfflineToast] = useState<{ text: string; plans: boolean } | null>(null);
   useEffect(() => {
     if (!offlineSupported()) return;
-    const update = () => void listSaved().then((rows) => setOfflineSaved(rows.some((r) => r.id === notebook.id)));
+    const update = () =>
+      void listSaved().then((rows) => {
+        setOfflineSaved(rows.some((r) => r.id === notebook.id));
+        setOfflineOn(true);
+      });
     update();
     return subscribeSaved(update);
   }, [notebook.id]);
@@ -592,13 +596,27 @@ export function Workspace({
         <div className="hidden md:block">
           <HistoryControl history={history} />
         </div>
-        {canEdit && (
-          <ContextTab
-            notebookId={notebook.id}
-            initial={context.initial}
-            hasOverride={context.hasOverride}
-            isSet={context.isSet}
-          />
+        {/* Save for offline (SPEC.md §17, Unitos Ultra): the pill in the header.
+            Saved, it reads Offline and a press removes the copy. */}
+        {offlineOn && (
+          <button
+            onClick={() => void toggleOffline()}
+            disabled={offlineSaving}
+            data-track="offline-save"
+            aria-label={t(offlineSaved ? "works.removeOffline" : "works.saveOffline")}
+            data-tip={t(offlineSaved ? "works.removeOffline" : "works.saveOffline")}
+            className={`flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[13px] hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40 ${
+              offlineSaved
+                ? "border border-sage-300 bg-sage-200 text-sage-800"
+                : "border border-dashed border-sand-400 text-sand-600"
+            }`}
+          >
+            <OfflineIcon size={14} />
+            <span className="hidden sm:inline">
+              {t(offlineSaved ? "works.offlineBadge" : "works.saveOffline")}
+            </span>
+            {!collab.ultra && !offlineSaved && <TierMark state="ultra" size={10} />}
+          </button>
         )}
         {pending.length > 0 && (
           <span className="hidden shrink-0 rounded-full bg-clay-200 px-3.5 py-1.5 text-xs font-semibold text-clay-800 lg:inline">
@@ -880,24 +898,6 @@ export function Workspace({
             <EditsIcon />
           </button>
 
-          {offlineSupported() && (
-            <button
-              onClick={() => void toggleOffline()}
-              disabled={offlineSaving}
-              data-track="offline-save"
-              data-nudge="settings"
-              aria-label={t(offlineSaved ? "works.removeOffline" : "works.saveOffline")}
-              data-tip={t(offlineSaved ? "works.removeOffline" : "works.saveOffline")}
-              className={`${offlineSaved ? RAIL_BUTTON_ON : RAIL_BUTTON} md:mt-auto disabled:opacity-40`}
-            >
-              <OfflineIcon />
-              {!collab.ultra && !offlineSaved && (
-                <span className="absolute -top-0.5 -right-0.5">
-                  <TierMark state="ultra" size={11} />
-                </span>
-              )}
-            </button>
-          )}
         </nav>
       </div>
 
