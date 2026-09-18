@@ -1235,6 +1235,22 @@ function sitsInColumns(line: Line, columns: number[]): boolean {
   );
 }
 
+// A row whose cells fused into one: the gap between two of them is too narrow
+// to read as a separator, so the line carries one cell — but an item still
+// starts at one of the run's later columns, where the next cell begins.
+// tableFromRun re-splits every line of a run against the run's own columns, so
+// a fused row read back into the run comes out as the row it is (import
+// compare loop finding: a row whose first column nearly filled its column fell
+// out of the table as a paragraph, taking the header with it).
+function isFusedRowLine(line: Line, columns: number[]): boolean {
+  return (
+    line.cells.length === 1 &&
+    columns.length >= 2 &&
+    Math.abs(line.x - columns[0]) < 12 &&
+    line.items.some((item) => columns.some((c, idx) => idx > 0 && Math.abs(item.x - c) < 3))
+  );
+}
+
 // A two-cell line that is a table row with a wrapped first column: the page
 // carries a line of three or more cells whose first and last columns are this
 // line's two. A label line ("2008  Watchtower deployed …") has no such row.
@@ -1306,13 +1322,15 @@ function findTableRuns(lines: Line[], ctx: PageContext): number[] {
       // the first column, a first-column line on its own baseline, or an
       // aligned line after a row gap: the table must resume within the next
       // two lines — a multi-cell line, a first-column line, or an aligned
-      // line — at row pitch, and the line must not read as prose.
+      // line — at row pitch, and the line must not read as prose. A fused row
+      // is as long as the table is wide and ends wherever its last cell ends,
+      // so the prose gate is not its test: an item at one of the columns is.
+      const fused = isFusedRowLine(next, columns);
       let resumes = false;
       if (
         (Math.abs(next.x - columns[0]) < 12 || leftOnly || aligned) &&
         gap <= next.size * ctx.leading * 1.9 &&
-        next.text.length < 90 &&
-        !/[.!?]$/.test(next.text.trim())
+        (fused || (next.text.length < 90 && !/[.!?]$/.test(next.text.trim())))
       ) {
         let y = next.y;
         for (let k = j + 1; k <= j + 2 && k < lines.length; k++) {
