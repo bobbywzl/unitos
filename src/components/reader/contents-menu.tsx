@@ -3,22 +3,33 @@
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import type { ContentsEntry } from "@/lib/contents";
-import { ContentsIcon, SpinnerIcon } from "@/components/icons";
+import { useCollab } from "@/components/collab/collab-context";
+import { ContentsIcon, SparkleIcon, SpinnerIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { Presence } from "@/components/presence";
 
 // Contents (SPEC.md §26): the button at the top left of the article, in the
 // article menu's place, and the list it opens — the article's parts, each a
-// jump to the block it starts at. The parts are built the first time the
-// list opens (POST /api/documents/[documentId]/contents, one model call,
-// stored on the document) and answered as stored after. A click on a part
-// scrolls the reader to its block and flashes it (dissect:flash-block).
-// The button and the list hide with the article menu once the reader
-// scrolls (reader-interactions.tsx atTop). The parts are kept per document
-// for the browser tab, so a reopen shows them at once.
+// jump to the block it starts at. Two clicks make the contents: Contents
+// opens the list, and with none stored the list asks whether to generate
+// them — one line on what AI writes, the Generate contents button, and the
+// disclaimer that AI-written parts may be off — and Generate contents runs
+// the one model call (POST /api/documents/[documentId]/contents
+// {generate: true}) and stores the parts. Until then the list shows the
+// article's own headings, when it has any. Stored parts show at once, under
+// the disclaimer. A click on a part scrolls the reader to its block and
+// flashes it (dissect:flash-block). The button and the list hide with the
+// article menu once the reader scrolls (reader-interactions.tsx atTop). The
+// parts are kept per document for the browser tab, so a reopen shows them
+// at once.
 
-type Loaded = { parts: ContentsEntry[]; fallback: boolean };
+// generated: the parts are the stored, AI-written contents. false: the
+// article's headings stand in, and nothing is stored.
+type Loaded = { parts: ContentsEntry[]; generated: boolean };
 const loaded = new Map<string, Loaded>();
+
+type Answer = { parts: ContentsEntry[]; fallback: boolean };
+const toLoaded = (answer: Answer): Loaded => ({ parts: answer.parts, generated: !answer.fallback });
 
 export function ContentsMenu({
   documentId,
@@ -30,45 +41,38 @@ export function ContentsMenu({
   onOpenChange: (open: boolean) => void;
 }) {
   const t = useT();
+  const { canEdit } = useCollab();
   // What this tab has for the document: the stored answer, or the answer
-  // of the attempt in hand. Try again starts a new attempt, which reads
-  // nothing from the cache. busy is derived: open with nothing to show and
-  // no failure means the request is running.
-  const [fetched, setFetched] = useState<{ id: string; attempt: number; data: Loaded } | null>(null);
-  const [failure, setFailure] = useState<{ id: string; attempt: number; message: string } | null>(null);
-  const [attempt, setAttempt] = useState(0);
-  const state =
-    fetched?.id === documentId && fetched.attempt === attempt
-      ? fetched.data
-      : attempt === 0
-        ? (loaded.get(documentId) ?? null)
-        : null;
-  const error = failure?.id === documentId && failure.attempt === attempt ? failure.message : null;
-  const busy = open && !state && !error;
+  // of the read or the generation in hand. reading is derived: open with
+  // nothing to show and no failure means the read is running.
+  const [fetched, setFetched] = useState<{ id: string; data: Loaded } | null>(null);
+  const [readFailure, setReadFailure] = useState<{ id: string; message: string } | null>(null);
+  const [generating, setGenerating] = useState(false);
+  const [generateError, setGenerateError] = useState<string | null>(null);
+  const state = fetched?.id === documentId ? fetched.data : (loaded.get(documentId) ?? null);
+  const readError = readFailure?.id === documentId ? readFailure.message : null;
+  const reading = open && !state && !readError;
 
-  // The parts load when the list opens, once per document per tab.
+  // The stored parts, or the headings, load when the list opens, once per
+  // document per tab. No model call: that is Generate contents.
   useEffect(() => {
-    if (!open || state || error) return;
+    if (!open || state || readError) return;
     let live = true;
-    api<{ parts: ContentsEntry[]; fallback: boolean }>(`/api/documents/${documentId}/contents`, "POST", {})
-      .then((result) => {
+    api<Answer>(`/api/documents/${documentId}/contents`, "POST", {})
+      .then((answer) => {
         if (!live) return;
-        const next = { parts: result.parts, fallback: result.fallback };
+        const next = toLoaded(answer);
         loaded.set(documentId, next);
-        setFetched({ id: documentId, attempt, data: next });
+        setFetched({ id: documentId, data: next });
       })
       .catch((err: unknown) => {
         if (!live) return;
-        setFailure({
-          id: documentId,
-          attempt,
-          message: err instanceof Error ? err.message : t("common.requestFailed"),
-        });
+        setReadFailure({ id: documentId, message: err instanceof Error ? err.message : t("common.requestFailed") });
       });
     return () => {
       live = false;
     };
-  }, [open, documentId, attempt, state, error, t]);
+  }, [open, documentId, state, readError, t]);
 
   // A click outside the list and the button (both carry data-contents)
   // closes the list.
@@ -90,10 +94,53 @@ export function ContentsMenu({
     };
   }, [open, onOpenChange]);
 
+  // The second click: the one model call that writes and stores the parts.
+  async function generate() {
+    if (generating) return;
+    setGenerating(true);
+    setGenerateError(null);
+    try {
+      const answer = await api<Answer>(`/api/documents/${documentId}/contents`, "POST", { generate: true });
+      const next = toLoaded(answer);
+      loaded.set(documentId, next);
+      setFetched({ id: documentId, data: next });
+    } catch (err) {
+      setGenerateError(err instanceof Error ? err.message : t("common.requestFailed"));
+    } finally {
+      setGenerating(false);
+    }
+  }
+
   function jump(blockId: string) {
     onOpenChange(false);
     window.dispatchEvent(new CustomEvent("dissect:flash-block", { detail: { blockId } }));
   }
+
+  const note = "px-4 text-[12px] leading-snug text-sand-600";
+  const disclaimer = "px-4 text-[11px] leading-snug text-sand-500";
+
+  const list = (parts: ContentsEntry[]) => (
+    <ol className="flex max-h-[min(480px,60vh)] flex-col overflow-y-auto">
+      {parts.map((part, i) => (
+        <li key={`${part.blockId}:${i}`}>
+          <a
+            href={`#block-${part.blockId}`}
+            onClick={(e) => {
+              e.preventDefault();
+              jump(part.blockId);
+            }}
+            data-track="contents-part"
+            data-tip={t("reader.contentsPartTitle", { title: part.title })}
+            className={`block truncate py-1.5 pr-4 text-left text-[12.5px] hover:bg-clay-100/70 hover:text-clay-800 ${
+              part.level === 2 ? "pl-8 text-sand-700" : "pl-4 font-semibold text-sand-800"
+            }`}
+          >
+            {part.title}
+          </a>
+        </li>
+      ))}
+    </ol>
+  );
 
   return (
     <>
@@ -115,50 +162,58 @@ export function ContentsMenu({
           <nav
             data-contents
             aria-label={t("reader.contents")}
-            className="pop-in pointer-events-auto flex w-full max-w-[400px] origin-top-left flex-col rounded-[24px] bg-card/85 py-2 shadow-float backdrop-blur-md"
+            className="pop-in pointer-events-auto flex w-full max-w-[400px] origin-top-left flex-col gap-2 rounded-[24px] bg-card/85 py-3 shadow-float backdrop-blur-md"
           >
-            {busy && (
-              <p className="flex items-center gap-2 px-4 py-2 text-[12.5px] text-sand-600">
+            {reading && (
+              <p className={`flex items-center gap-2 ${note}`}>
                 <SpinnerIcon size={14} className="animate-spin" />
-                {t("reader.contentsBuilding")}
+                {t("common.loading")}
               </p>
             )}
-            {!busy && error && (
-              <p className="flex flex-wrap items-center gap-2 px-4 py-2 text-[12.5px] text-red-600">
-                {t("reader.contentsFailed", { reason: error })}
-                <button
-                  onClick={() => setAttempt((n) => n + 1)}
-                  data-track="contents-retry"
-                  className="rounded-full bg-sand-100 px-2.5 py-0.5 text-[11px] font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800"
-                >
-                  {t("reader.contentsRetry")}
-                </button>
-              </p>
+            {readError && <p className={`${note} text-red-600`}>{readError}</p>}
+
+            {/* Stored, AI-written parts: the disclaimer, then the list. */}
+            {state?.generated && (
+              <>
+                <p className={disclaimer}>{t("reader.contentsDisclaimer")}</p>
+                {state.parts.length > 0 ? list(state.parts) : <p className={note}>{t("reader.contentsEmpty")}</p>}
+              </>
             )}
-            {!busy && !error && state && state.parts.length === 0 && (
-              <p className="px-4 py-2 text-[12.5px] text-sand-600">{t("reader.contentsEmpty")}</p>
-            )}
-            {!busy && !error && state && state.parts.length > 0 && (
-              <ol className="flex max-h-[min(480px,60vh)] flex-col overflow-y-auto">
-                {state.parts.map((part, i) => (
-                  <li key={`${part.blockId}:${i}`}>
-                    <a
-                      href={`#block-${part.blockId}`}
-                      onClick={(e) => {
-                        e.preventDefault();
-                        jump(part.blockId);
-                      }}
-                      data-track="contents-part"
-                      data-tip={t("reader.contentsPartTitle", { title: part.title })}
-                      className={`block truncate py-1.5 pr-4 text-left text-[12.5px] hover:bg-clay-100/70 hover:text-clay-800 ${
-                        part.level === 2 ? "pl-8 text-sand-700" : "pl-4 font-semibold text-sand-800"
-                      }`}
-                    >
-                      {part.title}
-                    </a>
-                  </li>
-                ))}
-              </ol>
+
+            {/* Nothing stored: ask, the Generate contents button, the
+                disclaimer; the headings below, when the article has any. */}
+            {state && !state.generated && (
+              <>
+                {canEdit ? (
+                  <>
+                    <p className={note}>{t("reader.contentsAsk")}</p>
+                    <div className="px-4">
+                      <button
+                        onClick={() => void generate()}
+                        data-track="contents-generate"
+                        disabled={generating}
+                        data-tip={t("reader.contentsGenerateTitle")}
+                        className="flex items-center gap-1.5 rounded-full bg-clay px-3.5 py-1.5 text-[12px] font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-60"
+                      >
+                        {generating ? <SpinnerIcon size={13} className="animate-spin" /> : <SparkleIcon size={13} />}
+                        {t(generating ? "reader.contentsBuilding" : "reader.contentsGenerate")}
+                      </button>
+                    </div>
+                    {generateError && (
+                      <p className={`${note} text-red-600`}>{t("reader.contentsFailed", { reason: generateError })}</p>
+                    )}
+                    <p className={disclaimer}>{t("reader.contentsDisclaimer")}</p>
+                  </>
+                ) : (
+                  <p className={note}>{t("reader.contentsViewer")}</p>
+                )}
+                {state.parts.length > 0 && (
+                  <>
+                    <p className={`${disclaimer} mt-1 border-t border-line pt-2`}>{t("reader.contentsHeadingsNote")}</p>
+                    {list(state.parts)}
+                  </>
+                )}
+              </>
             )}
           </nav>
         )}

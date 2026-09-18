@@ -40,3 +40,16 @@
 - Drift counts a removed block's line at ten times its length (the text is gone); a document with no skeleton is fully stale. Under a tenth, changed blocks read as their own first words with no model call.
 - Embeddings were not restored: BM25 needs no key and no index, and it only runs when the routed lines still overflow the budget.
 - The route pass runs only past 200k characters of skeleton text; under that one select call reads every skeleton, byte-identical turn to turn, so the prefix caches.
+
+## Round three: Contents in two clicks
+
+**Intent:** Contents opens the list; with nothing stored the list asks whether to generate the contents, offers Generate contents, and carries the disclaimer that AI-written parts may be off; Generate contents runs the one model call.
+
+**Files:**
+- `src/components/reader/contents-menu.tsx`: the two states — stored parts under the disclaimer; the ask, the Generate contents button, the disclaimer, and the article's headings under a rule when nothing is stored. A viewer reads that an editor can generate them.
+- `src/app/api/documents/[documentId]/contents/route.ts`: `{generate?}`; a read never calls the model; a failed generate is a 422 the list shows.
+- `src/lib/i18n/dict/reader.ts`, `SPEC.md` §26, `README.md`.
+
+**Decisions:**
+- The skeleton (§22) still builds the contents on its way when a document has none, so a document whose skeleton has built shows its parts on the first click; the two-click flow is for a document with nothing stored.
+- The disclaimer shows in both states, not only before generation: the parts stay AI-written after they are stored.
