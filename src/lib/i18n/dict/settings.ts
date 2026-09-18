@@ -56,6 +56,25 @@ const en = {
   driveLink: "Link Google Drive",
   driveRelink: "Link again for all files",
   driveUnlink: "Unlink",
+  // Assistant on this device (SPEC.md §27): the local model, served by
+  // Ollama on the reader's machine. Stored in localStorage only.
+  localModel: "Assistant on this device",
+  localModelDesc:
+    "A model on this computer, served by Ollama. The browser calls it directly; the server never sees the model or its answers. Leave Model empty and every tool runs on the cloud models.",
+  localModelTools: "Runs on this model: Simplify. Runs on the cloud models: every other tool.",
+  localModelUrl: "Ollama URL",
+  localModelUrlOnlyLocalhost:
+    "Only localhost works. A page served over HTTPS may call http://localhost; it may not call another machine's address.",
+  localModelName: "Model",
+  localModelNamePh: "e.g. qwen3:4b",
+  localModelOrigins:
+    "Ollama answers a browser only from the origins in its OLLAMA_ORIGINS. Set this line before starting Ollama:",
+  localModelTest: "Test",
+  localModelTesting: "Testing…",
+  localModelAnswered: "The model answered: {answer}",
+  localModelUnreachable:
+    "Could not reach Ollama at {url}. Check that Ollama is running and that it was started with {line}.",
+  localModelFailed: "The local model call failed: {reason}",
   // Your data: every stored field and count about the account
   // (lib/account-data.ts), read-only.
   // Storage (TIERS.md): the account's files against the tier's limit
@@ -99,7 +118,7 @@ const en = {
   dataDriveNone: "not linked",
   dataDriveDesc: "Linked: a refresh token Unitos uses to read a Drive file when you add it. Unlink revokes it.",
   dataBrowser: "In your browser only",
-  dataBrowserValue: "Language cookie, theme, and offline work queued on this device.",
+  dataBrowserValue: "Language cookie, theme, the local model setting, and offline work queued on this device.",
   dataLogs: "Server logs",
   dataLogsValue: "The hosting provider keeps IP addresses and request times.",
   dataDelete: "To delete this account and everything in it, email {email}.",
@@ -158,6 +177,20 @@ const zh: Record<keyof typeof en, string> = {
   driveLink: "关联 Google Drive",
   driveRelink: "重新关联以访问全部文件",
   driveUnlink: "取消关联",
+  localModel: "本设备上的助手",
+  localModelDesc:
+    "本机上的模型，由 Ollama 提供。浏览器直接调用它；服务器不会看到该模型及其回答。“模型”留空，所有工具都使用云端模型。",
+  localModelTools: "使用本地模型的工具：简化。其余工具使用云端模型。",
+  localModelUrl: "Ollama 地址",
+  localModelUrlOnlyLocalhost: "只支持 localhost。HTTPS 页面可以调用 http://localhost，不能调用其他机器的地址。",
+  localModelName: "模型",
+  localModelNamePh: "如：qwen3:4b",
+  localModelOrigins: "Ollama 只回应 OLLAMA_ORIGINS 中列出的来源发出的浏览器调用。启动 Ollama 前设置这一行：",
+  localModelTest: "测试",
+  localModelTesting: "测试中…",
+  localModelAnswered: "模型回答：{answer}",
+  localModelUnreachable: "无法连接 {url} 上的 Ollama。请确认 Ollama 正在运行，并且启动时设置了 {line}。",
+  localModelFailed: "本地模型调用失败：{reason}",
   storage: "存储空间",
   storageUsed: "已用 {used}",
   storageOf: "已用 {used}，共 {limit}",
@@ -198,7 +231,7 @@ const zh: Record<keyof typeof en, string> = {
   dataDriveNone: "未关联",
   dataDriveDesc: "已关联时：一个刷新令牌，Unitos 在你添加 Drive 文件时用它读取该文件。取消关联即撤销。",
   dataBrowser: "仅在你的浏览器中",
-  dataBrowserValue: "语言 Cookie、主题，以及本设备上排队的离线工作。",
+  dataBrowserValue: "语言 Cookie、主题、本地模型设置，以及本设备上排队的离线工作。",
   dataLogs: "服务器日志",
   dataLogsValue: "托管服务商保留 IP 地址和请求时间。",
   dataDelete: "如需删除此账户及其全部内容，请发邮件至 {email}。",

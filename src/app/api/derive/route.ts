@@ -79,6 +79,7 @@ import {
 } from "@/lib/video/types";
 import { ultraActive } from "@/lib/tiers";
 import { addTokens, recordUsage, sdkTokens, type TokenCounts } from "@/lib/usage";
+import { localModelRuns } from "@/lib/local-model/settings";
 import { parseBody } from "@/lib/validate";
 
 // FORMALIZE holds the connection for minutes on a long transcript (heartbeat
@@ -162,6 +163,18 @@ const deriveSchema = z
       question: z.string().min(1).max(500).optional(),
     })
     .optional(),
+  // The local model (SPEC.md §27): the same derivation with the model call
+  // in the browser. stage prompt answers with the messages the cloud model
+  // would get; stage store takes the local model's output and persists it
+  // as the cloud output is persisted. Only the tools in LOCAL_MODEL_TOOLS.
+  stage: z.enum(["prompt", "store"]).optional(),
+  output: z.string().max(200_000).optional(),
+  })
+  .refine((d) => !d.stage || localModelRuns(d.type), {
+    message: "stage is for the local model's tools only",
+  })
+  .refine((d) => d.stage !== "store" || Boolean(d.output?.trim()), {
+    message: "stage store needs output",
   })
   .refine(
     (d) =>
@@ -281,12 +294,12 @@ export async function POST(req: Request) {
 }
 
 async function handle(req: Request, t: TFunc) {
-  if (!kimiConfigured()) {
-    return NextResponse.json({ error: t("api.deriveNeedsKey") }, { status: 503 });
-  }
-
   const { data, error } = await parseBody(req, deriveSchema);
   if (error) return error;
+  // The local model's stages call no cloud model, so they need no key.
+  if (!data.stage && !kimiConfigured()) {
+    return NextResponse.json({ error: t("api.deriveNeedsKey") }, { status: 503 });
+  }
   // Every derivation persists something (annotation, layer, summary), so the
   // gate is editor — except FIND and ASK, which persist nothing and stay open
   // to viewers.
@@ -1036,6 +1049,57 @@ async function handle(req: Request, t: TFunc) {
     );
   }
 
+  // SIMPLIFY and ANALYZE persist in the hidden Annotations section: one
+  // write for the cloud stream and for the local model's store stage. Null
+  // when the anchor's block is gone.
+  const saveAnnotation = async (type: "SIMPLIFY" | "ANALYZE", text: string) => {
+    if (!anchor || !blockById.get(anchor.blockId)) return null;
+    const section = await annotationsSection(data.notebookId);
+    const count = await db.note.count({ where: { sectionId: section.id } });
+    const note = await db.note.create({
+      data: {
+        sectionId: section.id,
+        content: text,
+        status: "ACCEPTED",
+        derivationType: type,
+        createdById: user.id,
+        order: count,
+        // One source per segment: the marks cover the whole passage.
+        sources: { create: passageSources(documentId, passage) },
+      },
+    });
+    await bumpNotebook(data.notebookId);
+    return note.id;
+  };
+
+  // The local model (SPEC.md §27). Stage prompt: the messages, built above
+  // as for the cloud models, go to the browser, which runs them on the
+  // reader's machine. Stage store: the output comes back and lands where
+  // the cloud output lands. The local model's tools attach no image, so
+  // every message is text.
+  if (data.stage === "prompt") {
+    const plain = messages.map((m) =>
+      typeof m.content === "string" ? { role: m.role, content: m.content } : null,
+    );
+    if (plain.some((m) => m === null)) {
+      return NextResponse.json({ error: t("api.typeNotBuilt", { type: data.type }) }, { status: 400 });
+    }
+    return NextResponse.json({ messages: plain });
+  }
+  if (data.stage === "store" && data.type === "SIMPLIFY") {
+    const text = data.output?.trim() ?? "";
+    try {
+      const noteId = await saveAnnotation(data.type, text);
+      return NextResponse.json({ noteId });
+    } catch (err) {
+      console.error("[derive] annotation save failed:", err);
+      return NextResponse.json({ error: t("api.annotationNotSaved") }, { status: 500 });
+    }
+  }
+  if (data.stage === "store") {
+    return NextResponse.json({ error: t("api.typeNotBuilt", { type: data.type }) }, { status: 501 });
+  }
+
   const model = await kimi(DERIVATION_MODEL[data.type]);
   const maxOutputTokens = MAX_OUTPUT_TOKENS[data.type];
   const effort = DERIVATION_EFFORT[data.type];
@@ -1131,25 +1195,8 @@ async function handle(req: Request, t: TFunc) {
         }
         if ((data.type === "SIMPLIFY" || data.type === "ANALYZE") && anchor && text.trim()) {
           try {
-            const block = blockById.get(anchor.blockId);
-            if (block) {
-              const section = await annotationsSection(data.notebookId);
-              const count = await db.note.count({ where: { sectionId: section.id } });
-              const note = await db.note.create({
-                data: {
-                  sectionId: section.id,
-                  content: text,
-                  status: "ACCEPTED",
-                  derivationType: data.type,
-                  createdById: user.id,
-                  order: count,
-                  // One source per segment: the marks cover the whole passage.
-                  sources: { create: passageSources(documentId, passage) },
-                },
-              });
-              await bumpNotebook(data.notebookId);
-              send(`${STREAM_NOTE_TOKEN}${note.id}`);
-            }
+            const noteId = await saveAnnotation(data.type, text);
+            if (noteId) send(`${STREAM_NOTE_TOKEN}${noteId}`);
           } catch (err) {
             console.error("[derive] annotation save failed:", err);
             send(`${STREAM_ERROR_TOKEN}${t("api.annotationNotSaved")}`);

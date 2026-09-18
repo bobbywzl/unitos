@@ -156,6 +156,7 @@ until the owner makes one.
 - Figure and table analysis (SPEC.md §4): runs at the model's highest reasoning effort, the most expensive call per use in the app
 - Voice notes (SPEC.md §6): transcription minutes, like video
 - Compare two documents and Ask about a range: tokens like every derivation
+- The local model (SPEC.md §27): Simplify on a model on the reader's own machine, served by Ollama, chosen in Settings. It costs the operator nothing per call — the browser calls the reader's machine — so gating it is a product decision, not a cost line. Ungated today; nobody has decided
 - What an expired account keeps: today only offline work and large images close. Whether AI, documents, or sharing close too when the trial ends is undecided
 
 ## Open questions

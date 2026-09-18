@@ -109,6 +109,8 @@ import { PANE_HEADER } from "@/components/reader/reader-panes";
 import type { FigureRenderInfo } from "@/components/reader/figure-capture";
 import { Reader, type TranscriptVariant } from "@/components/reader/reader";
 import { openVisualization } from "@/components/reader/visualization-viewer";
+import { localModelFor } from "@/lib/local-model/settings";
+import { runLocalDerivation } from "@/lib/local-model/run";
 import { setQuoteDragImage, writeQuoteDrag } from "@/lib/quote-drag";
 
 // One block's span of a selection (SPEC.md §5).
@@ -3000,8 +3002,11 @@ export function ReaderInteractions({
     return segments.length > 1 ? { segments: segments.map(anchorBody) } : {};
   }
 
+  function deriveInput(type: string, anchor: Anchor) {
+    return { type, documentId, notebookId, anchor: anchorBody(anchor), ...segmentsBody(anchor) };
+  }
   function deriveBody(type: string, anchor: Anchor) {
-    return JSON.stringify({ type, documentId, notebookId, anchor: anchorBody(anchor), ...segmentsBody(anchor) });
+    return JSON.stringify(deriveInput(type, anchor));
   }
 
   // ANALYZE streams into the card beside the article (SPEC.md §4, §6): the
@@ -3117,31 +3122,51 @@ export function ReaderInteractions({
     const controller = new AbortController();
     simplifyAbortRef.current = controller;
     try {
-      const res = await fetch("/api/derive", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        signal: controller.signal,
-        body: deriveBody("SIMPLIFY", anchor),
-      });
-      if (!res.ok || !res.body) {
-        const detail = (await res.json().catch(() => null)) as { error?: string } | null;
-        throw new Error(detail?.error ?? t("reader.deriveFailedStatus", { status: res.status }));
+      let text = "";
+      let noteId: string | null = null;
+      let error: string | null = null;
+      // The local model (SPEC.md §27): the same derivation, the model call
+      // on the reader's machine. Unset, the cloud model streams as before.
+      const local = localModelFor("SIMPLIFY");
+      if (local) {
+        const run = await runLocalDerivation({
+          local,
+          input: deriveInput("SIMPLIFY", anchor),
+          signal: controller.signal,
+          onText: (live) => setSimplifyCard((c) => (c ? { ...c, text: live } : c)),
+        });
+        text = run.text;
+        noteId = run.noteId;
+      } else {
+        const res = await fetch("/api/derive", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          signal: controller.signal,
+          body: deriveBody("SIMPLIFY", anchor),
+        });
+        if (!res.ok || !res.body) {
+          const detail = (await res.json().catch(() => null)) as { error?: string } | null;
+          throw new Error(detail?.error ?? t("reader.deriveFailedStatus", { status: res.status }));
+        }
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let raw = "";
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          raw += decoder.decode(value, { stream: true });
+          const live = splitStreamNote(splitStreamError(raw).text).text;
+          setSimplifyCard((c) => (c ? { ...c, text: live } : c));
+        }
+        // A failure mid-stream arrives in-band; an empty stream is a failure too.
+        // The note id trailer means the annotation persisted before the stream
+        // closed, so the refresh below always finds the stored mark.
+        const split = splitStreamError(raw);
+        const stored = splitStreamNote(split.text);
+        text = stored.text;
+        noteId = stored.noteId;
+        error = split.error;
       }
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let raw = "";
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        raw += decoder.decode(value, { stream: true });
-        const live = splitStreamNote(splitStreamError(raw).text).text;
-        setSimplifyCard((c) => (c ? { ...c, text: live } : c));
-      }
-      // A failure mid-stream arrives in-band; an empty stream is a failure too.
-      // The note id trailer means the annotation persisted before the stream
-      // closed, so the refresh below always finds the stored mark.
-      const { text: withoutError, error } = splitStreamError(raw);
-      const { text, noteId } = splitStreamNote(withoutError);
       if (noteId) addLocalAnchor(anchor);
       setSimplifyCard((c) =>
         c

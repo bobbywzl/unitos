@@ -13,6 +13,15 @@ import { api } from "@/lib/api";
 import type { AccountStorage } from "@/lib/storage";
 import { storageLimit, type TierState } from "@/lib/tiers";
 import { StorageBar } from "@/components/storage-bar";
+import { ollamaOriginsLine, testLocalModel } from "@/lib/local-model/ollama";
+import {
+  DEFAULT_OLLAMA_URL,
+  localModelUrl,
+  readLocalModelFields,
+  serverLocalModelFields,
+  subscribeLocalModel,
+  writeLocalModelFields,
+} from "@/lib/local-model/settings";
 import { TierMark, tierLook } from "@/components/tier-mark";
 import { PortalButton } from "@/components/billing/portal-button";
 
@@ -57,6 +66,16 @@ function setTheme(theme: Theme) {
   for (const cb of themeListeners) cb();
 }
 
+// The page's origin, for the OLLAMA_ORIGINS line. Read at render on the
+// client; empty on the server so the first render matches.
+const noSubscribe = () => () => {};
+function readOrigin(): string {
+  return ollamaOriginsLine();
+}
+function serverOrigin(): string {
+  return "";
+}
+
 // Resize the chosen image to a small square JPEG data URL. 192px covers every
 // badge size; the result stays a few tens of KB.
 async function resizePicture(file: File): Promise<string> {
@@ -93,8 +112,9 @@ const secondaryButton =
   "shrink-0 rounded-full border border-line px-4 py-1.5 text-xs font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40";
 
 // Settings: one Profile section (picture, name, symbol, color, background),
-// Unitos Premium, Connections (sign-in and Google Drive), Your data (every
-// stored field and count about the account), then Language and Theme.
+// Unitos Premium, Connections (sign-in and Google Drive), Assistant on this
+// device (the local model), Your data (every stored field and count about
+// the account), then Language and Theme.
 // Changes save automatically.
 export function SettingsForm({
   account,
@@ -150,6 +170,26 @@ export function SettingsForm({
     /* eslint-enable react-hooks/set-state-in-effect */
     window.history.replaceState(null, "", window.location.pathname);
   }, [t]);
+  // Assistant on this device (SPEC.md §27): the local model, in localStorage
+  // only. Test asks the model one question and shows its answer.
+  const localModel = useSyncExternalStore(subscribeLocalModel, readLocalModelFields, serverLocalModelFields);
+  const originsLine = useSyncExternalStore(noSubscribe, readOrigin, serverOrigin);
+  const localUrlValid = localModelUrl(localModel.url) !== null;
+  const [localTest, setLocalTest] = useState<
+    { state: "idle" } | { state: "testing" } | { state: "ok"; answer: string } | { state: "error"; reason: string }
+  >({ state: "idle" });
+  async function runLocalTest() {
+    const url = localModelUrl(localModel.url);
+    const model = localModel.model.trim();
+    if (!url || !model) return;
+    setLocalTest({ state: "testing" });
+    try {
+      const answer = await testLocalModel({ url, model });
+      setLocalTest({ state: "ok", answer });
+    } catch (err) {
+      setLocalTest({ state: "error", reason: err instanceof Error ? err.message : String(err) });
+    }
+  }
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSaved = useRef(
     JSON.stringify({
@@ -556,6 +596,68 @@ export function SettingsForm({
               {t("settings.connectionsNone")}
             </p>
           )}
+        </div>
+      </section>
+
+      <section className="space-y-3">
+        <h2 className={sectionTitle}>{t("settings.localModel")}</h2>
+        <div className="space-y-4 rounded-2xl bg-card p-5 shadow-soft">
+          <p className="text-xs text-sand-600">{t("settings.localModelDesc")}</p>
+          <p className="text-xs text-sand-600">{t("settings.localModelTools")}</p>
+          <div className="grid grid-cols-[1fr_180px] gap-4 border-t border-line pt-4">
+            <label className="block">
+              <span className={fieldLabel}>{t("settings.localModelUrl")}</span>
+              <input
+                value={localModel.url}
+                onChange={(e) => {
+                  writeLocalModelFields({ ...localModel, url: e.target.value });
+                  setLocalTest({ state: "idle" });
+                }}
+                placeholder={DEFAULT_OLLAMA_URL}
+                spellCheck={false}
+                className="mt-1 w-full rounded-full bg-sand-100 px-4 py-2 text-sm outline-none placeholder:text-sand-500"
+              />
+            </label>
+            <label className="block">
+              <span className={fieldLabel}>{t("settings.localModelName")}</span>
+              <input
+                value={localModel.model}
+                onChange={(e) => {
+                  writeLocalModelFields({ ...localModel, model: e.target.value });
+                  setLocalTest({ state: "idle" });
+                }}
+                placeholder={t("settings.localModelNamePh")}
+                spellCheck={false}
+                className="mt-1 w-full rounded-full bg-sand-100 px-4 py-2 text-sm outline-none placeholder:text-sand-500"
+              />
+            </label>
+          </div>
+          <p className={`-mt-3 text-[11px] ${localUrlValid ? "text-sand-500" : "text-red-500"}`}>
+            {t("settings.localModelUrlOnlyLocalhost")}
+          </p>
+          <div className="text-xs text-sand-600">
+            <p>{t("settings.localModelOrigins")}</p>
+            <code className="mt-1 block rounded-xl bg-sand-100 px-3 py-2 text-[12px] text-sand-800 select-all">
+              {originsLine}
+            </code>
+          </div>
+          <div className="flex items-center gap-3 text-xs">
+            <button
+              onClick={() => void runLocalTest()}
+              disabled={localTest.state === "testing" || !localUrlValid || !localModel.model.trim()}
+              className={secondaryButton}
+            >
+              {t(localTest.state === "testing" ? "settings.localModelTesting" : "settings.localModelTest")}
+            </button>
+            {localTest.state === "ok" && (
+              <span className="min-w-0 break-words text-clay-800">
+                {t("settings.localModelAnswered", { answer: localTest.answer })}
+              </span>
+            )}
+            {localTest.state === "error" && (
+              <span className="min-w-0 break-words text-red-500">{localTest.reason}</span>
+            )}
+          </div>
         </div>
       </section>
 

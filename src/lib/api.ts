@@ -25,7 +25,7 @@ function queueable(path: string, method: string): boolean {
 }
 
 // The language on the client, outside React: the same cookie the layout reads.
-function clientLang(): Lang {
+export function clientLang(): Lang {
   if (typeof document === "undefined") return DEFAULT_LANG;
   const value = document.cookie.match(new RegExp(`(?:^|; )${LANG_COOKIE}=([^;]+)`))?.[1];
   return isLang(value) ? value : DEFAULT_LANG;

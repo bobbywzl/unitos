@@ -53,7 +53,9 @@
 //   billing(付款流程与开关) 付费 · plan page 方案页 · order(付款前的订单页) 订单 ·
 //   checkout(Stripe 结账) 结账 · receipt(一次付款; code Purchase) 收据 ·
 //   subscription 订阅 · Manage subscription 管理订阅 · confirmation 确认 ·
-//   billing switch 付费开关 · Stripe 不翻译
+//   billing switch 付费开关 · Stripe 不翻译 ·
+//   local model(本机 Ollama 上的模型) 本地模型 · Assistant on this device 本设备上的助手 ·
+//   cloud models 云端模型 · Ollama 不翻译
 // highlight 高亮 仅指高亮功能；表示选取文字一律用 选中。
 
 const en = {
