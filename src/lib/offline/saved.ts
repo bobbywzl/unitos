@@ -127,11 +127,20 @@ async function keepStatic(cache: Cache, url: string, cssMedia: Set<string>) {
   await cache.put(url, res);
 }
 
+// Save progress (SPEC.md §17): two stages, pages then files — the images
+// the pages show, and the chunks and fonts they load. Real fetches counted
+// as they land, the same rule the ingest progress card follows (never a
+// simulated timer).
+export type SaveProgress = { stage: "pages" | "files"; done: number; total: number };
+
 // Save one project for offline, or refresh its copy: every page fetched
 // again, the images they show fetched if missing, anything no longer
 // referenced dropped. Throws with the route's message when the route refuses
 // (403 below Ultra, 404 when the project is gone).
-export async function saveProject(id: string): Promise<SavedProject> {
+export async function saveProject(
+  id: string,
+  onProgress?: (progress: SaveProgress) => void,
+): Promise<SavedProject> {
   const info = await fetchInfo(id);
   const pages = pageUrls(id, info);
   const cache = await caches.open(PROJECT_CACHE_PREFIX + id);
@@ -139,6 +148,8 @@ export async function saveProject(id: string): Promise<SavedProject> {
   const assets = new Set<string>();
   const statics = new Set<string>();
 
+  let pagesDone = 0;
+  onProgress?.({ stage: "pages", done: 0, total: pages.length });
   for (const page of pages) {
     const res = await fetch(page);
     const html = res.headers.get("content-type")?.includes("text/html") ?? false;
@@ -147,26 +158,35 @@ export async function saveProject(id: string): Promise<SavedProject> {
     await cache.put(page, cacheable(res, text));
     collect(text, ASSET_RE, assets);
     collect(text, STATIC_RE, statics);
+    onProgress?.({ stage: "pages", done: ++pagesDone, total: pages.length });
   }
+
+  // The chunks the pages load, and the fonts their stylesheets load, counted
+  // with the images so one stage covers everything that is not a page.
+  const cssMedia = new Set<string>();
+  let filesDone = 0;
+  const filesTotal = assets.size + statics.size;
+  onProgress?.({ stage: "files", done: 0, total: filesTotal });
 
   for (const url of assets) {
-    if (await cache.match(url)) continue;
-    try {
-      const res = await fetch(url);
-      if (res.ok) await cache.put(url, res);
-    } catch {
-      // One image missing does not fail the copy: the page shows its gap.
+    if (!(await cache.match(url))) {
+      try {
+        const res = await fetch(url);
+        if (res.ok) await cache.put(url, res);
+      } catch {
+        // One image missing does not fail the copy: the page shows its gap.
+      }
     }
+    onProgress?.({ stage: "files", done: ++filesDone, total: filesTotal });
   }
 
-  // The chunks the pages load, and the fonts their stylesheets load.
-  const cssMedia = new Set<string>();
   for (const url of statics) {
     try {
       await keepStatic(staticCache, url, cssMedia);
     } catch {
       // A chunk that fails to fetch is retried on the next refresh.
     }
+    onProgress?.({ stage: "files", done: ++filesDone, total: filesTotal });
   }
   for (const url of cssMedia) {
     try {

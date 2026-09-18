@@ -1,7 +1,9 @@
 import { ACCOUNT_HEADER } from "@/lib/constants";
 import { DEFAULT_LANG, isLang, LANG_COOKIE, type Lang } from "@/lib/i18n/config";
 import { translate } from "@/lib/i18n/dictionaries";
+import { isAiCall } from "@/lib/offline/ai-routes";
 import { isOffline, offlinePremium, queueWrite } from "@/lib/offline/queue";
+import { beginWrite, endWrite } from "@/lib/save-state";
 import { tabAccount } from "@/lib/tab-account";
 
 // Offline work (SPEC.md §17, Unitos Premium): these writes replay cleanly and
@@ -31,7 +33,10 @@ function clientLang(): Lang {
   return isLang(value) ? value : DEFAULT_LANG;
 }
 
-// Client-side fetch helper for JSON API routes.
+// Client-side fetch helper for JSON API routes. Every call counts in the
+// save indicator (lib/save-state.ts): a call that needs a model too, so the
+// line reads Saving… while the model works, and a stopped call counts as
+// landed.
 export async function api<T = unknown>(
   path: string,
   method: "POST" | "PUT" | "PATCH" | "DELETE",
@@ -39,11 +44,33 @@ export async function api<T = unknown>(
   // signal: Stop aborts the request; the caller checks signal.aborted.
   init?: { signal?: AbortSignal },
 ): Promise<T> {
+  beginWrite();
+  try {
+    const result = await send<T>(path, method, body, init);
+    endWrite(true);
+    return result;
+  } catch (err) {
+    endWrite(Boolean(init?.signal?.aborted));
+    throw err;
+  }
+}
+
+async function send<T>(
+  path: string,
+  method: "POST" | "PUT" | "PATCH" | "DELETE",
+  body: unknown,
+  init?: { signal?: AbortSignal },
+): Promise<T> {
   // The tab's rendered account rides along; the middleware rejects the call
   // when the browser has since signed into a different account (stale tab).
   const account = tabAccount();
   let res: Response;
   try {
+    // Offline, a call that needs a model answers with the plain message
+    // (SPEC.md §17): AI is off for every account until the network is back.
+    if (isOffline() && isAiCall(path, body)) {
+      throw new Error(translate(clientLang(), "common.offlineAi"));
+    }
     if (isOffline()) throw new TypeError("offline");
     res = await fetch(path, {
       method,
@@ -57,6 +84,7 @@ export async function api<T = unknown>(
   } catch (err) {
     // Stopped, not failed: the caller reads signal.aborted.
     if (init?.signal?.aborted) throw err;
+    if (err instanceof Error && !(err instanceof TypeError)) throw err;
     // Network failure. With Unitos Premium the queueable writes save offline
     // and sync later (SPEC.md §17); everything else reports plainly.
     if (offlinePremium() && queueable(path, method)) {

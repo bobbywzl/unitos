@@ -8,6 +8,7 @@ import type { NotebookView, SectionView } from "@/lib/types";
 import { ArrowLeftIcon } from "@/components/icons";
 import { AccountGuard } from "@/components/account-guard";
 import { CollabProvider, type CollabState } from "@/components/collab/collab-context";
+import { SaveIndicator } from "@/components/save-indicator";
 import { SyncRefresh } from "@/components/collab/sync-refresh";
 import { ExportMenu } from "@/components/export-menu";
 import { Outline } from "@/components/outline/outline";
@@ -126,6 +127,9 @@ export default async function NotesPage(props: { params: Promise<{ notebookId: s
           {t("common.works")}
         </Link>
         <div className="ml-auto flex items-center gap-2">
+          <CollabProvider value={collab}>
+            <SaveIndicator />
+          </CollabProvider>
           <Link
             href={`/n/${notebook.id}`}
             className="rounded-full border border-line px-4 py-1.5 text-[13px] text-sand-700 hover:bg-clay-100 hover:text-clay-800"

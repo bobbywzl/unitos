@@ -86,6 +86,7 @@ const PARSERS: Record<ModelRole, (id: string) => Parsed | null> = {
   glmFlash: parseGlmFlash,
   claude: parseClaude,
   opus: parseClaude,
+  sonnet: parseClaude,
   kimi: parseKimi,
   gemini: parseGemini,
 };
@@ -181,6 +182,7 @@ const LISTS: Record<ModelRole, () => Promise<string[]>> = {
   kimi: listKimi,
   claude: listClaude,
   opus: listClaude,
+  sonnet: listClaude,
   gemini: listGemini,
 };
 
@@ -190,6 +192,7 @@ const CONFIGURED: Record<ModelRole, () => boolean> = {
   kimi: kimiConfigured,
   claude: claudeConfigured,
   opus: claudeConfigured,
+  sonnet: claudeConfigured,
   gemini: geminiConfigured,
 };
 

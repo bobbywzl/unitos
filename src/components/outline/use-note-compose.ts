@@ -5,6 +5,7 @@ import { api } from "@/lib/api";
 import { ACCOUNT_HEADER } from "@/lib/constants";
 import { clearComposeDraft, readComposeDraft, writeComposeDraft } from "@/lib/note-drafts";
 import { isOffline } from "@/lib/offline/queue";
+import { beginWrite, clearDirty, endWrite, markDirty } from "@/lib/save-state";
 import { tabAccount } from "@/lib/tab-account";
 import type { QuoteDrag } from "@/lib/quote-drag";
 import type { NoteView } from "@/lib/types";
@@ -86,7 +87,9 @@ export function useNoteCompose({
     if (creatingRef.current) return creatingRef.current;
     const account = tabAccount();
     // A plain fetch, not api(): a create that queues offline returns no id,
-    // and the composer must never own a note it cannot name.
+    // and the composer must never own a note it cannot name. It counts in
+    // the save indicator like every write.
+    beginWrite();
     const run = fetch("/api/notes", {
       method: "POST",
       headers: {
@@ -96,6 +99,7 @@ export function useNoteCompose({
       body: JSON.stringify({ sectionId, content: trimmed, top: true }),
     })
       .then(async (res) => {
+        endWrite(res.ok);
         if (!res.ok) return;
         const note = (await res.json()) as { id?: unknown };
         if (typeof note.id !== "string") return;
@@ -108,6 +112,7 @@ export function useNoteCompose({
       })
       .catch(() => {
         // Not created: the next keystroke tries again; Save creates it itself.
+        endWrite(false);
         setFailed(trimmed);
       })
       .finally(() => {
@@ -137,7 +142,9 @@ export function useNoteCompose({
     if (!composing || !canEdit) return;
     const trimmed = draft.trim();
     if (!trimmed || trimmed === lastSavedRef.current) return;
+    markDirty(`compose:${sectionId}`);
     const timer = setTimeout(() => {
+      clearDirty(`compose:${sectionId}`);
       const id = noteIdRef.current;
       if (id) {
         const before = lastSavedRef.current;
@@ -154,7 +161,10 @@ export function useNoteCompose({
       if (isOffline()) return;
       void create(trimmed);
     }, 900);
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+      clearDirty(`compose:${sectionId}`);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draft, composing, canEdit, sectionId]);
 

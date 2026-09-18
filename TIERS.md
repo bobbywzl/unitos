@@ -105,7 +105,7 @@ Ultra when the account is not Ultra.
 | Documents: PDF, web page, image, video, audio | Whole |
 | AI: derivations, assistant, distill, extract, glossary, conversion | Whole |
 | Sharing and collaboration | Whole |
-| Offline work (SPEC.md §17) | Note edits, note create and delete, section renames and reorders, replies, block text edits and deletes, highlights and comments, and content uploads queue in IndexedDB and sync when the browser is back online |
+| Offline work (SPEC.md §17) | Note edits, note create and delete, section renames and reorders, replies, block text edits and deletes, highlights and comments, and content uploads queue in IndexedDB and sync when the browser is back online. AI is off offline for every tier, and says so |
 | Images dropped into a note or into the reader's edit mode | Up to 25 MB per image (`MAX_IMAGE_BYTES`, `lib/images.ts`) |
 | Video dropped into a note or into the reader's edit mode | Not built yet: a video dropped anywhere is still added as a video document |
 
@@ -116,7 +116,7 @@ Ultra when the account is not Ultra.
 | Everything in Premium | Whole |
 | Visualize (SPEC.md §20) | The selection as a picture — a directed diagram, a drawing, or a short animation — on Claude Fable 5.1 at its highest effort; declined with the reason when the model is not certain the picture carries the passage's core idea |
 | Tool conversations (SPEC.md §21) | Continuing a Simplify, Analyze, or Visualize card's output into a conversation (Simplify+, Analyze+, …). Offered to every account at the end of the tool's output; a non-Ultra press answers with the plain Ultra message, like Visualize, and the route answers 403 |
-| Offline copies (SPEC.md §17) | Save for offline, in a project's ⋯ menu on the dashboard: the project's pages and images kept in the browser, so the project opens without a network; offline, the dashboard shows only the saved projects. Offered to every account; a non-Ultra press answers with the plain Ultra message, and `GET /api/notebooks/<id>/offline` answers 403. Videos and the assistant stay online-only |
+| Offline copies (SPEC.md §17) | Save for offline, the pill in the reader's header and an item in a project's ⋯ menu on the dashboard: the project's pages and images kept in the browser, so the project opens without a network; offline, the dashboard shows only the saved projects. Offered to every account; a non-Ultra press answers with the plain Ultra message, and `GET /api/notebooks/<id>/offline` answers 403. Videos and the assistant stay online-only |
 
 ## Expired (trial ended, nothing granted)
 
@@ -155,7 +155,7 @@ until the owner makes one.
 - Translation (SPEC.md §19): DeepL bills per character — $25 per million on the Pro API, 500k a month free on the Free API — and a document translates once per language. A characters-per-month cap, or the feature itself, is a natural Premium line; nobody has drawn it
 - The assistant's web access (SPEC.md §7): each answer with Web on can run up to five searches at $0.005 each on top of the tokens
 - Figure and table analysis (SPEC.md §4): runs at the model's highest reasoning effort, the most expensive call per use in the app
-- Voice notes (SPEC.md §6): transcription minutes, like video
+- Voice command (SPEC.md §6): transcription minutes, like video, plus one Claude Sonnet 5 call per command over the open document
 - Compare two documents and Ask about a range: tokens like every derivation
 - What an expired account keeps: today only offline work and large images close. Whether AI, documents, or sharing close too when the trial ends is undecided
 

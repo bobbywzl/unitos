@@ -7,7 +7,6 @@ import { currentLang, serverT } from "@/lib/i18n/server";
 import { peopleByIds, roleOf } from "@/lib/collab";
 import { matchInText } from "@/lib/anchors/match";
 import { conversationTurns } from "@/lib/conversation";
-import { hasContext } from "@/lib/derive/context";
 import { editedRanges } from "@/lib/diff";
 import { definitionFor, glossaryEntries, lacksDefinitionsIn } from "@/lib/glossary";
 import { conversionIsStale } from "@/lib/handwritten/convert";
@@ -944,7 +943,6 @@ export default async function NotebookPage(props: {
   // The rest of the page's reads depend on nothing below: they start together.
   const [
     editRows,
-    globalProfile,
     corpusQuoteDocs,
     graph,
     events,
@@ -961,7 +959,6 @@ export default async function NotebookPage(props: {
             include: { replies: { orderBy: { createdAt: "asc" } } },
           })
         : [],
-      db.readerProfile.findUnique({ where: { userId: notebook.userId } }),
       corpusQuoteDocIds.length > 0
         ? db.document.findMany({
             where: { id: { in: corpusQuoteDocIds } },
@@ -1006,27 +1003,6 @@ export default async function NotebookPage(props: {
         createdAt: e.createdAt.toISOString(),
       }));
 
-  // Context for the Context tab: notebook override wins over the global context
-  // (SPEC.md §3). Same ladder as loadProfile.
-  const override = notebook.profile as {
-    background?: string;
-    purpose?: string;
-    application?: string;
-  } | null;
-  const hasOverride = hasContext(override);
-  const contextValues = hasOverride
-    ? {
-        background: override?.background ?? "",
-        purpose: override?.purpose ?? "",
-        application: override?.application ?? "",
-      }
-    : globalProfile
-      ? {
-          background: globalProfile.background,
-          purpose: globalProfile.purpose,
-          application: globalProfile.application,
-        }
-      : null;
 
   // Corpus distillations (SPEC.md §13): quotes heal against the current blocks
   // of every document they cite, orphaning visibly (SPEC.md §5); each quote
@@ -1279,11 +1255,6 @@ export default async function NotebookPage(props: {
       }}
       history={history}
       corpusDistillations={corpusDistillations}
-      context={{
-        initial: contextValues,
-        hasOverride,
-        isSet: hasContext(contextValues),
-      }}
       assistant={
         <AssistantPanel
           key={paneOne?.document.id ?? "none"}

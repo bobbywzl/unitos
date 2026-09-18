@@ -1,4 +1,4 @@
-import { CLAUDE_FABLE_5_1, CLAUDE_OPUS_5, GEMINI_FLASH, GLM_5_3, GLM_5_3_FLASH, KIMI_K3 } from "@/lib/derive/config";
+import { CLAUDE_FABLE_5_1, CLAUDE_OPUS_5, CLAUDE_SONNET_5, GEMINI_FLASH, GLM_5_3, GLM_5_3_FLASH, KIMI_K3 } from "@/lib/derive/config";
 import { db } from "@/lib/db";
 import { gatewayConfigured } from "@/lib/gateway";
 
@@ -9,7 +9,7 @@ import { gatewayConfigured } from "@/lib/gateway";
 // clients call resolveModelId on every call, so a default id follows the
 // row; an id that is not a role's default is called as written.
 
-export type ModelRole = "glm" | "glmFlash" | "kimi" | "claude" | "opus" | "gemini";
+export type ModelRole = "glm" | "glmFlash" | "kimi" | "claude" | "opus" | "sonnet" | "gemini";
 
 export const MODEL_ROLES: Record<ModelRole, { provider: string; defaultId: string }> = {
   glm: { provider: "Z.ai", defaultId: GLM_5_3 },
@@ -17,10 +17,11 @@ export const MODEL_ROLES: Record<ModelRole, { provider: string; defaultId: strin
   kimi: { provider: "Moonshot AI", defaultId: KIMI_K3 },
   claude: { provider: "Anthropic", defaultId: CLAUDE_FABLE_5_1 },
   opus: { provider: "Anthropic", defaultId: CLAUDE_OPUS_5 },
+  sonnet: { provider: "Anthropic", defaultId: CLAUDE_SONNET_5 },
   gemini: { provider: "Google", defaultId: GEMINI_FLASH },
 };
 
-export const ROLE_ORDER: ModelRole[] = ["glm", "glmFlash", "kimi", "claude", "opus", "gemini"];
+export const ROLE_ORDER: ModelRole[] = ["glm", "glmFlash", "kimi", "claude", "opus", "sonnet", "gemini"];
 
 /** A GLM id: Z.ai's model, reached through the gateway alone. */
 export function isGlmModel(modelId: string): boolean {

@@ -226,7 +226,7 @@ export default async function SignInPage({
   // The pitch: the lead line, three rows each stamped Done, then the closer
   // (hero-pitch.tsx).
   const pitchRows: PitchRow[] = [
-    { text: t("signin.heroPitchLead"), done: false },
+    { text: t("signin.heroPitchLead"), done: false, lead: true },
     { text: t("signin.heroPitchRow1"), done: true },
     { text: t("signin.heroPitchRow2"), done: true },
     { text: t("signin.heroPitchRow3"), done: true },
