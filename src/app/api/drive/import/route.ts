@@ -16,6 +16,7 @@ import { renderPageImages } from "@/lib/handwritten/page-images";
 import { serverT } from "@/lib/i18n/server";
 import { progressResponse } from "@/lib/ingest-response";
 import { attachDocument } from "@/lib/parse/attach";
+import { refreshSkeleton } from "@/lib/graph/skeleton";
 import { describeIngestError } from "@/lib/parse/ingest-error";
 import { ingestMediaUrl } from "@/lib/video/ingest-media-url";
 import { runTranscription } from "@/lib/video/transcription-job";
@@ -131,6 +132,9 @@ export async function POST(req: Request) {
     const { document, deduped } = ingested;
     await attachDocument(data.notebookId, document.id);
     await bumpNotebook(data.notebookId);
+    // The skeleton builds after the response (SPEC.md §22); a handwritten
+    // document's waits for its conversion.
+    if (!deduped && !document.handwritten) after(() => refreshSkeleton(document.id, user?.id ?? null).catch(() => {}));
     if (!deduped && document.handwritten) {
       // The pages render and store after the response (SPEC.md §16); the
       // reader loads them as they land, and the page image route renders

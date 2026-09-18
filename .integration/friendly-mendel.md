@@ -21,3 +21,22 @@
 - Contents: one AI pass at low effort stores the parts; a failed pass answers the document's headings and stores nothing, so the next open tries again. Titles are never translated.
 - Stitch's pick lives in the graph overlay's state for the session, not in the URL. Send ends picking.
 - Existing multi upload rows are dropped by the migration. Generated documents keep their blocks, links, and command.
+
+## Round two: context saving for Stitch
+
+**Intent:** Make a Stitch command cost what it needs, not the project: every document carries a skeleton, the reading passes read skeletons and route to parts, lines are ranked when there are too many, and only the picked blocks' real text reaches the answer pass; the skeleton follows edits and rebuilds past a tenth changed.
+
+**Files:**
+- `prisma/schema.prisma`, `prisma/migrations/20260918150000_skeleton`: `Document.skeleton`, `Document.skeletonStartedAt`.
+- `src/lib/graph/skeleton.ts` (new), `src/lib/prompts/skeleton.ts` (new): build (one call per 100k-char window, in parallel), hash per block, drift, patch for small edits, `ensureSkeleton` (Stitch), `refreshSkeleton` (background, locked).
+- `src/lib/graph/rank.ts` (new): BM25 over lines, word and CJK-bigram tokens.
+- `src/lib/graph/stitch.ts`, `src/lib/prompts/stitch.ts`: the reading passes over skeletons — select in one call; route pass and ranking past the budget; the per-document whole-text select call, the per-document cut, and the `leftOut` budget are gone. `StitchDocument.status` is `read | empty`.
+- `src/lib/derive/config.ts`: `STITCH_ROUTE_EFFORT`, `STITCH_WHOLE_THRESHOLD`, `STITCH_SKELETON_BUDGET`, `STITCH_SELECTED_BUDGET`, `SKELETON_*`.
+- Background hooks: `src/app/api/documents/route.ts`, `src/app/api/drive/import/route.ts`, `src/app/api/documents/[documentId]/reparse/route.ts`, `src/app/api/blocks/[blockId]/route.ts` (`after(refreshSkeleton)`), `src/lib/video/transcription-job.ts`, `src/lib/handwritten/convert.ts` (after the text lands), `src/lib/parse/ingest.ts` (a re-parse clears the skeleton).
+- `src/components/graph/stitch-box.tsx`, `src/lib/i18n/dict/stitch.ts`, `src/lib/types.ts`, `src/lib/usage.ts`, `scripts/qa/mock-kimi.mjs`, `SPEC.md` §22, `CLAUDE.md`, `README.md`.
+
+**Decisions:**
+- The skeleton is built on Kimi K3 at low effort like every other reading pass; a cheaper model is one constant away but no second client is wired for Stitch, so none is used.
+- Drift counts a removed block's line at ten times its length (the text is gone); a document with no skeleton is fully stale. Under a tenth, changed blocks read as their own first words with no model call.
+- Embeddings were not restored: BM25 needs no key and no index, and it only runs when the routed lines still overflow the budget.
+- The route pass runs only past 200k characters of skeleton text; under that one select call reads every skeleton, byte-identical turn to turn, so the prefix caches.

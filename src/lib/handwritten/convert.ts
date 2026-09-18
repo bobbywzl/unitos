@@ -11,6 +11,7 @@ import { claude, claudeConfigured, claudeOptions } from "@/lib/claude";
 import { convertPrompt } from "@/lib/prompts/convert";
 import { fixTexPrompt } from "@/lib/prompts/fix-tex";
 import { resolveModelId } from "@/lib/models";
+import { refreshSkeleton } from "@/lib/graph/skeleton";
 
 // The conversion job (SPEC.md §16): guards, page rendering, the model batches,
 // and the text block writes. Conversion starts on its own when a handwritten
@@ -311,6 +312,9 @@ export async function runConversion(
     });
     await bumpDocument(documentId);
     console.log(`[convert] ${documentId}: ${rows.length} blocks from ${usePages.length} pages`);
+    // The converted text is the document's text: its skeleton builds now
+    // (SPEC.md §22). A failure here is the skeleton's, never the conversion's.
+    await refreshSkeleton(documentId, userId).catch((err: unknown) => console.warn("[convert] skeleton failed:", err));
     return { ok: true, blocks: rows.length };
   } catch (err) {
     const message = err instanceof Error ? err.message : "Conversion failed";

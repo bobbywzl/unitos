@@ -616,9 +616,12 @@ export async function reparseDocument(
         conversionStatus: "NONE",
         conversionError: null,
         conversionStartedAt: null,
-        // The blocks are new, so the contents' block ids are stale: the
-        // next open of Contents builds them again (SPEC.md §26).
+        // The blocks are new, so the contents' and the skeleton's block ids
+        // are stale: the next open of Contents builds them again (SPEC.md
+        // §26), and the skeleton builds again after the response (§22).
         contents: Prisma.DbNull,
+        skeleton: Prisma.DbNull,
+        skeletonStartedAt: null,
       },
     });
   });
