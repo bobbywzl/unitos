@@ -32,6 +32,7 @@ const en = {
   saving: "Saving…",
   saved: "Saved",
   saveFailed: "Not saved",
+  savedOffline: "Saved on this device · syncs when online",
   // Hold to drag (SPEC.md §6): a hold anywhere on a note picks it up.
   holdToDrag:
     "Hold to drag. Move the note, hold it over another note to merge the two, or drop it on the article to float it.",
@@ -212,6 +213,7 @@ const zh: Record<keyof typeof en, string> = {
   saving: "保存中…",
   saved: "已保存",
   saveFailed: "未保存",
+  savedOffline: "已保存在此设备 · 联网后同步",
   holdToDrag: "按住即可拖动。移动笔记；压在另一条笔记上按住即合并；放到文章上即浮动。",
   holdToDragPage: "按住即可拖动。移动笔记，或压在另一条笔记上按住即合并。",
   holdToMoveCard: "按住即可移动此卡片。放到笔记栏上即把笔记放回。",

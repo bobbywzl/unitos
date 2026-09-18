@@ -18,6 +18,44 @@ const SHELL = "unitos-shell-v1";
 const STATIC = "unitos-static-v1";
 const PROJECT_PREFIX = "unitos-project-";
 const SHELL_URLS = ["/offline", "/icon.png", "/manifest.webmanifest"];
+// The routes that need a model (lib/offline/ai-routes.ts keeps the same
+// pattern for the client): offline, a call answers 503 with the plain
+// message, in the app's language — the page posts it on every load, and
+// it is kept in the shell cache so a restarted worker still has it.
+const AI_ROUTE =
+  /^\/api\/(derive|assistant(\/.*)?|notes\/gist|notes\/voice|documents\/[^/]+\/(glossary|translate|convert|reparse|transcribe|finish|article|figure|speakers)|multi(\/.*)?|notebooks\/[^/]+\/(connect|stitch)|drive\/import)$/;
+const LANG_KEY = "/__lang";
+const OFFLINE_AI = {
+  en: "AI is off while offline. Notes, highlights, comments, and edits save on this device and sync when you are back online.",
+  zh: "离线时 AI 不可用。笔记、高亮、评论和编辑会保存在此设备上，联网后同步。",
+};
+
+self.addEventListener("message", (event) => {
+  const data = event.data;
+  if (!data || data.type !== "lang" || !(data.lang in OFFLINE_AI)) return;
+  event.waitUntil(caches.open(SHELL).then((cache) => cache.put(LANG_KEY, new Response(data.lang))));
+});
+
+async function offlineAiResponse(request) {
+  let lang = "en";
+  try {
+    const hit = await (await caches.open(SHELL)).match(LANG_KEY);
+    const stored = hit ? await hit.text() : "";
+    if (stored in OFFLINE_AI) lang = stored;
+  } catch {
+    // The default stands.
+  }
+  // Merge with AI shares its route with Join text, which queues; only the
+  // AI mode answers with the message.
+  if (new URL(request.url).pathname === "/api/notes/merge") {
+    const body = await request.clone().json().catch(() => null);
+    if (!body || body.mode !== "ai") throw new Error("not an AI call");
+  }
+  return new Response(JSON.stringify({ error: OFFLINE_AI[lang] }), {
+    status: 503,
+    headers: { "Content-Type": "application/json" },
+  });
+}
 
 const STATIC_RE = /\/_next\/static\/[^"'\s)\\]+/g;
 
@@ -140,9 +178,16 @@ async function networkFirst(request, navigate) {
 
 self.addEventListener("fetch", (event) => {
   const { request } = event;
-  if (request.method !== "GET") return;
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
+  if (request.method !== "GET") {
+    if (AI_ROUTE.test(url.pathname) || url.pathname === "/api/notes/merge") {
+      event.respondWith(
+        fetch(request).catch((err) => offlineAiResponse(request).catch(() => Promise.reject(err))),
+      );
+    }
+    return;
+  }
   if (isStatic(url)) {
     event.respondWith(cacheFirst(request));
     return;

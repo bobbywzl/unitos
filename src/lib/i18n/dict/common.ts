@@ -100,9 +100,13 @@ const en = {
   tierExpired: "Unitos Premium · trial ended {date}",
   // Offline work (SPEC.md §17, Unitos Premium)
   offline: "Offline. This change did not save.",
-  offlineQueued: "Offline · {n} saved for sync · Unitos Premium",
-  offlinePremium: "Offline · edits save and sync later · Unitos Premium",
-  offlineReadOnly: "Offline · changes do not save. Unitos Premium saves offline work.",
+  offlineQueued: "Offline · AI is off · {n} saved for sync · Unitos Premium",
+  offlinePremium: "Offline · AI is off · notes and edits save and sync later · Unitos Premium",
+  offlineReadOnly: "Offline · AI is off · changes do not save. Unitos Premium saves offline work.",
+  // A call that needs a model, offline (SPEC.md §17): the same words as the
+  // service worker's answer (public/sw.js)
+  offlineAi:
+    "AI is off while offline. Notes, highlights, comments, and edits save on this device and sync when you are back online.",
   offlineSyncing: "Syncing {n} offline changes…",
   // The offline page (SPEC.md §17, Unitos Ultra): what loads without a network
   offlineTitle: "Offline",
@@ -185,9 +189,12 @@ const zh: Record<keyof typeof en, string> = {
   tierExpired: "Unitos Premium · 试用已于 {date} 结束",
   // Offline work (SPEC.md §17, Unitos Premium)
   offline: "已离线。此更改未保存。",
-  offlineQueued: "离线 · 已保存 {n} 项待同步 · Unitos Premium",
-  offlinePremium: "离线 · 编辑会保存并稍后同步 · Unitos Premium",
-  offlineReadOnly: "离线 · 更改不会保存。Unitos Premium 可保存离线工作。",
+  offlineQueued: "离线 · AI 不可用 · 已保存 {n} 项待同步 · Unitos Premium",
+  offlinePremium: "离线 · AI 不可用 · 笔记和编辑会保存并稍后同步 · Unitos Premium",
+  offlineReadOnly: "离线 · AI 不可用 · 更改不会保存。Unitos Premium 可保存离线工作。",
+  // A call that needs a model, offline (SPEC.md §17): the same words as the
+  // service worker's answer (public/sw.js)
+  offlineAi: "离线时 AI 不可用。笔记、高亮、评论和编辑会保存在此设备上，联网后同步。",
   offlineSyncing: "正在同步 {n} 项离线更改…",
   // The offline page (SPEC.md §17, Unitos Ultra): what loads without a network
   offlineTitle: "离线",

@@ -38,6 +38,7 @@ import { GuideDialog } from "@/components/guide-dialog";
 import { useT } from "@/components/lang-provider";
 import { NotebookTitle } from "@/components/notebook-title";
 import { ProgressBar } from "@/components/progress-bar";
+import { SaveIndicator } from "@/components/save-indicator";
 import { OpenDocumentProvider } from "@/components/reader/open-document-context";
 import {
   listSaved,
@@ -592,6 +593,7 @@ export function Workspace({
           />
         </div>
         <OfflineStatus />
+        <SaveIndicator />
         <ShareControl notebookId={notebook.id} presence={presence} />
         <div className="hidden md:block">
           <HistoryControl history={history} />

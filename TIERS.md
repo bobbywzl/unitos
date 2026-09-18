@@ -105,7 +105,7 @@ Ultra when the account is not Ultra.
 | Documents: PDF, web page, image, video, audio | Whole |
 | AI: derivations, assistant, distill, extract, glossary, conversion | Whole |
 | Sharing and collaboration | Whole |
-| Offline work (SPEC.md §17) | Note edits, note create and delete, section renames and reorders, replies, block text edits and deletes, highlights and comments, and content uploads queue in IndexedDB and sync when the browser is back online |
+| Offline work (SPEC.md §17) | Note edits, note create and delete, section renames and reorders, replies, block text edits and deletes, highlights and comments, and content uploads queue in IndexedDB and sync when the browser is back online. AI is off offline for every tier, and says so |
 | Images dropped into a note or into the reader's edit mode | Up to 25 MB per image (`MAX_IMAGE_BYTES`, `lib/images.ts`) |
 | Video dropped into a note or into the reader's edit mode | Not built yet: a video dropped anywhere is still added as a video document |
 
