@@ -499,6 +499,17 @@ export function ThumbsDownIcon(props: IconProps) {
 
 // The Drive glyph: a triangle of three strokes, the assistant's Add from
 // Google Drive button.
+// A device with a downward arrow into it: Save for offline (SPEC.md §17).
+export function OfflineIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M12 3v10" />
+      <path d="M8 9l4 4 4-4" />
+      <rect x="4" y="15" width="16" height="6" rx="2" />
+    </Icon>
+  );
+}
+
 export function DriveIcon(props: IconProps) {
   return (
     <Icon {...props}>

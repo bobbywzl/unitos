@@ -10,8 +10,10 @@ import {
   removeSaved,
   saveProject,
   subscribeSaved,
+  type SaveProgress,
 } from "@/lib/offline/saved";
 import { useT } from "@/components/lang-provider";
+import { ProgressBar } from "@/components/progress-bar";
 import { WorkCard, type WorkItem } from "@/components/works/work-card";
 
 export type { WorkItem };
@@ -44,6 +46,7 @@ export function WorksShelf({
   const [supported, setSupported] = useState(false);
   const [saved, setSaved] = useState<Set<string>>(new Set());
   const [savingId, setSavingId] = useState<string | null>(null);
+  const [saveProgress, setSaveProgress] = useState<SaveProgress | null>(null);
   const [toast, setToast] = useState<{ text: string; plans: boolean } | null>(null);
 
   useEffect(() => {
@@ -76,8 +79,9 @@ export function WorksShelf({
       return;
     }
     setSavingId(id);
+    setSaveProgress({ stage: "pages", done: 0, total: 0 });
     try {
-      await saveProject(id);
+      await saveProject(id, setSaveProgress);
       setToast({ text: t("works.offlineSaved"), plans: false });
     } catch (err) {
       const status = (err as { status?: number }).status;
@@ -87,8 +91,10 @@ export function WorksShelf({
       });
     } finally {
       setSavingId(null);
+      setSaveProgress(null);
     }
   }
+  const savingTitle = [...works, ...sharedWorks].find((w) => w.id === savingId)?.title ?? "";
 
   const offlineOf = (id: string) =>
     supported
@@ -185,6 +191,15 @@ export function WorksShelf({
             ))}
           </ul>
         </>
+      )}
+
+      {savingId && saveProgress && (
+        <ProgressBar
+          label={t(saveProgress.stage === "pages" ? "works.savingOfflinePages" : "works.savingOfflineFiles")}
+          title={savingTitle}
+          done={saveProgress.done}
+          total={saveProgress.total}
+        />
       )}
 
       {toast && (

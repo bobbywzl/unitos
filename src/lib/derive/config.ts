@@ -10,6 +10,8 @@ import { translate } from "@/lib/i18n/dictionaries";
 export const KIMI_K3 = "kimi-k3";
 export const CLAUDE_FABLE_5_1 = "claude-fable-5-1";
 export const CLAUDE_OPUS_5 = "claude-opus-5";
+// The voice command (SPEC.md §6) runs on Claude Sonnet 5 (VOICE_MODEL below).
+export const CLAUDE_SONNET_5 = "claude-sonnet-5";
 // Gemini's flash model reads video (SPEC.md §11): transcription and clip
 // descriptions. The client is lib/video/gemini.ts.
 export const GEMINI_FLASH = "gemini-3.7-flash";
@@ -55,7 +57,7 @@ export const DERIVATION_MODEL: Record<DerivationType, string> = {
   ASK: KIMI_K3,
   COMPARE: KIMI_K3,
   ANALYZE: KIMI_K3,
-  VOICE: KIMI_K3, // no model call of its own: the transcription ladder does the work
+  VOICE: CLAUDE_SONNET_5, // the voice command (SPEC.md §6): VOICE_MODEL below, not a Kimi call
   VISUALIZE: CLAUDE_OPUS_5, // the strongest model at drawing: the picture has to be faithful or refused (SPEC.md §20)
 };
 
@@ -76,6 +78,17 @@ export const DERIVATION_EFFORT: Record<DerivationType, KimiEffort> = {
   VOICE: DEFAULT_EFFORT,
   VISUALIZE: "max", // not a Kimi call: VISUALIZE_EFFORT below is the effort used
 };
+
+// The voice command (SPEC.md §6): a spoken command over the open document and
+// the section's notes becomes pending notes with the document's quotes as
+// sources. Claude Sonnet 5: it follows a multi-part spoken instruction and
+// copies quotes exactly at a fifth of Opus 5's price ($2 / $10 per million
+// tokens against $5 / $25), and its context holds a whole document with the
+// notes; the document prefix is cached, so a second command on the same
+// document reads it at a tenth of the price. Deep Thinking runs at "high",
+// Fast Thinking at "low" (lib/assistant/thinking.ts).
+export const VOICE_MODEL = CLAUDE_SONNET_5;
+export const VOICE_EFFORT: Record<"fast" | "deep", ClaudeEffort> = { fast: "low", deep: "high" };
 
 // VISUALIZE (SPEC.md §20, Unitos Ultra) runs on Claude Opus 5 at its highest
 // reasoning effort: the model first judges whether a picture can carry the
@@ -116,7 +129,7 @@ export const MAX_OUTPUT_TOKENS: Record<DerivationType, number> = {
   ASK: 16384,
   COMPARE: 32768, // two documents' points, each with its spans
   ANALYZE: 32768, // three short sections, read at "max" effort: room for the reasoning
-  VOICE: 0,
+  VOICE: 16384, // a few notes with their quotes, and the short reasoning before them
   VISUALIZE: 32768, // the judgment, then a diagram spec or an SVG; an animation's SVG is long
 };
 

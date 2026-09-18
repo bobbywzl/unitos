@@ -30,5 +30,6 @@ export const promptTemplates: Partial<Record<DerivationType, (ctx: PromptCtx) =>
   COMPARE: comparePrompt,
   ANALYZE: analyzePrompt,
   VISUALIZE: visualizePrompt,
-  // VOICE has no template: the transcription ladder does the work (SPEC.md §6).
+  // VOICE's template is lib/prompts/voice.ts: the voice command runs from
+  // /api/notes/voice, not from /api/derive (SPEC.md §6).
 };

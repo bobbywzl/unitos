@@ -20,8 +20,8 @@ import {
   EditsIcon,
   GraphIcon,
   HistoryIcon,
-  MoreIcon,
   NotesIcon,
+  OfflineIcon,
   QuestionIcon,
   SparkleIcon,
 } from "@/components/icons";
@@ -38,6 +38,17 @@ import { ContextTab, type ContextValues } from "@/components/context-tab";
 import { GuideDialog } from "@/components/guide-dialog";
 import { useT } from "@/components/lang-provider";
 import { NotebookTitle } from "@/components/notebook-title";
+import { ProgressBar } from "@/components/progress-bar";
+import { OpenDocumentProvider } from "@/components/reader/open-document-context";
+import {
+  listSaved,
+  offlineSupported,
+  removeSaved,
+  saveProject,
+  subscribeSaved,
+  type SaveProgress,
+} from "@/lib/offline/saved";
+import { TierMark } from "@/components/tier-mark";
 import { FloatingNoteEditor } from "@/components/outline/floating-note-editor";
 import { readSideChatOpen, subscribeSideChatOpen } from "@/lib/assistant/side-chat-open";
 import { NotesTray } from "@/components/outline/notes-tray";
@@ -220,8 +231,50 @@ export function Workspace({
     const timer = setTimeout(() => document.getElementById(RESTORE_STYLE_ID)?.remove(), RESTORE_STYLE_MS);
     return () => clearTimeout(timer);
   }, []);
-  const [menuOpen, setMenuOpen] = useState(false);
   const [guideOpen, setGuideOpen] = useState(false);
+  // Save for offline (SPEC.md §17, Unitos Ultra), from the rail: whether this
+  // browser already holds a copy, a save under way, and the one-line result.
+  const [offlineSaved, setOfflineSaved] = useState(false);
+  const [offlineSaving, setOfflineSaving] = useState(false);
+  const [offlineProgress, setOfflineProgress] = useState<SaveProgress | null>(null);
+  const [offlineToast, setOfflineToast] = useState<{ text: string; plans: boolean } | null>(null);
+  useEffect(() => {
+    if (!offlineSupported()) return;
+    const update = () => void listSaved().then((rows) => setOfflineSaved(rows.some((r) => r.id === notebook.id)));
+    update();
+    return subscribeSaved(update);
+  }, [notebook.id]);
+  useEffect(() => {
+    if (!offlineToast) return;
+    const timer = setTimeout(() => setOfflineToast(null), 5000);
+    return () => clearTimeout(timer);
+  }, [offlineToast]);
+  async function toggleOffline() {
+    if (offlineSaving) return;
+    if (offlineSaved) {
+      await removeSaved(notebook.id);
+      return;
+    }
+    if (!collab.ultra) {
+      setOfflineToast({ text: t("works.offlineNeedsUltra"), plans: collab.billing });
+      return;
+    }
+    setOfflineSaving(true);
+    setOfflineProgress({ stage: "pages", done: 0, total: 0 });
+    try {
+      await saveProject(notebook.id, setOfflineProgress);
+      setOfflineToast({ text: t("works.offlineSaved"), plans: false });
+    } catch (err) {
+      const status = (err as { status?: number }).status;
+      setOfflineToast({
+        text: status === 403 ? t("works.offlineNeedsUltra") : t("works.offlineSaveFailed"),
+        plans: status === 403 && collab.billing,
+      });
+    } finally {
+      setOfflineSaving(false);
+      setOfflineProgress(null);
+    }
+  }
   // The ? nudge for a new reader (the welcome flow points here): a pulsing
   // dot on the guide button until the guide is opened once on this browser.
   // Revealed a frame after hydration, so server and client render alike.
@@ -248,7 +301,6 @@ export function Workspace({
   const [graphOpen, setGraphOpen] = useState(false);
   // The corpus distilled page: null = closed; { shownId } open (null = ask view).
   const [corpusDistill, setCorpusDistill] = useState<{ shownId: string | null } | null>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
 
   const noteCount = countNotes(tree);
 
@@ -453,22 +505,6 @@ export function Workspace({
     window.addEventListener("blur", onUp);
   }
 
-  useEffect(() => {
-    if (!menuOpen) return;
-    const onPointerDown = (e: PointerEvent) => {
-      if (!menuRef.current?.contains(e.target as Node)) setMenuOpen(false);
-    };
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setMenuOpen(false);
-    };
-    window.addEventListener("pointerdown", onPointerDown);
-    window.addEventListener("keydown", onKeyDown);
-    return () => {
-      window.removeEventListener("pointerdown", onPointerDown);
-      window.removeEventListener("keydown", onKeyDown);
-    };
-  }, [menuOpen]);
-
   function show(next: Tab) {
     if (mobileTray && tab === next) {
       setMobileTray(false);
@@ -512,6 +548,7 @@ export function Workspace({
     // print: the shell flattens to plain flow so the whole document prints,
     // not one screen of the scroll pane; chrome and trays hide.
     <CollabProvider value={collab}>
+    <OpenDocumentProvider value={activeDocumentId}>
     {/* Click telemetry (SPEC.md §7): the header, the rail, and the tray are
         the surfaces; every control in them carries data-track. */}
     <ClickTracker notebookId={notebook.id} />
@@ -843,42 +880,48 @@ export function Workspace({
             <EditsIcon />
           </button>
 
-          <div ref={menuRef} className="relative md:mt-auto">
+          {offlineSupported() && (
             <button
-              onClick={() => setMenuOpen(!menuOpen)}
-              data-track="more"
+              onClick={() => void toggleOffline()}
+              disabled={offlineSaving}
+              data-track="offline-save"
               data-nudge="settings"
-              aria-label={t("panes.more")}
-              data-tip={t("panes.moreTitle")}
-              aria-expanded={menuOpen}
-              className={RAIL_BUTTON}
+              aria-label={t(offlineSaved ? "works.removeOffline" : "works.saveOffline")}
+              data-tip={t(offlineSaved ? "works.removeOffline" : "works.saveOffline")}
+              className={`${offlineSaved ? RAIL_BUTTON_ON : RAIL_BUTTON} md:mt-auto disabled:opacity-40`}
             >
-              <MoreIcon />
+              <OfflineIcon />
+              {!collab.ultra && !offlineSaved && (
+                <span className="absolute -top-0.5 -right-0.5">
+                  <TierMark state="ultra" size={11} />
+                </span>
+              )}
             </button>
-            <Presence show={menuOpen} exit="menu">
-            {menuOpen && (
-              <div className="menu-in absolute right-0 bottom-full mb-2 flex w-44 flex-col overflow-hidden rounded-2xl bg-card py-1 shadow-float">
-                <Link
-                  href={`/n/${notebook.id}/notes`}
-                  data-track="more-notes-full-page"
-                  className="px-4 py-2 text-sm text-sand-700 hover:bg-clay-100 hover:text-clay-800"
-                >
-                  {t("panes.notesFullPage")}
-                </Link>
-                <Link
-                  href="/settings"
-                  data-track="more-settings"
-                  className="px-4 py-2 text-sm text-sand-700 hover:bg-clay-100 hover:text-clay-800"
-                >
-                  {t("common.settings")}
-                </Link>
-              </div>
-            )}
-            </Presence>
-          </div>
+          )}
         </nav>
       </div>
 
+      {offlineSaving && offlineProgress && (
+        <ProgressBar
+          label={t(offlineProgress.stage === "pages" ? "works.savingOfflinePages" : "works.savingOfflineFiles")}
+          title={notebook.title}
+          done={offlineProgress.done}
+          total={offlineProgress.total}
+        />
+      )}
+      {offlineToast && !offlineSaving && (
+        <div className="fixed bottom-6 left-1/2 z-40 flex -translate-x-1/2 items-center gap-2 rounded-full bg-ink/90 px-3 py-1.5 text-xs text-paper">
+          {offlineToast.text}
+          {offlineToast.plans && (
+            <button
+              onClick={() => window.open("/billing", "_blank", "noopener")}
+              className="rounded-full bg-paper/20 px-2.5 py-0.5 font-semibold hover:bg-paper/30"
+            >
+              {t("billing.plans")}
+            </button>
+          )}
+        </div>
+      )}
       <GuideDialog open={guideOpen} onClose={() => setGuideOpen(false)} />
       <Presence show={corpusDistill !== null} exit="fade">
       {corpusDistill && (
@@ -913,6 +956,7 @@ export function Workspace({
           does not run a script React inserts. */}
       <script dangerouslySetInnerHTML={{ __html: restoreScript(notebook.id) }} />
     </div>
+    </OpenDocumentProvider>
     </CollabProvider>
   );
 }
