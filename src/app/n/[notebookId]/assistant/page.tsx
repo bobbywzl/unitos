@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { authEnabled, currentUser } from "@/lib/auth";
-import { roleOf } from "@/lib/collab";
+import { peopleByIds, roleOf } from "@/lib/collab";
 import { loggedTurns, TOOL_DERIVATIONS, toolKindOf } from "@/lib/conversation";
 import { parseTurnContent } from "@/lib/assistant/attachments";
 import { db } from "@/lib/db";
@@ -17,14 +17,15 @@ import {
 
 export const dynamic = "force-dynamic";
 
-// Assistant history (SPEC.md §7): every assistant conversation the reader had
-// in this project, newest first, each on its own panel, each saying where it
-// comes from — the selection chat (the popover's assistant on a highlighted
-// text), a tool's output continued into a conversation, or the sidebar
-// assistant's own. An anchored panel links back to the highlighted text it
-// started from; the sidebar's says it lives in the assistant tab of the side
-// panel and links nowhere. Conversations are notes in the hidden Annotations
-// section (SPEC.md §21), so this page reads that section alone.
+// Assistant history (SPEC.md §7): every assistant conversation of this
+// project, newest first, each on its own panel, each labelled with the
+// contributor who started it and saying where it comes from — the selection
+// chat (the popover's assistant on a highlighted text), a tool's output
+// continued into a conversation, or the sidebar assistant's own. An anchored
+// panel links back to the highlighted text it started from; the sidebar's
+// says it lives in the assistant tab of the side panel and links nowhere.
+// Conversations are notes in the hidden Annotations section (SPEC.md §21), so
+// this page reads that section alone; a side chat is left out.
 export default async function AssistantHistoryPage(props: { params: Promise<{ notebookId: string }> }) {
   const { notebookId } = await props.params;
   const user = await currentUser();
@@ -38,12 +39,14 @@ export default async function AssistantHistoryPage(props: { params: Promise<{ no
   if (!myRole) notFound();
   const t = await serverT();
 
-  // The reader's own conversations. With sign-in off the local reader is the
-  // one account, and every conversation is theirs.
+  // Every conversation of this project, whoever had it, each labelled with
+  // the contributor who started it (SPEC.md §7, §19) — the Annotations tab
+  // shows the same work. A side chat belongs to the conversation it came
+  // from and opens from that chat box alone, so it is never listed here.
   const notes = await db.note.findMany({
     where: {
       section: { notebookId, hidden: true, title: ANNOTATIONS_SECTION_TITLE },
-      ...(authEnabled() ? { createdById: user.id } : {}),
+      sideChatOfId: null,
       OR: [
         { derivationType: "SYNTHESIS" },
         { derivationType: { in: [...TOOL_DERIVATIONS] }, conversation: { not: { equals: null } } },
@@ -84,6 +87,7 @@ export default async function AssistantHistoryPage(props: { params: Promise<{ no
         kind,
         origin,
         anchor,
+        authorId: n.createdById,
         updatedAt: n.updatedAt.toISOString(),
         turns: turns.map((turn) =>
           turn.role === "user"
@@ -108,7 +112,12 @@ export default async function AssistantHistoryPage(props: { params: Promise<{ no
         <h1 className="ml-2 font-display text-[18px]">{t("assistant.historyPageTitle")}</h1>
         <span className="ml-auto truncate text-[13px] text-sand-600">{notebook.title}</span>
       </header>
-      <AssistantHistory notebookId={notebook.id} conversations={conversations} />
+      <AssistantHistory
+        notebookId={notebook.id}
+        conversations={conversations}
+        people={await peopleByIds(notes.flatMap((n) => (n.createdById ? [n.createdById] : [])))}
+        shared={authEnabled() && notebook.collaborators.length > 0}
+      />
     </main>
   );
 }

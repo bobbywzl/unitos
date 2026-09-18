@@ -47,6 +47,20 @@ import { reportError } from "@/lib/error-log";
 import { isOffline, offlinePremium, queueWrite } from "@/lib/offline/queue";
 import { parseYouTubeId, youtubeWatchUrl } from "@/lib/video/youtube";
 import type { TFunc, TKey } from "@/lib/i18n/dictionaries";
+import {
+  ANSWER_MARK,
+  AnswerToolbar,
+  CommentBox,
+  CommentList,
+  QuoteChip,
+  quoteMessage,
+  SideChatChips,
+  SideChatHeader,
+  useAnswerSelection,
+  type AnswerComment,
+} from "@/components/assistant/answer-tools";
+import { setSideChatOpen } from "@/lib/assistant/side-chat-open";
+import type { Person } from "@/lib/person";
 import { ThinkingChips, useThinking } from "@/components/assistant/thinking-chips";
 import { useLang, useT } from "@/components/lang-provider";
 import { clipWords, markdownPreview } from "@/lib/markdown-preview";
@@ -438,6 +452,18 @@ type AssistantChat = {
   messages: ChatMessage[];
   input: string;
   busy: boolean;
+  // Side chats off a quote of an answer (SPEC.md §7): each one its own
+  // conversation, kept with this one and out of assistant history. openKey =
+  // the side chat on screen; quote = the words the next message carries.
+  sideChats?: ReaderSideChat[];
+  openKey?: string | null;
+  quote?: string | null;
+};
+type ReaderSideChat = {
+  key: string;
+  noteId: string | null;
+  quote: string;
+  messages: ChatMessage[];
 };
 
 // The picture a stored visualization's markdown points at, and its caption
@@ -765,7 +791,7 @@ export function ReaderInteractions({
   const tCtx = useT();
   // Viewers on a shared corpus read only: no selection tools, no edit mode,
   // no assistant. The server rejects their writes; this keeps the surface honest.
-  const { canEdit, premium, ultra, billing } = useCollab();
+  const { canEdit, premium, ultra, billing, myId, people } = useCollab();
   // Billing on (SPEC.md §24): the Ultra message offers the plan page.
   const plansAction = billing
     ? { label: tCtx("billing.plans"), run: () => window.open("/billing", "_blank", "noopener") }
@@ -1257,6 +1283,14 @@ export function ReaderInteractions({
   const splitRef = useRef(split);
   splitRef.current = split;
   const [assistantChat, setAssistantChat] = useState<AssistantChat | null>(null);
+  // Highlighting an answer in the chat card (SPEC.md §7): Start side chat,
+  // Ask about this, Comment.
+  const { selection: answerSelection, clear: clearAnswerSelection } = useAnswerSelection();
+  const [chatComments, setChatComments] = useState<AnswerComment[]>([]);
+  const [chatCommentPeople, setChatCommentPeople] = useState<Record<string, Person>>({});
+  const [chatCommentQuote, setChatCommentQuote] = useState<string | null>(null);
+  const [chatCommentBusy, setChatCommentBusy] = useState(false);
+  const sideChatsLoadedFor = useRef<string | null>(null);
   // A stored comment, opened from its icon beside the text — editable in place.
   const [commentCard, setCommentCard] = useState<{
     left: number;
@@ -4214,6 +4248,9 @@ export function ReaderInteractions({
     // A tool conversation (SPEC.md §21): the turn continues from the tool's
     // annotation; the server takes the selection and the turns from it.
     toolNoteId?: string,
+    // A side chat (SPEC.md §7): the conversation it branched from and the
+    // quote it started on. Its turns persist on a note of its own.
+    sideChat?: { of: string; quote: string },
   ): Promise<{ reply: string; noteId: string | null }> {
     const res = await fetch("/api/assistant/act", {
       method: "POST",
@@ -4228,6 +4265,8 @@ export function ReaderInteractions({
         history: history.slice(-12),
         conversationNoteId: conversationNoteId ?? undefined,
         toolNoteId,
+        sideChatOf: sideChat?.of,
+        sideChatQuote: sideChat?.quote,
         thinking,
       }),
     });
@@ -4251,31 +4290,212 @@ export function ReaderInteractions({
     return { reply: parts.join("\n\n"), noteId: plan.conversationNoteId ?? null };
   }
 
-  async function sendChatMessage() {
-    const chat = assistantChat;
-    const text = chat?.input.trim();
-    if (!chat || !text || chat.busy) return;
-    const history = chat.messages;
+  // The side chat on screen in the card, and the note the open thread saves
+  // on: what a comment is written under.
+  const chatOpenSide = assistantChat?.openKey
+    ? ((assistantChat.sideChats ?? []).find((s) => s.key === assistantChat.openKey) ?? null)
+    : null;
+  const chatNoteId = chatOpenSide ? chatOpenSide.noteId : (assistantChat?.noteId ?? null);
+
+  // A conversation reopened from its mark brings its side chats with it.
+  useEffect(() => {
+    const noteId = assistantChat?.noteId ?? null;
+    if (!noteId || sideChatsLoadedFor.current === noteId) return;
+    sideChatsLoadedFor.current = noteId;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch(`/api/assistant/conversation?noteId=${encodeURIComponent(noteId)}`);
+        const json = (await res.json().catch(() => null)) as {
+          sideChats?: { id: string; quote: string; turns: ChatMessage[] }[];
+        } | null;
+        if (cancelled || !res.ok || !json?.sideChats) return;
+        const loaded: ReaderSideChat[] = json.sideChats.map((s) => ({
+          key: s.id,
+          noteId: s.id,
+          quote: s.quote,
+          messages: s.turns,
+        }));
+        setAssistantChat((c) => {
+          if (!c || c.noteId !== noteId) return c;
+          // A side chat started in this card and not yet saved keeps its place.
+          const unsaved = (c.sideChats ?? []).filter((s) => !s.noteId);
+          return { ...c, sideChats: [...loaded, ...unsaved] };
+        });
+      } catch {
+        // Offline: the conversation reads the same, with no side chats listed.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [assistantChat?.noteId]);
+
+  // The comments under the open thread.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      if (!chatNoteId) {
+        setChatComments([]);
+        return;
+      }
+      try {
+        const res = await fetch(`/api/replies?noteId=${encodeURIComponent(chatNoteId)}`);
+        const json = (await res.json().catch(() => null)) as {
+          replies?: AnswerComment[];
+          people?: Record<string, Person>;
+        } | null;
+        if (cancelled || !res.ok || !json) return;
+        setChatComments(json.replies ?? []);
+        setChatCommentPeople(json.people ?? {});
+      } catch {
+        // Offline: the thread reads the same, with no comments under it.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [chatNoteId]);
+
+  // The tray folds while a side chat is open, so the card has the room
+  // (SPEC.md §7); it unfolds when the side chat closes.
+  useEffect(() => {
+    setSideChatOpen(assistantChat?.openKey != null);
+    return () => setSideChatOpen(false);
+  }, [assistantChat?.openKey]);
+
+  // The selection's three actions in the card, the panel's three.
+  function takeAnswerSelection(): string {
+    const text = answerSelection?.text ?? "";
+    clearAnswerSelection();
+    window.getSelection()?.removeAllRanges();
+    return text;
+  }
+  function startChatSideChat() {
+    const text = takeAnswerSelection();
+    if (!text || !assistantChat?.noteId) return;
+    const key = `side-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     setAssistantChat((c) =>
       c
-        ? { ...c, input: "", busy: true, messages: [...c.messages, { role: "user", content: text }] }
+        ? {
+            ...c,
+            sideChats: [...(c.sideChats ?? []), { key, noteId: null, quote: text, messages: [] }],
+            openKey: key,
+            quote: text,
+          }
         : c,
     );
+    setChatCommentQuote(null);
+  }
+  function askAboutThisInChat() {
+    const text = takeAnswerSelection();
+    if (!text) return;
+    setAssistantChat((c) => (c ? { ...c, quote: text } : c));
+    setChatCommentQuote(null);
+  }
+  function openChatComment() {
+    const text = takeAnswerSelection();
+    if (!text || !chatNoteId) return;
+    setChatCommentQuote(text);
+  }
+  async function postChatComment(text: string) {
+    if (!chatNoteId || chatCommentBusy) return;
+    setChatCommentBusy(true);
+    try {
+      const res = await fetch("/api/replies", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ noteId: chatNoteId, content: quoteMessage(chatCommentQuote ?? "", text) }),
+      });
+      const json = (await res.json().catch(() => null)) as (AnswerComment & { error?: string }) | null;
+      if (!res.ok || !json?.id) throw new Error(json?.error ?? t("assistant.commentFailed"));
+      setChatComments((list) => [...list, json]);
+      setChatCommentQuote(null);
+    } catch (err) {
+      showError(err instanceof Error ? err.message : t("assistant.commentFailed"));
+    } finally {
+      setChatCommentBusy(false);
+    }
+  }
+  async function deleteChatComment(id: string) {
+    setChatComments((list) => list.filter((c) => c.id !== id));
+    try {
+      await fetch(`/api/replies/${id}`, { method: "DELETE" });
+    } catch {
+      // Offline: the row is gone on screen and stays on the server; the next
+      // load of the thread shows it again.
+    }
+  }
+
+  async function sendChatMessage() {
+    const chat = assistantChat;
+    const typed = chat?.input.trim();
+    if (!chat || !typed || chat.busy) return;
+    // The quote the reader took from an answer rides in the message.
+    const text = chat.quote ? quoteMessage(chat.quote, typed) : typed;
+    const openKey = chat.openKey ?? null;
+    const open = openKey ? (chat.sideChats ?? []).find((s) => s.key === openKey) ?? null : null;
+    if (openKey && !open) return;
+    const history = open ? open.messages : chat.messages;
+    // A side chat needs the conversation it branched from; without a saved
+    // note there is nothing to branch from.
+    if (open && !chat.noteId) return;
+    const pushUser = (c: AssistantChat): AssistantChat =>
+      open
+        ? {
+            ...c,
+            input: "",
+            quote: null,
+            busy: true,
+            sideChats: (c.sideChats ?? []).map((s) =>
+              s.key === open.key ? { ...s, messages: [...s.messages, { role: "user", content: text }] } : s,
+            ),
+          }
+        : {
+            ...c,
+            input: "",
+            quote: null,
+            busy: true,
+            messages: [...c.messages, { role: "user", content: text }],
+          };
+    setAssistantChat((c) => (c ? pushUser(c) : c));
     const controller = new AbortController();
     chatAbortRef.current = controller;
     try {
-      const turn = await assistantTurn(text, chat.anchor, history, chat.noteId, controller.signal);
-      if (turn.noteId && chat.anchor) addLocalAnchor(chat.anchor);
-      setAssistantChat((c) =>
-        c
-          ? {
-              ...c,
-              busy: false,
-              noteId: turn.noteId ?? c.noteId,
-              messages: [...c.messages, { role: "assistant", content: turn.reply }],
-            }
-          : c,
+      const turn = await assistantTurn(
+        text,
+        chat.anchor,
+        history,
+        open ? open.noteId : chat.noteId,
+        controller.signal,
+        undefined,
+        open && chat.noteId ? { of: chat.noteId, quote: open.quote } : undefined,
       );
+      if (turn.noteId && chat.anchor && !open) addLocalAnchor(chat.anchor);
+      setAssistantChat((c) => {
+        if (!c) return c;
+        if (open) {
+          return {
+            ...c,
+            busy: false,
+            sideChats: (c.sideChats ?? []).map((s) =>
+              s.key === open.key
+                ? {
+                    ...s,
+                    noteId: turn.noteId ?? s.noteId,
+                    messages: [...s.messages, { role: "assistant", content: turn.reply }],
+                  }
+                : s,
+            ),
+          };
+        }
+        return {
+          ...c,
+          busy: false,
+          noteId: turn.noteId ?? c.noteId,
+          messages: [...c.messages, { role: "assistant", content: turn.reply }],
+        };
+      });
     } catch (err) {
       // Stopped, not failed: the sent message stays, no reply lands.
       if (controller.signal.aborted) {
@@ -4283,11 +4503,21 @@ export function ReaderInteractions({
         return;
       }
       const message = err instanceof Error ? err.message : t("reader.assistantFailed");
-      setAssistantChat((c) =>
-        c
-          ? { ...c, busy: false, messages: [...c.messages, { role: "assistant", content: message }] }
-          : c,
-      );
+      setAssistantChat((c) => {
+        if (!c) return c;
+        if (open) {
+          return {
+            ...c,
+            busy: false,
+            sideChats: (c.sideChats ?? []).map((s) =>
+              s.key === open.key
+                ? { ...s, messages: [...s.messages, { role: "assistant", content: message }] }
+                : s,
+            ),
+          };
+        }
+        return { ...c, busy: false, messages: [...c.messages, { role: "assistant", content: message }] };
+      });
     } finally {
       if (chatAbortRef.current === controller) chatAbortRef.current = null;
     }
@@ -5295,7 +5525,43 @@ function blockFormatKind(
   // beside the article and the full conversation view render the same one.
   const assistantChatFoot = (chat: AssistantChat, className: string, chipsClassName: string) => (
     <>
+    {chat.openKey ? (
+      <SideChatHeader
+        quote={chatOpenSide?.quote ?? ""}
+        onBack={() => setAssistantChat((c) => (c ? { ...c, openKey: null, quote: null } : c))}
+        className={chipsClassName}
+      />
+    ) : (
+      <SideChatChips
+        sideChats={(chat.sideChats ?? []).filter((s) => s.messages.length > 0)}
+        onOpen={(key) => setAssistantChat((c) => (c ? { ...c, openKey: key } : c))}
+        className={chipsClassName}
+      />
+    )}
+    <CommentList
+      comments={chatComments}
+      people={{ ...people, ...chatCommentPeople }}
+      myId={myId}
+      onDelete={(id) => void deleteChatComment(id)}
+      className={chipsClassName}
+    />
     <ThinkingChips className={chipsClassName} small />
+    {chat.quote && (
+      <QuoteChip
+        quote={chat.quote}
+        onClear={() => setAssistantChat((c) => (c ? { ...c, quote: null } : c))}
+        className={chipsClassName}
+      />
+    )}
+    {chatCommentQuote ? (
+      <CommentBox
+        quote={chatCommentQuote}
+        busy={chatCommentBusy}
+        onCancel={() => setChatCommentQuote(null)}
+        onSubmit={(text) => void postChatComment(text)}
+        className={chipsClassName}
+      />
+    ) : (
     <form
       className={className}
       onSubmit={(e) => {
@@ -5335,6 +5601,16 @@ function blockFormatKind(
         {chat.busy ? <StopIcon size={11} /> : t("reader.send")}
       </button>
     </form>
+    )}
+    {answerSelection && (
+      <AnswerToolbar
+        selection={answerSelection}
+        canSideChat={assistantChat?.noteId != null}
+        onSideChat={startChatSideChat}
+        onAsk={askAboutThisInChat}
+        onComment={openChatComment}
+      />
+    )}
     </>
   );
   // The card's title once its output continued into a conversation.
@@ -6785,29 +7061,33 @@ function blockFormatKind(
             </span>
           </div>
           <div ref={chatScrollRef} className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-4 py-2">
-            {assistantChat.messages.map((message, i) =>
+            {(chatOpenSide ? chatOpenSide.messages : assistantChat.messages).map((message, i, list) =>
               message.role === "user" ? (
                 <p
                   key={i}
-                  className="ml-6 self-end rounded-2xl bg-clay-100 px-3 py-1.5 text-[12.5px] text-clay-800"
+                  className="ml-6 self-end rounded-2xl bg-clay-100 px-3 py-1.5 text-[12.5px] whitespace-pre-wrap text-clay-800"
                 >
                   {message.content}
                 </p>
               ) : (
                 <div key={i} className="text-[13px]">
-                  <Markdown>{message.content}</Markdown>
+                  {/* Highlighting the answer offers the side chat, the quoted
+                      question, and the comment (SPEC.md §7). */}
+                  <div {...{ [ANSWER_MARK]: "" }}>
+                    <Markdown>{message.content}</Markdown>
+                  </div>
                   {/* The rating (SPEC.md §25): the question and the selection
                       it ran on, the answer it gave. */}
                   {!assistantChat.busy && (
                     <RatingButtons
                       tool="act"
-                      input={[assistantChat.anchor?.quotedText ?? "", assistantChat.messages[i - 1]?.content ?? ""]
+                      input={[assistantChat.anchor?.quotedText ?? "", list[i - 1]?.content ?? ""]
                         .filter(Boolean)
                         .join("\n\n")}
                       output={message.content}
                       notebookId={notebookId}
                       documentId={documentId}
-                      noteId={assistantChat.noteId}
+                      noteId={chatNoteId}
                       className="mt-1"
                     />
                   )}
@@ -6959,7 +7239,7 @@ function blockFormatKind(
         <ConversationView
           title={t("reader.assistant")}
           icon={<SparkleIcon size={12} />}
-          messages={assistantChat.messages}
+          messages={chatOpenSide ? chatOpenSide.messages : assistantChat.messages}
           busy={assistantChat.busy}
           foot={assistantChatFoot(assistantChat, "flex items-end gap-1.5", "pb-1.5")}
           onClose={closeConversationView}

@@ -5,7 +5,7 @@ import {
   embedAttachments,
   parseTurnContent,
 } from "@/lib/assistant/attachments";
-import { bumpNotebook, notebookAccess } from "@/lib/collab";
+import { bumpNotebook, noteAccess, notebookAccess } from "@/lib/collab";
 import { parseTranscript, renderTranscript } from "@/lib/conversation";
 import { db } from "@/lib/db";
 import { ANNOTATIONS_SECTION_TITLE } from "@/lib/derive/config";
@@ -28,7 +28,9 @@ export const maxDuration = 30;
 // images included.
 
 /** The note this reader's sidebar conversation lives on for this project, if
-    they have started one. */
+    they have started one. A side chat is a conversation note of its own with
+    no sources, so it is excluded here: the sidebar's conversation is the one
+    that belongs to no other. */
 async function findConversationNote(notebookId: string, userId: string) {
   const section = await db.section.findFirst({
     where: { notebookId, hidden: true, title: ANNOTATIONS_SECTION_TITLE },
@@ -40,11 +42,28 @@ async function findConversationNote(notebookId: string, userId: string) {
       sectionId: section.id,
       derivationType: "SYNTHESIS",
       createdById: userId,
+      sideChatOfId: null,
       sources: { none: {} },
     },
     orderBy: { updatedAt: "desc" },
     select: { id: true, content: true },
   });
+}
+
+/** The side chats of one conversation (SPEC.md §7), oldest first: each one's
+    quote and its turns. They open from their own chat box alone. */
+async function sideChatsOf(noteId: string) {
+  const notes = await db.note.findMany({
+    where: { sideChatOfId: noteId },
+    orderBy: { createdAt: "asc" },
+    select: { id: true, content: true, sideChatQuote: true, updatedAt: true },
+  });
+  return notes.map((n) => ({
+    id: n.id,
+    quote: n.sideChatQuote ?? "",
+    turns: turnsToClient(n.content),
+    updatedAt: n.updatedAt.toISOString(),
+  }));
 }
 
 const turnsToClient = (content: string) =>
@@ -56,7 +75,16 @@ const turnsToClient = (content: string) =>
 
 export async function GET(req: Request) {
   const t = await serverT();
-  const notebookId = new URL(req.url).searchParams.get("notebookId");
+  const params = new URL(req.url).searchParams;
+  // noteId: the side chats of one conversation, for a chat box that already
+  // knows its note — the reader's card, reopened from its mark.
+  const noteId = params.get("noteId");
+  if (noteId) {
+    const access = await noteAccess(noteId, "viewer");
+    if (access instanceof NextResponse) return access;
+    return NextResponse.json({ sideChats: await sideChatsOf(noteId) });
+  }
+  const notebookId = params.get("notebookId");
   if (!notebookId) return NextResponse.json({ error: t("api.missingNotebookId") }, { status: 400 });
   const access = await notebookAccess(notebookId, "viewer");
   if (access instanceof NextResponse) return access;
@@ -65,6 +93,7 @@ export async function GET(req: Request) {
   return NextResponse.json({
     conversationNoteId: note?.id ?? null,
     turns: note ? turnsToClient(note.content) : [],
+    sideChats: note ? await sideChatsOf(note.id) : [],
   });
 }
 
@@ -72,6 +101,10 @@ const saveSchema = z.object({
   notebookId: z.string().min(1),
   conversationNoteId: z.string().nullish(),
   turns: z.array(conversationTurnSchema).max(200),
+  // A side chat (SPEC.md §7): the conversation it was started from, and the
+  // words it was started on. Set on the first save; the note carries them.
+  sideChatOf: z.string().min(1).optional(),
+  quote: z.string().min(1).max(2000).optional(),
 });
 
 export async function POST(req: Request) {
@@ -121,6 +154,8 @@ export async function POST(req: Request) {
       derivationType: "SYNTHESIS",
       createdById: access.user.id,
       order: count,
+      sideChatOfId: data.sideChatOf ?? null,
+      sideChatQuote: data.sideChatOf ? (data.quote ?? "") : null,
     },
     select: { id: true },
   });

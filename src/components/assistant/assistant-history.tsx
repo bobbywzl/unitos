@@ -4,6 +4,8 @@ import Link from "next/link";
 import type { ToolKind } from "@/lib/conversation";
 import { imageUrl } from "@/lib/images";
 import type { TKey } from "@/lib/i18n/dictionaries";
+import type { Person } from "@/lib/person";
+import { PersonBadge } from "@/components/collab/person-badge";
 import { useT } from "@/components/lang-provider";
 import { PaperclipIcon } from "@/components/icons";
 import { Markdown } from "@/components/markdown";
@@ -28,6 +30,9 @@ export type HistoryConversation = {
     orphaned: boolean;
   } | null;
   updatedAt: string; // ISO
+  // The contributor who started the conversation (SPEC.md §19); null before
+  // attribution existed. The badge renders on shared projects only.
+  authorId: string | null;
   turns: (
     | { role: "assistant"; content: string }
     | {
@@ -81,9 +86,15 @@ function formatDate(iso: string): string {
 export function AssistantHistory({
   notebookId,
   conversations,
+  people,
+  shared,
 }: {
   notebookId: string;
   conversations: HistoryConversation[];
+  // Everyone whose conversations are listed. Labels render on shared
+  // projects only (SPEC.md §19); solo work stays unlabelled.
+  people: Record<string, Person>;
+  shared: boolean;
 }) {
   const t = useT();
   if (conversations.length === 0) {
@@ -100,6 +111,12 @@ export function AssistantHistory({
             <header className="mb-3 flex flex-wrap items-start gap-x-3 gap-y-1.5 border-b border-line pb-3">
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
+                  {shared && c.authorId && people[c.authorId] && (
+                    <span className="flex items-center gap-1.5">
+                      <PersonBadge person={people[c.authorId]} size={18} />
+                      <span className="text-[12px] text-sand-600">{people[c.authorId].name}</span>
+                    </span>
+                  )}
                   <span className="text-[11px] font-bold tracking-[0.08em] text-clay-800 uppercase">
                     {t(KIND_TITLE[c.kind])}
                   </span>
