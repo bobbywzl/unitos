@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { providerKey } from "@/lib/gateway";
 import { recordUsage } from "@/lib/usage";
 import { normalizeSegments, type TranscriptSegment } from "@/lib/video/segments";
 
@@ -10,10 +11,19 @@ import { normalizeSegments, type TranscriptSegment } from "@/lib/video/segments"
 // this rung needs no chunking and no separate speakers pass over the media;
 // the speakers only need names, which the text alone gives
 // (lib/video/speakers.ts nameSpeakers). DEEPGRAM_API_URL points a local run
-// at a stand-in server.
+// at a stand-in server. This is the one AI call that does not take the
+// gateway (lib/gateway.ts): the request body is the media bytes, which the
+// gateway's pass-through re-encodes as JSON, and the gateway's own Deepgram
+// route answers text and word times without the speakers. DEEPGRAM_API_KEY
+// stays on the app's host; without it the ladder starts at Groq Whisper.
 
 const ENDPOINT = process.env.DEEPGRAM_API_URL ?? "https://api.deepgram.com/v1/listen";
 const MODEL = "nova-3";
+
+/** DEEPGRAM_API_KEY is set, so the Deepgram rung runs. */
+export function deepgramConfigured(): boolean {
+  return Boolean(providerKey("deepgram"));
+}
 const USD_PER_MINUTE = 0.0043;
 
 const wordSchema = z.object({
@@ -50,7 +60,7 @@ export async function deepgramTranscribe(
   mimeType: string,
   opts: { signal?: AbortSignal; userId?: string | null } = {},
 ): Promise<TranscriptSegment[]> {
-  const key = process.env.DEEPGRAM_API_KEY;
+  const key = providerKey("deepgram");
   if (!key) throw new Error("DEEPGRAM_API_KEY is not set");
   const params = new URLSearchParams({
     model: MODEL,

@@ -6,6 +6,8 @@ import { db } from "@/lib/db";
 import { parseSpeakers, parseTried, type Speaker } from "@/lib/video/types";
 import { parsePastedTranscript } from "@/lib/video/paste";
 import { tidyTranscript } from "@/lib/video/tidy";
+import { deepgramConfigured } from "@/lib/video/deepgram";
+import { geminiConfigured } from "@/lib/video/gemini";
 import { GEMINI_FILE_TTL_MS, geminiFileFresh, type GeminiFile } from "@/lib/video/gemini-files";
 import {
   geminiMediaPart,
@@ -20,6 +22,8 @@ import {
   type TranscribeOptions,
   type TranscribeSource,
   type TranscriptSegment,
+  TRANSCRIPTION_KEYS_UNSET,
+  whisperConfigured,
 } from "@/lib/video/transcribe";
 import { detectSpeakers, nameSpeakers } from "@/lib/video/speakers";
 
@@ -88,25 +92,15 @@ export async function runTranscription(
     }
   } else {
     // Uploads need a provider key; the YouTube ladder has a keyless rung.
-    if (
-      !process.env.DEEPGRAM_API_KEY &&
-      !process.env.GROQ_API_KEY &&
-      !process.env.OPENAI_API_KEY &&
-      !process.env.GEMINI_API_KEY
-    ) {
-      return {
-        ok: false,
-        status: 503,
-        error:
-          "Set DEEPGRAM_API_KEY, GROQ_API_KEY, OPENAI_API_KEY, or GEMINI_API_KEY. Transcription needs one.",
-      };
+    if (!deepgramConfigured() && !whisperConfigured() && !geminiConfigured()) {
+      return { ok: false, status: 503, error: TRANSCRIPTION_KEYS_UNSET };
     }
     // What a big file can still be transcribed by: Deepgram takes the whole
     // file, an MP3 past the Whisper cap splits at frame boundaries, and any
     // format at all goes through Gemini's file store. Only without all of
     // them is the 25 MB cap the end of it.
     const chunkable = asset.mimeType === "audio/mpeg";
-    const store = Boolean(process.env.GEMINI_API_KEY || process.env.DEEPGRAM_API_KEY);
+    const store = geminiConfigured() || deepgramConfigured();
     if (asset.size === null) {
       return { ok: false, status: 400, error: "This file has no recorded size" };
     }
@@ -352,8 +346,8 @@ export async function runSpeakers(
   // The reader who pressed Detect speakers, for the admin usage page.
   userId: string | null = null,
 ): Promise<{ ok: true; speakers: Speaker[] } | { ok: false; status: number; error: string }> {
-  if (!process.env.GEMINI_API_KEY) {
-    return { ok: false, status: 503, error: "Set GEMINI_API_KEY. Detecting speakers needs it." };
+  if (!geminiConfigured()) {
+    return { ok: false, status: 503, error: "Set GEMINI_API_KEY or the gateway. Detecting speakers needs one." };
   }
   const asset = await db.videoAsset.findUnique({
     where: { documentId },

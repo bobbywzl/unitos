@@ -1,7 +1,8 @@
 import { generateText } from "ai";
 import { claude, claudeApiKey, claudeBaseUrl, claudeConfigured, claudeOptions } from "@/lib/claude";
 import { db } from "@/lib/db";
-import { kimi, kimiApiKey, kimiBaseUrl, kimiConfigured, kimiOptions } from "@/lib/kimi";
+import { gatewayHeaders } from "@/lib/gateway";
+import { kimi, kimiApiKey, kimiConfigured, kimiOptions, moonshotApiUrl } from "@/lib/kimi";
 import {
   currentModelId,
   forgetModelChoices,
@@ -11,6 +12,7 @@ import {
 } from "@/lib/models";
 import { outboundFetch } from "@/lib/outbound-fetch";
 import { recordUsage, sdkTokens } from "@/lib/usage";
+import { geminiApiKey, geminiBaseUrl, geminiConfigured } from "@/lib/video/gemini";
 
 // The bimonthly model update (SPEC.md §2): for each role, read the provider's
 // published model list, find the newest version of the role's family, and
@@ -100,7 +102,7 @@ export function newestInFamily(role: ModelRole, current: string, ids: string[]):
 // ── The providers' published lists ─────────────────────────────────────────
 
 async function listKimi(): Promise<string[]> {
-  const res = await outboundFetch(`${kimiBaseUrl()}/models`, {
+  const res = await outboundFetch(`${moonshotApiUrl()}/models`, {
     headers: { Authorization: `Bearer ${kimiApiKey() ?? ""}` },
   });
   if (!res.ok) throw new Error(`model list failed (${res.status})`);
@@ -130,11 +132,11 @@ async function listClaude(): Promise<string[]> {
 }
 
 async function listGemini(): Promise<string[]> {
-  const key = process.env.GEMINI_API_KEY ?? "";
+  const key = geminiApiKey() ?? "";
   const ids: string[] = [];
   let token = "";
   for (let page = 0; page < 20; page++) {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000${token ? `&pageToken=${encodeURIComponent(token)}` : ""}`;
+    const url = `${geminiBaseUrl()}/v1beta/models?pageSize=1000${token ? `&pageToken=${encodeURIComponent(token)}` : ""}`;
     const res = await outboundFetch(url, { headers: { "x-goog-api-key": key } });
     if (!res.ok) throw new Error(`model list failed (${res.status})`);
     const body = (await res.json()) as {
@@ -162,7 +164,7 @@ const CONFIGURED: Record<ModelRole, () => boolean> = {
   kimi: kimiConfigured,
   claude: claudeConfigured,
   opus: claudeConfigured,
-  gemini: () => Boolean(process.env.GEMINI_API_KEY),
+  gemini: geminiConfigured,
 };
 
 // ── The probe: one short call on the candidate before the role moves ───────
@@ -173,10 +175,14 @@ async function probe(role: ModelRole, id: string): Promise<void> {
   const usage = { userId: null, feature: "model-update", model: id };
   if (role === "gemini") {
     const res = await outboundFetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${id}:generateContent`,
+      `${geminiBaseUrl()}/v1beta/models/${id}:generateContent`,
       {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-goog-api-key": process.env.GEMINI_API_KEY ?? "" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-goog-api-key": geminiApiKey() ?? "",
+          ...gatewayHeaders(usage),
+        },
         body: JSON.stringify({
           contents: [{ role: "user", parts: [{ text: PROBE_PROMPT }] }],
           generationConfig: { maxOutputTokens: 64 },
@@ -191,6 +197,7 @@ async function probe(role: ModelRole, id: string): Promise<void> {
     model: role === "kimi" ? await kimi(id) : await claude(id),
     maxOutputTokens: 16384, // a reasoning model counts its reasoning here
     providerOptions: role === "kimi" ? kimiOptions("low") : claudeOptions("low"),
+    headers: gatewayHeaders(usage),
     prompt: PROBE_PROMPT,
   });
   recordUsage(usage, sdkTokens(result.usage));

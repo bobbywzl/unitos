@@ -24,6 +24,7 @@ import { streamTextTo } from "@/lib/derive/text-stream";
 import { ensureDigest } from "@/lib/digest/ensure";
 import { corpusSystem, documentSystem } from "@/lib/digest/render";
 import { currentLang, serverT } from "@/lib/i18n/server";
+import { gatewayHeaders } from "@/lib/gateway";
 import { kimi, kimiConfigured, kimiOptions, WEB_SEARCH_TOOL, WEB_SEARCH_USD, webSearchTool } from "@/lib/kimi";
 import { resolveModelId } from "@/lib/models";
 import { addTokens, computeCostUsd, recordUsage, sdkTokens, type TokenCounts } from "@/lib/usage";
@@ -227,6 +228,7 @@ async function handle(req: Request, t: TFunc) {
       model,
       maxOutputTokens,
       providerOptions: kimiOptions(effort),
+      headers: gatewayHeaders(usageMeta),
       allowSystemInMessages: true,
       messages,
       ...(web

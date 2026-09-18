@@ -1,4 +1,5 @@
 import type { Lang } from "@/lib/i18n/config";
+import { gatewayConfigured, gatewayHeaders, gatewayUrl, keyFor, providerConfigured } from "@/lib/gateway";
 import { outboundFetch } from "@/lib/outbound-fetch";
 import { recordUsage } from "@/lib/usage";
 
@@ -14,11 +15,16 @@ export const DEEPL_MODEL = "deepl";
 
 const TARGET: Record<Lang, string> = { en: "EN-US", zh: "ZH" };
 
+/** The gateway or a key is set, so Translate is offered. */
 export function deeplConfigured(): boolean {
-  return Boolean(process.env.DEEPL_API_KEY);
+  return providerConfigured("deepl");
 }
 
+// Under the gateway (lib/gateway.ts) the call goes to its DeepL pass-through
+// with the app key; the gateway holds DeepL's key and picks the host
+// (litellm/config.yaml: the free host for a Free key).
 function endpoint(key: string): string {
+  if (gatewayConfigured()) return gatewayUrl("/deepl/v2/translate");
   const base =
     process.env.DEEPL_API_URL ??
     (key.endsWith(":fx") ? "https://api-free.deepl.com" : "https://api.deepl.com");
@@ -34,13 +40,16 @@ async function translateBatch(
   texts: string[],
   target: Lang,
   key: string,
+  userId: string | null,
   signal?: AbortSignal,
 ): Promise<{ texts: string[]; detected: string[] }> {
   const res = await outboundFetch(endpoint(key), {
     method: "POST",
     headers: {
-      Authorization: `DeepL-Auth-Key ${key}`,
+      // The gateway reads a Bearer app key; DeepL itself reads its own scheme.
+      Authorization: gatewayConfigured() ? `Bearer ${key}` : `DeepL-Auth-Key ${key}`,
       "Content-Type": "application/json",
+      ...gatewayHeaders({ userId, feature: "translate" }),
     },
     body: JSON.stringify({
       text: texts,
@@ -77,7 +86,7 @@ export async function deeplTranslate(
   target: Lang,
   opts: { userId: string | null; signal?: AbortSignal },
 ): Promise<{ texts: string[]; detected: string[] }> {
-  const key = process.env.DEEPL_API_KEY;
+  const key = keyFor("deepl");
   if (!key) throw new Error("DEEPL_API_KEY is not set");
   const out: string[] = new Array(texts.length).fill("");
   const detected: string[] = new Array(texts.length).fill("");
@@ -92,6 +101,7 @@ export async function deeplTranslate(
       indices.map((i) => texts[i]),
       target,
       key,
+      opts.userId,
       opts.signal,
     );
     indices.forEach((i, at) => {

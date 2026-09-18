@@ -50,6 +50,7 @@ import { cropPageRegion, pageBlockText, renderPdfPage } from "@/lib/handwritten/
 import { parseRegion } from "@/lib/video/types";
 import type { TFunc } from "@/lib/i18n/dictionaries";
 import { currentLang, serverT } from "@/lib/i18n/server";
+import { gatewayHeaders } from "@/lib/gateway";
 import { kimi, kimiConfigured, kimiOptions } from "@/lib/kimi";
 import { resolveModelId } from "@/lib/models";
 import { promptTemplates } from "@/lib/prompts";
@@ -1054,6 +1055,7 @@ async function handle(req: Request, t: TFunc) {
       model,
       maxOutputTokens,
       providerOptions: kimiOptions(effort),
+      headers: gatewayHeaders(usageMeta),
       allowSystemInMessages: true,
       messages,
       // Stop aborts the model call too (SPEC.md §6), not just the response.

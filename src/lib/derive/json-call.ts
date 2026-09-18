@@ -1,7 +1,9 @@
 import { generateText, type ModelMessage } from "ai";
 import type { LanguageModel } from "ai";
 import type { z } from "zod";
+import { claude, CLAUDE_REFUSAL_FALLBACK, isClaudeModel } from "@/lib/claude";
 import { extractJson, parseJson } from "@/lib/derive/json";
+import { gatewayConfigured, gatewayHeaders } from "@/lib/gateway";
 import { serverT } from "@/lib/i18n/server";
 import { recordUsage, sdkTokens, type UsageMeta } from "@/lib/usage";
 
@@ -52,11 +54,14 @@ export async function callForJson<S extends z.ZodType>(params: {
   // claudeOptions() for Claude Fable 5.1 (lib/derive/config.ts).
   providerOptions: ProviderOptions;
 }): Promise<JsonCallResult<z.infer<S>>> {
-  const attempt = async (messages: ModelMessage[]) => {
+  const run = async (model: LanguageModel, messages: ModelMessage[], usage: UsageMeta | undefined) => {
     const result = await generateText({
-      model: params.model,
+      model,
       maxOutputTokens: params.maxOutputTokens,
       providerOptions: params.providerOptions,
+      // The gateway's spend logs carry the same account and function as the
+      // usage record (lib/gateway.ts); nothing without the gateway.
+      headers: usage ? gatewayHeaders(usage) : undefined,
       allowSystemInMessages: true,
       messages,
       abortSignal: params.abortSignal,
@@ -66,8 +71,25 @@ export async function callForJson<S extends z.ZodType>(params: {
         `cacheWrite=${result.usage.inputTokenDetails.cacheWriteTokens ?? 0} ` +
         `output=${result.usage.outputTokens ?? 0}`,
     );
-    if (params.usage) recordUsage(params.usage, sdkTokens(result.usage));
+    if (usage) recordUsage(usage, sdkTokens(result.usage));
     return { text: result.text, finishReason: result.finishReason };
+  };
+  // A Claude call the safety classifiers declined runs once more on the
+  // fallback model. Direct to Anthropic, the request's own `fallbacks`
+  // field has the API do this in the same call; the gateway strips that
+  // field (lib/claude.ts), so under the gateway the app does it here, and
+  // the usage record names the model that answered.
+  const attempt = async (messages: ModelMessage[]) => {
+    const first = await run(params.model, messages, params.usage);
+    if (first.finishReason !== "content-filter" || !gatewayConfigured() || !isClaudeModel(params.model)) {
+      return first;
+    }
+    console.warn(`[derive] ${params.label} refused; rerunning on ${CLAUDE_REFUSAL_FALLBACK}`);
+    return run(
+      await claude(CLAUDE_REFUSAL_FALLBACK),
+      messages,
+      params.usage ? { ...params.usage, model: CLAUDE_REFUSAL_FALLBACK } : undefined,
+    );
   };
 
   let first: Attempt;

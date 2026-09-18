@@ -2,6 +2,13 @@ import { createMoonshotAI, type MoonshotAIProvider } from "@ai-sdk/moonshotai";
 import { tool, type LanguageModel } from "ai";
 import { z } from "zod";
 import { DEFAULT_EFFORT, type KimiEffort } from "@/lib/derive/config";
+import {
+  gatewayConfigured,
+  gatewayModelId,
+  gatewayUrl,
+  keyFor,
+  providerConfigured,
+} from "@/lib/gateway";
 import { resolveModelId } from "@/lib/models";
 import { outboundFetch } from "@/lib/outbound-fetch";
 
@@ -10,23 +17,34 @@ import { outboundFetch } from "@/lib/outbound-fetch";
 // Moonshot AI's API is OpenAI-compatible; the AI SDK's Moonshot provider speaks
 // it. The key is MOONSHOT_API_KEY. MOONSHOT_BASE_URL points a local run at a
 // stand-in server (scripts/qa) or at the China platform
-// (https://api.moonshot.cn/v1).
+// (https://api.moonshot.cn/v1). Under the gateway (lib/gateway.ts) the chat
+// calls go to its OpenAI-compatible route as moonshot/<id>, and the formula
+// and model-list calls to its Moonshot pass-through; the key is the app key.
 
 const DEFAULT_BASE_URL = "https://api.moonshot.ai/v1";
 
-// Whitespace stripped: a key pasted into the host's settings with a line
-// break inside it is refused as a header value, and the request never leaves.
+/** The key a Kimi call sends: the app key under the gateway, else MOONSHOT_API_KEY. */
 export function kimiApiKey(): string | undefined {
-  return process.env.MOONSHOT_API_KEY?.replace(/\s+/g, "") || undefined;
+  return keyFor("moonshot");
 }
 
-/** A key is set, so the AI features are on. Every route checks this first. */
+/** The gateway or a key is set, so the AI features are on. Every route checks this first. */
 export function kimiConfigured(): boolean {
-  return Boolean(kimiApiKey());
+  return providerConfigured("moonshot");
 }
 
+/** The chat completions root. */
 export function kimiBaseUrl(): string {
+  if (gatewayConfigured()) return gatewayUrl("/v1");
   return (process.env.MOONSHOT_BASE_URL || DEFAULT_BASE_URL).replace(/\/+$/, "");
+}
+
+/** Moonshot's API root for what is not a chat completion — the web-search
+    formula, the model list: the gateway's Moonshot pass-through, or the
+    same root as the chat calls. */
+export function moonshotApiUrl(): string {
+  if (gatewayConfigured()) return gatewayUrl("/moonshot");
+  return kimiBaseUrl();
 }
 
 let provider: MoonshotAIProvider | null = null;
@@ -37,7 +55,7 @@ let provider: MoonshotAIProvider | null = null;
     returned model's modelId is the id called. */
 export async function kimi(modelId: string): Promise<LanguageModel> {
   provider ??= createMoonshotAI({ apiKey: kimiApiKey(), baseURL: kimiBaseUrl() });
-  return provider(await resolveModelId(modelId));
+  return provider(gatewayModelId("moonshot", await resolveModelId(modelId)));
 }
 
 /** Provider options for one call: the reasoning effort (lib/derive/config.ts).
@@ -66,7 +84,7 @@ export const webSearchTool = tool({
   inputSchema: z.object({ query: z.string().describe("What to search for") }),
   execute: async ({ query }, { abortSignal }) => {
     try {
-      const res = await outboundFetch(`${kimiBaseUrl()}/formulas/${WEB_SEARCH_FORMULA}/fibers`, {
+      const res = await outboundFetch(`${moonshotApiUrl()}/formulas/${WEB_SEARCH_FORMULA}/fibers`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${kimiApiKey() ?? ""}`,

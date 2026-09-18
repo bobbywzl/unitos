@@ -1,10 +1,18 @@
 import { z } from "zod";
 import { extractJson } from "@/lib/derive/json";
+import {
+  gatewayConfigured,
+  gatewayHeaders,
+  gatewayModelId,
+  gatewayUrl,
+  keyFor,
+  providerConfigured,
+} from "@/lib/gateway";
 import { recordUsage } from "@/lib/usage";
 import { browserCaptions } from "@/lib/video/browser-transcript";
 import { youtubeCaptions } from "@/lib/video/captions";
-import { deepgramTranscribe } from "@/lib/video/deepgram";
-import { geminiCall, geminiCountTokens } from "@/lib/video/gemini";
+import { deepgramConfigured, deepgramTranscribe } from "@/lib/video/deepgram";
+import { geminiCall, geminiConfigured, geminiCountTokens } from "@/lib/video/gemini";
 import { splitFmp4, type ByteRange } from "@/lib/video/fmp4";
 import { uploadGeminiFile, type GeminiFile } from "@/lib/video/gemini-files";
 import { type Mp3Chunk, splitMp3 } from "@/lib/video/mp3";
@@ -203,17 +211,15 @@ async function runLadder(
 // and fits that provider's cap: 25 MB for the Whisper rungs, 14 MB inline
 // for Gemini alone.
 function youtubeAudioRung(youtubeId: string, opts: TranscribeOptions): Promise<TranscriptSegment[]> {
-  const whisper = Boolean(process.env.GROQ_API_KEY || process.env.OPENAI_API_KEY);
-  if (!whisper && !process.env.GEMINI_API_KEY && !process.env.DEEPGRAM_API_KEY) {
-    return Promise.reject(
-      new Error("DEEPGRAM_API_KEY, GROQ_API_KEY, OPENAI_API_KEY, or GEMINI_API_KEY is not set"),
-    );
+  const whisper = whisperConfigured();
+  if (!whisper && !geminiConfigured() && !deepgramConfigured()) {
+    return Promise.reject(new Error(TRANSCRIPTION_KEYS_UNSET));
   }
   return youtubeAudio(youtubeId, {
     // Deepgram and Gemini's file store take what the Whisper rungs cannot:
     // with either key set, the stream only has to fit the app's own upload
     // ceiling.
-    maxBytes: process.env.GEMINI_API_KEY || process.env.DEEPGRAM_API_KEY
+    maxBytes: geminiConfigured() || deepgramConfigured()
       ? GEMINI_FILE_MAX_BYTES
       : whisper
         ? TRANSCRIBE_MAX_BYTES
@@ -257,32 +263,49 @@ const EXTENSION: Record<string, string> = {
 // Groq and OpenAI take the same multipart request; only the endpoint, key,
 // model, and per-minute price differ. Groq serves whisper-large-v3-turbo at
 // $0.04 per hour with a free tier — the best transcription quality per
-// dollar, so it goes first.
+// dollar, so it goes first. Under the gateway (lib/gateway.ts) both go to
+// its transcription route as <provider>/<model> with the app key.
 type WhisperProvider = {
+  provider: "groq" | "openai";
   keyEnv: "GROQ_API_KEY" | "OPENAI_API_KEY";
-  endpoint: string;
+  endpoint: () => string;
   model: string;
   usdPerMinute: number;
 };
 
 const GROQ_WHISPER: WhisperProvider = {
+  provider: "groq",
   keyEnv: "GROQ_API_KEY",
   // GROQ_API_URL points a local run at a stand-in server (scripts/qa).
-  endpoint: process.env.GROQ_API_URL ?? "https://api.groq.com/openai/v1/audio/transcriptions",
+  endpoint: () =>
+    gatewayConfigured()
+      ? gatewayUrl("/v1/audio/transcriptions")
+      : (process.env.GROQ_API_URL ?? "https://api.groq.com/openai/v1/audio/transcriptions"),
   model: "whisper-large-v3-turbo",
   usdPerMinute: 0.04 / 60,
 };
 
 const OPENAI_WHISPER: WhisperProvider = {
+  provider: "openai",
   keyEnv: "OPENAI_API_KEY",
-  endpoint: "https://api.openai.com/v1/audio/transcriptions",
+  endpoint: () =>
+    gatewayConfigured() ? gatewayUrl("/v1/audio/transcriptions") : "https://api.openai.com/v1/audio/transcriptions",
   model: "whisper-1",
   usdPerMinute: 0.006,
 };
 
+/** The gateway or a Whisper key is set, so a Whisper rung runs. */
+export function whisperConfigured(): boolean {
+  return providerConfigured("groq") || providerConfigured("openai");
+}
+
+/** The reason when no transcription provider is set at all. */
+export const TRANSCRIPTION_KEYS_UNSET =
+  "Set LITELLM_BASE_URL and LITELLM_API_KEY, or DEEPGRAM_API_KEY, GROQ_API_KEY, OPENAI_API_KEY, or GEMINI_API_KEY. Transcription needs one.";
+
 // One OpenAI-compatible transcription call.
 async function whisperCall(
-  opts: { endpoint: string; key: string; model: string; usdPerMinute: number; userId: string | null },
+  opts: WhisperProvider & { key: string; userId: string | null },
   bytes: Uint8Array,
   mimeType: string,
 ): Promise<TranscriptSegment[]> {
@@ -292,14 +315,17 @@ async function whisperCall(
     new Blob([bytes as BlobPart], { type: mimeType }),
     `media.${EXTENSION[mimeType] ?? "mp4"}`,
   );
-  form.set("model", opts.model);
+  form.set("model", gatewayModelId(opts.provider, opts.model));
   form.set("response_format", "verbose_json");
   form.append("timestamp_granularities[]", "segment");
 
   // Plain fetch: multipart bodies do not fit outboundFetch's string body.
-  const res = await fetch(opts.endpoint, {
+  const res = await fetch(opts.endpoint(), {
     method: "POST",
-    headers: { Authorization: `Bearer ${opts.key}` },
+    headers: {
+      Authorization: `Bearer ${opts.key}`,
+      ...gatewayHeaders({ userId: opts.userId, feature: "transcribe" }),
+    },
     body: form,
   });
   if (!res.ok) {
@@ -348,7 +374,7 @@ async function whisperFamily(
   ranges: StreamRanges = null,
   userId: string | null = null,
 ): Promise<TranscriptSegment[]> {
-  const key = process.env[provider.keyEnv];
+  const key = keyFor(provider.provider);
   if (!key) throw new Error(`${provider.keyEnv} is not set`);
   const opts = { ...provider, key, userId };
   if (bytes.length <= TRANSCRIBE_MAX_BYTES) return whisperCall(opts, bytes, mimeType);

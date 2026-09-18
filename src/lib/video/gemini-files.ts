@@ -1,5 +1,6 @@
 import { outboundFetch } from "@/lib/outbound-fetch";
 import { recordUsage } from "@/lib/usage";
+import { geminiApiKey, geminiBaseUrl } from "@/lib/video/gemini";
 
 // Gemini's file store (SPEC.md §11). A video or audio file too big to send
 // inline is uploaded here first and then referred to by its URI, exactly the
@@ -11,7 +12,6 @@ import { recordUsage } from "@/lib/usage";
 // a URL, then the bytes to that URL. A video is processed after it lands, so
 // the file is PROCESSING for a while and only an ACTIVE file can be read.
 
-const BASE = "https://generativelanguage.googleapis.com";
 // A stored file lives 48 hours; the id is kept on the asset so a retry inside
 // that window skips the upload (VideoAsset.geminiFileUri).
 export const GEMINI_FILE_TTL_MS = 47 * 60 * 60 * 1000;
@@ -20,7 +20,7 @@ const POLL_INTERVAL_MS = 2_000;
 export type GeminiFile = { uri: string; name: string; mimeType: string };
 
 function key(): string {
-  const value = process.env.GEMINI_API_KEY;
+  const value = geminiApiKey();
   if (!value) throw new Error("GEMINI_API_KEY is not set");
   return value;
 }
@@ -38,7 +38,7 @@ export async function uploadGeminiFile(
   mimeType: string,
   opts: { displayName?: string; deadline?: number } = {},
 ): Promise<GeminiFile> {
-  const start = await outboundFetch(`${BASE}/upload/v1beta/files`, {
+  const start = await outboundFetch(`${geminiBaseUrl()}/upload/v1beta/files`, {
     method: "POST",
     headers: {
       "x-goog-api-key": key(),
@@ -91,7 +91,7 @@ async function waitForActive(
       throw new Error("the file was still processing when the time ran out");
     }
     await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
-    const res = await outboundFetch(`${BASE}/v1beta/${name}`, {
+    const res = await outboundFetch(`${geminiBaseUrl()}/v1beta/${name}`, {
       headers: { "x-goog-api-key": key() },
     });
     if (!res.ok) throw new Error(`file could not be read: ${await reason(res)}`);

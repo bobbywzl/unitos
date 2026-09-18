@@ -1,6 +1,7 @@
 import { createAnthropic, type AnthropicProvider } from "@ai-sdk/anthropic";
 import type { LanguageModel } from "ai";
 import { HANDWRITTEN_EFFORT, type ClaudeEffort } from "@/lib/derive/config";
+import { gatewayConfigured, gatewayUrl, keyFor, providerConfigured } from "@/lib/gateway";
 import { resolveModelId } from "@/lib/models";
 
 // The Claude client (SPEC.md §2): the handwritten passes — Import PDF's
@@ -8,21 +9,36 @@ import { resolveModelId } from "@/lib/models";
 // whose model id is a claude- id (lib/parse/model.ts). Every other model
 // call goes through lib/kimi.ts. The key is ANTHROPIC_API_KEY.
 // ANTHROPIC_BASE_URL points a local run at a stand-in server (scripts/qa).
+// Under the gateway (lib/gateway.ts) the calls go to its Anthropic
+// pass-through — the request reaches Anthropic as written, the effort
+// included — and the key is the app key. The one field the gateway strips
+// is `fallbacks`, a name it keeps for its own router, so under the gateway
+// the server-side refusal fallback never runs; callForJson
+// (lib/derive/json-call.ts) reruns a refused call on CLAUDE_REFUSAL_FALLBACK
+// instead, the same work on the app's side.
 
 const DEFAULT_BASE_URL = "https://api.anthropic.com/v1";
 
-// Whitespace stripped: a key pasted into the host's settings with a line
-// break inside it is refused as a header value, and the request never leaves.
-export function claudeApiKey(): string | undefined {
-  return process.env.ANTHROPIC_API_KEY?.replace(/\s+/g, "") || undefined;
+/** The model a refused Claude call runs again on under the gateway. */
+export const CLAUDE_REFUSAL_FALLBACK = "claude-opus-4-8";
+
+/** A Claude model: the client that built it says so. */
+export function isClaudeModel(model: LanguageModel): boolean {
+  return typeof model !== "string" && model.provider.startsWith("anthropic");
 }
 
-/** A key is set, so the import's AI passes are on. Every import call checks this first. */
+/** The key a Claude call sends: the app key under the gateway, else ANTHROPIC_API_KEY. */
+export function claudeApiKey(): string | undefined {
+  return keyFor("anthropic");
+}
+
+/** The gateway or a key is set, so the import's AI passes are on. Every import call checks this first. */
 export function claudeConfigured(): boolean {
-  return Boolean(claudeApiKey());
+  return providerConfigured("anthropic");
 }
 
 export function claudeBaseUrl(): string {
+  if (gatewayConfigured()) return gatewayUrl("/anthropic/v1");
   return (process.env.ANTHROPIC_BASE_URL || DEFAULT_BASE_URL).replace(/\/+$/, "");
 }
 

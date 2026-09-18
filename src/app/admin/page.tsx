@@ -1,8 +1,7 @@
 import { redirect } from "next/navigation";
 import { isAdmin } from "@/lib/admin-auth";
 import { authEnabled } from "@/lib/auth";
-import { claudeConfigured } from "@/lib/claude";
-import { kimiConfigured } from "@/lib/kimi";
+import { gatewayAdminKey, gatewayConfigured, providerKey } from "@/lib/gateway";
 import { db } from "@/lib/db";
 import { serverT } from "@/lib/i18n/server";
 import { recipientAccounts } from "@/lib/notifications";
@@ -60,12 +59,29 @@ export default async function AdminPage() {
   const nameOf = new Map(accounts.map((a) => [a.id, a.name || t("admin.localReader")]));
 
   // Status only — values never leave the server. Operator concern, so it lives
-  // here, not in reader Settings.
-  const services: { label: string; description: string; set: boolean }[] = [
-    { label: "MOONSHOT_API_KEY", description: t("admin.svcKimi"), set: kimiConfigured() },
-    { label: "ANTHROPIC_API_KEY", description: t("admin.svcClaude"), set: claudeConfigured() },
-    { label: "SESSION_SECRET + provider", description: t("admin.svcSignIn"), set: authEnabled() },
-    { label: "ADMIN_PASSWORD", description: t("admin.svcAdmin"), set: Boolean(process.env.ADMIN_PASSWORD) },
+  // here, not in reader Settings. Under the gateway (SPEC.md §2) the provider
+  // keys live on the gateway, so their rows say so instead of Not set.
+  const gateway = gatewayConfigured();
+  const viaGateway = (set: boolean): "set" | "gateway" | "unset" =>
+    set ? "set" : gateway ? "gateway" : "unset";
+  const services: { label: string; description: string; state: "set" | "gateway" | "unset" }[] = [
+    {
+      label: "LITELLM_BASE_URL + LITELLM_API_KEY",
+      description: t("admin.svcGateway"),
+      state: gateway ? "set" : "unset",
+    },
+    { label: "LITELLM_ADMIN_KEY", description: t("admin.svcGatewayAdmin"), state: gatewayAdminKey() ? "set" : "unset" },
+    { label: "MOONSHOT_API_KEY", description: t("admin.svcKimi"), state: viaGateway(Boolean(providerKey("moonshot"))) },
+    { label: "ANTHROPIC_API_KEY", description: t("admin.svcClaude"), state: viaGateway(Boolean(providerKey("anthropic"))) },
+    { label: "GEMINI_API_KEY", description: t("admin.svcGemini"), state: viaGateway(Boolean(providerKey("gemini"))) },
+    {
+      label: "DEEPGRAM_API_KEY · GROQ_API_KEY · OPENAI_API_KEY",
+      description: t("admin.svcTranscribe"),
+      state: viaGateway(["deepgram", "groq", "openai"].some((p) => providerKey(p as "deepgram" | "groq" | "openai"))),
+    },
+    { label: "DEEPL_API_KEY", description: t("admin.svcDeepl"), state: viaGateway(Boolean(providerKey("deepl"))) },
+    { label: "SESSION_SECRET + provider", description: t("admin.svcSignIn"), state: authEnabled() ? "set" : "unset" },
+    { label: "ADMIN_PASSWORD", description: t("admin.svcAdmin"), state: process.env.ADMIN_PASSWORD ? "set" : "unset" },
   ];
 
   return (
@@ -84,10 +100,14 @@ export default async function AdminPage() {
               </div>
               <span
                 className={`rounded-full px-3 py-0.5 text-xs font-semibold ${
-                  svc.set ? "bg-sage-200 text-sage-800" : "bg-sand-200 text-sand-600"
+                  svc.state === "unset" ? "bg-sand-200 text-sand-600" : "bg-sage-200 text-sage-800"
                 }`}
               >
-                {svc.set ? t("admin.svcSet") : t("admin.svcNotSet")}
+                {svc.state === "set"
+                  ? t("admin.svcSet")
+                  : svc.state === "gateway"
+                    ? t("admin.svcViaGateway")
+                    : t("admin.svcNotSet")}
               </span>
             </div>
           ))}

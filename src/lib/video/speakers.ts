@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { extractJson } from "@/lib/derive/json";
-import { geminiCall, geminiCountTokens } from "@/lib/video/gemini";
+import { geminiCall, geminiConfigured, geminiCountTokens } from "@/lib/video/gemini";
 import {
   CHUNK_SECONDS,
   GEMINI_SINGLE_CALL_TOKENS,
@@ -123,7 +123,7 @@ export async function detectSpeakers(
   lines: TranscriptSegment[],
   opts: { deadline?: number; userId?: string | null } = {},
 ): Promise<SpeakerLines> {
-  if (lines.length === 0 || !process.env.GEMINI_API_KEY) return EMPTY;
+  if (lines.length === 0 || !geminiConfigured()) return EMPTY;
 
   const byLine: (string | null)[] = new Array(lines.length).fill(null);
   const roster = new Map<string, Speaker>();
@@ -193,7 +193,7 @@ export async function nameSpeakers(
     if (id !== null && !roster.has(id)) roster.set(id, { id, name: "" });
   }
   if (roster.size <= 1) return EMPTY;
-  if (process.env.GEMINI_API_KEY) {
+  if (geminiConfigured()) {
     try {
       // Names are said early — an introduction, a host's welcome — so the
       // first batch names most voices; later batches only fill in the rest.

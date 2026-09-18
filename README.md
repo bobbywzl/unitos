@@ -31,6 +31,7 @@ Notes-centric web app for deep reading. Documents attach to notebooks; every AI 
 - Feedback pipeline (`.claude/skills/feedback-pipeline`): a daily Routine reads the feedback inbox, opens one pull request per change that fits the spec for employees to review, and after a merge (Vercel deploys `main`) resolves the feedback and replies to its senders
 - Feedback button + admin inbox (`/admin`) with new → seen → resolved triage and Reply, which reaches the account that sent the feedback as a notification on its dashboard; admin digest page (`/admin/digest`) showing the store per account — every project → document → annotations, notes, distillations — with forced rebuilds and the exact text each scope sends; admin accounts page (`/admin/accounts`) listing every account with Block and Unblock, which put the account's email on the block list (a blocked email cannot sign in; an email with no account yet can be blocked too) and take it off, and Reset account, which deletes the account's data and puts it back at onboarding like a new account. The admin gate (`ADMIN_PASSWORD`) is separate from reader sign-in
 - AI usage telemetry: every model call records tokens and cost (list prices at call time); the admin usage page (`/admin/usage`) shows totals, daily cost, and cost per function, model, and account
+- The AI gateway (`litellm/`): LiteLLM in front of every AI provider, holding the provider keys, the app key's rate limits and budget, the fallbacks, and spend per call; the admin gateway page (`/admin/gateway`) shows readiness, models with limits and prices, fallbacks, the app key's spend and limits, spend by day, model, provider, function, and account, and issues the app key
 - Admin notifications (`/admin/notifications`): the admin sends a notification — an update to Unitos, or a change made to an account — to every account or to chosen ones; it shows on each recipient's dashboard until dismissed. The admin picks recipients from names and emails and cannot open or change an account
 - Click telemetry: every click on a reader control records its surface (top bar, sidebar, AI toolbar, article menu, reader, notes tray) and control; the admin clicks page (`/admin/clicks`) shows clicks per day by surface, per surface, per control, and per account
 - Settings (`/settings`): account + sign out, language, light/dark/system theme, context, service status
@@ -58,6 +59,8 @@ npm run dev                   # → http://localhost:3000
 
 Reading, notes, anchoring, and export work with no API keys. Add `MOONSHOT_API_KEY` to `.env` for the AI features, `ANTHROPIC_API_KEY` for the import's AI passes, and `GROQ_API_KEY`, `OPENAI_API_KEY`, or `GEMINI_API_KEY` for video transcription (YouTube captions need no key).
 
+Or run every AI call through the gateway: `litellm/README.md` has the steps. With `LITELLM_BASE_URL`, `LITELLM_API_KEY`, and `LITELLM_ADMIN_KEY` set, the provider keys live on the gateway host and the app reads none of them.
+
 ## Deploy (Vercel)
 
 1. Import this repo on vercel.com.
@@ -75,6 +78,7 @@ Supabase instead of Neon works too: enable the `vector` extension, then set `DAT
 2. Copy `.env.example` to `.env` and fill in:
    - `DATABASE_URL` — Supabase pooled connection (port 6543, `?pgbouncer=true&connection_limit=1`)
    - `DIRECT_URL` — Supabase direct connection (port 5432), used for migrations
+   - `LITELLM_BASE_URL`, `LITELLM_API_KEY`, `LITELLM_ADMIN_KEY` — the AI gateway (`litellm/README.md`). With the first two set, every AI call goes through it and the provider keys below are not read; the third opens the admin gateway page
    - `MOONSHOT_API_KEY` — required for derivations, the assistant, and glossary (`MOONSHOT_BASE_URL` overrides the endpoint)
    - `ANTHROPIC_API_KEY` — required for the import's AI passes — upload review, the URL core and structure passes, Import PDF's judgment, and conversion — and for Visualize (`ANTHROPIC_BASE_URL` overrides the endpoint)
    - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `SESSION_SECRET` — Google sign-in at `/signin`; unset = single local reader, nothing gated. Redirect URI: `<origin>/api/auth/callback` — the only one to register; Link Google Drive returns through it too

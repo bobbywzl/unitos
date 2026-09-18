@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { extractJson } from "@/lib/derive/json";
-import { geminiCall } from "@/lib/video/gemini";
+import { geminiCall, geminiConfigured } from "@/lib/video/gemini";
 import type { TranscriptSegment } from "@/lib/video/transcribe";
 
 // Transcript cleanup (SPEC.md §11): every new video and audio transcript is
@@ -134,7 +134,7 @@ export async function tidyTranscript(
 ): Promise<{ lines: TranscriptSegment[]; provider: "Gemini" | "rules" }> {
   if (lines.length === 0) return { lines, provider: "rules" };
 
-  if (process.env.GEMINI_API_KEY) {
+  if (geminiConfigured()) {
     try {
       const cleaned: string[] = [];
       for (let i = 0; i < lines.length; i += BATCH_LINES) {
