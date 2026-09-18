@@ -1,26 +1,21 @@
 import { redirect } from "next/navigation";
 import { isAdmin } from "@/lib/admin-auth";
-import { db } from "@/lib/db";
 import { gatewayAdminKey, gatewayBaseUrl, gatewayKey } from "@/lib/gateway";
 import {
+  appGatewayModels,
   gatewayErrorMessage,
   gatewayKeyInfo,
   gatewayModels,
   gatewayReadiness,
   gatewayRouter,
-  gatewaySpend,
-  gatewayTagSpend,
   type GatewayKeyInfo,
   type GatewayModel,
   type GatewayReadiness,
   type GatewayRouter,
-  type GatewaySpend,
-  type GatewayTagSpend,
 } from "@/lib/gateway-admin";
 import { serverT } from "@/lib/i18n/server";
-import { currentModelId, MODEL_ROLES, ROLE_ORDER } from "@/lib/models";
 import { AdminNav } from "@/components/admin/admin-nav";
-import { BarList, DailyChart, fmtTok, fmtUsd, Tile } from "@/components/admin/charts";
+import { fmtUsd, Tile } from "@/components/admin/charts";
 import { GatewayHealth } from "@/components/admin/gateway-health";
 import { GatewayKey } from "@/components/admin/gateway-key";
 
@@ -28,8 +23,9 @@ export const dynamic = "force-dynamic";
 
 // Admin: the AI gateway (SPEC.md §2) — whether it answers, the models it
 // routes with their limits and prices, the fallbacks, the app key's limits
-// and spend, and the gateway's own spend by day, model, provider, function,
-// and account. Every figure is read from the gateway's management API
+// and spend, and Check models. Spend by day, model, provider, function, and
+// account is on the usage page, which reads the gateway when it is set.
+// Every figure here is read from the gateway's management API
 // (lib/gateway-admin.ts) with the master key.
 
 type Fetched<T> = { ok: true; data: T } | { ok: false; error: string };
@@ -95,32 +91,21 @@ export default async function AdminGatewayPage() {
     );
   }
 
-  const [readiness, models, router, keyInfo, spend, tags, users] = await Promise.all([
+  const [readiness, models, router, keyInfo] = await Promise.all([
     fetched<GatewayReadiness>(gatewayReadiness),
     adminKey ? fetched<GatewayModel[]>(gatewayModels) : null,
     adminKey ? fetched<GatewayRouter>(gatewayRouter) : null,
     adminKey && appKey ? fetched<GatewayKeyInfo>(gatewayKeyInfo) : null,
-    adminKey ? fetched<GatewaySpend>(() => gatewaySpend(30)) : null,
-    adminKey ? fetched<GatewayTagSpend>(() => gatewayTagSpend(30)) : null,
-    db.user.findMany({ select: { id: true, email: true } }),
   ]);
-  const emailOf = new Map(users.map((u) => [u.id, u.email]));
   // The gateway's model list expands each wildcard into every model of that
   // provider it knows a price for, some under bare ids. The table shows the
-  // ones the app calls: each role's current id under its provider's prefix,
-  // plus the audio models; the rest is one count.
-  const prefixOf: Record<string, string> = { "Z.ai": "zai", "Moonshot AI": "moonshot", Anthropic: "anthropic", Google: "gemini" };
-  const appModels = new Set<string>();
-  for (const role of ROLE_ORDER) {
-    appModels.add(`${prefixOf[MODEL_ROLES[role].provider]}/${await currentModelId(role)}`);
-  }
-  appModels.add("gemini/gemini-flash-latest");
+  // ones the app calls (appGatewayModels) and the OpenAI fallbacks; the rest
+  // is one count.
+  const appModels = new Set(await appGatewayModels());
   const shownModels = models?.ok
-    ? models.data.filter((m) => appModels.has(m.name) || /^(groq|openai)\//.test(m.name))
+    ? models.data.filter((m) => appModels.has(m.name) || m.name.startsWith("openai/"))
     : [];
   const otherModels = models?.ok ? models.data.length - shownModels.length : 0;
-  const accountLabel = (id: string) =>
-    emailOf.get(id) ?? (id === "user-1" ? t("admin.localReader") : id);
 
   return (
     <main className="mx-auto max-w-4xl px-6 py-8">
@@ -254,58 +239,6 @@ export default async function AdminGatewayPage() {
             </div>
             <GatewayHealth />
           </Card>
-        )}
-
-        {adminKey && spend && !spend.ok && <Failed error={spend.error} />}
-        {adminKey && spend?.ok && (
-          <>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-              <Tile label={t("admin.gatewaySpend30")} value={fmtUsd(spend.data.totalUsd)} />
-              <Tile label={t("admin.gatewayRequests")} value={spend.data.requests.toLocaleString()} />
-              <Tile label={t("admin.gatewayFailed")} value={spend.data.failed.toLocaleString()} />
-              <Tile label={t("admin.usageTokensIn")} value={fmtTok(spend.data.inputTokens)} />
-              <Tile label={t("admin.usageTokensOut")} value={fmtTok(spend.data.outputTokens)} />
-              <Tile label={t("admin.usageCacheRead")} value={fmtTok(spend.data.cacheReadTokens)} />
-            </div>
-            <DailyChart title={t("admin.gatewayDaily")} days={spend.data.days} />
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              <BarList t={t} title={t("admin.usageByProvider")} rows={spend.data.byProvider} />
-              <BarList t={t} title={t("admin.usageByModel")} rows={spend.data.byModel} />
-              {tags?.ok && <BarList t={t} title={t("admin.usageByFunction")} rows={tags.data.byFeature} />}
-            </div>
-            {tags && !tags.ok && <Failed error={tags.error} />}
-            {tags?.ok && (
-              <div className="overflow-x-auto rounded-2xl bg-card p-4 shadow-soft">
-                <p className="mb-2 text-[11px] font-bold tracking-[0.08em] text-sand-600 uppercase">
-                  {t("admin.usageByUser")}
-                </p>
-                {tags.data.byUser.length === 0 ? (
-                  <p className="text-xs text-sand-500">{t("admin.gatewayNoTagged")}</p>
-                ) : (
-                  <table className="w-full text-xs">
-                    <thead>
-                      <tr className="border-b border-line text-left text-[10px] tracking-wider text-sand-500 uppercase">
-                        <th className="py-2 font-semibold">{t("admin.usageColAccount")}</th>
-                        <th className="px-3 py-2 text-right font-semibold">{t("admin.usageColCalls")}</th>
-                        <th className="px-3 py-2 text-right font-semibold">{t("admin.gatewayColTokens")}</th>
-                        <th className="py-2 text-right font-semibold">{t("admin.usageColCost")}</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-line">
-                      {tags.data.byUser.map((r) => (
-                        <tr key={r.label}>
-                          <td className="max-w-[240px] truncate py-2 text-sand-800">{accountLabel(r.label)}</td>
-                          <td className="px-3 py-2 text-right tabular-nums">{r.calls.toLocaleString()}</td>
-                          <td className="px-3 py-2 text-right tabular-nums">{fmtTok(r.tokens)}</td>
-                          <td className="py-2 text-right font-semibold tabular-nums">{fmtUsd(r.costUsd)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
-              </div>
-            )}
-          </>
         )}
       </div>
     </main>

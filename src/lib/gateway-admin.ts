@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { gatewayAdminKey, gatewayBaseUrl, gatewayKey } from "@/lib/gateway";
+import { currentModelId, MODEL_ROLES, ROLE_ORDER, type ModelRole } from "@/lib/models";
 import { outboundFetch } from "@/lib/outbound-fetch";
 
 // The gateway's management API, for the admin console alone (SPEC.md §2):
@@ -445,17 +446,56 @@ export type GatewayHealth = {
   unhealthy: { model: string; error: string }[];
 };
 
-/** Probe every model in the gateway's list. Each probe is a real call, so
-    this runs from the page's button, never on load. */
+// The prefix each provider's models carry on the gateway (litellm/config.yaml).
+const GATEWAY_PREFIX: Record<string, string> = {
+  "Z.ai": "zai",
+  "Moonshot AI": "moonshot",
+  Anthropic: "anthropic",
+  Google: "gemini",
+};
+
+// The roles a feature calls today. The claude role (Fable) is a role with
+// no caller since the parse passes moved to GLM 5.3 Flash, so no probe.
+const CALLED_ROLES: ModelRole[] = ["glm", "glmFlash", "kimi", "opus", "sonnet", "gemini"];
+
+/** The models the app calls, as the gateway names them: each called role's
+    current id under its provider's prefix, the Gemini alias rung, and the
+    Groq transcription model. The OpenAI Whisper and voice fallbacks are not
+    here: they run only when the gateway holds an OpenAI key. */
+export async function appGatewayModels(): Promise<string[]> {
+  const names = new Set<string>();
+  for (const role of ROLE_ORDER) {
+    if (!CALLED_ROLES.includes(role)) continue;
+    names.add(`${GATEWAY_PREFIX[MODEL_ROLES[role].provider]}/${await currentModelId(role)}`);
+  }
+  names.add("gemini/gemini-flash-latest");
+  names.add("groq/whisper-large-v3-turbo");
+  return [...names];
+}
+
+/** Probe the models the app calls, one live call each, in parallel. Runs
+    from the page's button, never on load: every probe is a billed call. A
+    reasoning model takes seconds to answer even "OK": the route allows
+    120 s, so each probe gets most of it. */
 export async function gatewayHealth(): Promise<GatewayHealth> {
-  // One live call per model, and a reasoning model takes seconds to answer
-  // even "OK": the route allows 120 s, so the probes get most of it.
-  const body = await call("/health", healthSchema, { timeoutMs: 110_000 });
-  return {
-    healthy: (body.healthy_endpoints ?? []).map((e) => e.model ?? "?"),
-    unhealthy: (body.unhealthy_endpoints ?? []).map((e) => ({
-      model: e.model ?? "?",
-      error: gatewayErrorMessage(typeof e.error === "string" ? e.error : JSON.stringify(e.error ?? "")),
-    })),
-  };
+  const models = await appGatewayModels();
+  const results = await Promise.all(
+    models.map(async (model) => {
+      try {
+        const body = await call(`/health?model=${encodeURIComponent(model)}`, healthSchema, { timeoutMs: 110_000 });
+        const unhealthy = (body.unhealthy_endpoints ?? []).map((e) => ({
+          model,
+          error: gatewayErrorMessage(typeof e.error === "string" ? e.error : JSON.stringify(e.error ?? "")),
+        }));
+        // A model the gateway does not know answers with neither list.
+        if (unhealthy.length === 0 && (body.healthy_endpoints ?? []).length === 0) {
+          return { healthy: [], unhealthy: [{ model, error: "the gateway has no route for this model" }] };
+        }
+        return { healthy: unhealthy.length === 0 ? [model] : [], unhealthy };
+      } catch (err) {
+        return { healthy: [], unhealthy: [{ model, error: gatewayErrorMessage(err) }] };
+      }
+    }),
+  );
+  return { healthy: results.flatMap((r) => r.healthy), unhealthy: results.flatMap((r) => r.unhealthy) };
 }

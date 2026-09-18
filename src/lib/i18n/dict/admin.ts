@@ -168,7 +168,13 @@ const en = {
   svcTranscribe: "Transcription of uploads and voice notes; OpenAI also reads aloud. Deepgram never takes the gateway",
   svcDeepl: "Translation",
   svcViaGateway: "On the gateway",
-  usageGatewayNote: "The gateway records the same calls on its own side. Its figures are on the Gateway page.",
+  usageGatewayDesc:
+    "AI cost and tokens over the last 30 days, from the gateway: every call it carried, at the provider's price, under the model that answered. What the gateway does not price — Deepgram, DeepL, the Edge voice, the browser, email — is the app's own count at list price.",
+  usageAppCount: "App's count, same models (30d)",
+  usageAppCountHint:
+    "App's count is what the app's own records make of the gateway's models at the list prices in the code. The two should be close; a gap means one price list is stale, and the gateway's is the one to trust.",
+  usageOutside: "Outside the gateway (30d)",
+  usageOutsideBy: "Cost by function, outside the gateway (30d)",
   // Gateway page (SPEC.md §2): LiteLLM in front of every AI provider.
   gateway: "Gateway",
   gatewayDesc:
@@ -476,7 +482,13 @@ const zh: Record<keyof typeof en, string> = {
   svcTranscribe: "上传文件和语音笔记的逐字稿；OpenAI 也用于朗读。Deepgram 从不经过网关",
   svcDeepl: "翻译",
   svcViaGateway: "在网关上",
-  usageGatewayNote: "网关在自己一侧也记录同样的调用。其数据见网关页面。",
+  usageGatewayDesc:
+    "最近 30 天的 AI 成本与 token 用量，来自网关：它承载的每次调用，按提供商的价格，记在实际作答的模型下。网关不计价的部分——Deepgram、DeepL、Edge 语音、浏览器、邮件——是应用自己按官方定价的统计。",
+  usageAppCount: "应用统计，同样的模型（30 天）",
+  usageAppCountHint:
+    "应用统计是应用自己的记录按代码里的官方定价对网关模型算出的数字。两者应当接近；有差距说明某一份价目表过时了，以网关的为准。",
+  usageOutside: "网关之外（30 天）",
+  usageOutsideBy: "网关之外按功能的成本（30 天）",
   // Gateway page (SPEC.md §2): LiteLLM in front of every AI provider.
   gateway: "网关",
   gatewayDesc:
