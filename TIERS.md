@@ -95,7 +95,7 @@ Ultra when the account is not Ultra.
 | Who | Every new account (`lib/auth.ts` sets `trialEndsAt` on create; a reset account starts a new trial) |
 | What | Unitos Premium, whole |
 | How long | Two months (`TRIAL_MONTHS`, `lib/tiers.ts`) |
-| After | Expired: offline changes do not save, images over 5 MB do not drop, until the operator grants a tier |
+| After | Expired: offline changes do not save, images over 5 MB do not drop, until the operator grants a tier. A saved project's copy stays until sign out; new copies need Ultra |
 
 ## Unitos Premium
 
@@ -116,6 +116,7 @@ Ultra when the account is not Ultra.
 | Everything in Premium | Whole |
 | Visualize (SPEC.md §20) | The selection as a picture — a directed diagram, a drawing, or a short animation — on Claude Fable 5.1 at its highest effort; declined with the reason when the model is not certain the picture carries the passage's core idea |
 | Tool conversations (SPEC.md §21) | Continuing a Simplify, Analyze, or Visualize card's output into a conversation (Simplify+, Analyze+, …). Offered to every account at the end of the tool's output; a non-Ultra press answers with the plain Ultra message, like Visualize, and the route answers 403 |
+| Offline copies (SPEC.md §17) | Save for offline, in a project's ⋯ menu on the dashboard: the project's pages and images kept in the browser, so the project opens without a network; offline, the dashboard shows only the saved projects. Offered to every account; a non-Ultra press answers with the plain Ultra message, and `GET /api/notebooks/<id>/offline` answers 403. Videos and the assistant stay online-only |
 
 ## Expired (trial ended, nothing granted)
 
@@ -166,6 +167,11 @@ until the owner makes one.
 
 ## Decisions, as they were made
 
+- **2026-09-18** — Offline copies are Unitos Ultra (SPEC.md §17): Save for
+  offline keeps a project's pages and images in the browser, and offline
+  Unitos opens with only the saved projects, like Google Drive offline in
+  Chrome. Offline work itself (the queued writes) stays Premium; AI stays
+  online-only for everyone.
 - **2026-09-16** — Both tiers sell monthly and yearly, not one price each:
   `STRIPE_PRICE_PREMIUM_MONTHLY`, `STRIPE_PRICE_PREMIUM_YEARLY`,
   `STRIPE_PRICE_ULTRA_MONTHLY`, `STRIPE_PRICE_ULTRA_YEARLY`. The plan page

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useT } from "@/components/lang-provider";
+import { TierMark } from "@/components/tier-mark";
 import { Instruments } from "@/components/works/instruments";
 
 export type WorkItem = {
@@ -24,11 +25,15 @@ export function WorkCard({
   onRename,
   onDelete,
   onLeave,
+  offline,
 }: {
   work: WorkItem;
   onRename: (id: string, current: string) => void;
   onDelete: (id: string) => void;
   onLeave?: (id: string) => void;
+  // Offline copy (SPEC.md §17, Unitos Ultra): the card's state and the toggle.
+  // Absent where the browser cannot hold one.
+  offline?: { saved: boolean; saving: boolean; ultra: boolean; onToggle: (id: string) => void };
 }) {
   const t = useT();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -85,6 +90,11 @@ export function WorkCard({
               {t("works.pendingCount", { n: work.pendingCount })}
             </span>
           )}
+          {offline?.saved && (
+            <span className="rounded-full bg-sage-200 px-3 py-1 text-xs font-semibold text-sage-800">
+              {t("works.offlineBadge")}
+            </span>
+          )}
           {work.shared ? (
             <span className="rounded-full bg-sage-200 px-3 py-1 text-xs font-semibold text-sage-800">
               {t(work.shared.role === "editor" ? "panes.roleEditor" : "panes.roleViewer")}
@@ -123,13 +133,35 @@ export function WorkCard({
           </svg>
         </button>
         {menuOpen && (
-          <div className="absolute right-0 mt-1 flex w-36 flex-col overflow-hidden rounded-2xl bg-card py-1 shadow-float">
+          <div className="absolute right-0 mt-1 flex w-44 flex-col overflow-hidden rounded-2xl bg-card py-1 shadow-float">
             <Link
               href={`/n/${work.id}/notes`}
               className="px-4 py-2 text-left text-sm text-sand-700 hover:bg-clay-100 hover:text-clay-800"
             >
               {t("works.notes")}
             </Link>
+            {offline && (
+              <button
+                onClick={() => {
+                  setMenuOpen(false);
+                  offline.onToggle(work.id);
+                }}
+                disabled={offline.saving}
+                className="flex items-center gap-1.5 px-4 py-2 text-left text-sm text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40"
+              >
+                {offline.saving
+                  ? t("works.savingOffline")
+                  : offline.saved
+                    ? t("works.removeOffline")
+                    : t("works.saveOffline")}
+                {!offline.ultra && !offline.saved && (
+                  <span className="ml-auto flex items-center gap-1 text-[11px] text-sand-600">
+                    <TierMark state="ultra" size={10} />
+                    {t("reader.ultra")}
+                  </span>
+                )}
+              </button>
+            )}
             {(!work.shared || work.shared.role === "editor") && (
               <button
                 onClick={() => {

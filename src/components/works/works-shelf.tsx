@@ -1,8 +1,16 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import {
+  listSaved,
+  offlineSupported,
+  refreshSaved,
+  removeSaved,
+  saveProject,
+  subscribeSaved,
+} from "@/lib/offline/saved";
 import { useT } from "@/components/lang-provider";
 import { WorkCard, type WorkItem } from "@/components/works/work-card";
 
@@ -14,14 +22,78 @@ export function WorksShelf({
   works,
   sharedWorks,
   myEmail,
+  ultra,
+  billing,
 }: {
   works: WorkItem[];
   sharedWorks: WorkItem[];
   myEmail: string;
+  // Unitos Ultra (TIERS.md): Save for offline. Offered to every account; a
+  // non-Ultra press answers with the plain Ultra message, and the route
+  // answers 403.
+  ultra: boolean;
+  // Billing on (SPEC.md §24): the Ultra message offers the plan page.
+  billing: boolean;
 }) {
   const router = useRouter();
   const t = useT();
   const [busy, setBusy] = useState(false);
+
+  // Offline copies (SPEC.md §17): which projects this browser holds, which one
+  // is saving now, and the one-line toast a press answers with.
+  const [supported, setSupported] = useState(false);
+  const [saved, setSaved] = useState<Set<string>>(new Set());
+  const [savingId, setSavingId] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ text: string; plans: boolean } | null>(null);
+
+  useEffect(() => {
+    if (!offlineSupported()) return;
+    const update = () =>
+      void listSaved().then((rows) => {
+        setSaved(new Set(rows.map((r) => r.id)));
+        setSupported(true);
+      });
+    update();
+    // Copies older than an hour refresh in the background while online.
+    void refreshSaved();
+    return subscribeSaved(update);
+  }, []);
+
+  useEffect(() => {
+    if (!toast) return;
+    const timer = setTimeout(() => setToast(null), 5000);
+    return () => clearTimeout(timer);
+  }, [toast]);
+
+  async function toggleOffline(id: string) {
+    if (savingId) return;
+    if (saved.has(id)) {
+      await removeSaved(id);
+      return;
+    }
+    if (!ultra) {
+      setToast({ text: t("works.offlineNeedsUltra"), plans: billing });
+      return;
+    }
+    setSavingId(id);
+    try {
+      await saveProject(id);
+      setToast({ text: t("works.offlineSaved"), plans: false });
+    } catch (err) {
+      const status = (err as { status?: number }).status;
+      setToast({
+        text: status === 403 ? t("works.offlineNeedsUltra") : t("works.offlineSaveFailed"),
+        plans: status === 403 && billing,
+      });
+    } finally {
+      setSavingId(null);
+    }
+  }
+
+  const offlineOf = (id: string) =>
+    supported
+      ? { saved: saved.has(id), saving: savingId === id, ultra, onToggle: (i: string) => void toggleOffline(i) }
+      : undefined;
 
   // New project: one press. The project gets the default title (renamed in
   // the reader's title) and opens on the add-document dialog (?add=1), so the
@@ -87,7 +159,13 @@ export function WorksShelf({
 
       <ul className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {works.map((work) => (
-          <WorkCard key={work.id} work={work} onRename={rename} onDelete={remove} />
+          <WorkCard
+            key={work.id}
+            work={work}
+            onRename={rename}
+            onDelete={remove}
+            offline={offlineOf(work.id)}
+          />
         ))}
       </ul>
 
@@ -102,10 +180,30 @@ export function WorksShelf({
                 onRename={rename}
                 onDelete={remove}
                 onLeave={leave}
+                offline={offlineOf(work.id)}
               />
             ))}
           </ul>
         </>
+      )}
+
+      {toast && (
+        <div className="pointer-events-none fixed inset-x-0 bottom-6 z-50 flex justify-center px-6">
+          <span
+            role="status"
+            className="pointer-events-auto flex items-center gap-2 rounded-full bg-ink/90 px-3 py-1.5 text-xs text-paper"
+          >
+            {toast.text}
+            {toast.plans && (
+              <button
+                onClick={() => window.open("/billing", "_blank", "noopener")}
+                className="rounded-full bg-paper/20 px-2.5 py-0.5 font-semibold hover:bg-paper/30"
+              >
+                {t("billing.plans")}
+              </button>
+            )}
+          </span>
+        </div>
       )}
     </>
   );
