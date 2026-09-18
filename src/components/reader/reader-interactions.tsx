@@ -49,6 +49,7 @@ import { parseYouTubeId, youtubeWatchUrl } from "@/lib/video/youtube";
 import type { TFunc, TKey } from "@/lib/i18n/dictionaries";
 import {
   ANSWER_MARK,
+  AnswerTint,
   AnswerToolbar,
   CommentBox,
   CommentList,
@@ -1285,7 +1286,12 @@ export function ReaderInteractions({
   const [assistantChat, setAssistantChat] = useState<AssistantChat | null>(null);
   // Highlighting an answer in the chat card (SPEC.md §7): Start side chat,
   // Ask about this, Comment.
-  const { selection: answerSelection, clear: clearAnswerSelection } = useAnswerSelection();
+  const {
+    selection: answerSelection,
+    tintRects: answerTintRects,
+    hold: holdAnswerSelection,
+    clear: clearAnswerSelection,
+  } = useAnswerSelection();
   const [chatComments, setChatComments] = useState<AnswerComment[]>([]);
   const [chatCommentPeople, setChatCommentPeople] = useState<Record<string, Person>>({});
   const [chatCommentQuote, setChatCommentQuote] = useState<string | null>(null);
@@ -1453,6 +1459,7 @@ export function ReaderInteractions({
     await runSimplify(anchor, slot, noteId);
   }
   function closeAssistantChat() {
+    clearAnswerSelection();
     // A turn still in flight aborts too — closing the card means nobody will
     // read the reply, so there is nothing left for it to finish for.
     chatAbortRef.current?.abort();
@@ -4365,11 +4372,15 @@ export function ReaderInteractions({
   }, [assistantChat?.openKey]);
 
   // The selection's three actions in the card, the panel's three.
+  // The browser's own selection goes — the box that opens takes focus — and
+  // the words stay marked by the tint until the reader is done with them.
   function takeAnswerSelection(): string {
-    const text = answerSelection?.text ?? "";
+    return holdAnswerSelection();
+  }
+  // The quote goes, and the words it marked stop being marked.
+  function dropChatQuote() {
+    setAssistantChat((c) => (c ? { ...c, quote: null } : c));
     clearAnswerSelection();
-    window.getSelection()?.removeAllRanges();
-    return text;
   }
   function startChatSideChat() {
     const text = takeAnswerSelection();
@@ -4411,6 +4422,7 @@ export function ReaderInteractions({
       if (!res.ok || !json?.id) throw new Error(json?.error ?? t("assistant.commentFailed"));
       setChatComments((list) => [...list, json]);
       setChatCommentQuote(null);
+      clearAnswerSelection();
     } catch (err) {
       showError(err instanceof Error ? err.message : t("assistant.commentFailed"));
     } finally {
@@ -4440,6 +4452,7 @@ export function ReaderInteractions({
     // A side chat needs the conversation it branched from; without a saved
     // note there is nothing to branch from.
     if (open && !chat.noteId) return;
+    if (chat.quote) clearAnswerSelection();
     const pushUser = (c: AssistantChat): AssistantChat =>
       open
         ? {
@@ -5547,17 +5560,16 @@ function blockFormatKind(
     />
     <ThinkingChips className={chipsClassName} small />
     {chat.quote && (
-      <QuoteChip
-        quote={chat.quote}
-        onClear={() => setAssistantChat((c) => (c ? { ...c, quote: null } : c))}
-        className={chipsClassName}
-      />
+      <QuoteChip quote={chat.quote} onClear={dropChatQuote} className={chipsClassName} />
     )}
     {chatCommentQuote ? (
       <CommentBox
         quote={chatCommentQuote}
         busy={chatCommentBusy}
-        onCancel={() => setChatCommentQuote(null)}
+        onCancel={() => {
+          setChatCommentQuote(null);
+          clearAnswerSelection();
+        }}
         onSubmit={(text) => void postChatComment(text)}
         className={chipsClassName}
       />
@@ -5602,6 +5614,7 @@ function blockFormatKind(
       </button>
     </form>
     )}
+    <AnswerTint rects={answerTintRects} />
     {answerSelection && (
       <AnswerToolbar
         selection={answerSelection}

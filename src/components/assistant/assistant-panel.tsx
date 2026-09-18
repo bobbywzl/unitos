@@ -25,6 +25,7 @@ import type { SummaryDepth, SummaryLevels } from "@/lib/types";
 import { UPLOAD_CHUNK_BYTES } from "@/lib/video/types";
 import {
   ANSWER_MARK,
+  AnswerTint,
   AnswerToolbar,
   CommentBox,
   CommentList,
@@ -306,7 +307,7 @@ export function AssistantPanel({
   const activeNoteId = openSideChat ? openSideChat.noteId : conversationNoteId;
   // Highlighting an answer (SPEC.md §7): the quote the next message carries,
   // the quote a comment is being written on, and this thread's comments.
-  const { selection, clear: clearSelection } = useAnswerSelection();
+  const { selection, tintRects, hold: holdSelection, clear: clearSelection } = useAnswerSelection();
   const [quote, setQuote] = useState<string | null>(null);
   const [commentQuote, setCommentQuote] = useState<string | null>(null);
   const [comments, setComments] = useState<AnswerComment[]>([]);
@@ -450,6 +451,7 @@ export function AssistantPanel({
     setQuote(null);
     setCommentQuote(null);
     setComments([]);
+    clearSelection();
     cacheThread();
     setAttachments([]);
     setQueue(() => []);
@@ -482,14 +484,11 @@ export function AssistantPanel({
     };
   }, [activeNoteId]);
 
-  // The selection's three actions (SPEC.md §7). The browser selection goes
-  // with the toolbar: the words are quoted now, the highlight has done its
-  // job.
+  // The selection's three actions (SPEC.md §7). The browser's own selection
+  // goes — the box that opens takes focus — and the words stay marked by the
+  // tint until the reader is done with them.
   function takeSelection(): string {
-    const text = selection?.text ?? "";
-    clearSelection();
-    window.getSelection()?.removeAllRanges();
-    return text;
+    return holdSelection();
   }
   // Start side chat: a conversation of its own off these words, kept with
   // this conversation and out of assistant history.
@@ -531,6 +530,7 @@ export function AssistantPanel({
       if (!res.ok || !json?.id) throw new Error(json?.error ?? t("assistant.commentFailed"));
       setComments((list) => [...list, json]);
       setCommentQuote(null);
+      clearSelection();
     } catch (err) {
       setError(err instanceof Error ? err.message : t("assistant.commentFailed"));
     } finally {
@@ -802,6 +802,12 @@ export function AssistantPanel({
   const canSend = !busy && composed;
   const canQueue = busy && composed;
 
+  // The quote goes, and the words it marked stop being marked.
+  function dropQuote() {
+    setQuote(null);
+    clearSelection();
+  }
+
   // Ask: the composer's message goes out now, or into the queue while an
   // answer runs. The composer clears either way.
   function ask() {
@@ -814,7 +820,7 @@ export function AssistantPanel({
       files: attachments.flatMap((a) => (a.kind === "file" ? [{ name: a.name, text: a.text }] : [])),
     };
     setQuestion("");
-    setQuote(null);
+    if (quote) dropQuote();
     setAttachments([]);
     if (busy) {
       setQueue((list) => [...list, { ...message, key: `${Date.now()}-${Math.random().toString(36).slice(2)}` }]);
@@ -1101,7 +1107,7 @@ export function AssistantPanel({
           )}
         </div>
       )}
-      {quote && <QuoteChip quote={quote} onClear={() => setQuote(null)} className="mb-1.5" />}
+      {quote && <QuoteChip quote={quote} onClear={dropQuote} className="mb-1.5" />}
       <textarea
         ref={boxRef}
         value={question}
@@ -1340,12 +1346,16 @@ export function AssistantPanel({
           <CommentBox
             quote={commentQuote}
             busy={commentBusy}
-            onCancel={() => setCommentQuote(null)}
+            onCancel={() => {
+              setCommentQuote(null);
+              clearSelection();
+            }}
             onSubmit={(text) => void postComment(text)}
           />
         ) : (
           composer
         )}
+        <AnswerTint rects={tintRects} />
         {selection && (
           <AnswerToolbar
             selection={selection}

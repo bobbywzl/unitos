@@ -230,6 +230,16 @@ select,
 .link-pending-mark::selection {
   background: transparent;
 }
+/* The words a reader highlighted in an assistant answer (SPEC.md §7): the
+   same tint the article's selection keeps, painted as bands over the words
+   (components/assistant/answer-tools.tsx) — an answer is markdown the reader
+   never edits, so there is no mark to put inside it. The tint stays while the
+   words are quoted, commented on, or carried into a side chat. */
+.answer-tint {
+  background: var(--selection-bg);
+  border-radius: 2px;
+}
+
 /* The first end of a link waiting for its other end (SPEC.md §6): tinted
    like a selection, the link's dashed line under it until Close link. */
 .link-pending-mark {
