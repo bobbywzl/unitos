@@ -121,7 +121,7 @@ await page.unroute("**/api/assistant/act");
 await page.keyboard.press("Escape");
 await sleep(300);
 
-// ── Explain: Thinking + Stop, then a real streamed answer ──────────────────
+// ── Simplify: Thinking + Stop, then a real streamed answer ─────────────────
 await page.route("**/api/derive", async (route) => {
   await sleep(6000);
   try {
@@ -131,29 +131,29 @@ await page.route("**/api/derive", async (route) => {
   }
 });
 await selectInBlock(2, 50);
-await page.locator("[data-selection-popover]").getByRole("button", { name: "Explain", exact: true }).click();
+await page.locator("[data-selection-popover]").getByRole("button", { name: "Simplify", exact: true }).click();
 await sleep(600);
-const explainCard = page.locator('[data-side-card="explain"]');
-check("explain card opens", (await explainCard.count()) === 1);
-check("explain card shows Thinking", (await explainCard.locator('[role="status"]').count()) > 0);
-await shot(page, "09-explain-thinking");
-await explainCard.getByRole("button", { name: "Stop" }).click();
+const simplifyCard = page.locator('[data-side-card="simplify"]');
+check("simplify card opens", (await simplifyCard.count()) === 1);
+check("simplify card shows Thinking", (await simplifyCard.locator('[role="status"]').count()) > 0);
+await shot(page, "09-simplify-thinking");
+await simplifyCard.getByRole("button", { name: "Stop" }).click();
 await sleep(500);
-check("stopped empty explain card closes", (await explainCard.count()) === 0);
+check("stopped empty simplify card closes", (await simplifyCard.count()) === 0);
 await page.unroute("**/api/derive");
 await selectInBlock(2, 50);
-await page.locator("[data-selection-popover]").getByRole("button", { name: "Explain", exact: true }).click();
+await page.locator("[data-selection-popover]").getByRole("button", { name: "Simplify", exact: true }).click();
 await page.waitForFunction(
-  () => document.querySelector('[data-side-card="explain"] .prose') !== null,
+  () => document.querySelector('[data-side-card="simplify"]')?.textContent?.trim().length > 40,
   null,
   { timeout: 20000 },
 );
 await sleep(300);
-await shot(page, "10-explain-answer");
-check("explain streams an answer", (await explainCard.locator(".prose").count()) === 1);
-await explainCard.getByRole("button", { name: "Close" }).click();
+await shot(page, "10-simplify-answer");
+check("simplify streams an answer", (await simplifyCard.count()) === 1);
+await simplifyCard.getByRole("button", { name: "Close" }).click();
 await sleep(100);
-check("explain card leaves through Presence", (await page.locator(".presence-exit-bubble").count()) > 0);
+check("simplify card leaves through Presence", (await page.locator(".presence-exit-bubble").count()) > 0);
 await sleep(400);
 
 // ── Distill page fades in and out ───────────────────────────────────────────
@@ -205,7 +205,7 @@ const ladder = await page.evaluate(
     const explain = await fetch("/api/derive", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ type: "EXPLAIN", notebookId: NB, documentId: DOC, anchor: body.anchor }),
+      body: JSON.stringify({ type: "SIMPLIFY", notebookId: NB, documentId: DOC, anchor: body.anchor }),
     });
     const explainText = await explain.text();
     return {
@@ -224,7 +224,7 @@ check(
   (ladder.status === 201 || ladder.status === 200) && ladder.blockId === ladder.realBlockId,
   JSON.stringify(ladder),
 );
-check("stale block id + quote resolves for Explain", ladder.explainStatus === 200, `status=${ladder.explainStatus}`);
+check("stale block id + quote resolves for Simplify", ladder.explainStatus === 200, `status=${ladder.explainStatus}`);
 
 // ── Ingest reasons ──────────────────────────────────────────────────────────
 async function ingest(url) {

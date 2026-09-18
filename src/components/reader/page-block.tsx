@@ -7,15 +7,16 @@ import { Markdown } from "@/components/markdown";
 import { ThinkingIndicator } from "@/components/thinking";
 import { HIGHLIGHT_HUES, HUE_DOT, HUE_KEY, type HighlightHue } from "@/components/reader/hues";
 import { api } from "@/lib/api";
+import type { PageSize } from "@/lib/handwritten/pages";
 import { splitStreamError, splitStreamNote } from "@/lib/derive/config";
 import { regionBounds, regionPathD, type Region } from "@/lib/video/types";
 
-// One page of a handwritten document (SPEC.md §16): the PDF page rendered by
-// the page image route, the stored marks drawn over it, and Circle & ask —
-// drag a loop on the page, then ask, explain, comment, or pick a color to
-// lasso highlight the circled spot. Ask and Explain stream through
-// /api/derive (EXPLAIN with a page payload) and persist as annotations with a
-// region source; Comment and the lasso highlight post to /api/annotations.
+// One page of a handwritten document (SPEC.md §16): the page image the page
+// image route serves, the stored marks drawn over it, and Circle & ask —
+// drag a loop on the page, then ask, comment, or pick a color to lasso
+// highlight the circled spot. Ask streams through /api/derive (EXPLAIN with a
+// page payload and the question) and persists as an annotation with a region
+// source; Comment and the lasso highlight post to /api/annotations.
 // Clicking a mark opens its annotation like a text mark.
 
 export type PageMark = {
@@ -28,14 +29,13 @@ export type PageMark = {
 
 type DrawState = { points: { x: number; y: number }[] };
 type Pending = { region: Region };
-// asked = the question this answer ran with, null when Explain ran without
-// one: what Regenerate runs again. noteId = the annotation it saved, which
-// Regenerate replaces (SPEC.md §4).
+// asked = the question this answer ran with: what Regenerate runs again.
+// noteId = the annotation it saved, which Regenerate replaces (SPEC.md §4).
 type Answer = {
   content: string;
   done: boolean;
   error: string | null;
-  asked: string | null;
+  asked: string;
   noteId: string | null;
 };
 
@@ -45,6 +45,7 @@ export function PageBlock({
   blockId,
   text,
   marks,
+  size,
   canEdit,
   hint,
 }: {
@@ -53,6 +54,9 @@ export function PageBlock({
   blockId: string;
   text: string; // the stored block text ("Page N") — the page label
   marks: PageMark[];
+  // The stored image's pixels: the page keeps its shape before the image
+  // arrives, so the browser loads pages lazily. Null = not known yet.
+  size: PageSize | null;
   canEdit: boolean;
   hint: boolean; // first page only: the fading Circle & ask hint
 }) {
@@ -149,16 +153,15 @@ export function PageBlock({
     setError(null);
   }
 
-  // Ask streams EXPLAIN with the typed question; Explain streams it without
-  // one. asked is the question to run: null runs Explain.
-  async function ask(withQuestion: boolean) {
+  // Ask streams EXPLAIN with the typed question. asked is the question to run.
+  async function ask() {
     const q = question.trim();
-    if (withQuestion && !q) return;
-    await run(withQuestion ? q : null);
+    if (!q) return;
+    await run(q);
   }
   // replaceNoteId: the annotation this run regenerates. It goes only once the
   // new one is stored, so a failed run never loses what stands (SPEC.md §4).
-  async function run(asked: string | null, replaceNoteId?: string | null) {
+  async function run(asked: string, replaceNoteId?: string | null) {
     if (!pending || busy !== null) return;
     setBusy("ask");
     setError(null);
@@ -177,7 +180,7 @@ export function PageBlock({
           page: {
             blockId,
             region: pending.region,
-            question: asked ?? undefined,
+            question: asked,
           },
         }),
       });
@@ -271,9 +274,12 @@ export function PageBlock({
         <img
           src={`/api/documents/${documentId}/page/${blockId}`}
           alt=""
+          width={size?.width}
+          height={size?.height}
           loading="lazy"
+          decoding="async"
           draggable={false}
-          className="block w-full select-none"
+          className="block h-auto w-full select-none"
         />
         {/* Draw layer: the drag draws the loop; a plain click opens the mark
             under it. Viewers draw nothing; their click still opens marks. */}
@@ -387,7 +393,7 @@ export function PageBlock({
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey) {
                     e.preventDefault();
-                    void ask(question.trim().length > 0);
+                    void ask();
                   }
                 }}
                 placeholder={t("panes.pageAskPlaceholder")}
@@ -409,22 +415,13 @@ export function PageBlock({
             {answer === null ? (
               <div className="flex items-center gap-1.5">
                 <button
-                  onClick={() => void ask(true)}
+                  onClick={() => void ask()}
                   data-track="page-ask"
                   disabled={busy !== null || question.trim().length === 0}
                   data-tip={t("panes.pageAskTitle")}
                   className={buttonClass}
                 >
                   {t("panes.pageAsk")}
-                </button>
-                <button
-                  onClick={() => void ask(false)}
-                  data-track="page-explain"
-                  disabled={busy !== null}
-                  data-tip={t("panes.pageExplainTitle")}
-                  className={quietButtonClass}
-                >
-                  {t("panes.pageExplain")}
                 </button>
                 <button
                   onClick={() => void comment()}

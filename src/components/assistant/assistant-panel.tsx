@@ -10,21 +10,42 @@ import {
   FILE_MAX_BYTES,
   MAX_FILES_PER_MESSAGE,
   MAX_IMAGES_PER_MESSAGE,
+  MEDIA_MAX_BYTES,
   TURN_MAX_CHARS,
   type ConversationTurn,
 } from "@/lib/assistant/attachments";
 import { splitStreamError } from "@/lib/derive/config";
+import type { DriveConfig } from "@/lib/drive/config";
+import { pickDriveFiles } from "@/lib/drive/picker-client";
+import { DRIVE_ASSISTANT_MIME_TYPES, type DrivePickedFile } from "@/lib/drive/types";
 import { useImeGuard } from "@/lib/ime";
 import { imageUrl, refuseImage, uploadImage } from "@/lib/images";
+import type { Person } from "@/lib/person";
 import type { SummaryDepth, SummaryLevels } from "@/lib/types";
+import { UPLOAD_CHUNK_BYTES } from "@/lib/video/types";
+import {
+  ANSWER_MARK,
+  AnswerTint,
+  AnswerToolbar,
+  CommentBox,
+  CommentList,
+  QuoteChip,
+  quoteMessage,
+  SideChatChips,
+  SideChatHeader,
+  useAnswerSelection,
+  type AnswerComment,
+} from "@/components/assistant/answer-tools";
+import { ThinkingChips, useThinking } from "@/components/assistant/thinking-chips";
 import { useCollab } from "@/components/collab/collab-context";
 import { useT } from "@/components/lang-provider";
-import { PaperclipIcon, StopIcon } from "@/components/icons";
+import { DriveIcon, PaperclipIcon, StopIcon } from "@/components/icons";
 import type { TFunc, TKey } from "@/lib/i18n/dictionaries";
 import { Markdown } from "@/components/markdown";
+import { RatingButtons } from "@/components/rating-buttons";
 import { LoadingDots, ThinkingIndicator } from "@/components/thinking";
 
-type Scope = "notebook" | "corpus";
+type Scope = "document" | "notebook";
 type Task = "contradictions" | "gaps" | "unsourced";
 type Issue = { noteIds: string[]; issue: string; explanation: string };
 
@@ -46,7 +67,27 @@ type Turn = {
   images?: { id: string; url: string; name: string }[];
   files?: { name: string; text?: string }[];
 };
-type Thread = { turns: Turn[]; conversationNoteId: string | null };
+// One side chat of this conversation (SPEC.md §7): the quote it was started
+// from and its own turns. noteId = the note it saves on, null until the
+// first answer lands; key holds it together before then.
+type SideChat = { key: string; noteId: string | null; quote: string; turns: Turn[] };
+type Thread = {
+  turns: Turn[];
+  conversationNoteId: string | null;
+  sideChats: SideChat[];
+  // The side chat on screen, by key; null = the conversation itself.
+  openKey: string | null;
+};
+
+// One message as it is sent: the text and the attachments read for it.
+type OutgoingMessage = {
+  content: string;
+  images: { id: string; url: string; name: string }[];
+  files: { name: string; text: string }[];
+};
+// A message queued while an answer runs (SPEC.md §7): it sends, in order,
+// once the answer lands. The key removes it from the queue.
+type QueuedMessage = OutgoingMessage & { key: string };
 
 // The conversation survives a tab switch and a document switch within the
 // same tab (both remount the panel, so the thread lives outside it, per
@@ -86,11 +127,11 @@ function subscribeWeb(onChange: () => void) {
 }
 
 // Two scopes, both reading the digest (SPEC.md §7). Scope ids stay as wire
-// values; the labels say Corpus for this binding of documents and Corpora for
-// all of them. Tables hold dictionary keys, translated at render.
+// values: document = This page (the open document whole), notebook = Project
+// (this project whole). Tables hold dictionary keys, translated at render.
 const SCOPES: { id: Scope; labelKey: TKey; hintKey: TKey }[] = [
-  { id: "notebook", labelKey: "assistant.scopeCorpusLabel", hintKey: "assistant.scopeCorpusHint" },
-  { id: "corpus", labelKey: "assistant.scopeCorporaLabel", hintKey: "assistant.scopeCorporaHint" },
+  { id: "document", labelKey: "assistant.scopeDocumentLabel", hintKey: "assistant.scopeDocumentHint" },
+  { id: "notebook", labelKey: "assistant.scopeProjectLabel", hintKey: "assistant.scopeProjectHint" },
 ];
 
 // Recommended functions for the open document, in this order. Insiders
@@ -137,6 +178,55 @@ async function attachToText(file: File, t: TFunc): Promise<string> {
   return json.text;
 }
 
+// A video or audio file becomes its transcript on the server (SPEC.md §7).
+// The bytes stage in chunks first, the upload's own path (a request body caps
+// at about 4.5 MB), then POST /api/assistant/attach-media transcribes them.
+// Throws with the server's plain reason.
+async function attachMediaToText(file: File, t: TFunc): Promise<string> {
+  const uploadId = crypto.randomUUID();
+  for (let sent = 0; sent < file.size; sent += UPLOAD_CHUNK_BYTES) {
+    const index = Math.floor(sent / UPLOAD_CHUNK_BYTES);
+    const res = await fetch(`/api/uploads?uploadId=${uploadId}&index=${index}`, {
+      method: "POST",
+      body: file.slice(sent, sent + UPLOAD_CHUNK_BYTES),
+    });
+    if (!res.ok) {
+      const detail = (await res.json().catch(() => null)) as { error?: string } | null;
+      throw new Error(detail?.error ?? t("assistant.requestFailedStatus", { status: res.status }));
+    }
+  }
+  const res = await fetch("/api/assistant/attach-media", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ uploadId, name: capFileName(file.name), mimeType: file.type || undefined }),
+  });
+  const json = (await res.json().catch(() => null)) as { text?: string; error?: string } | null;
+  if (!res.ok || typeof json?.text !== "string") {
+    throw new Error(json?.error ?? t("assistant.requestFailedStatus", { status: res.status }));
+  }
+  return json.text;
+}
+
+// A Google Drive file becomes an attachment on the server (SPEC.md §7, §14):
+// text for a Doc, Sheet, Slide, Drawing, PDF, or text file, a transcript for
+// video or audio, a stored image for an image. Throws with the server's
+// plain reason.
+type DriveAttached =
+  | { kind: "file"; name: string; text: string }
+  | { kind: "image"; name: string; id: string; url: string };
+async function attachDriveFile(file: DrivePickedFile, token: string, t: TFunc): Promise<DriveAttached> {
+  const res = await fetch("/api/assistant/attach-drive", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ fileId: file.id, name: file.name, mimeType: file.mimeType }),
+  });
+  const json = (await res.json().catch(() => null)) as (DriveAttached & { error?: string }) | null;
+  if (!res.ok || !json || (json.kind !== "file" && json.kind !== "image")) {
+    throw new Error(json?.error ?? t("assistant.requestFailedStatus", { status: res.status }));
+  }
+  return json;
+}
+
 function hasFiles(e: React.DragEvent): boolean {
   return e.dataTransfer?.types.includes("Files") ?? false;
 }
@@ -148,17 +238,25 @@ export function AssistantPanel({
   notebookId,
   documentId,
   summaries,
+  drive,
 }: {
   notebookId: string;
   documentId: string | null;
   summaries: SummaryLevels;
+  // Google Drive (SPEC.md §14); null = not configured, no Drive button.
+  drive: DriveConfig | null;
 }) {
   const router = useRouter();
   const t = useT();
   const ime = useImeGuard();
-  const { premium } = useCollab();
-  const [scope, setScope] = useState<Scope>("notebook");
+  const { premium, myId, people } = useCollab();
+  // This page while a document is open, else Project: the panel remounts on
+  // every document switch, so the default follows the open document.
+  const [scope, setScope] = useState<Scope>(documentId ? "document" : "notebook");
   const web = useSyncExternalStore(subscribeWeb, readWeb, () => true);
+  // Fast Thinking or Deep Thinking (SPEC.md §7): one choice for every
+  // assistant surface, remembered in this browser.
+  const thinking = useThinking();
   const [question, setQuestion] = useState("");
   // The conversation (SPEC.md §7, §21): the first question opens it; every
   // turn after continues it. Empty = the panel's first layout. The note it
@@ -169,12 +267,65 @@ export function AssistantPanel({
   const [conversationNoteId, setConversationNoteId] = useState<string | null>(
     () => cached?.conversationNoteId ?? null,
   );
+  // The side chats of this conversation, and the one on screen (SPEC.md §7).
+  const [sideChats, setSideChatsState] = useState<SideChat[]>(() => cached?.sideChats ?? []);
+  const [openKey, setOpenKeyState] = useState<string | null>(() => cached?.openKey ?? null);
   const [hydrated, setHydrated] = useState(() => cached !== undefined);
+  // The thread as the running send() reads it: state is stale inside its own
+  // closure, and a queued message sends from there.
+  const turnsRef = useRef<Turn[]>(turns);
+  const sideChatsRef = useRef<SideChat[]>(sideChats);
+  const openKeyRef = useRef<string | null>(openKey);
+  const noteIdRef = useRef<string | null>(conversationNoteId);
+  function cacheThread() {
+    threads.set(notebookId, {
+      turns: turnsRef.current,
+      conversationNoteId: noteIdRef.current,
+      sideChats: sideChatsRef.current,
+      openKey: openKeyRef.current,
+    });
+  }
+  function setSideChats(update: (list: SideChat[]) => SideChat[]) {
+    sideChatsRef.current = update(sideChatsRef.current);
+    setSideChatsState(sideChatsRef.current);
+    cacheThread();
+  }
+  function setOpenKey(key: string | null) {
+    openKeyRef.current = key;
+    setOpenKeyState(key);
+    cacheThread();
+  }
+  function setNoteId(id: string | null) {
+    noteIdRef.current = id;
+    setConversationNoteId(id);
+    cacheThread();
+  }
+  // The open thread: the side chat on screen, or the conversation itself.
+  const openSideChat = sideChats.find((s) => s.key === openKey) ?? null;
+  const activeTurns = openSideChat ? openSideChat.turns : turns;
+  // The note the open thread saves on: what a comment is written under.
+  const activeNoteId = openSideChat ? openSideChat.noteId : conversationNoteId;
+  // Highlighting an answer (SPEC.md §7): the quote the next message carries,
+  // the quote a comment is being written on, and this thread's comments.
+  const { selection, tintRects, hold: holdSelection, clear: clearSelection } = useAnswerSelection();
+  const [quote, setQuote] = useState<string | null>(null);
+  const [commentQuote, setCommentQuote] = useState<string | null>(null);
+  const [comments, setComments] = useState<AnswerComment[]>([]);
+  const [commentPeople, setCommentPeople] = useState<Record<string, Person>>({});
+  const [commentBusy, setCommentBusy] = useState(false);
+  /** Update the thread on screen — the side chat's turns, or the conversation's. */
   function setTurns(update: (turns: Turn[]) => Turn[]) {
+    if (openKeyRef.current) {
+      const key = openKeyRef.current;
+      setSideChats((list) =>
+        list.map((s) => (s.key === key ? { ...s, turns: update(s.turns) } : s)),
+      );
+      return;
+    }
     setTurnsState((prev) => {
-      const next = update(prev);
-      threads.set(notebookId, { turns: next, conversationNoteId });
-      return next;
+      turnsRef.current = update(prev);
+      cacheThread();
+      return turnsRef.current;
     });
   }
   // The panel is keyed by document, so it remounts on every document switch;
@@ -186,24 +337,39 @@ export function AssistantPanel({
     void (async () => {
       try {
         const res = await fetch(`/api/assistant/conversation?notebookId=${encodeURIComponent(notebookId)}`);
+        type StoredTurn = {
+          role: "user" | "assistant";
+          content: string;
+          images?: { id: string; name: string }[];
+          files?: { name: string }[];
+        };
         const json = (await res.json().catch(() => null)) as {
           conversationNoteId?: string | null;
-          turns?: {
-            role: "user" | "assistant";
-            content: string;
-            images?: { id: string; name: string }[];
-            files?: { name: string }[];
-          }[];
+          turns?: StoredTurn[];
+          sideChats?: { id: string; quote: string; turns: StoredTurn[] }[];
         } | null;
         if (cancelled || !res.ok || !json) return;
-        const loaded: Turn[] = (json.turns ?? []).map((turn) => ({
-          role: turn.role,
-          content: turn.content,
-          images: turn.images?.map((img) => ({ id: img.id, name: img.name, url: imageUrl(img.id) })),
-          files: turn.files,
+        const toTurns = (stored: StoredTurn[]): Turn[] =>
+          stored.map((turn) => ({
+            role: turn.role,
+            content: turn.content,
+            images: turn.images?.map((img) => ({ id: img.id, name: img.name, url: imageUrl(img.id) })),
+            files: turn.files,
+          }));
+        const loaded = toTurns(json.turns ?? []);
+        const loadedSideChats: SideChat[] = (json.sideChats ?? []).map((s) => ({
+          key: s.id,
+          noteId: s.id,
+          quote: s.quote,
+          turns: toTurns(s.turns),
         }));
-        threads.set(notebookId, { turns: loaded, conversationNoteId: json.conversationNoteId ?? null });
+        turnsRef.current = loaded;
+        sideChatsRef.current = loadedSideChats;
+        noteIdRef.current = json.conversationNoteId ?? null;
+        openKeyRef.current = null;
+        cacheThread();
         setTurnsState(loaded);
+        setSideChatsState(loadedSideChats);
         setConversationNoteId(json.conversationNoteId ?? null);
       } finally {
         if (!cancelled) setHydrated(true);
@@ -212,8 +378,24 @@ export function AssistantPanel({
     return () => {
       cancelled = true;
     };
+    // One load per project per tab: cacheThread writes the refs it is given,
+    // so it never needs to re-run this.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [notebookId]);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
+  // Messages sent while an answer runs wait here and go out in order once it
+  // lands (SPEC.md §7). The ref mirrors the state for the drain at the end of
+  // a run, which reads the queue as it is then, not as it was when the run
+  // started.
+  const [queue, setQueueState] = useState<QueuedMessage[]>([]);
+  const queueRef = useRef<QueuedMessage[]>([]);
+  function setQueue(update: (list: QueuedMessage[]) => QueuedMessage[]) {
+    queueRef.current = update(queueRef.current);
+    setQueueState(queueRef.current);
+  }
+  // Whether a run is on, as the drain reads it: the state is stale inside
+  // the run's own closure.
+  const busyRef = useRef(false);
   const [issues, setIssues] = useState<Issue[] | null>(null);
   const [taskRun, setTaskRun] = useState<Task | null>(null);
   const [busy, setBusy] = useState(false);
@@ -226,6 +408,8 @@ export function AssistantPanel({
   // The running ask() or task, so Stop can abort it — whatever streamed in
   // already stays on screen, the read just stops.
   const runAbortRef = useRef<AbortController | null>(null);
+  // Whether the thread sticks to its newest turn (the scroll effect below).
+  const stickRef = useRef(true);
   function stopRun() {
     runAbortRef.current?.abort();
     runAbortRef.current = null;
@@ -256,25 +440,130 @@ export function AssistantPanel({
         body: JSON.stringify({ notebookId, conversationNoteId }),
       }).catch(() => {});
     }
-    setTurns(() => []);
+    turnsRef.current = [];
+    sideChatsRef.current = [];
+    openKeyRef.current = null;
+    noteIdRef.current = null;
+    setTurnsState([]);
+    setSideChatsState([]);
+    setOpenKeyState(null);
     setConversationNoteId(null);
-    threads.set(notebookId, { turns: [], conversationNoteId: null });
+    setQuote(null);
+    setCommentQuote(null);
+    setComments([]);
+    clearSelection();
+    cacheThread();
     setAttachments([]);
+    setQueue(() => []);
     setQuestion("");
+  }
+
+  // The comments under the open thread, reloaded when the thread changes.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      if (!activeNoteId) {
+        setComments([]);
+        return;
+      }
+      try {
+        const res = await fetch(`/api/replies?noteId=${encodeURIComponent(activeNoteId)}`);
+        const json = (await res.json().catch(() => null)) as {
+          replies?: AnswerComment[];
+          people?: Record<string, Person>;
+        } | null;
+        if (cancelled || !res.ok || !json) return;
+        setComments(json.replies ?? []);
+        setCommentPeople(json.people ?? {});
+      } catch {
+        // Offline: the thread reads the same, with no comments under it.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeNoteId]);
+
+  // The selection's three actions (SPEC.md §7). The browser's own selection
+  // goes — the box that opens takes focus — and the words stay marked by the
+  // tint until the reader is done with them.
+  function takeSelection(): string {
+    return holdSelection();
+  }
+  // Start side chat: a conversation of its own off these words, kept with
+  // this conversation and out of assistant history.
+  function startSideChat() {
+    const text = takeSelection();
+    if (!text || !conversationNoteId) return;
+    const key = `side-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    setSideChats((list) => [...list, { key, noteId: null, quote: text, turns: [] }]);
+    setOpenKey(key);
+    setQuote(text);
+    setCommentQuote(null);
+    stickRef.current = true;
+  }
+  // Ask about this: the words ride into the next message of this thread.
+  function askAboutThis() {
+    const text = takeSelection();
+    if (!text) return;
+    setQuote(text);
+    setCommentQuote(null);
+  }
+  function openComment() {
+    const text = takeSelection();
+    if (!text || !activeNoteId) return;
+    setCommentQuote(text);
+  }
+  async function postComment(text: string) {
+    if (!activeNoteId || commentBusy) return;
+    setCommentBusy(true);
+    try {
+      const res = await fetch("/api/replies", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          noteId: activeNoteId,
+          content: quoteMessage(commentQuote ?? "", text),
+        }),
+      });
+      const json = (await res.json().catch(() => null)) as (AnswerComment & { error?: string }) | null;
+      if (!res.ok || !json?.id) throw new Error(json?.error ?? t("assistant.commentFailed"));
+      setComments((list) => [...list, json]);
+      setCommentQuote(null);
+      clearSelection();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t("assistant.commentFailed"));
+    } finally {
+      setCommentBusy(false);
+    }
+  }
+  async function deleteComment(id: string) {
+    setComments((list) => list.filter((c) => c.id !== id));
+    try {
+      await fetch(`/api/replies/${id}`, { method: "DELETE" });
+    } catch {
+      // Offline: the row is gone on screen and stays on the server; the next
+      // load of the thread shows it again.
+    }
   }
 
   // A completed turn saves (SPEC.md §21): the first one creates the note,
   // every one after updates it in place. Fire-and-forget — a save that fails
   // costs the reader nothing they would notice this session; the thread
   // stays on screen either way, from the threads cache above.
-  async function saveConversation(savedTurns: Turn[]) {
+  async function saveConversation(savedTurns: Turn[], sideChatKey: string | null) {
+    const side = sideChatKey ? sideChatsRef.current.find((s) => s.key === sideChatKey) : null;
+    if (sideChatKey && !side) return;
     try {
       const res = await fetch("/api/assistant/conversation", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           notebookId,
-          conversationNoteId,
+          conversationNoteId: side ? side.noteId : noteIdRef.current,
+          // A side chat belongs to the conversation it was started from.
+          sideChatOf: side ? noteIdRef.current : undefined,
+          quote: side ? side.quote : undefined,
           turns: savedTurns.map((turn) => ({
             role: turn.role,
             content: turn.content.slice(0, TURN_MAX_CHARS),
@@ -285,8 +574,12 @@ export function AssistantPanel({
       });
       const json = (await res.json().catch(() => null)) as { conversationNoteId?: string } | null;
       if (!res.ok || !json?.conversationNoteId) return;
-      setConversationNoteId(json.conversationNoteId);
-      threads.set(notebookId, { turns: savedTurns, conversationNoteId: json.conversationNoteId });
+      if (side) {
+        const noteId = json.conversationNoteId;
+        setSideChats((list) => list.map((s) => (s.key === side.key ? { ...s, noteId } : s)));
+        return;
+      }
+      setNoteId(json.conversationNoteId);
     } catch {
       // Offline, or the request otherwise never landed — the thread is still
       // right here on screen; the next completed turn tries again.
@@ -390,6 +683,12 @@ export function AssistantPanel({
           continue;
         }
         imageCount++;
+      } else if (kind === "media") {
+        if (file.size > MEDIA_MAX_BYTES) {
+          setError(t("api.videoTooLarge"));
+          continue;
+        }
+        fileCount++;
       } else {
         if (file.size > FILE_MAX_BYTES) {
           setError(t("api.attachmentTooLarge"));
@@ -403,14 +702,24 @@ export function AssistantPanel({
     }
   }
 
-  async function readAttachment(file: File, kind: "image" | "pdf" | "text", key: string, name: string) {
+  async function readAttachment(
+    file: File,
+    kind: "image" | "pdf" | "text" | "media",
+    key: string,
+    name: string,
+  ) {
     try {
       let done: Attachment;
       if (kind === "image") {
         const stored = await uploadImage(file);
         done = { key, kind: "image", name, id: stored.id, url: stored.url };
       } else {
-        const text = kind === "pdf" ? await attachToText(file, t) : capFileText(await file.text());
+        const text =
+          kind === "pdf"
+            ? await attachToText(file, t)
+            : kind === "media"
+              ? await attachMediaToText(file, t)
+              : capFileText(await file.text());
         if (!text.trim()) throw new Error(t("api.attachmentEmpty"));
         done = { key, kind: "file", name, text };
       }
@@ -421,25 +730,122 @@ export function AssistantPanel({
     }
   }
 
+  // Add from Google Drive (SPEC.md §14): the picker opens with the
+  // assistant's own filter; every picked file becomes an attachment on the
+  // server, one pending chip each while it does.
+  async function addDriveFiles() {
+    if (!drive || busy) return;
+    setError(null);
+    let token: string;
+    let picked: DrivePickedFile[];
+    try {
+      const result = await pickDriveFiles({
+        clientId: drive.clientId,
+        apiKey: drive.apiKey,
+        linked: drive.linked,
+        access: drive.access,
+        mimeTypes: DRIVE_ASSISTANT_MIME_TYPES,
+      });
+      token = result.token;
+      picked = result.files;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t("panes.driveAuthFailed"));
+      return;
+    }
+    if (picked.length === 0) return; // closed the picker without choosing a file
+    let imageCount = attachments.filter((a) => a.kind === "image").length;
+    let fileCount = attachments.filter((a) => a.kind !== "image").length;
+    for (const file of picked) {
+      const image = file.mimeType.startsWith("image/");
+      if (image ? imageCount >= MAX_IMAGES_PER_MESSAGE : fileCount >= MAX_FILES_PER_MESSAGE) {
+        setError(
+          t("assistant.attachmentsMax", {
+            images: String(MAX_IMAGES_PER_MESSAGE),
+            files: String(MAX_FILES_PER_MESSAGE),
+          }),
+        );
+        break;
+      }
+      if (image) imageCount++;
+      else fileCount++;
+      const key = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      const name = capFileName(file.name);
+      setAttachments((list) => [...list, { key, kind: "pending", name, pending: true }]);
+      void (async () => {
+        try {
+          const done = await attachDriveFile(file, token, t);
+          const chip: Attachment =
+            done.kind === "image"
+              ? { key, kind: "image", name: done.name, id: done.id, url: done.url }
+              : { key, kind: "file", name: done.name, text: done.text };
+          setAttachments((list) => list.map((a) => (a.key === key ? chip : a)));
+        } catch (err) {
+          setAttachments((list) => list.filter((a) => a.key !== key));
+          setError(err instanceof Error ? err.message : t("common.requestFailed"));
+        }
+      })();
+    }
+  }
+
   function removeAttachment(key: string) {
     setAttachments((list) => list.filter((a) => a.key !== key));
   }
 
-  const reading = attachments.some((a) => a.pending);
-  const canSend = !busy && !reading && (question.trim() !== "" || attachments.length > 0);
+  function removeQueued(key: string) {
+    setQueue((list) => list.filter((m) => m.key !== key));
+  }
 
-  async function ask() {
-    const q = question.trim();
-    if (!canSend) return;
+  const reading = attachments.some((a) => a.pending);
+  // The composer sends when it holds a message and nothing is still being
+  // read; while an answer runs, it queues instead (SPEC.md §7).
+  const composed = !reading && (question.trim() !== "" || attachments.length > 0);
+  const canSend = !busy && composed;
+  const canQueue = busy && composed;
+
+  // The quote goes, and the words it marked stop being marked.
+  function dropQuote() {
+    setQuote(null);
+    clearSelection();
+  }
+
+  // Ask: the composer's message goes out now, or into the queue while an
+  // answer runs. The composer clears either way.
+  function ask() {
+    if (!composed) return;
+    const message: OutgoingMessage = {
+      content: quote ? quoteMessage(quote, question) : question.trim(),
+      images: attachments.flatMap((a) =>
+        a.kind === "image" ? [{ id: a.id, url: a.url, name: a.name }] : [],
+      ),
+      files: attachments.flatMap((a) => (a.kind === "file" ? [{ name: a.name, text: a.text }] : [])),
+    };
+    setQuestion("");
+    if (quote) dropQuote();
+    setAttachments([]);
+    if (busy) {
+      setQueue((list) => [...list, { ...message, key: `${Date.now()}-${Math.random().toString(36).slice(2)}` }]);
+      return;
+    }
+    void send(message);
+  }
+
+  async function send(message: OutgoingMessage) {
+    if (busyRef.current) return;
+    busyRef.current = true;
+    const q = message.content;
+    const { images, files } = message;
     reset();
     setBusy(true);
-    const images = attachments.flatMap((a) =>
-      a.kind === "image" ? [{ id: a.id, url: a.url, name: a.name }] : [],
-    );
-    const files = attachments.flatMap((a) => (a.kind === "file" ? [{ name: a.name, text: a.text }] : []));
+    // The thread this message belongs to, read from the refs: a queued
+    // message sends from inside the previous run's closure, where the state
+    // is the state of the run before it.
+    const sideChatKey = openKeyRef.current;
+    const threadTurns = sideChatKey
+      ? (sideChatsRef.current.find((s) => s.key === sideChatKey)?.turns ?? [])
+      : turnsRef.current;
     // The turns so far, as the route replays them: a file by its name alone
     // (its answer already read the text), an image by its id.
-    const history: ConversationTurn[] = turns.map((turn) =>
+    const history: ConversationTurn[] = threadTurns.map((turn) =>
       turn.role === "user"
         ? {
             role: "user",
@@ -451,8 +857,6 @@ export function AssistantPanel({
     );
     const userTurn: Turn = { role: "user", content: q, images, files };
     setTurns((prev) => [...prev, userTurn, { role: "assistant", content: "" }]);
-    setQuestion("");
-    setAttachments([]);
     const setAnswer = (content: string) =>
       setTurns((prev) => {
         const last = prev[prev.length - 1];
@@ -465,9 +869,11 @@ export function AssistantPanel({
       const body = {
         notebookId,
         scope,
+        documentId: scope === "document" ? documentId : undefined,
         task: "ask",
         question: q,
         web,
+        thinking,
         history,
         images: images.map((img) => ({ id: img.id, name: img.name })),
         files,
@@ -500,7 +906,7 @@ export function AssistantPanel({
         throw new Error(streamError ?? t("assistant.emptyResponse"));
       }
       setAnswer(text);
-      void saveConversation([...turns, userTurn, { role: "assistant", content: text }]);
+      void saveConversation([...threadTurns, userTurn, { role: "assistant", content: text }], sideChatKey);
     } catch (err) {
       // Stopped, not failed: whatever streamed in already stays on screen.
       if (controller.signal.aborted) return;
@@ -514,6 +920,15 @@ export function AssistantPanel({
         const last = prev[prev.length - 1];
         return last && last.role === "assistant" && !last.content ? prev.slice(0, -1) : prev;
       });
+      busyRef.current = false;
+      // The queue drains one message per finished answer, in order — after a
+      // Stop too: a queued message was sent to go out next.
+      const [next, ...rest] = queueRef.current;
+      if (next) {
+        setQueue(() => rest);
+        stickRef.current = true;
+        void send(next);
+      }
     }
   }
 
@@ -529,7 +944,7 @@ export function AssistantPanel({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         signal: controller.signal,
-        body: JSON.stringify({ notebookId, scope: "notebook", task }),
+        body: JSON.stringify({ notebookId, scope: "notebook", task, thinking }),
       });
       const json = (await res.json().catch(() => null)) as
         | { issues?: Issue[]; error?: string }
@@ -555,7 +970,9 @@ export function AssistantPanel({
   const recommendedRow = RECOMMENDED.find((r) => r.depth === recDepth);
   const recommendedLabel = recommendedRow ? t(recommendedRow.labelKey) : "";
   const scopeRow = SCOPES.find((s) => s.id === scope);
-  const inConversation = turns.length > 0;
+  // A side chat is open on top of a conversation: both are a conversation on
+  // screen, so the first layout never returns while one is open.
+  const inConversation = turns.length > 0 || openSideChat !== null;
 
   // The composer's box grows with the message, up to six lines.
   const boxRef = useRef<HTMLTextAreaElement>(null);
@@ -569,12 +986,11 @@ export function AssistantPanel({
   // The thread follows the newest turn while the reader is at its foot; a
   // reader who scrolled up to read stays where they are.
   const threadRef = useRef<HTMLDivElement>(null);
-  const stickRef = useRef(true);
   const lastContent = turns[turns.length - 1]?.content ?? "";
   useEffect(() => {
     const el = threadRef.current;
     if (el && stickRef.current) el.scrollTop = el.scrollHeight;
-  }, [turns.length, lastContent, error]);
+  }, [turns.length, lastContent, error, queue.length]);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [over, setOver] = useState(false);
@@ -586,7 +1002,10 @@ export function AssistantPanel({
           key={s.id}
           onClick={() => setScope(s.id)}
           data-track={`assistant-scope:${s.id}`}
-          data-tip={t(s.hintKey)}
+          // This page needs an open document; without one the pill stays,
+          // disabled, and says why.
+          disabled={s.id === "document" && !documentId}
+          data-tip={t(s.id === "document" && !documentId ? "assistant.scopeDocumentNoDocument" : s.hintKey)}
           className={`rounded-full px-3 py-1 text-xs font-semibold disabled:opacity-40 ${
             scope === s.id
               ? "bg-ink text-paper"
@@ -596,6 +1015,7 @@ export function AssistantPanel({
           {t(s.labelKey)}
         </button>
       ))}
+      <ThinkingChips />
       <button
         onClick={() => writeWeb(!web)}
         data-track={`assistant-web:${web ? "off" : "on"}`}
@@ -625,7 +1045,7 @@ export function AssistantPanel({
       onSubmit={(e) => {
         e.preventDefault();
         stickRef.current = true;
-        void ask();
+        ask();
       }}
       onDragOver={(e) => {
         if (!hasFiles(e)) return;
@@ -687,6 +1107,7 @@ export function AssistantPanel({
           )}
         </div>
       )}
+      {quote && <QuoteChip quote={quote} onClear={dropQuote} className="mb-1.5" />}
       <textarea
         ref={boxRef}
         value={question}
@@ -698,7 +1119,7 @@ export function AssistantPanel({
           e.preventDefault();
           if (ime.isImeEnter(e)) return;
           stickRef.current = true;
-          void ask();
+          ask();
         }}
         onPaste={(e) => {
           const files = [...(e.clipboardData?.files ?? [])];
@@ -707,11 +1128,15 @@ export function AssistantPanel({
           void addFiles(files);
         }}
         placeholder={t(
-          inConversation
-            ? "assistant.followUpPlaceholder"
-            : scope === "corpus"
-              ? "assistant.askPlaceholderCorpora"
-              : "assistant.askPlaceholderCorpus",
+          busy
+            ? "assistant.queuePlaceholder"
+            : openSideChat
+              ? "assistant.sideChatPlaceholder"
+              : inConversation
+                ? "assistant.followUpPlaceholder"
+                : scope === "document"
+                  ? "assistant.askPlaceholderDocument"
+                  : "assistant.askPlaceholderProject",
         )}
         className="block max-h-40 w-full resize-none bg-transparent px-2 py-1.5 text-sm outline-none placeholder:text-sand-500"
       />
@@ -732,27 +1157,44 @@ export function AssistantPanel({
           type="button"
           onClick={() => fileInputRef.current?.click()}
           data-track="assistant-attach"
-          disabled={busy}
           aria-label={t("assistant.attach")}
           data-tip={t("assistant.attachTitle")}
           className="flex size-8 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40"
         >
           <PaperclipIcon size={15} />
         </button>
+        {drive && (
+          <button
+            type="button"
+            onClick={() => void addDriveFiles()}
+            data-track="assistant-attach-drive"
+            aria-label={t("assistant.attachDrive")}
+            data-tip={t("assistant.attachDriveTitle")}
+            className="flex size-8 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40"
+          >
+            <DriveIcon size={15} />
+          </button>
+        )}
+        {/* While an answer runs the button is Stop, or Queue once a message
+            is composed; the thinking row in the thread keeps its own Stop. */}
         <button
           type="submit"
-          data-track={`assistant-ask:${scope}`}
+          data-track={canQueue ? "assistant-queue" : `assistant-ask:${scope}`}
           onClick={(e) => {
-            if (!busy) return;
+            if (!busy || canQueue) return;
             e.preventDefault();
             stopRun();
           }}
           disabled={!busy && !canSend}
-          data-tip={busy ? t("assistant.stopAsk") : undefined}
-          aria-label={busy ? t("assistant.stopAsk") : undefined}
+          data-tip={busy ? t(canQueue ? "assistant.queueTitle" : "assistant.stopAsk") : undefined}
+          aria-label={busy && !canQueue ? t("assistant.stopAsk") : undefined}
           className="ml-auto rounded-full bg-clay px-4 py-1.5 text-sm font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
         >
-          {busy ? <StopIcon size={13} /> : t(inConversation ? "assistant.send" : "assistant.ask")}
+          {busy && !canQueue ? (
+            <StopIcon size={13} />
+          ) : (
+            t(canQueue ? "assistant.queue" : inConversation ? "assistant.send" : "assistant.ask")
+          )}
         </button>
       </div>
     </form>
@@ -781,7 +1223,7 @@ export function AssistantPanel({
           }}
           className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain"
         >
-          {turns.map((turn, i) =>
+          {activeTurns.map((turn, i) =>
             turn.role === "user" ? (
               <div key={i} className="ml-8 flex flex-col items-end gap-1.5">
                 {turn.images && turn.images.length > 0 && (
@@ -819,16 +1261,110 @@ export function AssistantPanel({
             ) : (
               <div key={i} className="rounded-2xl bg-card p-4 text-sm shadow-soft">
                 {turn.content ? (
-                  <Markdown>{turn.content}</Markdown>
+                  <>
+                    {/* Highlighting the answer offers the side chat, the
+                        quoted question, and the comment (SPEC.md §7). */}
+                    <div {...{ [ANSWER_MARK]: "" }}>
+                      <Markdown>{turn.content}</Markdown>
+                    </div>
+                    {/* The rating (SPEC.md §25): the question it answered and
+                        the answer, once the answer is whole. */}
+                    {!(busy && i === activeTurns.length - 1) && (
+                      <RatingButtons
+                        tool="assistant"
+                        input={activeTurns[i - 1]?.content ?? ""}
+                        output={turn.content}
+                        notebookId={notebookId}
+                        documentId={documentId ?? undefined}
+                        className="mt-2"
+                      />
+                    )}
+                  </>
                 ) : (
                   <ThinkingIndicator className="text-xs" onStop={stopRun} />
                 )}
               </div>
             ),
           )}
+          {queue.length > 0 && (
+            <div className="flex flex-col items-end gap-1.5">
+              <span className="text-[11px] font-bold tracking-[0.08em] text-sand-500 uppercase">
+                {t("assistant.queued", { n: String(queue.length) })}
+              </span>
+              {queue.map((m) => (
+                <div key={m.key} className="ml-8 flex max-w-full items-start gap-1.5">
+                  <div className="flex flex-col items-end gap-1 opacity-60">
+                    {(m.images.length > 0 || m.files.length > 0) && (
+                      <div className="flex flex-wrap justify-end gap-1">
+                        {m.images.map((img) => (
+                          <span key={img.id} className="rounded-full bg-sand-100 px-2.5 py-0.5 text-xs text-sand-700">
+                            {img.name}
+                          </span>
+                        ))}
+                        {m.files.map((f, j) => (
+                          <span key={j} className="inline-flex items-center gap-1 rounded-full bg-sand-100 px-2.5 py-0.5 text-xs text-sand-700">
+                            <PaperclipIcon size={11} />
+                            {f.name}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    {m.content && (
+                      <p className="rounded-2xl bg-clay-100 px-3.5 py-2 text-[13.5px] whitespace-pre-wrap text-clay-800">
+                        {m.content}
+                      </p>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => removeQueued(m.key)}
+                    data-track="assistant-queue-remove"
+                    aria-label={t("assistant.removeQueued")}
+                    data-tip={t("assistant.removeQueued")}
+                    className="mt-1.5 text-sand-500 hover:text-clay-800"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
           {error && <p className="text-sm text-red-600">{error}</p>}
+          <CommentList
+            comments={comments}
+            people={{ ...people, ...commentPeople }}
+            myId={myId}
+            onDelete={(id) => void deleteComment(id)}
+          />
         </div>
-        {composer}
+        {openSideChat ? (
+          <SideChatHeader quote={openSideChat.quote} onBack={() => setOpenKey(null)} />
+        ) : (
+          <SideChatChips sideChats={sideChats.filter((s) => s.turns.length > 0)} onOpen={setOpenKey} />
+        )}
+        {commentQuote ? (
+          <CommentBox
+            quote={commentQuote}
+            busy={commentBusy}
+            onCancel={() => {
+              setCommentQuote(null);
+              clearSelection();
+            }}
+            onSubmit={(text) => void postComment(text)}
+          />
+        ) : (
+          composer
+        )}
+        <AnswerTint rects={tintRects} />
+        {selection && (
+          <AnswerToolbar
+            selection={selection}
+            canSideChat={conversationNoteId !== null}
+            onSideChat={startSideChat}
+            onAsk={askAboutThis}
+            onComment={openComment}
+          />
+        )}
       </div>
     );
   }

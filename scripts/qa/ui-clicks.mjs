@@ -63,7 +63,7 @@ await click("[data-track-surface='topbar'] [data-track='document-list']");
 await page.keyboard.press("Escape");
 
 // Article menu.
-await click("[data-track-surface='article-menu'] [data-track='search']");
+await click("[data-track-surface='article-menu'] [data-track='contents']");
 await page.keyboard.press("Escape");
 
 // AI toolbar: select text in a paragraph, then use the popover.
@@ -105,7 +105,7 @@ check("guide close recorded as topbar", has("topbar", "guide-close"));
 check("topbar history recorded", has("topbar", "history"));
 check("topbar add-document recorded", has("topbar", "add-document"));
 check("add dialog close recorded as topbar", has("topbar", "add-dialog-close"));
-check("article-menu search recorded", has("article-menu", "search"));
+check("article-menu contents recorded", has("article-menu", "contents"));
 check("ai-toolbar comment recorded", has("ai-toolbar", "comment"));
 check("ai-toolbar highlight recorded", has("ai-toolbar", "highlight"));
 check("reader distill recorded", has("reader", "distill"));

@@ -21,6 +21,7 @@ import type { GraphEdge, GraphEdgeLink, GraphNode } from "@/lib/types";
 import { FilmIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { clipWords } from "@/lib/markdown-preview";
+import { LinkDetail } from "@/components/graph/link-detail";
 
 // The corpus graph (SPEC.md §13; the release-edu canvas patterns): documents
 // as nodes on a pan/zoom canvas, links between them as swept curves. The more
@@ -30,7 +31,9 @@ import { clipWords } from "@/lib/markdown-preview";
 // its links, and its linked documents; hovering a curve spotlights the pair
 // and lists its links at the curve; a click pins the list.
 // Nodes float in scattered on first open and settle into place. Clicking a
-// node opens that document.
+// node opens that document; ⇧-click, or a click while the Stitch box is
+// picking, selects it for Stitch instead (SPEC.md §22) — a selected node
+// draws a clay ring.
 
 // Deterministic pseudo-random in [-1, 1] from a string (release-edu's jitter):
 // the same corpus always scatters, bows, and breathes the same way.
@@ -56,13 +59,15 @@ const SpotlightContext = createContext<{
   litIds: Set<string> | null;
   pinnedEdgeId: string | null;
   hoverEdge: (edgeId: string) => void;
+  pinEdge: (edgeId: string) => void;
   scheduleClear: () => void;
-  openLink: (link: GraphEdgeLink) => void;
+  openLink: (link: GraphEdgeLink, documentId: string) => void;
 }>({
   hover: null,
   litIds: null,
   pinnedEdgeId: null,
   hoverEdge: () => {},
+  pinEdge: () => {},
   scheduleClear: () => {},
   openLink: () => {},
 });
@@ -73,6 +78,7 @@ type DocumentNodeData = {
   degree: number;
   active: boolean;
   breathing: boolean;
+  selected: boolean; // picked for Stitch (SPEC.md §22)
 };
 
 type LinkEdgeData = {
@@ -103,7 +109,7 @@ function DocumentNode({ id, data }: NodeProps<DocumentNodeData>) {
             data.active
               ? "bg-clay shadow-[0_0_20px_color-mix(in_srgb,var(--clay)_55%,transparent)]"
               : "bg-sage-500 shadow-[0_0_12px_color-mix(in_srgb,var(--sage)_40%,transparent)]"
-          } ${spotlight === "lit" ? "scale-110" : ""}`}
+          } ${spotlight === "lit" ? "scale-110" : ""} ${data.selected ? "ring-[3px] ring-clay ring-offset-2 ring-offset-paper" : ""}`}
           style={{ width: size, height: size }}
         >
           {data.hasVideo && <FilmIcon size={Math.max(10, size - 16)} className={data.active ? "text-clay-fg" : "text-sage-fg"} />}
@@ -131,10 +137,13 @@ function edgeTone(depth: number): string {
 // clay deeper, deepest at the middle (SPEC.md §13). Accepted links draw clay;
 // a recommended-only pair draws sand, dashed, dashes marching until a link is
 // accepted. Hovering the curve, or clicking it to pin, lists the pair's links
-// at the curve; each opens the reader on that link.
+// at the curve; a click on a link expands it — why it was made, and the
+// passage at each end, with a button that opens the reader there — and pins
+// the curve so the list stays.
 function LinkEdge({ id, source, target, sourceX, sourceY, targetX, targetY, data }: EdgeProps<LinkEdgeData>) {
-  const { hover, pinnedEdgeId, hoverEdge, scheduleClear, openLink } = useContext(SpotlightContext);
+  const { hover, pinnedEdgeId, hoverEdge, pinEdge, scheduleClear, openLink } = useContext(SpotlightContext);
   const t = useT();
+  const [openId, setOpenId] = useState<string | null>(null);
   const lit = hover?.nodeId ? source === hover.nodeId || target === hover.nodeId : hover?.edgeId === id;
   const spotlight: Spotlight = hover === null ? "base" : lit ? "lit" : "dim";
   const count = data?.count ?? 1;
@@ -189,7 +198,7 @@ function LinkEdge({ id, source, target, sourceX, sourceY, targetX, targetY, data
             onMouseLeave={scheduleClear}
             onClick={(e) => e.stopPropagation()}
             data-track-surface="graph-links"
-            className="nodrag nopan menu-in absolute z-20 flex w-72 max-w-[calc(100vw-32px)] flex-col gap-0.5 rounded-2xl border border-line bg-card/95 p-2 shadow-float backdrop-blur-md"
+            className={`nodrag nopan menu-in absolute z-20 flex ${openId ? "w-[400px]" : "w-72"} max-w-[calc(100vw-32px)] flex-col gap-0.5 rounded-2xl border border-line bg-card/95 p-2 shadow-float backdrop-blur-md`}
             style={{
               transform: `translate(-50%, 0) translate(${midX + bow / 2}px, ${midY + 12}px)`,
               pointerEvents: "all",
@@ -198,30 +207,43 @@ function LinkEdge({ id, source, target, sourceX, sourceY, targetX, targetY, data
             <p className="px-2 pt-0.5 pb-1 text-[11px] font-bold tracking-[0.06em] text-sand-600 uppercase">
               {count === 1 ? t("panes.graphPairLinkOne") : t("panes.graphPairLinks", { count })}
             </p>
-            {links.map((l) => (
-              <button
-                key={l.id}
-                onClick={() => openLink(l)}
-                data-track="graph-link-open"
-                data-tip={t("panes.graphOpenLink")}
-                className="flex w-full flex-col items-start gap-0.5 rounded-xl px-2 py-1.5 text-left hover:bg-clay-100"
-              >
-                <span className="text-[12.5px] leading-snug font-semibold text-ink">
-                  {l.reason ?? clipWords(l.quotedText, 60)}
-                </span>
-                {l.reason && (
-                  <span className="text-[11px] leading-snug text-sand-600">{clipWords(l.quotedText, 60)}</span>
-                )}
-                {l.toQuotedText && (
-                  <span className="text-[11px] leading-snug text-sand-500">{clipWords(l.toQuotedText, 60)}</span>
-                )}
-                {l.recommended && (
-                  <span className="mt-0.5 rounded-full border border-dashed border-clay-300 px-2 text-[10.5px] font-semibold text-clay-700">
-                    {t("panes.graphLinkRecommended")}
-                  </span>
-                )}
-              </button>
-            ))}
+            {links.map((l) => {
+              const open = openId === l.id;
+              return (
+                <div key={l.id} className={open ? "rounded-xl bg-sand-100/70" : undefined}>
+                  <button
+                    onClick={() => {
+                      setOpenId(open ? null : l.id);
+                      if (!open) pinEdge(id);
+                    }}
+                    data-track="graph-link-expand"
+                    data-tip={t(open ? "panes.linkCollapse" : "panes.linkExpand")}
+                    aria-expanded={open}
+                    className="flex w-full flex-col items-start gap-0.5 rounded-xl px-2 py-1.5 text-left hover:bg-clay-100"
+                  >
+                    <span className="text-[12.5px] leading-snug font-semibold text-ink">
+                      {l.reason ?? clipWords(l.quotedText, 60)}
+                    </span>
+                    {!open && l.reason && (
+                      <span className="text-[11px] leading-snug text-sand-600">{clipWords(l.quotedText, 60)}</span>
+                    )}
+                    {!open && l.toQuotedText && (
+                      <span className="text-[11px] leading-snug text-sand-500">{clipWords(l.toQuotedText, 60)}</span>
+                    )}
+                    {l.recommended && (
+                      <span className="mt-0.5 rounded-full border border-dashed border-clay-300 px-2 text-[10.5px] font-semibold text-clay-700">
+                        {t("panes.graphLinkRecommended")}
+                      </span>
+                    )}
+                  </button>
+                  {open && (
+                    <div className="px-2 pt-1 pb-2">
+                      <LinkDetail link={l} onOpen={(documentId) => openLink(l, documentId)} />
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </EdgeLabelRenderer>
       )}
@@ -275,6 +297,9 @@ function GraphCanvas({
   edges,
   onOpenDocument,
   docHref,
+  selectedIds,
+  picking = false,
+  onToggleSelect,
 }: {
   notebookId: string;
   activeDocumentId: string | null;
@@ -283,6 +308,12 @@ function GraphCanvas({
   onOpenDocument: () => void;
   // Where a node click goes. Default: the reader on that document.
   docHref?: (documentId: string) => string;
+  // The nodes picked for Stitch (SPEC.md §22), and the toggle a click runs
+  // instead of opening the document: while picking, every click; otherwise
+  // a ⇧-click or a ⌘/Ctrl-click.
+  selectedIds?: Set<string>;
+  picking?: boolean;
+  onToggleSelect?: (documentId: string) => void;
 }) {
   const router = useRouter();
   const t = useT();
@@ -331,12 +362,13 @@ function GraphCanvas({
   );
   useEffect(() => cancelClear, [cancelClear]);
   const openLink = useCallback(
-    (link: GraphEdgeLink) => {
-      router.push(`/n/${notebookId}?doc=${link.fromDocumentId}&link=${link.id}`);
+    (link: GraphEdgeLink, documentId: string) => {
+      router.push(`/n/${notebookId}?doc=${documentId}&link=${link.id}`);
       onOpenDocument();
     },
     [router, notebookId, onOpenDocument],
   );
+  const pinEdge = useCallback((edgeId: string) => setPinnedEdgeId(edgeId), []);
   // Nothing hovered: a pinned curve keeps its pair in the spotlight.
   const shown = useMemo<HoverState>(
     () => hover ?? (pinnedEdgeId ? { edgeId: pinnedEdgeId } : null),
@@ -389,6 +421,7 @@ function GraphCanvas({
         degree: degree.get(n.id) ?? 0,
         active: n.id === activeDocumentId,
         breathing: breathing.has(n.id),
+        selected: selectedIds?.has(n.id) ?? false,
       },
     });
     const target = (n: GraphNode) => draggedPos.current.get(n.id) ?? layout.get(n.id) ?? { x: 0, y: 0 };
@@ -432,7 +465,7 @@ function GraphCanvas({
       return;
     }
     setFlowNodes(nodes.map((n) => mk(n, target(n))));
-  }, [nodes, degree, breathing, layout, activeDocumentId, flow, setFlowNodes]);
+  }, [nodes, degree, breathing, layout, activeDocumentId, selectedIds, flow, setFlowNodes]);
 
   const flowEdges = useMemo<FlowEdge<LinkEdgeData>[]>(
     () =>
@@ -447,8 +480,8 @@ function GraphCanvas({
   );
 
   const spotlight = useMemo(
-    () => ({ hover: shown, litIds, pinnedEdgeId, hoverEdge, scheduleClear, openLink }),
-    [shown, litIds, pinnedEdgeId, hoverEdge, scheduleClear, openLink],
+    () => ({ hover: shown, litIds, pinnedEdgeId, hoverEdge, pinEdge, scheduleClear, openLink }),
+    [shown, litIds, pinnedEdgeId, hoverEdge, pinEdge, scheduleClear, openLink],
   );
 
   const onNodeDragStop = useCallback((_: unknown, node: FlowNode) => {
@@ -465,7 +498,11 @@ function GraphCanvas({
         edgeTypes={edgeTypes}
         onNodesChange={onNodesChange}
         onNodeDragStop={onNodeDragStop}
-        onNodeClick={(_, node) => {
+        onNodeClick={(e, node) => {
+          if (onToggleSelect && (picking || e.shiftKey || e.metaKey || e.ctrlKey)) {
+            onToggleSelect(node.id);
+            return;
+          }
           router.push(docHref ? docHref(node.id) : `/n/${notebookId}?doc=${node.id}`);
           onOpenDocument();
         }}
@@ -511,7 +548,7 @@ function GraphCanvas({
       </ReactFlow>
       </SpotlightContext.Provider>
       <p className="pointer-events-none absolute bottom-4 left-1/2 z-10 -translate-x-1/2 rounded-full border border-line bg-card/95 px-4 py-1.5 text-[11px] text-sand-600 shadow-soft">
-        {t("panes.graphHint")}
+        {t(picking ? "panes.graphPickHint" : "panes.graphHint")}
       </p>
     </div>
   );
@@ -524,6 +561,9 @@ export default function GraphView(props: {
   edges: GraphEdge[];
   onOpenDocument: () => void;
   docHref?: (documentId: string) => string;
+  selectedIds?: Set<string>;
+  picking?: boolean;
+  onToggleSelect?: (documentId: string) => void;
 }) {
   return (
     <ReactFlowProvider>

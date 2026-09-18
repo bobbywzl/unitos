@@ -1,12 +1,14 @@
 import { createHash } from "node:crypto";
-import type { Document } from "@prisma/client";
+import { Prisma, type Document } from "@prisma/client";
 import { db } from "@/lib/db";
 import { classifyPdf } from "@/lib/handwritten/classify";
+import { storePageSizes } from "@/lib/handwritten/page-images";
 import { pageBlockText, pdfPageCount } from "@/lib/handwritten/pages";
 import { parsePdf } from "@/lib/parse/pdf";
 import { auditFigures } from "@/lib/parse/figure-audit";
 import { restoreFigures } from "@/lib/parse/figures";
 import { layoutBlocks } from "@/lib/parse/layout";
+import type { ParseModel } from "@/lib/parse/model";
 import { pruneReferences } from "@/lib/parse/references";
 import { browserConfigured } from "@/lib/browser";
 import { needsBrowserRender, renderIfNeeded, type RenderReport } from "@/lib/parse/render-page";
@@ -88,27 +90,32 @@ export const SPLIT_URL_MARKER = "#unitos-part-";
 // budget: past it a pass is skipped and the blocks stand. References prune
 // afterwards: a link reference whose citing blocks were dropped was chrome,
 // not a citation.
-async function refineUrlBlocks(
+/** The model passes over a URL's mechanical blocks (SPEC.md §2): the core
+    pass, then the layout pass on the page's html (the structure pass
+    without it), then the figures the passes dropped between survivors
+    restored. choice: the model to run on, the parse model by default
+    (scripts/parse-compare.ts runs two). */
+export async function refineUrlBlocks(
   parsed: ParsedDocument,
   onProgress: OnIngestProgress | undefined,
-  opts: { deadline?: number; pageHtml: string | null; url: string },
+  opts: { deadline?: number; pageHtml: string | null; url: string; choice?: ParseModel },
 ) {
-  const { deadline, pageHtml, url } = opts;
+  const { deadline, pageHtml, url, choice } = opts;
   let blocks = parsed.blocks;
   let font: ParsedDocument["font"] | undefined;
   onProgress?.("select");
   const coreSignal = modelPassSignal(deadline);
   if (coreSignal === null) console.warn("[ingest] core pass skipped: the time budget is spent");
-  else blocks = await selectCoreBlocks(blocks, parsed.title, coreSignal);
+  else blocks = await selectCoreBlocks(blocks, parsed.title, coreSignal, choice);
   onProgress?.("structure");
   const signal = modelPassSignal(deadline);
   if (signal === null) console.warn("[ingest] layout pass skipped: the time budget is spent");
   else if (pageHtml) {
     onProgress?.("layout");
-    const laid = await layoutBlocks({ blocks, title: parsed.title, pageHtml, url, signal });
+    const laid = await layoutBlocks({ blocks, title: parsed.title, pageHtml, url, signal, choice });
     blocks = laid.blocks;
     font = laid.font;
-  } else blocks = await structureBlocks(blocks, parsed.title, signal);
+  } else blocks = await structureBlocks(blocks, parsed.title, signal, choice);
   // The passes reference blocks by index: a figure dropped between two
   // blocks that survived is restored (lib/parse/figures.ts restoreFigures).
   blocks = restoreFigures(parsed.blocks, blocks);
@@ -270,6 +277,16 @@ async function createHandwrittenDocument(data: {
   });
 }
 
+// The page sizes are the reader's layout (SPEC.md §16); a failure here
+// leaves the pages sizeless, never the document unsaved.
+async function storePageSizesQuietly(documentId: string, bytes: Uint8Array): Promise<void> {
+  try {
+    await storePageSizes(documentId, bytes);
+  } catch (err) {
+    console.warn("[handwritten] page sizes failed:", err);
+  }
+}
+
 function pageBlockRows(documentId: string, pageCount: number) {
   return Array.from({ length: pageCount }, (_, i) => ({
     documentId,
@@ -316,6 +333,7 @@ export async function ingestPdf(
       pageCount,
       convert: opts.convert !== false,
     });
+    await storePageSizesQuietly(document.id, bytes);
     return { document, deduped: false };
   }
   const title = parsed.title ?? filename.replace(/\.pdf$/i, "");
@@ -519,6 +537,7 @@ export async function reparseDocument(
         },
       });
     });
+    await storePageSizesQuietly(documentId, new Uint8Array(document.fileData));
     return db.document.findUnique({ where: { id: documentId } });
   }
 
@@ -597,6 +616,9 @@ export async function reparseDocument(
         conversionStatus: "NONE",
         conversionError: null,
         conversionStartedAt: null,
+        // The blocks are new, so the contents' block ids are stale: the
+        // next open of Contents builds them again (SPEC.md §26).
+        contents: Prisma.DbNull,
       },
     });
   });

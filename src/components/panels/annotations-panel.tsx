@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import type { AnnotationItem, LinkIn, LinkOut } from "@/lib/types";
+import type { AnnotationItem, LinkIn, LinkOut, SectionView } from "@/lib/types";
 import { api } from "@/lib/api";
 import { useCollab } from "@/components/collab/collab-context";
 import { AuthorChip } from "@/components/collab/person-badge";
@@ -32,6 +32,7 @@ import { markdownPreview } from "@/lib/markdown-preview";
 import { useGist } from "@/lib/gist-client";
 import { NoteId } from "@/components/outline/note-id";
 import { AnnotationGrip } from "@/components/outline/annotation-grip";
+import { AnnotationMenu } from "@/components/panels/annotation-menu";
 import { useCardDropOpen } from "@/components/outline/use-card-drop";
 import { useCollapsedView, type CollapsedViewModel } from "@/components/use-collapsed-view";
 import { stripSimplifyMarkers } from "@/lib/sentences";
@@ -116,11 +117,14 @@ function AnnotationCard({
   annotation,
   view,
   summary,
+  menu,
   children,
 }: {
   annotation: AnnotationItem;
   view: CollapsedViewModel;
   summary: string;
+  /** The three-dots menu at the right of the header (annotation-menu.tsx). */
+  menu?: React.ReactNode;
   children: React.ReactNode;
 }) {
   const t = useT();
@@ -173,10 +177,14 @@ function AnnotationCard({
           </button>
         )}
         {collapsed && annotation.figureLabel && (
-          <span className="shrink-0 rounded-full bg-sand-200 px-2 text-[10.5px] font-semibold text-sand-600">
+          <span
+            className="shrink-0 rounded-full bg-sand-200 px-2 text-[10.5px] font-semibold text-sand-600"
+            data-tip={t("panels.figureLabelTitle", { label: annotation.figureLabel })}
+          >
             {annotation.figureLabel}
           </span>
         )}
+        {menu && <span className="ml-auto flex shrink-0 items-center">{menu}</span>}
       </div>
       {!collapsed && <div className="mt-1">{children}</div>}
     </div>
@@ -218,7 +226,11 @@ function AnnotationActions({
           onClick={jump}
           data-track="annotation-jump"
           aria-label={t("panels.jumpToAnchor")}
-          data-tip={t("panels.jumpToAnchor")}
+          data-tip={
+            annotation.figureLabel
+              ? `${t("panels.jumpToAnchor")}\n${t("panels.figureLabelTitle", { label: annotation.figureLabel })}`
+              : t("panels.jumpToAnchor")
+          }
           className="inline-flex items-center gap-1.5 rounded-full bg-clay-100 px-2.5 py-1 text-[11px] font-semibold text-clay-800 hover:bg-clay-200"
         >
           <LocateIcon size={11} />
@@ -226,7 +238,10 @@ function AnnotationActions({
         </button>
       )}
       {!canJump && annotation.figureLabel && (
-        <span className="rounded-full bg-sand-200 px-2.5 py-1 text-[11px] font-semibold text-sand-600">
+        <span
+          className="rounded-full bg-sand-200 px-2.5 py-1 text-[11px] font-semibold text-sand-600"
+          data-tip={t("panels.figureLabelTitle", { label: annotation.figureLabel })}
+        >
           {annotation.figureLabel}
         </span>
       )}
@@ -373,12 +388,15 @@ export function AnnotationsPanel({
   annotations,
   linksOut,
   linksIn,
+  sections,
 }: {
   notebookId: string;
   documentId: string | null;
   annotations: AnnotationItem[];
   linksOut: LinkOut[];
   linksIn: LinkIn[];
+  /** The project's sections with their notes: where an annotation can go (annotation-menu.tsx). */
+  sections: SectionView[];
 }) {
   const router = useRouter();
   const t = useT();
@@ -442,6 +460,18 @@ export function AnnotationsPanel({
     return <p className="text-[13px] text-sand-600">{t("panels.annotationsEmpty")}</p>;
   }
 
+  // The three-dots menu at the right of every card's header: New note, Add
+  // to a note, Jump, Delete — in reach while the card is collapsed too.
+  const menuFor = (a: AnnotationItem) => (
+    <AnnotationMenu
+      annotation={a}
+      notebookId={notebookId}
+      documentId={documentId}
+      sections={sections}
+      onDelete={deleteAnnotation}
+    />
+  );
+
   // The same actions under every annotation body.
   const actionsFor = (a: AnnotationItem) => (
     <AnnotationActions
@@ -497,7 +527,7 @@ export function AnnotationsPanel({
         <div className="flex flex-col gap-2">
           <GroupLabel>{t("panels.highlights")}</GroupLabel>
           {highlights.map((a) => (
-            <AnnotationCard key={a.id} annotation={a} view={view} summary={a.content}>
+            <AnnotationCard key={a.id} annotation={a} view={view} menu={menuFor(a)} summary={a.content}>
               <p className="text-[13px]">{a.content}</p>
               {a.orphaned && a.quotedText && a.quotedText !== a.content && (
                 <p className="mt-2 line-clamp-2 border-l-2 border-red-300 pl-2 text-xs text-sand-500">
@@ -514,7 +544,7 @@ export function AnnotationsPanel({
         <div className="flex flex-col gap-2">
           <GroupLabel icon={<CommentIcon size={12} />}>{t("panels.comments")}</GroupLabel>
           {comments.map((a) => (
-            <AnnotationCard key={a.id} annotation={a} view={view} summary={markdownPreview(a.content)}>
+            <AnnotationCard key={a.id} annotation={a} view={view} menu={menuFor(a)} summary={markdownPreview(a.content)}>
               <div className="text-[13px]">
                 <Markdown>{a.content}</Markdown>
               </div>
@@ -533,7 +563,7 @@ export function AnnotationsPanel({
         <div className="flex flex-col gap-2">
           <GroupLabel icon={<QuestionIcon size={12} />}>{t("panels.explanations")}</GroupLabel>
           {explanations.map((a) => (
-            <AnnotationCard key={a.id} annotation={a} view={view} summary={markdownPreview(a.content)}>
+            <AnnotationCard key={a.id} annotation={a} view={view} menu={menuFor(a)} summary={markdownPreview(a.content)}>
               <div className="text-[13px]">
                 <Markdown>{a.content}</Markdown>
               </div>
@@ -553,7 +583,7 @@ export function AnnotationsPanel({
         <div className="flex flex-col gap-2">
           <GroupLabel icon={<ChartIcon size={12} />}>{t("panels.analyses")}</GroupLabel>
           {analyses.map((a) => (
-            <AnnotationCard key={a.id} annotation={a} view={view} summary={markdownPreview(a.content)}>
+            <AnnotationCard key={a.id} annotation={a} view={view} menu={menuFor(a)} summary={markdownPreview(a.content)}>
               <div className="text-[13px]">
                 <Markdown>{a.content}</Markdown>
               </div>
@@ -573,7 +603,7 @@ export function AnnotationsPanel({
         <div className="flex flex-col gap-2">
           <GroupLabel icon={<VisualizeIcon size={12} />}>{t("panels.visualizations")}</GroupLabel>
           {visualizations.map((a) => (
-            <AnnotationCard key={a.id} annotation={a} view={view} summary={markdownPreview(a.content)}>
+            <AnnotationCard key={a.id} annotation={a} view={view} menu={menuFor(a)} summary={markdownPreview(a.content)}>
               <div className="text-[13px]">
                 <Markdown>{a.content}</Markdown>
               </div>
@@ -593,7 +623,7 @@ export function AnnotationsPanel({
         <div className="flex flex-col gap-2">
           <GroupLabel icon={<SparkleIcon size={12} />}>{t("panels.assistant")}</GroupLabel>
           {conversations.map((a) => (
-            <AnnotationCard key={a.id} annotation={a} view={view} summary={markdownPreview(a.content)}>
+            <AnnotationCard key={a.id} annotation={a} view={view} menu={menuFor(a)} summary={markdownPreview(a.content)}>
               {/* The whole conversation, nothing to scroll inside the card. */}
               <div className="text-[13px]">
                 <Markdown>{a.content}</Markdown>
@@ -617,6 +647,7 @@ export function AnnotationsPanel({
               key={a.id}
               annotation={a}
               view={view}
+              menu={menuFor(a)}
               summary={markdownPreview(stripSimplifyMarkers(a.content))}
             >
               <div className="text-[13px]">

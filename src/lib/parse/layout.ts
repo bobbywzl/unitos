@@ -1,12 +1,11 @@
 import { JSDOM, VirtualConsole } from "jsdom";
 import type { ModelMessage } from "ai";
 import { z } from "zod";
-import { claude, claudeConfigured, claudeOptions } from "@/lib/claude";
-import { PARSE_MODEL } from "@/lib/derive/config";
 import { callForJson } from "@/lib/derive/json-call";
-import { isFigureCaption } from "@/lib/parse/figure-audit";
+import { hasMedia, isFigureCaption } from "@/lib/parse/figure-audit";
 import type { CitationSpan, LinkSpan, ParsedBlock, StyleSpan } from "@/lib/parse/types";
 import type { UsageMeta } from "@/lib/usage";
+import { DEFAULT_PARSE_MODEL, parseCall, parseConfigured, type ParseModel } from "@/lib/parse/model";
 
 // The layout pass for URL ingest (SPEC.md §2): the second AI pass, after the
 // core pass, and it does the structure pass's work too (drop residual junk,
@@ -407,9 +406,13 @@ export function applyLayoutOps(
     claim(indexes, { kind: "join", indexes, separator: " " });
   }
 
+  // A figure with media is never dropped: the rule is the code's, not the
+  // model's, so the parse keeps its figures under any model.
   const drops = new Set<number>();
   for (const op of result.ops) {
-    if (op.action === "drop" && inRange(op.index) && !claimed.has(op.index)) drops.add(op.index);
+    if (op.action === "drop" && inRange(op.index) && !claimed.has(op.index) && !hasMedia(blocks[op.index])) {
+      drops.add(op.index);
+    }
   }
   if (drops.size > blocks.length * DROP_CEILING) {
     console.warn(`[ingest] layout pass wanted ${drops.size}/${blocks.length} drops, drops ignored`);
@@ -499,23 +502,27 @@ export async function layoutBlocks(input: {
   // The pass's time budget (lib/parse/ingest.ts modelPassSignal): past it the
   // call aborts and the blocks stand.
   signal?: AbortSignal;
+  // The model to run on: the parse model unless a caller picks another
+  // (scripts/parse-compare.ts).
+  choice?: ParseModel;
 }): Promise<{ blocks: ParsedBlock[]; font?: PageFont }> {
-  const { blocks, title, pageHtml, url, signal } = input;
-  if (!claudeConfigured() || !pageHtml || blocks.length < 3) return { blocks };
+  const { blocks, title, pageHtml, url, signal, choice = DEFAULT_PARSE_MODEL } = input;
+  if (!parseConfigured(choice) || !pageHtml || blocks.length < 3) return { blocks };
   const digest = pageDigest(pageHtml, url);
   if (!digest) return { blocks };
   const listed = blocks.slice(0, MAX_LISTED_BLOCKS);
   const messages: ModelMessage[] = [
     { role: "user", content: layoutPrompt(title, listed, digest) },
   ];
+  const { model, providerOptions, modelId } = await parseCall(choice);
   const result = await callForJson({
-    model: await claude(PARSE_MODEL),
+    model,
     messages,
     maxOutputTokens: 24576,
-    providerOptions: claudeOptions(),
+    providerOptions,
     schema: layoutSchema,
     label: "INGEST_LAYOUT",
-    usage: { userId: null, feature: "parse", model: PARSE_MODEL } satisfies UsageMeta,
+    usage: { userId: null, feature: "parse", model: modelId } satisfies UsageMeta,
     abortSignal: signal,
   });
   if (!result.ok) {

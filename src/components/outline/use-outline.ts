@@ -6,23 +6,39 @@ import { arrayMove } from "@dnd-kit/sortable";
 import { api } from "@/lib/api";
 import type { MergeMode } from "@/lib/card-drag";
 import { clearNoteDraft, confirmNoteDraft, readNoteDraft, sweepStaleDrafts } from "@/lib/note-drafts";
+import { joinNoteContents } from "@/lib/notes/join";
+import type { QuoteDrag } from "@/lib/quote-drag";
 import type { NotebookView, NoteView, SectionView } from "@/lib/types";
+import { useT } from "@/components/lang-provider";
 import { useCollapsedView, type CollapsedView } from "@/components/use-collapsed-view";
 
-// The floating card: one note's editor taken out of the tray, over the
-// article (floating-note-editor.tsx).
+// The floating card: one note taken out of the tray, over the article
+// (floating-note-editor.tsx). It opens in its draggable mode; the pencil
+// opens its editor.
 export type FloatingEdit = {
   id: string;
-  /** The draft the floating card opens with. */
+  /** The draft the floating card's editor opens with. */
   draft: string;
   /** The content before the edit began: what Cancel restores. */
   original: string;
   /** Where the card lands. Unset: beside the tray. */
   left?: number;
   top?: number;
-  /** Set while the card is being dragged out of the tray: the pointer's offset inside the card. */
-  grab?: { dx: number; dy: number };
+  /** Open in the editor at once: the tray's editor was moved out here. */
+  editing?: boolean;
 };
+
+/** What a merge answered: the merged text, and the id that undoes the merge. */
+export type MergeResult = { content: string; undoId: string | null };
+
+/** The last merge, while it can be undone (SPEC.md §6): the pill under the
+    notes offers Undo for MERGE_UNDO_MS. */
+export type LastMerge = { undoId: string; targetId: string; count: number };
+const MERGE_UNDO_MS = 12_000;
+
+/** The target of a merge took the other notes in: its card blooms
+    (note-card.tsx listens). */
+export const NOTE_ABSORBED_EVENT = "dissect:note-absorbed";
 
 export type OutlineActions = {
   notebookId: string;
@@ -32,16 +48,25 @@ export type OutlineActions = {
   reorderSection: (parentId: string | null, id: string, toIndex: number) => void;
   addNote: (sectionId: string, content: string) => Promise<void>;
   saveNote: (id: string, content: string) => Promise<void>;
+  /** A quote dropped into the note (lib/quote-drag.ts): its anchor becomes
+      a source of the note, so the quote points back to the reader. */
+  attachSource: (id: string, drag: QuoteDrag) => Promise<void>;
   deleteNote: (id: string) => Promise<void>;
   reorderNote: (sectionId: string, id: string, toIndex: number) => void;
   moveNoteToSection: (id: string, sectionId: string, toIndex?: number) => Promise<void>;
-  /** Merge notes into the target (SPEC.md §6). join: the sources' text lands
-      in the target as it is. ai: the model writes the one note that takes
-      their place. An annotation source is copied, never consumed. Returns the
-      merged text, or null when the merge did not run. */
-  mergeNotes: (targetId: string, sourceIds: string[], mode?: MergeMode) => Promise<string | null>;
+  /** Merge notes into the target (SPEC.md §6). join, the default: the notes'
+      text lands in the target as it is, in the order the notes stand in. ai:
+      the model writes the one note that takes their place. An annotation
+      source is copied, never consumed. Returns the merged text and the id
+      that undoes the merge, or null when the merge did not run. */
+  mergeNotes: (targetId: string, sourceIds: string[], mode?: MergeMode) => Promise<MergeResult | null>;
   /** Notes the AI is merging right now: their cards say so while it runs. */
   merging: ReadonlySet<string>;
+  /** The last merge, while Undo is offered. */
+  lastMerge: LastMerge | null;
+  /** Undo the last merge. Resolves to the reason when it could not run. */
+  undoMerge: () => Promise<string | null>;
+  dismissMerge: () => void;
   setPinned: (id: string, pinned: boolean) => Promise<void>;
   acceptNote: (id: string) => Promise<void>;
   rejectNote: (id: string) => Promise<void>;
@@ -129,6 +154,7 @@ export function filterSections(sections: SectionView[], query: string): SectionV
 // one optimistic tree, one pending queue, one set of keyboard bindings (SPEC.md §6).
 // canEdit false (a viewer on a shared corpus): keys still navigate, never write.
 export function useOutline(notebook: NotebookView, canEdit = true) {
+  const t = useT();
   const router = useRouter();
   const [tree, setTree] = useState(notebook.sections);
   const [prevSections, setPrevSections] = useState(notebook.sections);
@@ -191,6 +217,27 @@ export function useOutline(notebook: NotebookView, canEdit = true) {
 
   // The notes the AI is merging right now: their cards say so while it runs.
   const [merging, setMergingIds] = useState<ReadonlySet<string>>(new Set());
+
+  // The last merge, while it can be undone: one pill offers Undo for a while
+  // after each merge, and the next merge takes the pill.
+  const [lastMerge, setLastMerge] = useState<LastMerge | null>(null);
+  useEffect(() => {
+    if (!lastMerge) return;
+    const timer = setTimeout(() => setLastMerge(null), MERGE_UNDO_MS);
+    return () => clearTimeout(timer);
+  }, [lastMerge]);
+  const undoMerge = useCallback(async (): Promise<string | null> => {
+    if (!lastMerge) return null;
+    const { undoId } = lastMerge;
+    setLastMerge(null);
+    try {
+      await api("/api/notes/merge/undo", "POST", { undoId });
+    } catch (err) {
+      return err instanceof Error ? err.message : String(err);
+    }
+    refresh();
+    return null;
+  }, [lastMerge, refresh]);
 
   // Ticker selection, pruned against the tree so deleted or merged notes drop out.
   const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(new Set());
@@ -361,6 +408,12 @@ export function useOutline(notebook: NotebookView, canEdit = true) {
       await api(`/api/notes/${id}`, "PATCH", { content });
       refresh();
     },
+    async attachSource(id, drag) {
+      await api(`/api/notes/${id}`, "PATCH", {
+        addSource: { source: drag.source, ...(drag.segments ? { segments: drag.segments } : {}) },
+      });
+      refresh();
+    },
     async deleteNote(id) {
       // The reader fades the note's marks at once (reader-interactions.tsx),
       // and puts them back if the delete fails.
@@ -404,7 +457,8 @@ export function useOutline(notebook: NotebookView, canEdit = true) {
       refresh();
     },
     async mergeNotes(targetId, sourceIds, mode = "join") {
-      const byId = new Map(flattenNotes(tree).map((n) => [n.id, n]));
+      const all = flattenNotes(tree);
+      const byId = new Map(all.map((n) => [n.id, n]));
       const target = byId.get(targetId);
       if (!target || target.status !== "ACCEPTED") return null;
       // A source in the tree is a note of a section; a source that is not is an
@@ -413,18 +467,18 @@ export function useOutline(notebook: NotebookView, canEdit = true) {
       // go through Accept/Reject first.
       const notes = sourceIds
         .map((id) => byId.get(id))
-        .filter((n): n is NoteView => n !== undefined);
+        .filter((n): n is NoteView => n !== undefined && n.id !== targetId);
       if (notes.some((n) => n.status !== "ACCEPTED")) return null;
       const ids = sourceIds.filter((id) => id !== targetId);
       if (ids.length === 0) return null;
-      // Optimistic: the notes fold into the target instantly. The AI merge
-      // writes text the client cannot know, so the target says it is merging
-      // until the answer lands; a join lands its text at once.
-      const joined = [target.content, ...notes.map((n) => n.content)]
-        .map((c) => c.trim())
-        .filter(Boolean)
-        .join("\n\n");
+      // Optimistic: the notes fold into the target instantly. Join text puts
+      // the notes in the order they stand in — the note on top first
+      // (lib/notes/join.ts); an annotation's text lands with the answer. The
+      // AI merge writes text the client cannot know, so the target says it is
+      // merging until the answer lands.
       const gone = new Set(notes.map((n) => n.id));
+      const ordered = all.filter((n) => n.id === targetId || gone.has(n.id));
+      const joined = joinNoteContents(ordered.map((n) => n.content), t("outline.mergedNote"));
       setTree((prev) =>
         prev.map(function walk(s): SectionView {
           return {
@@ -441,15 +495,18 @@ export function useOutline(notebook: NotebookView, canEdit = true) {
         }),
       );
       setSelectedIds(new Set());
+      window.dispatchEvent(new CustomEvent(NOTE_ABSORBED_EVENT, { detail: { noteId: targetId } }));
       if (mode === "ai") setMergingIds((prev) => new Set(prev).add(targetId));
       try {
-        const merged = await api<{ content?: string }>("/api/notes/merge", "POST", {
+        const merged = await api<{ content?: string; undoId?: string }>("/api/notes/merge", "POST", {
           targetId,
           sourceIds: ids,
           mode,
         });
         refresh();
-        return merged?.content ?? null;
+        const undoId = typeof merged?.undoId === "string" ? merged.undoId : null;
+        if (undoId) setLastMerge({ undoId, targetId, count: ids.length + 1 });
+        return { content: merged?.content ?? joined, undoId };
       } finally {
         if (mode === "ai") {
           setMergingIds((prev) => {
@@ -461,6 +518,11 @@ export function useOutline(notebook: NotebookView, canEdit = true) {
       }
     },
     merging,
+    lastMerge,
+    undoMerge,
+    dismissMerge() {
+      setLastMerge(null);
+    },
     async setPinned(id, pinned) {
       // Optimistic: pinning also moves the note to the top of its section.
       setTree((prev) =>

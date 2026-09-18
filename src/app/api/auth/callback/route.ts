@@ -38,8 +38,9 @@ export async function GET(req: Request) {
   const profile = await exchangeCode(origin, code);
   if (!profile) return fail("Could not verify your Google identity");
 
-  const { session } = await signIn(profile);
-  const res = sessionRedirect(origin, session);
+  const signed = await signIn(profile);
+  if (signed === "blocked") return fail("This email is blocked");
+  const res = sessionRedirect(origin, signed.session);
   res.cookies.set(STATE_COOKIE, "", { path: "/", maxAge: 0 });
   return res;
 }

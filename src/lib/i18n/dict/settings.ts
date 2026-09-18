@@ -30,7 +30,7 @@ const en = {
   planPremium:
     "Offline work — notes, non-AI annotations, edits, uploads — saves on this device and syncs when you are back online. Images up to 25 MB drop into notes.",
   planUltra:
-    "Everything in Unitos Premium. Visualize: the selection as a picture — a diagram, a drawing, or a short animation. Conversations: continue an Explain, Simplify, Analyze, or Visualize card into a conversation.",
+    "Everything in Unitos Premium. Visualize: the selection as a picture — a diagram, a drawing, or a short animation. Conversations: continue a Simplify, Analyze, or Visualize card into a conversation.",
   planExpired:
     "The trial ended on {date}. Offline changes do not save, and images over 5 MB do not drop.",
   planMark:
@@ -58,6 +58,14 @@ const en = {
   driveUnlink: "Unlink",
   // Your data: every stored field and count about the account
   // (lib/account-data.ts), read-only.
+  // Storage (TIERS.md): the account's files against the tier's limit
+  storage: "Storage",
+  storageUsed: "{used} used",
+  storageOf: "{used} of {limit} used",
+  storageNoLimit: "No storage limit is set for {tier} yet.",
+  storageDocuments: "Documents",
+  storageImages: "Images",
+  storageVideos: "Videos",
   data: "Your data",
   dataDesc: "Everything Unitos holds about this account. The Privacy Policy says where each part goes:",
   dataEmail: "Email",
@@ -130,7 +138,7 @@ const zh: Record<keyof typeof en, string> = {
   planPremium:
     "离线工作——笔记、非 AI 批注、编辑、上传——会保存在本设备，恢复联网后同步。最大 25 MB 的图片可拖入笔记。",
   planUltra:
-    "包含 Unitos Premium 的全部功能。可视化：把选中内容画成图——示意图、插画或短动画。对话：把解释、简化、分析或可视化卡片继续为对话。",
+    "包含 Unitos Premium 的全部功能。可视化：把选中内容画成图——示意图、插画或短动画。对话：把简化、分析或可视化卡片继续为对话。",
   planExpired: "试用已于 {date} 结束。离线更改不会保存，超过 5 MB 的图片无法拖入。",
   planMark: "徽章旁的方案标记在各处标明你的方案：白水晶是 Unitos Premium，黑钻是 Unitos Ultra。",
   connections: "连接",
@@ -150,6 +158,13 @@ const zh: Record<keyof typeof en, string> = {
   driveLink: "关联 Google Drive",
   driveRelink: "重新关联以访问全部文件",
   driveUnlink: "取消关联",
+  storage: "存储空间",
+  storageUsed: "已用 {used}",
+  storageOf: "已用 {used}，共 {limit}",
+  storageNoLimit: "{tier} 的存储上限尚未设定。",
+  storageDocuments: "文档",
+  storageImages: "图片",
+  storageVideos: "视频",
   data: "你的数据",
   dataDesc: "Unitos 保存的关于此账户的全部数据。隐私政策说明每项数据的去向：",
   dataEmail: "邮箱",

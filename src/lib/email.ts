@@ -1,6 +1,7 @@
 import { translatorFor, type TKey } from "@/lib/i18n/dictionaries";
 import type { Lang } from "@/lib/i18n/config";
 import { outboundFetch } from "@/lib/outbound-fetch";
+import { recordUsage } from "@/lib/usage";
 
 // Outbound email through Resend (https://resend.com): one POST, no SDK.
 // EMAIL_FROM must be a sender on a domain verified in Resend, e.g.
@@ -37,6 +38,9 @@ export async function sendEmail(msg: {
     console.error("[email] resend send failed:", res.status, await res.text());
     return false;
   }
+  // One row per email sent, at $0: Resend bills per month on a plan this app
+  // cannot read, so the admin usage page counts the sends and claims no cost.
+  recordUsage({ userId: null, feature: "email", model: "resend-email" }, {}, 0);
   return true;
 }
 

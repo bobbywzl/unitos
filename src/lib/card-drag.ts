@@ -58,6 +58,15 @@ function ghostFor(label: string): HTMLElement {
   return ghost;
 }
 
+/** Drop a card on a target without a gesture: the board's hold ring closed
+    on the floating card (components/sortable.tsx), and the floating card
+    takes the drop the way it takes one from a card drag — its own words
+    saved first, the merged text put into its editor. */
+export function dropCardOn(targetId: string, drag: CardDrag) {
+  window.dispatchEvent(new CustomEvent(CARD_DRAG_START, { detail: { drag } }));
+  window.dispatchEvent(new CustomEvent<CardDragEndDetail>(CARD_DRAG_END, { detail: { drag, targetId } }));
+}
+
 /** Start the drag. Returns at once; the gesture runs on window listeners
     until the pointer is released or Escape cancels it. onEnd is called with
     the target the card was released on, or null. */

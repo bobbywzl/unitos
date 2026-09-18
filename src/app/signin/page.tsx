@@ -131,14 +131,6 @@ const CALLOUTS: Callout[] = [
     dot: { x: 72, y: 9.8 },
   },
   {
-    // The M1 match mark after "and transduction models"; the chip in
-    // the left gutter below it.
-    key: "signin.calloutExtract",
-    chip: { left: "1.5%", top: "85.6%" },
-    line: { x1: 5, y1: 88.5, x2: 27.7, y2: 82.9 },
-    dot: { x: 29, y: 81.6 },
-  },
-  {
     // "Explain simply" in the assistant menu; the chip beside the Abstract
     // heading, the line over the menu's clear right half.
     key: "signin.calloutAssistant",
@@ -168,13 +160,6 @@ const FUNCTIONS: { key: TKey; sub: TKey; icon: React.ReactNode }[] = [
     icon: <path d="M21 12a8 8 0 0 1-8 8H4l2-3a8 8 0 1 1 15-5Zm-12-1h6m-6 4h4" />,
   },
   {
-    key: "signin.fnExplain",
-    sub: "signin.fnExplainSub",
-    icon: (
-      <path d="M12 3v3m0 12v3M3 12h3m12 0h3M6 6l2 2m8 8 2 2m0-12-2 2M8 16l-2 2m6-9a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z" />
-    ),
-  },
-  {
     key: "signin.fnSimplify",
     sub: "signin.fnSimplifySub",
     icon: <path d="M5 7h14M8 12h8M10 17h4" />,
@@ -188,11 +173,6 @@ const FUNCTIONS: { key: TKey; sub: TKey; icon: React.ReactNode }[] = [
     key: "signin.fnDistill",
     sub: "signin.fnDistillSub",
     icon: <path d="M10 7H6a2 2 0 0 0-2 2v3a2 2 0 0 0 2 2h2v2a2 2 0 0 1-2 2m14-11h-4a2 2 0 0 0-2 2v3a2 2 0 0 0 2 2h2v2a2 2 0 0 1-2 2" />,
-  },
-  {
-    key: "signin.fnExtract",
-    sub: "signin.fnExtractSub",
-    icon: <path d="M4 6h16M4 12h16M4 18h9m4-2 4 4m0-4-4 4" />,
   },
 ];
 
@@ -229,6 +209,7 @@ export default async function SignInPage({
     "Wrong email or password": t("signin.errBadLogin"),
     "This account has no password yet — use Forgot password to set one":
       t("signin.errNoPassword"),
+    "This email is blocked": t("signin.errBlocked"),
   };
 
   const inputCls =

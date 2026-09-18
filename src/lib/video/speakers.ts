@@ -9,35 +9,59 @@ import {
 import type { TranscriptSegment } from "@/lib/video/segments";
 import { formatTime, type Speaker } from "@/lib/video/types";
 
-// Speakers (SPEC.md §11): who says each line. The pass reads the media and
-// the lines already transcribed, tells the voices apart, and names them from
-// what the recording itself says — an introduction, a host naming a guest,
-// one person addressing another. A voice nobody names keeps its number. It
-// runs over every transcript whatever rung produced it, because it reads the
-// lines rather than making them: YouTube's captions carry no speakers and
-// neither Whisper rung returns any.
+// Speakers (SPEC.md §11): who says each line. Two paths:
+//   - A transcript whose rung told the voices apart (Deepgram: every
+//     utterance carries its voice, from the audio itself) only needs names.
+//     nameSpeakers reads the lines as text and names the voices the
+//     conversation names; the media is not read again.
+//   - Any other transcript (YouTube's captions carry no speakers and neither
+//     Whisper rung returns any) takes detectSpeakers: the pass reads the
+//     media beside the lines, tells the voices apart by voice and, in a
+//     video, by who is on camera speaking, and names them.
+// Both name a voice only from what the recording itself says or shows — an
+// introduction, a host naming a guest, one person addressing another, a
+// name caption on screen. A voice nobody names keeps its number.
 //
-// Names come only from the audio. The pass never guesses from the subject,
-// the channel, or a name it recognizes: a wrong name on every line of a
-// transcript is worse than "Speaker 2".
+// The pass never guesses from the subject, the channel, or a name it
+// recognizes: a wrong name on every line of a transcript is worse than
+// "Speaker 2".
 
 /** At most this many voices in one recording. A pass that returns more has
     lost the thread — panel voices it cannot separate become one each. */
 const MAX_SPEAKERS = 12;
 
 const SPEAKER_PROMPT = [
-  "You are given a recording and the lines already transcribed from it.",
+  "You are given a recording and the lines already transcribed from it, each with the time it is spoken.",
   "Say which voice speaks each line, and name the voices the recording names.",
   'Return ONLY JSON: {"speakers": [{"id": "S1", "name": "…"}], "lines": [{"i": 0, "speaker": "S1"}]}',
-  "1. Tell the voices apart by the sound of the voice, never by what is said.",
-  "2. Every line gets exactly one speaker id, and every id used is in speakers.",
-  "3. The same voice keeps the same id everywhere in the recording.",
-  "4. Name a voice only from what the recording says: someone introduces themselves, a host names a guest, one person addresses another by name. Use the name as it is said.",
-  '5. A voice the recording never names keeps its number: "Speaker 2".',
-  "6. Never guess a name from the subject, the channel, or a person you recognize. An unnamed voice is a number.",
-  "7. One voice throughout: return one speaker and give it every line.",
+  "1. Listen to the recording at each line's time and tell the voices apart by the sound of the voice: pitch, timbre, pace, accent. In a video, also use who is on camera with their mouth moving at that time. Never decide by what is said alone.",
+  "2. Use the conversation as a check: a question and its answer are two voices; a reply that says a name is addressed to that voice; the same voice keeps its manner of speaking.",
+  "3. Every line gets exactly one speaker id, and every id used is in speakers. A line where the voice changes mid-line goes to the voice that says most of it.",
+  "4. The same voice keeps the same id everywhere in the recording.",
+  "5. Name a voice only from what the recording says or shows: someone introduces themselves, a host names a guest, one person addresses another by name, a name caption on screen while that person speaks. Use the name as it is said or shown.",
+  '6. A voice the recording never names keeps its number: "Speaker 2".',
+  "7. Never guess a name from the subject, the channel, or a person you recognize. An unnamed voice is a number.",
+  "8. One voice throughout: return one speaker and give it every line.",
   "Lines (index. time. text):",
 ].join("\n");
+
+// Names for voices already told apart: the lines carry their voice ids, and
+// the text says who is who. Text only, one call per 400 lines.
+const NAME_PROMPT = [
+  "You are given transcript lines of one recording. Each line carries the id of the voice that says it; the voices are already told apart.",
+  "Name the voices the conversation names.",
+  'Return ONLY JSON: {"speakers": [{"id": "S1", "name": "…"}]}',
+  "1. Name a voice only from what is said: someone introduces themselves, a host names a guest, one person addresses another by name (the name then belongs to the voice being addressed, not the one saying it). Use the name as it is said.",
+  '2. A voice the conversation never names: return "" as its name.',
+  "3. Never guess a name from the subject or a person you recognize.",
+  "4. Return every voice id that appears in the lines, each once.",
+  "Lines (index. time. voice. text):",
+].join("\n");
+const NAME_LINES = 400;
+
+const nameResponseSchema = z.object({
+  speakers: z.array(z.object({ id: z.string(), name: z.string() })),
+});
 
 const responseSchema = z.object({
   speakers: z.array(z.object({ id: z.string(), name: z.string() })),
@@ -65,6 +89,7 @@ async function speakersOf(
   lines: TranscriptSegment[],
   offset: number,
   known: Speaker[],
+  userId: string | null,
 ): Promise<z.infer<typeof responseSchema>> {
   const roster =
     known.length > 0
@@ -80,7 +105,7 @@ async function speakersOf(
       json: true,
       maxOutputTokens: 65536,
       lowResolution: true,
-      usage: { userId: null, feature: "transcribe" },
+      usage: { userId, feature: "transcribe" },
     },
     (text) => {
       const parsed = responseSchema.safeParse(extractJson(text));
@@ -96,7 +121,7 @@ async function speakersOf(
 export async function detectSpeakers(
   media: { part: MediaPart; windowable: boolean; inline: boolean },
   lines: TranscriptSegment[],
-  opts: { deadline?: number } = {},
+  opts: { deadline?: number; userId?: string | null } = {},
 ): Promise<SpeakerLines> {
   if (lines.length === 0 || !process.env.GEMINI_API_KEY) return EMPTY;
 
@@ -119,7 +144,7 @@ export async function detectSpeakers(
     const whole = [media.part(), { text: SPEAKER_PROMPT }];
     const total = media.inline ? 0 : await geminiCountTokens(whole);
     if (total === null || total <= GEMINI_SINGLE_CALL_TOKENS || !media.windowable) {
-      take(await speakersOf(media.part, undefined, lines, 0, []));
+      take(await speakersOf(media.part, undefined, lines, 0, [], opts.userId ?? null));
     } else {
       // Too long for one call: windows in order, each carrying the roster
       // forward so a voice heard in the first window keeps its id in the
@@ -140,6 +165,7 @@ export async function detectSpeakers(
             lines.slice(first, after),
             first,
             [...roster.values()],
+            opts.userId ?? null,
           ),
         );
       }
@@ -149,6 +175,58 @@ export async function detectSpeakers(
     return EMPTY;
   }
 
+  return settleSpeakers(roster, byLine);
+}
+
+/** Names for lines that already carry their voice ids (a Deepgram
+    transcript). Reads the text only; the roster is the ids in order of first
+    speaking, named where the conversation names them. Answers an empty
+    roster when one voice speaks throughout, and unnamed voices without a
+    key or when the pass fails. */
+export async function nameSpeakers(
+  lines: TranscriptSegment[],
+  userId: string | null = null,
+): Promise<SpeakerLines> {
+  const byLine = lines.map((line) => line.speaker ?? null);
+  const roster = new Map<string, Speaker>();
+  for (const id of byLine) {
+    if (id !== null && !roster.has(id)) roster.set(id, { id, name: "" });
+  }
+  if (roster.size <= 1) return EMPTY;
+  if (process.env.GEMINI_API_KEY) {
+    try {
+      // Names are said early — an introduction, a host's welcome — so the
+      // first batch names most voices; later batches only fill in the rest.
+      for (let at = 0; at < lines.length; at += NAME_LINES) {
+        if ([...roster.values()].every((s) => s.name !== "")) break;
+        const batch = lines.slice(at, at + NAME_LINES);
+        const prompt = [
+          NAME_PROMPT,
+          ...batch.map(
+            (line, i) =>
+              `${at + i}. ${formatTime(line.start)}. ${line.speaker ?? "?"}. ${line.text.replace(/\n/g, " ")}`,
+          ),
+        ].join("\n");
+        const answer = await geminiCall(
+          [{ text: prompt }],
+          { json: true, maxOutputTokens: 4096, usage: { userId, feature: "transcribe" } },
+          (text) => {
+            const parsed = nameResponseSchema.safeParse(extractJson(text));
+            if (!parsed.success) throw new Error("output was not speakers");
+            return parsed.data;
+          },
+        );
+        for (const speaker of answer.speakers) {
+          const known = roster.get(speaker.id);
+          if (known && known.name === "" && speaker.name.trim() !== "") {
+            roster.set(speaker.id, { id: speaker.id, name: speaker.name.trim() });
+          }
+        }
+      }
+    } catch (err) {
+      console.warn("[speakers] naming failed:", err instanceof Error ? err.message : err);
+    }
+  }
   return settleSpeakers(roster, byLine);
 }
 

@@ -74,12 +74,17 @@ export type DistillQuote = {
   caption: string;
 };
 
+/** How many times one extraction may run again (Regenerate). The count
+    rides on the extraction that replaces it. */
+export const DISTILL_REGENERATE_MAX = 2;
+
 /** Stored on NotebookDocument.distillations, newest first. */
 export type Distillation = {
   id: string;
   question: string;
   createdAt: string; // ISO
   createdById?: string; // account that ran the distillation; absent = before attribution
+  regenerations?: number; // times this question ran again to make this one; absent = 0
   quotes: DistillQuote[];
 };
 
@@ -142,6 +147,7 @@ export type CorpusDistillation = {
   question: string;
   createdAt: string; // ISO
   createdById?: string;
+  regenerations?: number; // as on Distillation
   quotes: CorpusDistillQuote[];
 };
 
@@ -293,7 +299,8 @@ export type HistoryEntry = {
     | "STYLE"
     | "NOTE_REMOVE"
     | "SECTION_REMOVE"
-    | "DOCUMENT_DETACH";
+    | "DOCUMENT_DETACH"
+    | "NOTE_MERGE";
   // The snippet the entry shows: the edited or removed text, the section or
   // document title, the linked quote.
   content: string;
@@ -301,20 +308,10 @@ export type HistoryEntry = {
   createdAt: string; // ISO
 };
 
-// ── Multi upload (SPEC.md §22): documents added together onto one page ──
+// ── Stitch (SPEC.md §22): the assistant over the project's documents, from the graph ──
 
-/** One member of a multi upload, as the multi upload page lists it. */
-export type MultiMemberView = {
-  id: string; // document id
-  title: string;
-  hasVideo: boolean;
-  blockCount: number;
-  sourceUrl: string | null;
-  order: number;
-};
-
-/** One generated document of a multi upload (SPEC.md §22): the Stitch
-    assistant wrote it from the members. */
+/** One generated document of the project (SPEC.md §22): Stitch wrote it
+    from the project's documents. */
 export type GeneratedDocumentView = {
   id: string; // document id
   title: string;
@@ -323,25 +320,44 @@ export type GeneratedDocumentView = {
   blockCount: number;
 };
 
-export type MultiUploadView = {
+/** What Stitch read of one document (SPEC.md §22). read: every block went
+    to the model. cut: the first `blocks` of `total` did, the rest cut for
+    length. leftOut: none did, the document past the documents budget.
+    empty: the document has nothing to read, and `reason` says why — a
+    video or audio document reads as its transcript lines, a handwritten
+    document as its converted text, so a transcript or conversion that has
+    not landed is an empty document. `detail` is the stored transcription
+    or conversion error. */
+export type StitchDocument = {
   id: string;
-  notebookId: string;
   title: string;
-  createdAt: string; // ISO
-  members: MultiMemberView[];
-  generated: GeneratedDocumentView[]; // newest first
+  kind: "text" | "video" | "audio" | "handwritten";
+  status: "read" | "cut" | "leftOut" | "empty";
+  blocks: number;
+  total: number;
+  reason:
+    | "transcriptPending"
+    | "transcriptStale"
+    | "transcriptFailed"
+    | "transcriptNone"
+    | "conversionPending"
+    | "conversionFailed"
+    | "conversionNone"
+    | "noText"
+    | null;
+  detail: string | null;
 };
 
-/** A multi upload as the document bar lists it. */
-export type MultiUploadSummary = { id: string; title: string; memberCount: number };
-
 /** What one Stitch command produced (SPEC.md §22): the reply, how many links
-    it proposed (each a recommended link awaiting Accept), and the generated
-    document when it wrote one. */
+    it proposed (each a recommended link awaiting Accept), the generated
+    document when it wrote one, and what was read of each document. With
+    fewer than two documents read, the command did not run: reply is empty,
+    nothing is stored, and documents says why. */
 export type StitchResult = {
   reply: string;
   linkCount: number;
   document: { id: string; title: string } | null;
+  documents: StitchDocument[];
 };
 
 // ── Graph view (SPEC.md §13): documents as nodes, links as weighted edges ──
@@ -358,9 +374,16 @@ export type GraphNode = {
 export type GraphEdgeLink = {
   id: string;
   fromDocumentId: string;
+  fromTitle: string;
   toDocumentId: string;
+  toTitle: string;
   quotedText: string; // the from end
   toQuotedText: string | null; // the to end; null = document-level
+  // The block each end's quote sits in, whole: the passage the expanded link
+  // shows around the quote. Null when the block is gone or the end is
+  // document-level.
+  fromBlockText: string | null;
+  toBlockText: string | null;
   reason: string | null;
   recommended: boolean;
 };
@@ -386,6 +409,8 @@ export type RecommendedLinkView = {
   toTitle: string;
   quotedText: string; // the from end
   toQuotedText: string | null; // the to end; null = document-level
+  fromBlockText: string | null; // the block around each end's quote, as on GraphEdgeLink
+  toBlockText: string | null;
   reason: string | null;
   createdById: string | null;
   replies: ReplyView[];

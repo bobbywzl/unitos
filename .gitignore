@@ -47,3 +47,8 @@ next-env.d.ts
 
 # import compare runs (scripts/qa/import-compare.mjs)
 .qa/
+
+# tool eval runs (scripts/eval/run.ts)
+.eval/
+scripts/eval/cases/from-ratings.json
+scripts/eval/fixtures/rated-*.md

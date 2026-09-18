@@ -11,6 +11,7 @@ import { CollabProvider, type CollabState } from "@/components/collab/collab-con
 import { SyncRefresh } from "@/components/collab/sync-refresh";
 import { ExportMenu } from "@/components/export-menu";
 import { Outline } from "@/components/outline/outline";
+import { billingLinks } from "@/lib/billing/switch";
 import { accountTier } from "@/lib/tiers";
 
 export const dynamic = "force-dynamic";
@@ -110,6 +111,7 @@ export default async function NotesPage(props: { params: Promise<{ notebookId: s
     trialEndsAt: user.trialEndsAt?.toISOString() ?? null,
     premium: tier !== "expired",
     ultra: tier === "ultra",
+    billing: await billingLinks(),
   };
 
   return (

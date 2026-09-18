@@ -10,11 +10,10 @@ import {
   MAX_IMAGES_PER_CONVERSATION,
   MAX_IMAGES_PER_MESSAGE,
 } from "@/lib/assistant/attachments";
-import { authEnabled } from "@/lib/auth";
+import { thinkingEffort, thinkingSchema } from "@/lib/assistant/thinking";
 import { notebookAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
 import {
-  DERIVATION_EFFORT,
   DERIVATION_MODEL,
   MAX_OUTPUT_TOKENS,
   STREAM_ERROR_TOKEN,
@@ -22,12 +21,12 @@ import {
 import { loadProfile } from "@/lib/derive/context";
 import { callForJson, modelErrorMessage } from "@/lib/derive/json-call";
 import { streamTextTo } from "@/lib/derive/text-stream";
-import { ensureAllDigests, ensureDigest } from "@/lib/digest/ensure";
-import { corporaSystem, corpusSystem } from "@/lib/digest/render";
+import { ensureDigest } from "@/lib/digest/ensure";
+import { corpusSystem, documentSystem } from "@/lib/digest/render";
 import { currentLang, serverT } from "@/lib/i18n/server";
 import { kimi, kimiConfigured, kimiOptions, WEB_SEARCH_TOOL, WEB_SEARCH_USD, webSearchTool } from "@/lib/kimi";
 import { resolveModelId } from "@/lib/models";
-import { computeCostUsd, recordUsage, sdkTokens } from "@/lib/usage";
+import { addTokens, computeCostUsd, recordUsage, sdkTokens, type TokenCounts } from "@/lib/usage";
 import type { TFunc } from "@/lib/i18n/dictionaries";
 import { synthesisAskPrompt, synthesisHistoryTurn, synthesisTaskPrompt } from "@/lib/prompts/synthesis";
 import { parseBody } from "@/lib/validate";
@@ -35,16 +34,23 @@ import { parseBody } from "@/lib/validate";
 export const maxDuration = 120;
 
 // Assistant panel with two scopes, both reading the digest (SPEC.md §7).
-// Scope ids stay as wire values: notebook = this corpus whole, corpus = every
-// corpus whole. SYNTHESIS derivations; transient output.
+// Scope ids stay as wire values: document = This page (the open document
+// whole), notebook = Project (this project whole). SYNTHESIS derivations;
+// transient output.
 const assistantSchema = z.object({
   notebookId: z.string().min(1),
-  scope: z.enum(["notebook", "corpus"]),
+  scope: z.enum(["document", "notebook"]),
+  // document scope: the open document.
+  documentId: z.string().min(1).optional(),
   task: z.enum(["ask", "contradictions", "gaps", "unsourced"]),
   question: z.string().max(4000).optional(),
   // ask only: the assistant may search the web and cite outside sources
   // (SPEC.md §7).
   web: z.boolean().optional(),
+  // How hard the model thinks about this message (SPEC.md §7): Fast Thinking
+  // or Deep Thinking. Absent = Deep, the effort every answer used before the
+  // choice existed.
+  thinking: thinkingSchema.optional(),
   // ask only: the conversation so far, oldest first (SPEC.md §7). The
   // question continues it. The prompt reads the newest MAX_HISTORY_TURNS.
   history: z.array(conversationTurnSchema).max(200).optional(),
@@ -95,6 +101,9 @@ async function handle(req: Request, t: TFunc) {
   if (data.task !== "ask" && data.scope !== "notebook") {
     return NextResponse.json({ error: t("api.taskCorpusScope") }, { status: 400 });
   }
+  if (data.scope === "document" && !data.documentId) {
+    return NextResponse.json({ error: t("api.missingDocumentId") }, { status: 400 });
+  }
   const question = data.question?.trim() ?? "";
   const images = data.images ?? [];
   const files = data.files ?? [];
@@ -114,24 +123,28 @@ async function handle(req: Request, t: TFunc) {
   const profile = await loadProfile(data.notebookId);
   const model = await kimi(DERIVATION_MODEL.SYNTHESIS);
   const maxOutputTokens = MAX_OUTPUT_TOKENS.SYNTHESIS;
+  const effort = thinkingEffort(data.thinking);
 
   // The digest is the scope context: deterministic until the content changes,
   // so the prompt prefix caches across questions (SPEC.md §2).
   let system: string;
   let scopeLabel: string;
-  if (data.scope === "notebook") {
-    const digest = await ensureDigest(data.notebookId);
-    if (!digest) return NextResponse.json({ error: t("api.corpusNotFound") }, { status: 404 });
+  const digest = await ensureDigest(data.notebookId);
+  if (!digest) return NextResponse.json({ error: t("api.corpusNotFound") }, { status: 404 });
+  if (data.scope === "document") {
+    // This page: the open document from the project's digest, whole, with
+    // its layers and the notes that cite it.
+    const rendered = documentSystem(digest.parts, data.documentId!);
+    if (rendered === null) {
+      return NextResponse.json({ error: t("api.documentNotAttachedToCorpus") }, { status: 404 });
+    }
+    system = rendered;
+    scopeLabel =
+      "this page: the open document in full, and every note, annotation, distillation, extraction, and summary on it";
+  } else {
     system = corpusSystem(digest.parts);
     scopeLabel =
-      "this corpus: every document in full, and every note, annotation, distillation, extraction, and summary in it";
-  } else {
-    // Corpora scope: the signed-in reader's corpora (every corpus in
-    // single-reader mode).
-    const digests = await ensureAllDigests(authEnabled() ? user.id : undefined);
-    system = corporaSystem(digests.map((d) => d.parts));
-    scopeLabel =
-      "all your corpora: every document, note, annotation, distillation, extraction, and summary across them";
+      "this project: every document in full, and every note, annotation, distillation, extraction, and summary in it";
   }
 
   const lang = await currentLang();
@@ -213,7 +226,7 @@ async function handle(req: Request, t: TFunc) {
     const result = streamText({
       model,
       maxOutputTokens,
-      providerOptions: kimiOptions(DERIVATION_EFFORT.SYNTHESIS),
+      providerOptions: kimiOptions(effort),
       allowSystemInMessages: true,
       messages,
       ...(web
@@ -227,10 +240,21 @@ async function handle(req: Request, t: TFunc) {
       abortSignal: req.signal,
       onEnd: ({ usage }) => {
         console.log(
-          `[assistant] ask scope=${data.scope} web=${web} turns=${turns} images=${images.length} files=${files.length} searches=${searches} chars=${system.length} cacheRead=${usage.inputTokenDetails.cacheReadTokens ?? 0} ` +
+          `[assistant] ask scope=${data.scope} thinking=${data.thinking ?? "deep"} web=${web} turns=${turns} images=${images.length} files=${files.length} searches=${searches} chars=${system.length} cacheRead=${usage.inputTokenDetails.cacheReadTokens ?? 0} ` +
             `cacheWrite=${usage.inputTokenDetails.cacheWriteTokens ?? 0} output=${usage.outputTokens ?? 0}`,
         );
         const tokens = sdkTokens(usage);
+        recordUsage(usageMeta, tokens, computeCostUsd(usageMeta.model, tokens) + searches * WEB_SEARCH_USD);
+      },
+      // Stop (SPEC.md §6): the steps that finished were billed, so they are
+      // recorded. A step cut off mid-answer reports no usage at all — the
+      // provider billed it and the page cannot know, so a stopped answer
+      // reads a little under what it cost.
+      onAbort: ({ steps }) => {
+        const tokens = steps.reduce<TokenCounts>(
+          (sum, step) => addTokens(sum, sdkTokens(step.usage)),
+          {},
+        );
         recordUsage(usageMeta, tokens, computeCostUsd(usageMeta.model, tokens) + searches * WEB_SEARCH_USD);
       },
     });
@@ -279,7 +303,7 @@ async function handle(req: Request, t: TFunc) {
     model,
     messages,
     maxOutputTokens,
-    providerOptions: kimiOptions(DERIVATION_EFFORT.SYNTHESIS),
+    providerOptions: kimiOptions(effort),
     schema: issuesSchema,
     label: `assistant:${data.task}`,
     usage: usageMeta,

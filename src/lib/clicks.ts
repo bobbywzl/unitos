@@ -10,8 +10,8 @@
 export const CLICK_SURFACES = [
   "topbar", // the workspace header: documents, share, history, context, guide
   "sidebar", // the rail: assistant, notes, distill, graph, annotations, edits, more
-  "ai-toolbar", // the selection popover: explain, simplify, extract, comment, link, highlight, add to notes, read aloud
-  "article-menu", // the floating menu at the top left: frequent asks, search, distill
+  "ai-toolbar", // the selection popover: assistant, simplify, visualize, comment, link, highlight, add to notes, read aloud
+  "article-menu", // the floating menu at the top left: the contents
   "reader", // the article itself: distill button, edit toolbar, tool cards, distilled page, pages, video pane
   "tray", // the notes tray: notes, assistant, distill, annotations, and edits tabs
 ] as const;
@@ -42,20 +42,27 @@ export type ClickGroup = (typeof CLICK_GROUPS)[number];
 const CLICK_FUNCTIONS: Record<ClickGroup, readonly string[]> = {
   ai: [
     // the AI toolbar
-    "explain",
     "simplify",
-    "extract",
-    "extract-term",
-    "assistant-run", // a question about the selection
+    "assistant-run", // a question or a command about the selection
     "read-aloud",
     // the article menu's asks: ask:summarize, ask:key-takeaways, ask:explain-simply
     "ask:",
     // the assistant panel: the scope asked, the task run, the summary depth
     "assistant-ask:",
     "assistant-web:",
+    "assistant-thinking:",
+    // highlighting an assistant answer: the side chat, the quoted question,
+    // the comment
+    "assistant-side-chat-start",
+    "assistant-side-chat-open",
+    "assistant-quote-ask",
+    "assistant-answer-comment",
+    "assistant-comment-send",
     "assistant-task:",
     "assistant-recommended:",
     "assistant-regenerate",
+    // the rating of a tool's output: rate:<tool>:up, rate:<tool>:down, rate:<tool>:comment
+    "rate:",
     // distill (keypoints) and extract (distill) runs
     "keypoints-page-run",
     "keypoints-page-regenerate",
@@ -63,7 +70,6 @@ const CLICK_FUNCTIONS: Record<ClickGroup, readonly string[]> = {
     "distill-corpus-run",
     // handwritten pages
     "page-ask",
-    "page-explain",
     "convert-to-text",
     "convert-again",
     "convert-retry",
@@ -74,8 +80,6 @@ const CLICK_FUNCTIONS: Record<ClickGroup, readonly string[]> = {
     "document-compare",
     "translate",
     // video
-    "video-explain",
-    "video-line-explain",
     "video-ask",
     "video-ask-add-note",
     "video-assistant-send",

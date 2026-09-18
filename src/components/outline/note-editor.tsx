@@ -5,6 +5,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { attachNoteEditable, type NoteEditable, type StyleCommand } from "@/lib/note-editable";
 import type { Patch } from "@/lib/markdown-style";
 import { IMAGE_ACCEPT, imageMarkdown, refuseImage, uploadImage } from "@/lib/images";
+import { hasQuoteDrag, quoteMarkdown, readQuoteDrag, type QuoteDrag } from "@/lib/quote-drag";
 import { RedoIcon, UndoIcon } from "@/components/icons";
 import { useCollab } from "@/components/collab/collab-context";
 import { useT } from "@/components/lang-provider";
@@ -69,13 +70,9 @@ function setLinePrefix(lines: string[], prefix: (i: number) => string, active: R
 
 // track names the format in click telemetry (SPEC.md §7). full: the notes
 // full page only; the tray's bar leaves it out.
+// No Paragraph button: Backspace at the start of a marked line drops its
+// marker (lib/note-editable.ts), and that is the whole of that action.
 const FORMATS: { label: string; tipKey: TKey; track: string; full?: boolean; map: (lines: string[]) => string[] }[] = [
-  {
-    label: "¶",
-    tipKey: "outline.tipParagraph",
-    track: "paragraph",
-    map: (ls) => ls.map((l) => l.replace(LINE_MARKER, "$1")),
-  },
   {
     label: "H1",
     tipKey: "outline.tipHeading1",
@@ -124,7 +121,6 @@ const FORMATS: { label: string; tipKey: TKey; track: string; full?: boolean; map
     label: "❝",
     tipKey: "outline.tipQuote",
     track: "quote",
-    full: true,
     map: (ls) => setLinePrefix(ls, () => "> ", /^\s*>/),
   },
 ];
@@ -155,19 +151,6 @@ function useModKey(): string {
   return mod;
 }
 
-function GripIcon() {
-  return (
-    <svg width="10" height="14" viewBox="0 0 10 14" fill="currentColor" aria-hidden>
-      <circle cx="2.5" cy="2.5" r="1.4" />
-      <circle cx="7.5" cy="2.5" r="1.4" />
-      <circle cx="2.5" cy="7" r="1.4" />
-      <circle cx="7.5" cy="7" r="1.4" />
-      <circle cx="2.5" cy="11.5" r="1.4" />
-      <circle cx="7.5" cy="11.5" r="1.4" />
-    </svg>
-  );
-}
-
 function ImageIcon({ size = 13 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -191,9 +174,11 @@ export function NoteEditor({
   onKeyDown,
   placeholder,
   className = "",
-  handle,
   full = false,
   moreHref,
+  autoFocus = true,
+  title,
+  onQuoteDrop,
 }: {
   value: string;
   onChange: (next: string) => void;
@@ -202,13 +187,21 @@ export function NoteEditor({
   /** Extra classes on the root: a flex column, the bar above the text. Give it
       a height (min-h-0 flex-1 under a capped parent) and the text scrolls. */
   className?: string;
-  /** When set, a slim row above the bar — a grip and a label — is the drag
-      handle: pointerdown on it goes here. */
-  handle?: { onPointerDown: (e: React.PointerEvent<HTMLDivElement>) => void; title: string; label: string };
   /** The whole bar (the notes full page); false: the core tools (the tray). */
   full?: boolean;
   /** With the core bar: where the whole bar is — the notes full page. */
   moreHref?: string;
+  /** The caret lands at the end of the text on mount. False: the title field
+      takes the focus (note-title-field.tsx). */
+  autoFocus?: boolean;
+  /** The note's title field, drawn under the bar and over the body: the bar
+      is the editor's own, so it sits at the top of the editor, and the title
+      reads as the first line of what it writes (SPEC.md §6). */
+  title?: React.ReactNode;
+  /** A quote dragged from the reader and let go in the text
+      (lib/quote-drag.ts): the quote is already in the text at the caret
+      when this runs; the owner attaches its source to the note. */
+  onQuoteDrop?: (drag: QuoteDrag) => void | Promise<void>;
 }) {
   const t = useT();
   const mod = useModKey();
@@ -218,6 +211,8 @@ export function NoteEditor({
   const core = useRef<NoteEditable | null>(null);
   const onChangeRef = useRef(onChange);
   const valueRef = useRef(value);
+  // Read once, on mount: whether the caret lands in the text.
+  const autoFocusRef = useRef(autoFocus);
   const [imageError, setImageError] = useState<string | null>(null);
   // What the undo and redo buttons can do, read back after every edit — the
   // editable owns the history (lib/note-editable.ts) and Cmd+Z reaches it
@@ -268,7 +263,7 @@ export function NoteEditor({
       onImageFiles: (files) => void insertImagesRef.current(files),
     });
     core.current = editable;
-    editable.focusEnd();
+    if (autoFocusRef.current) editable.focusEnd();
     return () => {
       editable.destroy();
       core.current = null;
@@ -313,6 +308,96 @@ export function NoteEditor({
     onKeyDown?.(e);
   }
 
+  // A quote dragged over the text (lib/quote-drag.ts): a caret, drawn by
+  // this component and never blinking, stands where the quote would land —
+  // the text position under the pointer — and the drop puts the quote there
+  // on a line of its own. The caret rides the text's box; nothing else on the
+  // page takes the drop.
+  const bodyBox = useRef<HTMLDivElement>(null);
+  const [dropCaret, setDropCaret] = useState<{ top: number; left: number; height: number } | null>(null);
+
+  const rangeAtPoint = (x: number, y: number): Range | null => {
+    const doc = document as Document & {
+      caretPositionFromPoint?: (x: number, y: number) => { offsetNode: Node; offset: number } | null;
+      caretRangeFromPoint?: (x: number, y: number) => Range | null;
+    };
+    let range: Range | null = null;
+    if (doc.caretPositionFromPoint) {
+      const at = doc.caretPositionFromPoint(x, y);
+      if (at) {
+        range = document.createRange();
+        range.setStart(at.offsetNode, at.offset);
+        range.collapse(true);
+      }
+    } else if (doc.caretRangeFromPoint) {
+      range = doc.caretRangeFromPoint(x, y);
+    }
+    const el = ref.current;
+    if (!el) return null;
+    if (!range || !el.contains(range.startContainer)) {
+      // Past the text: the end of it.
+      range = document.createRange();
+      range.selectNodeContents(el);
+      range.collapse(false);
+    }
+    return range;
+  };
+
+  const showCaret = (range: Range) => {
+    const box = bodyBox.current;
+    if (!box) return;
+    const rects = range.getClientRects();
+    let rect = rects.length > 0 ? rects[0] : range.getBoundingClientRect();
+    if (rect.height === 0) {
+      // An empty line has no glyph to measure; the line's own box does.
+      const node = range.startContainer;
+      const host = node instanceof Element ? node : node.parentElement;
+      if (host) rect = host.getBoundingClientRect();
+    }
+    const at = box.getBoundingClientRect();
+    setDropCaret({
+      top: rect.top - at.top,
+      left: rect.left - at.left,
+      height: Math.max(14, rect.height),
+    });
+  };
+
+  function onQuoteDragOver(e: React.DragEvent) {
+    if (!onQuoteDrop || !hasQuoteDrag(e.dataTransfer)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = "copy";
+    const range = rangeAtPoint(e.clientX, e.clientY);
+    if (range) showCaret(range);
+  }
+
+  function onQuoteDragLeave(e: React.DragEvent) {
+    if (!onQuoteDrop || !hasQuoteDrag(e.dataTransfer)) return;
+    const to = e.relatedTarget;
+    if (to instanceof Node && bodyBox.current?.contains(to)) return;
+    setDropCaret(null);
+  }
+
+  function onQuoteDropped(e: React.DragEvent) {
+    if (!onQuoteDrop || !hasQuoteDrag(e.dataTransfer)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setDropCaret(null);
+    const drag = readQuoteDrag(e.dataTransfer);
+    const el = ref.current;
+    if (!drag || !el || !core.current) return;
+    const range = rangeAtPoint(e.clientX, e.clientY);
+    el.focus({ preventScroll: true });
+    if (range) {
+      const sel = window.getSelection();
+      sel?.removeAllRanges();
+      sel?.addRange(range);
+    }
+    core.current.insertBlock(quoteMarkdown(drag.text));
+    readHistory();
+    void onQuoteDrop(drag);
+  }
+
   const keep = (e: React.MouseEvent) => e.preventDefault();
   const barButton =
     "inline-flex items-center rounded-full px-2 py-0.5 text-[11.5px] font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800";
@@ -320,19 +405,6 @@ export function NoteEditor({
 
   return (
     <div className={`flex min-h-0 flex-col gap-1.5 ${className}`}>
-      {handle && (
-        <div
-          onPointerDown={handle.onPointerDown}
-          style={{ touchAction: "pan-y" }}
-          data-tip={handle.title}
-          className="flex shrink-0 cursor-grab items-center gap-1.5 text-[11px] font-bold tracking-[0.08em] text-sand-500 uppercase select-none active:cursor-grabbing"
-        >
-          <span className="flex text-sand-400">
-            <GripIcon />
-          </span>
-          {handle.label}
-        </div>
-      )}
       <div className="flex shrink-0 flex-wrap items-center gap-0.5">
         <button
           type="button"
@@ -464,17 +536,34 @@ export function NoteEditor({
         </Link>
       )}
       {imageError && <p className="shrink-0 text-[11px] text-red-500">{imageError}</p>}
+      {title}
       <div
-        ref={ref}
-        role="textbox"
-        aria-multiline="true"
-        aria-label={placeholder ?? t("outline.noteText")}
-        contentEditable
-        suppressContentEditableWarning
-        data-placeholder={placeholder}
-        onKeyDown={handleKeyDown}
-        className="note-doc prose prose-sm max-w-none prose-p:my-1.5 prose-headings:my-2 prose-ul:my-1.5 prose-ol:my-1.5 min-h-[4.5em] min-w-0 flex-1 overflow-y-auto outline-none"
-      />
+        ref={bodyBox}
+        className="relative flex min-h-0 min-w-0 flex-1 flex-col"
+        onDragOver={onQuoteDragOver}
+        onDragLeave={onQuoteDragLeave}
+        onDrop={onQuoteDropped}
+        data-tip={dropCaret ? t("outline.dropQuoteHere") : undefined}
+      >
+        <div
+          ref={ref}
+          role="textbox"
+          aria-multiline="true"
+          aria-label={placeholder ?? t("outline.noteText")}
+          contentEditable
+          suppressContentEditableWarning
+          data-placeholder={placeholder}
+          onKeyDown={handleKeyDown}
+          className="note-doc prose prose-sm max-w-none prose-p:my-1.5 prose-headings:my-2 prose-ul:my-1.5 prose-ol:my-1.5 min-h-[4.5em] min-w-0 flex-1 overflow-y-auto outline-none"
+        />
+        {dropCaret && (
+          <div
+            aria-hidden
+            className="pointer-events-none absolute w-[2px] rounded-full bg-clay-500"
+            style={{ top: dropCaret.top, left: dropCaret.left, height: dropCaret.height }}
+          />
+        )}
+      </div>
     </div>
   );
 }

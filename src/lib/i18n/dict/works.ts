@@ -27,13 +27,15 @@ const en = {
   welcomeTagline: "Unitos Notebook, your all-powerful notemaker",
   nudgeProject: "Start here: press New project. A project binds documents and notes.",
   nudgeDocument: "Add more documents with +: a PDF, a web page, a video, or Google Drive.",
-  nudgeSelect: "Select any passage of the text. A toolbar appears: Explain, Simplify, Comment, and the Assistant.",
+  nudgeSelect: "Select any passage of the text. A toolbar appears: the Assistant, Simplify, Comment, and colors.",
   nudgeRail:
     "The side panel: Assistant, Graph, Notes, Annotations, Distill, Edit history. Open one and explore.",
   nudgeTools:
-    "Distill writes the article as bullet points. Extract answers one question with quotes. Assistant, top left, takes any command.",
-  nudgeFloat: "Hold a note's header and drag it left. The note floats over the article while you read.",
-  nudgeMerge: "Drag another note onto this card and drop it. The AI merges the two into one note.",
+    "Distill writes the article as bullet points. Extract answers one question with quotes. Contents, top left, jumps to any part of the article.",
+  nudgeMerge: "Hold a note over another note until the ring closes. The two join into one note.",
+  nudgeFloat: "Hold a note and drag it onto the article. The note floats there while you read.",
+  nudgeFullPage: "The four arrows open the notes full page: every note of the project, and each section as a board.",
+  nudgeBoard: "Click a section's title to open it as a board: its notes side by side, filling the screen.",
 
   // Companions (SPEC.md §23): the web apps for the steps around dissecting a
   // document that Unitos does not do, under Projects on the dashboard.
@@ -72,22 +74,16 @@ const en = {
     "Click a quote to jump to its exact words. Add to notes files a quote as a pending note. The Distill tab in the side panel lists the distillation and every extraction of the open document.",
   guideCircleHeader: "Circle & ask — draw on anything",
   guideCircleBody:
-    "Hold and circle any part of a figure or equation. Explain reads the visual; a color marks it; Comment and Link work as on text.",
+    "Hold and circle any part of a figure or equation. The Assistant reads the visual and answers; Analyze reads a figure or table in three sections; a color marks it; Comment and Link work as on text.",
   guideCirclePagesBody:
-    "Handwritten PDFs import as pages, and every page is a figure: circle a formula, a sketch, or a margin note, then Ask, Explain, Comment, or pick a color.",
+    "Handwritten PDFs import as pages, and every page is a figure: circle a formula, a sketch, or a margin note, then Ask, Comment, or pick a color.",
   guideSelectHeader: "Select text and use the AI toolbar",
   guideAssistant: "Assistant",
   guideAssistantBody:
-    "Type or speak a command about the selection. It proposes a plan: Ask mode waits for your approval, Auto mode runs it. The reply opens a chat beside the article; every turn applies to the selection.",
-  guideExplain: "Explain",
-  guideExplainBody:
-    "A short explanation of the selection, tuned to your background. Saved under Annotations; click the highlight to reopen it.",
+    "Type or speak a question or a command about the selection. A question is answered from the passages across the article that match the selection, each cited with a ¶ chip that jumps to it. A command proposes a plan: Ask mode waits for your approval, Auto mode runs it. The reply opens a chat beside the article; every turn applies to the selection.",
   guideSimplify: "Simplify",
   guideSimplifyBody:
     "Rewrites the selection in plain words in a bubble beside the article. Press a sentence to light up the original it restates. Saved under Annotations.",
-  guideExtract: "Match-it",
-  guideExtractBody:
-    "Highlights every passage in the article that matches what the selection focuses on. Each gets a label chip (M1, M2, …) that jumps back to the selection.",
   guideColors: "Colors",
   guideColorsBody: "Highlight the selection. Type a comment first and it rides on the highlight.",
   guideComment: "Comment",
@@ -104,7 +100,7 @@ const en = {
   guideDistill: "Distill",
   guidePanelHeader: "Side panel",
   guidePanelNotesBody:
-    "Your sections and the pending queue. Drag a note by its grip to reorder it; a line says where it lands. Lay it over another note and hold: a ring draws around that note, and at the full ring the two merge — the AI writes the one note that takes their place. Select notes with the circle at their top right to merge, pin, or delete them together.",
+    "Your sections and the pending queue. Hold a note to pick it up and drag it; a line says where it lands. Hold it over another note: a ring draws around that note, and at the full ring the two join into one note. Drop a note on the article to float it there. Select notes with the circle at their top right to merge, pin, or delete them together.",
   guidePanelAssistantBody:
     "Ask questions at document, project, or projects scope, and run checks (contradictions, gaps).",
   guidePanelDistillBody: "The distillation and every extraction of the open document; open one to read it.",
@@ -179,11 +175,13 @@ const zh: Record<keyof typeof en, string> = {
   welcomeTagline: "Unitos Notebook，你的全能笔记本",
   nudgeProject: "从这里开始：按“新建项目”。一个项目绑定文档和笔记。",
   nudgeDocument: "用 + 添加更多文档：PDF、网页、视频或 Google Drive。",
-  nudgeSelect: "选中正文中的任意一段。工具栏随即出现：解释、简化、评论和助手。",
+  nudgeSelect: "选中正文中的任意一段。工具栏随即出现：助手、简化、评论和颜色。",
   nudgeRail: "侧栏：助手、图谱、笔记、批注、提炼、编辑记录。打开一个，开始探索。",
-  nudgeTools: "提炼把文章写成分条要点。提取用引文回答一个问题。左上角的助手接受任何指令。",
-  nudgeFloat: "按住笔记的标题行向左拖。笔记会浮在文章上，边读边写。",
-  nudgeMerge: "把另一条笔记拖到这张卡片上松开。AI 会把两条合并成一条。",
+  nudgeTools: "提炼把文章写成分条要点。提取用引文回答一个问题。左上角的目录可跳转到文章的任何部分。",
+  nudgeMerge: "把一条笔记压在另一条上按住，直到合并环合拢。两条会合并成一条。",
+  nudgeFloat: "按住一条笔记，拖到文章上。笔记会浮在文章上，边读边写。",
+  nudgeFullPage: "四向箭头打开整页笔记：项目的每条笔记，以及每个章节的看板。",
+  nudgeBoard: "点击章节标题即以看板打开它：笔记并排铺满屏幕。",
 
   companions: "配套应用",
   companionsIntro: "围绕文档、但 Unitos 不做的那些环节所用的网页应用。每个都在新标签页打开。",
@@ -215,21 +213,16 @@ const zh: Record<keyof typeof en, string> = {
     "点击引文可跳到它的原文字句。“添加到笔记”把一条引文存为待定笔记。侧栏的“提炼”页签列出当前文档的提炼和每次提取。",
   guideCircleHeader: "圈选并提问——在任何内容上画圈",
   guideCircleBody:
-    "按住并在插图或公式的任意部分画圈。“解释”解读图像；颜色标记它；“评论”和“链接”与文本上相同。",
+    "按住并在插图或公式的任意部分画圈。助手解读图像并回答；“分析”分三段解读插图或表格；颜色标记它；“评论”和“链接”与文本上相同。",
   guideCirclePagesBody:
-    "手写 PDF 按页面导入，每一页都是一张插图：圈出公式、草图或旁注，然后提问、解释、评论，或选颜色。",
+    "手写 PDF 按页面导入，每一页都是一张插图：圈出公式、草图或旁注，然后提问、评论，或选颜色。",
   guideSelectHeader: "选中文本，使用 AI 工具栏",
   guideAssistant: "助手",
   guideAssistantBody:
-    "对选中内容输入或说出一条指令。它会提出计划：“询问”模式等你批准，“自动”模式直接执行。回复在文章旁打开聊天；每一轮都作用于选中内容。",
-  guideExplain: "解释",
-  guideExplainBody: "对选中内容的简短解释，贴合你的背景。保存在批注下；点击高亮可重新打开。",
+    "对选中内容输入或说出一个问题或一条指令。问题会根据全文中与选中内容匹配的片段作答，每处片段带一个 ¶ 标记，点击即可跳转。指令会提出计划：“询问”模式等你批准，“自动”模式直接执行。回复在文章旁打开聊天；每一轮都作用于选中内容。",
   guideSimplify: "简化",
   guideSimplifyBody:
     "用平实的话改写选中内容，显示在文章旁的气泡里。点击一句，它复述的原文就会亮起。保存在批注下。",
-  guideExtract: "匹配",
-  guideExtractBody:
-    "在全文中高亮与选中内容主旨匹配的每处片段。每处都有一个标签（M1、M2……），点击跳回选中内容。",
   guideColors: "颜色",
   guideColorsBody: "高亮选中内容。先输入评论，评论就附在高亮上。",
   guideComment: "评论",
@@ -243,7 +236,7 @@ const zh: Record<keyof typeof en, string> = {
   guideDistill: "提炼",
   guidePanelHeader: "侧栏",
   guidePanelNotesBody:
-    "你的章节与待定队列。拖动笔记的把手可调整顺序，落位线会显示落点。把笔记压在另一条上按住：那条笔记周围会画出一圈环，环合拢时两条即合并——AI 会写出取代两条的那一条。点击笔记右上角的圆圈选择笔记，可一起合并、置顶或删除。",
+    "你的章节和待定队列。按住一条笔记即可拿起并拖动；落位线说明它会落在哪里。把它压在另一条笔记上按住：那条笔记周围会画出合并环，合拢时两条合并为一条。把笔记放到文章上即浮动。用笔记右上角的圆圈选中笔记，可一起合并、置顶或删除。",
   guidePanelAssistantBody: "在文档、项目或全部项目范围提问，并运行检查（矛盾、疏漏）。",
   guidePanelDistillBody: "当前文档的提炼和每次提取；打开一条即可阅读。",
   guidePanelSummary: "摘要",

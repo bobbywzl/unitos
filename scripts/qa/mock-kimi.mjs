@@ -3,7 +3,7 @@
 // web-search tool uses, and Anthropic's Messages API on /v1/messages for the
 // import's model (lib/claude.ts). Sniffs each prompt and returns valid,
 // context-aware output: real block ids, real quotes, schema-exact JSON — so
-// every AI flow (EXPLAIN, SIMPLIFY, EXTRACT, SALIENCE, assistant ask and act,
+// every AI flow (SIMPLIFY, SALIENCE, DISTILL, assistant ask and act with matches,
 // the import's passes) runs end-to-end with zero external calls. Point the app
 // at it with
 //   MOONSHOT_API_KEY=mock MOONSHOT_BASE_URL=http://localhost:3399/v1
@@ -21,7 +21,8 @@ function textOf(content) {
 function parseBlocks(all) {
   // [block <id>] (TYPE)\n<text until blank line before next [block or end>
   const blocks = [];
-  const re = /\[block ([^\]]+)\] \(([A-Z]+)\)\n([\s\S]*?)(?=\n\n\[block |\n\nDocument title:|$)/g;
+  // A timed block's tag carries its seconds: (TRANSCRIPT 0.0s–14.0s).
+  const re = /\[block ([^\]]+)\] \(([A-Z]+)[^)]*\)\n([\s\S]*?)(?=\n\n\[block |\n\nDocument title:|$)/g;
   let m;
   while ((m = re.exec(all))) blocks.push({ id: m[1], type: m[2], text: m[3] });
   return blocks;
@@ -82,6 +83,57 @@ function buildResponse(all) {
     return JSON.stringify({ quotes: p1 ? [quoteOf(p1, "The passage answers the question directly in the document's own terms.")] : [] });
   }
 
+  // Stitch (SPEC.md §22), the select pass: the first three paragraphs of
+  // every document, ids only.
+  if (all.includes('"blockIds"') && all.includes("A second read will do what the command asks")) {
+    const headers = [...all.matchAll(/\[document ([^\]]+)\] "/g)];
+    const blockIds = [];
+    headers.forEach((h, i) => {
+      const end = i + 1 < headers.length ? headers[i + 1].index : all.length;
+      parseBlocks(all.slice(h.index, end))
+        .filter((b) => b.type === "PARAGRAPH")
+        .slice(0, 3)
+        .forEach((b) => blockIds.push(b.id));
+    });
+    console.log("[mock stitch select]", blockIds.length, "blocks");
+    return JSON.stringify({ blockIds });
+  }
+
+  // Stitch, the answer pass: one link between the first two documents (one
+  // end a verbatim quote, one end the whole block), a page of one whole-block
+  // quote part per document and one text part with sources, and a reply.
+  if (all.includes('"reply"') && all.includes('"parts"') && /\[document [^\]]+\] "/.test(all)) {
+    const headers = [...all.matchAll(/\[document ([^\]]+)\] "/g)];
+    const firstParagraph = headers.map((h, i) => {
+      const end = i + 1 < headers.length ? headers[i + 1].index : all.length;
+      return parseBlocks(all.slice(h.index, end)).find((b) => b.type === "PARAGRAPH" && b.text.length > 40);
+    });
+    const [one, two] = firstParagraph;
+    const links =
+      one && two
+        ? [{ fromBlockId: one.id, fromQuote: one.text.slice(0, 60), toBlockId: two.id, reason: "Mock: both passages make the same claim." }]
+        : [];
+    const parts = [];
+    firstParagraph.forEach((b, i) => {
+      if (!b) return;
+      parts.push({ kind: "heading", text: `Document ${i + 1}` });
+      parts.push({ kind: "quote", blockId: b.id });
+    });
+    if (one) {
+      parts.push({
+        kind: "text",
+        markdown: "**Mock summary.** The documents agree on the point above.",
+        sources: [{ blockId: one.id, quote: one.text.slice(0, 40) }],
+      });
+    }
+    console.log("[mock stitch]", links.length, "links,", parts.length, "parts");
+    return JSON.stringify({
+      reply: `Mock: ${links.length} link proposed and a page of ${parts.length} parts written.`,
+      links,
+      document: parts.length > 0 ? { title: "Mock stitched page", parts } : null,
+    });
+  }
+
   // Recommended links (connect scan): one valid link from the new document to
   // the first other document, quotes copied verbatim from real blocks.
   if (all.includes('"fromQuote"') && /\[document [^\]]+\] "/.test(all)) {
@@ -134,8 +186,18 @@ function buildResponse(all) {
     const p = paragraphs[0];
     if (!p) return JSON.stringify({ reply: "No paragraphs found.", actions: [] });
     const quote = p.text.slice(0, Math.min(48, p.text.length)).trim();
+    // The matches (SPEC.md §7): with a selection, two verbatim passages from
+    // paragraphs after the first, each with a why; none without a selection.
+    const matches = all.includes("The reader has selected")
+      ? paragraphs.slice(1, 4).map((b, i) => ({
+          blockId: b.id,
+          quote: b.text.slice(0, Math.min(70, b.text.length)).trim(),
+          why: `Mock match ${i + 1}: this passage states the topic's claim.`,
+        }))
+      : [];
     return JSON.stringify({
-      reply: "Mock plan: one highlight and one note.",
+      reply: `Mock plan: one highlight and one note. The opening claim is in [block ${p.id}].`,
+      matches,
       actions: [
         {
           type: "highlight",
@@ -167,6 +229,25 @@ function buildResponse(all) {
     }));
     return JSON.stringify({
       spans: spans.length > 0 ? spans : [{ blockId: blocks[0]?.id ?? "x", start: 0, end: 10 }],
+    });
+  }
+
+  // KEYPOINTS (the reader's Distill): one point per paragraph, in order.
+  if (all.includes('"points"') && all.includes("distilled")) {
+    const points = paragraphs.slice(0, 6).map((b) => ({
+      text: `Mock point: ${b.text.slice(0, 50).trim()}.`,
+      blockId: b.id,
+      start: 0,
+      end: Math.min(90, b.text.length),
+    }));
+    return JSON.stringify({ points });
+  }
+
+  // FIND (SPEC.md §11): the first two transcript blocks as one match.
+  if (all.includes('"blockIds"') && all.includes("Their search:")) {
+    const timed = blocks.filter((b) => b.type === "TRANSCRIPT").slice(0, 2);
+    return JSON.stringify({
+      matches: timed.length > 0 ? [{ blockIds: timed.map((b) => b.id), explanation: "Mock match: the speaker says it here." }] : [],
     });
   }
 
@@ -236,6 +317,19 @@ function buildResponse(all) {
 
   // Notebook tasks: no issues found.
   // Gists: the first five words of each listed note.
+  // Contents (SPEC.md §26): every HEADING block past the first as a part,
+  // and the first paragraph of a document with no headings.
+  if (all.includes('"parts"') && all.includes("Write the contents of this document")) {
+    const blocks = parseBlocks(all);
+    const headings = blocks.filter((b, i) => b.type === "HEADING" && i > 0);
+    const parts =
+      headings.length > 0
+        ? headings.map((b) => ({ title: b.text, blockId: b.id, level: 1 }))
+        : blocks.filter((b) => b.type === "PARAGRAPH").slice(0, 1).map((b) => ({ title: "Opening", blockId: b.id, level: 1 }));
+    console.log("[mock contents]", parts.length, "parts");
+    return JSON.stringify({ parts });
+  }
+
   if (all.includes('"gists"')) {
     const gists = [...all.matchAll(/\[note ([^\]]+)\]\n([^\n]*)/g)].map((m) => ({
       id: m[1],
@@ -349,7 +443,8 @@ const usage = () => ({ prompt_tokens: 100, completion_tokens: 50, total_tokens: 
 // Moonshot's invalid-key error. MOCK_KIMI_FAIL=length streams reasoning alone
 // and ends with finish_reason length: the output budget spent before the
 // answer. MOCK_KIMI_DELAY_MS holds the first content delta that long: Kimi
-// K3's silent reasoning, the text stream heartbeat's case.
+// K3's silent reasoning, the text stream heartbeat's case; a JSON call's
+// whole answer that long, the deadline's case.
 const FAIL = process.env.MOCK_KIMI_FAIL ?? "";
 const DELAY_MS = Number(process.env.MOCK_KIMI_DELAY_MS ?? 0);
 const REASONING = "The mock reasons until the output budget is spent.";
@@ -416,6 +511,7 @@ async function chatCompletion(body, res) {
     return;
   }
 
+  if (DELAY_MS) await sleep(DELAY_MS);
   res.writeHead(200, { "content-type": "application/json" });
   res.end(
     JSON.stringify({

@@ -11,13 +11,14 @@ here is a plan or a proposal: each line is either a decision the owner stated
 nobody has assigned to a tier is listed under **Unassigned** rather than
 guessed at.
 
-Today there is no billing. The columns are `User.tier` (`PREMIUM` | `ULTRA`,
-default `PREMIUM`) and `User.trialEndsAt` (`lib/tiers.ts`): a new account gets
-`trialEndsAt` two months out; the operator grants Premium for good by clearing
-it, or Ultra by setting the tier. Past `trialEndsAt` on `PREMIUM` the account
-is **expired**: Premium features gate until the operator extends or grants
-(`premiumActive`). Ultra never expires (`ultraActive`). The single local reader
-(sign-in off) is Ultra: there is no account to gate.
+Billing is built and off (SPEC.md §24, below). The columns are `User.tier`
+(`PREMIUM` | `ULTRA`, default `PREMIUM`) and `User.trialEndsAt`
+(`lib/tiers.ts`): a new account gets `trialEndsAt` two months out; the
+operator grants Premium for good by clearing it, or Ultra by setting the
+tier. Past `trialEndsAt` on `PREMIUM` the account is **expired**: Premium
+features gate until the operator extends or grants (`premiumActive`). Ultra
+never expires (`ultraActive`). The single local reader (sign-in off) is
+Ultra: there is no account to gate.
 
 ## Where the tier is set
 
@@ -27,6 +28,29 @@ control on every account (`components/admin/tier-control.tsx`, `POST
 Premium on a trial until a date. A past date ends the trial now. Nothing else
 writes the tier: sign-in never changes it, and Reset account puts the account
 back on a new trial like a new account.
+
+## Billing
+
+The payment pipeline (SPEC.md §24) sells both tiers through Stripe as
+subscriptions, monthly or yearly, on its own pages under `/billing`: the
+plan page, the order page, Stripe Checkout, the confirmation page, and the
+receipts. It is **off**: the admin billing page (`/admin/billing`) has the
+switch, and until it is on the pages answer 404 and the app shows no link to
+them (the admin sees them as a preview). On needs sign-in on,
+`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, and the four
+`STRIPE_PRICE_<TIER>_MONTHLY` / `STRIPE_PRICE_<TIER>_YEARLY` variables set,
+and all four prices readable from Stripe. Prices live in Stripe, not here:
+the pages show whatever the four prices say, and the yearly toggle's saving
+badge is computed from them, not stated as a number anywhere in code or here.
+
+A payment writes the same two columns the gates read. A paid subscription
+sets `tier` to the tier bought and clears `trialEndsAt`; the subscription's
+id, tier, and paid period's end sit beside them for the billing pages. An
+ended subscription sets `tier` to PREMIUM and `trialEndsAt` to the paid
+period's end: Premium until then, expired after, whatever the operator had
+granted before. The admin's Tier control still works on every account and
+still wins until the next Stripe event. Every paid invoice is one receipt
+(`Purchase`).
 
 ## Where the tier is read
 
@@ -91,7 +115,7 @@ Ultra when the account is not Ultra.
 |---|---|
 | Everything in Premium | Whole |
 | Visualize (SPEC.md §20) | The selection as a picture — a directed diagram, a drawing, or a short animation — on Claude Fable 5.1 at its highest effort; declined with the reason when the model is not certain the picture carries the passage's core idea |
-| Tool conversations (SPEC.md §21) | Continuing an Explain, Simplify, Analyze, or Visualize card's output into a conversation (Explain+, Simplify+, …). Offered to every account at the end of the tool's output; a non-Ultra press answers with the plain Ultra message, like Visualize, and the route answers 403 |
+| Tool conversations (SPEC.md §21) | Continuing a Simplify, Analyze, or Visualize card's output into a conversation (Simplify+, Analyze+, …). Offered to every account at the end of the tool's output; a non-Ultra press answers with the plain Ultra message, like Visualize, and the route answers 403 |
 
 ## Expired (trial ended, nothing granted)
 
@@ -101,13 +125,28 @@ Ultra when the account is not Ultra.
 | Offline work | Not available: an offline write fails with the plain offline message |
 | Images dropped into a note or into the reader's edit mode | Up to 5 MB per image (`FREE_IMAGE_BYTES`, `lib/images.ts`) |
 
+## Storage
+
+Each tier will have a storage limit per account: the bytes the account's
+files take — the documents attached to its projects (their stored bytes),
+the images it dropped or its parses captured, and the videos of its
+documents (`lib/storage.ts`). Settings shows the used amount as a bar against
+the limit (`components/storage-bar.tsx`). The limits are **not set**: both
+are `null` in `STORAGE_LIMIT_BYTES` (`lib/tiers.ts`), the one place to set
+them, and nothing gates on them until they are.
+
+| Tier | Storage limit |
+|---|---|
+| Unitos Premium | not set |
+| Unitos Ultra | not set |
+
 ## Unassigned
 
 Everything not named above is ungated today because that is what the code
 does. Naming a tier for any of it is a decision, not a cleanup: leave it here
 until the owner makes one.
 
-- Document count per project, project count per account, storage in total
+- Document count per project, project count per account
 - AI usage: calls per day, which model answers, the digest's size budget
 - Video length and transcription minutes
 - Google Drive import
@@ -127,6 +166,18 @@ until the owner makes one.
 
 ## Decisions, as they were made
 
+- **2026-09-16** — Both tiers sell monthly and yearly, not one price each:
+  `STRIPE_PRICE_PREMIUM_MONTHLY`, `STRIPE_PRICE_PREMIUM_YEARLY`,
+  `STRIPE_PRICE_ULTRA_MONTHLY`, `STRIPE_PRICE_ULTRA_YEARLY`. The plan page
+  toggles between them and shows each tier's own yearly saving against its
+  monthly price; the order page carries the choice through to Stripe
+  Checkout. Prices still live in Stripe, not here.
+- **2026-09-12** — Billing is built and off. Both tiers sell through Stripe
+  as subscriptions on their own pages under `/billing` (plan page, order
+  page, Stripe Checkout, confirmation, receipts), with the switch on the
+  admin billing page. Off, the pages 404 and the app shows no link; the
+  admin previews them. A paid subscription sets the tier bought; an ended
+  one sets Premium until the paid period's end, expired after.
 - **2026-09-08** — Every current account is Unitos Ultra: they have access to
   everything. One migration sets `tier = ULTRA` and clears `trialEndsAt` on
   every account row (`prisma/migrations/20260908160000_all_accounts_ultra`).

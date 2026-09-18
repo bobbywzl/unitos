@@ -38,9 +38,60 @@ model User {
   // per visit.
   driveRefreshToken String @default("")
   driveScope        String @default("")
+  // Billing (SPEC.md §24): the account's Stripe customer, and the
+  // subscription that pays for its tier. "" = none. subscriptionTier is the
+  // tier the subscription buys; subscriptionEndsAt is the paid period's end.
+  // The gates still read tier and trialEndsAt only: the webhook writes them.
+  stripeCustomerId   String    @default("")
+  subscriptionId     String    @default("")
+  subscriptionTier   Tier?
+  subscriptionEndsAt DateTime?
   createdAt    DateTime  @default(now())
   lastSeenAt   DateTime  @default(now())
   sessions     Session[]
+  purchases    Purchase[]
+  linkScanRuns LinkScanRun[]
+}
+
+// Billing (SPEC.md §24): one purchase per paid Stripe invoice — the first
+// payment of a subscription and every renewal. The receipt page shows one
+// row; the receipts page lists the account's rows.
+model Purchase {
+  id              String         @id @default(cuid())
+  userId          String
+  user            User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tier            Tier
+  stripeInvoiceId String         @unique
+  subscriptionId  String         @default("")
+  // Stripe's invoice number, e.g. "A1B2C3D4-0001"; "" when Stripe gave none.
+  number          String         @default("")
+  // Minor units (cents) and the ISO currency code, as Stripe reports them.
+  amount          Int
+  currency        String
+  status          PurchaseStatus @default(PAID)
+  // The paid period.
+  periodStart     DateTime
+  periodEnd       DateTime
+  // Stripe's hosted invoice page and PDF; "" when Stripe gave none.
+  hostedInvoiceUrl String        @default("")
+  invoicePdfUrl    String        @default("")
+  paidAt          DateTime
+  createdAt       DateTime       @default(now())
+
+  @@index([userId, paidAt])
+}
+
+enum PurchaseStatus {
+  PAID
+  REFUNDED
+}
+
+// One operator setting per row (lib/settings.ts). Billing's switch is the
+// row "billing": "on" or "off"; no row = off.
+model AppSetting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
 }
 
 // The tiers (TIERS.md): every account is Premium (on trial or granted) or
@@ -77,6 +128,17 @@ model EmailConfirmation {
   @@index([email])
 }
 
+// The block list (SPEC.md §2): one row per blocked email. A blocked email
+// cannot sign in through any provider and cannot start an email sign-in or a
+// password reset; blocking deletes the account's sessions, so it is signed out
+// at once. The row keys on the email, not the account, so an email with no
+// account yet can be blocked, and a reset account stays blocked. The operator
+// blocks and unblocks from the admin accounts page.
+model BlockedEmail {
+  email     String   @id
+  createdAt DateTime @default(now())
+}
+
 model Notebook {
   id            String                 @id @default(cuid())
   userId        String                 @default("user-1") // owner account; "user-1" = the local reader
@@ -91,10 +153,10 @@ model Notebook {
   sections      Section[]
   documents     NotebookDocument[]
   digest        NotebookDigest?
-  multiUploads  MultiUpload[]
   collaborators NotebookCollaborator[]
   presence      NotebookPresence[]
   events        NotebookEvent[]
+  linkScanRuns  LinkScanRun[]
   createdAt     DateTime               @default(now())
   updatedAt     DateTime               @updatedAt
 
@@ -209,6 +271,14 @@ model Note {
   log            Json?
   pinned         Boolean         @default(false) // pinning also moves the note to the top of its section
   order          Int
+  // A side chat (SPEC.md §7): a conversation branched off a quote of an
+  // assistant answer. It belongs to the conversation it was started from,
+  // opens from that chat box alone, and never shows in assistant history.
+  // The quote is the words it started from. Null = an ordinary note.
+  sideChatOfId   String?
+  sideChatOf     Note?           @relation("SideChats", fields: [sideChatOfId], references: [id], onDelete: Cascade)
+  sideChats      Note[]          @relation("SideChats")
+  sideChatQuote  String?
   // Account that wrote the note (or ran the derivation that produced it).
   // Soft reference like Notebook.userId; null = before attribution existed.
   createdById    String?
@@ -219,6 +289,7 @@ model Note {
   updatedAt      DateTime        @updatedAt
 
   @@index([sectionId])
+  @@index([sideChatOfId])
 }
 
 // One edit of a note's text, for the note's own history (SPEC.md §12): who
@@ -281,6 +352,22 @@ enum DerivationType {
   ANALYZE // a figure or table read by the vision model: values verbatim, estimates marked; one PENDING note on the block (SPEC.md §4)
   VOICE // a spoken note: transcribed, cleaned, landed PENDING for the reader to accept (SPEC.md §6)
   VISUALIZE // Unitos Ultra: the selection as a picture — a diagram, a drawing, or a short animation — stored as an SVG ImageAsset and one annotation on the selection; declined when the model is not certain the picture is faithful (SPEC.md §20)
+}
+
+// One press of Recommend links (SPEC.md §13): the project-wide scan the
+// reader asks for. The rows are the monthly quota — an account gets a few
+// runs a calendar month, and the scan reads every document of a project
+// whole, so it never starts on its own.
+model LinkScanRun {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  notebookId String
+  notebook   Notebook @relation(fields: [notebookId], references: [id], onDelete: Cascade)
+  linkCount  Int      @default(0)
+  createdAt  DateTime @default(now())
+
+  @@index([userId, createdAt])
 }
 
 model Source {
@@ -385,45 +472,18 @@ model Document {
   linksFrom     DocLink[]          @relation("DocLinkFrom")
   linksTo       DocLink[]          @relation("DocLinkTo")
   glossary      Json? // Phase 7: [{term, definition, blockIds[], lang, definitions: {en?, zh?}}] — one definition per reader language
+  // The contents (SPEC.md §26): the document's parts, each with the block it
+  // starts at — [{title, blockId, level, lang}]. Built when the reader first
+  // opens Contents, never at ingest.
+  contents      Json?
   references    Json? // the article's reference list, extracted at ingest: [{id, label, text, url}]
   video         VideoAsset? // set = video document; the reader renders the video pane (SPEC.md §11)
   images        ImageAsset[] // images the parse captured (chart animations)
-  // A generated document (SPEC.md §22): the Stitch assistant wrote it from
-  // the members of a multi upload. generatedCommand is the command that made it.
-  generatedFromId  String?
-  generatedFrom    MultiUpload? @relation("GeneratedFrom", fields: [generatedFromId], references: [id], onDelete: SetNull)
+  // A generated document (SPEC.md §22): Stitch wrote it from the project's
+  // documents. generatedCommand is the command that made it; a document with
+  // one is a generated document of the project it is attached to.
   generatedCommand String?
-  multiUploads     MultiUploadMember[]
   createdAt     DateTime           @default(now())
-
-  @@index([generatedFromId])
-}
-
-// A multi upload (SPEC.md §22): two or more documents of a project added
-// together onto one page. Two members read side by side; three or more read
-// as a graph or a list. The Stitch assistant works over the members.
-model MultiUpload {
-  id          String              @id @default(cuid())
-  notebookId  String
-  notebook    Notebook            @relation(fields: [notebookId], references: [id], onDelete: Cascade)
-  title       String
-  createdById String?
-  members     MultiUploadMember[]
-  generated   Document[]          @relation("GeneratedFrom")
-  createdAt   DateTime            @default(now())
-
-  @@index([notebookId])
-}
-
-model MultiUploadMember {
-  multiUploadId String
-  multiUpload   MultiUpload @relation(fields: [multiUploadId], references: [id], onDelete: Cascade)
-  documentId    String
-  document      Document    @relation(fields: [documentId], references: [id], onDelete: Cascade)
-  order         Int
-
-  @@id([multiUploadId, documentId])
-  @@index([documentId])
 }
 
 // One row per user change to a document: block text edits and link add/remove.
@@ -525,8 +585,25 @@ model Block {
   // Semantic search vector (text-embedding-3-small, 1024 dims). Null = not
   // embedded yet; the search route backfills lazily, a text edit clears it.
   embedding    Unsupported("vector(1024)")?
+  // PAGE blocks: the page rendered once and kept (SPEC.md §16).
+  pageImage    PageImage?
 
   @@index([documentId, order])
+}
+
+// Handwritten document (SPEC.md §16): a PAGE block's page rendered once and
+// kept, so the page image route serves stored bytes instead of rendering the
+// PDF on every request. width and height are the stored image's pixels: the
+// reader lays the page out from them before the bytes arrive. data null =
+// the size is known but the page is not rendered yet; the route renders it
+// on its first request and fills the row.
+model PageImage {
+  blockId   String   @id
+  block     Block    @relation(fields: [blockId], references: [id], onDelete: Cascade)
+  width     Int
+  height    Int
+  data      Bytes? // JPEG at PAGE_IMAGE_WIDTH
+  updatedAt DateTime @updatedAt
 }
 
 enum BlockType {
@@ -572,6 +649,11 @@ model VideoAsset {
   // When the running transcription started. A PENDING older than 10 minutes is
   // a dead run and may start again.
   transcriptStartedAt DateTime?
+  // The rungs the running attempt has tried and their reasons,
+  // [{rung, reason}] (lib/video/transcription-job.ts): one attempt runs in
+  // legs across functions, each past the rungs the last one tried. Null when
+  // no attempt is between legs.
+  transcriptTried     Json?
   // The voices heard in this media (SPEC.md §11): [{id, name}], the id on
   // each TRANSCRIPT block's speaker. Names come from the introductions; a
   // voice nobody names keeps "Speaker 2". Null = never detected.
@@ -742,4 +824,26 @@ model ReaderProfile {
   background  String // "Stanford student, stochastic calc + stats + quantum"
   purpose     String // "due diligence" | "exam prep" | "replicate results" | free text
   application String // "investment decision for Bough Capital" etc.
+}
+
+// A rating of one AI tool's output (SPEC.md §25): the reader's thumb on a
+// card, a page, or an answer, with the input the tool ran on and the output
+// it gave, so the tool quality loop (scripts/eval) can turn a poor answer
+// into an eval case. Fire-and-forget from the client; never blocks a card.
+model ToolRating {
+  id         String   @id @default(cuid())
+  userId     String? // null = no signed-in reader
+  notebookId String?
+  documentId String?
+  noteId     String? // the annotation or conversation note the output lives on, when it has one
+  tool       String // simplify | analyze | visualize | assistant | act | distill | keypoints | summarize | ask | find | formalize | stitch
+  rating     String // "up" | "down"
+  lang       String // the reader's UI language at the time
+  input      String // what the tool ran on: the selection, the question, the command (cut at 4000)
+  output     String // what the tool answered (cut at 12000)
+  comment    String? // what the reader typed after a thumb down, if anything
+  createdAt  DateTime @default(now())
+
+  @@index([tool, rating, createdAt])
+  @@index([createdAt])
 }

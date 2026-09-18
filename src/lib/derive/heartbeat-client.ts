@@ -21,7 +21,7 @@ export async function runDerivation<T extends object>(
 }
 
 // The same read for any route that answers over the heartbeat stream:
-// Stitch (/api/multi/[multiId]/stitch, SPEC.md §22) answers this way too.
+// Stitch (/api/notebooks/[notebookId]/stitch, SPEC.md §22) answers this way too.
 export async function runHeartbeat<T extends object>(
   path: string,
   body: Record<string, unknown>,

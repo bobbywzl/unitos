@@ -7,6 +7,7 @@ import { clipWords, markdownPreview } from "@/lib/markdown-preview";
 import { GIST_MAX_CHARS, gistPrompt } from "@/lib/prompts/gist";
 import { stripSimplifyMarkers } from "@/lib/sentences";
 import type { UsageMeta } from "@/lib/usage";
+import { resolveModelId } from "@/lib/models";
 
 // The gist of a note: the phrase its collapsed row shows (SPEC.md §6). Written
 // by AI for every note in the batch that has none, one model call per 25
@@ -50,7 +51,7 @@ export async function writeGists(
       providerOptions: kimiOptions(GIST_EFFORT),
       schema: gistSchema,
       label: "GIST",
-      usage: { userId, feature: "gist", model: GIST_MODEL } satisfies UsageMeta,
+      usage: { userId, feature: "gist", model: await resolveModelId(GIST_MODEL) } satisfies UsageMeta,
     });
     if (!result.ok) {
       console.error(`[gist] ${result.error}`);

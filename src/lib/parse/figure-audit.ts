@@ -40,7 +40,11 @@ export type FigureAudit = {
 // A parsed block or a stored Block row: both audit alike.
 export type AuditBlock = { type: string; text: string; html?: string | null };
 
-function hasMedia(block: AuditBlock): boolean {
+/** A figure with something to show: an image, a video, an embed, or an SVG
+    (a PDF figure's html is null and its media is the page render). The
+    parse passes never drop one, whatever the model says (structure.ts,
+    layout.ts). */
+export function hasMedia(block: AuditBlock): boolean {
   return block.type === "FIGURE" && (block.html == null || /<(?:img|video|iframe|svg)\b/i.test(block.html));
 }
 

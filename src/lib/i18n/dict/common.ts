@@ -9,7 +9,10 @@
 //   Match-it/match(短语→片段; code EXTRACT) 匹配 · point(提炼的一条) 要点 ·
 //   summary 摘要 · digest 汇编 · annotation 批注 ·
 //   highlight 高亮 · comment 评论 · explain 解释 · simplify 简化 ·
-//   assistant 助手 · document 文档 · video 视频 · audio 音频 ·
+//   side chat(从回答引用分出的对话) 支线对话 ·
+//   comment on an answer(对回答引用的评论) 评论 ·
+//   assistant 助手 · thinking(助手思考档位) 思考 · Fast Thinking 快速思考 ·
+//   Deep Thinking 深度思考 · document 文档 · video 视频 · audio 音频 ·
 //   transcript 逐字稿 · formalize 整理 · article (formalized) 文章 ·
 //   salient 要点 · link 链接 · edit 编辑 · reader 阅读器 · glossary 术语表 ·
 //   sign in 登录 · sign out 退出登录 · settings 设置 · admin 管理 ·
@@ -34,16 +37,23 @@
 //   visualize 可视化 · visualization(可视化生成的图) 可视化图 ·
 //   link Google Drive(账号关联) 关联 · pages(手写页面) 页面 ·
 //   lasso highlight(页面圈选高亮) 圈选高亮 ·
+//   account 账户 · block 封禁 · unblock 解封 · block list 封禁名单 ·
 //   account 账户 · notification 通知 · recipient 收件人 ·
 //   dismiss(通知) 关闭 · update(通知类型) 更新 · account change 账户变更 ·
 //   gist 要旨 · checklist 清单 · dash list 短横线列表 ·
 //   quote(笔记格式，> 行) 引用 · notes full page 整页笔记 ·
 //   conversation 对话 · attachment 附件 · file 文件 ·
-//   multi upload 多文档上传 · member(多文档上传的成员) 成员 · stitch 缝合 ·
-//   generated document 生成文档 · merge(两条笔记合为一条) 合并 ·
+//   stitch 缝合 · generated document 生成文档 · pick(为缝合选中节点) 选取 ·
+//   contents(文章的目录) 目录 · part(目录的一项) 部分 · merge(两条笔记合为一条) 合并 ·
 //   Merge with AI 用 AI 合并 · Join text 拼接文本 ·
 //   hold ring(合并进度环) 合并环 · drop line(落位线) 落位线 ·
+//   board(章节的笔记铺满屏幕) 看板 · tile(看板上的一条笔记) 方块 ·
+//   storage(账户文件占用) 存储空间 · storage limit 存储上限 ·
 //   companion(仪表板上的外部网页应用) 配套应用
+//   billing(付款流程与开关) 付费 · plan page 方案页 · order(付款前的订单页) 订单 ·
+//   checkout(Stripe 结账) 结账 · receipt(一次付款; code Purchase) 收据 ·
+//   subscription 订阅 · Manage subscription 管理订阅 · confirmation 确认 ·
+//   billing switch 付费开关 · Stripe 不翻译
 // highlight 高亮 仅指高亮功能；表示选取文字一律用 选中。
 
 const en = {
@@ -62,6 +72,12 @@ const en = {
   edit: "Edit",
   retry: "Retry",
   regenerate: "Regenerate",
+  send: "Send",
+  // The rating of an AI tool's output (SPEC.md §25)
+  rateUp: "Good answer",
+  rateDown: "Poor answer",
+  rateWhatWasWrong: "What was wrong? (optional)",
+  rateThanks: "Noted",
   working: "Working…",
   loading: "Loading…",
   accept: "Accept",
@@ -137,6 +153,11 @@ const zh: Record<keyof typeof en, string> = {
   edit: "编辑",
   retry: "重试",
   regenerate: "重新生成",
+  send: "发送",
+  rateUp: "回答得好",
+  rateDown: "回答不好",
+  rateWhatWasWrong: "哪里不对？（可不填）",
+  rateThanks: "已记录",
   working: "处理中…",
   loading: "加载中…",
   accept: "接受",

@@ -1,21 +1,19 @@
 import { after, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { authEnabled, currentUser } from "@/lib/auth";
+import { currentUser } from "@/lib/auth";
 import { bumpNotebook, notebookAccess } from "@/lib/collab";
-import { buildConnections } from "@/lib/connect";
-import { driveAccess } from "@/lib/drive/config";
-import { classifyDriveFile, type DriveAccess, driveGrant } from "@/lib/drive/types";
+import { requestDriveToken } from "@/lib/drive/request-token";
+import { classifyDriveFile } from "@/lib/drive/types";
 import {
   driveDownloadUrl,
   fetchDriveMetadata,
   fetchDrivePdf,
   fetchExportedPdf,
 } from "@/lib/drive/fetch";
-import { mintDriveAccessToken } from "@/lib/drive/link";
-import { buildGlossary } from "@/lib/glossary";
 import { runConversion } from "@/lib/handwritten/convert";
-import { currentLang, serverT } from "@/lib/i18n/server";
+import { renderPageImages } from "@/lib/handwritten/page-images";
+import { serverT } from "@/lib/i18n/server";
 import { progressResponse } from "@/lib/ingest-response";
 import { attachDocument } from "@/lib/parse/attach";
 import { describeIngestError } from "@/lib/parse/ingest-error";
@@ -44,18 +42,11 @@ const bodySchema = z.object({
   mimeType: z.string().min(1).optional(),
   pages: z.boolean().default(false),
   convert: z.boolean().default(true),
-  // Who runs the glossary and recommended-links scans after the save:
-  // "server" in after(), "client" in the upload assistant's finishing step,
-  // before the document opens (SPEC.md §15). Conversion and transcription
-  // keep their own chains.
-  scans: z.enum(["server", "client"]).default("server"),
 });
 
 export async function POST(req: Request) {
   const user = await currentUser();
   const t = await serverT();
-  // Captured now: the after() scans below outlive the request and its cookies.
-  const lang = await currentLang();
   const { data, error } = await parseBody(req, bodySchema);
   if (error) return error;
 
@@ -64,27 +55,7 @@ export async function POST(req: Request) {
   const access = await notebookAccess(data.notebookId, "editor");
   if (access instanceof NextResponse) return access;
 
-  const authHeader = req.headers.get("authorization") ?? "";
-  let token = authHeader.startsWith("Bearer ") ? authHeader.slice("Bearer ".length) : "";
-  let grant: DriveAccess = driveAccess();
-  if (authEnabled() && user) {
-    const row = await db.user.findUnique({
-      where: { id: user.id },
-      select: { driveRefreshToken: true, driveScope: true },
-    });
-    if (row?.driveRefreshToken) {
-      // A linked account's token — on the request or minted here — reaches
-      // what the stored grant reaches.
-      grant = driveGrant(row.driveScope);
-      if (!token) {
-        // No per-visit grant on the request: mint from the linked account
-        // (SPEC.md §14). A revoked grant clears itself on the token route;
-        // here it just fails the mint.
-        const minted = await mintDriveAccessToken(row.driveRefreshToken);
-        if (minted !== null && minted !== "revoked") token = minted.token;
-      }
-    }
-  }
+  const { token, grant } = await requestDriveToken(req, user);
   if (!token) return NextResponse.json({ error: t("api.driveTokenMissing") }, { status: 401 });
 
   let name = data.name;
@@ -119,17 +90,7 @@ export async function POST(req: Request) {
       await bumpNotebook(data.notebookId);
       // Transcription starts on its own — the transcript is the point. The
       // recommended-links scan follows it, so it reads the transcript.
-      if (!deduped) {
-        after(() =>
-          runTranscription(document.id)
-            .then(() => buildConnections(data.notebookId, document.id, user?.id ?? null, lang))
-            .catch(() => {}),
-        );
-      } else {
-        after(() =>
-          buildConnections(data.notebookId, document.id, user?.id ?? null, lang).catch(() => {}),
-        );
-      }
+      if (!deduped) after(() => runTranscription(document.id).catch(() => {}));
       return { id: document.id, title: document.title, deduped };
     });
   }
@@ -170,29 +131,18 @@ export async function POST(req: Request) {
     const { document, deduped } = ingested;
     await attachDocument(data.notebookId, document.id);
     await bumpNotebook(data.notebookId);
+    if (!deduped && document.handwritten) {
+      // The pages render and store after the response (SPEC.md §16); the
+      // reader loads them as they land, and the page image route renders
+      // any page still missing on request.
+      after(() => renderPageImages(document.id).catch(() => {}));
+    }
     if (!deduped && document.handwritten && document.conversionStatus === "NONE") {
       // A handwritten document (SPEC.md §16): conversion starts on its own —
       // the text is the point. Glossary and the recommended-links scan follow
       // it, so they read the converted text. conversionStatus OFF = the
       // reader said not to convert; nothing starts.
-      after(() =>
-        runConversion(document.id, user?.id ?? null)
-          .then((r) =>
-            r.ok ? buildGlossary(document.id, user?.id ?? null, lang).catch(() => {}) : undefined,
-          )
-          .then(() => buildConnections(data.notebookId, document.id, user?.id ?? null, lang))
-          .catch(() => {}),
-      );
-    } else if (
-      data.scans === "server" &&
-      (!document.handwritten || document.conversionStatus === "READY")
-    ) {
-      // A handwritten document without converted text has nothing to read —
-      // both scans skip.
-      if (!deduped) after(() => buildGlossary(document.id, user?.id ?? null, lang).catch(() => {}));
-      after(() =>
-        buildConnections(data.notebookId, document.id, user?.id ?? null, lang).catch(() => {}),
-      );
+      after(() => runConversion(document.id, user?.id ?? null).catch(() => {}));
     }
     return { id: document.id, title: document.title, deduped };
   });

@@ -3,26 +3,37 @@ import { z } from "zod";
 import { matchInText } from "@/lib/anchors/match";
 import { bumpNotebook } from "@/lib/collab";
 import { db } from "@/lib/db";
-import { CONNECT_MODEL } from "@/lib/derive/config";
-import { renderBlockLines } from "@/lib/derive/context";
+import { CONNECT_EFFORT, CONNECT_MODEL } from "@/lib/derive/config";
+import { loadProfile, renderBlockLines } from "@/lib/derive/context";
 import { callForJson } from "@/lib/derive/json-call";
 import type { Lang } from "@/lib/i18n/config";
 import { currentLang } from "@/lib/i18n/server";
 import { kimi, kimiConfigured, kimiOptions } from "@/lib/kimi";
-import { connectPrompt } from "@/lib/prompts/connect";
+import { connectPrompt, connectVerifyPrompt } from "@/lib/prompts/connect";
+import { resolveModelId } from "@/lib/models";
 
-// Recommended links (SPEC.md §13): when a document joins a corpus, scan it
-// against the corpus's other documents and store the connections as DocLink
-// rows with recommended: true. The model reads the content only — block text,
-// transcript included — never a document title, so a link rests on what the
-// documents say, not on what they are called. Nothing paints in the text until
-// the reader accepts a link — the user approves everything (SPEC.md §1).
-// Best-effort like the glossary: a failure never breaks ingest.
+// Recommended links (SPEC.md §13): the connections between a project's
+// documents, stored as DocLink rows with recommended: true. The reader asks
+// for them — Recommend links in the graph runs scanProject below — and
+// nothing runs on its own: the scan reads whole documents against whole
+// documents, which is the most expensive thing the app can do to a project,
+// and a document joining a project is not a request for it.
+//
+// Two passes per document, both reading whole documents: the scan reads one
+// document whole against every other document whole, with the reader's notes
+// and background as project context, and proposes links; the check then
+// reads each pair of documents whole and keeps only the links that hold. The
+// model reads the content only — block text, transcript included — never a
+// document title, so a link rests on what the documents say, not on what
+// they are called. Nothing paints in the text until the reader accepts a
+// link — the user approves everything (SPEC.md §1). Best-effort: a failed
+// pass is a pass that proposed nothing, never an error to the reader.
 
-const MAX_LINKS = 8;
-const NEW_DOCUMENT_BUDGET = 50_000; // chars of the new document sent
-const PER_DOCUMENT_BUDGET = 15_000; // chars per other document
-const OTHERS_BUDGET = 130_000; // chars across all other documents
+const MAX_LINKS = 6;
+const MAX_CANDIDATES = 8;
+const DOCUMENT_BUDGET = 200_000; // chars of a document sent, the new one or another
+const OTHERS_BUDGET = 480_000; // chars across all other documents
+const NOTES_BUDGET = 30_000; // chars of the reader's notes across the project
 
 const outputSchema = z.object({
   links: z
@@ -39,7 +50,36 @@ const outputSchema = z.object({
     .max(12),
 });
 
+const verifySchema = z.object({
+  links: z
+    .array(
+      z.object({
+        index: z.number().int().min(0),
+        keep: z.boolean(),
+        reason: z.string().min(1).max(200),
+      }),
+    )
+    .max(12),
+});
+
 type BlockRow = { id: string; type: string; text: string };
+type WholeBlock = Parameters<typeof renderBlockLines>[0][number];
+
+// A document rendered whole up to the budget: whole blocks only, and a
+// declared cut past it, so the model knows what it did not read.
+function renderWhole(blocks: WholeBlock[], budget: number): string {
+  const kept: WholeBlock[] = [];
+  let used = 0;
+  for (const block of blocks) {
+    const size = block.text.length + block.id.length + 24;
+    if (used + size > budget) break;
+    used += size;
+    kept.push(block);
+  }
+  const cut = blocks.length - kept.length;
+  const lines = renderBlockLines(kept);
+  return cut > 0 ? `${lines}\n\n[cut: ${cut} more block${cut === 1 ? "" : "s"} of this document not shown]` : lines;
+}
 
 function resolveQuote(block: BlockRow | undefined, quote: string) {
   if (!block) return null;
@@ -96,28 +136,59 @@ export async function buildConnections(
   ]);
   if (!document || document.blocks.length === 0 || attachments.length === 0) return 0;
 
-  const cap = (text: string, budget: number) =>
-    text.length > budget ? text.slice(0, budget) : text;
+  const [profile, noteRows] = await Promise.all([
+    loadProfile(notebookId),
+    // The reader's notes across the project: what they are working on. The
+    // hidden Annotations section stays out — annotations quote the documents,
+    // which the model already reads whole.
+    db.note.findMany({
+      where: { section: { notebookId, hidden: false }, status: "ACCEPTED" },
+      orderBy: { createdAt: "asc" },
+      take: 200,
+      select: { id: true, content: true, section: { select: { title: true } } },
+    }),
+  ]);
+  let notesUsed = 0;
+  const noteLines: string[] = [];
+  for (const n of noteRows) {
+    const line = `[note ${n.id}] (section: ${n.section.title})\n${n.content.slice(0, 2000)}`;
+    if (notesUsed + line.length > NOTES_BUDGET) break;
+    notesUsed += line.length;
+    noteLines.push(line);
+  }
+  const notes = noteLines.join("\n\n");
 
   const otherById = new Map(attachments.map((a) => [a.document.id, a.document]));
   const otherSections: string[] = [];
   let othersUsed = 0;
+  let othersLeftOut = 0;
   for (const { document: other } of attachments) {
     if (other.blocks.every((b) => !b.text.trim())) continue;
-    const rendered = `[document ${other.id}]\n${cap(renderBlockLines(other.blocks), PER_DOCUMENT_BUDGET)}`;
-    if (othersUsed + rendered.length > OTHERS_BUDGET) break;
+    const rendered = `[document ${other.id}]\n${renderWhole(other.blocks, DOCUMENT_BUDGET)}`;
+    if (othersUsed + rendered.length > OTHERS_BUDGET) {
+      othersLeftOut++;
+      continue;
+    }
     othersUsed += rendered.length;
     otherSections.push(rendered);
   }
   if (otherSections.length === 0) return 0;
+  if (othersLeftOut > 0) {
+    otherSections.push(
+      `[cut: ${othersLeftOut} more document${othersLeftOut === 1 ? "" : "s"} of the project not shown]`,
+    );
+  }
 
+  const documentBlocks = renderWhole(document.blocks, DOCUMENT_BUDGET);
   const messages: ModelMessage[] = [
     {
       role: "user",
       content: connectPrompt({
         lang: reasonLang,
-        documentBlocks: cap(renderBlockLines(document.blocks), NEW_DOCUMENT_BUDGET),
+        profile,
+        documentBlocks,
         others: otherSections.join("\n\n"),
+        notes,
       }),
     },
   ];
@@ -125,10 +196,10 @@ export async function buildConnections(
     model: await kimi(CONNECT_MODEL),
     messages,
     maxOutputTokens: 24576,
-    providerOptions: kimiOptions(),
+    providerOptions: kimiOptions(CONNECT_EFFORT),
     schema: outputSchema,
     label: "CONNECT",
-    usage: { userId, feature: "connect", model: CONNECT_MODEL },
+    usage: { userId, feature: "connect", model: await resolveModelId(CONNECT_MODEL) },
     abortSignal: signal,
   });
   if (!result.ok) {
@@ -145,9 +216,16 @@ export async function buildConnections(
   });
   const seen = new Set(existing.map((l) => `${l.fromBlockId}|${l.quotedText}|${l.toDocumentId}`));
 
-  let created = 0;
+  type Candidate = {
+    index: number;
+    toDocumentId: string;
+    reason: string;
+    from: NonNullable<ReturnType<typeof resolveQuote>>;
+    to: NonNullable<ReturnType<typeof resolveQuote>>;
+  };
+  const candidates: Candidate[] = [];
   for (const link of result.data.links) {
-    if (created >= MAX_LINKS) break;
+    if (candidates.length >= MAX_CANDIDATES) break;
     const other = otherById.get(link.toDocumentId);
     if (!other) continue;
     const from = resolveQuote(blockById.get(link.fromBlockId), link.fromQuote);
@@ -157,6 +235,67 @@ export async function buildConnections(
     const key = `${from.blockId}|${from.quotedText}|${link.toDocumentId}`;
     if (seen.has(key)) continue;
     seen.add(key);
+    candidates.push({ index: candidates.length, toDocumentId: link.toDocumentId, reason: link.reason, from, to });
+  }
+
+  // The check: one call per other document the candidates point at, both
+  // documents whole. A link the check drops is not stored; a check that
+  // fails to answer keeps its candidates as the scan proposed them — a
+  // failed call is no evidence against a link.
+  const kept: Candidate[] = [];
+  const byOther = new Map<string, Candidate[]>();
+  for (const c of candidates) byOther.set(c.toDocumentId, [...(byOther.get(c.toDocumentId) ?? []), c]);
+  for (const [otherId, group] of byOther) {
+    if (signal?.aborted) break;
+    const other = otherById.get(otherId);
+    if (!other) continue;
+    const verify = await callForJson({
+      model: await kimi(CONNECT_MODEL),
+      messages: [
+        {
+          role: "user",
+          content: connectVerifyPrompt({
+            lang: reasonLang,
+            profile,
+            documentBlocks,
+            otherId,
+            otherBlocks: renderWhole(other.blocks, DOCUMENT_BUDGET),
+            notes,
+            candidates: group.map((c) => ({
+              index: c.index,
+              fromQuote: c.from.quotedText,
+              toQuote: c.to.quotedText,
+              reason: c.reason,
+            })),
+          }),
+        },
+      ],
+      maxOutputTokens: 16384,
+      providerOptions: kimiOptions(CONNECT_EFFORT),
+      schema: verifySchema,
+      label: "CONNECT:check",
+      usage: { userId, feature: "connect", model: await resolveModelId(CONNECT_MODEL) },
+      abortSignal: signal,
+    });
+    if (!verify.ok) {
+      console.warn("[connect] check failed:", verify.error);
+      kept.push(...group);
+      continue;
+    }
+    const verdicts = new Map(verify.data.links.map((v) => [v.index, v]));
+    for (const c of group) {
+      const verdict = verdicts.get(c.index);
+      if (!verdict) continue; // not answered: not confirmed, not stored
+      if (!verdict.keep) continue;
+      kept.push({ ...c, reason: verdict.reason });
+    }
+  }
+  kept.sort((a, b) => a.index - b.index);
+
+  let created = 0;
+  for (const link of kept) {
+    if (created >= MAX_LINKS) break;
+    const { from, to } = link;
     await db.docLink.create({
       data: {
         recommended: true,
@@ -181,6 +320,76 @@ export async function buildConnections(
     created++;
   }
   if (created > 0) await bumpNotebook(notebookId);
-  console.log(`[connect] ${document.title}: ${created} recommended link(s)`);
+  console.log(`[connect] ${document.title}: ${candidates.length} candidate(s), ${created} recommended link(s)`);
   return created;
+}
+
+// ── The project scan (SPEC.md §13) ───────────────────────────────────────────
+
+/** How many runs an account gets in a calendar month. The scan reads every
+    document of a project whole against every other, so the quota is the
+    ceiling on what one account can spend on it. */
+export const LINK_SCAN_RUNS_PER_MONTH = 3;
+// Documents scanned in one run. Each is one scan call plus up to a few check
+// calls, so a run over a large project is capped rather than unbounded; the
+// deadline below usually ends it first.
+const MAX_DOCUMENTS_PER_RUN = 8;
+// One run's own clock, under the route's 300 seconds, so the run answers
+// with what it found rather than being cut off by the platform.
+const RUN_BUDGET_MS = 250_000;
+
+/** The first moment of the current calendar month, UTC. */
+export function monthStart(now = new Date()): Date {
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+}
+
+/** Runs this account has left this calendar month. */
+export async function linkScanRunsLeft(userId: string | null): Promise<number> {
+  if (!userId) return LINK_SCAN_RUNS_PER_MONTH;
+  const used = await db.linkScanRun.count({
+    where: { userId, createdAt: { gte: monthStart() } },
+  });
+  return Math.max(0, LINK_SCAN_RUNS_PER_MONTH - used);
+}
+
+/** One press of Recommend links: every document of the project scanned
+    against the others, oldest attachment first, until the run's documents or
+    its clock run out. Returns the links proposed and how many documents were
+    read. The caller records the run against the quota. */
+export async function scanProject(
+  notebookId: string,
+  userId: string | null,
+  opts: { lang?: Lang; signal?: AbortSignal } = {},
+): Promise<{ linkCount: number; documentsScanned: number; documentsLeft: number }> {
+  // Oldest document first: the attachment row carries no time of its own,
+  // and a run that stops short should have read the project's settled
+  // documents rather than whatever the database returned first.
+  const attachments = await db.notebookDocument.findMany({
+    where: { notebookId },
+    orderBy: { document: { createdAt: "asc" } },
+    select: { documentId: true },
+  });
+  if (attachments.length < 2) {
+    return { linkCount: 0, documentsScanned: 0, documentsLeft: 0 };
+  }
+  const deadline = Date.now() + RUN_BUDGET_MS;
+  let linkCount = 0;
+  let scanned = 0;
+  for (const { documentId } of attachments) {
+    if (scanned >= MAX_DOCUMENTS_PER_RUN) break;
+    if (Date.now() > deadline) break;
+    if (opts.signal?.aborted) break;
+    try {
+      linkCount += await buildConnections(notebookId, documentId, userId, opts.lang, opts.signal);
+    } catch (err) {
+      console.warn("[connect] a document's scan failed:", err instanceof Error ? err.message : err);
+    }
+    scanned++;
+  }
+  console.log(`[connect] project ${notebookId}: ${scanned} document(s), ${linkCount} recommended link(s)`);
+  return {
+    linkCount,
+    documentsScanned: scanned,
+    documentsLeft: Math.max(0, attachments.length - scanned),
+  };
 }

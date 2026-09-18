@@ -3,9 +3,11 @@ import { extractJson } from "@/lib/derive/json";
 import { recordUsage } from "@/lib/usage";
 import { browserCaptions } from "@/lib/video/browser-transcript";
 import { youtubeCaptions } from "@/lib/video/captions";
+import { deepgramTranscribe } from "@/lib/video/deepgram";
 import { geminiCall, geminiCountTokens } from "@/lib/video/gemini";
+import { splitFmp4, type ByteRange } from "@/lib/video/fmp4";
 import { uploadGeminiFile, type GeminiFile } from "@/lib/video/gemini-files";
-import { splitMp3 } from "@/lib/video/mp3";
+import { type Mp3Chunk, splitMp3 } from "@/lib/video/mp3";
 import { normalizeSegments, type TranscriptSegment } from "@/lib/video/segments";
 import { MAX_VIDEO_BYTES, parseTimeInput } from "@/lib/video/types";
 import { youtubeWatchUrl } from "@/lib/video/youtube";
@@ -17,24 +19,37 @@ export { groupSegments, normalizeSegments, type TranscriptSegment } from "@/lib/
 //   YouTube video:  caption tracks from YouTube's player API — the transcript
 //                   YouTube itself shows (ANDROID, IOS, then ANDROID_VR
 //                   client, then the watch page) → the same captions read by
-//                   a real browser, where one is configured → Gemini reads
-//                   the video by URL → the audio stream downloads and takes
-//                   the upload ladder.
-//   Uploaded video or audio: Groq Whisper (best quality per dollar; free tier)
-//                   → OpenAI Whisper → Gemini, with the bytes inline when they
-//                   are small enough and through Gemini's file store when they
-//                   are not — an hour of media is far past every other rung's
-//                   cap, and the store takes 2 GB.
+//                   a real browser, where one is configured → the audio
+//                   stream downloads and takes the upload ladder (the
+//                   smallest stream, split for Whisper at its segment
+//                   boundaries: $0.04 an hour, no video tokens) → Gemini
+//                   reads the video by URL, last: about 100 tokens a second
+//                   of video, three times the audio's, and one call over an
+//                   hour of video outruns the ladder's clock.
+//   Uploaded video or audio: Deepgram Nova-3 (one call over the whole file,
+//                   2 GB allowed; timestamps and the voice on every utterance
+//                   from the audio itself, $0.26 an hour) → Groq Whisper (best
+//                   quality per dollar among the rest; free tier) → OpenAI
+//                   Whisper → Gemini, with the bytes inline when they are small
+//                   enough and through Gemini's file store when they are not
+//                   — an hour of media is far past every other rung's cap,
+//                   and the store takes 2 GB.
 // Each rung throws a plain reason; the ladder tries the next and reports every
-// reason when all fail. A rung never starts with under 20 seconds left of the
-// caller's deadline. Segments group into transcript lines at the end; the job
-// writes them as TRANSCRIPT blocks.
+// reason when all have run. A rung never starts with under 20 seconds left of
+// the caller's deadline: the ladder then stops with LadderOutOfTime, which
+// names the rungs that failed and the rungs left, and the transcription job
+// runs the rest on a fresh function (its next leg, `skip` naming the rungs
+// already tried) — FAILED is written only after every rung has actually run.
+// Segments group into transcript lines at the end; the job writes them as
+// TRANSCRIPT blocks.
 
 export const TRANSCRIBE_MAX_BYTES = 25 * 1024 * 1024; // Whisper-family upload cap
-// An MP3 past the cap splits at frame boundaries and transcribes in chunks
-// (lib/video/mp3.ts); other containers cannot be cut safely and keep the cap.
-const MP3_CHUNK_BYTES = 24 * 1024 * 1024;
-const MP3_CHUNK_CONCURRENCY = 3;
+// An MP3 past the cap splits at frame boundaries (lib/video/mp3.ts), an
+// indexed MP4 stream at its segment boundaries (lib/video/fmp4.ts), and the
+// chunks transcribe a few at a time; other containers cannot be cut safely
+// and keep the cap.
+const WHISPER_CHUNK_BYTES = 24 * 1024 * 1024;
+const WHISPER_CHUNK_CONCURRENCY = 3;
 // Inline bytes reach Gemini base64-encoded inside a 20 MB request; past that
 // the file goes in Gemini's store, which takes 2 GB — more than this app
 // accepts, so the app's own upload ceiling is the real cap (lib/video/types.ts).
@@ -43,9 +58,17 @@ export const GEMINI_FILE_MAX_BYTES = MAX_VIDEO_BYTES;
 
 // A video costs Gemini roughly 100 tokens per second, so a feature-length one
 // runs past the 1M context window in a single call (and its transcript would
-// crowd the output cap). Past this many tokens the video transcribes in
-// windows that are stitched back together.
+// crowd the output cap). Past this many tokens a pass over the video runs in
+// windows that are stitched back together. The speakers pass keeps this
+// ceiling: it hears every voice at once, which is what keeps one id per
+// voice honest.
 export const GEMINI_SINGLE_CALL_TOKENS = 700_000;
+// Transcription windows far sooner: Gemini's timestamps drift with the
+// length of what it reads, minutes late by the end of an hour in one call,
+// and every line then sits under the wrong moment. A window of fifteen
+// minutes keeps them within seconds. About fifteen minutes of video at low
+// resolution, so anything longer windows.
+export const GEMINI_TRANSCRIBE_SINGLE_CALL_TOKENS = 100_000;
 export const CHUNK_SECONDS = 900; // 15 minutes per window — a longer one invites a partial answer
 const MAX_CHUNKS = 16; // 4 hours; past that the run cannot finish inside one request
 // Windows run together, so a long video costs about one window of wall clock
@@ -59,6 +82,12 @@ export type TranscribeSource =
 export type TranscribeOptions = {
   /** Epoch ms. A rung does not start with under RUNG_MIN_MS left before it. */
   deadline?: number;
+  /** Rungs already tried by an earlier leg of the same attempt, by name; the
+      ladder starts past them. */
+  skip?: string[];
+  /** The reader who asked, for the admin usage page; null = the app's own
+      automatic run (SPEC.md §11). */
+  userId?: string | null;
   /** A file already in Gemini's store for this media: the upload is skipped. */
   geminiFile?: GeminiFile | null;
   /** Called when a file lands in the store, so a retry can reuse it. */
@@ -69,6 +98,39 @@ const RUNG_MIN_MS = 20_000;
 
 type Rung = [string, () => Promise<TranscriptSegment[]>];
 
+export type RungFailure = { rung: string; reason: string };
+
+/** The ladder stopped before its deadline with rungs left to run. `failures`
+    are the rungs that ran and failed in this leg; `remaining` the rungs not
+    run, first the one that was about to start. */
+export class LadderOutOfTime extends Error {
+  constructor(
+    public failures: RungFailure[],
+    public remaining: string[],
+  ) {
+    super(
+      [
+        ...failures.map((f) => `${f.rung}: ${f.reason}`),
+        `out of time before ${remaining.join(", ")}`,
+      ].join(" · "),
+    );
+  }
+}
+
+/** Every rung ran and failed. */
+export class LadderExhausted extends Error {
+  constructor(public failures: RungFailure[]) {
+    super(failures.map((f) => `${f.rung}: ${f.reason}`).join(" · "));
+  }
+}
+
+// The abort signal a rung's request takes, so a call cannot outlive the
+// caller's deadline.
+function deadlineSignal(opts: TranscribeOptions): AbortSignal | undefined {
+  if (opts.deadline === undefined) return undefined;
+  return AbortSignal.timeout(Math.max(1_000, opts.deadline - Date.now()));
+}
+
 export async function transcribe(
   source: TranscribeSource,
   opts: TranscribeOptions = {},
@@ -78,44 +140,63 @@ export async function transcribe(
       ? [
           ["YouTube captions", () => youtubeCaptions(source.youtubeId)],
           ["YouTube captions (browser)", () => browserCaptions(source.youtubeId)],
-          ["Gemini", () => geminiYouTube(source.youtubeId)],
           ["YouTube audio", () => youtubeAudioRung(source.youtubeId, opts)],
+          ["Gemini", () => geminiYouTube(source.youtubeId, opts.userId ?? null)],
         ]
       : uploadRungs(source.bytes, source.mimeType ?? "video/mp4", opts);
   return runLadder(rungs, opts);
 }
 
+// ranges: a DASH stream's init and index ranges (the YouTube audio rung),
+// so a Whisper rung can split it past the cap.
 function uploadRungs(
   bytes: Uint8Array<ArrayBuffer>,
   mimeType: string,
   opts: TranscribeOptions = {},
+  ranges: StreamRanges = null,
 ): Rung[] {
   return [
-    ["Groq Whisper", () => whisperFamily(GROQ_WHISPER, bytes, mimeType)],
-    ["OpenAI Whisper", () => whisperFamily(OPENAI_WHISPER, bytes, mimeType)],
+    [
+      "Deepgram",
+      () =>
+        deepgramTranscribe(bytes, mimeType, {
+          signal: deadlineSignal(opts),
+          userId: opts.userId ?? null,
+        }),
+    ],
+    ["Groq Whisper", () => whisperFamily(GROQ_WHISPER, bytes, mimeType, ranges, opts.userId ?? null)],
+    ["OpenAI Whisper", () => whisperFamily(OPENAI_WHISPER, bytes, mimeType, ranges, opts.userId ?? null)],
     ["Gemini", () => geminiUpload(bytes, mimeType, opts)],
   ];
 }
 
+type StreamRanges = { init: ByteRange; index: ByteRange } | null;
+
+// The rungs in order, past the ones an earlier leg tried. A rung that runs
+// out of time inside its own work (the YouTube audio rung runs the upload
+// ladder inside it) counts as not run: the next leg runs it again.
 async function runLadder(
   rungs: Rung[],
   opts: TranscribeOptions,
 ): Promise<{ segments: TranscriptSegment[]; provider: string }> {
-  const failures: string[] = [];
-  for (const [name, run] of rungs) {
+  const pending = rungs.filter(([name]) => !opts.skip?.includes(name));
+  const failures: RungFailure[] = [];
+  for (let i = 0; i < pending.length; i++) {
+    const [name, run] = pending[i];
+    const remaining = () => pending.slice(i).map(([n]) => n);
     if (opts.deadline !== undefined && Date.now() > opts.deadline - RUNG_MIN_MS) {
-      failures.push(`${name}: skipped, out of time`);
-      continue;
+      throw new LadderOutOfTime(failures, remaining());
     }
     try {
       return { segments: await run(), provider: name };
     } catch (err) {
+      if (err instanceof LadderOutOfTime) throw new LadderOutOfTime(failures, remaining());
       const message = err instanceof Error ? err.message : String(err);
       console.warn(`[transcribe] ${name} failed:`, message);
-      failures.push(`${name}: ${message}`);
+      failures.push({ rung: name, reason: message });
     }
   }
-  throw new Error(failures.join(" · "));
+  throw new LadderExhausted(failures);
 }
 
 // The audio stream takes the upload ladder, so it needs an upload provider
@@ -123,19 +204,22 @@ async function runLadder(
 // for Gemini alone.
 function youtubeAudioRung(youtubeId: string, opts: TranscribeOptions): Promise<TranscriptSegment[]> {
   const whisper = Boolean(process.env.GROQ_API_KEY || process.env.OPENAI_API_KEY);
-  if (!whisper && !process.env.GEMINI_API_KEY) {
-    return Promise.reject(new Error("GROQ_API_KEY, OPENAI_API_KEY, or GEMINI_API_KEY is not set"));
+  if (!whisper && !process.env.GEMINI_API_KEY && !process.env.DEEPGRAM_API_KEY) {
+    return Promise.reject(
+      new Error("DEEPGRAM_API_KEY, GROQ_API_KEY, OPENAI_API_KEY, or GEMINI_API_KEY is not set"),
+    );
   }
   return youtubeAudio(youtubeId, {
-    // Gemini's file store takes what the Whisper rungs cannot: with a key
-    // set, the stream only has to fit the app's own upload ceiling.
-    maxBytes: process.env.GEMINI_API_KEY
+    // Deepgram and Gemini's file store take what the Whisper rungs cannot:
+    // with either key set, the stream only has to fit the app's own upload
+    // ceiling.
+    maxBytes: process.env.GEMINI_API_KEY || process.env.DEEPGRAM_API_KEY
       ? GEMINI_FILE_MAX_BYTES
       : whisper
         ? TRANSCRIBE_MAX_BYTES
         : GEMINI_INLINE_MAX_BYTES,
-    transcribeBytes: (bytes, mimeType) =>
-      runLadder(uploadRungs(bytes, mimeType, opts), opts).then((result) => {
+    transcribeBytes: (bytes, mimeType, ranges) =>
+      runLadder(uploadRungs(bytes, mimeType, opts, ranges), { ...opts, skip: undefined }).then((result) => {
         console.log(`[transcribe] YouTube audio transcribed by ${result.provider}`);
         return result.segments;
       }),
@@ -198,7 +282,7 @@ const OPENAI_WHISPER: WhisperProvider = {
 
 // One OpenAI-compatible transcription call.
 async function whisperCall(
-  opts: { endpoint: string; key: string; model: string; usdPerMinute: number },
+  opts: { endpoint: string; key: string; model: string; usdPerMinute: number; userId: string | null },
   bytes: Uint8Array,
   mimeType: string,
 ): Promise<TranscriptSegment[]> {
@@ -228,37 +312,52 @@ async function whisperCall(
   // Whisper bills per minute; tokens do not apply.
   const minutes = (segments.at(-1)?.end ?? 0) / 60;
   recordUsage(
-    { userId: null, feature: "transcribe", model: opts.model },
+    { userId: opts.userId, feature: "transcribe", model: opts.model },
     { inputTokens: Math.ceil(minutes * 60) },
     minutes * opts.usdPerMinute,
   );
   return segments;
 }
 
-// A file under the cap goes in one call. A bigger MP3 splits at frame
-// boundaries (chunks decode cleanly), each chunk transcribes on its own clock,
-// and the segments shift back onto the audio's. Chunks run a few at a time; a
-// chunk that fails twice leaves a gap rather than losing the transcript, like
-// the YouTube windows.
+// The chunks a file over the cap splits into: an MP3 at frame boundaries,
+// an indexed MP4 stream at segment boundaries. Throws with the reason when
+// the file cannot be split.
+function splitForWhisper(bytes: Uint8Array, mimeType: string, ranges: StreamRanges): Mp3Chunk[] {
+  if (mimeType === "audio/mpeg") {
+    const chunks = splitMp3(bytes, WHISPER_CHUNK_BYTES);
+    if (!chunks) throw new Error("MP3 frames did not parse; the file cannot be split");
+    return chunks;
+  }
+  if (mimeType === "audio/mp4" && ranges) {
+    const chunks = splitFmp4(bytes, ranges, WHISPER_CHUNK_BYTES);
+    if (!chunks) throw new Error("the MP4 stream's segment index did not parse; the stream cannot be split");
+    return chunks;
+  }
+  throw new Error("file is larger than the 25 MB transcription cap for this format");
+}
+
+// A file under the cap goes in one call. A bigger file splits (chunks decode
+// cleanly), each chunk transcribes on its own clock, and the segments shift
+// back onto the audio's. Chunks run a few at a time; a chunk that fails
+// twice leaves a gap rather than losing the transcript, like the YouTube
+// windows.
 async function whisperFamily(
   provider: WhisperProvider,
   bytes: Uint8Array,
   mimeType: string,
+  ranges: StreamRanges = null,
+  userId: string | null = null,
 ): Promise<TranscriptSegment[]> {
   const key = process.env[provider.keyEnv];
   if (!key) throw new Error(`${provider.keyEnv} is not set`);
-  const opts = { ...provider, key };
+  const opts = { ...provider, key, userId };
   if (bytes.length <= TRANSCRIBE_MAX_BYTES) return whisperCall(opts, bytes, mimeType);
-  if (mimeType !== "audio/mpeg") {
-    throw new Error("file is larger than the 25 MB transcription cap for this format");
-  }
-  const chunks = splitMp3(bytes, MP3_CHUNK_BYTES);
-  if (!chunks) throw new Error("MP3 frames did not parse; the file cannot be split");
-  console.log(`[transcribe] ${bytes.length} bytes → ${chunks.length} MP3 chunks`);
+  const chunks = splitForWhisper(bytes, mimeType, ranges);
+  console.log(`[transcribe] ${bytes.length} bytes ${mimeType} → ${chunks.length} chunks`);
 
   const results: TranscriptSegment[][] = new Array(chunks.length).fill([]);
-  for (let i = 0; i < chunks.length; i += MP3_CHUNK_CONCURRENCY) {
-    const batch = chunks.slice(i, i + MP3_CHUNK_CONCURRENCY);
+  for (let i = 0; i < chunks.length; i += WHISPER_CHUNK_CONCURRENCY) {
+    const batch = chunks.slice(i, i + WHISPER_CHUNK_CONCURRENCY);
     await Promise.all(
       batch.map(async (chunk, j) => {
         for (let attempt = 0; attempt < 2; attempt++) {
@@ -272,7 +371,7 @@ async function whisperFamily(
             return;
           } catch (err) {
             console.warn(
-              `[transcribe] MP3 chunk ${i + j} attempt ${attempt + 1} failed:`,
+              `[transcribe] chunk ${i + j} attempt ${attempt + 1} failed:`,
               err instanceof Error ? err.message : err,
             );
           }
@@ -281,17 +380,20 @@ async function whisperFamily(
     );
   }
   const segments = normalizeSegments(results.flat());
-  if (segments.length === 0) throw new Error("every MP3 chunk failed to transcribe");
+  if (segments.length === 0) throw new Error("every chunk failed to transcribe");
   return segments;
 }
 
 // ── Gemini ──────────────────────────────────────────────────────────────────
 
+// Timestamps are asked for as a clock ("M:SS", "H:MM:SS"): that is how
+// Gemini refers to moments of the media it reads, and a clock it reads off
+// lands closer to the moment than a count of seconds it works out.
 const GEMINI_TRANSCRIPT_PROMPT = [
-  "Transcribe this video's speech with timestamps.",
-  'Return ONLY JSON: {"segments": [{"start": <seconds>, "end": <seconds>, "text": "…"}]}',
+  "Transcribe this recording's speech with timestamps.",
+  'Return ONLY JSON: {"segments": [{"start": "M:SS", "end": "M:SS", "text": "…"}]}',
   "1. One segment per sentence or phrase, 5–15 seconds each.",
-  "2. start and end are plain numbers of SECONDS from the start of what you were given — never milliseconds, never a formatted clock.",
+  '2. start and end are the clock of the recording you were given, as "M:SS" or "H:MM:SS" (for example "4:07", "1:02:05"), the moment the words are spoken — read from the recording, never estimated from the text. Segments follow the recording in order and never overlap.',
   "3. Transcribe the spoken words exactly; no summaries, no speaker labels.",
   '4. No speech: return {"segments": []}.',
 ].join("\n");
@@ -313,11 +415,16 @@ const geminiSegmentsSchema = z.object({
 
 function geminiSegments(
   parts: unknown[],
-  opts: { allowEmpty?: boolean } = {},
+  opts: { allowEmpty?: boolean; userId?: string | null } = {},
 ): Promise<TranscriptSegment[]> {
   return geminiCall(
     parts,
-    { json: true, maxOutputTokens: 65536, lowResolution: true, usage: { userId: null, feature: "transcribe" } },
+    {
+      json: true,
+      maxOutputTokens: 65536,
+      lowResolution: true,
+      usage: { userId: opts.userId ?? null, feature: "transcribe" },
+    },
     (text) => {
       const parsed = geminiSegmentsSchema.safeParse(extractJson(text));
       if (!parsed.success) throw new Error("output was not timed segments");
@@ -414,10 +521,11 @@ export async function geminiMediaPart(
 function transcribeWindow(
   part: MediaPart,
   w: { start: number; end: number; last?: boolean },
+  userId: string | null,
 ): Promise<TranscriptSegment[]> {
   return geminiSegments(
     [part(w), { text: GEMINI_TRANSCRIPT_PROMPT }],
-    { allowEmpty: true },
+    { allowEmpty: true, userId },
   ).then((segments) => {
     if (segments.length === 0) return segments;
     const span = w.end - w.start;
@@ -434,17 +542,23 @@ function transcribeWindow(
 
     // Then the clock: a window answers on its own clock or on the video's, and
     // which one varies per call. Past the first window the two ranges cannot
-    // overlap — a window starting at 30:00 is either 0..30:00 or 30:00..60:00 —
-    // so the largest timestamp says which came back, and only a window clock
-    // gets shifted onto the video's.
-    const aligned =
-      latest > span * 1.15
-        ? scaled
-        : scaled.map((s) => ({
-            ...s,
-            start: s.start + w.start,
-            end: Math.min(s.end + w.start, w.end),
-          }));
+    // overlap — a window starting at 30:00 is either 0..30:00 or 30:00..60:00.
+    // The earliest timestamp decides: an answer on the video's clock never
+    // starts before the window does, so one that starts well before it is
+    // on the window's own clock. The last window's span is an estimate, so
+    // its answer can run past it on either clock; the earliest timestamp
+    // still tells them apart. Only a window clock gets shifted onto the
+    // video's.
+    const earliest = Math.min(...scaled.map((s) => s.start));
+    const ownClock =
+      earliest < w.start * 0.5 || (latest <= span * 1.15 && earliest < w.start - 30);
+    const aligned = ownClock
+      ? scaled.map((s) => ({
+          ...s,
+          start: s.start + w.start,
+          end: Math.min(s.end + w.start, w.end),
+        }))
+      : scaled;
 
     return aligned;
   });
@@ -464,12 +578,13 @@ function windowCoverage(segments: TranscriptSegment[], w: { start: number }): nu
 async function transcribeWindowBest(
   part: MediaPart,
   w: { start: number; end: number; last?: boolean },
+  userId: string | null,
 ): Promise<TranscriptSegment[]> {
   const span = w.end - w.start;
   let best: TranscriptSegment[] = [];
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
-      const segments = await transcribeWindow(part, w);
+      const segments = await transcribeWindow(part, w, userId);
       if (windowCoverage(segments, w) > windowCoverage(best, w)) best = segments;
     } catch (err) {
       console.warn(
@@ -496,12 +611,12 @@ async function transcribeWindowBest(
 // metadata), which then has to fit one call.
 async function geminiWindowed(
   part: MediaPart,
-  opts: { windowable: boolean; label: string },
+  opts: { windowable: boolean; label: string; userId: string | null },
 ): Promise<TranscriptSegment[]> {
   const whole = [part(), { text: GEMINI_TRANSCRIPT_PROMPT }];
   const total = await geminiCountTokens(whole);
-  if (total === null || total <= GEMINI_SINGLE_CALL_TOKENS) {
-    return geminiSegments(whole);
+  if (total === null || total <= GEMINI_TRANSCRIBE_SINGLE_CALL_TOKENS) {
+    return geminiSegments(whole, { userId: opts.userId });
   }
   if (!opts.windowable) {
     throw new Error(`${opts.label} is too long to transcribe in one call`);
@@ -535,7 +650,7 @@ async function geminiWindowed(
     const batch = windows.slice(i, i + CHUNK_CONCURRENCY);
     results.push(
       ...(await Promise.all(
-        batch.map((w) => transcribeWindowBest(part, w)),
+        batch.map((w) => transcribeWindowBest(part, w, opts.userId)),
       )),
     );
   }
@@ -544,10 +659,11 @@ async function geminiWindowed(
   return segments;
 }
 
-function geminiYouTube(youtubeId: string): Promise<TranscriptSegment[]> {
+function geminiYouTube(youtubeId: string, userId: string | null): Promise<TranscriptSegment[]> {
   return geminiWindowed((w) => youtubeVideoPart(youtubeId, w), {
     windowable: true,
     label: "video",
+    userId,
   });
 }
 
@@ -561,8 +677,13 @@ async function geminiUpload(
   opts: TranscribeOptions = {},
 ): Promise<TranscriptSegment[]> {
   const media = await geminiMediaPart({ kind: "upload", bytes, mimeType }, opts);
+  const userId = opts.userId ?? null;
   if (media.inline) {
-    return geminiSegments([media.part(), { text: GEMINI_TRANSCRIPT_PROMPT }]);
+    return geminiSegments([media.part(), { text: GEMINI_TRANSCRIPT_PROMPT }], { userId });
   }
-  return geminiWindowed(media.part, { windowable: media.windowable, label: media.label });
+  return geminiWindowed(media.part, {
+    windowable: media.windowable,
+    label: media.label,
+    userId,
+  });
 }

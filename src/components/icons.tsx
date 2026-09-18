@@ -68,6 +68,30 @@ export function NotesIcon(props: IconProps) {
   );
 }
 
+// A page: the generated content of the graph (SPEC.md §22).
+export function PageIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9Z" />
+      <path d="M14 3v6h6" />
+    </Icon>
+  );
+}
+
+// The contents of an article (SPEC.md §26): a list with its markers.
+export function ContentsIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M9 6h11" />
+      <path d="M9 12h11" />
+      <path d="M9 18h11" />
+      <path d="M4 6h.01" />
+      <path d="M4 12h.01" />
+      <path d="M4 18h.01" />
+    </Icon>
+  );
+}
+
 export function SparkleIcon(props: IconProps) {
   return (
     <Icon {...props}>
@@ -90,6 +114,22 @@ export function ChevronDownIcon(props: IconProps) {
   return (
     <Icon {...props}>
       <path d="m6 9 6 6 6-6" />
+    </Icon>
+  );
+}
+
+/** Four arrows to the corners: the notes full page, opened from the tray. */
+export function MaximizeIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M15 3h6v6" />
+      <path d="m21 3-6 6" />
+      <path d="M9 21H3v-6" />
+      <path d="m3 21 6-6" />
+      <path d="M3 9V3h6" />
+      <path d="m3 3 6 6" />
+      <path d="M21 15v6h-6" />
+      <path d="m21 21-6-6" />
     </Icon>
   );
 }
@@ -213,6 +253,14 @@ export function DistillIcon(props: IconProps) {
 }
 
 // Extract (DISTILL): the quotes that answer a question.
+export function BookmarkIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M6 3h12a1 1 0 0 1 1 1v17l-7-4-7 4V4a1 1 0 0 1 1-1z" />
+    </Icon>
+  );
+}
+
 export function QuoteIcon(props: IconProps) {
   return (
     <Icon {...props}>
@@ -425,6 +473,39 @@ export function LocateIcon(props: IconProps) {
       <line x1="12" x2="12" y1="2" y2="5" />
       <line x1="12" x2="12" y1="19" y2="22" />
       <circle cx="12" cy="12" r="7" />
+    </Icon>
+  );
+}
+
+// A reader's rating of a tool's answer (rating-buttons.tsx): thumb up.
+export function ThumbsUpIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M7 10v12" />
+      <path d="M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2h0a3.13 3.13 0 0 1 3 3.88Z" />
+    </Icon>
+  );
+}
+
+// Its mirror: thumb down.
+export function ThumbsDownIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M17 14V2" />
+      <path d="M9 18.12 10 14H4.17a2 2 0 0 1-1.92-2.56l2.33-8A2 2 0 0 1 6.5 2H20a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.76a2 2 0 0 0-1.79 1.11L12 22h0a3.13 3.13 0 0 1-3-3.88Z" />
+    </Icon>
+  );
+}
+
+// The Drive glyph: a triangle of three strokes, the assistant's Add from
+// Google Drive button.
+export function DriveIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M8.5 4h7l6 10.5-3.5 6h-12l-3.5-6z" />
+      <path d="M8.5 4l6.5 11.5" />
+      <path d="M15.5 4l-6 10.5h12.5" />
+      <path d="M2.5 14.5h13" />
     </Icon>
   );
 }

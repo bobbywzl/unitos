@@ -10,7 +10,10 @@
     "build": "next build",
     "build:deploy": "node scripts/deploy-build.mjs",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "eval": "tsx scripts/eval/run.ts",
+    "eval:ratings": "tsx scripts/eval/import-ratings.ts",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.49",
@@ -36,6 +39,7 @@
     "reactflow": "^11.11.4",
     "remark-gfm": "^4.0.1",
     "remark-parse": "^11.0.0",
+    "stripe": "^22.6.2",
     "undici": "^8.10.0",
     "unified": "^11.0.5",
     "unpdf": "^1.8.0",
@@ -51,6 +55,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.3.0",
     "tailwindcss": "^4",
+    "tsx": "^4.23.13",
     "typescript": "^5"
   }
 }

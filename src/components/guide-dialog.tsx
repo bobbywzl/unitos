@@ -12,9 +12,7 @@ import type { TKey } from "@/lib/i18n/dictionaries";
 // The selection tools, in the toolbox's order: name key, body key.
 const TOOLS: [TKey, TKey][] = [
   ["works.guideAssistant", "works.guideAssistantBody"],
-  ["works.guideExplain", "works.guideExplainBody"],
   ["works.guideSimplify", "works.guideSimplifyBody"],
-  ["works.guideExtract", "works.guideExtractBody"],
   ["works.guideColors", "works.guideColorsBody"],
   ["works.guideComment", "works.guideCommentBody"],
   ["works.guideAddTo", "works.guideAddToBody"],

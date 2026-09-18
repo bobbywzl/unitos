@@ -10,6 +10,7 @@ import { currentLang } from "@/lib/i18n/server";
 import { kimi, kimiConfigured, kimiOptions } from "@/lib/kimi";
 import { languageName } from "@/lib/prompts/types";
 import type { UsageMeta } from "@/lib/usage";
+import { resolveModelId } from "@/lib/models";
 
 // On-ingest glossary extraction: terms, acronyms, symbols (SPEC.md §8 Phase 7).
 // Stored as Document.glossary: [{term, definition, blockIds[], lang, definitions}].
@@ -159,7 +160,7 @@ export async function buildGlossary(
     providerOptions: kimiOptions(),
     schema: glossarySchema,
     label: "GLOSSARY",
-    usage: { userId, feature: "glossary", model: GLOSSARY_MODEL } satisfies UsageMeta,
+    usage: { userId, feature: "glossary", model: await resolveModelId(GLOSSARY_MODEL) } satisfies UsageMeta,
   });
   if (!result.ok) throw new Error(result.error);
 
@@ -208,7 +209,7 @@ export async function glossaryInLanguage(
     maxOutputTokens: 8192,
     schema: glossaryLanguageSchema,
     label: "GLOSSARY_LANGUAGE",
-    usage: { userId, feature: "glossary", model: GLOSSARY_MODEL } satisfies UsageMeta,
+    usage: { userId, feature: "glossary", model: await resolveModelId(GLOSSARY_MODEL) } satisfies UsageMeta,
   });
   if (!result.ok) throw new Error(result.error);
 

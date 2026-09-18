@@ -124,6 +124,9 @@ export type VideoInfo = {
   transcriptStatus: TranscriptStatusName;
   transcriptError: string | null;
   transcriptStale: boolean; // PENDING but the run is dead; Transcribe may start again
+  /** PENDING: the rungs the running attempt has tried so far and why each
+      failed (SPEC.md §11); the pane shows them under Transcribing…. */
+  transcriptTried: RungTried[];
   /** The voices heard (SPEC.md §11); empty = one voice, or never detected. */
   speakers: Speaker[];
 };
@@ -132,6 +135,24 @@ export type VideoInfo = {
 // or crashed before writing FAILED. The route lets it start again; the pane
 // shows Transcribe again instead of a spinner.
 export const TRANSCRIBE_STALE_MS = 10 * 60 * 1000;
+
+// Stored transcription errors are language-neutral English diagnostics
+// (lib/video/transcribe.ts). The known classes have a UI string under
+// video.err*; the rest show as stored. The transcript pane and the Stitch
+// box describe a failed transcript through this one map.
+export type TranscriptErrorKey =
+  | "video.errNoSpeech"
+  | "video.errTooLarge"
+  | "video.errCaptions"
+  | "video.errNotConfigured";
+
+export function transcriptErrorKey(message: string): TranscriptErrorKey | null {
+  if (/no speech found/i.test(message)) return "video.errNoSpeech";
+  if (/transcription cap/i.test(message)) return "video.errTooLarge";
+  if (/caption/i.test(message)) return "video.errCaptions";
+  if (/is not set/i.test(message)) return "video.errNotConfigured";
+  return null;
+}
 
 export function transcriptIsStale(
   status: TranscriptStatusName,
@@ -152,6 +173,16 @@ export const speakerSchema = z.object({ id: z.string(), name: z.string() });
 /** The stored roster, or [] for anything else (never detected, one voice). */
 export function parseSpeakers(value: unknown): Speaker[] {
   const parsed = z.array(speakerSchema).safeParse(value);
+  return parsed.success ? parsed.data : [];
+}
+
+/** One rung the running transcription attempt tried, and why it failed. */
+export type RungTried = { rung: string; reason: string };
+const rungTriedSchema = z.object({ rung: z.string(), reason: z.string() });
+
+/** VideoAsset.transcriptTried as stored: [{rung, reason}], or nothing. */
+export function parseTried(value: unknown): RungTried[] {
+  const parsed = z.array(rungTriedSchema).safeParse(value);
   return parsed.success ? parsed.data : [];
 }
 

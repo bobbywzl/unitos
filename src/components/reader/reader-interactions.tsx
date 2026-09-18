@@ -26,8 +26,6 @@ import type {
   AssistantPlan,
   Distillation,
   DistillationView,
-  Extraction,
-  ExtractionSpan,
   ExtractionView,
   Keypoints,
   KeypointsView,
@@ -49,6 +47,22 @@ import { reportError } from "@/lib/error-log";
 import { isOffline, offlinePremium, queueWrite } from "@/lib/offline/queue";
 import { parseYouTubeId, youtubeWatchUrl } from "@/lib/video/youtube";
 import type { TFunc, TKey } from "@/lib/i18n/dictionaries";
+import {
+  ANSWER_MARK,
+  AnswerTint,
+  AnswerToolbar,
+  CommentBox,
+  CommentList,
+  QuoteChip,
+  quoteMessage,
+  SideChatChips,
+  SideChatHeader,
+  useAnswerSelection,
+  type AnswerComment,
+} from "@/components/assistant/answer-tools";
+import { setSideChatOpen } from "@/lib/assistant/side-chat-open";
+import type { Person } from "@/lib/person";
+import { ThinkingChips, useThinking } from "@/components/assistant/thinking-chips";
 import { useLang, useT } from "@/components/lang-provider";
 import { clipWords, markdownPreview } from "@/lib/markdown-preview";
 import { AnnotationGrip } from "@/components/outline/annotation-grip";
@@ -61,11 +75,9 @@ import {
   LinkIcon,
   MicIcon,
   NotesIcon,
-  QuestionIcon,
   QuoteIcon,
   ChartIcon,
   RegenerateIcon,
-  SearchIcon,
   VisualizeIcon,
   SparkleIcon,
   SpinnerIcon,
@@ -75,6 +87,7 @@ import {
   VolumeIcon,
 } from "@/components/icons";
 import { Markdown } from "@/components/markdown";
+import { RatingButtons } from "@/components/rating-buttons";
 import { Collapse, Presence } from "@/components/presence";
 import { ThinkingIndicator } from "@/components/thinking";
 import { type BlockData, type Highlight, ToolSymbol } from "@/components/reader/block-view";
@@ -83,18 +96,20 @@ import { Bibliography } from "@/components/reader/bibliography";
 import type { ConversionInfo } from "@/components/reader/conversion-strip";
 import { HIGHLIGHT_HUES, HUE_DOT, HUE_KEY } from "@/components/reader/hues";
 import type { PageMark } from "@/components/reader/page-block";
+import type { PageSize } from "@/lib/handwritten/pages";
 import { useCollab } from "@/components/collab/collab-context";
 import { TierMark } from "@/components/tier-mark";
-import { useImageDrop, type DroppedImage } from "@/components/use-image-drop";
+import { useNoteDrop, type DroppedImage } from "@/components/use-note-drop";
 import { AuthorChip } from "@/components/collab/person-badge";
 import { ConversationView } from "@/components/reader/conversation-view";
 import { DistillPage } from "@/components/reader/distill-page";
 import { KeypointsPage } from "@/components/reader/keypoints-page";
-import { ProjectSearch } from "@/components/reader/project-search";
+import { ContentsMenu } from "@/components/reader/contents-menu";
 import { PANE_HEADER } from "@/components/reader/reader-panes";
 import type { FigureRenderInfo } from "@/components/reader/figure-capture";
 import { Reader, type TranscriptVariant } from "@/components/reader/reader";
 import { openVisualization } from "@/components/reader/visualization-viewer";
+import { setQuoteDragImage, writeQuoteDrag } from "@/lib/quote-drag";
 
 // One block's span of a selection (SPEC.md §5).
 type Segment = Omit<SourceInput, "documentId">;
@@ -108,19 +123,6 @@ type Anchor = Segment & { segments?: Segment[] };
     selection stayed in one block. */
 function segmentsOf(anchor: Anchor): Segment[] {
   return anchor.segments && anchor.segments.length > 0 ? anchor.segments : [anchor];
-}
-
-/** A stored span read back as a selection: what a tool needs to run again on
-    the passage it ran on before. */
-function anchorOfSpan(span: ExtractionSpan): Anchor {
-  return {
-    blockId: span.blockId,
-    startOffset: span.start,
-    endOffset: span.end,
-    quotedText: span.quotedText,
-    prefix: span.prefix,
-    suffix: span.suffix,
-  };
 }
 
 /** The passage's text: the segments' quotes, one paragraph each. */
@@ -159,18 +161,23 @@ function isTextEntry(el: HTMLElement): boolean {
   );
 }
 
+// The layer the reader's tools sit on, over the article: the toolbar a
+// selection opens, and every card it opens. Above the floating note card
+// (z-30) — the tools are what the reader just asked for, and a note card left
+// over the article must never cover them — and below the surfaces that take
+// the whole window (z-50: the dialogs, the graph, the distilled page).
+const TOOL_LAYER = "z-40";
+
 // One toolbar per content kind (SPEC.md §6). The popover shows the tools of
 // the kind under the selection and nothing else: a tool missing from a
 // kind's list is not offered there. The first tool of a kind after the
 // assistant is its lead tool and reads as recommended.
-type ContentKind = "text" | "table" | "figure" | "equation";
+type ContentKind = "text" | "figure" | "equation";
 type Tool =
   | "assistant"
   | "analyze"
-  | "explain"
   | "simplify"
   | "visualize"
-  | "extract"
   | "comment"
   | "link"
   | "highlight"
@@ -178,24 +185,22 @@ type Tool =
   | "readAloud";
 
 const TOOLBARS: Record<ContentKind, readonly Tool[]> = {
-  text: ["assistant", "explain", "simplify", "visualize", "extract", "comment", "link", "highlight", "addToNotes", "readAloud"],
-  table: ["assistant", "analyze", "explain", "comment", "link", "highlight", "addToNotes"],
-  figure: ["assistant", "analyze", "explain", "comment", "link", "highlight", "addToNotes"],
-  equation: ["assistant", "explain", "visualize", "comment", "link", "highlight", "addToNotes"],
+  text: ["assistant", "simplify", "visualize", "comment", "link", "highlight", "addToNotes", "readAloud"],
+  figure: ["assistant", "analyze", "comment", "link", "highlight", "addToNotes"],
+  equation: ["assistant", "visualize", "comment", "link", "highlight", "addToNotes"],
 };
 
-// The blocks the hold-and-circle gesture opens a toolbar on, whole.
-const CIRCLED_TYPES = new Set(["FIGURE", "EQUATION", "TABLE"]);
+// The blocks the hold-and-circle gesture opens a toolbar on, whole. A table
+// is text (SPEC.md §6): its cells are rendered text, selected like any.
+const CIRCLED_TYPES = new Set(["FIGURE", "EQUATION"]);
 
 function contentKindOf(type: string | undefined): ContentKind {
-  if (type === "TABLE") return "table";
   if (type === "FIGURE") return "figure";
   if (type === "EQUATION") return "equation";
   return "text";
 }
 
 const KIND_LABEL: Record<Exclude<ContentKind, "text">, TKey> = {
-  table: "reader.tableTools",
   figure: "reader.figureTools",
   equation: "reader.equationTools",
 };
@@ -447,6 +452,18 @@ type AssistantChat = {
   messages: ChatMessage[];
   input: string;
   busy: boolean;
+  // Side chats off a quote of an answer (SPEC.md §7): each one its own
+  // conversation, kept with this one and out of assistant history. openKey =
+  // the side chat on screen; quote = the words the next message carries.
+  sideChats?: ReaderSideChat[];
+  openKey?: string | null;
+  quote?: string | null;
+};
+type ReaderSideChat = {
+  key: string;
+  noteId: string | null;
+  quote: string;
+  messages: ChatMessage[];
 };
 
 // The picture a stored visualization's markdown points at, and its caption
@@ -519,18 +536,6 @@ type AnnotationCard = {
   left: number;
   busy: boolean;
 };
-
-// The article menu's frequent asks: one click sends the question to the
-// assistant, which reads the whole document and answers in the chat card.
-// Keys, not strings — the menu translates at render, and the question goes to
-// the assistant in the reader's language.
-// track names the ask in click telemetry (SPEC.md §7).
-const FREQUENT_ASKS: { labelKey: TKey; questionKey: TKey; track: string }[] = [
-  { labelKey: "reader.summarizeLabel", questionKey: "reader.summarizeQuestion", track: "summarize" },
-  { labelKey: "reader.takeawaysLabel", questionKey: "reader.takeawaysQuestion", track: "key-takeaways" },
-  { labelKey: "reader.explainSimplyLabel", questionKey: "reader.explainSimplyQuestion", track: "explain-simply" },
-];
-
 
 // English plural suffix for count phrases ({s} in reader.* keys); zh templates
 // omit {s}.
@@ -634,6 +639,7 @@ export function ReaderInteractions({
   citationsByBlock,
   references,
   pageMarksByBlock,
+  pageSizeByBlock,
   conversion,
   font,
   columnWidth,
@@ -753,6 +759,9 @@ export function ReaderInteractions({
   // conversion status for the strip under the pages. conversion null = not a
   // handwritten document.
   pageMarksByBlock: Record<string, PageMark[]>;
+  // The stored page image's pixels per PAGE block: the page's shape before
+  // its image arrives. Missing = the size is not known yet.
+  pageSizeByBlock: Record<string, PageSize>;
   conversion: ConversionInfo | null;
   font: string | null;
   // The page's text column width in px (Document.columnWidth): the article
@@ -770,7 +779,11 @@ export function ReaderInteractions({
   const tCtx = useT();
   // Viewers on a shared corpus read only: no selection tools, no edit mode,
   // no assistant. The server rejects their writes; this keeps the surface honest.
-  const { canEdit, premium, ultra } = useCollab();
+  const { canEdit, premium, ultra, billing, myId, people } = useCollab();
+  // Billing on (SPEC.md §24): the Ultra message offers the plan page.
+  const plansAction = billing
+    ? { label: tCtx("billing.plans"), run: () => window.open("/billing", "_blank", "noopener") }
+    : null;
   const canEditRef = useRef(canEdit);
   canEditRef.current = canEdit;
   const tRef = useRef(tCtx);
@@ -937,6 +950,7 @@ export function ReaderInteractions({
   const [distillRun, setDistillRun] = useState<{ question: string } | null>(null);
   const [distillError, setDistillError] = useState<string | null>(null);
   const [localDistillations, setLocalDistillations] = useState<DistillationView[]>([]);
+  const [goneDistillations, setGoneDistillations] = useState<Set<string>>(new Set());
   // The running request, so Cancel can abort it. Cancel keeps the question in
   // the ask view for editing; nothing persists from an aborted run.
   const distillAbortRef = useRef<AbortController | null>(null);
@@ -945,7 +959,6 @@ export function ReaderInteractions({
   // stopped stream keeps what arrived; nothing persists (SPEC.md §6).
   const explainAbortRef = useRef<AbortController | null>(null);
   const simplifyAbortRef = useRef<AbortController | null>(null);
-  const extractAbortRef = useRef<AbortController | null>(null);
   // The span a jump landed on (a distilled quote, an extract origin): tinted
   // while the reader arrives.
   const [spanFlash, setSpanFlash] = useState<{
@@ -954,10 +967,9 @@ export function ReaderInteractions({
     end: number;
   } | null>(null);
   const spanFlashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // EXTRACT: the highlighted phrase's topic → labeled passages (SPEC.md §4).
-  // A fresh extraction shows from local state until the refresh delivers it.
+  // Stored extractions of the old Match-it tool (SPEC.md §4): the layer and
+  // its card still show, and Delete still removes one; nothing makes new ones.
   const [localExtractions, setLocalExtractions] = useState<ExtractionView[]>([]);
-  const [extractBusy, setExtractBusy] = useState(false);
   // The document's translation (SPEC.md §19), one text per block, shown
   // under each block while the reader has it on.
   const [translations, setTranslations] = useState<Record<string, string> | null>(null);
@@ -985,10 +997,8 @@ export function ReaderInteractions({
   // Spans made in this session: their marks sweep in left to right the first
   // time they paint (block-view.tsx mark-sweep). Keyed `${blockId}:${start}:${end}`,
   // so the server's copy of a span matches the optimistic one and the class
-  // survives the refresh swap without restarting. Extractions sweep whole,
-  // their spans staggered, tracked by extraction id.
+  // survives the refresh swap without restarting.
   const freshSpansRef = useRef(new Set<string>());
-  const freshExtractIdsRef = useRef(new Set<string>());
   function markFreshSpan(blockId: string, start: number, end: number) {
     freshSpansRef.current.add(`${blockId}:${start}:${end}`);
   }
@@ -1218,6 +1228,9 @@ export function ReaderInteractions({
 
   // The assistant as an actor: a command becomes a plan; the plan runs after
   // approval, or immediately when the reader toggled auto.
+  // Fast Thinking or Deep Thinking (SPEC.md §7): one choice for every
+  // assistant surface, remembered in this browser.
+  const thinking = useThinking();
   const [aiCommand, setAiCommand] = useState("");
   const [aiBusy, setAiBusy] = useState(false);
   const [aiListening, setAiListening] = useState(false);
@@ -1258,6 +1271,19 @@ export function ReaderInteractions({
   const splitRef = useRef(split);
   splitRef.current = split;
   const [assistantChat, setAssistantChat] = useState<AssistantChat | null>(null);
+  // Highlighting an answer in the chat card (SPEC.md §7): Start side chat,
+  // Ask about this, Comment.
+  const {
+    selection: answerSelection,
+    tintRects: answerTintRects,
+    hold: holdAnswerSelection,
+    clear: clearAnswerSelection,
+  } = useAnswerSelection();
+  const [chatComments, setChatComments] = useState<AnswerComment[]>([]);
+  const [chatCommentPeople, setChatCommentPeople] = useState<Record<string, Person>>({});
+  const [chatCommentQuote, setChatCommentQuote] = useState<string | null>(null);
+  const [chatCommentBusy, setChatCommentBusy] = useState(false);
+  const sideChatsLoadedFor = useRef<string | null>(null);
   // A stored comment, opened from its icon beside the text — editable in place.
   const [commentCard, setCommentCard] = useState<{
     left: number;
@@ -1392,9 +1418,6 @@ export function ReaderInteractions({
   function stopSimplify() {
     simplifyAbortRef.current?.abort();
   }
-  function stopExtract() {
-    extractAbortRef.current?.abort();
-  }
   async function deleteSimplify() {
     const card = simplifyCard;
     if (!card?.noteId || card.streaming || card.busy) return;
@@ -1408,7 +1431,7 @@ export function ReaderInteractions({
     const card = bubble;
     if (!card || !card.anchor || card.streaming || card.busy) return;
     if (card.kind === "visualize" && !ultra) {
-      showToast(t("reader.visualizeNeedsUltra"));
+      showToast(t("reader.visualizeNeedsUltra"), plansAction);
       return;
     }
     const { kind, anchor, noteId } = card;
@@ -1423,6 +1446,7 @@ export function ReaderInteractions({
     await runSimplify(anchor, slot, noteId);
   }
   function closeAssistantChat() {
+    clearAnswerSelection();
     // A turn still in flight aborts too — closing the card means nobody will
     // read the reply, so there is nothing left for it to finish for.
     chatAbortRef.current?.abort();
@@ -1554,7 +1578,6 @@ export function ReaderInteractions({
     setLocalLinks([]);
     setRemovedNotes({});
     freshSpansRef.current = new Set();
-    freshExtractIdsRef.current = new Set();
     setDistillOpen(false);
     setDistillShownId(null);
     setDistillRun(null);
@@ -1573,8 +1596,6 @@ export function ReaderInteractions({
     distillAbortRef.current?.abort();
     explainAbortRef.current?.abort();
     simplifyAbortRef.current?.abort();
-    extractAbortRef.current?.abort();
-    setExtractBusy(false);
     distillReturnScroll.current = null;
     voiceRunRef.current += 1;
     voiceAudioRef.current?.pause();
@@ -2205,7 +2226,25 @@ export function ReaderInteractions({
       tracking = null;
     };
     const onDragStart = (e: DragEvent) => {
-      if (figureAt(e.target as Element)) e.preventDefault();
+      if (figureAt(e.target as Element)) {
+        e.preventDefault();
+        return;
+      }
+      // A drag that starts on the selection carries the passage as a quote
+      // (lib/quote-drag.ts): let go in a note, it lands there as a quote
+      // with the same source Add to notes gives it, pointing back here.
+      const anchor = popoverRef.current?.anchor;
+      const sel = window.getSelection();
+      if (!anchor || !e.dataTransfer || !sel || sel.isCollapsed) return;
+      const docId = documentIdRef.current;
+      const segments = segmentsOf(anchor).map((segment) => ({ documentId: docId, ...anchorBody(segment) }));
+      const text = passageText(anchor);
+      writeQuoteDrag(e.dataTransfer, {
+        source: segments[0],
+        ...(segments.length > 1 ? { segments } : {}),
+        text,
+      });
+      setQuoteDragImage(e.dataTransfer, text);
     };
     container.addEventListener("pointerdown", onDown);
     container.addEventListener("pointermove", onMove);
@@ -2223,17 +2262,18 @@ export function ReaderInteractions({
   }, []);
 
   // Scroll to an anchor and flash it. Retries while the refreshed tree paints.
+  // The mark may not be painted yet — the document is still rendering, or the
+  // reader arrived here from a note in another document — so the look-up
+  // retries for a while, reading the container fresh each time.
   const flashSource = useCallback((sourceId: string) => {
-    const container = containerRef.current;
-    if (!container) return;
     let attempts = 0;
     const tryScroll = () => {
-      const el = container.querySelector<HTMLElement>(`[data-source-id="${sourceId}"]`);
+      const el = containerRef.current?.querySelector<HTMLElement>(`[data-source-id="${sourceId}"]`);
       if (el) {
         el.scrollIntoView({ behavior: "smooth", block: "center" });
         el.classList.add("anchor-flash");
         setTimeout(() => el.classList.remove("anchor-flash"), 2000);
-      } else if (attempts++ < 10) {
+      } else if (attempts++ < 30) {
         setTimeout(tryScroll, 200);
       }
     };
@@ -2637,12 +2677,9 @@ export function ReaderInteractions({
     return () => window.removeEventListener("mousedown", onMouseDown);
   }, [annotationCard]);
 
-  // Below xl the article menu collapses to a pill; the card would sit over
-  // the article text there. The pill toggles it; an action closes it.
-  const [menuExpanded, setMenuExpanded] = useState(false);
-  // The project search bubble, opened from the search icon beside the
-  // assistant button. Opening one closes the other.
-  const [searchOpen, setSearchOpen] = useState(false);
+  // The contents list (SPEC.md §26), opened from the Contents button at the
+  // top left of the article.
+  const [contentsOpen, setContentsOpen] = useState(false);
   // The article menu tracks the scroll position: visible only at the top.
   useEffect(() => {
     const container = containerRef.current;
@@ -2967,12 +3004,10 @@ export function ReaderInteractions({
     return JSON.stringify({ type, documentId, notebookId, anchor: anchorBody(anchor), ...segmentsBody(anchor) });
   }
 
-  // EXPLAIN and ANALYZE stream into the same card beside the article (SPEC.md
-  // §4, §6): an explanation of the selection, or the three-section analysis
-  // of a figure or table. Both persist in the hidden Annotations section.
-  async function explain() {
-    await streamBubble("explain");
-  }
+  // ANALYZE streams into the card beside the article (SPEC.md §4, §6): the
+  // three-section analysis of a figure or table. It persists in the hidden
+  // Annotations section. The card's kind "explain" is kept for stored
+  // explanations of the old Explain tool, which still reopen from their mark.
   async function analyze() {
     await streamBubble("analyze");
   }
@@ -3143,7 +3178,7 @@ export function ReaderInteractions({
   async function visualize() {
     if (!popover || busy) return;
     if (!ultra) {
-      showToast(t("reader.visualizeNeedsUltra"));
+      showToast(t("reader.visualizeNeedsUltra"), plansAction);
       return;
     }
     const { anchor, yTop } = popover;
@@ -3325,10 +3360,12 @@ export function ReaderInteractions({
 
   // DISTILL: one question, the whole article, the quotes that answer it
   // (SPEC.md §4). The page opens on the ask view; Run scans the article.
+  // A deleted or replaced extraction leaves the list at once; the page's
+  // next load carries the same.
   const allDistillations = [
     ...localDistillations.filter((d) => !distillations.some((p) => p.id === d.id)),
     ...distillations,
-  ];
+  ].filter((d) => !goneDistillations.has(d.id));
 
   // KEYPOINTS — the reader's Distill: the article's most important points as
   // bullets, each anchored (SPEC.md §4). One per document; Distill again
@@ -3610,7 +3647,7 @@ export function ReaderInteractions({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         signal: controller.signal,
-        body: JSON.stringify({ type: "DISTILL", documentId, notebookId, question: q }),
+        body: JSON.stringify({ type: "DISTILL", documentId, notebookId, question: q, replaceId }),
       });
       if (!res.ok || !res.body) {
         const detail = (await res.json().catch(() => null)) as { error?: string } | null;
@@ -3642,7 +3679,8 @@ export function ReaderInteractions({
       };
       setLocalDistillations((prev) => [fresh, ...prev]);
       setDistillShownId(fresh.id);
-      if (replaceId) await deleteDistillation(replaceId);
+      // The route dropped the replaced extraction with the new one's arrival.
+      if (replaceId) setGoneDistillations((prev) => new Set(prev).add(replaceId));
       // The page may be closed: the pill's progress bar stops, and the toast
       // says where the result is.
       if (!distillOpenRef.current) showToast(t("reader.distilledToast"));
@@ -3662,12 +3700,23 @@ export function ReaderInteractions({
   }
 
   async function deleteDistillation(id: string) {
+    await deleteDistillations([id]);
+  }
+
+  // The selected extractions go in one call (SPEC.md §4).
+  async function deleteDistillations(ids: string[]) {
+    if (ids.length === 0) return;
     try {
       await api(`/api/notebooks/${notebookId}/documents/${documentId}`, "PATCH", {
-        removeDistillationId: id,
+        removeDistillationIds: ids,
       });
-      setLocalDistillations((prev) => prev.filter((d) => d.id !== id));
-      if (distillShownId === id) setDistillShownId(null);
+      setLocalDistillations((prev) => prev.filter((d) => !ids.includes(d.id)));
+      setGoneDistillations((prev) => {
+        const next = new Set(prev);
+        for (const id of ids) next.add(id);
+        return next;
+      });
+      if (distillShownId && ids.includes(distillShownId)) setDistillShownId(null);
       router.refresh();
     } catch (err) {
       showError(err instanceof Error ? err.message : t("reader.deleteFailed"));
@@ -3740,72 +3789,7 @@ export function ReaderInteractions({
     flashSpan(quote.blockId, quote.start, quote.end);
   }
 
-  // EXTRACT: the highlighted phrase's topic → the passages across the article
-  // that reveal it, painted with a label chip that jumps back to the origin
-  // (SPEC.md §4).
-  async function extract() {
-    if (!popover || extractBusy) return;
-    const { anchor } = popover;
-    await flushLiveBlock(anchor.blockId);
-    setPopover(null);
-    setSubmenu(null);
-    window.getSelection()?.removeAllRanges();
-    await runExtract(anchor);
-  }
-  // Regenerate: Match-it runs again on the same origin phrase, and the new
-  // match replaces the old (SPEC.md §4).
-  async function regenerateExtraction(extraction: ExtractionView) {
-    if (extractBusy) return;
-    setExtractCard(null);
-    await runExtract(anchorOfSpan(extraction.origin), extraction.id);
-  }
-  // replaceId: the match this run regenerates — it goes once the new one is
-  // stored (SPEC.md §4).
-  async function runExtract(anchor: Anchor, replaceId?: string) {
-    setExtractBusy(true);
-    const controller = new AbortController();
-    extractAbortRef.current = controller;
-    try {
-      const res = await fetch("/api/derive", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        signal: controller.signal,
-        body: deriveBody("EXTRACT", anchor),
-      });
-      const json = (await res.json().catch(() => null)) as {
-        extraction?: Extraction;
-        error?: string;
-      } | null;
-      if (!res.ok || !json?.extraction) {
-        throw new Error(json?.error ?? t("reader.extractFailedStatus", { status: res.status }));
-      }
-      const label = `E${allExtractionsRef.current.length + 1}`;
-      const fresh: ExtractionView = {
-        id: json.extraction.id,
-        createdAt: json.extraction.createdAt,
-        label,
-        origin: { ...json.extraction.origin, orphaned: false },
-        spans: json.extraction.spans.map((s) => ({ ...s, orphaned: false })),
-      };
-      freshExtractIdsRef.current.add(fresh.id);
-      setLocalExtractions((prev) => [...prev, fresh]);
-      if (replaceId) await removeExtraction(replaceId);
-      showToast(
-        t("reader.extractDone", { label, n: fresh.spans.length, s: plural(fresh.spans.length) }),
-      );
-      router.refresh();
-    } catch (err) {
-      // Stopped, not failed: nothing was extracted, nothing to say.
-      if (controller.signal.aborted) return;
-      showError(err instanceof Error ? err.message : t("reader.extractFailed"));
-    } finally {
-      if (extractAbortRef.current === controller) extractAbortRef.current = null;
-      setExtractBusy(false);
-    }
-  }
-
   // The stored match goes; the caller says whether the reader hears about it.
-  // A regenerate removes quietly — the run that follows lands the new match.
   async function removeExtraction(id: string) {
     try {
       await api(`/api/notebooks/${notebookId}/documents/${documentId}`, "PATCH", {
@@ -3931,56 +3915,6 @@ export function ReaderInteractions({
     }
   }
 
-  // The article menu's asks: the assistant reads the whole document — no
-  // anchor, document scope — and answers in the chat card beside the article.
-  // question null opens an empty chat for the reader's own question.
-  function openArticleChat(question: string | null) {
-    const container = containerRef.current;
-    const slot = claimSideSlot("assistant", (container?.scrollTop ?? 0) + 56);
-    if (question === null) {
-      setAssistantChat({ anchor: null, noteId: null, ...slot, messages: [], input: "", busy: false });
-      return;
-    }
-    setAssistantChat({
-      anchor: null,
-      noteId: null,
-      ...slot,
-      messages: [{ role: "user", content: question }],
-      input: "",
-      busy: true,
-    });
-    const controller = new AbortController();
-    chatAbortRef.current = controller;
-    void (async () => {
-      try {
-        const turn = await assistantTurn(question, null, [], null, controller.signal);
-        setAssistantChat((c) =>
-          c
-            ? {
-                ...c,
-                busy: false,
-                noteId: turn.noteId ?? c.noteId,
-                messages: [...c.messages, { role: "assistant", content: turn.reply }],
-              }
-            : c,
-        );
-      } catch (err) {
-        // Stopped, not failed: the question stays, no reply lands.
-        if (controller.signal.aborted) {
-          setAssistantChat((c) => (c ? { ...c, busy: false } : c));
-          return;
-        }
-        const message = err instanceof Error ? err.message : t("reader.assistantFailed");
-        setAssistantChat((c) =>
-          c
-            ? { ...c, busy: false, messages: [...c.messages, { role: "assistant", content: message }] }
-            : c,
-        );
-      } finally {
-        if (chatAbortRef.current === controller) chatAbortRef.current = null;
-      }
-    })();
-  }
 
   // Stop the assistant chat's running turn — the popover's Run button before
   // the chat card exists, or the chat card's Send button once it does. The
@@ -4255,6 +4189,9 @@ export function ReaderInteractions({
     // A tool conversation (SPEC.md §21): the turn continues from the tool's
     // annotation; the server takes the selection and the turns from it.
     toolNoteId?: string,
+    // A side chat (SPEC.md §7): the conversation it branched from and the
+    // quote it started on. Its turns persist on a note of its own.
+    sideChat?: { of: string; quote: string },
   ): Promise<{ reply: string; noteId: string | null }> {
     const res = await fetch("/api/assistant/act", {
       method: "POST",
@@ -4269,6 +4206,9 @@ export function ReaderInteractions({
         history: history.slice(-12),
         conversationNoteId: conversationNoteId ?? undefined,
         toolNoteId,
+        sideChatOf: sideChat?.of,
+        sideChatQuote: sideChat?.quote,
+        thinking,
       }),
     });
     const plan = (await res.json().catch(() => null)) as
@@ -4291,31 +4231,218 @@ export function ReaderInteractions({
     return { reply: parts.join("\n\n"), noteId: plan.conversationNoteId ?? null };
   }
 
-  async function sendChatMessage() {
-    const chat = assistantChat;
-    const text = chat?.input.trim();
-    if (!chat || !text || chat.busy) return;
-    const history = chat.messages;
+  // The side chat on screen in the card, and the note the open thread saves
+  // on: what a comment is written under.
+  const chatOpenSide = assistantChat?.openKey
+    ? ((assistantChat.sideChats ?? []).find((s) => s.key === assistantChat.openKey) ?? null)
+    : null;
+  const chatNoteId = chatOpenSide ? chatOpenSide.noteId : (assistantChat?.noteId ?? null);
+
+  // A conversation reopened from its mark brings its side chats with it.
+  useEffect(() => {
+    const noteId = assistantChat?.noteId ?? null;
+    if (!noteId || sideChatsLoadedFor.current === noteId) return;
+    sideChatsLoadedFor.current = noteId;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch(`/api/assistant/conversation?noteId=${encodeURIComponent(noteId)}`);
+        const json = (await res.json().catch(() => null)) as {
+          sideChats?: { id: string; quote: string; turns: ChatMessage[] }[];
+        } | null;
+        if (cancelled || !res.ok || !json?.sideChats) return;
+        const loaded: ReaderSideChat[] = json.sideChats.map((s) => ({
+          key: s.id,
+          noteId: s.id,
+          quote: s.quote,
+          messages: s.turns,
+        }));
+        setAssistantChat((c) => {
+          if (!c || c.noteId !== noteId) return c;
+          // A side chat started in this card and not yet saved keeps its place.
+          const unsaved = (c.sideChats ?? []).filter((s) => !s.noteId);
+          return { ...c, sideChats: [...loaded, ...unsaved] };
+        });
+      } catch {
+        // Offline: the conversation reads the same, with no side chats listed.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [assistantChat?.noteId]);
+
+  // The comments under the open thread.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      if (!chatNoteId) {
+        setChatComments([]);
+        return;
+      }
+      try {
+        const res = await fetch(`/api/replies?noteId=${encodeURIComponent(chatNoteId)}`);
+        const json = (await res.json().catch(() => null)) as {
+          replies?: AnswerComment[];
+          people?: Record<string, Person>;
+        } | null;
+        if (cancelled || !res.ok || !json) return;
+        setChatComments(json.replies ?? []);
+        setChatCommentPeople(json.people ?? {});
+      } catch {
+        // Offline: the thread reads the same, with no comments under it.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [chatNoteId]);
+
+  // The tray folds while a side chat is open, so the card has the room
+  // (SPEC.md §7); it unfolds when the side chat closes.
+  useEffect(() => {
+    setSideChatOpen(assistantChat?.openKey != null);
+    return () => setSideChatOpen(false);
+  }, [assistantChat?.openKey]);
+
+  // The selection's three actions in the card, the panel's three.
+  // The browser's own selection goes — the box that opens takes focus — and
+  // the words stay marked by the tint until the reader is done with them.
+  function takeAnswerSelection(): string {
+    return holdAnswerSelection();
+  }
+  // The quote goes, and the words it marked stop being marked.
+  function dropChatQuote() {
+    setAssistantChat((c) => (c ? { ...c, quote: null } : c));
+    clearAnswerSelection();
+  }
+  function startChatSideChat() {
+    const text = takeAnswerSelection();
+    if (!text || !assistantChat?.noteId) return;
+    const key = `side-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     setAssistantChat((c) =>
       c
-        ? { ...c, input: "", busy: true, messages: [...c.messages, { role: "user", content: text }] }
+        ? {
+            ...c,
+            sideChats: [...(c.sideChats ?? []), { key, noteId: null, quote: text, messages: [] }],
+            openKey: key,
+            quote: text,
+          }
         : c,
     );
+    setChatCommentQuote(null);
+  }
+  function askAboutThisInChat() {
+    const text = takeAnswerSelection();
+    if (!text) return;
+    setAssistantChat((c) => (c ? { ...c, quote: text } : c));
+    setChatCommentQuote(null);
+  }
+  function openChatComment() {
+    const text = takeAnswerSelection();
+    if (!text || !chatNoteId) return;
+    setChatCommentQuote(text);
+  }
+  async function postChatComment(text: string) {
+    if (!chatNoteId || chatCommentBusy) return;
+    setChatCommentBusy(true);
+    try {
+      const res = await fetch("/api/replies", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ noteId: chatNoteId, content: quoteMessage(chatCommentQuote ?? "", text) }),
+      });
+      const json = (await res.json().catch(() => null)) as (AnswerComment & { error?: string }) | null;
+      if (!res.ok || !json?.id) throw new Error(json?.error ?? t("assistant.commentFailed"));
+      setChatComments((list) => [...list, json]);
+      setChatCommentQuote(null);
+      clearAnswerSelection();
+    } catch (err) {
+      showError(err instanceof Error ? err.message : t("assistant.commentFailed"));
+    } finally {
+      setChatCommentBusy(false);
+    }
+  }
+  async function deleteChatComment(id: string) {
+    setChatComments((list) => list.filter((c) => c.id !== id));
+    try {
+      await fetch(`/api/replies/${id}`, { method: "DELETE" });
+    } catch {
+      // Offline: the row is gone on screen and stays on the server; the next
+      // load of the thread shows it again.
+    }
+  }
+
+  async function sendChatMessage() {
+    const chat = assistantChat;
+    const typed = chat?.input.trim();
+    if (!chat || !typed || chat.busy) return;
+    // The quote the reader took from an answer rides in the message.
+    const text = chat.quote ? quoteMessage(chat.quote, typed) : typed;
+    const openKey = chat.openKey ?? null;
+    const open = openKey ? (chat.sideChats ?? []).find((s) => s.key === openKey) ?? null : null;
+    if (openKey && !open) return;
+    const history = open ? open.messages : chat.messages;
+    // A side chat needs the conversation it branched from; without a saved
+    // note there is nothing to branch from.
+    if (open && !chat.noteId) return;
+    if (chat.quote) clearAnswerSelection();
+    const pushUser = (c: AssistantChat): AssistantChat =>
+      open
+        ? {
+            ...c,
+            input: "",
+            quote: null,
+            busy: true,
+            sideChats: (c.sideChats ?? []).map((s) =>
+              s.key === open.key ? { ...s, messages: [...s.messages, { role: "user", content: text }] } : s,
+            ),
+          }
+        : {
+            ...c,
+            input: "",
+            quote: null,
+            busy: true,
+            messages: [...c.messages, { role: "user", content: text }],
+          };
+    setAssistantChat((c) => (c ? pushUser(c) : c));
     const controller = new AbortController();
     chatAbortRef.current = controller;
     try {
-      const turn = await assistantTurn(text, chat.anchor, history, chat.noteId, controller.signal);
-      if (turn.noteId && chat.anchor) addLocalAnchor(chat.anchor);
-      setAssistantChat((c) =>
-        c
-          ? {
-              ...c,
-              busy: false,
-              noteId: turn.noteId ?? c.noteId,
-              messages: [...c.messages, { role: "assistant", content: turn.reply }],
-            }
-          : c,
+      const turn = await assistantTurn(
+        text,
+        chat.anchor,
+        history,
+        open ? open.noteId : chat.noteId,
+        controller.signal,
+        undefined,
+        open && chat.noteId ? { of: chat.noteId, quote: open.quote } : undefined,
       );
+      if (turn.noteId && chat.anchor && !open) addLocalAnchor(chat.anchor);
+      setAssistantChat((c) => {
+        if (!c) return c;
+        if (open) {
+          return {
+            ...c,
+            busy: false,
+            sideChats: (c.sideChats ?? []).map((s) =>
+              s.key === open.key
+                ? {
+                    ...s,
+                    noteId: turn.noteId ?? s.noteId,
+                    messages: [...s.messages, { role: "assistant", content: turn.reply }],
+                  }
+                : s,
+            ),
+          };
+        }
+        return {
+          ...c,
+          busy: false,
+          noteId: turn.noteId ?? c.noteId,
+          messages: [...c.messages, { role: "assistant", content: turn.reply }],
+        };
+      });
     } catch (err) {
       // Stopped, not failed: the sent message stays, no reply lands.
       if (controller.signal.aborted) {
@@ -4323,11 +4450,21 @@ export function ReaderInteractions({
         return;
       }
       const message = err instanceof Error ? err.message : t("reader.assistantFailed");
-      setAssistantChat((c) =>
-        c
-          ? { ...c, busy: false, messages: [...c.messages, { role: "assistant", content: message }] }
-          : c,
-      );
+      setAssistantChat((c) => {
+        if (!c) return c;
+        if (open) {
+          return {
+            ...c,
+            busy: false,
+            sideChats: (c.sideChats ?? []).map((s) =>
+              s.key === open.key
+                ? { ...s, messages: [...s.messages, { role: "assistant", content: message }] }
+                : s,
+            ),
+          };
+        }
+        return { ...c, busy: false, messages: [...c.messages, { role: "assistant", content: message }] };
+      });
     } finally {
       if (chatAbortRef.current === controller) chatAbortRef.current = null;
     }
@@ -4350,7 +4487,7 @@ export function ReaderInteractions({
   // press answers with the plain Ultra message, like Visualize.
   function openToolChat(kind: "explain" | "simplify") {
     if (!ultra) {
-      showToast(t("reader.continueNeedsUltra"));
+      showToast(t("reader.continueNeedsUltra"), plansAction);
       return;
     }
     setToolChat(kind, () => ({ chatOpen: true }));
@@ -4362,7 +4499,7 @@ export function ReaderInteractions({
   }
   async function sendToolMessage(kind: "explain" | "simplify") {
     if (!ultra) {
-      showToast(t("reader.continueNeedsUltra"));
+      showToast(t("reader.continueNeedsUltra"), plansAction);
       return;
     }
     const card = kind === "explain" ? bubble : simplifyCard;
@@ -4804,7 +4941,7 @@ export function ReaderInteractions({
   // says where they land. Everything else keeps travelling to the window,
   // which adds dropped files as documents (document-bar.tsx).
   const dropPointRef = useRef<{ x: number; y: number } | null>(null);
-  const imageDrop = useImageDrop({
+  const imageDrop = useNoteDrop({
     premium,
     enabled: editMode && canEdit,
     t,
@@ -5080,15 +5217,12 @@ function blockFormatKind(
   }
   // Extraction layers: the origin phrase and its revealing passages, each
   // carrying the extraction's label chip. Unresolvable spans stay unpainted.
-  // A fresh extraction sweeps in staggered: the origin first, then its
-  // passages down the document, one after the other.
   for (const extraction of allExtractions) {
-    const freshExtract = freshExtractIdsRef.current.has(extraction.id);
     const entries = [
       ...(!extraction.origin.orphaned ? [{ span: extraction.origin, isOrigin: true }] : []),
       ...extraction.spans.filter((s) => !s.orphaned).map((span) => ({ span, isOrigin: false })),
     ];
-    entries.forEach(({ span, isOrigin }, i) => {
+    entries.forEach(({ span, isOrigin }) => {
       const existing = highlightsByBlock[span.blockId] ?? [];
       highlightsByBlock[span.blockId] = [
         ...existing,
@@ -5100,8 +5234,6 @@ function blockFormatKind(
           extractId: extraction.id,
           extractLabel: extraction.label,
           extractOrigin: isOrigin,
-          fresh: freshExtract,
-          freshDelay: freshExtract && i > 0 ? i * 90 : undefined,
         },
       ];
     });
@@ -5338,7 +5470,44 @@ function blockFormatKind(
   };
   // The assistant card's foot: the box that sends the next turn. The card
   // beside the article and the full conversation view render the same one.
-  const assistantChatFoot = (chat: AssistantChat, className: string) => (
+  const assistantChatFoot = (chat: AssistantChat, className: string, chipsClassName: string) => (
+    <>
+    {chat.openKey ? (
+      <SideChatHeader
+        quote={chatOpenSide?.quote ?? ""}
+        onBack={() => setAssistantChat((c) => (c ? { ...c, openKey: null, quote: null } : c))}
+        className={chipsClassName}
+      />
+    ) : (
+      <SideChatChips
+        sideChats={(chat.sideChats ?? []).filter((s) => s.messages.length > 0)}
+        onOpen={(key) => setAssistantChat((c) => (c ? { ...c, openKey: key } : c))}
+        className={chipsClassName}
+      />
+    )}
+    <CommentList
+      comments={chatComments}
+      people={{ ...people, ...chatCommentPeople }}
+      myId={myId}
+      onDelete={(id) => void deleteChatComment(id)}
+      className={chipsClassName}
+    />
+    <ThinkingChips className={chipsClassName} small />
+    {chat.quote && (
+      <QuoteChip quote={chat.quote} onClear={dropChatQuote} className={chipsClassName} />
+    )}
+    {chatCommentQuote ? (
+      <CommentBox
+        quote={chatCommentQuote}
+        busy={chatCommentBusy}
+        onCancel={() => {
+          setChatCommentQuote(null);
+          clearAnswerSelection();
+        }}
+        onSubmit={(text) => void postChatComment(text)}
+        className={chipsClassName}
+      />
+    ) : (
     <form
       className={className}
       onSubmit={(e) => {
@@ -5378,6 +5547,18 @@ function blockFormatKind(
         {chat.busy ? <StopIcon size={11} /> : t("reader.send")}
       </button>
     </form>
+    )}
+    <AnswerTint rects={answerTintRects} />
+    {answerSelection && (
+      <AnswerToolbar
+        selection={answerSelection}
+        canSideChat={assistantChat?.noteId != null}
+        onSideChat={startChatSideChat}
+        onAsk={askAboutThisInChat}
+        onComment={openChatComment}
+      />
+    )}
+    </>
   );
   // The card's title once its output continued into a conversation.
   const toolPlus = (card: ToolChat) => card.chatOpen || card.conversation.length > 0;
@@ -5414,14 +5595,14 @@ function blockFormatKind(
     </button>
   );
 
-  // The article menu: frequent asks go to the assistant at document scope;
-  // Distill opens the distilled page, Extract the extract page; the search icon beside the assistant
-  // button expands the project search bubble. In Normal view it floats open
-  // at the top of the page, hides once the reader scrolls, and returns at the
-  // top — the strip spans the pane so the bubble can size to it, and only the
-  // controls take pointer events. In a split view it sits in the pane header,
-  // always in reach, and its panels drop below the header (SPEC.md §6). A
-  // transcript has the video pane's own tools instead (SPEC.md §11).
+  // The article menu: the Contents button (SPEC.md §26) and the list it
+  // opens — the article's parts, each a jump to its block. In Normal view it
+  // floats open at the top of the page, hides once the reader scrolls, and
+  // returns at the top — the strip spans the pane so the list can size to
+  // it, and only the controls take pointer events. In a split view it sits
+  // in the pane header, always in reach, and its list drops below the
+  // header (SPEC.md §6). A transcript has the video pane's own tools
+  // instead (SPEC.md §11).
   const articleMenu = (
       <div
       data-track-surface="article-menu"
@@ -5434,114 +5615,14 @@ function blockFormatKind(
               }`
         }
       >
-        <div className={`flex w-max gap-1.5${split ? "" : " mb-1.5"}`}>
-          <button
-            onClick={() => {
-              setMenuExpanded((v) => !v);
-              setSearchOpen(false);
-            }}
-            data-track="assistant"
-            aria-expanded={menuExpanded}
-            data-tip={t("reader.assistantMenuTitle")}
-            className="pointer-events-auto flex items-center gap-1.5 rounded-full bg-card px-3 py-2 text-[12px] font-semibold text-clay-800 shadow-float"
-          >
-            <SparkleIcon size={13} />
-            {t("reader.assistant")}
-          </button>
-          <button
-            data-project-search
-            data-track="search"
-            onClick={() => {
-              setSearchOpen((v) => !v);
-              setMenuExpanded(false);
-            }}
-            aria-label={t("panes.searchProject")}
-            aria-expanded={searchOpen}
-            data-tip={t("panes.searchProjectTitle")}
-            className={`pointer-events-auto flex w-[34px] items-center justify-center rounded-full bg-card shadow-float ${
-              searchOpen ? "text-clay-800" : "text-sand-600 hover:text-clay-800"
-            }`}
-          >
-            <SearchIcon size={15} />
-          </button>
-        </div>
-        {/* The panels: under the pill in Normal view; under the pane header,
-            over the text, in a split view. */}
         <div
           className={
             split
-              ? "pointer-events-none absolute top-full left-0 z-30 mt-2 flex w-[min(400px,70vw)] flex-col gap-1.5"
-              : "contents"
+              ? "flex w-max items-start gap-1.5 [&>nav]:absolute [&>nav]:top-full [&>nav]:left-0 [&>nav]:mt-2 [&>nav]:w-[min(400px,70vw)]"
+              : "flex flex-col items-start gap-1.5"
           }
         >
-        <Collapse open={menuExpanded}>
-        <div className="pointer-events-auto flex w-56 flex-col overflow-hidden rounded-2xl bg-card py-1.5 shadow-float">
-          {canEdit && (
-            <>
-              <span className="flex items-center gap-1.5 px-4 pt-1.5 pb-1 text-[11px] font-bold tracking-[0.08em] text-clay-800 uppercase">
-                <SparkleIcon size={12} />
-                {t("reader.assistant")}
-              </span>
-              {FREQUENT_ASKS.map((ask) => (
-                <button
-                  key={ask.labelKey}
-                  data-track={`ask:${ask.track}`}
-                  data-tip={t(ask.questionKey)}
-                  onClick={() => {
-                    setMenuExpanded(false);
-                    openArticleChat(t(ask.questionKey));
-                  }}
-                  className="px-4 py-2 text-left text-[12.5px] text-sand-800 hover:bg-clay-100 hover:text-clay-800"
-                >
-                  {t(ask.labelKey)}
-                </button>
-              ))}
-              <button
-                onClick={() => {
-                  setMenuExpanded(false);
-                  openArticleChat(null);
-                }}
-                data-track="ask-assistant"
-                data-tip={t("reader.askAssistantTitle")}
-                className="px-4 py-2 text-left text-[12.5px] text-sand-800 hover:bg-clay-100 hover:text-clay-800"
-              >
-                {t("reader.askAssistant")}
-              </button>
-              <div className="mx-3 my-1 border-t border-line" />
-            </>
-          )}
-          <button
-            onClick={() => {
-              setMenuExpanded(false);
-              openKeypointsPage();
-            }}
-            data-track="keypoints"
-            data-tip={t("reader.keypointsMenuTitle")}
-            className="flex items-center gap-1.5 px-4 py-2 text-left text-[12.5px] text-sand-800 hover:bg-clay-100 hover:text-clay-800"
-          >
-            <DistillIcon size={12} />
-            {t("reader.keypoints")}
-          </button>
-          <button
-            onClick={() => {
-              setMenuExpanded(false);
-              openDistillPage(null);
-            }}
-            data-track="distill"
-            data-tip={t("reader.distillMenuTitle")}
-            className="flex items-center gap-1.5 px-4 py-2 text-left text-[12.5px] text-sand-800 hover:bg-clay-100 hover:text-clay-800"
-          >
-            <QuoteIcon size={12} />
-            {t("reader.distill")}
-            {allDistillations.length > 0 ? ` (${allDistillations.length})` : ""}
-          </button>
-        </div>
-        </Collapse>
-        <ProjectSearch
-          notebookId={notebookId}
-          open={searchOpen}
-          onClose={() => setSearchOpen(false)}
-        />
+          <ContentsMenu documentId={documentId} open={contentsOpen} onOpenChange={setContentsOpen} />
         </div>
       </div>
   );
@@ -5647,11 +5728,6 @@ function blockFormatKind(
         className="pointer-events-auto flex items-center gap-2 rounded-full"
         data-nudge={!split && !transcript ? "tools" : undefined}
       >
-        {extractBusy && (
-          <span className="rounded-full bg-card px-3 py-1.5 text-xs shadow-soft">
-            <ThinkingIndicator label={t("reader.extracting")} onStop={stopExtract} />
-          </span>
-        )}
       <Presence show={toast !== null} exit="fade">
         {toast && (
           <span className="flex items-center gap-2 rounded-full bg-ink/90 px-3 py-1.5 text-xs text-paper">
@@ -5726,7 +5802,7 @@ function blockFormatKind(
         editedByBlock={editedByBlock}
         pages={
           conversion
-            ? { notebookId, canEdit, marksByBlock: pageMarksByBlock, conversion }
+            ? { notebookId, canEdit, marksByBlock: pageMarksByBlock, sizeByBlock: pageSizeByBlock, conversion }
             : null
         }
         onSaveText={saveBlockEdit}
@@ -5757,7 +5833,7 @@ function blockFormatKind(
       {annotationCard && (
         <div
           data-selection-popover
-          className="pop-in absolute z-30 w-[300px] rounded-2xl bg-card p-3 shadow-float"
+          className={`pop-in absolute ${TOOL_LAYER} w-[300px] rounded-2xl bg-card p-3 shadow-float`}
           style={{ top: annotationCard.top, left: annotationCard.left }}
         >
           <div className="mb-2 flex items-center justify-between">
@@ -5846,7 +5922,7 @@ function blockFormatKind(
           return (
             <div
               data-selection-popover
-              className="pop-in absolute z-30 w-[300px] rounded-2xl bg-card p-3 shadow-float"
+              className={`pop-in absolute ${TOOL_LAYER} w-[300px] rounded-2xl bg-card p-3 shadow-float`}
               style={{ top: extractCard.top, left: extractCard.left }}
             >
               <div className="mb-2 flex items-center justify-between">
@@ -5898,16 +5974,6 @@ function blockFormatKind(
                 {canEdit && (
                   <span className="flex items-center gap-3">
                     <button
-                      onClick={() => void regenerateExtraction(extraction)}
-                      data-track="extract-card-regenerate"
-                      disabled={extractBusy}
-                      className="text-sand-500 hover:text-clay-800 disabled:opacity-40"
-                      aria-label={t("common.regenerate")}
-                      data-tip={t("reader.regenerateExtractionTitle")}
-                    >
-                      <RegenerateIcon size={12} />
-                    </button>
-                    <button
                       onClick={() => void deleteExtraction(extraction.id)}
                       data-track="extract-card-delete"
                       className="text-xs font-semibold text-red-500 hover:text-red-700"
@@ -5947,7 +6013,7 @@ function blockFormatKind(
             if (target.closest("textarea, input")) return;
             e.preventDefault();
           }}
-          className="pop-in absolute z-20 flex flex-col gap-0.5 rounded-2xl bg-card p-1.5 shadow-float"
+          className={`pop-in absolute ${TOOL_LAYER} flex flex-col gap-0.5 rounded-2xl bg-card p-1.5 shadow-float`}
           style={popoverBox}
         >
           {popover.truncated && (
@@ -6015,6 +6081,7 @@ function blockFormatKind(
                 rows={2}
                 className="w-full resize-none rounded-xl bg-sand-100 p-2 text-[12px] outline-none placeholder:text-sand-500"
               />
+              <ThinkingChips small />
               <div className="flex items-center gap-1.5">
                 <button
                   onClick={toggleVoice}
@@ -6045,52 +6112,23 @@ function blockFormatKind(
           )}
           </Collapse>
 
-          {popover.term && (
-            <button
-              onClick={() => void extract()}
-              data-track="extract-term"
-              disabled={extractBusy}
-              data-tip={t("reader.extractTermTitle")}
-              className={`flex w-full items-center justify-between gap-2 rounded-full bg-clay-100 ${toolRow} text-left font-semibold text-clay-800 hover:bg-clay-200 disabled:opacity-40`}
-            >
-              <span className="flex items-center gap-1.5">
-                <ExtractIcon size={coarse ? 14 : 12} />
-                {t("reader.extract")}
-              </span>
-              <span className="text-[9px] font-bold tracking-[0.06em] text-clay-700 uppercase">
-                {t("reader.recommended")}
-              </span>
-            </button>
-          )}
-
-          {/* Analyze leads the table and figure toolbars (SPEC.md §4): the
-              three-section analysis beside the article. Never on text. */}
+          {/* Analyze leads the figure toolbar (SPEC.md §4): the three-section
+              analysis beside the article. Never on text. */}
           {has("analyze") && (
             <button
               onClick={() => void analyze()}
               data-track="analyze"
-              data-tip={t(popoverKind === "table" ? "reader.analyzeTableTitle" : "reader.analyzeFigureTitle")}
+              data-tip={t("reader.analyzeFigureTitle")}
               className={`flex w-full items-center justify-between gap-2 rounded-full bg-clay-100 ${toolRow} text-left font-semibold text-clay-800 hover:bg-clay-200 disabled:opacity-40`}
             >
               <span className="flex items-center gap-1.5">
                 <ChartIcon size={coarse ? 14 : 12} />
-                {t(popoverKind === "table" ? "reader.analyzeTable" : "reader.analyzeFigure")}
+                {t("reader.analyzeFigure")}
               </span>
               <span className="text-[9px] font-bold tracking-[0.06em] text-clay-700 uppercase">
                 {t("reader.recommended")}
               </span>
             </button>
-          )}
-          {has("explain") && (
-          <button
-            onClick={() => void explain()}
-            data-track="explain"
-            data-tip={popoverKind === "figure" ? t("reader.explainFigureTitle") : t("reader.explainTitle")}
-            className={`flex w-full items-center gap-1.5 rounded-full ${toolRow} text-left text-sand-800 hover:bg-clay-100 hover:text-clay-800`}
-          >
-            <QuestionIcon size={coarse ? 14 : 12} />
-            {t("reader.explain")}
-          </button>
           )}
           {has("simplify") && (
             <button
@@ -6118,18 +6156,6 @@ function blockFormatKind(
                 <TierMark state="ultra" size={10} />
                 {t("reader.ultra")}
               </span>
-            </button>
-          )}
-          {has("extract") && !popover.term && (
-            <button
-              onClick={() => void extract()}
-              data-track="extract"
-              disabled={extractBusy}
-              data-tip={t("reader.extractTitle")}
-              className={`flex w-full items-center gap-1.5 rounded-full ${toolRow} text-left text-sand-800 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40`}
-            >
-              <ExtractIcon size={coarse ? 14 : 12} />
-              {t("reader.extract")}
             </button>
           )}
 
@@ -6327,7 +6353,7 @@ function blockFormatKind(
           data-tip={t("reader.closeLinkTitle")}
           onMouseDown={(e) => e.preventDefault()} // keep the highlight alive under the press
           onClick={() => void completeCloseLink()}
-          className="absolute z-20 flex -translate-y-1/2 items-center gap-1.5 rounded-full bg-sage-600 px-2.5 py-1 text-[11.5px] font-semibold text-sage-fg shadow-float hover:bg-sage-700 disabled:opacity-40"
+          className={`absolute ${TOOL_LAYER} flex -translate-y-1/2 items-center gap-1.5 rounded-full bg-sage-600 px-2.5 py-1 text-[11.5px] font-semibold text-sage-fg shadow-float hover:bg-sage-700 disabled:opacity-40`}
           style={{ left: closeLink.left, top: closeLink.top }}
         >
           {busy ? (
@@ -6345,7 +6371,7 @@ function blockFormatKind(
         <div
           data-selection-popover
           data-side-card="explain"
-          className="bubble-in absolute z-20 flex flex-col rounded-[20px] border border-line bg-card/90 p-4 shadow-float backdrop-blur-md"
+          className={`bubble-in absolute ${TOOL_LAYER} flex flex-col rounded-[20px] border border-line bg-card/90 p-4 shadow-float backdrop-blur-md`}
           style={{ left: bubble.left, top: bubble.top, width: bubble.width, maxHeight: cardMaxHeight }}
         >
           <div
@@ -6370,9 +6396,7 @@ function blockFormatKind(
                     ? bubble.streaming
                       ? t("reader.visualizing")
                       : t("reader.visualization")
-                    : bubble.streaming
-                      ? t("reader.explaining")
-                      : t("reader.explanation")}
+                    : t("reader.explanation")}
             </span>
             <span className="flex items-center gap-3">
               {bubble.streaming && (
@@ -6412,6 +6436,16 @@ function blockFormatKind(
                 >
                   <RegenerateIcon size={12} />
                 </button>
+              )}
+              {bubble.noteId && !bubble.streaming && !bubble.error && (
+                <RatingButtons
+                  tool={bubble.kind}
+                  input={bubble.anchor?.quotedText ?? ""}
+                  output={bubble.text}
+                  notebookId={notebookId}
+                  documentId={documentId}
+                  noteId={bubble.noteId}
+                />
               )}
               {bubble.noteId && !bubble.streaming && (
                 <button
@@ -6467,7 +6501,7 @@ function blockFormatKind(
           key={`${simplifyCard.anchor.blockId}:${simplifyCard.anchor.startOffset}`}
           data-selection-popover
           data-side-card="simplify"
-          className="bubble-in absolute z-20 flex flex-col rounded-[20px] border border-line bg-card/80 p-4 shadow-float backdrop-blur-md"
+          className={`bubble-in absolute ${TOOL_LAYER} flex flex-col rounded-[20px] border border-line bg-card/80 p-4 shadow-float backdrop-blur-md`}
           style={{
             top: simplifyCard.top,
             left: simplifyCard.left,
@@ -6516,6 +6550,16 @@ function blockFormatKind(
                 >
                   <RegenerateIcon size={12} />
                 </button>
+              )}
+              {simplifyCard.noteId && !simplifyCard.streaming && !simplifyCard.error && (
+                <RatingButtons
+                  tool="simplify"
+                  input={simplifyCard.anchor.quotedText}
+                  output={simplifyCard.text}
+                  notebookId={notebookId}
+                  documentId={documentId}
+                  noteId={simplifyCard.noteId}
+                />
               )}
               {simplifyCard.noteId && !simplifyCard.streaming && (
                 <button
@@ -6590,7 +6634,7 @@ function blockFormatKind(
         <div
           data-log-card="log"
           data-selection-popover
-          className="bubble-in absolute z-20 flex flex-col rounded-[20px] border border-line bg-card/90 p-4 shadow-float backdrop-blur-md"
+          className={`bubble-in absolute ${TOOL_LAYER} flex flex-col rounded-[20px] border border-line bg-card/90 p-4 shadow-float backdrop-blur-md`}
           style={{ left: logCard.left, top: logCard.top, width: logCard.width, maxHeight: cardMaxHeight }}
         >
           <div className="mb-2 flex items-center justify-between">
@@ -6634,7 +6678,7 @@ function blockFormatKind(
         <div
           data-selection-popover
           data-side-card="comment"
-          className="bubble-in absolute z-20 flex flex-col rounded-[20px] border border-line bg-card/90 p-4 shadow-float backdrop-blur-md"
+          className={`bubble-in absolute ${TOOL_LAYER} flex flex-col rounded-[20px] border border-line bg-card/90 p-4 shadow-float backdrop-blur-md`}
           style={{
             left: commentCard.left,
             top: commentCard.top,
@@ -6733,7 +6777,7 @@ function blockFormatKind(
         <div
           data-selection-popover
           data-side-card="link"
-          className="bubble-in absolute z-20 flex flex-col rounded-[20px] border border-line bg-card/90 p-4 shadow-float backdrop-blur-md"
+          className={`bubble-in absolute ${TOOL_LAYER} flex flex-col rounded-[20px] border border-line bg-card/90 p-4 shadow-float backdrop-blur-md`}
           style={{ left: linkCard.left, top: linkCard.top, width: linkCard.width, maxHeight: cardMaxHeight }}
         >
           <div
@@ -6812,7 +6856,7 @@ function blockFormatKind(
         <div
           data-selection-popover
           data-side-card="assistant"
-          className="bubble-in absolute z-20 flex resize flex-col overflow-hidden rounded-[20px] border border-line bg-card/95 shadow-float backdrop-blur-md"
+          className={`bubble-in absolute ${TOOL_LAYER} flex resize flex-col overflow-hidden rounded-[20px] border border-line bg-card/95 shadow-float backdrop-blur-md`}
           style={{
             left: assistantChat.left,
             top: assistantChat.top,
@@ -6864,23 +6908,42 @@ function blockFormatKind(
             </span>
           </div>
           <div ref={chatScrollRef} className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-4 py-2">
-            {assistantChat.messages.map((message, i) =>
+            {(chatOpenSide ? chatOpenSide.messages : assistantChat.messages).map((message, i, list) =>
               message.role === "user" ? (
                 <p
                   key={i}
-                  className="ml-6 self-end rounded-2xl bg-clay-100 px-3 py-1.5 text-[12.5px] text-clay-800"
+                  className="ml-6 self-end rounded-2xl bg-clay-100 px-3 py-1.5 text-[12.5px] whitespace-pre-wrap text-clay-800"
                 >
                   {message.content}
                 </p>
               ) : (
                 <div key={i} className="text-[13px]">
-                  <Markdown>{message.content}</Markdown>
+                  {/* Highlighting the answer offers the side chat, the quoted
+                      question, and the comment (SPEC.md §7). */}
+                  <div {...{ [ANSWER_MARK]: "" }}>
+                    <Markdown>{message.content}</Markdown>
+                  </div>
+                  {/* The rating (SPEC.md §25): the question and the selection
+                      it ran on, the answer it gave. */}
+                  {!assistantChat.busy && (
+                    <RatingButtons
+                      tool="act"
+                      input={[assistantChat.anchor?.quotedText ?? "", list[i - 1]?.content ?? ""]
+                        .filter(Boolean)
+                        .join("\n\n")}
+                      output={message.content}
+                      notebookId={notebookId}
+                      documentId={documentId}
+                      noteId={chatNoteId}
+                      className="mt-1"
+                    />
+                  )}
                 </div>
               ),
             )}
             {assistantChat.busy && <ThinkingIndicator className="py-0.5 text-[12px]" />}
           </div>
-          {assistantChatFoot(assistantChat, "flex items-end gap-1.5 px-3 pb-3")}
+          {assistantChatFoot(assistantChat, "flex items-end gap-1.5 px-3 pb-3", "px-3 pb-1.5")}
         </div>
       )}
       </Presence>
@@ -7023,9 +7086,9 @@ function blockFormatKind(
         <ConversationView
           title={t("reader.assistant")}
           icon={<SparkleIcon size={12} />}
-          messages={assistantChat.messages}
+          messages={chatOpenSide ? chatOpenSide.messages : assistantChat.messages}
           busy={assistantChat.busy}
-          foot={assistantChatFoot(assistantChat, "flex items-end gap-1.5")}
+          foot={assistantChatFoot(assistantChat, "flex items-end gap-1.5", "pb-1.5")}
           onClose={closeConversationView}
         />
       )}
@@ -7087,6 +7150,7 @@ function blockFormatKind(
           onAsk={() => setDistillShownId(null)}
           onClose={closeDistillPage}
           onDelete={(id) => void deleteDistillation(id)}
+          onDeleteMany={(ids) => void deleteDistillations(ids)}
           onJump={jumpToQuote}
           onAddNote={addQuoteNote}
           onAddSelection={(text, quote) => addSelectionNote(text, quote)}

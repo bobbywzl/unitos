@@ -47,7 +47,7 @@ const en = {
   pAiAnthropic:
     "Anthropic (Claude) receives document text, page images, and your upload instructions, when you add a document or convert handwritten pages.",
   pAiMoonshot:
-    "Moonshot AI (Kimi) receives document text, your notes and annotations, and your context, when you use Explain, Simplify, Distill, Extract, Match-it, Summarize, or the assistant.",
+    "Moonshot AI (Kimi) receives document text, your notes and annotations, and your context, when you use Simplify, Distill, Extract, Analyze, Summarize, or the assistant.",
   pAiOpenAI:
     "OpenAI receives the text you ask to be read aloud. OpenAI and Groq receive the audio of videos you upload, or of YouTube videos you add that have no captions, for transcription.",
   pAiGoogle:
@@ -189,7 +189,7 @@ const zh: Record<keyof typeof en, string> = {
   pAiAnthropic:
     "当你添加文档或转换手写页面时，Anthropic（Claude）会收到文档文字、页面图片和你的上传要求。",
   pAiMoonshot:
-    "当你使用解释、简化、提炼、提取、匹配、摘要或助手时，Moonshot AI（Kimi）会收到文档文字、你的笔记和批注，以及你的背景。",
+    "当你使用简化、提炼、提取、分析、摘要或助手时，Moonshot AI（Kimi）会收到文档文字、你的笔记和批注，以及你的背景。",
   pAiOpenAI: "OpenAI 会收到你要求朗读的文字。OpenAI 和 Groq 会收到你上传的视频、或你添加的没有字幕的 YouTube 视频的音频，用于转写。",
   pAiGoogle:
     "Google（Gemini）会收到你上传的视频，或你添加的 YouTube 视频链接，用于转写以及描述你所询问的画面。",

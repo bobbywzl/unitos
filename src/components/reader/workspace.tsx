@@ -1,14 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import type {
   CorpusDistillationView,
   GraphEdge,
   GraphNode,
   HistoryEntry,
-  MultiUploadSummary,
-  MultiUploadView,
+  GeneratedDocumentView,
   NotebookView,
   RecommendedLinkView,
 } from "@/lib/types";
@@ -19,8 +18,8 @@ import {
   CommentIcon,
   DistillIcon,
   EditsIcon,
-  ExpandIcon,
   GraphIcon,
+  HistoryIcon,
   MoreIcon,
   NotesIcon,
   QuestionIcon,
@@ -33,7 +32,6 @@ import { ShareControl } from "@/components/collab/share-control";
 import { OfflineStatus } from "@/components/offline-status";
 import { useNotebookSync } from "@/components/collab/use-sync";
 import { GraphOverlay } from "@/components/graph/graph-overlay";
-import { StitchBox } from "@/components/multi/stitch-box";
 import { VisualizationViewer } from "@/components/reader/visualization-viewer";
 import { CorpusDistillPage } from "@/components/reader/corpus-distill-page";
 import { ContextTab, type ContextValues } from "@/components/context-tab";
@@ -41,9 +39,10 @@ import { GuideDialog } from "@/components/guide-dialog";
 import { useT } from "@/components/lang-provider";
 import { NotebookTitle } from "@/components/notebook-title";
 import { FloatingNoteEditor } from "@/components/outline/floating-note-editor";
+import { readSideChatOpen, subscribeSideChatOpen } from "@/lib/assistant/side-chat-open";
 import { NotesTray } from "@/components/outline/notes-tray";
 import { Presence } from "@/components/presence";
-import { useOutline } from "@/components/outline/use-outline";
+import { flattenNotes, useOutline } from "@/components/outline/use-outline";
 import { DocumentBar, type AttachedDocument } from "@/components/reader/document-bar";
 import type { ReaderViewKind } from "@/components/reader/reader-panes";
 import type { DriveConfig } from "@/lib/drive/config";
@@ -108,8 +107,6 @@ export function Workspace({
   graph,
   history,
   corpusDistillations,
-  multi,
-  multiUploads,
 }: {
   notebook: NotebookView;
   documents: AttachedDocument[];
@@ -132,14 +129,17 @@ export function Workspace({
   context: { initial: ContextValues | null; hasOverride: boolean; isSet: boolean };
   collab: CollabState;
   rev: number;
-  graph: { nodes: GraphNode[]; edges: GraphEdge[]; recommended: RecommendedLinkView[] };
+  graph: {
+    nodes: GraphNode[];
+    edges: GraphEdge[];
+    recommended: RecommendedLinkView[];
+    // The pages Stitch wrote for the project (SPEC.md §22).
+    generated: GeneratedDocumentView[];
+    // Runs of Recommend links this account has left this month (SPEC.md §13).
+    linkScansLeft: number;
+  };
   history: HistoryEntry[];
   corpusDistillations: CorpusDistillationView[];
-  // The open multi upload (?multi=, SPEC.md §22): the Stitch box docks at
-  // the bottom of the reader. Null = none open.
-  multi: MultiUploadView | null;
-  // The project's multi uploads, for the document list.
-  multiUploads: MultiUploadSummary[];
 }) {
   const t = useT();
   const canEdit = collab.canEdit;
@@ -480,18 +480,22 @@ export function Workspace({
     revealTray();
   }
 
-  // A note floats over the article (dragged out of the tray): the tray folds
-  // so the card has the room, and unfolds when the card docks or closes.
-  // Docking opens the tray on notes on its own (onDock below); this undoes
-  // only the fold it made, so a tray the reader had folded stays folded.
+  // A note floats over the article (dragged out of the tray), or a side chat
+  // is open in the reader (SPEC.md §7): the tray folds so the card has the
+  // room, and unfolds when the card docks or closes and the side chat is
+  // gone. Docking opens the tray on notes on its own (onDock below); this
+  // undoes only the fold it made, so a tray the reader had folded stays
+  // folded.
   const floatingId = actions.floating?.id ?? null;
+  const sideChatOpen = useSyncExternalStore(subscribeSideChatOpen, readSideChatOpen, () => false);
+  const needsRoom = floatingId !== null || sideChatOpen;
   const collapsedRef = useRef(collapsed);
   useEffect(() => {
     collapsedRef.current = collapsed;
   }, [collapsed]);
   useEffect(() => {
     /* eslint-disable react-hooks/set-state-in-effect */
-    if (floatingId) {
+    if (needsRoom) {
       setMobileTray(false);
       if (!collapsedRef.current) {
         foldedForFloat.current = true;
@@ -502,7 +506,7 @@ export function Workspace({
       setCollapsed(false);
     }
     /* eslint-enable react-hooks/set-state-in-effect */
-  }, [floatingId]);
+  }, [needsRoom]);
 
   return (
     // print: the shell flattens to plain flow so the whole document prints,
@@ -544,7 +548,6 @@ export function Workspace({
             drive={drive}
             figureGaps={figureGaps}
             browserConfigured={browserConfigured}
-            multiUploads={multiUploads}
           />
         </div>
         <OfflineStatus />
@@ -582,12 +585,13 @@ export function Workspace({
         </button>
       </header>
 
-      {/* A note's editor taken out of the tray, over the article. Docking it
-          opens the tray on notes, where the note's card reopens the editor. */}
+      {/* A note taken out of the tray, over the article. Docking it opens the
+          tray on notes, where the note's card takes it back. */}
       {actions.floating && (
         <FloatingNoteEditor
           key={actions.floating.id}
           edit={actions.floating}
+          note={flattenNotes(tree).find((n) => n.id === actions.floating?.id) ?? null}
           actions={actions}
           onDock={() => show("notes")}
         />
@@ -671,12 +675,25 @@ export function Workspace({
               {tab === "annotations" && annotationCount > 0 && (
                 <span className="text-[13px] text-sand-600">{annotationCount}</span>
               )}
+              {/* Assistant history (SPEC.md §7): every conversation of the
+                  project on its own page, from the assistant page's top right. */}
+              {tab === "assistant" && (
+                <Link
+                  href={`/n/${notebook.id}/assistant`}
+                  data-track="assistant-history"
+                  data-tip={t("assistant.historyTitle")}
+                  className="ml-auto flex items-center gap-1.5 rounded-full bg-card px-3 py-1 text-xs font-semibold text-sand-600 shadow-soft hover:text-clay-800"
+                >
+                  <HistoryIcon size={13} />
+                  {t("assistant.history")}
+                </Link>
+              )}
               <button
                 onClick={() => setMobileTray(false)}
                 data-track="close"
                 aria-label={t("common.close")}
                 data-tip={t("common.close")}
-                className="ml-auto rounded-full px-2 text-sand-500 hover:text-clay-800 md:hidden"
+                className={`${tab === "assistant" ? "" : "ml-auto "}rounded-full px-2 text-sand-500 hover:text-clay-800 md:hidden`}
               >
                 ✕
               </button>
@@ -705,17 +722,6 @@ export function Workspace({
               </div>
             )}
 
-            {tab === "notes" && (
-              <Link
-                href={`/n/${notebook.id}/notes`}
-                data-track="notes-full-page"
-                data-tip={t("panes.notesFullPageTitle")}
-                className="flex shrink-0 items-center justify-center gap-2 rounded-full bg-card px-4 py-2.5 text-[13px] font-semibold text-sand-700 shadow-soft hover:bg-clay-100 hover:text-clay-800"
-              >
-                <ExpandIcon size={15} />
-                {t("panes.notesFullPage")}
-              </Link>
-            )}
           </aside>
         </div>
         </div>
@@ -887,9 +893,6 @@ export function Workspace({
       )}
       </Presence>
       <VisualizationViewer />
-      {/* The Stitch assistant docked over the reader while a multi upload is
-          open (SPEC.md §22): every command works across its members. */}
-      {multi && <StitchBox notebookId={notebook.id} multiId={multi.id} docked />}
       <Presence show={graphOpen} exit="fade">
       {graphOpen && (
         <GraphOverlay
@@ -898,6 +901,8 @@ export function Workspace({
           nodes={graph.nodes}
           edges={graph.edges}
           recommended={graph.recommended}
+          generated={graph.generated}
+          linkScansLeft={graph.linkScansLeft}
           onClose={() => setGraphOpen(false)}
         />
       )}

@@ -3,9 +3,10 @@ import { isLang, LANG_COOKIE } from "@/lib/i18n/config";
 import { translate } from "@/lib/i18n/dictionaries";
 
 // Two models (SPEC.md §2). Kimi K3, Moonshot AI's flagship, is behind every AI
-// feature but the import; Claude Fable 5.1, Anthropic's most capable model, is
-// the import's model (PARSE_MODEL below). The clients live in lib/kimi.ts and
-// lib/claude.ts, not here: client components import this file.
+// feature but the handwritten passes and Visualize, which run on Claude
+// Opus 5 (HANDWRITTEN_MODEL and VISUALIZE_MODEL below). The clients live in
+// lib/kimi.ts and lib/claude.ts, not here: client components import this
+// file.
 export const KIMI_K3 = "kimi-k3";
 export const CLAUDE_FABLE_5_1 = "claude-fable-5-1";
 export const CLAUDE_OPUS_5 = "claude-opus-5";
@@ -120,15 +121,38 @@ export const MAX_OUTPUT_TOKENS: Record<DerivationType, number> = {
 };
 
 // The ingest-time corpus scan for recommended links (SPEC.md §13). Not a
-// DerivationType — it runs as a background job, not through /api/derive.
+// DerivationType — it runs as a background job, not through /api/derive. Two
+// passes, the scan and the check, both at the reader's effort: the scan
+// reads the whole project, and "max" over that much text outruns the request.
 export const CONNECT_MODEL = KIMI_K3;
+export const CONNECT_EFFORT: KimiEffort = DEFAULT_EFFORT;
 
-// Stitch (SPEC.md §22): the assistant over a multi upload's members. It reads
-// every member whole and answers one command with links, a generated
-// document, or both. Not a DerivationType — it runs through /api/multi.
+// Stitch (SPEC.md §22): the assistant over the project's documents, from the
+// graph. Two passes. The select pass reads every document whole and names
+// the blocks the command needs — ids only, at "low": a reading, the same as
+// KEYPOINTS, and the one pass over the whole text. The answer pass reads
+// the selected blocks at the reader's effort and answers with links, a
+// generated document, or both. One pass at "high" over every document whole
+// outran the request every time the documents were long. Not a
+// DerivationType — it runs through /api/notebooks/[notebookId]/stitch.
 export const STITCH_MODEL = KIMI_K3;
+export const STITCH_SELECT_EFFORT: KimiEffort = "low";
+export const STITCH_SELECT_MAX_OUTPUT_TOKENS = 16384; // a list of ids, with the short reasoning before it
 export const STITCH_EFFORT: KimiEffort = "high";
-export const STITCH_MAX_OUTPUT_TOKENS = 65536; // a gathered page of passages is long
+export const STITCH_MAX_OUTPUT_TOKENS = 32768; // a page of whole-block references and the model's own writing
+// The model passes together get this long; the route's limit (300 s) keeps
+// the rest for storing the answer. Past it the run stops and the reader is
+// told to narrow the command instead of reading a stream that ended empty.
+export const STITCH_DEADLINE_MS = 270_000;
+
+// The contents of a document (SPEC.md §26): the parts the reader jumps
+// between, each with the block it starts at. One call over the whole
+// document at "low", like KEYPOINTS: a reading of where the parts begin,
+// not a problem to reason through, and a long document at "high" outran
+// the request.
+export const CONTENTS_MODEL = KIMI_K3;
+export const CONTENTS_EFFORT: KimiEffort = "low";
+export const CONTENTS_MAX_OUTPUT_TOKENS = 16384; // a list of titles and block ids, with the short reasoning before it
 
 // The merge of notes (SPEC.md §6): the reader drops a note on another and
 // picks Merge with AI, and the model writes the one note that replaces both.
@@ -141,22 +165,30 @@ export const MERGE_EFFORT: KimiEffort = DEFAULT_EFFORT;
 export const GIST_MODEL = KIMI_K3;
 export const GIST_EFFORT: KimiEffort = "low";
 
-// The import runs on the most capable model at its highest reasoning effort:
-// what the parse gets wrong, every later tool inherits. One constant for the
-// upload assistant's review and instruction check (SPEC.md §15), the URL core
-// and structure passes (SPEC.md §2), Import PDF's judgment, and conversion
-// (SPEC.md §16). The client is lib/claude.ts.
-export const PARSE_MODEL = CLAUDE_FABLE_5_1;
-export const PARSE_EFFORT: ClaudeEffort = "max";
+// The parse passes — the URL core, structure, and layout passes (SPEC.md §2)
+// — run on Kimi K3 at high effort. The passes answer with ops by block
+// index, a reading of the page rather than a problem to solve, and the
+// figure rules are the code's (lib/parse/structure.ts, layout.ts: a figure
+// with media is never dropped), so the parse keeps its figures under any
+// model. A claude- id here runs through lib/claude.ts instead; the passes
+// call whichever client the id belongs to (lib/parse/model.ts), and the
+// prompts are the same either way. What the parse gets wrong every later
+// tool inherits: keep the effort high.
+export const PARSE_MODEL = KIMI_K3;
+export const PARSE_EFFORT: KimiEffort = "high";
 
 // The upload assistant's review and instruction check (SPEC.md §15). Not a
 // DerivationType — it runs before ingest, not through /api/derive.
 export const UPLOAD_MODEL = PARSE_MODEL;
 
-// Handwritten documents (SPEC.md §16). Not DerivationTypes: classification
-// runs inside Import PDF, conversion as a background job.
-export const CLASSIFY_MODEL = PARSE_MODEL;
-export const CONVERT_MODEL = PARSE_MODEL;
+// Handwritten documents (SPEC.md §16): Import PDF's judgment and conversion
+// read page images, and run on Claude Opus 5 at high effort. Not
+// DerivationTypes: classification runs inside Import PDF, conversion as a
+// background job. The client is lib/claude.ts.
+export const HANDWRITTEN_MODEL = CLAUDE_OPUS_5;
+export const HANDWRITTEN_EFFORT: ClaudeEffort = "high";
+export const CLASSIFY_MODEL = HANDWRITTEN_MODEL;
+export const CONVERT_MODEL = HANDWRITTEN_MODEL;
 
 export const ANNOTATIONS_SECTION_TITLE = "Annotations";
 

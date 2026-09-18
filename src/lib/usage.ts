@@ -37,6 +37,9 @@ const MODEL_PRICING: Record<string, Price> = {
   "whisper-1": price(0, 0),
   // Groq: per-hour transcription — its caller passes costUsd directly.
   "whisper-large-v3-turbo": price(0, 0),
+  // Deepgram: per-second transcription — its caller passes costUsd directly
+  // (lib/video/deepgram.ts). inputTokens on these rows is seconds of audio.
+  "nova-3": price(0, 0),
   "gpt-4o-mini-tts": price(0.6, 12),
   // Microsoft Edge read-aloud voice: free, no key.
   "edge-tts": price(0, 0),
@@ -45,6 +48,17 @@ const MODEL_PRICING: Record<string, Price> = {
   // to 500k a month on the Free API. Callers pass the character count as
   // inputTokens.
   deepl: price(25, 0),
+  // Not billed per token, and the price depends on a plan this app cannot
+  // read, so these record the call and $0 rather than a made-up figure: the
+  // page then says how much of each ran, and never a cost that is not real.
+  // A file in Gemini's store is billed on the call that reads it, not on the
+  // upload (lib/video/gemini-files.ts).
+  "gemini-files": price(0, 0),
+  // One page opened in the browser service (lib/browser.ts): the figure
+  // render and the YouTube transcript panel.
+  "browser-session": price(0, 0),
+  // One email sent through Resend (lib/email.ts).
+  "resend-email": price(0, 0),
 };
 
 /** Family fallbacks for ids not priced exactly; first match wins. */
@@ -97,31 +111,57 @@ export function sdkTokens(usage: {
   };
 }
 
+/** Two token counts summed: the steps of one stopped generation. */
+export function addTokens(a: TokenCounts, b: TokenCounts): TokenCounts {
+  return {
+    inputTokens: (a.inputTokens ?? 0) + (b.inputTokens ?? 0),
+    outputTokens: (a.outputTokens ?? 0) + (b.outputTokens ?? 0),
+    cacheReadTokens: (a.cacheReadTokens ?? 0) + (b.cacheReadTokens ?? 0),
+    cacheWriteTokens: (a.cacheWriteTokens ?? 0) + (b.cacheWriteTokens ?? 0),
+  };
+}
+
 export type UsageMeta = {
   userId: string | null;
-  feature: string; // explain | simplify | … | assistant | act | glossary | transcribe | describe | voice | gist | merge
+  feature: string; // explain | simplify | … | assistant | act | glossary | contents | transcribe | describe | voice | gist | merge | stitch
   model: string;
 };
 
-function providerOf(model: string): string {
-  if (model.startsWith("claude")) return "anthropic";
-  if (model.startsWith("kimi") || model.startsWith("moonshot")) return "moonshot";
-  if (model.startsWith("gemini")) return "google";
-  if (model.startsWith("whisper-large") || model.startsWith("distil-whisper")) return "groq";
-  if (model === "edge-tts") return "microsoft";
-  if (model === "deepl") return "deepl";
-  return "openai";
+// Who serves each model. Ordered; first match wins. A model no rule names
+// is filed under "other", never guessed into a provider: a row under the
+// wrong provider reads as that provider's spend and is worse than an
+// unnamed one. Add the rule when a provider is added.
+const PROVIDERS: [RegExp, string][] = [
+  [/^claude/, "anthropic"],
+  [/^(kimi|moonshot)/, "moonshot"],
+  [/^(gemini|gemini-files)/, "google"],
+  [/^(whisper-large|distil-whisper)/, "groq"],
+  [/^nova-/, "deepgram"],
+  [/^(whisper-1|gpt-|text-embedding-|o[0-9])/, "openai"],
+  [/^edge-tts$/, "microsoft"],
+  [/^deepl$/, "deepl"],
+  [/^browser-session$/, "browser"],
+  [/^resend-email$/, "resend"],
+];
+
+export function providerOf(model: string): string {
+  for (const [rx, provider] of PROVIDERS) if (rx.test(model)) return provider;
+  return "other";
 }
 
-/** Record one model call. costUsd defaults to list price × tokens; per-minute
-    callers (whisper) pass their own. Nothing meaningful → no row. */
+/** Record one call. costUsd defaults to list price × tokens; a caller billed
+    on something other than tokens (whisper per minute, Deepgram per second,
+    DeepL per character) passes its own. A caller that passes costUsd — `0`
+    included — always gets a row, so a free or flat-rate service still shows
+    its calls; a call that says nothing at all (no tokens, no cost) writes
+    nothing. */
 export function recordUsage(meta: UsageMeta, tokens: TokenCounts, costUsd?: number): void {
   const total =
     (tokens.inputTokens ?? 0) +
     (tokens.outputTokens ?? 0) +
     (tokens.cacheReadTokens ?? 0) +
     (tokens.cacheWriteTokens ?? 0);
-  if (total === 0 && !costUsd) return;
+  if (total === 0 && costUsd === undefined) return;
   void db.usageEvent
     .create({
       data: {

@@ -31,7 +31,6 @@ import {
   compareOutputSchema,
   distillOutputSchema,
   keypointsOutputSchema,
-  extractOutputSchema,
   findOutputSchema,
   formalizeArticleSchema,
   formalizeNotesSchema,
@@ -58,22 +57,19 @@ import { corpusDistillPrompt } from "@/lib/prompts/distill";
 import type { PromptCtx } from "@/lib/prompts/types";
 import {
   corpusDistillationList,
+  DISTILL_REGENERATE_MAX,
   distillationList,
-  extractionList,
   FORMALIZE_FORMATS,
   formalizedArticle,
   SUMMARY_DEPTHS,
   type CorpusDistillation,
   type Distillation,
-  type Extraction,
   type FormalizedArticle,
   type Keypoints,
   type SummaryLevels,
 } from "@/lib/types";
 import { materializeArticle } from "@/lib/video/article-document";
 import { landingSection } from "@/lib/derive/landing";
-import { videoAnchorFor } from "@/lib/video/anchor";
-import { describeYouTubeClip } from "@/lib/video/gemini";
 import {
   formatTimeRange,
   isAudioMime,
@@ -82,7 +78,7 @@ import {
   type VideoFindMatch,
 } from "@/lib/video/types";
 import { ultraActive } from "@/lib/tiers";
-import { recordUsage, sdkTokens } from "@/lib/usage";
+import { addTokens, recordUsage, sdkTokens, type TokenCounts } from "@/lib/usage";
 import { parseBody } from "@/lib/validate";
 
 // FORMALIZE holds the connection for minutes on a long transcript (heartbeat
@@ -97,7 +93,6 @@ const deriveSchema = z
     "EXPLAIN",
     "SIMPLIFY",
     "SALIENCE",
-    "EXTRACT",
     "DISTILL",
     "KEYPOINTS",
     "SUMMARIZE",
@@ -136,6 +131,10 @@ const deriveSchema = z
   depth: z.enum(SUMMARY_DEPTHS).optional(), // SUMMARIZE only
   query: z.string().min(1).max(500).optional(), // FIND only
   question: z.string().min(1).max(500).optional(), // DISTILL and ASK; DISTILL's anchor is optional focus
+  // DISTILL: the extraction this run regenerates. It goes when the new one is
+  // stored, and the new one counts the runs; at DISTILL_REGENERATE_MAX the
+  // run is refused (SPEC.md §4).
+  replaceId: z.string().min(1).optional(),
   format: z.enum(FORMALIZE_FORMATS).optional(), // FORMALIZE only
   sectionId: z.string().min(1).optional(), // FORMALIZE notes, COMPARE: where the notes land
   // EXPLAIN on a video moment (SPEC.md §11): the time range, the drawn region,
@@ -185,9 +184,13 @@ const deriveSchema = z
   })
   .refine((d) => !d.page || d.type === "EXPLAIN", {
     message: "page is EXPLAIN only",
+  })
+  // EXPLAIN serves Circle & ask alone (SPEC.md §16): the page, and a question.
+  .refine((d) => d.type !== "EXPLAIN" || Boolean(d.page?.question?.trim()), {
+    message: "EXPLAIN needs a page and a question",
   });
 
-const ANCHOR_REQUIRED = new Set(["EXPLAIN", "SIMPLIFY", "EXTRACT", "ANALYZE", "VISUALIZE"]);
+const ANCHOR_REQUIRED = new Set(["SIMPLIFY", "ANALYZE", "VISUALIZE"]);
 
 // A model call that holds one connection for minutes dies at idle proxies, so
 // the response streams a heartbeat space while the model works and ends with
@@ -312,12 +315,7 @@ async function handle(req: Request, t: TFunc) {
   if (!template) {
     return NextResponse.json({ error: t("api.typeNotBuilt", { type: data.type }) }, { status: 501 });
   }
-  // A video or page anchor stands in for a text anchor on EXPLAIN (SPEC.md §11, §16).
-  if (
-    ANCHOR_REQUIRED.has(data.type) &&
-    !data.anchor &&
-    !(data.type === "EXPLAIN" && (data.video || data.page))
-  ) {
+  if (ANCHOR_REQUIRED.has(data.type) && !data.anchor) {
     return NextResponse.json({ error: t("api.typeRequiresAnchor", { type: data.type }) }, { status: 400 });
   }
   if (data.type === "FIND" && !data.query) {
@@ -341,6 +339,15 @@ async function handle(req: Request, t: TFunc) {
   // connect scan; quotes come back as block spans and the server maps each to
   // its document — block ids are unique across the corpus.
   if (data.type === "DISTILL" && data.scope === "corpus") {
+    const notebookBefore = data.replaceId
+      ? await db.notebook.findUnique({ where: { id: data.notebookId }, select: { distillations: true } })
+      : null;
+    const replacedCorpus = data.replaceId
+      ? (corpusDistillationList(notebookBefore?.distillations).find((d) => d.id === data.replaceId) ?? null)
+      : null;
+    if (replacedCorpus && (replacedCorpus.regenerations ?? 0) >= DISTILL_REGENERATE_MAX) {
+      return NextResponse.json({ error: t("api.distillRegenerateLimit") }, { status: 400 });
+    }
     const attachments = await db.notebookDocument.findMany({
       where: { notebookId: data.notebookId },
       include: {
@@ -457,6 +464,10 @@ async function handle(req: Request, t: TFunc) {
                 a.start - b.start,
             );
           if (quotes.length === 0) {
+            console.error(
+              "[derive] DISTILL:corpus resolved no quotes:",
+              JSON.stringify(result.data.quotes.map((q) => ({ blockId: q.blockId, start: q.start, end: q.end, quote: q.quote?.slice(0, 80) }))),
+            );
             fail(t("api.distillNoQuotes"));
             return;
           }
@@ -481,13 +492,15 @@ async function handle(req: Request, t: TFunc) {
             where: { id: data.notebookId },
             select: { distillations: true },
           });
+          if (replacedCorpus) distillation.regenerations = (replacedCorpus.regenerations ?? 0) + 1;
           await db.notebook.update({
             where: { id: data.notebookId },
             data: {
-              // Keep the newest 20; the page deletes the rest one by one.
+              // Keep the newest 20; the page deletes the rest. The replaced
+              // extraction goes with the new one's arrival.
               distillations: [
                 distillation,
-                ...corpusDistillationList(notebookRow?.distillations),
+                ...corpusDistillationList(notebookRow?.distillations).filter((d) => d.id !== data.replaceId),
               ].slice(0, 20),
             },
           });
@@ -689,6 +702,14 @@ async function handle(req: Request, t: TFunc) {
   if (!attachment) {
     return NextResponse.json({ error: t("api.documentNotAttachedToCorpus") }, { status: 404 });
   }
+  // Regenerate on a document extraction: the count rides on the replaced one.
+  const replaced =
+    data.type === "DISTILL" && data.replaceId
+      ? (distillationList(attachment.distillations).find((d) => d.id === data.replaceId) ?? null)
+      : null;
+  if (replaced && (replaced.regenerations ?? 0) >= DISTILL_REGENERATE_MAX) {
+    return NextResponse.json({ error: t("api.distillRegenerateLimit") }, { status: 400 });
+  }
 
   // 1. Load document blocks (the cached prompt prefix), profile, section skeleton.
   const document = await db.document.findUnique({
@@ -766,75 +787,20 @@ async function handle(req: Request, t: TFunc) {
     return NextResponse.json({ error: t("api.formalizeNeedsTranscript") }, { status: 400 });
   }
 
-  // EXPLAIN on a video moment: the anchor is the time range; the frame rides
-  // along as an image when the client could capture it. A YouTube frame cannot
-  // be captured cross-origin, so Gemini watches the clip instead and its
-  // description grounds the explanation (SPEC.md §11).
-  let videoAnchor: { blockId: string; quotedText: string } | null = null;
-  let frameImage: Uint8Array | null = null;
-  if (data.type === "EXPLAIN" && data.video) {
-    videoAnchor = await videoAnchorFor(document.id, data.video.startTime, data.video.endTime);
-    if (!videoAnchor) {
-      return NextResponse.json({ error: t("api.noVideoBlock") }, { status: 400 });
-    }
-    if (data.video.frame) {
-      frameImage = new Uint8Array(
-        Buffer.from(data.video.frame.slice("data:image/jpeg;base64,".length), "base64"),
-      );
-      if (frameImage.length === 0) frameImage = null;
-    }
-    // A YouTube frame comes from the storyboard sheets, which are small. Gemini
-    // watches the same clip at full resolution, so the model gets two
-    // independent looks at the moment: the actual cropped frame and a
-    // description of it. They corroborate each other.
-    const asset = await db.videoAsset.findUnique({
-      where: { documentId: document.id },
-      select: { kind: true, youtubeId: true, mimeType: true },
-    });
-    const previewFrame = asset?.kind === "YOUTUBE";
-    let frameDescription: string | undefined;
-    if (previewFrame && asset?.youtubeId && process.env.GEMINI_API_KEY) {
-      frameDescription = await describeYouTubeClip(
-        asset.youtubeId,
-        data.video.startTime,
-        data.video.endTime,
-        data.video.region ?? null,
-        { userId: usageMeta.userId, feature: "describe" },
-      ).catch((err) => {
-        console.warn("[derive] clip description failed:", err);
-        return undefined;
-      });
-    }
-    const excerpt = timedBlocks
-      .filter((b) => b.startTime! < data.video!.endTime && b.endTime! > data.video!.startTime)
-      .map((b) => b.text)
-      .join(" ");
-    ctx.video = {
-      timeRange: formatTimeRange(data.video.startTime, data.video.endTime),
-      transcriptExcerpt: excerpt.length > 1500 ? `${excerpt.slice(0, 1499)}…` : excerpt,
-      hasFrame: frameImage !== null,
-      hasRegion: Boolean(data.video.region),
-      previewFrame: previewFrame && frameImage !== null,
-      frameDescription,
-      audio: isAudioMime(asset?.mimeType ?? null),
-    };
-  }
-
-  // EXPLAIN on a figure block: the model deciphers the visual. An image figure
-  // attaches its image bytes (fetched here — a failed fetch degrades to
-  // caption and context, never fails the request); an SVG chart attaches its
-  // source; a PDF figure attaches its rendered page; a video figure explains
-  // from caption and context only.
-  let figureImage: FigureImage | null = null;
   // ANALYZE reads a FIGURE or TABLE block (SPEC.md §4): the anchored block,
-  // with its visual when one can be produced.
+  // with its visual when one can be produced. An image figure attaches its
+  // image bytes (fetched here — a failed fetch degrades to caption and
+  // context, never fails the request); an SVG chart attaches its source; a
+  // PDF figure attaches its rendered page; a video figure reads from caption
+  // and context only.
+  let figureImage: FigureImage | null = null;
   let analyzedBlock: { id: string; type: string; text: string } | null = null;
-  if ((data.type === "EXPLAIN" || data.type === "ANALYZE") && anchor) {
+  if (data.type === "ANALYZE" && anchor) {
     const anchoredBlock = await db.block.findUnique({
       where: { id: anchor.blockId },
       select: { type: true, html: true, text: true, page: true, region: true },
     });
-    if (data.type === "ANALYZE") {
+    {
       if (!anchoredBlock || (anchoredBlock.type !== "FIGURE" && anchoredBlock.type !== "TABLE")) {
         return NextResponse.json({ error: t("api.analyzeNeedsFigureOrTable") }, { status: 400 });
       }
@@ -907,14 +873,13 @@ async function handle(req: Request, t: TFunc) {
     };
   }
 
-  // EXPLAIN answers confusions and ANALYZE links a figure or table to the
-  // rest of the project, so both see the corpus: related passages from the
-  // other documents, the reader's notes, and their annotations. Its own
-  // system message after the cached prefix, so the prefix cache holds. The
-  // whole block's text scores the related passages for ANALYZE: a table
-  // selection alone is a few cells.
+  // ANALYZE links a figure or table to the rest of the project, so it sees
+  // the corpus: related passages from the other documents, the reader's
+  // notes, and their annotations. Its own system message after the cached
+  // prefix, so the prefix cache holds. The whole block's text scores the
+  // related passages: a table selection alone is a few cells.
   const corpus =
-    data.type === "EXPLAIN" || data.type === "ANALYZE"
+    data.type === "ANALYZE"
       ? await corpusSection(
           data.notebookId,
           documentId,
@@ -927,9 +892,7 @@ async function handle(req: Request, t: TFunc) {
   // derivation on this document (SPEC.md §2).
   const attachedImages: { bytes: Uint8Array; mediaType: string }[] = figureImage
     ? [{ bytes: figureImage.bytes, mediaType: figureImage.mediaType }]
-    : frameImage
-      ? [{ bytes: frameImage, mediaType: "image/jpeg" }]
-      : pageImages.map((bytes) => ({ bytes, mediaType: "image/png" }));
+    : pageImages.map((bytes) => ({ bytes, mediaType: "image/png" }));
   const messages: ModelMessage[] = [
     {
       role: "system",
@@ -966,7 +929,7 @@ async function handle(req: Request, t: TFunc) {
   // ImageAsset, and one annotation lands on the selection whose markdown
   // points at it. When the model is not certain, or the check withdraws the
   // picture, the run declines with the reason and persists nothing: the card
-  // says so and points at the assistant, Explain, and Simplify. Runs behind
+  // says so and points at the assistant and Simplify. Runs behind
   // the heartbeat stream.
   if (data.type === "VISUALIZE" && anchor) {
     return heartbeatResponse(
@@ -1078,8 +1041,8 @@ async function handle(req: Request, t: TFunc) {
   const effort = DERIVATION_EFFORT[data.type];
 
   // 3 + 4. Stream or collect, then route by destination.
-  // EXPLAIN, SIMPLIFY, ANALYZE, SUMMARIZE, and ASK stream text. SALIENCE and
-  // DISTILL return validated JSON.
+  // EXPLAIN (Circle & ask), SIMPLIFY, ANALYZE, SUMMARIZE, and ASK stream
+  // text. SALIENCE and DISTILL return validated JSON.
   if (
     data.type === "EXPLAIN" ||
     data.type === "SIMPLIFY" ||
@@ -1095,6 +1058,14 @@ async function handle(req: Request, t: TFunc) {
       messages,
       // Stop aborts the model call too (SPEC.md §6), not just the response.
       abortSignal: req.signal,
+      // Stopped: the steps that finished were billed, so they are recorded.
+      // A step cut off mid-answer reports no usage at all.
+      onAbort: ({ steps }) => {
+        recordUsage(
+          usageMeta,
+          steps.reduce<TokenCounts>((sum, step) => addTokens(sum, sdkTokens(step.usage)), {}),
+        );
+      },
       onEnd: async ({ text, usage }) => {
         console.log(
           `[derive] ${data.type} cacheRead=${usage.inputTokenDetails.cacheReadTokens ?? 0} ` +
@@ -1126,9 +1097,9 @@ async function handle(req: Request, t: TFunc) {
     // and the client shows it (lib/derive/text-stream.ts: heartbeat spaces
     // while the model reasons, the real reason on failure). A failed stream
     // persists nothing.
-    // EXPLAIN, SIMPLIFY, and ANALYZE persist in the hidden Annotations section
-    // before the stream closes, then the stream ends with STREAM_NOTE_TOKEN +
-    // the note id: the client's refresh always finds the stored mark, and the
+    // SIMPLIFY and ANALYZE persist in the hidden Annotations section before
+    // the stream closes, then the stream ends with STREAM_NOTE_TOKEN + the
+    // note id: the client's refresh always finds the stored mark, and the
     // card can delete its annotation in place.
     const encoder = new TextEncoder();
     let cancelled = false;
@@ -1158,11 +1129,7 @@ async function handle(req: Request, t: TFunc) {
           }
           return;
         }
-        if (
-          (data.type === "EXPLAIN" || data.type === "SIMPLIFY" || data.type === "ANALYZE") &&
-          anchor &&
-          text.trim()
-        ) {
+        if ((data.type === "SIMPLIFY" || data.type === "ANALYZE") && anchor && text.trim()) {
           try {
             const block = blockById.get(anchor.blockId);
             if (block) {
@@ -1212,43 +1179,6 @@ async function handle(req: Request, t: TFunc) {
                     prefix: "",
                     suffix: "",
                     region: pageAnchor.region as object,
-                  },
-                },
-              },
-            });
-            await bumpNotebook(data.notebookId);
-            send(`${STREAM_NOTE_TOKEN}${note.id}`);
-          } catch (err) {
-            console.error("[derive] annotation save failed:", err);
-            send(`${STREAM_ERROR_TOKEN}${t("api.annotationNotSaved")}`);
-          }
-        }
-        // A video EXPLAIN persists with its time anchor, so the explained
-        // moment joins the overlay and Visual (SPEC.md §11).
-        if (data.type === "EXPLAIN" && data.video && videoAnchor && text.trim()) {
-          try {
-            const section = await annotationsSection(data.notebookId);
-            const count = await db.note.count({ where: { sectionId: section.id } });
-            const note = await db.note.create({
-              data: {
-                sectionId: section.id,
-                content: text,
-                status: "ACCEPTED",
-                derivationType: "EXPLAIN",
-                createdById: user.id,
-                order: count,
-                sources: {
-                  create: {
-                    documentId: documentId,
-                    blockId: videoAnchor.blockId,
-                    startOffset: 0,
-                    endOffset: 0,
-                    quotedText: videoAnchor.quotedText,
-                    prefix: "",
-                    suffix: "",
-                    startTime: data.video.startTime,
-                    endTime: data.video.endTime,
-                    region: data.video.region,
                   },
                 },
               },
@@ -1334,83 +1264,6 @@ async function handle(req: Request, t: TFunc) {
     });
     await bumpNotebook(data.notebookId);
     return NextResponse.json({ ok: true, spanCount: spans.length });
-  }
-
-  // EXTRACT: the highlighted phrase's topic → the passages across the document
-  // that reveal it, stored on the attachment as a labeled layer. Spans resolve
-  // against the real block text; spans overlapping the origin or each other
-  // drop — the origin is already marked, and stacked marks read as one.
-  if (data.type === "EXTRACT") {
-    const result = await callForJson({
-      model,
-      messages,
-      maxOutputTokens,
-      providerOptions: kimiOptions(effort),
-      schema: extractOutputSchema,
-      label: "EXTRACT",
-      usage: usageMeta,
-      abortSignal: req.signal,
-    });
-    if (!result.ok) {
-      return NextResponse.json({ error: t("api.extractFailed", { reason: result.error }) }, { status: 422 });
-    }
-    const origin = resolveSpan(
-      {
-        blockId: anchor!.blockId,
-        start: anchor!.startOffset,
-        end: anchor!.endOffset,
-      },
-      blockById,
-    );
-    if (!origin) {
-      return NextResponse.json({ error: t("api.anchorNotResolvedInDocument") }, { status: 400 });
-    }
-    const orderByBlock = new Map(document.blocks.map((b, i) => [b.id, i]));
-    const spans: NonNullable<ReturnType<typeof resolveSpan>>[] = [];
-    for (const span of result.data.spans
-      .map((s) => resolveSpan(s, blockById))
-      .filter((s) => s !== null)
-      .sort(
-        (a, b) =>
-          (orderByBlock.get(a.blockId) ?? 0) - (orderByBlock.get(b.blockId) ?? 0) ||
-          a.start - b.start,
-      )) {
-      const overlapsOrigin =
-        span.blockId === origin.blockId && span.start < origin.end && span.end > origin.start;
-      const overlapsKept = spans.some(
-        (s) => s.blockId === span.blockId && span.start < s.end && span.end > s.start,
-      );
-      if (!overlapsOrigin && !overlapsKept) spans.push(span);
-    }
-    if (spans.length === 0) {
-      return NextResponse.json({ error: t("api.extractNoSpans") }, { status: 422 });
-    }
-    const toSpan = (s: NonNullable<ReturnType<typeof resolveSpan>>) => ({
-      blockId: s.blockId,
-      start: s.start,
-      end: s.end,
-      quotedText: s.quotedText,
-      prefix: s.prefix,
-      suffix: s.suffix,
-    });
-    const extraction: Extraction = {
-      id: crypto.randomUUID(),
-      createdAt: new Date().toISOString(),
-      createdById: user.id,
-      origin: toSpan(origin),
-      spans: spans.map(toSpan),
-    };
-    await db.notebookDocument.update({
-      where: {
-        notebookId_documentId: { notebookId: data.notebookId, documentId: documentId },
-      },
-      data: {
-        // Oldest first — the index gives the label. Keep the newest 20.
-        extractions: [...extractionList(attachment.extractions), extraction].slice(-20),
-      },
-    });
-    await bumpNotebook(data.notebookId);
-    return NextResponse.json({ ok: true, extraction }, { status: 201 });
   }
 
   // FORMALIZE: the transcript rewritten (SPEC.md §11). format article stores
@@ -1708,6 +1561,10 @@ async function handle(req: Request, t: TFunc) {
               a.start - b.start,
           );
         if (quotes.length === 0) {
+          console.error(
+            "[derive] DISTILL resolved no quotes:",
+            JSON.stringify(result.data.quotes.map((q) => ({ blockId: q.blockId, start: q.start, end: q.end, quote: q.quote?.slice(0, 80) }))),
+          );
           fail(t("api.distillNoQuotes"));
           return;
         }
@@ -1727,13 +1584,18 @@ async function handle(req: Request, t: TFunc) {
           })),
         };
         if (cancelled || req.signal.aborted) return;
+        if (replaced) distillation.regenerations = (replaced.regenerations ?? 0) + 1;
         await db.notebookDocument.update({
           where: {
             notebookId_documentId: { notebookId: data.notebookId, documentId: documentId },
           },
           data: {
-            // Keep the newest 20; the page deletes the rest one by one.
-            distillations: [distillation, ...distillationList(attachment.distillations)].slice(0, 20),
+            // Keep the newest 20; the page deletes the rest. The replaced
+            // extraction goes with the new one's arrival.
+            distillations: [
+              distillation,
+              ...distillationList(attachment.distillations).filter((d) => d.id !== data.replaceId),
+            ].slice(0, 20),
           },
         });
         await bumpNotebook(data.notebookId);

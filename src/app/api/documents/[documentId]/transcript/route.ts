@@ -20,7 +20,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ documentId: st
   if (access instanceof NextResponse) return access;
   const body = await parseBody(req, bodySchema);
   if (body.error) return body.error;
-  const result = await storePastedTranscript(documentId, body.data.text);
+  const result = await storePastedTranscript(documentId, body.data.text, access.user.id);
   if (!result.ok) {
     const error =
       result.status === 400
@@ -32,5 +32,5 @@ export async function POST(req: Request, ctx: { params: Promise<{ documentId: st
         : result.error;
     return NextResponse.json({ error }, { status: result.status });
   }
-  return NextResponse.json({ ok: true, lines: result.lines });
+  return NextResponse.json({ ok: true, lines: result.continuing ? 0 : result.lines });
 }

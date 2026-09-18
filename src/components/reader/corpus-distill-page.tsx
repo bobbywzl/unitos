@@ -5,11 +5,12 @@ import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { splitStreamError } from "@/lib/derive/config";
 import { isImeKey, useImeGuard } from "@/lib/ime";
-import type { CorpusDistillation, CorpusDistillationView } from "@/lib/types";
+import { DISTILL_REGENERATE_MAX, type CorpusDistillation, type CorpusDistillationView } from "@/lib/types";
 import { useCollab } from "@/components/collab/collab-context";
 import { AuthorChip } from "@/components/collab/person-badge";
 import { ChevronLeftIcon } from "@/components/icons";
 import { useLang, useT } from "@/components/lang-provider";
+import { ExtractionList } from "@/components/reader/extraction-list";
 import { jumpUnlessSelecting as onQuoteClick, SelectionNotes } from "@/components/reader/selection-notes";
 import { ThinkingIndicator } from "@/components/thinking";
 
@@ -46,6 +47,8 @@ export function CorpusDistillPage({
   const [running, setRunning] = useState<{ question: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [local, setLocal] = useState<CorpusDistillationView[]>([]);
+  // Deleted or replaced: gone from the list at once, before the page reloads.
+  const [gone, setGone] = useState<Set<string>>(new Set());
   const [saved, setSaved] = useState<Set<string>>(new Set());
   const [savingKey, setSavingKey] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -66,7 +69,9 @@ export function CorpusDistillPage({
     };
   }, [onClose]);
 
-  const all = [...local.filter((d) => !distillations.some((p) => p.id === d.id)), ...distillations];
+  const all = [...local.filter((d) => !distillations.some((p) => p.id === d.id)), ...distillations].filter(
+    (d) => !gone.has(d.id),
+  );
   const shown = currentId ? (all.find((d) => d.id === currentId) ?? null) : null;
 
   // replaceId: the extraction this run regenerates — it goes once the new one
@@ -84,7 +89,7 @@ export function CorpusDistillPage({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         signal: controller.signal,
-        body: JSON.stringify({ type: "DISTILL", scope: "corpus", notebookId, question: trimmed }),
+        body: JSON.stringify({ type: "DISTILL", scope: "corpus", notebookId, question: trimmed, replaceId }),
       });
       if (!res.ok || !res.body) {
         const detail = (await res.json().catch(() => null)) as { error?: string } | null;
@@ -120,7 +125,8 @@ export function CorpusDistillPage({
       };
       setLocal((prev) => [fresh, ...prev]);
       setCurrentId(fresh.id);
-      if (replaceId) await remove(replaceId);
+      // The route dropped the replaced extraction with the new one's arrival.
+      if (replaceId) setGone((prev) => new Set(prev).add(replaceId));
       router.refresh();
     } catch (err) {
       if (controller.signal.aborted) return;
@@ -132,10 +138,21 @@ export function CorpusDistillPage({
   }
 
   async function remove(id: string) {
+    await removeMany([id]);
+  }
+
+  // The selected extractions go in one call (SPEC.md §13).
+  async function removeMany(ids: string[]) {
+    if (ids.length === 0) return;
     try {
-      await api(`/api/notebooks/${notebookId}`, "PATCH", { removeDistillationId: id });
-      setLocal((prev) => prev.filter((d) => d.id !== id));
-      if (currentId === id) setCurrentId(null);
+      await api(`/api/notebooks/${notebookId}`, "PATCH", { removeDistillationIds: ids });
+      setLocal((prev) => prev.filter((d) => !ids.includes(d.id)));
+      setGone((prev) => {
+        const next = new Set(prev);
+        for (const id of ids) next.add(id);
+        return next;
+      });
+      if (currentId && ids.includes(currentId)) setCurrentId(null);
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : t("common.requestFailed"));
@@ -244,8 +261,15 @@ export function CorpusDistillPage({
               <button
                 onClick={() => void run(shown.question, shown.id)}
                 data-track="distill-corpus-regenerate"
-                className="text-xs font-semibold text-sand-600 hover:text-clay-800"
-                data-tip={t("panes.distillAgainTitle")}
+                disabled={(shown.regenerations ?? 0) >= DISTILL_REGENERATE_MAX}
+                className="text-xs font-semibold text-sand-600 hover:text-clay-800 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:text-sand-600"
+                data-tip={
+                  (shown.regenerations ?? 0) >= DISTILL_REGENERATE_MAX
+                    ? t("panes.distillAgainLimit", { n: DISTILL_REGENERATE_MAX })
+                    : t("panes.distillAgainTitle", {
+                        left: DISTILL_REGENERATE_MAX - (shown.regenerations ?? 0),
+                      })
+                }
               >
                 {t("common.regenerate")}
               </button>
@@ -392,48 +416,20 @@ export function CorpusDistillPage({
             </form>
 
             {all.length > 0 && (
-              <div className="mt-8">
-                <span className="text-[11px] font-bold tracking-[0.08em] text-sand-600 uppercase">
-                  {t("panes.distilled")}
-                </span>
-                <div className="mt-2 flex flex-col gap-1.5">
-                  {all.map((d) => (
-                    <div
-                      key={d.id}
-                      className="flex items-center gap-2 rounded-2xl bg-card px-4 py-2.5 shadow-soft"
-                    >
-                      <button
-                        onClick={() => setCurrentId(d.id)}
-                        data-track="distill-corpus-open"
-                        className="min-w-0 flex-1 text-left"
-                        data-tip={t("panes.openDistillation")}
-                      >
-                        <span className="block truncate text-[13.5px] font-semibold text-sand-800 hover:text-clay-800">
-                          {d.question}
-                        </span>
-                        <span className="mt-0.5 flex items-center gap-1.5 text-[11px] text-sand-500">
-                          {t(d.quotes.length === 1 ? "panes.quoteCount1" : "panes.quoteCountN", {
-                            n: d.quotes.length,
-                          })}{" "}
-                          · {new Date(d.createdAt).toLocaleDateString(dateLocale)}
-                          <AuthorChip createdById={d.createdById} nameless size={13} />
-                        </span>
-                      </button>
-                      {canEdit && (
-                        <button
-                          onClick={() => void remove(d.id)}
-                          data-track="distill-corpus-delete-item"
-                          aria-label={t("panes.deleteDistillation")}
-                          data-tip={t("panes.deleteDistillation")}
-                          className="shrink-0 rounded-full px-1.5 text-sand-400 hover:text-red-600"
-                        >
-                          ✕
-                        </button>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
+              <ExtractionList
+                rows={all.map((d) => ({
+                  id: d.id,
+                  question: d.question,
+                  quoteCount: d.quotes.length,
+                  createdAt: d.createdAt,
+                  createdById: d.createdById,
+                }))}
+                canEdit={canEdit}
+                openTrack="distill-corpus-open"
+                onOpen={setCurrentId}
+                onDelete={(id) => void remove(id)}
+                onDeleteMany={(ids) => void removeMany(ids)}
+              />
             )}
           </div>
         )}

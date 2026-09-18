@@ -51,3 +51,17 @@ export function accountTier(user: TierFields, authOn: boolean, now = new Date())
 export function tierOf(state: TierState): Tier {
   return state === "ultra" ? "ULTRA" : "PREMIUM";
 }
+
+/** Storage per tier (TIERS.md): the bytes an account's documents, images,
+    and videos may take, per account. Not set yet: null. Settings shows what
+    is used either way, and the bar fills against the limit once one is set
+    here. Nothing gates on it yet. */
+export const STORAGE_LIMIT_BYTES: Record<Tier, number | null> = {
+  PREMIUM: null,
+  ULTRA: null,
+};
+
+/** The storage limit the account's state carries; null while unset. */
+export function storageLimit(state: TierState): number | null {
+  return STORAGE_LIMIT_BYTES[tierOf(state)];
+}

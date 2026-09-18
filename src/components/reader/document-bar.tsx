@@ -3,9 +3,7 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { api } from "@/lib/api";
-import { runDerivation } from "@/lib/derive/heartbeat-client";
 import type { DriveConfig } from "@/lib/drive/config";
-import type { MultiUploadSummary } from "@/lib/types";
 import { pickDriveFiles } from "@/lib/drive/picker-client";
 import { parseDriveFileId, type DrivePickedFile } from "@/lib/drive/types";
 import { IMAGE_ACCEPT, isImageFile } from "@/lib/handwritten/image";
@@ -18,6 +16,7 @@ import { clipWords } from "@/lib/markdown-preview";
 import { Logo } from "@/components/logo";
 import { Collapse, Presence } from "@/components/presence";
 import { LoadingDots, ThinkingIndicator } from "@/components/thinking";
+import { usePageFileDrop } from "@/components/reader/use-page-file-drop";
 import type { TFunc } from "@/lib/i18n/dictionaries";
 import { readNdjson } from "@/lib/ndjson";
 import { isOffline, offlinePremium, queueUpload, queueWrite } from "@/lib/offline/queue";
@@ -51,7 +50,8 @@ export type AttachedDocument = {
   sourceUrl: string | null;
   parserVersion: number;
   hasFile: boolean;
-  hasVideo: boolean; // video documents never re-parse (SPEC.md §11)
+  pdf: boolean; // the stored file is a PDF: Re-parse asks which shape (SPEC.md §16)
+  hasVideo: boolean; // re-parses by transcribing again (SPEC.md §11)
   handwritten: boolean; // pages, not text blocks; the menu flips the shape (SPEC.md §16)
   // The browser render for scripted figures (Document.figureRenderAt,
   // figureRenderError): none has run, or when the last ran and why it did
@@ -185,15 +185,11 @@ export function DocumentBar({
   drive,
   figureGaps,
   browserConfigured,
-  multiUploads,
 }: {
   notebookId: string;
   documents: AttachedDocument[];
   activeId: string | null;
   drive: DriveConfig | null;
-  // The project's multi uploads (SPEC.md §22), newest first: the list opens
-  // each on its own page.
-  multiUploads: MultiUploadSummary[];
   // The open document's captions left without their figure, by label
   // (lib/parse/figure-audit.ts captionGaps), and whether this deployment
   // has a browser to render them with (SPEC.md §15).
@@ -223,24 +219,6 @@ export function DocumentBar({
   }, [error, activeId]);
   // Opening a document is a server round trip; the pill shows it is on its way.
   const [opening, startOpening] = useTransition();
-
-  // A multi upload from documents already attached (SPEC.md §22): the page
-  // opens once the server has it.
-  const [makingMulti, setMakingMulti] = useState(false);
-  async function makeMulti(documentIds: string[]) {
-    if (makingMulti) return;
-    setMakingMulti(true);
-    setError(null);
-    try {
-      const made = await api<{ id: string }>("/api/multi", "POST", { notebookId, documentIds });
-      startOpening(() => router.push(`/n/${notebookId}/multi/${made.id}`));
-      router.refresh();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t("common.requestFailed"));
-    } finally {
-      setMakingMulti(false);
-    }
-  }
 
   // Hover keeps the list open across the gap between pill and list; leaving
   // both closes it after a grace period.
@@ -291,17 +269,14 @@ export function DocumentBar({
       ?.scrollIntoView({ block: "nearest" });
   }, [listOpen]);
 
-  // Opening a document keeps the reader view: view and doc2 ride along, and
-  // so does the open multi upload (SPEC.md §22).
+  // Opening a document keeps the reader view: view and doc2 ride along.
   function open(docId: string) {
     const params = new URLSearchParams();
     params.set("doc", docId);
     const view = searchParams.get("view");
     const doc2 = searchParams.get("doc2");
-    const multi = searchParams.get("multi");
     if (view) params.set("view", view);
     if (doc2) params.set("doc2", doc2);
-    if (multi) params.set("multi", multi);
     startOpening(() => router.push(`/n/${notebookId}?${params.toString()}`));
   }
 
@@ -313,17 +288,16 @@ export function DocumentBar({
     router.refresh();
   }
 
-  // Re-parse with the current parser. Runs automatically when the open document
-  // was parsed by an older pipeline, and manually from the document's actions
-  // in the document list.
+  // Re-parse with the current parser: the reader asks for it, from the
+  // document's actions in the document list. A document parsed by an older
+  // pipeline is marked in the list and left as it is until then — a re-parse
+  // is a full import on the import's model, and a parser release would
+  // otherwise re-import the whole library as the reader opened it, at no
+  // request of theirs.
   const reparseAttempted = useRef(new Set<string>());
   const active = documents.find((d) => d.id === activeId) ?? null;
-  const activeStale =
-    active !== null &&
-    !active.hasVideo &&
-    !active.handwritten &&
-    (active.sourceUrl !== null || active.hasFile) &&
-    active.parserVersion < PARSER_VERSION;
+  const isStale = (d: AttachedDocument) =>
+    !d.hasVideo && !d.handwritten && (d.sourceUrl !== null || d.hasFile) && d.parserVersion < PARSER_VERSION;
   // The open document's figures a browser render can bring over: captions
   // left without their figure on a page, while a browser is configured. One
   // run on open when no render has run for the document yet — a browser
@@ -339,81 +313,44 @@ export function DocumentBar({
   const capture = useFigureCapture(active?.id);
   const captureRunning = useRef(false);
 
-  // Manual re-parse: the progress card shows, errors show.
-  const [connecting, setConnecting] = useState<string | null>(null);
-  const [connectNotice, setConnectNotice] = useState<string | null>(null);
-  // The running scan, so Stop can abort it.
-  const connectAbortRef = useRef<AbortController | null>(null);
-  function stopConnect() {
-    connectAbortRef.current?.abort();
-  }
+  // The bar's passing notice: a comparison filed, an add queued offline.
+  const [notice, setNotice] = useState<string | null>(null);
   // Compare two documents (SPEC.md §4): the open document against this one.
   // One PENDING note of agreements, disagreements, and what only one covers
   // lands in the notes tray; the notice says where.
-  const [comparing, setComparing] = useState<string | null>(null);
-  const compareAbortRef = useRef<AbortController | null>(null);
-  function stopCompare() {
-    compareAbortRef.current?.abort();
-  }
-  async function compare(doc: AttachedDocument) {
-    if (comparing || !activeId || doc.id === activeId) return;
-    setComparing(doc.id);
-    setConnectNotice(null);
+  // A video or audio document re-parses by transcribing again (SPEC.md
+  // §11): the lines are replaced. The pane shows the run once the refresh
+  // lands; a 409 is a run already going.
+  const [transcribing, setTranscribing] = useState<string | null>(null);
+  async function transcribeAgain(doc: AttachedDocument) {
+    if (transcribing) return;
+    setTranscribing(doc.id);
     setError(null);
-    const controller = new AbortController();
-    compareAbortRef.current = controller;
     try {
-      const result = await runDerivation<{ noteId: string; sectionTitle: string; pointCount: number }>(
-        { type: "COMPARE", notebookId, documentIds: [activeId, doc.id] },
-        controller.signal,
-      );
-      setConnectNotice(t("panes.compareDone", { section: result.sectionTitle }));
-      setTimeout(() => setConnectNotice(null), 6000);
+      const res = await fetch(`/api/documents/${doc.id}/transcribe`, { method: "POST" });
+      if (!res.ok && res.status !== 409) {
+        const detail = await readJson<{ error?: string }>(res);
+        throw new Error(detail?.error ?? statusMessage(t, res.status));
+      }
       router.refresh();
     } catch (err) {
-      // Stopped, not failed: no note, no notice.
-      if (controller.signal.aborted) return;
-      setError(err instanceof Error ? err.message : t("common.requestFailed"));
+      setError(err instanceof Error ? err.message : t("panes.reparseFailed"));
     } finally {
-      if (compareAbortRef.current === controller) compareAbortRef.current = null;
-      setComparing(null);
-    }
-  }
-  // The recommended-links scan, on demand — for documents added before the
-  // scan existed (SPEC.md §13).
-  async function recommendLinks(doc: AttachedDocument) {
-    if (connecting) return;
-    setConnecting(doc.id);
-    setConnectNotice(null);
-    setError(null);
-    const controller = new AbortController();
-    connectAbortRef.current = controller;
-    try {
-      const result = await api<{ linkCount: number }>(
-        `/api/documents/${doc.id}/connect`,
-        "POST",
-        { notebookId },
-        { signal: controller.signal },
-      );
-      setConnectNotice(
-        result.linkCount > 0
-          ? t("panes.recommendLinksDone", { n: result.linkCount })
-          : t("panes.recommendLinksNone"),
-      );
-      setTimeout(() => setConnectNotice(null), 4000);
-      router.refresh();
-    } catch (err) {
-      // Stopped, not failed: no links, no notice.
-      if (controller.signal.aborted) return;
-      setError(err instanceof Error ? err.message : t("common.requestFailed"));
-    } finally {
-      if (connectAbortRef.current === controller) connectAbortRef.current = null;
-      setConnecting(null);
+      setTranscribing(null);
     }
   }
 
-  // `as` flips a PDF between article and handwritten pages (SPEC.md §16) —
-  // the escape hatch when Import PDF judged it wrong. Absent = plain re-parse.
+  // What a re-parse can read again: the video, the stored file, or the URL.
+  function canReparse(doc: AttachedDocument): boolean {
+    return doc.hasVideo || doc.hasFile || doc.sourceUrl !== null;
+  }
+
+  // Re-parse on a PDF asks which shape first (SPEC.md §16): the row folds
+  // open to the two choices for this document.
+  const [reparseChoice, setReparseChoice] = useState<string | null>(null);
+
+  // Manual re-parse: in the document's own shape, or as the shape the reader
+  // chose for a PDF (`as`). The progress card shows, errors show.
   async function reparse(doc: AttachedDocument, as?: "article" | "handwritten") {
     setError(null);
     // The figure's place in the reader moves while the re-parse runs; the
@@ -421,11 +358,12 @@ export function DocumentBar({
     const figures = activeGap && doc.id === active?.id;
     if (figures) setFigureCapture({ documentId: doc.id, status: "running", error: null });
     try {
-      await runIngest(doc.title, doc.sourceUrl && !as ? "url" : "pdf", () =>
+      await runIngest(doc.title, doc.sourceUrl ? "url" : "pdf", () =>
         fetch(`/api/documents/${doc.id}/reparse`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(as ? { as } : {}),
+          ...(as
+            ? { headers: { "Content-Type": "application/json" }, body: JSON.stringify({ as }) }
+            : {}),
         }),
       );
       router.refresh();
@@ -504,18 +442,18 @@ export function DocumentBar({
 
   useEffect(() => {
     if (active === null || phase !== null) return;
-    if (!activeStale && !activeNeedsCapture) return;
+    if (!activeNeedsCapture) return;
     if (reparseAttempted.current.has(active.id)) return;
     if (isOffline() || !reparseDue(active.id)) {
       // A figure run held back: the figure's place says so, with Try again.
-      if (activeNeedsCapture) setFigureCapture({ documentId: active.id, status: "failed", error: null });
+      setFigureCapture({ documentId: active.id, status: "failed", error: null });
       return;
     }
     reparseAttempted.current.add(active.id);
     markReparse(active.id);
-    void reparseSilently(active, activeGap);
+    void reparseSilently(active, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeId, activeStale, activeNeedsCapture]);
+  }, [activeId, activeNeedsCapture]);
 
   // The reader's Try again, at the figure's place.
   useEffect(() => {
@@ -595,8 +533,8 @@ export function DocumentBar({
         setError(t("common.offlineReadOnly"));
         return;
       }
-      // A batch queues item by item; a multi upload needs the server and is
-      // not offered offline — every item opens on its own page after the sync.
+      // A batch queues item by item; every item opens on its own page after
+      // the sync.
       const items =
         request.kind === "files"
           ? request.files.map((file) => ({ kind: "file" as const, file }))
@@ -611,8 +549,8 @@ export function DocumentBar({
         ),
       ).then(() => items.length);
       void queued.then((n) => {
-        setConnectNotice(t("panes.uploadQueuedOffline", { n }));
-        setTimeout(() => setConnectNotice(null), 4000);
+        setNotice(t("panes.uploadQueuedOffline", { n }));
+        setTimeout(() => setNotice(null), 4000);
       });
       setDialog(false);
       return;
@@ -746,32 +684,14 @@ export function DocumentBar({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [addParam, canEdit]);
 
-  // Drag-and-drop upload — PDFs, images, video and audio files: dropping
-  // anywhere on the page adds to this work.
-  const [dragging, setDragging] = useState(false);
-  const dragDepth = useRef(0);
-  useEffect(() => {
-    const hasFiles = (e: DragEvent) => e.dataTransfer?.types.includes("Files") ?? false;
-    const onEnter = (e: DragEvent) => {
-      if (!hasFiles(e)) return;
-      e.preventDefault();
-      dragDepth.current += 1;
-      setDragging(true);
-    };
-    const onOver = (e: DragEvent) => {
-      if (hasFiles(e)) e.preventDefault();
-    };
-    const onLeave = (e: DragEvent) => {
-      if (!hasFiles(e)) return;
-      dragDepth.current = Math.max(0, dragDepth.current - 1);
-      if (dragDepth.current === 0) setDragging(false);
-    };
-    const onDrop = (e: DragEvent) => {
-      if (!hasFiles(e)) return;
-      e.preventDefault();
-      dragDepth.current = 0;
-      setDragging(false);
-      const files = [...(e.dataTransfer?.files ?? [])];
+  // Drag-and-drop upload — PDFs, images, Markdown, video and audio files:
+  // dropping anywhere on the page adds to this work (use-page-file-drop.ts).
+  // A drop of files the work cannot take opens the add-document dialog with
+  // the reason: the error shows there, and the dialog's drop zone is where
+  // the next try goes.
+  const dragging = usePageFileDrop({
+    enabled: canEdit,
+    onDrop: (files) => {
       const accepted = files.filter(
         (f) =>
           f.type === "application/pdf" ||
@@ -782,22 +702,12 @@ export function DocumentBar({
       );
       if (accepted.length === 0) {
         setError(t("panes.dropPdfOrVideo"));
+        setDialog(true);
         return;
       }
       openAssistant({ kind: "files", files: accepted });
-    };
-    window.addEventListener("dragenter", onEnter);
-    window.addEventListener("dragover", onOver);
-    window.addEventListener("dragleave", onLeave);
-    window.addEventListener("drop", onDrop);
-    return () => {
-      window.removeEventListener("dragenter", onEnter);
-      window.removeEventListener("dragover", onOver);
-      window.removeEventListener("dragleave", onLeave);
-      window.removeEventListener("drop", onDrop);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [notebookId]);
+    },
+  });
 
   // One ingest path for every link: the server routes YouTube links and
   // direct media file links to video documents, everything else to the
@@ -855,11 +765,19 @@ export function DocumentBar({
     router.refresh();
   }
 
-  async function detach(documentId: string) {
+  // Delete document: the document leaves the project and the library
+  // (DELETE /api/documents/[documentId]; refused while notes cite it).
+  async function deleteDocument(documentId: string) {
     closeList();
-    await api(`/api/notebooks/${notebookId}/documents/${documentId}`, "DELETE");
-    if (documentId === activeId) router.push(`/n/${notebookId}`);
-    router.refresh();
+    if (!confirm(t("panes.confirmDeleteDocument"))) return;
+    setError(null);
+    try {
+      await api(`/api/documents/${documentId}`, "DELETE");
+      if (documentId === activeId) router.push(`/n/${notebookId}`);
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t("panes.deleteFailed"));
+    }
   }
 
   async function removeFromLibrary(documentId: string) {
@@ -924,9 +842,14 @@ export function DocumentBar({
                           ? "font-semibold text-ink"
                           : "text-sand-700 hover:bg-clay-100 hover:text-clay-800"
                       }`}
-                      data-tip={d.title}
+                      data-tip={isStale(d) ? t("panes.reparseStaleTitle") : d.title}
                     >
                       {clipWords(d.title, 44)}
+                      {isStale(d) && (
+                        <span className="ml-1.5 text-[11px] font-normal text-sand-500">
+                          {t("panes.reparseStale")}
+                        </span>
+                      )}
                     </button>
                     <button
                       onClick={() => setPillMenu(pillMenu === d.id ? null : d.id)}
@@ -952,93 +875,69 @@ export function DocumentBar({
                   <Collapse open={pillMenu === d.id}>
                   {pillMenu === d.id && (
                     <div className="mx-2 mb-1.5 flex flex-col rounded-xl bg-sand-100 py-1">
-                      {canEdit && !d.hasVideo && !d.handwritten && (d.sourceUrl !== null || d.hasFile) && (
+                      {/* Re-parse, on every document: a video or audio
+                          document transcribes again, a handwritten one
+                          re-makes its pages and converts again, a text one
+                          parses its file or URL again. A document with no
+                          source (pasted text, a generated document) has
+                          nothing to parse again; the row says so. */}
+                      {canEdit && (
                         <button
                           onClick={() => {
+                            // A PDF asks which shape first: the row opens
+                            // the two choices instead of running.
+                            if (d.pdf && !d.hasVideo) {
+                              setReparseChoice(reparseChoice === d.id ? null : d.id);
+                              return;
+                            }
                             closeList();
-                            void reparse(d);
+                            void (d.hasVideo ? transcribeAgain(d) : reparse(d));
                           }}
                           data-track="document-reparse"
-                          disabled={phase !== null}
+                          disabled={phase !== null || transcribing !== null || !canReparse(d)}
+                          aria-expanded={d.pdf && !d.hasVideo ? reparseChoice === d.id : undefined}
                           className={`${rowAction} disabled:opacity-40`}
-                          data-tip={t("panes.reparseDocumentTitle")}
+                          data-tip={
+                            d.hasVideo
+                              ? t("panes.reparseVideoTitle")
+                              : canReparse(d)
+                                ? t("panes.reparseDocumentTitle")
+                                : t("panes.reparseNoSource")
+                          }
                         >
                           {t("panes.reparseDocument")}
                         </button>
                       )}
-                      {/* The shape switch (SPEC.md §16): the escape hatch when
-                          Import PDF judged this PDF wrong. */}
-                      {canEdit && d.handwritten && (
-                        <button
-                          onClick={() => {
-                            closeList();
-                            void reparse(d, "article");
-                          }}
-                          data-track="document-parse-as-article"
-                          disabled={phase !== null}
-                          className={`${rowAction} disabled:opacity-40`}
-                          data-tip={t("panes.parseAsArticleTitle")}
-                        >
-                          {t("panes.parseAsArticle")}
-                        </button>
-                      )}
-                      {canEdit && !d.hasVideo && !d.handwritten && d.hasFile && (
-                        <button
-                          onClick={() => {
-                            closeList();
-                            void reparse(d, "handwritten");
-                          }}
-                          data-track="document-open-as-handwritten"
-                          disabled={phase !== null}
-                          className={`${rowAction} disabled:opacity-40`}
-                          data-tip={t("panes.openAsHandwrittenTitle")}
-                        >
-                          {t("panes.openAsHandwritten")}
-                        </button>
-                      )}
-                      {canEdit && activeId && d.id !== activeId && (
-                        <button
-                          onClick={() => {
-                            closeList();
-                            void compare(d);
-                          }}
-                          data-track="document-compare"
-                          disabled={comparing !== null}
-                          className={`${rowAction} disabled:opacity-40`}
-                          data-tip={t("panes.compareWithOpenTitle", { title: active?.title ?? "" })}
-                        >
-                          {comparing === d.id ? t("common.working") : t("panes.compareWithOpen")}
-                        </button>
-                      )}
-                      {/* A multi upload from documents already here (SPEC.md
-                          §22): this document and the open one on one page. */}
-                      {canEdit && activeId && d.id !== activeId && (
-                        <button
-                          onClick={() => {
-                            closeList();
-                            void makeMulti([activeId, d.id]);
-                          }}
-                          data-track="document-multi-with-open"
-                          disabled={makingMulti}
-                          className={`${rowAction} disabled:opacity-40`}
-                          data-tip={t("multi.withOpenTitle", { title: active?.title ?? "" })}
-                        >
-                          {t("multi.withOpen")}
-                        </button>
-                      )}
-                      {canEdit && (
-                        <button
-                          onClick={() => {
-                            closeList();
-                            void recommendLinks(d);
-                          }}
-                          data-track="document-recommend-links"
-                          disabled={connecting !== null}
-                          className={`${rowAction} disabled:opacity-40`}
-                          data-tip={t("panes.recommendLinksTitle")}
-                        >
-                          {connecting === d.id ? t("common.working") : t("panes.recommendLinks")}
-                        </button>
+                      {canEdit && d.pdf && !d.hasVideo && reparseChoice === d.id && (
+                        <div className="flex flex-col border-y border-line bg-sand-50/60 py-1">
+                          <p className="px-4 pb-0.5 text-[11px] text-sand-500">{t("panes.reparseChoose")}</p>
+                          {(["handwritten", "article"] as const).map((as) => {
+                            const current = as === "handwritten" ? d.handwritten : !d.handwritten;
+                            return (
+                              <button
+                                key={as}
+                                onClick={() => {
+                                  setReparseChoice(null);
+                                  closeList();
+                                  void reparse(d, as);
+                                }}
+                                data-track={`document-reparse-${as}`}
+                                disabled={phase !== null || transcribing !== null}
+                                className={`${rowAction} flex items-center gap-2 pl-6 disabled:opacity-40`}
+                                data-tip={t(
+                                  as === "handwritten" ? "panes.reparseAsHandwrittenTitle" : "panes.reparseAsArticleTitle",
+                                )}
+                              >
+                                <span>{t(as === "handwritten" ? "panes.reparseAsHandwritten" : "panes.reparseAsArticle")}</span>
+                                {current && (
+                                  <span className="rounded-full border border-line px-1.5 text-[10px] text-sand-500">
+                                    {t("panes.reparseCurrentShape")}
+                                  </span>
+                                )}
+                              </button>
+                            );
+                          })}
+                        </div>
                       )}
                       <button
                         onClick={() => {
@@ -1058,12 +957,12 @@ export function DocumentBar({
                       </button>
                       {canEdit && (
                         <button
-                          onClick={() => void detach(d.id)}
-                          data-track="document-detach"
+                          onClick={() => void deleteDocument(d.id)}
+                          data-track="document-delete"
                           className="px-4 py-1.5 text-left text-[12.5px] text-red-600 hover:bg-red-50 dark:hover:bg-red-950"
-                          data-tip={t("panes.detachDocumentTitle")}
+                          data-tip={t("panes.deleteDocumentTitle")}
                         >
-                          {t("panes.detachDocument")}
+                          {t("panes.deleteDocument")}
                         </button>
                       )}
                     </div>
@@ -1071,51 +970,6 @@ export function DocumentBar({
                   </Collapse>
                 </div>
               ))}
-              {/* Multi uploads (SPEC.md §22): each opens on its own page, and
-                  every document of the project can go on one page together. */}
-              {(multiUploads.length > 0 || (canEdit && documents.length > 2)) && (
-                <>
-                  <div className="mx-4 mt-1.5 mb-1 border-t border-line pt-2 text-[11px] font-semibold text-sand-500">
-                    {t("multi.multiUploads")}
-                  </div>
-                  {canEdit && documents.length > 2 && (
-                    <button
-                      onClick={() => {
-                        closeList();
-                        void makeMulti(documents.map((d) => d.id));
-                      }}
-                      data-track="multi-all"
-                      disabled={makingMulti}
-                      className="px-4 py-2 text-left text-[13px] text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40"
-                      data-tip={t("multi.allTitle")}
-                    >
-                      {t("multi.all", { n: documents.length })}
-                    </button>
-                  )}
-                  {multiUploads.map((m) => (
-                    <button
-                      key={m.id}
-                      onClick={() => {
-                        closeList();
-                        startOpening(() => router.push(`/n/${notebookId}/multi/${m.id}`));
-                      }}
-                      data-track="multi-open"
-                      data-active-row={m.id === searchParams.get("multi") || undefined}
-                      className={`flex min-w-0 items-center gap-2 overflow-hidden px-4 py-2 text-left text-[13px] whitespace-nowrap ${
-                        m.id === searchParams.get("multi")
-                          ? "font-semibold text-ink"
-                          : "text-sand-700 hover:bg-clay-100 hover:text-clay-800"
-                      }`}
-                      data-tip={m.title}
-                    >
-                      <span className="min-w-0 flex-1 truncate">{clipWords(m.title, 40)}</span>
-                      <span className="shrink-0 rounded-full bg-sand-100 px-1.5 text-[11px] tabular-nums text-sand-600">
-                        {m.memberCount}
-                      </span>
-                    </button>
-                  ))}
-                </>
-              )}
             </div>
           )}
           </Presence>
@@ -1193,14 +1047,14 @@ export function DocumentBar({
       )}
       {/* While the dialog is open it shows the progress and the error itself. */}
       {phase && !dialog && <IngestProgress fileLabel={phase.fileLabel} steps={phase.steps} />}
-      {connecting && (
+      {transcribing && (
         <span className="shrink-0 rounded-full bg-card px-3 py-1 text-xs shadow-soft">
-          <ThinkingIndicator label={t("panes.recommendLinksRunning")} onStop={stopConnect} />
+          <ThinkingIndicator label={t("video.transcribing")} />
         </span>
       )}
-      {comparing && (
-        <span className="shrink-0 rounded-full bg-card px-3 py-1 text-xs shadow-soft">
-          <ThinkingIndicator label={t("panes.compareRunning")} onStop={stopCompare} />
+      {notice && capture?.status !== "running" && (
+        <span className="shrink-0 rounded-full bg-sage-200 px-3 py-1 text-xs font-semibold text-sage-800">
+          {notice}
         </span>
       )}
       {capture?.status === "running" && (
@@ -1211,11 +1065,6 @@ export function DocumentBar({
         >
           <MovingFigureIcon size={14} />
           <span className="thinking-label">{t("panes.figureMoving", { label: figureGaps.join(", ") })}</span>
-        </span>
-      )}
-      {connectNotice && capture?.status !== "running" && (
-        <span className="shrink-0 rounded-full bg-sage-200 px-3 py-1 text-xs font-semibold text-sage-800">
-          {connectNotice}
         </span>
       )}
 
@@ -1236,11 +1085,7 @@ export function DocumentBar({
             setAssistant(null);
             setAssistantHidden(false);
             setAssistantOpened(null);
-            // A multi upload (SPEC.md §22) opens on its own page.
-            if (target?.kind === "multi") {
-              startOpening(() => router.push(`/n/${notebookId}/multi/${target.id}`));
-              router.refresh();
-            } else if (target && target.id !== opened) openAdded(target.id);
+            if (target && target.id !== opened) openAdded(target.id);
             // Opened early: the glossary and links the finishing step wrote
             // arrive with a refresh.
             else if (target) router.refresh();
@@ -1248,9 +1093,11 @@ export function DocumentBar({
         />
       )}
 
+      {/* No backdrop blur: a blur over the whole page re-draws on every
+          drag frame, and the drag stutters. A tint is enough. */}
       {dragging && (
-        <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center bg-paper/90 backdrop-blur-sm">
-          <div className="flex flex-col items-center gap-3 rounded-[28px] border-2 border-dashed border-sand-400 bg-card px-14 py-10 shadow-float">
+        <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center bg-paper/85">
+          <div className="pop-in flex flex-col items-center gap-3 rounded-[28px] border-2 border-dashed border-clay bg-card px-14 py-10 shadow-float">
             <Logo size={72} className="text-clay" />
             <p className="text-sm font-semibold text-sand-800">
               {t("panes.dropToAdd")}

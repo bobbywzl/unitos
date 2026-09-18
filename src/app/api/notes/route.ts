@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { bumpNotebook, sectionAccess } from "@/lib/collab";
@@ -14,7 +15,11 @@ import { parseBody } from "@/lib/validate";
 const createSchema = z
   .object({
     sectionId: z.string().min(1),
-    content: z.string().min(1).max(50_000),
+    content: z.string().min(1).max(50_000).optional(),
+    // A note made of an annotation (SPEC.md §6): the annotation's text and
+    // anchors are copied into the new note, and the annotation stays where
+    // it is, still painted in the article. content is then not sent.
+    fromAnnotationId: z.string().min(1).optional(),
     source: sourceInputSchema.optional(),
     // A selection over several blocks of the source's document
     // (lib/anchors/passage.ts): one anchor per block, the first being
@@ -39,7 +44,10 @@ const createSchema = z
     // (SPEC.md §6); everything else lands at the end.
     top: z.boolean().optional(),
   })
-  .refine((d) => !(d.source && d.video), { message: "Provide source or video, not both" });
+  .refine((d) => !(d.source && d.video), { message: "Provide source or video, not both" })
+  .refine((d) => Boolean(d.content) !== Boolean(d.fromAnnotationId), {
+    message: "Provide content or fromAnnotationId, not both",
+  });
 
 // Manual notes, with an optional anchor (manual extract). Derived notes are created by /api/derive.
 export async function POST(req: Request) {
@@ -102,11 +110,53 @@ export async function POST(req: Request) {
   } as const;
   const derivationType = data.origin ? ORIGIN_TYPE[data.origin] : undefined;
   const alwaysPending = data.origin !== undefined && data.origin !== "assistant";
+
+  // From an annotation: its text, and copies of its anchors, so the note and
+  // the annotation stay anchored to the same words (SPEC.md §5).
+  let content = data.content ?? "";
+  let copiedSources: {
+    documentId: string;
+    blockId: string;
+    startOffset: number;
+    endOffset: number;
+    quotedText: string;
+    prefix: string;
+    suffix: string;
+    orphaned: boolean;
+    startTime: number | null;
+    endTime: number | null;
+    region?: Prisma.InputJsonValue;
+  }[] = [];
+  if (data.fromAnnotationId) {
+    const annotation = await db.note.findUnique({
+      where: { id: data.fromAnnotationId },
+      include: { sources: true, section: { select: { hidden: true, notebookId: true } } },
+    });
+    if (!annotation || !annotation.section.hidden || annotation.section.notebookId !== section.notebookId) {
+      return NextResponse.json({ error: t("api.noteNotFound") }, { status: 404 });
+    }
+    content = annotation.content;
+    copiedSources = annotation.sources.map((source) => ({
+      documentId: source.documentId,
+      blockId: source.blockId,
+      startOffset: source.startOffset,
+      endOffset: source.endOffset,
+      quotedText: source.quotedText,
+      prefix: source.prefix,
+      suffix: source.suffix,
+      orphaned: source.orphaned,
+      startTime: source.startTime,
+      endTime: source.endTime,
+      ...(source.region === null ? {} : { region: source.region as Prisma.InputJsonValue }),
+    }));
+  }
+  if (!content.trim()) return NextResponse.json({ error: t("api.validationFailed") }, { status: 400 });
+
   const count = await db.note.count({ where: { sectionId: data.sectionId } });
   const note = await db.note.create({
     data: {
       sectionId: data.sectionId,
-      content: data.content,
+      content,
       // Find, distill, ask, and voice output is AI output: it lands PENDING, no exceptions (SPEC.md §1).
       status: data.pending || alwaysPending ? "PENDING" : "ACCEPTED",
       ...(derivationType ? { derivationType } : {}),
@@ -114,6 +164,7 @@ export async function POST(req: Request) {
       // Top: before every sibling; the normalize below makes the orders 0..n again.
       order: data.top ? -1 : count,
       ...(sources.length > 0 ? { sources: { create: sources } } : {}),
+      ...(copiedSources.length > 0 ? { sources: { create: copiedSources } } : {}),
       ...(videoSource
         ? {
             sources: {

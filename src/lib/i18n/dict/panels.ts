@@ -54,6 +54,23 @@ const en = {
   dragAnnotationTitle:
     "Drag this annotation onto the floating note card to put it in the note",
   deleteAnnotationTitle: "Delete this annotation and its mark in the reader",
+  // The three-dots menu on every annotation (annotation-menu.tsx)
+  annotationMenu: "Annotation actions",
+  annotationMenuTitle: "Put this annotation into a note, jump to it, or delete it",
+  annotationNewNote: "New note from this annotation",
+  annotationNewNoteTitle:
+    "A new note with this annotation's text and anchors. The annotation stays in the article.",
+  annotationAddToNote: "Add to a note…",
+  annotationAddToNoteTitle:
+    "Put this annotation's text into a note you pick. The annotation stays in the article.",
+  annotationPickSection: "Which section?",
+  annotationPickNote: "Which note?",
+  annotationNoNotes: "No notes match. Make a new note instead.",
+  annotationNoteMade: "New note #{id} in {section}",
+  annotationNoteAdded: "Added to note #{id}",
+  // The label on an annotation of a figure, table, or equation ("A1", "A2", …)
+  figureLabelTitle:
+    "Label {label}: this annotation is on a figure, table, or equation. The block carries the same label in the article. Labels count such annotations in document order.",
   removeLinkTitle: "Remove this link from both documents",
   linkAbout: "About this link",
   linkAboutPlaceholder: "What is this link about?",
@@ -138,6 +155,18 @@ const zh: Record<keyof typeof en, string> = {
   restoreTitle: "恢复被移除的段落",
   dragAnnotationTitle: "把这条批注拖到悬浮笔记卡片上，即可放进该笔记",
   deleteAnnotationTitle: "删除此批注及其在阅读器中的标记",
+  annotationMenu: "批注操作",
+  annotationMenuTitle: "把此批注放进笔记、跳转到它，或删除它",
+  annotationNewNote: "由此批注新建笔记",
+  annotationNewNoteTitle: "新建一条笔记，带上此批注的文本和锚点。批注仍留在文章中。",
+  annotationAddToNote: "加入笔记…",
+  annotationAddToNoteTitle: "把此批注的文本放进你选的笔记。批注仍留在文章中。",
+  annotationPickSection: "放到哪个章节？",
+  annotationPickNote: "加入哪条笔记？",
+  annotationNoNotes: "没有匹配的笔记。请改为新建一条。",
+  annotationNoteMade: "已在 {section} 新建笔记 #{id}",
+  annotationNoteAdded: "已加入笔记 #{id}",
+  figureLabelTitle: "标签 {label}：此批注在插图、表格或公式上。文章中的该块带同一标签。标签按文档顺序给这类批注编号。",
   removeLinkTitle: "从两个文档中移除此链接",
   linkAbout: "链接说明",
   linkAboutPlaceholder: "这个链接是关于什么的？",
