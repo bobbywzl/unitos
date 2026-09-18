@@ -63,6 +63,12 @@ export async function POST(req: Request) {
   if (!res.ok || !res.body) {
     const detail = await res.text().catch(() => "");
     console.error("[speech] TTS failed:", res.status, detail.slice(0, 300));
+    // Under the gateway the app cannot know whether the gateway holds an
+    // OpenAI key; a refusal from it (no key, no such model) is the same case
+    // as no key here, and 503 is what sends the client to the browser voice.
+    if (gatewayConfigured() && [400, 401, 403, 404].includes(res.status)) {
+      return NextResponse.json({ error: t("api.speechNeedsKey") }, { status: 503 });
+    }
     return NextResponse.json({ error: t("api.voiceFailedStatus", { status: res.status }) }, { status: 502 });
   }
   recordUsage(

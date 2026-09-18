@@ -18,7 +18,7 @@ class GatewayError extends Error {}
 async function call<S extends z.ZodType>(
   path: string,
   schema: S,
-  init: { method?: "GET" | "POST"; body?: unknown; auth?: boolean } = {},
+  init: { method?: "GET" | "POST"; body?: unknown; auth?: boolean; timeoutMs?: number } = {},
 ): Promise<z.infer<S>> {
   const base = gatewayBaseUrl();
   if (!base) throw new GatewayError("LITELLM_BASE_URL is not set");
@@ -33,7 +33,7 @@ async function call<S extends z.ZodType>(
     method: init.method ?? "GET",
     headers,
     body: init.body === undefined ? undefined : JSON.stringify(init.body),
-    signal: AbortSignal.timeout(20_000),
+    signal: AbortSignal.timeout(init.timeoutMs ?? 20_000),
   });
   const json = await res.json().catch(() => null);
   if (!res.ok) {
@@ -439,7 +439,9 @@ export type GatewayHealth = {
 /** Probe every model in the gateway's list. Each probe is a real call, so
     this runs from the page's button, never on load. */
 export async function gatewayHealth(): Promise<GatewayHealth> {
-  const body = await call("/health", healthSchema);
+  // One live call per model, and a reasoning model takes seconds to answer
+  // even "OK": the route allows 120 s, so the probes get most of it.
+  const body = await call("/health", healthSchema, { timeoutMs: 110_000 });
   return {
     healthy: (body.healthy_endpoints ?? []).map((e) => e.model ?? "?"),
     unhealthy: (body.unhealthy_endpoints ?? []).map((e) => ({

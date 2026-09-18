@@ -117,21 +117,11 @@ async function handle(req: Request, t: TFunc) {
   const access = await notebookAccess(data.notebookId, "editor");
   if (access instanceof NextResponse) return access;
   const user = access.user;
-  // Kimi K3 when the answer needs what GLM 5.3 lacks (SPEC.md §2): the
-  // web-search tool is Moonshot's, and GLM takes text alone, so a picture in
-  // the conversation — this message's or an earlier turn's — sends the whole
-  // conversation to Kimi.
-  const pictured =
-    images.length > 0 || files.length > 0 || (data.history ?? []).some((turn) => (turn.images ?? []).length > 0);
-  const chatModelId = data.web === true ? WEB_SEARCH_MODEL : pictured ? VISION_MODEL : DERIVATION_MODEL.SYNTHESIS;
-  const usageMeta = {
-    userId: user.id,
-    feature: "assistant",
-    model: await resolveModelId(chatModelId),
-  };
+  // The model is picked once the messages are built (below); the usage
+  // record names it then.
+  const usageMeta = { userId: user.id, feature: "assistant", model: "" };
 
   const profile = await loadProfile(data.notebookId);
-  const model = await kimi(chatModelId);
   const maxOutputTokens = MAX_OUTPUT_TOKENS.SYNTHESIS;
   const effort = thinkingEffort(data.thinking);
 
@@ -225,6 +215,20 @@ async function handle(req: Request, t: TFunc) {
       content: synthesisTaskPrompt({ profile, lang, task: data.task }),
     });
   }
+
+  // Kimi K3 when the answer needs what GLM 5.3 lacks (SPEC.md §2): the
+  // web-search tool is Moonshot's, and GLM takes text alone, so a picture
+  // among the messages — one actually attached, this turn's or an earlier
+  // one's — sends the whole conversation to Kimi. A text file rides as
+  // text and changes nothing.
+  const pictured = messages.some(
+    (m) =>
+      Array.isArray(m.content) &&
+      m.content.some((part) => part.type === "file" && part.mediaType.startsWith("image/")),
+  );
+  const chatModelId = data.web === true ? WEB_SEARCH_MODEL : pictured ? VISION_MODEL : DERIVATION_MODEL.SYNTHESIS;
+  usageMeta.model = await resolveModelId(chatModelId);
+  const model = await kimi(chatModelId);
 
   if (data.task === "ask") {
     // Web access (SPEC.md §7): the model calls Moonshot's web-search tool

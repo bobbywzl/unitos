@@ -43,10 +43,15 @@ model_list:
 
   # Kimi — the calls that carry an image, the assistant with Web on, and the
   # bimonthly model update's probes. Chat completions, OpenAI-compatible.
+  # allowed_openai_params keeps the app's reasoning_effort on a Kimi id the
+  # gateway's price list does not know yet (a new version the model update
+  # probes); without it drop_params would drop the effort and Kimi would
+  # reason at its slowest.
   - model_name: "moonshot/*"
     litellm_params:
       model: "moonshot/*"
       api_key: os.environ/MOONSHOT_API_KEY
+      allowed_openai_params: ["reasoning_effort"]
       # An account on the China platform: api_base: https://api.moonshot.cn/v1
       # (and the /moonshot pass-through target below to match).
 

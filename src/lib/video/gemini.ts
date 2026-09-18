@@ -10,9 +10,11 @@ import { youtubeWatchUrl } from "@/lib/video/youtube";
 export type GeminiUsageMeta = { userId: string | null; feature: string };
 
 // The Gemini API root. Under the gateway (lib/gateway.ts) it is the gateway's
-// Gemini pass-through — every path, the file store included, reaches Google
-// as written, and the key is the app key. GEMINI_API_URL points a local run
-// at a stand-in server.
+// Gemini pass-through — every path reaches Google as written, and the key is
+// the app key. The one call that does not take it is the file store's
+// second leg: the bytes go to the upload URL Google answers with
+// (lib/video/gemini-files.ts). GEMINI_API_URL points a local run at a
+// stand-in server.
 const DEFAULT_BASE_URL = "https://generativelanguage.googleapis.com";
 
 export function geminiBaseUrl(): string {

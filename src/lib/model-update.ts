@@ -219,10 +219,11 @@ async function probe(role: ModelRole, id: string): Promise<void> {
     return;
   }
   // The candidate is not a role's default, so the client calls it as written.
+  const onClaude = role === "claude" || role === "opus";
   const result = await generateText({
-    model: role === "claude" || role === "opus" ? await claude(id) : await kimi(id),
+    model: onClaude ? await claude(id) : await kimi(id),
     maxOutputTokens: 16384, // a reasoning model counts its reasoning here
-    providerOptions: role === "kimi" ? kimiOptions("low") : claudeOptions("low"),
+    providerOptions: onClaude ? claudeOptions("low") : kimiOptions("low"),
     headers: gatewayHeaders(usage),
     prompt: PROBE_PROMPT,
   });
