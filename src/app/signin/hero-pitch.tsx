@@ -28,6 +28,8 @@ export type PitchRow = {
   done: boolean;
   /** The closing line: larger, and it underlines itself once it has typed in. */
   close?: boolean;
+  /** The lead line: subheading size, bold, no underline. */
+  lead?: boolean;
 };
 
 export function HeroPitch({ rows, doneLabel }: { rows: PitchRow[]; doneLabel: string }) {
@@ -113,7 +115,9 @@ export function HeroPitch({ rows, doneLabel }: { rows: PitchRow[]; doneLabel: st
               className={
                 r.close
                   ? "grid pt-1 text-lg leading-snug font-semibold text-ink sm:text-xl"
-                  : "grid text-[13.5px] leading-relaxed font-medium text-sand-800 sm:text-[15px]"
+                  : r.lead
+                    ? "grid text-lg leading-snug font-bold text-ink sm:text-xl"
+                    : "grid text-[13.5px] leading-relaxed font-medium text-sand-800 sm:text-[15px]"
               }
             >
               {/* The sizer: the finished row, hidden. It holds the space the
