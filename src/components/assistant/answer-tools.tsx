@@ -17,6 +17,9 @@ import { SparkleIcon, CommentIcon } from "@/components/icons";
 export const ANSWER_MARK = "data-assistant-answer";
 
 export type AnswerSelection = { text: string; top: number; left: number };
+// One painted band of the tint: where the highlighted words sit in the
+// viewport, clipped to the box that scrolls them.
+export type TintRect = { top: number; left: number; width: number; height: number };
 
 /** The quote and the message under it, as one message: the quote as a
     markdown quote, then the reader's words. The transcript, the digest, and
@@ -36,38 +39,107 @@ export function quoteLine(quote: string, max = 120): string {
   return line.length > max ? `${line.slice(0, max - 1)}…` : line;
 }
 
-/** The selection inside an assistant answer, while it stands. The position
-    is the viewport's, so the toolbar sits over the words in any scroller;
-    scrolling moves it with them, and a collapsed selection clears it. */
+// The box that scrolls the words: the tint is clipped to it, so a band never
+// paints over the composer or outside the panel when the thread scrolls.
+function scrollBoxOf(range: Range): DOMRect | null {
+  const node = range.commonAncestorContainer;
+  let el: Element | null = node.nodeType === Node.ELEMENT_NODE ? (node as Element) : node.parentElement;
+  while (el) {
+    const overflow = getComputedStyle(el).overflowY;
+    if (overflow === "auto" || overflow === "scroll") return el.getBoundingClientRect();
+    el = el.parentElement;
+  }
+  return null;
+}
+
+/** The selection inside an assistant answer, and the tint over the words it
+    marks (SPEC.md §7). The positions are the viewport's, so the toolbar and
+    the tint sit over the words in any scroller and move with them.
+
+    The tint is what stays: pressing a function takes the browser's own
+    selection away — the box it opens takes focus — and the words stay marked
+    until the reader is done with them, the reader's selection tint in the
+    article (SPEC.md §6). */
 export function useAnswerSelection(): {
   selection: AnswerSelection | null;
+  tintRects: TintRect[];
+  /** Take the highlighted text and keep the words marked: the toolbar
+      closes, the browser's selection goes, the tint stays. */
+  hold: () => string;
+  /** The toolbar and the tint both go. */
   clear: () => void;
 } {
   const [selection, setSelection] = useState<AnswerSelection | null>(null);
+  const [tintRects, setTintRects] = useState<TintRect[]>([]);
+  // The selection as it stands, and the words held marked after a function
+  // took it. A Range keeps its place once the selection is gone.
   const rangeRef = useRef<Range | null>(null);
+  const heldRef = useRef<Range | null>(null);
+  const textRef = useRef("");
 
-  const place = useCallback((range: Range, text: string) => {
-    const rect = range.getBoundingClientRect();
-    if (rect.width === 0 && rect.height === 0) return;
-    setSelection({
-      text,
-      top: rect.top,
-      left: rect.left + rect.width / 2,
-    });
+  const paint = useCallback(() => {
+    const range = heldRef.current ?? rangeRef.current;
+    if (!range) {
+      setTintRects([]);
+      return;
+    }
+    const box = scrollBoxOf(range);
+    const rects: TintRect[] = [];
+    for (const rect of range.getClientRects()) {
+      if (rect.width <= 0 || rect.height <= 0) continue;
+      const top = box ? Math.max(rect.top, box.top) : rect.top;
+      const bottom = box ? Math.min(rect.bottom, box.bottom) : rect.bottom;
+      const left = box ? Math.max(rect.left, box.left) : rect.left;
+      const right = box ? Math.min(rect.right, box.right) : rect.right;
+      if (bottom - top <= 1 || right - left <= 1) continue;
+      rects.push({ top, left, width: right - left, height: bottom - top });
+    }
+    setTintRects(rects);
   }, []);
+
+  const place = useCallback(
+    (range: Range, text: string) => {
+      const rect = range.getBoundingClientRect();
+      if (rect.width === 0 && rect.height === 0) return;
+      setSelection({
+        text,
+        top: rect.top,
+        left: rect.left + rect.width / 2,
+      });
+      paint();
+    },
+    [paint],
+  );
 
   const clear = useCallback(() => {
     rangeRef.current = null;
+    heldRef.current = null;
+    textRef.current = "";
     setSelection(null);
+    setTintRects([]);
   }, []);
+
+  const hold = useCallback(() => {
+    const text = textRef.current;
+    heldRef.current = rangeRef.current;
+    rangeRef.current = null;
+    setSelection(null);
+    window.getSelection()?.removeAllRanges();
+    paint();
+    return text;
+  }, [paint]);
 
   useEffect(() => {
     const read = () => {
       const sel = window.getSelection();
       const text = sel?.toString().trim() ?? "";
       if (!sel || sel.rangeCount === 0 || !text) {
+        // The held words stay marked: an empty selection is the browser's,
+        // not the reader dropping what a function is working on.
         rangeRef.current = null;
+        textRef.current = heldRef.current ? textRef.current : "";
         setSelection(null);
+        paint();
         return;
       }
       const range = sel.getRangeAt(0);
@@ -76,9 +148,13 @@ export function useAnswerSelection(): {
       if (!el?.closest(`[${ANSWER_MARK}]`)) {
         rangeRef.current = null;
         setSelection(null);
+        paint();
         return;
       }
+      // A new selection in an answer replaces the words held before it.
+      heldRef.current = null;
       rangeRef.current = range.cloneRange();
+      textRef.current = text;
       place(range, text);
     };
     // The selection is read when it settles: a drag ends, a key lifts, a tap
@@ -88,8 +164,8 @@ export function useAnswerSelection(): {
     const onMove = () => {
       const range = rangeRef.current;
       const text = window.getSelection()?.toString().trim() ?? "";
-      if (!range || !text) return;
-      place(range, text);
+      if (range && text) place(range, text);
+      else paint();
     };
     document.addEventListener("mouseup", onUp);
     document.addEventListener("keyup", onUp);
@@ -103,9 +179,27 @@ export function useAnswerSelection(): {
       window.removeEventListener("scroll", onMove, true);
       window.removeEventListener("resize", onMove);
     };
-  }, [place]);
+  }, [place, paint]);
 
-  return { selection, clear };
+  return { selection, tintRects, hold, clear };
+}
+
+/** The tint over the highlighted words. Painted on the body, like the
+    toolbar, so no card's transform moves it or clips it. */
+export function AnswerTint({ rects }: { rects: TintRect[] }) {
+  if (typeof document === "undefined" || rects.length === 0) return null;
+  return createPortal(
+    <div aria-hidden className="pointer-events-none fixed inset-0 z-40">
+      {rects.map((rect, i) => (
+        <span
+          key={i}
+          className="answer-tint"
+          style={{ position: "fixed", top: rect.top, left: rect.left, width: rect.width, height: rect.height }}
+        />
+      ))}
+    </div>,
+    document.body,
+  );
 }
 
 /** The three things a highlighted answer offers. Start side chat waits for
