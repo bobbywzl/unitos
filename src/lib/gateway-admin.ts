@@ -70,11 +70,17 @@ export type GatewayReadiness = { status: string; db: string; version: string };
 
 export async function gatewayReadiness(): Promise<GatewayReadiness> {
   const body = await call("/health/readiness", readinessSchema, { auth: false });
-  return {
-    status: body.status ?? "unknown",
-    db: body.db ?? "unknown",
-    version: body.litellm_version ?? "",
-  };
+  // The public probe says status and db alone; the version is on the
+  // authenticated details, read when the master key is set.
+  let version = body.litellm_version ?? "";
+  if (!version && gatewayAdminKey()) {
+    try {
+      version = (await call("/health/readiness/details", readinessSchema)).litellm_version ?? "";
+    } catch {
+      /* the tile shows a dash */
+    }
+  }
+  return { status: body.status ?? "unknown", db: body.db ?? "unknown", version };
 }
 
 // ── Models, limits, prices, fallbacks ──────────────────────────────────────
@@ -239,7 +245,10 @@ export async function gatewayGenerateKey(limits: GatewayKeyLimits): Promise<stri
   const body = await call("/key/generate", generatedKeySchema, {
     method: "POST",
     body: {
-      key_alias: `unitos-app-${new Date().toISOString().slice(0, 10)}`,
+      // The gateway wants every alias unique, so the minute is in it: a
+      // second key on the same day (one made before the limits were set)
+      // does not collide.
+      key_alias: `unitos-app-${new Date().toISOString().slice(0, 16).replace(/[T:]/g, "-")}`,
       rpm_limit: limits.rpm,
       tpm_limit: limits.tpm,
       max_budget: limits.maxBudget,
