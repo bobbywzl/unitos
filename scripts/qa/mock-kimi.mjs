@@ -84,7 +84,7 @@ function buildResponse(all) {
   }
 
   // Stitch (SPEC.md §22), the select pass: the first three paragraphs of
-  // every member, ids only.
+  // every document, ids only.
   if (all.includes('"blockIds"') && all.includes("A second read will do what the command asks")) {
     const headers = [...all.matchAll(/\[document ([^\]]+)\] "/g)];
     const blockIds = [];
@@ -99,9 +99,9 @@ function buildResponse(all) {
     return JSON.stringify({ blockIds });
   }
 
-  // Stitch, the answer pass: one link between the first two members (one end
-  // a verbatim quote, one end the whole block), a page of one whole-block
-  // quote part per member and one text part with sources, and a reply.
+  // Stitch, the answer pass: one link between the first two documents (one
+  // end a verbatim quote, one end the whole block), a page of one whole-block
+  // quote part per document and one text part with sources, and a reply.
   if (all.includes('"reply"') && all.includes('"parts"') && /\[document [^\]]+\] "/.test(all)) {
     const headers = [...all.matchAll(/\[document ([^\]]+)\] "/g)];
     const firstParagraph = headers.map((h, i) => {
@@ -116,13 +116,13 @@ function buildResponse(all) {
     const parts = [];
     firstParagraph.forEach((b, i) => {
       if (!b) return;
-      parts.push({ kind: "heading", text: `Member ${i + 1}` });
+      parts.push({ kind: "heading", text: `Document ${i + 1}` });
       parts.push({ kind: "quote", blockId: b.id });
     });
     if (one) {
       parts.push({
         kind: "text",
-        markdown: "**Mock summary.** The members agree on the point above.",
+        markdown: "**Mock summary.** The documents agree on the point above.",
         sources: [{ blockId: one.id, quote: one.text.slice(0, 40) }],
       });
     }
@@ -317,12 +317,17 @@ function buildResponse(all) {
 
   // Notebook tasks: no issues found.
   // Gists: the first five words of each listed note.
-  // The title of a multi upload (SPEC.md §22): the first member's first two
-  // words and the member count.
-  if (all.includes('"title": "<phrase>"') && all.includes("[member 1]")) {
-    const first = all.match(/\[member 1\] "([^"]*)"/)?.[1] ?? "Members";
-    const count = [...all.matchAll(/\[member \d+\]/g)].length;
-    return JSON.stringify({ title: `${first.split(/\s+/).slice(0, 2).join(" ")} set of ${count}` });
+  // Contents (SPEC.md §26): every HEADING block past the first as a part,
+  // and the first paragraph of a document with no headings.
+  if (all.includes('"parts"') && all.includes("Write the contents of this document")) {
+    const blocks = parseBlocks(all);
+    const headings = blocks.filter((b, i) => b.type === "HEADING" && i > 0);
+    const parts =
+      headings.length > 0
+        ? headings.map((b) => ({ title: b.text, blockId: b.id, level: 1 }))
+        : blocks.filter((b) => b.type === "PARAGRAPH").slice(0, 1).map((b) => ({ title: "Opening", blockId: b.id, level: 1 }));
+    console.log("[mock contents]", parts.length, "parts");
+    return JSON.stringify({ parts });
   }
 
   if (all.includes('"gists"')) {

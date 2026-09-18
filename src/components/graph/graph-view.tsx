@@ -31,7 +31,9 @@ import { LinkDetail } from "@/components/graph/link-detail";
 // its links, and its linked documents; hovering a curve spotlights the pair
 // and lists its links at the curve; a click pins the list.
 // Nodes float in scattered on first open and settle into place. Clicking a
-// node opens that document.
+// node opens that document; ⇧-click, or a click while the Stitch box is
+// picking, selects it for Stitch instead (SPEC.md §22) — a selected node
+// draws a clay ring.
 
 // Deterministic pseudo-random in [-1, 1] from a string (release-edu's jitter):
 // the same corpus always scatters, bows, and breathes the same way.
@@ -76,6 +78,7 @@ type DocumentNodeData = {
   degree: number;
   active: boolean;
   breathing: boolean;
+  selected: boolean; // picked for Stitch (SPEC.md §22)
 };
 
 type LinkEdgeData = {
@@ -106,7 +109,7 @@ function DocumentNode({ id, data }: NodeProps<DocumentNodeData>) {
             data.active
               ? "bg-clay shadow-[0_0_20px_color-mix(in_srgb,var(--clay)_55%,transparent)]"
               : "bg-sage-500 shadow-[0_0_12px_color-mix(in_srgb,var(--sage)_40%,transparent)]"
-          } ${spotlight === "lit" ? "scale-110" : ""}`}
+          } ${spotlight === "lit" ? "scale-110" : ""} ${data.selected ? "ring-[3px] ring-clay ring-offset-2 ring-offset-paper" : ""}`}
           style={{ width: size, height: size }}
         >
           {data.hasVideo && <FilmIcon size={Math.max(10, size - 16)} className={data.active ? "text-clay-fg" : "text-sage-fg"} />}
@@ -294,6 +297,9 @@ function GraphCanvas({
   edges,
   onOpenDocument,
   docHref,
+  selectedIds,
+  picking = false,
+  onToggleSelect,
 }: {
   notebookId: string;
   activeDocumentId: string | null;
@@ -302,6 +308,12 @@ function GraphCanvas({
   onOpenDocument: () => void;
   // Where a node click goes. Default: the reader on that document.
   docHref?: (documentId: string) => string;
+  // The nodes picked for Stitch (SPEC.md §22), and the toggle a click runs
+  // instead of opening the document: while picking, every click; otherwise
+  // a ⇧-click or a ⌘/Ctrl-click.
+  selectedIds?: Set<string>;
+  picking?: boolean;
+  onToggleSelect?: (documentId: string) => void;
 }) {
   const router = useRouter();
   const t = useT();
@@ -409,6 +421,7 @@ function GraphCanvas({
         degree: degree.get(n.id) ?? 0,
         active: n.id === activeDocumentId,
         breathing: breathing.has(n.id),
+        selected: selectedIds?.has(n.id) ?? false,
       },
     });
     const target = (n: GraphNode) => draggedPos.current.get(n.id) ?? layout.get(n.id) ?? { x: 0, y: 0 };
@@ -452,7 +465,7 @@ function GraphCanvas({
       return;
     }
     setFlowNodes(nodes.map((n) => mk(n, target(n))));
-  }, [nodes, degree, breathing, layout, activeDocumentId, flow, setFlowNodes]);
+  }, [nodes, degree, breathing, layout, activeDocumentId, selectedIds, flow, setFlowNodes]);
 
   const flowEdges = useMemo<FlowEdge<LinkEdgeData>[]>(
     () =>
@@ -485,7 +498,11 @@ function GraphCanvas({
         edgeTypes={edgeTypes}
         onNodesChange={onNodesChange}
         onNodeDragStop={onNodeDragStop}
-        onNodeClick={(_, node) => {
+        onNodeClick={(e, node) => {
+          if (onToggleSelect && (picking || e.shiftKey || e.metaKey || e.ctrlKey)) {
+            onToggleSelect(node.id);
+            return;
+          }
           router.push(docHref ? docHref(node.id) : `/n/${notebookId}?doc=${node.id}`);
           onOpenDocument();
         }}
@@ -531,7 +548,7 @@ function GraphCanvas({
       </ReactFlow>
       </SpotlightContext.Provider>
       <p className="pointer-events-none absolute bottom-4 left-1/2 z-10 -translate-x-1/2 rounded-full border border-line bg-card/95 px-4 py-1.5 text-[11px] text-sand-600 shadow-soft">
-        {t("panes.graphHint")}
+        {t(picking ? "panes.graphPickHint" : "panes.graphHint")}
       </p>
     </div>
   );
@@ -544,6 +561,9 @@ export default function GraphView(props: {
   edges: GraphEdge[];
   onOpenDocument: () => void;
   docHref?: (documentId: string) => string;
+  selectedIds?: Set<string>;
+  picking?: boolean;
+  onToggleSelect?: (documentId: string) => void;
 }) {
   return (
     <ReactFlowProvider>

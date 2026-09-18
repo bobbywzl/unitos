@@ -2,16 +2,18 @@
 
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
-import type { GraphEdge, GraphNode, RecommendedLinkView } from "@/lib/types";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { GeneratedDocumentView, GraphEdge, GraphNode, RecommendedLinkView } from "@/lib/types";
 import { api } from "@/lib/api";
 import { useCollab } from "@/components/collab/collab-context";
 import { AuthorChip } from "@/components/collab/person-badge";
 import { ReplyThread } from "@/components/collab/reply-thread";
-import { SparkleIcon, UnlinkIcon } from "@/components/icons";
+import { PageIcon, SparkleIcon, UnlinkIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { Presence } from "@/components/presence";
+import { GeneratedList } from "@/components/graph/generated-list";
 import { LinkDetail } from "@/components/graph/link-detail";
+import { StitchBox } from "@/components/graph/stitch-box";
 
 // reactflow loads only when the graph opens — the workspace bundle stays lean.
 const GraphView = dynamic(() => import("@/components/graph/graph-view"), {
@@ -22,13 +24,17 @@ const GraphView = dynamic(() => import("@/components/graph/graph-view"), {
 // Full-screen overlay over the workspace: the corpus as a connected whole.
 // Recommended links live here too (SPEC.md §13): a folded list beside the
 // canvas holds every recommended link of the project — the reason, both
-// quotes, Accept and Dismiss — since the dashed curves are theirs.
+// quotes, Accept and Dismiss — since the dashed curves are theirs. So does
+// Stitch (SPEC.md §22): the box at the foot of the canvas runs a command
+// across the project's documents — the nodes picked, or every one — and
+// Generated content, a second folded list, holds every page it wrote.
 export function GraphOverlay({
   notebookId,
   activeDocumentId,
   nodes,
   edges,
   recommended,
+  generated,
   linkScansLeft,
   onClose,
 }: {
@@ -37,6 +43,7 @@ export function GraphOverlay({
   nodes: GraphNode[];
   edges: GraphEdge[];
   recommended: RecommendedLinkView[];
+  generated: GeneratedDocumentView[];
   /** Runs of Recommend links this account has left this month. */
   linkScansLeft: number;
   onClose: () => void;
@@ -44,7 +51,28 @@ export function GraphOverlay({
   const t = useT();
   const router = useRouter();
   const { canEdit } = useCollab();
-  const [listOpen, setListOpen] = useState(false);
+  // One folded list at a time beside the canvas: the recommended links, or
+  // the generated content.
+  const [list, setList] = useState<"recommended" | "generated" | null>(null);
+  const listOpen = list === "recommended";
+  // The documents picked for Stitch (SPEC.md §22): a ⇧-click on a node, or
+  // any click while picking. Empty = every document. A node that leaves
+  // the graph leaves the pick: the pick the canvas and the box read is the
+  // stored one cut to the nodes.
+  const [pickedIds, setPickedIds] = useState<Set<string>>(() => new Set());
+  const [picking, setPicking] = useState(false);
+  const toggleSelect = useCallback((documentId: string) => {
+    setPickedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(documentId)) next.delete(documentId);
+      else next.add(documentId);
+      return next;
+    });
+  }, []);
+  const selectedIds = useMemo(() => {
+    const ids = new Set(nodes.map((n) => n.id));
+    return new Set([...pickedIds].filter((id) => ids.has(id)));
+  }, [nodes, pickedIds]);
   // Recommend links (SPEC.md §13): the scan the reader asks for. It reads
   // every document of the project whole against the others, so it runs only
   // here and only a few times a month; the button says how many are left.
@@ -75,7 +103,7 @@ export function GraphOverlay({
             : t("panes.recommendScanDone", { n: result.linkCount }),
       );
       if (result.linkCount > 0) {
-        setListOpen(true);
+        setList("recommended");
         router.refresh();
       }
     } catch (err) {
@@ -128,7 +156,7 @@ export function GraphOverlay({
           </button>
         )}
         <button
-          onClick={() => setListOpen((v) => !v)}
+          onClick={() => setList((v) => (v === "recommended" ? null : "recommended"))}
           data-track="graph-recommended-links"
           aria-expanded={listOpen}
           data-tip={t("panes.recommendedLinksToggleTitle")}
@@ -144,6 +172,21 @@ export function GraphOverlay({
           {t("panes.recommendedLinks")}
           <span className="rounded-full bg-sand-200 px-1.5 text-[11px] font-semibold tabular-nums text-sand-700">
             {recommended.length}
+          </span>
+        </button>
+        <button
+          onClick={() => setList((v) => (v === "generated" ? null : "generated"))}
+          data-track="graph-generated"
+          aria-expanded={list === "generated"}
+          data-tip={t("stitch.generatedToggleTitle")}
+          className={`flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-[13px] hover:bg-clay-100 hover:text-clay-800 ${
+            list === "generated" ? "border-line bg-clay-100 text-clay-800" : "border-line text-sand-600"
+          }`}
+        >
+          <PageIcon size={13} />
+          {t("stitch.generated")}
+          <span className="rounded-full bg-sand-200 px-1.5 text-[11px] font-semibold tabular-nums text-sand-700">
+            {generated.length}
           </span>
         </button>
         <button
@@ -171,6 +214,9 @@ export function GraphOverlay({
             nodes={nodes}
             edges={edges}
             onOpenDocument={onClose}
+            selectedIds={selectedIds}
+            picking={picking}
+            onToggleSelect={canEdit ? toggleSelect : undefined}
           />
         )}
         <Presence show={listOpen} exit="menu">
@@ -178,6 +224,23 @@ export function GraphOverlay({
           <RecommendedLinkList notebookId={notebookId} links={recommended} onOpenDocument={onClose} />
         )}
         </Presence>
+        <Presence show={list === "generated"} exit="menu">
+        {list === "generated" && (
+          <GeneratedList notebookId={notebookId} generated={generated} onOpenDocument={onClose} />
+        )}
+        </Presence>
+        {nodes.length >= 2 && (
+          <StitchBox
+            notebookId={notebookId}
+            nodes={nodes}
+            selectedIds={selectedIds}
+            picking={picking}
+            onPickingChange={setPicking}
+            onUnpick={toggleSelect}
+            onClearPick={() => setPickedIds(new Set())}
+            onOpenDocument={onClose}
+          />
+        )}
       </div>
     </div>
   );

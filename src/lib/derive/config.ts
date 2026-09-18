@@ -127,14 +127,14 @@ export const MAX_OUTPUT_TOKENS: Record<DerivationType, number> = {
 export const CONNECT_MODEL = KIMI_K3;
 export const CONNECT_EFFORT: KimiEffort = DEFAULT_EFFORT;
 
-// Stitch (SPEC.md §22): the assistant over a multi upload's members. Two
-// passes. The select pass reads every member whole and names the blocks the
-// command needs — ids only, at "low": a reading, the same as KEYPOINTS, and
-// the one pass over the whole text. The answer pass reads the selected
-// blocks at the reader's effort and answers with links, a generated
-// document, or both. One pass at "high" over every member whole outran the
-// request every time the members were long. Not a DerivationType — it runs
-// through /api/multi.
+// Stitch (SPEC.md §22): the assistant over the project's documents, from the
+// graph. Two passes. The select pass reads every document whole and names
+// the blocks the command needs — ids only, at "low": a reading, the same as
+// KEYPOINTS, and the one pass over the whole text. The answer pass reads
+// the selected blocks at the reader's effort and answers with links, a
+// generated document, or both. One pass at "high" over every document whole
+// outran the request every time the documents were long. Not a
+// DerivationType — it runs through /api/notebooks/[notebookId]/stitch.
 export const STITCH_MODEL = KIMI_K3;
 export const STITCH_SELECT_EFFORT: KimiEffort = "low";
 export const STITCH_SELECT_MAX_OUTPUT_TOKENS = 16384; // a list of ids, with the short reasoning before it
@@ -145,11 +145,14 @@ export const STITCH_MAX_OUTPUT_TOKENS = 32768; // a page of whole-block referenc
 // told to narrow the command instead of reading a stream that ended empty.
 export const STITCH_DEADLINE_MS = 270_000;
 
-// The title of a multi upload (SPEC.md §22): a short phrase for what the
-// members are about together, from their titles and openings — a label, so
-// the lowest effort, like the gist.
-export const MULTI_TITLE_MODEL = KIMI_K3;
-export const MULTI_TITLE_EFFORT: KimiEffort = "low";
+// The contents of a document (SPEC.md §26): the parts the reader jumps
+// between, each with the block it starts at. One call over the whole
+// document at "low", like KEYPOINTS: a reading of where the parts begin,
+// not a problem to reason through, and a long document at "high" outran
+// the request.
+export const CONTENTS_MODEL = KIMI_K3;
+export const CONTENTS_EFFORT: KimiEffort = "low";
+export const CONTENTS_MAX_OUTPUT_TOKENS = 16384; // a list of titles and block ids, with the short reasoning before it
 
 // The merge of notes (SPEC.md §6): the reader drops a note on another and
 // picks Merge with AI, and the model writes the one note that replaces both.

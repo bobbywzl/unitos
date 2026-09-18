@@ -123,7 +123,7 @@ export function addTokens(a: TokenCounts, b: TokenCounts): TokenCounts {
 
 export type UsageMeta = {
   userId: string | null;
-  feature: string; // explain | simplify | … | assistant | act | glossary | transcribe | describe | voice | gist | merge
+  feature: string; // explain | simplify | … | assistant | act | glossary | contents | transcribe | describe | voice | gist | merge | stitch
   model: string;
 };
 

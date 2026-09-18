@@ -4,13 +4,13 @@ import { assistant } from "@/lib/i18n/dict/assistant";
 import { billing } from "@/lib/i18n/dict/billing";
 import { common } from "@/lib/i18n/dict/common";
 import { legal } from "@/lib/i18n/dict/legal";
-import { multi } from "@/lib/i18n/dict/multi";
 import { outline } from "@/lib/i18n/dict/outline";
 import { panels } from "@/lib/i18n/dict/panels";
 import { panes } from "@/lib/i18n/dict/panes";
 import { reader } from "@/lib/i18n/dict/reader";
 import { settings } from "@/lib/i18n/dict/settings";
 import { signin } from "@/lib/i18n/dict/signin";
+import { stitch } from "@/lib/i18n/dict/stitch";
 import { video } from "@/lib/i18n/dict/video";
 import { works } from "@/lib/i18n/dict/works";
 import type { Lang } from "@/lib/i18n/config";
@@ -31,7 +31,7 @@ const NAMESPACES = {
   billing,
   panels,
   panes,
-  multi,
+  stitch,
   video,
   settings,
   admin,

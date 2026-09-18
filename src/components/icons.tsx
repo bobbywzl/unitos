@@ -68,6 +68,30 @@ export function NotesIcon(props: IconProps) {
   );
 }
 
+// A page: the generated content of the graph (SPEC.md §22).
+export function PageIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9Z" />
+      <path d="M14 3v6h6" />
+    </Icon>
+  );
+}
+
+// The contents of an article (SPEC.md §26): a list with its markers.
+export function ContentsIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M9 6h11" />
+      <path d="M9 12h11" />
+      <path d="M9 18h11" />
+      <path d="M4 6h.01" />
+      <path d="M4 12h.01" />
+      <path d="M4 18h.01" />
+    </Icon>
+  );
+}
+
 export function SparkleIcon(props: IconProps) {
   return (
     <Icon {...props}>

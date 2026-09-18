@@ -43,8 +43,8 @@
 //   gist 要旨 · checklist 清单 · dash list 短横线列表 ·
 //   quote(笔记格式，> 行) 引用 · notes full page 整页笔记 ·
 //   conversation 对话 · attachment 附件 · file 文件 ·
-//   multi upload 多文档上传 · member(多文档上传的成员) 成员 · stitch 缝合 ·
-//   generated document 生成文档 · merge(两条笔记合为一条) 合并 ·
+//   stitch 缝合 · generated document 生成文档 · pick(为缝合选中节点) 选取 ·
+//   contents(文章的目录) 目录 · part(目录的一项) 部分 · merge(两条笔记合为一条) 合并 ·
 //   Merge with AI 用 AI 合并 · Join text 拼接文本 ·
 //   hold ring(合并进度环) 合并环 · drop line(落位线) 落位线 ·
 //   board(章节的笔记铺满屏幕) 看板 · tile(看板上的一条笔记) 方块 ·

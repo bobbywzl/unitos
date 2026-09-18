@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { Document } from "@prisma/client";
+import { Prisma, type Document } from "@prisma/client";
 import { db } from "@/lib/db";
 import { classifyPdf } from "@/lib/handwritten/classify";
 import { storePageSizes } from "@/lib/handwritten/page-images";
@@ -616,6 +616,9 @@ export async function reparseDocument(
         conversionStatus: "NONE",
         conversionError: null,
         conversionStartedAt: null,
+        // The blocks are new, so the contents' block ids are stale: the
+        // next open of Contents builds them again (SPEC.md §26).
+        contents: Prisma.DbNull,
       },
     });
   });

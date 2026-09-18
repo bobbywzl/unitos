@@ -4,7 +4,6 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { api } from "@/lib/api";
 import type { DriveConfig } from "@/lib/drive/config";
-import type { MultiUploadSummary } from "@/lib/types";
 import { pickDriveFiles } from "@/lib/drive/picker-client";
 import { parseDriveFileId, type DrivePickedFile } from "@/lib/drive/types";
 import { IMAGE_ACCEPT, isImageFile } from "@/lib/handwritten/image";
@@ -186,15 +185,11 @@ export function DocumentBar({
   drive,
   figureGaps,
   browserConfigured,
-  multiUploads,
 }: {
   notebookId: string;
   documents: AttachedDocument[];
   activeId: string | null;
   drive: DriveConfig | null;
-  // The project's multi uploads (SPEC.md §22), newest first: the list opens
-  // each on its own page.
-  multiUploads: MultiUploadSummary[];
   // The open document's captions left without their figure, by label
   // (lib/parse/figure-audit.ts captionGaps), and whether this deployment
   // has a browser to render them with (SPEC.md §15).
@@ -224,53 +219,6 @@ export function DocumentBar({
   }, [error, activeId]);
   // Opening a document is a server round trip; the pill shows it is on its way.
   const [opening, startOpening] = useTransition();
-
-  // A multi upload from documents already attached (SPEC.md §22): the page
-  // opens once the server has it.
-  const [makingMulti, setMakingMulti] = useState(false);
-  async function makeMulti(documentIds: string[]) {
-    if (makingMulti) return;
-    setMakingMulti(true);
-    setError(null);
-    try {
-      const made = await api<{ id: string }>("/api/multi", "POST", { notebookId, documentIds });
-      startOpening(() => router.push(`/n/${notebookId}/multi/${made.id}`));
-      router.refresh();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t("common.requestFailed"));
-    } finally {
-      setMakingMulti(false);
-    }
-  }
-
-  // Rename and delete a multi upload from its row (SPEC.md §22), the same
-  // actions as its page header.
-  const [multiRename, setMultiRename] = useState<{ id: string; draft: string } | null>(null);
-  async function renameMulti() {
-    if (!multiRename) return;
-    const current = multiUploads.find((m) => m.id === multiRename.id);
-    const title = multiRename.draft.trim();
-    setMultiRename(null);
-    if (!current || !title || title === current.title) return;
-    setError(null);
-    try {
-      await api(`/api/multi/${current.id}`, "PATCH", { title });
-      router.refresh();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t("common.requestFailed"));
-    }
-  }
-  async function deleteMulti(multiId: string) {
-    if (!confirm(t("multi.confirmDelete"))) return;
-    setError(null);
-    try {
-      await api(`/api/multi/${multiId}`, "DELETE");
-      if (searchParams.get("multi") === multiId) router.push(`/n/${notebookId}`);
-      router.refresh();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t("common.requestFailed"));
-    }
-  }
 
   // Hover keeps the list open across the gap between pill and list; leaving
   // both closes it after a grace period.
@@ -321,17 +269,14 @@ export function DocumentBar({
       ?.scrollIntoView({ block: "nearest" });
   }, [listOpen]);
 
-  // Opening a document keeps the reader view: view and doc2 ride along, and
-  // so does the open multi upload (SPEC.md §22).
+  // Opening a document keeps the reader view: view and doc2 ride along.
   function open(docId: string) {
     const params = new URLSearchParams();
     params.set("doc", docId);
     const view = searchParams.get("view");
     const doc2 = searchParams.get("doc2");
-    const multi = searchParams.get("multi");
     if (view) params.set("view", view);
     if (doc2) params.set("doc2", doc2);
-    if (multi) params.set("multi", multi);
     startOpening(() => router.push(`/n/${notebookId}?${params.toString()}`));
   }
 
@@ -588,8 +533,8 @@ export function DocumentBar({
         setError(t("common.offlineReadOnly"));
         return;
       }
-      // A batch queues item by item; a multi upload needs the server and is
-      // not offered offline — every item opens on its own page after the sync.
+      // A batch queues item by item; every item opens on its own page after
+      // the sync.
       const items =
         request.kind === "files"
           ? request.files.map((file) => ({ kind: "file" as const, file }))
@@ -1025,114 +970,6 @@ export function DocumentBar({
                   </Collapse>
                 </div>
               ))}
-              {/* Multi uploads (SPEC.md §22): each opens on its own page, and
-                  every document of the project can go on one page together. */}
-              {(multiUploads.length > 0 || (canEdit && documents.length > 2)) && (
-                <>
-                  <div className="mx-4 mt-1.5 mb-1 border-t border-line pt-2 text-[11px] font-semibold text-sand-500">
-                    {t("multi.multiUploads")}
-                  </div>
-                  {canEdit && documents.length > 2 && (
-                    <button
-                      onClick={() => {
-                        closeList();
-                        void makeMulti(documents.map((d) => d.id));
-                      }}
-                      data-track="multi-all"
-                      disabled={makingMulti}
-                      className="px-4 py-2 text-left text-[13px] text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40"
-                      data-tip={t("multi.allTitle")}
-                    >
-                      {t("multi.all", { n: documents.length })}
-                    </button>
-                  )}
-                  {multiUploads.map((m) => (
-                    <div key={m.id} className="flex flex-col">
-                      <div className="flex items-center">
-                        {multiRename?.id === m.id ? (
-                          <input
-                            autoFocus
-                            value={multiRename.draft}
-                            onChange={(e) => setMultiRename({ id: m.id, draft: e.target.value })}
-                            onBlur={() => void renameMulti()}
-                            onKeyDown={(e) => {
-                              if (isImeKey(e)) return;
-                              if (e.key === "Enter") void renameMulti();
-                              if (e.key === "Escape") setMultiRename(null);
-                            }}
-                            aria-label={t("multi.renameTitle")}
-                            className="mx-2 my-1 min-w-0 flex-1 rounded-full bg-sand-100 px-3 py-1 text-[13px] outline-none"
-                          />
-                        ) : (
-                          <button
-                            onClick={() => {
-                              closeList();
-                              startOpening(() => router.push(`/n/${notebookId}/multi/${m.id}`));
-                            }}
-                            data-track="multi-open"
-                            data-active-row={m.id === searchParams.get("multi") || undefined}
-                            className={`flex min-w-0 flex-1 items-center gap-2 overflow-hidden px-4 py-2 text-left text-[13px] whitespace-nowrap ${
-                              m.id === searchParams.get("multi")
-                                ? "font-semibold text-ink"
-                                : "text-sand-700 hover:bg-clay-100 hover:text-clay-800"
-                            }`}
-                            data-tip={m.title}
-                          >
-                            <span className="min-w-0 flex-1 truncate">{clipWords(m.title, 40)}</span>
-                            <span className="shrink-0 rounded-full bg-sand-100 px-1.5 text-[11px] tabular-nums text-sand-600">
-                              {m.memberCount}
-                            </span>
-                          </button>
-                        )}
-                        {canEdit && (
-                          <button
-                            onClick={() => setPillMenu(pillMenu === `multi:${m.id}` ? null : `multi:${m.id}`)}
-                            data-track="multi-actions"
-                            aria-label={t("multi.actionsFor", { title: m.title })}
-                            aria-expanded={pillMenu === `multi:${m.id}`}
-                            data-tip={t("multi.actions")}
-                            className="mr-2 flex size-6 shrink-0 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-800"
-                          >
-                            <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-                              <circle cx="12" cy="5" r="2" />
-                              <circle cx="12" cy="12" r="2" />
-                              <circle cx="12" cy="19" r="2" />
-                            </svg>
-                          </button>
-                        )}
-                      </div>
-                      <Collapse open={pillMenu === `multi:${m.id}`}>
-                        {pillMenu === `multi:${m.id}` && (
-                          <div className="mx-2 mb-1.5 flex flex-col rounded-xl bg-sand-100 py-1">
-                            <button
-                              onClick={() => {
-                                setPillMenu(null);
-                                setMultiRename({ id: m.id, draft: m.title });
-                              }}
-                              data-track="multi-rename"
-                              className={rowAction}
-                              data-tip={t("multi.renameTitle")}
-                            >
-                              {t("multi.rename")}
-                            </button>
-                            <button
-                              onClick={() => {
-                                closeList();
-                                void deleteMulti(m.id);
-                              }}
-                              data-track="multi-delete"
-                              className="px-4 py-1.5 text-left text-[12.5px] text-red-600 hover:bg-red-50 dark:hover:bg-red-950"
-                              data-tip={t("multi.deleteTitle")}
-                            >
-                              {t("multi.delete")}
-                            </button>
-                          </div>
-                        )}
-                      </Collapse>
-                    </div>
-                  ))}
-                </>
-              )}
             </div>
           )}
           </Presence>
@@ -1248,11 +1085,7 @@ export function DocumentBar({
             setAssistant(null);
             setAssistantHidden(false);
             setAssistantOpened(null);
-            // A multi upload (SPEC.md §22) opens on its own page.
-            if (target?.kind === "multi") {
-              startOpening(() => router.push(`/n/${notebookId}/multi/${target.id}`));
-              router.refresh();
-            } else if (target && target.id !== opened) openAdded(target.id);
+            if (target && target.id !== opened) openAdded(target.id);
             // Opened early: the glossary and links the finishing step wrote
             // arrive with a refresh.
             else if (target) router.refresh();

@@ -78,7 +78,6 @@ import {
   QuoteIcon,
   ChartIcon,
   RegenerateIcon,
-  SearchIcon,
   VisualizeIcon,
   SparkleIcon,
   SpinnerIcon,
@@ -105,7 +104,7 @@ import { AuthorChip } from "@/components/collab/person-badge";
 import { ConversationView } from "@/components/reader/conversation-view";
 import { DistillPage } from "@/components/reader/distill-page";
 import { KeypointsPage } from "@/components/reader/keypoints-page";
-import { ProjectSearch } from "@/components/reader/project-search";
+import { ContentsMenu } from "@/components/reader/contents-menu";
 import { PANE_HEADER } from "@/components/reader/reader-panes";
 import type { FigureRenderInfo } from "@/components/reader/figure-capture";
 import { Reader, type TranscriptVariant } from "@/components/reader/reader";
@@ -537,18 +536,6 @@ type AnnotationCard = {
   left: number;
   busy: boolean;
 };
-
-// The article menu's frequent asks: one click sends the question to the
-// assistant, which reads the whole document and answers in the chat card.
-// Keys, not strings — the menu translates at render, and the question goes to
-// the assistant in the reader's language.
-// track names the ask in click telemetry (SPEC.md §7).
-const FREQUENT_ASKS: { labelKey: TKey; questionKey: TKey; track: string }[] = [
-  { labelKey: "reader.summarizeLabel", questionKey: "reader.summarizeQuestion", track: "summarize" },
-  { labelKey: "reader.takeawaysLabel", questionKey: "reader.takeawaysQuestion", track: "key-takeaways" },
-  { labelKey: "reader.explainSimplyLabel", questionKey: "reader.explainSimplyQuestion", track: "explain-simply" },
-];
-
 
 // English plural suffix for count phrases ({s} in reader.* keys); zh templates
 // omit {s}.
@@ -2690,12 +2677,9 @@ export function ReaderInteractions({
     return () => window.removeEventListener("mousedown", onMouseDown);
   }, [annotationCard]);
 
-  // Below xl the article menu collapses to a pill; the card would sit over
-  // the article text there. The pill toggles it; an action closes it.
-  const [menuExpanded, setMenuExpanded] = useState(false);
-  // The project search bubble, opened from the search icon beside the
-  // assistant button. Opening one closes the other.
-  const [searchOpen, setSearchOpen] = useState(false);
+  // The contents list (SPEC.md §26), opened from the Contents button at the
+  // top left of the article.
+  const [contentsOpen, setContentsOpen] = useState(false);
   // The article menu tracks the scroll position: visible only at the top.
   useEffect(() => {
     const container = containerRef.current;
@@ -3931,56 +3915,6 @@ export function ReaderInteractions({
     }
   }
 
-  // The article menu's asks: the assistant reads the whole document — no
-  // anchor, document scope — and answers in the chat card beside the article.
-  // question null opens an empty chat for the reader's own question.
-  function openArticleChat(question: string | null) {
-    const container = containerRef.current;
-    const slot = claimSideSlot("assistant", (container?.scrollTop ?? 0) + 56);
-    if (question === null) {
-      setAssistantChat({ anchor: null, noteId: null, ...slot, messages: [], input: "", busy: false });
-      return;
-    }
-    setAssistantChat({
-      anchor: null,
-      noteId: null,
-      ...slot,
-      messages: [{ role: "user", content: question }],
-      input: "",
-      busy: true,
-    });
-    const controller = new AbortController();
-    chatAbortRef.current = controller;
-    void (async () => {
-      try {
-        const turn = await assistantTurn(question, null, [], null, controller.signal);
-        setAssistantChat((c) =>
-          c
-            ? {
-                ...c,
-                busy: false,
-                noteId: turn.noteId ?? c.noteId,
-                messages: [...c.messages, { role: "assistant", content: turn.reply }],
-              }
-            : c,
-        );
-      } catch (err) {
-        // Stopped, not failed: the question stays, no reply lands.
-        if (controller.signal.aborted) {
-          setAssistantChat((c) => (c ? { ...c, busy: false } : c));
-          return;
-        }
-        const message = err instanceof Error ? err.message : t("reader.assistantFailed");
-        setAssistantChat((c) =>
-          c
-            ? { ...c, busy: false, messages: [...c.messages, { role: "assistant", content: message }] }
-            : c,
-        );
-      } finally {
-        if (chatAbortRef.current === controller) chatAbortRef.current = null;
-      }
-    })();
-  }
 
   // Stop the assistant chat's running turn — the popover's Run button before
   // the chat card exists, or the chat card's Send button once it does. The
@@ -5661,14 +5595,14 @@ function blockFormatKind(
     </button>
   );
 
-  // The article menu: frequent asks go to the assistant at document scope;
-  // Distill opens the distilled page, Extract the extract page; the search icon beside the assistant
-  // button expands the project search bubble. In Normal view it floats open
-  // at the top of the page, hides once the reader scrolls, and returns at the
-  // top — the strip spans the pane so the bubble can size to it, and only the
-  // controls take pointer events. In a split view it sits in the pane header,
-  // always in reach, and its panels drop below the header (SPEC.md §6). A
-  // transcript has the video pane's own tools instead (SPEC.md §11).
+  // The article menu: the Contents button (SPEC.md §26) and the list it
+  // opens — the article's parts, each a jump to its block. In Normal view it
+  // floats open at the top of the page, hides once the reader scrolls, and
+  // returns at the top — the strip spans the pane so the list can size to
+  // it, and only the controls take pointer events. In a split view it sits
+  // in the pane header, always in reach, and its list drops below the
+  // header (SPEC.md §6). A transcript has the video pane's own tools
+  // instead (SPEC.md §11).
   const articleMenu = (
       <div
       data-track-surface="article-menu"
@@ -5681,114 +5615,14 @@ function blockFormatKind(
               }`
         }
       >
-        <div className={`flex w-max gap-1.5${split ? "" : " mb-1.5"}`}>
-          <button
-            onClick={() => {
-              setMenuExpanded((v) => !v);
-              setSearchOpen(false);
-            }}
-            data-track="assistant"
-            aria-expanded={menuExpanded}
-            data-tip={t("reader.assistantMenuTitle")}
-            className="pointer-events-auto flex items-center gap-1.5 rounded-full bg-card px-3 py-2 text-[12px] font-semibold text-clay-800 shadow-float"
-          >
-            <SparkleIcon size={13} />
-            {t("reader.assistant")}
-          </button>
-          <button
-            data-project-search
-            data-track="search"
-            onClick={() => {
-              setSearchOpen((v) => !v);
-              setMenuExpanded(false);
-            }}
-            aria-label={t("panes.searchProject")}
-            aria-expanded={searchOpen}
-            data-tip={t("panes.searchProjectTitle")}
-            className={`pointer-events-auto flex w-[34px] items-center justify-center rounded-full bg-card shadow-float ${
-              searchOpen ? "text-clay-800" : "text-sand-600 hover:text-clay-800"
-            }`}
-          >
-            <SearchIcon size={15} />
-          </button>
-        </div>
-        {/* The panels: under the pill in Normal view; under the pane header,
-            over the text, in a split view. */}
         <div
           className={
             split
-              ? "pointer-events-none absolute top-full left-0 z-30 mt-2 flex w-[min(400px,70vw)] flex-col gap-1.5"
-              : "contents"
+              ? "flex w-max items-start gap-1.5 [&>nav]:absolute [&>nav]:top-full [&>nav]:left-0 [&>nav]:mt-2 [&>nav]:w-[min(400px,70vw)]"
+              : "flex flex-col items-start gap-1.5"
           }
         >
-        <Collapse open={menuExpanded}>
-        <div className="pointer-events-auto flex w-56 flex-col overflow-hidden rounded-2xl bg-card py-1.5 shadow-float">
-          {canEdit && (
-            <>
-              <span className="flex items-center gap-1.5 px-4 pt-1.5 pb-1 text-[11px] font-bold tracking-[0.08em] text-clay-800 uppercase">
-                <SparkleIcon size={12} />
-                {t("reader.assistant")}
-              </span>
-              {FREQUENT_ASKS.map((ask) => (
-                <button
-                  key={ask.labelKey}
-                  data-track={`ask:${ask.track}`}
-                  data-tip={t(ask.questionKey)}
-                  onClick={() => {
-                    setMenuExpanded(false);
-                    openArticleChat(t(ask.questionKey));
-                  }}
-                  className="px-4 py-2 text-left text-[12.5px] text-sand-800 hover:bg-clay-100 hover:text-clay-800"
-                >
-                  {t(ask.labelKey)}
-                </button>
-              ))}
-              <button
-                onClick={() => {
-                  setMenuExpanded(false);
-                  openArticleChat(null);
-                }}
-                data-track="ask-assistant"
-                data-tip={t("reader.askAssistantTitle")}
-                className="px-4 py-2 text-left text-[12.5px] text-sand-800 hover:bg-clay-100 hover:text-clay-800"
-              >
-                {t("reader.askAssistant")}
-              </button>
-              <div className="mx-3 my-1 border-t border-line" />
-            </>
-          )}
-          <button
-            onClick={() => {
-              setMenuExpanded(false);
-              openKeypointsPage();
-            }}
-            data-track="keypoints"
-            data-tip={t("reader.keypointsMenuTitle")}
-            className="flex items-center gap-1.5 px-4 py-2 text-left text-[12.5px] text-sand-800 hover:bg-clay-100 hover:text-clay-800"
-          >
-            <DistillIcon size={12} />
-            {t("reader.keypoints")}
-          </button>
-          <button
-            onClick={() => {
-              setMenuExpanded(false);
-              openDistillPage(null);
-            }}
-            data-track="distill"
-            data-tip={t("reader.distillMenuTitle")}
-            className="flex items-center gap-1.5 px-4 py-2 text-left text-[12.5px] text-sand-800 hover:bg-clay-100 hover:text-clay-800"
-          >
-            <QuoteIcon size={12} />
-            {t("reader.distill")}
-            {allDistillations.length > 0 ? ` (${allDistillations.length})` : ""}
-          </button>
-        </div>
-        </Collapse>
-        <ProjectSearch
-          notebookId={notebookId}
-          open={searchOpen}
-          onClose={() => setSearchOpen(false)}
-        />
+          <ContentsMenu documentId={documentId} open={contentsOpen} onOpenChange={setContentsOpen} />
         </div>
       </div>
   );

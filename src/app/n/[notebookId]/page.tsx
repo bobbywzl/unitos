@@ -17,7 +17,7 @@ import { documentReferences } from "@/lib/parse/types";
 import { resolveDocumentSources } from "@/lib/anchors/resolve";
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
-import { documentsGraph, listMultiUploads, loadMultiUpload } from "@/lib/multi/view";
+import { documentsGraph, listGenerated } from "@/lib/graph/view";
 import {
   corpusDistillationList,
   distillationList,
@@ -72,10 +72,10 @@ export const dynamic = "force-dynamic";
 // every pane carries the full tool set.
 export default async function NotebookPage(props: {
   params: Promise<{ notebookId: string }>;
-  searchParams: Promise<{ doc?: string; doc2?: string; view?: string; src?: string; multi?: string }>;
+  searchParams: Promise<{ doc?: string; doc2?: string; view?: string; src?: string }>;
 }) {
   const { notebookId } = await props.params;
-  const { doc, doc2, view: viewParam, multi: multiParam } = await props.searchParams;
+  const { doc, doc2, view: viewParam } = await props.searchParams;
 
   const user = await currentUser();
   if (!user) redirect("/signin");
@@ -949,8 +949,7 @@ export default async function NotebookPage(props: {
     graph,
     events,
     allEdits,
-    multiUploads,
-    multiOpen,
+    generated,
   ] =
     await Promise.all([
       // Edit history for the open document, newest first.
@@ -990,12 +989,10 @@ export default async function NotebookPage(props: {
         take: 80,
         include: { document: { select: { title: true } } },
       }),
-      // The project's multi uploads (SPEC.md §22), and the open one when the
-      // URL names one of this project's.
-      listMultiUploads(notebookId),
-      multiParam ? loadMultiUpload(multiParam) : null,
+      // The pages Stitch wrote for the project (SPEC.md §22): the graph's
+      // Generated content list.
+      listGenerated(notebookId),
     ]);
-  const multi = multiOpen && multiOpen.notebookId === notebookId ? multiOpen : null;
 
   const edits: EditItem[] = editRows.map((e) => ({
         id: e.id,
@@ -1277,10 +1274,9 @@ export default async function NotebookPage(props: {
         nodes: graphNodes,
         edges: graphEdges,
         recommended: recommendedLinks,
+        generated,
         linkScansLeft: await linkScanRunsLeft(user?.id ?? null),
       }}
-      multi={multi}
-      multiUploads={multiUploads}
       history={history}
       corpusDistillations={corpusDistillations}
       context={{

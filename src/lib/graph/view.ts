@@ -1,38 +1,17 @@
 import { db } from "@/lib/db";
-import type {
-  GeneratedDocumentView,
-  GraphEdge,
-  GraphNode,
-  MultiUploadSummary,
-  MultiUploadView,
-  RecommendedLinkView,
-} from "@/lib/types";
+import type { GeneratedDocumentView, GraphEdge, GraphNode, RecommendedLinkView } from "@/lib/types";
 
-// The multi upload page's data (SPEC.md §22): the members in order, the
-// generated documents newest first, and the graph among the members — the
-// same node, edge, and recommended-link shapes the project graph draws
-// (SPEC.md §13), scoped to the members.
+// The graph's data (SPEC.md §13, §22): the nodes, the edges, the recommended
+// links, and the generated documents Stitch wrote for the project.
 
-export async function loadMultiUpload(multiId: string): Promise<MultiUploadView | null> {
-  const multi = await db.multiUpload.findUnique({
-    where: { id: multiId },
-    include: {
-      members: {
-        orderBy: { order: "asc" },
-        include: {
-          document: {
-            select: {
-              id: true,
-              title: true,
-              sourceUrl: true,
-              video: { select: { id: true } },
-              _count: { select: { blocks: true } },
-            },
-          },
-        },
-      },
-      generated: {
-        orderBy: { createdAt: "desc" },
+/** Every generated document of the project, newest first (SPEC.md §22):
+    the attached documents that carry a Stitch command. */
+export async function listGenerated(notebookId: string): Promise<GeneratedDocumentView[]> {
+  const rows = await db.notebookDocument.findMany({
+    where: { notebookId, document: { generatedCommand: { not: null } } },
+    orderBy: { document: { createdAt: "desc" } },
+    select: {
+      document: {
         select: {
           id: true,
           title: true,
@@ -43,40 +22,13 @@ export async function loadMultiUpload(multiId: string): Promise<MultiUploadView 
       },
     },
   });
-  if (!multi) return null;
-  return {
-    id: multi.id,
-    notebookId: multi.notebookId,
-    title: multi.title,
-    createdAt: multi.createdAt.toISOString(),
-    members: multi.members.map((m) => ({
-      id: m.document.id,
-      title: m.document.title,
-      hasVideo: m.document.video !== null,
-      blockCount: m.document._count.blocks,
-      sourceUrl: m.document.sourceUrl,
-      order: m.order,
-    })),
-    generated: multi.generated.map(
-      (g): GeneratedDocumentView => ({
-        id: g.id,
-        title: g.title,
-        command: g.generatedCommand,
-        createdAt: g.createdAt.toISOString(),
-        blockCount: g._count.blocks,
-      }),
-    ),
-  };
-}
-
-/** Every multi upload of a project, newest first, for the document bar. */
-export async function listMultiUploads(notebookId: string): Promise<MultiUploadSummary[]> {
-  const rows = await db.multiUpload.findMany({
-    where: { notebookId },
-    orderBy: { createdAt: "desc" },
-    select: { id: true, title: true, _count: { select: { members: true } } },
-  });
-  return rows.map((r) => ({ id: r.id, title: r.title, memberCount: r._count.members }));
+  return rows.map(({ document: g }) => ({
+    id: g.id,
+    title: g.title,
+    command: g.generatedCommand,
+    createdAt: g.createdAt.toISOString(),
+    blockCount: g._count.blocks,
+  }));
 }
 
 /** The graph among a set of documents: nodes, one edge per linked pair, and

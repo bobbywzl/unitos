@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { api } from "@/lib/api";
 import { isImeKey } from "@/lib/ime";
 import { useT } from "@/components/lang-provider";
 import { CheckIcon } from "@/components/icons";
@@ -27,9 +26,9 @@ import {
 // The upload box: files or a URL are the only two ways in (SPEC.md §15). It
 // takes what it is given and imports it right away — no kind to pick, no
 // format to choose, no review before anything is saved. It shows the
-// progress in place and ends on the final figure check. When an add will
-// land two or more documents, the box asks first whether they go on
-// separate pages or on one page as a multi upload (SPEC.md §22).
+// progress in place and ends on the final figure check. An add that lands
+// two or more documents shows what it will add and waits for Add; each
+// document opens on its own page.
 
 // One item of a batch add (SPEC.md §22): the add dialog queues links and
 // files of every kind together, and the box adds them one after another.
@@ -47,13 +46,8 @@ export type UploadRequest =
   | { kind: "drive"; token: string; files: DrivePickedFile[] }
   | { kind: "batch"; items: UploadItem[] };
 
-// Where the documents of an add go (SPEC.md §22): each on its own page, as
-// ever, or together on one page as a multi upload.
-export type UploadLayout = "separate" | "multi";
-
-// What the box opens when it is done: the first added document, or the
-// multi upload it made.
-export type OpenTarget = { kind: "document"; id: string } | { kind: "multi"; id: string };
+// What the box opens when it is done: the first added document.
+export type OpenTarget = { kind: "document"; id: string };
 
 type Phase = "ready" | "adding" | "done";
 type Added = { id: string; title: string };
@@ -139,8 +133,7 @@ export function UploadAssistant({
   // now and hide the box; the finishing step runs on. onClose follows with
   // the same id once the box is done.
   onOpenEarly: (docId: string) => void;
-  // Called once the box is done: the first added document or the multi
-  // upload to open, or null.
+  // Called once the box is done: the first added document to open, or null.
   onClose: (target: OpenTarget | null) => void;
 }) {
   const t = useT();
@@ -162,14 +155,13 @@ export function UploadAssistant({
         : request.kind === "batch"
           ? Math.max(1, items.length)
           : 1;
-  // Two or more documents ask where they go before anything imports
-  // (SPEC.md §22); one imports right away.
+  // Two or more documents wait for Add before anything imports; one
+  // imports right away.
   const [phase, setPhase] = useState<Phase>(itemCount > 1 ? "ready" : "adding");
-  const [layout, setLayout] = useState<UploadLayout>("separate");
   const [steps, setSteps] = useState<IngestStep[] | null>(null);
   const [headline, setHeadline] = useState<string | null>(null);
   const [added, setAdded] = useState<Added[]>([]);
-  // What Close opens once the add is done: the first document, or the multi upload.
+  // What Close opens once the add is done: the first document.
   const [openTarget, setOpenTarget] = useState<OpenTarget | null>(null);
   const [failures, setFailures] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -353,8 +345,8 @@ export function UploadAssistant({
     return result.documents ?? [{ id: result.id, title: result.title }];
   }
 
-  // ── The add itself: runs at once for one document; after the layout
-  // question for two or more ──────────────────────────────────────────────
+  // ── The add itself: runs at once for one document; after Add for two or
+  // more ──────────────────────────────────────────────────────────────────
   const startedRef = useRef(false);
   async function runAdd() {
     setError(null);
@@ -364,10 +356,7 @@ export function UploadAssistant({
     saveDetailRef.current = null;
     addStartedAtRef.current = Date.now();
     setAddStartedAt(addStartedAtRef.current);
-    // A multi upload opens as one page once every member is in: no member
-    // opens early on its own.
-    const multi = layout === "multi" && itemCount > 1;
-    earlyOpenRef.current = multi ? "off" : "pending";
+    earlyOpenRef.current = "pending";
 
     if (request.kind === "url" || request.kind === "video-url") {
       try {
@@ -472,23 +461,6 @@ export function UploadAssistant({
       }
     }
 
-    // A multi upload (SPEC.md §22): the documents that landed become one
-    // page. With one document there is nothing to put together, so it opens
-    // on its own like every add.
-    let multiId: string | null = null;
-    if (multi && collected.length > 1) {
-      setHeadline(t("panes.uploadMakingMulti"));
-      try {
-        const made = await api<{ id: string }>("/api/multi", "POST", {
-          notebookId,
-          documentIds: collected.map((d) => d.id),
-        });
-        multiId = made.id;
-      } catch (err) {
-        failed.push(err instanceof Error ? err.message : t("panes.uploadFailed"));
-      }
-    }
-
     setAdded(collected);
     setFailures(failed);
     setHeadline(null);
@@ -500,9 +472,7 @@ export function UploadAssistant({
       return;
     }
     setPhase("done");
-    const target: OpenTarget = multiId
-      ? { kind: "multi", id: multiId }
-      : { kind: "document", id: collected[0].id };
+    const target: OpenTarget = { kind: "document", id: collected[0].id };
     setOpenTarget(target);
     // Clean adds close themselves; failures stay visible until Close, and so
     // does a lost figure: a single add whose figure check found a caption
@@ -523,7 +493,7 @@ export function UploadAssistant({
     startedRef.current = true;
     void runAdd();
     // Runs once, for the request this box was opened with; two or more
-    // documents wait for the layout question's Add.
+    // documents wait for Add.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -552,8 +522,6 @@ export function UploadAssistant({
 
   const amberNote =
     "rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-950 dark:text-amber-200";
-  const sectionLabel = "text-[12px] font-semibold text-sand-600";
-  const pill = "rounded-full px-3.5 py-1.5 text-xs font-semibold";
 
   if (hidden) return null;
 
@@ -605,29 +573,6 @@ export function UploadAssistant({
                 ))}
               </ul>
             )}
-            {/* The layout question (SPEC.md §22): an add that lands two or more
-                documents puts each on its own page, or all on one page as a
-                multi upload. */}
-            <div className="flex flex-col gap-1.5">
-              <span className={sectionLabel}>{t("panes.uploadLayoutQuestion", { n: itemCount })}</span>
-              <div className="flex flex-wrap items-center gap-2">
-                {(["separate", "multi"] as const).map((choice) => (
-                  <button
-                    key={choice}
-                    type="button"
-                    onClick={() => setLayout(choice)}
-                    data-track={`upload-layout:${choice}`}
-                    aria-pressed={layout === choice}
-                    className={`${pill} ${layout === choice ? "bg-clay text-clay-fg" : "bg-sand-100 text-sand-700 hover:bg-clay-100"}`}
-                  >
-                    {t(choice === "separate" ? "panes.uploadLayoutSeparate" : "panes.uploadLayoutMulti")}
-                  </button>
-                ))}
-              </div>
-              <p className="text-xs text-sand-500">
-                {t(layout === "separate" ? "panes.uploadLayoutSeparateNote" : "panes.uploadLayoutMultiNote")}
-              </p>
-            </div>
             <div className="flex items-center gap-2">
               <button
                 onClick={() => {
