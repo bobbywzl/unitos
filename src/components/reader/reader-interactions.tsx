@@ -800,7 +800,11 @@ export function ReaderInteractions({
   const [submenu, setSubmenu] = useState<null | "add" | "ai" | "comment">(null);
   const [commentDraft, setCommentDraft] = useState("");
   // The page is only editable in edit mode; reading mode never opens editors.
-  const [editMode, setEditMode] = useState(false);
+  // `edit=1` opens the document in edit mode (SPEC.md §15: a blank document
+  // opens ready to write); viewers and transcripts never enter it.
+  const [editMode, setEditMode] = useState(
+    () => searchParams.get("edit") === "1" && canEdit && transcript === undefined && !embedded,
+  );
   const [bubble, setBubble] = useState<ExplainBubble | null>(null);
   const [busy, setBusy] = useState(false);
   const [simplifyCard, setSimplifyCard] = useState<SimplifyCard | null>(null);
@@ -1273,8 +1277,20 @@ export function ReaderInteractions({
   const logCardRef = useRef(logCard);
   logCardRef.current = logCard;
   const recognitionRef = useRef<SpeechRec | null>(null);
-  const editModeRef = useRef(false);
+  const editModeRef = useRef(editMode);
   editModeRef.current = editMode;
+  // Opened in edit mode: the caret lands in the first block once its editable
+  // mounts, so the reader can type at once.
+  useEffect(() => {
+    if (!editModeRef.current) return;
+    const frame = requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        const el = containerRef.current?.querySelector<HTMLElement>("[data-edit-block]");
+        el?.focus();
+      }),
+    );
+    return () => cancelAnimationFrame(frame);
+  }, []);
   const transcriptModeRef = useRef(false);
   transcriptModeRef.current = transcript !== undefined;
   const blocksRef = useRef(blocks);

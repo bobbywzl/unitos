@@ -71,6 +71,7 @@ export function AddDocumentDialog({
   error,
   onError,
   onSubmit,
+  onCreateBlank,
   fileAccept,
   projectTitle,
   onImportDrive,
@@ -90,6 +91,8 @@ export function AddDocumentDialog({
   onError: (message: string | null) => void;
   // The queue goes to the upload box.
   onSubmit: (request: UploadRequest) => void;
+  // A blank document (SPEC.md §15): created at once, opened in edit mode.
+  onCreateBlank: () => void;
   fileAccept: string;
   // A new project's title (SPEC.md §15): the current title and its default.
   // Set on a project with no document yet; the dialog shows a title field
@@ -370,6 +373,15 @@ export function AddDocumentDialog({
             )}
 
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-line pt-3">
+              <button
+                onClick={onCreateBlank}
+                data-track="add-blank"
+                data-tip={t("panes.blankDocumentTitle")}
+                disabled={busy}
+                className={smallButton}
+              >
+                {t("panes.blankDocument")}
+              </button>
               {onImportDrive && (
                 <button
                   onClick={() => void pickDrive()}

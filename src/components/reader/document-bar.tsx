@@ -285,6 +285,32 @@ export function DocumentBar({
     startOpening(() => router.push(`/n/${notebookId}?${params.toString()}`));
   }
 
+  // A blank document (SPEC.md §15): created with one empty paragraph and
+  // opened straight into edit mode (`edit=1`, reader-interactions.tsx), so
+  // the reader writes it here with the edit toolbar. No box: there is
+  // nothing to import or finish.
+  async function createBlank() {
+    if (isOffline()) {
+      setError(t("common.offlineReadOnly"));
+      return;
+    }
+    setError(null);
+    try {
+      const created = await api<{ id: string; title: string }>("/api/documents/blank", "POST", {
+        notebookId,
+        title: t("panes.untitledDocument"),
+      });
+      setDialog(false);
+      const params = new URLSearchParams();
+      params.set("doc", created.id);
+      params.set("edit", "1");
+      startOpening(() => router.push(`/n/${notebookId}?${params.toString()}`));
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t("common.requestFailed"));
+    }
+  }
+
   // A document just added opens with the reveal (reveal.tsx): the flag is
   // set before the open, the reader takes it on mount.
   function openAdded(docId: string) {
@@ -1047,6 +1073,7 @@ export function DocumentBar({
         error={error}
         onError={setError}
         onSubmit={openAssistant}
+        onCreateBlank={() => void createBlank()}
         fileAccept={UPLOAD_FILE_ACCEPT}
         projectTitle={
           documents.length === 0

@@ -818,10 +818,12 @@ export function BlockView({
       return <h3 data-block-id={block.id} className={`${shared} ${cls}`}>{content}</h3>;
     }
     case "PARAGRAPH":
+      // An empty paragraph (a blank document's first block, an inserted one
+      // left empty) keeps a line's height, so a double-click still finds it.
       return (
         <p
           data-block-id={block.id}
-          className={`${shared} ${layoutClass(layoutTokens(block.html), "my-4")} whitespace-pre-wrap`}
+          className={`${shared} ${layoutClass(layoutTokens(block.html), "my-4")} whitespace-pre-wrap${block.text ? "" : " min-h-[1.6em]"}`}
         >
           {content}
         </p>
