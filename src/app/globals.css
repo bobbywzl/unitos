@@ -2811,3 +2811,281 @@ li[data-checked] > .note-box::before {
     animation: nudge-ring-draw 3.2s linear infinite;
   }
 }
+
+/* Billing (SPEC.md §24): the plan page, the order page, the Stripe
+   hand-off overlay, and the confirmation page. Unitos Premium pages are
+   light: a cream ground, pearl cards. Unitos Ultra pages are night: a
+   starry ground, obsidian cards, gold text. The colors are fixed here, not
+   the theme's, so the pages read the same in light and dark mode. */
+.billing-light {
+  --bl-title: #2e2b25;
+  --bl-text: #474238;
+  --bl-muted: #645c50;
+  --bl-faint: #82796a;
+  --bl-line: #ece6da;
+  --bl-link: #8c491a;
+  --bl-track: rgb(32 30 29 / 0.06);
+  --bl-pill: #ffffff;
+  --bl-pill-shadow: 0 1px 4px rgb(0 0 0 / 0.1);
+  color: var(--bl-text);
+}
+.billing-night {
+  --bl-title: #f7ecd4;
+  --bl-text: #f3e9d2;
+  --bl-muted: rgb(243 233 210 / 0.75);
+  --bl-faint: rgb(243 233 210 / 0.6);
+  --bl-line: rgb(214 178 106 / 0.22);
+  --bl-link: #d6b26a;
+  --bl-track: rgb(243 233 210 / 0.08);
+  --bl-pill: rgb(243 233 210 / 0.16);
+  --bl-pill-shadow: none;
+  color: var(--bl-text);
+}
+.billing-ground-light {
+  background: linear-gradient(180deg, #f5ead8 0%, #fbf6ec 45%, #ffffff 100%);
+}
+.billing-ground-night {
+  background: radial-gradient(120% 80% at 50% 0%, #2a2318 0%, #171410 45%, #0b0a08 100%);
+}
+/* Two star layers, each a repeating tile of dots that breathe out of phase. */
+.billing-stars-a {
+  background-repeat: repeat;
+  background-size: 420px 380px;
+  background-image:
+    radial-gradient(1.4px 1.4px at 22px 34px, #fff 60%, transparent 62%),
+    radial-gradient(1px 1px at 130px 88px, #f3e6c4 60%, transparent 62%),
+    radial-gradient(1.6px 1.6px at 260px 40px, #fff 60%, transparent 62%),
+    radial-gradient(1px 1px at 340px 200px, #d6b26a 60%, transparent 62%),
+    radial-gradient(1.2px 1.2px at 60px 280px, #fff 60%, transparent 62%),
+    radial-gradient(1px 1px at 200px 330px, #f3e6c4 60%, transparent 62%),
+    radial-gradient(1.8px 1.8px at 390px 300px, #fff 60%, transparent 62%);
+}
+.billing-stars-b {
+  background-repeat: repeat;
+  background-size: 560px 470px;
+  background-image:
+    radial-gradient(1px 1px at 80px 120px, #fff 60%, transparent 62%),
+    radial-gradient(1.5px 1.5px at 420px 60px, #f3e6c4 60%, transparent 62%),
+    radial-gradient(1px 1px at 300px 400px, #fff 60%, transparent 62%),
+    radial-gradient(1.2px 1.2px at 500px 260px, #d6b26a 60%, transparent 62%),
+    radial-gradient(1px 1px at 160px 440px, #fff 60%, transparent 62%);
+}
+.billing-stars-card-a {
+  background-repeat: repeat;
+  background-size: 240px 220px;
+  background-image:
+    radial-gradient(1.3px 1.3px at 20px 30px, #fff 60%, transparent 62%),
+    radial-gradient(1px 1px at 120px 80px, #f3e6c4 60%, transparent 62%),
+    radial-gradient(1.5px 1.5px at 200px 40px, #fff 60%, transparent 62%),
+    radial-gradient(1px 1px at 170px 170px, #d6b26a 60%, transparent 62%),
+    radial-gradient(1.2px 1.2px at 60px 190px, #fff 60%, transparent 62%);
+}
+.billing-stars-card-b {
+  background-repeat: repeat;
+  background-size: 330px 290px;
+  background-image:
+    radial-gradient(1px 1px at 90px 130px, #fff 60%, transparent 62%),
+    radial-gradient(1.4px 1.4px at 260px 60px, #f3e6c4 60%, transparent 62%),
+    radial-gradient(1px 1px at 300px 240px, #fff 60%, transparent 62%);
+}
+/* The cards: the tier's material (tier-card-*) with a deeper shadow. */
+.billing-card-premium {
+  box-shadow:
+    inset 0 0 0 1px rgb(255 255 255 / 0.9),
+    0 0 0 1px rgb(192 182 165 / 0.6),
+    0 12px 30px rgb(120 90 50 / 0.12);
+}
+.billing-card-ultra {
+  box-shadow:
+    inset 0 0 0 1px rgb(214 178 106 / 0.45),
+    0 0 0 1px rgb(214 178 106 / 0.2),
+    0 12px 30px rgb(0 0 0 / 0.3);
+}
+/* The order sheet beside the card. */
+.billing-sheet-light {
+  background: #ffffff;
+  box-shadow:
+    0 0 0 1px rgb(192 182 165 / 0.5),
+    0 12px 30px rgb(120 90 50 / 0.1);
+}
+.billing-sheet-night {
+  background: rgb(243 233 210 / 0.06);
+  box-shadow:
+    inset 0 0 0 1px rgb(214 178 106 / 0.3),
+    0 12px 30px rgb(0 0 0 / 0.35);
+  backdrop-filter: blur(6px);
+}
+/* The buttons: clay for Unitos Premium, gold for Unitos Ultra. */
+.billing-btn-clay {
+  background: #c67139;
+  color: #ffffff;
+  box-shadow: 0 10px 24px rgb(198 113 57 / 0.3);
+}
+.billing-btn-clay:hover {
+  background: #b2622d;
+  color: #ffffff;
+}
+.billing-btn-gold {
+  background: linear-gradient(140deg, #f3e6c4, #d6b26a);
+  color: #17150f;
+  box-shadow: 0 10px 24px rgb(214 178 106 / 0.25);
+}
+.billing-btn-gold:hover {
+  background: linear-gradient(140deg, #fff3d6, #e2c07c);
+  color: #17150f;
+}
+/* Gold text: a sheen runs along the letters. */
+.billing-gold {
+  background: linear-gradient(100deg, #8a5a10 0%, #c9962c 22%, #f3dc9a 42%, #d9a83a 55%, #f7e6b4 70%, #b8893a 100%);
+  background-size: 260% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 2px 0 rgb(120 80 10 / 0.35)) drop-shadow(0 8px 18px rgb(214 178 106 / 0.35));
+}
+.billing-gold-big {
+  background: linear-gradient(100deg, #8a5a10 0%, #d9a83a 18%, #fff1b8 36%, #e2b243 50%, #fff5c8 64%, #d9a83a 82%, #8a5a10 100%);
+  background-size: 260% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 3px 0 rgb(120 80 10 / 0.28)) drop-shadow(0 14px 30px rgb(214 178 106 / 0.45));
+}
+/* The Stripe hand-off overlay: the page dims, a white card says Stripe is
+   opening, a ring spins until the browser leaves. */
+.billing-overlay {
+  background: rgb(20 18 13 / 0.55);
+  backdrop-filter: blur(8px);
+}
+.billing-overlay-card {
+  background: #ffffff;
+  box-shadow: 0 30px 80px rgb(0 0 0 / 0.35);
+}
+.billing-spinner {
+  border: 3px solid #f3efe7;
+  border-top-color: #c67139;
+  animation: billing-spin 0.9s linear infinite;
+}
+@keyframes billing-float {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) rotate(-4deg);
+  }
+  50% {
+    transform: translate3d(0, -14px, 0) rotate(2deg);
+  }
+}
+@keyframes billing-star-a {
+  0%,
+  100% {
+    opacity: 0.25;
+  }
+  50% {
+    opacity: 0.95;
+  }
+}
+@keyframes billing-star-b {
+  0%,
+  100% {
+    opacity: 0.9;
+  }
+  50% {
+    opacity: 0.15;
+  }
+}
+@keyframes billing-drift {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(-1.5%, -1%, 0);
+  }
+}
+@keyframes billing-rise {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes billing-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes billing-spark {
+  0%,
+  100% {
+    opacity: 0.05;
+    transform: scale(0.3);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+@keyframes billing-gold {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -60% 0;
+  }
+}
+@keyframes billing-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.7);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.06);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .billing-rise {
+    animation: billing-rise 0.7s ease both;
+  }
+  .billing-ground-night {
+    animation: billing-rise 0.8s ease both;
+  }
+  .billing-float {
+    animation: billing-float 9s ease-in-out infinite;
+  }
+  .billing-float-slow {
+    animation: billing-float 12s ease-in-out infinite;
+  }
+  .billing-stars-a {
+    animation:
+      billing-star-a 3.6s ease-in-out infinite,
+      billing-drift 90s linear infinite alternate;
+  }
+  .billing-stars-b {
+    animation: billing-star-b 5.2s ease-in-out infinite;
+  }
+  .billing-stars-card-a {
+    animation: billing-star-a 3.8s ease-in-out infinite;
+  }
+  .billing-stars-card-b {
+    animation: billing-star-b 5.4s ease-in-out infinite;
+  }
+  .billing-gold,
+  .billing-gold-big {
+    animation: billing-gold 3.4s linear infinite;
+  }
+  .billing-spark {
+    animation: billing-spark 2.6s ease-in-out infinite;
+  }
+  .billing-pop {
+    animation: billing-pop 0.9s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  }
+  .billing-overlay {
+    animation: billing-rise 0.3s ease both;
+  }
+}

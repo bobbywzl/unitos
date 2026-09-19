@@ -57,10 +57,35 @@ export function priceLine(t: TFunc, lang: Lang, price: PlanPrice): string {
     : t("billing.priceIntervalN", { price: money, n: price.intervalCount, interval });
 }
 
-/** The renewal line on the order page. */
-export function renewsLine(t: TFunc, price: PlanPrice): string {
+/** The interval as "every …" reads it: "month", "year", "3 months". */
+export function everyInterval(t: TFunc, price: PlanPrice): string {
   const interval = t(intervalKey(price.interval));
-  return price.intervalCount === 1
-    ? t("billing.orderRenews", { interval })
-    : t("billing.orderRenewsN", { n: price.intervalCount, interval });
+  return price.intervalCount === 1 ? interval : t("billing.intervalN", { n: price.intervalCount, interval });
+}
+
+/** How many months one period of the price covers; null for a daily or
+    weekly price, which no page divides down to a month. */
+function monthsOf(price: PlanPrice): number | null {
+  if (price.interval === "year") return 12 * price.intervalCount;
+  if (price.interval === "month") return price.intervalCount;
+  return null;
+}
+
+/** The price as a monthly rate, in minor units: a yearly price divided by
+    twelve. null when the price is unset or not monthly or yearly. */
+export function perMonth(price: PlanPrice): number | null {
+  const months = monthsOf(price);
+  if (price.amount === null || months === null) return null;
+  return Math.round(price.amount / months);
+}
+
+/** The yearly saving against twelve months at the monthly price, as a whole
+    percent, floored so the badge never claims more than it delivers. null
+    when either price is missing or the monthly price is free. */
+export function savingsPercent(month: PlanPrice, year: PlanPrice): number | null {
+  const monthly = perMonth(month);
+  const yearly = perMonth(year);
+  if (monthly === null || yearly === null || monthly <= 0) return null;
+  const percent = Math.floor((1 - yearly / monthly) * 100);
+  return percent > 0 ? percent : null;
 }
