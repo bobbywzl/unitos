@@ -14,6 +14,7 @@
 - `src/components/billing/plan-choice.tsx`, `src/lib/i18n/dict/billing.ts` — during the beta the state line says first that the tier chosen takes effect when the beta ends.
 - `src/app/admin/billing/page.tsx` — a `BETA` row above the Stripe values.
 - `src/app/billing/confirmed/page.tsx`, `src/middleware.ts` — without a session id the confirmation page says there is no order to confirm and points at the plans page; that state is public, so the URL an ads tool checks answers 200.
+- `scripts/stripe-setup.mjs` — configures a Stripe account by API, idempotently: products, prices, the webhook endpoint, the customer portal; prints the env lines. Tested against a sandbox with a trial checkout, a paid checkout, a refund, and a cancellation, all through the webhook.
 
 **Decisions:**
 - Tax is behind its own flag, not tied to the billing switch: `automatic_tax` on an account without Stripe Tax active makes Checkout fail, and on an account without registrations it collects nothing silently. The operator turns it on after the Dashboard setup.
