@@ -157,13 +157,22 @@ export function NoteCard({
   // An annotation dragged out of the Annotations tab, or off its card over the
   // article, lands here: dropped on the note it is copied in — its text into
   // the note, its anchors as sources — and it stays painted in the article
-  // (SPEC.md §6). A note the reader cannot edit, and one not accepted yet,
-  // take no drop: the merge is for the notes being kept.
+  // (SPEC.md §6). A highlight held in the reader's text lands as a quote at
+  // the end of the note, its anchor a source (lib/card-drag.ts). A note the
+  // reader cannot edit, and one not accepted yet, take no drop: the merge is
+  // for the notes being kept.
   const takesDrop = canEdit && note.status === "ACCEPTED" && !floating;
   async function takeDrop(end: CardDragEndDetail) {
     if (!takesDrop) return;
     try {
-      await actions.mergeNotes(note.id, end.drag.ids, "join");
+      const { drag } = end;
+      if (drag.kind === "quote") {
+        if (!drag.quote) return;
+        await addToNote(quoteMarkdown(drag.quote.text));
+        await actions.attachSource(note.id, drag.quote);
+        return;
+      }
+      await actions.mergeNotes(note.id, drag.ids, "join");
     } catch (err) {
       setDropError(err instanceof Error ? err.message : t("common.requestFailed"));
     }
@@ -612,7 +621,13 @@ export function NoteCard({
       data-tip={
         dropTip ??
         (cardDrop.over
-          ? t(cardDrop.drag?.kind === "annotation" ? "outline.dropAnnotation" : "outline.dropNote")
+          ? t(
+              cardDrop.drag?.kind === "annotation"
+                ? "outline.dropAnnotation"
+                : cardDrop.drag?.kind === "quote"
+                  ? "outline.dropQuoteIntoNote"
+                  : "outline.dropNote",
+            )
           : isMergeTarget
             ? t("outline.holdToMerge")
             : draggable

@@ -109,7 +109,9 @@ import { PANE_HEADER } from "@/components/reader/reader-panes";
 import type { FigureRenderInfo } from "@/components/reader/figure-capture";
 import { Reader, type TranscriptVariant } from "@/components/reader/reader";
 import { openVisualization } from "@/components/reader/visualization-viewer";
-import { setQuoteDragImage, writeQuoteDrag } from "@/lib/quote-drag";
+import { setQuoteDragImage, writeQuoteDrag, type QuoteDrag } from "@/lib/quote-drag";
+import { startCardDrag } from "@/lib/card-drag";
+import { watchHold } from "@/lib/hold-drag";
 
 // One block's span of a selection (SPEC.md §5).
 type Segment = Omit<SourceInput, "documentId">;
@@ -1718,6 +1720,9 @@ export function ReaderInteractions({
       cw,
     };
   }, []);
+  // Read by the drag-start handler below, a mount-time effect with no deps.
+  const captureSelectionRef = useRef(captureSelection);
+  captureSelectionRef.current = captureSelection;
 
   // Escape closes the popover and bubbles first; with nothing open it leaves
   // edit mode, saving unsaved typing on the way out.
@@ -2232,10 +2237,13 @@ export function ReaderInteractions({
       }
       // A drag that starts on the selection carries the passage as a quote
       // (lib/quote-drag.ts): let go in a note, it lands there as a quote
-      // with the same source Add to notes gives it, pointing back here.
-      const anchor = popoverRef.current?.anchor;
+      // with the same source Add to notes gives it, pointing back here. The
+      // toolbar's anchor when it is open, else the selection read now: the
+      // drag never waits on the toolbar.
       const sel = window.getSelection();
-      if (!anchor || !e.dataTransfer || !sel || sel.isCollapsed) return;
+      if (!e.dataTransfer || !sel || sel.isCollapsed) return;
+      const anchor = popoverRef.current?.anchor ?? captureSelectionRef.current()?.anchor;
+      if (!anchor) return;
       const docId = documentIdRef.current;
       const segments = segmentsOf(anchor).map((segment) => ({ documentId: docId, ...anchorBody(segment) }));
       const text = passageText(anchor);
@@ -2365,6 +2373,53 @@ export function ReaderInteractions({
     }
     return null;
   }, []);
+
+  // A hold on a highlight in the text lifts its passage (SPEC.md §6,
+  // lib/card-drag.ts): the pointer stays on the mark for HOLD_MS, the quote
+  // follows the pointer as a ghost, and let go on a note — a note card of
+  // the tray, or the floating card — it lands there as a quote, the mark's
+  // anchor its source. A press that moves first is a selection, as ever, and
+  // a shorter press is the click that opens the annotation. The article
+  // stops selecting while the ghost is out: the press already started a
+  // selection, and it would otherwise grow under the pointer.
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const onDown = (e: PointerEvent) => {
+      if (e.button !== 0 || !canEditRef.current || editModeRef.current) return;
+      const mark = (e.target as Element | null)?.closest<HTMLElement>("mark[data-source-id]");
+      if (!mark || !container.contains(mark)) return;
+      const sourceId = mark.dataset.sourceId;
+      if (!sourceId) return;
+      watchHold(
+        e,
+        (at) => {
+          const anchor = anchorOfSource(sourceId);
+          if (!anchor) return;
+          const docId = documentIdRef.current;
+          const segments = segmentsOf(anchor).map((segment) => ({ documentId: docId, ...anchorBody(segment) }));
+          const text = passageText(anchor);
+          if (!text.trim()) return;
+          const quote: QuoteDrag = {
+            source: segments[0],
+            ...(segments.length > 1 ? { segments } : {}),
+            text,
+          };
+          document.body.style.userSelect = "none";
+          startCardDrag(
+            { clientX: at.x, clientY: at.y },
+            { kind: "quote", ids: [], label: `❝ ${clipWords(text, 60)}`, quote },
+            () => {
+              document.body.style.userSelect = "";
+            },
+          );
+        },
+        { pull: false },
+      );
+    };
+    container.addEventListener("pointerdown", onDown);
+    return () => container.removeEventListener("pointerdown", onDown);
+  }, [anchorOfSource]);
 
   // The log card (SPEC.md §21): hovering a mark whose annotation holds a
   // conversation — an assistant conversation, or a tool's output continued
