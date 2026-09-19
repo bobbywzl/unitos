@@ -565,19 +565,67 @@ export function attachNoteEditable(
     paint(sel);
   }
 
+  /** The inline styles in effect at a source offset: the styles of the run
+      the offset is inside, or of the run whose markers it sits just inside
+      (right after its openers, right before its closers). */
+  function stylesAt(src: number): InlineStyle[] {
+    const line = lineAt(lines, src);
+    if (!line) return [];
+    for (const run of line.runs) {
+      if (isAtom(run)) continue;
+      const inside = src > run.src && src < run.src + run.srcLen;
+      const atOpen = src === run.src && run.openLen > 0;
+      const atClose = src === run.src + run.srcLen && run.closeLen > 0;
+      if (inside || atOpen || atClose) return run.styles;
+    }
+    return [];
+  }
+
+  /** The text before the caret with every run the caret is inside closed,
+      innermost first. A run with nothing before the caret loses its opener
+      instead: "<plum></plum>" would not parse and would show as text. Spaces
+      before the seam go: a marker never closes on a space. */
+  function closeRuns(head: string, styles: InlineStyle[]): string {
+    let out = head;
+    for (const style of [...styles].reverse()) {
+      const [open, close] = MARKERS[style];
+      out = out.replace(/[ \t]+$/, "");
+      if (out.endsWith(open)) out = out.slice(0, -open.length);
+      else out += close;
+    }
+    return out;
+  }
+
+  /** The text after the caret with every run the caret is inside reopened,
+      so the run goes on after the block. A run with nothing after the caret
+      loses its closer instead. */
+  function reopenRuns(tail: string, styles: InlineStyle[]): string {
+    let out = tail;
+    for (const style of [...styles].reverse()) {
+      const [open, close] = MARKERS[style];
+      out = out.replace(/^[ \t]+/, "");
+      if (out.startsWith(close)) out = out.slice(close.length);
+      else out = open + out;
+    }
+    return out;
+  }
+
   /** Markdown on its own line at the caret: a blank line before it when the
-      caret's line has text, and a fresh line after it to keep typing on. */
+      caret's line has text, and a fresh line after it to keep typing on. A
+      caret inside a styled run — colored text, bold — splits the run: the
+      run closes before the block and reopens after it, so no marker is left
+      open to show as text (a quote dropped into colored text). */
   function insertBlock(markdown: string) {
     el.focus({ preventScroll: true });
     const sel = currentSelection();
     const from = Math.min(sel.start, sel.end);
     const to = Math.max(sel.start, sel.end);
-    const before = text.slice(0, from);
-    const after = text.slice(to);
+    const before = closeRuns(text.slice(0, from), stylesAt(from));
+    const after = reopenRuns(text.slice(to), stylesAt(to));
     const lead = before === "" || before.endsWith("\n\n") ? "" : before.endsWith("\n") ? "\n" : "\n\n";
     const tail = after.startsWith("\n") ? "\n" : "\n\n";
     const insert = `${lead}${markdown}${tail}`;
-    const caret = from + lead.length + markdown.length + 1;
+    const caret = before.length + lead.length + markdown.length + 1;
     commit(before + insert + after, { start: caret, end: caret }, false);
   }
 
