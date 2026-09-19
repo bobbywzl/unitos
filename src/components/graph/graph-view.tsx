@@ -18,6 +18,8 @@ import ReactFlow, {
 } from "reactflow";
 import "reactflow/dist/style.css";
 import type { GraphEdge, GraphEdgeLink, GraphNode } from "@/lib/types";
+import { api } from "@/lib/api";
+import { useCollab } from "@/components/collab/collab-context";
 import { FilmIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { clipWords } from "@/lib/markdown-preview";
@@ -144,6 +146,29 @@ function LinkEdge({ id, source, target, sourceX, sourceY, targetX, targetY, data
   const { hover, pinnedEdgeId, hoverEdge, pinEdge, scheduleClear, openLink } = useContext(SpotlightContext);
   const t = useT();
   const [openId, setOpenId] = useState<string | null>(null);
+  // A recommended link accepted or dismissed from the list (SPEC.md §13):
+  // the row answers at once, and the refresh brings the graph's own data.
+  const { canEdit } = useCollab();
+  const router = useRouter();
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [accepted, setAccepted] = useState<Set<string>>(() => new Set());
+  const [dismissed, setDismissed] = useState<Set<string>>(() => new Set());
+  const [decideError, setDecideError] = useState<string | null>(null);
+  async function decide(linkId: string, accept: boolean) {
+    if (busyId) return;
+    setBusyId(linkId);
+    setDecideError(null);
+    try {
+      if (accept) await api(`/api/links/${linkId}`, "PATCH", { accept: true });
+      else await api(`/api/links/${linkId}`, "DELETE");
+      (accept ? setAccepted : setDismissed)((prev) => new Set(prev).add(linkId));
+      router.refresh();
+    } catch (err) {
+      setDecideError(err instanceof Error ? err.message : t("common.requestFailed"));
+    } finally {
+      setBusyId(null);
+    }
+  }
   const lit = hover?.nodeId ? source === hover.nodeId || target === hover.nodeId : hover?.edgeId === id;
   const spotlight: Spotlight = hover === null ? "base" : lit ? "lit" : "dim";
   const count = data?.count ?? 1;
@@ -207,8 +232,11 @@ function LinkEdge({ id, source, target, sourceX, sourceY, targetX, targetY, data
             <p className="px-2 pt-0.5 pb-1 text-[11px] font-bold tracking-[0.06em] text-sand-600 uppercase">
               {count === 1 ? t("panes.graphPairLinkOne") : t("panes.graphPairLinks", { count })}
             </p>
+            {decideError && <p className="px-2 text-[11px] text-red-500">{decideError}</p>}
             {links.map((l) => {
+              if (dismissed.has(l.id)) return null;
               const open = openId === l.id;
+              const recommended = l.recommended && !accepted.has(l.id);
               return (
                 <div key={l.id} className={open ? "rounded-xl bg-sand-100/70" : undefined}>
                   <button
@@ -230,12 +258,36 @@ function LinkEdge({ id, source, target, sourceX, sourceY, targetX, targetY, data
                     {!open && l.toQuotedText && (
                       <span className="text-[11px] leading-snug text-sand-500">{clipWords(l.toQuotedText, 60)}</span>
                     )}
-                    {l.recommended && (
-                      <span className="mt-0.5 rounded-full border border-dashed border-clay-300 px-2 text-[10.5px] font-semibold text-clay-700">
+                  </button>
+                  {recommended && (
+                    <div className="flex flex-wrap items-center gap-1.5 px-2 pb-1.5">
+                      <span className="rounded-full border border-dashed border-clay-300 px-2 text-[10.5px] font-semibold text-clay-700">
                         {t("panes.graphLinkRecommended")}
                       </span>
-                    )}
-                  </button>
+                      {canEdit && (
+                        <span className="ml-auto flex items-center gap-1.5">
+                          <button
+                            onClick={() => void decide(l.id, true)}
+                            data-track="link-accept"
+                            disabled={busyId !== null}
+                            data-tip={t("panes.acceptLinkTitle")}
+                            className="rounded-full bg-sage-600 px-2.5 py-0.5 text-[11px] font-semibold text-sage-fg hover:bg-sage-700 disabled:opacity-40"
+                          >
+                            {t("panes.acceptLink")}
+                          </button>
+                          <button
+                            onClick={() => void decide(l.id, false)}
+                            data-track="link-dismiss"
+                            disabled={busyId !== null}
+                            data-tip={t("panes.dismissLinkTitle")}
+                            className="rounded-full border border-line px-2 py-0.5 text-[11px] text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40"
+                          >
+                            {t("panes.dismissLink")}
+                          </button>
+                        </span>
+                      )}
+                    </div>
+                  )}
                   {open && (
                     <div className="px-2 pt-1 pb-2">
                       <LinkDetail link={l} onOpen={(documentId) => openLink(l, documentId)} />
