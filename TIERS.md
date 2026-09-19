@@ -96,6 +96,7 @@ Ultra when the account is not Ultra.
 | What | Unitos Premium, whole |
 | How long | Two months (`TRIAL_MONTHS`, `lib/tiers.ts`) |
 | After | Expired: offline changes do not save, images over 5 MB do not drop, until the operator grants a tier. A saved project's copy stays until sign out; new copies need Ultra |
+| At checkout | A subscription bought while the trial runs starts free and charges when the trial ends (SPEC.md §24, `lib/billing/trial.ts`): the order page says so, Stripe takes the card now. A trial that ends within two days charges at once (Stripe's floor) |
 
 ## Unitos Premium
 

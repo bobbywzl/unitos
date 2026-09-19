@@ -93,9 +93,10 @@ export async function applySubscription(sub: Stripe.Subscription): Promise<void>
 }
 
 /** Record a paid invoice as a Purchase and keep the tier on. Returns the
-    purchase id, or null when the invoice is not paid or names no account. */
+    purchase id, or null when the invoice is not paid, paid nothing (the
+    trial's first invoice; a receipt is one payment), or names no account. */
 export async function recordInvoice(invoice: Stripe.Invoice): Promise<string | null> {
-  if (invoice.status !== "paid") return null;
+  if (invoice.status !== "paid" || invoice.amount_paid === 0) return null;
   const details = invoice.parent?.subscription_details ?? null;
   const subscriptionId = idOf(details?.subscription);
   const line = invoice.lines.data[0];

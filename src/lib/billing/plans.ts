@@ -1,5 +1,6 @@
 import type { Tier } from "@prisma/client";
 import { INTERVALS, type Interval, priceEnvName, priceIdOf, stripeConfigured, TIERS } from "@/lib/billing/config";
+import { savingsPercent } from "@/lib/billing/format";
 import { stripe } from "@/lib/billing/stripe";
 
 // The plans (SPEC.md §24): what each tier sells at, at each interval, read
@@ -82,13 +83,9 @@ export async function plansReady(): Promise<boolean> {
   return (await plans()).every((p) => p.error === "" && p.amount !== null);
 }
 
-// The yearly saving against twelve months at the monthly price, as a whole
-// percent, floored so the badge never claims more than it delivers. null
-// when either price is missing or the monthly price is free.
+// The tier's yearly saving against twelve months at its monthly price
+// (format.ts savingsPercent): the badge on the Yearly toggle carries the
+// largest among the tiers.
 export async function yearlySavingsPercent(tier: Tier): Promise<number | null> {
-  const month = await planOf(tier, "month");
-  const year = await planOf(tier, "year");
-  if (month.amount === null || year.amount === null || month.amount <= 0) return null;
-  const percent = Math.floor((1 - year.amount / (month.amount * 12)) * 100);
-  return percent > 0 ? percent : null;
+  return savingsPercent(await planOf(tier, "month"), await planOf(tier, "year"));
 }
