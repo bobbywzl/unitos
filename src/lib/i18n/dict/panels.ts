@@ -19,9 +19,9 @@ const en = {
   notAttached: "not attached",
   // The conversation continued from the output (SPEC.md §21)
   conversation: "Conversation",
-  // Distill tab. Key names are code identifiers: keypoints* = the reader's
-  // Distill (KEYPOINTS), distill* = the reader's Extract (DISTILL).
-  distillNoDoc: "Open a text document to distill it or extract from it.",
+  // Extract tab. Key names are code identifiers: distill* = the reader's
+  // Extract (DISTILL).
+  distillNoDoc: "Open a text document to extract from it.",
   distillArticle: "Extract from the article",
   distillCorpusTitle: "One question; the AI scans every document in the project",
   distillButtonTitle: "Ask the article one question; the AI pulls the quotes that answer it",

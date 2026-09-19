@@ -212,7 +212,7 @@ export function DocumentBar({
   const [library, setLibrary] = useState<LibraryDocument[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   // Every error the bar shows also lands in the error log, on the open
-  // document: the reader lists them under Distill and Extract
+  // document: the reader lists them under Extract
   // (article-errors.tsx).
   useEffect(() => {
     if (error) reportError(error, activeId);

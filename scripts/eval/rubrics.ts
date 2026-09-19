@@ -37,17 +37,6 @@ export const RUBRICS: Record<string, Rubric> = {
       { key: "honest", ask: "When the document does not answer, or answers only a facet, does the output say so instead of pretending?" },
     ],
   },
-  keypoints: {
-    tool: "Distill (KEYPOINTS)",
-    what: "The document's core content as bullets: a reader who reads the bullets alone knows what it claims, found, how, and with what limits, with the document's own numbers.",
-    criteria: [
-      { key: "coverage", ask: "Do the bullets cover the whole document — main claim, findings with numbers, method or evidence, definitions, limits, conclusion — not just its opening?" },
-      { key: "claims", ask: "Does each bullet state the claim itself, never that a claim is made ('X buys the top ten points' not 'discusses X')?" },
-      { key: "numbers", ask: "Is every number that carries a finding kept, as printed?" },
-      { key: "order", ask: "Are the bullets in document order, one point each, with no framing, repetition, or aside?" },
-      { key: "no_judgment", ask: "Is there no judgment, advice, or conclusion the document does not state?" },
-    ],
-  },
   summarize: {
     tool: "Summarize",
     what: "A summary at the asked depth: the reader can say what the document found, with its numbers, and why it matters at that depth; nothing in it could be written without this document.",

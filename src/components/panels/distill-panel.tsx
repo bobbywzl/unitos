@@ -8,8 +8,7 @@ import { useLang, useT } from "@/components/lang-provider";
 // The Extract tab: every extraction (DISTILL, the reader's Extract) of the
 // open document, and the project's extractions, for reference. An extraction
 // row opens the extract page on that extraction; the buttons open the pages on
-// their run views. The pages themselves delete what they show. Distill lives
-// at the top of the article, not here.
+// their run views. The pages themselves delete what they show.
 export function DistillPanel({
   documentId,
   distillations,

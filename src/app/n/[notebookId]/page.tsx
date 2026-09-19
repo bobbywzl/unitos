@@ -21,12 +21,10 @@ import {
   corpusDistillationList,
   distillationList,
   extractionList,
-  keypointsStored,
   formalizedArticle,
   type AnnotationItem,
   type CorpusDistillationView,
   type DistillationView,
-  type KeypointsView,
   type EditItem,
   type ExtractionView,
   type HistoryEntry,
@@ -270,13 +268,13 @@ export default async function NotebookPage(props: {
       anchorHighlights[r.blockId] = list;
     }
 
-    // Stored summaries, distillations, extractions, keypoints, and the
+    // Stored summaries, distillations, extractions, and the
     // formalized article live on the attachment (SPEC.md §4).
     const attachment = notebook!.documents.find((d) => d.documentId === document.id);
     const summaries = (attachment?.summaries as SummaryLevels | null) ?? {};
     const formalized = formalizedArticle(attachment?.formalized ?? null);
 
-    // Stored distillation quotes, extraction spans, and keypoint spans heal at render with the
+    // Stored distillation quotes and extraction spans heal at render with the
     // anchor ladder (SPEC.md §5): exact offsets, the quote matcher within the
     // stored block, then across all blocks — a re-parse gives new block ids.
     const healSpan = <T extends { blockId: string; start: number; end: number; quotedText: string; prefix: string; suffix: string }>(
@@ -314,16 +312,6 @@ export default async function NotebookPage(props: {
       origin: healSpan(x.origin),
       spans: (x.spans ?? []).map(healSpan),
     }));
-    const storedKeypoints = keypointsStored(attachment?.keypoints);
-    const keypoints: KeypointsView | null = storedKeypoints
-      ? {
-          id: storedKeypoints.id,
-          createdAt: storedKeypoints.createdAt,
-          createdById: storedKeypoints.createdById,
-          points: storedKeypoints.points.map(healSpan),
-        }
-      : null;
-
     // Glossary hover terms: first occurrence per term per listed block. The
     // definition reads in the reader's language (SPEC.md §8 Phase 7). An entry
     // without one in it still underlines; "" leaves its hover at "Click for
@@ -854,7 +842,6 @@ export default async function NotebookPage(props: {
       summaries,
       distillations,
       extractions,
-      keypoints,
       anchorHighlights,
       annotations,
       annotationBubbles,
@@ -1097,7 +1084,6 @@ export default async function NotebookPage(props: {
   for (const pane of [paneOne, paneTwo]) {
     for (const d of pane?.distillations ?? []) if (d.createdById) authorIds.add(d.createdById);
     for (const x of pane?.extractions ?? []) if (x.createdById) authorIds.add(x.createdById);
-    if (pane?.keypoints?.createdById) authorIds.add(pane.keypoints.createdById);
     for (const link of [...(pane?.linksOut ?? []), ...(pane?.linksIn ?? [])]) {
       if (link.createdById) authorIds.add(link.createdById);
       for (const r of link.replies) authorIds.add(r.userId);
@@ -1137,7 +1123,6 @@ export default async function NotebookPage(props: {
     annotationBubbles: pane.annotationBubbles,
     distillations: pane.distillations,
     extractions: pane.extractions,
-    keypoints: pane.keypoints,
     termsByBlock: pane.termsByBlock,
     linksByBlock: pane.linksByBlock,
     editedByBlock: pane.editedByBlock,
@@ -1294,7 +1279,6 @@ export default async function NotebookPage(props: {
         (paneOne?.linksIn.filter((l) => !l.recommended).length ?? 0)
       }
       distillationCount={
-        (paneOne?.keypoints ? 1 : 0) +
         (paneOne?.distillations.length ?? 0) +
         corpusDistillations.length
       }

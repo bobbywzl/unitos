@@ -31,7 +31,6 @@ import { figureContent, figureVisual, renderFigurePage, type FigureImage } from 
 import {
   compareOutputSchema,
   distillOutputSchema,
-  keypointsOutputSchema,
   findOutputSchema,
   formalizeArticleSchema,
   formalizeNotesSchema,
@@ -67,7 +66,6 @@ import {
   type CorpusDistillation,
   type Distillation,
   type FormalizedArticle,
-  type Keypoints,
   type SummaryLevels,
 } from "@/lib/types";
 import { materializeArticle } from "@/lib/video/article-document";
@@ -96,7 +94,6 @@ const deriveSchema = z
     "SIMPLIFY",
     "SALIENCE",
     "DISTILL",
-    "KEYPOINTS",
     "SUMMARIZE",
     "FIND",
     "FORMALIZE",
@@ -232,36 +229,6 @@ function heartbeatResponse(
     },
   });
   return new Response(stream, { headers: { "Content-Type": "text/plain; charset=utf-8" } });
-}
-
-// The time one model call may take inside a request: the route's limit less
-// the margin the answer needs — resolving the spans, the write, the payload —
-// and the request's own cancellation folded in, so Cancel still stops the
-// call. spent() tells the two apart afterwards: the budget ran out, or the
-// reader closed the connection. Every caller calls done() when the call
-// returns, so the timer never outlives it.
-const DERIVE_MARGIN_SECONDS = 25;
-
-function deriveBudget(req: Request, maxDurationSeconds: number) {
-  const controller = new AbortController();
-  let timedOut = false;
-  const onAbort = () => controller.abort();
-  req.signal.addEventListener("abort", onAbort);
-  const timer = setTimeout(
-    () => {
-      timedOut = true;
-      controller.abort();
-    },
-    Math.max(30, maxDurationSeconds - DERIVE_MARGIN_SECONDS) * 1000,
-  );
-  return {
-    signal: controller.signal,
-    done: () => {
-      clearTimeout(timer);
-      req.signal.removeEventListener("abort", onAbort);
-    },
-    spent: () => timedOut,
-  };
 }
 
 // A failed JSON call throws with the reason; heartbeatResponse reports it.
@@ -1434,87 +1401,6 @@ async function handle(req: Request, t: TFunc) {
     return new Response(formalizeStream, {
       headers: { "Content-Type": "text/plain; charset=utf-8" },
     });
-  }
-
-  // KEYPOINTS — the reader's Distill: the article's most important points as
-  // bullets, each anchored to the span it comes from. Every span resolves
-  // against the real block text before anything persists (a point whose span
-  // does not resolve is dropped: a bullet with nothing behind it is a claim of
-  // the model's own). One distillation per attachment; Distill again
-  // overwrites. Points reach notes only through the page's "Add to notes",
-  // which lands them PENDING (SPEC.md §1). Runs behind the heartbeat stream.
-  if (data.type === "KEYPOINTS") {
-    return heartbeatResponse(
-      req,
-      async () => {
-        // The longest call the reader makes: the whole document read at once.
-        // Left alone it can outlive the request itself, and a request the
-        // platform kills mid-call answers with nothing at all — no points, no
-        // reason, the reader's "Distill did not finish". So the call carries
-        // the request's own budget (the same discipline the import's model
-        // passes keep, lib/parse/ingest.ts): it stops before the request does,
-        // and the reader is told what happened.
-        const budget = deriveBudget(req, maxDuration);
-        const started = Date.now();
-        let result;
-        try {
-          result = await callForJson({
-            model,
-            messages,
-            maxOutputTokens,
-            providerOptions: kimiOptions(effort),
-            schema: keypointsOutputSchema,
-            label: "KEYPOINTS",
-            usage: usageMeta,
-            abortSignal: budget.signal,
-          });
-        } finally {
-          budget.done();
-        }
-        console.log(`[derive] KEYPOINTS took ${Date.now() - started}ms`);
-        if (!result.ok) {
-          throw new DeriveFailure(budget.spent() ? t("api.keypointsOutOfTime") : result.error);
-        }
-        const orderByBlock = new Map(document.blocks.map((b, i) => [b.id, i]));
-        const points = result.data.points
-          .flatMap((p) => {
-            const span = resolveSpan(p, blockById);
-            const text = p.text.trim();
-            return span && text ? [{ ...span, text }] : [];
-          })
-          .sort(
-            (a, b) =>
-              (orderByBlock.get(a.blockId) ?? 0) - (orderByBlock.get(b.blockId) ?? 0) ||
-              a.start - b.start,
-          );
-        if (points.length === 0) throw new DeriveFailure(t("api.keypointsNoPoints"));
-        const keypoints: Keypoints = {
-          id: crypto.randomUUID(),
-          createdAt: new Date().toISOString(),
-          createdById: user.id,
-          points: points.map((p) => ({
-            text: p.text,
-            blockId: p.blockId,
-            start: p.start,
-            end: p.end,
-            quotedText: p.quotedText,
-            prefix: p.prefix,
-            suffix: p.suffix,
-          })),
-        };
-        // A cancelled run persists nothing; heartbeatResponse sends nothing either.
-        if (req.signal.aborted) throw new DeriveFailure("cancelled");
-        await db.notebookDocument.update({
-          where: {
-            notebookId_documentId: { notebookId: data.notebookId, documentId: documentId },
-          },
-          data: { keypoints },
-        });
-        await bumpNotebook(data.notebookId);
-        return { ok: true, keypoints };
-      },
-      (reason) => t("api.keypointsFailed", { reason }),
-    );
   }
 
   // DISTILL: question → the quotes that answer it. Every span resolves against

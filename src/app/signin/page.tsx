@@ -165,11 +165,6 @@ const FUNCTIONS: { key: TKey; sub: TKey; icon: React.ReactNode }[] = [
     icon: <path d="M5 7h14M8 12h8M10 17h4" />,
   },
   {
-    key: "signin.fnKeypoints",
-    sub: "signin.fnKeypointsSub",
-    icon: <path d="M4 4h16l-6 8v6l-4 2v-8L4 4Z" />,
-  },
-  {
     key: "signin.fnDistill",
     sub: "signin.fnDistillSub",
     icon: <path d="M10 7H6a2 2 0 0 0-2 2v3a2 2 0 0 0 2 2h2v2a2 2 0 0 1-2 2m14-11h-4a2 2 0 0 0-2 2v3a2 2 0 0 0 2 2h2v2a2 2 0 0 1-2 2" />,

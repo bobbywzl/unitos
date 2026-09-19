@@ -1,15 +1,13 @@
 // UI strings of the reader pane chrome (workspace, panes, document bar,
 // ingest, distilled page, extract page). zh glossary: dict/common.ts. Every
 // key exists in both languages — zh's type enforces it.
-// Key names are code identifiers: keypoints* = the reader's Distill
-// (KEYPOINTS), distill* = the reader's Extract (DISTILL), extract* = the
+// Key names are code identifiers: distill* = the reader's Extract (DISTILL), extract* = the
 // reader's Match-it (EXTRACT).
 
 const en = {
   // Workspace tabs and rail (workspace.tsx)
   notes: "Notes",
   assistant: "Assistant",
-  keypoints: "Distill",
   distill: "Extract",
   annotations: "Annotations",
   edits: "Edits",
@@ -238,12 +236,6 @@ const en = {
   uploadPageFailed: "{title} — {reason}",
   uploadAddedCount: "Added {n} documents.",
 
-  // Distilled page (keypoints-page.tsx)
-  keypointsArticle: "Distill the article",
-  keypointsHint:
-    "The AI reads the whole article, thinks through what it establishes, and writes its most important points as bullets. Each point jumps to the passage it comes from.",
-  keypointsAgain: "Distill again",
-  keypointsAgainTitle: "Distill the article again. The new points replace these.",
   distillAgainTitle: "Ask this question again. The new extraction replaces this one. {left} left: an extraction runs again at most twice.",
   distillAgainLimit: "This extraction ran again {n} times, the most an extraction runs again. Ask the question as a new extraction instead.",
   distillSelected: "{n} selected",
@@ -251,11 +243,6 @@ const en = {
   selectDistillationTitle: "Select this extraction; the selected extractions delete together",
   deleteSelectedDistillations: "Delete selected",
   deleteSelectedDistillationsTitle: "Delete the selected extractions",
-  deleteKeypoints: "Delete the distillation",
-  distillingArticle: "Reading the whole article for its most important points",
-  stopDistill: "Stop this run. The stored distillation stays.",
-  pointCount1: "{n} point",
-  pointCountN: "{n} points",
   // Extract page (distill-page.tsx)
   deleteDistillation: "Delete this extraction",
   scanningArticle: "Scanning the article for the quotes that answer it",
@@ -405,7 +392,6 @@ const en = {
 const zh: Record<keyof typeof en, string> = {
   notes: "笔记",
   assistant: "助手",
-  keypoints: "提炼",
   distill: "提取",
   annotations: "批注",
   edits: "编辑记录",
@@ -614,9 +600,6 @@ const zh: Record<keyof typeof en, string> = {
   uploadPageFailed: "{title} —— {reason}",
   uploadAddedCount: "已添加 {n} 个文档。",
 
-  keypointsArticle: "提炼文章",
-  keypointsHint: "AI 通读全文，想清楚它论证了什么，再把最重要的要点写成分条。每条要点都能跳到它所依据的片段。",
-  keypointsAgain: "重新提炼",
   distillAgainTitle: "重新提出这个问题。新的提取会替换当前这条。还剩 {left} 次：一条提取最多重新生成两次。",
   distillAgainLimit: "这条提取已重新生成 {n} 次，达到上限。请把问题作为新的提取再提一次。",
   distillSelected: "已选 {n} 条",
@@ -624,12 +607,6 @@ const zh: Record<keyof typeof en, string> = {
   selectDistillationTitle: "选择此提取；所选的提取一起删除",
   deleteSelectedDistillations: "删除所选",
   deleteSelectedDistillationsTitle: "删除所选的提取",
-  keypointsAgainTitle: "重新提炼文章。新的要点会替换这些。",
-  deleteKeypoints: "删除提炼",
-  distillingArticle: "正在通读全文，找出最重要的要点",
-  stopDistill: "停止本次运行。已保存的提炼保留。",
-  pointCount1: "{n} 条要点",
-  pointCountN: "{n} 条要点",
   deleteDistillation: "删除此提取",
   scanningArticle: "正在扫描文章，找出回答它的引文",
   stopScan: "停止扫描并编辑问题",

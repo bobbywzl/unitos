@@ -441,7 +441,7 @@ export function Workspace({
         });
       }, 150);
     };
-    // The Distill tab opens the corpus distilled page (SPEC.md §13).
+    // The Extract tab opens the corpus extract page (SPEC.md §13).
     const onOpenCorpusDistillation = (e: Event) => {
       const { distillationId } = (e as CustomEvent<{ distillationId: string | null }>).detail;
       setCorpusDistill({ shownId: distillationId });

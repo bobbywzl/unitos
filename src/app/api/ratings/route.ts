@@ -16,7 +16,6 @@ export const RATING_TOOLS = [
   "assistant",
   "act",
   "distill",
-  "keypoints",
   "summarize",
   "ask",
   "find",

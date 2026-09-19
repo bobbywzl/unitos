@@ -44,16 +44,10 @@ export const GEMINI_FLASH = "gemini-3.7-flash";
 // K3 and GLM 5.3 always reason and take the same three levels; "max" is the
 // default of both and the slowest. The reader's tools answer at "high";
 // ANALYZE reads a figure or table at "max": a misread number is worse than
-// a slow answer. KEYPOINTS
-// (the reader's Distill) reads the whole document at "low", the one tool that
-// does: a distillation is careful bullet pointing of what the document says,
-// not a problem to reason through. Kimi counts its reasoning against the
+// a slow answer. A reading of a whole document (the skeleton, the contents,
+// Stitch's select pass) runs at "low": Kimi counts its reasoning against the
 // output budget, and the budget is the clock — a call free to think for tens
 // of thousands of tokens takes minutes and outlives the request that made it.
-// At "max" a long document spent the budget thinking and the run failed with
-// no points; at "high" with a budget large enough to cover the thinking, the
-// run outran the request instead and the reader got nothing back at all.
-// Thinking short is what makes Distill answer.
 export type KimiEffort = "low" | "high" | "max";
 export const DEFAULT_EFFORT: KimiEffort = "high";
 
@@ -73,7 +67,6 @@ export const DERIVATION_MODEL: Record<DerivationType, string> = {
   SYNTHESIS: GLM_5_3,
   FIND: GLM_5_3_FLASH,
   DISTILL: GLM_5_3_FLASH,
-  KEYPOINTS: GLM_5_3_FLASH,
   FORMALIZE: GLM_5_3,
   ASK: GLM_5_3,
   COMPARE: GLM_5_3,
@@ -91,7 +84,6 @@ export const DERIVATION_EFFORT: Record<DerivationType, KimiEffort> = {
   SYNTHESIS: DEFAULT_EFFORT,
   FIND: DEFAULT_EFFORT,
   DISTILL: DEFAULT_EFFORT,
-  KEYPOINTS: "low",
   FORMALIZE: DEFAULT_EFFORT,
   ASK: DEFAULT_EFFORT,
   COMPARE: DEFAULT_EFFORT,
@@ -145,7 +137,6 @@ export const MAX_OUTPUT_TOKENS: Record<DerivationType, number> = {
   SYNTHESIS: 32768,
   FIND: 24576,
   DISTILL: 24576,
-  KEYPOINTS: 32768, // a long document's points, with room for the short reasoning before them
   FORMALIZE: 65536, // a long transcript's article is long
   ASK: 16384,
   COMPARE: 32768, // two documents' points, each with its spans
@@ -164,7 +155,7 @@ export const CONNECT_EFFORT: KimiEffort = DEFAULT_EFFORT;
 // Stitch (SPEC.md §22): the assistant over the project's documents, from the
 // graph. The documents are read through their skeletons (SKELETON_* below):
 // a select pass reads every skeleton and names the blocks the command needs
-// — ids only, at "low": a reading, the same as KEYPOINTS. Past
+// — ids only, at "low": a reading, not a problem to reason through. Past
 // STITCH_SKELETON_BUDGET of skeleton text a route pass at "low" reads the
 // gists and part summaries first and names the parts, and the select pass
 // reads only those parts' lines, ranked against the command when they
@@ -193,7 +184,7 @@ export const STITCH_DEADLINE_MS = 270_000;
 // Stitch — a gist, one summary per part of the contents, one line per
 // block that keeps every claim and number and drops the wording. Built in
 // the background after an add (lib/graph/skeleton.ts), one call per window
-// of SKELETON_WINDOW_CHARS at "low": a reading, like KEYPOINTS, and the
+// of SKELETON_WINDOW_CHARS at "low": a reading, and the
 // lines are copied more than composed, so GLM 5.3 Flash. Rebuilt when more than
 // SKELETON_STALE_FRACTION of the document's text has changed since; under
 // that the changed blocks read as their own first words, no model call.
@@ -206,7 +197,7 @@ export const SKELETON_STALE_MS = 10 * 60_000; // a build older than this is a de
 
 // The contents of a document (SPEC.md §26): the parts the reader jumps
 // between, each with the block it starts at. One call over the whole
-// document at "low", like KEYPOINTS: a reading of where the parts begin,
+// document at "low": a reading of where the parts begin,
 // not a problem to reason through, and a long document at "high" outran
 // the request.
 export const CONTENTS_MODEL = GLM_5_3_FLASH;

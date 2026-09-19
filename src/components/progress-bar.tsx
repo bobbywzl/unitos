@@ -1,7 +1,7 @@
 "use client";
 
 // Work in progress: a bottom-fixed bar, the same shape as every other
-// bottom-fixed status in the reader (the toast, the Distill composer). The
+// bottom-fixed status in the reader (the toast, the Extract composer). The
 // label says the stage, the title says what the work is on, and the fill is
 // driven by real steps landing — pages fetched, stages passed — never a
 // simulated timer, the rule the ingest progress card follows. Every

@@ -12,7 +12,6 @@ export type EvalTool =
   | "simplify"
   | "salience"
   | "distill"
-  | "keypoints"
   | "summarize"
   | "assistant"
   | "act"
@@ -74,11 +73,6 @@ export const CASES: EvalCase[] = [
   { id: "distill-news-dissent", tool: "distill", fixture: "news-rate-decision", lang: "en", profile: null, question: "Why did the two dissenters want to cut now?", expect: "Unemployment up to 4.4% from 3.9%, job openings down 22%, waiting means easing too late." },
   { id: "distill-zh-who-gains", tool: "distill", fixture: "zh-platform-fees", lang: "zh", profile: null, question: "降低抽成率后谁受益、谁受损？", expect: "头部商家受益（订单量只降 3%），长尾商家受损（订单量降 18%）。" },
   { id: "distill-essay-unanswered", tool: "distill", fixture: "essay-slow-reading", lang: "en", profile: null, question: "What reading speed in words per minute does the author recommend?", expect: "The document gives no words-per-minute figure; the answer must say so." },
-  // ── Distill (KEYPOINTS) ──
-  { id: "keypoints-paper", tool: "keypoints", fixture: "paper-sparse-routing", lang: "en", profile: ML_ENGINEER },
-  { id: "keypoints-memo", tool: "keypoints", fixture: "report-earnings-memo", lang: "en", profile: NOVICE },
-  { id: "keypoints-docs", tool: "keypoints", fixture: "docs-rate-limiting", lang: "en", profile: null },
-  { id: "keypoints-zh", tool: "keypoints", fixture: "zh-platform-fees", lang: "zh", profile: null },
   // ── Summarize ──
   { id: "summarize-paper-layman", tool: "summarize", fixture: "paper-sparse-routing", lang: "en", profile: NOVICE, depth: "layman" },
   { id: "summarize-memo-professional", tool: "summarize", fixture: "report-earnings-memo", lang: "en", profile: ANALYST, depth: "professional" },

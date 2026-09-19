@@ -98,8 +98,6 @@ const en = {
   fnHighlightSub: "Highlight a passage, comment in the margin.",
   fnSimplify: "Simplify",
   fnSimplifySub: "Select a passage — rewritten in plain words, in place.",
-  fnKeypoints: "Distill",
-  fnKeypointsSub: "The whole document as bullet points; each one anchored to its passage.",
   fnDistill: "Extract",
   fnDistillSub: "One question to the document; the quotes that answer it.",
 
@@ -214,8 +212,6 @@ const zh: Record<keyof typeof en, string> = {
   fnHighlightSub: "高亮一个片段，在页边评论。",
   fnSimplify: "简化",
   fnSimplifySub: "选中一段——用通俗的话就地重写。",
-  fnKeypoints: "提炼",
-  fnKeypointsSub: "整篇文档写成分条要点，每条锚定到它的片段。",
   fnDistill: "提取",
   fnDistillSub: "向文档问一个问题，得到回答它的引文。",
 

@@ -63,9 +63,7 @@ const CLICK_FUNCTIONS: Record<ClickGroup, readonly string[]> = {
     "assistant-regenerate",
     // the rating of a tool's output: rate:<tool>:up, rate:<tool>:down, rate:<tool>:comment
     "rate:",
-    // distill (keypoints) and extract (distill) runs
-    "keypoints-page-run",
-    "keypoints-page-regenerate",
+    // extract (distill) runs
     "distill-page-run",
     "distill-corpus-run",
     // handwritten pages
@@ -124,7 +122,6 @@ const CLICK_FUNCTIONS: Record<ClickGroup, readonly string[]> = {
     // notes made from elsewhere
     "add-to-notes",
     "add-to-notes-section",
-    "keypoints-page-add-to-notes",
     "distill-page-add-to-notes",
     "distill-corpus-add-to-notes",
     "video-find-add-note",

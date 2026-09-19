@@ -25,7 +25,6 @@ const TOOL_OF: Record<string, EvalTool | null> = {
   assistant: "assistant",
   act: "act",
   distill: "distill",
-  keypoints: "keypoints",
   summarize: "summarize",
   ask: "ask",
   find: "find",
@@ -70,7 +69,7 @@ async function main() {
     const [firstLine, ...rest] = row.input.split("\n\n");
     const blockIndex = document.blocks.findIndex((b) => firstLine && b.text.includes(firstLine.slice(0, 80)));
     const selection = blockIndex >= 0 ? { block: blockIndex + 1, text: firstLine.slice(0, 200) } : undefined;
-    const question = tool === "simplify" || tool === "keypoints" || tool === "summarize" ? undefined : rest.join("\n\n") || (selection ? undefined : firstLine);
+    const question = tool === "simplify" || tool === "summarize" ? undefined : rest.join("\n\n") || (selection ? undefined : firstLine);
     cases.push({
       id: name,
       tool,

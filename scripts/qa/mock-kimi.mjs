@@ -227,17 +227,6 @@ function buildResponse(all) {
     });
   }
 
-  // KEYPOINTS (the reader's Distill): one point per paragraph, in order.
-  if (all.includes('"points"') && all.includes("distilled")) {
-    const points = paragraphs.slice(0, 6).map((b) => ({
-      text: `Mock point: ${b.text.slice(0, 50).trim()}.`,
-      blockId: b.id,
-      start: 0,
-      end: Math.min(90, b.text.length),
-    }));
-    return JSON.stringify({ points });
-  }
-
   // FIND (SPEC.md §11): the first two transcript blocks as one match.
   if (all.includes('"blockIds"') && all.includes("Their search:")) {
     const timed = blocks.filter((b) => b.type === "TRANSCRIPT").slice(0, 2);

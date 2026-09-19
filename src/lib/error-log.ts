@@ -5,7 +5,7 @@ import { useSyncExternalStore } from "react";
 // The error log: every error the workspace shows since the page opened, so a
 // notice that came and went is still readable. Producers call reportError
 // with the document the error is about; the reader lists that document's
-// entries under its Distill and Extract buttons (article-errors.tsx), and
+// entries under its Extract button (article-errors.tsx), and
 // Dismiss there drops them. Module state: one log per tab, shared by every
 // component.
 

@@ -39,9 +39,9 @@ const en = {
   nudgeDocument: "Add more documents with +: a PDF, a web page, a video, or Google Drive.",
   nudgeSelect: "Select any passage of the text. A toolbar appears: the Assistant, Simplify, Comment, and colors.",
   nudgeRail:
-    "The side panel: Assistant, Graph, Notes, Annotations, Distill, Edit history. Open one and explore.",
+    "The side panel: Assistant, Graph, Notes, Annotations, Extract, Edit history. Open one and explore.",
   nudgeTools:
-    "Distill writes the article as bullet points. Extract answers one question with quotes. Contents, top left, jumps to any part of the article.",
+    "Extract answers one question with quotes. Contents, top left, jumps to any part of the article.",
   nudgeMerge: "Hold a note over another note until the ring closes. The two join into one note.",
   nudgeFloat: "Hold a note and drag it onto the article. The note floats there while you read.",
   nudgeFullPage: "The four arrows open the notes full page: every note of the project, and each section as a board.",
@@ -72,16 +72,11 @@ const en = {
   // Guide dialog
   guideLabel: "Guide",
   guideTitle: "How to dissect a document",
-  guideKeypointsHeader: "Distill — the article as bullet points",
-  guideKeypointsBody:
-    "Press Distill at the top right. The AI reads the whole document, thinks through what it establishes, and opens the distilled page: its most important points as bullets, in document order, each anchored to the passage it comes from.",
-  guideKeypointsNotesBody:
-    "Click a point to jump to its passage. Add to notes files a point as a pending note. Distill again replaces the points.",
   guideDistillHeader: "Extract — ask the article one question",
   guideDistillBody:
     "Press Extract at the top right and ask one question. The AI scans the whole document and opens the extract page: your question at the top, under it the quotes that answer it, each with a caption saying how it answers the question.",
   guideDistillNotesBody:
-    "Click a quote to jump to its exact words. Add to notes files a quote as a pending note. The Distill tab in the side panel lists the distillation and every extraction of the open document.",
+    "Click a quote to jump to its exact words. Add to notes files a quote as a pending note. The Extract tab in the side panel lists every extraction of the open document.",
   guideCircleHeader: "Circle & ask — draw on anything",
   guideCircleBody:
     "Hold and circle any part of a figure or equation. The Assistant reads the visual and answers; Analyze reads a figure or table in three sections; a color marks it; Comment and Link work as on text.",
@@ -107,13 +102,13 @@ const en = {
   guideVoice: "Voice",
   guideVoiceBody:
     "The round bubble under the tools reads the selection aloud, Chinese and English alike. Press it again to stop.",
-  guideDistill: "Distill",
+  guideDistill: "Extract",
   guidePanelHeader: "Side panel",
   guidePanelNotesBody:
     "Your sections and the pending queue. Hold a note to pick it up and drag it; a line says where it lands. Hold it over another note: a ring draws around that note, and at the full ring the two join into one note. Drop a note on the article to float it there. Select notes with the circle at their top right to merge, pin, or delete them together.",
   guidePanelAssistantBody:
     "Ask questions at document, project, or projects scope, and run checks (contradictions, gaps).",
-  guidePanelDistillBody: "The distillation and every extraction of the open document; open one to read it.",
+  guidePanelDistillBody: "Every extraction of the open document; open one to read it.",
   guidePanelSummary: "Summary",
   guidePanelSummaryBody:
     "The whole document summarized at the depth you pick: layman, intermediate, or professional. Each depth is kept once generated.",
@@ -196,8 +191,8 @@ const zh: Record<keyof typeof en, string> = {
   nudgeProject: "从这里开始：按“新建项目”。一个项目绑定文档和笔记。",
   nudgeDocument: "用 + 添加更多文档：PDF、网页、视频或 Google Drive。",
   nudgeSelect: "选中正文中的任意一段。工具栏随即出现：助手、简化、评论和颜色。",
-  nudgeRail: "侧栏：助手、图谱、笔记、批注、提炼、编辑记录。打开一个，开始探索。",
-  nudgeTools: "提炼把文章写成分条要点。提取用引文回答一个问题。左上角的目录可跳转到文章的任何部分。",
+  nudgeRail: "侧栏：助手、图谱、笔记、批注、提取、编辑记录。打开一个，开始探索。",
+  nudgeTools: "提取用引文回答一个问题。左上角的目录可跳转到文章的任何部分。",
   nudgeMerge: "把一条笔记压在另一条上按住，直到合并环合拢。两条会合并成一条。",
   nudgeFloat: "按住一条笔记，拖到文章上。笔记会浮在文章上，边读边写。",
   nudgeFullPage: "四向箭头打开整页笔记：项目的每条笔记，以及每个章节的看板。",
@@ -222,15 +217,11 @@ const zh: Record<keyof typeof en, string> = {
   nudgeDone: "知道了",
   guideLabel: "指南",
   guideTitle: "如何拆解一篇文档",
-  guideKeypointsHeader: "提炼——把文章写成分条要点",
-  guideKeypointsBody:
-    "按右上角的“提炼”。AI 通读整篇文档，想清楚它论证了什么，然后打开提炼页：最重要的要点按文中顺序分条列出，每条锚定到它所依据的片段。",
-  guideKeypointsNotesBody: "点击要点可跳到它的片段。“添加到笔记”把一条要点存为待定笔记。“重新提炼”会替换这些要点。",
   guideDistillHeader: "提取——向文章提出一个问题",
   guideDistillBody:
     "按右上角的“提取”，提出一个问题。AI 扫描整篇文档并打开提取页：你的问题居顶，下方是回答它的引文，每条配有说明，讲它如何回答问题。",
   guideDistillNotesBody:
-    "点击引文可跳到它的原文字句。“添加到笔记”把一条引文存为待定笔记。侧栏的“提炼”页签列出当前文档的提炼和每次提取。",
+    "点击引文可跳到它的原文字句。“添加到笔记”把一条引文存为待定笔记。侧栏的“提取”页签列出当前文档的每次提取。",
   guideCircleHeader: "圈选并提问——在任何内容上画圈",
   guideCircleBody:
     "按住并在插图或公式的任意部分画圈。助手解读图像并回答；“分析”分三段解读插图或表格；颜色标记它；“评论”和“链接”与文本上相同。",
@@ -253,12 +244,12 @@ const zh: Record<keyof typeof en, string> = {
   guideLinkBody: "把这段文字与本文档或另一份文档中的片段连起来。选中另一端并按“链接到此”。",
   guideVoice: "语音",
   guideVoiceBody: "工具下方的圆形气泡朗读选中内容，中英文皆可。再按一次即停止。",
-  guideDistill: "提炼",
+  guideDistill: "提取",
   guidePanelHeader: "侧栏",
   guidePanelNotesBody:
     "你的章节和待定队列。按住一条笔记即可拿起并拖动；落位线说明它会落在哪里。把它压在另一条笔记上按住：那条笔记周围会画出合并环，合拢时两条合并为一条。把笔记放到文章上即浮动。用笔记右上角的圆圈选中笔记，可一起合并、置顶或删除。",
   guidePanelAssistantBody: "在文档、项目或全部项目范围提问，并运行检查（矛盾、疏漏）。",
-  guidePanelDistillBody: "当前文档的提炼和每次提取；打开一条即可阅读。",
+  guidePanelDistillBody: "当前文档的每次提取；打开一条即可阅读。",
   guidePanelSummary: "摘要",
   guidePanelSummaryBody: "整篇文档按你选的深度摘要：通俗、进阶或专业。每个深度生成后即保留。",
   guidePanelAnnotations: "批注",

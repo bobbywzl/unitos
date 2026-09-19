@@ -233,7 +233,7 @@ export function StopIcon(props: IconProps) {
   );
 }
 
-// The error button under Distill in the rail (workspace.tsx).
+// The error button under Extract in the rail (workspace.tsx).
 export function WarningIcon(props: IconProps) {
   return (
     <Icon {...props}>
