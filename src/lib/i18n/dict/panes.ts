@@ -362,6 +362,7 @@ const en = {
 
   // The layout step of a URL add (ingest-progress.tsx)
   stepLayingOut: "Laying out the page",
+  stepChecking: "Checking the page against the reader",
   // The figure check (upload-assistant.tsx, ingest-progress.tsx; SPEC.md §15)
   detailCaptionsWithoutFigure1: "{n} caption without a figure",
   detailCaptionsWithoutFigureN: "{n} captions without a figure",
@@ -714,6 +715,7 @@ const zh: Record<keyof typeof en, string> = {
   scanningCorpus: "正在扫描项目",
 
   stepLayingOut: "排版页面",
+  stepChecking: "对照页面检查阅读器",
   detailCaptionsWithoutFigure1: "{n} 条说明没有插图",
   detailCaptionsWithoutFigureN: "{n} 条说明没有插图",
   uploadFigureCheck: "{figures} 张插图 · {captions} 条说明",

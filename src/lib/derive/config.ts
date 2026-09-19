@@ -241,6 +241,14 @@ export const GIST_EFFORT: KimiEffort = "low";
 export const PARSE_MODEL = KIMI_K3;
 export const PARSE_EFFORT: KimiEffort = "high";
 
+// The vision check (SPEC.md §2, lib/parse/vision-check.ts): the last pass
+// of a URL import reads pictures of the page and of the reader's rendering
+// side by side, so it runs on the model that reads images. VISION_CHECK=off
+// in the environment turns it off. Up to this many pictures per set.
+export const VISION_CHECK_MODEL = VISION_MODEL;
+export const VISION_CHECK_EFFORT: KimiEffort = "high";
+export const VISION_CHECK_TILES = 8;
+
 // The upload assistant's review and instruction check (SPEC.md §15). Not a
 // DerivationType — it runs before ingest, not through /api/derive.
 export const UPLOAD_MODEL = PARSE_MODEL;
