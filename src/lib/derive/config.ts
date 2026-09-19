@@ -4,8 +4,10 @@ import { translate } from "@/lib/i18n/dictionaries";
 
 // The models (SPEC.md §2). GLM 5.3, Z.ai's flagship, is behind the reader's
 // tools, the assistant, Stitch's answer, and the merge of notes; GLM 5.3
-// Flash, its small sibling, behind every reading — the readings copy claims
-// into structure, and Flash reads a million tokens for a tenth of the price.
+// Flash, its small sibling, behind every reading but the parse — the
+// readings copy claims into structure, and Flash reads a million tokens for
+// a tenth of the price. The parse passes run on Kimi K3 (PARSE_MODEL
+// below): what the parse gets wrong, every later tool inherits.
 // Both run through the gateway (lib/gateway.ts): without it, a GLM id
 // resolves to Kimi K3 (lib/models.ts). Kimi K3, Moonshot AI's flagship,
 // keeps what GLM 5.3 cannot do: it reads images (VISION_MODEL: a circled
@@ -55,6 +57,15 @@ export const DEFAULT_EFFORT: KimiEffort = "high";
 // its slowest and its most thorough.
 export type ClaudeEffort = "low" | "medium" | "high" | "xhigh" | "max";
 
+// An SVG chart (SPEC.md §2): a figure whose media is inline SVG. Wherever
+// a model reads one — Analyze on it, the assistant acting on it — the call
+// goes to Claude Opus 5 with the whole source (lib/derive/svg-chart.ts),
+// whatever the feature's model: reading a drawing from its code is where
+// Opus 5 leads, and GLM 5.3 reads it as XML with no picture. High effort,
+// not max: a chart of thousands of elements at max outlives the request.
+export const SVG_CHART_MODEL = CLAUDE_OPUS_5;
+export const SVG_CHART_EFFORT: ClaudeEffort = "high";
+
 // Model per derivation type (SPEC.md §2). One place to change. GLM 5.3 for
 // the tools that reason over a passage or answer the reader; GLM 5.3 Flash
 // for the readings, which find and copy passages into structure.
@@ -70,7 +81,7 @@ export const DERIVATION_MODEL: Record<DerivationType, string> = {
   FORMALIZE: GLM_5_3,
   ASK: GLM_5_3,
   COMPARE: GLM_5_3,
-  ANALYZE: GLM_5_3, // with a figure attached the call goes to VISION_MODEL (api/derive)
+  ANALYZE: GLM_5_3, // an image attached goes to VISION_MODEL, an SVG chart to SVG_CHART_MODEL (api/derive)
   VOICE: CLAUDE_SONNET_5, // the voice command (SPEC.md §6): VOICE_MODEL below, not a chat call
   VISUALIZE: CLAUDE_OPUS_5, // the strongest model at drawing: the picture has to be faithful or refused (SPEC.md §20)
 };
@@ -216,15 +227,18 @@ export const GIST_MODEL = GLM_5_3_FLASH;
 export const GIST_EFFORT: KimiEffort = "low";
 
 // The parse passes — the URL core, structure, and layout passes (SPEC.md §2)
-// — run on GLM 5.3 Flash at high effort. The passes answer with ops by block
-// index, a reading of the page rather than a problem to solve, and the
-// figure rules are the code's (lib/parse/structure.ts, layout.ts: a figure
-// with media is never dropped), so the parse keeps its figures under any
-// model. A claude- id here runs through lib/claude.ts instead; the passes
-// call whichever client the id belongs to (lib/parse/model.ts), and the
-// prompts are the same either way. What the parse gets wrong every later
-// tool inherits: keep the effort high.
-export const PARSE_MODEL = GLM_5_3_FLASH;
+// — run on Kimi K3 at high effort, Moonshot's flagship, which reads the
+// page's own HTML more faithfully than GLM 5.3 Flash did. The passes answer
+// with ops by block index, and what the parse gets wrong every later tool
+// inherits — a heading read as a paragraph, a figure row split, a caption
+// dropped — so the parse gets a strong model, not the cheapest. The figure
+// rules stay the code's (lib/parse/structure.ts, layout.ts: a figure with
+// media is never dropped), whatever the model. "high", not "max": the
+// layout pass reads the page's whole HTML against the request's time budget
+// (modelPassDeadline), and a pass that outruns it is skipped. A claude- id
+// here runs through lib/claude.ts instead; any other id through lib/kimi.ts
+// (lib/parse/model.ts), with the same prompts, so the model is one constant.
+export const PARSE_MODEL = KIMI_K3;
 export const PARSE_EFFORT: KimiEffort = "high";
 
 // The upload assistant's review and instruction check (SPEC.md §15). Not a

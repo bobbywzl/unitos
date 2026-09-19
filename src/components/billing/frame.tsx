@@ -6,7 +6,7 @@ import { serverT } from "@/lib/i18n/server";
 // the language switcher), and the page's column. Light is the cream ground
 // of the plan page and every Unitos Premium page; night is the starry ground
 // of the Unitos Ultra order page and confirmation page. The plan page's back
-// link goes to the app; every other page's goes back to the plan page.
+// link goes to the app; every other page's goes back to the plans page.
 export async function BillingFrame({
   night = false,
   back,
@@ -31,7 +31,7 @@ export async function BillingFrame({
       )}
       <header className="relative flex items-center justify-between gap-4 px-[clamp(20px,5vw,48px)] py-[22px] print:hidden">
         <Link
-          href={back === "app" ? "/" : "/billing"}
+          href={back === "app" ? "/" : "/plans"}
           className="inline-flex items-center gap-2 text-sm font-semibold text-(--bl-muted) hover:text-(--bl-link)"
         >
           <svg

@@ -40,7 +40,7 @@ Notes-centric web app for deep reading. Documents attach to notebooks; every AI 
 
 - Next.js (App Router, TypeScript strict, server components by default)
 - PostgreSQL (Supabase) + Prisma
-- GLM 5.3 and GLM 5.3 Flash (Z.ai) through the AI gateway for the reader's tools, the assistant, Stitch, the readings, and the parse passes; Kimi K3 (Moonshot AI) for calls that carry an image and the assistant with Web on, and for every GLM call without the gateway; all via the AI SDK, streaming, automatic prompt caching (the parsed document — and the digest at assistant scopes — is the cached prefix); Claude Fable 5.1 (Anthropic) at its highest reasoning effort for the import — upload review, the URL core and structure passes, Import PDF's judgment, and conversion — and for Visualize
+- GLM 5.3 and GLM 5.3 Flash (Z.ai) through the AI gateway for the reader's tools, the assistant, Stitch, and the readings; Kimi K3 (Moonshot AI) for the parse passes — the URL core, structure, and layout passes — for calls that carry an image and the assistant with Web on, and for every GLM call without the gateway; all via the AI SDK, streaming, automatic prompt caching (the parsed document — and the digest at assistant scopes — is the cached prefix); Claude Opus 5 (Anthropic) for Import PDF's judgment, conversion, Visualize, and every reading of an SVG chart
 - The bimonthly model update: on the 1st of every second month a cron reads each provider's published model list, moves each model to the newest version of its family after one probe call, and records the outcome on the admin page (`/api/cron/models`, `lib/model-update.ts`)
 - Tailwind
 
