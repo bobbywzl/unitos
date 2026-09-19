@@ -330,6 +330,8 @@ const en = {
   svcStripe: "Stripe client: checkout, the billing portal, prices",
   svcStripeWebhook: "Stripe webhook signing",
   svcStripeTax: "Stripe Tax at checkout: on needs a head office address and a registration in every jurisdiction that collects",
+  svcBeta:
+    "The beta: every account has Unitos Ultra in the app while this is on; billing sells the tiers and records purchases, which take effect when it is unset",
   svcPricePremiumMonthly: "The Stripe price Unitos Premium sells at, billed monthly",
   svcPricePremiumYearly: "The Stripe price Unitos Premium sells at, billed yearly",
   svcPriceUltraMonthly: "The Stripe price Unitos Ultra sells at, billed monthly",
@@ -635,6 +637,7 @@ const zh: Record<keyof typeof en, string> = {
   svcStripe: "Stripe 客户端：结账、订阅门户、价格",
   svcStripeWebhook: "Stripe webhook 签名",
   svcStripeTax: "结账时的 Stripe Tax：开启需要总部地址和每个征税辖区的税务登记",
+  svcBeta: "测试阶段：开启期间应用内每个账户都拥有 Unitos Ultra；付费照常出售方案并记录购买，取消设置后生效",
   svcPricePremiumMonthly: "Unitos Premium 按月计费的 Stripe 价格",
   svcPricePremiumYearly: "Unitos Premium 按年计费的 Stripe 价格",
   svcPriceUltraMonthly: "Unitos Ultra 按月计费的 Stripe 价格",

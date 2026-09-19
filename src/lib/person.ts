@@ -2,7 +2,7 @@
 // presence, and the share dialog. No server imports — imported from both
 // server and client code.
 
-import { tierState, type TierFields, type TierState } from "@/lib/tiers";
+import { accountTier, type TierFields, type TierState } from "@/lib/tiers";
 
 export type NotebookRole = "owner" | "editor" | "viewer";
 
@@ -63,7 +63,9 @@ export function personOf(
     picture: user.picture,
   };
   if (user.tier !== undefined && user.trialEndsAt !== undefined) {
-    person.tier = tierState({ tier: user.tier, trialEndsAt: user.trialEndsAt });
+    // The app's reading (accountTier): Ultra during the beta. Sign-in on:
+    // with it off the only row is the local reader, Ultra on its record.
+    person.tier = accountTier({ tier: user.tier, trialEndsAt: user.trialEndsAt }, true);
   }
   return person;
 }
