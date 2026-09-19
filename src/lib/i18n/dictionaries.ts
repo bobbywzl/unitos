@@ -7,6 +7,7 @@ import { legal } from "@/lib/i18n/dict/legal";
 import { outline } from "@/lib/i18n/dict/outline";
 import { panels } from "@/lib/i18n/dict/panels";
 import { panes } from "@/lib/i18n/dict/panes";
+import { plans } from "@/lib/i18n/dict/plans";
 import { reader } from "@/lib/i18n/dict/reader";
 import { settings } from "@/lib/i18n/dict/settings";
 import { signin } from "@/lib/i18n/dict/signin";
@@ -31,6 +32,7 @@ const NAMESPACES = {
   billing,
   panels,
   panes,
+  plans,
   stitch,
   video,
   settings,
