@@ -155,7 +155,14 @@ function AnnotationCard({
         {droppable && documentId && (
           <div className="-ml-1 opacity-70 transition-opacity group-hover/annotation:opacity-100 focus-within:opacity-100">
             <AnnotationGrip
-              reference={{ annotationId: annotation.id, documentId, sourceId, label: gist }}
+              reference={{
+                annotationId: annotation.id,
+                documentId,
+                sourceId,
+                label: gist,
+                // A visualization brings its picture into the note.
+                ...(annotation.kind === "visualize" ? { picture: annotation.content } : {}),
+              }}
             />
           </div>
         )}
