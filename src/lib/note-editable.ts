@@ -65,9 +65,26 @@ export type NoteEditable = {
 
 type Snapshot = { text: string; start: number; end: number };
 
-// Keystrokes closer than this merge into one undo step.
+// Keystrokes closer than this merge into one undo step, until a word ends.
 const COALESCE_MS = 400;
 const HISTORY_MAX = 200;
+
+/** Whether typing that turned prev into next ended a word: the inserted text
+    holds a space or a line break. Cmd+Z then takes typing back a word at a
+    time, the way a word processor does, never a whole burst of typing at
+    once. */
+function endsWord(prev: string, next: string): boolean {
+  let head = 0;
+  while (head < prev.length && head < next.length && prev[head] === next[head]) head++;
+  let tail = 0;
+  while (
+    tail < prev.length - head &&
+    tail < next.length - head &&
+    prev[prev.length - 1 - tail] === next[next.length - 1 - tail]
+  )
+    tail++;
+  return /\s/.test(next.slice(head, next.length - tail));
+}
 const TEXT_NODE = 3;
 
 const STYLE_OF: Record<StyleCommand, InlineStyle> = {
@@ -359,7 +376,7 @@ export function attachNoteEditable(
       current.end = sel.end;
       return;
     }
-    if (coalesce && lastCoalescable && current && now - lastPush < COALESCE_MS) {
+    if (coalesce && lastCoalescable && current && now - lastPush < COALESCE_MS && !endsWord(current.text, text)) {
       history[index] = { text, ...sel };
     } else {
       history.splice(index + 1);
