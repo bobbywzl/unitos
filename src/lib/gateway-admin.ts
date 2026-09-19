@@ -19,15 +19,25 @@ class GatewayError extends Error {}
 async function call<S extends z.ZodType>(
   path: string,
   schema: S,
-  init: { method?: "GET" | "POST"; body?: unknown; auth?: boolean; timeoutMs?: number } = {},
+  init: {
+    method?: "GET" | "POST";
+    body?: unknown;
+    auth?: boolean;
+    /** The key to send in place of the master key. */
+    key?: string;
+    headers?: Record<string, string>;
+    timeoutMs?: number;
+    /** Statuses besides 2xx whose JSON body is the answer. */
+    okStatus?: number[];
+  } = {},
 ): Promise<z.infer<S>> {
   const base = gatewayBaseUrl();
   if (!base) throw new GatewayError("LITELLM_BASE_URL is not set");
-  const headers: Record<string, string> = { Accept: "application/json" };
+  const headers: Record<string, string> = { Accept: "application/json", ...init.headers };
   if (init.auth !== false) {
-    const admin = gatewayAdminKey();
-    if (!admin) throw new GatewayError("LITELLM_ADMIN_KEY is not set");
-    headers.Authorization = `Bearer ${admin}`;
+    const key = init.key ?? gatewayAdminKey();
+    if (!key) throw new GatewayError("LITELLM_ADMIN_KEY is not set");
+    headers.Authorization = `Bearer ${key}`;
   }
   if (init.body !== undefined) headers["Content-Type"] = "application/json";
   const res = await outboundFetch(`${base}${path}`, {
@@ -37,7 +47,7 @@ async function call<S extends z.ZodType>(
     signal: AbortSignal.timeout(init.timeoutMs ?? 20_000),
   });
   const json = await res.json().catch(() => null);
-  if (!res.ok) {
+  if (!res.ok && !(json !== null && init.okStatus?.includes(res.status))) {
     const detail = (json as { detail?: unknown; error?: { message?: string } } | null) ?? null;
     const reason =
       typeof detail?.detail === "string"
@@ -473,25 +483,61 @@ export async function appGatewayModels(): Promise<string[]> {
   return [...names];
 }
 
+// The audio models: a probe needs media, so the gateway's own health check
+// makes the call (it holds a sample). Every other model is a chat model.
+const AUDIO_MODELS = new Set(["groq/whisper-large-v3-turbo", "openai/whisper-1", "openai/gpt-4o-mini-tts"]);
+
+const chatSchema = z.object({ choices: z.array(z.unknown()).optional() }).loose();
+
+type Probe = { healthy: string[]; unhealthy: { model: string; error: string }[] };
+
+/** One chat model: the call the app makes, with the app key when it is set
+    (the master key before the app key exists), a few tokens of answer. A
+    wildcard route (moonshot/*, anthropic/*, gemini/*) resolves the way it
+    does for the app; the gateway's own /health?model= does not resolve a
+    wildcard, so it never reports these. The call carries feature:check, so
+    the usage page lists the probes as their own function. */
+async function probeChat(model: string, key: string): Promise<Probe> {
+  await call("/v1/chat/completions", chatSchema, {
+    method: "POST",
+    key,
+    headers: { "x-litellm-tags": "feature:check" },
+    body: { model, messages: [{ role: "user", content: "Say OK." }], max_tokens: 64 },
+    timeoutMs: 110_000,
+  });
+  return { healthy: [model], unhealthy: [] };
+}
+
+/** One audio model: the gateway's own probe. It answers 503 with the same
+    lists when the model fails, so 503 is read, not thrown. */
+async function probeAudio(model: string): Promise<Probe> {
+  const body = await call(`/health?model=${encodeURIComponent(model)}`, healthSchema, {
+    timeoutMs: 110_000,
+    okStatus: [503],
+  });
+  const unhealthy = (body.unhealthy_endpoints ?? []).map((e) => ({
+    model,
+    error: gatewayErrorMessage(typeof e.error === "string" ? e.error : JSON.stringify(e.error ?? "")),
+  }));
+  // A model the gateway does not know answers with neither list.
+  if (unhealthy.length === 0 && (body.healthy_endpoints ?? []).length === 0) {
+    return { healthy: [], unhealthy: [{ model, error: "the gateway has no route for this model" }] };
+  }
+  return { healthy: unhealthy.length === 0 ? [model] : [], unhealthy };
+}
+
 /** Probe the models the app calls, one live call each, in parallel. Runs
     from the page's button, never on load: every probe is a billed call. A
     reasoning model takes seconds to answer even "OK": the route allows
     120 s, so each probe gets most of it. */
 export async function gatewayHealth(): Promise<GatewayHealth> {
   const models = await appGatewayModels();
+  const key = gatewayKey() ?? gatewayAdminKey();
+  if (!key) throw new GatewayError("LITELLM_ADMIN_KEY is not set");
   const results = await Promise.all(
     models.map(async (model) => {
       try {
-        const body = await call(`/health?model=${encodeURIComponent(model)}`, healthSchema, { timeoutMs: 110_000 });
-        const unhealthy = (body.unhealthy_endpoints ?? []).map((e) => ({
-          model,
-          error: gatewayErrorMessage(typeof e.error === "string" ? e.error : JSON.stringify(e.error ?? "")),
-        }));
-        // A model the gateway does not know answers with neither list.
-        if (unhealthy.length === 0 && (body.healthy_endpoints ?? []).length === 0) {
-          return { healthy: [], unhealthy: [{ model, error: "the gateway has no route for this model" }] };
-        }
-        return { healthy: unhealthy.length === 0 ? [model] : [], unhealthy };
+        return AUDIO_MODELS.has(model) ? await probeAudio(model) : await probeChat(model, key);
       } catch (err) {
         return { healthy: [], unhealthy: [{ model, error: gatewayErrorMessage(err) }] };
       }

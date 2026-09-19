@@ -55,8 +55,9 @@ model_list:
       # An account on the China platform: api_base: https://api.moonshot.cn/v1
       # (and the /moonshot pass-through target below to match).
     model_info:
-      # Check models probes a wildcard with this id, not a random one of the
-      # provider's list.
+      # The gateway's own /health probes a wildcard with this id, not a
+      # random one of the provider's list. (The admin console's Check models
+      # makes a real chat call per model instead, so it needs no entry.)
       health_check_model: moonshot/kimi-k3
 
   # Claude — the app's own Claude calls take the /anthropic pass-through
