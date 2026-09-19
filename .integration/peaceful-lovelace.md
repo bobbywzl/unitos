@@ -23,6 +23,8 @@
 - `src/lib/handwritten/slide-pictures.ts` (new): pictures for uploaded decks by LibreOffice or the configured browser.
 - `SPEC.md` (§27), `CLAUDE.md` (glossary), `package.json` (fflate, ssf).
 
+**Verified:** `npm run build` passes; `scripts/qa/ui-office.mjs` passes against the production server on a local Postgres, twice: with LibreOffice installed (pictures from its PDF) and with `SOFFICE_PATH` pointed nowhere and `CHROMIUM_PATH` set (pictures from the browser). The run covers the multipart and chunked uploads, dedupe, the page route, notes anchored on a slide and a sheet cell and their marks in the reader, the selection toolbar on a slide, charts on slides and in sheets, sheet pictures, web font links, the real Google Slides and Sheets exports, and a re-parse.
+
 **Decisions:**
 - Own OOXML parsers over a library: no npm pptx reader keeps positions, styles, and notes together, and the DOM-text-equals-block-text rule needs control over every text node. The zip reader is fflate; XML goes through jsdom's DOMParser, already a dependency. Number formats use SheetJS's standalone `ssf`.
 - A sheet is one SHEET block per sheet (capped at 10k rows / 200k cells) in a scroll box with sticky frozen rows and columns, not chunked blocks: chunks would split the grid into several scroll boxes.

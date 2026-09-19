@@ -146,7 +146,10 @@ async function renderReplicaPictures(documentId: string): Promise<void> {
       const page = await context.newPage();
       for (const block of todo) {
         const html = (block.html ?? "").replace(/<div class="slide-notes">[\s\S]*$/, "</div>");
-        const doc = `<!DOCTYPE html><html><head><meta charset="utf-8">${links}<style>${OFFICE_CSS}body{margin:0;background:#fff}.reader-slide{width:${PAGE_IMAGE_WIDTH}px}.reader-slide .slide{border-radius:0;box-shadow:none}.reader-slide .slide-number{display:none}</style></head><body><div class="reader-slide">${html}</div></body></html>`;
+        // A base URL: the replica's pictures are relative (/api/images/…),
+        // and on a page set from a string they need an origin to resolve
+        // against before the route above can serve them.
+        const doc = `<!DOCTYPE html><html><head><meta charset="utf-8"><base href="http://unitos.local/">${links}<style>${OFFICE_CSS}body{margin:0;background:#fff}.reader-slide{width:${PAGE_IMAGE_WIDTH}px}.reader-slide .slide{border-radius:0;box-shadow:none}.reader-slide .slide-number{display:none}</style></head><body><div class="reader-slide">${html}</div></body></html>`;
         await page.setContent(doc, { waitUntil: "load" });
         await page.evaluate(() => document.fonts.ready).catch(() => {});
         await page.waitForTimeout(150);

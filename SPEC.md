@@ -937,6 +937,10 @@ One HEADING block (the sheet's name) and one SHEET block per visible sheet, in w
 - **Text.** One line per row, cells separated by tabs, values as formatted. A merged-away cell's tab rides inside the cell that covers it, so the rows stay aligned. Hidden rows and columns are left out of both the grid and the text; trailing empty rows and columns are trimmed, a colored band near the words kept. The document prefix says what a SHEET block is and that the HEADING before it is the sheet's name.
 - **Caps.** 10,000 rows, 256 columns, 200,000 cells per sheet; a cut sheet ends with a paragraph saying where.
 
+### Verifying them
+
+`scripts/qa/ui-office.mjs` runs the whole path against a server on :3311: the multipart and chunked uploads of the fixtures under `scripts/qa/fixtures/office/`, the parse, the pictures made after the response (LibreOffice or the browser), a note anchored on a slide's words and one on a sheet's cell, the reader (replicas, pictures over them, marks, the text toolbar, charts, sheet drawings, web fonts), and a re-parse that keeps pictures and anchors. Every run uploads fresh bytes, so runs never dedupe into each other.
+
 ### Adding them
 
 Every add path takes them: the upload box's drop zone and file input (`SLIDES_ACCEPT`, `SHEETS_ACCEPT` in `lib/office-file.ts`), a drop anywhere on the page, the chunked upload (`/api/uploads/complete`), and Drive (`classifyDriveFile`: Google Slides → `slides`, Google Sheets → `sheets`, a .pptx in Drive → `slides-file`, a .xlsx/.csv/.tsv in Drive → `sheets-file`; the picker lists them). The server never trusts the name for a zip: `sniffOfficeFile` reads the format from the zip's parts; a .csv/.tsv is read by name only when the bytes are not a zip. The assistant's Drive attachments keep Drive's PDF export for Google Slides and Sheets (they ride as text). Translation treats a slide's words like a paragraph's (under the table cap) and a sheet's cells as data.

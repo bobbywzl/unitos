@@ -53,3 +53,7 @@ next-env.d.ts
 scripts/eval/cases/from-ratings.json
 scripts/eval/fixtures/rated-*.md
 .scratch/
+scripts/qa/out/
+scripts/qa/fixtures/office/gslides.pptx
+scripts/qa/fixtures/office/gsheets.xlsx
+scripts/qa/fixtures/office/*.zip
