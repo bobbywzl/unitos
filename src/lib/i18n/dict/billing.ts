@@ -68,6 +68,9 @@ const en = {
   currentExpired: "Your trial ended on {date}. Pick a tier to bring Premium features back.",
   currentSubscribed: "You have {tier}. The paid period ends on {date}.",
   currentGranted: "You have {tier}, granted by the operator. Nothing to pay.",
+  // The beta (TIERS.md): before the state line while BETA is on.
+  betaLine:
+    "Unitos is in beta: every account has Unitos Ultra for now. The tier you choose takes effect when the beta ends.",
   manage: "Manage subscription",
   manageOpening: "Opening Stripe…",
   manageFailed: "Could not open Stripe. {reason}",
@@ -105,6 +108,9 @@ const en = {
   confirmedProcessingBody:
     "Stripe has not settled the payment yet. The tier turns on and the receipt appears under Receipts when it does.",
   confirmedDashboard: "Go to dashboard",
+  // The confirmation page without a session id: a stray visit.
+  confirmedNoneTitle: "No order to confirm",
+  confirmedNoneBody: "Stripe brings you here after a payment. This visit has no order. Choose a tier on the plans page.",
   confirmedReceipt: "See the receipt",
   // Receipts: one per payment.
   receiptsEmpty: "No receipts. One appears here for every payment.",
@@ -173,6 +179,7 @@ const zh: Record<keyof typeof en, string> = {
   currentExpired: "你的试用已于 {date} 结束。选择一种方案，恢复 Premium 功能。",
   currentSubscribed: "你拥有 {tier}。已付费周期于 {date} 结束。",
   currentGranted: "你拥有 {tier}，由运营者授予。无需付款。",
+  betaLine: "Unitos 正处于测试阶段：目前每个账户都拥有 Unitos Ultra。你选择的方案将在测试结束后生效。",
   manage: "管理订阅",
   manageOpening: "正在打开 Stripe…",
   manageFailed: "无法打开 Stripe。{reason}",
@@ -206,6 +213,8 @@ const zh: Record<keyof typeof en, string> = {
   confirmedProcessing: "付款处理中",
   confirmedProcessingBody: "Stripe 尚未完成结算。结算完成后方案开启，收据出现在“收据”中。",
   confirmedDashboard: "前往仪表板",
+  confirmedNoneTitle: "没有待确认的订单",
+  confirmedNoneBody: "付款后 Stripe 会把你带到这里。本次访问没有订单。请在方案页选择一种方案。",
   confirmedReceipt: "查看收据",
   receiptsEmpty: "还没有收据。每次付款都会在这里生成一张。",
   receiptTitle: "收据",

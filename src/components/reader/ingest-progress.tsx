@@ -34,6 +34,7 @@ const STEP_TEMPLATES: Record<
     { key: "select", labelKey: "panes.stepFindingArticle" },
     { key: "structure", labelKey: "panes.stepStructuring" },
     { key: "layout", labelKey: "panes.stepLayingOut" },
+    { key: "check", labelKey: "panes.stepChecking" },
     { key: "save", labelKey: "panes.stepSaving" },
   ],
   video: [

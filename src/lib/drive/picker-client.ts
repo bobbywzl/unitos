@@ -32,6 +32,9 @@ type PickerDocsView = {
   setIncludeFolders: (v: boolean) => PickerDocsView;
   setSelectFolderEnabled: (v: boolean) => PickerDocsView;
   setEnableDrives: (v: boolean) => PickerDocsView;
+  setOwnedByMe: (v: boolean) => PickerDocsView;
+  setStarred: (v: boolean) => PickerDocsView;
+  setParent: (parentId: string) => PickerDocsView;
   setMimeTypes: (types: string) => PickerDocsView;
 };
 type PickerBuilder = {
@@ -133,20 +136,40 @@ async function requestAccessToken(clientId: string, access: DriveAccess): Promis
   });
 }
 
-// One tab of the picker: the reader's own Drive (My Drive and everything
-// shared with them), or the shared drives they are a member of. Folders show
-// so the reader can walk into them, and stay unselectable — a folder is not a
-// document to import.
-function docsView(
-  picker: GooglePickerNamespace,
-  sharedDrives: boolean,
-  mimeTypes: string,
-): PickerDocsView {
-  const view = new picker.DocsView(picker.ViewId.DOCS)
-    .setIncludeFolders(true)
-    .setSelectFolderEnabled(false)
-    .setMimeTypes(mimeTypes);
-  return sharedDrives ? view.setEnableDrives(true) : view;
+// The picker's tabs, the same five Google Drive itself shows in its sidebar:
+// My Drive, Shared with me, Recent, Starred, Shared drives. Each is one
+// DocsView; the picker names the tab from how the view is set. Folders show
+// so the reader can walk into them, and stay unselectable — a folder is not
+// a document to import. Recent lists files only: one DocsView with no parent
+// and folders on lists every folder of the Drive flat, newest first, which
+// read as a wall of stale folders with the reader's own Drive nowhere.
+type DriveTab = "my-drive" | "shared-with-me" | "recent" | "starred" | "shared-drives";
+const DRIVE_TABS: DriveTab[] = ["my-drive", "shared-with-me", "recent", "starred", "shared-drives"];
+
+function docsView(picker: GooglePickerNamespace, tab: DriveTab, mimeTypes: string): PickerDocsView {
+  const view = new picker.DocsView(picker.ViewId.DOCS).setSelectFolderEnabled(false);
+  switch (tab) {
+    case "my-drive":
+      // "root" is Drive's alias for the account's My Drive folder.
+      return view.setIncludeFolders(true).setParent("root").setMimeTypes(mimeTypes);
+    case "shared-with-me":
+      return view.setIncludeFolders(true).setOwnedByMe(false).setMimeTypes(mimeTypes);
+    case "recent":
+      // The mime filter is a whitelist over every item the view lists, so
+      // the folder type leaves it here — with it, folders would list too.
+      return view.setIncludeFolders(false).setMimeTypes(withoutFolders(mimeTypes));
+    case "starred":
+      return view.setIncludeFolders(true).setStarred(true).setMimeTypes(mimeTypes);
+    case "shared-drives":
+      return view.setIncludeFolders(true).setEnableDrives(true).setMimeTypes(mimeTypes);
+  }
+}
+
+function withoutFolders(mimeTypes: string): string {
+  return mimeTypes
+    .split(",")
+    .filter((type) => type !== DRIVE_FOLDER_MIME_TYPE)
+    .join(",");
 }
 
 // Get a Drive token, open the picker, resolve with whatever the reader picked
@@ -172,15 +195,14 @@ export async function pickDriveFiles(opts: {
   ]);
   const picker = window.google!.picker!;
   const files = await new Promise<DrivePickedFile[]>((resolve) => {
-    // Two views, so the picker opens on the reader's own Drive and shows
-    // shared drives in a second tab. One view with setEnableDrives(true) is
-    // not both: Google's rule is that with it set, only shared drives are in
-    // the view. That one view is what an account with no shared drive saw as
-    // an empty picker, with its own Drive nowhere.
+    // One tab per Drive view, My Drive first, so the picker opens on the
+    // reader's own Drive at its root. One view cannot be every tab: with
+    // setEnableDrives(true) Google puts only shared drives in the view, and
+    // with no parent it lists the whole Drive flat.
     const mimeTypes = opts.mimeTypes ?? DRIVE_PICKER_MIME_TYPES;
-    const builder = new picker.PickerBuilder()
-      .addView(docsView(picker, false, mimeTypes))
-      .addView(docsView(picker, true, mimeTypes))
+    const builder = new picker.PickerBuilder();
+    for (const tab of DRIVE_TABS) builder.addView(docsView(picker, tab, mimeTypes));
+    builder
       .setOAuthToken(token)
       .enableFeature(picker.Feature.MULTISELECT_ENABLED)
       .enableFeature(picker.Feature.SUPPORT_DRIVES);

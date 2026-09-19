@@ -63,7 +63,24 @@ row once through `accountTier` (`lib/tiers.ts`): the reader and the notes page
 put it in `CollabState` (`tier`, `trialEndsAt`, `premium`, `ultra`), the
 dashboard and Settings read it directly. A page loaded before the change
 still carries the old tier until it reloads: the client's gate (the toast on
-Visualize or Continue) is a courtesy, the route is the gate.
+Visualize or Continue) is a courtesy, the route is the gate. During the beta
+(below) the same path answers Ultra for every account.
+
+## Beta
+
+`BETA=on` (the environment; the admin billing page shows whether it is set)
+gives every account Unitos Ultra in the app for as long as it is set: every
+gate opens and every tier mark is the black diamond, whatever the account's
+record says. `accountTier`, `ultraActive`, and `premiumActive` read it; the
+record (`User.tier`, `User.trialEndsAt`) does not change. Billing (SPEC.md
+§24) keeps reading the record through `tierState`: the plan page and the
+plans page show the account's trial or subscription and sell the tiers, a
+purchase writes the record as always, and the state line on both pages says
+first that the tier chosen takes effect when the beta ends. The admin's Tier
+control reads the record too. Unset `BETA` and redeploy to end the beta:
+from then on every account reads as its record says, so an account whose
+trial ended during the beta is expired until it buys a tier or the operator
+grants one.
 
 ## How the tier shows
 
@@ -170,6 +187,11 @@ until the owner makes one.
 
 ## Decisions, as they were made
 
+- **2026-09-19** — The beta: while `BETA` is on, every account has Unitos
+  Ultra in the app, and billing runs beside it, disconnected. The plan pages
+  are up so ads can point at a purchase; a purchase is recorded and takes
+  effect when the beta ends. Set at the environment; the admin billing page
+  shows it.
 - **2026-09-18** — Offline copies are Unitos Ultra (SPEC.md §17): Save for
   offline keeps a project's pages and images in the browser, and offline
   Unitos opens with only the saved projects, like Google Drive offline in

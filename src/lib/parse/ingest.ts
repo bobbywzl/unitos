@@ -12,6 +12,7 @@ import type { ParseModel } from "@/lib/parse/model";
 import { pruneReferences } from "@/lib/parse/references";
 import { browserConfigured } from "@/lib/browser";
 import { needsBrowserRender, renderIfNeeded, type RenderReport } from "@/lib/parse/render-page";
+import { visionCheck, visionCheckPossible, type VisionCheckReport } from "@/lib/parse/vision-check";
 import { splitBlocks, splitPartCount } from "@/lib/parse/split";
 import { selectCoreBlocks, structureBlocks } from "@/lib/parse/structure";
 import { fetchPage, type FetchedPage } from "@/lib/parse/fetch-page";
@@ -50,6 +51,7 @@ export type IngestStage =
   | "select"
   | "structure"
   | "layout"
+  | "check"
   | "review";
 export type OnIngestProgress = (stage: IngestStage, detail?: string) => void;
 
@@ -131,12 +133,30 @@ export async function refineUrlBlocks(
   // The passes reference blocks by index: a figure dropped between two
   // blocks that survived is restored (lib/parse/figures.ts restoreFigures).
   blocks = restoreFigures(parsed.blocks, blocks);
+  // The vision check (lib/parse/vision-check.ts): the page and the reader's
+  // rendering of the blocks, pictured in a browser and compared by the
+  // vision model. Where it cannot run, the blocks stand and the report says why.
+  let check: VisionCheckReport | null = null;
+  if (pageHtml && visionCheckPossible(blocks)) {
+    onProgress?.("check");
+    const checked = await visionCheck({
+      url,
+      blocks,
+      title: parsed.title,
+      columnWidth: parsed.columnWidth,
+      font: parsed.font ?? font ?? null,
+      deadline,
+      onProgress: (detail) => onProgress?.("check", detail),
+    });
+    blocks = checked.blocks;
+    check = checked.report;
+  }
   const references = pruneReferences(
     blocks,
     parsed.references ?? [],
     parsed.formalReferences ?? 0,
   );
-  return { blocks, references, font };
+  return { blocks, references, font, check };
 }
 
 // The final figure check, reported with the save stage so the upload
@@ -152,6 +172,7 @@ function saveDetail(
   scriptedFigures = false,
   render: RenderReport | null = null,
   media: MediaCheck | undefined = undefined,
+  check: VisionCheckReport | null = null,
 ): string {
   const audit = auditFigures(blocks);
   return JSON.stringify({
@@ -160,6 +181,7 @@ function saveDetail(
     scriptedFigures,
     renderError: render?.error ?? null,
     ...(media ? { media: media.onPage, mediaLost: media.lost } : {}),
+    ...(check ? { visionCheck: check } : {}),
   });
 }
 
@@ -565,7 +587,7 @@ export async function ingestUrl(
   const pageHtml = page.kind === "html" ? page.html : fetched.html;
   onProgress?.("extract");
   const parsed = await parseHtmlContent(pageHtml, url, onProgress);
-  const { blocks, references, font: laidFont } = await refineUrlBlocks(parsed, onProgress, {
+  const { blocks, references, font: laidFont, check } = await refineUrlBlocks(parsed, onProgress, {
     deadline: opts.deadline,
     pageHtml,
     url,
@@ -579,7 +601,7 @@ export async function ingestUrl(
     const chars = blocks.reduce((n, b) => n + b.text.length, 0);
     const parts = splitBlocks(title, blocks, splitPartCount(chars));
     if (parts.length > 1) {
-      onProgress?.("save", saveDetail(blocks, unrenderedScripts(fetched), render, parsed.mediaCheck));
+      onProgress?.("save", saveDetail(blocks, unrenderedScripts(fetched), render, parsed.mediaCheck, check));
       const documents = [];
       for (let i = 0; i < parts.length; i++) {
         documents.push(
@@ -598,7 +620,7 @@ export async function ingestUrl(
     }
   }
 
-  onProgress?.("save", saveDetail(blocks, unrenderedScripts(fetched), render, parsed.mediaCheck));
+  onProgress?.("save", saveDetail(blocks, unrenderedScripts(fetched), render, parsed.mediaCheck, check));
   const document = await createDocumentWithBlocks({
     title,
     sourceUrl: url,
@@ -712,6 +734,7 @@ export async function reparseDocument(
   let scriptedFigures = false;
   let render: RenderReport | null = null;
   let mediaCheck: MediaCheck | undefined;
+  let check: VisionCheckReport | null = null;
   if (document.fileData) {
     onProgress?.("parse");
     const bytes = new Uint8Array(document.fileData);
@@ -742,6 +765,7 @@ export async function reparseDocument(
     });
     references = refined.references;
     blocks = refined.blocks;
+    check = refined.check;
     columnWidth = parsed.columnWidth;
     mediaCheck = parsed.mediaCheck;
   } else {
@@ -750,7 +774,7 @@ export async function reparseDocument(
 
   // The figure check rides with the save stage, as on an add: the document
   // bar reports a caption left without its figure.
-  onProgress?.("save", saveDetail(blocks, scriptedFigures, render, mediaCheck));
+  onProgress?.("save", saveDetail(blocks, scriptedFigures, render, mediaCheck, check));
   const rows = resolveContentsLinks(blocks);
   await db.$transaction(async (tx) => {
     await tx.block.deleteMany({ where: { documentId } });
