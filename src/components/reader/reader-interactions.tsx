@@ -1165,8 +1165,17 @@ export function ReaderInteractions({
     sourceId: string | null,
     text: string,
     fallback: string,
+    picture?: string,
   ): AnnotationReference | null =>
-    noteId ? { annotationId: noteId, documentId, sourceId, label: referenceLabel(text, fallback) } : null;
+    noteId
+      ? {
+          annotationId: noteId,
+          documentId,
+          sourceId,
+          label: referenceLabel(text, fallback),
+          ...(picture ? { picture } : {}),
+        }
+      : null;
   const annotationGrip = (reference: AnnotationReference | null) =>
     dropOpen && reference ? <AnnotationGrip reference={reference} className="-ml-1" /> : null;
   // A hold anywhere on the card, off its controls and off the header that
@@ -5790,6 +5799,8 @@ function blockFormatKind(
           bubble.noteId ? sourceIdOfNote(bubble.noteId) : null,
           bubble.text,
           t(bubble.kind === "analyze" ? "reader.analysis" : bubble.kind === "visualize" ? "reader.visualization" : "reader.explanation"),
+          // A visualization brings its picture into the note.
+          bubble.kind === "visualize" ? bubble.text : undefined,
         )
       : null;
   const simplifyReference =

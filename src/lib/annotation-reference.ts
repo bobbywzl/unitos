@@ -20,6 +20,10 @@ export type AnnotationReference = {
   sourceId: string | null;
   /** The row's text: the annotation's gist, or its first words. */
   label: string;
+  /** A visualization: its own markdown — the picture and its caption
+      (lib/derive/visualize.ts). It lands in the note above the reference,
+      so the note shows the picture, not only the row that opens it. */
+  picture?: string;
 };
 
 /** The query parameter that names the annotation the reader opens on arrival. */
@@ -43,9 +47,12 @@ export function annotationReferenceHref(notebookId: string, ref: AnnotationRefer
   return `/n/${notebookId}?doc=${encodeURIComponent(ref.documentId)}${src}&${ANNOTATION_PARAM}=${encodeURIComponent(ref.annotationId)}`;
 }
 
-/** The reference as note markdown: a link on a line of its own. */
+/** The reference as note markdown: a link on a line of its own, under the
+    picture when the annotation is a visualization. */
 export function annotationReferenceMarkdown(notebookId: string, ref: AnnotationReference): string {
-  return `[${ref.label}](${annotationReferenceHref(notebookId, ref)})`;
+  const row = `[${ref.label}](${annotationReferenceHref(notebookId, ref)})`;
+  const picture = ref.picture?.trim();
+  return picture ? `${picture}\n\n${row}` : row;
 }
 
 export type ParsedAnnotationReference = {
