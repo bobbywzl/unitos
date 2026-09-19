@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { isImeKey } from "@/lib/ime";
 import type { SectionView } from "@/lib/types";
 import { useCollab } from "@/components/collab/collab-context";
@@ -20,14 +20,26 @@ import { VoiceNoteButton } from "@/components/outline/voice-note";
 import { findSection, type OutlineActions } from "@/components/outline/use-outline";
 
 // A section's board (SPEC.md §6): the section's notes filling the screen as
-// 3:4 tiles side by side, one grid, opened from the notes full page by a
-// click on the section's title. Every tile is in the note's draggable mode: a
+// tiles side by side, one grid, opened from the notes full page by a click on
+// the section's title. A tile shows its whole body when the board has the
+// room: the board's height is shared among the rows of tiles, and a tile
+// grows to its share, never under the 3:4 tile. Every tile is in the note's draggable mode: a
 // hold anywhere picks it up, to reorder it or to hold it over another tile and
 // merge the two. A click opens the note whole over the board — its card, with
 // the pencil, the jump, the history — and Esc or ✕ closes it. The section's
 // own actions — + Note, Speak — stay in the header; a nested section's board
 // is one press away, and so is the section it sits in. Esc or Notes closes
 // the board.
+
+// The tiles' grid (globals.css .note-board): the gap between tiles, the
+// narrowest tile, and the widest.
+const TILE_GAP = 14;
+const TILE_MIN_WIDTH = 220;
+const TILE_MAX_WIDTH = 480;
+
+/** The grid's columns, and the height limits of a tile in px: never under
+    the 3:4 tile, and up to the tile's share of the board's height. */
+type TileSize = { columns: number; min: number; max: number };
 
 /** The parent of a section, or null for a root section. */
 function parentOf(tree: SectionView[], id: string): SectionView | null {
@@ -68,6 +80,59 @@ export function SectionBoard({
   // An annotation reference clicked in the open note opens the annotation
   // beside its card (annotation-side.tsx): the overlay widens for the two.
   const sideOpen = Boolean(useAnnotationSide()?.side);
+
+  // The tiles' grid and height limits (SPEC.md §6). Columns: as many
+  // 220px tiles as the board's width holds, and no more than the notes, so
+  // few notes take wide tiles, up to 480px. Heights: the board's height,
+  // less the composer above the tiles and the gaps, shared among the rows
+  // of tiles; a tile grows to its whole body up to that share, and never
+  // under the 3:4 tile, so a row of few notes shows them whole and a board
+  // of many notes keeps its 3:4 tiles. Measured from the board's size and
+  // the count of notes, so the tiles' own heights never feed back into it.
+  const boardRef = useRef<HTMLDivElement>(null);
+  const [tileSize, setTileSize] = useState<TileSize | null>(null);
+  const noteCount = notes.length;
+  const composing = compose.composing;
+  useLayoutEffect(() => {
+    const el = boardRef.current;
+    if (!el) return;
+    const measure = () => {
+      const grid = el.querySelector<HTMLElement>(".note-board");
+      if (!grid || noteCount === 0) {
+        setTileSize(null);
+        return;
+      }
+      const gridWidth = grid.clientWidth;
+      const columns = Math.max(
+        1,
+        Math.min(noteCount, Math.floor((gridWidth + TILE_GAP) / (TILE_MIN_WIDTH + TILE_GAP))),
+      );
+      const rows = Math.ceil(noteCount / columns);
+      const width = Math.min(TILE_MAX_WIDTH, (gridWidth - TILE_GAP * (columns - 1)) / columns);
+      const gridTop = grid.getBoundingClientRect().top - el.getBoundingClientRect().top + el.scrollTop;
+      const room =
+        el.clientHeight - gridTop - parseFloat(getComputedStyle(el).paddingBottom) - TILE_GAP * (rows - 1);
+      const min = Math.round((width * 4) / 3);
+      const max = Math.max(min, Math.floor(room / rows));
+      setTileSize((prev) =>
+        prev && prev.columns === columns && prev.min === min && prev.max === max
+          ? prev
+          : { columns, min, max },
+      );
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [noteCount, composing]);
+  const tileVars = tileSize
+    ? ({
+        "--tile-cols": tileSize.columns,
+        "--tile-min": `${tileSize.min}px`,
+        "--tile-max": `${tileSize.max}px`,
+      } as React.CSSProperties)
+    : undefined;
+  const sizedClass = tileSize ? " note-tiles-sized" : "";
 
   // The section is gone (deleted elsewhere): the board closes.
   const gone = section === null;
@@ -174,7 +239,7 @@ export function SectionBoard({
         </div>
       </header>
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-4 md:p-6">
+      <div ref={boardRef} className="min-h-0 flex-1 overflow-y-auto p-4 md:p-6">
         {voiceError && <p className="mb-3 text-xs text-red-500">{voiceError}</p>}
         {/* The composer sits above the tiles: a new note lands at the top of
             the section (SPEC.md §6). */}
@@ -196,10 +261,22 @@ export function SectionBoard({
           }
           overlay={(itemId) => {
             const note = notesById.get(itemId);
-            return note ? <NoteTile note={note} actions={actions} onOpen={() => {}} /> : null;
+            // The overlay rides outside the board: it carries the same
+            // height limits, so the dragged tile keeps its size.
+            return note ? (
+              <div className={`h-full${sizedClass}`} style={tileVars}>
+                <NoteTile note={note} actions={actions} onOpen={() => {}} />
+              </div>
+            ) : null;
           }}
         >
-          <SortableGroup id={notesList(section.id)} ids={notes.map((n) => n.id)} layout="grid" className="note-board">
+          <SortableGroup
+            id={notesList(section.id)}
+            ids={notes.map((n) => n.id)}
+            layout="grid"
+            className={`note-board${sizedClass}`}
+            style={tileVars}
+          >
             {notes.map((note) => (
               <SortableItem key={note.id} id={note.id}>
                 {(handle) => <NoteTile note={note} actions={actions} handle={canEdit ? handle : undefined} onOpen={setOpen} />}

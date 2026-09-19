@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { NoteView } from "@/lib/types";
 import { useCollab } from "@/components/collab/collab-context";
 import { PersonBadge } from "@/components/collab/person-badge";
@@ -30,9 +30,10 @@ function TickIcon({ size = 10 }: { size?: number }) {
   );
 }
 
-// One tile of a section's board (SPEC.md §6): the note as a 3:4 tile, taller
-// than wide — its id, its title, and as much of its body as fits, fading out
-// at the bottom — so the tiles line up as one board. A tile is in the note's
+// One tile of a section's board (SPEC.md §6): the note as a tile — its id,
+// its title, and its body, whole when the board has the room for it (the
+// board sets the tile's height limits, section-board.tsx), else as much as
+// fits, fading out at the bottom — so the tiles line up as one board. A tile is in the note's
 // draggable mode and nothing else: a hold anywhere picks it up, to reorder it
 // or to hold it over another tile and merge the two; a click opens the note
 // whole. Editing happens in the opened note, never in the tile.
@@ -58,6 +59,20 @@ export function NoteTile({
   const isSelected = actions.selected.has(note.id);
   const author = shared && note.createdById ? people[note.createdById] : undefined;
   const draggable = Boolean(handle) && canEdit;
+
+  // The body is cut: more of it than the tile shows. Only a cut body fades
+  // out at the bottom; a body shown whole reads to its last line.
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const [cut, setCut] = useState(false);
+  useEffect(() => {
+    const el = bodyRef.current;
+    if (!el) return;
+    const check = () => setCut(el.scrollHeight > el.clientHeight + 1);
+    check();
+    const observer = new ResizeObserver(check);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [parts.body]);
 
   // The tile took other notes in: it blooms once as they land.
   const [absorbed, setAbsorbed] = useState(false);
@@ -136,8 +151,8 @@ export function NoteTile({
           )}
         </span>
       </div>
-      {parts.title && <h3 className="note-title note-tile-title mt-2 shrink-0">{parts.title}</h3>}
-      <div className="note-tile-body mt-1.5 min-h-0 flex-1 overflow-hidden">
+      {parts.title && <h3 className="note-title mt-2 shrink-0">{parts.title}</h3>}
+      <div ref={bodyRef} className={`note-tile-body mt-1.5 min-h-0 flex-1 overflow-hidden${cut ? " note-tile-cut" : ""}`}>
         {parts.body.trim() !== "" && (
           <Markdown breaks sources={note.sources} notebookId={actions.notebookId}>
             {parts.body}

@@ -565,12 +565,14 @@ export function SortableGroup({
   ids,
   layout = "column",
   className,
+  style,
   children,
 }: {
   id: string;
   ids: string[];
   layout?: ListLayout;
   className?: string;
+  style?: React.CSSProperties;
   children: React.ReactNode;
 }) {
   const registry = useContext(BoardContext);
@@ -588,6 +590,7 @@ export function SortableGroup({
         <div
           ref={setNodeRef}
           data-drop-list={id}
+          style={style}
           className={`relative ${className ?? ""}${
             empty
               ? ` min-h-9 rounded-2xl border-[1.5px] border-dashed ${
