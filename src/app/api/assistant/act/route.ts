@@ -16,8 +16,8 @@ import {
 } from "@/lib/conversation";
 import { stripSimplifyMarkers } from "@/lib/sentences";
 import { db } from "@/lib/db";
-import { DERIVATION_MODEL,
-  VISION_MODEL, MAX_OUTPUT_TOKENS } from "@/lib/derive/config";
+import { DERIVATION_MODEL, VISION_MODEL, MAX_OUTPUT_TOKENS } from "@/lib/derive/config";
+import { svgChartCall } from "@/lib/derive/svg-chart";
 import {
   annotationsSection,
   documentPrefix,
@@ -316,6 +316,7 @@ async function handle(req: Request, t: TFunc) {
   // source for charts — same treatment as EXPLAIN (SPEC.md §4: one pipeline).
   let selectionBlock = "";
   let attachedImage: FigureImage | null = null;
+  let svgSource: string | null = null;
   // The anchor resolves through the ladder (SPEC.md §5): block id and offsets,
   // then the quote inside the block, then the quote across the document. A
   // re-parse gives every block a new id while an open reader still sends the
@@ -337,6 +338,7 @@ async function handle(req: Request, t: TFunc) {
     if (figure && anchoredBlock) {
       const visual = await figureVisual(figure, anchoredBlock, document.id, document.sourceUrl);
       attachedImage = visual?.image ?? null;
+      svgSource = figure.svgSource ?? null;
       selectionBlock = [
         `The reader has selected the figure in block ${anchor.blockId}. Its caption: "${figure.caption.slice(0, 500) || "(no caption)"}".`,
         ...(visual
@@ -440,16 +442,18 @@ async function handle(req: Request, t: TFunc) {
       : { role: "user", content: userPrompt },
   ];
 
-  // A video frame goes to the model that reads images (SPEC.md §2).
+  // A video frame goes to the model that reads images (SPEC.md §2); an SVG
+  // chart to Claude Opus 5, which reads the source whole (lib/derive/svg-chart.ts).
+  const svgChart = svgSource ? await svgChartCall() : null;
   const chatModelId = attachedImage ? VISION_MODEL : DERIVATION_MODEL.SYNTHESIS;
   const result = await callForJson({
-    model: await kimi(chatModelId),
+    model: svgChart?.model ?? (await kimi(chatModelId)),
     messages,
     maxOutputTokens: MAX_OUTPUT_TOKENS.SYNTHESIS,
-    providerOptions: kimiOptions(thinkingEffort(data.thinking)),
+    providerOptions: svgChart?.providerOptions ?? kimiOptions(thinkingEffort(data.thinking)),
     schema: planSchema,
     label: "assistant:act",
-    usage: { userId: user.id, feature: "act", model: await resolveModelId(chatModelId) },
+    usage: { userId: user.id, feature: "act", model: svgChart ? svgChart.modelId : await resolveModelId(chatModelId) },
     // Stop aborts here too (SPEC.md §6): the client disconnecting stops the
     // model call, not just the response the client would have read.
     abortSignal: req.signal,
