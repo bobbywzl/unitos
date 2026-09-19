@@ -186,7 +186,9 @@ function resolveOne(
   source: Source,
   blocks: { id: string; text: string }[],
 ): { blockId: string; start: number; end: number; orphaned: boolean } {
-  const hit = resolveAnchor(blocks, source);
+  // The words the anchor covers now, when a block edit changed them; the
+  // quote itself never changes (SPEC.md §5).
+  const hit = resolveAnchor(blocks, { ...source, quotedText: source.anchoredText ?? source.quotedText });
   if (hit) return { blockId: hit.blockId, start: hit.startOffset, end: hit.endOffset, orphaned: false };
   return {
     blockId: source.blockId,

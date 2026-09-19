@@ -115,12 +115,15 @@ function GroupLabel({ icon, children }: { icon?: React.ReactNode; children: Reac
 // text (dissect:open-annotation) opens a collapsed card first.
 function AnnotationCard({
   annotation,
+  documentId,
   view,
   summary,
   menu,
   children,
 }: {
   annotation: AnnotationItem;
+  /** The open document, where the annotation is anchored; null: no reference can point to it. */
+  documentId: string | null;
   view: CollapsedViewModel;
   summary: string;
   /** The three-dots menu at the right of the header (annotation-menu.tsx). */
@@ -149,9 +152,11 @@ function AnnotationCard({
   return (
     <div data-annotation-source-id={sourceId ?? undefined} className={`group/annotation ${card}`}>
       <div className="flex min-h-[18px] items-center gap-1.5">
-        {droppable && (
+        {droppable && documentId && (
           <div className="-ml-1 opacity-70 transition-opacity group-hover/annotation:opacity-100 focus-within:opacity-100">
-            <AnnotationGrip noteId={annotation.id} label={gist} />
+            <AnnotationGrip
+              reference={{ annotationId: annotation.id, documentId, sourceId, label: gist }}
+            />
           </div>
         )}
         <button
@@ -527,7 +532,7 @@ export function AnnotationsPanel({
         <div className="flex flex-col gap-2">
           <GroupLabel>{t("panels.highlights")}</GroupLabel>
           {highlights.map((a) => (
-            <AnnotationCard key={a.id} annotation={a} view={view} menu={menuFor(a)} summary={a.content}>
+            <AnnotationCard key={a.id} documentId={documentId} annotation={a} view={view} menu={menuFor(a)} summary={a.content}>
               <p className="text-[13px]">{a.content}</p>
               {a.orphaned && a.quotedText && a.quotedText !== a.content && (
                 <p className="mt-2 line-clamp-2 border-l-2 border-red-300 pl-2 text-xs text-sand-500">
@@ -544,7 +549,7 @@ export function AnnotationsPanel({
         <div className="flex flex-col gap-2">
           <GroupLabel icon={<CommentIcon size={12} />}>{t("panels.comments")}</GroupLabel>
           {comments.map((a) => (
-            <AnnotationCard key={a.id} annotation={a} view={view} menu={menuFor(a)} summary={markdownPreview(a.content)}>
+            <AnnotationCard key={a.id} documentId={documentId} annotation={a} view={view} menu={menuFor(a)} summary={markdownPreview(a.content)}>
               <div className="text-[13px]">
                 <Markdown>{a.content}</Markdown>
               </div>
@@ -563,7 +568,7 @@ export function AnnotationsPanel({
         <div className="flex flex-col gap-2">
           <GroupLabel icon={<QuestionIcon size={12} />}>{t("panels.explanations")}</GroupLabel>
           {explanations.map((a) => (
-            <AnnotationCard key={a.id} annotation={a} view={view} menu={menuFor(a)} summary={markdownPreview(a.content)}>
+            <AnnotationCard key={a.id} documentId={documentId} annotation={a} view={view} menu={menuFor(a)} summary={markdownPreview(a.content)}>
               <div className="text-[13px]">
                 <Markdown>{a.content}</Markdown>
               </div>
@@ -583,7 +588,7 @@ export function AnnotationsPanel({
         <div className="flex flex-col gap-2">
           <GroupLabel icon={<ChartIcon size={12} />}>{t("panels.analyses")}</GroupLabel>
           {analyses.map((a) => (
-            <AnnotationCard key={a.id} annotation={a} view={view} menu={menuFor(a)} summary={markdownPreview(a.content)}>
+            <AnnotationCard key={a.id} documentId={documentId} annotation={a} view={view} menu={menuFor(a)} summary={markdownPreview(a.content)}>
               <div className="text-[13px]">
                 <Markdown>{a.content}</Markdown>
               </div>
@@ -603,7 +608,7 @@ export function AnnotationsPanel({
         <div className="flex flex-col gap-2">
           <GroupLabel icon={<VisualizeIcon size={12} />}>{t("panels.visualizations")}</GroupLabel>
           {visualizations.map((a) => (
-            <AnnotationCard key={a.id} annotation={a} view={view} menu={menuFor(a)} summary={markdownPreview(a.content)}>
+            <AnnotationCard key={a.id} documentId={documentId} annotation={a} view={view} menu={menuFor(a)} summary={markdownPreview(a.content)}>
               <div className="text-[13px]">
                 <Markdown>{a.content}</Markdown>
               </div>
@@ -623,7 +628,7 @@ export function AnnotationsPanel({
         <div className="flex flex-col gap-2">
           <GroupLabel icon={<SparkleIcon size={12} />}>{t("panels.assistant")}</GroupLabel>
           {conversations.map((a) => (
-            <AnnotationCard key={a.id} annotation={a} view={view} menu={menuFor(a)} summary={markdownPreview(a.content)}>
+            <AnnotationCard key={a.id} documentId={documentId} annotation={a} view={view} menu={menuFor(a)} summary={markdownPreview(a.content)}>
               {/* The whole conversation, nothing to scroll inside the card. */}
               <div className="text-[13px]">
                 <Markdown>{a.content}</Markdown>
@@ -645,6 +650,7 @@ export function AnnotationsPanel({
           {simplifications.map((a) => (
             <AnnotationCard
               key={a.id}
+              documentId={documentId}
               annotation={a}
               view={view}
               menu={menuFor(a)}

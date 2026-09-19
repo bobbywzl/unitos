@@ -19,6 +19,7 @@ import { NoteId } from "@/components/outline/note-id";
 import { NoteTitleField, focusBodyEditor, useNoteParts } from "@/components/outline/note-title-field";
 import { SaveStateLabel } from "@/components/outline/save-state";
 import { useNoteDrop } from "@/components/use-note-drop";
+import { annotationReferenceMarkdown } from "@/lib/annotation-reference";
 import { quoteMarkdown } from "@/lib/quote-drag";
 import { useCardDropTarget } from "@/components/outline/use-card-drop";
 import { useNoteDraft } from "@/components/outline/use-note-draft";
@@ -261,15 +262,49 @@ export function FloatingNoteEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gone]);
 
-  // A note or an annotation dropped on the card joins its text into the note
-  // (SPEC.md §6). The card's own words are saved first, so the merge reads
-  // what is on screen; while editing, the merged text then takes the draft's
-  // place, saved and ready to keep editing.
+  // An image or a link dropped on the card goes into the note, like a drop
+  // on its tray card (SPEC.md §6, §16): into the draft while editing, else
+  // added and saved.
+  async function addToNote(markdown: string) {
+    setDropError(null);
+    if (editing) {
+      const base = parts.body.replace(/\s+$/, "");
+      const next = base ? `${base}\n\n${markdown}\n` : `${markdown}\n`;
+      setBody(next);
+      actions.floatingDraftChanged(next);
+      return;
+    }
+    const base = shown.body.replace(/\s+$/, "");
+    const body = base ? `${base}\n\n${markdown}` : markdown;
+    await actions.saveNote(edit.id, shown.title ? `# ${shown.title}\n\n${body}` : body);
+  }
+
+  // A note dropped on the card joins its text into the note (SPEC.md §6).
+  // The card's own words are saved first, so the merge reads what is on
+  // screen; while editing, the merged text then takes the draft's place,
+  // saved and ready to keep editing. An annotation dropped on the card lands
+  // as an annotation reference at the end of the note
+  // (lib/annotation-reference.ts); a highlight held in the reader's text
+  // lands as a quote at the end, its anchor a source (lib/card-drag.ts).
   const [merging, setMerging] = useState(false);
   const [mergeError, setMergeError] = useState<string | null>(null);
   async function takeDrop(end: CardDragEndDetail) {
     if (!canEdit || merging) return;
     setMergeError(null);
+    if (end.drag.kind === "quote" || end.drag.kind === "annotation") {
+      const { quote, reference } = end.drag;
+      try {
+        if (end.drag.kind === "quote" && quote) {
+          await addToNote(quoteMarkdown(quote.text));
+          if (note) await actions.attachSource(note.id, quote);
+        } else if (reference) {
+          await addToNote(annotationReferenceMarkdown(actions.notebookId, reference));
+        }
+      } catch (err) {
+        setMergeError(err instanceof Error ? err.message : t("common.requestFailed"));
+      }
+      return;
+    }
     setMerging(true);
     try {
       const current = draft.trim();
@@ -416,22 +451,6 @@ export function FloatingNoteEditor({
   // The card leaves: the gap closes.
   useEffect(() => () => announceNoteWrap(null), []);
 
-  // An image or a link dropped on the card goes into the note, like a drop
-  // on its tray card (SPEC.md §6, §16): into the draft while editing, else
-  // added and saved.
-  async function addToNote(markdown: string) {
-    setDropError(null);
-    if (editing) {
-      const base = parts.body.replace(/\s+$/, "");
-      const next = base ? `${base}\n\n${markdown}\n` : `${markdown}\n`;
-      setBody(next);
-      actions.floatingDraftChanged(next);
-      return;
-    }
-    const base = shown.body.replace(/\s+$/, "");
-    const body = base ? `${base}\n\n${markdown}` : markdown;
-    await actions.saveNote(edit.id, shown.title ? `# ${shown.title}\n\n${body}` : body);
-  }
   const noteDrop = useNoteDrop({
     premium,
     enabled: canEdit,
@@ -509,7 +528,13 @@ export function FloatingNoteEditor({
       data-tip={
         dropTip ??
         (cardDrop.drag && canEdit
-          ? t(cardDrop.drag.kind === "annotation" ? "outline.dropAnnotation" : "outline.dropNote")
+          ? t(
+              cardDrop.drag.kind === "annotation"
+                ? "outline.dropAnnotation"
+                : cardDrop.drag.kind === "quote"
+                  ? "outline.dropQuoteIntoNote"
+                  : "outline.dropNote",
+            )
           : editing
             ? undefined
             : t("outline.holdToMoveCard"))
@@ -597,7 +622,13 @@ export function FloatingNoteEditor({
       {cardDrop.drag && canEdit ? (
         <div className="mt-2 flex shrink-0 items-center gap-1.5">
           <span className="text-[11px] font-semibold text-sage-700">
-            {t(cardDrop.drag.kind === "annotation" ? "outline.dropAnnotation" : "outline.dropNote")}
+            {t(
+              cardDrop.drag.kind === "annotation"
+                ? "outline.dropAnnotation"
+                : cardDrop.drag.kind === "quote"
+                  ? "outline.dropQuoteIntoNote"
+                  : "outline.dropNote",
+            )}
           </span>
         </div>
       ) : editing ? (

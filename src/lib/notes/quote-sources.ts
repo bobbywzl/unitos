@@ -48,11 +48,12 @@ export function quotesOf(body: string): string[] {
   return quotes;
 }
 
-/** The sources a note's quotes do not cover: the chips still worth showing. */
-export function uncoveredSources(body: string, sources: SourceChip[]): SourceChip[] {
+/** The ids of the sources a note's quotes cover. */
+export function coveredSourceIds(body: string, sources: { id: string; quotedText: string }[]): Set<string> {
   const covered = new Set<string>();
+  const chips = sources.map((s) => ({ id: s.id, quotedText: s.quotedText, documentId: "", documentTitle: "", orphaned: false }));
   for (const quote of quotesOf(body)) {
-    const source = sourceOfQuote(quote, sources);
+    const source = sourceOfQuote(quote, chips);
     if (source) covered.add(source.id);
     // A passage over several blocks: every block's source it holds.
     for (const s of sources) {
@@ -60,5 +61,25 @@ export function uncoveredSources(body: string, sources: SourceChip[]): SourceChi
       if (n.length >= 8 && normalize(quote).includes(n)) covered.add(s.id);
     }
   }
+  return covered;
+}
+
+/** The sources a note's quotes do not cover: the chips still worth showing. */
+export function uncoveredSources(body: string, sources: SourceChip[]): SourceChip[] {
+  const covered = coveredSourceIds(body, sources);
   return sources.filter((s) => !covered.has(s.id));
+}
+
+/** The sources whose quote an edit removed from the note: covered by a
+    quote in the text before, by none in the text after (SPEC.md §6). They
+    go with the quote, so the mark in the reader stops pointing at a note
+    that no longer holds the words. A source no quote ever covered stays. */
+export function sourcesLeftByQuotes(
+  before: string,
+  after: string,
+  sources: { id: string; quotedText: string }[],
+): string[] {
+  const was = coveredSourceIds(before, sources);
+  const is = coveredSourceIds(after, sources);
+  return [...was].filter((id) => !is.has(id));
 }

@@ -52,9 +52,16 @@ export function stopClickAfterDrag() {
 export function watchHold(
   e: { clientX: number; clientY: number; pointerType: string },
   onLift: (at: { x: number; y: number }) => void,
+  {
+    pull = true,
+  }: {
+    /** False: a mouse pull never lifts, only the hold does — on text the
+        reader may want to select, a pull is a selection. */
+    pull?: boolean;
+  } = {},
 ) {
   const start = { x: e.clientX, y: e.clientY };
-  const mouse = e.pointerType !== "touch";
+  const mouse = pull && e.pointerType !== "touch";
   let lifted = false;
   const stop = () => {
     clearTimeout(timer);
