@@ -52,7 +52,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ blockId: stri
   const access = await documentAccess(block.documentId, "editor");
   if (access instanceof NextResponse) return access;
 
-  if (block.type === "TABLE" || block.type === "FIGURE") {
+  if (block.type === "TABLE" || block.type === "FIGURE" || block.type === "SLIDE" || block.type === "SHEET") {
     return NextResponse.json({ error: t("api.onlyTextBlocksEdited") }, { status: 400 });
   }
 
@@ -230,7 +230,7 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ blockId: st
   if (!block) return NextResponse.json({ error: t("api.blockNotFound") }, { status: 404 });
   const access = await documentAccess(block.documentId, "editor");
   if (access instanceof NextResponse) return access;
-  if (block.type === "TABLE" || block.type === "FIGURE") {
+  if (block.type === "TABLE" || block.type === "FIGURE" || block.type === "SLIDE" || block.type === "SHEET") {
     return NextResponse.json({ error: t("api.onlyTextBlocksRemoved") }, { status: 400 });
   }
 

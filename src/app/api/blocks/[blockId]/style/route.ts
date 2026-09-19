@@ -33,7 +33,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ blockId: strin
   if (!block) return NextResponse.json({ error: t("api.blockNotFound") }, { status: 404 });
   const access = await documentAccess(block.documentId, "editor");
   if (access instanceof NextResponse) return access;
-  if (block.type === "TABLE" || block.type === "FIGURE") {
+  if (block.type === "TABLE" || block.type === "FIGURE" || block.type === "SLIDE" || block.type === "SHEET") {
     return NextResponse.json({ error: t("api.onlyTextBlocksStyled") }, { status: 400 });
   }
   if (data.endOffset <= data.startOffset || data.endOffset > block.text.length) {

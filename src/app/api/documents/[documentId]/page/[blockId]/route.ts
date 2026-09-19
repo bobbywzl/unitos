@@ -16,7 +16,11 @@ const paramsSchema = z.object({
 // A handwritten document's page: the PAGE block's stored render (PageImage,
 // SPEC.md §16). A page without one — a document from before pages were kept,
 // or a render that has not landed yet — renders from the document's stored
-// bytes now and is kept for the next request.
+// bytes now and is kept for the next request. A slides document's slide
+// (SPEC.md §27): the SLIDE block's stored picture, rendered from Drive's PDF
+// export after the add; a slide without one answers 404 — the stored file
+// is the .pptx, there is nothing to render from — and the reader shows the
+// replica alone.
 export async function GET(
   _req: Request,
   ctx: { params: Promise<{ documentId: string; blockId: string }> },
@@ -32,7 +36,12 @@ export async function GET(
     where: { id: blockId },
     select: { documentId: true, type: true, page: true },
   });
-  if (!block || block.documentId !== documentId || block.type !== "PAGE" || block.page === null) {
+  if (
+    !block ||
+    block.documentId !== documentId ||
+    (block.type !== "PAGE" && block.type !== "SLIDE") ||
+    block.page === null
+  ) {
     return NextResponse.json({ error: t("api.blockNotFound") }, { status: 404 });
   }
   const access = await documentAccess(documentId, "viewer");
@@ -40,6 +49,9 @@ export async function GET(
 
   const stored = await db.pageImage.findUnique({ where: { blockId }, select: { data: true } });
   let image: Uint8Array | null = stored?.data ?? null;
+  if (!image && block.type === "SLIDE") {
+    return NextResponse.json({ error: t("api.blockNotFound") }, { status: 404 });
+  }
   if (!image) {
     const document = await db.document.findUnique({
       where: { id: documentId },

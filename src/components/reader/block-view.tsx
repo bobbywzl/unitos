@@ -642,15 +642,21 @@ function HighlightLabel({ anchors }: { anchors: Highlight[] }) {
   );
 }
 
-// A table's html with the block's marks painted inside it (table-marks.ts).
-// The html lands as one string; the marks are painted after it, on the
-// DOM, and repainted only when what they depend on changes — a paint
-// replaces the passage's text nodes, and the browser's selection with them,
-// which the selection tint stands in for (reader-interactions.tsx). When
-// the html's text is not the block text nothing paints and the block rings
-// whole, as a figure does.
-function TableHtml({
+// A table's, a slide's, or a sheet's html with the block's marks painted
+// inside it (table-marks.ts). The html lands as one string; the marks are
+// painted after it, on the DOM, and repainted only when what they depend
+// on changes — a paint replaces the passage's text nodes, and the
+// browser's selection with them, which the selection tint stands in for
+// (reader-interactions.tsx). When the html's text is not the block text
+// nothing paints and the block rings whole, as a figure does.
+// A slide that came with a picture (SPEC.md §27: data-picture on its
+// frame, the picture the page image route serves) draws the picture over
+// the replica once it loads: the replica's words turn transparent and its
+// shapes hide, the marks still paint on the words. A picture that fails
+// to load leaves the replica as it is.
+function MarkedHtml({
   blockId,
+  documentId,
   className,
   html,
   text,
@@ -658,6 +664,7 @@ function TableHtml({
   ring,
 }: {
   blockId: string;
+  documentId?: string;
   className: string;
   html: string;
   text: string;
@@ -680,6 +687,23 @@ function TableHtml({
     if (!el) return;
     return bindTableMarkClicks(el);
   }, []);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || !documentId) return;
+    const frame = el.querySelector<HTMLElement>(".slide-frame[data-picture]");
+    const slide = frame?.querySelector<HTMLElement>(".slide");
+    if (!frame || !slide || slide.querySelector(".slide-picture")) return;
+    const img = document.createElement("img");
+    img.className = "slide-picture";
+    img.alt = "";
+    img.draggable = false;
+    img.loading = "lazy";
+    img.setAttribute("data-anchor-skip", "");
+    img.addEventListener("load", () => frame.classList.add("slide-pictured"));
+    img.addEventListener("error", () => img.remove());
+    img.src = `/api/documents/${documentId}/page/${blockId}`;
+    slide.prepend(img);
+  }, [html, documentId, blockId]);
   return (
     <div
       ref={ref}
@@ -847,9 +871,49 @@ export function BlockView({
     case "TABLE":
       if (block.html) {
         return (
-          <TableHtml
+          <MarkedHtml
             blockId={block.id}
             className={`${shared} reader-table my-3 overflow-x-auto text-sm`}
+            html={block.html}
+            text={block.text}
+            highlights={highlights}
+            ring={htmlHighlighted}
+          />
+        );
+      }
+      return (
+        <pre data-block-id={block.id} className={`${shared} my-3 overflow-x-auto font-mono text-sm`}>
+          {content}
+        </pre>
+      );
+    // A slide and a sheet are text (SPEC.md §27): their words are rendered
+    // text inside the replica or the grid, selected and marked like a
+    // table's, never rung whole.
+    case "SLIDE":
+      if (block.html) {
+        return (
+          <MarkedHtml
+            blockId={block.id}
+            documentId={documentId}
+            className={`${shared} reader-slide my-6`}
+            html={block.html}
+            text={block.text}
+            highlights={highlights}
+            ring={htmlHighlighted}
+          />
+        );
+      }
+      return (
+        <p data-block-id={block.id} className={`${shared} my-4 whitespace-pre-wrap`}>
+          {content}
+        </p>
+      );
+    case "SHEET":
+      if (block.html) {
+        return (
+          <MarkedHtml
+            blockId={block.id}
+            className={`${shared} reader-sheet my-3 text-sm`}
             html={block.html}
             text={block.text}
             highlights={highlights}

@@ -30,6 +30,24 @@ export function renderBlockLines(blocks: PrefixBlock[]): string {
     .join("\n\n");
 }
 
+// Slides and sheets (SPEC.md §27): what a SLIDE or SHEET block's text is,
+// said once when the document has one. Constant per document, so the
+// cached prefix stays byte-identical across derivations.
+export function formatLines(blocks: { type: string }[]): string[] {
+  const lines: string[] = [];
+  if (blocks.some((b) => b.type === "SLIDE")) {
+    lines.push(
+      "A SLIDE block is one slide: its title first, then its text top to bottom, then its speaker notes after the line \"Speaker notes:\". Cells of a table on a slide are separated by tabs, rows by newlines.",
+    );
+  }
+  if (blocks.some((b) => b.type === "SHEET")) {
+    lines.push(
+      "A SHEET block is one sheet of a spreadsheet: one line per row, cells separated by tabs, values as the sheet formats them. The HEADING before it is the sheet's name. Name a cell by its sheet, row, and column when the reader needs to find it.",
+    );
+  }
+  return lines;
+}
+
 // One rendering of the reference list for every prompt and for the digest.
 export function renderReferenceLines(references: unknown): string[] {
   const referenceList = documentReferences(references ?? null);
@@ -49,6 +67,7 @@ export function documentPrefix(
   return [
     "You assist a reader dissecting a document. The full document follows.",
     "Each block starts with its id in the form [block <id>]. Reference block ids exactly as given when asked for them.",
+    ...formatLines(blocks),
     "",
     `Document title: ${title}`,
     "",

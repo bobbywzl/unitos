@@ -20,6 +20,7 @@ import { isMediaUrl } from "@/lib/video/types";
 import { parseYouTubeId } from "@/lib/video/youtube";
 import { parseBody } from "@/lib/validate";
 import { isMarkdownFile } from "@/lib/markdown-file";
+import { isSheetsFile } from "@/lib/office-file";
 
 // A split add parses one very long page and saves several documents; the AI
 // passes on such a page need the headroom.
@@ -82,6 +83,21 @@ const fileFieldsSchema = z.object({
   convert: z.enum(["0", "1"]).default("1"),
 });
 
+// Which of the slides and sheets formats an uploaded file is (SPEC.md §27):
+// a .pptx or .xlsx by its zip's parts, a .csv/.tsv by its name or type
+// (plain text has no magic). Null for a PDF, an image, or a Markdown file.
+function officeFormat(
+  parse: typeof import("@/lib/parse/ingest"),
+  bytes: Uint8Array,
+  file: { type: string; name: string },
+): "slides" | "sheets" | null {
+  const office = parse.sniffOfficeFile(bytes);
+  if (office === "pptx") return "slides";
+  if (office === "xlsx") return "sheets";
+  if (!parse.isZipBytes(bytes) && isSheetsFile(file)) return "sheets";
+  return null;
+}
+
 // PDF upload (multipart) or URL ingestion (JSON). Both attach to the notebook.
 export async function POST(req: Request) {
   const user = await currentUser();
@@ -140,6 +156,26 @@ export async function POST(req: Request) {
       }
       filename = filename.replace(IMAGE_EXTENSIONS, "");
       pages = true;
+    } else if (officeFormat(parse, bytes, { type: file.type, name: filename })) {
+      // Slides and sheets (SPEC.md §27): a .pptx, a .xlsx, or a .csv/.tsv
+      // parses with its own parser, no judgment, no model pass.
+      const format = officeFormat(parse, bytes, { type: file.type, name: filename });
+      return progressResponse(async (onProgress) => {
+        try {
+          const { document, deduped } =
+            format === "slides"
+              ? await parse.ingestSlides(bytes, filename, onProgress, {}, user?.id ?? null)
+              : await parse.ingestSheets(bytes, filename, onProgress);
+          await attachDocument(fields.data.notebookId, document.id);
+          await bumpNotebook(fields.data.notebookId);
+          // The skeleton builds after the response (SPEC.md §22).
+          if (!deduped) after(() => refreshSkeleton(document.id, user?.id ?? null).catch(() => {}));
+          return { id: document.id, title: document.title, deduped };
+        } catch (err) {
+          console.error("Slides/sheets ingest failed:", err);
+          throw new Error(describeIngestError(err, t, "pdf"));
+        }
+      });
     } else if (isMarkdownFile({ type: file.type, name: filename })) {
       // A Markdown file (SPEC.md §2): the URL walk reads it, no judgment, no
       return progressResponse(async (onProgress) => {

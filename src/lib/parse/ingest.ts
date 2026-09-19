@@ -24,6 +24,18 @@ import {
   type ParsedDocument,
 } from "@/lib/parse/types";
 import { parseMarkdownDocument } from "@/lib/parse/markdown-document";
+import { sniffOfficeFile } from "@/lib/parse/office";
+// The routes load this module per request (see /api/documents), so the
+// sniff that decides a file's parser rides with it: jsdom must not load
+// with a route module.
+export { isZipBytes, sniffOfficeFile } from "@/lib/parse/office";
+import { parseSlides, type SlideImageStore } from "@/lib/parse/slides";
+import { parseDelimited, parseSheets, type Delimiter } from "@/lib/parse/sheets";
+import {
+  restoreSlidePictures,
+  slidePicturesByPage,
+  storeSlidePictureSizes,
+} from "@/lib/handwritten/page-images";
 
 // Ingest progress, reported to the caller as each stage starts. A repeated stage
 // updates the detail line ("148 figures · 152 equations"). Dedupe hits report
@@ -190,6 +202,8 @@ async function createDocumentWithBlocks(data: {
   font?: ParsedDocument["font"];
   columnWidth?: number;
   render?: RenderReport | null;
+  // Slides and sheets (SPEC.md §27): the stored file's format.
+  format?: ParsedDocument["format"];
 }) {
   const blocks = resolveContentsLinks(data.blocks);
   return db.$transaction(async (tx) => {
@@ -203,6 +217,7 @@ async function createDocumentWithBlocks(data: {
         references: data.references,
         font: data.font,
         columnWidth: data.columnWidth,
+        format: data.format,
         ...renderColumns(data.render ?? null),
       },
     });
@@ -226,9 +241,11 @@ async function createDocumentWithBlocks(data: {
 }
 
 // An image the parse stored itself (a captured chart animation,
-// lib/parse/render-page.ts) belongs to the document whose figure carries
-// it: it goes with the document, and a re-parse replaces it.
-const OWN_IMAGE_SRC_RX = /\ssrc="\/api\/images\/([A-Za-z0-9_-]+)"/g;
+// lib/parse/render-page.ts; a slide's picture, lib/parse/slides.ts)
+// belongs to the document whose block carries it — as an <img src> or as
+// a CSS background url(): it goes with the document, and a re-parse
+// replaces it.
+const OWN_IMAGE_SRC_RX = /(?:\ssrc="|url\()\/api\/images\/([A-Za-z0-9_-]+)/g;
 
 function capturedImageIds(blocks: { html?: string | null }[]): string[] {
   const ids = new Set<string>();
@@ -384,6 +401,112 @@ export async function ingestMarkdown(
   return { document, deduped: false };
 }
 
+// ── Slides and sheets (SPEC.md §27) ─────────────────────────────────────────
+
+// The reader's column for a slides document: the replica scales to the
+// column, so a wide column shows a slide large enough to read; sheets take
+// the widest column, and the pane caps it.
+const SLIDES_COLUMN_WIDTH = 960;
+const SHEETS_COLUMN_WIDTH = 1600;
+
+/** A slide's pictures stored as images of the document (claimed on save,
+    like a captured chart). */
+function slideImageStore(userId: string | null): SlideImageStore {
+  return async (bytes, mimeType) => {
+    const image = await db.imageAsset.create({
+      data: { mimeType, size: bytes.length, data: Buffer.from(bytes), userId },
+      select: { id: true },
+    });
+    return `/api/images/${image.id}`;
+  };
+}
+
+export type SlidesIngestOptions = IngestOptions & {
+  // Drive's PDF export of the same file (SPEC.md §14): one page per slide,
+  // the picture the reader draws over each replica. The sizes are stored
+  // with the document; the caller renders the pages after the response
+  // (renderSlidePictures).
+  picture?: Uint8Array;
+};
+
+// Slides upload path (SPEC.md §27): a .pptx, or a Google Slides file Drive
+// exported as one. Dedupe by fileHash like a PDF; the bytes are kept for
+// re-parse. No model pass: the parse is the file's own structure.
+export async function ingestSlides(
+  bytes: Uint8Array<ArrayBuffer>,
+  filename: string,
+  onProgress?: OnIngestProgress,
+  opts: SlidesIngestOptions = {},
+  userId: string | null = null,
+) {
+  const fileHash = createHash("sha256").update(bytes).digest("hex");
+  const existing = await db.document.findUnique({ where: { fileHash } });
+  if (existing) return { document: existing, deduped: true };
+
+  onProgress?.("parse");
+  const parsed = await parseSlides(bytes, filename, {
+    storeImage: slideImageStore(userId),
+    picture: opts.picture !== undefined,
+  });
+  onProgress?.("save");
+  const document = await createDocumentWithBlocks({
+    title: parsed.title ?? filename.replace(/\.pptx$/i, ""),
+    sourceUrl: opts.sourceUrl,
+    fileHash,
+    fileData: bytes,
+    blocks: parsed.blocks,
+    format: "slides",
+    columnWidth: SLIDES_COLUMN_WIDTH,
+  });
+  if (opts.picture) {
+    try {
+      await storeSlidePictureSizes(document.id, opts.picture);
+    } catch (err) {
+      console.warn("[slides] picture sizes failed:", err);
+    }
+  }
+  return { document, deduped: false };
+}
+
+/** The delimiter a sheets file name promises: tabs for a .tsv; otherwise
+    the text decides (lib/parse/sheets.ts sniffDelimiter). */
+function delimiterOf(filename: string): Delimiter | undefined {
+  return /\.tsv$/i.test(filename) ? "\t" : undefined;
+}
+
+function parseSheetsBytes(bytes: Uint8Array, filename: string): ParsedDocument {
+  if (sniffOfficeFile(bytes) === "xlsx") return parseSheets(bytes, filename);
+  return parseDelimited(new TextDecoder("utf-8").decode(bytes), filename, delimiterOf(filename));
+}
+
+// Sheets upload path (SPEC.md §27): a .xlsx, a Google Sheets file Drive
+// exported as one, or a .csv/.tsv. Dedupe by fileHash; the bytes are kept
+// for re-parse. No model pass.
+export async function ingestSheets(
+  bytes: Uint8Array<ArrayBuffer>,
+  filename: string,
+  onProgress?: OnIngestProgress,
+  opts: IngestOptions = {},
+) {
+  const fileHash = createHash("sha256").update(bytes).digest("hex");
+  const existing = await db.document.findUnique({ where: { fileHash } });
+  if (existing) return { document: existing, deduped: true };
+
+  onProgress?.("parse");
+  const parsed = parseSheetsBytes(bytes, filename);
+  onProgress?.("save");
+  const document = await createDocumentWithBlocks({
+    title: parsed.title ?? filename,
+    sourceUrl: opts.sourceUrl,
+    fileHash,
+    fileData: bytes,
+    blocks: parsed.blocks,
+    format: "sheets",
+    columnWidth: SHEETS_COLUMN_WIDTH,
+  });
+  return { document, deduped: false };
+}
+
 // The file name a PDF link carries, for the document title fallback.
 function filenameOfUrl(url: string): string {
   try {
@@ -515,6 +638,47 @@ export async function reparseDocument(
   // page over it (SPEC.md §15).
   if (document.sourceUrl?.includes(SPLIT_URL_MARKER)) {
     throw new Error("Split documents do not re-parse");
+  }
+
+  // A slides or sheets document (SPEC.md §27) parses its stored file with
+  // its own parser; the slides' stored pictures carry over by slide number.
+  if (document.format === "slides" || document.format === "sheets") {
+    if (!document.fileData) throw new Error("Document has no stored file");
+    onProgress?.("parse");
+    const bytes = new Uint8Array(document.fileData);
+    const pictures = document.format === "slides" ? await slidePicturesByPage(documentId) : new Map();
+    const parsed =
+      document.format === "slides"
+        ? await parseSlides(bytes, document.title, { storeImage: slideImageStore(userId), picture: pictures.size > 0 })
+        : parseSheetsBytes(bytes, document.title);
+    onProgress?.("save", saveDetail(parsed.blocks));
+    await db.$transaction(async (tx) => {
+      await tx.block.deleteMany({ where: { documentId } });
+      await tx.imageAsset.deleteMany({ where: { documentId } });
+      await tx.block.createMany({
+        data: parsed.blocks.map((b, i) => ({
+          documentId,
+          order: i,
+          type: b.type,
+          text: b.text,
+          html: b.html,
+          page: b.page,
+        })),
+      });
+      await claimCapturedImages(tx, documentId, parsed.blocks);
+      await tx.document.update({
+        where: { id: documentId },
+        data: {
+          parserVersion: PARSER_VERSION,
+          columnWidth: document.format === "slides" ? SLIDES_COLUMN_WIDTH : SHEETS_COLUMN_WIDTH,
+          contents: Prisma.DbNull,
+          skeleton: Prisma.DbNull,
+          skeletonStartedAt: null,
+        },
+      });
+    });
+    await restoreSlidePictures(documentId, pictures);
+    return db.document.findUnique({ where: { id: documentId } });
   }
 
   const target = as ?? (document.handwritten ? "handwritten" : "article");

@@ -1881,7 +1881,9 @@ export function ReaderInteractions({
         block.type === "FIGURE" ||
         block.type === "TABLE" ||
         block.type === "SEPARATOR" ||
-        block.type === "PAGE"
+        block.type === "PAGE" ||
+        block.type === "SLIDE" ||
+        block.type === "SHEET"
       )
         return;
       // Video documents' blocks refuse edits outright.

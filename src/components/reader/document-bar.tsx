@@ -43,6 +43,7 @@ import {
 import { setRevealFlag } from "@/components/reader/reveal";
 import { UploadAssistant, uploadItemTitle, type UploadRequest } from "@/components/reader/upload-assistant";
 import { isMarkdownFile, MARKDOWN_ACCEPT } from "@/lib/markdown-file";
+import { isSheetsFile, isSlidesFile, SHEETS_ACCEPT, SLIDES_ACCEPT } from "@/lib/office-file";
 
 export type AttachedDocument = {
   id: string;
@@ -169,11 +170,11 @@ function isMediaFile(file: File): boolean {
 }
 
 // Every file the add-document dialog's drop zone takes: PDF, image, video and
-// audio, Markdown — one accept list, since the dialog does not ask which kind
-// is coming in.
+// audio, Markdown, slides and sheets (SPEC.md §27) — one accept list, since
+// the dialog does not ask which kind is coming in.
 const VIDEO_ACCEPT =
   "video/mp4,video/webm,video/ogg,video/quicktime,audio/mpeg,audio/mp4,audio/aac,audio/wav,audio/flac,audio/ogg,.mp4,.m4v,.webm,.ogv,.ogg,.mov,.mp3,.m4a,.m4b,.aac,.wav,.flac,.oga,.opus";
-const UPLOAD_FILE_ACCEPT = `application/pdf,.pdf,${IMAGE_ACCEPT},${MARKDOWN_ACCEPT},${VIDEO_ACCEPT}`;
+const UPLOAD_FILE_ACCEPT = `application/pdf,.pdf,${IMAGE_ACCEPT},${MARKDOWN_ACCEPT},${SLIDES_ACCEPT},${SHEETS_ACCEPT},${VIDEO_ACCEPT}`;
 
 // Documents in the header: one pill showing the open document, expanding a
 // vertical document list on hover or click. Everything that adds one opens
@@ -711,8 +712,9 @@ export function DocumentBar({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [addParam, canEdit]);
 
-  // Drag-and-drop upload — PDFs, images, Markdown, video and audio files:
-  // dropping anywhere on the page adds to this work (use-page-file-drop.ts).
+  // Drag-and-drop upload — PDFs, images, Markdown, slides, sheets, video and
+  // audio files: dropping anywhere on the page adds to this work
+  // (use-page-file-drop.ts).
   // A drop of files the work cannot take opens the add-document dialog with
   // the reason: the error shows there, and the dialog's drop zone is where
   // the next try goes.
@@ -725,6 +727,8 @@ export function DocumentBar({
           f.name.toLowerCase().endsWith(".pdf") ||
           isImageFile(f) ||
           isMarkdownFile(f) ||
+          isSlidesFile(f) ||
+          isSheetsFile(f) ||
           isMediaFile(f),
       );
       if (accepted.length === 0) {

@@ -88,6 +88,11 @@ export type ParsedDocument = {
   // it out, read from the baked <body data-column-px>; stored in
   // Document.columnWidth, the reader's column width for the document.
   columnWidth?: number;
+  // Slides and sheets (SPEC.md §27): the stored file's format, kept on
+  // Document.format so a re-parse picks the same parser.
+  format?: "slides" | "sheets";
+  // Slides: the slide's width over its height; sets the reader's column.
+  slideAspect?: number;
 };
 
 /** Document.references as stored Json → typed entries. Defensive: bad rows drop. */
@@ -203,4 +208,7 @@ export type UrlParseProgress = (stage: "extract", detail?: string) => void;
 //     video, iframe, and chart of the page against the blocks after the walk
 //     and rebuilds what no block carries where the page set it; a figure the
 //     model passes dropped between two kept blocks is restored.
+// Slides and sheets (SPEC.md §27) parse with their own parsers
+// (lib/parse/slides.ts, lib/parse/sheets.ts) and re-parse only on request:
+// they carry no version of their own.
 export const PARSER_VERSION = 19;

@@ -53,6 +53,14 @@ export async function GET(_req: Request, ctx: { params: Promise<{ documentId: st
       images.add(`/api/documents/${documentId}/page/${block.id}`);
     } else if (block.type === "FIGURE" && !block.html && block.page !== null) {
       images.add(`/api/documents/${documentId}/figure/${block.id}`);
+    } else if (block.type === "SLIDE" && block.html) {
+      // A slide's stored picture (SPEC.md §27), when the add promised one,
+      // and the pictures its replica carries.
+      if (block.html.includes('data-picture="1"')) images.add(`/api/documents/${documentId}/page/${block.id}`);
+      for (const match of block.html.matchAll(IMG_SRC_RX)) {
+        const src = unescapeAttr(match[1]);
+        if (/^(?:https?:\/\/|\/api\/)/i.test(src)) images.add(src);
+      }
     } else if ((block.type === "FIGURE" || block.type === "TABLE") && block.html) {
       for (const match of block.html.matchAll(IMG_SRC_RX)) {
         const src = unescapeAttr(match[1]);
