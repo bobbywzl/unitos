@@ -4,8 +4,10 @@ import { translate } from "@/lib/i18n/dictionaries";
 
 // The models (SPEC.md §2). GLM 5.3, Z.ai's flagship, is behind the reader's
 // tools, the assistant, Stitch's answer, and the merge of notes; GLM 5.3
-// Flash, its small sibling, behind every reading — the readings copy claims
-// into structure, and Flash reads a million tokens for a tenth of the price.
+// Flash, its small sibling, behind every reading but the parse — the
+// readings copy claims into structure, and Flash reads a million tokens for
+// a tenth of the price. The parse passes run on Claude Fable 5.1
+// (PARSE_MODEL below): what the parse gets wrong, every later tool inherits.
 // Both run through the gateway (lib/gateway.ts): without it, a GLM id
 // resolves to Kimi K3 (lib/models.ts). Kimi K3, Moonshot AI's flagship,
 // keeps what GLM 5.3 cannot do: it reads images (VISION_MODEL: a circled
@@ -216,16 +218,18 @@ export const GIST_MODEL = GLM_5_3_FLASH;
 export const GIST_EFFORT: KimiEffort = "low";
 
 // The parse passes — the URL core, structure, and layout passes (SPEC.md §2)
-// — run on GLM 5.3 Flash at high effort. The passes answer with ops by block
-// index, a reading of the page rather than a problem to solve, and the
-// figure rules are the code's (lib/parse/structure.ts, layout.ts: a figure
-// with media is never dropped), so the parse keeps its figures under any
-// model. A claude- id here runs through lib/claude.ts instead; the passes
-// call whichever client the id belongs to (lib/parse/model.ts), and the
-// prompts are the same either way. What the parse gets wrong every later
-// tool inherits: keep the effort high.
-export const PARSE_MODEL = GLM_5_3_FLASH;
-export const PARSE_EFFORT: KimiEffort = "high";
+// — run on Claude Fable 5.1 at high effort: the best reader available. The
+// passes answer with ops by block index, and what the parse gets wrong every
+// later tool inherits — a heading read as a paragraph, a figure row split, a
+// caption dropped — so the parse gets the strongest model, not the cheapest.
+// The figure rules stay the code's (lib/parse/structure.ts, layout.ts: a
+// figure with media is never dropped), whatever the model. "high", not
+// "max": the layout pass reads the page's whole HTML against the request's
+// time budget (modelPassDeadline), and a pass that outruns it is skipped.
+// A claude- id runs through lib/claude.ts; any other id through lib/kimi.ts
+// (lib/parse/model.ts), with the same prompts, so the model is one constant.
+export const PARSE_MODEL = CLAUDE_FABLE_5_1;
+export const PARSE_EFFORT: ClaudeEffort = "high";
 
 // The upload assistant's review and instruction check (SPEC.md §15). Not a
 // DerivationType — it runs before ingest, not through /api/derive.
