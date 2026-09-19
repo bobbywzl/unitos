@@ -1,3 +1,4 @@
+import type { AnnotationReference } from "@/lib/annotation-reference";
 import type { QuoteDrag } from "@/lib/quote-drag";
 
 // One drag that crosses surfaces (SPEC.md §6): a note card of the notes tray,
@@ -28,6 +29,10 @@ export type CardDrag = {
       on a note, the quote lands at the end of the note and the anchor
       becomes a source of the note. */
   quote?: QuoteDrag;
+  /** kind "annotation": the annotation and where it is anchored
+      (lib/annotation-reference.ts); dropped on a note, an annotation
+      reference lands at the end of the note. */
+  reference?: AnnotationReference;
 };
 
 /** What a merge does to the text. join: the sources' text lands in the target

@@ -7,6 +7,7 @@ import { useCollab } from "@/components/collab/collab-context";
 import { ChevronLeftIcon, PlusIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { SortableBoard, SortableGroup, SortableItem } from "@/components/sortable";
+import { AnnotationSideHost, useAnnotationSide } from "@/components/outline/annotation-side";
 import { dropIndex, notesList, parseListId } from "@/components/outline/board-lists";
 import { MergeUndoBar } from "@/components/outline/merge-undo";
 import { NoteCard } from "@/components/outline/note-card";
@@ -64,6 +65,9 @@ export function SectionBoard({
   const notes = compose.visibleNotes;
   const notesById = new Map(notes.map((n) => [n.id, n]));
   const opened = open ? (notesById.get(open) ?? null) : null;
+  // An annotation reference clicked in the open note opens the annotation
+  // beside its card (annotation-side.tsx): the overlay widens for the two.
+  const sideOpen = Boolean(useAnnotationSide()?.side);
 
   // The section is gone (deleted elsewhere): the board closes.
   const gone = section === null;
@@ -219,17 +223,22 @@ export function SectionBoard({
             className="fixed inset-0 cursor-default"
             tabIndex={-1}
           />
-          <div className="content-in relative w-full max-w-[760px]">
-            <button
-              onClick={() => setOpen(null)}
-              data-track="board-note-close"
-              aria-label={t("common.close")}
-              data-tip={t("common.close")}
-              className="absolute -top-9 right-0 flex size-7 items-center justify-center rounded-full bg-card text-sand-600 shadow-soft hover:bg-clay-100 hover:text-clay-800"
-            >
-              ✕
-            </button>
-            <NoteCard note={opened} actions={actions} variant="page" />
+          <div
+            className={`content-in relative flex w-full flex-col items-start gap-6 lg:flex-row ${sideOpen ? "max-w-[1160px]" : "max-w-[760px]"}`}
+          >
+            <div className="relative w-full min-w-0 max-w-[760px] flex-1">
+              <button
+                onClick={() => setOpen(null)}
+                data-track="board-note-close"
+                aria-label={t("common.close")}
+                data-tip={t("common.close")}
+                className="absolute -top-9 right-0 flex size-7 items-center justify-center rounded-full bg-card text-sand-600 shadow-soft hover:bg-clay-100 hover:text-clay-800"
+              >
+                ✕
+              </button>
+              <NoteCard note={opened} actions={actions} variant="page" />
+            </div>
+            <AnnotationSideHost />
           </div>
         </div>
       )}

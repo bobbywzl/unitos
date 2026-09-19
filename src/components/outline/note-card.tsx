@@ -15,7 +15,9 @@ import { markdownPreview } from "@/lib/markdown-preview";
 import { useGist } from "@/lib/gist-client";
 import { useMergeTarget, type HandleProps } from "@/components/sortable";
 import { useNoteDrop } from "@/components/use-note-drop";
+import { annotationReferenceMarkdown } from "@/lib/annotation-reference";
 import { quoteMarkdown } from "@/lib/quote-drag";
+import { useAnnotationSide } from "@/components/outline/annotation-side";
 import { imageMarkdown } from "@/lib/images";
 import { linkMarkdown } from "@/lib/note-links";
 import { setTaskChecked } from "@/lib/note-markup";
@@ -123,6 +125,9 @@ export function NoteCard({
   const t = useT();
   const router = useRouter();
   const { canEdit, premium, shared, people } = useCollab();
+  // The notes full page: an annotation reference opens the annotation beside
+  // the note (annotation-side.tsx). Elsewhere it opens the reader.
+  const annotationSide = useAnnotationSide();
   const [editing, setEditing] = useState(false);
   const [copied, setCopied] = useState(false);
   // The note's own history, open under the note (note-history.tsx).
@@ -155,8 +160,8 @@ export function NoteCard({
   const hit = searchHit(search);
 
   // An annotation dragged out of the Annotations tab, or off its card over the
-  // article, lands here: dropped on the note it is copied in — its text into
-  // the note, its anchors as sources — and it stays painted in the article
+  // article, lands here as an annotation reference at the end of the note
+  // (lib/annotation-reference.ts), and it stays painted in the article
   // (SPEC.md §6). A highlight held in the reader's text lands as a quote at
   // the end of the note, its anchor a source (lib/card-drag.ts). A note the
   // reader cannot edit, and one not accepted yet, take no drop: the merge is
@@ -170,6 +175,11 @@ export function NoteCard({
         if (!drag.quote) return;
         await addToNote(quoteMarkdown(drag.quote.text));
         await actions.attachSource(note.id, drag.quote);
+        return;
+      }
+      if (drag.kind === "annotation") {
+        if (!drag.reference) return;
+        await addToNote(annotationReferenceMarkdown(actions.notebookId, drag.reference));
         return;
       }
       await actions.mergeNotes(note.id, drag.ids, "join");
@@ -652,6 +662,7 @@ export function NoteCard({
               highlight={hit}
               sources={note.sources}
               notebookId={actions.notebookId}
+              onAnnotationReference={annotationSide ? annotationSide.open : undefined}
               onToggleTask={
                 canEdit
                   ? (line, checked) =>

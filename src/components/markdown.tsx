@@ -6,10 +6,11 @@ import { useRouter } from "next/navigation";
 import { createContext, useContext, useMemo } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { LinkIcon } from "@/components/icons";
+import { CommentIcon, LinkIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { isVisualizationImage, openVisualization } from "@/components/reader/visualization-viewer";
 import { imageWidth } from "@/lib/note-markup";
+import { parseAnnotationReference, type ParsedAnnotationReference } from "@/lib/annotation-reference";
 import { linkHost } from "@/lib/note-links";
 import { sourceOfQuote } from "@/lib/notes/quote-sources";
 import { splitHits } from "@/lib/search-hits";
@@ -257,6 +258,44 @@ function LinkCard({ href, children }: { href: string; children: React.ReactNode 
   );
 }
 
+// An annotation reference (SPEC.md §6, lib/annotation-reference.ts): a link
+// to the reader that names an annotation draws as a row — the annotation
+// glyph, the reference's text, "Annotation" under it — and a click opens the
+// annotation: beside the note on the notes full page (onOpen), else in the
+// reader.
+function AnnotationReferenceCard({
+  href,
+  children,
+  onOpen,
+}: {
+  href: string;
+  children: React.ReactNode;
+  onOpen: () => void;
+}) {
+  const t = useT();
+  return (
+    <a
+      href={href}
+      draggable={false}
+      data-track="note-annotation-open"
+      data-tip={t("outline.annotationReferenceTitle")}
+      className="note-link-card note-annotation-ref"
+      onClick={(e) => {
+        e.preventDefault();
+        onOpen();
+      }}
+    >
+      <span className="note-link-card-icon">
+        <CommentIcon size={14} />
+      </span>
+      <span className="note-link-card-text">
+        <span className="note-link-card-title">{children}</span>
+        <span className="note-link-card-host">{t("outline.annotationReference")}</span>
+      </span>
+    </a>
+  );
+}
+
 // The line a checklist item sits on, handed from the item to its box: the
 // box's own node carries no position.
 const TaskLine = createContext(-1);
@@ -286,7 +325,9 @@ function AnchorGlyph() {
     highlight: the text a search looks for; every match lights up.
     sources, with notebookId: the note's sources; a quote whose words are a
     source's points back to the reader (SPEC.md §6) — a click jumps to the
-    source, and the line under the words names the document. */
+    source, and the line under the words names the document.
+    onAnnotationReference: a click on an annotation reference opens the
+    annotation here (the notes full page); unset, it opens the reader. */
 export function Markdown({
   children,
   breaks = false,
@@ -294,6 +335,7 @@ export function Markdown({
   highlight,
   sources,
   notebookId,
+  onAnnotationReference,
 }: {
   children: string;
   breaks?: boolean;
@@ -301,6 +343,7 @@ export function Markdown({
   highlight?: string;
   sources?: SourceChip[];
   notebookId?: string;
+  onAnnotationReference?: (ref: ParsedAnnotationReference & { label: string }) => void;
 }) {
   const t = useT();
   const router = useRouter();
@@ -439,6 +482,37 @@ export function Markdown({
                 >
                   ¶
                 </button>
+              );
+            }
+            // An annotation reference (lib/annotation-reference.ts): the
+            // row opens the annotation beside the note, or in the reader.
+            const reference = parseAnnotationReference(href);
+            if (reference && href) {
+              const label = hastText(node);
+              return (
+                <AnnotationReferenceCard
+                  href={href}
+                  onOpen={() => {
+                    if (onAnnotationReference) {
+                      onAnnotationReference({ ...reference, label });
+                      return;
+                    }
+                    window.getSelection()?.removeAllRanges();
+                    router.push(href);
+                    // Already on that document: the push changes nothing,
+                    // so the mark flashes and the annotation opens from here.
+                    if (reference.sourceId) {
+                      window.dispatchEvent(
+                        new CustomEvent("dissect:flash-source", { detail: { sourceId: reference.sourceId } }),
+                      );
+                      window.dispatchEvent(
+                        new CustomEvent("dissect:open-annotation", { detail: { sourceId: reference.sourceId } }),
+                      );
+                    }
+                  }}
+                >
+                  {linkChildren}
+                </AnnotationReferenceCard>
               );
             }
             // An outside link (a web source the assistant cites) opens in a

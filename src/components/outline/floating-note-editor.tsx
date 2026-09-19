@@ -19,6 +19,7 @@ import { NoteId } from "@/components/outline/note-id";
 import { NoteTitleField, focusBodyEditor, useNoteParts } from "@/components/outline/note-title-field";
 import { SaveStateLabel } from "@/components/outline/save-state";
 import { useNoteDrop } from "@/components/use-note-drop";
+import { annotationReferenceMarkdown } from "@/lib/annotation-reference";
 import { quoteMarkdown } from "@/lib/quote-drag";
 import { useCardDropTarget } from "@/components/outline/use-card-drop";
 import { useNoteDraft } from "@/components/outline/use-note-draft";
@@ -278,23 +279,27 @@ export function FloatingNoteEditor({
     await actions.saveNote(edit.id, shown.title ? `# ${shown.title}\n\n${body}` : body);
   }
 
-  // A note or an annotation dropped on the card joins its text into the note
-  // (SPEC.md §6). The card's own words are saved first, so the merge reads
-  // what is on screen; while editing, the merged text then takes the draft's
-  // place, saved and ready to keep editing. A highlight held in the reader's
-  // text lands as a quote at the end of the note, its anchor a source
-  // (lib/card-drag.ts).
+  // A note dropped on the card joins its text into the note (SPEC.md §6).
+  // The card's own words are saved first, so the merge reads what is on
+  // screen; while editing, the merged text then takes the draft's place,
+  // saved and ready to keep editing. An annotation dropped on the card lands
+  // as an annotation reference at the end of the note
+  // (lib/annotation-reference.ts); a highlight held in the reader's text
+  // lands as a quote at the end, its anchor a source (lib/card-drag.ts).
   const [merging, setMerging] = useState(false);
   const [mergeError, setMergeError] = useState<string | null>(null);
   async function takeDrop(end: CardDragEndDetail) {
     if (!canEdit || merging) return;
     setMergeError(null);
-    if (end.drag.kind === "quote") {
-      const { quote } = end.drag;
-      if (!quote) return;
+    if (end.drag.kind === "quote" || end.drag.kind === "annotation") {
+      const { quote, reference } = end.drag;
       try {
-        await addToNote(quoteMarkdown(quote.text));
-        if (note) await actions.attachSource(note.id, quote);
+        if (end.drag.kind === "quote" && quote) {
+          await addToNote(quoteMarkdown(quote.text));
+          if (note) await actions.attachSource(note.id, quote);
+        } else if (reference) {
+          await addToNote(annotationReferenceMarkdown(actions.notebookId, reference));
+        }
       } catch (err) {
         setMergeError(err instanceof Error ? err.message : t("common.requestFailed"));
       }

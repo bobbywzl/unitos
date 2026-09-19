@@ -2632,6 +2632,17 @@ li[data-checked] > .note-box::before {
   border-color: var(--clay-300);
   background: var(--clay-100);
 }
+/* An annotation reference (SPEC.md §6): the link card's row, in sage. */
+.prose .note-annotation-ref {
+  background: color-mix(in srgb, var(--sage-100, #e6efe6) 55%, transparent);
+}
+.prose .note-annotation-ref:hover {
+  border-color: var(--sage-500);
+  background: var(--sage-100, #e6efe6);
+}
+.prose .note-annotation-ref .note-link-card-icon {
+  color: var(--sage-700, #3f6b4a);
+}
 .note-link-card-icon {
   display: flex;
   flex: none;
