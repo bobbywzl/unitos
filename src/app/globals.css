@@ -2698,31 +2698,41 @@ li[data-checked] > .note-box::before {
 }
 
 /* ── A section's board (SPEC.md §6, section-board.tsx) ─────────────────────
-   The section's notes as 3:4 tiles — taller than wide — in one grid, side by
-   side, so they line up as one board. A tile shows as much of its body as fits and fades
+   The section's notes as tiles in one grid, side by side, so they line up as
+   one board. Tiles of 220px or more, and 3:4 — taller than wide — until the
+   board measures its room (.note-tiles-sized, section-board.tsx): then the
+   columns are as many as the board's width holds and no more than the
+   notes, so few notes take wide tiles, up to 480px, and a tile grows to its
+   whole body, up to its share of the board's height, never under the 3:4
+   tile; the tiles of one row stretch to one height. Only a cut body fades
    out at the bottom; the line between tiles says where a dragged tile lands. */
 .note-board {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   gap: 14px;
 }
+.note-board.note-tiles-sized {
+  grid-template-columns: repeat(var(--tile-cols), minmax(0, 480px));
+}
 .note-tile {
   aspect-ratio: 3 / 4;
   cursor: pointer;
   transition: box-shadow 140ms, transform 140ms;
 }
+.note-tiles-sized .note-tile {
+  aspect-ratio: auto;
+  /* The grid item is the tile's sortable wrapper, stretched to the row: the
+     tile fills it, so the tiles of one row are one height. */
+  height: 100%;
+  min-height: var(--tile-min);
+  max-height: var(--tile-max);
+}
 .note-tile:hover {
   box-shadow: var(--shadow-float);
 }
-.note-tile-title {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  overflow: hidden;
-}
-.note-tile-body {
-  -webkit-mask-image: linear-gradient(to bottom, #000 72%, transparent 100%);
-  mask-image: linear-gradient(to bottom, #000 72%, transparent 100%);
+.note-tile-body.note-tile-cut {
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 56px), transparent 100%);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 56px), transparent 100%);
 }
 .note-tile-body .prose {
   font-size: 12.5px;
