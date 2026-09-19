@@ -240,6 +240,7 @@ const en = {
   uploadItemPdf: "PDF",
   uploadPageFailed: "{title} — {reason}",
   uploadAddedCount: "Added {n} documents.",
+  uploadNothingAdded: "Nothing was added.",
 
   distillAgainTitle: "Ask this question again. The new extraction replaces this one. {left} left: an extraction runs again at most twice.",
   distillAgainLimit: "This extraction ran again {n} times, the most an extraction runs again. Ask the question as a new extraction instead.",
@@ -609,6 +610,7 @@ const zh: Record<keyof typeof en, string> = {
   uploadItemPdf: "PDF",
   uploadPageFailed: "{title} —— {reason}",
   uploadAddedCount: "已添加 {n} 个文档。",
+  uploadNothingAdded: "没有添加任何文档。",
 
   distillAgainTitle: "重新提出这个问题。新的提取会替换当前这条。还剩 {left} 次：一条提取最多重新生成两次。",
   distillAgainLimit: "这条提取已重新生成 {n} 次，达到上限。请把问题作为新的提取再提一次。",

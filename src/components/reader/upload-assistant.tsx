@@ -634,12 +634,15 @@ export function UploadAssistant({
 
         {phase === "done" && (
           <div className="flex flex-col gap-2.5">
-            <p className="flex items-center gap-2 text-[13px] font-semibold text-sand-800">
-              <CheckIcon size={14} className="text-sage" />
-              {added.length > 1
-                ? t("panes.uploadAddedCount", { n: added.length })
-                : (added[0]?.title ?? t("common.done"))}
-            </p>
+            {/* The headline: what was added; nothing added is not Done. */}
+            {added.length === 0 ? (
+              <p className="text-[13px] font-semibold text-sand-800">{t("panes.uploadNothingAdded")}</p>
+            ) : (
+              <p className="flex items-center gap-2 text-[13px] font-semibold text-sand-800">
+                <CheckIcon size={14} className="text-sage" />
+                {added.length > 1 ? t("panes.uploadAddedCount", { n: added.length }) : added[0].title}
+              </p>
+            )}
             {verification && (
               <p className={lostFigures ? amberNote : "text-xs text-sand-500"}>
                 {[
