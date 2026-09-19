@@ -366,5 +366,7 @@ export function fontFamilyCss(typeface: string): string {
   const name = cssValue(typeface);
   if (!name) return "";
   const generic = MONO_RX.test(name) ? "ui-monospace, monospace" : SERIF_RX.test(name) ? "serif" : "sans-serif";
-  return `"${name}", ${generic}`;
+  // Single quotes: the declaration sits inside a double-quoted style
+  // attribute, and cssValue has stripped every quote from the name.
+  return `'${name}', ${generic}`;
 }

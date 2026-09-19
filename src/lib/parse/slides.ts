@@ -1076,15 +1076,23 @@ async function placeShape(scope: SlideScope, sp: Element, transform: Transform, 
     line = `${cqw(width, ctx.slideW)} solid ${rgbCss(lnRefColor.rgb, lnRefColor.alpha)}`;
   }
   const prstGeom = child(spPr, "prstGeom");
+  const custGeom = child(spPr, "custGeom");
   const geometry = attr(prstGeom, "prst") ?? "rect";
   if (LINE_GEOMETRIES.has(geometry)) {
     out.push({ html: lineHtml(box, line, ctx), text: null, box, z: out.length + scope.zBase, title: false });
     return;
   }
-  const fillStyles = [fill && fill !== "none" ? fill : "", line && line !== "none" ? `border:${line}` : "", geometryStyle(prstGeom, box, ctx)]
-    .filter(Boolean)
-    .join(";");
-  const fillLayer = fillStyles ? `<div class="sf" style="${fillStyles}"></div>` : "";
+  // A custom geometry draws as an SVG path in the shape's box; a preset
+  // one as a styled div.
+  let fillLayer: string;
+  if (custGeom) {
+    fillLayer = customGeometrySvg(custGeom, box, fill, line);
+  } else {
+    const fillStyles = [fill && fill !== "none" ? fill : "", line && line !== "none" ? `border:${line}` : "", geometryStyle(prstGeom, box, ctx)]
+      .filter(Boolean)
+      .join(";");
+    fillLayer = fillStyles ? `<div class="sf" style="${fillStyles}"></div>` : "";
+  }
 
   // The text: the shape's own list style, then its placeholder chain's, then
   // the master's text styles for its kind.
@@ -1142,6 +1150,81 @@ function themeFontName(fontRef: Element | null): string | null {
 // A line's stroke is drawn in screen pixels (non-scaling), sized for the
 // reader's column: the slide's width at this many pixels.
 const LINE_REFERENCE_PX = 960;
+
+/** The one color a fill declaration paints with, for an SVG fill: a solid
+    color, or a gradient's first stop. Null for no fill or a picture. */
+function fillColorOf(fill: string | "none" | null): string | null {
+  if (!fill || fill === "none") return null;
+  if (fill.startsWith("background-color:")) return fill.slice("background-color:".length);
+  const m = /linear-gradient\([^,]+,\s*([^ ]+)\s/.exec(fill);
+  return m ? m[1] : null;
+}
+
+/** A line declaration ("Wcqw solid color") as SVG stroke attributes. */
+function strokeAttrs(line: string | "none" | null): string {
+  if (!line || line === "none") return 'stroke="none"';
+  const [cqwWidth, style, ...rest] = line.split(" ");
+  const color = rest.join(" ") || "#000000";
+  const width = num(Math.max(1, (parseFloat(cqwWidth) / 100) * LINE_REFERENCE_PX));
+  const dash = style === "dashed" ? ' stroke-dasharray="6 4"' : style === "dotted" ? ' stroke-dasharray="2 3"' : "";
+  return `stroke="${escapeHtml(color)}" stroke-width="${width}" vector-effect="non-scaling-stroke"${dash}`;
+}
+
+/** A custom geometry (a:custGeom) as an SVG in the shape's box: every path
+    in the path space it declares, moves, lines, and curves as SVG path
+    commands (an arc approximated by its chord), filled with the shape's
+    fill unless the path says none. */
+function customGeometrySvg(custGeom: Element, box: Box, fill: string | "none" | null, line: string | "none" | null): string {
+  const paths = children(child(custGeom, "pathLst"), "path");
+  if (paths.length === 0) return "";
+  const fillColor = fillColorOf(fill);
+  const stroke = strokeAttrs(line);
+  const out: string[] = [];
+  for (const path of paths) {
+    const w = intAttr(path, "w") || box.w || 1;
+    const h = intAttr(path, "h") || box.h || 1;
+    const d: string[] = [];
+    const pt = (el: Element | null) => `${num(intAttr(el, "x") ?? 0)} ${num(intAttr(el, "y") ?? 0)}`;
+    for (const cmd of Array.from(path.children)) {
+      const pts = children(cmd, "pt");
+      switch (cmd.localName) {
+        case "moveTo":
+          d.push(`M ${pt(pts[0])}`);
+          break;
+        case "lnTo":
+          d.push(`L ${pt(pts[0])}`);
+          break;
+        case "cubicBezTo":
+          if (pts.length >= 3) d.push(`C ${pt(pts[0])}, ${pt(pts[1])}, ${pt(pts[2])}`);
+          break;
+        case "quadBezTo":
+          if (pts.length >= 2) d.push(`Q ${pt(pts[0])}, ${pt(pts[1])}`);
+          break;
+        case "arcTo": {
+          // The end of the arc from its angles, joined by a chord.
+          const wR = intAttr(cmd, "wR") ?? 0;
+          const hR = intAttr(cmd, "hR") ?? 0;
+          const st = ((intAttr(cmd, "stAng") ?? 0) / 60000) * (Math.PI / 180);
+          const sw = ((intAttr(cmd, "swAng") ?? 0) / 60000) * (Math.PI / 180);
+          const dx = wR * (Math.cos(st + sw) - Math.cos(st));
+          const dy = hR * (Math.sin(st + sw) - Math.sin(st));
+          d.push(`l ${num(dx)} ${num(dy)}`);
+          break;
+        }
+        case "close":
+          d.push("Z");
+          break;
+      }
+    }
+    if (d.length === 0) continue;
+    const noFill = attr(path, "fill") === "none" || !fillColor;
+    const noStroke = attr(path, "stroke") === "0";
+    out.push(
+      `<svg viewBox="0 0 ${num(w)} ${num(h)}" preserveAspectRatio="none"><path d="${d.join(" ")}" fill="${noFill ? "none" : escapeHtml(fillColor ?? "none")}" ${noStroke ? 'stroke="none"' : stroke}/></svg>`,
+    );
+  }
+  return out.length > 0 ? `<div class="sf sv">${out.join("")}</div>` : "";
+}
 
 function lineHtml(box: Box, line: string | "none" | null, ctx: Ctx): string {
   const stroke = line && line !== "none" ? line : `${cqw(9525, ctx.slideW)} solid #000000`;
