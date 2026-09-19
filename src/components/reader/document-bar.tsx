@@ -41,7 +41,7 @@ import {
   useFigureCapture,
 } from "@/components/reader/figure-capture";
 import { setRevealFlag } from "@/components/reader/reveal";
-import { UploadAssistant, type UploadRequest } from "@/components/reader/upload-assistant";
+import { UploadAssistant, uploadItemTitle, type UploadRequest } from "@/components/reader/upload-assistant";
 import { isMarkdownFile, MARKDOWN_ACCEPT } from "@/lib/markdown-file";
 
 export type AttachedDocument = {
@@ -180,6 +180,7 @@ const UPLOAD_FILE_ACCEPT = `application/pdf,.pdf,${IMAGE_ACCEPT},${MARKDOWN_ACCE
 // from the dashed + as the add-document dialog.
 export function DocumentBar({
   notebookId,
+  title,
   documents,
   activeId,
   drive,
@@ -187,6 +188,9 @@ export function DocumentBar({
   browserConfigured,
 }: {
   notebookId: string;
+  // The project's title: a project with no document yet asks for it in the
+  // add-document dialog (SPEC.md §15).
+  title: string;
   documents: AttachedDocument[];
   activeId: string | null;
   drive: DriveConfig | null;
@@ -503,6 +507,11 @@ export function DocumentBar({
   // itself. Google Drive picks open it too — the server fetches those files
   // at import time, so only the sandbox review has nothing to read.
   const [assistant, setAssistant] = useState<UploadRequest | null>(null);
+  // One box at a time: an add that arrives while one runs waits here and
+  // starts when the running one closes, so neither replaces the other. The
+  // run counter keys the box, so each request mounts a fresh one.
+  const [pending, setPending] = useState<UploadRequest[]>([]);
+  const [assistantRun, setAssistantRun] = useState(0);
   // The box hidden while its add runs on (SPEC.md §15): the header shows the
   // running pill instead, and clicking the pill brings the box back.
   const [assistantHidden, setAssistantHidden] = useState(false);
@@ -515,8 +524,14 @@ export function DocumentBar({
     : assistant.kind === "files" || assistant.kind === "drive"
       ? assistant.files.map((f) => f.name).join(" · ")
       : assistant.kind === "batch"
-        ? assistant.items.map((item) => (item.kind === "file" ? item.file.name : item.url)).join(" · ")
+        ? assistant.items.map(uploadItemTitle).join(" · ")
         : assistant.url;
+
+  function startAssistant(request: UploadRequest) {
+    setAssistant(request);
+    setAssistantRun((n) => n + 1);
+    setAssistantHidden(false);
+  }
 
   function openAssistant(request: UploadRequest) {
     setError(null);
@@ -525,7 +540,10 @@ export function DocumentBar({
     // plain ingest request — and syncs when the browser is back online.
     if (isOffline()) {
       // A Drive pick cannot queue: its token expires before any sync.
-      if (request.kind === "drive") {
+      if (
+        request.kind === "drive" ||
+        (request.kind === "batch" && request.items.some((item) => item.kind === "drive-file"))
+      ) {
         setError(t("panes.driveOffline"));
         return;
       }
@@ -545,7 +563,9 @@ export function DocumentBar({
         items.map((item) =>
           item.kind === "file"
             ? queueUpload(item.file, notebookId)
-            : queueWrite("/api/documents", "POST", { url: item.url, notebookId }),
+            : item.kind === "drive-file"
+              ? Promise.resolve()
+              : queueWrite("/api/documents", "POST", { url: item.url, notebookId }),
         ),
       ).then(() => items.length);
       void queued.then((n) => {
@@ -555,9 +575,15 @@ export function DocumentBar({
       setDialog(false);
       return;
     }
-    setAssistant(request);
-    setAssistantHidden(false);
     setDialog(false);
+    if (assistant) {
+      // A box is running: this add waits its turn (one box at a time).
+      setPending((queue) => [...queue, request]);
+      setNotice(t("panes.uploadQueuedBehind"));
+      setTimeout(() => setNotice(null), 4000);
+      return;
+    }
+    startAssistant(request);
   }
 
   // A pasted Google Drive link is not a readable page: with Drive linked it
@@ -600,15 +626,15 @@ export function DocumentBar({
 
   // Google Drive upload (SPEC.md §14): get a token and open the picker
   // (client-only; a linked account's token comes from the server, no consent
-  // popup), then hand the picks to the upload assistant box — instructions
-  // and the PDF directives ride along like every add (SPEC.md §15).
-  async function importFromDrive() {
-    if (!drive) return;
+  // popup). The picks and the token come back for the dialog's queue; null
+  // = nothing picked, or a failure the dialog shows.
+  async function pickFromDrive(): Promise<{ token: string; files: DrivePickedFile[] } | null> {
+    if (!drive) return null;
     setError(null);
     // The picker and the imports need the server; Drive adds do not queue.
     if (isOffline()) {
       setError(t("panes.driveOffline"));
-      return;
+      return null;
     }
     // A signed-in account that can link but has not: link first. The consent
     // returns through the sign-in redirect URI — the one Google accepts — to
@@ -622,10 +648,8 @@ export function DocumentBar({
         `/api/drive/link?next=${encodeURIComponent(next)}`,
         window.location.origin,
       ).toString();
-      return;
+      return null;
     }
-    let token: string;
-    let picked: DrivePickedFile[];
     try {
       const result = await pickDriveFiles({
         clientId: drive.clientId,
@@ -633,16 +657,19 @@ export function DocumentBar({
         linked: drive.linked,
         access: drive.access,
       });
-      token = result.token;
-      picked = result.files;
+      // Closed the picker without choosing a file: nothing to queue.
+      return result.files.length > 0 ? result : null;
     } catch (err) {
       setError(err instanceof Error ? err.message : t("panes.driveAuthFailed"));
-      return;
+      return null;
     }
-    if (picked.length === 0) return; // closed the picker without choosing a file
-    setAssistant({ kind: "drive", token, files: picked });
-    setAssistantHidden(false);
-    setDialog(false);
+  }
+
+  // Back from Link Google Drive: the picker opens on its own, and the picks
+  // go straight to the box (the dialog's queue is gone with the page load).
+  async function importFromDrive() {
+    const picked = await pickFromDrive();
+    if (picked) openAssistant({ kind: "drive", token: picked.token, files: picked.files });
   }
 
   // Back from Link Google Drive: the callback returns here with ?drive=linked
@@ -1017,7 +1044,19 @@ export function DocumentBar({
         onError={setError}
         onSubmit={openAssistant}
         fileAccept={UPLOAD_FILE_ACCEPT}
-        onImportDrive={drive ? () => void importFromDrive() : null}
+        projectTitle={
+          documents.length === 0
+            ? {
+                title,
+                untitled: t("works.untitledProject"),
+                onSave: async (next) => {
+                  await api(`/api/notebooks/${notebookId}`, "PATCH", { title: next });
+                  router.refresh();
+                },
+              }
+            : null
+        }
+        onImportDrive={drive ? pickFromDrive : null}
         driveLink={
           drive
             ? { linked: drive.linked, canLink: drive.canLink, access: drive.access, grant: drive.grant }
@@ -1070,6 +1109,7 @@ export function DocumentBar({
 
       {assistant && (
         <UploadAssistant
+          key={assistantRun}
           notebookId={notebookId}
           request={assistant}
           hidden={assistantHidden}
@@ -1082,9 +1122,15 @@ export function DocumentBar({
           }}
           onClose={(target) => {
             const opened = assistantOpened;
-            setAssistant(null);
-            setAssistantHidden(false);
             setAssistantOpened(null);
+            // The next add waiting its turn starts now; none: the box goes.
+            const [next, ...rest] = pending;
+            setPending(rest);
+            if (next) startAssistant(next);
+            else {
+              setAssistant(null);
+              setAssistantHidden(false);
+            }
             if (target && target.id !== opened) openAdded(target.id);
             // Opened early: the glossary and links the finishing step wrote
             // arrive with a refresh.

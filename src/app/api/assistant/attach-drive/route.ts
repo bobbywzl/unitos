@@ -5,7 +5,7 @@ import { capFileName, capFileText, FILE_MAX_BYTES, MEDIA_MAX_BYTES } from "@/lib
 import { mediaAttachmentText } from "@/lib/assistant/media";
 import { currentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { driveDownloadUrl, fetchDrivePdf, fetchExportedPdf } from "@/lib/drive/fetch";
+import { driveFetchUrl, fetchDrivePdf, fetchExportedPdf } from "@/lib/drive/fetch";
 import { requestDriveToken } from "@/lib/drive/request-token";
 import { classifyDriveAttachment } from "@/lib/drive/types";
 import { outboundFetch } from "@/lib/outbound-fetch";
@@ -50,7 +50,7 @@ export async function POST(req: Request) {
   }
 
   const download = async (cap: number) => {
-    const res = await outboundFetch(driveDownloadUrl(data.fileId), {
+    const res = await outboundFetch(driveFetchUrl(data.fileId), {
       headers: { Authorization: `Bearer ${token}` },
     });
     if (!res.ok) throw new Error(t("api.driveFetchFailed"));

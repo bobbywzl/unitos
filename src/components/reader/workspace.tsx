@@ -585,6 +585,7 @@ export function Workspace({
         <div className="mr-auto flex min-w-0">
           <DocumentBar
             notebookId={notebook.id}
+            title={notebook.title}
             documents={documents}
             activeId={activeDocumentId}
             drive={drive}

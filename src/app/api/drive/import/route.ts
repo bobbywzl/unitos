@@ -7,6 +7,7 @@ import { requestDriveToken } from "@/lib/drive/request-token";
 import { classifyDriveFile } from "@/lib/drive/types";
 import {
   driveDownloadUrl,
+  driveFetchUrl,
   fetchDriveMetadata,
   fetchDrivePdf,
   fetchExportedPdf,
@@ -82,6 +83,7 @@ export async function POST(req: Request) {
     return progressResponse(async (onProgress) => {
       const { document, deduped } = await ingestMediaUrl(driveDownloadUrl(data.fileId), t, onProgress, {
         headers: { Authorization: `Bearer ${token}` },
+        fetchUrl: driveFetchUrl(data.fileId),
         // The download URL's own path is the Drive file id, not a name —
         // pass the picked file's real name, extension stripped like the
         // chunked video upload path titles a document (/api/uploads/complete).
