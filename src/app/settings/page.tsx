@@ -11,7 +11,7 @@ import { Logo } from "@/components/logo";
 import { AccountGuard } from "@/components/account-guard";
 import { SettingsForm } from "@/components/settings-form";
 import { accountStorage } from "@/lib/storage";
-import { tierState } from "@/lib/tiers";
+import { accountTier } from "@/lib/tiers";
 
 export const dynamic = "force-dynamic";
 
@@ -64,7 +64,7 @@ export default async function SettingsPage() {
         account={account}
         background={background}
         plan={{
-          state: authEnabled() ? tierState(user) : "ultra",
+          state: accountTier(user, authEnabled()),
           trialEndsAt: user.trialEndsAt?.toISOString() ?? null,
         }}
         billing={billing ? { subscribed: user.subscriptionId !== "" } : null}

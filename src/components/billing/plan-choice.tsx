@@ -5,7 +5,7 @@ import { formatDate } from "@/lib/billing/format";
 import { checkoutTrialEnd } from "@/lib/billing/trial";
 import type { Lang } from "@/lib/i18n/config";
 import type { TFunc } from "@/lib/i18n/dictionaries";
-import { tierOf, tierState, TRIAL_MONTHS } from "@/lib/tiers";
+import { betaOn, tierOf, tierState, TRIAL_MONTHS } from "@/lib/tiers";
 import { emphasize } from "@/components/billing/frame";
 import { planButton } from "@/components/billing/plan-button";
 import { PortalButton } from "@/components/billing/portal-button";
@@ -15,7 +15,8 @@ import { PortalButton } from "@/components/billing/portal-button";
 // and what each card offers. One reading of the account, so the two pages
 // cannot disagree.
 export type PlanChoice = {
-  // The account's state, the date in bold; null before sign-in.
+  // The account's state, the date in bold; during the beta, first what the
+  // choice does; null before sign-in.
   line: React.ReactNode | null;
   // The account holds a subscription: Manage subscription and Receipts show.
   subscribed: boolean;
@@ -54,8 +55,11 @@ export function planChoice(user: User | null, t: TFunc, lang: Lang): PlanChoice 
         : t(state === "trial" ? "billing.currentTrial" : "billing.currentExpired", { date: date(user.trialEndsAt) });
   const currentDate = !user ? "" : user.subscriptionId ? date(user.subscriptionEndsAt) : date(user.trialEndsAt);
   const trialEnd = user ? checkoutTrialEnd(user) : null;
+  // The beta (TIERS.md): the app has every account on Ultra, so the line
+  // says first that the tier chosen takes effect when the beta ends.
+  const line = current && betaOn() ? `${t("billing.betaLine")} ${current}` : current;
   return {
-    line: current ? emphasize(current, currentDate) : null,
+    line: line ? emphasize(line, currentDate) : null,
     subscribed: Boolean(user?.subscriptionId),
     trialEnd,
     freeMonths: !user || trialEnd ? TRIAL_MONTHS : null,

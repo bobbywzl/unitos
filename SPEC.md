@@ -885,6 +885,8 @@ Unitos Premium and Unitos Ultra (TIERS.md) sold through Stripe as subscriptions.
 
 **The links in the app**, shown only while the switch is on (`billingLinks`): Plans beside the tier chip in the dashboard header; Plans, Receipts, and — with a subscription — Manage subscription under the plan card in Settings; and the plain Ultra message in the reader (Visualize, Continue) carries a Plans action that opens the plan page in a new tab. The local reader (sign-in off) never sees them: there is no account to bill.
 
+**The beta** (TIERS.md). `BETA=on` gives every account Unitos Ultra in the app while it is set: `accountTier`, `ultraActive`, and `premiumActive` (`lib/tiers.ts`) answer Ultra whatever the record says, so every gate opens and every tier mark is the black diamond. Billing runs beside it, disconnected: the pages read the record through `tierState` and sell the tiers as always, a purchase writes the record as always, and the state line on the plan page and the plans page says first that the tier chosen takes effect when the beta ends. The plan page and the plans page are public doors in the middleware, so a visitor from an ad reaches them signed out. The admin billing page shows whether `BETA` is set. Unset it and redeploy to end the beta.
+
 ---
 
 ## 25. The tool quality loop

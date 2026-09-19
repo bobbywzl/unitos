@@ -18,6 +18,7 @@ import { plans } from "@/lib/billing/plans";
 import { billingOn } from "@/lib/billing/switch";
 import { db } from "@/lib/db";
 import { currentLang, serverT } from "@/lib/i18n/server";
+import { betaOn } from "@/lib/tiers";
 import type { TKey } from "@/lib/i18n/dictionaries";
 import { AdminNav } from "@/components/admin/admin-nav";
 import { BillingSwitch } from "@/components/admin/billing-switch";
@@ -65,6 +66,7 @@ export default async function AdminBillingPage() {
   const webhookUrl = `${proto}://${host}/api/stripe/webhook`;
 
   const services: { label: string; description: string; set: boolean }[] = [
+    { label: "BETA", description: t("admin.svcBeta"), set: betaOn() },
     { label: "STRIPE_SECRET_KEY", description: t("admin.svcStripe"), set: stripeConfigured() },
     { label: "STRIPE_WEBHOOK_SECRET", description: t("admin.svcStripeWebhook"), set: webhookConfigured() },
     { label: "STRIPE_TAX", description: t("admin.svcStripeTax"), set: taxEnabled() },
