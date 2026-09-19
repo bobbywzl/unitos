@@ -1,3 +1,4 @@
+import "@/lib/pdf-runtime";
 import { getDocumentProxy } from "unpdf";
 import type { LinkSpan, ParsedBlock, StyleSpan } from "@/lib/parse/types";
 import type { Region } from "@/lib/video/types";

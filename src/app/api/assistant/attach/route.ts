@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import "@/lib/pdf-runtime";
 import { extractText } from "unpdf";
 import { capFileText, FILE_MAX_BYTES } from "@/lib/assistant/attachments";
 import { currentUser } from "@/lib/auth";

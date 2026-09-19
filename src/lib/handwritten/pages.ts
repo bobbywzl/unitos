@@ -1,3 +1,4 @@
+import "@/lib/pdf-runtime";
 import { regionBounds, type Region } from "@/lib/video/types";
 
 // Handwritten documents (SPEC.md §16): page rendering from the stored PDF
