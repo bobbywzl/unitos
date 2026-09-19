@@ -1771,8 +1771,33 @@ export function ReaderInteractions({
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
+    // A press on the article, outside the toolbar and off the text under it,
+    // closes the toolbar at once. The tint the toolbar keeps on its text is
+    // the selection's color, so a toolbar left open under a new drag shows
+    // two selections — the old tint and the new selection — while the tools
+    // read only the old one. The text under the toolbar keeps it: a press
+    // there starts a drag of the passage (dragstart below).
+    const onContainerMouseDown = (event: MouseEvent) => {
+      if (event.button !== 0) return;
+      if (!popoverRef.current && !closeLinkRef.current) return;
+      const target = event.target instanceof Element ? event.target : null;
+      if (target?.closest("[data-selection-popover], .selection-mark, .link-pending-mark")) return;
+      setPopover(null);
+      setSubmenu(null);
+      setCloseLink(null);
+    };
+    // A drag that starts on the article and lets go outside the pane still
+    // ends a selection: the mouseup listens on the document, and a press
+    // that started outside the pane never opens or closes the toolbar.
+    let pressStartedInside = false;
+    const onDocumentMouseDown = (event: MouseEvent) => {
+      pressStartedInside = event.target instanceof Node && container.contains(event.target);
+    };
     const onMouseUp = (event: MouseEvent) => {
       if (!canEditRef.current) return;
+      const inside = event.target instanceof Node && container.contains(event.target);
+      if (!inside && !pressStartedInside) return;
+      pressStartedInside = false;
       if (suppressNextMouseUp.current) {
         suppressNextMouseUp.current = false;
         return;
@@ -1857,11 +1882,15 @@ export function ReaderInteractions({
         setSubmenu(null);
       }, 500);
     };
-    container.addEventListener("mouseup", onMouseUp);
+    container.addEventListener("mousedown", onContainerMouseDown);
+    document.addEventListener("mousedown", onDocumentMouseDown);
+    document.addEventListener("mouseup", onMouseUp);
     container.addEventListener("pointerup", onPointerUp);
     document.addEventListener("selectionchange", onSelectionChange);
     return () => {
-      container.removeEventListener("mouseup", onMouseUp);
+      container.removeEventListener("mousedown", onContainerMouseDown);
+      document.removeEventListener("mousedown", onDocumentMouseDown);
+      document.removeEventListener("mouseup", onMouseUp);
       container.removeEventListener("pointerup", onPointerUp);
       document.removeEventListener("selectionchange", onSelectionChange);
       if (selectionTimer) clearTimeout(selectionTimer);
