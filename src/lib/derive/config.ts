@@ -57,6 +57,15 @@ export const DEFAULT_EFFORT: KimiEffort = "high";
 // its slowest and its most thorough.
 export type ClaudeEffort = "low" | "medium" | "high" | "xhigh" | "max";
 
+// An SVG chart (SPEC.md §2): a figure whose media is inline SVG. Wherever
+// a model reads one — Analyze on it, the assistant acting on it — the call
+// goes to Claude Opus 5 with the whole source (lib/derive/svg-chart.ts),
+// whatever the feature's model: reading a drawing from its code is where
+// Opus 5 leads, and GLM 5.3 reads it as XML with no picture. High effort,
+// not max: a chart of thousands of elements at max outlives the request.
+export const SVG_CHART_MODEL = CLAUDE_OPUS_5;
+export const SVG_CHART_EFFORT: ClaudeEffort = "high";
+
 // Model per derivation type (SPEC.md §2). One place to change. GLM 5.3 for
 // the tools that reason over a passage or answer the reader; GLM 5.3 Flash
 // for the readings, which find and copy passages into structure.
@@ -72,7 +81,7 @@ export const DERIVATION_MODEL: Record<DerivationType, string> = {
   FORMALIZE: GLM_5_3,
   ASK: GLM_5_3,
   COMPARE: GLM_5_3,
-  ANALYZE: GLM_5_3, // with a figure attached the call goes to VISION_MODEL (api/derive)
+  ANALYZE: GLM_5_3, // an image attached goes to VISION_MODEL, an SVG chart to SVG_CHART_MODEL (api/derive)
   VOICE: CLAUDE_SONNET_5, // the voice command (SPEC.md §6): VOICE_MODEL below, not a chat call
   VISUALIZE: CLAUDE_OPUS_5, // the strongest model at drawing: the picture has to be faithful or refused (SPEC.md §20)
 };

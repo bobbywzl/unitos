@@ -28,6 +28,7 @@ import {
 } from "@/lib/derive/context";
 import { comparisonMarkdown } from "@/lib/derive/analysis";
 import { figureContent, figureVisual, renderFigurePage, type FigureImage } from "@/lib/derive/figure";
+import { svgChartCall } from "@/lib/derive/svg-chart";
 import {
   compareOutputSchema,
   distillOutputSchema,
@@ -863,9 +864,15 @@ async function handle(req: Request, t: TFunc) {
     ? [{ bytes: figureImage.bytes, mediaType: figureImage.mediaType }]
     : pageImages.map((bytes) => ({ bytes, mediaType: "image/png" }));
   // A call with an image goes to the model that reads images (SPEC.md §2):
-  // the feature's model, GLM 5.3, takes text alone.
-  const chatModelId = attachedImages.length > 0 ? VISION_MODEL : DERIVATION_MODEL[data.type];
-  usageMeta.model = await resolveModelId(chatModelId);
+  // the feature's model, GLM 5.3, takes text alone. An SVG chart goes to
+  // Claude Opus 5, which reads the source whole (lib/derive/svg-chart.ts).
+  const svgChart = ctx.figure?.kind === "svg" ? await svgChartCall() : null;
+  const chatModelId = svgChart
+    ? svgChart.modelId
+    : attachedImages.length > 0
+      ? VISION_MODEL
+      : DERIVATION_MODEL[data.type];
+  usageMeta.model = svgChart ? svgChart.modelId : await resolveModelId(chatModelId);
   const messages: ModelMessage[] = [
     {
       role: "system",
@@ -1009,9 +1016,10 @@ async function handle(req: Request, t: TFunc) {
     );
   }
 
-  const model = await kimi(chatModelId);
+  const model = svgChart?.model ?? (await kimi(chatModelId));
   const maxOutputTokens = MAX_OUTPUT_TOKENS[data.type];
   const effort = DERIVATION_EFFORT[data.type];
+  const providerOptions = svgChart?.providerOptions ?? kimiOptions(effort);
 
   // 3 + 4. Stream or collect, then route by destination.
   // EXPLAIN (Circle & ask), SIMPLIFY, ANALYZE, SUMMARIZE, and ASK stream
@@ -1026,7 +1034,7 @@ async function handle(req: Request, t: TFunc) {
     const result = streamText({
       model,
       maxOutputTokens,
-      providerOptions: kimiOptions(effort),
+      providerOptions,
       headers: gatewayHeaders(usageMeta),
       allowSystemInMessages: true,
       messages,
