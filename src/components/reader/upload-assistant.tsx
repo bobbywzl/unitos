@@ -10,6 +10,7 @@ import { type FinishPlan, warmImages } from "@/lib/finish";
 import { classifyDriveFile, type DrivePickedFile } from "@/lib/drive/types";
 import { isImageFile } from "@/lib/handwritten/image";
 import { isMarkdownFile } from "@/lib/markdown-file";
+import { isSheetsFile, isSlidesFile } from "@/lib/office-file";
 import { isMediaUrl, MAX_VIDEO_BYTES, MEDIA_EXTENSIONS, UPLOAD_CHUNK_BYTES } from "@/lib/video/types";
 import { parseYouTubeId } from "@/lib/video/youtube";
 import {
@@ -85,6 +86,8 @@ function uploadItemKindKey(item: UploadItem): TKey {
   if (isMediaFile(item.file)) return "panes.uploadItemMediaFile";
   if (isImageFile(item.file)) return "panes.uploadItemImage";
   if (isMarkdownFile(item.file)) return "panes.uploadItemMarkdown";
+  if (isSlidesFile(item.file)) return "panes.uploadItemSlides";
+  if (isSheetsFile(item.file)) return "panes.uploadItemSheets";
   return "panes.uploadItemPdf";
 }
 
@@ -362,7 +365,11 @@ export function UploadAssistant({
     if (kind === "media" && file.sizeBytes !== null && file.sizeBytes > MAX_VIDEO_BYTES) {
       return t("panes.fileTooLarge", { name: file.name, mb: 200 });
     }
-    if (kind === "pdf" && file.sizeBytes !== null && file.sizeBytes > MAX_PDF_BYTES) {
+    if (
+      (kind === "pdf" || kind === "slides-file" || kind === "sheets-file") &&
+      file.sizeBytes !== null &&
+      file.sizeBytes > MAX_PDF_BYTES
+    ) {
       return t("panes.fileTooLarge", { name: file.name, mb: 50 });
     }
     return null;

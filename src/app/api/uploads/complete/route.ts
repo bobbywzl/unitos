@@ -6,6 +6,7 @@ import { currentUser } from "@/lib/auth";
 import { bumpNotebook, notebookAccess } from "@/lib/collab";
 import { runConversion } from "@/lib/handwritten/convert";
 import { renderPageImages } from "@/lib/handwritten/page-images";
+import { renderUploadedSlidePictures } from "@/lib/handwritten/slide-pictures";
 import { IMAGE_EXTENSIONS, sniffImage } from "@/lib/handwritten/image";
 import { imageToPdf } from "@/lib/handwritten/image-pdf";
 import { serverT } from "@/lib/i18n/server";
@@ -18,6 +19,8 @@ import { runTranscription } from "@/lib/video/transcription-job";
 import { MAX_VIDEO_BYTES, UPLOAD_CHUNK_BYTES } from "@/lib/video/types";
 import { parseBody } from "@/lib/validate";
 import { isMarkdownFile } from "@/lib/markdown-file";
+import { isSheetsFile } from "@/lib/office-file";
+import { refreshSkeleton } from "@/lib/graph/skeleton";
 
 // Media uploads kick off transcription in after(); a long audio's chunked run
 // plus the cleanup pass needs the headroom.
@@ -107,6 +110,30 @@ export async function POST(req: Request) {
     }
     filename = filename.replace(IMAGE_EXTENSIONS, "");
     pages = true;
+  } else if (parse.sniffOfficeFile(bytes) !== null || (!parse.isZipBytes(bytes) && isSheetsFile({ type: "", name: filename }))) {
+    // Slides and sheets (SPEC.md §27): a .pptx, a .xlsx, or a .csv/.tsv
+    // parses with its own parser, no judgment, no model pass.
+    const format = parse.sniffOfficeFile(bytes) === "pptx" ? "slides" : "sheets";
+    return progressResponse(async (onProgress) => {
+      try {
+        const { document, deduped } =
+          format === "slides"
+            ? await parse.ingestSlides(bytes, filename, onProgress, {}, user?.id ?? null)
+            : await parse.ingestSheets(bytes, filename, onProgress, {}, user?.id ?? null);
+        await attachDocument(data.notebookId, document.id);
+        await bumpNotebook(data.notebookId);
+        if (!deduped) after(() => refreshSkeleton(document.id, user?.id ?? null).catch(() => {}));
+        // An uploaded deck's pictures render after the response (SPEC.md §27).
+        if (!deduped && format === "slides") {
+          const deck = bytes;
+          after(() => renderUploadedSlidePictures(document.id, deck).catch((err) => console.warn("[slides] pictures failed:", err)));
+        }
+        return { id: document.id, title: document.title, deduped };
+      } catch (err) {
+        console.error("Slides/sheets ingest failed:", err);
+        throw new Error(describeIngestError(err, t, "pdf"));
+      }
+    });
   } else if (isMarkdownFile({ type: "", name: filename })) {
     // A Markdown file (SPEC.md §2): the URL walk reads it, no judgment.
     return progressResponse(async (onProgress) => {

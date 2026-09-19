@@ -453,6 +453,11 @@ model Document {
   sourceUrl     String?
   fileHash      String?            @unique // dedupe re-uploads
   fileData      Bytes? // original PDF bytes, kept for forced re-parse (SPEC.md §8 Phase 3)
+  // The stored file's format when it is neither a PDF nor a Markdown file
+  // (SPEC.md §27): "slides" (a .pptx) or "sheets" (a .xlsx, .csv, or .tsv).
+  // Null = a PDF, a Markdown file, or no file. Re-parse reads it to pick
+  // the parser; the reader reads it to lay the document out.
+  format        String?
   // Handwritten document (SPEC.md §16): the PDF is rough handwritten notes or
   // drawings. PAGE blocks render its pages; conversion writes text blocks
   // after them. Import PDF sets it by AI judgment; the document menu flips it.
@@ -627,6 +632,8 @@ enum BlockType {
   VIDEO // the video document's player block, exactly one per video document
   TRANSCRIPT // one transcript line, timed with startTime/endTime
   PAGE // one PDF page of a handwritten document; page holds the 1-based number
+  SLIDE // one slide of a slides document (SPEC.md §27); page holds the 1-based slide number
+  SHEET // the rows of one sheet of a sheets document, at most SHEET_ROWS_PER_BLOCK per block (SPEC.md §27)
 }
 
 enum ConversionStatus {

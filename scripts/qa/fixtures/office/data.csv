@@ -1,0 +1,4 @@
+name,amount,"quoted, field"
+Alice,12.5,"says ""hi"""
+Bob,-3,"multi
+line"

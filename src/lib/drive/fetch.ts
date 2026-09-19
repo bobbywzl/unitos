@@ -10,6 +10,7 @@ import { outboundFetch, type OutboundResponse } from "@/lib/outbound-fetch";
 
 const DRIVE_FILES_URL = "https://www.googleapis.com/drive/v3/files";
 const MAX_PDF_BYTES = 50 * 1024 * 1024;
+const MAX_FILE_BYTES = 50 * 1024 * 1024;
 
 // The direct-download URL doubles as the document's sourceUrl: re-picking the
 // same Drive file dedupes against it, the same as re-adding a web link. It
@@ -24,9 +25,8 @@ export function driveFetchUrl(fileId: string): string {
   return `${driveDownloadUrl(fileId)}&supportsAllDrives=true`;
 }
 
-function driveExportUrl(fileId: string): string {
-  const mimeType = encodeURIComponent("application/pdf");
-  return `${DRIVE_FILES_URL}/${encodeURIComponent(fileId)}/export?mimeType=${mimeType}`;
+function driveExportUrl(fileId: string, mimeType = "application/pdf"): string {
+  return `${DRIVE_FILES_URL}/${encodeURIComponent(fileId)}/export?mimeType=${encodeURIComponent(mimeType)}`;
 }
 
 // Drive's refusal as one line for the reader: the app's own line for the
@@ -81,20 +81,52 @@ export async function fetchDriveMetadata(
   return { name: data.name, mimeType: data.mimeType };
 }
 
-// Google Docs, Sheets, Slides, and Drawings export to PDF — Drive's own
-// conversion — then ingest exactly like an uploaded PDF; the app has no other
-// reader for the native formats. Drive caps an export at 10 MB.
-export async function fetchExportedPdf(
+// A Google file exported — Drive's own conversion — in the format asked
+// for: PDF for Docs and Drawings (then ingested exactly like an uploaded
+// PDF), .pptx for Slides and .xlsx for Sheets (SPEC.md §27; then ingested
+// exactly like the uploaded file), and PDF again for a Slides file's
+// pictures. Drive caps an export at 10 MB.
+export async function fetchExported(
+  fileId: string,
+  token: string,
+  grant: DriveAccess,
+  t: TFunc,
+  mimeType: string,
+): Promise<Uint8Array<ArrayBuffer>> {
+  const res = await outboundFetch(driveExportUrl(fileId, mimeType), {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error(await driveErrorMessage(t, res, grant));
+  const bytes = new Uint8Array(await res.arrayBuffer());
+  if (bytes.length === 0) throw new Error(t("api.driveFetchFailed"));
+  return bytes;
+}
+
+export function fetchExportedPdf(
   fileId: string,
   token: string,
   grant: DriveAccess,
   t: TFunc,
 ): Promise<Uint8Array<ArrayBuffer>> {
-  const res = await outboundFetch(driveExportUrl(fileId), {
+  return fetchExported(fileId, token, grant, t, "application/pdf");
+}
+
+// A file sitting in Drive as it is — a .pptx, a .xlsx, a .csv — the same
+// bytes a direct upload would send.
+export async function fetchDriveFile(
+  fileId: string,
+  token: string,
+  grant: DriveAccess,
+  t: TFunc,
+): Promise<Uint8Array<ArrayBuffer>> {
+  const res = await outboundFetch(driveFetchUrl(fileId), {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) throw new Error(await driveErrorMessage(t, res, grant));
+  const declared = Number(res.headers.get("content-length") ?? "0");
+  if (declared > MAX_FILE_BYTES) throw new Error(t("api.pdfTooLarge"));
   const bytes = new Uint8Array(await res.arrayBuffer());
+  if (bytes.length > MAX_FILE_BYTES) throw new Error(t("api.pdfTooLarge"));
   if (bytes.length === 0) throw new Error(t("api.driveFetchFailed"));
   return bytes;
 }

@@ -8,12 +8,16 @@ import { classifyDriveFile } from "@/lib/drive/types";
 import {
   driveDownloadUrl,
   driveFetchUrl,
+  fetchDriveFile,
   fetchDriveMetadata,
   fetchDrivePdf,
+  fetchExported,
   fetchExportedPdf,
 } from "@/lib/drive/fetch";
 import { runConversion } from "@/lib/handwritten/convert";
-import { renderPageImages } from "@/lib/handwritten/page-images";
+import { renderPageImages, renderSlidePictures } from "@/lib/handwritten/page-images";
+import { renderUploadedSlidePictures } from "@/lib/handwritten/slide-pictures";
+import { SHEETS_MIME_TYPE, SLIDES_MIME_TYPE } from "@/lib/office-file";
 import { serverT } from "@/lib/i18n/server";
 import { progressResponse } from "@/lib/ingest-response";
 import { attachDocument } from "@/lib/parse/attach";
@@ -98,9 +102,8 @@ export async function POST(req: Request) {
     });
   }
 
-  // kind is "pdf" or "export" — both end up as PDF bytes, ingested the one
-  // way this app reads a PDF. The parse chain (jsdom, unpdf) loads per
-  // request; see /api/documents for why it cannot load with the route module.
+  // The parse chain (jsdom, unpdf) loads per request; see /api/documents
+  // for why it cannot load with the route module.
   let parse: typeof import("@/lib/parse/ingest");
   try {
     parse = await import("@/lib/parse/ingest");
@@ -110,6 +113,77 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: t("api.parsingUnavailable", { message }) }, { status: 500 });
   }
 
+  // Slides and sheets (SPEC.md §27): a Google Slides file arrives as Drive's
+  // .pptx export plus its PDF export — the pictures the reader draws over
+  // the replicas — and a Google Sheets file as Drive's .xlsx export; a
+  // .pptx or .xlsx/.csv sitting in Drive downloads as it is. Each ingests
+  // exactly like the same file uploaded.
+  if (kind === "slides" || kind === "sheets" || kind === "slides-file" || kind === "sheets-file") {
+    const fileName = name;
+    const fileId = data.fileId;
+    return progressResponse(async (onProgress) => {
+      onProgress("fetch");
+      try {
+        if (kind === "slides" || kind === "slides-file") {
+          const bytes =
+            kind === "slides"
+              ? await fetchExported(fileId, token, grant, t, SLIDES_MIME_TYPE)
+              : await fetchDriveFile(fileId, token, grant, t);
+          // The pictures are a bonus: a failed PDF export leaves the replicas.
+          let picture: Uint8Array<ArrayBuffer> | undefined;
+          if (kind === "slides") {
+            try {
+              picture = await fetchExportedPdf(fileId, token, grant, t);
+            } catch (err) {
+              console.warn("[drive] slides PDF export failed:", err);
+            }
+          }
+          const { document, deduped } = await parse.ingestSlides(
+            bytes,
+            kind === "slides" ? `${fileName}.pptx` : fileName,
+            onProgress,
+            { picture },
+            user?.id ?? null,
+          );
+          await attachDocument(data.notebookId, document.id);
+          await bumpNotebook(data.notebookId);
+          if (!deduped) {
+            const pdf = picture;
+            // Drive's PDF export draws the pictures; a .pptx from Drive, or
+            // a failed export, gets them the way an upload does (SPEC.md §27).
+            if (pdf) after(() => renderSlidePictures(document.id, pdf).catch(() => {}));
+            else {
+              const deck = bytes;
+              after(() => renderUploadedSlidePictures(document.id, deck).catch((err) => console.warn("[slides] pictures failed:", err)));
+            }
+            after(() => refreshSkeleton(document.id, user?.id ?? null).catch(() => {}));
+          }
+          return { id: document.id, title: document.title, deduped };
+        }
+        const bytes =
+          kind === "sheets"
+            ? await fetchExported(fileId, token, grant, t, SHEETS_MIME_TYPE)
+            : await fetchDriveFile(fileId, token, grant, t);
+        const { document, deduped } = await parse.ingestSheets(
+          bytes,
+          kind === "sheets" ? `${fileName}.xlsx` : fileName,
+          onProgress,
+          {},
+          user?.id ?? null,
+        );
+        await attachDocument(data.notebookId, document.id);
+        await bumpNotebook(data.notebookId);
+        if (!deduped) after(() => refreshSkeleton(document.id, user?.id ?? null).catch(() => {}));
+        return { id: document.id, title: document.title, deduped };
+      } catch (err) {
+        console.error("Drive slides/sheets ingest failed:", err);
+        throw new Error(describeIngestError(err, t, "pdf"));
+      }
+    });
+  }
+
+  // kind is "pdf" or "export" — both end up as PDF bytes, ingested the one
+  // way this app reads a PDF.
   const pdfName = name;
   return progressResponse(async (onProgress) => {
     onProgress("fetch");

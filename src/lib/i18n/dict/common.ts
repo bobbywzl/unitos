@@ -54,7 +54,11 @@
 //   billing(付款流程与开关) 付费 · plan page 方案页 · order(付款前的订单页) 订单 ·
 //   checkout(Stripe 结账) 结账 · receipt(一次付款; code Purchase) 收据 ·
 //   subscription 订阅 · Manage subscription 管理订阅 · confirmation 确认 ·
-//   billing switch 付费开关 · Stripe 不翻译
+//   billing switch 付费开关 · Stripe 不翻译 ·
+//   slides(幻灯片文档) 幻灯片 · slide(一页幻灯片) 幻灯片 · replica(复刻) 复刻 ·
+//   picture(幻灯片的图片) 图片 · speaker notes 演讲者备注 ·
+//   sheets(电子表格文档) 电子表格 · sheet(一个工作表) 工作表 · cell 单元格 ·
+//   frozen(冻结的行列) 冻结
 // highlight 高亮 仅指高亮功能；表示选取文字一律用 选中。
 
 const en = {

@@ -126,3 +126,88 @@ export async function pageSizesFor(
   }
   return Object.fromEntries(rows.map((r) => [r.blockId, { width: r.width, height: r.height }]));
 }
+
+// ── Slide pictures (SPEC.md §27) ─────────────────────────────────────────────
+// A slides document from Google Drive comes with Drive's own PDF export: one
+// page per slide, drawn as Google draws it. Each page renders once and is
+// kept as the SLIDE block's PageImage, the picture the reader draws over
+// the replica. The PDF bytes are not stored — the document's file is the
+// .pptx — so a slide without a stored picture shows its replica alone, and
+// the page image route never renders one on request.
+
+type SlideBlock = { id: string; page: number | null };
+
+async function slideBlocksOf(documentId: string): Promise<SlideBlock[]> {
+  return db.block.findMany({
+    where: { documentId, type: "SLIDE" },
+    select: { id: true, page: true },
+    orderBy: { order: "asc" },
+  });
+}
+
+/** Every SLIDE block's picture size stored from the PDF export, no
+    render, so the reader knows a picture is coming. */
+export async function storeSlidePictureSizes(documentId: string, pdfBytes: Uint8Array): Promise<void> {
+  await storeSizes(await slideBlocksOf(documentId), pdfBytes);
+}
+
+/** Every SLIDE block without a stored picture, rendered from the PDF
+    export and stored in slide order. Stops at budgetMs. */
+export async function renderSlidePictures(
+  documentId: string,
+  pdfBytes: Uint8Array,
+  opts: { budgetMs?: number } = {},
+): Promise<void> {
+  const blocks = await slideBlocksOf(documentId);
+  if (blocks.length === 0) return;
+  const stored = await db.pageImage.findMany({
+    where: { blockId: { in: blocks.map((b) => b.id) }, data: { not: null } },
+    select: { blockId: true },
+  });
+  const done = new Set(stored.map((r) => r.blockId));
+  const todo = blocks.filter((b) => b.page !== null && !done.has(b.id));
+  if (todo.length === 0) return;
+  const blockByPage = new Map(todo.map((b) => [b.page as number, b.id]));
+  const started = Date.now();
+  await renderPdfPagesJpeg(pdfBytes, [...blockByPage.keys()], PAGE_IMAGE_WIDTH, async (page, image, size) => {
+    await storeRender(blockByPage.get(page) as string, image, size);
+    return opts.budgetMs === undefined || Date.now() - started < opts.budgetMs;
+  });
+}
+
+/** The stored pictures of a slides document by slide number, for a
+    re-parse to carry over: the blocks are recreated under new ids, and the
+    PDF export they came from is not kept. */
+export async function slidePicturesByPage(
+  documentId: string,
+): Promise<Map<number, { width: number; height: number; data: Uint8Array | null }>> {
+  const rows = await db.pageImage.findMany({
+    where: { block: { documentId, type: "SLIDE" } },
+    select: { width: true, height: true, data: true, block: { select: { page: true } } },
+  });
+  const out = new Map<number, { width: number; height: number; data: Uint8Array | null }>();
+  for (const row of rows) {
+    if (row.block.page !== null) out.set(row.block.page, { width: row.width, height: row.height, data: row.data });
+  }
+  return out;
+}
+
+/** Stored pictures written back onto a re-parsed slides document's new
+    SLIDE blocks, by slide number. */
+export async function restoreSlidePictures(
+  documentId: string,
+  pictures: Map<number, { width: number; height: number; data: Uint8Array | null }>,
+): Promise<void> {
+  if (pictures.size === 0) return;
+  const blocks = await slideBlocksOf(documentId);
+  for (const block of blocks) {
+    const picture = block.page !== null ? pictures.get(block.page) : undefined;
+    if (!picture) continue;
+    const data = picture.data ? Buffer.from(picture.data) : null;
+    await db.pageImage.upsert({
+      where: { blockId: block.id },
+      create: { blockId: block.id, width: picture.width, height: picture.height, data },
+      update: { width: picture.width, height: picture.height, data },
+    });
+  }
+}

@@ -17,6 +17,8 @@ import { useT } from "@/components/lang-provider";
 import { Equation } from "@/components/reader/equation";
 import { MediaHtml } from "@/components/reader/figure-media";
 import { bindTableMarkClicks, marksSignature, paintTableMarks } from "@/components/reader/table-marks";
+import { OFFICE_CSS } from "@/lib/office-css";
+import { googleFontsUrl, parseFontList, webFontFamilies } from "@/lib/office-fonts";
 import type { TFunc, TKey } from "@/lib/i18n/dictionaries";
 
 const CHAIN_BUTTON =
@@ -642,15 +644,46 @@ function HighlightLabel({ anchors }: { anchors: Highlight[] }) {
   );
 }
 
-// A table's html with the block's marks painted inside it (table-marks.ts).
-// The html lands as one string; the marks are painted after it, on the
-// DOM, and repainted only when what they depend on changes — a paint
-// replaces the passage's text nodes, and the browser's selection with them,
-// which the selection tint stands in for (reader-interactions.tsx). When
-// the html's text is not the block text nothing paints and the block rings
-// whole, as a figure does.
-function TableHtml({
+// The slide and sheet styles (lib/office-css.ts) reach the page once, the
+// first time a slide or a sheet renders; the web fonts a document names
+// (data-fonts, lib/office-fonts.ts) load once per family.
+const OFFICE_STYLE_ID = "unitos-office-css";
+const loadedFonts = new Set<string>();
+
+function ensureOfficeStyles(): void {
+  if (document.getElementById(OFFICE_STYLE_ID)) return;
+  const style = document.createElement("style");
+  style.id = OFFICE_STYLE_ID;
+  style.textContent = OFFICE_CSS;
+  document.head.appendChild(style);
+}
+
+function ensureWebFonts(typefaces: string[]): void {
+  for (const family of webFontFamilies(typefaces)) {
+    if (loadedFonts.has(family)) continue;
+    loadedFonts.add(family);
+    const link = document.createElement("link");
+    link.rel = "stylesheet";
+    link.href = googleFontsUrl(family);
+    document.head.appendChild(link);
+  }
+}
+
+// A table's, a slide's, or a sheet's html with the block's marks painted
+// inside it (table-marks.ts). The html lands as one string; the marks are
+// painted after it, on the DOM, and repainted only when what they depend
+// on changes — a paint replaces the passage's text nodes, and the
+// browser's selection with them, which the selection tint stands in for
+// (reader-interactions.tsx). When the html's text is not the block text
+// nothing paints and the block rings whole, as a figure does.
+// A slide that came with a picture (SPEC.md §27: data-picture on its
+// frame, the picture the page image route serves) draws the picture over
+// the replica once it loads: the replica's words turn transparent and its
+// shapes hide, the marks still paint on the words. A picture that fails
+// to load leaves the replica as it is.
+function MarkedHtml({
   blockId,
+  documentId,
   className,
   html,
   text,
@@ -658,6 +691,7 @@ function TableHtml({
   ring,
 }: {
   blockId: string;
+  documentId?: string;
   className: string;
   html: string;
   text: string;
@@ -680,6 +714,31 @@ function TableHtml({
     if (!el) return;
     return bindTableMarkClicks(el);
   }, []);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const office = el.querySelector<HTMLElement>(".slide-frame, .sheet");
+    if (!office) return;
+    ensureOfficeStyles();
+    ensureWebFonts(parseFontList(office.dataset.fonts));
+  }, [html]);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || !documentId) return;
+    const frame = el.querySelector<HTMLElement>(".slide-frame[data-picture]");
+    const slide = frame?.querySelector<HTMLElement>(".slide");
+    if (!frame || !slide || slide.querySelector(".slide-picture")) return;
+    const img = document.createElement("img");
+    img.className = "slide-picture";
+    img.alt = "";
+    img.draggable = false;
+    img.loading = "lazy";
+    img.setAttribute("data-anchor-skip", "");
+    img.addEventListener("load", () => frame.classList.add("slide-pictured"));
+    img.addEventListener("error", () => img.remove());
+    img.src = `/api/documents/${documentId}/page/${blockId}`;
+    slide.prepend(img);
+  }, [html, documentId, blockId]);
   return (
     <div
       ref={ref}
@@ -847,9 +906,49 @@ export function BlockView({
     case "TABLE":
       if (block.html) {
         return (
-          <TableHtml
+          <MarkedHtml
             blockId={block.id}
             className={`${shared} reader-table my-3 overflow-x-auto text-sm`}
+            html={block.html}
+            text={block.text}
+            highlights={highlights}
+            ring={htmlHighlighted}
+          />
+        );
+      }
+      return (
+        <pre data-block-id={block.id} className={`${shared} my-3 overflow-x-auto font-mono text-sm`}>
+          {content}
+        </pre>
+      );
+    // A slide and a sheet are text (SPEC.md §27): their words are rendered
+    // text inside the replica or the grid, selected and marked like a
+    // table's, never rung whole.
+    case "SLIDE":
+      if (block.html) {
+        return (
+          <MarkedHtml
+            blockId={block.id}
+            documentId={documentId}
+            className={`${shared} reader-slide my-6`}
+            html={block.html}
+            text={block.text}
+            highlights={highlights}
+            ring={htmlHighlighted}
+          />
+        );
+      }
+      return (
+        <p data-block-id={block.id} className={`${shared} my-4 whitespace-pre-wrap`}>
+          {content}
+        </p>
+      );
+    case "SHEET":
+      if (block.html) {
+        return (
+          <MarkedHtml
+            blockId={block.id}
+            className={`${shared} reader-sheet my-3 text-sm`}
             html={block.html}
             text={block.text}
             highlights={highlights}

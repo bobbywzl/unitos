@@ -15,8 +15,9 @@ export const maxDuration = 120;
 // language. GET answers what is cached; POST translates what is missing or
 // stale (the block was edited since) and answers the whole map. The reader
 // shows each translation under its block; anchors stay on the original text.
-const TRANSLATABLE = new Set(["PARAGRAPH", "HEADING", "LIST", "TRANSCRIPT", "TABLE", "FIGURE"]);
-// A table's plain text past this reads as data, not prose; it stays untranslated.
+// A slide's words translate like a paragraph's; a sheet's cells are data.
+const TRANSLATABLE = new Set(["PARAGRAPH", "HEADING", "LIST", "TRANSCRIPT", "TABLE", "FIGURE", "SLIDE"]);
+// A table's or slide's plain text past this reads as data, not prose; it stays untranslated.
 const TABLE_MAX_CHARS = 5_000;
 
 const bodySchema = z.object({ lang: z.enum(["en", "zh"]) });
@@ -29,7 +30,7 @@ type Block = { id: string; type: string; text: string };
 
 function translatable(block: Block): boolean {
   if (!TRANSLATABLE.has(block.type) || block.text.trim() === "") return false;
-  if (block.type === "TABLE" && block.text.length > TABLE_MAX_CHARS) return false;
+  if ((block.type === "TABLE" || block.type === "SLIDE") && block.text.length > TABLE_MAX_CHARS) return false;
   return true;
 }
 
