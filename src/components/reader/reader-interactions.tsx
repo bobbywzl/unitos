@@ -68,6 +68,8 @@ import { useCardDropOpen } from "@/components/outline/use-card-drop";
 import {
   CommentIcon,
   ExpandIcon,
+  MaximizeIcon,
+  TrashIcon,
   ExtractIcon,
   LinkIcon,
   MicIcon,
@@ -5494,15 +5496,21 @@ function blockFormatKind(
     }
   }
   // Expand, on the header of every card that holds a conversation.
+  // Every action in a card's header is one button: a 24px circle around a
+  // 13px glyph, the same on the explanation, the simplification, the
+  // analysis, the visualization, and the assistant's card. The rating sits
+  // at the card's foot, not in the header (SPEC.md §25).
+  const CARD_ACTION =
+    "flex size-6 shrink-0 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-800";
   const expandButton = (kind: "assistant" | "explain" | "simplify") => (
     <button
       onClick={() => openConversationView(kind)}
       data-track={`${kind}-expand`}
-      className="text-sand-500 hover:text-clay-800"
+      className={CARD_ACTION}
       aria-label={t("reader.expandConversation")}
       data-tip={t("reader.expandConversationTitle")}
     >
-      <ExpandIcon size={12} />
+      <ExpandIcon size={13} />
     </button>
   );
 
@@ -6313,9 +6321,9 @@ function blockFormatKind(
             style={{ touchAction: "none" }}
             data-no-drag
             data-tip={t("reader.dragToMove")}
-            className="mb-2 flex cursor-move items-center justify-between"
+            className="mb-2 flex cursor-move items-center justify-between gap-2"
           >
-            <span className="flex items-center gap-1.5 text-[11px] font-bold tracking-[0.08em] text-clay-800 uppercase">
+            <span className="flex min-w-0 items-center gap-1.5 text-[11px] font-bold tracking-[0.08em] text-clay-800 uppercase">
               {annotationGrip(bubbleReference)}
               <ToolSymbol tool={bubble.kind} plus={toolPlus(bubble)} size={12} />
               {toolPlus(bubble)
@@ -6330,7 +6338,7 @@ function blockFormatKind(
                       : t("reader.visualization")
                     : t("reader.explanation")}
             </span>
-            <span className="flex items-center gap-3">
+            <span className="flex shrink-0 items-center gap-0.5">
               {bubble.streaming && (
                 <button
                   onClick={stopExplain}
@@ -6345,10 +6353,11 @@ function blockFormatKind(
                 <button
                   onClick={() => openVisualization(visualizationImage(bubble.text)!)}
                   data-track="visualize-open"
-                  className="text-xs font-semibold text-sand-700 hover:text-clay-800"
+                  className={CARD_ACTION}
+                  aria-label={t("reader.openVisualization")}
                   data-tip={t("reader.openVisualizationTitle")}
                 >
-                  {t("reader.openVisualization")}
+                  <MaximizeIcon size={13} />
                 </button>
               )}
               {(bubble.text || bubble.conversation.length > 0) && expandButton("explain")}
@@ -6356,7 +6365,7 @@ function blockFormatKind(
                 <button
                   onClick={() => void regenerateBubble()}
                   data-track={`${bubble.kind}-regenerate`}
-                  className="text-sand-500 hover:text-clay-800"
+                  className={CARD_ACTION}
                   aria-label={t("common.regenerate")}
                   data-tip={t(
                     bubble.kind === "analyze"
@@ -6366,24 +6375,15 @@ function blockFormatKind(
                         : "reader.regenerateExplanationTitle",
                   )}
                 >
-                  <RegenerateIcon size={12} />
+                  <RegenerateIcon size={13} />
                 </button>
-              )}
-              {bubble.noteId && !bubble.streaming && !bubble.error && (
-                <RatingButtons
-                  tool={bubble.kind}
-                  input={bubble.anchor?.quotedText ?? ""}
-                  output={bubble.text}
-                  notebookId={notebookId}
-                  documentId={documentId}
-                  noteId={bubble.noteId}
-                />
               )}
               {bubble.noteId && !bubble.streaming && (
                 <button
                   onClick={() => void deleteExplain()}
                   data-track={`${bubble.kind}-delete`}
-                  className="text-xs font-semibold text-red-500 hover:text-red-700"
+                  className={CARD_ACTION}
+                  aria-label={t("common.delete")}
                   data-tip={t(
                     bubble.kind === "analyze"
                       ? "reader.deleteAnalysisTitle"
@@ -6392,13 +6392,13 @@ function blockFormatKind(
                         : "reader.deleteExplainTitle",
                   )}
                 >
-                  {t("common.delete")}
+                  <TrashIcon size={13} />
                 </button>
               )}
               <button
                 onClick={closeExplain}
                 data-track={`${bubble.kind}-close`}
-                className="text-xs text-sand-500 hover:text-clay-700"
+                className={`${CARD_ACTION} text-xs`}
                 aria-label={t("common.close")}
                 data-tip={t("common.close")}
               >
@@ -6421,6 +6421,17 @@ function blockFormatKind(
             </div>
           ) : (
             <ThinkingIndicator className="py-1 text-[12.5px]" />
+          )}
+          {bubble.noteId && !bubble.streaming && !bubble.error && bubble.declined === null && (
+            <RatingButtons
+              tool={bubble.kind}
+              input={bubble.anchor?.quotedText ?? ""}
+              output={bubble.text}
+              notebookId={notebookId}
+              documentId={documentId}
+              noteId={bubble.noteId}
+              className="mt-2 shrink-0"
+            />
           )}
           {bubble.declined === null && toolChatFoot("explain", bubble, bubble.kind)}
         </div>
@@ -6450,9 +6461,9 @@ function blockFormatKind(
             style={{ touchAction: "none" }}
             data-no-drag
             data-tip={t("reader.dragToMove")}
-            className="mb-2 flex cursor-move items-center justify-between"
+            className="mb-2 flex cursor-move items-center justify-between gap-2"
           >
-            <span className="flex items-center gap-1.5 text-[11px] font-bold tracking-[0.08em] text-sage-800 uppercase">
+            <span className="flex min-w-0 items-center gap-1.5 text-[11px] font-bold tracking-[0.08em] text-sage-800 uppercase">
               {annotationGrip(simplifyReference)}
               <ToolSymbol tool="simplify" plus={toolPlus(simplifyCard)} size={12} />
               {toolPlus(simplifyCard)
@@ -6461,7 +6472,7 @@ function blockFormatKind(
                   ? t("reader.simplifying")
                   : t("reader.simplified")}
             </span>
-            <span className="flex items-center gap-3">
+            <span className="flex shrink-0 items-center gap-0.5">
               {simplifyCard.streaming && (
                 <button
                   onClick={stopSimplify}
@@ -6477,37 +6488,28 @@ function blockFormatKind(
                 <button
                   onClick={() => void regenerateSimplify()}
                   data-track="simplify-regenerate"
-                  className="text-sand-500 hover:text-clay-800"
+                  className={CARD_ACTION}
                   aria-label={t("common.regenerate")}
                   data-tip={t("reader.regenerateSimplifyTitle")}
                 >
-                  <RegenerateIcon size={12} />
+                  <RegenerateIcon size={13} />
                 </button>
-              )}
-              {simplifyCard.noteId && !simplifyCard.streaming && !simplifyCard.error && (
-                <RatingButtons
-                  tool="simplify"
-                  input={simplifyCard.anchor.quotedText}
-                  output={simplifyCard.text}
-                  notebookId={notebookId}
-                  documentId={documentId}
-                  noteId={simplifyCard.noteId}
-                />
               )}
               {simplifyCard.noteId && !simplifyCard.streaming && (
                 <button
                   onClick={() => void deleteSimplify()}
                   data-track="simplify-delete"
-                  className="text-xs font-semibold text-red-500 hover:text-red-700"
+                  className={CARD_ACTION}
+                  aria-label={t("common.delete")}
                   data-tip={t("reader.deleteSimplifyTitle")}
                 >
-                  {t("common.delete")}
+                  <TrashIcon size={13} />
                 </button>
               )}
               <button
                 onClick={closeSimplify}
                 data-track="simplify-close"
-                className="text-xs text-sand-500 hover:text-clay-700"
+                className={`${CARD_ACTION} text-xs`}
                 aria-label={t("common.close")}
                 data-tip={t("common.close")}
               >
@@ -6554,6 +6556,17 @@ function blockFormatKind(
           )}
           {toolChatTurns(simplifyCard)}
           </div>
+          )}
+          {simplifyCard.noteId && !simplifyCard.streaming && !simplifyCard.error && (
+            <RatingButtons
+              tool="simplify"
+              input={simplifyCard.anchor.quotedText}
+              output={simplifyCard.text}
+              notebookId={notebookId}
+              documentId={documentId}
+              noteId={simplifyCard.noteId}
+              className="mt-2 shrink-0"
+            />
           )}
           {toolChatFoot("simplify", simplifyCard, "simplify")}
         </div>
@@ -6817,22 +6830,23 @@ function blockFormatKind(
               <SparkleIcon size={12} />
               {t("reader.assistant")}
             </span>
-            <span className="flex items-center gap-3">
+            <span className="flex shrink-0 items-center gap-0.5">
               {assistantChat.messages.length > 0 && expandButton("assistant")}
               {assistantChat.noteId && (
                 <button
                   onClick={() => void deleteAssistantConversation()}
                   data-track="assistant-card-delete"
-                  className="text-xs font-semibold text-red-500 hover:text-red-700"
+                  className={CARD_ACTION}
+                  aria-label={t("common.delete")}
                   data-tip={t("reader.deleteConversationTitle")}
                 >
-                  {t("common.delete")}
+                  <TrashIcon size={13} />
                 </button>
               )}
               <button
                 onClick={closeAssistantChat}
                 data-track="assistant-card-close"
-                className="text-xs text-sand-500 hover:text-clay-700"
+                className={`${CARD_ACTION} text-xs`}
                 aria-label={t("common.close")}
                 data-tip={t("common.close")}
               >
