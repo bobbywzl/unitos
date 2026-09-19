@@ -18,12 +18,17 @@
 - `src/components/reader/block-view.tsx`: `MarkedHtml` (was `TableHtml`) renders TABLE, SLIDE, SHEET and loads a slide's picture; `reader-interactions.tsx`: no edit mode on SLIDE/SHEET; `document-bar.tsx`, `upload-assistant.tsx`: accept lists, drop filter, item labels, Drive size checks.
 - `src/app/globals.css`: `.reader-slide` and `.reader-sheet` styles.
 - `src/lib/i18n/dict/panes.ts`, `api.ts`, `common.ts`: new keys, messages, zh glossary terms.
+- `src/lib/parse/chart.ts` (new): charts drawn as SVG for slides and sheets.
+- `src/lib/office-fonts.ts` (new): web fonts for the file's typefaces (stand-ins for Office fonts, Google Fonts for the rest); `src/lib/office-css.ts` (new): the slide and sheet styles, shared by the reader and the server render.
+- `src/lib/handwritten/slide-pictures.ts` (new): pictures for uploaded decks by LibreOffice or the configured browser.
 - `SPEC.md` (§27), `CLAUDE.md` (glossary), `package.json` (fflate, ssf).
 
 **Decisions:**
 - Own OOXML parsers over a library: no npm pptx reader keeps positions, styles, and notes together, and the DOM-text-equals-block-text rule needs control over every text node. The zip reader is fflate; XML goes through jsdom's DOMParser, already a dependency. Number formats use SheetJS's standalone `ssf`.
 - A sheet is one SHEET block per sheet (capped at 10k rows / 200k cells) in a scroll box with sticky frozen rows and columns, not chunked blocks: chunks would split the grid into several scroll boxes.
-- A slide's picture (Drive's PDF export) is drawn over the replica with the replica's words transparent, a PDF viewer's text layer; uploaded .pptx files have no picture and show the replica. The PDF bytes are not stored; a re-parse carries the stored pictures over by slide number.
+- A slide's picture (Drive's PDF export) is drawn over the replica with the replica's words transparent, a PDF viewer's text layer. An uploaded .pptx gets its pictures from LibreOffice where installed, else from the configured browser photographing the replica, else none. The PDF bytes are not stored; a re-parse carries the stored pictures over by slide number.
+- Charts are drawn as SVG (skipped for anchoring) with their data laid under them invisible as the block's words: the picture stays faithful and the assistant still reads the numbers.
+- Web fonts load from Google Fonts by family, one link each, so an unknown family fails alone.
 - Bullets and numbers are part of the block text ("• ", "1. "), like LIST blocks carry their markers.
 - `Document.format` is a column rather than a byte sniff because a .csv has no magic and would read as Markdown on re-parse.
 - `PARSER_VERSION` is not bumped: the new formats do not change existing documents, and a bump re-parses every URL document on open.

@@ -1,5 +1,6 @@
 import { unzipSync } from "fflate";
 import { JSDOM } from "jsdom";
+import { fontFamilyDeclaration } from "@/lib/office-fonts";
 
 // Office Open XML files (SPEC.md §27): the zip and XML reading the slides
 // parser (lib/parse/slides.ts) and the sheets parser (lib/parse/sheets.ts)
@@ -310,6 +311,108 @@ export function modifyColor(
 
 // ── Theme ────────────────────────────────────────────────────────────────────
 
+/** The default color map: which theme color each scheme name means when a
+    master sets no clrMap (a workbook, a chart part). */
+export const DEFAULT_COLOR_MAP: Record<string, string> = {
+  bg1: "lt1",
+  tx1: "dk1",
+  bg2: "lt2",
+  tx2: "dk2",
+};
+
+const PRESET_COLORS: Record<string, string> = {
+  black: "000000",
+  white: "FFFFFF",
+  red: "FF0000",
+  green: "008000",
+  blue: "0000FF",
+  yellow: "FFFF00",
+  gray: "808080",
+  grey: "808080",
+  darkGray: "A9A9A9",
+  lightGray: "D3D3D3",
+  orange: "FFA500",
+  purple: "800080",
+  navy: "000080",
+  silver: "C0C0C0",
+  lime: "00FF00",
+  teal: "008080",
+  maroon: "800000",
+  olive: "808000",
+  aqua: "00FFFF",
+  cyan: "00FFFF",
+  magenta: "FF00FF",
+  fuchsia: "FF00FF",
+};
+
+export type DrawingPalette = { theme: ThemeColors; clrMap: Record<string, string>; phClr: Rgb | null };
+
+/** A DrawingML color element (srgbClr, schemeClr, sysClr, prstClr,
+    scrgbClr) resolved through the theme, with its modifiers (lumMod,
+    lumOff, tint, shade); the alpha rides separately. Null when the color
+    cannot be read. */
+export function resolveDrawingColor(el: Element | null, palette: DrawingPalette): { rgb: Rgb; alpha: number } | null {
+  if (!el) return null;
+  let rgb: Rgb | null = null;
+  switch (el.localName) {
+    case "srgbClr":
+      rgb = parseHexColor(attr(el, "val"));
+      break;
+    case "sysClr":
+      rgb = parseHexColor(attr(el, "lastClr")) ?? (attr(el, "val") === "windowText" ? { r: 0, g: 0, b: 0 } : { r: 255, g: 255, b: 255 });
+      break;
+    case "prstClr":
+      rgb = parseHexColor(PRESET_COLORS[attr(el, "val") ?? ""] ?? null);
+      break;
+    case "scrgbClr": {
+      const pct = (name: string) => ((intAttr(el, name) ?? 0) / 100000) * 255;
+      rgb = { r: pct("r"), g: pct("g"), b: pct("b") };
+      break;
+    }
+    case "schemeClr": {
+      const name = attr(el, "val") ?? "";
+      if (name === "phClr") rgb = palette.phClr;
+      else {
+        const mapped = palette.clrMap[name] ?? DEFAULT_COLOR_MAP[name] ?? name;
+        rgb = palette.theme[mapped] ?? palette.theme[name] ?? null;
+      }
+      break;
+    }
+    default:
+      rgb = null;
+  }
+  if (!rgb) return null;
+  const mods: Parameters<typeof modifyColor>[1] = {};
+  let alpha = 1;
+  for (const mod of Array.from(el.children)) {
+    const val = intAttr(mod, "val");
+    if (val === null) continue;
+    switch (mod.localName) {
+      case "lumMod":
+        mods.lumMod = val / 100000;
+        break;
+      case "lumOff":
+        mods.lumOff = val / 100000;
+        break;
+      case "tint":
+        mods.tint = val / 100000;
+        break;
+      case "shade":
+        mods.shade = val / 100000;
+        break;
+      case "alpha":
+        alpha = val / 100000;
+        break;
+    }
+  }
+  return { rgb: modifyColor(rgb, mods), alpha };
+}
+
+/** The theme's accent colors in order, as CSS: a chart's series colors. */
+export function themeAccents(theme: ThemeColors): string[] {
+  return ["accent1", "accent2", "accent3", "accent4", "accent5", "accent6"].flatMap((name) => (theme[name] ? [rgbCss(theme[name])] : []));
+}
+
 export type ThemeColors = Record<string, Rgb>;
 
 /** A theme part's color scheme by name (dk1, lt1, dk2, lt2, accent1…6,
@@ -356,17 +459,9 @@ export function num(n: number): string {
 }
 
 // ── Fonts ────────────────────────────────────────────────────────────────────
+// The declaration comes from lib/office-fonts.ts, shared with the reader,
+// which loads the web fonts it names.
 
-const SERIF_RX = /times|georgia|garamond|cambria|palatino|book antiqua|baskerville|didot|bodoni|playfair|merriweather|lora|serif|century|minion|constantia|charter|caslon|spectral|libre|crimson|noto serif|pt serif|source serif|cormorant|domine|vollkorn|bitter/i;
-const MONO_RX = /courier|consolas|mono|menlo|monaco|code|inconsolata|fira code|lucida console|jetbrains/i;
-
-/** A font family declaration for a file's typeface: the name first, then a
-    generic family read from the name. */
 export function fontFamilyCss(typeface: string): string {
-  const name = cssValue(typeface);
-  if (!name) return "";
-  const generic = MONO_RX.test(name) ? "ui-monospace, monospace" : SERIF_RX.test(name) ? "serif" : "sans-serif";
-  // Single quotes: the declaration sits inside a double-quoted style
-  // attribute, and cssValue has stripped every quote from the name.
-  return `'${name}', ${generic}`;
+  return fontFamilyDeclaration(typeface);
 }

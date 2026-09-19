@@ -16,6 +16,7 @@ import {
 } from "@/lib/drive/fetch";
 import { runConversion } from "@/lib/handwritten/convert";
 import { renderPageImages, renderSlidePictures } from "@/lib/handwritten/page-images";
+import { renderUploadedSlidePictures } from "@/lib/handwritten/slide-pictures";
 import { SHEETS_MIME_TYPE, SLIDES_MIME_TYPE } from "@/lib/office-file";
 import { serverT } from "@/lib/i18n/server";
 import { progressResponse } from "@/lib/ingest-response";
@@ -148,7 +149,13 @@ export async function POST(req: Request) {
           await bumpNotebook(data.notebookId);
           if (!deduped) {
             const pdf = picture;
+            // Drive's PDF export draws the pictures; a .pptx from Drive, or
+            // a failed export, gets them the way an upload does (SPEC.md §27).
             if (pdf) after(() => renderSlidePictures(document.id, pdf).catch(() => {}));
+            else {
+              const deck = bytes;
+              after(() => renderUploadedSlidePictures(document.id, deck).catch((err) => console.warn("[slides] pictures failed:", err)));
+            }
             after(() => refreshSkeleton(document.id, user?.id ?? null).catch(() => {}));
           }
           return { id: document.id, title: document.title, deduped };
@@ -161,6 +168,8 @@ export async function POST(req: Request) {
           bytes,
           kind === "sheets" ? `${fileName}.xlsx` : fileName,
           onProgress,
+          {},
+          user?.id ?? null,
         );
         await attachDocument(data.notebookId, document.id);
         await bumpNotebook(data.notebookId);

@@ -474,8 +474,8 @@ function delimiterOf(filename: string): Delimiter | undefined {
   return /\.tsv$/i.test(filename) ? "\t" : undefined;
 }
 
-function parseSheetsBytes(bytes: Uint8Array, filename: string): ParsedDocument {
-  if (sniffOfficeFile(bytes) === "xlsx") return parseSheets(bytes, filename);
+async function parseSheetsBytes(bytes: Uint8Array, filename: string, userId: string | null): Promise<ParsedDocument> {
+  if (sniffOfficeFile(bytes) === "xlsx") return parseSheets(bytes, filename, { storeImage: slideImageStore(userId) });
   return parseDelimited(new TextDecoder("utf-8").decode(bytes), filename, delimiterOf(filename));
 }
 
@@ -487,13 +487,14 @@ export async function ingestSheets(
   filename: string,
   onProgress?: OnIngestProgress,
   opts: IngestOptions = {},
+  userId: string | null = null,
 ) {
   const fileHash = createHash("sha256").update(bytes).digest("hex");
   const existing = await db.document.findUnique({ where: { fileHash } });
   if (existing) return { document: existing, deduped: true };
 
   onProgress?.("parse");
-  const parsed = parseSheetsBytes(bytes, filename);
+  const parsed = await parseSheetsBytes(bytes, filename, userId);
   onProgress?.("save");
   const document = await createDocumentWithBlocks({
     title: parsed.title ?? filename,
@@ -650,7 +651,7 @@ export async function reparseDocument(
     const parsed =
       document.format === "slides"
         ? await parseSlides(bytes, document.title, { storeImage: slideImageStore(userId), picture: pictures.size > 0 })
-        : parseSheetsBytes(bytes, document.title);
+        : await parseSheetsBytes(bytes, document.title, userId);
     onProgress?.("save", saveDetail(parsed.blocks));
     await db.$transaction(async (tx) => {
       await tx.block.deleteMany({ where: { documentId } });

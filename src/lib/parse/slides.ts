@@ -1,4 +1,6 @@
 import type { ParsedBlock, ParsedDocument } from "@/lib/parse/types";
+import { renderChart as drawChart } from "@/lib/parse/chart";
+import { fontListAttr } from "@/lib/office-fonts";
 import {
   attr,
   boolAttr,
@@ -13,14 +15,16 @@ import {
   intAttr,
   modifyColor,
   num,
-  parseHexColor,
   parseTheme,
   parseXmlPart,
   partRels,
   relsOfType,
+  resolveDrawingColor,
   rgbCss,
   textGap,
+  themeAccents,
   unzipOffice,
+  type DrawingPalette,
   type OfficeZip,
   type Relationship,
   type Rgb,
@@ -143,6 +147,9 @@ type Ctx = {
   imageUrls: Map<string, Promise<string | null>>;
   masters: Map<string, MasterCtx>;
   layouts: Map<string, LayoutCtx>;
+  // Every typeface the deck's text names, for the web fonts the reader
+  // loads (lib/office-fonts.ts): data-fonts on every slide frame.
+  fonts: Set<string>;
 };
 
 // A shape laid out on the slide, ready to render in reading order.
@@ -177,6 +184,7 @@ export async function parseSlides(
     imageUrls: new Map(),
     masters: new Map(),
     layouts: new Map(),
+    fonts: new Set(),
   };
 
   const slideIds = descendants(presentation.doc, "sldId");
@@ -213,6 +221,16 @@ export async function parseSlides(
     });
   }
 
+  // The deck's typefaces ride on every slide frame: the reader loads their
+  // web fonts once per document.
+  const fonts = fontListAttr(ctx.fonts);
+  if (fonts) {
+    for (const block of blocks) {
+      if (block.type === "SLIDE" && block.html) {
+        block.html = block.html.replace('<div class="slide-frame"', `<div class="slide-frame" data-fonts="${escapeHtml(fonts)}"`);
+      }
+    }
+  }
   const title = presentationTitle(zip) ?? filename.replace(/\.pptx$/i, "");
   return { title, blocks, format: "slides", slideAspect: ctx.slideW / ctx.slideH };
 }
@@ -422,90 +440,10 @@ function colorElementIn(el: Element | null): Element | null {
 
 // ── Colors ───────────────────────────────────────────────────────────────────
 
-const PRESET_COLORS: Record<string, string> = {
-  black: "000000",
-  white: "FFFFFF",
-  red: "FF0000",
-  green: "008000",
-  blue: "0000FF",
-  yellow: "FFFF00",
-  gray: "808080",
-  grey: "808080",
-  darkGray: "A9A9A9",
-  lightGray: "D3D3D3",
-  orange: "FFA500",
-  purple: "800080",
-  navy: "000080",
-  silver: "C0C0C0",
-  lime: "00FF00",
-  teal: "008080",
-  maroon: "800000",
-  olive: "808000",
-  aqua: "00FFFF",
-  cyan: "00FFFF",
-  magenta: "FF00FF",
-  fuchsia: "FF00FF",
-};
+type Palette = DrawingPalette;
 
-type Palette = { theme: ThemeColors; clrMap: Record<string, string>; phClr: Rgb | null };
-
-/** A color element resolved through the theme, with its modifiers; the
-    alpha rides separately. Null when the color cannot be read. */
 function resolveColor(el: Element | null, palette: Palette): { rgb: Rgb; alpha: number } | null {
-  if (!el) return null;
-  let rgb: Rgb | null = null;
-  switch (el.localName) {
-    case "srgbClr":
-      rgb = parseHexColor(attr(el, "val"));
-      break;
-    case "sysClr":
-      rgb = parseHexColor(attr(el, "lastClr")) ?? (attr(el, "val") === "windowText" ? { r: 0, g: 0, b: 0 } : { r: 255, g: 255, b: 255 });
-      break;
-    case "prstClr":
-      rgb = parseHexColor(PRESET_COLORS[attr(el, "val") ?? ""] ?? null);
-      break;
-    case "scrgbClr": {
-      const pct = (name: string) => ((intAttr(el, name) ?? 0) / 100000) * 255;
-      rgb = { r: pct("r"), g: pct("g"), b: pct("b") };
-      break;
-    }
-    case "schemeClr": {
-      const name = attr(el, "val") ?? "";
-      if (name === "phClr") rgb = palette.phClr;
-      else {
-        const mapped = palette.clrMap[name] ?? name;
-        rgb = palette.theme[mapped] ?? palette.theme[name] ?? null;
-      }
-      break;
-    }
-    default:
-      rgb = null;
-  }
-  if (!rgb) return null;
-  const mods: Parameters<typeof modifyColor>[1] = {};
-  let alpha = 1;
-  for (const mod of Array.from(el.children)) {
-    const val = intAttr(mod, "val");
-    if (val === null) continue;
-    switch (mod.localName) {
-      case "lumMod":
-        mods.lumMod = val / 100000;
-        break;
-      case "lumOff":
-        mods.lumOff = val / 100000;
-        break;
-      case "tint":
-        mods.tint = val / 100000;
-        break;
-      case "shade":
-        mods.shade = val / 100000;
-        break;
-      case "alpha":
-        alpha = val / 100000;
-        break;
-    }
-  }
-  return { rgb: modifyColor(rgb, mods), alpha };
+  return resolveDrawingColor(el, palette);
 }
 
 function colorCss(el: Element | null, palette: Palette): string | null {
@@ -740,6 +678,8 @@ type TextSettings = {
   minor: string;
   slideW: number;
   rels: Map<string, Relationship>; // the part's relationships, for hyperlinks
+  fonts: Set<string>; // every typeface the text names, collected for the reader
+  forceColor?: string; // a styled table's header row: every run in this color
 };
 
 type RenderedText = { html: string; text: string };
@@ -800,7 +740,9 @@ function renderTextBody(txBody: Element | null, s: TextSettings): RenderedText {
       bulletText = `${label} `;
       const size = runs.firstSize * (bullet.sizePct ?? 1);
       const color = (bullet.color ? colorCss(bullet.color, s.palette) : null) ?? runs.firstColor;
-      const font = bullet.kind === "char" && bullet.font ? fontFamilyCss(bullet.font) : "";
+      const bulletFont = bullet.kind === "char" && bullet.font && !bullet.font.startsWith("+") ? bullet.font : null;
+      if (bulletFont) s.fonts.add(bulletFont);
+      const font = bulletFont ? fontFamilyCss(bulletFont) : "";
       bulletHtml = `<span class="sb" style="font-size:${cqw(size, s.slideW)}${color ? `;color:${color}` : ""}${font ? `;font-family:${font}` : ""}">${escapeHtml(bulletText)}</span>`;
     }
     const algn = levelProp(s.chain, level, "algn", own);
@@ -856,11 +798,14 @@ function renderRuns(
     const font = themeFont(runProps.font ?? levelProp(s.chain, level, "font", own) ?? s.defaultFont ?? undefined, s);
     const runColor = runProps.color ? colorCss(runProps.color, s.palette) : null;
     const levelColor = levelProp(s.chain, level, "color", own);
-    const color = runColor ?? (levelColor ? colorCss(levelColor, s.palette) : null) ?? s.defaultColor;
+    const color = s.forceColor ?? runColor ?? (levelColor ? colorCss(levelColor, s.palette) : null) ?? s.defaultColor;
     const styles = [`font-size:${cqw(size, s.slideW)}`];
     if (bold) styles.push("font-weight:700");
     if (italic) styles.push("font-style:italic");
-    if (font) styles.push(`font-family:${fontFamilyCss(font)}`);
+    if (font) {
+      styles.push(`font-family:${fontFamilyCss(font)}`);
+      s.fonts.add(font);
+    }
     if (color) styles.push(`color:${color}`);
     const u = attr(rPr, "u");
     const strike = attr(rPr, "strike");
@@ -1117,6 +1062,7 @@ async function placeShape(scope: SlideScope, sp: Element, transform: Transform, 
     minor: scope.master.theme.minor,
     slideW: ctx.slideW,
     rels: scope.part.rels,
+    fonts: ctx.fonts,
   };
   const rendered = renderTextBody(txBody, settings);
   const furniture = ph !== null && FURNITURE_PH.has(ph.raw ?? "");
@@ -1322,7 +1268,7 @@ async function placeGraphicFrame(scope: SlideScope, frame: Element, transform: T
   if (chart) {
     const rid = attr(chart, "id");
     const rel = rid ? scope.part.rels.get(rid) : undefined;
-    const rendered = rel && !rel.external ? renderChart(scope, rel.target) : null;
+    const rendered = rel && !rel.external ? renderChart(scope, rel.target, placed) : null;
     if (rendered) {
       out.push({
         html: `<div class="sh sc" style="${boxStyle(placed, scope.ctx)}">${rendered.html}</div>`,
@@ -1369,8 +1315,19 @@ async function renderTable(scope: SlideScope, tbl: Element, box: Box): Promise<R
     minor: scope.master.theme.minor,
     slideW: ctx.slideW,
     rels: scope.part.rels,
+    fonts: ctx.fonts,
   };
   const colgroup = cols.length > 0 ? `<colgroup>${cols.map((w) => `<col style="width:${pct(w, totalW)}">`).join("")}</colgroup>` : "";
+  // A table style (a:tableStyleId): the built-in styles paint the header
+  // row in the first accent with white bold text and band the body rows in
+  // its tints. The file's own cell fills win.
+  const tblPr = child(tbl, "tblPr");
+  const styled = Boolean(child(tblPr, "tableStyleId")?.textContent?.trim());
+  const accent = scope.master.theme.colors.accent1 ?? null;
+  const headerRow = styled && boolAttr(tblPr, "firstRow") && accent ? rgbCss(accent) : null;
+  const bands = styled && boolAttr(tblPr, "bandRow", true) && accent
+    ? [rgbCss(modifyColor(accent, { tint: 0.2 })), rgbCss(modifyColor(accent, { tint: 0.4 }))]
+    : null;
   const rowHtml: string[] = [];
   const rowText: string[] = [];
   for (let r = 0; r < rows.length; r++) {
@@ -1391,11 +1348,14 @@ async function renderTable(scope: SlideScope, tbl: Element, box: Box): Promise<R
         pendingGaps += sep;
         continue;
       }
-      const rendered = renderTextBody(child(tc, "txBody"), settings);
+      const header = headerRow !== null && r === 0;
+      const rendered = renderTextBody(child(tc, "txBody"), header ? { ...settings, forceColor: "#ffffff", chain: [boldStyle(), ...settings.chain] } : settings);
       const tcPr = child(tc, "tcPr");
       const fill = await fillCss(tcPr, scope.palette, ctx, scope.part.rels);
       const styles: string[] = [];
       if (fill && fill !== "none") styles.push(fill);
+      else if (header) styles.push(`background-color:${headerRow}`);
+      else if (bands) styles.push(`background-color:${bands[(r - (headerRow !== null ? 1 : 0)) % 2]}`);
       const l = intAttr(tcPr, "marL") ?? 91440;
       const rr = intAttr(tcPr, "marR") ?? 91440;
       const t = intAttr(tcPr, "marT") ?? 45720;
@@ -1424,14 +1384,50 @@ async function renderTable(scope: SlideScope, tbl: Element, box: Box): Promise<R
   return { html: `<table class="stbl">${colgroup}<tbody>${rowHtml.join("")}</tbody></table>`, text };
 }
 
+/** A list style that makes every level bold: a styled table's header row. */
+function boldStyle(): ListStyle {
+  return Array.from({ length: 9 }, () => ({ bold: true }));
+}
+
 // ── Charts ───────────────────────────────────────────────────────────────────
 
-/** A chart's data as a small table with its title: the categories down the
-    first column, one column per series. Its picture, when the slide has
-    one, is the stored slide picture. */
-function renderChart(scope: SlideScope, chartPath: string): RenderedText | null {
+/** A chart drawn as an SVG (lib/parse/chart.ts) in the frame, its words
+    skipped, and its data — the title, then the categories down the first
+    column and one column per series — laid under it invisible as the
+    block's words. A chart kind the drawing does not cover shows the data
+    table itself. */
+function renderChart(scope: SlideScope, chartPath: string, box: Box): RenderedText | null {
   const doc = parseXmlPart(scope.ctx.zip, chartPath);
   if (!doc) return null;
+  const drawn = drawChart(doc, { width: box.w, height: box.h }, {
+    accents: themeAccents(scope.master.theme.colors),
+    resolveColor: (el) => colorCss(el, scope.palette),
+  });
+  if (!drawn) return renderChartTable(doc);
+  const pieces: RenderedText[] = [];
+  if (drawn.title) pieces.push({ html: `<div class="sct">${escapeHtml(drawn.title)}</div>`, text: drawn.title });
+  if (drawn.rows.length > 0) pieces.push(dataTable(drawn.rows));
+  const data = pieces.length > 0 ? `<div class="scd-hidden">${pieces.map((p) => p.html).join(textGap("\n"))}</div>` : "";
+  return {
+    html: `<div class="scv" data-anchor-skip>${drawn.svg}</div>${data}`,
+    text: pieces.map((p) => p.text).join("\n"),
+  };
+}
+
+function dataTable(rows: string[][]): RenderedText {
+  const html = `<table class="stbl scd"><tbody>${rows
+    .map((row, r) => `<tr>${row.map((cell, c) => {
+      const last = c === row.length - 1;
+      const gap = last ? (r === rows.length - 1 ? "" : textGap("\n")) : textGap("\t");
+      return `<td>${escapeHtml(cell)}${gap}</td>`;
+    }).join("")}</tr>`)
+    .join("")}</tbody></table>`;
+  return { html, text: rows.map((r) => r.join("\t")).join("\n") };
+}
+
+/** A chart's data as a small visible table with its title, for a chart
+    kind the drawing does not cover. */
+function renderChartTable(doc: XMLDocument): RenderedText | null {
   const chart = descendants(doc, "chart")[0];
   const titleText = cleanText(
     descendants(child(chart, "title"), "t")
@@ -1457,16 +1453,7 @@ function renderChart(scope: SlideScope, chartPath: string): RenderedText | null 
   }
   const pieces: RenderedText[] = [];
   if (titleText) pieces.push({ html: `<div class="sct">${escapeHtml(titleText)}</div>`, text: titleText });
-  if (rows.length > 0) {
-    const html = `<table class="stbl scd"><tbody>${rows
-      .map((row, r) => `<tr>${row.map((cell, c) => {
-        const last = c === row.length - 1;
-        const gap = last ? (r === rows.length - 1 ? "" : textGap("\n")) : textGap("\t");
-        return `<td>${escapeHtml(cell)}${gap}</td>`;
-      }).join("")}</tr>`)
-      .join("")}</tbody></table>`;
-    pieces.push({ html, text: rows.map((r) => r.join("\t")).join("\n") });
-  }
+  if (rows.length > 0) pieces.push(dataTable(rows));
   if (pieces.length === 0) return null;
   return { html: pieces.map((p) => p.html).join(textGap("\n")), text: pieces.map((p) => p.text).join("\n") };
 }
@@ -1604,6 +1591,7 @@ function notesText(ctx: Ctx, path: string, master: MasterCtx, palette: Palette):
     minor: master.theme.minor,
     slideW: ctx.slideW,
     rels: part.rels,
+    fonts: ctx.fonts,
   };
   for (const sp of descendants(tree, "sp")) {
     const ph = placeholderOf(sp);

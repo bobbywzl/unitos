@@ -17,6 +17,8 @@ import { useT } from "@/components/lang-provider";
 import { Equation } from "@/components/reader/equation";
 import { MediaHtml } from "@/components/reader/figure-media";
 import { bindTableMarkClicks, marksSignature, paintTableMarks } from "@/components/reader/table-marks";
+import { OFFICE_CSS } from "@/lib/office-css";
+import { googleFontsUrl, parseFontList, webFontFamilies } from "@/lib/office-fonts";
 import type { TFunc, TKey } from "@/lib/i18n/dictionaries";
 
 const CHAIN_BUTTON =
@@ -642,6 +644,31 @@ function HighlightLabel({ anchors }: { anchors: Highlight[] }) {
   );
 }
 
+// The slide and sheet styles (lib/office-css.ts) reach the page once, the
+// first time a slide or a sheet renders; the web fonts a document names
+// (data-fonts, lib/office-fonts.ts) load once per family.
+const OFFICE_STYLE_ID = "unitos-office-css";
+const loadedFonts = new Set<string>();
+
+function ensureOfficeStyles(): void {
+  if (document.getElementById(OFFICE_STYLE_ID)) return;
+  const style = document.createElement("style");
+  style.id = OFFICE_STYLE_ID;
+  style.textContent = OFFICE_CSS;
+  document.head.appendChild(style);
+}
+
+function ensureWebFonts(typefaces: string[]): void {
+  for (const family of webFontFamilies(typefaces)) {
+    if (loadedFonts.has(family)) continue;
+    loadedFonts.add(family);
+    const link = document.createElement("link");
+    link.rel = "stylesheet";
+    link.href = googleFontsUrl(family);
+    document.head.appendChild(link);
+  }
+}
+
 // A table's, a slide's, or a sheet's html with the block's marks painted
 // inside it (table-marks.ts). The html lands as one string; the marks are
 // painted after it, on the DOM, and repainted only when what they depend
@@ -687,6 +714,14 @@ function MarkedHtml({
     if (!el) return;
     return bindTableMarkClicks(el);
   }, []);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const office = el.querySelector<HTMLElement>(".slide-frame, .sheet");
+    if (!office) return;
+    ensureOfficeStyles();
+    ensureWebFonts(parseFontList(office.dataset.fonts));
+  }, [html]);
   useEffect(() => {
     const el = ref.current;
     if (!el || !documentId) return;

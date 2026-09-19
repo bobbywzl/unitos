@@ -6,6 +6,7 @@ import { currentUser } from "@/lib/auth";
 import { bumpNotebook, notebookAccess } from "@/lib/collab";
 import { runConversion } from "@/lib/handwritten/convert";
 import { renderPageImages } from "@/lib/handwritten/page-images";
+import { renderUploadedSlidePictures } from "@/lib/handwritten/slide-pictures";
 import { IMAGE_EXTENSIONS, sniffImage } from "@/lib/handwritten/image";
 import { imageToPdf } from "@/lib/handwritten/image-pdf";
 import { serverT } from "@/lib/i18n/server";
@@ -118,10 +119,15 @@ export async function POST(req: Request) {
         const { document, deduped } =
           format === "slides"
             ? await parse.ingestSlides(bytes, filename, onProgress, {}, user?.id ?? null)
-            : await parse.ingestSheets(bytes, filename, onProgress);
+            : await parse.ingestSheets(bytes, filename, onProgress, {}, user?.id ?? null);
         await attachDocument(data.notebookId, document.id);
         await bumpNotebook(data.notebookId);
         if (!deduped) after(() => refreshSkeleton(document.id, user?.id ?? null).catch(() => {}));
+        // An uploaded deck's pictures render after the response (SPEC.md §27).
+        if (!deduped && format === "slides") {
+          const deck = bytes;
+          after(() => renderUploadedSlidePictures(document.id, deck).catch((err) => console.warn("[slides] pictures failed:", err)));
+        }
         return { id: document.id, title: document.title, deduped };
       } catch (err) {
         console.error("Slides/sheets ingest failed:", err);

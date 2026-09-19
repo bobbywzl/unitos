@@ -1,6 +1,9 @@
 import { createHash } from "node:crypto";
 import * as ssf from "ssf";
 import type { ParsedBlock, ParsedDocument } from "@/lib/parse/types";
+import { renderChart } from "@/lib/parse/chart";
+import { fontListAttr } from "@/lib/office-fonts";
+import type { SlideImageStore } from "@/lib/parse/slides";
 import {
   attr,
   boolAttr,
@@ -19,8 +22,10 @@ import {
   parseXmlPart,
   partRels,
   relsOfType,
+  resolveDrawingColor,
   rgbCss,
   textGap,
+  themeAccents,
   unzipOffice,
   type OfficeZip,
   type Relationship,
@@ -37,11 +42,14 @@ import {
 // format applied, so 0.1 with a percent format reads 10%), in the cell's
 // font, weight, color, fill, alignment, and borders; merged cells span;
 // frozen rows and columns stay in view; a formula rides on its cell as a
-// tooltip. The block's text is the rows, cells separated by tabs and rows
-// by newlines, and the grid's DOM text is exactly that text (SPEC.md §5):
-// every cell ends in an invisible gap, and a merged-away cell's tab rides
-// inside the cell that covers it. Hidden rows and columns are left out of
-// both. A sheet past the caps is cut and says so.
+// tooltip; the sheet's drawings — pictures, charts drawn as SVG
+// (lib/parse/chart.ts), shapes — lie over the grid at the cells they are
+// anchored to. The block's text is the rows, cells separated by tabs and
+// rows by newlines, and the grid's DOM text is exactly that text (SPEC.md
+// §5): every cell ends in an invisible gap, a merged-away cell's tab rides
+// inside the cell that covers it, and a drawing's words are skipped, its
+// chart data laid under it invisible as the block's words. Hidden rows and
+// columns are left out of both. A sheet past the caps is cut and says so.
 
 export const SHEET_MAX_ROWS = 10_000;
 export const SHEET_MAX_COLS = 256;
@@ -74,11 +82,25 @@ type CellStyle = {
   borders?: { top: Border; right: Border; bottom: Border; left: Border };
 };
 
-type Cell = { text: string; kind: CellKind; styleId: number | null; href?: string; formula?: string };
+type Cell = { text: string; kind: CellKind; styleId: number | null; href?: string; formula?: string; number?: number };
 
 type Row = { cells: Cell[]; heightPt: number | null };
 
 type Merge = { r0: number; c0: number; r1: number; c1: number };
+
+// One drawing anchored to the sheet: a picture, a chart, or a shape. The
+// anchor is a cell and an offset into it (EMU) at each corner.
+type Anchor = { col: number; colOff: number; row: number; rowOff: number };
+type Drawing = {
+  from: Anchor;
+  // The far corner, or the size in EMU when the drawing is anchored by one cell.
+  to: Anchor | null;
+  ext: { cx: number; cy: number } | null;
+  content:
+    | { kind: "image"; url: string }
+    | { kind: "chart"; svg: string; text: string; html: string }
+    | { kind: "shape"; html: string; fill: string | null };
+};
 
 type Sheet = {
   name: string;
@@ -90,19 +112,27 @@ type Sheet = {
   defaultRowHeightPt: number;
   defaultColWidthChars: number;
   cutRows: number | null; // the sheet's row count when cut short
+  drawings: Drawing[];
 };
 
 type Workbook = {
   sheets: Sheet[];
   styles: CellStyle[]; // by xf index
   styleKey: string; // the class prefix the styles render under
+  fonts: string[]; // every typeface the cells name, for the reader's web fonts
+};
+
+export type SheetsParseOptions = {
+  // Where a sheet's pictures go (lib/parse/slides.ts SlideImageStore); no
+  // store = pictures are left out.
+  storeImage?: SlideImageStore;
 };
 
 // ── Entry: .xlsx ─────────────────────────────────────────────────────────────
 
-export function parseSheets(bytes: Uint8Array, filename: string): ParsedDocument {
+export async function parseSheets(bytes: Uint8Array, filename: string, opts: SheetsParseOptions = {}): Promise<ParsedDocument> {
   const zip = unzipOffice(bytes);
-  const workbook = readWorkbook(zip, bytes);
+  const workbook = await readWorkbook(zip, bytes, opts.storeImage ?? null);
   const title = workbookTitle(zip) ?? sheetsTitle(filename);
   return { title, blocks: renderWorkbook(workbook), format: "sheets" };
 }
@@ -141,8 +171,9 @@ export function parseDelimited(text: string, filename: string, delimiter?: Delim
     defaultRowHeightPt: DEFAULT_ROW_HEIGHT_PT,
     defaultColWidthChars: DEFAULT_COL_WIDTH_CHARS,
     cutRows: null,
+    drawings: [],
   };
-  const workbook: Workbook = { sheets: [sheet], styles: [], styleKey: styleKeyOf(Buffer.from(text)) };
+  const workbook: Workbook = { sheets: [sheet], styles: [], styleKey: styleKeyOf(Buffer.from(text)), fonts: [] };
   return { title, blocks: renderWorkbook(workbook), format: "sheets" };
 }
 
@@ -239,7 +270,7 @@ function styleKeyOf(bytes: Uint8Array): string {
   return createHash("sha256").update(bytes).digest("hex").slice(0, 8);
 }
 
-function readWorkbook(zip: OfficeZip, bytes: Uint8Array): Workbook {
+async function readWorkbook(zip: OfficeZip, bytes: Uint8Array, storeImage: SlideImageStore | null): Promise<Workbook> {
   const workbookPath = "xl/workbook.xml";
   const doc = parseXmlPart(zip, workbookPath);
   if (!doc) throw new Error("Not a workbook: xl/workbook.xml is missing");
@@ -249,17 +280,214 @@ function readWorkbook(zip: OfficeZip, bytes: Uint8Array): Workbook {
   const theme = themeRel && !themeRel.external ? parseTheme(zip, themeRel.target) : { colors: {}, major: "", minor: "" };
   const shared = readSharedStrings(zip, rels);
   const styles = readStyles(zip, rels, theme.colors);
-  const sheets: Sheet[] = [];
+  // Every sheet's cells first, then every sheet's drawings: a chart's
+  // references may point at another sheet.
+  const read: ReadSheet[] = [];
   for (const sheetEl of descendants(doc, "sheet")) {
     if (attr(sheetEl, "state") === "hidden" || attr(sheetEl, "state") === "veryHidden") continue;
     const rid = attr(sheetEl, "id");
     const rel = rid ? rels.get(rid) : undefined;
     if (!rel || rel.external) continue;
-    const name = cleanText(attr(sheetEl, "name") ?? `Sheet ${sheets.length + 1}`);
+    const name = cleanText(attr(sheetEl, "name") ?? `Sheet ${read.length + 1}`);
     const sheet = readSheet(zip, rel.target, name, shared, styles, date1904);
-    if (sheet) sheets.push(sheet);
+    if (sheet) read.push(sheet);
   }
-  return { sheets, styles: styles.cellStyles, styleKey: styleKeyOf(bytes) };
+  const drawingCtx: DrawingCtx = {
+    zip,
+    theme: theme.colors,
+    storeImage,
+    imageUrls: new Map(),
+    resolveRef: (formula) => resolveReference(formula, read),
+  };
+  const sheets: Sheet[] = [];
+  for (const r of read) {
+    r.sheet.drawings = await readDrawings(drawingCtx, r.rels);
+    sheets.push(compactSheet(r.sheet, r.hiddenRows, r.hiddenCols, (id) => {
+      const style = styles.cellStyles[id];
+      return Boolean(style && (style.fill || style.borders));
+    }));
+  }
+  return { sheets, styles: styles.cellStyles, styleKey: styleKeyOf(bytes), fonts: styles.fonts };
+}
+
+// A sheet as read, before its drawings and its compaction.
+type ReadSheet = { sheet: Sheet; rels: Map<string, Relationship>; hiddenRows: Set<number>; hiddenCols: Set<number> };
+
+/** The cells a reference formula names, from the sheets as read:
+    "'Data'!$B$2:$B$5", "Data!B2:B5", or a single cell. Null when the sheet
+    is unknown or the reference does not parse. */
+function resolveReference(formula: string, sheets: ReadSheet[]): { text: string; number: number | null }[] | null {
+  const m = /^(?:'((?:[^']|'')+)'|([^!]+))!\$?([A-Z]+)\$?(\d+)(?::\$?([A-Z]+)\$?(\d+))?$/i.exec(formula.trim());
+  if (!m) return null;
+  const sheetName = (m[1] ?? m[2] ?? "").replace(/''/g, "'");
+  const sheet = sheets.find((s) => s.sheet.name === sheetName)?.sheet ?? (sheets.length === 1 ? sheets[0].sheet : null);
+  if (!sheet) return null;
+  const from = cellRef(`${m[3]}${m[4]}`);
+  const to = m[5] ? cellRef(`${m[5]}${m[6]}`) : from;
+  if (!from || !to) return null;
+  const out: { text: string; number: number | null }[] = [];
+  for (let r = Math.min(from.row, to.row); r <= Math.max(from.row, to.row); r++) {
+    for (let c = Math.min(from.col, to.col); c <= Math.max(from.col, to.col); c++) {
+      const cell = sheet.rows[r]?.cells[c];
+      out.push({ text: cell?.text ?? "", number: cell?.number ?? null });
+    }
+  }
+  return out;
+}
+
+// ── Drawings ─────────────────────────────────────────────────────────────────
+
+type DrawingCtx = {
+  zip: OfficeZip;
+  theme: ThemeColors;
+  storeImage: SlideImageStore | null;
+  imageUrls: Map<string, Promise<string | null>>;
+  resolveRef: (formula: string) => { text: string; number: number | null }[] | null;
+};
+
+const IMAGE_MIME_BY_EXT: Record<string, string> = {
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  gif: "image/gif",
+  bmp: "image/bmp",
+  webp: "image/webp",
+  svg: "image/svg+xml",
+};
+
+function storedImage(ctx: DrawingCtx, path: string): Promise<string | null> {
+  const cached = ctx.imageUrls.get(path);
+  if (cached) return cached;
+  const promise = (async () => {
+    const bytes = ctx.zip.get(path);
+    const store = ctx.storeImage;
+    if (!bytes || !store) return null;
+    const ext = path.slice(path.lastIndexOf(".") + 1).toLowerCase();
+    const mime = IMAGE_MIME_BY_EXT[ext];
+    if (!mime) return null;
+    try {
+      return await store(bytes, mime);
+    } catch (err) {
+      console.warn("[sheets] picture not stored:", err);
+      return null;
+    }
+  })();
+  ctx.imageUrls.set(path, promise);
+  return promise;
+}
+
+function readAnchor(el: Element | null): Anchor | null {
+  if (!el) return null;
+  return {
+    col: Number(child(el, "col")?.textContent ?? "0") || 0,
+    colOff: Number(child(el, "colOff")?.textContent ?? "0") || 0,
+    row: Number(child(el, "row")?.textContent ?? "0") || 0,
+    rowOff: Number(child(el, "rowOff")?.textContent ?? "0") || 0,
+  };
+}
+
+/** The sheet's drawing part: every picture, chart, and shape with the
+    cells it is anchored to. */
+async function readDrawings(ctx: DrawingCtx, sheetRels: Map<string, Relationship>): Promise<Drawing[]> {
+  const out: Drawing[] = [];
+  for (const rel of relsOfType(sheetRels, "drawing")) {
+    if (rel.external) continue;
+    const doc = parseXmlPart(ctx.zip, rel.target);
+    if (!doc) continue;
+    const rels = partRels(ctx.zip, rel.target);
+    for (const anchorEl of Array.from(doc.documentElement.children)) {
+      const kind = anchorEl.localName;
+      if (kind !== "twoCellAnchor" && kind !== "oneCellAnchor" && kind !== "absoluteAnchor") continue;
+      const from = kind === "absoluteAnchor" ? { col: 0, colOff: Number(attr(child(anchorEl, "pos"), "x") ?? "0") || 0, row: 0, rowOff: Number(attr(child(anchorEl, "pos"), "y") ?? "0") || 0 } : readAnchor(child(anchorEl, "from"));
+      if (!from) continue;
+      const to = kind === "twoCellAnchor" ? readAnchor(child(anchorEl, "to")) : null;
+      const extEl = child(anchorEl, "ext");
+      const ext = extEl ? { cx: intAttr(extEl, "cx") ?? 0, cy: intAttr(extEl, "cy") ?? 0 } : null;
+      const content = await drawingContent(ctx, anchorEl, rels, from, to, ext);
+      if (content) out.push({ from, to, ext, content });
+    }
+  }
+  return out;
+}
+
+async function drawingContent(
+  ctx: DrawingCtx,
+  anchorEl: Element,
+  rels: Map<string, Relationship>,
+  from: Anchor,
+  to: Anchor | null,
+  ext: { cx: number; cy: number } | null,
+): Promise<Drawing["content"] | null> {
+  const pic = child(anchorEl, "pic");
+  if (pic) {
+    const blip = child(child(pic, "blipFill"), "blip");
+    const rid = attr(blip, "embed");
+    const target = rid ? rels.get(rid) : undefined;
+    const url = target && !target.external ? await storedImage(ctx, target.target) : null;
+    return url ? { kind: "image", url } : null;
+  }
+  const frame = child(anchorEl, "graphicFrame");
+  const chartEl = frame ? descendants(frame, "chart")[0] : null;
+  if (chartEl) {
+    const rid = attr(chartEl, "id");
+    const target = rid ? rels.get(rid) : undefined;
+    const doc = target && !target.external ? parseXmlPart(ctx.zip, target.target) : null;
+    if (!doc) return null;
+    // The box's aspect for the drawing: from the anchors when both are
+    // cells (rough: a column is about 64px, a row 20px), else the size.
+    const width = ext ? ext.cx : Math.max(1, (to ? (to.col - from.col) * 64 * 9525 + to.colOff - from.colOff : 4000000));
+    const height = ext ? ext.cy : Math.max(1, (to ? (to.row - from.row) * 20 * 9525 + to.rowOff - from.rowOff : 2500000));
+    const palette = { theme: ctx.theme, clrMap: {}, phClr: null };
+    const drawn = renderChart(doc, { width, height }, {
+      accents: themeAccents(ctx.theme),
+      resolveColor: (el) => {
+        const c = resolveDrawingColor(el, palette);
+        return c ? rgbCss(c.rgb, c.alpha) : null;
+      },
+      resolveRef: ctx.resolveRef,
+    });
+    if (!drawn) return null;
+    const rows = drawn.rows;
+    const table = `<table class="scd"><tbody>${rows
+      .map((row, r) => `<tr>${row.map((cell, c) => {
+        const last = c === row.length - 1;
+        const gap = last ? (r === rows.length - 1 ? "" : textGap("\n")) : textGap("\t");
+        return `<td>${escapeHtml(cell)}${gap}</td>`;
+      }).join("")}</tr>`)
+      .join("")}</tbody></table>`;
+    const pieces = [drawn.title ? { html: `<div>${escapeHtml(drawn.title)}</div>`, text: drawn.title } : null, rows.length > 0 ? { html: table, text: rows.map((r) => r.join("\t")).join("\n") } : null].filter((p): p is { html: string; text: string } => p !== null);
+    return {
+      kind: "chart",
+      svg: drawn.svg,
+      html: pieces.map((p) => p.html).join(textGap("\n")),
+      text: pieces.map((p) => p.text).join("\n"),
+    };
+  }
+  const sp = child(anchorEl, "sp");
+  if (sp) {
+    const palette = { theme: ctx.theme, clrMap: {}, phClr: null };
+    const fillColor = resolveDrawingColor(descendantColor(child(child(sp, "spPr"), "solidFill")), palette);
+    const words = cleanText(
+      descendants(child(sp, "txBody"), "p")
+        .map((p) => descendants(p, "t").map((t) => t.textContent ?? "").join(""))
+        .join("\n"),
+    ).trim();
+    if (!words && !fillColor) return null;
+    return {
+      kind: "shape",
+      html: escapeHtml(words),
+      fill: fillColor ? rgbCss(fillColor.rgb, fillColor.alpha) : null,
+    };
+  }
+  return null;
+}
+
+function descendantColor(fill: Element | null): Element | null {
+  if (!fill) return null;
+  for (const c of Array.from(fill.children)) {
+    if (["srgbClr", "schemeClr", "sysClr", "prstClr", "scrgbClr"].includes(c.localName)) return c;
+  }
+  return null;
 }
 
 function readSharedStrings(zip: OfficeZip, rels: Map<string, Relationship>): string[] {
@@ -283,6 +511,7 @@ function richText(el: Element): string {
 type Styles = {
   cellStyles: CellStyle[];
   numFmts: (string | number)[]; // by xf index: a format code or a built-in id
+  fonts: string[]; // every typeface the workbook's fonts name
 };
 
 // Excel's theme color order differs from the theme file's: index 0 is
@@ -328,7 +557,7 @@ function readStyles(zip: OfficeZip, rels: Map<string, Relationship>, theme: Them
   const doc = parseXmlPart(zip, rel && !rel.external ? rel.target : "xl/styles.xml");
   const cellStyles: CellStyle[] = [];
   const numFmts: (string | number)[] = [];
-  if (!doc) return { cellStyles, numFmts };
+  if (!doc) return { cellStyles, numFmts, fonts: [] };
   const formatCodes = new Map<number, string>();
   for (const f of descendants(child(doc.documentElement, "numFmts"), "numFmt")) {
     const id = intAttr(f, "numFmtId");
@@ -407,7 +636,7 @@ function readStyles(zip: OfficeZip, rels: Map<string, Relationship>, theme: Them
     const numFmtId = intAttr(xf, "numFmtId") ?? 0;
     numFmts.push(formatCodes.get(numFmtId) ?? numFmtId);
   }
-  return { cellStyles, numFmts };
+  return { cellStyles, numFmts, fonts: [...new Set(fonts.map((f) => f.font ?? "").filter(Boolean))] };
 }
 
 /** "A1" → zero-based column and row. */
@@ -437,7 +666,7 @@ function readSheet(
   shared: string[],
   styles: Styles,
   date1904: boolean,
-): Sheet | null {
+): ReadSheet | null {
   const doc = parseXmlPart(zip, path);
   if (!doc) return null;
   const rels = partRels(zip, path);
@@ -533,7 +762,7 @@ function readSheet(
     });
   }
 
-  const sheet = compactSheet({
+  const sheet: Sheet = {
     name,
     rows,
     colWidths,
@@ -543,11 +772,9 @@ function readSheet(
     defaultRowHeightPt,
     defaultColWidthChars,
     cutRows: cut ? totalRows : null,
-  }, hiddenRows, hiddenCols, (id) => {
-    const style = styles.cellStyles[id];
-    return Boolean(style && (style.fill || style.borders));
-  });
-  return sheet;
+    drawings: [],
+  };
+  return { sheet, rels, hiddenRows, hiddenCols };
 }
 
 function readCell(c: Element, shared: string[], styles: Styles, date1904: boolean): Cell {
@@ -573,14 +800,15 @@ function readCell(c: Element, shared: string[], styles: Styles, date1904: boolea
       return { ...base, text: cleanText(v), kind: "error" };
     case "d": {
       const date = new Date(v);
-      const text = Number.isNaN(date.getTime()) ? cleanText(v) : formatNumber(dateSerial(date, date1904), styleId, styles, date1904);
-      return { ...base, text, kind: "number" };
+      const serial = Number.isNaN(date.getTime()) ? null : dateSerial(date, date1904);
+      const text = serial === null ? cleanText(v) : formatNumber(serial, styleId, styles, date1904);
+      return { ...base, text, kind: "number", number: serial ?? undefined };
     }
     default: {
       if (v === "") return { ...base, text: "", kind: "empty" };
       const n = Number(v);
       if (!Number.isFinite(n)) return { ...base, text: cleanText(v), kind: "text" };
-      return { ...base, text: formatNumber(n, styleId, styles, date1904), kind: "number" };
+      return { ...base, text: formatNumber(n, styleId, styles, date1904), kind: "number", number: n };
     }
   }
 }
@@ -682,6 +910,26 @@ function compactSheet(sheet: Sheet, hiddenRows: Set<number>, hiddenCols: Set<num
   for (let r = 0; r < sheet.frozenRows; r++) if (rowMap.has(r)) frozenRows++;
   let frozenCols = 0;
   for (let c = 0; c < sheet.frozenCols; c++) if (colMap.has(c)) frozenCols++;
+  // A drawing's anchors move to the kept rows and columns: a hidden anchor
+  // cell maps to the next kept one.
+  // Inside the kept range a hidden anchor moves to the next kept row or
+  // column; past the range it keeps its distance from the range's end,
+  // on the empty space the grid draws beyond its last cell.
+  const nextKept = (map: Map<number, number>, index: number, lastOriginal: number, keptCount: number): number => {
+    if (index > lastOriginal) return keptCount + (index - lastOriginal - 1);
+    for (let i = index; i <= lastOriginal; i++) {
+      const mapped = map.get(i);
+      if (mapped !== undefined) return mapped;
+    }
+    return keptCount;
+  };
+  const remap = (a: Anchor): Anchor => ({
+    col: nextKept(colMap, a.col, lastCol, width),
+    colOff: colMap.has(a.col) || a.col > lastCol ? a.colOff : 0,
+    row: nextKept(rowMap, a.row, lastRow, compact.length),
+    rowOff: rowMap.has(a.row) || a.row > lastRow ? a.rowOff : 0,
+  });
+  const drawings = sheet.drawings.map((d) => ({ ...d, from: remap(d.from), to: d.to ? remap(d.to) : null }));
   return {
     ...sheet,
     rows: compact,
@@ -689,6 +937,7 @@ function compactSheet(sheet: Sheet, hiddenRows: Set<number>, hiddenCols: Set<num
     merges,
     frozenRows,
     frozenCols,
+    drawings,
   };
 }
 
@@ -862,8 +1111,52 @@ function renderGrid(sheet: Sheet, workbook: Workbook): { text: string; html: str
     textRows.push(texts.join("\t"));
   }
 
+  // The drawings, over the grid at their anchors. A chart's data is the
+  // block's words and follows the rows in the text; its SVG is skipped.
+  // A drawing past the grid's last column or row lies on the empty space
+  // beyond it, columns and rows there at the sheet's default sizes; the
+  // grid's text never grows for it.
+  const defaultW = colWidthPx(null, sheet.defaultColWidthChars);
+  const defaultH = rowHeightPx(null, sheet.defaultRowHeightPt);
+  const colLeft = (c: number) =>
+    ROW_NUMBER_WIDTH_PX + widths.slice(0, Math.min(c, widths.length)).reduce((a, b) => a + b, 0) + Math.max(0, c - widths.length) * defaultW;
+  const rowTop = (r: number) =>
+    HEADER_HEIGHT_PX + heights.slice(0, Math.min(r, heights.length)).reduce((a, b) => a + b, 0) + Math.max(0, r - heights.length) * defaultH;
+  let innerWidth = totalWidth;
+  let innerHeight = 0;
+  const px = (emu: number) => emu / 9525;
+  const drawingHtml: string[] = [];
+  const drawingText: string[] = [];
+  for (const d of sheet.drawings) {
+    const left = colLeft(d.from.col) + px(d.from.colOff);
+    const top = rowTop(d.from.row) + px(d.from.rowOff);
+    let w: number;
+    let h: number;
+    if (d.to) {
+      w = colLeft(d.to.col) + px(d.to.colOff) - left;
+      h = rowTop(d.to.row) + px(d.to.rowOff) - top;
+    } else if (d.ext) {
+      w = px(d.ext.cx);
+      h = px(d.ext.cy);
+    } else continue;
+    if (w < 4 || h < 4) continue;
+    innerWidth = Math.max(innerWidth, Math.ceil(left + w));
+    innerHeight = Math.max(innerHeight, Math.ceil(top + h));
+    const style = `left:${num(left)}px;top:${num(top)}px;width:${num(w)}px;height:${num(h)}px`;
+    if (d.content.kind === "image") {
+      drawingHtml.push(`<div class="sheet-drawing" style="${style}" data-anchor-skip><img src="${escapeHtml(d.content.url)}" alt="" loading="lazy" draggable="false"></div>`);
+    } else if (d.content.kind === "chart") {
+      const gap = textRows.length > 0 || drawingText.length > 0 ? textGap("\n") : "";
+      drawingHtml.push(`<div class="sheet-drawing" style="${style}"><div data-anchor-skip>${d.content.svg}</div>${gap}<div class="scd-hidden">${d.content.html}</div></div>`);
+      drawingText.push(d.content.text);
+    } else {
+      const fill = d.content.fill ? `background-color:${d.content.fill};` : "";
+      drawingHtml.push(`<div class="sheet-drawing" style="${style}" data-anchor-skip><div class="sheet-drawing-shape" style="${fill}">${d.content.html}</div></div>`);
+    }
+  }
+  const fonts = fontListAttr(workbook.fonts);
   const html =
-    `<div class="sheet sheet-k${workbook.styleKey}" data-sheet="${escapeHtml(sheet.name)}" data-rows="${sheet.rows.length}" data-cols="${cols}" data-frozen-rows="${sheet.frozenRows}" data-frozen-cols="${sheet.frozenCols}">` +
-    `<table style="width:${totalWidth}px">${colgroup}${head}<tbody>${htmlRows.join("")}</tbody></table></div>`;
-  return { text: textRows.join("\n"), html };
+    `<div class="sheet sheet-k${workbook.styleKey}" data-sheet="${escapeHtml(sheet.name)}" data-rows="${sheet.rows.length}" data-cols="${cols}" data-frozen-rows="${sheet.frozenRows}" data-frozen-cols="${sheet.frozenCols}"${fonts ? ` data-fonts="${escapeHtml(fonts)}"` : ""}>` +
+    `<div class="sheet-inner" style="width:${innerWidth}px${innerHeight > 0 ? `;min-height:${innerHeight}px` : ""}"><table style="width:${totalWidth}px">${colgroup}${head}<tbody>${htmlRows.join("")}</tbody></table>${drawingHtml.join("")}</div></div>`;
+  return { text: [...textRows, ...drawingText].join("\n"), html };
 }
