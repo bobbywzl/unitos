@@ -108,6 +108,9 @@ const en = {
   confirmedProcessingBody:
     "Stripe has not settled the payment yet. The tier turns on and the receipt appears under Receipts when it does.",
   confirmedDashboard: "Go to dashboard",
+  // The confirmation page without a session id: a stray visit.
+  confirmedNoneTitle: "No order to confirm",
+  confirmedNoneBody: "Stripe brings you here after a payment. This visit has no order. Choose a tier on the plans page.",
   confirmedReceipt: "See the receipt",
   // Receipts: one per payment.
   receiptsEmpty: "No receipts. One appears here for every payment.",
@@ -210,6 +213,8 @@ const zh: Record<keyof typeof en, string> = {
   confirmedProcessing: "付款处理中",
   confirmedProcessingBody: "Stripe 尚未完成结算。结算完成后方案开启，收据出现在“收据”中。",
   confirmedDashboard: "前往仪表板",
+  confirmedNoneTitle: "没有待确认的订单",
+  confirmedNoneBody: "付款后 Stripe 会把你带到这里。本次访问没有订单。请在方案页选择一种方案。",
   confirmedReceipt: "查看收据",
   receiptsEmpty: "还没有收据。每次付款都会在这里生成一张。",
   receiptTitle: "收据",

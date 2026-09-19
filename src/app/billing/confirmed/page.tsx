@@ -20,20 +20,39 @@ export const dynamic = "force-dynamic";
 // same idempotent path as the webhook), so the tier is on before the
 // webhook lands. The page says what was charged and when the next payment
 // lands, then Go to dashboard. Not yet paid (a bank transfer settling), the
-// page says so. Unitos Ultra's confirmation is a night page.
+// page says so. Unitos Ultra's confirmation is a night page. Without a
+// session id — a stray visit, or an ads tool checking the URL — the page
+// says there is no order to confirm and points at the plans page; that
+// state is public, like the plan page: nothing on it is the account's.
 export default async function ConfirmedPage({
   searchParams,
 }: {
   searchParams: Promise<{ session?: string }>;
 }) {
   const view = await billingView();
+  const t = await serverT();
+  const { session: sessionId } = await searchParams;
+  if (!sessionId) {
+    return (
+      <BillingFrame back="plans" preview={view.preview}>
+        <section className="billing-rise pt-[4vh] text-center">
+          <h1 className="mb-3.5 font-display text-[clamp(38px,5.5vw,64px)] tracking-[-0.02em] text-(--bl-title) text-balance">
+            {t("billing.confirmedNoneTitle")}
+          </h1>
+          <p className="mx-auto mb-6 max-w-[46ch] text-base leading-relaxed text-(--bl-muted) text-pretty">
+            {t("billing.confirmedNoneBody")}
+          </p>
+          <Link href="/plans" className={`${planButton("PREMIUM")} px-9 py-4 text-base`}>
+            {t("billing.plans")}
+          </Link>
+        </section>
+      </BillingFrame>
+    );
+  }
   if (!authEnabled()) notFound();
   const user = await currentUser();
   if (!user) redirect("/signin");
-  const { session: sessionId } = await searchParams;
-  if (!sessionId) redirect("/billing");
   if (!stripeConfigured()) notFound();
-  const t = await serverT();
   const lang = await currentLang();
 
   let session: Stripe.Checkout.Session;
