@@ -6,9 +6,9 @@ the app key's rate limits and budget, records spend per call, and runs the
 fallbacks in `config.yaml`. The admin console's Gateway page reads all of it.
 
 What goes through it: GLM 5.3 and GLM 5.3 Flash (the reader's tools, the
-assistant, Stitch, the readings), Kimi (calls that carry an image, the
-assistant with Web on), Claude (the parse passes, the handwritten passes,
-and Visualize), Gemini (video), Groq and OpenAI Whisper (transcription), OpenAI
+assistant, Stitch, the readings), Kimi (the parse passes, calls that carry
+an image, the assistant with Web on), Claude (the handwritten passes and
+Visualize), Gemini (video), Groq and OpenAI Whisper (transcription), OpenAI
 TTS (voice), DeepL (translation), Moonshot's web search, and the model lists
 the bimonthly model update reads. `src/lib/gateway.ts` names the route each
 client takes. GLM has no direct client: without the gateway, Kimi K3 takes
