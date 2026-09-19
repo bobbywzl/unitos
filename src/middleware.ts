@@ -53,7 +53,8 @@ export function middleware(request: NextRequest) {
   // Public doors: the sign-in page, the password reset page, the auth
   // callbacks, the cron endpoint, the two legal documents — those are
   // linked from Google's consent screen, so a signed-out reader must reach
-  // them without hitting the gate — the plan page and the plans page
+  // them without hitting the gate — the plan page, the plans page, and the
+  // confirmation page, which without an order shows nothing of an account
   // (SPEC.md §24; they 404 while billing is off), the Stripe webhook, which
   // has no session, and
   // the transcription job's next leg (SPEC.md §11): the app calling its own
@@ -70,6 +71,7 @@ export function middleware(request: NextRequest) {
     pathname === "/terms" ||
     pathname === "/billing" ||
     pathname === "/plans" ||
+    pathname === "/billing/confirmed" ||
     pathname === "/api/stripe/webhook" ||
     pathname.startsWith("/api/auth/") ||
     pathname.startsWith("/api/cron/") ||

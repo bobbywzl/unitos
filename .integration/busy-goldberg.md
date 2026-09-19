@@ -13,6 +13,7 @@
 - `src/middleware.ts` — `/plans` is a public door like `/billing`, so a visitor from an ad reaches it signed out.
 - `src/components/billing/plan-choice.tsx`, `src/lib/i18n/dict/billing.ts` — during the beta the state line says first that the tier chosen takes effect when the beta ends.
 - `src/app/admin/billing/page.tsx` — a `BETA` row above the Stripe values.
+- `src/app/billing/confirmed/page.tsx`, `src/middleware.ts` — without a session id the confirmation page says there is no order to confirm and points at the plans page; that state is public, so the URL an ads tool checks answers 200.
 
 **Decisions:**
 - Tax is behind its own flag, not tied to the billing switch: `automatic_tax` on an account without Stripe Tax active makes Checkout fail, and on an account without registrations it collects nothing silently. The operator turns it on after the Dashboard setup.
