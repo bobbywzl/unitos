@@ -4,8 +4,9 @@ import type { Tier } from "@prisma/client";
 // Stripe client; STRIPE_WEBHOOK_SECRET verifies the events Stripe posts to
 // /api/stripe/webhook; STRIPE_PRICE_<TIER>_MONTHLY and STRIPE_PRICE_<TIER>_YEARLY
 // name the two recurring Stripe prices each tier sells at — monthly and
-// yearly, four prices in all. Every value is read here and nowhere else. No
-// server imports: the admin page reads the same shape.
+// yearly, four prices in all. STRIPE_TAX="on" turns Stripe Tax on at
+// checkout. Every value is read here and nowhere else. No server imports:
+// the admin page reads the same shape.
 
 export const TIERS: readonly Tier[] = ["PREMIUM", "ULTRA"] as const;
 
@@ -33,6 +34,15 @@ export function stripeConfigured(): boolean {
 
 export function webhookConfigured(): boolean {
   return Boolean(process.env.STRIPE_WEBHOOK_SECRET);
+}
+
+// Stripe Tax is on: checkout passes automatic_tax, collects the billing
+// address and a tax id, and every invoice of the subscription carries tax.
+// Off by default. On needs Stripe Tax active on the account with a head
+// office address and a registration in every jurisdiction that collects:
+// without a registration Stripe collects no tax and reports no error.
+export function taxEnabled(): boolean {
+  return process.env.STRIPE_TAX === "on";
 }
 
 const PRICE_ENV: Record<Tier, Record<Interval, string>> = {

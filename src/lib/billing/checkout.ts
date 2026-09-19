@@ -1,5 +1,5 @@
 import type { Tier, User } from "@prisma/client";
-import { type Interval, priceIdOf, tierSlug } from "@/lib/billing/config";
+import { type Interval, priceIdOf, taxEnabled, tierSlug } from "@/lib/billing/config";
 import { stripe } from "@/lib/billing/stripe";
 import { checkoutTrialEnd } from "@/lib/billing/trial";
 import { db } from "@/lib/db";
@@ -11,6 +11,9 @@ import type { Lang } from "@/lib/i18n/config";
 // card now and charges then. Stripe returns to /billing/confirmed with the
 // session id; Cancel returns to the order page. The account's Stripe
 // customer is created on the first checkout and kept on User.stripeCustomerId.
+// With STRIPE_TAX on, the session calculates tax: Stripe collects the
+// billing address and a tax id at checkout and saves both on the customer,
+// so every renewal invoice carries the same tax.
 
 export async function ensureCustomer(user: User): Promise<string> {
   if (user.stripeCustomerId) return user.stripeCustomerId;
@@ -55,6 +58,22 @@ export async function createCheckout(
     },
     allow_promotion_codes: true,
     locale: stripeLocale(lang),
+    // The label the Dashboard groups these sessions under.
+    integration_identifier: "unitos_subscription_jzzcezrd",
+    // No payment_method_types: Stripe picks the payment methods the
+    // Dashboard turns on.
+    ...(taxEnabled()
+      ? {
+          automatic_tax: { enabled: true },
+          // The address entered at checkout is the tax address: the customer
+          // row has none before the first payment.
+          billing_address_collection: "required" as const,
+          customer_update: { address: "auto" as const, name: "auto" as const },
+          // A business enters its tax id: a cross-border B2B sale is then
+          // reverse-charged instead of taxed as B2C.
+          tax_id_collection: { enabled: true },
+        }
+      : {}),
   });
   if (!session.url) throw new Error("Stripe returned no checkout URL");
   return session.url;

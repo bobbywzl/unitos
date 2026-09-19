@@ -39,7 +39,9 @@ switch, and until it is on the pages answer 404 and the app shows no link to
 them (the admin sees them as a preview). On needs sign-in on,
 `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, and the four
 `STRIPE_PRICE_<TIER>_MONTHLY` / `STRIPE_PRICE_<TIER>_YEARLY` variables set,
-and all four prices readable from Stripe. Prices live in Stripe, not here:
+and all four prices readable from Stripe. `STRIPE_TAX` on adds Stripe Tax
+at checkout and on every renewal invoice; it is separate from the switch.
+Prices live in Stripe, not here:
 the pages show whatever the four prices say, and the yearly toggle's saving
 badge is computed from them, not stated as a number anywhere in code or here.
 

@@ -18,28 +18,34 @@ function idOf(x: string | { id: string } | null | undefined): string {
   return typeof x === "string" ? x : (x?.id ?? "");
 }
 
-// The tier a subscription or invoice buys: the metadata the checkout set,
-// else the tier whose price it carries.
+// The tier a subscription or invoice buys: the tier whose price it carries,
+// else the metadata the checkout set. The price is Stripe's own record;
+// metadata is the fallback for a price that is no longer one of the four.
 function tierOf(meta: Stripe.Metadata | null | undefined, priceId: string): Tier | null {
+  const byPrice = tierOfPriceId(priceId);
+  if (byPrice) return byPrice;
   const named = meta?.tier;
-  if (named === "PREMIUM" || named === "ULTRA") return named;
-  return tierOfPriceId(priceId);
+  return named === "PREMIUM" || named === "ULTRA" ? named : null;
 }
 
-// The account: the metadata's userId when that account exists, else the
-// account whose Stripe customer this is.
+// The account: the account whose Stripe customer this is, else the
+// metadata's userId when that account exists. The customer is Stripe's own
+// record of who pays; metadata is the fallback for the first checkout event,
+// which can land before User.stripeCustomerId is written.
 async function userIdOf(
   meta: Stripe.Metadata | null | undefined,
   customer: string | { id: string } | null | undefined,
 ): Promise<string | null> {
+  const customerId = idOf(customer);
+  if (customerId) {
+    const user = await db.user.findFirst({ where: { stripeCustomerId: customerId }, select: { id: true } });
+    if (user) return user.id;
+  }
   if (meta?.userId) {
     const user = await db.user.findUnique({ where: { id: meta.userId }, select: { id: true } });
     if (user) return user.id;
   }
-  const customerId = idOf(customer);
-  if (!customerId) return null;
-  const user = await db.user.findFirst({ where: { stripeCustomerId: customerId }, select: { id: true } });
-  return user?.id ?? null;
+  return null;
 }
 
 const PAID: readonly Stripe.Subscription.Status[] = ["active", "trialing"];
@@ -189,12 +195,36 @@ async function applyRefund(charge: Stripe.Charge): Promise<void> {
 /** Every Stripe event the webhook handles. Unknown types do nothing. */
 export async function applyStripeEvent(event: Stripe.Event): Promise<void> {
   switch (event.type) {
+    // A payment method that settles later (a bank debit) completes the
+    // session unpaid and pays it days after: both events come here, and
+    // applyCheckoutSession grants nothing until the subscription is active
+    // and the invoice is paid.
     case "checkout.session.completed":
+    case "checkout.session.async_payment_succeeded":
       await applyCheckoutSession(event.data.object);
+      return;
+    case "checkout.session.async_payment_failed":
+      // Nothing was granted: the subscription stays incomplete and expires
+      // (customer.subscription.updated, below). Logged so the operator can
+      // see a first payment that never settled.
+      console.warn(
+        `[billing] checkout ${event.data.object.id} payment failed (customer ${idOf(event.data.object.customer)})`,
+      );
       return;
     case "invoice.paid":
       await recordInvoice(event.data.object);
       return;
+    case "invoice.payment_failed": {
+      // A renewal that did not pay. Stripe retries and emails the customer
+      // (Dashboard: Billing → Subscriptions and emails → Manage failed
+      // payments); the subscription goes past_due, which holds the tier,
+      // and ends as unpaid or canceled, which ends it. Logged only.
+      const invoice = event.data.object;
+      console.warn(
+        `[billing] invoice ${invoice.id} payment failed (customer ${idOf(invoice.customer)}, attempt ${invoice.attempt_count})`,
+      );
+      return;
+    }
     case "customer.subscription.created":
     case "customer.subscription.updated":
     case "customer.subscription.deleted":
