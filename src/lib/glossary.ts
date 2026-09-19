@@ -2,7 +2,7 @@ import type { ModelMessage } from "ai";
 import { z } from "zod";
 import { bumpDocument } from "@/lib/collab";
 import { db } from "@/lib/db";
-import { KIMI_K3 } from "@/lib/derive/config";
+import { GLM_5_3_FLASH } from "@/lib/derive/config";
 import { documentPrefix } from "@/lib/derive/context";
 import { callForJson } from "@/lib/derive/json-call";
 import { isLang, type Lang } from "@/lib/i18n/config";
@@ -20,7 +20,7 @@ import { resolveModelId } from "@/lib/models";
 // definitions[lang] mirrors definition. An entry saved before lang was stored
 // has no lang: its language is unknown, so only definitions can serve it.
 // The term is never translated: it stays as the document writes it.
-const GLOSSARY_MODEL = KIMI_K3;
+const GLOSSARY_MODEL = GLM_5_3_FLASH; // a reading of the document's terms
 const TERM_MAX = 80;
 const DEFINITION_MAX = 500;
 

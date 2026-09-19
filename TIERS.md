@@ -98,6 +98,7 @@ Ultra when the account is not Ultra.
 | What | Unitos Premium, whole |
 | How long | Two months (`TRIAL_MONTHS`, `lib/tiers.ts`) |
 | After | Expired: offline changes do not save, images over 5 MB do not drop, until the operator grants a tier. A saved project's copy stays until sign out; new copies need Ultra |
+| At checkout | A subscription bought while the trial runs starts free and charges when the trial ends (SPEC.md §24, `lib/billing/trial.ts`): the order page says so, Stripe takes the card now. A trial that ends within two days charges at once (Stripe's floor) |
 
 ## Unitos Premium
 
@@ -105,9 +106,9 @@ Ultra when the account is not Ultra.
 |---|---|
 | Reading, notes, anchoring, export | Whole |
 | Documents: PDF, web page, image, video, audio | Whole |
-| AI: derivations, assistant, distill, extract, glossary, conversion | Whole |
+| AI: derivations, assistant, extract, glossary, conversion | Whole |
 | Sharing and collaboration | Whole |
-| Offline work (SPEC.md §17) | Note edits, note create and delete, section renames and reorders, replies, block text edits and deletes, highlights and comments, and content uploads queue in IndexedDB and sync when the browser is back online |
+| Offline work (SPEC.md §17) | Note edits, note create and delete, section renames and reorders, replies, block text edits and deletes, highlights and comments, and content uploads queue in IndexedDB and sync when the browser is back online. AI is off offline for every tier, and says so |
 | Images dropped into a note or into the reader's edit mode | Up to 25 MB per image (`MAX_IMAGE_BYTES`, `lib/images.ts`) |
 | Video dropped into a note or into the reader's edit mode | Not built yet: a video dropped anywhere is still added as a video document |
 

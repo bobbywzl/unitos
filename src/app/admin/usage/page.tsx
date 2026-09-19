@@ -2,109 +2,44 @@ import { redirect } from "next/navigation";
 import { Prisma } from "@prisma/client";
 import { isAdmin } from "@/lib/admin-auth";
 import { db } from "@/lib/db";
+import { gatewayConfigured } from "@/lib/gateway";
+import {
+  gatewayAdminConfigured,
+  gatewayErrorMessage,
+  gatewaySpend,
+  gatewayTagSpend,
+  type GatewaySpend,
+  type GatewayTagSpend,
+} from "@/lib/gateway-admin";
 import { providerOf } from "@/lib/usage";
 import { serverT } from "@/lib/i18n/server";
-import type { TFunc } from "@/lib/i18n/dictionaries";
 import { AdminNav } from "@/components/admin/admin-nav";
+import { BarList, DailyChart, fmtTok, fmtUsd, Tile } from "@/components/admin/charts";
 
 export const dynamic = "force-dynamic";
 
 // Admin: AI cost and tokens (Scalae admin pattern) — totals, per function,
-// per model, per account, per day. Server-rendered; figures are estimates
-// from list prices at call time.
+// per model, per account, per day. Server-rendered. With the gateway set
+// (SPEC.md §2), the figures are the gateway's: every call it carried, at
+// the provider's price, under the model that answered; the app's own
+// records then cover only what the gateway does not price — Deepgram,
+// DeepL, the Edge voice, the browser, email — and one tile says what the
+// app's own count makes of the gateway's models, as a check on the two
+// price lists. Without the gateway, the app's records are the whole page,
+// priced at list at call time.
 
-function fmtUsd(v: number): string {
-  return v >= 100 ? `$${Math.round(v).toLocaleString()}` : v >= 0.01 ? `$${v.toFixed(2)}` : v > 0 ? "<$0.01" : "$0.00";
-}
-function fmtTok(v: number): string {
-  return v >= 1_000_000 ? `${(v / 1_000_000).toFixed(1)}M` : v >= 1_000 ? `${(v / 1_000).toFixed(1)}k` : String(v);
-}
+// The providers whose cost the gateway prices (litellm/config.yaml). The
+// rest is priced by the app alone.
+const GATEWAY_PROVIDERS = new Set(["zai", "moonshot", "anthropic", "google", "groq", "openai"]);
 
-function Tile({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-2xl bg-card px-4 py-3 shadow-soft">
-      <p className="text-[11px] font-bold tracking-[0.08em] text-sand-600 uppercase">{label}</p>
-      <p className="mt-0.5 text-lg font-bold text-sand-800 tabular-nums">{value}</p>
-    </div>
-  );
-}
+type Fetched<T> = { ok: true; data: T } | { ok: false; error: string };
 
-// Horizontal magnitude bars: label left, value at the tip, detail under.
-function BarList({
-  t,
-  title,
-  rows,
-}: {
-  t: TFunc;
-  title: string;
-  rows: { label: string; costUsd: number; tokens: number; calls: number }[];
-}) {
-  const max = Math.max(...rows.map((r) => r.costUsd), 1e-9);
-  return (
-    <div className="rounded-2xl bg-card p-4 shadow-soft">
-      <p className="mb-3 text-[11px] font-bold tracking-[0.08em] text-sand-600 uppercase">{title}</p>
-      <div className="space-y-2.5">
-        {rows.slice(0, 8).map((r) => (
-          <div key={r.label}>
-            <div className="mb-1 flex items-baseline justify-between gap-3">
-              <span className="truncate font-mono text-xs text-sand-800">{r.label}</span>
-              <span className="shrink-0 text-xs font-semibold text-sand-800 tabular-nums">
-                {fmtUsd(r.costUsd)}
-              </span>
-            </div>
-            <div className="h-2 overflow-hidden rounded-full bg-sand-100">
-              <div
-                className="h-full rounded-full bg-clay-400"
-                style={{ width: `${Math.max(2, (r.costUsd / max) * 100)}%` }}
-              />
-            </div>
-            <p className="mt-0.5 text-[10px] text-sand-500">
-              {t("admin.usageDetail", { tokens: fmtTok(r.tokens), calls: r.calls })}
-            </p>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// Daily columns, last 30 days, server-rendered SVG.
-function DailyChart({ title, days }: { title: string; days: { day: string; costUsd: number }[] }) {
-  const W = 600;
-  const H = 90;
-  const max = Math.max(...days.map((d) => d.costUsd), 1e-9);
-  const slot = W / days.length;
-  const barW = Math.min(16, Math.max(4, slot - 2));
-  return (
-    <div className="rounded-2xl bg-card p-4 shadow-soft">
-      <p className="mb-2 text-[11px] font-bold tracking-[0.08em] text-sand-600 uppercase">{title}</p>
-      <svg viewBox={`0 0 ${W} ${H + 14}`} className="w-full" role="img" aria-label={title}>
-        {days.map((d, i) => {
-          const h = d.costUsd <= 0 ? 0 : Math.max(2, (d.costUsd / max) * H);
-          return (
-            <rect
-              key={d.day}
-              x={i * slot + (slot - barW) / 2}
-              y={H - h}
-              width={barW}
-              height={h}
-              rx={2}
-              className="fill-clay-400"
-            >
-              <title>{`${d.day.slice(5)} · ${fmtUsd(d.costUsd)}`}</title>
-            </rect>
-          );
-        })}
-        <line x1="0" y1={H} x2={W} y2={H} className="stroke-line" strokeWidth="1" />
-        <text x="0" y={H + 11} className="fill-sand-500" fontSize="9">
-          {days[0]?.day.slice(5)}
-        </text>
-        <text x={W} y={H + 11} textAnchor="end" className="fill-sand-500" fontSize="9">
-          {days.at(-1)?.day.slice(5)}
-        </text>
-      </svg>
-    </div>
-  );
+async function fetched<T>(run: () => Promise<T>): Promise<Fetched<T>> {
+  try {
+    return { ok: true, data: await run() };
+  } catch (err) {
+    return { ok: false, error: gatewayErrorMessage(err) };
+  }
 }
 
 export default async function AdminUsagePage() {
@@ -117,7 +52,8 @@ export default async function AdminUsagePage() {
   const since90 = new Date(now - 90 * 86_400_000);
   const since30 = new Date(now - 30 * 86_400_000);
 
-  const [totals, cost30, byFeature, byModel, byUser, byDayRaw, users] = await Promise.all([
+  const gateway = gatewayConfigured() && gatewayAdminConfigured();
+  const [totals, cost30, byFeature, byModel, byUser, byDayRaw, users, byModel30, byFeature30, spend, tags] = await Promise.all([
     db.usageEvent.aggregate({
       where: { createdAt: { gte: since90 } },
       _count: true,
@@ -153,7 +89,41 @@ export default async function AdminUsagePage() {
       FROM "UsageEvent" WHERE "createdAt" >= ${since30}
       GROUP BY 1 ORDER BY 1`),
     db.user.findMany({ select: { id: true, email: true } }),
+    // The last 30 days by model and by function, for the gateway view: what
+    // the app's own count makes of the gateway's models, and the cost of
+    // the services outside the gateway.
+    db.usageEvent.groupBy({
+      by: ["model"],
+      where: { createdAt: { gte: since30 } },
+      _sum: { costUsd: true },
+    }),
+    db.usageEvent.groupBy({
+      by: ["feature", "model"],
+      where: { createdAt: { gte: since30 } },
+      _count: true,
+      _sum: { inputTokens: true, outputTokens: true, costUsd: true },
+    }),
+    gateway ? fetched<GatewaySpend>(() => gatewaySpend(30)) : null,
+    gateway ? fetched<GatewayTagSpend>(() => gatewayTagSpend(30)) : null,
   ]);
+  // The app's own count over 30 days, split by whether the gateway prices
+  // the model: the gateway providers' part is the cross-check tile; the
+  // rest is the "outside the gateway" figure and its by-function rows.
+  const appGatewayUsd = byModel30
+    .filter((r) => GATEWAY_PROVIDERS.has(providerOf(r.model)))
+    .reduce((sum, r) => sum + (r._sum.costUsd ?? 0), 0);
+  const outside = byFeature30.filter((r) => !GATEWAY_PROVIDERS.has(providerOf(r.model)));
+  const outsideUsd = outside.reduce((sum, r) => sum + (r._sum.costUsd ?? 0), 0);
+  const outsideByFeature = [...outside
+    .reduce((acc, r) => {
+      const row = acc.get(r.feature) ?? { label: r.feature, costUsd: 0, tokens: 0, calls: 0 };
+      row.costUsd += r._sum.costUsd ?? 0;
+      row.tokens += (r._sum.inputTokens ?? 0) + (r._sum.outputTokens ?? 0);
+      row.calls += r._count;
+      acc.set(r.feature, row);
+      return acc;
+    }, new Map<string, { label: string; costUsd: number; tokens: number; calls: number }>())
+    .values()].sort((a, b) => b.costUsd - a.costUsd);
 
   // The provider of each row is read from its model (lib/usage.ts), not from
   // the provider column it was written with: a row stamped before a provider
@@ -196,10 +166,78 @@ export default async function AdminUsagePage() {
       <AdminNav active="usage" />
       <header className="mb-6">
         <h1 className="text-[28px]">{t("admin.usage")}</h1>
-        <p className="text-sm text-sand-600">{t("admin.usageDesc")}</p>
+        <p className="text-sm text-sand-600">{gateway ? t("admin.usageGatewayDesc") : t("admin.usageDesc")}</p>
       </header>
 
-      {calls === 0 ? (
+      {gateway && spend && !spend.ok && <p className="mb-4 text-xs text-red-600">{spend.error}</p>}
+      {gateway && spend?.ok ? (
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <Tile label={t("admin.gatewaySpend30")} value={fmtUsd(spend.data.totalUsd)} />
+            <Tile label={t("admin.usageAppCount")} value={fmtUsd(appGatewayUsd)} />
+            <Tile label={t("admin.usageOutside")} value={fmtUsd(outsideUsd)} />
+            <Tile label={t("admin.gatewayRequests")} value={spend.data.requests.toLocaleString()} />
+            <Tile label={t("admin.gatewayFailed")} value={spend.data.failed.toLocaleString()} />
+            <Tile label={t("admin.usageTokensIn")} value={fmtTok(spend.data.inputTokens)} />
+            <Tile label={t("admin.usageTokensOut")} value={fmtTok(spend.data.outputTokens)} />
+            <Tile label={t("admin.usageCacheRead")} value={fmtTok(spend.data.cacheReadTokens)} />
+          </div>
+          <p className="text-xs text-sand-500">{t("admin.usageAppCountHint")}</p>
+
+          <DailyChart title={t("admin.gatewayDaily")} days={spend.data.days} />
+
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <BarList t={t} title={t("admin.usageByProvider")} rows={spend.data.byProvider} />
+            <BarList t={t} title={t("admin.usageByModel")} rows={spend.data.byModel} />
+            {tags?.ok ? (
+              <BarList t={t} title={t("admin.usageByFunction")} rows={tags.data.byFeature} />
+            ) : (
+              <BarList t={t} title={t("admin.usageOutsideBy")} rows={outsideByFeature} />
+            )}
+          </div>
+          {tags && !tags.ok && <p className="text-xs text-red-600">{tags.error}</p>}
+
+          {tags?.ok && (
+            <div className="overflow-x-auto rounded-2xl bg-card p-4 shadow-soft">
+              <p className="mb-2 text-[11px] font-bold tracking-[0.08em] text-sand-600 uppercase">
+                {t("admin.usageByUser")}
+              </p>
+              {tags.data.byUser.length === 0 ? (
+                <p className="text-xs text-sand-500">{t("admin.gatewayNoTagged")}</p>
+              ) : (
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-line text-left text-[10px] tracking-wider text-sand-500 uppercase">
+                      <th className="py-2 font-semibold">{t("admin.usageColAccount")}</th>
+                      <th className="px-3 py-2 text-right font-semibold">{t("admin.usageColCalls")}</th>
+                      <th className="px-3 py-2 text-right font-semibold">{t("admin.gatewayColTokens")}</th>
+                      <th className="py-2 text-right font-semibold">{t("admin.usageColCost")}</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-line">
+                    {tags.data.byUser.map((r) => (
+                      <tr key={r.label}>
+                        <td className="max-w-[240px] truncate py-2 text-sand-800">
+                          {emailOf.get(r.label) ?? (r.label === "user-1" ? t("admin.localReader") : r.label)}
+                        </td>
+                        <td className="px-3 py-2 text-right tabular-nums">{r.calls.toLocaleString()}</td>
+                        <td className="px-3 py-2 text-right tabular-nums">{fmtTok(r.tokens)}</td>
+                        <td className="py-2 text-right font-semibold tabular-nums">{fmtUsd(r.costUsd)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          )}
+
+          {tags?.ok && outsideByFeature.length > 0 && (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <BarList t={t} title={t("admin.usageOutsideBy")} rows={outsideByFeature} />
+            </div>
+          )}
+        </div>
+      ) : calls === 0 ? (
         <p className="text-sm text-sand-600">{t("admin.usageEmpty")}</p>
       ) : (
         <div className="space-y-4">

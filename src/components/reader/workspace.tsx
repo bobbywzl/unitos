@@ -38,6 +38,7 @@ import { GuideDialog } from "@/components/guide-dialog";
 import { useT } from "@/components/lang-provider";
 import { NotebookTitle } from "@/components/notebook-title";
 import { ProgressBar } from "@/components/progress-bar";
+import { SaveIndicator } from "@/components/save-indicator";
 import { OpenDocumentProvider } from "@/components/reader/open-document-context";
 import {
   listSaved,
@@ -440,7 +441,7 @@ export function Workspace({
         });
       }, 150);
     };
-    // The Distill tab opens the corpus distilled page (SPEC.md §13).
+    // The Extract tab opens the corpus extract page (SPEC.md §13).
     const onOpenCorpusDistillation = (e: Event) => {
       const { distillationId } = (e as CustomEvent<{ distillationId: string | null }>).detail;
       setCorpusDistill({ shownId: distillationId });
@@ -584,6 +585,7 @@ export function Workspace({
         <div className="mr-auto flex min-w-0">
           <DocumentBar
             notebookId={notebook.id}
+            title={notebook.title}
             documents={documents}
             activeId={activeDocumentId}
             drive={drive}
@@ -592,6 +594,7 @@ export function Workspace({
           />
         </div>
         <OfflineStatus />
+        <SaveIndicator />
         <ShareControl notebookId={notebook.id} presence={presence} />
         <div className="hidden md:block">
           <HistoryControl history={history} />

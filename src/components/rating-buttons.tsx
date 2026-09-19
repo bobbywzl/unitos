@@ -18,7 +18,6 @@ export type RatingTool =
   | "assistant"
   | "act"
   | "distill"
-  | "keypoints"
   | "summarize"
   | "ask"
   | "find"

@@ -1,4 +1,5 @@
 import { GEMINI_FLASH } from "@/lib/derive/config";
+import { gatewayConfigured, gatewayHeaders, gatewayUrl, keyFor, providerConfigured } from "@/lib/gateway";
 import { currentModelId } from "@/lib/models";
 import { outboundFetch } from "@/lib/outbound-fetch";
 import { recordUsage } from "@/lib/usage";
@@ -7,6 +8,29 @@ import { youtubeWatchUrl } from "@/lib/video/youtube";
 
 // Usage telemetry for the admin usage page: whose call, for which function.
 export type GeminiUsageMeta = { userId: string | null; feature: string };
+
+// The Gemini API root. Under the gateway (lib/gateway.ts) it is the gateway's
+// Gemini pass-through — every path reaches Google as written, and the key is
+// the app key. The one call that does not take it is the file store's
+// second leg: the bytes go to the upload URL Google answers with
+// (lib/video/gemini-files.ts). GEMINI_API_URL points a local run at a
+// stand-in server.
+const DEFAULT_BASE_URL = "https://generativelanguage.googleapis.com";
+
+export function geminiBaseUrl(): string {
+  if (gatewayConfigured()) return gatewayUrl("/gemini");
+  return (process.env.GEMINI_API_URL || DEFAULT_BASE_URL).replace(/\/+$/, "");
+}
+
+/** The key a Gemini call sends: the app key under the gateway, else GEMINI_API_KEY. */
+export function geminiApiKey(): string | undefined {
+  return keyFor("gemini");
+}
+
+/** The gateway or a key is set, so the video features are on. */
+export function geminiConfigured(): boolean {
+  return providerConfigured("gemini");
+}
 
 // Gemini calls for video (SPEC.md §11): transcription segments and clip
 // descriptions. The first model that answers wins; the alias rung means a
@@ -27,16 +51,20 @@ export async function geminiCall<T>(
   opts: { json?: boolean; maxOutputTokens: number; lowResolution?: boolean; usage?: GeminiUsageMeta },
   parse: (text: string) => T,
 ): Promise<T> {
-  const key = process.env.GEMINI_API_KEY;
+  const key = geminiApiKey();
   if (!key) throw new Error("GEMINI_API_KEY is not set");
   const failures: string[] = [];
   for (const model of await geminiModels()) {
     try {
       const res = await outboundFetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+        `${geminiBaseUrl()}/v1beta/models/${model}:generateContent`,
         {
           method: "POST",
-          headers: { "Content-Type": "application/json", "x-goog-api-key": key },
+          headers: {
+            "Content-Type": "application/json",
+            "x-goog-api-key": key,
+            ...(opts.usage ? gatewayHeaders(opts.usage) : {}),
+          },
           body: JSON.stringify({
             contents: [{ role: "user", parts }],
             generationConfig: {
@@ -86,12 +114,12 @@ export async function geminiCall<T>(
 // the context window. Null when the count is unavailable — the caller then
 // takes its normal path and lets the real call report any limit.
 export async function geminiCountTokens(parts: unknown[]): Promise<number | null> {
-  const key = process.env.GEMINI_API_KEY;
+  const key = geminiApiKey();
   if (!key) return null;
   const model = await currentModelId("gemini");
   try {
     const res = await outboundFetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${model}:countTokens`,
+      `${geminiBaseUrl()}/v1beta/models/${model}:countTokens`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-goog-api-key": key },

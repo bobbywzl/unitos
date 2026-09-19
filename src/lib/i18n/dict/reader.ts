@@ -1,7 +1,6 @@
 // UI strings of the reader surfaces. zh glossary: dict/common.ts. Every key
 // exists in both languages — zh's type enforces it.
-// Key names are code identifiers: keypoints* = the reader's Distill
-// (KEYPOINTS), distill* = the reader's Extract (DISTILL), extract* = a
+// Key names are code identifiers: distill* = the reader's Extract (DISTILL), extract* = a
 // stored match of the old Match-it tool (EXTRACT; the assistant does that
 // work now, SPEC.md §7).
 //
@@ -87,9 +86,6 @@ const en = {
   recolor: "Recolor {color}",
 
   // Article menu
-  keypoints: "Distill",
-  keypointsMenuTitle: "The AI reads the whole article and writes its most important points as bullets",
-  keypointsButtonTitle: "Open the distilled page",
   distill: "Extract",
   distillMenuTitle: "Ask the article a question; the AI pulls the quotes that answer it",
   distillButtonTitle: "Open the extract page",
@@ -212,10 +208,6 @@ const en = {
   emptyResponse: "The model returned an empty response. Try again.",
   simplifyFailed: "Simplify failed",
   visualizeFailed: "Visualize failed",
-  keypointsFailed: "Distill failed",
-  keypointsFailedStatus: "Distill failed ({status})",
-  keypointsUnfinished: "Distill did not finish. Try again.",
-  keypointsToast: "Distilled — open Distill to read it",
   distillFailed: "Extract failed",
   distillFailedStatus: "Extract failed ({status})",
   distillUnfinished: "Extract did not finish. Try again.",
@@ -328,9 +320,6 @@ const zh: Record<keyof typeof en, string> = {
   recolor: "改为{color}",
 
   // Article menu
-  keypoints: "提炼",
-  keypointsMenuTitle: "AI 通读全文，把最重要的要点写成分条",
-  keypointsButtonTitle: "打开提炼页",
   distill: "提取",
   distillMenuTitle: "向文章提问；AI 会找出回答它的引文",
   distillButtonTitle: "打开提取页",
@@ -452,10 +441,6 @@ const zh: Record<keyof typeof en, string> = {
   emptyResponse: "模型返回了空响应。请重试。",
   simplifyFailed: "简化失败",
   visualizeFailed: "可视化失败",
-  keypointsFailed: "提炼失败",
-  keypointsFailedStatus: "提炼失败（{status}）",
-  keypointsUnfinished: "提炼未完成。请重试。",
-  keypointsToast: "提炼完成——打开“提炼”查看",
   distillFailed: "提取失败",
   distillFailedStatus: "提取失败（{status}）",
   distillUnfinished: "提取未完成。请重试。",

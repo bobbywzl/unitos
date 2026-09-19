@@ -151,14 +151,17 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ blockId: stri
         },
       });
     }
+    // The quote stays the words as quoted (SPEC.md §5): a note's quote and
+    // an annotation's words never change under an edit. The words the anchor
+    // covers now ride anchoredText, so the ladder still finds the mark.
     for (const src of sources) {
-      const r = remapAnchor(segments, newText, src);
+      const r = remapAnchor(segments, newText, { ...src, quotedText: src.anchoredText ?? src.quotedText });
       await tx.source.update({
         where: { id: src.id },
         data: {
           startOffset: r.startOffset,
           endOffset: r.endOffset,
-          quotedText: r.quotedText,
+          anchoredText: r.orphaned || r.quotedText === src.quotedText ? null : r.quotedText,
           prefix: r.prefix,
           suffix: r.suffix,
           orphaned: r.orphaned,

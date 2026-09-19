@@ -6,7 +6,6 @@ import { distillPrompt } from "@/lib/prompts/distill";
 import { explainPrompt } from "@/lib/prompts/explain";
 import { findPrompt } from "@/lib/prompts/find";
 import { formalizePrompt } from "@/lib/prompts/formalize";
-import { keypointsPrompt } from "@/lib/prompts/keypoints";
 import { saliencePrompt } from "@/lib/prompts/salience";
 import { simplifyPrompt } from "@/lib/prompts/simplify";
 import { summarizePrompt } from "@/lib/prompts/summarize";
@@ -22,7 +21,6 @@ export const promptTemplates: Partial<Record<DerivationType, (ctx: PromptCtx) =>
   SIMPLIFY: simplifyPrompt,
   SALIENCE: saliencePrompt,
   DISTILL: distillPrompt,
-  KEYPOINTS: keypointsPrompt,
   SUMMARIZE: summarizePrompt,
   FIND: findPrompt,
   FORMALIZE: formalizePrompt,

@@ -6,8 +6,8 @@ import { useT } from "@/components/lang-provider";
 import { Presence } from "@/components/presence";
 import { dismissErrors, useErrorLog } from "@/lib/error-log";
 
-// The article's errors (lib/error-log.ts): a red triangle under the Distill
-// and Extract buttons while the document has entries. Click lists them;
+// The article's errors (lib/error-log.ts): a red triangle under the Extract
+// button while the document has entries. Click lists them;
 // Dismiss drops them. Renders nothing while the document has no entries.
 // The parent places it: under the floating controls in Normal view, under
 // the pane header in a split view.

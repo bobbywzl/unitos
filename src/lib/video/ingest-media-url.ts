@@ -19,7 +19,9 @@ export async function ingestMediaUrl(
   url: string,
   t: TFunc,
   onProgress?: OnIngestProgress,
-  opts?: { headers?: Record<string, string>; title?: string },
+  // fetchUrl: where the bytes come from when that is not the URL stored as
+  // sourceUrl (a Drive download with its shared-drive flag).
+  opts?: { headers?: Record<string, string>; title?: string; fetchUrl?: string },
 ) {
   const existing = await db.document.findFirst({
     where: { sourceUrl: url, video: { isNot: null } },
@@ -27,7 +29,7 @@ export async function ingestMediaUrl(
   if (existing) return { document: existing, deduped: true };
 
   onProgress?.("fetch");
-  const res = await outboundFetch(url, { headers: opts?.headers });
+  const res = await outboundFetch(opts?.fetchUrl ?? url, { headers: opts?.headers });
   if (!res.ok || !res.body) throw new Error(t("api.mediaUnavailable"));
   const declared = Number(res.headers.get("content-length") ?? "0");
   if (declared > MAX_VIDEO_BYTES) throw new Error(t("api.videoTooLarge"));

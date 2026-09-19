@@ -35,7 +35,15 @@ import {
 export type UploadItem =
   | { kind: "url"; url: string }
   | { kind: "video-url"; url: string }
-  | { kind: "file"; file: File };
+  | { kind: "file"; file: File }
+  // A file picked in the Google Drive picker (SPEC.md §14), with the token
+  // its import spends. Picks queue beside files and links.
+  | { kind: "drive-file"; token: string; file: DrivePickedFile };
+
+/** What a queued item is called in the list: the file's name, or the link. */
+export function uploadItemTitle(item: UploadItem): string {
+  return item.kind === "file" || item.kind === "drive-file" ? item.file.name : item.url;
+}
 
 export type UploadRequest =
   | { kind: "url"; url: string }
@@ -73,6 +81,7 @@ function isMediaFile(file: File): boolean {
 function uploadItemKindKey(item: UploadItem): TKey {
   if (item.kind === "url") return "panes.uploadItemPage";
   if (item.kind === "video-url") return "panes.uploadItemVideoLink";
+  if (item.kind === "drive-file") return "panes.uploadItemDrive";
   if (isMediaFile(item.file)) return "panes.uploadItemMediaFile";
   if (isImageFile(item.file)) return "panes.uploadItemImage";
   if (isMarkdownFile(item.file)) return "panes.uploadItemMarkdown";
@@ -171,7 +180,7 @@ export function UploadAssistant({
       : request.kind === "drive"
         ? driveFiles.map((f) => f.name).join(" · ")
         : request.kind === "batch"
-          ? items.map((item) => (item.kind === "file" ? item.file.name : item.url)).join(" · ")
+          ? items.map(uploadItemTitle).join(" · ")
           : request.url;
   // The save stage detail of the last add — the final figure check (SPEC.md
   // §15) — read at the end of the add: a lost figure keeps the box open.
@@ -345,6 +354,42 @@ export function UploadAssistant({
     return result.documents ?? [{ id: result.id, title: result.title }];
   }
 
+  // What keeps a Drive pick from importing, before any request: a type the
+  // app cannot read, or a size past the ceiling. null = it can import.
+  function driveProblem(file: DrivePickedFile): string | null {
+    const kind = driveKindOf(file);
+    if (kind === "unsupported") return t("panes.driveUnsupportedFile", { name: file.name });
+    if (kind === "media" && file.sizeBytes !== null && file.sizeBytes > MAX_VIDEO_BYTES) {
+      return t("panes.fileTooLarge", { name: file.name, mb: 200 });
+    }
+    if (kind === "pdf" && file.sizeBytes !== null && file.sizeBytes > MAX_PDF_BYTES) {
+      return t("panes.fileTooLarge", { name: file.name, mb: 50 });
+    }
+    return null;
+  }
+
+  // One Drive pick's add (SPEC.md §14): the server fetches the file with the
+  // token and ingests it like an upload.
+  async function addDriveFile(file: DrivePickedFile, token: string): Promise<Added> {
+    setSteps(initialIngestSteps(driveKindOf(file) === "media" ? "media" : "drive"));
+    const result = await ingestAndFinish(
+      await fetch("/api/drive/import", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          notebookId,
+          fileId: file.id,
+          name: file.name,
+          mimeType: file.mimeType,
+        }),
+      }),
+    );
+    return { id: result.id, title: result.title };
+  }
+
   // ── The add itself: runs at once for one document; after Add for two or
   // more ──────────────────────────────────────────────────────────────────
   const startedRef = useRef(false);
@@ -374,12 +419,20 @@ export function UploadAssistant({
       // each, in the order the dialog queued them.
       for (let i = 0; i < items.length; i++) {
         const item = items[i];
-        const title = item.kind === "file" ? item.file.name : item.url;
+        const title = uploadItemTitle(item);
         setHeadline(
           items.length > 1 ? t("panes.uploadFileProgress", { i: i + 1, total: items.length, title }) : null,
         );
+        if (item.kind === "drive-file") {
+          const problem = driveProblem(item.file);
+          if (problem) {
+            failed.push(problem);
+            continue;
+          }
+        }
         try {
           if (item.kind === "file") collected.push(await addFile(item.file));
+          else if (item.kind === "drive-file") collected.push(await addDriveFile(item.file, item.token));
           else collected.push(...(await addLink(item.url)));
         } catch (err) {
           failed.push(
@@ -395,42 +448,18 @@ export function UploadAssistant({
       // token rides each request.
       for (let i = 0; i < driveFiles.length; i++) {
         const file = driveFiles[i];
-        const kind = driveKindOf(file);
         setHeadline(
           driveFiles.length > 1
             ? t("panes.uploadFileProgress", { i: i + 1, total: driveFiles.length, title: file.name })
             : null,
         );
-        if (kind === "unsupported") {
-          failed.push(t("panes.driveUnsupportedFile", { name: file.name }));
+        const problem = driveProblem(file);
+        if (problem) {
+          failed.push(problem);
           continue;
         }
-        if (kind === "media" && file.sizeBytes !== null && file.sizeBytes > MAX_VIDEO_BYTES) {
-          failed.push(t("panes.fileTooLarge", { name: file.name, mb: 200 }));
-          continue;
-        }
-        if (kind === "pdf" && file.sizeBytes !== null && file.sizeBytes > MAX_PDF_BYTES) {
-          failed.push(t("panes.fileTooLarge", { name: file.name, mb: 50 }));
-          continue;
-        }
-        setSteps(initialIngestSteps(kind === "media" ? "media" : "drive"));
         try {
-          const result = await ingestAndFinish(
-            await fetch("/api/drive/import", {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${request.token}`,
-              },
-              body: JSON.stringify({
-                notebookId,
-                fileId: file.id,
-                name: file.name,
-                mimeType: file.mimeType,
-              }),
-            }),
-          );
-          collected.push({ id: result.id, title: result.title });
+          collected.push(await addDriveFile(file, request.token));
         } catch (err) {
           failed.push(
             t("panes.uploadPageFailed", {
@@ -568,7 +597,7 @@ export function UploadAssistant({
                     <span className="mr-2 rounded-full bg-sand-200 px-2 py-0.5 text-[11px] font-semibold text-sand-600">
                       {t(uploadItemKindKey(item))}
                     </span>
-                    {item.kind === "file" ? item.file.name : item.url}
+                    {uploadItemTitle(item)}
                   </li>
                 ))}
               </ul>
@@ -605,12 +634,15 @@ export function UploadAssistant({
 
         {phase === "done" && (
           <div className="flex flex-col gap-2.5">
-            <p className="flex items-center gap-2 text-[13px] font-semibold text-sand-800">
-              <CheckIcon size={14} className="text-sage" />
-              {added.length > 1
-                ? t("panes.uploadAddedCount", { n: added.length })
-                : (added[0]?.title ?? t("common.done"))}
-            </p>
+            {/* The headline: what was added; nothing added is not Done. */}
+            {added.length === 0 ? (
+              <p className="text-[13px] font-semibold text-sand-800">{t("panes.uploadNothingAdded")}</p>
+            ) : (
+              <p className="flex items-center gap-2 text-[13px] font-semibold text-sand-800">
+                <CheckIcon size={14} className="text-sage" />
+                {added.length > 1 ? t("panes.uploadAddedCount", { n: added.length }) : added[0].title}
+              </p>
+            )}
             {verification && (
               <p className={lostFigures ? amberNote : "text-xs text-sand-500"}>
                 {[

@@ -1,16 +1,19 @@
 import type { Tier, User } from "@prisma/client";
 import { type Interval, priceIdOf, taxEnabled, tierSlug } from "@/lib/billing/config";
 import { stripe } from "@/lib/billing/stripe";
+import { checkoutTrialEnd } from "@/lib/billing/trial";
 import { db } from "@/lib/db";
 import type { Lang } from "@/lib/i18n/config";
 
 // Checkout (SPEC.md §24): Pay on the order page opens a Stripe Checkout
-// session for the tier's price at the chosen interval. Stripe returns to
-// /billing/confirmed with the session id; Cancel returns to the order page.
-// The account's Stripe customer is created on the first checkout and kept
-// on User.stripeCustomerId. With STRIPE_TAX on, the session calculates tax:
-// Stripe collects the billing address and a tax id at checkout and saves
-// both on the customer, so every renewal invoice carries the same tax.
+// session for the tier's price at the chosen interval. On the trial the
+// subscription starts free until the trial ends (trial.ts): Stripe takes the
+// card now and charges then. Stripe returns to /billing/confirmed with the
+// session id; Cancel returns to the order page. The account's Stripe
+// customer is created on the first checkout and kept on User.stripeCustomerId.
+// With STRIPE_TAX on, the session calculates tax: Stripe collects the
+// billing address and a tax id at checkout and saves both on the customer,
+// so every renewal invoice carries the same tax.
 
 export async function ensureCustomer(user: User): Promise<string> {
   if (user.stripeCustomerId) return user.stripeCustomerId;
@@ -36,6 +39,7 @@ export async function createCheckout(
   lang: Lang,
 ): Promise<string> {
   const customer = await ensureCustomer(user);
+  const trialEnd = checkoutTrialEnd(user);
   const session = await stripe().checkout.sessions.create({
     mode: "subscription",
     customer,
@@ -48,7 +52,10 @@ export async function createCheckout(
     // The interval itself needs no metadata — the price id the subscription
     // and every invoice carry already names it (config.ts intervalOfPriceId).
     metadata: { userId: user.id, tier },
-    subscription_data: { metadata: { userId: user.id, tier } },
+    subscription_data: {
+      metadata: { userId: user.id, tier },
+      ...(trialEnd ? { trial_end: Math.floor(trialEnd.getTime() / 1000) } : {}),
+    },
     allow_promotion_codes: true,
     locale: stripeLocale(lang),
     // The label the Dashboard groups these sessions under.

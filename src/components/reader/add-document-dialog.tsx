@@ -1,12 +1,16 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { isImeKey } from "@/lib/ime";
+import { isImeKey, useImeGuard } from "@/lib/ime";
 import { useT } from "@/components/lang-provider";
 import { Presence } from "@/components/presence";
-import { parseDriveFileId, type DriveAccess } from "@/lib/drive/types";
+import { parseDriveFileId, type DriveAccess, type DrivePickedFile } from "@/lib/drive/types";
 import { IngestProgress, type IngestStep } from "@/components/reader/ingest-progress";
-import type { UploadItem, UploadRequest } from "@/components/reader/upload-assistant";
+import {
+  uploadItemTitle,
+  type UploadItem,
+  type UploadRequest,
+} from "@/components/reader/upload-assistant";
 import { isMediaUrl } from "@/lib/video/types";
 import { parseYouTubeId } from "@/lib/video/youtube";
 
@@ -29,12 +33,23 @@ function parseLinks(raw: string): string[] {
   return out;
 }
 
-// One request for the queue (SPEC.md §22): a lone link or files alone go to
-// the box as before; everything else is a batch.
+// One request for the queue (SPEC.md §22): a lone link, files alone, or
+// Drive picks alone go to the box as before; everything else is a batch.
 function requestFor(items: UploadItem[]): UploadRequest {
-  if (items.length === 1 && items[0].kind !== "file") return items[0];
+  if (items.length === 1 && (items[0].kind === "url" || items[0].kind === "video-url")) return items[0];
   if (items.every((item) => item.kind === "file")) {
     return { kind: "files", files: items.flatMap((item) => (item.kind === "file" ? [item.file] : [])) };
+  }
+  const first = items[0];
+  if (
+    first.kind === "drive-file" &&
+    items.every((item) => item.kind === "drive-file" && item.token === first.token)
+  ) {
+    return {
+      kind: "drive",
+      token: first.token,
+      files: items.flatMap((item) => (item.kind === "drive-file" ? [item.file] : [])),
+    };
   }
   return { kind: "batch", items };
 }
@@ -42,11 +57,12 @@ function requestFor(items: UploadItem[]): UploadRequest {
 // The add-document dialog: one centered window for everything that adds a
 // document, opened by the dashed +. Files and a URL are the only two ways
 // in — a big drop-or-choose space for files, a box for a URL beneath it —
-// so the dialog never asks what kind of thing is coming in. Links and files
-// of every kind queue together (SPEC.md §22): Enter after a link queues it,
-// dropping or choosing files queues them, and Continue hands the queue to
-// the upload box, which imports it. Google Drive and the library stay one
-// small button each, off to the side.
+// so the dialog never asks what kind of thing is coming in. Links, files,
+// and Drive picks queue together (SPEC.md §22): Enter after a link queues
+// it, dropping or choosing files queues them, picking in Google Drive queues
+// the picks, and Continue hands the queue to the upload box, which imports
+// it. Google Drive and the library stay one small button each, off to the
+// side. A new project (no document yet) asks for its title at the top.
 export function AddDocumentDialog({
   open,
   onClose,
@@ -56,6 +72,7 @@ export function AddDocumentDialog({
   onError,
   onSubmit,
   fileAccept,
+  projectTitle,
   onImportDrive,
   driveLink,
   onDriveLink,
@@ -74,7 +91,14 @@ export function AddDocumentDialog({
   // The queue goes to the upload box.
   onSubmit: (request: UploadRequest) => void;
   fileAccept: string;
-  onImportDrive: (() => void) | null; // null: Google Drive is not configured
+  // A new project's title (SPEC.md §15): the current title and its default.
+  // Set on a project with no document yet; the dialog shows a title field
+  // above the drop zone, saved on blur, Enter, and Continue. null: none.
+  projectTitle: { title: string; untitled: string; onSave: (title: string) => Promise<void> } | null;
+  // Open the Google Drive picker: the picks and the token their imports
+  // spend, or null (nothing picked, or the pick failed and the document bar
+  // showed why). null: Google Drive is not configured.
+  onImportDrive: (() => Promise<{ token: string; files: DrivePickedFile[] } | null>) | null;
   // Link Google Drive (SPEC.md §14): linked shows the state — the grant's
   // access, and Link again when it reaches picked files only while the
   // deployment asks for all; canLink offers the link flow. null when Drive is
@@ -90,12 +114,19 @@ export function AddDocumentDialog({
   onRemoveFromLibrary: (documentId: string) => void;
 }) {
   const t = useT();
+  const ime = useImeGuard();
   const [url, setUrl] = useState("");
   const [over, setOver] = useState(false);
   const [libraryOpen, setLibraryOpen] = useState(false);
   // The queue: what Continue hands to the box, in the order it was added.
   const [items, setItems] = useState<UploadItem[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // The project title field: empty while the project carries the default
+  // title, which stands as the placeholder.
+  const titleOf = (p: { title: string; untitled: string } | null) =>
+    p && p.title !== p.untitled ? p.title : "";
+  const [titleDraft, setTitleDraft] = useState(titleOf(projectTitle));
+  const [titleSaving, setTitleSaving] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -118,6 +149,23 @@ export function AddDocumentDialog({
       setUrl("");
       setItems([]);
       setLibraryOpen(false);
+      setTitleDraft(titleOf(projectTitle));
+    }
+  }
+
+  // Save the title field when it changed: on blur, Enter, and Continue. An
+  // empty field keeps the title as it is.
+  async function saveTitle() {
+    if (!projectTitle) return;
+    const next = titleDraft.trim();
+    if (!next || next === projectTitle.title) return;
+    setTitleSaving(true);
+    try {
+      await projectTitle.onSave(next);
+    } catch (err) {
+      onError(err instanceof Error ? err.message : t("panes.titleSaveFailed"));
+    } finally {
+      setTitleSaving(false);
     }
   }
 
@@ -158,11 +206,21 @@ export function AddDocumentDialog({
     setUrl("");
   }
 
-  function submit() {
+  async function submit() {
     if (items.length === 0) return;
+    await saveTitle();
     onSubmit(requestFor(items));
     setItems([]);
     setUrl("");
+  }
+
+  // Add from Google Drive: the picks queue like files (SPEC.md §14, §22),
+  // so a pick never drops what the queue already holds.
+  async function pickDrive() {
+    if (!onImportDrive) return;
+    const picked = await onImportDrive();
+    if (!picked) return;
+    queue(picked.files.map((file) => ({ kind: "drive-file" as const, token: picked.token, file })));
   }
 
   function hasFiles(e: React.DragEvent): boolean {
@@ -208,6 +266,31 @@ export function AddDocumentDialog({
           </div>
         ) : (
           <>
+            {projectTitle && (
+              <label className="flex flex-col gap-1.5">
+                <span className="text-[13px] font-semibold text-sand-800">{t("panes.projectTitle")}</span>
+                <input
+                  value={titleDraft}
+                  onChange={(e) => setTitleDraft(e.target.value)}
+                  onBlur={() => void saveTitle()}
+                  {...ime.props}
+                  onKeyDown={(e) => {
+                    if (ime.isImeEnter(e) || isImeKey(e)) return;
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      void saveTitle();
+                    }
+                  }}
+                  placeholder={projectTitle.untitled}
+                  disabled={titleSaving}
+                  maxLength={200}
+                  data-track="add-project-title"
+                  className="min-w-0 rounded-full bg-sand-100 px-4 py-2 font-display text-lg outline-none placeholder:text-sand-500"
+                />
+                <span className="text-[11px] text-sand-500">{t("panes.projectTitleHint")}</span>
+              </label>
+            )}
+
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
@@ -269,9 +352,7 @@ export function AddDocumentDialog({
                 <ul className="flex max-h-40 flex-col gap-0.5 overflow-y-auto rounded-2xl bg-sand-100 p-2">
                   {items.map((item, i) => (
                     <li key={i} className="flex items-center gap-2 px-2 py-1 text-[13px] text-sand-800">
-                      <span className="min-w-0 flex-1 truncate">
-                        {item.kind === "file" ? item.file.name : item.url}
-                      </span>
+                      <span className="min-w-0 flex-1 truncate">{uploadItemTitle(item)}</span>
                       <button
                         onClick={() => removeItem(i)}
                         data-track="add-queue-remove"
@@ -291,7 +372,7 @@ export function AddDocumentDialog({
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-line pt-3">
               {onImportDrive && (
                 <button
-                  onClick={onImportDrive}
+                  onClick={() => void pickDrive()}
                   data-track="add-drive"
                   disabled={busy}
                   className={smallButton}
@@ -312,7 +393,7 @@ export function AddDocumentDialog({
                 {t("panes.library")}
               </button>
               <button
-                onClick={submit}
+                onClick={() => void submit()}
                 data-track="add-continue"
                 disabled={busy || items.length === 0}
                 className={`ml-auto ${submitButton}`}

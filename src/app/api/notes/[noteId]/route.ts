@@ -7,6 +7,7 @@ import { bumpNotebook, noteAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
 import { serverT } from "@/lib/i18n/server";
 import { recordNoteEdit } from "@/lib/notes/edits";
+import { sourcesLeftByQuotes } from "@/lib/notes/quote-sources";
 import { normalizeNoteOrders, movedOrder } from "@/lib/order";
 import { parseBody } from "@/lib/validate";
 
@@ -85,6 +86,11 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ noteId: strin
     // A changed text is the note's history (SPEC.md §12).
     if (data.content !== undefined && data.content !== note.content) {
       await recordNoteEdit(noteId, access.user.id || null, data.content);
+      // A quote deleted from the note takes its source with it: the mark in
+      // the reader no longer points at a note that lost the words (SPEC.md §6).
+      const sources = await db.source.findMany({ where: { noteId }, select: { id: true, quotedText: true } });
+      const left = sourcesLeftByQuotes(note.content, data.content, sources);
+      if (left.length > 0) await db.source.deleteMany({ where: { id: { in: left }, noteId } });
     }
   }
 

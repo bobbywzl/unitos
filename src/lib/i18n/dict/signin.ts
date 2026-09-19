@@ -40,7 +40,7 @@ const en = {
   betaThanks:
     "Thank you for being here this early. Every project you build and every piece of feedback you send shapes what Unitos becomes.",
   betaFree:
-    "As our thanks, every beta account gets Unitos free and without limits for now: the whole notebook, and the Kimi, Claude, Gemini, and Groq tokens it uses, at no cost to you.",
+    "As our thanks, every beta account gets Unitos free and without limits for now: the whole notebook, and the GLM, Kimi, Claude, Gemini, and Groq tokens it uses, at no cost to you.",
   betaSigned: "— The Unitos team",
   betaContinue: "Continue",
 
@@ -98,8 +98,6 @@ const en = {
   fnHighlightSub: "Highlight a passage, comment in the margin.",
   fnSimplify: "Simplify",
   fnSimplifySub: "Select a passage — rewritten in plain words, in place.",
-  fnKeypoints: "Distill",
-  fnKeypointsSub: "The whole document as bullet points; each one anchored to its passage.",
   fnDistill: "Extract",
   fnDistillSub: "One question to the document; the quotes that answer it.",
 
@@ -157,7 +155,7 @@ const zh: Record<keyof typeof en, string> = {
   betaTitle: "Unitos 正处于测试阶段",
   betaThanks: "感谢你这么早就来到这里。你建立的每个项目、发来的每条反馈，都在塑造 Unitos 的未来。",
   betaFree:
-    "作为感谢，目前每个测试账户都可以免费、不限量地使用 Unitos：整个笔记本，以及它所使用的 Kimi、Claude、Gemini 和 Groq 的 token，全部免费。",
+    "作为感谢，目前每个测试账户都可以免费、不限量地使用 Unitos：整个笔记本，以及它所使用的 GLM、Kimi、Claude、Gemini 和 Groq 的 token，全部免费。",
   betaSigned: "——Unitos 团队",
   betaContinue: "继续",
 
@@ -214,8 +212,6 @@ const zh: Record<keyof typeof en, string> = {
   fnHighlightSub: "高亮一个片段，在页边评论。",
   fnSimplify: "简化",
   fnSimplifySub: "选中一段——用通俗的话就地重写。",
-  fnKeypoints: "提炼",
-  fnKeypointsSub: "整篇文档写成分条要点，每条锚定到它的片段。",
   fnDistill: "提取",
   fnDistillSub: "向文档问一个问题，得到回答它的引文。",
 

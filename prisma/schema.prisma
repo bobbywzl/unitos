@@ -345,7 +345,6 @@ enum DerivationType {
   SYNTHESIS // notebook-scope assistant output
   FIND // video content reader: query → time ranges + explanations (SPEC.md §11)
   DISTILL // the reader's Extract: question → the quotes that answer it, stored on the attachment (SPEC.md §4)
-  KEYPOINTS // the reader's Distill: the article's most important points as bullets, each anchored, stored on the attachment (SPEC.md §4)
   FORMALIZE // transcript → formal article on the attachment, or bullet-point notes (PENDING)
   ASK // a question about a time range of a video or audio document, answered from the transcript in that range; "Add to notes" lands PENDING (SPEC.md §11)
   COMPARE // two documents → one PENDING note of agreements, disagreements, and what only one covers, sourced on both (SPEC.md §4)
@@ -380,7 +379,10 @@ model Source {
   blockId     String
   startOffset Int
   endOffset   Int
-  quotedText  String
+  quotedText  String // the words as quoted when the source was made; a block edit never changes it (SPEC.md §5)
+  // The words the anchor covers now, once a block edit changed them; null
+  // while they are still the quote. The ladder re-finds by these.
+  anchoredText String?
   prefix      String // 32 chars before selection
   suffix      String // 32 chars after selection
   orphaned    Boolean  @default(false)
@@ -560,7 +562,6 @@ model NotebookDocument {
   distillations Json? // DISTILL output: [{id, question, createdAt, quotes}], newest first, per notebook per document (SPEC.md §4)
   extractions   Json? // EXTRACT output: [{id, createdAt, origin, spans}], oldest first — the index gives the label (SPEC.md §4)
   formalized    Json? // FORMALIZE output: {article: {title, markdown, createdAt, createdById}}; Regenerate overwrites
-  keypoints     Json? // KEYPOINTS output: {id, createdAt, createdById, points}, one per notebook per document; Distill again overwrites (SPEC.md §4)
 
   @@id([notebookId, documentId])
   @@index([documentId])
@@ -844,7 +845,7 @@ model ToolRating {
   notebookId String?
   documentId String?
   noteId     String? // the annotation or conversation note the output lives on, when it has one
-  tool       String // simplify | analyze | visualize | assistant | act | distill | keypoints | summarize | ask | find | formalize | stitch
+  tool       String // simplify | analyze | visualize | assistant | act | distill | summarize | ask | find | formalize | stitch
   rating     String // "up" | "down"
   lang       String // the reader's UI language at the time
   input      String // what the tool ran on: the selection, the question, the command (cut at 4000)

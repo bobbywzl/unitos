@@ -29,6 +29,10 @@ const anthropicPrice = (input: number, output: number, cacheRead = input * 0.1):
 /** Exact-match list prices, USD per 1M tokens. */
 const MODEL_PRICING: Record<string, Price> = {
   "claude-fable-5-1": anthropicPrice(10, 50, 0.25),
+  // Z.ai serves a cache hit at about 0.2× the input price (GLM 5.3: $0.26 on
+  // $1.40; Flash: $0.03 on $0.15) and charges nothing to write the cache.
+  "glm-5.3": { input: 1.4, output: 4.4, cacheRead: 0.26, cacheWrite: 1.4 },
+  "glm-5.3-flash": { input: 0.15, output: 0.5, cacheRead: 0.03, cacheWrite: 0.15 },
   "kimi-k3": price(3, 15),
   "gemini-3.7-flash": price(0.3, 2.5),
   "gemini-flash-latest": price(0.3, 2.5),
@@ -63,6 +67,8 @@ const MODEL_PRICING: Record<string, Price> = {
 
 /** Family fallbacks for ids not priced exactly; first match wins. */
 const FAMILY_PRICING: [RegExp, Price][] = [
+  [/^glm.*flash/, price(0.15, 0.5)],
+  [/^glm/, price(1.4, 4.4)],
   [/^claude.*(fable|mythos)/, anthropicPrice(10, 50)],
   [/^claude.*opus/, anthropicPrice(5, 25)],
   [/^claude.*haiku/, anthropicPrice(1, 5)],
@@ -132,6 +138,7 @@ export type UsageMeta = {
 // wrong provider reads as that provider's spend and is worse than an
 // unnamed one. Add the rule when a provider is added.
 const PROVIDERS: [RegExp, string][] = [
+  [/^glm/, "zai"],
   [/^claude/, "anthropic"],
   [/^(kimi|moonshot)/, "moonshot"],
   [/^(gemini|gemini-files)/, "google"],

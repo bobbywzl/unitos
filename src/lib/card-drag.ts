@@ -1,6 +1,9 @@
+import type { AnnotationReference } from "@/lib/annotation-reference";
+import type { QuoteDrag } from "@/lib/quote-drag";
+
 // One drag that crosses surfaces (SPEC.md §6): a note card of the notes tray,
-// a row of the Annotations tab, or one of the reader's own cards over the
-// article, dragged onto a note — a note card of the tray, or the floating
+// a row of the Annotations tab, one of the reader's own cards over the
+// article, or a highlight in the reader's text, dragged onto a note — a note card of the tray, or the floating
 // card. The board drag (components/sortable.tsx) moves notes inside one list;
 // this moves a card onto a target that is not in that list, and lives outside
 // React so the panels, the reader, and the floating card never need one
@@ -11,16 +14,25 @@
 // dispatches three events on the window: start, over (the target under the
 // pointer, or null), and end (the target it was released on, or null).
 
-/** The cards being dragged: notes of the tray, or an annotation — a row of
-    the Annotations tab, or a card of the reader over the article.
+/** The cards being dragged: notes of the tray, an annotation — a row of
+    the Annotations tab, or a card of the reader over the article — or a
+    quote: a highlight held in the reader's text.
     A note that is one of the selected notes carries the whole selection, so
     several notes land in one drop. */
 export type CardDrag = {
-  kind: "note" | "annotation";
+  kind: "note" | "annotation" | "quote";
   /** The dragged card first, then the rest: they merge in this order. */
   ids: string[];
   /** The line the ghost shows while it follows the pointer. */
   label: string;
+  /** kind "quote": the passage and its anchor (lib/quote-drag.ts); dropped
+      on a note, the quote lands at the end of the note and the anchor
+      becomes a source of the note. */
+  quote?: QuoteDrag;
+  /** kind "annotation": the annotation and where it is anchored
+      (lib/annotation-reference.ts); dropped on a note, an annotation
+      reference lands at the end of the note. */
+  reference?: AnnotationReference;
 };
 
 /** What a merge does to the text. join: the sources' text lands in the target

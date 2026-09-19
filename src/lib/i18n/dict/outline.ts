@@ -32,6 +32,7 @@ const en = {
   saving: "Saving…",
   saved: "Saved",
   saveFailed: "Not saved",
+  savedOffline: "Saved on this device · syncs when online",
   // Hold to drag (SPEC.md §6): a hold anywhere on a note picks it up.
   holdToDrag:
     "Hold to drag. Move the note, hold it over another note to merge the two, or drop it on the article to float it.",
@@ -96,7 +97,14 @@ const en = {
   mergedNotes: "{n} notes merged into one",
   undoMergeTitle: "Put the merged notes back as they were",
   dropNote: "Drop to merge this note in",
-  dropAnnotation: "Drop to merge this annotation in",
+  dropAnnotation: "Drop to put a reference to this annotation in the note",
+  // An annotation reference in a note (lib/annotation-reference.ts): the
+  // row's second line, its tooltip, and the annotation beside the note on the
+  // notes full page (annotation-side.tsx).
+  annotationReference: "Annotation",
+  annotationReferenceTitle: "Open this annotation",
+  annotationJump: "Jump to this annotation in the reader",
+  annotationLoadFailed: "Could not load the annotation",
   pin: "Pin",
   unpin: "Unpin",
   pinnedLabel: "Pinned",
@@ -212,6 +220,7 @@ const zh: Record<keyof typeof en, string> = {
   saving: "保存中…",
   saved: "已保存",
   saveFailed: "未保存",
+  savedOffline: "已保存在此设备 · 联网后同步",
   holdToDrag: "按住即可拖动。移动笔记；压在另一条笔记上按住即合并；放到文章上即浮动。",
   holdToDragPage: "按住即可拖动。移动笔记，或压在另一条笔记上按住即合并。",
   holdToMoveCard: "按住即可移动此卡片。放到笔记栏上即把笔记放回。",
@@ -261,7 +270,11 @@ const zh: Record<keyof typeof en, string> = {
   mergedNotes: "已把 {n} 条笔记合并为一条",
   undoMergeTitle: "把合并的笔记恢复原样",
   dropNote: "松开即把这条笔记合并进来",
-  dropAnnotation: "松开即把这条批注合并进来",
+  dropAnnotation: "松开即把这条批注的批注链接放进笔记",
+  annotationReference: "批注",
+  annotationReferenceTitle: "打开这条批注",
+  annotationJump: "跳到阅读器中的这条批注",
+  annotationLoadFailed: "无法加载这条批注",
   pin: "置顶",
   unpin: "取消置顶",
   pinnedLabel: "已置顶",

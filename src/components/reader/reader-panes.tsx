@@ -16,7 +16,7 @@ import type { TKey } from "@/lib/i18n/dictionaries";
 //
 // A split view is its own layout (SPEC.md §6): each pane's chrome is one row
 // at its top (the pane header: the pane's document, the article menu, the
-// search, Distill), the two panes fill the browser exactly, and the tray is a
+// search, Extract), the two panes fill the browser exactly, and the tray is a
 // screen to their right that the workspace scrolls to (workspace.tsx).
 
 export type ReaderViewKind = "normal" | "side" | "stack";
@@ -68,7 +68,7 @@ export function viewHref(
 // The pane header of a split view: one row at the top of the pane, above
 // its scroller, never over the text. The reader renders it — for a video
 // document too, through the video pane — and adds its article menu and
-// Distill to the row for an article. It follows the strip's cut like the
+// Extract to the row for an article. It follows the strip's cut like the
 // column (globals.css .pane-header), so its controls stay in the visible
 // part of the pane.
 export const PANE_HEADER =
@@ -370,7 +370,7 @@ export function ReaderPanes({
       className={`relative flex h-full min-h-0 min-w-0 ${view === "stack" ? "flex-col" : "flex-row"}`}
     >
       {/* Bottom-left: clear of the article menu (top-left) and the sticky
-          Distill controls (top-right). */}
+          Extract controls (top-right). */}
       <div ref={menuRef} className="absolute bottom-4 left-4 z-30 print:hidden">
         <button
           onClick={() => setMenu((v) => !v)}

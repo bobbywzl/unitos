@@ -23,7 +23,6 @@ import {
   distillOutputSchema,
   extractJson,
   findOutputSchema,
-  keypointsOutputSchema,
   resolveSpan,
   salienceOutputSchema,
 } from "@/lib/derive/json";
@@ -31,7 +30,6 @@ import { actPrompt, textSelectionBlock } from "@/lib/prompts/act";
 import { askPrompt } from "@/lib/prompts/ask";
 import { distillPrompt } from "@/lib/prompts/distill";
 import { findPrompt } from "@/lib/prompts/find";
-import { keypointsPrompt } from "@/lib/prompts/keypoints";
 import { saliencePrompt } from "@/lib/prompts/salience";
 import { simplifyPrompt } from "@/lib/prompts/simplify";
 import { summarizePrompt } from "@/lib/prompts/summarize";
@@ -201,37 +199,6 @@ const adapters: Record<EvalTool, Adapter> = {
     ];
     const output = quotes.map((q) => `- ${q.caption}\n  “${q.span!.quotedText.replace(/\s+/g, " ")}” [block ${q.span!.blockId}]`).join("\n");
     return { input: c.question ?? "", prompt, raw: r.text, output, checks, ms: r.ms, tokens: { input: r.inputTokens, output: r.outputTokens } };
-  },
-
-  async keypoints(c, f) {
-    const ctx = promptCtx(f, c);
-    const prompt = keypointsPrompt(ctx);
-    const r = await callTool({ messages: [system(f), { role: "user", content: prompt }], effort: DERIVATION_EFFORT.KEYPOINTS, maxOutputTokens: MAX_OUTPUT_TOKENS.KEYPOINTS });
-    const parsed = keypointsOutputSchema.safeParse(extractJson(r.text));
-    const blockById = new Map(f.blocks.map((b) => [b.id, { id: b.id, text: b.text }]));
-    const order = new Map(f.blocks.map((b, i) => [b.id, i]));
-    const points = parsed.success
-      ? parsed.data.points.map((p) => ({ span: resolveSpan(p, blockById), text: p.text })).filter((p) => p.span !== null)
-      : [];
-    let inOrder = true;
-    for (let i = 1; i < points.length; i++) {
-      const a = order.get(points[i - 1].span!.blockId) ?? 0;
-      const b = order.get(points[i].span!.blockId) ?? 0;
-      if (b < a) inOrder = false;
-    }
-    const numbersInDoc = new Set((f.blocks.map((b) => b.text).join(" ").match(/\d[\d,.]*%?/g) ?? []).map((n) => n.replace(/,/g, "")));
-    const invented = points.flatMap((p) => (p.text.match(/\d[\d,.]*%?/g) ?? []).map((n) => n.replace(/,/g, ""))).filter((n) => !numbersInDoc.has(n) && !numbersInDoc.has(n.replace(/%$/, "")));
-    const checks: Check[] = [
-      { name: "valid JSON", ok: parsed.success },
-      { name: "spans resolve", ok: parsed.success && points.length === parsed.data.points.length, detail: `${points.length} of ${parsed.success ? parsed.data.points.length : 0}` },
-      { name: "5 to 20 points", ok: points.length >= 4 && points.length <= 20, detail: `${points.length}` },
-      { name: "document order", ok: inOrder },
-      { name: "no invented numbers", ok: invented.length === 0, detail: invented.join(", ") },
-      { name: "points in " + c.lang, ok: points.every((p) => languageCheck(p.text, c.lang).ok) },
-      { name: "points state claims", ok: points.every((p) => !/^(the (document|author|paper|memo|article) (discusses|describes|mentions|talks about))|^(本文|作者)(讨论|介绍|提到)/i.test(p.text)) },
-    ];
-    const output = points.map((p) => `- ${p.text}\n  “${p.span!.quotedText.replace(/\s+/g, " ").slice(0, 160)}” [block ${p.span!.blockId}]`).join("\n");
-    return { input: "(whole document)", prompt, raw: r.text, output, checks, ms: r.ms, tokens: { input: r.inputTokens, output: r.outputTokens } };
   },
 
   async summarize(c, f) {

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
+import { clearDirty, markDirty } from "@/lib/save-state";
 import { ACCOUNT_HEADER } from "@/lib/constants";
 import { clearNoteDraft, confirmNoteDraft, writeNoteDraft } from "@/lib/note-drafts";
 import { tabAccount } from "@/lib/tab-account";
@@ -64,7 +65,11 @@ export function useNoteDraft({
     if (!trimmed || trimmed === lastSavedRef.current) return;
     // The local draft first: synchronous, so it is there whatever happens next.
     writeNoteDraft(noteId, draft);
+    // The save indicator reads Saving… from the keystroke; the save itself
+    // counts from the moment it starts.
+    markDirty(noteId);
     const timer = setTimeout(() => {
+      clearDirty(noteId);
       const before = lastSavedRef.current;
       lastSavedRef.current = trimmed;
       void api(`/api/notes/${noteId}`, "PATCH", { content: trimmed })
@@ -79,7 +84,10 @@ export function useNoteDraft({
           setFailed(trimmed);
         });
     }, 900);
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+      clearDirty(noteId);
+    };
   }, [draft, active, canEdit, noteId]);
 
   useEffect(() => {

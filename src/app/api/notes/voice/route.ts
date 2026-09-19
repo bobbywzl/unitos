@@ -14,7 +14,8 @@ import type { TFunc } from "@/lib/i18n/dictionaries";
 import { resolveModelId } from "@/lib/models";
 import { ndjsonHeartbeat, ndjsonWriter } from "@/lib/ndjson";
 import { voicePrompt } from "@/lib/prompts/voice";
-import { transcribe } from "@/lib/video/transcribe";
+import { geminiConfigured } from "@/lib/video/gemini";
+import { transcribe, whisperConfigured } from "@/lib/video/transcribe";
 
 export const maxDuration = 180;
 
@@ -66,7 +67,7 @@ export async function POST(req: Request) {
   if (!section) return NextResponse.json({ error: t("api.sectionNotFound") }, { status: 404 });
   const access = await sectionAccess(sectionId, "editor");
   if (access instanceof NextResponse) return access;
-  if (!process.env.GROQ_API_KEY && !process.env.OPENAI_API_KEY && !process.env.GEMINI_API_KEY) {
+  if (!whisperConfigured() && !geminiConfigured()) {
     return NextResponse.json({ error: t("api.voiceNoteNeedsKey") }, { status: 503 });
   }
   if (!claudeConfigured()) {

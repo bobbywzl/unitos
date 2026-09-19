@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { currentUser } from "@/lib/auth";
+import { gatewayConfigured, gatewayHeaders, gatewayModelId, gatewayUrl, keyFor, providerConfigured } from "@/lib/gateway";
 import { serverT } from "@/lib/i18n/server";
 import { recordUsage } from "@/lib/usage";
 import { parseBody } from "@/lib/validate";
@@ -10,9 +11,11 @@ export const maxDuration = 60;
 
 // Voice (SPEC.md §6): the Edge voice reads the text aloud — free neural
 // voices, no key, Chinese and English alike. When it fails and
-// OPENAI_API_KEY is set, OpenAI TTS reads instead (model gpt-4o-mini-tts,
-// voice alloy). When both are out, the route answers 503 and the client
-// reads with the browser voice.
+// OPENAI_API_KEY or the gateway is set, OpenAI TTS reads instead (model
+// gpt-4o-mini-tts, voice alloy; under the gateway, its speech route with the
+// app key). When both are out, the route answers 503 and the client reads
+// with the browser voice.
+const TTS_MODEL = "gpt-4o-mini-tts";
 const speechSchema = z.object({
   text: z.string().min(1).max(4096),
 });
@@ -34,19 +37,20 @@ export async function POST(req: Request) {
   } catch (err) {
     console.error("[speech] edge-tts failed:", err);
   }
-  if (!process.env.OPENAI_API_KEY) {
+  if (!providerConfigured("openai")) {
     return NextResponse.json({ error: t("api.speechNeedsKey") }, { status: 503 });
   }
   let res: Response;
   try {
-    res = await fetch("https://api.openai.com/v1/audio/speech", {
+    res = await fetch(gatewayConfigured() ? gatewayUrl("/v1/audio/speech") : "https://api.openai.com/v1/audio/speech", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+        Authorization: `Bearer ${keyFor("openai") ?? ""}`,
         "Content-Type": "application/json",
+        ...gatewayHeaders({ userId: user?.id ?? null, feature: "voice" }),
       },
       body: JSON.stringify({
-        model: "gpt-4o-mini-tts",
+        model: gatewayModelId("openai", TTS_MODEL),
         voice: "alloy",
         input: data.text,
         response_format: "mp3",
@@ -59,10 +63,16 @@ export async function POST(req: Request) {
   if (!res.ok || !res.body) {
     const detail = await res.text().catch(() => "");
     console.error("[speech] TTS failed:", res.status, detail.slice(0, 300));
+    // Under the gateway the app cannot know whether the gateway holds an
+    // OpenAI key; a refusal from it (no key, no such model) is the same case
+    // as no key here, and 503 is what sends the client to the browser voice.
+    if (gatewayConfigured() && [400, 401, 403, 404].includes(res.status)) {
+      return NextResponse.json({ error: t("api.speechNeedsKey") }, { status: 503 });
+    }
     return NextResponse.json({ error: t("api.voiceFailedStatus", { status: res.status }) }, { status: 502 });
   }
   recordUsage(
-    { userId: user?.id ?? null, feature: "voice", model: "gpt-4o-mini-tts" },
+    { userId: user?.id ?? null, feature: "voice", model: TTS_MODEL },
     { inputTokens: tokens, outputTokens: tokens },
   );
   return new Response(res.body, { headers: { "Content-Type": "audio/mpeg" } });

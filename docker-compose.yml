@@ -9,5 +9,26 @@ services:
     volumes:
       - dissect-pgdata:/var/lib/postgresql/data
 
+  # The AI gateway (SPEC.md §2; litellm/README.md). Optional: start it with
+  # `docker compose up -d litellm` after filling litellm/.env.
+  litellm:
+    build: ./litellm
+    env_file:
+      - ./litellm/.env
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@litellm-db:5432/litellm
+    ports:
+      - "4000:4000"
+    depends_on:
+      - litellm-db
+  litellm-db:
+    image: postgres:16
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: litellm
+    volumes:
+      - litellm-pgdata:/var/lib/postgresql/data
+
 volumes:
   dissect-pgdata:
+  litellm-pgdata:

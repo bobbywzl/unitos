@@ -14,7 +14,7 @@ import type { TKey } from "@/lib/i18n/dictionaries";
 // starts it (startNudges); accounts that saw the old welcome never see nudges.
 //
 // The order: New project on the dashboard → + after the first document →
-// select a passage → the side panel → Distill and Extract → hold a note over
+// select a passage → the side panel → Extract → hold a note over
 // the note below it until the ring closes, and the two join (a ghost card
 // slides onto the next note, the ring draws, and the ghost falls in) → hold
 // the first note and drag it onto the article (a ghost card slides out to
@@ -30,7 +30,7 @@ type Step = {
   textKey: TKey;
   // Set: a later step may show while this step's target is absent — opening
   // an existing project skips the dashboard's step; a transcript has no
-  // article to select in and no Distill. Unset: the sequence waits for the
+  // article to select in and no Extract. Unset: the sequence waits for the
   // target — the + waits for the first document, the note waits for a note.
   skip?: boolean;
   // Set: the step ends when this holds (checked on every measure). Unset:

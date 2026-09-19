@@ -15,6 +15,8 @@ import { notebookAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
 import {
   DERIVATION_MODEL,
+  VISION_MODEL,
+  WEB_SEARCH_MODEL,
   MAX_OUTPUT_TOKENS,
   STREAM_ERROR_TOKEN,
 } from "@/lib/derive/config";
@@ -24,6 +26,7 @@ import { streamTextTo } from "@/lib/derive/text-stream";
 import { ensureDigest } from "@/lib/digest/ensure";
 import { corpusSystem, documentSystem } from "@/lib/digest/render";
 import { currentLang, serverT } from "@/lib/i18n/server";
+import { gatewayHeaders } from "@/lib/gateway";
 import { kimi, kimiConfigured, kimiOptions, WEB_SEARCH_TOOL, WEB_SEARCH_USD, webSearchTool } from "@/lib/kimi";
 import { resolveModelId } from "@/lib/models";
 import { addTokens, computeCostUsd, recordUsage, sdkTokens, type TokenCounts } from "@/lib/usage";
@@ -114,14 +117,11 @@ async function handle(req: Request, t: TFunc) {
   const access = await notebookAccess(data.notebookId, "editor");
   if (access instanceof NextResponse) return access;
   const user = access.user;
-  const usageMeta = {
-    userId: user.id,
-    feature: "assistant",
-    model: await resolveModelId(DERIVATION_MODEL.SYNTHESIS),
-  };
+  // The model is picked once the messages are built (below); the usage
+  // record names it then.
+  const usageMeta = { userId: user.id, feature: "assistant", model: "" };
 
   const profile = await loadProfile(data.notebookId);
-  const model = await kimi(DERIVATION_MODEL.SYNTHESIS);
   const maxOutputTokens = MAX_OUTPUT_TOKENS.SYNTHESIS;
   const effort = thinkingEffort(data.thinking);
 
@@ -216,6 +216,20 @@ async function handle(req: Request, t: TFunc) {
     });
   }
 
+  // Kimi K3 when the answer needs what GLM 5.3 lacks (SPEC.md §2): the
+  // web-search tool is Moonshot's, and GLM takes text alone, so a picture
+  // among the messages — one actually attached, this turn's or an earlier
+  // one's — sends the whole conversation to Kimi. A text file rides as
+  // text and changes nothing.
+  const pictured = messages.some(
+    (m) =>
+      Array.isArray(m.content) &&
+      m.content.some((part) => part.type === "file" && part.mediaType.startsWith("image/")),
+  );
+  const chatModelId = data.web === true ? WEB_SEARCH_MODEL : pictured ? VISION_MODEL : DERIVATION_MODEL.SYNTHESIS;
+  usageMeta.model = await resolveModelId(chatModelId);
+  const model = await kimi(chatModelId);
+
   if (data.task === "ask") {
     // Web access (SPEC.md §7): the model calls Moonshot's web-search tool
     // (lib/kimi.ts), reads the result, and answers with the pages it used as
@@ -227,6 +241,7 @@ async function handle(req: Request, t: TFunc) {
       model,
       maxOutputTokens,
       providerOptions: kimiOptions(effort),
+      headers: gatewayHeaders(usageMeta),
       allowSystemInMessages: true,
       messages,
       ...(web

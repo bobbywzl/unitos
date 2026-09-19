@@ -6,6 +6,7 @@ import { billingView } from "@/lib/billing/switch";
 import { db } from "@/lib/db";
 import { currentLang, serverT } from "@/lib/i18n/server";
 import { Logo } from "@/components/logo";
+import { BillingFrame } from "@/components/billing/frame";
 import { PrintButton } from "@/components/billing/print-button";
 import { TierChip } from "@/components/tier-mark";
 
@@ -14,7 +15,7 @@ export const dynamic = "force-dynamic";
 // The receipt page (SPEC.md §24): one payment — number, date, account, tier,
 // period, amount, status — with Stripe's PDF and invoice page, and Print.
 export default async function ReceiptPage({ params }: { params: Promise<{ id: string }> }) {
-  await billingView();
+  const view = await billingView();
   if (!authEnabled()) notFound();
   const user = await currentUser();
   if (!user) redirect("/signin");
@@ -49,34 +50,34 @@ export default async function ReceiptPage({ params }: { params: Promise<{ id: st
     },
   ];
   const link =
-    "rounded-full bg-card px-4 py-1.5 text-xs font-semibold text-sand-700 shadow-soft hover:text-clay-800";
+    "rounded-full bg-(--bl-pill) px-4 py-1.5 text-xs font-semibold text-(--bl-muted) shadow-(--bl-pill-shadow) hover:text-(--bl-link)";
 
   return (
-    <>
+    <BillingFrame back="plans" preview={view.preview}>
       <header className="mb-6 flex items-center justify-between gap-3 print:hidden">
-        <h1 className="font-display text-[34px]">{t("billing.receiptTitle")}</h1>
+        <h1 className="font-display text-[34px] text-(--bl-title)">{t("billing.receiptTitle")}</h1>
         <Link href="/billing/receipts" className={link}>
           {t("billing.receipts")}
         </Link>
       </header>
-      <section className="rounded-2xl bg-card p-6 shadow-soft print:shadow-none">
+      <section className="billing-sheet-light rounded-2xl p-6 print:shadow-none">
         <div className="mb-4 flex items-center gap-2">
           <Logo size={22} className="text-clay" />
-          <span className="font-display text-[19px]">{t("common.appName")}</span>
-          <span className="ml-auto text-xs text-sand-500">{t("billing.receiptTitle")}</span>
+          <span className="font-display text-[19px] text-(--bl-title)">{t("common.appName")}</span>
+          <span className="ml-auto text-xs text-(--bl-faint)">{t("billing.receiptTitle")}</span>
         </div>
         <dl>
           {rows.map((r) => (
             <div
               key={r.label}
-              className="flex items-baseline justify-between gap-4 border-t border-line py-2.5 text-sm"
+              className="flex items-baseline justify-between gap-4 border-t border-(--bl-line) py-2.5 text-sm"
             >
-              <dt className="text-sand-600">{r.label}</dt>
-              <dd className="text-right text-sand-800">{r.value}</dd>
+              <dt className="text-(--bl-muted)">{r.label}</dt>
+              <dd className="text-right text-(--bl-title)">{r.value}</dd>
             </div>
           ))}
         </dl>
-        <p className="mt-4 text-[11px] text-sand-500">{t("billing.receiptIssuer")}</p>
+        <p className="mt-4 text-[11px] text-(--bl-faint)">{t("billing.receiptIssuer")}</p>
       </section>
       <div className="mt-4 flex flex-wrap items-center gap-2 print:hidden">
         {purchase.invoicePdfUrl && (
@@ -91,6 +92,6 @@ export default async function ReceiptPage({ params }: { params: Promise<{ id: st
         )}
         <PrintButton />
       </div>
-    </>
+    </BillingFrame>
   );
 }

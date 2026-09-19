@@ -27,8 +27,6 @@ import type {
   Distillation,
   DistillationView,
   ExtractionView,
-  Keypoints,
-  KeypointsView,
 } from "@/lib/types";
 import type { DocumentReference } from "@/lib/parse/types";
 import { splitStreamError, splitStreamNote } from "@/lib/derive/config";
@@ -64,12 +62,11 @@ import { setSideChatOpen } from "@/lib/assistant/side-chat-open";
 import type { Person } from "@/lib/person";
 import { ThinkingChips, useThinking } from "@/components/assistant/thinking-chips";
 import { useLang, useT } from "@/components/lang-provider";
-import { clipWords, markdownPreview } from "@/lib/markdown-preview";
+import { clipWords } from "@/lib/markdown-preview";
 import { AnnotationGrip } from "@/components/outline/annotation-grip";
 import { useCardDropOpen } from "@/components/outline/use-card-drop";
 import {
   CommentIcon,
-  DistillIcon,
   ExpandIcon,
   ExtractIcon,
   LinkIcon,
@@ -103,13 +100,15 @@ import { useNoteDrop, type DroppedImage } from "@/components/use-note-drop";
 import { AuthorChip } from "@/components/collab/person-badge";
 import { ConversationView } from "@/components/reader/conversation-view";
 import { DistillPage } from "@/components/reader/distill-page";
-import { KeypointsPage } from "@/components/reader/keypoints-page";
 import { ContentsMenu } from "@/components/reader/contents-menu";
 import { PANE_HEADER } from "@/components/reader/reader-panes";
 import type { FigureRenderInfo } from "@/components/reader/figure-capture";
 import { Reader, type TranscriptVariant } from "@/components/reader/reader";
 import { openVisualization } from "@/components/reader/visualization-viewer";
-import { setQuoteDragImage, writeQuoteDrag } from "@/lib/quote-drag";
+import { setQuoteDragImage, writeQuoteDrag, type QuoteDrag } from "@/lib/quote-drag";
+import { startCardDrag } from "@/lib/card-drag";
+import { skipsDrag, watchHold } from "@/lib/hold-drag";
+import { ANNOTATION_PARAM, referenceLabel, type AnnotationReference } from "@/lib/annotation-reference";
 
 // One block's span of a selection (SPEC.md §5).
 type Segment = Omit<SourceInput, "documentId">;
@@ -630,7 +629,6 @@ export function ReaderInteractions({
   embedded,
   distillations,
   extractions,
-  keypoints,
   termsByBlock,
   linksByBlock,
   editedByBlock,
@@ -705,7 +703,7 @@ export function ReaderInteractions({
   // The pane's document select, at the head of the pane header.
   paneHeader?: React.ReactNode;
   /** The article card in the video pane (SPEC.md §11): the layer renders inside
-      another reader's scroller. No article menu, no Distill, no reading
+      another reader's scroller. No article menu, no Extract, no reading
       position, no scroll box of its own; the selection toolbar, marks, links,
       and edit mode work as on any document. */
   embedded?: boolean;
@@ -715,9 +713,6 @@ export function ReaderInteractions({
   // Stored extractions for this document, oldest first (labels M1…), spans
   // healed against the current blocks.
   extractions: ExtractionView[];
-  // The stored keypoints for this document (the reader's Distill), points
-  // healed against the current blocks; null = none yet.
-  keypoints: KeypointsView | null;
   termsByBlock: Record<string, { start: number; end: number; definition: string }[]>;
   linksByBlock: Record<
     string,
@@ -814,17 +809,6 @@ export function ReaderInteractions({
   const [distillOpen, setDistillOpen] = useState(false);
   const distillOpenRef = useRef(false);
   distillOpenRef.current = distillOpen;
-  // The distilled page (KEYPOINTS, the reader's Distill): the article's most
-  // important points. A fresh result shows from local state until the refresh
-  // delivers it as a prop; null local = nothing fresh, deleted = removed here.
-  const [keypointsOpen, setKeypointsOpen] = useState(false);
-  const keypointsOpenRef = useRef(false);
-  keypointsOpenRef.current = keypointsOpen;
-  const [keypointsRun, setKeypointsRun] = useState(false);
-  const [keypointsError, setKeypointsError] = useState<string | null>(null);
-  const [localKeypoints, setLocalKeypoints] = useState<KeypointsView | null | "deleted">(null);
-  const keypointsAbortRef = useRef<AbortController | null>(null);
-  const keypointsReturnScroll = useRef<number | null>(null);
   // The full conversation view (SPEC.md §21): which open card's conversation
   // is read whole over the pane. The card stays open under it, so the same
   // box sends from either place.
@@ -923,7 +907,6 @@ export function ReaderInteractions({
       // position, the stored one stands.
       if (
         distillOpenRef.current ||
-        keypointsOpenRef.current ||
         conversationViewRef.current ||
         positionHeld.current
       )
@@ -1146,19 +1129,48 @@ export function ReaderInteractions({
   closeLinkRef.current = closeLink;
 
   // A card over the article holds an annotation once it is persisted, and an
-  // annotation goes into a note by its grip (SPEC.md §6): the same grip the
-  // Annotations tab's rows carry, on the card the reader is reading. It shows
-  // while there is a note to drop it on — a note card of the tray, or the
-  // floating card.
+  // annotation goes into a note as an annotation reference (SPEC.md §6,
+  // lib/annotation-reference.ts) by its grip — the same grip the Annotations
+  // tab's rows carry, on the card the reader is reading — or by a hold
+  // anywhere on the card, the way a hold lifts a note card. Both need a note
+  // to drop it on — a note card of the tray, or the floating card: the grip
+  // shows while there is one, and the hold lifts while there is one.
   const dropOpen = useCardDropOpen();
-  const annotationGrip = (noteId: string | null | undefined, text: string, fallback: string) =>
-    dropOpen && noteId ? (
-      <AnnotationGrip
-        noteId={noteId}
-        label={clipWords(markdownPreview(text), 60) || fallback}
-        className="-ml-1"
-      />
-    ) : null;
+  const sourceIdOfNote = (noteId: string): string | null =>
+    Object.values(anchorHighlights)
+      .flat()
+      .find((h) => h.noteId === noteId)?.sourceId ?? null;
+  const annotationReference = (
+    noteId: string | null | undefined,
+    sourceId: string | null,
+    text: string,
+    fallback: string,
+  ): AnnotationReference | null =>
+    noteId ? { annotationId: noteId, documentId, sourceId, label: referenceLabel(text, fallback) } : null;
+  const annotationGrip = (reference: AnnotationReference | null) =>
+    dropOpen && reference ? <AnnotationGrip reference={reference} className="-ml-1" /> : null;
+  // A hold anywhere on the card, off its controls and off the header that
+  // moves the card (data-no-drag), lifts the annotation. A pull never lifts:
+  // the card's text is there to select.
+  const holdAnnotation = (reference: AnnotationReference | null) => (e: React.PointerEvent) => {
+    if (!reference || !dropOpen || e.button !== 0) return;
+    const target = e.target as Element;
+    if (skipsDrag(target) || target.closest("button, a, [data-no-drag]")) return;
+    watchHold(
+      e,
+      (at) => {
+        document.body.style.userSelect = "none";
+        startCardDrag(
+          { clientX: at.x, clientY: at.y },
+          { kind: "annotation", ids: [reference.annotationId], label: reference.label, reference },
+          () => {
+            document.body.style.userSelect = "";
+          },
+        );
+      },
+      { pull: false },
+    );
+  };
 
   function broadcastPendingLink(next: PendingLink | null) {
     setPendingLink(next);
@@ -1583,13 +1595,6 @@ export function ReaderInteractions({
     setDistillRun(null);
     setDistillError(null);
     setLocalDistillations([]);
-    setKeypointsOpen(false);
-    setKeypointsRun(false);
-    setKeypointsError(null);
-    setLocalKeypoints(null);
-    keypointsAbortRef.current?.abort();
-    keypointsAbortRef.current = null;
-    keypointsReturnScroll.current = null;
     setSpanFlash(null);
     setLocalExtractions([]);
     setExtractCard(null);
@@ -1718,6 +1723,9 @@ export function ReaderInteractions({
       cw,
     };
   }, []);
+  // Read by the drag-start handler below, a mount-time effect with no deps.
+  const captureSelectionRef = useRef(captureSelection);
+  captureSelectionRef.current = captureSelection;
 
   // Escape closes the popover and bubbles first; with nothing open it leaves
   // edit mode, saving unsaved typing on the way out.
@@ -2090,7 +2098,7 @@ export function ReaderInteractions({
     if (!container || !grown) return;
     // A page over the pane scrolls it to the top while it is open; that is not
     // where the cards under it sit, so nothing moves until it closes.
-    if (distillOpenRef.current || keypointsOpenRef.current || conversationViewRef.current) return;
+    if (distillOpenRef.current || conversationViewRef.current) return;
     const el = container.querySelector<HTMLElement>(`[data-side-card="${grown}"]`);
     if (!el || el.closest(".presence-exit")) return;
     const top = parseFloat(el.style.top) || el.offsetTop;
@@ -2232,10 +2240,13 @@ export function ReaderInteractions({
       }
       // A drag that starts on the selection carries the passage as a quote
       // (lib/quote-drag.ts): let go in a note, it lands there as a quote
-      // with the same source Add to notes gives it, pointing back here.
-      const anchor = popoverRef.current?.anchor;
+      // with the same source Add to notes gives it, pointing back here. The
+      // toolbar's anchor when it is open, else the selection read now: the
+      // drag never waits on the toolbar.
       const sel = window.getSelection();
-      if (!anchor || !e.dataTransfer || !sel || sel.isCollapsed) return;
+      if (!e.dataTransfer || !sel || sel.isCollapsed) return;
+      const anchor = popoverRef.current?.anchor ?? captureSelectionRef.current()?.anchor;
+      if (!anchor) return;
       const docId = documentIdRef.current;
       const segments = segmentsOf(anchor).map((segment) => ({ documentId: docId, ...anchorBody(segment) }));
       const text = passageText(anchor);
@@ -2281,10 +2292,30 @@ export function ReaderInteractions({
   }, []);
 
   // Source chip navigation: ?src=<sourceId> scrolls to the anchor and flashes it.
+  // With ?annotation= too (an annotation reference in a note,
+  // lib/annotation-reference.ts), the annotation opens once its mark is
+  // painted: the bubble, the on-mark card, or the card in the Annotations tab.
   const src = searchParams.get("src");
+  const annotationParam = searchParams.get(ANNOTATION_PARAM);
   useEffect(() => {
-    if (src) flashSource(src);
-  }, [src, flashSource]);
+    if (!src) return;
+    flashSource(src);
+    if (!annotationParam) return;
+    let attempts = 0;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const tryOpen = () => {
+      const el = containerRef.current?.querySelector<HTMLElement>(`[data-source-id="${src}"]`);
+      if (el) {
+        window.dispatchEvent(new CustomEvent("dissect:open-annotation", { detail: { sourceId: src } }));
+      } else if (attempts++ < 30) {
+        timer = setTimeout(tryOpen, 200);
+      }
+    };
+    tryOpen();
+    return () => {
+      if (timer) clearTimeout(timer);
+    };
+  }, [src, annotationParam, flashSource]);
 
   // Arriving through a link's other end: ?link=<id> flashes the mark here.
   const linkParam = searchParams.get("link");
@@ -2365,6 +2396,53 @@ export function ReaderInteractions({
     }
     return null;
   }, []);
+
+  // A hold on a highlight in the text lifts its passage (SPEC.md §6,
+  // lib/card-drag.ts): the pointer stays on the mark for HOLD_MS, the quote
+  // follows the pointer as a ghost, and let go on a note — a note card of
+  // the tray, or the floating card — it lands there as a quote, the mark's
+  // anchor its source. A press that moves first is a selection, as ever, and
+  // a shorter press is the click that opens the annotation. The article
+  // stops selecting while the ghost is out: the press already started a
+  // selection, and it would otherwise grow under the pointer.
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const onDown = (e: PointerEvent) => {
+      if (e.button !== 0 || !canEditRef.current || editModeRef.current) return;
+      const mark = (e.target as Element | null)?.closest<HTMLElement>("mark[data-source-id]");
+      if (!mark || !container.contains(mark)) return;
+      const sourceId = mark.dataset.sourceId;
+      if (!sourceId) return;
+      watchHold(
+        e,
+        (at) => {
+          const anchor = anchorOfSource(sourceId);
+          if (!anchor) return;
+          const docId = documentIdRef.current;
+          const segments = segmentsOf(anchor).map((segment) => ({ documentId: docId, ...anchorBody(segment) }));
+          const text = passageText(anchor);
+          if (!text.trim()) return;
+          const quote: QuoteDrag = {
+            source: segments[0],
+            ...(segments.length > 1 ? { segments } : {}),
+            text,
+          };
+          document.body.style.userSelect = "none";
+          startCardDrag(
+            { clientX: at.x, clientY: at.y },
+            { kind: "quote", ids: [], label: `❝ ${clipWords(text, 60)}`, quote },
+            () => {
+              document.body.style.userSelect = "";
+            },
+          );
+        },
+        { pull: false },
+      );
+    };
+    container.addEventListener("pointerdown", onDown);
+    return () => container.removeEventListener("pointerdown", onDown);
+  }, [anchorOfSource]);
 
   // The log card (SPEC.md §21): hovering a mark whose annotation holds a
   // conversation — an assistant conversation, or a tool's output continued
@@ -2790,8 +2868,8 @@ export function ReaderInteractions({
     return () => window.removeEventListener("dissect:extract-chip", onChip);
   }, []);
 
-  // The Distill panel in the side tray opens the extract page (a stored
-  // distillation by id, or the ask view, id null) or the distilled page. Only
+  // The Extract panel in the side tray opens the extract page (a stored
+  // distillation by id, or the ask view, id null). Only
   // the pane showing the panel's document handles it.
   useEffect(() => {
     const onOpen = (e: Event) => {
@@ -2858,7 +2936,7 @@ export function ReaderInteractions({
   }
 
   // A failure shows as a toast and lands in the error log on this document,
-  // so it stays readable under Distill and Extract after the toast fades
+  // so it stays readable under Extract after the toast fades
   // (article-errors.tsx).
   function showError(message: string) {
     showToast(message);
@@ -3367,178 +3445,10 @@ export function ReaderInteractions({
     ...distillations,
   ].filter((d) => !goneDistillations.has(d.id));
 
-  // KEYPOINTS — the reader's Distill: the article's most important points as
-  // bullets, each anchored (SPEC.md §4). One per document; Distill again
-  // overwrites. The fresh result stands until the refresh delivers it.
-  const currentKeypoints: KeypointsView | null =
-    localKeypoints === "deleted" ? null : (localKeypoints ?? keypoints);
-  const currentKeypointsRef = useRef(currentKeypoints);
-  currentKeypointsRef.current = currentKeypoints;
-
-  function openKeypointsPage() {
-    const container = containerRef.current;
-    if (container && !keypointsOpenRef.current) {
-      keypointsReturnScroll.current = container.scrollTop;
-      container.scrollTo({ top: 0 });
-    }
-    setKeypointsError(null);
-    setKeypointsOpen(true);
-  }
-
-  // Closing the page never cancels: a running Distill keeps going, with the
-  // progress bar under the Distill button showing it.
-  function closeKeypointsPage() {
-    setKeypointsOpen(false);
-    const container = containerRef.current;
-    if (container && keypointsReturnScroll.current !== null) {
-      container.scrollTo({ top: keypointsReturnScroll.current });
-    }
-    keypointsReturnScroll.current = null;
-  }
-
-  // Cancel a running Distill: the request aborts, the server persists
-  // nothing, and the stored distillation stays.
-  function cancelKeypoints() {
-    keypointsAbortRef.current?.abort();
-    keypointsAbortRef.current = null;
-    setKeypointsRun(false);
-  }
-
-  // The distillation the server stored for this document, if the run that just
-  // ran is the one that wrote it. Read after a run whose answer never arrived:
-  // the work may be done and only the response lost. Each run writes a new id,
-  // so an id the page already showed is the run before this one — a failure,
-  // not a recovery.
-  async function storedKeypoints(forDocumentId: string, wasId: string | null) {
-    try {
-      const res = await fetch(`/api/notebooks/${notebookId}/documents/${forDocumentId}`, {
-        cache: "no-store",
-      });
-      if (!res.ok) return null;
-      const data = (await res.json()) as { keypoints?: Keypoints | null };
-      const stored = data.keypoints ?? null;
-      return stored && stored.id !== wasId ? stored : null;
-    } catch {
-      return null;
-    }
-  }
-
-  async function runKeypoints() {
-    if (keypointsRun) return;
-    const runDocumentId = documentId;
-    // What the page shows now, so a recovered distillation can be told from
-    // the one this run would replace.
-    const wasId = currentKeypointsRef.current?.id ?? null;
-    const controller = new AbortController();
-    keypointsAbortRef.current = controller;
-    setKeypointsRun(true);
-    setKeypointsError(null);
-    try {
-      const res = await fetch("/api/derive", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        signal: controller.signal,
-        body: JSON.stringify({ type: "KEYPOINTS", documentId, notebookId }),
-      });
-      if (!res.ok || !res.body) {
-        const detail = (await res.json().catch(() => null)) as { error?: string } | null;
-        throw new Error(detail?.error ?? t("reader.keypointsFailedStatus", { status: res.status }));
-      }
-      // The response streams heartbeat spaces while the model works; the
-      // payload is the trailer — the keypoints JSON, or the in-band error.
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let raw = "";
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        raw += decoder.decode(value, { stream: true });
-      }
-      const { text, error } = splitStreamError(raw);
-      if (error) throw new Error(error);
-      let payload: { keypoints?: Keypoints } | null = null;
-      try {
-        payload = JSON.parse(text.trim()) as { keypoints?: Keypoints };
-      } catch {
-        payload = null;
-      }
-      // The run writes the distillation before it answers, so a response cut
-      // short — the platform ending the request, a proxy dropping the
-      // connection — can still have finished the work. Ask for what is stored
-      // before calling it a failure.
-      const keypoints = payload?.keypoints ?? (await storedKeypoints(runDocumentId, wasId));
-      if (!keypoints) throw new Error(t("reader.keypointsUnfinished"));
-      if (controller.signal.aborted || documentIdRef.current !== runDocumentId) return;
-      setLocalKeypoints({
-        ...keypoints,
-        points: keypoints.points.map((point) => ({ ...point, orphaned: false })),
-      });
-      // The page may be closed: the pill's progress bar stops, and the toast
-      // says where the result is.
-      if (!keypointsOpenRef.current) showToast(t("reader.keypointsToast"));
-      router.refresh();
-    } catch (err) {
-      // A cancelled run is not a failure: the stored distillation stays.
-      if (controller.signal.aborted) return;
-      if (documentIdRef.current !== runDocumentId) return;
-      const message = err instanceof Error ? err.message : t("reader.keypointsFailed");
-      setKeypointsError(message);
-      reportError(message, runDocumentId);
-      if (!keypointsOpenRef.current) showToast(message);
-    } finally {
-      if (keypointsAbortRef.current === controller) keypointsAbortRef.current = null;
-      if (documentIdRef.current === runDocumentId) setKeypointsRun(false);
-    }
-  }
-
-  async function deleteKeypoints() {
-    try {
-      await api(`/api/notebooks/${notebookId}/documents/${documentId}`, "PATCH", {
-        removeKeypoints: true,
-      });
-      setLocalKeypoints("deleted");
-      router.refresh();
-    } catch (err) {
-      showError(err instanceof Error ? err.message : t("reader.deleteFailed"));
-    }
-  }
-
-  // A point lands as a note: the point as content, its passage as source,
-  // PENDING like every AI note (SPEC.md §1).
-  async function addKeypointNote(point: KeypointsView["points"][number]): Promise<boolean> {
-    const section = sectionChoices[0];
-    if (!section) {
-      showToast(t("reader.addSectionFirstDot"));
-      return false;
-    }
-    try {
-      await api("/api/notes", "POST", {
-        sectionId: section.id,
-        content: point.text,
-        source: {
-          documentId,
-          blockId: point.blockId,
-          startOffset: point.start,
-          endOffset: point.end,
-          quotedText: point.quotedText,
-          prefix: point.prefix,
-          suffix: point.suffix,
-        },
-        origin: "keypoints",
-      });
-      markFreshSpan(point.blockId, point.start, point.end);
-      router.refresh();
-      return true;
-    } catch (err) {
-      showError(err instanceof Error ? err.message : t("reader.addFailed"));
-      return false;
-    }
-  }
-
-  // Text highlighted on the distilled page or the extract page (SPEC.md §6):
-  // it lands as a pending note, anchored to the point or the quote it was
-  // highlighted inside. Highlighted anywhere else on those pages it lands
-  // without an anchor — the words are the note.
+  // Text highlighted on the extract page (SPEC.md §6): it lands as a pending
+  // note, anchored to the quote it was highlighted inside. Highlighted
+  // anywhere else on the page it lands without an anchor — the words are the
+  // note.
   async function addSelectionNote(
     text: string,
     anchor: {
@@ -3585,14 +3495,6 @@ export function ReaderInteractions({
     }
   }
 
-  // Jump from the distilled page: close it, then land on the point's passage.
-  function jumpToKeypoint(point: { blockId: string; start: number; end: number; orphaned: boolean }) {
-    if (point.orphaned) return;
-    setKeypointsOpen(false);
-    keypointsReturnScroll.current = null;
-    flashSpan(point.blockId, point.start, point.end);
-  }
-
   // Oldest first, matching the stored order — the index gives the label.
   const allExtractions = [
     ...extractions,
@@ -3613,7 +3515,7 @@ export function ReaderInteractions({
   }
 
   // Closing the page never cancels: a running distillation keeps going, with
-  // the progress bar under the Distill button showing it.
+  // the progress bar under the Extract button showing it.
   function closeDistillPage() {
     setDistillOpen(false);
     const container = containerRef.current;
@@ -5626,28 +5528,12 @@ function blockFormatKind(
         </div>
       </div>
   );
-  // Distill and Extract: links into the distilled page and the extract page.
-  // While a run is going, a progress bar shows under its button. Top right of
+  // Extract: a link into the extract page. While a run is going, a progress
+  // bar shows under its button. Top right of
   // the page in Normal view; the end of the pane header in a split view. A
   // transcript has none: the video pane has its own tools (SPEC.md §11).
   const distillButton = (
         <>
-        <div className="relative">
-          <button
-            onClick={() => openKeypointsPage()}
-            data-track="keypoints"
-            className="flex items-center gap-1.5 rounded-full bg-sand-100 px-3.5 py-1.5 text-xs font-semibold text-sand-600 shadow-soft hover:text-clay-800"
-            data-tip={t("reader.keypointsButtonTitle")}
-          >
-            <DistillIcon size={13} />
-            {t("reader.keypoints")}
-          </button>
-          {keypointsRun && (
-            <span aria-hidden className="progress-track absolute right-1.5 -bottom-[7px] left-1.5">
-              <span className="progress-fill" />
-            </span>
-          )}
-        </div>
         <div className="relative">
           <button
             onClick={() => openDistillPage(distillShownId)}
@@ -5668,10 +5554,46 @@ function blockFormatKind(
         </>
   );
 
+  // The annotation each card over the article holds, as a reference
+  // (lib/annotation-reference.ts): what its grip and a hold on it drag.
+  const annotationCardReference = annotationCard
+    ? annotationReference(
+        annotationCard.noteId,
+        annotationCard.sourceId,
+        annotationCard.saved,
+        t(annotationCard.kind === "highlight" ? "reader.highlight" : "reader.comment"),
+      )
+    : null;
+  const bubbleReference =
+    bubble && !bubble.streaming
+      ? annotationReference(
+          bubble.noteId,
+          bubble.noteId ? sourceIdOfNote(bubble.noteId) : null,
+          bubble.text,
+          t(bubble.kind === "analyze" ? "reader.analysis" : bubble.kind === "visualize" ? "reader.visualization" : "reader.explanation"),
+        )
+      : null;
+  const simplifyReference =
+    simplifyCard && !simplifyCard.streaming
+      ? annotationReference(
+          simplifyCard.noteId,
+          simplifyCard.noteId ? sourceIdOfNote(simplifyCard.noteId) : null,
+          simplifyCard.text,
+          t("reader.simplified"),
+        )
+      : null;
+  const assistantReference = assistantChat
+    ? annotationReference(
+        assistantChat.noteId,
+        assistantChat.noteId ? sourceIdOfNote(assistantChat.noteId) : null,
+        assistantChat.messages.map((m) => m.content).join(" "),
+        t("reader.assistant"),
+      )
+    : null;
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       {/* A split view: the pane header — the pane's document, the article
-          menu, Distill — one row above the scroller, never over the text
+          menu, Extract — one row above the scroller, never over the text
           (SPEC.md §6). On a transcript the header carries the document only. */}
       {split && (
         <div className={PANE_HEADER}>
@@ -5703,14 +5625,14 @@ function blockFormatKind(
       // The inline restore script finds this pane's stored reading position by
       // its document (lib/reading-position.ts). An embedded layer has none.
       data-document-id={embedded ? undefined : documentId}
-      // While the distilled page or the extract page is open it scrolls itself; the article
+      // While the extract page is open it scrolls itself; the article
       // underneath must not scroll away, so the pane clips instead. An
       // embedded layer scrolls with the pane around it.
       className={
         embedded
           ? "relative min-w-0"
           : `relative min-h-0 min-w-0 flex-1 print:overflow-visible ${
-              distillOpen || keypointsOpen || conversationView
+              distillOpen || conversationView
                 ? "overflow-hidden"
                 : "overflow-y-auto"
             }`
@@ -5833,16 +5755,13 @@ function blockFormatKind(
       {annotationCard && (
         <div
           data-selection-popover
+          onPointerDown={holdAnnotation(annotationCardReference)}
           className={`pop-in absolute ${TOOL_LAYER} w-[300px] rounded-2xl bg-card p-3 shadow-float`}
           style={{ top: annotationCard.top, left: annotationCard.left }}
         >
           <div className="mb-2 flex items-center justify-between">
             <span className="flex items-center gap-1.5 text-[11px] font-bold tracking-[0.08em] text-sand-600 uppercase">
-              {annotationGrip(
-                annotationCard.noteId,
-                annotationCard.saved,
-                t(annotationCard.kind === "highlight" ? "reader.highlight" : "reader.comment"),
-              )}
+              {annotationGrip(annotationCardReference)}
               {annotationCard.kind === "highlight" ? t("reader.highlight") : t("reader.comment")}
             </span>
             <button
@@ -6371,6 +6290,7 @@ function blockFormatKind(
         <div
           data-selection-popover
           data-side-card="explain"
+          onPointerDown={holdAnnotation(bubbleReference)}
           className={`bubble-in absolute ${TOOL_LAYER} flex flex-col rounded-[20px] border border-line bg-card/90 p-4 shadow-float backdrop-blur-md`}
           style={{ left: bubble.left, top: bubble.top, width: bubble.width, maxHeight: cardMaxHeight }}
         >
@@ -6380,11 +6300,12 @@ function blockFormatKind(
               (left, top) => setBubble((b) => (b ? { ...b, left, top } : b)),
             )}
             style={{ touchAction: "none" }}
+            data-no-drag
             data-tip={t("reader.dragToMove")}
             className="mb-2 flex cursor-move items-center justify-between"
           >
             <span className="flex items-center gap-1.5 text-[11px] font-bold tracking-[0.08em] text-clay-800 uppercase">
-              {!bubble.streaming && annotationGrip(bubble.noteId, bubble.text, t("reader.explanation"))}
+              {annotationGrip(bubbleReference)}
               <ToolSymbol tool={bubble.kind} plus={toolPlus(bubble)} size={12} />
               {toolPlus(bubble)
                 ? t(TOOL_PLUS_KEY[bubble.kind])
@@ -6501,6 +6422,7 @@ function blockFormatKind(
           key={`${simplifyCard.anchor.blockId}:${simplifyCard.anchor.startOffset}`}
           data-selection-popover
           data-side-card="simplify"
+          onPointerDown={holdAnnotation(simplifyReference)}
           className={`bubble-in absolute ${TOOL_LAYER} flex flex-col rounded-[20px] border border-line bg-card/80 p-4 shadow-float backdrop-blur-md`}
           style={{
             top: simplifyCard.top,
@@ -6515,12 +6437,12 @@ function blockFormatKind(
               (left, top) => setSimplifyCard((c) => (c ? { ...c, left, top } : c)),
             )}
             style={{ touchAction: "none" }}
+            data-no-drag
             data-tip={t("reader.dragToMove")}
             className="mb-2 flex cursor-move items-center justify-between"
           >
             <span className="flex items-center gap-1.5 text-[11px] font-bold tracking-[0.08em] text-sage-800 uppercase">
-              {!simplifyCard.streaming &&
-                annotationGrip(simplifyCard.noteId, simplifyCard.text, t("reader.simplified"))}
+              {annotationGrip(simplifyReference)}
               <ToolSymbol tool="simplify" plus={toolPlus(simplifyCard)} size={12} />
               {toolPlus(simplifyCard)
                 ? t(TOOL_PLUS_KEY.simplify)
@@ -6692,6 +6614,7 @@ function blockFormatKind(
               (left, top) => setCommentCard((c) => (c ? { ...c, left, top } : c)),
             )}
             style={{ touchAction: "none" }}
+            data-no-drag
             data-tip={t("reader.dragToMove")}
             className="mb-2 flex cursor-move items-center justify-between"
           >
@@ -6786,6 +6709,7 @@ function blockFormatKind(
               (left, top) => setLinkCard((c) => (c ? { ...c, left, top } : c)),
             )}
             style={{ touchAction: "none" }}
+            data-no-drag
             data-tip={t("reader.dragToMove")}
             className="mb-2 flex cursor-move items-center justify-between"
           >
@@ -6856,6 +6780,7 @@ function blockFormatKind(
         <div
           data-selection-popover
           data-side-card="assistant"
+          onPointerDown={holdAnnotation(assistantReference)}
           className={`bubble-in absolute ${TOOL_LAYER} flex resize flex-col overflow-hidden rounded-[20px] border border-line bg-card/95 shadow-float backdrop-blur-md`}
           style={{
             left: assistantChat.left,
@@ -6872,15 +6797,12 @@ function blockFormatKind(
               (left, top) => setAssistantChat((c) => (c ? { ...c, left, top } : c)),
             )}
             style={{ touchAction: "none" }}
+            data-no-drag
             data-tip={t("reader.dragToMove")}
             className="flex cursor-move items-center justify-between px-4 pt-3 pb-1"
           >
             <span className="flex items-center gap-1.5 text-[11px] font-bold tracking-[0.08em] text-clay-800 uppercase">
-              {annotationGrip(
-                assistantChat.noteId,
-                assistantChat.messages.map((m) => m.content).join(" "),
-                t("reader.assistant"),
-              )}
+              {annotationGrip(assistantReference)}
               <SparkleIcon size={12} />
               {t("reader.assistant")}
             </span>
@@ -7158,29 +7080,6 @@ function blockFormatKind(
       )}
       </Presence>
 
-      <Presence show={keypointsOpen} exit="fade">
-      {keypointsOpen && (
-        <KeypointsPage
-          title={title}
-          keypoints={currentKeypoints}
-          running={keypointsRun}
-          error={keypointsError}
-          canAddNotes={sectionChoices.length > 0}
-          addNoteHint={
-            sectionChoices.length === 0
-              ? t("reader.addSectionFirst")
-              : t("reader.addPendingNote", { section: sectionChoices[0].label })
-          }
-          onRun={() => void runKeypoints()}
-          onCancel={cancelKeypoints}
-          onClose={closeKeypointsPage}
-          onDelete={() => void deleteKeypoints()}
-          onJump={jumpToKeypoint}
-          onAddNote={addKeypointNote}
-          onAddSelection={(text, point) => addSelectionNote(text, point)}
-        />
-      )}
-      </Presence>
     </div>
     </div>
   );
