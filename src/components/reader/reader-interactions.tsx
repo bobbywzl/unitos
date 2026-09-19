@@ -62,7 +62,7 @@ import { setSideChatOpen } from "@/lib/assistant/side-chat-open";
 import type { Person } from "@/lib/person";
 import { ThinkingChips, useThinking } from "@/components/assistant/thinking-chips";
 import { useLang, useT } from "@/components/lang-provider";
-import { clipWords, markdownPreview } from "@/lib/markdown-preview";
+import { clipWords } from "@/lib/markdown-preview";
 import { AnnotationGrip } from "@/components/outline/annotation-grip";
 import { useCardDropOpen } from "@/components/outline/use-card-drop";
 import {
@@ -105,7 +105,10 @@ import { PANE_HEADER } from "@/components/reader/reader-panes";
 import type { FigureRenderInfo } from "@/components/reader/figure-capture";
 import { Reader, type TranscriptVariant } from "@/components/reader/reader";
 import { openVisualization } from "@/components/reader/visualization-viewer";
-import { setQuoteDragImage, writeQuoteDrag } from "@/lib/quote-drag";
+import { setQuoteDragImage, writeQuoteDrag, type QuoteDrag } from "@/lib/quote-drag";
+import { startCardDrag } from "@/lib/card-drag";
+import { skipsDrag, watchHold } from "@/lib/hold-drag";
+import { ANNOTATION_PARAM, referenceLabel, type AnnotationReference } from "@/lib/annotation-reference";
 
 // One block's span of a selection (SPEC.md §5).
 type Segment = Omit<SourceInput, "documentId">;
@@ -1126,19 +1129,48 @@ export function ReaderInteractions({
   closeLinkRef.current = closeLink;
 
   // A card over the article holds an annotation once it is persisted, and an
-  // annotation goes into a note by its grip (SPEC.md §6): the same grip the
-  // Annotations tab's rows carry, on the card the reader is reading. It shows
-  // while there is a note to drop it on — a note card of the tray, or the
-  // floating card.
+  // annotation goes into a note as an annotation reference (SPEC.md §6,
+  // lib/annotation-reference.ts) by its grip — the same grip the Annotations
+  // tab's rows carry, on the card the reader is reading — or by a hold
+  // anywhere on the card, the way a hold lifts a note card. Both need a note
+  // to drop it on — a note card of the tray, or the floating card: the grip
+  // shows while there is one, and the hold lifts while there is one.
   const dropOpen = useCardDropOpen();
-  const annotationGrip = (noteId: string | null | undefined, text: string, fallback: string) =>
-    dropOpen && noteId ? (
-      <AnnotationGrip
-        noteId={noteId}
-        label={clipWords(markdownPreview(text), 60) || fallback}
-        className="-ml-1"
-      />
-    ) : null;
+  const sourceIdOfNote = (noteId: string): string | null =>
+    Object.values(anchorHighlights)
+      .flat()
+      .find((h) => h.noteId === noteId)?.sourceId ?? null;
+  const annotationReference = (
+    noteId: string | null | undefined,
+    sourceId: string | null,
+    text: string,
+    fallback: string,
+  ): AnnotationReference | null =>
+    noteId ? { annotationId: noteId, documentId, sourceId, label: referenceLabel(text, fallback) } : null;
+  const annotationGrip = (reference: AnnotationReference | null) =>
+    dropOpen && reference ? <AnnotationGrip reference={reference} className="-ml-1" /> : null;
+  // A hold anywhere on the card, off its controls and off the header that
+  // moves the card (data-no-drag), lifts the annotation. A pull never lifts:
+  // the card's text is there to select.
+  const holdAnnotation = (reference: AnnotationReference | null) => (e: React.PointerEvent) => {
+    if (!reference || !dropOpen || e.button !== 0) return;
+    const target = e.target as Element;
+    if (skipsDrag(target) || target.closest("button, a, [data-no-drag]")) return;
+    watchHold(
+      e,
+      (at) => {
+        document.body.style.userSelect = "none";
+        startCardDrag(
+          { clientX: at.x, clientY: at.y },
+          { kind: "annotation", ids: [reference.annotationId], label: reference.label, reference },
+          () => {
+            document.body.style.userSelect = "";
+          },
+        );
+      },
+      { pull: false },
+    );
+  };
 
   function broadcastPendingLink(next: PendingLink | null) {
     setPendingLink(next);
@@ -1691,6 +1723,9 @@ export function ReaderInteractions({
       cw,
     };
   }, []);
+  // Read by the drag-start handler below, a mount-time effect with no deps.
+  const captureSelectionRef = useRef(captureSelection);
+  captureSelectionRef.current = captureSelection;
 
   // Escape closes the popover and bubbles first; with nothing open it leaves
   // edit mode, saving unsaved typing on the way out.
@@ -2205,10 +2240,13 @@ export function ReaderInteractions({
       }
       // A drag that starts on the selection carries the passage as a quote
       // (lib/quote-drag.ts): let go in a note, it lands there as a quote
-      // with the same source Add to notes gives it, pointing back here.
-      const anchor = popoverRef.current?.anchor;
+      // with the same source Add to notes gives it, pointing back here. The
+      // toolbar's anchor when it is open, else the selection read now: the
+      // drag never waits on the toolbar.
       const sel = window.getSelection();
-      if (!anchor || !e.dataTransfer || !sel || sel.isCollapsed) return;
+      if (!e.dataTransfer || !sel || sel.isCollapsed) return;
+      const anchor = popoverRef.current?.anchor ?? captureSelectionRef.current()?.anchor;
+      if (!anchor) return;
       const docId = documentIdRef.current;
       const segments = segmentsOf(anchor).map((segment) => ({ documentId: docId, ...anchorBody(segment) }));
       const text = passageText(anchor);
@@ -2254,10 +2292,30 @@ export function ReaderInteractions({
   }, []);
 
   // Source chip navigation: ?src=<sourceId> scrolls to the anchor and flashes it.
+  // With ?annotation= too (an annotation reference in a note,
+  // lib/annotation-reference.ts), the annotation opens once its mark is
+  // painted: the bubble, the on-mark card, or the card in the Annotations tab.
   const src = searchParams.get("src");
+  const annotationParam = searchParams.get(ANNOTATION_PARAM);
   useEffect(() => {
-    if (src) flashSource(src);
-  }, [src, flashSource]);
+    if (!src) return;
+    flashSource(src);
+    if (!annotationParam) return;
+    let attempts = 0;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const tryOpen = () => {
+      const el = containerRef.current?.querySelector<HTMLElement>(`[data-source-id="${src}"]`);
+      if (el) {
+        window.dispatchEvent(new CustomEvent("dissect:open-annotation", { detail: { sourceId: src } }));
+      } else if (attempts++ < 30) {
+        timer = setTimeout(tryOpen, 200);
+      }
+    };
+    tryOpen();
+    return () => {
+      if (timer) clearTimeout(timer);
+    };
+  }, [src, annotationParam, flashSource]);
 
   // Arriving through a link's other end: ?link=<id> flashes the mark here.
   const linkParam = searchParams.get("link");
@@ -2338,6 +2396,53 @@ export function ReaderInteractions({
     }
     return null;
   }, []);
+
+  // A hold on a highlight in the text lifts its passage (SPEC.md §6,
+  // lib/card-drag.ts): the pointer stays on the mark for HOLD_MS, the quote
+  // follows the pointer as a ghost, and let go on a note — a note card of
+  // the tray, or the floating card — it lands there as a quote, the mark's
+  // anchor its source. A press that moves first is a selection, as ever, and
+  // a shorter press is the click that opens the annotation. The article
+  // stops selecting while the ghost is out: the press already started a
+  // selection, and it would otherwise grow under the pointer.
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const onDown = (e: PointerEvent) => {
+      if (e.button !== 0 || !canEditRef.current || editModeRef.current) return;
+      const mark = (e.target as Element | null)?.closest<HTMLElement>("mark[data-source-id]");
+      if (!mark || !container.contains(mark)) return;
+      const sourceId = mark.dataset.sourceId;
+      if (!sourceId) return;
+      watchHold(
+        e,
+        (at) => {
+          const anchor = anchorOfSource(sourceId);
+          if (!anchor) return;
+          const docId = documentIdRef.current;
+          const segments = segmentsOf(anchor).map((segment) => ({ documentId: docId, ...anchorBody(segment) }));
+          const text = passageText(anchor);
+          if (!text.trim()) return;
+          const quote: QuoteDrag = {
+            source: segments[0],
+            ...(segments.length > 1 ? { segments } : {}),
+            text,
+          };
+          document.body.style.userSelect = "none";
+          startCardDrag(
+            { clientX: at.x, clientY: at.y },
+            { kind: "quote", ids: [], label: `❝ ${clipWords(text, 60)}`, quote },
+            () => {
+              document.body.style.userSelect = "";
+            },
+          );
+        },
+        { pull: false },
+      );
+    };
+    container.addEventListener("pointerdown", onDown);
+    return () => container.removeEventListener("pointerdown", onDown);
+  }, [anchorOfSource]);
 
   // The log card (SPEC.md §21): hovering a mark whose annotation holds a
   // conversation — an assistant conversation, or a tool's output continued
@@ -5449,6 +5554,42 @@ function blockFormatKind(
         </>
   );
 
+  // The annotation each card over the article holds, as a reference
+  // (lib/annotation-reference.ts): what its grip and a hold on it drag.
+  const annotationCardReference = annotationCard
+    ? annotationReference(
+        annotationCard.noteId,
+        annotationCard.sourceId,
+        annotationCard.saved,
+        t(annotationCard.kind === "highlight" ? "reader.highlight" : "reader.comment"),
+      )
+    : null;
+  const bubbleReference =
+    bubble && !bubble.streaming
+      ? annotationReference(
+          bubble.noteId,
+          bubble.noteId ? sourceIdOfNote(bubble.noteId) : null,
+          bubble.text,
+          t(bubble.kind === "analyze" ? "reader.analysis" : bubble.kind === "visualize" ? "reader.visualization" : "reader.explanation"),
+        )
+      : null;
+  const simplifyReference =
+    simplifyCard && !simplifyCard.streaming
+      ? annotationReference(
+          simplifyCard.noteId,
+          simplifyCard.noteId ? sourceIdOfNote(simplifyCard.noteId) : null,
+          simplifyCard.text,
+          t("reader.simplified"),
+        )
+      : null;
+  const assistantReference = assistantChat
+    ? annotationReference(
+        assistantChat.noteId,
+        assistantChat.noteId ? sourceIdOfNote(assistantChat.noteId) : null,
+        assistantChat.messages.map((m) => m.content).join(" "),
+        t("reader.assistant"),
+      )
+    : null;
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       {/* A split view: the pane header — the pane's document, the article
@@ -5614,16 +5755,13 @@ function blockFormatKind(
       {annotationCard && (
         <div
           data-selection-popover
+          onPointerDown={holdAnnotation(annotationCardReference)}
           className={`pop-in absolute ${TOOL_LAYER} w-[300px] rounded-2xl bg-card p-3 shadow-float`}
           style={{ top: annotationCard.top, left: annotationCard.left }}
         >
           <div className="mb-2 flex items-center justify-between">
             <span className="flex items-center gap-1.5 text-[11px] font-bold tracking-[0.08em] text-sand-600 uppercase">
-              {annotationGrip(
-                annotationCard.noteId,
-                annotationCard.saved,
-                t(annotationCard.kind === "highlight" ? "reader.highlight" : "reader.comment"),
-              )}
+              {annotationGrip(annotationCardReference)}
               {annotationCard.kind === "highlight" ? t("reader.highlight") : t("reader.comment")}
             </span>
             <button
@@ -6152,6 +6290,7 @@ function blockFormatKind(
         <div
           data-selection-popover
           data-side-card="explain"
+          onPointerDown={holdAnnotation(bubbleReference)}
           className={`bubble-in absolute ${TOOL_LAYER} flex flex-col rounded-[20px] border border-line bg-card/90 p-4 shadow-float backdrop-blur-md`}
           style={{ left: bubble.left, top: bubble.top, width: bubble.width, maxHeight: cardMaxHeight }}
         >
@@ -6161,11 +6300,12 @@ function blockFormatKind(
               (left, top) => setBubble((b) => (b ? { ...b, left, top } : b)),
             )}
             style={{ touchAction: "none" }}
+            data-no-drag
             data-tip={t("reader.dragToMove")}
             className="mb-2 flex cursor-move items-center justify-between"
           >
             <span className="flex items-center gap-1.5 text-[11px] font-bold tracking-[0.08em] text-clay-800 uppercase">
-              {!bubble.streaming && annotationGrip(bubble.noteId, bubble.text, t("reader.explanation"))}
+              {annotationGrip(bubbleReference)}
               <ToolSymbol tool={bubble.kind} plus={toolPlus(bubble)} size={12} />
               {toolPlus(bubble)
                 ? t(TOOL_PLUS_KEY[bubble.kind])
@@ -6282,6 +6422,7 @@ function blockFormatKind(
           key={`${simplifyCard.anchor.blockId}:${simplifyCard.anchor.startOffset}`}
           data-selection-popover
           data-side-card="simplify"
+          onPointerDown={holdAnnotation(simplifyReference)}
           className={`bubble-in absolute ${TOOL_LAYER} flex flex-col rounded-[20px] border border-line bg-card/80 p-4 shadow-float backdrop-blur-md`}
           style={{
             top: simplifyCard.top,
@@ -6296,12 +6437,12 @@ function blockFormatKind(
               (left, top) => setSimplifyCard((c) => (c ? { ...c, left, top } : c)),
             )}
             style={{ touchAction: "none" }}
+            data-no-drag
             data-tip={t("reader.dragToMove")}
             className="mb-2 flex cursor-move items-center justify-between"
           >
             <span className="flex items-center gap-1.5 text-[11px] font-bold tracking-[0.08em] text-sage-800 uppercase">
-              {!simplifyCard.streaming &&
-                annotationGrip(simplifyCard.noteId, simplifyCard.text, t("reader.simplified"))}
+              {annotationGrip(simplifyReference)}
               <ToolSymbol tool="simplify" plus={toolPlus(simplifyCard)} size={12} />
               {toolPlus(simplifyCard)
                 ? t(TOOL_PLUS_KEY.simplify)
@@ -6473,6 +6614,7 @@ function blockFormatKind(
               (left, top) => setCommentCard((c) => (c ? { ...c, left, top } : c)),
             )}
             style={{ touchAction: "none" }}
+            data-no-drag
             data-tip={t("reader.dragToMove")}
             className="mb-2 flex cursor-move items-center justify-between"
           >
@@ -6567,6 +6709,7 @@ function blockFormatKind(
               (left, top) => setLinkCard((c) => (c ? { ...c, left, top } : c)),
             )}
             style={{ touchAction: "none" }}
+            data-no-drag
             data-tip={t("reader.dragToMove")}
             className="mb-2 flex cursor-move items-center justify-between"
           >
@@ -6637,6 +6780,7 @@ function blockFormatKind(
         <div
           data-selection-popover
           data-side-card="assistant"
+          onPointerDown={holdAnnotation(assistantReference)}
           className={`bubble-in absolute ${TOOL_LAYER} flex resize flex-col overflow-hidden rounded-[20px] border border-line bg-card/95 shadow-float backdrop-blur-md`}
           style={{
             left: assistantChat.left,
@@ -6653,15 +6797,12 @@ function blockFormatKind(
               (left, top) => setAssistantChat((c) => (c ? { ...c, left, top } : c)),
             )}
             style={{ touchAction: "none" }}
+            data-no-drag
             data-tip={t("reader.dragToMove")}
             className="flex cursor-move items-center justify-between px-4 pt-3 pb-1"
           >
             <span className="flex items-center gap-1.5 text-[11px] font-bold tracking-[0.08em] text-clay-800 uppercase">
-              {annotationGrip(
-                assistantChat.noteId,
-                assistantChat.messages.map((m) => m.content).join(" "),
-                t("reader.assistant"),
-              )}
+              {annotationGrip(assistantReference)}
               <SparkleIcon size={12} />
               {t("reader.assistant")}
             </span>

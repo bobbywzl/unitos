@@ -3,25 +3,30 @@ import { notFound, redirect } from "next/navigation";
 import { authEnabled, currentUser } from "@/lib/auth";
 import { intervalOfPriceId, stripeConfigured, tierOfPriceId } from "@/lib/billing/config";
 import { applyCheckoutSession } from "@/lib/billing/events";
+import { formatDate, formatMoney } from "@/lib/billing/format";
 import { planOf } from "@/lib/billing/plans";
 import { stripe, type Stripe } from "@/lib/billing/stripe";
 import { billingView } from "@/lib/billing/switch";
-import { serverT } from "@/lib/i18n/server";
-import { PlanCard, planButton } from "@/components/billing/plan-card";
+import { currentLang, serverT } from "@/lib/i18n/server";
+import { BillingFrame, emphasize } from "@/components/billing/frame";
+import { planButton } from "@/components/billing/plan-button";
+import { TierMark } from "@/components/tier-mark";
 
 export const dynamic = "force-dynamic";
 
 // The confirmation page (SPEC.md §24): Stripe returns here with the checkout
-// session id. The session must belong to the signed-in account. Paid, the
-// purchase is recorded here at once (the same idempotent path as the
-// webhook), so the tier is on before the webhook lands; the receipt link
-// goes to the row. Not yet paid (a bank transfer settling), the page says so.
+// session id. The session must belong to the signed-in account. Paid, or
+// started free on the trial, the purchase is recorded here at once (the
+// same idempotent path as the webhook), so the tier is on before the
+// webhook lands. The page says what was charged and when the next payment
+// lands, then Go to dashboard. Not yet paid (a bank transfer settling), the
+// page says so. Unitos Ultra's confirmation is a night page.
 export default async function ConfirmedPage({
   searchParams,
 }: {
   searchParams: Promise<{ session?: string }>;
 }) {
-  await billingView();
+  const view = await billingView();
   if (!authEnabled()) notFound();
   const user = await currentUser();
   if (!user) redirect("/signin");
@@ -29,6 +34,7 @@ export default async function ConfirmedPage({
   if (!sessionId) redirect("/billing");
   if (!stripeConfigured()) notFound();
   const t = await serverT();
+  const lang = await currentLang();
 
   let session: Stripe.Checkout.Session;
   try {
@@ -44,35 +50,75 @@ export default async function ConfirmedPage({
   const priceId = typeof linePrice === "string" ? linePrice : (linePrice?.id ?? "");
   const tier = named === "ULTRA" || named === "PREMIUM" ? named : tierOfPriceId(priceId);
   if (!tier) notFound();
+  const ultra = tier === "ULTRA";
   const interval = intervalOfPriceId(priceId) ?? "month";
-  const label = t(tier === "ULTRA" ? "common.tierUltra" : "common.tierPremium");
-  const paid = session.payment_status === "paid";
+  const label = t(ultra ? "common.tierUltra" : "common.tierPremium");
+  // On the trial the session owes nothing today: Stripe reports
+  // no_payment_required and the subscription is trialing.
+  const paid = session.payment_status === "paid" || session.payment_status === "no_payment_required";
   const { purchaseId } = paid ? await applyCheckoutSession(session) : { purchaseId: null };
   const plan = await planOf(tier, interval);
+  const sub = typeof session.subscription === "string" ? null : session.subscription;
+  const trialEnd = sub?.status === "trialing" && sub.trial_end ? new Date(sub.trial_end * 1000) : null;
+  const periodEnd = sub ? new Date(Math.max(0, ...sub.items.data.map((i) => i.current_period_end)) * 1000) : null;
+  const price = plan.amount === null ? "" : formatMoney(plan.amount, plan.currency, lang);
+  const note = !price
+    ? ""
+    : trialEnd
+      ? t("billing.confirmedNoteTrial", { price, date: formatDate(trialEnd, lang) })
+      : periodEnd
+        ? t("billing.confirmedNoteCharged", { price, date: formatDate(periodEnd, lang) })
+        : "";
 
+  const spark = ultra
+    ? "billing-spark absolute rounded-full bg-[#fff7e0] shadow-[0_0_12px_3px_#f3e6c4]"
+    : "billing-spark absolute rounded-full bg-white shadow-[0_0_10px_2px_#fff]";
   return (
-    <>
-      <header className="mb-6">
-        <h1 className="font-display text-[34px]">
+    <BillingFrame night={ultra} back="plans" preview={view.preview}>
+      <section className="billing-rise relative pt-[4vh] text-center">
+        <div className={`billing-pop relative mb-2 inline-block ${ultra ? "size-[160px]" : "size-[150px]"}`}>
+          <div
+            className="billing-float"
+            style={{
+              filter: ultra
+                ? "drop-shadow(0 18px 34px rgba(214,178,106,0.25))"
+                : "drop-shadow(0 18px 30px rgba(120,90,50,0.25))",
+            }}
+          >
+            <TierMark state={ultra ? "ultra" : "premium"} size={ultra ? 160 : 150} />
+          </div>
+          <span aria-hidden className={`${spark} top-6 left-1.5 size-2.5`} />
+          <span aria-hidden className={`${spark} top-[60px] right-2.5 size-[7px] [animation-delay:0.8s]`} />
+          <span aria-hidden className={`${spark} bottom-1.5 left-11 size-1.5 [animation-delay:1.5s]`} />
+        </div>
+        <h1 className="billing-gold-big mb-3.5 font-display text-[clamp(54px,10vw,128px)] leading-none tracking-[-0.03em] text-balance">
           {paid ? t("billing.confirmedTitle") : t("billing.confirmedProcessing")}
         </h1>
-        <p className="mt-2 text-[15px] leading-relaxed text-sand-800">
-          {paid ? t("billing.confirmedBody", { tier: label }) : t("billing.confirmedProcessingBody")}
+        <p className="mx-auto mb-1.5 max-w-[48ch] font-display text-[clamp(20px,2.4vw,28px)] leading-tight text-(--bl-title) text-pretty">
+          {paid ? t("billing.confirmedThanks") : t("billing.confirmedProcessingBody")}
         </p>
-      </header>
-      <div className="grid gap-5 sm:grid-cols-2">
-        <PlanCard tier={tier} price={plan}>
-          <Link href="/" className={planButton}>
-            {t("billing.confirmedOpenApp")}
+        {paid && (
+          <p className="mx-auto mb-2 max-w-[46ch] text-base leading-relaxed text-(--bl-muted) text-pretty">
+            {emphasize(t("billing.confirmedBody", { tier: label }), label, "font-bold text-(--bl-title)")}
+          </p>
+        )}
+        {paid && note && <p className="mx-auto mb-[30px] max-w-[46ch] text-[13px] leading-relaxed text-(--bl-faint)">{note}</p>}
+        <div className="mt-6 flex flex-wrap justify-center gap-2.5">
+          <Link href="/" className={`${planButton(tier)} px-9 py-4 text-base`}>
+            {t("billing.confirmedDashboard")}
           </Link>
-          <Link
-            href={purchaseId ? `/billing/receipts/${purchaseId}` : "/billing/receipts"}
-            className="rounded-full bg-card px-4 py-1.5 text-xs font-semibold text-sand-700 shadow-soft hover:text-clay-800"
-          >
-            {t("billing.confirmedReceipt")}
+        </div>
+        <p className="mt-10 flex flex-wrap justify-center gap-4 text-xs text-(--bl-faint)">
+          {purchaseId && (
+            <Link href={`/billing/receipts/${purchaseId}`} className="underline hover:text-(--bl-link)">
+              {t("billing.confirmedReceipt")}
+            </Link>
+          )}
+          <Link href="/billing" className="underline hover:text-(--bl-link)">
+            {t("billing.plans")}
           </Link>
-        </PlanCard>
-      </div>
-    </>
+        </p>
+      </section>
+    </BillingFrame>
   );
 }

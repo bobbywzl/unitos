@@ -7,6 +7,7 @@
 //   accepted 已接受 · extract/extraction(问题→引文; code DISTILL) 提取 ·
 //   quote 引文 · caption 说明 · Match-it/match(短语→片段; code EXTRACT) 匹配 ·
 //   summary 摘要 · digest 汇编 · annotation 批注 ·
+//   annotation reference(笔记里指向批注的行) 批注链接 ·
 //   highlight 高亮 · comment 评论 · explain 解释 · simplify 简化 ·
 //   side chat(从回答引用分出的对话) 支线对话 ·
 //   comment on an answer(对回答引用的评论) 评论 ·

@@ -9,7 +9,7 @@ export function PrintButton() {
     <button
       type="button"
       onClick={() => window.print()}
-      className="rounded-full bg-card px-4 py-1.5 text-xs font-semibold text-sand-700 shadow-soft hover:text-clay-800"
+      className="rounded-full bg-(--bl-pill) px-4 py-1.5 text-xs font-semibold text-(--bl-muted) shadow-(--bl-pill-shadow) hover:text-(--bl-link)"
     >
       {t("billing.receiptPrint")}
     </button>

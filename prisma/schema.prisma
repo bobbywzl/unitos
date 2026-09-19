@@ -379,7 +379,10 @@ model Source {
   blockId     String
   startOffset Int
   endOffset   Int
-  quotedText  String
+  quotedText  String // the words as quoted when the source was made; a block edit never changes it (SPEC.md §5)
+  // The words the anchor covers now, once a block edit changed them; null
+  // while they are still the quote. The ladder re-finds by these.
+  anchoredText String?
   prefix      String // 32 chars before selection
   suffix      String // 32 chars after selection
   orphaned    Boolean  @default(false)

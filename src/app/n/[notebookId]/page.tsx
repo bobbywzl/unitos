@@ -1,5 +1,6 @@
 import { Logo } from "@/components/logo";
 import { notFound, redirect } from "next/navigation";
+import { annotationKind } from "@/lib/annotations/kind";
 import { authEnabled, currentUser } from "@/lib/auth";
 import { browserConfigured } from "@/lib/browser";
 import { driveConfig } from "@/lib/drive/config";
@@ -343,23 +344,9 @@ export default async function NotebookPage(props: {
       .map((n): AnnotationItem | null => {
         const source = n.sources.find((src) => src.documentId === document.id);
         if (!source) return null;
-        const kind =
-          n.derivationType === "EXPLAIN"
-            ? ("explain" as const)
-            : n.derivationType === "SIMPLIFY"
-              ? ("simplify" as const)
-              : n.derivationType === "ANALYZE"
-                ? ("analyze" as const)
-                : n.derivationType === "VISUALIZE"
-                  ? ("visualize" as const)
-                  : n.derivationType === "SYNTHESIS"
-                    ? ("assistant" as const)
-                    : n.color
-                      ? ("highlight" as const)
-                      : ("comment" as const);
         return {
           id: n.id,
-          kind,
+          kind: annotationKind(n),
           content: n.content,
           gist: n.gist,
           color: n.color,

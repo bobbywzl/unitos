@@ -11,6 +11,7 @@ import { CollabProvider, type CollabState } from "@/components/collab/collab-con
 import { SaveIndicator } from "@/components/save-indicator";
 import { SyncRefresh } from "@/components/collab/sync-refresh";
 import { ExportMenu } from "@/components/export-menu";
+import { NotesPageFrame } from "@/components/outline/annotation-side";
 import { Outline } from "@/components/outline/outline";
 import { billingLinks } from "@/lib/billing/switch";
 import { accountTier } from "@/lib/tiers";
@@ -116,7 +117,7 @@ export default async function NotesPage(props: { params: Promise<{ notebookId: s
   };
 
   return (
-    <main className="mx-auto w-full max-w-[760px] px-6 pt-[26px] pb-24">
+    <NotesPageFrame>
       <AccountGuard userId={user.id} enabled={authEnabled()} />
       <header className="mb-[34px] flex items-center gap-2">
         <Link
@@ -143,6 +144,6 @@ export default async function NotesPage(props: { params: Promise<{ notebookId: s
         <SyncRefresh notebookId={notebook.id} rev={notebook.rev} />
         <Outline notebook={view} />
       </CollabProvider>
-    </main>
+    </NotesPageFrame>
   );
 }
