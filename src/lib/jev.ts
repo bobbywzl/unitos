@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { gatewayConfigured, gatewayHeaders, gatewayUrl, keyFor, providerKey } from "@/lib/gateway";
 import { recordUsage, type UsageMeta } from "@/lib/usage";
 
 // Jev (TypeSafe AI's System One model): typed decisions, never text. One
@@ -11,23 +12,48 @@ import { recordUsage, type UsageMeta } from "@/lib/usage";
 // literally, counts badly, and loses accuracy as the state fills with
 // text the question does not need — so a caller sends the smallest state
 // that decides the question and keeps every threshold in code.
-// `TYPESAFE_API_KEY` turns it on; unset, jevEnabled() is false and every
-// caller runs as it did without it. `TYPESAFE_BASE_URL` is the API root
-// the call posts `/systemone` under: TypeSafe's own (the default), the QA
-// mock (scripts/qa/mock-jev.mjs), or OpenRouter (`https://openrouter.ai/api/v1`
-// with an OpenRouter key and `TYPESAFE_MODEL=typesafe/jev-1.13`; OpenRouter
-// serves the same request and answer shape and adds `usage.cost`).
-// `TYPESAFE_MODEL` is the model id. Every call records its tokens, and the
-// cost when the gateway states it, under the caller's usage row.
+// Under the AI gateway (lib/gateway.ts) the call goes to the gateway's
+// `/typesafe/systemone` pass-through with the app key, and TYPESAFE_API_KEY
+// lives on the gateway host with the other provider keys; the pass-through's
+// target in litellm/config.yaml is the API root that serves Jev — OpenRouter's
+// `https://openrouter.ai/api/v1` (Jev at the same request and answer shape,
+// `usage.cost` added) or TypeSafe's own. Without the gateway,
+// `TYPESAFE_API_KEY` on the app's host turns Jev on and `TYPESAFE_BASE_URL`
+// is that root (the default is TypeSafe's; the QA mock,
+// scripts/qa/mock-jev.mjs, is another). Either way `TYPESAFE_MODEL` on the
+// app's host is the model id the call names: `jev-latest` at TypeSafe,
+// `~typesafe/jev-latest` or `typesafe/jev-1.13` at OpenRouter. With neither
+// key, jevEnabled() is false and every caller runs as it did without Jev.
+// A gateway that has no Jev route answers 401 or 404: the client then
+// stands down for GATEWAY_RETRY_MS, so no caller waits on it twice.
+// Every call records its tokens, and the cost when the gateway states it,
+// under the caller's usage row.
 
 export const JEV_MODEL = process.env.TYPESAFE_MODEL || "jev-latest";
 const BASE_URL = (process.env.TYPESAFE_BASE_URL || "https://api.typesafe.ai/v1").replace(/\/+$/, "");
 const TIMEOUT_MS = 12_000;
 const RETRIES = 2; // on 429, 529, 5xx, and a dropped connection
 const RETRY_STATUSES = new Set([408, 429, 500, 502, 503, 504, 529]);
+const GATEWAY_RETRY_MS = 5 * 60_000; // after a 401 or 404 from the gateway: no Jev route there
 
+// When the gateway last said it has no Jev route (401 or 404), or 0.
+let gatewayRefusedAt = 0;
+
+/** Jev is on: the app's own key, or the gateway (whose Jev route may still
+    turn out missing — then the client stands down for a while). */
 export function jevEnabled(): boolean {
-  return Boolean(process.env.TYPESAFE_API_KEY);
+  if (providerKey("typesafe")) return true;
+  if (!gatewayConfigured()) return false;
+  return Date.now() - gatewayRefusedAt > GATEWAY_RETRY_MS;
+}
+
+/** Where the call goes and what it sends: the gateway's pass-through with
+    the app key, or the provider's root with the provider's key. */
+function route(): { url: string; key: string | undefined; gateway: boolean } {
+  if (gatewayConfigured() && !providerKey("typesafe")) {
+    return { url: gatewayUrl("/typesafe/systemone"), key: keyFor("typesafe"), gateway: true };
+  }
+  return { url: `${BASE_URL}/systemone`, key: providerKey("typesafe"), gateway: false };
 }
 
 export type JevJson = string | number | boolean | null | JevJson[] | { [key: string]: JevJson };
@@ -72,8 +98,9 @@ export async function systemOne(input: {
   signal?: AbortSignal;
   label?: string;
 }): Promise<JevResult> {
-  const key = process.env.TYPESAFE_API_KEY;
   const label = input.label ?? "jev";
+  if (!jevEnabled()) return { ok: false, error: "Jev is not configured" };
+  const { url, key, gateway } = route();
   if (!key) return { ok: false, error: "TYPESAFE_API_KEY is not set" };
   if (Object.keys(input.questions).length === 0) return { ok: true, answers: {} };
   const body = JSON.stringify({ model: JEV_MODEL, state: input.state, questions: input.questions });
@@ -86,14 +113,22 @@ export async function systemOne(input: {
     const onAbort = () => controller.abort();
     input.signal?.addEventListener("abort", onAbort, { once: true });
     try {
-      const res = await fetch(`${BASE_URL}/systemone`, {
+      const res = await fetch(url, {
         method: "POST",
-        headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+        headers: {
+          Authorization: `Bearer ${key}`,
+          "Content-Type": "application/json",
+          ...(gateway && input.usage ? gatewayHeaders(input.usage) : {}),
+        },
         body,
         signal: controller.signal,
       });
       if (!res.ok) {
         lastError = `${label}: HTTP ${res.status}`;
+        if (gateway && (res.status === 401 || res.status === 404)) {
+          gatewayRefusedAt = Date.now();
+          return { ok: false, error: `${lastError} (the gateway has no Jev route)` };
+        }
         if (RETRY_STATUSES.has(res.status)) continue;
         return { ok: false, error: lastError };
       }

@@ -9,7 +9,8 @@ What goes through it: GLM 5.3 and GLM 5.3 Flash (the reader's tools, the
 assistant, Stitch, the readings), Kimi (the parse passes, calls that carry
 an image, the assistant with Web on), Claude (the handwritten passes and
 Visualize), Gemini (video), Groq and OpenAI Whisper (transcription), OpenAI
-TTS (voice), DeepL (translation), Moonshot's web search, and the model lists
+TTS (voice), DeepL (translation), Jev (TypeSafe's decision model, through
+OpenRouter; `lib/jev.ts`), Moonshot's web search, and the model lists
 the bimonthly model update reads. `src/lib/gateway.ts` names the route each
 client takes. GLM has no direct client: without the gateway, Kimi K3 takes
 its calls.
@@ -47,7 +48,9 @@ Fly and Render take the same Dockerfile and the same variables.
    now goes through the gateway.
 4. Delete the provider keys from the app's host: `MOONSHOT_API_KEY`,
    `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `GROQ_API_KEY`, `OPENAI_API_KEY`,
-   `DEEPL_API_KEY`. With the gateway set, the app never reads them. Keep
+   `DEEPL_API_KEY`, `TYPESAFE_API_KEY`. With the gateway set, the app never
+   reads them. `TYPESAFE_MODEL` stays on the app's host: it is the model id
+   the Jev call names, not a key. Keep
    `DEEPGRAM_API_KEY` there: Deepgram is the one direct call.
 
 ## Run it locally
