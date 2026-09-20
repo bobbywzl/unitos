@@ -95,6 +95,9 @@ export async function resetAccount(userId: string): Promise<AccountResetCounts |
         trialEndsAt: trialEnd(now),
         driveRefreshToken: "",
         driveScope: "",
+        // The active time and the billing ask (lib/active-time.ts) start over.
+        activeSeconds: 0,
+        billingAskedAt: null,
         createdAt: now,
         lastSeenAt: now,
       },

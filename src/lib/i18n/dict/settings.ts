@@ -21,18 +21,15 @@ const en = {
   backgroundPh: "e.g. Stanford student, stochastic calc + stats + quantum. Reading for due diligence.",
   singleReader:
     "Sign-in is off — this instance runs as a single reader. Set GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, and SESSION_SECRET to open Google sign-in at /signin.",
-  // Plan (TIERS.md): the plan card — the tier mark and the tier's name as the
-  // title (common.tier*), then what the tier holds and, on trial, when the
-  // trial ends.
-  plan: "Plan",
-  planTrial:
-    "Free trial until {date}. Offline work — notes, non-AI annotations, edits, uploads — saves on this device and syncs when you are back online. Images up to 25 MB drop into notes.",
+  // Subscription (SPEC.md §24, TIERS.md): the subscription panel — the
+  // plan, its status, the card, the actions on the subscription
+  // (billing.panel*), then what the tier holds.
+  subscription: "Subscription",
   planPremium:
     "Offline work — notes, non-AI annotations, edits, uploads — saves on this device and syncs when you are back online. Images up to 25 MB drop into notes.",
   planUltra:
     "Everything in Unitos Premium. Visualize: the selection as a picture — a diagram, a drawing, or a short animation. Conversations: continue a Simplify, Analyze, or Visualize card into a conversation.",
-  planExpired:
-    "The trial ended on {date}. Offline changes do not save, and images over 5 MB do not drop.",
+  planExpired: "Offline changes do not save, and images over 5 MB do not drop.",
   planMark:
     "The tier mark beside your badge says your tier everywhere: the white crystal is Unitos Premium, the black diamond is Unitos Ultra.",
   // Connections (SPEC.md §14): the services connected to the account and what
@@ -135,14 +132,12 @@ const zh: Record<keyof typeof en, string> = {
   backgroundPh: "如：斯坦福学生，修过随机微积分、统计和量子力学。为尽职调查而读。",
   singleReader:
     "此实例未开启登录——当前以单人阅读器模式运行。设置 GOOGLE_CLIENT_ID、GOOGLE_CLIENT_SECRET 和 SESSION_SECRET 即可在 /signin 开启 Google 登录。",
-  plan: "方案",
-  planTrial:
-    "免费试用至 {date}。离线工作——笔记、非 AI 批注、编辑、上传——会保存在本设备，恢复联网后同步。最大 25 MB 的图片可拖入笔记。",
+  subscription: "订阅",
   planPremium:
     "离线工作——笔记、非 AI 批注、编辑、上传——会保存在本设备，恢复联网后同步。最大 25 MB 的图片可拖入笔记。",
   planUltra:
     "包含 Unitos Premium 的全部功能。可视化：把选中内容画成图——示意图、插画或短动画。对话：把简化、分析或可视化卡片继续为对话。",
-  planExpired: "试用已于 {date} 结束。离线更改不会保存，超过 5 MB 的图片无法拖入。",
+  planExpired: "离线更改不会保存，超过 5 MB 的图片无法拖入。",
   planMark: "徽章旁的方案标记在各处标明你的方案：白水晶是 Unitos Premium，黑钻是 Unitos Ultra。",
   connections: "连接",
   connectionsDesc: "此账户已连接的服务，以及每项可访问的范围。",

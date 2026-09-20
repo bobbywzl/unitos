@@ -5,6 +5,8 @@ import { currentLang } from "@/lib/i18n/server";
 
 const Body = z.object({
   email: z.string().trim().toLowerCase().email().max(200),
+  // The sign-up form asks for the email alone; the confirm route names the
+  // account by the email's local part when this is empty.
   name: z.string().trim().max(80).default(""),
 });
 

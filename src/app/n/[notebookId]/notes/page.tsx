@@ -7,6 +7,7 @@ import { serverT } from "@/lib/i18n/server";
 import type { NotebookView, SectionView } from "@/lib/types";
 import { ArrowLeftIcon } from "@/components/icons";
 import { AccountGuard } from "@/components/account-guard";
+import { ActiveTimeClock } from "@/components/active-time-clock";
 import { CollabProvider, type CollabState } from "@/components/collab/collab-context";
 import { SaveIndicator } from "@/components/save-indicator";
 import { SyncRefresh } from "@/components/collab/sync-refresh";
@@ -119,6 +120,7 @@ export default async function NotesPage(props: { params: Promise<{ notebookId: s
   return (
     <NotesPageFrame>
       <AccountGuard userId={user.id} enabled={authEnabled()} />
+      <ActiveTimeClock enabled={authEnabled()} />
       <header className="mb-[34px] flex items-center gap-2">
         <Link
           href="/"
