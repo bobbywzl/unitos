@@ -12,6 +12,7 @@ import { PlansActs, type PlansPrices } from "@/app/plans/acts";
 import { PlanCard } from "@/components/billing/plan-card";
 import { planChoice } from "@/components/billing/plan-choice";
 import { PortalButton } from "@/components/billing/portal-button";
+import { FunnelStepMark } from "@/components/funnel-step";
 import { LangSwitcher } from "@/components/lang-switcher";
 import { Logo } from "@/components/logo";
 
@@ -61,6 +62,8 @@ export default async function PlansPage() {
 
   return (
     <div className="plans-root">
+      {/* The onboarding funnel (lib/funnel.ts): the plans step. */}
+      <FunnelStepMark step="plans" />
       <div aria-hidden className="tier-band tier-band-premium" />
       <nav className="plans-nav print:hidden">
         <Link href="/" className="plans-back">

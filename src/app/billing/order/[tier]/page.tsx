@@ -13,6 +13,7 @@ import { BillingFrame, TierWatermark } from "@/components/billing/frame";
 import { PlanCard } from "@/components/billing/plan-card";
 import { PayButton } from "@/components/billing/pay-button";
 import { PortalButton } from "@/components/billing/portal-button";
+import { FunnelStepMark } from "@/components/funnel-step";
 import { TierChip } from "@/components/tier-mark";
 
 export const dynamic = "force-dynamic";
@@ -90,6 +91,8 @@ export default async function OrderPage({
   const row = "flex items-baseline justify-between gap-4 border-t border-(--bl-line) py-3 text-sm";
   return (
     <BillingFrame night={ultra} back="plans" preview={view.preview}>
+      {/* The onboarding funnel (lib/funnel.ts): the order step. */}
+      <FunnelStepMark step="order" />
       <section className="billing-rise relative">
         <TierWatermark tier={ultra ? "ultra" : "premium"} size={ultra ? 440 : 420} />
         <h1 className="relative mb-1.5 font-display text-[clamp(36px,5vw,56px)] tracking-[-0.02em] text-(--bl-title)">
