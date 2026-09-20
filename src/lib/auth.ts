@@ -13,6 +13,7 @@ import { ACCOUNT_COOKIE, APPLE_STATE_COOKIE, SESSION_COOKIE, STATE_COOKIE, USER_
 import { emailBlocked } from "@/lib/block";
 import { db } from "@/lib/db";
 import { sendConfirmationEmail, sendResetEmail } from "@/lib/email";
+import { recordFunnelStep } from "@/lib/funnel-record";
 import type { Lang } from "@/lib/i18n/config";
 import { outboundFetch } from "@/lib/outbound-fetch";
 import { trialEnd } from "@/lib/tiers";
@@ -501,6 +502,8 @@ export async function upsertUser(profile: {
   const user = await db.user.create({
     data: { email, name: profile.name, picture: profile.picture, trialEndsAt: trialEnd(new Date()) },
   });
+  // The onboarding funnel (lib/funnel.ts): the account step, once per email.
+  await recordFunnelStep("account", user.id);
   if (first) {
     await db.$transaction([
       db.notebook.updateMany({ where: { userId: USER_ID }, data: { userId: user.id } }),

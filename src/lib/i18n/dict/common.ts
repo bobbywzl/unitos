@@ -58,7 +58,8 @@
 //   slides(幻灯片文档) 幻灯片 · slide(一页幻灯片) 幻灯片 · replica(复刻) 复刻 ·
 //   picture(幻灯片的图片) 图片 · speaker notes 演讲者备注 ·
 //   sheets(电子表格文档) 电子表格 · sheet(一个工作表) 工作表 · cell 单元格 ·
-//   frozen(冻结的行列) 冻结
+//   frozen(冻结的行列) 冻结 ·
+//   funnel(注册漏斗) 漏斗 · step(漏斗的一步) 步骤 · visitor(一个浏览器) 访客
 // highlight 高亮 仅指高亮功能；表示选取文字一律用 选中。
 
 const en = {

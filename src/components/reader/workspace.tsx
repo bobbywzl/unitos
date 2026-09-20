@@ -26,6 +26,7 @@ import {
   SparkleIcon,
 } from "@/components/icons";
 import { ClickTracker } from "@/components/click-tracker";
+import { FunnelStepMark } from "@/components/funnel-step";
 import { CollabProvider, type CollabState } from "@/components/collab/collab-context";
 import { HistoryControl } from "@/components/collab/history-control";
 import { ShareControl } from "@/components/collab/share-control";
@@ -557,6 +558,8 @@ export function Workspace({
     {/* Click telemetry (SPEC.md §7): the header, the rail, and the tray are
         the surfaces; every control in them carries data-track. */}
     <ClickTracker notebookId={notebook.id} />
+    {/* The onboarding funnel (lib/funnel.ts): the reader step. */}
+    <FunnelStepMark step="reader" />
     <div
       // A note floats over the article: the article column moves left (globals.css, .reader-column).
       data-note-floating={actions.floating ? "" : undefined}

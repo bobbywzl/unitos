@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { ACCOUNT_COOKIE, ACCOUNT_HEADER, SESSION_COOKIE } from "@/lib/constants";
+import { ACCOUNT_COOKIE, ACCOUNT_HEADER, SESSION_COOKIE, VISITOR_COOKIE } from "@/lib/constants";
 import { isLang, LANG_COOKIE, type Lang } from "@/lib/i18n/config";
 import { translate } from "@/lib/i18n/dictionaries";
 
@@ -17,7 +17,32 @@ function requestLang(request: NextRequest): Lang {
 //    configured. A fast presence check only — real validation happens in
 //    lib/auth (currentUser); this shapes the redirect UX. With sign-in off
 //    (single-reader mode) everything passes through.
+// The visitor cookie (the onboarding funnel, lib/funnel.ts): a random id on
+// the first page a browser opens, one year, httpOnly. Every page response
+// that lacks one sets one; API responses never do, so the id is the
+// browser's, never a caller's.
+const VISITOR_MAX_AGE = 365 * 24 * 60 * 60;
+
+function withVisitor(request: NextRequest, response: NextResponse): NextResponse {
+  const { pathname } = request.nextUrl;
+  // Not on an API answer, and not on a file (the service worker).
+  if (pathname.startsWith("/api/") || pathname.includes(".")) return response;
+  if (request.cookies.get(VISITOR_COOKIE)?.value) return response;
+  response.cookies.set(VISITOR_COOKIE, crypto.randomUUID(), {
+    path: "/",
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    maxAge: VISITOR_MAX_AGE,
+  });
+  return response;
+}
+
 export function middleware(request: NextRequest) {
+  return withVisitor(request, gate(request));
+}
+
+function gate(request: NextRequest): NextResponse {
   const { pathname } = request.nextUrl;
 
   if (pathname.startsWith("/admin") || pathname.startsWith("/api/admin")) {
@@ -61,7 +86,8 @@ export function middleware(request: NextRequest) {
   // transcribe route with no session and CRON_SECRET as the bearer. The
   // header only opens the door; the route refuses without the secret.
   // The offline page and the service worker (SPEC.md §17) hold no data:
-  // the worker fetches both without a session.
+  // the worker fetches both without a session. The funnel route takes the
+  // sign-in page's step from a signed-out browser.
   if (
     pathname === "/signin" ||
     pathname === "/reset" ||
@@ -73,6 +99,7 @@ export function middleware(request: NextRequest) {
     pathname === "/plans" ||
     pathname === "/billing/confirmed" ||
     pathname === "/api/stripe/webhook" ||
+    pathname === "/api/funnel" ||
     pathname.startsWith("/api/auth/") ||
     pathname.startsWith("/api/cron/") ||
     (pathname.startsWith("/api/documents/") &&

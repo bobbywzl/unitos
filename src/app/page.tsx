@@ -8,6 +8,7 @@ import { personOf } from "@/lib/person";
 import { accountTier } from "@/lib/tiers";
 import { Logo } from "@/components/logo";
 import { AccountGuard } from "@/components/account-guard";
+import { FunnelStepMark } from "@/components/funnel-step";
 import { PersonBadge } from "@/components/collab/person-badge";
 import { TierBand, TierChip } from "@/components/tier-mark";
 import { Companions } from "@/components/works/companions";
@@ -100,6 +101,8 @@ export default async function Home() {
   return (
     <main className="mx-auto w-full max-w-[1080px] px-6 pb-16 sm:px-16">
       <AccountGuard userId={user.id} enabled={authEnabled()} />
+      {/* The onboarding funnel (lib/funnel.ts): the dashboard step. */}
+      <FunnelStepMark step="dashboard" />
       <TierBand state={tier} />
       <header className="flex items-center gap-3 pt-[26px]">
         <Logo size={38} className="text-clay" />
