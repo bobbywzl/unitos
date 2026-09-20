@@ -799,6 +799,10 @@ export function ReaderInteractions({
   // selection alive, which also keeps a native select from ever opening.
   const [submenu, setSubmenu] = useState<null | "add" | "ai" | "comment">(null);
   const [commentDraft, setCommentDraft] = useState("");
+  // The lead tool Jev predicts for a popover (SPEC.md §6), keyed by the
+  // popover it answers: another popover reads it as null until its own
+  // answer lands. Null answers: no key, no confident answer, a fixed lead.
+  const [leadAnswer, setLeadAnswer] = useState<{ key: string; tool: Tool } | null>(null);
   // The page is only editable in edit mode; reading mode never opens editors.
   // `edit=1` opens the document in edit mode (SPEC.md §15: a blank document
   // opens ready to write); viewers and transcripts never enter it.
@@ -2823,6 +2827,42 @@ export function ReaderInteractions({
     container.addEventListener("scroll", onScroll, { passive: true });
     return () => container.removeEventListener("scroll", onScroll);
   }, []);
+
+  // The lead tool (SPEC.md §6): when the popover opens on a selection, Jev
+  // predicts which tool the reader reaches for, from the selection and the
+  // reader's own toolbar history (/api/jev/lead-tool), and that tool reads
+  // as recommended. The rows never move: an answer that lands late would
+  // move a button under the pointer. A key term's toolbar and a figure's
+  // keep their fixed lead. A plain fetch, not `api`: a prediction is not a
+  // save, so the save indicator stays quiet.
+  const popoverAnchorKey = popover
+    ? `${popover.anchor.blockId}:${popover.anchor.startOffset}:${popover.anchor.endOffset}:${popover.term ? "t" : ""}${popover.figure ? "f" : ""}`
+    : null;
+  const leadTool: Tool | null = leadAnswer && leadAnswer.key === popoverAnchorKey ? leadAnswer.tool : null;
+  useEffect(() => {
+    if (!popover || !popoverAnchorKey || popover.term || popover.figure) return;
+    const text = popover.anchor.quotedText.trim();
+    if (!text) return;
+    const blockType = blocksRef.current.find((b) => b.id === popover.anchor.blockId)?.type;
+    const kind = contentKindOf(blockType);
+    if (kind === "figure") return;
+    const key = popoverAnchorKey;
+    const controller = new AbortController();
+    fetch("/api/jev/lead-tool", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ notebookId, kind, blockType, text: text.slice(0, 600), tools: TOOLBARS[kind] }),
+      signal: controller.signal,
+    })
+      .then((res) => (res.ok ? (res.json() as Promise<{ tool: Tool | null }>) : null))
+      .then((data) => {
+        if (controller.signal.aborted || !data?.tool) return;
+        if (TOOLBARS[kind].includes(data.tool)) setLeadAnswer({ key, tool: data.tool });
+      })
+      .catch(() => {});
+    return () => controller.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [popoverAnchorKey, notebookId]);
 
   // Pressing a dotted key term opens the selection toolbar on it, with Extract
   // recommended on top. Fires on mousedown, so the toolbar survives the
@@ -5308,6 +5348,20 @@ function blockFormatKind(
     popover ? blocks.find((b) => b.id === popover.anchor.blockId)?.type : undefined,
   );
   const has = (tool: Tool) => TOOLBARS[popoverKind].includes(tool);
+  // A row's look: the predicted lead tool reads as recommended, like the
+  // figure toolbar's Analyze; every other row is plain.
+  const leads = (tool: Tool) => leadTool === tool;
+  const rowLook = (tool: Tool) =>
+    leads(tool)
+      ? "bg-clay-100 font-semibold text-clay-800 hover:bg-clay-200"
+      : "text-sand-800 hover:bg-clay-100 hover:text-clay-800";
+  const leadBadge = (tool: Tool) =>
+    leads(tool) ? (
+      <span className="text-[9px] font-bold tracking-[0.06em] text-clay-700 uppercase">{t("reader.recommended")}</span>
+    ) : null;
+  // A bubble outside the toolbox (the highlight colors, Add to notes, Read
+  // aloud) draws a clay ring when its tool leads.
+  const leadRing = (tool: Tool) => (leads(tool) ? " ring-2 ring-clay/60" : "");
   // Every tool card grows with its content up to the pane's height, then its
   // body scrolls (SPEC.md §6). Unmeasured (the SSR pass): no cap.
   const cardMaxHeight = paneHeight > 0 ? Math.max(200, paneHeight - 24) : undefined;
@@ -6112,10 +6166,13 @@ function blockFormatKind(
               onClick={() => void simplify()}
               data-track="simplify"
               data-tip={t("reader.simplifyTitle")}
-              className={`flex w-full items-center gap-1.5 rounded-full ${toolRow} text-left text-sand-800 hover:bg-clay-100 hover:text-clay-800`}
+              className={`flex w-full items-center justify-between gap-2 rounded-full ${toolRow} text-left ${rowLook("simplify")}`}
             >
-              <SummaryIcon size={coarse ? 14 : 12} />
-              {t("reader.simplify")}
+              <span className="flex items-center gap-1.5">
+                <SummaryIcon size={coarse ? 14 : 12} />
+                {t("reader.simplify")}
+              </span>
+              {leadBadge("simplify")}
             </button>
           )}
           {has("visualize") && (
@@ -6123,15 +6180,18 @@ function blockFormatKind(
               onClick={() => void visualize()}
               data-track="visualize"
               data-tip={t("reader.visualizeTitle")}
-              className={`flex w-full items-center justify-between gap-2 rounded-full ${toolRow} text-left text-sand-800 hover:bg-clay-100 hover:text-clay-800`}
+              className={`flex w-full items-center justify-between gap-2 rounded-full ${toolRow} text-left ${rowLook("visualize")}`}
             >
               <span className="flex items-center gap-1.5">
                 <VisualizeIcon size={coarse ? 14 : 12} />
                 {t("reader.visualize")}
               </span>
-              <span className="flex items-center gap-1 text-[9px] font-bold tracking-[0.06em] text-sand-500 uppercase">
-                <TierMark state="ultra" size={10} />
-                {t("reader.ultra")}
+              <span className="flex items-center gap-2">
+                {leadBadge("visualize")}
+                <span className="flex items-center gap-1 text-[9px] font-bold tracking-[0.06em] text-sand-500 uppercase">
+                  <TierMark state="ultra" size={10} />
+                  {t("reader.ultra")}
+                </span>
               </span>
             </button>
           )}
@@ -6143,14 +6203,15 @@ function blockFormatKind(
             data-track="comment"
             aria-expanded={submenu === "comment"}
             data-tip={t("reader.commentTitle")}
-            className={`flex w-full items-center gap-1.5 rounded-full ${toolRow} text-left ${
-              submenu === "comment"
-                ? "bg-clay-100 text-clay-800"
-                : "text-sand-800 hover:bg-clay-100 hover:text-clay-800"
+            className={`flex w-full items-center justify-between gap-2 rounded-full ${toolRow} text-left ${
+              submenu === "comment" ? "bg-clay-100 text-clay-800" : rowLook("comment")
             }`}
           >
-            <CommentIcon size={coarse ? 14 : 12} />
-            {t("reader.comment")}
+            <span className="flex items-center gap-1.5">
+              <CommentIcon size={coarse ? 14 : 12} />
+              {t("reader.comment")}
+            </span>
+            {leadBadge("comment")}
           </button>
           <Collapse open={submenu === "comment"}>
           {submenu === "comment" && (
@@ -6205,10 +6266,13 @@ function blockFormatKind(
             onClick={beginLink}
             data-track="link"
             data-tip={t("reader.linkTitle")}
-            className={`flex w-full items-center gap-1.5 rounded-full ${toolRow} text-left text-sand-800 hover:bg-clay-100 hover:text-clay-800`}
+            className={`flex w-full items-center justify-between gap-2 rounded-full ${toolRow} text-left ${rowLook("link")}`}
           >
-            <UnlinkIcon size={coarse ? 14 : 12} />
-            {t("reader.linkAcrossTexts")}
+            <span className="flex items-center gap-1.5">
+              <UnlinkIcon size={coarse ? 14 : 12} />
+              {t("reader.linkAcrossTexts")}
+            </span>
+            {leadBadge("link")}
           </button>
           )}
 
@@ -6220,10 +6284,10 @@ function blockFormatKind(
           <div
             className={
               coarse
-                ? "order-first flex items-center justify-around px-2 py-2"
+                ? `order-first flex items-center justify-around rounded-full px-2 py-2${leadRing("highlight")}`
                 : `absolute left-0 flex w-full items-center justify-around rounded-full bg-card px-3 py-2 shadow-float ${
                     popover.yTop < 54 ? "top-full mt-[50px]" : "bottom-full mb-2"
-                  }`
+                  }${leadRing("highlight")}`
             }
           >
             {HIGHLIGHT_HUES.map((color) => (
@@ -6254,10 +6318,10 @@ function blockFormatKind(
             <div
               className={
                 coarse
-                  ? "-order-1 flex flex-col gap-0.5"
+                  ? `-order-1 flex flex-col gap-0.5 rounded-2xl${leadRing("addToNotes")}`
                   : `absolute bottom-full left-0 flex w-full flex-col gap-0.5 rounded-2xl bg-card p-1.5 shadow-float ${
                       popover.yTop < 54 ? "mb-2" : "mb-[52px]"
-                    }`
+                    }${leadRing("addToNotes")}`
               }
             >
               <button
@@ -6304,7 +6368,7 @@ function blockFormatKind(
                 voice === "idle"
                   ? "bg-card text-sand-700 hover:text-clay-800"
                   : "bg-clay text-clay-fg hover:bg-clay-600"
-              }`}
+              }${leadRing("readAloud")}`}
             >
               {voice === "loading" ? (
                 <SpinnerIcon size={14} className="motion-safe:animate-spin" />

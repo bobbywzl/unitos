@@ -23,6 +23,8 @@ import { attachDocument } from "@/lib/parse/attach";
 import { parseMarkdown } from "@/lib/parse/markdown";
 import { PARSER_VERSION, type ParsedBlock } from "@/lib/parse/types";
 import { ensureSkeleton, type Skeleton } from "@/lib/graph/skeleton";
+import { jevRouteParts, jevSelectLines } from "@/lib/graph/stitch-jev";
+import { jevEnabled } from "@/lib/jev";
 import { rank } from "@/lib/graph/rank";
 import { stitchPrompt, stitchRoutePrompt, stitchSelectPrompt } from "@/lib/prompts/stitch";
 import type { StitchDocument, StitchResult } from "@/lib/types";
@@ -46,6 +48,11 @@ import { resolveModelId } from "@/lib/models";
 // with links, a generated document, or both. Documents under
 // STITCH_WHOLE_THRESHOLD together skip the reading passes: the answer pass
 // reads them whole.
+// With Jev configured (lib/jev.ts, TYPESAFE_API_KEY) the route and select
+// passes are Jev's (lib/graph/stitch-jev.ts): one calibrated yes/no per
+// part and per skeleton line, every line of every document read getting
+// its own decision, in small parallel calls. A Jev pass that fails falls
+// back to the GLM pass below, so the command always runs.
 // The model reads and writes short block aliases, never the stored ids: the
 // document's letter and the block's number in it (A1, B12), so a pick of 400
 // blocks is a few hundred tokens rather than thousands, a range (B10-B15)
@@ -427,9 +434,9 @@ export function selectedSystem(rendered: Rendered[], selected: Set<string>): str
 
 // ── The skeletons as the reading passes see them ─────────────────────────
 
-type SkeletonLineView = { alias: string; text: string; partAlias: string | null };
-type SkeletonPartView = { alias: string; title: string; summary: string };
-type SkeletonView = {
+export type SkeletonLineView = { alias: string; text: string; partAlias: string | null };
+export type SkeletonPartView = { alias: string; title: string; summary: string };
+export type SkeletonView = {
   r: Rendered;
   gist: string;
   parts: SkeletonPartView[];
@@ -694,74 +701,87 @@ export async function stitch(input: {
     // Past the budget: the route pass names the parts, and the lines are
     // cut to them and, if still too many, ranked against the command.
     let shown: Set<string> | null = null;
+    const jev = jevEnabled();
     if (skeletonLength > STITCH_SKELETON_BUDGET) {
-      let routed: Set<string> | null = null;
-      const route = await callForJson({
-        model: readModel,
-        messages: [
-          { role: "system", content: routeSystem(views, rendered) },
-          ...history,
-          {
-            role: "user",
-            content: stitchRoutePrompt({ profile, documents: documentList, command: input.command, maxParts: MAX_ROUTED }),
-          },
-        ],
-        maxOutputTokens: STITCH_SELECT_MAX_OUTPUT_TOKENS,
-        providerOptions: kimiOptions(STITCH_ROUTE_EFFORT),
-        schema: routeSchema,
-        label: "STITCH_ROUTE",
-        usage: readUsage,
-        abortSignal: input.signal,
-      });
-      if (!route.ok) {
-        if (input.signal?.aborted) throw input.onFailure(route.error);
-        console.warn("[stitch] route pass failed, ranking every line:", route.error);
-      } else {
-        const partAliases = new Set(views.flatMap((v) => v.parts.map((p) => p.alias)));
-        const picked = route.data.parts.map((p) => p.trim().toUpperCase()).filter((p) => partAliases.has(p));
-        if (picked.length > 0) routed = new Set(picked);
+      // Jev first (one noul per part), else the GLM route pass.
+      let routed: Set<string> | null = jev ? await jevRouteParts(views, input.command, input.userId, input.signal) : null;
+      if (input.signal?.aborted) throw input.onFailure("aborted");
+      if (!routed) {
+        const route = await callForJson({
+          model: readModel,
+          messages: [
+            { role: "system", content: routeSystem(views, rendered) },
+            ...history,
+            {
+              role: "user",
+              content: stitchRoutePrompt({ profile, documents: documentList, command: input.command, maxParts: MAX_ROUTED }),
+            },
+          ],
+          maxOutputTokens: STITCH_SELECT_MAX_OUTPUT_TOKENS,
+          providerOptions: kimiOptions(STITCH_ROUTE_EFFORT),
+          schema: routeSchema,
+          label: "STITCH_ROUTE",
+          usage: readUsage,
+          abortSignal: input.signal,
+        });
+        if (!route.ok) {
+          if (input.signal?.aborted) throw input.onFailure(route.error);
+          console.warn("[stitch] route pass failed, ranking every line:", route.error);
+        } else {
+          const partAliases = new Set(views.flatMap((v) => v.parts.map((p) => p.alias)));
+          const picked = route.data.parts.map((p) => p.trim().toUpperCase()).filter((p) => partAliases.has(p));
+          if (picked.length > 0) routed = new Set(picked);
+        }
       }
       shown = cutLines(views, routed, input.command, STITCH_SKELETON_BUDGET);
     }
 
-    const pick = await callForJson({
-      model: readModel,
-      messages: [
-        { role: "system", content: skeletonSystem(views, rendered, shown) },
-        ...history,
-        {
-          role: "user",
-          content: stitchSelectPrompt({
-            profile,
-            documents: documentList,
-            command: input.command,
-            maxBlocks: MAX_SELECTED,
-            partial: shown !== null,
-          }),
-        },
-      ],
-      maxOutputTokens: STITCH_SELECT_MAX_OUTPUT_TOKENS,
-      providerOptions: kimiOptions(STITCH_SELECT_EFFORT),
-      schema: selectSchema,
-      label: "STITCH_SELECT",
-      usage: readUsage,
-      abortSignal: input.signal,
-    });
-    if (!pick.ok) {
-      if (input.signal?.aborted) throw input.onFailure(pick.error);
-      console.warn("[stitch] select pass failed, reading every document's opening:", pick.error);
+    // The picks by document, most relevant first within each: Jev's (one
+    // noul per line), else the GLM select pass's.
+    let byDoc: Map<string, string[]> | null = jev
+      ? await jevSelectLines(views, shown, input.command, input.userId, input.signal)
+      : null;
+    if (input.signal?.aborted) throw input.onFailure("aborted");
+    if (!byDoc) {
+      const pick = await callForJson({
+        model: readModel,
+        messages: [
+          { role: "system", content: skeletonSystem(views, rendered, shown) },
+          ...history,
+          {
+            role: "user",
+            content: stitchSelectPrompt({
+              profile,
+              documents: documentList,
+              command: input.command,
+              maxBlocks: MAX_SELECTED,
+              partial: shown !== null,
+            }),
+          },
+        ],
+        maxOutputTokens: STITCH_SELECT_MAX_OUTPUT_TOKENS,
+        providerOptions: kimiOptions(STITCH_SELECT_EFFORT),
+        schema: selectSchema,
+        label: "STITCH_SELECT",
+        usage: readUsage,
+        abortSignal: input.signal,
+      });
+      if (!pick.ok) {
+        if (input.signal?.aborted) throw input.onFailure(pick.error);
+        console.warn("[stitch] select pass failed, reading every document's opening:", pick.error);
+      }
+      byDoc = new Map<string, string[]>(read.map((r) => [r.doc.id, []]));
+      for (const alias of pick.ok ? pick.data.blockIds.flatMap(expandPick) : []) {
+        const block = blockByRef.get(alias);
+        if (block) byDoc.get(block.documentId)?.push(alias);
+      }
     }
     const share = Math.floor(STITCH_SELECTED_BUDGET / read.length);
-    // The picks by document, most relevant first within each; a document
-    // the pick names nothing of reads as its opening, so every document
-    // read is under the answer pass.
-    const byDoc = new Map<string, string[]>(read.map((r) => [r.doc.id, []]));
-    for (const alias of pick.ok ? pick.data.blockIds.flatMap(expandPick) : []) {
-      const block = blockByRef.get(alias);
-      if (block) byDoc.get(block.documentId)?.push(alias);
-    }
+    // A document the pick names nothing of reads as its opening, so every
+    // document read is under the answer pass.
+    const picksByDoc = byDoc;
     const picks = read.map((r) => {
-      const own = byDoc.get(r.doc.id) ?? [];
+      const own = picksByDoc.get(r.doc.id) ?? [];
       return own.length > 0 ? own : opening(r, share);
     });
     if (input.signal?.aborted) throw input.onFailure("aborted");

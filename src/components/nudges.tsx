@@ -24,6 +24,9 @@ import type { TKey } from "@/lib/i18n/dictionaries";
 // several ids with spaces between when two steps share it.
 
 const NUDGE_KEY = "unitos-nudge-step";
+// The steps Jev found the reader has already done (/api/jev/nudges, SPEC.md
+// §6), kept for the tab: those steps skip.
+const KNOWN_KEY = "unitos-nudge-known";
 
 type Step = {
   id: string;
@@ -163,6 +166,39 @@ export function Nudges() {
   const shownRef = useRef<Shown | null>(null);
   const glowRef = useRef<HTMLElement | null>(null);
   const measureRef = useRef<() => void>(() => {});
+  // The step ids the reader has already earned, from Jev; empty until the
+  // answer lands, and empty for good without a key.
+  const knownRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (readStep() === null) return;
+    try {
+      const cached = sessionStorage.getItem(KNOWN_KEY);
+      if (cached) {
+        knownRef.current = new Set(JSON.parse(cached) as string[]);
+        measureRef.current();
+        return;
+      }
+    } catch {
+      // storage unavailable: ask every time
+    }
+    const controller = new AbortController();
+    fetch("/api/jev/nudges", { signal: controller.signal })
+      .then((res) => (res.ok ? (res.json() as Promise<{ done?: unknown }>) : null))
+      .then((data) => {
+        if (controller.signal.aborted || !data) return;
+        const done = Array.isArray(data.done) ? data.done.filter((id): id is string => typeof id === "string") : [];
+        knownRef.current = new Set(done);
+        try {
+          sessionStorage.setItem(KNOWN_KEY, JSON.stringify(done));
+        } catch {
+          // storage unavailable
+        }
+        measureRef.current();
+      })
+      .catch(() => {});
+    return () => controller.abort();
+  }, []);
 
   useEffect(() => {
     const glow = (el: HTMLElement | null) => {
@@ -181,13 +217,19 @@ export function Nudges() {
     // past steps marked skip. A modal (data-nudge-pause) hides the nudge
     // without advancing it.
     const measure = () => {
-      const step = readStep();
-      if (step === null || document.querySelector("[data-nudge-pause]")) {
+      const stored = readStep();
+      if (stored === null || document.querySelector("[data-nudge-pause]")) {
         hide();
         return;
       }
+      // A step the reader has already done (knownRef) is passed over.
+      const known = knownRef.current;
+      let step = stored;
+      while (step < STEPS.length && known.has(STEPS[step].id)) step++;
+      if (step !== stored) writeStep(step);
       for (let i = step; i < STEPS.length; i++) {
         const def = STEPS[i];
+        if (known.has(def.id)) continue;
         if (def.doneWhen?.()) {
           writeStep(i + 1);
           hide();

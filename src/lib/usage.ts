@@ -48,6 +48,7 @@ const MODEL_PRICING: Record<string, Price> = {
   // Microsoft Edge read-aloud voice: free, no key.
   "edge-tts": price(0, 0),
   "text-embedding-3-small": price(0.02, 0),
+  "jev-latest": price(0.042, 0), // TypeSafe Jev: output free
   // DeepL bills per character: $25 per 1M characters on the Pro API, free
   // to 500k a month on the Free API. Callers pass the character count as
   // inputTokens.
@@ -77,6 +78,7 @@ const FAMILY_PRICING: [RegExp, Price][] = [
   [/^kimi/, price(3, 15)],
   [/^gemini.*flash/, price(0.3, 2.5)],
   [/^gemini/, price(1.25, 10)],
+  [/^jev/, price(0.042, 0)],
 ];
 
 export function priceFor(model: string): Price {
@@ -149,6 +151,7 @@ const PROVIDERS: [RegExp, string][] = [
   [/^deepl$/, "deepl"],
   [/^browser-session$/, "browser"],
   [/^resend-email$/, "resend"],
+  [/^jev/, "typesafe"],
 ];
 
 export function providerOf(model: string): string {
