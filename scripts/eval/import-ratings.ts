@@ -38,7 +38,8 @@ const TOOL_OF: Record<string, EvalTool | null> = {
 async function main() {
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
   const rows = await db.toolRating.findMany({
-    where: { rating: "down", createdAt: { gte: since } },
+    // Thumbs down, and the flags the check raised (lib/derive/check.ts).
+    where: { rating: { in: ["down", "flag"] }, createdAt: { gte: since } },
     orderBy: { createdAt: "desc" },
     take: limit,
   });

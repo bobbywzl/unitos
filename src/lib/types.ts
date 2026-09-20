@@ -265,6 +265,9 @@ export type HistoryEntry = {
     | "SECTION_REMOVE"
     | "DOCUMENT_DETACH"
     | "NOTE_MERGE";
+  // A small edit (lib/history/trivial.ts): a typo fixed, a style toggled.
+  // The panel folds a run of them into one row.
+  trivial?: boolean;
   // The snippet the entry shows: the edited or removed text, the section or
   // document title, the linked quote.
   content: string;

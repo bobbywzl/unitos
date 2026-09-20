@@ -39,6 +39,8 @@ function describeFetchError(err: FetchPageError, t: TFunc): string {
       return err.status === null
         ? t("api.fetchChallenge", { host })
         : t("api.fetchBlocked", { host, status });
+    case "wall":
+      return t("api.fetchWall", { host });
     case "notFound":
       return t("api.fetchNotFound", { host, status });
     case "rateLimited":

@@ -78,7 +78,7 @@ const FAMILY_PRICING: [RegExp, Price][] = [
   [/^kimi/, price(3, 15)],
   [/^gemini.*flash/, price(0.3, 2.5)],
   [/^gemini/, price(1.25, 10)],
-  [/^jev/, price(0.042, 0)],
+  [/(^|\/)jev/, price(0.042, 0)], // jev-latest, typesafe/jev-1.13
 ];
 
 export function priceFor(model: string): Price {
@@ -151,7 +151,7 @@ const PROVIDERS: [RegExp, string][] = [
   [/^deepl$/, "deepl"],
   [/^browser-session$/, "browser"],
   [/^resend-email$/, "resend"],
-  [/^jev/, "typesafe"],
+  [/(^|\/)jev/, "typesafe"],
 ];
 
 export function providerOf(model: string): string {

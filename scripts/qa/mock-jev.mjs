@@ -83,7 +83,7 @@ function answer(name, q, state) {
 }
 
 const server = http.createServer((req, res) => {
-  if (req.method !== "POST" || !req.url.endsWith("/systemone")) {
+  if (req.method !== "POST" || !/\/(?:systemone|decisions)$/.test(req.url)) {
     res.writeHead(404).end();
     return;
   }

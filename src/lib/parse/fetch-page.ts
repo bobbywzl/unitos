@@ -9,6 +9,7 @@ import { serverT } from "@/lib/i18n/server";
 
 export type FetchFailure =
   | "blocked" // a bot wall or a sign-in wall: HTTP 401/403, or a human-check page
+  | "wall" // the page fetched, but it is a consent, sign-in, subscription, or error page, not the article (lib/parse/page-kind.ts)
   | "notFound" // HTTP 404/410
   | "rateLimited" // HTTP 429
   | "serverError" // HTTP 5xx
@@ -75,7 +76,7 @@ export function isChallengePage(html: string): boolean {
   return CHALLENGE_SIGNS.some((sign) => lower.includes(sign));
 }
 
-function hostOf(url: string): string {
+export function hostOf(url: string): string {
   try {
     return new URL(url).host.replace(/^www\./, "");
   } catch {

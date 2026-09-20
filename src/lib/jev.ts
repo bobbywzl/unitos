@@ -12,9 +12,13 @@ import { recordUsage, type UsageMeta } from "@/lib/usage";
 // text the question does not need — so a caller sends the smallest state
 // that decides the question and keeps every threshold in code.
 // `TYPESAFE_API_KEY` turns it on; unset, jevEnabled() is false and every
-// caller runs as it did without it. `TYPESAFE_BASE_URL` overrides the
-// endpoint (the QA mock, scripts/qa/mock-jev.mjs); `TYPESAFE_MODEL` the
-// model. Every call records its tokens under the caller's usage row.
+// caller runs as it did without it. `TYPESAFE_BASE_URL` is the API root
+// the call posts `/systemone` under: TypeSafe's own (the default), the QA
+// mock (scripts/qa/mock-jev.mjs), or OpenRouter (`https://openrouter.ai/api/v1`
+// with an OpenRouter key and `TYPESAFE_MODEL=typesafe/jev-1.13`; OpenRouter
+// serves the same request and answer shape and adds `usage.cost`).
+// `TYPESAFE_MODEL` is the model id. Every call records its tokens, and the
+// cost when the gateway states it, under the caller's usage row.
 
 export const JEV_MODEL = process.env.TYPESAFE_MODEL || "jev-latest";
 const BASE_URL = (process.env.TYPESAFE_BASE_URL || "https://api.typesafe.ai/v1").replace(/\/+$/, "");
@@ -51,7 +55,9 @@ const answerSchema = z.discriminatedUnion("type", [
 const resultSchema = z.object({
   model: z.string().optional(),
   answers: z.record(z.string(), answerSchema),
-  usage: z.object({ input_tokens: z.number().optional(), output_tokens: z.number().optional() }).optional(),
+  usage: z
+    .object({ input_tokens: z.number().optional(), output_tokens: z.number().optional(), cost: z.number().optional() })
+    .optional(),
 });
 export type JevAnswer = z.infer<typeof answerSchema>;
 export type JevResult = { ok: true; answers: Record<string, JevAnswer> } | { ok: false; error: string };
@@ -98,10 +104,14 @@ export async function systemOne(input: {
         if (!a || a.type !== q.type) return { ok: false, error: `${label}: no ${q.type} answer for ${name}` };
       }
       if (input.usage) {
-        recordUsage(input.usage, {
-          inputTokens: parsed.data.usage?.input_tokens ?? 0,
-          outputTokens: parsed.data.usage?.output_tokens ?? 0,
-        });
+        recordUsage(
+          input.usage,
+          {
+            inputTokens: parsed.data.usage?.input_tokens ?? 0,
+            outputTokens: parsed.data.usage?.output_tokens ?? 0,
+          },
+          parsed.data.usage?.cost,
+        );
       }
       return { ok: true, answers: parsed.data.answers };
     } catch (err) {

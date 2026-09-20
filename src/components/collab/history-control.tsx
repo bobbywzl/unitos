@@ -31,6 +31,32 @@ const REMOVALS = new Set<HistoryEntry["kind"]>([
   "DOCUMENT_DETACH",
 ]);
 
+type HistoryItem = { kind: "entry"; entry: HistoryEntry } | { kind: "run"; entries: HistoryEntry[] };
+
+// Consecutive small edits by one person in one document fold into one
+// item; a single small edit stands as itself.
+function foldRuns(entries: HistoryEntry[]): HistoryItem[] {
+  const items: HistoryItem[] = [];
+  let run: HistoryEntry[] = [];
+  const flush = () => {
+    if (run.length > 1) items.push({ kind: "run", entries: run });
+    else if (run.length === 1) items.push({ kind: "entry", entry: run[0] });
+    run = [];
+  };
+  for (const entry of entries) {
+    const last = run[run.length - 1];
+    if (entry.trivial && (!last || (last.userId === entry.userId && last.documentTitle === entry.documentTitle))) {
+      run.push(entry);
+      continue;
+    }
+    flush();
+    if (entry.trivial) run.push(entry);
+    else items.push({ kind: "entry", entry });
+  }
+  flush();
+  return items;
+}
+
 // The History panel (SPEC.md §12): every edit and deletion in the corpus,
 // newest first, each entry signed by the account that did it. A person's
 // badge in the filter row narrows the feed to their actions.
@@ -41,6 +67,8 @@ export function HistoryControl({ history }: { history: HistoryEntry[] }) {
   const panelRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [personFilter, setPersonFilter] = useState<string | null>(null);
+  // The folded runs of small edits the reader opened, by their first entry.
+  const [openRuns, setOpenRuns] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (!open) return;
@@ -63,6 +91,54 @@ export function HistoryControl({ history }: { history: HistoryEntry[] }) {
     .map((id) => people[id])
     .filter((p) => p !== undefined);
   const shown = personFilter ? history.filter((e) => e.userId === personFilter) : history;
+
+  // One entry as a row: the person, the kind, the time, the snippet.
+  const row = (entry: HistoryEntry) => {
+    const person = entry.userId ? people[entry.userId] : undefined;
+    return (
+      <div key={entry.id} className="flex items-start gap-2.5">
+        {person ? (
+          <PersonBadge person={person} size={20} />
+        ) : (
+          <span className="size-5 shrink-0 rounded-full border border-dashed border-sand-400" />
+        )}
+        <div className="min-w-0 flex-1">
+          <div className="flex items-baseline gap-2">
+            <span className="truncate text-[12px]">
+              {/* Without sign-in every entry is the local reader's. */}
+              <span className="font-semibold">
+                {person?.name ?? (authOn ? "?" : t("panes.historyYou"))}
+              </span>{" "}
+              <span className="text-sand-600">{t(KIND_KEY[entry.kind])}</span>
+            </span>
+            <span
+              suppressHydrationWarning
+              className="ml-auto shrink-0 text-[10px] text-sand-500"
+            >
+              {new Date(entry.createdAt).toLocaleString(dateLocale, {
+                month: "short",
+                day: "numeric",
+                hour: "2-digit",
+                minute: "2-digit",
+              })}
+            </span>
+          </div>
+          {entry.content && (
+            <p
+              className={`line-clamp-2 text-[11.5px] text-sand-600 ${
+                REMOVALS.has(entry.kind) ? "line-through decoration-sand-400" : ""
+              }`}
+            >
+              {entry.content}
+            </p>
+          )}
+          {entry.documentTitle && (
+            <p className="truncate text-[10px] text-sand-500">{entry.documentTitle}</p>
+          )}
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div ref={panelRef} className="relative shrink-0">
@@ -108,51 +184,55 @@ export function HistoryControl({ history }: { history: HistoryEntry[] }) {
             {shown.length === 0 && (
               <p className="text-[13px] text-sand-600">{t("panes.historyEmpty")}</p>
             )}
-            {shown.map((entry) => {
-              const person = entry.userId ? people[entry.userId] : undefined;
-              return (
-                <div key={entry.id} className="flex items-start gap-2.5">
-                  {person ? (
-                    <PersonBadge person={person} size={20} />
-                  ) : (
-                    <span className="size-5 shrink-0 rounded-full border border-dashed border-sand-400" />
-                  )}
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-baseline gap-2">
-                      <span className="truncate text-[12px]">
-                        {/* Without sign-in every entry is the local reader's. */}
-                        <span className="font-semibold">
-                          {person?.name ?? (authOn ? "?" : t("panes.historyYou"))}
-                        </span>{" "}
-                        <span className="text-sand-600">{t(KIND_KEY[entry.kind])}</span>
-                      </span>
-                      <span
-                        suppressHydrationWarning
-                        className="ml-auto shrink-0 text-[10px] text-sand-500"
-                      >
-                        {new Date(entry.createdAt).toLocaleString(dateLocale, {
-                          month: "short",
-                          day: "numeric",
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
-                      </span>
+            {foldRuns(shown).map((item) => {
+              if (item.kind === "run") {
+                // A run of small edits by one person in one document, folded
+                // into one row (SPEC.md §12); Show opens it.
+                const first = item.entries[0];
+                const person = first.userId ? people[first.userId] : undefined;
+                const opened = openRuns.has(first.id);
+                return (
+                  <div key={`run-${first.id}`} className="flex flex-col gap-2.5">
+                    <div className="flex items-start gap-2.5">
+                      {person ? (
+                        <PersonBadge person={person} size={20} />
+                      ) : (
+                        <span className="size-5 shrink-0 rounded-full border border-dashed border-sand-400" />
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-baseline gap-2">
+                          <span className="truncate text-[12px]">
+                            <span className="font-semibold">
+                              {person?.name ?? (authOn ? "?" : t("panes.historyYou"))}
+                            </span>{" "}
+                            <span className="text-sand-600">{t("panes.historySmallEdits", { n: item.entries.length })}</span>
+                          </span>
+                          <button
+                            onClick={() =>
+                              setOpenRuns((prev) => {
+                                const next = new Set(prev);
+                                if (opened) next.delete(first.id);
+                                else next.add(first.id);
+                                return next;
+                              })
+                            }
+                            data-track="history-small-edits"
+                            aria-expanded={opened}
+                            className="ml-auto shrink-0 text-[10px] font-semibold text-clay-700 hover:text-clay-800"
+                          >
+                            {t(opened ? "panes.historyHideSmall" : "panes.historyShowSmall")}
+                          </button>
+                        </div>
+                        {first.documentTitle && (
+                          <p className="truncate text-[10px] text-sand-500">{first.documentTitle}</p>
+                        )}
+                      </div>
                     </div>
-                    {entry.content && (
-                      <p
-                        className={`line-clamp-2 text-[11.5px] text-sand-600 ${
-                          REMOVALS.has(entry.kind) ? "line-through decoration-sand-400" : ""
-                        }`}
-                      >
-                        {entry.content}
-                      </p>
-                    )}
-                    {entry.documentTitle && (
-                      <p className="truncate text-[10px] text-sand-500">{entry.documentTitle}</p>
-                    )}
+                    {opened && <div className="flex flex-col gap-2.5 pl-4">{item.entries.map(row)}</div>}
                   </div>
-                </div>
-              );
+                );
+              }
+              return row(item.entry);
             })}
           </div>
         </div>

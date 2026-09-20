@@ -81,6 +81,14 @@ const en = {
 
   // Transcription
   transcript: "Transcription",
+  chapters: "Chapters",
+  chaptersTitle: "The chapters of the recording: a jump to where each topic starts",
+  chaptersAsk: "AI reads the transcript and marks where each topic starts. A chapter's title is its first words.",
+  chaptersGenerate: "Generate chapters",
+  chaptersGenerating: "Reading the transcript…",
+  chaptersViewer: "An editor can generate the chapters.",
+  chaptersNone: "This recording is too short to have chapters.",
+  chaptersFailed: "The chapters could not be built. Try again.",
   transcribeAgain: "Transcribe again",
   transcribeAgainTitle: "Transcribe the video again; the lines are replaced",
   transcribeAgainTitleAudio: "Transcribe the audio again; the lines are replaced",
@@ -245,6 +253,14 @@ const zh: Record<keyof typeof en, string> = {
 
   // Transcription
   transcript: "逐字稿",
+  chapters: "章节",
+  chaptersTitle: "录音的章节：点击跳到每个话题开始处",
+  chaptersAsk: "AI 阅读逐字稿，标出每个话题的开始。章节标题是它的开头几个词。",
+  chaptersGenerate: "生成章节",
+  chaptersGenerating: "正在阅读逐字稿…",
+  chaptersViewer: "编辑者可以生成章节。",
+  chaptersNone: "这段录音太短，没有章节。",
+  chaptersFailed: "章节未能生成。请重试。",
   transcribeAgain: "重新转写",
   transcribeAgainTitle: "重新转写视频；逐字稿行会被替换",
   transcribeAgainTitleAudio: "重新转写音频；逐字稿行会被替换",

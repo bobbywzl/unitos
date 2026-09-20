@@ -24,7 +24,9 @@ import { loadProfile } from "@/lib/derive/context";
 import { callForJson, modelErrorMessage } from "@/lib/derive/json-call";
 import { streamTextTo } from "@/lib/derive/text-stream";
 import { ensureDigest } from "@/lib/digest/ensure";
+import { rankDocumentsForQuestion } from "@/lib/digest/rank";
 import { corpusSystem, documentSystem } from "@/lib/digest/render";
+import { checkOutput } from "@/lib/derive/check";
 import { currentLang, serverT } from "@/lib/i18n/server";
 import { gatewayHeaders } from "@/lib/gateway";
 import { kimi, kimiConfigured, kimiOptions, WEB_SEARCH_TOOL, WEB_SEARCH_USD, webSearchTool } from "@/lib/kimi";
@@ -142,7 +144,10 @@ async function handle(req: Request, t: TFunc) {
     scopeLabel =
       "this page: the open document in full, and every note, annotation, distillation, extraction, and summary on it";
   } else {
-    system = corpusSystem(digest.parts);
+    // Past the text budget, the documents render in the order the question
+    // needs them (lib/digest/rank.ts), so the cut falls on the rest.
+    const documents = await rankDocumentsForQuestion(digest.parts.documents, question, access.user.id);
+    system = corpusSystem({ ...digest.parts, documents });
     scopeLabel =
       "this project: every document in full, and every note, annotation, distillation, extraction, and summary in it";
   }
@@ -292,12 +297,25 @@ async function handle(req: Request, t: TFunc) {
           }
         };
         try {
-          await streamTextTo(result, send, {
+          const text = await streamTextTo(result, send, {
             t,
             onPart: (part) => {
               if (part.type === "tool-call" && part.toolName === WEB_SEARCH_TOOL) searches++;
             },
           });
+          // The check (SPEC.md §25): the answer against its rubric, after
+          // the reader has it; a weak answer is flagged for the loop.
+          if (text.trim() && question) {
+            void checkOutput({
+              tool: "assistant",
+              input: question,
+              output: text,
+              lang,
+              userId: access.user.id,
+              notebookId: data.notebookId,
+              documentId: data.documentId ?? null,
+            });
+          }
         } catch (err) {
           // Stopped by the reader: nobody is listening.
           if (req.signal.aborted) return;

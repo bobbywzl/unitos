@@ -1,3 +1,4 @@
+import { JEV_MODEL, jevEnabled, mapLimit, systemOne } from "@/lib/jev";
 import type { ParsedBlock } from "@/lib/parse/types";
 
 // The figure audit (SPEC.md §15): a deterministic check of a parsed block
@@ -93,4 +94,72 @@ export function auditFigures(blocks: ParsedBlock[]): FigureAudit {
     if (isCaptionGap(blocks, i)) audit.captionsWithoutFigure.push(block.text.trim());
   });
   return audit;
+}
+
+// The caption check on Jev (SPEC.md §15): the label regex knows "Figure 2",
+// "Table 4", "图 3"; a caption in another language or another form ("The
+// pipeline, end to end.", "Source: ...", "Abb. 4") reaches the block list
+// as a text block and the audit misses it. With Jev configured, every short
+// text block the regex passed over and no figure stands beside is asked
+// one yes/no — is this line a caption — and the ones Jev is sure of count
+// as captions without their figure. The threshold is high: a false yes
+// keeps the upload box open for a figure that never was.
+const CAPTION_MIN = 0.8;
+const CANDIDATE_MAX_CHARS = 240;
+const CANDIDATE_MIN_CHARS = 8;
+const CANDIDATES_MAX = 400;
+const CHUNK = 32;
+const PARALLEL = 4;
+
+/** The audit, then Jev over the lines the regex passed over. Without Jev,
+    or when Jev fails, the deterministic audit alone. */
+export async function auditFiguresWithJev(blocks: ParsedBlock[], title: string | null): Promise<FigureAudit> {
+  const audit = auditFigures(blocks);
+  if (!jevEnabled()) return audit;
+  const candidates = blocks.flatMap((block, i) => {
+    if (block.type !== "PARAGRAPH" && block.type !== "HEADING") return [];
+    const text = block.text.trim();
+    if (text.length < CANDIDATE_MIN_CHARS || text.length > CANDIDATE_MAX_CHARS) return [];
+    if (isFigureCaption(text)) return [];
+    if ([blocks[i - 1], blocks[i + 1]].some((b) => b !== undefined && hasMedia(b))) return [];
+    return [{ n: i, text }];
+  });
+  if (candidates.length === 0) return audit;
+  const chunks: { n: number; text: string }[][] = [];
+  for (let i = 0; i < Math.min(candidates.length, CANDIDATES_MAX); i += CHUNK) chunks.push(candidates.slice(i, i + CHUNK));
+  const found: string[] = [];
+  await mapLimit(chunks, PARALLEL, async (chunk) => {
+    const result = await systemOne({
+      state: { document: title ?? "", lines: chunk.map((c) => ({ n: c.n, text: c.text })) },
+      questions: Object.fromEntries(
+        chunk.map((c) => [
+          `line_${c.n}`,
+          {
+            type: "noul" as const,
+            instructions: `Line ${c.n} is a caption: a label or a description of a figure, table, chart, or picture that stands with it, not a sentence of the running text.`,
+            criteria: {
+              true: "The line names or describes a figure, table, chart, or picture, or credits its source.",
+              false: "The line is a sentence, a heading, a list item, or a note of the running text.",
+            },
+          },
+        ]),
+      ),
+      usage: { userId: null, feature: "figure-audit", model: JEV_MODEL },
+      label: "FIGURE_AUDIT",
+    });
+    if (!result.ok) {
+      console.warn("[figure-audit] jev failed:", result.error);
+      return;
+    }
+    for (const c of chunk) {
+      const a = result.answers[`line_${c.n}`];
+      if (a?.type === "noul" && a.noul >= CAPTION_MIN) found.push(c.text);
+    }
+  });
+  if (found.length === 0) return audit;
+  return {
+    ...audit,
+    captions: audit.captions + found.length,
+    captionsWithoutFigure: [...audit.captionsWithoutFigure, ...found],
+  };
 }

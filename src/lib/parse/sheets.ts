@@ -3,6 +3,7 @@ import * as ssf from "ssf";
 import type { ParsedBlock, ParsedDocument } from "@/lib/parse/types";
 import { renderChart } from "@/lib/parse/chart";
 import { fontListAttr } from "@/lib/office-fonts";
+import { JEV_MODEL, jevEnabled, systemOne, type JevQuestion } from "@/lib/jev";
 import type { SlideImageStore } from "@/lib/parse/slides";
 import {
   attr,
@@ -153,7 +154,7 @@ export type Delimiter = "," | "\t" | ";";
 
 /** A delimited text file as one sheet named after the file. The delimiter
     is read from the text unless the caller knows it (a .tsv is tabs). */
-export function parseDelimited(text: string, filename: string, delimiter?: Delimiter): ParsedDocument {
+export async function parseDelimited(text: string, filename: string, delimiter?: Delimiter): Promise<ParsedDocument> {
   const sep = delimiter ?? sniffDelimiter(text);
   const table = parseDelimitedText(text.replace(/^﻿/, ""), sep);
   const rows: Row[] = table.map((cells) => ({
@@ -173,8 +174,90 @@ export function parseDelimited(text: string, filename: string, delimiter?: Delim
     cutRows: null,
     drawings: [],
   };
+  await repairSheet(sheet);
   const workbook: Workbook = { sheets: [sheet], styles: [], styleKey: styleKeyOf(Buffer.from(text)), fonts: [] };
   return { title, blocks: renderWorkbook(workbook), format: "sheets" };
+}
+
+// ── The sheet repairs on Jev (SPEC.md §27) ───────────────────────────────────
+// A .csv has no frozen panes and a workbook often none, so the header row
+// scrolls away with the records; and a column of numbers typed as text
+// ("1,200 kg", "$4.50") lines up left like words. With Jev configured, one
+// call per sheet asks whether row 1 is a header row and, for every column
+// that mixes text and digits, what the column holds. A header row freezes
+// (frozenRows 1); a number column's number-like text cells take the number
+// kind, so they line up right. Nothing else changes: the cells' text stays
+// as it is. Without Jev, or when Jev fails, the sheet stays as read.
+
+const HEADER_MIN = 0.7;
+const COLUMN_MIN_CONFIDENCE = 0.6;
+const REPAIR_ROWS = 6; // rows Jev reads for the header question
+const REPAIR_VALUES = 10; // values Jev reads per column
+const REPAIR_MAX_COLS = 30;
+const REPAIR_CELL_CHARS = 40;
+const NUMBER_LIKE_RX = /^[\s$€£¥+-]*\d[\d,.\s]*(?:%|[a-zA-Z]{1,4})?\s*$/;
+
+const cut = (text: string) => (text.length > REPAIR_CELL_CHARS ? `${text.slice(0, REPAIR_CELL_CHARS - 1)}…` : text);
+
+async function repairSheet(sheet: Sheet): Promise<void> {
+  if (!jevEnabled() || sheet.rows.length < 3) return;
+  const cols = Math.min(REPAIR_MAX_COLS, Math.max(...sheet.rows.slice(0, REPAIR_ROWS).map((r) => r.cells.length)));
+  if (cols === 0) return;
+  const questions: Record<string, JevQuestion> = {};
+  if (sheet.frozenRows === 0) {
+    questions.header = {
+      type: "noul",
+      instructions: "Row 1 is a header row: its cells name the columns, and the rows under it are records with a value under each name.",
+      criteria: {
+        true: "Row 1 holds names or labels, and the rows under it hold values of those names.",
+        false: "Row 1 holds values like the rows under it, or the sheet has no header.",
+      },
+    };
+  }
+  // The columns that mix text and digits: the ones a kind could change.
+  const mixed: number[] = [];
+  const columns: { c: number; header: string; values: string[] }[] = [];
+  for (let c = 0; c < cols; c++) {
+    const cells = sheet.rows.slice(1).map((r) => r.cells[c]).filter((cell) => cell && cell.kind !== "empty");
+    if (cells.length < 3) continue;
+    if (!cells.some((cell) => cell.kind === "text" && NUMBER_LIKE_RX.test(cell.text))) continue;
+    mixed.push(c);
+    columns.push({ c, header: sheet.rows[0].cells[c]?.text ?? "", values: cells.slice(0, REPAIR_VALUES).map((cell) => cut(cell.text)) });
+    questions[`col_${c}`] = {
+      type: "choice",
+      instructions: `What column ${c} holds.`,
+      criteria: {
+        number: "Amounts, counts, measurements, prices, or percentages, with or without a unit or a currency sign.",
+        date: "Dates or times.",
+        identifier: "Codes, ids, phone numbers, or references: digits that name, not measure.",
+        text: "Words.",
+      },
+    };
+  }
+  if (Object.keys(questions).length === 0) return;
+  const result = await systemOne({
+    state: {
+      rows: sheet.rows.slice(0, REPAIR_ROWS).map((r) => r.cells.slice(0, cols).map((cell) => cut(cell.text))),
+      columns,
+    },
+    questions,
+    usage: { userId: null, feature: "sheets-repair", model: JEV_MODEL },
+    label: "SHEETS_REPAIR",
+  });
+  if (!result.ok) {
+    console.warn("[sheets] jev repair failed:", result.error);
+    return;
+  }
+  const header = result.answers.header;
+  if (header?.type === "noul" && header.noul >= HEADER_MIN) sheet.frozenRows = 1;
+  for (const c of mixed) {
+    const a = result.answers[`col_${c}`];
+    if (a?.type !== "choice" || a.choice !== "number" || a.confidence < COLUMN_MIN_CONFIDENCE) continue;
+    for (const row of sheet.rows.slice(1)) {
+      const cell = row.cells[c];
+      if (cell && cell.kind === "text" && NUMBER_LIKE_RX.test(cell.text)) cell.kind = "number";
+    }
+  }
 }
 
 /** Which delimiter the text uses: the one that splits the first lines into
@@ -290,7 +373,10 @@ async function readWorkbook(zip: OfficeZip, bytes: Uint8Array, storeImage: Slide
     if (!rel || rel.external) continue;
     const name = cleanText(attr(sheetEl, "name") ?? `Sheet ${read.length + 1}`);
     const sheet = readSheet(zip, rel.target, name, shared, styles, date1904);
-    if (sheet) read.push(sheet);
+    if (sheet) {
+      await repairSheet(sheet.sheet);
+      read.push(sheet);
+    }
   }
   const drawingCtx: DrawingCtx = {
     zip,
