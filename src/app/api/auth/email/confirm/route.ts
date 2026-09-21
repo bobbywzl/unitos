@@ -21,8 +21,7 @@ export async function GET(req: Request) {
     );
   }
 
-  // The name is the email's local part: the sign-up form asks for the
-  // email alone. Settings changes it.
+  // The email local part is the standing fallback when the form left name empty.
   const name = pending.name || pending.email.split("@")[0];
   const signed = await signIn({ email: pending.email, name, picture: "" });
   if (signed === "blocked") {

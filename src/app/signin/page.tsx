@@ -333,20 +333,29 @@ export default async function SignInPage({
                 </div>
                 <div className="space-y-3">
                   {emailEnabled() && mode === "up" && (
-                    // Sign-up is the email alone (SPEC.md §2): the
-                    // confirmation link opens the account on the dashboard.
                     <form action="/api/auth/email/start" method="post" className="space-y-2.5">
-                      <input
-                        name="email"
-                        type="email"
-                        required
-                        autoComplete="email"
-                        maxLength={200}
-                        placeholder={t("signin.emailLabel")}
-                        aria-label={t("signin.emailLabel")}
-                        className={inputCls}
-                      />
-                      <UnitosButton label={t("signin.signUp")} />
+                      <div className="grid grid-cols-[0.8fr_1.2fr] gap-2.5">
+                        <input
+                          name="name"
+                          type="text"
+                          autoComplete="name"
+                          maxLength={80}
+                          placeholder={t("signin.nameLabel")}
+                          aria-label={t("signin.nameLabel")}
+                          className={inputCls}
+                        />
+                        <input
+                          name="email"
+                          type="email"
+                          required
+                          autoComplete="email"
+                          maxLength={200}
+                          placeholder={t("signin.emailLabel")}
+                          aria-label={t("signin.emailLabel")}
+                          className={inputCls}
+                        />
+                      </div>
+                      <UnitosButton label={t("signin.unitos")} />
                       <p className="text-center text-xs text-sand-600">
                         <Link href="/signin?mode=in" className="font-semibold text-clay hover:brightness-110">
                           {t("signin.toSignin")}
