@@ -53,9 +53,7 @@ export type NotebookView = {
 
 // ── SUMMARIZE: document-level summary, one per depth ───────────────────────
 
-// Depth "insights" is Insiders Insights: industry-insider findings, with
-// declared insufficiency as a correct answer.
-export const SUMMARY_DEPTHS = ["insights", "layman", "professional"] as const;
+export const SUMMARY_DEPTHS = ["layman", "professional"] as const;
 export type SummaryDepth = (typeof SUMMARY_DEPTHS)[number];
 /** Stored on NotebookDocument.summaries: one summary per generated depth. */
 export type SummaryLevels = Partial<Record<SummaryDepth, string>>;
@@ -355,10 +353,11 @@ export type GraphEdgeLink = {
 };
 
 /** One undirected pair of documents. Edge width and clay depth scale with
-    the total; a pair connected only by recommended links draws dashed. */
+    the total; a pair connected only by recommended links draws dashed.
+    a === b: the links inside one document, drawn as a loop on its node. */
 export type GraphEdge = {
   a: string; // document id
-  b: string; // document id
+  b: string; // document id; equal to a for a loop
   accepted: number;
   recommended: number;
   links: GraphEdgeLink[]; // accepted first, oldest first

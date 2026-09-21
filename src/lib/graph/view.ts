@@ -82,8 +82,9 @@ export async function documentsGraph(
   const titleOf = new Map(documents.map((d) => [d.id, d.title]));
   const nodes: GraphNode[] = documents.map((d) => ({ id: d.id, title: d.title, hasVideo: d.hasVideo }));
   const edgeByPair = new Map<string, GraphEdge>();
+  // A link with both ends in one document is an edge from the node to
+  // itself: a loop on that node (SPEC.md §13).
   for (const link of links) {
-    if (link.fromDocumentId === link.toDocumentId) continue;
     const [a, b] = [link.fromDocumentId, link.toDocumentId].sort();
     const edge = edgeByPair.get(`${a}|${b}`) ?? { a, b, accepted: 0, recommended: 0, links: [] };
     if (link.recommended) edge.recommended++;

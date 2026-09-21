@@ -187,7 +187,7 @@ const en = {
   // Services (env status; moved here from Settings — operator concern, not reader)
   services: "Services",
   svcGlm: "GLM 5.3: the reader's tools, the assistant, Stitch, Merge with AI. GLM 5.3 Flash: the readings and the parse passes. Through the gateway alone; Kimi stands in without it",
-  svcKimi: "Kimi K3: calls that carry an image, the assistant with Web on, and every GLM call without the gateway",
+  svcKimi: "Kimi K3: Extract, the parse passes, calls that carry an image, the assistant with Web on, and every GLM call without the gateway",
   svcClaude: "Import: upload review, parse, PDF judgment, conversion",
   svcSignIn: "Sign-in at /signin",
   svcAdmin: "Feedback inbox and digest at /admin",
@@ -555,7 +555,7 @@ const zh: Record<keyof typeof en, string> = {
   agoDays: "{n} 天前",
   services: "服务",
   svcGlm: "GLM 5.3：阅读器工具、助手、Stitch、AI 合并。GLM 5.3 Flash：各项读取和解析步骤。只经过网关；没有网关时由 Kimi 代替",
-  svcKimi: "Kimi K3：带图片的调用、开启联网的助手，以及没有网关时的所有 GLM 调用",
+  svcKimi: "Kimi K3：提取、解析步骤、带图片的调用、开启联网的助手，以及没有网关时的所有 GLM 调用",
   svcClaude: "导入：上传审阅、解析、PDF 判断、转换",
   svcSignIn: "位于 /signin 的登录",
   svcAdmin: "位于 /admin 的反馈收件箱与汇编",
