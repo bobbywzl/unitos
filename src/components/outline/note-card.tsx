@@ -15,7 +15,7 @@ import { markdownPreview } from "@/lib/markdown-preview";
 import { useGist } from "@/lib/gist-client";
 import { useMergeTarget, type HandleProps } from "@/components/sortable";
 import { useNoteDrop } from "@/components/use-note-drop";
-import { annotationReferenceMarkdown } from "@/lib/annotation-reference";
+import { referenceMarkdownForDrop } from "@/components/outline/reference-drop";
 import { quoteMarkdown } from "@/lib/quote-drag";
 import { useAnnotationSide } from "@/components/outline/annotation-side";
 import { imageMarkdown } from "@/lib/images";
@@ -97,13 +97,18 @@ function AnchorIcon({ size = 11 }: { size?: number }) {
 // the title, the body, and the actions. Collapsed, the header row is the whole
 // card: the id and the title, or the gist when the note has no title.
 //
-// A note has two modes, and only ever one of them (SPEC.md §6):
+// A note has two modes (SPEC.md §6):
 // - Draggable, the default: a hold anywhere on the card picks the note up
 //   (components/hold-sensor.ts) — to reorder it, to move it to another
 //   section, to hold it over another note until the ring closes and merge
 //   the two, or, in the tray, to drop it on the article and float it there.
 // - Editing: the pencil opens the editor in place — the title field and the
-//   body's editor at the same size — and nothing drags until Done or Cancel.
+//   body's editor at the same size. The editor keeps the press (a press in a
+//   text field never drags, lib/hold-drag.ts, and neither do its bar and
+//   its buttons); a hold on the header row still picks the note up, and the
+//   card still takes every drop: an annotation or a quote lands in the
+//   draft, a note held over it joins it once its draft is saved
+//   (use-note-draft.ts).
 export function NoteCard({
   note,
   actions,
@@ -179,7 +184,7 @@ export function NoteCard({
       }
       if (drag.kind === "annotation") {
         if (!drag.reference) return;
-        await addToNote(annotationReferenceMarkdown(actions.notebookId, drag.reference));
+        await addToNote(await referenceMarkdownForDrop(actions.notebookId, drag.reference, t));
         return;
       }
       await actions.mergeNotes(note.id, drag.ids, "join");
@@ -379,9 +384,11 @@ export function NoteCard({
   }
 
   // Draggable mode: the board's listeners on the whole card, so a hold
-  // anywhere picks the note up. Never while editing, never while the AI is
-  // merging into it, never while it floats, and never for a viewer.
-  const draggable = Boolean(handle) && canEdit && !editing && !merging && !floating;
+  // anywhere picks the note up — while editing, a hold on the header row,
+  // since the editor's fields, its bar, and its buttons keep their press.
+  // Never while the AI is merging into it, never while it floats, and never
+  // for a viewer.
+  const draggable = Boolean(handle) && canEdit && !merging && !floating;
   const dragProps = draggable
     ? {
         ...(handle?.listeners ?? {}),
@@ -534,15 +541,18 @@ export function NoteCard({
   if (editing) {
     // The editing card takes the same drops as the card at rest (SPEC.md
     // §6): an annotation or a quote lands in the draft (addToNote), a note
-    // joins. The ring turns sage while a card is held over it.
+    // joins once the draft is saved (use-outline.ts mergeNotes). The ring
+    // turns sage while a card is held over it. The same hold drags it, on
+    // the header row.
     return (
       <div
         ref={editCardRef}
         data-note-id={note.id}
         data-note-editing=""
         data-note-drop-target={takesDrop ? note.id : undefined}
-        style={limit !== null ? { maxHeight: limit } : undefined}
         {...noteDrop.handlers}
+        {...dragProps}
+        style={{ ...(draggable ? { touchAction: "pan-y" as const } : {}), ...(limit !== null ? { maxHeight: limit } : {}) }}
         data-tip={
           dropTip ??
           (cardDrop.over
@@ -553,10 +563,12 @@ export function NoteCard({
                     ? "outline.dropQuoteIntoNote"
                     : "outline.dropNote",
               )
-            : undefined)
+            : isMergeTarget
+              ? t("outline.holdToMerge")
+              : undefined)
         }
         className={`flex flex-col ${pane ? "outline-2 -outline-offset-2" : "rounded-2xl bg-card shadow-soft outline-2"} ${
-          cardDrop.over ? "outline-sage-500" : "outline-clay-400"
+          cardDrop.over || isMergeTarget ? "outline-sage-500" : "outline-clay-400"
         } ${PADDING[variant]}${dropRing}`}
       >
         {header}
@@ -586,6 +598,7 @@ export function NoteCard({
         />
         <div className="mt-2 flex shrink-0 items-center gap-2">
           <button
+            data-no-drag
             onClick={() => void done()}
             data-track="note-save"
             className="rounded-full bg-sage-600 px-3.5 py-1 text-xs font-semibold text-sage-fg hover:bg-sage-700"
@@ -593,6 +606,7 @@ export function NoteCard({
             {t("common.done")}
           </button>
           <button
+            data-no-drag
             onClick={cancel}
             data-track="note-cancel"
             className="rounded-full border border-line px-3 py-1 text-xs text-sand-700 hover:bg-clay-100 hover:text-clay-800"

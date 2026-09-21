@@ -19,7 +19,7 @@ import { NoteId } from "@/components/outline/note-id";
 import { NoteTitleField, focusBodyEditor, useNoteParts } from "@/components/outline/note-title-field";
 import { SaveStateLabel } from "@/components/outline/save-state";
 import { useNoteDrop } from "@/components/use-note-drop";
-import { annotationReferenceMarkdown } from "@/lib/annotation-reference";
+import { referenceMarkdownForDrop } from "@/components/outline/reference-drop";
 import { quoteMarkdown } from "@/lib/quote-drag";
 import { useCardDropTarget } from "@/components/outline/use-card-drop";
 import { useNoteDraft } from "@/components/outline/use-note-draft";
@@ -298,7 +298,7 @@ export function FloatingNoteEditor({
           await addToNote(quoteMarkdown(quote.text));
           if (note) await actions.attachSource(note.id, quote);
         } else if (reference) {
-          await addToNote(annotationReferenceMarkdown(actions.notebookId, reference));
+          await addToNote(await referenceMarkdownForDrop(actions.notebookId, reference, t));
         }
       } catch (err) {
         setMergeError(err instanceof Error ? err.message : t("common.requestFailed"));

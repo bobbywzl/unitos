@@ -24,7 +24,17 @@ export type AnnotationReference = {
       (lib/derive/visualize.ts). It lands in the note above the reference,
       so the note shows the picture, not only the row that opens it. */
   picture?: string;
+  /** The conversation the annotation holds (SPEC.md §21): how many turns.
+      0 or absent: none. With turns, the drop fetches the conversation's
+      log and lands it under the row (components/outline/reference-drop.ts). */
+  turns?: number;
+  /** The conversation's log, one line per message (lib/notes/conversation-log.ts),
+      set at drop time: it lands under the row as a dash list. */
+  log?: { role: "user" | "assistant"; text: string }[];
 };
+
+/** The log lines a reference lands: the last LOG_LINES_MAX of them. */
+const LOG_LINES_MAX = 20;
 
 /** The query parameter that names the annotation the reader opens on arrival. */
 export const ANNOTATION_PARAM = "annotation";
@@ -48,11 +58,20 @@ export function annotationReferenceHref(notebookId: string, ref: AnnotationRefer
 }
 
 /** The reference as note markdown: a link on a line of its own, under the
-    picture when the annotation is a visualization. */
-export function annotationReferenceMarkdown(notebookId: string, ref: AnnotationReference): string {
+    picture when the annotation is a visualization, and over the
+    conversation's log when the annotation holds one — a dash list, one
+    line per message, each opening with who said it (`labels`), so the note
+    keeps the exchange and not only the door to it. */
+export function annotationReferenceMarkdown(
+  notebookId: string,
+  ref: AnnotationReference,
+  labels: { user: string; assistant: string } = { user: "You", assistant: "Assistant" },
+): string {
   const row = `[${ref.label}](${annotationReferenceHref(notebookId, ref)})`;
   const picture = ref.picture?.trim();
-  return picture ? `${picture}\n\n${row}` : row;
+  const head = picture ? `${picture}\n\n${row}` : row;
+  const lines = (ref.log ?? []).slice(-LOG_LINES_MAX).map((l) => `- ${l.role === "user" ? labels.user : labels.assistant}: ${l.text.replace(/\s+/g, " ").trim()}`);
+  return lines.length > 0 ? `${head}\n\n${lines.join("\n")}` : head;
 }
 
 export type ParsedAnnotationReference = {

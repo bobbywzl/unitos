@@ -162,6 +162,8 @@ function AnnotationCard({
                 label: gist,
                 // A visualization brings its picture into the note.
                 ...(annotation.kind === "visualize" ? { picture: annotation.content } : {}),
+                // A conversation brings its log under the row.
+                ...(annotation.conversation.length > 0 ? { turns: annotation.conversation.length } : {}),
               }}
             />
           </div>
