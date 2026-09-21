@@ -77,6 +77,10 @@ export type Highlight = {
   // The stored AI annotation's tool symbol renders at the end of the span, in
   // every view; the symbol opens the card. Kind "anchor" only.
   tool?: "explain" | "simplify" | "analyze" | "visualize" | "assistant";
+  // The stored AI annotation's card is open: the mark keeps the clay fill.
+  // Closed, a stored AI annotation is its underline and its symbol alone,
+  // so it never reads as the live selection (globals.css .tool-mark).
+  open?: boolean;
   // The tool's output continued into a conversation — Explain+, Simplify+,
   // Analyze+, Visualize+ (SPEC.md §21): the symbol carries a plus.
   plus?: boolean;
@@ -101,10 +105,12 @@ export type Highlight = {
   linkReason?: string | null;
 };
 
-function anchorClass(color: string | null | undefined): string {
-  if (color === "sage") return "hl-sage";
-  if (color === "gold") return "hl-gold";
-  if (color === "plum") return "hl-plum";
+function anchorClass(anchor: Highlight): string {
+  if (anchor.color === "sage") return "hl-sage";
+  if (anchor.color === "gold") return "hl-gold";
+  if (anchor.color === "plum") return "hl-plum";
+  // A stored AI annotation whose card is closed: underline and symbol, no fill.
+  if (anchor.annotation && anchor.tool && !anchor.open) return "tool-mark";
   return "anchor-mark";
 }
 
@@ -362,7 +368,7 @@ function markedText(text: string, highlights: Highlight[], t: TFunc) {
       const markClass = simplify
         ? "simplify-mark"
         : anchor
-          ? anchorClass(anchor.color)
+          ? anchorClass(anchor)
           : extract
             ? extract.extractOrigin
               ? "extract-origin-mark"

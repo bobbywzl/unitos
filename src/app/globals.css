@@ -262,6 +262,17 @@ mark,
   background-color: var(--mark-bg);
   border-bottom: 2px solid color-mix(in srgb, var(--clay-500) 70%, transparent);
 }
+/* A stored AI annotation whose card is closed (block-view.tsx tool-mark):
+   the underline and the tool's symbol alone, no fill, so it never reads as
+   the live selection; the fill returns on hover, and while its card is open. */
+.tool-mark {
+  --mark-bg: color-mix(in srgb, var(--clay-400) 32%, transparent);
+  background-color: transparent;
+  border-bottom: 2px solid color-mix(in srgb, var(--clay-500) 70%, transparent);
+}
+.tool-mark:hover {
+  background-color: var(--mark-bg);
+}
 .salience-mark {
   --mark-bg: color-mix(in srgb, var(--sage-500) 28%, transparent);
   background-color: var(--mark-bg);

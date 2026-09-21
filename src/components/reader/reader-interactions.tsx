@@ -5141,11 +5141,18 @@ function blockFormatKind(
           ((stored?.conversation.length ?? 0) > 0 ||
             openTurns > 0 ||
             (toolConversationsRef.current[h.noteId]?.length ?? 0) > 0);
+        // Its card open: the mark keeps the fill (block-view.tsx open).
+        const open =
+          bubble?.noteId === h.noteId ||
+          simplifyCard?.noteId === h.noteId ||
+          assistantChat?.noteId === h.noteId ||
+          commentCard?.noteId === h.noteId;
         return {
           ...h,
           kind: "anchor" as const,
           tool,
           plus,
+          open,
           leaving: removedNotes[h.noteId] === "leaving",
         };
       });
