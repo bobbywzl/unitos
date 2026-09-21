@@ -116,7 +116,7 @@ export function HeroPitch({ rows, doneLabel }: { rows: PitchRow[]; doneLabel: st
                 r.close
                   ? "grid pt-1 text-lg leading-snug font-semibold text-ink sm:text-xl"
                   : r.lead
-                    ? "grid text-lg leading-snug font-bold text-ink sm:text-xl"
+                    ? "grid max-w-[34ch] text-lg leading-snug font-bold text-balance text-ink sm:text-xl"
                     : "grid text-[13.5px] leading-relaxed font-medium text-sand-800 sm:text-[15px]"
               }
             >

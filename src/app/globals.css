@@ -1562,42 +1562,104 @@ ellipse.anchor-flash {
   background-size: 26px 26px;
 }
 
-/* Sign-in reader tour: the cursor glides between dots, dips on the click,
-   and a ripple rings the dot it clicked. CSS only — timing in the component. */
-.tour-cursor {
-  transition:
-    left 0.62s cubic-bezier(0.5, 0.05, 0.25, 1),
-    top 0.62s cubic-bezier(0.5, 0.05, 0.25, 1),
-    opacity 0.4s ease;
-  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.45));
-}
-@keyframes tour-click {
-  0% {
-    transform: scale(1);
-  }
-  40% {
-    transform: scale(0.8);
-  }
+/* Sign-in card (signin/page.tsx): a clay halo behind the card and a ring
+   and shadow on the card, both breathing on one 3.2 s loop. The sentence
+   beside the card has a dashed arrow that nudges toward it with its dashes
+   flowing. Still under reduced motion, the ring held at its mid state. */
+@keyframes si-glow {
+  0%,
   100% {
+    box-shadow:
+      0 0 0 1px rgb(217 138 82 / 0.45),
+      0 0 60px -14px rgb(217 138 82 / 0.55),
+      0 0 120px -30px rgb(217 138 82 / 0.35);
+  }
+  50% {
+    box-shadow:
+      0 0 0 1px rgb(217 138 82 / 0.9),
+      0 0 80px -10px rgb(217 138 82 / 0.9),
+      0 0 160px -20px rgb(217 138 82 / 0.55);
+  }
+}
+@keyframes si-halo {
+  0%,
+  100% {
+    opacity: 0.55;
     transform: scale(1);
   }
-}
-.tour-click {
-  animation: tour-click 0.3s ease-out both;
-  transform-origin: 25% 15%;
-}
-@keyframes tour-ripple {
-  from {
-    opacity: 0.9;
-    transform: translate(-50%, -50%) scale(0.3);
+  50% {
+    opacity: 1;
+    transform: scale(1.06);
   }
+}
+@keyframes si-nudge {
+  0%,
+  100% {
+    transform: translateX(0);
+    opacity: 0.7;
+  }
+  50% {
+    transform: translateX(-14px);
+    opacity: 1;
+  }
+}
+@keyframes si-dash {
   to {
-    opacity: 0;
-    transform: translate(-50%, -50%) scale(2.6);
+    stroke-dashoffset: -24;
   }
 }
-.tour-ripple {
-  animation: tour-ripple 0.7s ease-out both;
+.si-halo {
+  background: radial-gradient(closest-side, rgb(217 138 82 / 0.35), rgb(217 138 82 / 0));
+  animation: si-halo 3.2s ease-in-out infinite;
+}
+.si-card-glow {
+  animation: si-glow 3.2s ease-in-out infinite;
+}
+.si-nudge {
+  animation: si-nudge 1.6s ease-in-out infinite;
+}
+.si-dash {
+  animation: si-dash 1.2s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .si-halo,
+  .si-card-glow,
+  .si-nudge,
+  .si-dash {
+    animation: none;
+  }
+  .si-card-glow {
+    box-shadow:
+      0 0 0 1px rgb(217 138 82 / 0.6),
+      0 0 70px -12px rgb(217 138 82 / 0.7);
+  }
+}
+/* The reader deck (signin/reader-deck.tsx): the strip snaps one screen at
+   a time and shows no scrollbar. */
+.si-deck-strip {
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.si-deck-strip::-webkit-scrollbar {
+  display: none;
+}
+/* The fall from the front door to the plans story (signin/page.tsx): a
+   tall eased gradient from the dark ground to the plans' cream. */
+.si-to-plans {
+  height: clamp(320px, 55vh, 560px);
+  margin-top: -80px;
+  background: linear-gradient(
+    180deg,
+    #14110d 0%,
+    #1d1812 12%,
+    #3a2f24 30%,
+    #6b5a45 48%,
+    #a8957a 64%,
+    #d4c3a8 80%,
+    #ede0cc 92%,
+    #f5ead8 100%
+  );
 }
 
 /* The beta notice's bowing figure (signin/beta-notice.tsx): the body tips
