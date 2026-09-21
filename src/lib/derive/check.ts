@@ -33,7 +33,7 @@ const CRITERIA: Record<CheckTool, Criterion[]> = {
   ],
   summarize: [
     { key: "findings_first", holds: "The output opens with what the document found and why it matters, before how it was done.", fails: "The output opens with background, method, or a description of the document." },
-    { key: "style", holds: "The output has short sentences, no preamble, and no closing summary.", fails: "The output has a preamble, a closing summary, or long winding sentences." },
+    { key: "style", holds: "The output answers directly and first, in short sentences and plain words, with no idioms, no preamble, and no closing summary.", fails: "The output has a preamble, a closing summary, an idiom, or long winding sentences." },
   ],
   distill: [
     { key: "answers", holds: "The quotes together answer the question as far as they can, with nothing stretched into an answer they do not give.", fails: "A quote is presented as an answer it does not give." },
@@ -44,7 +44,7 @@ const CRITERIA: Record<CheckTool, Criterion[]> = {
   assistant: [
     { key: "answer_first", holds: "The answer is in the first one or two sentences, before the evidence.", fails: "The output opens with context, method, or a restatement of the question." },
     { key: "honest", holds: "Where the material does not answer, the output says so, and does not fill the gap from general knowledge.", fails: "The output fills a gap in the material from general knowledge without saying so." },
-    { key: "style", holds: "The output has short sentences, no preamble, and no closing summary.", fails: "The output has a preamble, a closing summary, or long winding sentences." },
+    { key: "style", holds: "The output answers directly and first, in short sentences and plain words, with no idioms, no preamble, and no closing summary.", fails: "The output has a preamble, a closing summary, an idiom, or long winding sentences." },
   ],
 };
 

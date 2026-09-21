@@ -1,7 +1,7 @@
 import { ACTION_TYPE_LINES } from "@/lib/assistant/plan";
 import type { ChatTurn } from "@/lib/conversation";
 import type { Lang } from "@/lib/i18n/config";
-import { languageName, profileLines, type ReaderProfileCtx } from "@/lib/prompts/types";
+import { languageName, profileLines, STYLE_RULE, type ReaderProfileCtx } from "@/lib/prompts/types";
 
 // ACT: the selection chat and the article menu (SPEC.md §7, `/api/assistant/act`).
 // The reader's message becomes a plan: reply (the answer), actions (edits,
@@ -71,7 +71,7 @@ export function actPrompt(ctx: ActCtx): string {
     "5. TABLE and FIGURE blocks cannot be edited or removed.",
     "6. In reply, cite blocks as [block <id>] when you point at specific parts of the document — the tags render as links the reader can click.",
     `7. Write reply, every description, and every why in ${language}.`,
-    "8. reply: start with the answer, in one sentence. Then the evidence: what the document says, each claim citing its block. Short sentences, plain words, one point per sentence, under 150 words. No preamble, no filler, no closing summary. Say plainly when the document does not answer, then say what the document does say about it. Never add a fact the document does not state. A sentence that could be written about any other document is deleted; a sentence that restates the selection in other words is deleted.",
+    `8. reply: start with the answer, in one sentence. Then the evidence: what the document says, each claim citing its block. Under 150 words. ${STYLE_RULE} Say plainly when the document does not answer, then say what the document does say about it. Never add a fact the document does not state. A sentence that could be written about any other document is deleted; a sentence that restates the selection in other words is deleted.`,
     ...(ctx.hasSelection
       ? [
           "9. matches: the passages across the document that deal with what the selection focuses on. Do this before you write reply, and answer from them:",

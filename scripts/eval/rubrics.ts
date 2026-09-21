@@ -94,6 +94,6 @@ export const RUBRICS: Record<string, Rubric> = {
 
 // The criteria every assistant-voice tool shares, appended to its rubric.
 export const SHARED_CRITERIA: { key: string; ask: string }[] = [
-  { key: "style", ask: "Short sentences, plain words, one point per sentence, no preamble, no filler, no closing summary?" },
+  { key: "style", ask: "Is the answer direct and first, in short sentences and plain words, one point per sentence, with no idioms, no complex phrases, no preamble, no filler, and no closing summary?" },
   { key: "language", ask: "Is the output in the language the prompt asked for (the reader's UI language for assistant-voice tools, the passage's language for Simplify)?" },
 ];

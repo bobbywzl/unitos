@@ -1,5 +1,5 @@
 import type { Lang } from "@/lib/i18n/config";
-import { languageName, profileLines, type ReaderProfileCtx } from "@/lib/prompts/types";
+import { languageName, profileLines, STYLE_RULE, type ReaderProfileCtx } from "@/lib/prompts/types";
 
 // Stitch (SPEC.md §22): the assistant over the project's documents, from
 // the graph. Three prompts. The route pass reads the documents' gists and
@@ -125,7 +125,7 @@ export function stitchPrompt(ctx: StitchCtx): string {
     '   - {"kind": "quote", "blockId": "<alias>"}: one whole block of a document, copied as it is. Add "quote": "…" with a verbatim part of the block to keep that part alone. Use quote parts for everything the command asks to gather, collect, or list from the documents; a quote part never rewrites.',
     `   - {"kind": "text", "markdown": "…", "sources": [{"blockId": "<alias>", "quote": "…"}]}: your own writing, in ${name}, in markdown (paragraphs, lists, bold). sources: the blocks the writing rests on, each with a verbatim quote of 8 to 300 characters. Every text part needs at least one source. Write nothing the documents do not support.`,
     "   Up to 200 parts. A command that asks to gather and to summarise gets both: the quote parts, then a text part with the summary. null when the command asks for no page.",
-    `3. reply: the answer to the command in plain sentences, in ${name}. A question gets its answer here — concise, concrete, every claim with the document it comes from named — and a page only when the command asks for one. A command to gather, link, or write gets one to three sentences on what the page holds, how many links, or why the command could not be done with these documents. A document not read, or read only in part, gets one sentence saying so. Never restate the page.`,
+    `3. reply: the answer to the command in plain sentences, in ${name}. A question gets its answer here — concise, concrete, every claim with the document it comes from named — and a page only when the command asks for one. A command to gather, link, or write gets one to three sentences on what the page holds, how many links, or why the command could not be done with these documents. A document not read, or read only in part, gets one sentence saying so. Never restate the page. ${STYLE_RULE}`,
     "Rules: every blockId is an alias tagged above, copied exactly; never invent one. In reply, cite a block as [block <alias>]. Every quote is real text of the named block, copied exactly. When the command cannot be done with these documents, say so in reply and return empty links and a null document.",
     'Return ONLY JSON: {"reply": "…", "links": [{"fromBlockId": "A3", "fromQuote": "…", "toBlockId": "B12", "toQuote": "…", "reason": "…"}], "document": {"title": "…", "parts": [{"kind": "heading", "text": "…"}, {"kind": "quote", "blockId": "A4"}, {"kind": "quote", "blockId": "B7", "quote": "…"}, {"kind": "text", "markdown": "…", "sources": [{"blockId": "A4", "quote": "…"}]}]}}',
   ].join("\n");
