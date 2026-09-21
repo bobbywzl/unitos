@@ -1,6 +1,7 @@
 import { Noto_Serif_Display } from "next/font/google";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { FunnelStepMark } from "@/components/funnel-step";
 import { LangSwitcher } from "@/components/lang-switcher";
 import { Logo } from "@/components/logo";
 import { appleEnabled, authEnabled, currentUser, emailEnabled, googleEnabled } from "@/lib/auth";
@@ -232,6 +233,8 @@ export default async function SignInPage({
     <div
       className={`${heroFont.variable} dark relative flex min-h-screen flex-col overflow-hidden bg-[#14110d] text-ink`}
     >
+      {/* The onboarding funnel (lib/funnel.ts): the first step. */}
+      <FunnelStepMark step="signin" />
       {/* Backdrop: clay glow + dot lattice + the mark covering the top-left quadrant, behind everything */}
       <div aria-hidden className="signin-glow pointer-events-none absolute inset-0" />
       <div aria-hidden className="signin-dots pointer-events-none absolute inset-0" />

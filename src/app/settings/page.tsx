@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { accountData } from "@/lib/account-data";
 import { authEnabled, currentUser } from "@/lib/auth";
+import { subscriptionSummary } from "@/lib/billing/subscription";
 import { billingLinks } from "@/lib/billing/switch";
 import { db } from "@/lib/db";
 import { driveConfig } from "@/lib/drive/config";
@@ -11,7 +12,7 @@ import { Logo } from "@/components/logo";
 import { AccountGuard } from "@/components/account-guard";
 import { SettingsForm } from "@/components/settings-form";
 import { accountStorage } from "@/lib/storage";
-import { accountTier } from "@/lib/tiers";
+import { accountTier, betaOn, tierState } from "@/lib/tiers";
 
 export const dynamic = "force-dynamic";
 
@@ -66,8 +67,13 @@ export default async function SettingsPage() {
         plan={{
           state: accountTier(user, authEnabled()),
           trialEndsAt: user.trialEndsAt?.toISOString() ?? null,
+          // The beta (TIERS.md): the app has every account on Ultra; the
+          // subscription panel's status reads the record, like the plan page.
+          record: authEnabled() && betaOn() ? tierState(user) : null,
         }}
-        billing={billing ? { subscribed: user.subscriptionId !== "" } : null}
+        // The subscription panel (SPEC.md §24): the account's subscription as
+        // Stripe reports it, while billing is on.
+        billing={billing ? { subscription: await subscriptionSummary(user) } : null}
         drive={
           drive && (drive.canLink || drive.linked)
             ? { linked: drive.linked, canLink: drive.canLink, access: drive.access, grant: drive.grant }

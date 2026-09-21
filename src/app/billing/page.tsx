@@ -9,6 +9,7 @@ import { BillingFrame } from "@/components/billing/frame";
 import { PlanCard } from "@/components/billing/plan-card";
 import { planChoice } from "@/components/billing/plan-choice";
 import { PortalButton } from "@/components/billing/portal-button";
+import { FunnelStepMark } from "@/components/funnel-step";
 
 export const dynamic = "force-dynamic";
 
@@ -65,6 +66,8 @@ export default async function PlansPage({
 
   return (
     <BillingFrame back="app" preview={view.preview}>
+      {/* The onboarding funnel (lib/funnel.ts): the plan page is the plans step too. */}
+      <FunnelStepMark step="plans" />
       <section className="billing-rise">
         <h1 className="mb-2.5 font-display text-[clamp(38px,5.5vw,64px)] tracking-[-0.02em] text-(--bl-title)">
           {t("billing.plans")}

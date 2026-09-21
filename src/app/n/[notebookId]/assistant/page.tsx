@@ -10,6 +10,7 @@ import { serverT } from "@/lib/i18n/server";
 import { formatTimeRange } from "@/lib/video/types";
 import { ArrowLeftIcon } from "@/components/icons";
 import { AccountGuard } from "@/components/account-guard";
+import { ActiveTimeClock } from "@/components/active-time-clock";
 import {
   AssistantHistory,
   type HistoryConversation,
@@ -101,6 +102,7 @@ export default async function AssistantHistoryPage(props: { params: Promise<{ no
   return (
     <main className="mx-auto w-full max-w-[760px] px-6 pt-[26px] pb-24">
       <AccountGuard userId={user.id} enabled={authEnabled()} />
+      <ActiveTimeClock enabled={authEnabled()} />
       <header className="mb-[34px] flex items-center gap-2">
         <Link
           href={`/n/${notebook.id}`}

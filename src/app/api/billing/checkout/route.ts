@@ -5,6 +5,7 @@ import { createCheckout } from "@/lib/billing/checkout";
 import { stripeConfigured, tierFromSlug } from "@/lib/billing/config";
 import { planOf } from "@/lib/billing/plans";
 import { billingUsable } from "@/lib/billing/switch";
+import { recordFunnelStep } from "@/lib/funnel-record";
 import { currentLang, serverT } from "@/lib/i18n/server";
 import { parseBody } from "@/lib/validate";
 
@@ -34,6 +35,8 @@ export async function POST(req: Request) {
   }
   try {
     const url = await createCheckout(user, tier, data.interval, appOrigin(req), await currentLang());
+    // The onboarding funnel (lib/funnel.ts): the checkout step.
+    await recordFunnelStep("checkout", user.id);
     return NextResponse.json({ url });
   } catch (err) {
     console.error("[billing] checkout failed", err);

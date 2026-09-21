@@ -23,3 +23,7 @@ export const ACCOUNT_COOKIE = "dissect-account";
 // A tab's rendered account rides on its API writes; the middleware rejects the
 // write when the cookie says the browser has since switched accounts.
 export const ACCOUNT_HEADER = "x-dissect-account";
+// The visitor id (the onboarding funnel, lib/funnel.ts): a random id the
+// middleware sets on the first page a browser opens, httpOnly, one year. It
+// ties the steps a visitor reaches before sign-in to the account they make.
+export const VISITOR_COOKIE = "dissect-visitor";

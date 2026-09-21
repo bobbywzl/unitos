@@ -46,6 +46,12 @@ model User {
   subscriptionId     String    @default("")
   subscriptionTier   Tier?
   subscriptionEndsAt DateTime?
+  // The account's active time in the app, in seconds (lib/active-time.ts): the
+  // tab visible and the reader acting in it. The billing ask (SPEC.md §24)
+  // opens once it passes ASK_AFTER_SECONDS; billingAskedAt is when the ask
+  // last opened, so it waits ASK_AGAIN_MS before opening again.
+  activeSeconds  Int       @default(0)
+  billingAskedAt DateTime?
   createdAt    DateTime  @default(now())
   lastSeenAt   DateTime  @default(now())
   sessions     Session[]
@@ -757,6 +763,25 @@ model ClickEvent {
 
   @@index([createdAt])
   @@index([surface, control, createdAt])
+  @@index([userId, createdAt])
+}
+
+// The onboarding funnel (README, Onboarding funnel): one row per step a
+// visitor reaches on the way from the sign-in page to a subscription.
+// visitorId is the browser's visitor cookie (dissect-visitor, set by the
+// middleware); userId is the signed-in account, when there is one. The
+// admin funnel page (/admin/funnel) joins the two: a visitor whose row ever
+// carries an account is that account. step is one of lib/funnel.ts
+// FUNNEL_STEPS. The daily cron deletes rows older than 365 days.
+model FunnelEvent {
+  id        String   @id @default(cuid())
+  visitorId String? // null = a server event with no browser (the Stripe webhook)
+  userId    String? // null = no signed-in reader
+  step      String
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([visitorId, createdAt])
   @@index([userId, createdAt])
 }
 

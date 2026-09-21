@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { cronAuthorized, cronSecret } from "@/lib/cron-auth";
 import { CLICK_RETENTION_DAYS } from "@/lib/clicks";
 import { db } from "@/lib/db";
+import { FUNNEL_RETENTION_DAYS } from "@/lib/funnel";
 
 // Rejected notes keep for 7 days for undo, then hard-delete (SPEC.md §3).
 // Called by a scheduler (vercel.json cron). Requires CRON_SECRET.
@@ -23,6 +24,10 @@ export async function GET(req: Request) {
   // Click telemetry keeps 180 days (SPEC.md §7).
   await db.clickEvent.deleteMany({
     where: { createdAt: { lt: new Date(Date.now() - CLICK_RETENTION_DAYS * 24 * 60 * 60 * 1000) } },
+  });
+  // The onboarding funnel keeps a year (lib/funnel.ts).
+  await db.funnelEvent.deleteMany({
+    where: { createdAt: { lt: new Date(Date.now() - FUNNEL_RETENTION_DAYS * 24 * 60 * 60 * 1000) } },
   });
   return NextResponse.json({ ok: true, deleted: deleted.count });
 }

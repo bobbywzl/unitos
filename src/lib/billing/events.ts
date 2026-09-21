@@ -3,6 +3,7 @@ import type Stripe from "stripe";
 import { tierOfPriceId } from "@/lib/billing/config";
 import { stripe } from "@/lib/billing/stripe";
 import { db } from "@/lib/db";
+import { recordFunnelStep } from "@/lib/funnel-record";
 
 // Stripe events (SPEC.md §24): what a payment does to an account. One code
 // path — the webhook and the confirmation page both come here, and every
@@ -60,6 +61,7 @@ export async function applySubscription(sub: Stripe.Subscription): Promise<void>
   const customerId = idOf(sub.customer);
 
   if (PAID.includes(sub.status)) {
+    const before = await db.user.findUnique({ where: { id: userId }, select: { subscriptionId: true } });
     await db.user.update({
       where: { id: userId },
       data: {
@@ -71,6 +73,10 @@ export async function applySubscription(sub: Stripe.Subscription): Promise<void>
         trialEndsAt: null,
       },
     });
+    // The onboarding funnel (lib/funnel.ts): the subscribed step, once per
+    // subscription. The confirmation page and the webhook both apply the
+    // session; the second finds the subscription already on the account.
+    if (before && before.subscriptionId !== sub.id) await recordFunnelStep("subscribed", userId);
     return;
   }
   if (ENDED.includes(sub.status)) {
