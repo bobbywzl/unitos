@@ -47,7 +47,7 @@ const en = {
   // Check-your-email state (/signin?sent=<email>; mode=forgot after a reset)
   sentTitle: "Check your email",
   sentTo: "We sent a confirmation link to",
-  sentRest: "Click it to create your account. The link expires in 30 minutes.",
+  sentRest: "Click it to open your account. The link expires in 30 minutes.",
   resetSentTo: "If an account exists, a reset link is on its way to",
   resetSentRest: "Click it to set a new password. The link expires in 30 minutes.",
   sentBack: "Use a different email",
@@ -66,14 +66,8 @@ const en = {
   resetEmailBody: "Click the button to set a new password for your Unitos account.",
   resetEmailCta: "Set a new password",
 
-  // The welcome page (/welcome) — after the confirmation link
-  welcomeTitle: "Welcome, {name}",
-  welcomeDesc: "Your account {email} is confirmed. Set a password to sign in next time.",
-  setPassword: "Set password",
-  welcomeSkip: "Set it later",
-  welcomeNext: "Next: start your first project — upload a PDF or paste a link.",
-
   // The reset page (/reset)
+  setPassword: "Set password",
   resetTitle: "Set a new password",
 
   // The reader, as it is — callouts point from the text. One structure:
@@ -162,7 +156,7 @@ const zh: Record<keyof typeof en, string> = {
   // Check-your-email state (/signin?sent=<email>; mode=forgot after a reset)
   sentTitle: "请查收邮件",
   sentTo: "确认链接已发送至",
-  sentRest: "点击链接即可创建账户。链接 30 分钟内有效。",
+  sentRest: "点击链接即可进入账户。链接 30 分钟内有效。",
   resetSentTo: "如果已有账户，重置链接将发往",
   resetSentRest: "点击链接设置新密码。链接 30 分钟内有效。",
   sentBack: "换一个邮箱",
@@ -181,14 +175,8 @@ const zh: Record<keyof typeof en, string> = {
   resetEmailBody: "点击按钮为你的 Unitos 账户设置新密码。",
   resetEmailCta: "设置新密码",
 
-  // The welcome page (/welcome) — after the confirmation link
-  welcomeTitle: "欢迎，{name}",
-  welcomeDesc: "你的账户 {email} 已确认。设置密码，下次即可登录。",
-  setPassword: "设置密码",
-  welcomeSkip: "以后再设",
-  welcomeNext: "下一步：创建你的第一个项目——上传 PDF 或粘贴链接。",
-
   // The reset page (/reset)
+  setPassword: "设置密码",
   resetTitle: "设置新密码",
 
   // The reader, as it is — callouts point from the text

@@ -4,8 +4,8 @@
 // languages — zh's type enforces it.
 
 const en = {
-  // The link to the plan page: the dashboard header, the plan card in
-  // Settings, the Ultra message in the reader. Also the plan page's title.
+  // The plan page's title, and the link to it in the Ultra message in the
+  // reader.
   plans: "Plans",
   intro: "Two tiers. Pick one and pay with Stripe.",
   cancelAnyTime: "Cancel any time.",
@@ -75,6 +75,39 @@ const en = {
   manageOpening: "Opening Stripe…",
   manageFailed: "Could not open Stripe. {reason}",
   receipts: "Receipts",
+  seePlans: "See plans",
+  // The upgrade panel: the tier chip pressed by a Unitos Premium account.
+  // The list under the intro is ultraFeature2–6.
+  upgradeIntro: "What Unitos Ultra adds to Unitos Premium:",
+  // The billing ask: after 30 minutes of active time, a card to keep Unitos
+  // Premium after the trial (lib/active-time.ts).
+  askTitle: "Keep Unitos Premium free for {n} months",
+  askBody:
+    "Your account has Unitos Premium free until {date}. Add a card now to keep it after that: nothing is charged until {date}, and canceling before then costs nothing.",
+  askAddCard: "Add a card",
+  askNotNow: "Not now",
+  // The subscription panel in Settings: the plan, its status, the billing
+  // interval, the card on file, and the actions on the subscription.
+  panelPlan: "Plan",
+  panelStatus: "Status",
+  panelBilling: "Billing",
+  panelCard: "Card",
+  panelCardValue: "{brand} ending in {last4}",
+  panelCardNone: "None",
+  panelStatusTrial: "Free trial until {date}. No card on file.",
+  panelStatusTrialAsk:
+    "Add a card to keep Unitos Premium after the trial. Nothing is charged until then, and canceling before then costs nothing.",
+  panelStatusExpired: "The trial ended on {date}. Pick a tier to bring Unitos Premium back.",
+  panelStatusGranted: "Granted by the operator. Nothing to pay.",
+  panelSubTrial: "Free until {date}. The first payment lands then.",
+  panelSubRenews: "Renews on {date}.",
+  panelSubCanceling: "Canceled. Paid until {date}; the tier ends then.",
+  panelSubPastDue: "The last payment failed. Update the card to keep the tier.",
+  panelSubHeld: "Held by Stripe. Manage subscription says why.",
+  panelStripe: "Stripe holds the card and the invoices. Manage subscription opens them.",
+  changePlan: "Change plan",
+  updateCard: "Update card",
+  cancelSubscription: "Cancel subscription",
   // The order page: the tier, its price, the account, and Pay.
   orderTitle: "Order",
   orderSub: "{tier}, {billed}. Stripe handles the payment.",
@@ -184,6 +217,32 @@ const zh: Record<keyof typeof en, string> = {
   manageOpening: "正在打开 Stripe…",
   manageFailed: "无法打开 Stripe。{reason}",
   receipts: "收据",
+  seePlans: "查看方案",
+  upgradeIntro: "Unitos Ultra 在 Unitos Premium 之上增加：",
+  askTitle: "免费保留 Unitos Premium {n} 个月",
+  askBody:
+    "你的账户可免费使用 Unitos Premium 至 {date}。现在添加银行卡，之后继续使用：{date} 之前不扣款，在此之前取消则无需付费。",
+  askAddCard: "添加银行卡",
+  askNotNow: "以后再说",
+  panelPlan: "方案",
+  panelStatus: "状态",
+  panelBilling: "计费",
+  panelCard: "银行卡",
+  panelCardValue: "{brand} 尾号 {last4}",
+  panelCardNone: "无",
+  panelStatusTrial: "免费试用至 {date}。未绑定银行卡。",
+  panelStatusTrialAsk: "添加银行卡，试用结束后继续使用 Unitos Premium。在此之前不扣款，在此之前取消则无需付费。",
+  panelStatusExpired: "试用已于 {date} 结束。选择一种方案，恢复 Unitos Premium。",
+  panelStatusGranted: "由运营者授予。无需付款。",
+  panelSubTrial: "免费至 {date}，届时首次付款。",
+  panelSubRenews: "下次续订：{date}。",
+  panelSubCanceling: "已取消。已付费至 {date}，方案届时结束。",
+  panelSubPastDue: "上次付款失败。更换银行卡以保留方案。",
+  panelSubHeld: "已被 Stripe 暂停。在“管理订阅”中查看原因。",
+  panelStripe: "银行卡和账单由 Stripe 保存。“管理订阅”可打开它们。",
+  changePlan: "更改方案",
+  updateCard: "更换银行卡",
+  cancelSubscription: "取消订阅",
   orderTitle: "订单",
   orderSub: "{tier}，{billed}。由 Stripe 处理付款。",
   billedMonthly: "按月计费",

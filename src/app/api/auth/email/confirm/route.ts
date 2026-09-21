@@ -3,7 +3,8 @@ import { appOrigin, confirmEmailToken, emailEnabled, sessionRedirect, signIn } f
 
 // The link in the confirmation email lands here. Redeem the token, create the
 // account (this is the moment the user becomes a user), mint a session, and
-// land on /welcome to set a password.
+// land on the dashboard. No password step: a password is optional, set
+// through Forgot password when the account wants one.
 export async function GET(req: Request) {
   const origin = appOrigin(req);
   if (!emailEnabled()) return NextResponse.redirect(new URL("/", origin), 303);
@@ -29,5 +30,5 @@ export async function GET(req: Request) {
       303,
     );
   }
-  return sessionRedirect(origin, signed.session, "/welcome");
+  return sessionRedirect(origin, signed.session, "/");
 }

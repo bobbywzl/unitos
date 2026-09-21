@@ -8,9 +8,11 @@ import { personOf } from "@/lib/person";
 import { accountTier } from "@/lib/tiers";
 import { Logo } from "@/components/logo";
 import { AccountGuard } from "@/components/account-guard";
+import { TierButton } from "@/components/billing/tier-button";
 import { FunnelStepMark } from "@/components/funnel-step";
 import { PersonBadge } from "@/components/collab/person-badge";
-import { TierBand, TierChip } from "@/components/tier-mark";
+import { TierBand } from "@/components/tier-mark";
+import { ActiveTimeClock } from "@/components/active-time-clock";
 import { Companions } from "@/components/works/companions";
 import { Notifications } from "@/components/works/notifications";
 import { WelcomeFlow } from "@/components/works/welcome-flow";
@@ -61,8 +63,9 @@ export default async function Home() {
   // The account's tier (TIERS.md): the band over the page, the tier mark on
   // the badge, and the tier chip beside it. One read, the same as the reader's.
   const tier = accountTier(user, authEnabled());
-  // Billing (SPEC.md §24): the Plans link beside the tier chip, only while
-  // the switch is on.
+  // Billing (SPEC.md §24): the tier chip is the tier button while the
+  // switch is on — the upgrade panel for Unitos Premium, the plans page for
+  // Unitos Ultra.
   const billing = await billingLinks();
 
   // The account's open notifications from the admin (SPEC.md §18), newest first.
@@ -101,6 +104,8 @@ export default async function Home() {
   return (
     <main className="mx-auto w-full max-w-[1080px] px-6 pb-16 sm:px-16">
       <AccountGuard userId={user.id} enabled={authEnabled()} />
+      {/* The active time clock (lib/active-time.ts), and the billing ask. */}
+      <ActiveTimeClock enabled={authEnabled()} />
       {/* The onboarding funnel (lib/funnel.ts): the dashboard step. */}
       <FunnelStepMark step="dashboard" />
       <TierBand state={tier} />
@@ -108,21 +113,15 @@ export default async function Home() {
         <Logo size={38} className="text-clay" />
         <span className="font-display text-[21px]">{t("common.appName")}</span>
         {authEnabled() && (
-          <Link href="/settings" className="ml-auto flex min-w-0 items-center gap-3">
-            <PersonBadge person={{ ...personOf(user), tier }} size={30} title={user.name} />
-            <span className="hidden max-w-[200px] truncate text-xs text-sand-600 sm:inline">
-              {user.email}
-            </span>
-            <TierChip state={tier} trialEndsAt={user.trialEndsAt?.toISOString() ?? null} short />
-          </Link>
-        )}
-        {billing && (
-          <Link
-            href="/billing"
-            className="rounded-full bg-card px-3 py-1 text-xs font-semibold text-sand-600 shadow-soft hover:text-clay-800"
-          >
-            {t("billing.plans")}
-          </Link>
+          <>
+            <Link href="/settings" className="ml-auto flex min-w-0 items-center gap-3">
+              <PersonBadge person={{ ...personOf(user), tier }} size={30} title={user.name} />
+              <span className="hidden max-w-[200px] truncate text-xs text-sand-600 sm:inline">
+                {user.email}
+              </span>
+            </Link>
+            <TierButton state={tier} trialEndsAt={user.trialEndsAt?.toISOString() ?? null} billing={billing} />
+          </>
         )}
         <Link
           href="/settings"

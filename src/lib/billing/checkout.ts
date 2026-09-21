@@ -1,6 +1,6 @@
 import type { Tier, User } from "@prisma/client";
 import { type Interval, priceIdOf, taxEnabled, tierSlug } from "@/lib/billing/config";
-import { stripe } from "@/lib/billing/stripe";
+import { stripe, type Stripe } from "@/lib/billing/stripe";
 import { checkoutTrialEnd } from "@/lib/billing/trial";
 import { db } from "@/lib/db";
 import type { Lang } from "@/lib/i18n/config";
@@ -79,15 +79,39 @@ export async function createCheckout(
   return session.url;
 }
 
+/** Where the Stripe billing portal opens (SPEC.md §24): its home, or one
+    flow of it — change the plan, update the card, cancel the subscription.
+    The subscription flows need the account's subscription; without one the
+    portal opens at its home. */
+export type PortalFlow = "update" | "payment" | "cancel";
+
+function portalFlowData(
+  user: User,
+  flow: PortalFlow | undefined,
+): Stripe.BillingPortal.SessionCreateParams.FlowData | undefined {
+  if (flow === "payment") return { type: "payment_method_update" };
+  if (!user.subscriptionId) return undefined;
+  if (flow === "update") return { type: "subscription_update", subscription_update: { subscription: user.subscriptionId } };
+  if (flow === "cancel") return { type: "subscription_cancel", subscription_cancel: { subscription: user.subscriptionId } };
+  return undefined;
+}
+
 /** The Stripe billing portal URL: Manage subscription opens it. The account
     changes its card, cancels, or switches tier there; the webhook brings
-    every change back. */
-export async function portalUrl(user: User, origin: string, lang: Lang): Promise<string> {
+    every change back. Stripe returns to returnPath: the plan page, or the
+    subscription panel in Settings. */
+export async function portalUrl(
+  user: User,
+  origin: string,
+  lang: Lang,
+  opts: { flow?: PortalFlow; returnPath?: string } = {},
+): Promise<string> {
   const customer = await ensureCustomer(user);
   const session = await stripe().billingPortal.sessions.create({
     customer,
-    return_url: `${origin}/billing`,
+    return_url: `${origin}${opts.returnPath ?? "/billing"}`,
     locale: stripeLocale(lang),
+    flow_data: portalFlowData(user, opts.flow),
   });
   return session.url;
 }

@@ -46,6 +46,12 @@ model User {
   subscriptionId     String    @default("")
   subscriptionTier   Tier?
   subscriptionEndsAt DateTime?
+  // The account's active time in the app, in seconds (lib/active-time.ts): the
+  // tab visible and the reader acting in it. The billing ask (SPEC.md §24)
+  // opens once it passes ASK_AFTER_SECONDS; billingAskedAt is when the ask
+  // last opened, so it waits ASK_AGAIN_MS before opening again.
+  activeSeconds  Int       @default(0)
+  billingAskedAt DateTime?
   createdAt    DateTime  @default(now())
   lastSeenAt   DateTime  @default(now())
   sessions     Session[]

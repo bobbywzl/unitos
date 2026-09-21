@@ -13,13 +13,9 @@ import { api } from "@/lib/api";
 import { clearSaved, listSaved, subscribeSaved } from "@/lib/offline/saved";
 import type { AccountStorage } from "@/lib/storage";
 import { storageLimit, type TierState } from "@/lib/tiers";
+import type { SubscriptionSummary } from "@/lib/billing/subscription";
 import { StorageBar } from "@/components/storage-bar";
-import { TierMark, tierLook } from "@/components/tier-mark";
-import { PortalButton } from "@/components/billing/portal-button";
-
-// The links under the plan card, in the card's material.
-const planLink =
-  "rounded-full bg-card px-3 py-1 text-xs font-semibold text-sand-700 shadow-soft hover:text-clay-800 disabled:opacity-40";
+import { SubscriptionPanel } from "@/components/billing/subscription-panel";
 
 type Theme = "light" | "dark" | "system";
 
@@ -110,11 +106,12 @@ export function SettingsForm({
   account: (Person & { email: string; storedSymbol: string; storedColor: string }) | null;
   background: string;
   // The account's tier (TIERS.md, lib/tiers.ts) and, on trial or expired,
-  // the trial's end as an ISO date.
-  plan: { state: TierState; trialEndsAt: string | null };
-  // Billing (SPEC.md §24): the links under the plan card — Plans, Receipts,
-  // and Manage subscription when the account has one. null = billing off.
-  billing: { subscribed: boolean } | null;
+  // the trial's end as an ISO date. record: during the beta, the record's
+  // own state, for the subscription panel's status; null otherwise.
+  plan: { state: TierState; trialEndsAt: string | null; record: TierState | null };
+  // Billing (SPEC.md §24): the subscription panel's reading of the
+  // account's subscription, null without one. null = billing off.
+  billing: { subscription: SubscriptionSummary | null } | null;
   // Google Drive under Connections (SPEC.md §14): access is what a link asks
   // for, grant what this account's stored grant reaches. null = Drive linking
   // not available.
@@ -474,38 +471,10 @@ export function SettingsForm({
       </section>
 
       <section className="space-y-3">
-        <h2 className={sectionTitle}>{t("settings.plan")}</h2>
-        {/* The plan card (TIERS.md): the tier mark and the tier's name, in
-            the tier's own material, then what the tier holds. */}
-        <div className={`flex gap-4 rounded-2xl p-5 tier-card-${tierLook(plan.state)}`}>
-          <TierMark state={plan.state} size={40} className="mt-0.5" />
-          <div className="min-w-0 space-y-1.5">
-            <div className="tier-card-title font-display text-[19px]">
-              {t(plan.state === "ultra" ? "common.tierUltra" : "common.tierPremium")}
-            </div>
-            <p className="tier-card-muted text-xs leading-relaxed">
-              {plan.state === "ultra"
-                ? t("settings.planUltra")
-                : plan.state === "premium"
-                  ? t("settings.planPremium")
-                  : t(plan.state === "trial" ? "settings.planTrial" : "settings.planExpired", {
-                      date: plan.trialEndsAt ? fmtDate(plan.trialEndsAt) : "",
-                    })}
-            </p>
-            {account && <p className="tier-card-muted text-[11px]">{t("settings.planMark")}</p>}
-            {billing && (
-              <div className="flex flex-wrap items-center gap-2 pt-1">
-                <Link href="/billing" className={planLink}>
-                  {t("billing.plans")}
-                </Link>
-                <Link href="/billing/receipts" className={planLink}>
-                  {t("billing.receipts")}
-                </Link>
-                {billing.subscribed && <PortalButton className={planLink} />}
-              </div>
-            )}
-          </div>
-        </div>
+        <h2 className={sectionTitle}>{t("settings.subscription")}</h2>
+        {/* The subscription panel (SPEC.md §24): the plan, its status, the
+            card, and the actions on the subscription. */}
+        <SubscriptionPanel plan={plan} billing={billing} signedIn={Boolean(account)} />
         {/* Storage (TIERS.md): the account's files against the tier's limit. */}
         <StorageBar
           storage={storage}

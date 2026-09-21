@@ -37,6 +37,7 @@ import {
   type SummaryLevels,
 } from "@/lib/types";
 import { AccountGuard } from "@/components/account-guard";
+import { ActiveTimeClock } from "@/components/active-time-clock";
 import { AssistantPanel } from "@/components/assistant/assistant-panel";
 import type { CollabState } from "@/components/collab/collab-context";
 import { AnnotationsPanel } from "@/components/panels/annotations-panel";
@@ -1208,6 +1209,7 @@ export default async function NotebookPage(props: {
   return (
     <>
     <AccountGuard userId={user.id} enabled={authEnabled()} />
+    <ActiveTimeClock enabled={authEnabled()} />
     <Workspace
       notebook={view}
       documents={attached}
