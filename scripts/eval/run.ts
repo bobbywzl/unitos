@@ -206,7 +206,7 @@ const adapters: Record<EvalTool, Adapter> = {
     const ctx = { ...promptCtx(f, c), depth };
     const prompt = summarizePrompt(ctx);
     const r = await callTool({ messages: [system(f), { role: "user", content: prompt }], effort: DERIVATION_EFFORT.SUMMARIZE, maxOutputTokens: MAX_OUTPUT_TOKENS.SUMMARIZE });
-    const cap = depth === "layman" ? 180 : depth === "insights" ? 300 : 400;
+    const cap = depth === "layman" ? 180 : 400;
     const checks: Check[] = [capCheck(r.text, cap), tagCheck(r.text, f), languageCheck(r.text, c.lang), openerCheck(r.text)];
     return { input: `depth: ${depth}`, prompt, raw: r.text, output: r.text, checks, ms: r.ms, tokens: { input: r.inputTokens, output: r.outputTokens } };
   },

@@ -111,10 +111,8 @@ const SCOPES: { id: Scope; labelKey: TKey; hintKey: TKey }[] = [
   { id: "notebook", labelKey: "assistant.scopeProjectLabel", hintKey: "assistant.scopeProjectHint" },
 ];
 
-// Recommended functions for the open document, in this order. Insiders
-// Insights leads: industry-insider findings, honest when there are none.
+// Recommended functions for the open document, in this order.
 const RECOMMENDED: { depth: SummaryDepth; labelKey: TKey; hintKey: TKey }[] = [
-  { depth: "insights", labelKey: "assistant.recInsightsLabel", hintKey: "assistant.recInsightsHint" },
   { depth: "layman", labelKey: "assistant.recLaymanLabel", hintKey: "assistant.recLaymanHint" },
   {
     depth: "professional",

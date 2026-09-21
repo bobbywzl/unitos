@@ -53,9 +53,7 @@ export type NotebookView = {
 
 // ── SUMMARIZE: document-level summary, one per depth ───────────────────────
 
-// Depth "insights" is Insiders Insights: industry-insider findings, with
-// declared insufficiency as a correct answer.
-export const SUMMARY_DEPTHS = ["insights", "layman", "professional"] as const;
+export const SUMMARY_DEPTHS = ["layman", "professional"] as const;
 export type SummaryDepth = (typeof SUMMARY_DEPTHS)[number];
 /** Stored on NotebookDocument.summaries: one summary per generated depth. */
 export type SummaryLevels = Partial<Record<SummaryDepth, string>>;

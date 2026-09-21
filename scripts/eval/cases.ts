@@ -76,8 +76,6 @@ export const CASES: EvalCase[] = [
   // ── Summarize ──
   { id: "summarize-paper-layman", tool: "summarize", fixture: "paper-sparse-routing", lang: "en", profile: NOVICE, depth: "layman" },
   { id: "summarize-memo-professional", tool: "summarize", fixture: "report-earnings-memo", lang: "en", profile: ANALYST, depth: "professional" },
-  { id: "summarize-news-insights", tool: "summarize", fixture: "news-rate-decision", lang: "en", profile: null, depth: "insights" },
-  { id: "summarize-essay-insights", tool: "summarize", fixture: "essay-slow-reading", lang: "en", profile: null, depth: "insights", expect: "General coverage: the right answer says the essay carries no insider insight, in one or two sentences." },
   // ── Assistant (panel, document scope) ──
   { id: "assistant-memo-structural", tool: "assistant", fixture: "report-earnings-memo", lang: "en", profile: ANALYST, question: "Is the margin recovery real?", expect: "Splits the 2.8-point gain into ~1.1 structural and ~1.7 fuel; fuel is reversing; models 7.6% next quarter." },
   { id: "assistant-docs-count", tool: "assistant", fixture: "docs-rate-limiting", lang: "en", profile: LAWYER, question: "How many separate limits are there, and what triggers a suspension?", expect: "Read bucket 600/10s, write bucket 120/2s, search costs 5 tokens, 1,000 refusals in an hour suspends for 15 minutes." },

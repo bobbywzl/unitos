@@ -10,22 +10,11 @@ import {
 
 // SUMMARIZE: document-level output for the Assistant panel's Recommended
 // section. One output per depth, persisted on NotebookDocument.summaries
-// (SPEC.md §4). Depth "insights" is Insiders Insights; "layman" and
-// "professional" are summaries.
+// (SPEC.md §4).
 // What makes a summary worth reading: a reader who reads it alone can say
 // what the document found, with its numbers, and why that matters at their
 // depth; and nothing in it could have been written without this document.
 const DEPTH_RULES: Record<SummaryDepth, string[]> = {
-  insights: [
-    "Task: Insiders Insights.",
-    "Extract the insights only an industry insider could take from this document: findings that are specific, nuanced, technical, or company-specific — things an outsider would not learn from general news coverage.",
-    "1. Every insight must come from the document. Never invent, extrapolate, or pad.",
-    "2. Skip anything an outsider could learn from a general news article about this topic. The test: if a reader who follows this industry in the news would already know it, it is not an insight.",
-    "3. Quality over quantity. One real insight beats five weak ones. 2 to 6 insights.",
-    "4. If the document carries no insider insight — it is general coverage, or it reveals nothing deep about the industry or company — say exactly that in one or two sentences and stop. Declaring insufficiency is a correct answer, never a failure.",
-    "5. Format: a markdown list, one insight per item — a bold one-line finding with its number or its named mechanism, then one sentence on why it matters to someone in this industry, two at most, then the block tag of the passage it rests on.",
-    "6. Keep it under 300 words.",
-  ],
   layman: [
     "Task: layman summary.",
     "1. Write for a reader with no training in this field. Highly simple, intuitive, condensed: the core of what the document is about.",
