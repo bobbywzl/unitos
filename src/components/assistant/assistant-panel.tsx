@@ -14,14 +14,14 @@ import {
   TURN_MAX_CHARS,
   type ConversationTurn,
 } from "@/lib/assistant/attachments";
-import { splitStreamError } from "@/lib/derive/config";
+import { splitStreamError, splitStreamPlan } from "@/lib/derive/config";
 import type { DriveConfig } from "@/lib/drive/config";
 import { pickDriveFiles } from "@/lib/drive/picker-client";
 import { DRIVE_ASSISTANT_MIME_TYPES, type DrivePickedFile } from "@/lib/drive/types";
 import { useImeGuard } from "@/lib/ime";
 import { imageUrl, refuseImage, uploadImage } from "@/lib/images";
 import type { Person } from "@/lib/person";
-import type { SummaryDepth, SummaryLevels } from "@/lib/types";
+import type { AssistantAction, SummaryDepth, SummaryLevels } from "@/lib/types";
 import { UPLOAD_CHUNK_BYTES } from "@/lib/video/types";
 import {
   ANSWER_MARK,
@@ -66,7 +66,12 @@ type Turn = {
   content: string;
   images?: { id: string; url: string; name: string }[];
   files?: { name: string; text?: string }[];
+  // The plan the answer came with (SPEC.md §7, This page scope): the actions
+  // the reader approves in the plan card, and the warnings for the ones the
+  // server dropped. Not saved: the conversation keeps the answer alone.
+  plan?: { actions: AssistantAction[]; warnings: string[] };
 };
+const plural = (n: number) => (n === 1 ? "" : "s");
 // One side chat of this conversation (SPEC.md §7): the quote it was started
 // from and its own turns. noteId = the note it saves on, null until the
 // first answer lands; key holds it together before then.
@@ -857,11 +862,11 @@ export function AssistantPanel({
     );
     const userTurn: Turn = { role: "user", content: q, images, files };
     setTurns((prev) => [...prev, userTurn, { role: "assistant", content: "" }]);
-    const setAnswer = (content: string) =>
+    const setAnswer = (content: string, plan?: Turn["plan"]) =>
       setTurns((prev) => {
         const last = prev[prev.length - 1];
         if (!last || last.role !== "assistant") return prev;
-        return [...prev.slice(0, -1), { ...last, content }];
+        return [...prev.slice(0, -1), { ...last, content, plan }];
       });
     const controller = new AbortController();
     runAbortRef.current = controller;
@@ -897,15 +902,19 @@ export function AssistantPanel({
         const { done, value } = await reader.read();
         if (done) break;
         streamed += decoder.decode(value, { stream: true });
-        setAnswer(splitStreamError(streamed).text);
+        setAnswer(splitStreamPlan(splitStreamError(streamed).text).text);
       }
       // A failure mid-stream arrives in-band; an empty stream is a failure too.
-      const { text, error: streamError } = splitStreamError(streamed);
+      const { text: answered, error: streamError } = splitStreamError(streamed);
+      const { text, plan } = splitStreamPlan(answered);
       if (streamError || !text.trim()) {
         setAnswer("");
         throw new Error(streamError ?? t("assistant.emptyResponse"));
       }
-      setAnswer(text);
+      setAnswer(text, plan ?? undefined);
+      // The plan goes to the reader's plan card (SPEC.md §7): the actions
+      // wait for approval there, and Undo follows them.
+      if (plan && plan.actions.length > 0) proposePlan(plan);
       void saveConversation([...threadTurns, userTurn, { role: "assistant", content: text }], sideChatKey);
     } catch (err) {
       // Stopped, not failed: whatever streamed in already stays on screen.
@@ -964,6 +973,17 @@ export function AssistantPanel({
 
   function showNote(noteId: string) {
     window.dispatchEvent(new CustomEvent("dissect:show-note", { detail: { noteId } }));
+  }
+
+  // The plan card lives in the reader (reader-interactions.tsx); the open
+  // document's reader takes the plan by its document id.
+  function proposePlan(plan: { actions: AssistantAction[]; warnings: string[] }) {
+    if (!documentId) return;
+    window.dispatchEvent(
+      new CustomEvent("dissect:assistant-plan", {
+        detail: { documentId, actions: plan.actions, warnings: plan.warnings },
+      }),
+    );
   }
 
   const recommendedShown = recDepth ? (recTexts[recDepth] ?? summaries[recDepth] ?? "") : "";
@@ -1267,6 +1287,34 @@ export function AssistantPanel({
                     <div {...{ [ANSWER_MARK]: "" }}>
                       <Markdown>{turn.content}</Markdown>
                     </div>
+                    {/* The plan the answer came with: the count, and the way
+                        back to the plan card once it was closed. */}
+                    {turn.plan && turn.plan.actions.length > 0 && (
+                      <div className="mt-2 flex items-center gap-2 text-[12px] text-sand-600">
+                        <span>
+                          {t("assistant.proposedActions", {
+                            n: turn.plan.actions.length,
+                            s: plural(turn.plan.actions.length),
+                          })}
+                        </span>
+                        <button
+                          onClick={() => proposePlan(turn.plan!)}
+                          data-track="assistant-review-plan"
+                          className="rounded-full bg-sand-100 px-2.5 py-0.5 font-semibold text-sand-700 hover:bg-sand-200"
+                        >
+                          {t("assistant.reviewPlan")}
+                        </button>
+                      </div>
+                    )}
+                    {turn.plan && turn.plan.warnings.length > 0 && (
+                      <ul className="mt-2 flex flex-col gap-1 rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-2">
+                        {turn.plan.warnings.map((w, j) => (
+                          <li key={j} className="text-[11.5px] font-medium text-amber-700 dark:text-amber-400">
+                            ⚠ {w}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                     {/* The rating (SPEC.md §25): the question it answered and
                         the answer, once the answer is whole. */}
                     {!(busy && i === activeTurns.length - 1) && (

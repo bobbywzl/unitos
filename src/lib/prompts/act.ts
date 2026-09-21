@@ -1,3 +1,4 @@
+import { ACTION_TYPE_LINES } from "@/lib/assistant/plan";
 import type { ChatTurn } from "@/lib/conversation";
 import type { Lang } from "@/lib/i18n/config";
 import { languageName, profileLines, type ReaderProfileCtx } from "@/lib/prompts/types";
@@ -60,16 +61,7 @@ export function actPrompt(ctx: ActCtx): string {
     }`,
     "",
     "Action types:",
-    "- edit_block {blockId, newText, description} — replace a block's text.",
-    "- insert_paragraph {afterBlockId, text, description} — add a paragraph after a block.",
-    "- remove_block {blockId, description} — delete a block.",
-    '- highlight {blockId, quote, color: "clay"|"sage"|"gold"|"plum", comment?, description} — highlight exact text.',
-    "- comment {blockId, quote, comment, description} — annotate exact text with a note.",
-    "- add_note {content, sectionId? or sectionTitle?, blockId?, quote?, description} — a note in the notebook. Cite the passage via blockId + quote when the note comes from the text. A new sectionTitle creates the section.",
-    "- add_section {title, description} — an empty section.",
-    "- link {blockId, quote, toDocumentId, description} — hyperlink exact text to another attached document.",
-    '- format_block {blockId, kind: "paragraph"|"h1"|"h2"|"h3", description} — change a block\'s heading level.',
-    '- style {blockId, quote, style: "bold"|"italic", description} — bold or italicize exact text.',
+    ...ACTION_TYPE_LINES,
     "",
     "Rules:",
     "1. Use block ids exactly as given. Every quote must be an exact substring of the named block's text.",

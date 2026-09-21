@@ -30,11 +30,12 @@ import { callForJson, modelErrorMessage } from "@/lib/derive/json-call";
 import { currentLang, serverT } from "@/lib/i18n/server";
 import { kimi, kimiConfigured, kimiOptions } from "@/lib/kimi";
 import type { TFunc } from "@/lib/i18n/dictionaries";
+import { actionsSchema, enrichActions } from "@/lib/assistant/plan";
 import { actPrompt, textSelectionBlock } from "@/lib/prompts/act";
 import { parseBody } from "@/lib/validate";
 import { ultraActive } from "@/lib/tiers";
 import { formatTimeRange, regionSchema } from "@/lib/video/types";
-import type { AssistantAction, AssistantAnchor, AssistantPlan } from "@/lib/types";
+import type { AssistantPlan } from "@/lib/types";
 import { resolveModelId } from "@/lib/models";
 
 export const maxDuration = 120;
@@ -108,70 +109,6 @@ const requestSchema = z.object({
   toolNoteId: z.string().optional(),
 });
 
-const quote = z.string().min(1).max(2000);
-const description = z.string().min(1).max(300);
-
-const actionSchema = z.discriminatedUnion("type", [
-  z.object({
-    type: z.literal("edit_block"),
-    blockId: z.string().min(1),
-    newText: z.string().min(1).max(50_000),
-    description,
-  }),
-  z.object({
-    type: z.literal("insert_paragraph"),
-    afterBlockId: z.string().min(1),
-    text: z.string().min(1).max(50_000),
-    description,
-  }),
-  z.object({ type: z.literal("remove_block"), blockId: z.string().min(1), description }),
-  z.object({
-    type: z.literal("highlight"),
-    blockId: z.string().min(1),
-    quote,
-    color: z.enum(["clay", "sage", "gold", "plum"]),
-    comment: z.string().max(10_000).optional(),
-    description,
-  }),
-  z.object({
-    type: z.literal("comment"),
-    blockId: z.string().min(1),
-    quote,
-    comment: z.string().min(1).max(10_000),
-    description,
-  }),
-  z.object({
-    type: z.literal("add_note"),
-    content: z.string().min(1).max(50_000),
-    sectionId: z.string().optional(),
-    sectionTitle: z.string().max(200).optional(),
-    blockId: z.string().optional(),
-    quote: quote.optional(),
-    description,
-  }),
-  z.object({ type: z.literal("add_section"), title: z.string().min(1).max(200), description }),
-  z.object({
-    type: z.literal("link"),
-    blockId: z.string().min(1),
-    quote,
-    toDocumentId: z.string().min(1),
-    description,
-  }),
-  z.object({
-    type: z.literal("format_block"),
-    blockId: z.string().min(1),
-    kind: z.enum(["paragraph", "h1", "h2", "h3"]),
-    description,
-  }),
-  z.object({
-    type: z.literal("style"),
-    blockId: z.string().min(1),
-    quote,
-    style: z.enum(["bold", "italic"]),
-    description,
-  }),
-]);
-
 // The matches (SPEC.md §7): the passages across the document that deal
 // with the selection's topic, the work the old Match-it tool did. Each is a
 // verbatim quote of one block; the server resolves every quote against the
@@ -184,29 +121,13 @@ const matchSchema = z.object({
 
 const planSchema = z.object({
   reply: z.string().max(8000).nullable(),
-  actions: z.array(actionSchema).max(20),
+  actions: actionsSchema,
   matches: z.array(matchSchema).max(12).optional(),
 });
 
 // The most matches a reply lists, and the longest a listed quote gets.
 const MATCHES_MAX = 8;
 const MATCH_QUOTE_MAX = 220;
-
-const TEXT_TYPES = new Set(["PARAGRAPH", "HEADING", "LIST", "CODE", "EQUATION"]);
-
-function buildAnchor(blockText: string, quoteText: string, blockId: string) {
-  const start = blockText.indexOf(quoteText);
-  if (start === -1) return null;
-  const end = start + quoteText.length;
-  return {
-    blockId,
-    startOffset: start,
-    endOffset: end,
-    quotedText: quoteText,
-    prefix: blockText.slice(Math.max(0, start - 32), start),
-    suffix: blockText.slice(end, end + 32),
-  };
-}
 
 // Any unexpected throw still answers with the reason, never a bare 500 —
 // the client toast shows this message.
@@ -462,93 +383,16 @@ async function handle(req: Request, t: TFunc) {
     return NextResponse.json({ error: t("api.planFailed", { reason: result.error }) }, { status: 422 });
   }
 
-  // Validate and enrich every action against the real document, so the client
-  // executes ready-made requests. Invalid actions become warnings, never writes.
+  // Validate and enrich every action against the real document
+  // (lib/assistant/plan.ts): the sidebar assistant's plan takes the same path.
   const blockById = new Map(document.blocks.map((b) => [b.id, b]));
-  const attachedIds = new Set(attachedDocs.map((nd) => nd.documentId));
-  const sectionIds = new Set(sections.map((s) => s.id));
-  const actions: AssistantAction[] = [];
-  const warnings: string[] = [];
-
-  for (const action of result.data.actions) {
-    if (action.type === "add_section") {
-      actions.push(action);
-      continue;
-    }
-    if (action.type === "add_note") {
-      const sectionId = action.sectionId && sectionIds.has(action.sectionId) ? action.sectionId : undefined;
-      let source: (AssistantAnchor & { documentId: string }) | undefined;
-      if (action.blockId && action.quote) {
-        const block = blockById.get(action.blockId);
-        const anchor = block ? buildAnchor(block.text, action.quote, block.id) : null;
-        if (anchor) source = { documentId: data.documentId, ...anchor };
-        else warnings.push(t("api.warnSourceQuoteNotFound", { description: action.description }));
-      }
-      actions.push({
-        type: "add_note",
-        content: action.content,
-        sectionId,
-        sectionTitle: sectionId ? undefined : (action.sectionTitle ?? "Notes"),
-        source,
-        description: action.description,
-      });
-      continue;
-    }
-    if (action.type === "format_block") {
-      const target = blockById.get(action.blockId);
-      if (!target || !TEXT_TYPES.has(target.type)) {
-        warnings.push(t("api.warnBlockNotFoundOrNotText", { description: action.description }));
-        continue;
-      }
-      actions.push(action);
-      continue;
-    }
-    if (action.type === "style") {
-      const target = blockById.get(action.blockId);
-      const anchor = target ? buildAnchor(target.text, action.quote, target.id) : null;
-      if (!anchor) {
-        warnings.push(t("api.warnQuoteNotFound", { description: action.description }));
-        continue;
-      }
-      actions.push({ type: "style", anchor, style: action.style, description: action.description });
-      continue;
-    }
-    const block = blockById.get(
-      action.type === "insert_paragraph" ? action.afterBlockId : action.blockId,
-    );
-    if (!block) {
-      warnings.push(t("api.warnBlockNotFound", { description: action.description }));
-      continue;
-    }
-    if (
-      (action.type === "edit_block" || action.type === "remove_block") &&
-      !TEXT_TYPES.has(block.type)
-    ) {
-      warnings.push(t("api.warnOnlyTextEdited", { description: action.description }));
-      continue;
-    }
-    if (action.type === "edit_block" || action.type === "remove_block" || action.type === "insert_paragraph") {
-      actions.push(action);
-      continue;
-    }
-    // highlight / comment / link carry exact quotes: resolve to offsets now.
-    const anchor = buildAnchor(block.text, action.quote, block.id);
-    if (!anchor) {
-      warnings.push(t("api.warnQuoteNotFound", { description: action.description }));
-      continue;
-    }
-    if (action.type === "highlight") {
-      actions.push({ type: "highlight", anchor, color: action.color, comment: action.comment, description: action.description });
-    } else if (action.type === "comment") {
-      actions.push({ type: "comment", anchor, comment: action.comment, description: action.description });
-    } else {
-      if (!attachedIds.has(action.toDocumentId) || action.toDocumentId === data.documentId) {
-        warnings.push(t("api.warnLinkTargetNotAttached", { description: action.description }));
-        continue;
-      }
-      actions.push({ type: "link", anchor, toDocumentId: action.toDocumentId, description: action.description });
-    }
-  }
+  const { actions, warnings } = enrichActions(result.data.actions, {
+    documentId: data.documentId,
+    blocks: document.blocks,
+    attachedIds: new Set(attachedDocs.map((nd) => nd.documentId)),
+    sectionIds: new Set(sections.map((s) => s.id)),
+    t,
+  });
 
   // The matches (SPEC.md §7): every quote resolves in its named block — exact,
   // then the whitespace-tolerant match (SPEC.md §5) — else in any block; a

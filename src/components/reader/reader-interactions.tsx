@@ -3,6 +3,7 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api";
+import { blockKind } from "@/lib/block-kind";
 import {
   applyReadingPosition,
   atReadingPosition,
@@ -1258,7 +1259,8 @@ export function ReaderInteractions({
   }, [t, notebookId]);
 
   // The assistant as an actor: a command becomes a plan; the plan runs after
-  // approval, or immediately when the reader toggled auto.
+  // approval in the plan card, never before. The sidebar assistant's plan
+  // (SPEC.md §7) arrives by event and takes the same card.
   // Fast Thinking or Deep Thinking (SPEC.md §7): one choice for every
   // assistant surface, remembered in this browser.
   const thinking = useThinking();
@@ -1267,6 +1269,19 @@ export function ReaderInteractions({
   const [aiListening, setAiListening] = useState(false);
   const [aiPlan, setAiPlan] = useState<AssistantPlan | null>(null);
   const [planChecked, setPlanChecked] = useState<Set<number>>(new Set());
+  // The sidebar assistant's plan (SPEC.md §7): the panel sends the actions
+  // the server validated for this document; the plan card takes them. A
+  // split reader has two of these; the document id picks the one.
+  useEffect(() => {
+    const onPlan = (e: Event) => {
+      const detail = (e as CustomEvent<{ documentId: string; actions: AssistantAction[]; warnings: string[] }>).detail;
+      if (!detail || detail.documentId !== documentId) return;
+      setAiPlan({ reply: null, actions: detail.actions, warnings: detail.warnings, conversationNoteId: null });
+      setPlanChecked(new Set(detail.actions.map((_, i) => i)));
+    };
+    window.addEventListener("dissect:assistant-plan", onPlan);
+    return () => window.removeEventListener("dissect:assistant-plan", onPlan);
+  }, [documentId]);
   const aiCommandRef = useRef("");
   aiCommandRef.current = aiCommand;
   // The running assistant turn, so Stop can abort it — the popover's Run
@@ -3022,15 +3037,26 @@ export function ReaderInteractions({
     return () => window.removeEventListener("dissect:flash-block", onFlashBlock);
   }, [t]);
 
-  // Every toast fades after 5 seconds, action or not.
-  function showToast(message: string, action: { label: string; run: () => void } | null = null) {
+  // Every toast fades after 5 seconds, action or not; the Undo toast after
+  // the plan's actions stays UNDO_MS.
+  function showToast(
+    message: string,
+    action: { label: string; run: () => void } | null = null,
+    ms = 5000,
+  ) {
     setToast(message);
     setToastAction(action);
     if (toastTimer.current) clearTimeout(toastTimer.current);
     toastTimer.current = setTimeout(() => {
       setToast(null);
       setToastAction(null);
-    }, 5000);
+    }, ms);
+  }
+
+  function hideToast() {
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    setToast(null);
+    setToastAction(null);
   }
 
   // A failure shows as a toast and lands in the error log on this document,
@@ -4138,7 +4164,7 @@ export function ReaderInteractions({
   }, [notebookId]);
 
   // The assistant engine: command → server-validated plan → approval → the
-  // normal API routes. Auto mode skips approval; the toggle persists.
+  // normal API routes.
   async function runAssistant(commandText?: string) {
     const command = (commandText ?? aiCommandRef.current).trim();
     if (!command || aiBusy || !popover) return;
@@ -4179,7 +4205,7 @@ export function ReaderInteractions({
   }
 
   // One assistant turn: command + history → reply text. Plans route through the
-  // existing approval card (or run immediately in Auto), and the chat narrates it.
+  // plan card, and the chat narrates it.
   async function assistantTurn(
     command: string,
     anchor: Anchor | null,
@@ -4538,10 +4564,17 @@ export function ReaderInteractions({
     }
   }
 
+  // How long the Undo toast stays after the plan's actions run.
+  const UNDO_MS = 8000;
+
+  // Every applied action records the request that takes it back; Undo runs
+  // them newest first. A block's text and kind come from the article as it
+  // is now; the rest from the ids the write routes return.
   async function executePlan(actions: AssistantAction[], warnings: string[] = []) {
     const sectionIdByTitle = new Map(
       sectionChoices.map((c) => [c.label.toLowerCase(), c.id] as const),
     );
+    const undo: { description: string; run: () => Promise<unknown> }[] = [];
     let applied = 0;
     const failed: string[] = [];
     for (const action of actions) {
@@ -4554,38 +4587,58 @@ export function ReaderInteractions({
               parentId: null,
             });
             sectionIdByTitle.set(action.title.toLowerCase(), created.id);
+            undo.push({ description: action.description, run: () => api(`/api/sections/${created.id}`, "DELETE") });
             break;
           }
-          case "edit_block":
+          case "edit_block": {
+            const before = blocks.find((b) => b.id === action.blockId)?.text ?? null;
             await api(`/api/blocks/${action.blockId}`, "PATCH", { text: action.newText });
+            if (before !== null) {
+              undo.push({
+                description: action.description,
+                run: () => api(`/api/blocks/${action.blockId}`, "PATCH", { text: before }),
+              });
+            }
             break;
-          case "insert_paragraph":
-            await api("/api/blocks", "POST", {
+          }
+          case "insert_paragraph": {
+            const created = await api<{ id: string }>("/api/blocks", "POST", {
               documentId,
               afterBlockId: action.afterBlockId,
               text: action.text,
             });
+            undo.push({ description: action.description, run: () => api(`/api/blocks/${created.id}`, "DELETE") });
             break;
-          case "remove_block":
-            await api(`/api/blocks/${action.blockId}`, "DELETE");
+          }
+          case "remove_block": {
+            const removed = await api<{ editId: string }>(`/api/blocks/${action.blockId}`, "DELETE");
+            undo.push({
+              description: action.description,
+              run: () => api("/api/blocks/restore", "POST", { editId: removed.editId }),
+            });
             break;
-          case "highlight":
-            await api("/api/annotations", "POST", {
+          }
+          case "highlight": {
+            const note = await api<{ id: string }>("/api/annotations", "POST", {
               notebookId,
               documentId,
               anchor: action.anchor,
               color: action.color,
               comment: action.comment,
             });
+            undo.push({ description: action.description, run: () => api(`/api/notes/${note.id}`, "DELETE") });
             break;
-          case "comment":
-            await api("/api/annotations", "POST", {
+          }
+          case "comment": {
+            const note = await api<{ id: string }>("/api/annotations", "POST", {
               notebookId,
               documentId,
               anchor: action.anchor,
               comment: action.comment,
             });
+            undo.push({ description: action.description, run: () => api(`/api/notes/${note.id}`, "DELETE") });
             break;
+          }
           case "add_note": {
             let sectionId =
               action.sectionId ??
@@ -4601,35 +4654,55 @@ export function ReaderInteractions({
               });
               sectionId = created.id;
               sectionIdByTitle.set(title.toLowerCase(), created.id);
+              undo.push({ description: action.description, run: () => api(`/api/sections/${created.id}`, "DELETE") });
             }
             // Assistant notes carry their authorship. The plan was approved,
             // so the note lands accepted (SPEC.md §1).
-            await api("/api/notes", "POST", {
+            const note = await api<{ id: string }>("/api/notes", "POST", {
               sectionId,
               content: action.content,
               source: action.source,
               origin: "assistant",
               pending: false,
             });
+            undo.push({ description: action.description, run: () => api(`/api/notes/${note.id}`, "DELETE") });
             break;
           }
-          case "link":
-            await api("/api/links", "POST", {
+          case "link": {
+            const link = await api<{ id: string }>("/api/links", "POST", {
               fromDocumentId: documentId,
               toDocumentId: action.toDocumentId,
               anchor: action.anchor,
             });
+            undo.push({ description: action.description, run: () => api(`/api/links/${link.id}`, "DELETE") });
             break;
-          case "format_block":
+          }
+          case "format_block": {
+            const block = blocks.find((b) => b.id === action.blockId);
+            const before = block ? blockKind(block.type, block.html, block.text) : null;
             await api(`/api/blocks/${action.blockId}`, "PATCH", { kind: action.kind });
+            if (before !== null && before !== action.kind) {
+              undo.push({
+                description: action.description,
+                run: () => api(`/api/blocks/${action.blockId}`, "PATCH", { kind: before }),
+              });
+            }
             break;
-          case "style":
-            await api(`/api/blocks/${action.anchor.blockId}/style`, "POST", {
+          }
+          case "style": {
+            // The style route toggles the span: the same request takes it back.
+            const body = {
               startOffset: action.anchor.startOffset,
               endOffset: action.anchor.endOffset,
               style: action.style,
+            };
+            await api(`/api/blocks/${action.anchor.blockId}/style`, "POST", body);
+            undo.push({
+              description: action.description,
+              run: () => api(`/api/blocks/${action.anchor.blockId}/style`, "POST", body),
             });
             break;
+          }
         }
         applied += 1;
       } catch {
@@ -4642,7 +4715,33 @@ export function ReaderInteractions({
       ...(failed.length > 0 ? [t("reader.failedPrefix", { what: failed[0] })] : []),
       ...(warnings.length > 0 ? [warnings[0]] : []),
     ].join(" · ");
-    showToast(summary);
+    if (undo.length === 0) {
+      showToast(summary);
+      return;
+    }
+    showToast(summary, { label: t("reader.undo"), run: () => void undoPlan(undo) }, UNDO_MS);
+  }
+
+  // Undo, pressed in time: every applied action taken back, newest first.
+  async function undoPlan(undo: { description: string; run: () => Promise<unknown> }[]) {
+    hideToast();
+    let undone = 0;
+    const failed: string[] = [];
+    for (const step of [...undo].reverse()) {
+      try {
+        await step.run();
+        undone += 1;
+      } catch {
+        failed.push(step.description);
+      }
+    }
+    router.refresh();
+    showToast(
+      [
+        t("reader.actionsUndone", { n: undone, s: plural(undone) }),
+        ...(failed.length > 0 ? [t("reader.failedPrefix", { what: failed[0] })] : []),
+      ].join(" · "),
+    );
   }
 
   async function approvePlan() {
@@ -4652,8 +4751,7 @@ export function ReaderInteractions({
     await executePlan(actions, aiPlan.warnings);
   }
 
-  // Voice command: browser speech recognition fills the box; in auto mode the
-  // command runs when speech ends.
+  // Voice command: browser speech recognition fills the box.
   function toggleVoice() {
     if (aiListening) {
       recognitionRef.current?.stop();
