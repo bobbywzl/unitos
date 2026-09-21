@@ -12,6 +12,7 @@ import {
   type GatewayTagSpend,
 } from "@/lib/gateway-admin";
 import { providerOf } from "@/lib/usage";
+import type { TFunc } from "@/lib/i18n/dictionaries";
 import { serverT } from "@/lib/i18n/server";
 import { AdminNav } from "@/components/admin/admin-nav";
 import { BarList, DailyChart, fmtTok, fmtUsd, Tile } from "@/components/admin/charts";
@@ -49,13 +50,51 @@ export default async function AdminUsagePage() {
   // Force-dynamic admin page: the clock is the query parameter.
   // eslint-disable-next-line react-hooks/purity
   const now = Date.now();
-  const since90 = new Date(now - 90 * 86_400_000);
   const since30 = new Date(now - 30 * 86_400_000);
 
   const gateway = gatewayConfigured() && gatewayAdminConfigured();
+
+  // The horizons (SPEC.md §7): the app's own records are kept for good, so
+  // every window is a slice of one history — the last 7, 30, 90, and 365
+  // days, and all time since the first call — each with its total and its
+  // averages per day and per call. All time's days run from the first
+  // record, so its per-day average is over days the app was in use.
+  const first = await db.usageEvent.findFirst({ orderBy: { createdAt: "asc" }, select: { createdAt: true } });
+  const firstDay = first ? new Date(first.createdAt) : new Date(now);
+  const allDays = Math.max(1, Math.ceil((now - firstDay.getTime()) / 86_400_000));
+  const HORIZONS: { key: string; days: number | null }[] = [
+    { key: "7", days: 7 },
+    { key: "30", days: 30 },
+    { key: "90", days: 90 },
+    { key: "365", days: 365 },
+    { key: "all", days: null },
+  ];
+  const horizons = await Promise.all(
+    HORIZONS.map(async (h) => {
+      const since = h.days === null ? undefined : new Date(now - h.days * 86_400_000);
+      const agg = await db.usageEvent.aggregate({
+        where: since ? { createdAt: { gte: since } } : {},
+        _count: true,
+        _sum: { inputTokens: true, outputTokens: true, costUsd: true },
+      });
+      const days = h.days === null ? allDays : Math.min(h.days, allDays);
+      const cost = agg._sum.costUsd ?? 0;
+      return {
+        key: h.key,
+        days,
+        cost,
+        calls: agg._count,
+        tokens: (agg._sum.inputTokens ?? 0) + (agg._sum.outputTokens ?? 0),
+        perDay: cost / days,
+        callsPerDay: agg._count / days,
+        perCall: agg._count > 0 ? cost / agg._count : 0,
+      };
+    }),
+  );
+
   const [totals, cost30, byFeature, byModel, byUser, byDayRaw, users, byModel30, byFeature30, spend, tags] = await Promise.all([
+    // All time: the app's records are never deleted (SPEC.md §7).
     db.usageEvent.aggregate({
-      where: { createdAt: { gte: since90 } },
       _count: true,
       _sum: { inputTokens: true, outputTokens: true, cacheReadTokens: true, costUsd: true },
     }),
@@ -65,21 +104,18 @@ export default async function AdminUsagePage() {
     }),
     db.usageEvent.groupBy({
       by: ["feature"],
-      where: { createdAt: { gte: since90 } },
       _count: true,
       _sum: { inputTokens: true, outputTokens: true, costUsd: true },
       orderBy: { _sum: { costUsd: "desc" } },
     }),
     db.usageEvent.groupBy({
       by: ["model"],
-      where: { createdAt: { gte: since90 } },
       _count: true,
       _sum: { inputTokens: true, outputTokens: true, costUsd: true },
       orderBy: { _sum: { costUsd: "desc" } },
     }),
     db.usageEvent.groupBy({
       by: ["userId"],
-      where: { createdAt: { gte: since90 } },
       _count: true,
       _sum: { inputTokens: true, outputTokens: true, costUsd: true },
       orderBy: { _sum: { costUsd: "desc" } },
@@ -184,6 +220,12 @@ export default async function AdminUsagePage() {
           </div>
           <p className="text-xs text-sand-500">{t("admin.usageAppCountHint")}</p>
 
+          <HorizonTable
+            t={t}
+            rows={horizons}
+            firstDay={firstDay}
+          />
+
           <DailyChart title={t("admin.gatewayDaily")} days={spend.data.days} />
 
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -242,13 +284,19 @@ export default async function AdminUsagePage() {
       ) : (
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-            <Tile label={t("admin.usageCost90")} value={fmtUsd(totals._sum.costUsd ?? 0)} />
+            <Tile label={t("admin.usageCostAll")} value={fmtUsd(totals._sum.costUsd ?? 0)} />
             <Tile label={t("admin.usageCost30")} value={fmtUsd(cost30._sum.costUsd ?? 0)} />
             <Tile label={t("admin.usageCalls")} value={calls.toLocaleString()} />
             <Tile label={t("admin.usageTokensIn")} value={fmtTok(totals._sum.inputTokens ?? 0)} />
             <Tile label={t("admin.usageTokensOut")} value={fmtTok(totals._sum.outputTokens ?? 0)} />
             <Tile label={t("admin.usageCacheRead")} value={fmtTok(totals._sum.cacheReadTokens ?? 0)} />
           </div>
+
+          <HorizonTable
+            t={t}
+            rows={horizons}
+            firstDay={firstDay}
+          />
 
           <DailyChart title={t("admin.usageDaily")} days={days} />
 
@@ -304,5 +352,46 @@ export default async function AdminUsagePage() {
         </div>
       )}
     </main>
+  );
+}
+
+type HorizonRow = { key: string; days: number; cost: number; calls: number; tokens: number; perDay: number; callsPerDay: number; perCall: number };
+
+// The horizons table: one row per window, its total and its averages. The
+// all-time row says when the record starts.
+function HorizonTable({ t, rows, firstDay }: { t: TFunc; rows: HorizonRow[]; firstDay: Date }) {
+  const label = (row: HorizonRow) =>
+    row.key === "all" ? t("admin.usageHorizonAll", { date: firstDay.toISOString().slice(0, 10) }) : t("admin.usageHorizonDays", { n: row.key });
+  return (
+    <div className="overflow-x-auto rounded-2xl bg-card p-4 shadow-soft">
+      <p className="mb-2 text-[11px] font-bold tracking-[0.08em] text-sand-600 uppercase">{t("admin.usageHorizons")}</p>
+      <p className="mb-2 text-xs text-sand-500">{t("admin.usageHorizonsHint")}</p>
+      <table className="w-full text-xs">
+        <thead>
+          <tr className="border-b border-line text-left text-[10px] tracking-wider text-sand-500 uppercase">
+            <th className="py-2 font-semibold">{t("admin.usageColWindow")}</th>
+            <th className="px-3 py-2 text-right font-semibold">{t("admin.usageColCost")}</th>
+            <th className="px-3 py-2 text-right font-semibold">{t("admin.usageColCalls")}</th>
+            <th className="px-3 py-2 text-right font-semibold">{t("admin.gatewayColTokens")}</th>
+            <th className="px-3 py-2 text-right font-semibold">{t("admin.usageColPerDay")}</th>
+            <th className="px-3 py-2 text-right font-semibold">{t("admin.usageColCallsPerDay")}</th>
+            <th className="py-2 text-right font-semibold">{t("admin.usageColPerCall")}</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-line">
+          {rows.map((row) => (
+            <tr key={row.key}>
+              <td className="py-2 text-sand-800">{label(row)}</td>
+              <td className="px-3 py-2 text-right font-semibold tabular-nums">{fmtUsd(row.cost)}</td>
+              <td className="px-3 py-2 text-right tabular-nums">{row.calls.toLocaleString()}</td>
+              <td className="px-3 py-2 text-right tabular-nums">{fmtTok(row.tokens)}</td>
+              <td className="px-3 py-2 text-right tabular-nums">{fmtUsd(row.perDay)}</td>
+              <td className="px-3 py-2 text-right tabular-nums">{row.callsPerDay.toFixed(1)}</td>
+              <td className="py-2 text-right tabular-nums">{fmtUsd(row.perCall)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
