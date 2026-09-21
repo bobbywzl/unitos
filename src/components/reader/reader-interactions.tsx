@@ -114,7 +114,7 @@ import { Reader, type TranscriptVariant } from "@/components/reader/reader";
 import { openVisualization } from "@/components/reader/visualization-viewer";
 import { setQuoteDragImage, writeQuoteDrag, type QuoteDrag } from "@/lib/quote-drag";
 import { startCardDrag } from "@/lib/card-drag";
-import { skipsDrag, watchHold } from "@/lib/hold-drag";
+import { pointsAtText, skipsDrag, watchHold } from "@/lib/hold-drag";
 import { ANNOTATION_PARAM, referenceLabel, type AnnotationReference } from "@/lib/annotation-reference";
 
 // One block's span of a selection (SPEC.md §5).
@@ -1192,13 +1192,16 @@ export function ReaderInteractions({
       : null;
   const annotationGrip = (reference: AnnotationReference | null) =>
     dropOpen && reference ? <AnnotationGrip reference={reference} className="-ml-1" /> : null;
-  // A hold anywhere on the card, off its controls and off the header that
-  // moves the card (data-no-drag), lifts the annotation. A pull never lifts:
-  // the card's text is there to select.
+  // A hold on the card's blank space, off its controls and off the header
+  // that moves the card (data-no-drag), lifts the annotation. A press on the
+  // card's text — where the pointer shows the I-beam — selects the text and
+  // never lifts, hold or pull (pointsAtText). A pull from blank space never
+  // lifts either: only the hold does.
   const holdAnnotation = (reference: AnnotationReference | null) => (e: React.PointerEvent) => {
     if (!reference || !dropOpen || e.button !== 0) return;
     const target = e.target as Element;
     if (skipsDrag(target) || target.closest("button, a, [data-no-drag]")) return;
+    if (pointsAtText(e.clientX, e.clientY)) return;
     watchHold(
       e,
       (at) => {

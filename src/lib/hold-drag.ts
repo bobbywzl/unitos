@@ -27,6 +27,45 @@ export function distanceBetween(a: { x: number; y: number }, b: { x: number; y: 
   return Math.hypot(a.x - b.x, a.y - b.y);
 }
 
+/** The point is on a character: where the pointer shows the I-beam. A
+    press there is a text selection, never a hold. The browser names the
+    nearest character even from blank space, so the character's own box
+    decides: the point inside it is text, beside it is blank. */
+export function pointsAtText(x: number, y: number): boolean {
+  const doc = document as Document & {
+    caretPositionFromPoint?: (x: number, y: number) => { offsetNode: Node; offset: number } | null;
+  };
+  let node: Node | null = null;
+  let offset = 0;
+  if (doc.caretPositionFromPoint) {
+    const caret = doc.caretPositionFromPoint(x, y);
+    if (!caret) return false;
+    node = caret.offsetNode;
+    offset = caret.offset;
+  } else if (document.caretRangeFromPoint) {
+    const range = document.caretRangeFromPoint(x, y);
+    if (!range) return false;
+    node = range.startContainer;
+    offset = range.startOffset;
+  }
+  if (!node || node.nodeType !== Node.TEXT_NODE) return false;
+  const text = node.textContent ?? "";
+  const range = document.createRange();
+  // The character after the caret, else the one before it.
+  for (const [start, end] of [
+    [offset, offset + 1],
+    [offset - 1, offset],
+  ]) {
+    if (start < 0 || end > text.length || !text.slice(start, end).trim()) continue;
+    range.setStart(node, start);
+    range.setEnd(node, end);
+    for (const rect of range.getClientRects()) {
+      if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) return true;
+    }
+  }
+  return false;
+}
+
 /** After a drag, the click the release would fire lands on the control the
     hold began on. One capture listener stops it — for the one click after the
     release, never longer (a listener left behind once killed every click in

@@ -19,9 +19,9 @@ import { outboundFetch } from "@/lib/outbound-fetch";
 // run at a stand-in server (scripts/qa) or at the China platform
 // (https://api.moonshot.cn/v1). Under the gateway (lib/gateway.ts) the chat
 // calls go to its OpenAI-compatible route as moonshot/<id> or zai/<id> —
-// GLM 5.3 and GLM 5.3 Flash are reached through the gateway alone — and the
-// formula and model-list calls to its Moonshot pass-through; the key is the
-// app key.
+// GLM 5.3 and GLM 5.3 Flash are reached through the gateway alone — the
+// formula and model-list calls to its Moonshot pass-through, and Z.ai's web
+// search to its Z.ai pass-through; the key is the app key.
 
 const DEFAULT_BASE_URL = "https://api.moonshot.ai/v1";
 
@@ -69,16 +69,28 @@ export function kimiOptions(effort: KimiEffort = DEFAULT_EFFORT) {
   return { moonshotai: { reasoningEffort: effort } };
 }
 
-// The assistant's web access (SPEC.md §7): Moonshot's official web-search
-// tool. The model asks for a search as a standard function call; the search
-// runs on Moonshot's Formula API and comes back encrypted, readable by the
-// model alone, so the links the model writes are the sources the reader sees.
-// Moonshot bills each search $0.005 on top of the tokens.
-export const WEB_SEARCH_USD = 0.005;
+// The assistant's web access (SPEC.md §7): the model asks for a search as a
+// standard function call, and the search follows the model that answers.
+// Under GLM 5.3 it is Z.ai's Web Search API (the gateway's /zai pass-through;
+// GLM is reached through the gateway alone): the results come back as plain
+// text — title, site, date, link, summary — and the model cites the links.
+// Under Kimi K3 — what a GLM id resolves to without the gateway — it is
+// Moonshot's web-search formula, whose result comes back encrypted, readable
+// by Kimi alone. Either way the links the model writes are the sources the
+// reader sees. Z.ai bills a search $0.01, Moonshot $0.005, on top of the tokens.
+export const ZAI_WEB_SEARCH_USD = 0.01;
+export const MOONSHOT_WEB_SEARCH_USD = 0.005;
 export const WEB_SEARCH_TOOL = "web_search";
 // At most this many searches per answer, one step each, then the answer.
 export const WEB_SEARCH_MAX_USES = 5;
 const WEB_SEARCH_FORMULA = "moonshot/web-search:latest";
+const ZAI_WEB_SEARCH_ENGINE = "search-prime";
+const ZAI_WEB_SEARCH_COUNT = 10;
+
+/** What one search costs under this model: the resolved id the call names. */
+export function webSearchUsd(modelId: string): number {
+  return isGlmModel(modelId) ? ZAI_WEB_SEARCH_USD : MOONSHOT_WEB_SEARCH_USD;
+}
 
 type FiberResponse = {
   status?: string;
@@ -86,32 +98,70 @@ type FiberResponse = {
   error?: { message?: string };
 };
 
-export const webSearchTool = tool({
-  description: "Search the web for information",
-  inputSchema: z.object({ query: z.string().describe("What to search for") }),
-  execute: async ({ query }, { abortSignal }) => {
-    try {
-      const res = await outboundFetch(`${moonshotApiUrl()}/formulas/${WEB_SEARCH_FORMULA}/fibers`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${kimiApiKey() ?? ""}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ name: WEB_SEARCH_TOOL, arguments: JSON.stringify({ query }) }),
-        signal: abortSignal,
-      });
-      const body = (await res.json().catch(() => null)) as FiberResponse | null;
-      const output = body?.context?.encrypted_output ?? body?.context?.output;
-      if (!res.ok || body?.status !== "succeeded" || !output) {
-        throw new Error(body?.error?.message ?? `request failed (${res.status})`);
+type ZaiSearchResponse = {
+  search_result?: { title?: string; content?: string; link?: string; media?: string; publish_date?: string }[];
+  error?: { message?: string };
+};
+
+async function searchMoonshot(query: string, abortSignal: AbortSignal | undefined): Promise<string> {
+  const res = await outboundFetch(`${moonshotApiUrl()}/formulas/${WEB_SEARCH_FORMULA}/fibers`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${kimiApiKey() ?? ""}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ name: WEB_SEARCH_TOOL, arguments: JSON.stringify({ query }) }),
+    signal: abortSignal,
+  });
+  const body = (await res.json().catch(() => null)) as FiberResponse | null;
+  const output = body?.context?.encrypted_output ?? body?.context?.output;
+  if (!res.ok || body?.status !== "succeeded" || !output) {
+    throw new Error(body?.error?.message ?? `request failed (${res.status})`);
+  }
+  return output;
+}
+
+async function searchZai(query: string, abortSignal: AbortSignal | undefined): Promise<string> {
+  const res = await outboundFetch(`${gatewayUrl("/zai")}/web_search`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${keyFor("zai") ?? ""}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ search_engine: ZAI_WEB_SEARCH_ENGINE, search_query: query, count: ZAI_WEB_SEARCH_COUNT }),
+    signal: abortSignal,
+  });
+  const body = (await res.json().catch(() => null)) as ZaiSearchResponse | null;
+  if (!res.ok || !Array.isArray(body?.search_result)) {
+    throw new Error(body?.error?.message ?? `request failed (${res.status})`);
+  }
+  const results = body.search_result.filter((r) => r.link && r.title);
+  if (results.length === 0) return "No results.";
+  return results
+    .map((r, i) => {
+      const head = [r.title, r.media, r.publish_date].filter(Boolean).join(" — ");
+      return `${i + 1}. ${head}\n${r.link}\n${(r.content ?? "").trim()}`;
+    })
+    .join("\n\n");
+}
+
+/** The web-search tool for the model that answers: `modelId` is the resolved
+    id the call names (resolveModelId). */
+export function webSearchTool(modelId: string) {
+  const search = isGlmModel(modelId) ? searchZai : searchMoonshot;
+  return tool({
+    description: "Search the web for information",
+    inputSchema: z.object({ query: z.string().describe("What to search for") }),
+    execute: async ({ query }, { abortSignal }) => {
+      try {
+        return await search(query, abortSignal);
+      } catch (err) {
+        // The model reads the failure and answers from the material alone.
+        console.warn("[assistant] web search failed:", err);
+        return `Search failed: ${err instanceof Error ? err.message : String(err)}`;
       }
-      return output;
-    } catch (err) {
-      // The model reads the failure and answers from the material alone.
-      console.warn("[assistant] web search failed:", err);
-      return `Search failed: ${err instanceof Error ? err.message : String(err)}`;
-    }
-  },
-  // The result reaches the model as the string it is, never re-encoded as JSON.
-  toModelOutput: ({ output }) => ({ type: "text", value: output }),
-});
+    },
+    // The result reaches the model as the string it is, never re-encoded as JSON.
+    toModelOutput: ({ output }) => ({ type: "text", value: output }),
+  });
+}

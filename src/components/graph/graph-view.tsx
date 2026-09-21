@@ -141,7 +141,12 @@ function edgeTone(depth: number): string {
 // accepted. Hovering the curve, or clicking it to pin, lists the pair's links
 // at the curve; a click on a link expands it — why it was made, and the
 // passage at each end, with a button that opens the reader there — and pins
-// the curve so the list stays.
+// the curve so the list stays. A loop (source === target, SPEC.md §13) is
+// the links inside one document: the curve leaves the node's top, rises,
+// and returns to the same point, like a loop in graph theory; its pill and
+// list sit at the loop's top.
+const LOOP_HEIGHT = 64; // the control points' rise above the node's center
+const LOOP_HALF_WIDTH = 34;
 function LinkEdge({ id, source, target, sourceX, sourceY, targetX, targetY, data }: EdgeProps<LinkEdgeData>) {
   const { hover, pinnedEdgeId, hoverEdge, pinEdge, scheduleClear, openLink } = useContext(SpotlightContext);
   const t = useT();
@@ -175,10 +180,14 @@ function LinkEdge({ id, source, target, sourceX, sourceY, targetX, targetY, data
   const recommendedOnly = data?.recommendedOnly ?? false;
   const links = data?.links ?? [];
   const listOpen = links.length > 0 && (hover?.edgeId === id || pinnedEdgeId === id);
-  const bow = seeded(id, 3) * 46 + (targetX - sourceX) * 0.14;
-  const midX = (sourceX + targetX) / 2;
-  const midY = (sourceY + targetY) / 2;
-  const path = `M ${sourceX} ${sourceY} Q ${midX + bow} ${midY} ${targetX} ${targetY}`;
+  const loop = source === target;
+  const bow = loop ? 0 : seeded(id, 3) * 46 + (targetX - sourceX) * 0.14;
+  // The pill's and the list's anchor: the curve's middle, or the loop's top.
+  const midX = loop ? sourceX : (sourceX + targetX) / 2;
+  const midY = loop ? sourceY - LOOP_HEIGHT * 0.75 : (sourceY + targetY) / 2;
+  const path = loop
+    ? `M ${sourceX} ${sourceY} C ${sourceX - LOOP_HALF_WIDTH} ${sourceY - LOOP_HEIGHT}, ${sourceX + LOOP_HALF_WIDTH} ${sourceY - LOOP_HEIGHT}, ${sourceX} ${sourceY}`
+    : `M ${sourceX} ${sourceY} Q ${midX + bow} ${midY} ${targetX} ${targetY}`;
   const depth = Math.min(1, Math.max(0, count - 1) / 7);
   const width = 1.6 + depth * 6.4 + (spotlight === "lit" ? 0.8 : 0);
   const opacity = spotlight === "dim" ? 0.07 : spotlight === "lit" ? 0.95 : recommendedOnly ? 0.45 : 0.7;
@@ -189,7 +198,14 @@ function LinkEdge({ id, source, target, sourceX, sourceY, targetX, targetY, data
     <g style={{ opacity, transition: "opacity 0.25s ease" }}>
       {!recommendedOnly && (
         <defs>
-          <linearGradient id={gradientId} gradientUnits="userSpaceOnUse" x1={sourceX} y1={sourceY} x2={targetX} y2={targetY}>
+          <linearGradient
+            id={gradientId}
+            gradientUnits="userSpaceOnUse"
+            x1={sourceX}
+            y1={sourceY}
+            x2={loop ? sourceX : targetX}
+            y2={loop ? sourceY - LOOP_HEIGHT : targetY}
+          >
             <stop offset="0" stopColor={edgeTone(depth * 0.55)} />
             <stop offset="0.5" stopColor={edgeTone(depth)} />
             <stop offset="1" stopColor={edgeTone(depth * 0.55)} />
@@ -225,7 +241,11 @@ function LinkEdge({ id, source, target, sourceX, sourceY, targetX, targetY, data
             data-track-surface="graph-links"
             className={`nodrag nopan menu-in absolute z-20 flex ${openId ? "w-[400px]" : "w-72"} max-w-[calc(100vw-32px)] flex-col gap-0.5 rounded-2xl border border-line bg-card/95 p-2 shadow-float backdrop-blur-md`}
             style={{
-              transform: `translate(-50%, 0) translate(${midX + bow / 2}px, ${midY + 12}px)`,
+              // The list hangs under a curve's middle; above a loop's top, so
+              // it never covers the node and its title.
+              transform: loop
+                ? `translate(-50%, -100%) translate(${midX}px, ${midY - 10}px)`
+                : `translate(-50%, 0) translate(${midX + bow / 2}px, ${midY + 12}px)`,
               pointerEvents: "all",
             }}
           >
@@ -434,14 +454,15 @@ function GraphCanvas({
     for (const e of edges) {
       if (!adjacency.has(e.a)) adjacency.set(e.a, new Set());
       if (!adjacency.has(e.b)) adjacency.set(e.b, new Set());
+      degree.set(e.a, (degree.get(e.a) ?? 0) + e.accepted + e.recommended);
+      if (e.accepted === 0) breathing.add(e.a);
+      // A loop (a === b) is no neighbor of its own node: it counts once
+      // toward the node's degree and never moves it in the ring.
+      if (e.a === e.b) continue;
       adjacency.get(e.a)!.add(e.b);
       adjacency.get(e.b)!.add(e.a);
-      degree.set(e.a, (degree.get(e.a) ?? 0) + e.accepted + e.recommended);
       degree.set(e.b, (degree.get(e.b) ?? 0) + e.accepted + e.recommended);
-      if (e.accepted === 0) {
-        breathing.add(e.a);
-        breathing.add(e.b);
-      }
+      if (e.accepted === 0) breathing.add(e.b);
     }
     return { adjacency, degree, breathing };
   }, [edges]);

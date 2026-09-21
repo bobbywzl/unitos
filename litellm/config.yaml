@@ -41,7 +41,7 @@ model_list:
       supports_reasoning: true
       supports_vision: true
 
-  # Kimi — the calls that carry an image, the assistant with Web on, and the
+  # Kimi — Extract, the parse passes, the calls that carry an image, and the
   # bimonthly model update's probes. Chat completions, OpenAI-compatible.
   # allowed_openai_params keeps the app's reasoning_effort on a Kimi id the
   # gateway's price list does not know yet (a new version the model update
@@ -151,6 +151,17 @@ general_settings:
       auth: true
       include_subpath: true
       methods: ["GET", "POST"]
+    # Z.ai's API root: the Web Search API (/zai/web_search, lib/kimi.ts),
+    # what the assistant with Web on searches with under GLM 5.3. The chat
+    # calls take the zai/ entries above, not this.
+    - path: "/zai"
+      target: "https://api.z.ai/api/paas/v4"
+      headers:
+        Authorization: "Bearer os.environ/ZAI_API_KEY"
+        content-type: application/json
+      auth: true
+      include_subpath: true
+      methods: ["POST"]
     # Deepgram is not here: its request body is the media bytes, which a
     # pass-through re-encodes as JSON, and the gateway's own Deepgram route
     # answers without the speakers. The app calls Deepgram directly with

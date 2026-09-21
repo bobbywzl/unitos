@@ -368,8 +368,8 @@ const day = (d: Date) => d.toISOString().slice(0, 10);
 // goes out on the openai route with Z.ai's base URL (litellm/config.yaml),
 // so its log reads openai/glm-5.3 under provider openai. The label here is
 // the model's own name and its provider is read from it (lib/usage.ts
-// providerOf), so GLM reads zai. A pass-through call (DeepL, Moonshot's
-// web search, Jev) has no model in the log: it counts under pass-through.
+// providerOf), so GLM reads zai. A pass-through call (DeepL, Z.ai's or
+// Moonshot's web search, Jev) has no model in the log: it counts under pass-through.
 const PASS_THROUGH = "pass-through";
 
 function modelLabel(label: string): string {

@@ -43,7 +43,7 @@ export const RUBRICS: Record<string, Rubric> = {
     criteria: [
       { key: "findings_first", ask: "Does it lead with what the document found and why it matters, then how, then the limits?" },
       { key: "numbers", ask: "Are the findings carried with their numbers, as printed?" },
-      { key: "depth", ask: "Does the wording fit the depth: everyday words and definitions for layman, the document's own terminology for professional, insider-only findings for insights?" },
+      { key: "depth", ask: "Does the wording fit the depth: everyday words and definitions for layman, the document's own terminology for professional?" },
       { key: "specific", ask: "Could every sentence be written only about this document — no sentence that fits any document on the subject?" },
       { key: "grounded", ask: "Does every claim rest on the document, with block tags where the prompt asks for them, and no claim added?" },
     ],

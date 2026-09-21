@@ -1,7 +1,7 @@
 // The AI gateway (SPEC.md §2): LiteLLM, one host in front of every AI
 // provider. With LITELLM_BASE_URL and LITELLM_API_KEY set, every AI call goes
 // to the gateway — GLM, Kimi, Claude, Gemini, Groq and OpenAI Whisper, OpenAI
-// TTS, DeepL, Moonshot's web search, and the model lists the bimonthly model
+// TTS, DeepL, Z.ai's and Moonshot's web search, and the model lists the bimonthly model
 // update reads. GLM 5.3 and GLM 5.3 Flash have no direct client: they are
 // reached through the gateway alone, and without it Kimi K3 takes their
 // calls (lib/models.ts). The gateway holds the provider keys, applies the app key's
@@ -27,6 +27,8 @@
 //   TTS           /v1/audio/speech, model openai/<id>
 //   Moonshot      /moonshot/… — a pass-through to Moonshot's API root, for
 //                 the web-search formula and the model list
+//   Z.ai          /zai/… — a pass-through to Z.ai's API root, for the Web
+//                 Search API the assistant with Web on calls under GLM
 //   DeepL         /deepl/v2/translate — a pass-through
 //   Jev           /typesafe/systemone — a pass-through to the API root that
 //                 serves Jev (OpenRouter's, or TypeSafe's own); the model id

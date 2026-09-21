@@ -4,8 +4,6 @@
 const en = {
   // Recommended functions
   recommended: "Recommended",
-  recInsightsLabel: "Insiders Insights",
-  recInsightsHint: "Findings only an industry insider would catch — honest when there are none",
   recLaymanLabel: "Layman summary",
   recLaymanHint: "The core of the document, in plain words",
   recProfessionalLabel: "Professional summary",
@@ -124,8 +122,6 @@ const en = {
 
 const zh: Record<keyof typeof en, string> = {
   recommended: "推荐",
-  recInsightsLabel: "行家洞见",
-  recInsightsHint: "只有业内行家才能看出的发现——没有时如实说明",
   recLaymanLabel: "通俗摘要",
   recLaymanHint: "用大白话讲出文档的核心",
   recProfessionalLabel: "专业摘要",
