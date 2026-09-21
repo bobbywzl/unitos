@@ -51,6 +51,7 @@ import { cropPageRegion, pageBlockText, renderPdfPage } from "@/lib/handwritten/
 import { parseRegion } from "@/lib/video/types";
 import type { TFunc } from "@/lib/i18n/dictionaries";
 import { currentLang, serverT } from "@/lib/i18n/server";
+import { checkOutput, flagOutput, quotesAsText } from "@/lib/derive/check";
 import { gatewayHeaders } from "@/lib/gateway";
 import { kimi, kimiConfigured, kimiOptions } from "@/lib/kimi";
 import { resolveModelId } from "@/lib/models";
@@ -81,6 +82,11 @@ import {
 import { ultraActive } from "@/lib/tiers";
 import { addTokens, recordUsage, sdkTokens, type TokenCounts } from "@/lib/usage";
 import { parseBody } from "@/lib/validate";
+
+// The check's retry (lib/derive/check.ts): an extraction failing this many
+// criteria runs once more, and the better run is kept.
+const DISTILL_CHECK_ATTEMPTS = 2;
+const DISTILL_RETRY_FAILS = 2;
 
 // FORMALIZE holds the connection for minutes on a long transcript (heartbeat
 // stream); 120 s would kill it mid-call.
@@ -1068,6 +1074,15 @@ async function handle(req: Request, t: TFunc) {
             data: { summaries: { ...current, [depth]: text } },
           });
           await bumpNotebook(data.notebookId);
+          void checkOutput({
+            tool: "summarize",
+            input: `${document.title} · ${depth}`,
+            output: text,
+            lang: await currentLang(),
+            userId: user.id,
+            notebookId: data.notebookId,
+            documentId,
+          });
         }
       },
       onError: (err) => {
@@ -1131,6 +1146,20 @@ async function handle(req: Request, t: TFunc) {
               });
               await bumpNotebook(data.notebookId);
               send(`${STREAM_NOTE_TOKEN}${note.id}`);
+              // The check (SPEC.md §25): the rewrite against its rubric on
+              // Jev, after the reader has it; a weak one is flagged.
+              if (data.type === "SIMPLIFY") {
+                void checkOutput({
+                  tool: "simplify",
+                  input: data.anchor?.quotedText ?? "",
+                  output: text,
+                  lang: await currentLang(),
+                  userId: user.id,
+                  notebookId: data.notebookId,
+                  documentId,
+                  noteId: note.id,
+                });
+              }
             }
           } catch (err) {
             console.error("[derive] annotation save failed:", err);
@@ -1434,40 +1463,79 @@ async function handle(req: Request, t: TFunc) {
       heartbeat = setInterval(() => send(" "), 5_000);
       const fail = (message: string) => send(`${STREAM_ERROR_TOKEN}${message}`);
       try {
-        const result = await callForJson({
-          model,
-          messages,
-          maxOutputTokens,
-          providerOptions: kimiOptions(effort),
-          schema: distillOutputSchema,
-          label: "DISTILL",
-          usage: usageMeta,
-          abortSignal: req.signal,
-        });
-        if (cancelled || req.signal.aborted) return;
-        if (!result.ok) {
-          fail(t("api.distillFailed", { reason: result.error }));
-          return;
-        }
+        // The check (SPEC.md §25): the quotes against Extract's rubric on
+        // Jev. A run that fails DISTILL_RETRY_FAILS criteria or more runs
+        // once again; the run with fewer failures is kept, and a kept run
+        // that still fails is flagged for the loop.
         const orderByBlock = new Map(document.blocks.map((b, i) => [b.id, i]));
-        const quotes = result.data.quotes
-          .map((q) => {
-            const span = resolveSpan(q, blockById);
-            return span ? { ...span, caption: q.caption } : null;
-          })
-          .filter((q) => q !== null)
-          .sort(
-            (a, b) =>
-              (orderByBlock.get(a.blockId) ?? 0) - (orderByBlock.get(b.blockId) ?? 0) ||
-              a.start - b.start,
-          );
-        if (quotes.length === 0) {
-          console.error(
-            "[derive] DISTILL resolved no quotes:",
-            JSON.stringify(result.data.quotes.map((q) => ({ blockId: q.blockId, start: q.start, end: q.end, quote: q.quote?.slice(0, 80) }))),
-          );
-          fail(t("api.distillNoQuotes"));
-          return;
+        type ResolvedQuote = NonNullable<ReturnType<typeof resolveSpan>> & { caption: string };
+        const question = data.question!.trim();
+        const lang = await currentLang();
+        let best: { quotes: ResolvedQuote[]; failed: string[] } | null = null;
+        for (let attempt = 0; attempt < DISTILL_CHECK_ATTEMPTS; attempt++) {
+          const result = await callForJson({
+            model,
+            messages,
+            maxOutputTokens,
+            providerOptions: kimiOptions(effort),
+            schema: distillOutputSchema,
+            label: "DISTILL",
+            usage: usageMeta,
+            abortSignal: req.signal,
+          });
+          if (cancelled || req.signal.aborted) return;
+          if (!result.ok) {
+            if (best) break;
+            fail(t("api.distillFailed", { reason: result.error }));
+            return;
+          }
+          const resolved: ResolvedQuote[] = result.data.quotes
+            .map((q) => {
+              const span = resolveSpan(q, blockById);
+              return span ? { ...span, caption: q.caption } : null;
+            })
+            .filter((q): q is ResolvedQuote => q !== null)
+            .sort(
+              (a, b) =>
+                (orderByBlock.get(a.blockId) ?? 0) - (orderByBlock.get(b.blockId) ?? 0) ||
+                a.start - b.start,
+            );
+          if (resolved.length === 0) {
+            if (best) break;
+            console.error(
+              "[derive] DISTILL resolved no quotes:",
+              JSON.stringify(result.data.quotes.map((q) => ({ blockId: q.blockId, start: q.start, end: q.end, quote: q.quote?.slice(0, 80) }))),
+            );
+            fail(t("api.distillNoQuotes"));
+            return;
+          }
+          const check = await checkOutput({
+            tool: "distill",
+            input: question,
+            output: quotesAsText(resolved),
+            lang,
+            userId: user.id,
+            notebookId: data.notebookId,
+            documentId,
+            record: false,
+          });
+          const failed = check?.failed ?? [];
+          if (!best || failed.length < best.failed.length) best = { quotes: resolved, failed };
+          if (!check || failed.length < DISTILL_RETRY_FAILS) break;
+        }
+        if (!best) return;
+        const quotes = best.quotes;
+        if (best.failed.length > 0) {
+          void flagOutput({
+            tool: "distill",
+            input: question,
+            output: quotesAsText(quotes),
+            lang,
+            userId: user.id,
+            notebookId: data.notebookId,
+            documentId,
+            failed: best.failed,
+          });
         }
         const distillation: Distillation = {
           id: crypto.randomUUID(),

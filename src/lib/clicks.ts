@@ -22,6 +22,12 @@ export function isClickSurface(value: unknown): value is ClickSurface {
   return typeof value === "string" && (CLICK_SURFACES as readonly string[]).includes(value);
 }
 
+// One row is not a click: `lead-predicted:<tool>` on the ai-toolbar surface
+// is the lead tool Jev predicted for a selection (/api/jev/lead-tool), written
+// by the server beside the click it tried to predict, so the hit rate reads
+// from this log. The admin page's groups leave it out; the Jev routes skip
+// it when they read a reader's history.
+//
 // A control id: lowercase letters, digits, "-" and ":" ("format:h1"), at most
 // 64 characters. The client drops anything else before it is sent. The part
 // after ":" is the control's type or source where it has one: a highlight's

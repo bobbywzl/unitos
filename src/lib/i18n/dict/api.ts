@@ -173,6 +173,8 @@ const en = {
     "{host} refused the request (HTTP {status}). The site blocks automated readers, and no archived copy exists. Open the page in your browser, save it as a PDF, and upload that PDF.",
   fetchChallenge:
     "{host} showed a human check instead of the page, and no archived copy exists. Open the page in your browser, save it as a PDF, and upload that PDF.",
+  fetchWall:
+    "{host} answered with a consent, sign-in, subscription, or error page, not the article. Open the page in your browser, save it as a PDF, and upload that PDF.",
   fetchNotFound: "{host} has no page at this link (HTTP {status}). Check the link.",
   fetchRateLimited:
     "{host} is limiting requests right now (HTTP 429), and no archived copy exists. Wait a minute and try again.",
@@ -184,6 +186,7 @@ const en = {
   glossaryNeedsKey: "MOONSHOT_API_KEY is not set. Glossary extraction needs it.",
   glossaryFailed: "Glossary extraction failed",
   contentsNeedsKey: "MOONSHOT_API_KEY is not set. The contents need it.",
+  chaptersNeedKey: "TYPESAFE_API_KEY is not set. The chapters need it.",
   contentsFailed: "The contents could not be built",
   videoNoReparse: "Video documents do not re-parse",
   reparseRunning: "A re-parse of this document is already running",
@@ -436,6 +439,7 @@ const zh: Record<keyof typeof en, string> = {
     "{host} 拒绝了请求（HTTP {status}）。该网站拦截自动读取，也没有存档副本。请在浏览器中打开页面，另存为 PDF，再上传该 PDF。",
   fetchChallenge:
     "{host} 返回了人机验证页面而不是文章，也没有存档副本。请在浏览器中打开页面，另存为 PDF，再上传该 PDF。",
+  fetchWall: "{host} 返回的是同意页、登录页、订阅页或错误页，不是文章。请在浏览器中打开该页面，另存为 PDF 后上传。",
   fetchNotFound: "{host} 上没有此链接对应的页面（HTTP {status}）。请检查链接。",
   fetchRateLimited: "{host} 正在限制请求（HTTP 429），也没有存档副本。请稍等一分钟再试。",
   fetchServerError: "{host} 返回了服务器错误（HTTP {status}）。请稍后再试。",
@@ -446,6 +450,7 @@ const zh: Record<keyof typeof en, string> = {
   glossaryNeedsKey: "未设置 MOONSHOT_API_KEY。术语表生成需要它。",
   glossaryFailed: "术语表生成失败",
   contentsNeedsKey: "未设置 MOONSHOT_API_KEY。目录需要它。",
+  chaptersNeedKey: "未设置 TYPESAFE_API_KEY。章节需要它。",
   contentsFailed: "目录无法生成",
   videoNoReparse: "视频文档不能重新解析",
   reparseRunning: "此文档正在重新解析",

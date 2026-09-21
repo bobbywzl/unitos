@@ -210,8 +210,9 @@ export const SKELETON_STALE_MS = 10 * 60_000; // a build older than this is a de
 // between, each with the block it starts at. One call over the whole
 // document at "low": a reading of where the parts begin,
 // not a problem to reason through, and a long document at "high" outran
-// the request.
-export const CONTENTS_MODEL = GLM_5_3_FLASH;
+// the request. GLM 5.3, not Flash: a part's title and its start are what
+// the reader navigates by, and Flash cut parts and misnamed them.
+export const CONTENTS_MODEL = GLM_5_3;
 export const CONTENTS_EFFORT: KimiEffort = "low";
 export const CONTENTS_MAX_OUTPUT_TOKENS = 16384; // a list of titles and block ids, with the short reasoning before it
 

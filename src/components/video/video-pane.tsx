@@ -23,6 +23,7 @@ import { DocumentTitle } from "@/components/reader/document-title";
 import { ReaderInteractions } from "@/components/reader/reader-interactions";
 import type { TranscriptVariant } from "@/components/reader/reader";
 import { FindPanel } from "@/components/video/find-panel";
+import { ChaptersMenu } from "@/components/video/chapters-menu";
 import { TranscriptActions, TranscriptEmpty, ViewBar } from "@/components/video/transcript";
 import {
   VideoPlayer,
@@ -821,13 +822,23 @@ export function VideoPane({
           activeView === "article" ? (
             articleActions.actions
           ) : transcript.length > 0 && !transcriptPending ? (
-            <TranscriptActions
-              audio={audio}
-              busy={speakersBusy}
-              note={speakersNote}
-              onTranscribe={() => void transcribe()}
-              onDetectSpeakers={canEdit ? () => void detectSpeakers() : null}
-            />
+            <>
+              <ChaptersMenu
+                documentId={documentId}
+                lines={transcript}
+                onSeek={(line) => {
+                  playerRef.current?.seek(line.startTime);
+                  setActiveLineId(line.id);
+                }}
+              />
+              <TranscriptActions
+                audio={audio}
+                busy={speakersBusy}
+                note={speakersNote}
+                onTranscribe={() => void transcribe()}
+                onDetectSpeakers={canEdit ? () => void detectSpeakers() : null}
+              />
+            </>
           ) : null
         }
       />

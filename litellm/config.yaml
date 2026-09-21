@@ -164,6 +164,18 @@ general_settings:
         content-type: application/json
       auth: true
       methods: ["POST"]
+    # Jev (lib/jev.ts): TypeSafe's System One endpoint, served here by
+    # OpenRouter at the same request and answer shape (an OpenRouter key in
+    # TYPESAFE_API_KEY; the app names the model, ~typesafe/jev-latest or
+    # typesafe/jev-1.13). TypeSafe's own API takes the target
+    # https://api.typesafe.ai/v1 and a TypeSafe key, the model jev-latest.
+    - path: "/typesafe/systemone"
+      target: "https://openrouter.ai/api/v1/systemone"
+      headers:
+        Authorization: "Bearer os.environ/TYPESAFE_API_KEY"
+        content-type: application/json
+      auth: true
+      methods: ["POST"]
   # The built-in pass-throughs need no entry: /anthropic/* reads
   # ANTHROPIC_API_KEY, /gemini/* reads GEMINI_API_KEY, each with the app key
   # as the caller's key.

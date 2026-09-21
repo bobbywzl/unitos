@@ -28,6 +28,9 @@
 //   Moonshot      /moonshot/… — a pass-through to Moonshot's API root, for
 //                 the web-search formula and the model list
 //   DeepL         /deepl/v2/translate — a pass-through
+//   Jev           /typesafe/systemone — a pass-through to the API root that
+//                 serves Jev (OpenRouter's, or TypeSafe's own); the model id
+//                 stays the app's TYPESAFE_MODEL (lib/jev.ts)
 //   Deepgram      never: a direct call with DEEPGRAM_API_KEY
 
 export type GatewayProvider =
@@ -38,7 +41,8 @@ export type GatewayProvider =
   | "groq"
   | "openai"
   | "deepgram"
-  | "deepl";
+  | "deepl"
+  | "typesafe";
 
 const KEY_ENV: Record<GatewayProvider, string> = {
   zai: "ZAI_API_KEY", // read on the gateway host alone
@@ -49,6 +53,7 @@ const KEY_ENV: Record<GatewayProvider, string> = {
   openai: "OPENAI_API_KEY",
   deepgram: "DEEPGRAM_API_KEY",
   deepl: "DEEPL_API_KEY",
+  typesafe: "TYPESAFE_API_KEY",
 };
 
 // Whitespace stripped: a key pasted into the host's settings with a line

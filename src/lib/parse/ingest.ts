@@ -5,7 +5,8 @@ import { classifyPdf } from "@/lib/handwritten/classify";
 import { storePageSizes } from "@/lib/handwritten/page-images";
 import { pageBlockText, pdfPageCount } from "@/lib/handwritten/pages";
 import { parsePdf } from "@/lib/parse/pdf";
-import { auditFigures } from "@/lib/parse/figure-audit";
+import { auditFiguresWithJev } from "@/lib/parse/figure-audit";
+import { wallOf } from "@/lib/parse/page-kind";
 import { restoreFigures } from "@/lib/parse/figures";
 import { layoutBlocks } from "@/lib/parse/layout";
 import type { ParseModel } from "@/lib/parse/model";
@@ -15,7 +16,7 @@ import { needsBrowserRender, renderIfNeeded, type RenderReport } from "@/lib/par
 import { visionCheck, visionCheckPossible, type VisionCheckReport } from "@/lib/parse/vision-check";
 import { splitBlocks, splitPartCount } from "@/lib/parse/split";
 import { selectCoreBlocks, structureBlocks } from "@/lib/parse/structure";
-import { fetchPage, type FetchedPage } from "@/lib/parse/fetch-page";
+import { fetchPage, FetchPageError, hostOf, type FetchedPage } from "@/lib/parse/fetch-page";
 import { parseFetchedPage, parseHtmlContent, resolveContentsLinks } from "@/lib/parse/url";
 import {
   PARSER_VERSION,
@@ -167,14 +168,15 @@ export async function refineUrlBlocks(
 // lib/parse/render-page.ts), and the media check (SPEC.md §15): how many
 // images, videos, and charts the page's content holds and the names of
 // those no block carries.
-function saveDetail(
+async function saveDetail(
   blocks: ParsedBlock[],
   scriptedFigures = false,
   render: RenderReport | null = null,
   media: MediaCheck | undefined = undefined,
   check: VisionCheckReport | null = null,
-): string {
-  const audit = auditFigures(blocks);
+  title: string | null = null,
+): Promise<string> {
+  const audit = await auditFiguresWithJev(blocks, title);
   return JSON.stringify({
     figures: audit.figures,
     captionsWithoutFigure: audit.captionsWithoutFigure,
@@ -411,7 +413,7 @@ export async function ingestMarkdown(
   const parsed = await parseMarkdownDocument(new TextDecoder("utf-8").decode(bytes), filename);
   const title = parsed.title ?? filename;
   const blocks = parsed.blocks;
-  onProgress?.("save", saveDetail(blocks, false, null, parsed.mediaCheck));
+  onProgress?.("save", await saveDetail(blocks, false, null, parsed.mediaCheck, null, title));
   const document = await createDocumentWithBlocks({
     title,
     sourceUrl: opts.sourceUrl,
@@ -587,6 +589,10 @@ export async function ingestUrl(
   const pageHtml = page.kind === "html" ? page.html : fetched.html;
   onProgress?.("extract");
   const parsed = await parseHtmlContent(pageHtml, url, onProgress);
+  // A wall is not the article (lib/parse/page-kind.ts): the add stops here
+  // with the reason, before any model pass reads the wall's words.
+  const wall = await wallOf(parsed.title ?? url, parsed.blocks);
+  if (wall) throw new FetchPageError("wall", hostOf(url), null);
   const { blocks, references, font: laidFont, check } = await refineUrlBlocks(parsed, onProgress, {
     deadline: opts.deadline,
     pageHtml,
@@ -601,7 +607,7 @@ export async function ingestUrl(
     const chars = blocks.reduce((n, b) => n + b.text.length, 0);
     const parts = splitBlocks(title, blocks, splitPartCount(chars));
     if (parts.length > 1) {
-      onProgress?.("save", saveDetail(blocks, unrenderedScripts(fetched), render, parsed.mediaCheck, check));
+      onProgress?.("save", await saveDetail(blocks, unrenderedScripts(fetched), render, parsed.mediaCheck, check, title));
       const documents = [];
       for (let i = 0; i < parts.length; i++) {
         documents.push(
@@ -620,7 +626,7 @@ export async function ingestUrl(
     }
   }
 
-  onProgress?.("save", saveDetail(blocks, unrenderedScripts(fetched), render, parsed.mediaCheck, check));
+  onProgress?.("save", await saveDetail(blocks, unrenderedScripts(fetched), render, parsed.mediaCheck, check, title));
   const document = await createDocumentWithBlocks({
     title,
     sourceUrl: url,
@@ -674,7 +680,7 @@ export async function reparseDocument(
       document.format === "slides"
         ? await parseSlides(bytes, document.title, { storeImage: slideImageStore(userId), picture: pictures.size > 0 })
         : await parseSheetsBytes(bytes, document.title, userId);
-    onProgress?.("save", saveDetail(parsed.blocks));
+    onProgress?.("save", await saveDetail(parsed.blocks));
     await db.$transaction(async (tx) => {
       await tx.block.deleteMany({ where: { documentId } });
       await tx.imageAsset.deleteMany({ where: { documentId } });
@@ -774,7 +780,7 @@ export async function reparseDocument(
 
   // The figure check rides with the save stage, as on an add: the document
   // bar reports a caption left without its figure.
-  onProgress?.("save", saveDetail(blocks, scriptedFigures, render, mediaCheck, check));
+  onProgress?.("save", await saveDetail(blocks, scriptedFigures, render, mediaCheck, check));
   const rows = resolveContentsLinks(blocks);
   await db.$transaction(async (tx) => {
     await tx.block.deleteMany({ where: { documentId } });

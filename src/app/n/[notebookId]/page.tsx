@@ -17,6 +17,7 @@ import { documentReferences } from "@/lib/parse/types";
 import { resolveDocumentSources } from "@/lib/anchors/resolve";
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
+import { trivialEdits } from "@/lib/history/trivial";
 import { documentsGraph, listGenerated } from "@/lib/graph/view";
 import {
   corpusDistillationList,
@@ -1017,6 +1018,8 @@ export default async function NotebookPage(props: {
 
   // The History panel (SPEC.md §12): corpus events (deletions, detachments)
   // merged with every attached document's edits, newest first, attributed.
+  // Small edits are marked (lib/history/trivial.ts) so the panel folds them.
+  const trivial = await trivialEdits(allEdits);
   const history: HistoryEntry[] = [
     ...events.map(
       (e): HistoryEntry => ({
@@ -1043,6 +1046,7 @@ export default async function NotebookPage(props: {
                 ""),
         documentTitle: e.document.title,
         createdAt: e.createdAt.toISOString(),
+        trivial: trivial.get(e.id) ?? false,
       }),
     ),
   ]

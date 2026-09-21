@@ -4,7 +4,9 @@ import { documentAccess } from "@/lib/collab";
 import { buildContents, contentsEntries, headingContents } from "@/lib/contents";
 import { db } from "@/lib/db";
 import { serverT } from "@/lib/i18n/server";
+import { jevEnabled } from "@/lib/jev";
 import { kimiConfigured } from "@/lib/kimi";
+import { buildChapters } from "@/lib/video/chapters";
 import { parseBody } from "@/lib/validate";
 
 export const maxDuration = 120;
@@ -32,6 +34,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ documentId: st
     where: { id: documentId },
     select: {
       contents: true,
+      video: { select: { id: true } },
       blocks: {
         orderBy: { order: "asc" },
         select: { id: true, type: true, text: true, order: true, html: true },
@@ -44,6 +47,18 @@ export async function POST(req: Request, ctx: { params: Promise<{ documentId: st
   const headings = headingContents(document.blocks);
   if (!data.generate || access.role === "viewer") {
     return NextResponse.json({ ok: true, parts: headings, fallback: true });
+  }
+  // A media document's contents are its chapters (SPEC.md §26): built on
+  // Jev from the transcript, not by the contents prompt.
+  if (document.video) {
+    if (!jevEnabled()) return NextResponse.json({ error: t("api.chaptersNeedKey") }, { status: 503 });
+    try {
+      const parts = await buildChapters(documentId, access.user.id);
+      return NextResponse.json({ ok: true, parts, fallback: false });
+    } catch (err) {
+      console.error("Chapters failed:", err);
+      return NextResponse.json({ error: t("api.contentsFailed") }, { status: 422 });
+    }
   }
   if (!kimiConfigured()) {
     return NextResponse.json({ error: t("api.contentsNeedsKey") }, { status: 503 });
