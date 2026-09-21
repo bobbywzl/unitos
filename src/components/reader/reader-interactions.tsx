@@ -77,6 +77,7 @@ import {
   LinkIcon,
   MicIcon,
   NotesIcon,
+  QuestionIcon,
   QuoteIcon,
   ChartIcon,
   RegenerateIcon,
@@ -180,6 +181,7 @@ type ContentKind = "text" | "figure" | "equation";
 type Tool =
   | "assistant"
   | "analyze"
+  | "explain"
   | "simplify"
   | "visualize"
   | "comment"
@@ -189,9 +191,9 @@ type Tool =
   | "readAloud";
 
 const TOOLBARS: Record<ContentKind, readonly Tool[]> = {
-  text: ["assistant", "simplify", "visualize", "comment", "link", "highlight", "addToNotes", "readAloud"],
-  figure: ["assistant", "analyze", "comment", "link", "highlight", "addToNotes"],
-  equation: ["assistant", "visualize", "comment", "link", "highlight", "addToNotes"],
+  text: ["assistant", "explain", "simplify", "visualize", "comment", "link", "highlight", "addToNotes", "readAloud"],
+  figure: ["assistant", "analyze", "explain", "comment", "link", "highlight", "addToNotes"],
+  equation: ["assistant", "explain", "visualize", "comment", "link", "highlight", "addToNotes"],
 };
 
 // The blocks the hold-and-circle gesture opens a toolbar on, whole. A table
@@ -3213,10 +3215,12 @@ export function ReaderInteractions({
     return JSON.stringify({ type, documentId, notebookId, anchor: anchorBody(anchor), ...segmentsBody(anchor) });
   }
 
-  // ANALYZE streams into the card beside the article (SPEC.md §4, §6): the
-  // three-section analysis of a figure or table. It persists in the hidden
-  // Annotations section. The card's kind "explain" is kept for stored
-  // explanations of the old Explain tool, which still reopen from their mark.
+  // EXPLAIN and ANALYZE stream into the same card beside the article (SPEC.md
+  // §4, §6): an explanation of the selection, or the three-section analysis
+  // of a figure or table. Both persist in the hidden Annotations section.
+  async function explain() {
+    await streamBubble("explain");
+  }
   async function analyze() {
     await streamBubble("analyze");
   }
@@ -6343,6 +6347,20 @@ function blockFormatKind(
               </span>
             </button>
           )}
+          {has("explain") && (
+            <button
+              onClick={() => void explain()}
+              data-track="explain"
+              data-tip={popoverKind === "figure" ? t("reader.explainFigureTitle") : t("reader.explainTitle")}
+              className={`flex w-full items-center justify-between gap-2 rounded-full ${toolRow} text-left ${rowLook("explain")}`}
+            >
+              <span className="flex items-center gap-1.5">
+                <QuestionIcon size={coarse ? 14 : 12} />
+                {t("reader.explain")}
+              </span>
+              {leadBadge("explain")}
+            </button>
+          )}
           {has("simplify") && (
             <button
               onClick={() => void simplify()}
@@ -6621,7 +6639,9 @@ function blockFormatKind(
                     ? bubble.streaming
                       ? t("reader.visualizing")
                       : t("reader.visualization")
-                    : t("reader.explanation")}
+                    : bubble.streaming
+                      ? t("reader.explaining")
+                      : t("reader.explanation")}
             </span>
             <span className="flex shrink-0 items-center gap-0.5">
               {bubble.streaming && (

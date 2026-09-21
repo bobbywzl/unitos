@@ -220,6 +220,14 @@ const en = {
     "App's count is what the app's own records make of the gateway's models at the list prices in the code. The two should be close; a gap means one price list is stale, and the gateway's is the one to trust.",
   usageOutside: "Outside the gateway (30d)",
   usageOutsideBy: "Cost by function, outside the gateway (30d)",
+  usageSpending: "Spending estimate",
+  usageSpendingHint:
+    "AI is the cost of the last 30 days. A fixed cost is what the app pays each month whatever its use (lib/fixed-costs.ts). A year is twelve months.",
+  usageSpendingAi: "AI (last 30 days)",
+  usageSpendingTotal: "Total",
+  usageColItem: "Item",
+  usageColPerMonth: "/ month",
+  usageColPerYear: "/ year",
   // Gateway page (SPEC.md §2): LiteLLM in front of every AI provider.
   gateway: "Gateway",
   gatewayDesc:
@@ -578,6 +586,13 @@ const zh: Record<keyof typeof en, string> = {
     "应用统计是应用自己的记录按代码里的官方定价对网关模型算出的数字。两者应当接近；有差距说明某一份价目表过时了，以网关的为准。",
   usageOutside: "网关之外（30 天）",
   usageOutsideBy: "网关之外按功能的成本（30 天）",
+  usageSpending: "支出估算",
+  usageSpendingHint: "AI 是最近 30 天的成本。固定成本是应用无论用量每月都要付的（lib/fixed-costs.ts）。一年按十二个月算。",
+  usageSpendingAi: "AI（最近 30 天）",
+  usageSpendingTotal: "合计",
+  usageColItem: "项目",
+  usageColPerMonth: "/ 月",
+  usageColPerYear: "/ 年",
   // Gateway page (SPEC.md §2): LiteLLM in front of every AI provider.
   gateway: "网关",
   gatewayDesc:

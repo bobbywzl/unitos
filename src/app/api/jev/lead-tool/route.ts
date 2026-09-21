@@ -19,12 +19,13 @@ const HISTORY_DAYS = 90;
 const HISTORY_ROWS = 80;
 const TEXT_MAX = 600;
 
-const TOOLS = ["assistant", "simplify", "visualize", "analyze", "comment", "link", "highlight", "addToNotes", "readAloud"] as const;
+const TOOLS = ["assistant", "explain", "simplify", "visualize", "analyze", "comment", "link", "highlight", "addToNotes", "readAloud"] as const;
 type Tool = (typeof TOOLS)[number];
 
 // What each tool does, as the choice's criteria.
 const TOOL_CRITERIA: Record<Tool, string> = {
   assistant: "Ask the assistant a question about the selection, or give it a command.",
+  explain: "Explain the selection in plain words, tuned to the reader's background.",
   simplify: "Rewrite the selection in plain words, sentence by sentence.",
   visualize: "Draw the selection as a diagram, a picture, or an animation.",
   analyze: "Read a figure or table and explain what it shows.",
@@ -51,7 +52,7 @@ function toolOfControl(control: string): Tool | null {
   if (control === "read-aloud") return "readAloud";
   if (control === "assistant" || control === "assistant-run") return "assistant";
   if (control === "comment" || control === "comment-save") return "comment";
-  if (control === "simplify" || control === "visualize" || control === "analyze" || control === "link") return control;
+  if (control === "explain" || control === "simplify" || control === "visualize" || control === "analyze" || control === "link") return control;
   return null;
 }
 

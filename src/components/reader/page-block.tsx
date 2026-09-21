@@ -13,10 +13,11 @@ import { regionBounds, regionPathD, type Region } from "@/lib/video/types";
 
 // One page of a handwritten document (SPEC.md §16): the page image the page
 // image route serves, the stored marks drawn over it, and Circle & ask —
-// drag a loop on the page, then ask, comment, or pick a color to lasso
-// highlight the circled spot. Ask streams through /api/derive (EXPLAIN with a
-// page payload and the question) and persists as an annotation with a region
-// source; Comment and the lasso highlight post to /api/annotations.
+// drag a loop on the page, then ask, explain, comment, or pick a color to
+// lasso highlight the circled spot. Ask and Explain stream through
+// /api/derive (EXPLAIN with a page payload; Ask adds the question) and persist
+// as annotations with a region source; Comment and the lasso highlight post
+// to /api/annotations.
 // Clicking a mark opens its annotation like a text mark.
 
 export type PageMark = {
@@ -29,13 +30,14 @@ export type PageMark = {
 
 type DrawState = { points: { x: number; y: number }[] };
 type Pending = { region: Region };
-// asked = the question this answer ran with: what Regenerate runs again.
-// noteId = the annotation it saved, which Regenerate replaces (SPEC.md §4).
+// asked = the question this answer ran with, null when Explain ran without
+// one: what Regenerate runs again. noteId = the annotation it saved, which
+// Regenerate replaces (SPEC.md §4).
 type Answer = {
   content: string;
   done: boolean;
   error: string | null;
-  asked: string;
+  asked: string | null;
   noteId: string | null;
 };
 
@@ -153,15 +155,16 @@ export function PageBlock({
     setError(null);
   }
 
-  // Ask streams EXPLAIN with the typed question. asked is the question to run.
-  async function ask() {
+  // Ask streams EXPLAIN with the typed question; Explain streams it without
+  // one. asked is the question to run: null runs Explain.
+  async function ask(withQuestion: boolean) {
     const q = question.trim();
-    if (!q) return;
-    await run(q);
+    if (withQuestion && !q) return;
+    await run(withQuestion ? q : null);
   }
   // replaceNoteId: the annotation this run regenerates. It goes only once the
   // new one is stored, so a failed run never loses what stands (SPEC.md §4).
-  async function run(asked: string, replaceNoteId?: string | null) {
+  async function run(asked: string | null, replaceNoteId?: string | null) {
     if (!pending || busy !== null) return;
     setBusy("ask");
     setError(null);
@@ -180,7 +183,7 @@ export function PageBlock({
           page: {
             blockId,
             region: pending.region,
-            question: asked,
+            question: asked ?? undefined,
           },
         }),
       });
@@ -393,7 +396,7 @@ export function PageBlock({
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey) {
                     e.preventDefault();
-                    void ask();
+                    void ask(question.trim().length > 0);
                   }
                 }}
                 placeholder={t("panes.pageAskPlaceholder")}
@@ -415,13 +418,22 @@ export function PageBlock({
             {answer === null ? (
               <div className="flex items-center gap-1.5">
                 <button
-                  onClick={() => void ask()}
+                  onClick={() => void ask(true)}
                   data-track="page-ask"
                   disabled={busy !== null || question.trim().length === 0}
                   data-tip={t("panes.pageAskTitle")}
                   className={buttonClass}
                 >
                   {t("panes.pageAsk")}
+                </button>
+                <button
+                  onClick={() => void ask(false)}
+                  data-track="page-explain"
+                  disabled={busy !== null}
+                  data-tip={t("panes.pageExplainTitle")}
+                  className={quietButtonClass}
+                >
+                  {t("panes.pageExplain")}
                 </button>
                 <button
                   onClick={() => void comment()}

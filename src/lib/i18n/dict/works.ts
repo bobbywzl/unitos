@@ -37,7 +37,7 @@ const en = {
   welcomeTagline: "Unitos Notebook, your all-powerful notemaker",
   nudgeProject: "Start here: press New project. A project binds documents and notes.",
   nudgeDocument: "Add more documents with +: a PDF, a web page, a video, or Google Drive.",
-  nudgeSelect: "Select any passage of the text. A toolbar appears: the Assistant, Simplify, Comment, and colors.",
+  nudgeSelect: "Select any passage of the text. A toolbar appears: the Assistant, Explain, Simplify, Comment, and colors.",
   nudgeRail:
     "The side panel: Assistant, Graph, Notes, Annotations, Extract, Edit history. Open one and explore.",
   nudgeTools:
@@ -79,13 +79,16 @@ const en = {
     "Click a quote to jump to its exact words. Add to notes files a quote as a pending note. The Extract tab in the side panel lists every extraction of the open document.",
   guideCircleHeader: "Circle & ask — draw on anything",
   guideCircleBody:
-    "Hold and circle any part of a figure or equation. The Assistant reads the visual and answers; Analyze reads a figure or table in three sections; a color marks it; Comment and Link work as on text.",
+    "Hold and circle any part of a figure or equation. The Assistant reads the visual and answers; Analyze reads a figure or table in three sections; Explain deciphers the visual; a color marks it; Comment and Link work as on text.",
   guideCirclePagesBody:
-    "Handwritten PDFs import as pages, and every page is a figure: circle a formula, a sketch, or a margin note, then Ask, Comment, or pick a color.",
+    "Handwritten PDFs import as pages, and every page is a figure: circle a formula, a sketch, or a margin note, then Ask, Explain, Comment, or pick a color.",
   guideSelectHeader: "Select text and use the AI toolbar",
   guideAssistant: "Assistant",
   guideAssistantBody:
     "Type or speak a question or a command about the selection. A question is answered from the passages across the article that match the selection, each cited with a ¶ chip that jumps to it. A command proposes a plan: Ask mode waits for your approval, Auto mode runs it. The reply opens a chat beside the article; every turn applies to the selection.",
+  guideExplain: "Explain",
+  guideExplainBody:
+    "A short explanation of the selection, tuned to your background. Saved under Annotations; click the highlight to reopen it.",
   guideSimplify: "Simplify",
   guideSimplifyBody:
     "Rewrites the selection in plain words in a bubble beside the article. Press a sentence to light up the original it restates. Saved under Annotations.",
@@ -190,7 +193,7 @@ const zh: Record<keyof typeof en, string> = {
   welcomeTagline: "Unitos Notebook，你的全能笔记本",
   nudgeProject: "从这里开始：按“新建项目”。一个项目绑定文档和笔记。",
   nudgeDocument: "用 + 添加更多文档：PDF、网页、视频或 Google Drive。",
-  nudgeSelect: "选中正文中的任意一段。工具栏随即出现：助手、简化、评论和颜色。",
+  nudgeSelect: "选中正文中的任意一段。工具栏随即出现：助手、解释、简化、评论和颜色。",
   nudgeRail: "侧栏：助手、图谱、笔记、批注、提取、编辑记录。打开一个，开始探索。",
   nudgeTools: "提取用引文回答一个问题。左上角的目录可跳转到文章的任何部分。",
   nudgeMerge: "把一条笔记压在另一条上按住，直到合并环合拢。两条会合并成一条。",
@@ -224,13 +227,15 @@ const zh: Record<keyof typeof en, string> = {
     "点击引文可跳到它的原文字句。“添加到笔记”把一条引文存为待定笔记。侧栏的“提取”页签列出当前文档的每次提取。",
   guideCircleHeader: "圈选并提问——在任何内容上画圈",
   guideCircleBody:
-    "按住并在插图或公式的任意部分画圈。助手解读图像并回答；“分析”分三段解读插图或表格；颜色标记它；“评论”和“链接”与文本上相同。",
+    "按住并在插图或公式的任意部分画圈。助手解读图像并回答；“分析”分三段解读插图或表格；“解释”解读图像；颜色标记它；“评论”和“链接”与文本上相同。",
   guideCirclePagesBody:
-    "手写 PDF 按页面导入，每一页都是一张插图：圈出公式、草图或旁注，然后提问、评论，或选颜色。",
+    "手写 PDF 按页面导入，每一页都是一张插图：圈出公式、草图或旁注，然后提问、解释、评论，或选颜色。",
   guideSelectHeader: "选中文本，使用 AI 工具栏",
   guideAssistant: "助手",
   guideAssistantBody:
     "对选中内容输入或说出一个问题或一条指令。问题会根据全文中与选中内容匹配的片段作答，每处片段带一个 ¶ 标记，点击即可跳转。指令会提出计划：“询问”模式等你批准，“自动”模式直接执行。回复在文章旁打开聊天；每一轮都作用于选中内容。",
+  guideExplain: "解释",
+  guideExplainBody: "对选中内容的简短解释，贴合你的背景。保存在批注下；点击高亮可重新打开。",
   guideSimplify: "简化",
   guideSimplifyBody:
     "用平实的话改写选中内容，显示在文章旁的气泡里。点击一句，它复述的原文就会亮起。保存在批注下。",
