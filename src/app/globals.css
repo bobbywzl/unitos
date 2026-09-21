@@ -343,9 +343,11 @@ mark,
    across the span and the underline fades in behind it. The tint rides
    background-image so background-size can grow; a span wrapping several lines
    fills line after line, because an inline background slices one continuous
-   box. Runs once — the resting state matches the plain mark exactly, so the
-   class can stay on. animation-delay staggers a layer's spans; backwards fill
-   keeps a delayed span blank until its turn. */
+   box. Runs once, and the class comes off when it ends (lib/mark-sweep.ts):
+   the image is the sweep's alone, and left on it kept a fill on a mark that
+   has none (.tool-mark) and painted part of a span that wraps lines.
+   animation-delay staggers a layer's spans; backwards fill keeps a delayed
+   span blank until its turn. */
 @keyframes mark-sweep {
   from {
     background-size: 0% 100%;

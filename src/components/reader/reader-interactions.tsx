@@ -4,6 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { blockKind } from "@/lib/block-kind";
+import { MARK_SWEPT_EVENT, type MarkSweptDetail } from "@/lib/mark-sweep";
 import {
   applyReadingPosition,
   atReadingPosition,
@@ -1004,6 +1005,16 @@ export function ReaderInteractions({
   function markFreshSpan(blockId: string, start: number, end: number) {
     freshSpansRef.current.add(`${blockId}:${start}:${end}`);
   }
+  // The sweep ran once: the span is no longer fresh, so no later paint
+  // sweeps it again or keeps the sweep's fill (lib/mark-sweep.ts).
+  useEffect(() => {
+    const onSwept = (e: Event) => {
+      const { blockId, start, end } = (e as CustomEvent<MarkSweptDetail>).detail;
+      freshSpansRef.current.delete(`${blockId}:${start}:${end}`);
+    };
+    window.addEventListener(MARK_SWEPT_EVENT, onSwept);
+    return () => window.removeEventListener(MARK_SWEPT_EVENT, onSwept);
+  }, []);
   /** Every segment of the passage sweeps in. */
   function markFreshAnchor(anchor: Anchor) {
     for (const s of segmentsOf(anchor)) markFreshSpan(s.blockId, s.startOffset, s.endOffset);

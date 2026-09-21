@@ -2,6 +2,7 @@
 
 import type { Highlight } from "@/components/reader/block-view";
 import type { TFunc } from "@/lib/i18n/dictionaries";
+import { endSweep } from "@/lib/mark-sweep";
 
 // Marks inside a table's html (SPEC.md §6): a table with rendered text is
 // article text — a selection inside it opens the text toolbar, and its
@@ -89,7 +90,7 @@ function wrap(container: HTMLElement, from: number, to: number, make: () => HTML
 /** Paint the block's marks into the table's html. False when the html's
     text is not the block text — then nothing is painted, and the caller
     rings the block instead. */
-export function paintTableMarks(container: HTMLElement, text: string, highlights: Highlight[], t: TFunc): boolean {
+export function paintTableMarks(container: HTMLElement, blockId: string, text: string, highlights: Highlight[], t: TFunc): boolean {
   unpaint(container);
   const nodes = textNodes(container);
   const domText = nodes.map((n) => n.node.data).join("");
@@ -150,6 +151,14 @@ export function paintTableMarks(container: HTMLElement, text: string, highlights
         if (anchor?.sourceId) mark.dataset.sourceId = anchor.sourceId;
         if (tip) mark.dataset.tip = tip;
         if (sweep && painter?.freshDelay) mark.style.animationDelay = `${painter.freshDelay}ms`;
+        if (sweep && painter) {
+          // The sweep ran: the class comes off (lib/mark-sweep.ts).
+          mark.addEventListener("animationend", (e) => {
+            if (e.animationName !== "mark-sweep") return;
+            painter.fresh = false;
+            endSweep(mark, { blockId, start: painter.start, end: painter.end });
+          });
+        }
         if (focusable && anchor?.sourceId) mark.dataset.openAnnotation = anchor.sourceId;
         else if (noteMark) mark.dataset.openNote = noteMark;
         else if (extractMark) mark.dataset.openExtract = extractMark.extractId ?? "";

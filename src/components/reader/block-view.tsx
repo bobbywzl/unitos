@@ -17,6 +17,7 @@ import { useT } from "@/components/lang-provider";
 import { Equation } from "@/components/reader/equation";
 import { MediaHtml } from "@/components/reader/figure-media";
 import { bindTableMarkClicks, marksSignature, paintTableMarks } from "@/components/reader/table-marks";
+import { endSweep } from "@/lib/mark-sweep";
 import { OFFICE_CSS } from "@/lib/office-css";
 import { googleFontsUrl, parseFontList, webFontFamilies } from "@/lib/office-fonts";
 import type { TFunc, TKey } from "@/lib/i18n/dictionaries";
@@ -214,7 +215,7 @@ export function layoutClass(tokens: Set<LayoutToken>, base: string): string {
 
 // Split block text into plain and <mark> segments. Declarative painting: highlights are part
 // of the React tree, never DOM mutation after render (anchor offsets stay stable).
-function markedText(text: string, highlights: Highlight[], t: TFunc) {
+function markedText(blockId: string, text: string, highlights: Highlight[], t: TFunc) {
   const bounds = new Set<number>([0, text.length]);
   for (const h of highlights) {
     bounds.add(Math.max(0, Math.min(h.start, text.length)));
@@ -274,6 +275,15 @@ function markedText(text: string, highlights: Highlight[], t: TFunc) {
           data-source-id={anchor?.sourceId ?? undefined}
           data-tip={linkTip || undefined}
           className={`link-mark rounded-[4px]${link.fresh ? " mark-sweep" : ""}${selectionClass}${editedClass}`}
+          onAnimationEnd={
+            link.fresh
+              ? (e) => {
+                  if (e.animationName !== "mark-sweep") return;
+                  link.fresh = false;
+                  endSweep(e.currentTarget, { blockId, start: link.start, end: link.end });
+                }
+              : undefined
+          }
         >
           {segment}
         </a>,
@@ -430,6 +440,17 @@ function markedText(text: string, highlights: Highlight[], t: TFunc) {
           }
           className={`${markClass}${selectionClass}${anchors.length > 1 ? " hl-stacked" : ""}${sweep ? " mark-sweep" : ""}${leaving ? " mark-out" : ""} rounded-[4px] ${focusable || noteMark || extractMark ? "annotation-mark" : ""}${editedClass}`}
           style={sweep && painted.freshDelay ? { animationDelay: `${painted.freshDelay}ms` } : undefined}
+          // The sweep ran: the class comes off, so the resting mark is the
+          // plain mark (lib/mark-sweep.ts).
+          onAnimationEnd={
+            sweep
+              ? (e) => {
+                  if (e.animationName !== "mark-sweep") return;
+                  painted.fresh = false;
+                  endSweep(e.currentTarget, { blockId, start: painted.start, end: painted.end });
+                }
+              : undefined
+          }
         >
           {segment}
         </mark>,
@@ -711,10 +732,10 @@ function MarkedHtml({
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
-    setPainted(paintTableMarks(el, text, highlights, t));
+    setPainted(paintTableMarks(el, blockId, text, highlights, t));
     // highlights is read through its signature: the same marks, the same paint.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [html, text, signature, t]);
+  }, [html, blockId, text, signature, t]);
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
@@ -791,7 +812,7 @@ export function BlockView({
   const t = useT();
   const shared = "reader-block";
 
-  const content = highlights.length > 0 ? markedText(block.text, highlights, t) : block.text;
+  const content = highlights.length > 0 ? markedText(block.id, block.text, highlights, t) : block.text;
   const anchorIds = highlights.filter((h) => h.kind === "anchor" && h.sourceId && !h.leaving);
   const figureAnchors = highlights.filter((h) => h.kind === "anchor" && !h.leaving);
   // A whole figure, table, or equation under the toolbar rings like an
