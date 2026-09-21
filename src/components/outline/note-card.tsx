@@ -532,15 +532,32 @@ export function NoteCard({
   }
 
   if (editing) {
+    // The editing card takes the same drops as the card at rest (SPEC.md
+    // §6): an annotation or a quote lands in the draft (addToNote), a note
+    // joins. The ring turns sage while a card is held over it.
     return (
       <div
         ref={editCardRef}
         data-note-id={note.id}
         data-note-editing=""
+        data-note-drop-target={takesDrop ? note.id : undefined}
         style={limit !== null ? { maxHeight: limit } : undefined}
         {...noteDrop.handlers}
-        data-tip={dropTip}
-        className={`flex flex-col ${pane ? "outline-2 -outline-offset-2 outline-clay-400" : "rounded-2xl bg-card shadow-soft outline-2 outline-clay-400"} ${PADDING[variant]}${dropRing}`}
+        data-tip={
+          dropTip ??
+          (cardDrop.over
+            ? t(
+                cardDrop.drag?.kind === "annotation"
+                  ? "outline.dropAnnotation"
+                  : cardDrop.drag?.kind === "quote"
+                    ? "outline.dropQuoteIntoNote"
+                    : "outline.dropNote",
+              )
+            : undefined)
+        }
+        className={`flex flex-col ${pane ? "outline-2 -outline-offset-2" : "rounded-2xl bg-card shadow-soft outline-2"} ${
+          cardDrop.over ? "outline-sage-500" : "outline-clay-400"
+        } ${PADDING[variant]}${dropRing}`}
       >
         {header}
         {dropError && <p className="mt-1 text-[11px] text-red-500">{dropError}</p>}
