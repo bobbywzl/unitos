@@ -2,6 +2,7 @@ import { z } from "zod";
 import { gatewayAdminKey, gatewayBaseUrl, gatewayKey } from "@/lib/gateway";
 import { currentModelId, MODEL_ROLES, ROLE_ORDER, type ModelRole } from "@/lib/models";
 import { outboundFetch } from "@/lib/outbound-fetch";
+import { providerOf } from "@/lib/usage";
 
 // The gateway's management API, for the admin console alone (SPEC.md §2):
 // what the gateway page reads — readiness, the models and their limits and
@@ -363,6 +364,26 @@ function add(map: Map<string, SpendRow>, label: string, m: z.infer<typeof metric
 
 const day = (d: Date) => d.toISOString().slice(0, 10);
 
+// The gateway names a model by the route it took, not by who answers: GLM
+// goes out on the openai route with Z.ai's base URL (litellm/config.yaml),
+// so its log reads openai/glm-5.3 under provider openai. The label here is
+// the model's own name and its provider is read from it (lib/usage.ts
+// providerOf), so GLM reads zai. A pass-through call (DeepL, Moonshot's
+// web search, Jev) has no model in the log: it counts under pass-through.
+const PASS_THROUGH = "pass-through";
+
+function modelLabel(label: string): string {
+  const bare = label.replace(/^[a-z]+\//, "");
+  return /^glm/.test(bare) ? `zai/${bare}` : label;
+}
+
+function providerLabel(label: string): string {
+  const bare = label.replace(/^[a-z]+\//, "");
+  if (/^glm/.test(bare)) return "zai";
+  const known = providerOf(bare);
+  return known === "other" ? label.split("/")[0] : known;
+}
+
 /** Spend over the last `days` days, by day, model, and provider: every
     request through the gateway, whatever key or tag it carried. */
 export async function gatewaySpend(days: number): Promise<GatewaySpend> {
@@ -390,8 +411,16 @@ export async function gatewaySpend(days: number): Promise<GatewaySpend> {
     inputTokens += r.metrics.prompt_tokens ?? 0;
     outputTokens += r.metrics.completion_tokens ?? 0;
     cacheReadTokens += r.metrics.cache_read_input_tokens ?? 0;
-    for (const [label, entry] of Object.entries(r.breakdown?.models ?? {})) add(byModel, label, entry.metrics);
-    for (const [label, entry] of Object.entries(r.breakdown?.providers ?? {})) add(byProvider, label, entry.metrics);
+    // The models' rows, relabeled; the providers' rows from the models, and
+    // the calls the models leave out (no model in the log) as pass-through.
+    let modelCalls = 0;
+    for (const [label, entry] of Object.entries(r.breakdown?.models ?? {})) {
+      add(byModel, modelLabel(label), entry.metrics);
+      add(byProvider, providerLabel(label), entry.metrics);
+      modelCalls += entry.metrics.api_requests ?? 0;
+    }
+    const rest = (r.metrics.api_requests ?? 0) - modelCalls;
+    if (rest > 0) add(byProvider, PASS_THROUGH, { api_requests: rest });
   }
   const daysOut = Array.from({ length: days }, (_, i) => {
     const d = day(new Date(now - (days - 1 - i) * 86_400_000));
