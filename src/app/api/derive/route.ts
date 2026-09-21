@@ -72,6 +72,8 @@ import {
 } from "@/lib/types";
 import { materializeArticle } from "@/lib/video/article-document";
 import { landingSection } from "@/lib/derive/landing";
+import { videoAnchorFor } from "@/lib/video/anchor";
+import { describeYouTubeClip } from "@/lib/video/gemini";
 import {
   formatTimeRange,
   isAudioMime,
@@ -190,13 +192,9 @@ const deriveSchema = z
   })
   .refine((d) => !d.page || d.type === "EXPLAIN", {
     message: "page is EXPLAIN only",
-  })
-  // EXPLAIN serves Circle & ask alone (SPEC.md §16): the page, and a question.
-  .refine((d) => d.type !== "EXPLAIN" || Boolean(d.page?.question?.trim()), {
-    message: "EXPLAIN needs a page and a question",
   });
 
-const ANCHOR_REQUIRED = new Set(["SIMPLIFY", "ANALYZE", "VISUALIZE"]);
+const ANCHOR_REQUIRED = new Set(["EXPLAIN", "SIMPLIFY", "ANALYZE", "VISUALIZE"]);
 
 // A model call that holds one connection for minutes dies at idle proxies, so
 // the response streams a heartbeat space while the model works and ends with
@@ -291,7 +289,12 @@ async function handle(req: Request, t: TFunc) {
   if (!template) {
     return NextResponse.json({ error: t("api.typeNotBuilt", { type: data.type }) }, { status: 501 });
   }
-  if (ANCHOR_REQUIRED.has(data.type) && !data.anchor) {
+  // A video or page anchor stands in for a text anchor on EXPLAIN (SPEC.md §11, §16).
+  if (
+    ANCHOR_REQUIRED.has(data.type) &&
+    !data.anchor &&
+    !(data.type === "EXPLAIN" && (data.video || data.page))
+  ) {
     return NextResponse.json({ error: t("api.typeRequiresAnchor", { type: data.type }) }, { status: 400 });
   }
   if (data.type === "FIND" && !data.query) {
@@ -763,20 +766,75 @@ async function handle(req: Request, t: TFunc) {
     return NextResponse.json({ error: t("api.formalizeNeedsTranscript") }, { status: 400 });
   }
 
-  // ANALYZE reads a FIGURE or TABLE block (SPEC.md §4): the anchored block,
-  // with its visual when one can be produced. An image figure attaches its
-  // image bytes (fetched here — a failed fetch degrades to caption and
-  // context, never fails the request); an SVG chart attaches its source; a
-  // PDF figure attaches its rendered page; a video figure reads from caption
-  // and context only.
+  // EXPLAIN on a video moment: the anchor is the time range; the frame rides
+  // along as an image when the client could capture it. A YouTube frame cannot
+  // be captured cross-origin, so Gemini watches the clip instead and its
+  // description grounds the explanation (SPEC.md §11).
+  let videoAnchor: { blockId: string; quotedText: string } | null = null;
+  let frameImage: Uint8Array | null = null;
+  if (data.type === "EXPLAIN" && data.video) {
+    videoAnchor = await videoAnchorFor(document.id, data.video.startTime, data.video.endTime);
+    if (!videoAnchor) {
+      return NextResponse.json({ error: t("api.noVideoBlock") }, { status: 400 });
+    }
+    if (data.video.frame) {
+      frameImage = new Uint8Array(
+        Buffer.from(data.video.frame.slice("data:image/jpeg;base64,".length), "base64"),
+      );
+      if (frameImage.length === 0) frameImage = null;
+    }
+    // A YouTube frame comes from the storyboard sheets, which are small. Gemini
+    // watches the same clip at full resolution, so the model gets two
+    // independent looks at the moment: the actual cropped frame and a
+    // description of it. They corroborate each other.
+    const asset = await db.videoAsset.findUnique({
+      where: { documentId: document.id },
+      select: { kind: true, youtubeId: true, mimeType: true },
+    });
+    const previewFrame = asset?.kind === "YOUTUBE";
+    let frameDescription: string | undefined;
+    if (previewFrame && asset?.youtubeId && process.env.GEMINI_API_KEY) {
+      frameDescription = await describeYouTubeClip(
+        asset.youtubeId,
+        data.video.startTime,
+        data.video.endTime,
+        data.video.region ?? null,
+        { userId: usageMeta.userId, feature: "describe" },
+      ).catch((err) => {
+        console.warn("[derive] clip description failed:", err);
+        return undefined;
+      });
+    }
+    const excerpt = timedBlocks
+      .filter((b) => b.startTime! < data.video!.endTime && b.endTime! > data.video!.startTime)
+      .map((b) => b.text)
+      .join(" ");
+    ctx.video = {
+      timeRange: formatTimeRange(data.video.startTime, data.video.endTime),
+      transcriptExcerpt: excerpt.length > 1500 ? `${excerpt.slice(0, 1499)}…` : excerpt,
+      hasFrame: frameImage !== null,
+      hasRegion: Boolean(data.video.region),
+      previewFrame: previewFrame && frameImage !== null,
+      frameDescription,
+      audio: isAudioMime(asset?.mimeType ?? null),
+    };
+  }
+
+  // EXPLAIN on a figure block: the model deciphers the visual. ANALYZE reads
+  // a FIGURE or TABLE block (SPEC.md §4). Both take the anchored block with
+  // its visual when one can be produced. An image figure attaches its image
+  // bytes (fetched here — a failed fetch degrades to caption and context,
+  // never fails the request); an SVG chart attaches its source; a PDF figure
+  // attaches its rendered page; a video figure reads from caption and
+  // context only.
   let figureImage: FigureImage | null = null;
   let analyzedBlock: { id: string; type: string; text: string } | null = null;
-  if (data.type === "ANALYZE" && anchor) {
+  if ((data.type === "EXPLAIN" || data.type === "ANALYZE") && anchor) {
     const anchoredBlock = await db.block.findUnique({
       where: { id: anchor.blockId },
       select: { type: true, html: true, text: true, page: true, region: true },
     });
-    {
+    if (data.type === "ANALYZE") {
       if (!anchoredBlock || (anchoredBlock.type !== "FIGURE" && anchoredBlock.type !== "TABLE")) {
         return NextResponse.json({ error: t("api.analyzeNeedsFigureOrTable") }, { status: 400 });
       }
@@ -849,13 +907,14 @@ async function handle(req: Request, t: TFunc) {
     };
   }
 
-  // ANALYZE links a figure or table to the rest of the project, so it sees
-  // the corpus: related passages from the other documents, the reader's
-  // notes, and their annotations. Its own system message after the cached
-  // prefix, so the prefix cache holds. The whole block's text scores the
-  // related passages: a table selection alone is a few cells.
+  // EXPLAIN answers confusions and ANALYZE links a figure or table to the
+  // rest of the project, so both see the corpus: related passages from the
+  // other documents, the reader's notes, and their annotations. Its own
+  // system message after the cached prefix, so the prefix cache holds. The
+  // whole block's text scores the related passages for ANALYZE: a table
+  // selection alone is a few cells.
   const corpus =
-    data.type === "ANALYZE"
+    data.type === "EXPLAIN" || data.type === "ANALYZE"
       ? await corpusSection(
           data.notebookId,
           documentId,
@@ -868,7 +927,9 @@ async function handle(req: Request, t: TFunc) {
   // derivation on this document (SPEC.md §2).
   const attachedImages: { bytes: Uint8Array; mediaType: string }[] = figureImage
     ? [{ bytes: figureImage.bytes, mediaType: figureImage.mediaType }]
-    : pageImages.map((bytes) => ({ bytes, mediaType: "image/png" }));
+    : frameImage
+      ? [{ bytes: frameImage, mediaType: "image/jpeg" }]
+      : pageImages.map((bytes) => ({ bytes, mediaType: "image/png" }));
   // A call with an image goes to the model that reads images (SPEC.md §2):
   // the feature's model, GLM 5.3, takes text alone. An SVG chart goes to
   // Claude Opus 5, which reads the source whole (lib/derive/svg-chart.ts).
@@ -915,7 +976,7 @@ async function handle(req: Request, t: TFunc) {
   // ImageAsset, and one annotation lands on the selection whose markdown
   // points at it. When the model is not certain, or the check withdraws the
   // picture, the run declines with the reason and persists nothing: the card
-  // says so and points at the assistant and Simplify. Runs behind
+  // says so and points at the assistant, Explain, and Simplify. Runs behind
   // the heartbeat stream.
   if (data.type === "VISUALIZE" && anchor) {
     return heartbeatResponse(
@@ -1028,8 +1089,8 @@ async function handle(req: Request, t: TFunc) {
   const providerOptions = svgChart?.providerOptions ?? kimiOptions(effort);
 
   // 3 + 4. Stream or collect, then route by destination.
-  // EXPLAIN (Circle & ask), SIMPLIFY, ANALYZE, SUMMARIZE, and ASK stream
-  // text. SALIENCE and DISTILL return validated JSON.
+  // EXPLAIN, SIMPLIFY, ANALYZE, SUMMARIZE, and ASK stream text. SALIENCE and
+  // DISTILL return validated JSON.
   if (
     data.type === "EXPLAIN" ||
     data.type === "SIMPLIFY" ||
@@ -1094,7 +1155,7 @@ async function handle(req: Request, t: TFunc) {
     // and the client shows it (lib/derive/text-stream.ts: heartbeat spaces
     // while the model reasons, the real reason on failure). A failed stream
     // persists nothing.
-    // SIMPLIFY and ANALYZE persist in the hidden Annotations section before
+    // EXPLAIN, SIMPLIFY, and ANALYZE persist in the hidden Annotations section before
     // the stream closes, then the stream ends with STREAM_NOTE_TOKEN + the
     // note id: the client's refresh always finds the stored mark, and the
     // card can delete its annotation in place.
@@ -1126,7 +1187,11 @@ async function handle(req: Request, t: TFunc) {
           }
           return;
         }
-        if ((data.type === "SIMPLIFY" || data.type === "ANALYZE") && anchor && text.trim()) {
+        if (
+          (data.type === "EXPLAIN" || data.type === "SIMPLIFY" || data.type === "ANALYZE") &&
+          anchor &&
+          text.trim()
+        ) {
           try {
             const block = blockById.get(anchor.blockId);
             if (block) {
@@ -1161,6 +1226,43 @@ async function handle(req: Request, t: TFunc) {
                 });
               }
             }
+          } catch (err) {
+            console.error("[derive] annotation save failed:", err);
+            send(`${STREAM_ERROR_TOKEN}${t("api.annotationNotSaved")}`);
+          }
+        }
+        // A video EXPLAIN persists with its time anchor, so the explained
+        // moment joins the overlay and Visual (SPEC.md §11).
+        if (data.type === "EXPLAIN" && data.video && videoAnchor && text.trim()) {
+          try {
+            const section = await annotationsSection(data.notebookId);
+            const count = await db.note.count({ where: { sectionId: section.id } });
+            const note = await db.note.create({
+              data: {
+                sectionId: section.id,
+                content: text,
+                status: "ACCEPTED",
+                derivationType: "EXPLAIN",
+                createdById: user.id,
+                order: count,
+                sources: {
+                  create: {
+                    documentId: documentId,
+                    blockId: videoAnchor.blockId,
+                    startOffset: 0,
+                    endOffset: 0,
+                    quotedText: videoAnchor.quotedText,
+                    prefix: "",
+                    suffix: "",
+                    startTime: data.video.startTime,
+                    endTime: data.video.endTime,
+                    region: data.video.region,
+                  },
+                },
+              },
+            });
+            await bumpNotebook(data.notebookId);
+            send(`${STREAM_NOTE_TOKEN}${note.id}`);
           } catch (err) {
             console.error("[derive] annotation save failed:", err);
             send(`${STREAM_ERROR_TOKEN}${t("api.annotationNotSaved")}`);

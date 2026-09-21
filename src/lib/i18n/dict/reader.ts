@@ -15,6 +15,7 @@ const en = {
   copied: "Copied",
   copyFailed: "Could not copy. Your browser blocked it.",
   assistant: "Assistant",
+  explain: "Explain",
   simplify: "Simplify",
   visualize: "Visualize",
   visualizeTitle:
@@ -51,6 +52,9 @@ const en = {
   stopReading: "Stop reading",
   assistantTitle:
     "Tell the assistant what to do with the selection. It proposes a plan or replies beside the article.",
+  explainTitle:
+    "The AI explains the selection in plain words, tuned to your background. Saved under Annotations.",
+  explainFigureTitle: "The AI deciphers what the visualization shows",
   simplifyTitle:
     "The AI rewrites the selection in plain words beside the article. Press a sentence to see the original it restates.",
   commentTitle: "Attach a comment to the selection, without a highlight",
@@ -103,6 +107,7 @@ const en = {
   renameDocumentTitle: "Click to edit the title",
 
   // Side cards
+  explaining: "Explaining…",
   explanation: "Explanation",
   analyzing: "Analyzing…",
   analysis: "Analysis",
@@ -258,6 +263,7 @@ const zh: Record<keyof typeof en, string> = {
   copied: "已复制",
   copyFailed: "无法复制。浏览器阻止了此操作。",
   assistant: "助手",
+  explain: "解释",
   simplify: "简化",
   visualize: "可视化",
   visualizeTitle: "AI 在确定图能传达选中内容的核心思想时，把它画成图——示意图、插画或短动画。Unitos Ultra 功能。保存在批注下。",
@@ -291,6 +297,8 @@ const zh: Record<keyof typeof en, string> = {
   readAloud: "朗读选中内容",
   stopReading: "停止朗读",
   assistantTitle: "告诉助手要对选中内容做什么。它会提出计划，或在文章旁回复。",
+  explainTitle: "AI 结合你的背景，用通俗的语言解释选中内容。保存在批注下。",
+  explainFigureTitle: "AI 解读这幅图展示的内容",
   simplifyTitle: "AI 在文章旁用通俗的语言改写选中内容。点击一句可查看它对应的原文。",
   commentTitle: "给选中内容附上评论，不加高亮",
   closeLinkTitle: "把选中内容作为你已开始的链接的另一端",
@@ -339,6 +347,7 @@ const zh: Record<keyof typeof en, string> = {
   renameDocumentTitle: "点击编辑标题",
 
   // Side cards
+  explaining: "解释中…",
   explanation: "解释",
   analyzing: "分析中…",
   analysis: "分析",

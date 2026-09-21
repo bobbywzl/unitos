@@ -83,8 +83,8 @@ async function run() {
   await selectIn(paragraphId, 30);
   const textPopover = page.locator("[data-selection-popover]");
   check("text selection opens the text toolbar without Analyze", (await textPopover.count()) === 1 && (await textPopover.locator('button[data-track="analyze"]').count()) === 0);
-  check("the text toolbar has Simplify and Read aloud", (await textPopover.locator('button[data-track="simplify"]').count()) === 1 && (await textPopover.locator('button[data-track="read-aloud"]').count()) === 1);
-  check("the text toolbar has no Explain and no Match-it", (await textPopover.locator('button[data-track="explain"]').count()) === 0 && (await textPopover.locator('button[data-track="extract"]').count()) === 0);
+  check("the text toolbar has Explain, Simplify, and Read aloud", (await textPopover.locator('button[data-track="explain"]').count()) === 1 && (await textPopover.locator('button[data-track="simplify"]').count()) === 1 && (await textPopover.locator('button[data-track="read-aloud"]').count()) === 1);
+  check("the text toolbar has no Match-it", (await textPopover.locator('button[data-track="extract"]').count()) === 0);
   check("the text toolbar carries no kind label", !(await textPopover.innerText()).includes("tools"));
   await page.keyboard.press("Escape");
   await page.waitForTimeout(300);
