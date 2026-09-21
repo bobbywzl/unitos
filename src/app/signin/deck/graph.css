@@ -1,0 +1,37 @@
+/* Graph and Stitch frame of the sign-in deck: one 12 s loop. Keyframes copied from the design file (015819ef-Signin.dc.html). */
+
+@keyframes si-g-pair { 0%,3% { opacity: 0; } 5%,13% { opacity: 1; } 15%,100% { opacity: 0; } }
+@keyframes si-g-pick1 { 0%,20% { box-shadow: 0 6px 16px rgba(46,43,37,0.14); } 22%,100% { box-shadow: 0 6px 16px rgba(46,43,37,0.14), 0 0 0 2px #c67139; } }
+@keyframes si-g-pick2 { 0%,24% { box-shadow: 0 6px 16px rgba(46,43,37,0.14); } 26%,100% { box-shadow: 0 6px 16px rgba(46,43,37,0.14), 0 0 0 2px #c67139; } }
+@keyframes si-g-pick3 { 0%,28% { box-shadow: 0 6px 16px rgba(46,43,37,0.14); } 30%,100% { box-shadow: 0 6px 16px rgba(46,43,37,0.14), 0 0 0 2px #c67139; } }
+@keyframes si-g-pickbtn { 0%,17% { background: transparent; color: #645c50; box-shadow: inset 0 0 0 1px #e8dfd0; } 18%,32% { background: #c67139; color: #fff; box-shadow: none; } 33%,100% { background: transparent; color: #645c50; box-shadow: inset 0 0 0 1px #e8dfd0; } }
+@keyframes si-g-chip1 { 0%,21% { opacity: 0; transform: scale(0.8); display: none; } 22%,100% { opacity: 1; transform: none; display: inline; } }
+@keyframes si-g-chip2 { 0%,25% { opacity: 0; transform: scale(0.8); display: none; } 26%,100% { opacity: 1; transform: none; display: inline; } }
+@keyframes si-g-chip3 { 0%,29% { opacity: 0; transform: scale(0.8); display: none; } 30%,100% { opacity: 1; transform: none; display: inline; } }
+@keyframes si-g-scope-all { 0%,21% { opacity: 1; } 22%,100% { opacity: 0; position: absolute; } }
+@keyframes si-g-scope { 0%,21% { opacity: 0; } 22%,100% { opacity: 1; position: static; } }
+@keyframes si-g-sugg { 0%,38% { max-height: 40px; opacity: 1; } 41%,100% { max-height: 0; opacity: 0; padding-top: 0; } }
+@keyframes si-g-suggpress { 0%,35% { background: #f1ebe0; color: #474238; } 36%,100% { background: #fbe3d3; color: #8c491a; } }
+@keyframes si-g-type { 0%,36% { width: 0; } 37% { width: 44%; } 46%,49% { width: 100%; } 50%,100% { width: 0; } }
+@keyframes si-g-ph { 0%,36% { opacity: 1; } 37%,100% { opacity: 0; } }
+@keyframes si-g-user { 0%,50% { max-height: 0; opacity: 0; } 52%,100% { max-height: 40px; opacity: 1; } }
+@keyframes si-g-think { 0%,52% { max-height: 0; opacity: 0; } 54%,70% { max-height: 16px; opacity: 1; } 72%,100% { max-height: 0; opacity: 0; } }
+@keyframes si-g-reply { 0%,72% { max-height: 0; opacity: 0; } 76%,100% { max-height: 90px; opacity: 1; } }
+@keyframes si-g-dash1 { 0%,74% { opacity: 0; } 77%,90% { opacity: 1; } 92%,100% { opacity: 0; } }
+@keyframes si-g-dash2 { 0%,77% { opacity: 0; } 80%,100% { opacity: 1; } }
+@keyframes si-g-dash3 { 0%,80% { opacity: 0; } 83%,100% { opacity: 1; } }
+@keyframes si-g-flow { to { stroke-dashoffset: -11; } }
+@keyframes si-g-solid1 { 0%,90% { opacity: 0; } 93%,100% { opacity: 1; } }
+@keyframes si-g-rec { 0%,76% { opacity: 0; transform: translateY(-6px); } 79%,100% { opacity: 1; transform: none; } }
+@keyframes si-g-gen { 0%,79% { opacity: 0; transform: translateY(-6px); } 82%,100% { opacity: 1; transform: none; } }
+@keyframes si-g-row1 { 0%,79% { opacity: 0; } 81%,100% { opacity: 1; } }
+@keyframes si-g-row2 { 0%,81% { opacity: 0; } 83%,100% { opacity: 1; } }
+@keyframes si-g-row3 { 0%,83% { opacity: 0; } 85%,100% { opacity: 1; } }
+@keyframes si-g-accept { 0%,89% { background: transparent; color: #7a8a5e; box-shadow: inset 0 0 0 1px #7a8a5e; } 92%,100% { background: #7a8a5e; color: #ffffff; box-shadow: none; } }
+@keyframes si-g-cur { 0%,4% { transform: translate(50%, 50%); } 5%,13% { transform: translate(52%, 56%); } 16%,18% { transform: translate(54%, 75%); } 20%,22% { transform: translate(17%, 31%); } 24%,26% { transform: translate(57%, 27%); } 28%,30% { transform: translate(36%, 59%); } 34%,36% { transform: translate(44%, 82%); } 40%,74% { transform: translate(84%, 91%); } 88%,92% { transform: translate(93%, 16%); } 100% { transform: translate(93%, 16%); } }
+/* The design file's spinner keyframe (bl-spin), copied here under the frame's prefix. */
+@keyframes si-g-spin { to { transform: rotate(360deg); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .si-g-frame *, .si-g-frame { animation-play-state: paused !important; animation-delay: -11.3s !important; }
+}

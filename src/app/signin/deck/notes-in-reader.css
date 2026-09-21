@@ -1,0 +1,38 @@
+/* Notes in the reader: a 12 s loop. Keyframes copied from the design file (Signin.dc.html, si-n-*). */
+
+@keyframes si-n-ann { 0%,6% { left: 6%; top: 39%; transform: none; opacity: 1; box-shadow: 0 10px 28px rgba(46,43,37,0.2), inset 0 0 0 1px #e8dfd0; } 9% { transform: scale(0.985); } 12% { transform: scale(1.03) rotate(-1.5deg); box-shadow: 0 22px 44px rgba(46,43,37,0.3), inset 0 0 0 1px #e8dfd0; } 30% { left: 60%; top: 47%; transform: scale(1.03) rotate(-1.5deg); opacity: 1; } 33% { left: 60%; top: 47%; transform: scale(0.9); opacity: 0; } 34%,100% { left: 6%; top: 39%; opacity: 0; } }
+@keyframes si-n-target { 0%,27% { box-shadow: 0 4px 14px rgba(46,43,37,0.1); } 31%,35% { box-shadow: 0 4px 14px rgba(46,43,37,0.1), 0 0 0 2px #c67139; } 39%,100% { box-shadow: 0 4px 14px rgba(46,43,37,0.1); } }
+@keyframes si-n-grow { 0%,32% { max-height: 0; opacity: 0; } 37%,100% { max-height: 40px; opacity: 1; } }
+@keyframes si-n-toast { 0%,34% { opacity: 0; transform: translateY(6px); } 37%,46% { opacity: 1; transform: none; } 50%,100% { opacity: 0; } }
+@keyframes si-n-lift { 0%,50% { transform: none; opacity: 1; } 52% { transform: scale(0.985); } 55% { transform: scale(1.03) rotate(-1.5deg); box-shadow: 0 22px 44px rgba(46,43,37,0.3); } 58%,100% { transform: scale(1.03) rotate(-1.5deg); opacity: 0; } }
+@keyframes si-n-tray { 0%,60% { transform: none; } 66%,100% { transform: translateX(108%); } }
+@keyframes si-n-float { 0%,56% { left: 60%; top: 52%; opacity: 0; transform: scale(1.03) rotate(-1.5deg); } 58% { opacity: 1; } 68%,100% { left: 58%; top: 24%; opacity: 1; transform: none; } }
+@keyframes si-n-wrap { 0%,66% { width: 0; height: 0; margin-top: 0; } 68%,100% { width: 42%; height: 24cqh; margin-top: calc(24cqh - 16px); } }
+@keyframes si-n-article { 0%,60% { width: 58%; padding-right: 20px; } 66%,100% { width: 100%; padding-right: 20px; } }
+@keyframes si-n-pencil { 0%,74% { background: transparent; color: #82796a; } 76%,100% { background: #fbe3d3; color: #8c491a; } }
+@keyframes si-n-read { 0%,76% { opacity: 1; } 78%,100% { opacity: 0; } }
+@keyframes si-n-edit { 0%,77% { opacity: 0; } 79%,100% { opacity: 1; } }
+@keyframes si-n-type { 0%,80% { width: 0; } 92%,100% { width: 100%; } }
+@keyframes si-n-caret { 0%,49% { opacity: 1; } 50%,100% { opacity: 0; } }
+@keyframes si-n-cur { 0%,5% { transform: translate(14%, 44%); } 30%,34% { transform: translate(66%, 60%); } 48%,52% { transform: translate(70%, 52%); } 68%,72% { transform: translate(72%, 34%); } 74%,78% { transform: translate(90%, 27%); } 84%,100% { transform: translate(76%, 48%); } }
+
+/* One class per animated element; the rest of each element's style stays inline in the component. */
+.si-n-article { animation: si-n-article 12s cubic-bezier(.4,0,.2,1) infinite; }
+.si-n-wrap { animation: si-n-wrap 12s cubic-bezier(.4,0,.2,1) infinite; }
+.si-n-ann { animation: si-n-ann 12s cubic-bezier(.4,0,.2,1) infinite; }
+.si-n-tray { animation: si-n-tray 12s cubic-bezier(.4,0,.2,1) infinite; }
+.si-n-lift { animation: si-n-lift 12s cubic-bezier(.4,0,.2,1) infinite; }
+.si-n-target { animation: si-n-target 12s linear infinite; }
+.si-n-grow { animation: si-n-grow 12s linear infinite; }
+.si-n-toast { animation: si-n-toast 12s linear infinite; }
+.si-n-float { animation: si-n-float 12s cubic-bezier(.4,0,.2,1) infinite; }
+.si-n-pencil { animation: si-n-pencil 12s linear infinite; }
+.si-n-read { animation: si-n-read 12s linear infinite; }
+.si-n-edit { animation: si-n-edit 12s linear infinite; }
+.si-n-type { animation: si-n-type 12s linear infinite; }
+.si-n-caret { animation: si-n-caret 0.9s steps(1) infinite; }
+.si-n-cur { animation: si-n-cur 12s cubic-bezier(.4,0,.2,1) infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .si-n-frame *, .si-n-frame { animation-play-state: paused !important; animation-delay: -11.3s !important; }
+}

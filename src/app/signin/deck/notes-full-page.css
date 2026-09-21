@@ -1,0 +1,29 @@
+/* Notes full page frame: keyframes copied from the design file (12 s loop). */
+@keyframes si-c-seg { 0%,30% { transform: translateX(0); } 34%,100% { transform: translateX(100%); } }
+@keyframes si-c-cols { 0%,32% { opacity: 1; } 36%,100% { opacity: 0; } }
+@keyframes si-c-rows { 0%,34% { opacity: 0; } 38%,100% { opacity: 1; } }
+@keyframes si-c-cur { 0%,6% { transform: translate(22%, 40%); } 14%,18% { transform: translate(52%, 40%); } 28%,34% { transform: translate(84%, 6%); } 40%,44% { transform: translate(50%, 44%); } 58%,66% { transform: translate(50%, 22%); } 72%,100% { transform: translate(58%, 90%); } }
+@keyframes si-c-held { 0%,42% { transform: none; box-shadow: 0 6px 18px rgba(46,43,37,0.1); opacity: 1; } 45% { transform: scale(0.985); box-shadow: 0 2px 6px rgba(46,43,37,0.12); } 48% { transform: scale(1.03) rotate(-1.5deg); box-shadow: 0 22px 44px rgba(46,43,37,0.3); } 58%,66% { transform: translateY(-92%) scale(1.03) rotate(-1.5deg); box-shadow: 0 22px 44px rgba(46,43,37,0.3); opacity: 1; } 71%,100% { transform: translateY(-96%) scale(0.5); opacity: 0; box-shadow: none; } }
+@keyframes si-c-ring { 0%,57% { stroke-dashoffset: 100; opacity: 0; } 58% { stroke-dashoffset: 100; opacity: 1; } 66% { stroke-dashoffset: 0; opacity: 1; } 69%,100% { stroke-dashoffset: 0; opacity: 0; } }
+@keyframes si-c-bloom { 0%,68% { transform: none; } 71% { transform: scale(1.025); } 75%,100% { transform: none; } }
+@keyframes si-c-join { 0%,69% { max-height: 0; opacity: 0; } 74%,100% { max-height: 60px; opacity: 1; } }
+@keyframes si-c-join2 { 0%,71% { max-width: 0; opacity: 0; } 76%,100% { max-width: 400px; opacity: 1; } }
+@keyframes si-c-up { 0%,69% { transform: none; } 74%,100% { transform: translateY(-104%); } }
+@keyframes si-c-undo { 0%,75% { opacity: 0; transform: translate(-50%, 8px); } 78%,96% { opacity: 1; transform: translate(-50%, 0); } 100% { opacity: 0; } }
+
+/* Animated elements: the animation each carries in the design file. */
+.si-c-seg { animation: si-c-seg 12s linear infinite; }
+.si-c-cols { animation: si-c-cols 12s linear infinite; }
+.si-c-rows { animation: si-c-rows 12s linear infinite; }
+.si-c-bloom { animation: si-c-bloom 12s ease-out infinite; }
+.si-c-ring { animation: si-c-ring 12s linear infinite; }
+.si-c-join { animation: si-c-join 12s linear infinite; }
+.si-c-join2 { animation: si-c-join2 12s linear infinite; }
+.si-c-held { animation: si-c-held 12s cubic-bezier(.4,0,.2,1) infinite; }
+.si-c-up { animation: si-c-up 12s cubic-bezier(.4,0,.2,1) infinite; }
+.si-c-undo { animation: si-c-undo 12s linear infinite; }
+.si-c-cur { animation: si-c-cur 12s cubic-bezier(.4,0,.2,1) infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .si-c-frame *, .si-c-frame { animation-play-state: paused !important; animation-delay: -11.3s !important; }
+}
