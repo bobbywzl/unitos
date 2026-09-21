@@ -80,6 +80,7 @@ const en = {
   warnBlockNotFound: "Skipped: block not found. ({description})",
   warnOnlyTextEdited: "Skipped: only text blocks can be edited. ({description})",
   warnLinkTargetNotAttached: "Skipped: the link target is not another attached document. ({description})",
+  warnActionsUnreadable: "The assistant's actions could not be read. Ask again.",
 
   // Derivations
   deriveNeedsKey: "MOONSHOT_API_KEY is not set. Derivations need it.",
@@ -356,6 +357,7 @@ const zh: Record<keyof typeof en, string> = {
   warnBlockNotFound: "已跳过：未找到块。（{description}）",
   warnOnlyTextEdited: "已跳过：只有文本块可以编辑。（{description}）",
   warnLinkTargetNotAttached: "已跳过：链接目标不是此项目中的另一个文档。（{description}）",
+  warnActionsUnreadable: "无法读取助手的操作。请再问一次。",
 
   deriveNeedsKey: "未设置 MOONSHOT_API_KEY。AI 生成需要它。",
   typeNotBuilt: "{type} 尚未实现",

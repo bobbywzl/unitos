@@ -1,5 +1,6 @@
 import { after, NextResponse } from "next/server";
 import { z } from "zod";
+import { blockKind } from "@/lib/block-kind";
 import { diffSegments, remapAnchor, remapRange } from "@/lib/anchors/remap";
 import { bumpDocument, documentAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
@@ -29,13 +30,6 @@ const KIND_TO_BLOCK: Record<
   numbered: { type: "LIST", html: null },
 };
 
-function kindOf(type: string, html: string | null, text: string): string {
-  if (type === "LIST") return /^\s*\d{1,3}[.)]\s/.test(text) ? "numbered" : "list";
-  if (type !== "HEADING") return "paragraph";
-  const m = html?.match(/^<h([1-3])/);
-  return m ? `h${m[1]}` : "h2";
-}
-
 type StyleSpan = { start: number; end: number; style: string; quotedText: string };
 
 // Edit a block's text. TABLE and FIGURE content is sanitized html, not text, so they are
@@ -57,7 +51,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ blockId: stri
   }
 
   const target = data.kind !== undefined ? KIND_TO_BLOCK[data.kind] : null;
-  const fromKind = kindOf(block.type, block.html, block.text);
+  const fromKind = blockKind(block.type, block.html, block.text);
   const kindChanges = data.kind !== undefined && fromKind !== data.kind;
 
   // Format change without a text change: heading level, paragraph, or list kind,

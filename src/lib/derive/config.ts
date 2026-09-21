@@ -1,6 +1,7 @@
 import type { DerivationType } from "@prisma/client";
 import { isLang, LANG_COOKIE } from "@/lib/i18n/config";
 import { translate } from "@/lib/i18n/dictionaries";
+import type { AssistantAction } from "@/lib/types";
 
 // The models (SPEC.md §2). GLM 5.3, Z.ai's flagship, is behind the reader's
 // tools, the assistant, Stitch's answer, and the merge of notes; GLM 5.3
@@ -294,6 +295,30 @@ function modelCallFailed(): string {
 // closes, then the stream ends with this token + the note id. The client splits it off, so
 // the card can delete its annotation and a refresh always finds the stored mark.
 export const STREAM_NOTE_TOKEN = "\u0000note\u0000";
+
+// The sidebar assistant's plan (SPEC.md §7): the answer streams, then the
+// token, then the plan as JSON — the actions the reader approves in the
+// plan card, and the warnings for the ones that did not validate.
+export const STREAM_PLAN_TOKEN = "\u0000plan\u0000";
+
+export function splitStreamPlan(text: string): {
+  text: string;
+  plan: { actions: AssistantAction[]; warnings: string[] } | null;
+} {
+  const at = text.indexOf(STREAM_PLAN_TOKEN);
+  if (at === -1) return { text, plan: null };
+  let plan: { actions: AssistantAction[]; warnings: string[] } | null = null;
+  try {
+    const parsed = JSON.parse(text.slice(at + STREAM_PLAN_TOKEN.length)) as {
+      actions?: AssistantAction[];
+      warnings?: string[];
+    };
+    plan = { actions: parsed.actions ?? [], warnings: parsed.warnings ?? [] };
+  } catch {
+    // Still streaming, or cut off: no plan yet.
+  }
+  return { text: text.slice(0, at).trimEnd(), plan };
+}
 
 export function splitStreamNote(text: string): { text: string; noteId: string | null } {
   const at = text.indexOf(STREAM_NOTE_TOKEN);

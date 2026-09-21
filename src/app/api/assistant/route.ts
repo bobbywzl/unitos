@@ -19,8 +19,15 @@ import {
   WEB_SEARCH_MODEL,
   MAX_OUTPUT_TOKENS,
   STREAM_ERROR_TOKEN,
+  STREAM_PLAN_TOKEN,
 } from "@/lib/derive/config";
-import { loadProfile } from "@/lib/derive/context";
+import { loadProfile, sectionSkeleton } from "@/lib/derive/context";
+import {
+  ACTIONS_FENCE,
+  enrichActions,
+  parseActionsFence,
+  splitActionsFence,
+} from "@/lib/assistant/plan";
 import { callForJson, modelErrorMessage } from "@/lib/derive/json-call";
 import { streamTextTo } from "@/lib/derive/text-stream";
 import { ensureDigest } from "@/lib/digest/ensure";
@@ -153,6 +160,22 @@ async function handle(req: Request, t: TFunc) {
   }
 
   const lang = await currentLang();
+  // This page scope (SPEC.md §7): the assistant may propose actions on the
+  // open document and the notes. The sections and the attached documents
+  // go in the prompt; the plan validates against them after the answer.
+  const act =
+    data.task === "ask" && data.scope === "document"
+      ? await (async () => {
+          const [sections, attached] = await Promise.all([
+            sectionSkeleton(data.notebookId),
+            db.notebookDocument.findMany({
+              where: { notebookId: data.notebookId },
+              include: { document: { select: { id: true, title: true } } },
+            }),
+          ]);
+          return { sections, attachedDocs: attached.map((nd) => nd.document) };
+        })()
+      : null;
   const messages: ModelMessage[] = [{ role: "system", content: system }];
   if (data.task === "ask") {
     // The conversation (SPEC.md §7): the turns so far go in as messages, the
@@ -209,6 +232,12 @@ async function handle(req: Request, t: TFunc) {
       continued: history.length > 0,
       files,
       imageCount: parts.length,
+      act: act
+        ? {
+            sections: act.sections,
+            otherDocuments: act.attachedDocs.filter((d) => d.id !== data.documentId),
+          }
+        : undefined,
     });
     messages.push({
       role: "user",
@@ -284,6 +313,26 @@ async function handle(req: Request, t: TFunc) {
     // while the model reasons or searches, the real reason on failure).
     const encoder = new TextEncoder();
     let cancelled = false;
+    // The plan (SPEC.md §7): the fence's content as actions, validated and
+    // enriched against the real document, so the client executes ready-made
+    // requests after the reader approves them. A fence that does not read
+    // as actions is one warning.
+    const planFrom = async (content: string) => {
+      const raw = parseActionsFence(content);
+      if (!raw) return { actions: [], warnings: [t("api.warnActionsUnreadable")] };
+      const blocks = await db.block.findMany({
+        where: { documentId: data.documentId! },
+        orderBy: { order: "asc" },
+        select: { id: true, type: true, text: true },
+      });
+      return enrichActions(raw, {
+        documentId: data.documentId!,
+        blocks,
+        attachedIds: new Set(act!.attachedDocs.map((d) => d.id)),
+        sectionIds: new Set(act!.sections.map((s) => s.id)),
+        t,
+      });
+    };
     const stream = new ReadableStream<Uint8Array>({
       async start(controller) {
         // A closed stream takes nothing more: the heartbeat runs on a timer,
@@ -296,13 +345,50 @@ async function handle(req: Request, t: TFunc) {
             cancelled = true;
           }
         };
+        // This page scope: the answer streams up to the actions fence; the
+        // fence and what follows stay on the server. A tail that could be
+        // the fence's start waits for the next chunk.
+        let relayed = "";
+        let sent = 0;
+        const relay = (chunk: string) => {
+          relayed += chunk;
+          const at = relayed.indexOf(ACTIONS_FENCE);
+          let safe = at === -1 ? relayed.length : at;
+          if (at === -1) {
+            for (let k = Math.min(ACTIONS_FENCE.length - 1, relayed.length); k > 0; k--) {
+              if (ACTIONS_FENCE.startsWith(relayed.slice(relayed.length - k))) {
+                safe = relayed.length - k;
+                break;
+              }
+            }
+          }
+          if (safe > sent) {
+            send(relayed.slice(sent, safe));
+            sent = safe;
+          }
+        };
+        // The answer whole, once the model is done: what the relay held back
+        // and was not the fence goes out now.
+        const flush = () => {
+          const at = relayed.indexOf(ACTIONS_FENCE);
+          const end = at === -1 ? relayed.length : at;
+          if (end > sent) send(relayed.slice(sent, end));
+          sent = end;
+        };
         try {
-          const text = await streamTextTo(result, send, {
+          const full = await streamTextTo(result, act ? relay : send, {
             t,
             onPart: (part) => {
               if (part.type === "tool-call" && part.toolName === WEB_SEARCH_TOOL) searches++;
             },
           });
+          const { text, content } = act ? splitActionsFence(full) : { text: full, content: null };
+          if (act) {
+            // The text before the fence, whole: the relay held back what
+            // could have been the fence's start.
+            flush();
+            if (content !== null) send(`${STREAM_PLAN_TOKEN}${JSON.stringify(await planFrom(content))}`);
+          }
           // The check (SPEC.md §25): the answer against its rubric, after
           // the reader has it; a weak answer is flagged for the loop.
           if (text.trim() && question) {

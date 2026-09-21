@@ -109,6 +109,10 @@ const en = {
   historyOpenAnchorTitle: "Open the document at the highlighted text this conversation started from",
   historyTurns: "{n} messages",
   historyAnchorOrphaned: "The highlighted text is no longer in the document",
+  // Plan (SPEC.md §7, This page scope)
+  proposedActions: "Proposed {n} action{s}",
+  reviewPlan: "Review in the plan card",
+
   // Errors
   emptyResponse: "The model returned an empty response. Try again.",
   requestFailedStatus: "Request failed ({status})",
@@ -206,6 +210,8 @@ const zh: Record<keyof typeof en, string> = {
   historyOpenAnchorTitle: "打开文档并定位到这次对话发起时选中的高亮文本",
   historyTurns: "{n} 条消息",
   historyAnchorOrphaned: "高亮文本已不在文档中",
+  proposedActions: "已提议 {n} 个操作",
+  reviewPlan: "在计划卡片中查看",
   emptyResponse: "模型返回了空响应。请重试。",
   requestFailedStatus: "请求失败（{status}）",
   assistantFailed: "助手请求失败",

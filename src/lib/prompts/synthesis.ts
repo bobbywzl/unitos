@@ -1,3 +1,4 @@
+import { ACTION_TYPE_LINES } from "@/lib/assistant/plan";
 import type { Lang } from "@/lib/i18n/config";
 import {
   answerLanguage,
@@ -37,6 +38,12 @@ export function synthesisAskPrompt(params: {
   continued?: boolean;
   files?: { name: string; text?: string }[];
   imageCount?: number;
+  // This page scope (SPEC.md §7): the assistant may propose actions on the
+  // open document and the notes, which the reader approves in the plan card.
+  act?: {
+    sections: { id: string; title: string; parentTitle: string | null }[];
+    otherDocuments: { id: string; title: string }[];
+  };
 }): string {
   const files = params.files ?? [];
   const imageCount = params.imageCount ?? 0;
@@ -87,6 +94,7 @@ export function synthesisAskPrompt(params: {
         ]
       : []),
     STYLE_RULE,
+    ...(params.act ? actLines(params.act) : [ACT_ELSEWHERE_LINE]),
     ...(params.web
       ? [
           "",
@@ -99,6 +107,37 @@ export function synthesisAskPrompt(params: {
       : []),
     answerLanguage(params.lang),
   ].join("\n");
+}
+
+// Project scope cannot change a page: the message says where a change runs.
+const ACT_ELSEWHERE_LINE =
+  "You cannot change a document or the notes from this scope. When the message asks for a change, answer it, then say in one sentence that changes run from the This page scope with the document open.";
+
+// This page scope: the actions the assistant may propose, and the fence the
+// answer ends with when the message asks for a change. The server holds the
+// fence back from the stream, validates every action against the real
+// document (lib/assistant/plan.ts), and sends the plan after the answer; the
+// reader approves it in the plan card before anything runs.
+function actLines(act: {
+  sections: { id: string; title: string; parentTitle: string | null }[];
+  otherDocuments: { id: string; title: string }[];
+}): string[] {
+  return [
+    "",
+    "You can propose changes to the open document and the notes. The reader approves every action before it runs.",
+    `Sections in the project (id — title):\n${act.sections.length > 0 ? act.sections.map((s) => `${s.id} — ${s.parentTitle ? `${s.parentTitle} / ` : ""}${s.title}`).join("\n") : "none yet"}`,
+    `Other attached documents (id — title):\n${act.otherDocuments.length > 0 ? act.otherDocuments.map((d) => `${d.id} — ${d.title}`).join("\n") : "none"}`,
+    "Action types:",
+    ...ACTION_TYPE_LINES,
+    "Rules for actions:",
+    "1. A message that asks for a change to the document or the notes: write the answer, then end with a fenced block whose info string is actions, holding a JSON array of the actions. Nothing after the block.",
+    "2. A message that asks for analysis, an answer, or a summary, and no change: no block.",
+    "3. Use block ids exactly as given in the [block <id>] tags. Every quote must be an exact substring of the named block's text.",
+    "4. Use the smallest set of actions that fulfils the message. Never change text the message did not ask to change.",
+    "5. description: one plain sentence of what the action does, for the reader's approval list.",
+    "6. TABLE and FIGURE blocks cannot be edited or removed.",
+    "7. In the answer, say what each action changes and why. The answer stands on its own; the reader reads the actions in the plan card.",
+  ];
 }
 
 // An earlier message of the reader, as the conversation replays it: the
