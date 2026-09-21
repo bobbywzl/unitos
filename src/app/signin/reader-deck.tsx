@@ -56,6 +56,16 @@ export function ReaderDeck({
 
   useEffect(() => () => stop.current?.(), []);
 
+  // A resize changes the frame width: put the strip back on its screen.
+  useEffect(() => {
+    const onResize = () => {
+      const el = strip.current;
+      if (el) el.scrollLeft = slide * (el.clientWidth + GAP);
+    };
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [slide]);
+
   const go = (i: number) => {
     const el = strip.current;
     if (!el) return;
@@ -92,7 +102,7 @@ export function ReaderDeck({
             aria-selected={i === slide}
             onClick={() => go(i)}
             className={`rounded-full px-3 py-1.5 text-xs font-bold transition-colors ${
-              i === slide ? "bg-clay/[0.18] text-clay-200 ring-1 ring-clay/50" : "text-sand-600 hover:text-ink"
+              i === slide ? "bg-clay/[0.18] text-[#f3c9a8] ring-1 ring-clay/50" : "text-sand-600 hover:text-ink"
             }`}
           >
             {label}

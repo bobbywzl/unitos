@@ -369,7 +369,7 @@ export default async function SignInPage({
                   no billing information. */}
               {enabled && (
                 <div className="flex flex-col gap-3.5 py-2">
-                  <div className="flex items-center gap-2.5 text-clay-300">
+                  <div className="flex items-center gap-2.5 text-[#e9a874]">
                     <svg
                       width="56"
                       height="24"

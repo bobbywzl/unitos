@@ -84,12 +84,19 @@ export function NotesInReaderFrame() {
         >
           <span
             className="si-n-wrap"
-            style={{ float: "right", width: 0, height: 0, marginLeft: "14px", shapeOutside: "inset(0)" }}
+            style={{
+              float: "right",
+              width: 0,
+              height: 0,
+              marginLeft: "14px",
+              shapeOutside: "inset(0)",
+            }}
           />
           <p
             style={{
               margin: 0,
-              fontFamily: "var(--font-caprasimo), var(--font-figtree), system-ui, sans-serif",
+              fontFamily:
+                "var(--font-caprasimo), var(--font-figtree), system-ui, sans-serif",
               fontSize: "15px",
               color: "#2e2b25",
             }}
@@ -97,10 +104,12 @@ export function NotesInReaderFrame() {
             Attention Is All You Need
           </p>
           <p style={{ margin: "8px 0 0", color: "#474238" }}>
-            The dominant sequence transduction models are based on complex recurrent or convolutional neural networks.{" "}
+            The dominant sequence transduction models are based on complex
+            recurrent or convolutional neural networks.{" "}
             <span style={{ background: "#f6e3a8", borderRadius: "2px" }}>
-              We propose a new simple network architecture, the Transformer, based solely on attention mechanisms,
-              dispensing with recurrence and convolutions entirely.
+              We propose a new simple network architecture, the Transformer,
+              based solely on attention mechanisms, dispensing with recurrence
+              and convolutions entirely.
             </span>
             <span
               style={{
@@ -121,44 +130,65 @@ export function NotesInReaderFrame() {
             </span>
           </p>
           <p style={{ margin: "8px 0 0", color: "#474238" }}>
-            Experiments on two machine translation tasks show these models to be superior in quality while being more
-            parallelizable and requiring significantly less time to train.
+            Experiments on two machine translation tasks show these models to be
+            superior in quality while being more parallelizable and requiring
+            significantly less time to train.
           </p>
           <p style={{ margin: "8px 0 0", color: "#474238" }}>
-            Our model achieves 28.4 BLEU on the WMT 2014 English-to-German translation task, improving over the existing
-            best results, including ensembles, by over 2 BLEU.
+            Our model achieves 28.4 BLEU on the WMT 2014 English-to-German
+            translation task, improving over the existing best results,
+            including ensembles, by over 2 BLEU.
           </p>
           <p style={{ margin: "8px 0 0", color: "#474238" }}>
-            Recurrent models factor computation along the symbol positions of the input and output sequences, generating
-            a sequence of hidden states h<sub>t</sub> as a function of the previous hidden state and the input for
-            position t.
+            Recurrent models factor computation along the symbol positions of
+            the input and output sequences, generating a sequence of hidden
+            states h<sub>t</sub> as a function of the previous hidden state and
+            the input for position t.
           </p>
           <p style={{ margin: "8px 0 0", color: "#474238" }}>
-            This inherently sequential nature precludes parallelization within training examples, which becomes
-            critical at longer sequence lengths, as memory constraints limit batching across examples.
+            This inherently sequential nature precludes parallelization within
+            training examples, which becomes critical at longer sequence
+            lengths, as memory constraints limit batching across examples.
           </p>
           <p style={{ margin: "8px 0 0", color: "#474238" }}>
-            Attention mechanisms have become an integral part of compelling sequence modeling and transduction models in
-            various tasks, allowing modeling of dependencies without regard to their distance in the input or output
-            sequences. In all but a few cases, however, such attention mechanisms are used in conjunction with a
-            recurrent network.
+            Attention mechanisms have become an integral part of compelling
+            sequence modeling and transduction models in various tasks, allowing
+            modeling of dependencies without regard to their distance in the
+            input or output sequences. In all but a few cases, however, such
+            attention mechanisms are used in conjunction with a recurrent
+            network.
           </p>
           <p style={{ margin: "8px 0 0", color: "#474238" }}>
-            In this work we propose the Transformer, a model architecture eschewing recurrence and instead relying
-            entirely on an attention mechanism to draw global dependencies between input and output. The Transformer
-            allows for significantly more parallelization and can reach a new state of the art in translation quality
-            after being trained for as little as twelve hours on eight P100 GPUs.
+            In this work we propose the Transformer, a model architecture
+            eschewing recurrence and instead relying entirely on an attention
+            mechanism to draw global dependencies between input and output. The
+            Transformer allows for significantly more parallelization and can
+            reach a new state of the art in translation quality after being
+            trained for as little as twelve hours on eight P100 GPUs.
           </p>
-          <p style={{ margin: "12px 0 0", fontSize: "12px", fontWeight: 700, color: "#2e2b25" }}>2 Background</p>
+          <p
+            style={{
+              margin: "12px 0 0",
+              fontSize: "12px",
+              fontWeight: 700,
+              color: "#2e2b25",
+            }}
+          >
+            2 Background
+          </p>
           <p style={{ margin: "4px 0 0", color: "#474238" }}>
-            The goal of reducing sequential computation also forms the foundation of the Extended Neural GPU, ByteNet
-            and ConvS2S, all of which use convolutional neural networks as basic building block, computing hidden
-            representations in parallel for all input and output positions.
+            The goal of reducing sequential computation also forms the
+            foundation of the Extended Neural GPU, ByteNet and ConvS2S, all of
+            which use convolutional neural networks as basic building block,
+            computing hidden representations in parallel for all input and
+            output positions.
           </p>
           <p style={{ margin: "8px 0 0", color: "#474238" }}>
-            In these models, the number of operations required to relate signals from two arbitrary input or output
-            positions grows in the distance between positions, linearly for ConvS2S and logarithmically for ByteNet.
-            This makes it more difficult to learn dependencies between distant positions.
+            In these models, the number of operations required to relate signals
+            from two arbitrary input or output positions grows in the distance
+            between positions, linearly for ConvS2S and logarithmically for
+            ByteNet. This makes it more difficult to learn dependencies between
+            distant positions.
           </p>
         </div>
 
@@ -174,19 +204,32 @@ export function NotesInReaderFrame() {
             background: "#ffffff",
             padding: "8px 10px",
             fontSize: "10.5px",
-            boxShadow: "0 10px 28px rgba(46,43,37,0.2), inset 0 0 0 1px #e8dfd0",
+            boxShadow:
+              "0 10px 28px rgba(46,43,37,0.2), inset 0 0 0 1px #e8dfd0",
           }}
         >
           <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
             <span style={{ color: "#b5a892", letterSpacing: "-1px" }}>⋮⋮</span>
-            <span style={{ width: "8px", height: "8px", borderRadius: "9999px", background: "#d9a83a" }} />
+            <span
+              style={{
+                width: "8px",
+                height: "8px",
+                borderRadius: "9999px",
+                background: "#d9a83a",
+              }}
+            />
             <span style={{ fontWeight: 700, color: "#2e2b25" }}>Highlight</span>
-            <span style={{ marginLeft: "auto", color: "#b5a892" }}>¶ 1 · ···</span>
+            <span style={{ marginLeft: "auto", color: "#b5a892" }}>
+              ¶ 1 · ···
+            </span>
           </div>
           <p style={{ margin: "4px 0 0", color: "#474238" }}>
-            “…based solely on attention mechanisms, dispensing with recurrence and convolutions entirely.”
+            “…based solely on attention mechanisms, dispensing with recurrence
+            and convolutions entirely.”
           </p>
-          <p style={{ margin: "3px 0 0", color: "#645c50" }}>Core claim — everything else follows from it.</p>
+          <p style={{ margin: "3px 0 0", color: "#645c50" }}>
+            Core claim — everything else follows from it.
+          </p>
         </div>
 
         {/* the tray */}
@@ -261,8 +304,16 @@ export function NotesInReaderFrame() {
               ← → to decide
             </span>
           </div>
-          <div style={{ ...card, boxShadow: "0 4px 14px rgba(46,43,37,0.1), inset 0 0 0 1px #f3d9c6" }}>
-            <p style={{ margin: 0, color: "#474238" }}>The BLEU gain of 2 over ensembles is the headline result.</p>
+          <div
+            style={{
+              ...card,
+              boxShadow:
+                "0 4px 14px rgba(46,43,37,0.1), inset 0 0 0 1px #f3d9c6",
+            }}
+          >
+            <p style={{ margin: 0, color: "#474238" }}>
+              The BLEU gain of 2 over ensembles is the headline result.
+            </p>
             <p
               style={{
                 margin: "3px 0 0",
@@ -272,7 +323,8 @@ export function NotesInReaderFrame() {
                 color: "#82796a",
               }}
             >
-              “improving over the existing best results, including ensembles, by over 2 BLEU” ¶ 2
+              “improving over the existing best results, including ensembles, by
+              over 2 BLEU” ¶ 2
             </p>
             <div style={{ display: "flex", gap: "4px", marginTop: "6px" }}>
               <span
@@ -297,7 +349,15 @@ export function NotesInReaderFrame() {
               >
                 Reject
               </span>
-              <span style={{ marginLeft: "auto", fontSize: "9px", color: "#b5a892" }}>Enter · Backspace</span>
+              <span
+                style={{
+                  marginLeft: "auto",
+                  fontSize: "9px",
+                  color: "#b5a892",
+                }}
+              >
+                Enter · Backspace
+              </span>
             </div>
           </div>
           <div style={heading}>
@@ -313,7 +373,8 @@ export function NotesInReaderFrame() {
             >
               <path d="M6 9l6 6 6-6" />
             </svg>
-            Abstract <span style={{ fontWeight: 500, color: "#b5a892" }}>3</span>
+            Abstract{" "}
+            <span style={{ fontWeight: 500, color: "#b5a892" }}>3</span>
             <span
               style={{
                 marginLeft: "auto",
@@ -348,13 +409,25 @@ export function NotesInReaderFrame() {
             </span>
           </div>
           <div className="si-n-lift" style={card}>
-            <p style={{ margin: 0, fontWeight: 700, color: "#2e2b25" }}>Attention replaces recurrence</p>
-            <p style={gist}>Every position attends to every other in one step…</p>
+            <p style={{ margin: 0, fontWeight: 700, color: "#2e2b25" }}>
+              Attention replaces recurrence
+            </p>
+            <p style={gist}>
+              Every position attends to every other in one step…
+            </p>
           </div>
-          <div className="si-n-target" style={{ position: "relative", ...card }}>
-            <p style={{ margin: 0, fontWeight: 700, color: "#2e2b25" }}>Why it trains faster</p>
+          <div
+            className="si-n-target"
+            style={{ position: "relative", ...card }}
+          >
+            <p style={{ margin: 0, fontWeight: 700, color: "#2e2b25" }}>
+              Why it trains faster
+            </p>
             <p style={gist}>Parallel attention runs the whole batch at once…</p>
-            <div className="si-n-grow" style={{ overflow: "hidden", maxHeight: 0, opacity: 0 }}>
+            <div
+              className="si-n-grow"
+              style={{ overflow: "hidden", maxHeight: 0, opacity: 0 }}
+            >
               <div
                 style={{
                   display: "flex",
@@ -367,8 +440,17 @@ export function NotesInReaderFrame() {
                   fontSize: "9.5px",
                 }}
               >
-                <span style={{ width: "7px", height: "7px", borderRadius: "9999px", background: "#d9a83a" }} />
-                <span style={{ fontWeight: 700, color: "#474238" }}>Highlight</span>
+                <span
+                  style={{
+                    width: "7px",
+                    height: "7px",
+                    borderRadius: "9999px",
+                    background: "#d9a83a",
+                  }}
+                />
+                <span style={{ fontWeight: 700, color: "#474238" }}>
+                  Highlight
+                </span>
                 <span
                   style={{
                     minWidth: 0,
@@ -386,7 +468,9 @@ export function NotesInReaderFrame() {
             </div>
           </div>
           <div style={card}>
-            <p style={{ margin: 0, fontWeight: 700, color: "#2e2b25" }}>28.4 BLEU, and 41.8</p>
+            <p style={{ margin: 0, fontWeight: 700, color: "#2e2b25" }}>
+              28.4 BLEU, and 41.8
+            </p>
             <p style={gist}>Two records with one architecture…</p>
           </div>
           <div style={heading}>
@@ -402,7 +486,8 @@ export function NotesInReaderFrame() {
             >
               <path d="m9 18 6-6-6-6" />
             </svg>
-            Introduction <span style={{ fontWeight: 500, color: "#b5a892" }}>1</span>
+            Introduction{" "}
+            <span style={{ fontWeight: 500, color: "#b5a892" }}>1</span>
           </div>
         </div>
 
@@ -435,11 +520,27 @@ export function NotesInReaderFrame() {
             borderRadius: "14px",
             background: "#ffffff",
             fontSize: "10.5px",
-            boxShadow: "0 18px 40px rgba(46,43,37,0.28), inset 0 0 0 1px #e8dfd0",
+            boxShadow:
+              "0 18px 40px rgba(46,43,37,0.28), inset 0 0 0 1px #e8dfd0",
           }}
         >
-          <div style={{ display: "flex", alignItems: "center", gap: "6px", padding: "7px 10px 0" }}>
-            <span style={{ fontFamily: "ui-monospace, monospace", fontSize: "9px", color: "#b5a892" }}>#a3f2</span>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+              padding: "7px 10px 0",
+            }}
+          >
+            <span
+              style={{
+                fontFamily: "ui-monospace, monospace",
+                fontSize: "9px",
+                color: "#b5a892",
+              }}
+            >
+              #a3f2
+            </span>
             <span
               style={{
                 fontSize: "8.5px",
@@ -451,7 +552,14 @@ export function NotesInReaderFrame() {
             >
               Abstract
             </span>
-            <span style={{ marginLeft: "auto", display: "inline-flex", gap: "6px", color: "#82796a" }}>
+            <span
+              style={{
+                marginLeft: "auto",
+                display: "inline-flex",
+                gap: "6px",
+                color: "#82796a",
+              }}
+            >
               <span
                 style={{
                   display: "inline-flex",
@@ -495,18 +603,35 @@ export function NotesInReaderFrame() {
             </span>
           </div>
           <div className="si-n-read" style={{ padding: "6px 10px 10px" }}>
-            <p style={{ margin: 0, fontWeight: 700, color: "#2e2b25" }}>Attention replaces recurrence</p>
-            <p style={{ margin: "2px 0 0", color: "#474238" }}>
-              Every position attends to every other in one step — no sequential chain, so training parallelizes across
-              the sentence.
+            <p style={{ margin: 0, fontWeight: 700, color: "#2e2b25" }}>
+              Attention replaces recurrence
             </p>
-            <p style={{ margin: "6px 0 0", paddingLeft: "7px", borderLeft: "2px solid #c67139", color: "#645c50" }}>
-              “dispensing with recurrence and convolutions entirely” <span style={{ color: "#b5a892" }}>¶ 1</span>
+            <p style={{ margin: "2px 0 0", color: "#474238" }}>
+              Every position attends to every other in one step — no sequential
+              chain, so training parallelizes across the sentence.
+            </p>
+            <p
+              style={{
+                margin: "6px 0 0",
+                paddingLeft: "7px",
+                borderLeft: "2px solid #c67139",
+                color: "#645c50",
+              }}
+            >
+              “dispensing with recurrence and convolutions entirely”{" "}
+              <span style={{ color: "#b5a892" }}>¶ 1</span>
             </p>
           </div>
           <div
             className="si-n-edit"
-            style={{ position: "absolute", left: 0, right: 0, top: "30px", padding: "0 10px 10px", opacity: 0 }}
+            style={{
+              position: "absolute",
+              left: 0,
+              right: 0,
+              top: "30px",
+              padding: "0 10px 10px",
+              opacity: 0,
+            }}
           >
             <div
               style={{
@@ -531,8 +656,8 @@ export function NotesInReaderFrame() {
                 boxShadow: "inset 0 0 0 1px #c67139",
               }}
             >
-              Every position attends to every other in one step — no sequential chain, so training parallelizes across
-              the sentence.
+              Every position attends to every other in one step — no sequential
+              chain, so training parallelizes across the sentence.
               <span
                 className="si-n-type"
                 style={{
@@ -544,7 +669,8 @@ export function NotesInReaderFrame() {
                 }}
               >
                 {" "}
-                Contrast ¶ 4: the RNN builds one hidden state per step, so nothing runs in parallel.
+                Contrast ¶ 4: the RNN builds one hidden state per step, so
+                nothing runs in parallel.
               </span>
               <span
                 className="si-n-caret"
@@ -580,7 +706,16 @@ export function NotesInReaderFrame() {
               >
                 Cancel
               </span>
-              <span style={{ marginLeft: "auto", fontSize: "9px", color: "#b5a892", alignSelf: "center" }}>Saved</span>
+              <span
+                style={{
+                  marginLeft: "auto",
+                  fontSize: "9px",
+                  color: "#b5a892",
+                  alignSelf: "center",
+                }}
+              >
+                Saved
+              </span>
             </div>
           </div>
           <span
@@ -597,27 +732,32 @@ export function NotesInReaderFrame() {
         </div>
 
         {/* the pointer */}
-        <svg
+        <div
+          aria-hidden
           className="si-n-cur"
-          width="18"
-          height="18"
-          viewBox="0 0 24 24"
-          style={{
-            position: "absolute",
-            left: 0,
-            top: 0,
-            pointerEvents: "none",
-            filter: "drop-shadow(0 2px 3px rgba(0,0,0,0.3))",
-          }}
+          style={{ position: "absolute", inset: 0, pointerEvents: "none" }}
         >
-          <path
-            d="M5.5 3.2v16.2l4.1-3.9 2.5 5.6 2.7-1.2-2.5-5.5 5.6-.6L5.5 3.2Z"
-            fill="#1a1611"
-            stroke="#fff"
-            strokeWidth="1.6"
-            strokeLinejoin="round"
-          />
-        </svg>
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            style={{
+              position: "absolute",
+              left: 0,
+              top: 0,
+              pointerEvents: "none",
+              filter: "drop-shadow(0 2px 3px rgba(0,0,0,0.3))",
+            }}
+          >
+            <path
+              d="M5.5 3.2v16.2l4.1-3.9 2.5 5.6 2.7-1.2-2.5-5.5 5.6-.6L5.5 3.2Z"
+              fill="#1a1611"
+              stroke="#fff"
+              strokeWidth="1.6"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </div>
       </div>
     </div>
   );
