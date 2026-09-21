@@ -14,6 +14,7 @@
 - `src/components/billing/plan-choice.tsx`, `src/lib/i18n/dict/billing.ts` — during the beta the state line says first that the tier chosen takes effect when the beta ends.
 - `src/app/admin/billing/page.tsx` — a `BETA` row above the Stripe values.
 - `src/app/billing/confirmed/page.tsx`, `src/middleware.ts` — without a session id the confirmation page says there is no order to confirm and points at the plans page; that state is public, so the URL an ads tool checks answers 200.
+- `src/components/markdown.tsx` — the element overrides are defined once at module level and read the note's data from a context. Inline overrides were new component types on every render, so a re-render during a press (the hold's pending state on pointerdown) remounted the pressed node and the browser fired no click: an annotation reference in a note could not be opened.
 - `scripts/stripe-setup.mjs` — configures a Stripe account by API, idempotently: products, prices, the webhook endpoint, the customer portal; prints the env lines. Tested against a sandbox with a trial checkout, a paid checkout, a refund, and a cancellation, all through the webhook.
 
 **Decisions:**
