@@ -1,0 +1,43 @@
+/* Reader frame of the sign-in deck: one 18 s loop. Keyframes copied from the design file (015819ef-Signin.dc.html). */
+
+@keyframes si-r-sel { 0%,3% { background-size: 0% 100%, 0% 100%; } 7%,94% { background-size: 0% 100%, 100% 100%; } 98%,100% { background-size: 0% 100%, 0% 100%; } }
+@keyframes si-r-pop { 0%,6% { opacity: 0; transform: translateY(6px); } 8%,88% { opacity: 1; transform: none; } 92%,100% { opacity: 0; transform: translateY(6px); } }
+@keyframes si-r-press { 0%,11% { background: #fbe3d3; color: #8c491a; } 12%,30% { background: #c67139; color: #ffffff; } 31%,100% { background: #fbe3d3; color: #8c491a; } }
+@keyframes si-r-press2 { 0%,34% { background: transparent; color: #474238; } 35%,54% { background: #c67139; color: #ffffff; } 55%,100% { background: transparent; color: #474238; } }
+@keyframes si-r-box { 0%,58% { box-shadow: none; } 59%,100% { box-shadow: inset 0 0 0 1px #c67139; } }
+@keyframes si-r-ph { 0%,58% { opacity: 1; } 59%,100% { opacity: 0; } }
+@keyframes si-r-type { 0%,59% { width: 0; } 69%,71% { width: 100%; } 72%,100% { width: 0; } }
+@keyframes si-r-run { 0%,70% { background: #c67139; } 71%,73% { background: #8c491a; } 74%,100% { background: #c67139; } }
+@keyframes si-r-card { 0%,12% { opacity: 0; transform: translateY(8px); } 14%,96% { opacity: 1; transform: none; } 100% { opacity: 0; } }
+@keyframes si-r-title-a { 0%,19% { opacity: 1; } 20%,100% { opacity: 0; } }
+@keyframes si-r-title-b { 0%,19% { opacity: 0; } 20%,100% { opacity: 1; } }
+@keyframes si-r-think { 0%,19% { max-height: 14px; opacity: 1; } 20%,100% { max-height: 0; opacity: 0; } }
+@keyframes si-r-dots { 0%,100% { opacity: 0.25; transform: translateY(0); } 50% { opacity: 1; transform: translateY(-2px); } }
+@keyframes si-r-s1 { 0%,20% { max-height: 0; opacity: 0; } 23%,100% { max-height: 40px; opacity: 1; } }
+@keyframes si-r-s2 { 0%,23% { max-height: 0; opacity: 0; } 26%,100% { max-height: 40px; opacity: 1; } }
+@keyframes si-r-s3 { 0%,26% { max-height: 0; opacity: 0; } 29%,100% { max-height: 40px; opacity: 1; } }
+@keyframes si-r-vcard { 0%,35% { opacity: 0; transform: translateY(8px); } 37%,96% { opacity: 1; transform: none; } 100% { opacity: 0; } }
+@keyframes si-r-vtitle-a { 0%,45% { opacity: 1; } 46%,100% { opacity: 0; } }
+@keyframes si-r-vtitle-b { 0%,45% { opacity: 0; } 46%,100% { opacity: 1; } }
+@keyframes si-r-vthink { 0%,45% { max-height: 14px; opacity: 1; } 46%,100% { max-height: 0; opacity: 0; } }
+@keyframes si-r-vbody { 0%,45% { opacity: 0; } 47%,100% { opacity: 1; } }
+@keyframes si-r-vbodyh { 0%,45% { max-height: 0; opacity: 0; } 48%,100% { max-height: 140px; opacity: 1; } }
+@keyframes si-r-vdraw { 0%,47% { opacity: 0; } 53%,100% { opacity: 1; } }
+@keyframes si-r-acard { 0%,72% { opacity: 0; transform: translateY(8px); } 74%,96% { opacity: 1; transform: none; } 100% { opacity: 0; } }
+@keyframes si-r-athink { 0%,79% { max-height: 14px; opacity: 1; } 80%,100% { max-height: 0; opacity: 0; } }
+@keyframes si-r-a1 { 0%,80% { max-height: 0; opacity: 0; } 82%,100% { max-height: 40px; opacity: 1; } }
+@keyframes si-r-a2 { 0%,82% { max-height: 0; opacity: 0; } 84%,100% { max-height: 40px; opacity: 1; } }
+@keyframes si-r-a3 { 0%,84% { max-height: 0; opacity: 0; } 86%,100% { max-height: 40px; opacity: 1; } }
+@keyframes si-r-count { 0%,19% { background: #f1ebe0; } 20%,45% { background: #fbe3d3; } 46%,79% { background: #f1ebe0; } 80%,100% { background: #fbe3d3; } }
+@keyframes si-r-cur { 0%,2% { transform: translate(18%, 30%); } 6% { transform: translate(40%, 36%); } 10%,13% { transform: translate(5%, 63%); } 18%,30% { transform: translate(72%, 30%); } 33%,36% { transform: translate(13%, 63%); } 40%,54% { transform: translate(72%, 55%); } 57%,59% { transform: translate(24%, 56%); } 69%,73% { transform: translate(53%, 56%); } 78%,100% { transform: translate(72%, 84%); } }
+
+/* Shared pieces: the thinking dots and the buttons drawn more than once. */
+.si-r-dot { width: 4px; height: 4px; border-radius: 9999px; background: #c67139; animation: si-r-dots 1s 0s ease-in-out infinite; }
+.si-r-dot:nth-child(2) { animation-delay: 0.2s; }
+.si-r-dot:nth-child(3) { animation-delay: 0.4s; }
+.si-r-think { display: flex; gap: 3px; align-items: center; overflow: hidden; }
+.si-r-pill { border-radius: 9999px; padding: 4px 10px; font-weight: 600; color: #474238; box-shadow: inset 0 0 0 1px #e8dfd0; }
+
+@media (prefers-reduced-motion: reduce) {
+  .si-r-frame *, .si-r-frame { animation-play-state: paused !important; animation-delay: -17s !important; }
+}

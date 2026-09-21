@@ -21,8 +21,10 @@ const en = {
   ctaTitle: "New here? Start your first project",
   signinTitle: "Welcome back",
   forgotTitle: "Reset your password",
-  unitos: "Continue with a Unitos account",
-  nameLabel: "Name",
+  // The sign-up card: the email alone, then Start now. No card, no name:
+  // the confirmation link opens the account.
+  startNow: "Start now — it's free",
+  signIn: "Sign in",
   emailLabel: "Email",
   passwordLabel: "Password",
   confirmPasswordLabel: "Confirm password",
@@ -34,6 +36,10 @@ const en = {
   google: "Continue with Google",
   apple: "Continue with Apple",
   accountNote: "Sign-in creates your account and keeps your projects yours.",
+  // The sentence beside the card, the arrow pointing at it.
+  noCardKicker: "No billing information",
+  noCard: "Enter your email. Start your work now.",
+  noCardSub: "Two months of Unitos Premium, free. We never ask for a card to begin.",
 
   // The beta notice: opens once per tab when the page loads, a bowing figure above it.
   betaTitle: "Unitos is in beta",
@@ -70,30 +76,13 @@ const en = {
   setPassword: "Set password",
   resetTitle: "Set a new password",
 
-  // The reader, as it is — callouts point from the text. One structure:
-  // "Function: what it does", in plain words, the dot on that function.
-  showcaseTitle: "The reader, as it is",
-  showcaseCaption: "A real paper in the reader — every function shown is live.",
-  chipAccepted: "✓ Note accepted · anchored",
-  screenshotAlt: "The Unitos reader on Attention Is All You Need: highlights, notes, annotations, and links in place.",
-  calloutAssistant: "Smart assistant: summarize, explain, ask",
-  calloutHighlight: "Highlight: mark a passage",
-  calloutComment: "Comment: write in the margin",
-  calloutPending: "Anchored note: accept or reject",
-  calloutDistill: "Extract: ask one question, get quotes",
-
-  // Only functions you need
-  functionsTitle: "Only functions you need",
-  fnAssistant: "Smart assistant",
-  fnAssistantSub: "Summarize, explain, ask, match — grounded in the whole project.",
-  fnNotes: "Anchored notes",
-  fnNotesSub: "Every note clicks back to its source in the document.",
-  fnHighlight: "Highlight and comment",
-  fnHighlightSub: "Highlight a passage, comment in the margin.",
-  fnSimplify: "Simplify",
-  fnSimplifySub: "Select a passage — rewritten in plain words, in place.",
-  fnDistill: "Extract",
-  fnDistillSub: "One question to the document; the quotes that answer it.",
+  // The reader deck (signin/reader-deck.tsx): five screens, | separated —
+  // the tab of each and the caption under it.
+  deckTabs: "Reader|Notes full page|Notes in the reader|Graph and Stitch|Collaboration",
+  deckCaptions:
+    "Select a passage and the popover opens under it: the assistant’s command box, then Simplify, Visualize, Comment, Add to notes, Link across texts — the highlight colors right above. Simplify rewrites it beside the article, Visualize (Ultra) draws it, and the assistant answers a command on it in a chat card — every one saved under Annotations.|The notes full page: compare notes side by side or stacked. Hold a note and carry it over another; the ring draws itself, the held note falls in, and the other blooms as it takes it — seams kept, Undo a step away.|Notes stay beside the reader. Drag a highlight’s card onto a note and a reference lands in it; hold a note and let it go over the article, and it floats there — read it, then press the pencil and write against the text.|The graph draws every document as a node and every link as a curve. Stitch reads the documents you pick — papers, transcripts, web pages — and proposes links you accept.|Share a project: collaborators highlight, reply under notes, resolve threads, and propose edits you accept — every change signed.",
+  deckPrev: "Previous screen",
+  deckNext: "Next screen",
 
   tagline: "One project · every note anchored · accepted by you",
 
@@ -131,8 +120,8 @@ const zh: Record<keyof typeof en, string> = {
   ctaTitle: "第一次来？创建你的第一个项目",
   signinTitle: "欢迎回来",
   forgotTitle: "重置密码",
-  unitos: "使用 Unitos 账户继续",
-  nameLabel: "名字",
+  startNow: "立即开始——免费",
+  signIn: "登录",
   emailLabel: "邮箱",
   passwordLabel: "密码",
   confirmPasswordLabel: "确认密码",
@@ -144,6 +133,9 @@ const zh: Record<keyof typeof en, string> = {
   google: "使用 Google 继续",
   apple: "使用 Apple 继续",
   accountNote: "登录会创建你的账户，你的项目只属于你。",
+  noCardKicker: "不需要付款信息",
+  noCard: "输入邮箱，现在就开始工作。",
+  noCardSub: "Unitos Premium 免费两个月。开始时我们从不索要银行卡。",
 
   // The beta notice: opens once per tab when the page loads.
   betaTitle: "Unitos 正处于测试阶段",
@@ -179,29 +171,11 @@ const zh: Record<keyof typeof en, string> = {
   setPassword: "设置密码",
   resetTitle: "设置新密码",
 
-  // The reader, as it is — callouts point from the text
-  showcaseTitle: "阅读器，原样呈现",
-  showcaseCaption: "阅读器中的一篇真实论文——展示的功能全部真实可用。",
-  chipAccepted: "✓ 笔记已接受 · 已锚定",
-  screenshotAlt: "Unitos 阅读器中的 Attention Is All You Need：高亮、笔记、批注和链接一应俱全。",
-  calloutAssistant: "智能助手：总结、解释、提问",
-  calloutHighlight: "高亮：标记一个片段",
-  calloutComment: "评论：写在页边",
-  calloutPending: "锚定笔记：接受或拒绝",
-  calloutDistill: "提取：问一个问题，得到引文",
-
-  // Only functions you need
-  functionsTitle: "只有你需要的功能",
-  fnAssistant: "智能助手",
-  fnAssistantSub: "总结、解释、提问、匹配——基于整个项目。",
-  fnNotes: "锚定笔记",
-  fnNotesSub: "每条笔记都能点回文档中的出处。",
-  fnHighlight: "高亮与评论",
-  fnHighlightSub: "高亮一个片段，在页边评论。",
-  fnSimplify: "简化",
-  fnSimplifySub: "选中一段——用通俗的话就地重写。",
-  fnDistill: "提取",
-  fnDistillSub: "向文档问一个问题，得到回答它的引文。",
+  deckTabs: "阅读器|笔记全页|阅读器旁的笔记|图谱与缝合|协作",
+  deckCaptions:
+    "选中一段：简化、分析、可视化、匹配、提问。每个结果都是待定卡片，由你接受或拒绝；提取向文档问一个问题，返回引文。|笔记全页：并排或堆叠对比笔记，选中两条，用 AI 合并——一条笔记，两处来源都保留，随时可撤销。|笔记就在阅读器旁。把高亮拖到笔记上它就并入；把笔记拖到文章上它就浮在那里，边读边写。|图谱把每篇文档画成节点，每条链接画成曲线。缝合读取你选取的文档——论文、逐字稿、网页——并提出由你接受的链接。|共享项目：协作者高亮、在笔记下回复、解决线程、提出由你接受的编辑——每次更改都有署名。",
+  deckPrev: "上一屏",
+  deckNext: "下一屏",
 
   tagline: "一个项目 · 每条笔记有锚点 · 由你接受",
 

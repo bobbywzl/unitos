@@ -1,0 +1,39 @@
+/* Collaboration frame of the sign-in deck: one 11 s loop. Keyframes copied from the design file (015819ef-Signin.dc.html, si-p-*). */
+
+@keyframes si-p-join { 0%,3% { transform: scale(0); opacity: 0; } 7%,100% { transform: scale(1); opacity: 1; } }
+@keyframes si-p-remote { 0%,8% { left: 4%; top: 30%; } 16% { left: 6%; top: 40%; } 24% { left: 44%; top: 44%; } 36% { left: 30%; top: 50%; } 40%,100% { left: 34%; top: 52%; } }
+@keyframes si-p-hl { 0%,16% { background-size: 0% 100%; } 24%,100% { background-size: 100% 100%; } }
+@keyframes si-p-editmark { 0%,40% { background: transparent; } 44%,100% { background: #eef1e6; } }
+@keyframes si-p-editbadge { 0%,40% { opacity: 0; transform: scale(0); } 44%,100% { opacity: 1; transform: none; } }
+@keyframes si-p-r1 { 0%,28% { max-height: 0; opacity: 0; } 32%,100% { max-height: 40px; opacity: 1; } }
+@keyframes si-p-t1 { 0%,32% { width: 0; } 42%,100% { width: 100%; } }
+@keyframes si-p-r2 { 0%,50% { max-height: 0; opacity: 0; } 54%,100% { max-height: 40px; opacity: 1; } }
+@keyframes si-p-t2 { 0%,54% { width: 0; } 64%,100% { width: 100%; } }
+@keyframes si-p-compose { 0%,48% { opacity: 0; } 50%,100% { opacity: 1; } }
+@keyframes si-p-resolvebtn { 0%,72% { color: #82796a; } 75%,100% { color: #7a8a5e; } }
+@keyframes si-p-strike { 0%,74% { text-decoration-color: transparent; opacity: 1; } 77%,100% { text-decoration: line-through; text-decoration-color: #b5a892; opacity: 0.6; } }
+@keyframes si-p-count { 0%,76% { opacity: 0; } 79%,100% { opacity: 1; } }
+@keyframes si-p-edit { 0%,42% { opacity: 0; transform: translateY(6px); } 46%,100% { opacity: 1; transform: none; } }
+@keyframes si-p-editaccept { 0%,88% { background: transparent; color: #7a8a5e; box-shadow: inset 0 0 0 1px #7a8a5e; } 91%,100% { background: #7a8a5e; color: #ffffff; box-shadow: none; } }
+@keyframes si-p-cur { 0%,66% { transform: translate(72%, 84%); } 72%,76% { transform: translate(92%, 42%); } 84%,88% { transform: translate(8%, 92%); } 100% { transform: translate(8%, 92%); } }
+
+/* One class per animated element; the rest of each element's style stays inline in the component. */
+.si-p-join { animation: si-p-join 11s cubic-bezier(.2,.8,.2,1) infinite; }
+.si-p-remote { animation: si-p-remote 11s cubic-bezier(.4,0,.2,1) infinite; }
+.si-p-hl { animation: si-p-hl 11s linear infinite; }
+.si-p-editmark { animation: si-p-editmark 11s linear infinite; }
+.si-p-editbadge { animation: si-p-editbadge 11s linear infinite; }
+.si-p-r1 { animation: si-p-r1 11s linear infinite; }
+.si-p-t1 { animation: si-p-t1 11s linear infinite, si-p-strike 11s linear infinite; }
+.si-p-r2 { animation: si-p-r2 11s linear infinite; }
+.si-p-t2 { animation: si-p-t2 11s linear infinite; }
+.si-p-compose { animation: si-p-compose 11s linear infinite; }
+.si-p-resolvebtn { animation: si-p-resolvebtn 11s linear infinite; }
+.si-p-count { animation: si-p-count 11s linear infinite; }
+.si-p-edit { animation: si-p-edit 11s linear infinite; }
+.si-p-editaccept { animation: si-p-editaccept 11s linear infinite; }
+.si-p-cur { animation: si-p-cur 11s cubic-bezier(.4,0,.2,1) infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .si-p-frame *, .si-p-frame { animation-play-state: paused !important; animation-delay: -10.3s !important; }
+}
