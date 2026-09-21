@@ -76,6 +76,8 @@ export function kimiOptions(effort: KimiEffort = DEFAULT_EFFORT) {
 // Moonshot bills each search $0.005 on top of the tokens.
 export const WEB_SEARCH_USD = 0.005;
 export const WEB_SEARCH_TOOL = "web_search";
+// At most this many searches per answer, one step each, then the answer.
+export const WEB_SEARCH_MAX_USES = 5;
 const WEB_SEARCH_FORMULA = "moonshot/web-search:latest";
 
 type FiberResponse = {

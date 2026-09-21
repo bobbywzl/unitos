@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   attachmentKind,
   capFileName,
@@ -37,6 +37,7 @@ import {
   type AnswerComment,
 } from "@/components/assistant/answer-tools";
 import { ThinkingChips, useThinking } from "@/components/assistant/thinking-chips";
+import { useWeb, WebChip } from "@/components/assistant/web-chip";
 import { useCollab } from "@/components/collab/collab-context";
 import { useT } from "@/components/lang-provider";
 import { DriveIcon, PaperclipIcon, StopIcon } from "@/components/icons";
@@ -101,35 +102,6 @@ type QueuedMessage = OutgoingMessage & { key: string };
 // hydration effect below).
 const threads = new Map<string, Thread>();
 
-// Web access (SPEC.md §7): on by default, remembered in this browser. The
-// choice is read as an external store, so the server's render (on) and the
-// first client render agree.
-const WEB_KEY = "unitos-assistant-web";
-const WEB_EVENT = "unitos:assistant-web";
-function readWeb(): boolean {
-  try {
-    return localStorage.getItem(WEB_KEY) !== "off";
-  } catch {
-    return true;
-  }
-}
-function writeWeb(on: boolean) {
-  try {
-    if (on) localStorage.removeItem(WEB_KEY);
-    else localStorage.setItem(WEB_KEY, "off");
-  } catch {
-    // A blocked store only loses the memory of the choice.
-  }
-  window.dispatchEvent(new Event(WEB_EVENT));
-}
-function subscribeWeb(onChange: () => void) {
-  window.addEventListener(WEB_EVENT, onChange);
-  window.addEventListener("storage", onChange);
-  return () => {
-    window.removeEventListener(WEB_EVENT, onChange);
-    window.removeEventListener("storage", onChange);
-  };
-}
 
 // Two scopes, both reading the digest (SPEC.md §7). Scope ids stay as wire
 // values: document = This page (the open document whole), notebook = Project
@@ -258,7 +230,8 @@ export function AssistantPanel({
   // This page while a document is open, else Project: the panel remounts on
   // every document switch, so the default follows the open document.
   const [scope, setScope] = useState<Scope>(documentId ? "document" : "notebook");
-  const web = useSyncExternalStore(subscribeWeb, readWeb, () => true);
+  // Web access (SPEC.md §7): the one toggle every surface shares (web-chip.tsx).
+  const web = useWeb();
   // Fast Thinking or Deep Thinking (SPEC.md §7): one choice for every
   // assistant surface, remembered in this browser.
   const thinking = useThinking();
@@ -1036,17 +1009,7 @@ export function AssistantPanel({
         </button>
       ))}
       <ThinkingChips />
-      <button
-        onClick={() => writeWeb(!web)}
-        data-track={`assistant-web:${web ? "off" : "on"}`}
-        aria-pressed={web}
-        data-tip={t(web ? "assistant.webOnTitle" : "assistant.webOffTitle")}
-        className={`ml-auto rounded-full px-3 py-1 text-xs font-semibold ${
-          web ? "bg-sage-600 text-sage-fg" : "bg-card text-sand-600 shadow-soft hover:text-clay-800"
-        }`}
-      >
-        {t("assistant.web")}
-      </button>
+      <WebChip className="ml-auto" />
       {inConversation && (
         <button
           onClick={newConversation}

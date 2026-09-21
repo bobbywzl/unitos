@@ -7,6 +7,7 @@ import {
   profileLines,
   SPECIFICITY_RULE,
   STYLE_RULE,
+  WEB_LINES,
   type ReaderProfileCtx,
 } from "@/lib/prompts/types";
 
@@ -95,16 +96,7 @@ export function synthesisAskPrompt(params: {
       : []),
     STYLE_RULE,
     ...(params.act ? actLines(params.act) : [ACT_ELSEWHERE_LINE]),
-    ...(params.web
-      ? [
-          "",
-          "You can search the web. Use it to verify the factual claims the material and your answer rest on against outside sources, and to add what the material lacks. Rules:",
-          "1. Answer from the material first; the web checks it. Never present a web result as if it came from the material.",
-          "2. Cite every web source you use as a markdown link at the point it supports, with the page title as the link text.",
-          "3. When the web contradicts the material, say so plainly and show both sides.",
-          "4. End with a section titled \"Web sources\" listing every web page you relied on as a markdown link, one per line. Leave the section out when you used none.",
-        ]
-      : []),
+    ...(params.web ? ["", ...WEB_LINES] : []),
     answerLanguage(params.lang),
   ].join("\n");
 }

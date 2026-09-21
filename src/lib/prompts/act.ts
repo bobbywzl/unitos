@@ -1,7 +1,7 @@
 import { ACTION_TYPE_LINES } from "@/lib/assistant/plan";
 import type { ChatTurn } from "@/lib/conversation";
 import type { Lang } from "@/lib/i18n/config";
-import { languageName, profileLines, STYLE_RULE, type ReaderProfileCtx } from "@/lib/prompts/types";
+import { languageName, profileLines, STYLE_RULE, WEB_LINES, type ReaderProfileCtx } from "@/lib/prompts/types";
 
 // ACT: the selection chat and the article menu (SPEC.md §7, `/api/assistant/act`).
 // The reader's message becomes a plan: reply (the answer), actions (edits,
@@ -32,6 +32,8 @@ export type ActCtx = {
   notes: { sectionTitle: string; content: string }[];
   history: ChatTurn[];
   command: string;
+  // The reader's Web toggle is on: the model can search (SPEC.md §7).
+  web?: boolean;
 };
 
 /** The selection block for a text selection: what the route puts in the
@@ -94,6 +96,7 @@ export function actPrompt(ctx: ActCtx): string {
       : []),
     `Command: ${ctx.command}`,
     "",
+    ...(ctx.web ? ["", ...WEB_LINES, ""] : []),
     'Return ONLY JSON: {"reply": string or null, "actions": [...], "matches": [{"blockId": "<id>", "quote": "<verbatim>", "why": "<sentence>"}]}',
   ].join("\n");
 }

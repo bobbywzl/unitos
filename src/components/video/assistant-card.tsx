@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { useImeGuard } from "@/lib/ime";
 import { ThinkingChips, useThinking } from "@/components/assistant/thinking-chips";
+import { useWeb, WebChip } from "@/components/assistant/web-chip";
 import { SparkleIcon, StopIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { ReaderInteractions } from "@/components/reader/reader-interactions";
@@ -54,6 +55,7 @@ export function MediaAssistant({
   // Fast Thinking or Deep Thinking (SPEC.md §7): one choice for every
   // assistant surface, remembered in this browser.
   const thinking = useThinking();
+  const web = useWeb();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
@@ -159,7 +161,7 @@ export function MediaAssistant({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         signal: controller.signal,
-        body: JSON.stringify({ notebookId, documentId, command, history, video, thinking }),
+        body: JSON.stringify({ notebookId, documentId, command, history, video, thinking, web }),
       });
       const plan = (await res.json().catch(() => null)) as
         | (AssistantPlan & { error?: string })
@@ -234,6 +236,7 @@ export function MediaAssistant({
           {t("video.skillNotes")}
         </button>
         <ThinkingChips className="ml-auto" small />
+        <WebChip small />
       </div>
 
       {activeSpot && (

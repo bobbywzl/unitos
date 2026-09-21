@@ -1,11 +1,11 @@
-import { generateText, type ModelMessage } from "ai";
+import { generateText, type ModelMessage, type ToolSet } from "ai";
 import type { LanguageModel } from "ai";
 import type { z } from "zod";
 import { claude, CLAUDE_REFUSAL_FALLBACK, isClaudeModel } from "@/lib/claude";
 import { extractJson, parseJson } from "@/lib/derive/json";
 import { gatewayConfigured, gatewayHeaders } from "@/lib/gateway";
 import { serverT } from "@/lib/i18n/server";
-import { recordUsage, sdkTokens, type UsageMeta } from "@/lib/usage";
+import { computeCostUsd, recordUsage, sdkTokens, type UsageMeta } from "@/lib/usage";
 
 type JsonCallResult<T> = { ok: true; data: T } | { ok: false; error: string };
 
@@ -53,6 +53,12 @@ export async function callForJson<S extends z.ZodType>(params: {
   // The options of the model's client: kimiOptions(effort) for Kimi K3,
   // claudeOptions() for Claude Fable 5.1 (lib/derive/config.ts).
   providerOptions: ProviderOptions;
+  // Tools the model may call before it answers (the web search, SPEC.md §7),
+  // with the step cap; the JSON is the last step's text. toolCallUsd is what
+  // each call costs on top of the tokens, for the usage record.
+  tools?: ToolSet;
+  stopWhen?: Parameters<typeof generateText>[0]["stopWhen"];
+  toolCallUsd?: number;
 }): Promise<JsonCallResult<z.infer<S>>> {
   const run = async (model: LanguageModel, messages: ModelMessage[], usage: UsageMeta | undefined) => {
     const result = await generateText({
@@ -65,13 +71,22 @@ export async function callForJson<S extends z.ZodType>(params: {
       allowSystemInMessages: true,
       messages,
       abortSignal: params.abortSignal,
+      ...(params.tools ? { tools: params.tools, stopWhen: params.stopWhen } : {}),
     });
+    const toolCalls = params.tools ? result.steps.reduce((n, step) => n + step.toolCalls.length, 0) : 0;
     console.log(
       `[derive] ${params.label} cacheRead=${result.usage.inputTokenDetails.cacheReadTokens ?? 0} ` +
         `cacheWrite=${result.usage.inputTokenDetails.cacheWriteTokens ?? 0} ` +
-        `output=${result.usage.outputTokens ?? 0}`,
+        `output=${result.usage.outputTokens ?? 0}${params.tools ? ` toolCalls=${toolCalls}` : ""}`,
     );
-    if (usage) recordUsage(usage, sdkTokens(result.usage));
+    if (usage) {
+      const tokens = sdkTokens(result.usage);
+      recordUsage(
+        usage,
+        tokens,
+        params.toolCallUsd && toolCalls > 0 ? computeCostUsd(usage.model, tokens) + toolCalls * params.toolCallUsd : undefined,
+      );
+    }
     return { text: result.text, finishReason: result.finishReason };
   };
   // A Claude call the safety classifiers declined runs once more on the

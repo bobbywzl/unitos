@@ -62,6 +62,7 @@ import {
 import { setSideChatOpen } from "@/lib/assistant/side-chat-open";
 import type { Person } from "@/lib/person";
 import { ThinkingChips, useThinking } from "@/components/assistant/thinking-chips";
+import { useWeb, WebChip } from "@/components/assistant/web-chip";
 import { useLang, useT } from "@/components/lang-provider";
 import { clipWords } from "@/lib/markdown-preview";
 import { AnnotationGrip } from "@/components/outline/annotation-grip";
@@ -1264,6 +1265,7 @@ export function ReaderInteractions({
   // Fast Thinking or Deep Thinking (SPEC.md §7): one choice for every
   // assistant surface, remembered in this browser.
   const thinking = useThinking();
+  const web = useWeb();
   const [aiCommand, setAiCommand] = useState("");
   const [aiBusy, setAiBusy] = useState(false);
   const [aiListening, setAiListening] = useState(false);
@@ -4235,6 +4237,7 @@ export function ReaderInteractions({
         sideChatOf: sideChat?.of,
         sideChatQuote: sideChat?.quote,
         thinking,
+        web,
       }),
     });
     const plan = (await res.json().catch(() => null)) as
@@ -5611,7 +5614,10 @@ function blockFormatKind(
       onDelete={(id) => void deleteChatComment(id)}
       className={chipsClassName}
     />
-    <ThinkingChips className={chipsClassName} small />
+    <div className={`flex items-center gap-1.5 ${chipsClassName}`}>
+      <ThinkingChips small />
+      <WebChip small />
+    </div>
     {chat.quote && (
       <QuoteChip quote={chat.quote} onClear={dropChatQuote} className={chipsClassName} />
     )}
@@ -6225,7 +6231,10 @@ function blockFormatKind(
                 rows={2}
                 className="w-full resize-none rounded-xl bg-sand-100 p-2 text-[12px] outline-none placeholder:text-sand-500"
               />
-              <ThinkingChips small />
+              <div className="flex items-center gap-1.5">
+                <ThinkingChips small />
+                <WebChip small />
+              </div>
               <div className="flex items-center gap-1.5">
                 <button
                   onClick={toggleVoice}

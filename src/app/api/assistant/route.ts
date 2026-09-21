@@ -36,7 +36,7 @@ import { corpusSystem, documentSystem } from "@/lib/digest/render";
 import { checkOutput } from "@/lib/derive/check";
 import { currentLang, serverT } from "@/lib/i18n/server";
 import { gatewayHeaders } from "@/lib/gateway";
-import { kimi, kimiConfigured, kimiOptions, WEB_SEARCH_TOOL, WEB_SEARCH_USD, webSearchTool } from "@/lib/kimi";
+import { kimi, kimiConfigured, kimiOptions, WEB_SEARCH_MAX_USES, WEB_SEARCH_TOOL, WEB_SEARCH_USD, webSearchTool } from "@/lib/kimi";
 import { resolveModelId } from "@/lib/models";
 import { addTokens, computeCostUsd, recordUsage, sdkTokens, type TokenCounts } from "@/lib/usage";
 import type { TFunc } from "@/lib/i18n/dictionaries";
@@ -73,9 +73,6 @@ const assistantSchema = z.object({
   files: z.array(attachedFileSchema).max(MAX_FILES_PER_MESSAGE).optional(),
 });
 
-// Web access (SPEC.md §7): at most this many searches per answer, one step
-// each, then the answer.
-const WEB_SEARCH_MAX_USES = 5;
 
 const issuesSchema = z.object({
   issues: z
