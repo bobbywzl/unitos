@@ -9,13 +9,17 @@ import { startNudges } from "@/components/nudges";
 // the mark dimmed across the whole background — with "Welcome <first name>"
 // and the tagline, then fades out into the dashboard. It starts the nudges
 // (components/nudges.tsx): small floating captions, one at a time, that
-// point at the next thing to try. localStorage keeps the splash to one
-// showing per account: the stored value is welcomeKey — the account's id and
-// createdAt — so a second account on this browser is welcomed too, and so is
-// an account an admin reset (the reset stamps createdAt anew). firstWork gates
-// the splash to accounts with no project yet.
+// point at the next thing to try, for this account alone. localStorage keeps
+// the splash to one showing per account: the stored value is welcomeKey — the
+// account's id and createdAt — so a second account on this browser is welcomed
+// too, and so is an account an admin reset (the reset stamps createdAt anew).
+// firstWork gates the splash to accounts with no project yet, and createdAt
+// to new ones — created within NEW_ACCOUNT_DAYS; an older account, one that
+// signed up before the flow existed, is never welcomed and never nudged.
 
 const WELCOMED_KEY = "unitos-welcomed";
+// How long an account counts as new for the welcome flow and the nudges.
+const NEW_ACCOUNT_DAYS = 30;
 
 function welcomed(key: string): boolean {
   try {
@@ -29,10 +33,12 @@ export function WelcomeFlow({
   firstWork,
   firstName,
   welcomeKey,
+  createdAt,
 }: {
   firstWork: boolean;
   firstName: string;
   welcomeKey: string;
+  createdAt: string; // the account's createdAt, ISO
 }) {
   const t = useT();
   const [splash, setSplash] = useState(false);
@@ -41,6 +47,7 @@ export function WelcomeFlow({
   // fade-in wants), so hydration renders nothing and matches the server.
   useEffect(() => {
     if (!firstWork) return;
+    if (Date.now() - new Date(createdAt).getTime() > NEW_ACCOUNT_DAYS * 86_400_000) return;
     const id = requestAnimationFrame(() => {
       if (welcomed(welcomeKey)) return;
       try {
@@ -48,11 +55,11 @@ export function WelcomeFlow({
       } catch {
         // storage unavailable: showing twice is the worst case
       }
-      startNudges();
+      startNudges(welcomeKey.split(":")[0]);
       setSplash(true);
     });
     return () => cancelAnimationFrame(id);
-  }, [firstWork, welcomeKey]);
+  }, [firstWork, welcomeKey, createdAt]);
 
   if (!splash) return null;
   return (

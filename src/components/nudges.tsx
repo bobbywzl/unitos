@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useT } from "@/components/lang-provider";
 import type { TKey } from "@/lib/i18n/dictionaries";
+import { readAccountCookie } from "@/lib/tab-account";
 
 // The nudges after the welcome splash — the onboarding feature look: the next
 // thing to try glows (a pulsing clay ring, globals.css .nudge-glow) and one
@@ -11,7 +12,11 @@ import type { TKey } from "@/lib/i18n/dictionaries";
 // condition holds) or its ✕ is pressed; the next shows when its target is on
 // screen. localStorage keeps the position, so the sequence survives the
 // navigation between the dashboard and a project. Only the welcome splash
-// starts it (startNudges); accounts that saw the old welcome never see nudges.
+// starts it (startNudges), for the account it welcomed: the position is
+// stored with that account's id, and a nudge shows only while the signed-in
+// account (the account cookie) is that one — another account on the same
+// browser, or an account that never had the welcome, sees none. A position
+// stored without an account, from before this rule, counts as none.
 //
 // The order: New project on the dashboard → + after the first document →
 // select a passage → the side panel → Extract → hold a note over
@@ -24,6 +29,9 @@ import type { TKey } from "@/lib/i18n/dictionaries";
 // several ids with spaces between when two steps share it.
 
 const NUDGE_KEY = "unitos-nudge-step";
+// The account the sequence belongs to: the one the welcome splash started
+// it for.
+const NUDGE_ACCOUNT_KEY = "unitos-nudge-account";
 // The steps Jev found the reader has already done (/api/jev/nudges, SPEC.md
 // §6), kept for the tab: those steps skip.
 const KNOWN_KEY = "unitos-nudge-known";
@@ -112,8 +120,10 @@ const STEPS: Step[] = [
 
 const GLOW_CLASS = "nudge-glow";
 
-export function startNudges() {
+/** Start the sequence for the account the welcome splash showed to. */
+export function startNudges(accountId: string) {
   try {
+    localStorage.setItem(NUDGE_ACCOUNT_KEY, accountId);
     localStorage.setItem(NUDGE_KEY, "0");
   } catch {
     // storage unavailable: no nudges
@@ -122,6 +132,11 @@ export function startNudges() {
 
 function readStep(): number | null {
   try {
+    // The sequence is the welcomed account's alone.
+    const owner = localStorage.getItem(NUDGE_ACCOUNT_KEY);
+    if (!owner) return null;
+    const current = readAccountCookie();
+    if (current && current !== owner) return null;
     const value = localStorage.getItem(NUDGE_KEY);
     if (value === null || value === "done") return null;
     const n = Number(value);

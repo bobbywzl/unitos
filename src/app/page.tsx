@@ -145,10 +145,15 @@ export default async function Home() {
       </header>
 
       <div className="pt-16">
-        {/* welcomeKey is the account's birth: an admin reset stamps createdAt
-            anew, and the splash shows again. */}
+        {/* The welcome flow and the nudges are for a new account: no project
+            yet, and created within NEW_ACCOUNT_DAYS (welcome-flow.tsx).
+            welcomeKey is the account's birth: an admin reset stamps createdAt
+            anew, so a reset account is new again and the splash shows again.
+            An account older than that — one that signed up before the flow
+            existed — is never welcomed and never nudged. */}
         <WelcomeFlow
           firstWork={works.length === 0 && collabRows.length === 0}
+          createdAt={user.createdAt.toISOString()}
           firstName={user.name.trim().split(/\s+/)[0] || user.name}
           welcomeKey={`${user.id}:${user.createdAt.toISOString()}`}
         />
