@@ -4,7 +4,7 @@ import type { Element as HastElement, ElementContent, Root as HastRoot, Text as 
 import type { List, Root } from "mdast";
 import { useRouter } from "next/navigation";
 import { createContext, useContext, useMemo } from "react";
-import ReactMarkdown from "react-markdown";
+import ReactMarkdown, { type Components, type ExtraProps } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { CommentIcon, LinkIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
@@ -319,6 +319,207 @@ function AnchorGlyph() {
   );
 }
 
+// What the element overrides below read: the text as rendered (a list item
+// finds its line in it), the note's sources, the notebook, and the two
+// callbacks. Handed down by context, so the overrides are defined once.
+type MarkdownData = {
+  text: string;
+  sources?: SourceChip[];
+  notebookId?: string;
+  onToggleTask?: (line: number, checked: boolean) => void;
+  onAnnotationReference?: (ref: ParsedAnnotationReference & { label: string }) => void;
+};
+const MarkdownData = createContext<MarkdownData>({ text: "" });
+
+// The element overrides. Each is one component defined here, at module level,
+// and never inside Markdown: react-markdown mounts an override as a
+// component, so a function made on every render is a new component type,
+// and React tears the rendered nodes down and builds them again on each
+// render of Markdown. That took every click in a note whose card re-rendered
+// during the press — a hold's pending state re-renders the card on
+// pointerdown — because the pressed node was gone by the release, and the
+// browser fires no click then.
+type Override<Tag extends keyof React.JSX.IntrinsicElements> = React.JSX.IntrinsicElements[Tag] & ExtraProps;
+
+/** A quote whose words are a source's points back to the reader (SPEC.md §6):
+    a click jumps to the source, and the line under the words names the document. */
+function QuoteBlock({ node, children: quoteChildren, ...props }: Override<"blockquote">) {
+  const { sources, notebookId } = useContext(MarkdownData);
+  const t = useT();
+  const router = useRouter();
+  const source = sources && sources.length > 0 && notebookId ? sourceOfQuote(hastText(node), sources) : null;
+  if (!source) return <blockquote {...props}>{quoteChildren}</blockquote>;
+  const href = `/n/${notebookId}?doc=${source.documentId}&src=${source.id}`;
+  const jump = (e: { currentTarget: Element }) => {
+    if (source.orphaned) return;
+    // A click that ends a selection of the quote's own words belongs
+    // to the selection. A selection left elsewhere on the page does
+    // not hold the jump.
+    const selection = window.getSelection();
+    if (
+      selection &&
+      !selection.isCollapsed &&
+      selection.toString().trim() !== "" &&
+      e.currentTarget.contains(selection.anchorNode)
+    )
+      return;
+    selection?.removeAllRanges();
+    // The reader opens on the source's document (another document
+    // remounts the reader, which flashes ?src on mount) and, when it
+    // is already open on it, the event flashes the mark at once.
+    router.push(href);
+    window.dispatchEvent(new CustomEvent("dissect:flash-source", { detail: { sourceId: source.id } }));
+  };
+  return (
+    <blockquote
+      {...props}
+      className={source.orphaned ? "note-quote-orphaned" : "note-quote-linked"}
+      onClick={jump}
+      data-tip={source.orphaned ? t("outline.quoteUnresolved") : t("outline.quoteJump")}
+      data-track="note-quote-jump"
+    >
+      {quoteChildren}
+      <span className="note-quote-source">
+        <AnchorGlyph />
+        <span className="truncate">
+          {source.documentTitle}
+          {source.orphaned ? ` · ${t("outline.unresolvedLabel")}` : ""}
+        </span>
+      </span>
+    </blockquote>
+  );
+}
+
+/** A list item hands its line (from 0) to the checklist box inside it. */
+function ListItem({ node, children: itemChildren, ...props }: Override<"li">) {
+  const { text } = useContext(MarkdownData);
+  const offset = node?.position?.start.offset;
+  const line = offset === undefined ? -1 : text.slice(0, offset).split("\n").length - 1;
+  return (
+    <li {...props}>
+      <TaskLine.Provider value={line}>{itemChildren}</TaskLine.Provider>
+    </li>
+  );
+}
+
+function TaskInput({ type, checked }: Override<"input">) {
+  const { onToggleTask } = useContext(MarkdownData);
+  if (type !== "checkbox") return null;
+  return <TaskBox checked={Boolean(checked)} onToggle={onToggleTask} />;
+}
+
+// A visualization's image opens the viewer (SPEC.md §20): the picture large,
+// in the app, with its caption — the alt text, which the annotation's
+// markdown sets to the caption.
+function Image({ src, alt }: Override<"img">) {
+  const t = useT();
+  const source = typeof src === "string" ? src : undefined;
+  // A stored SVG, served immutable: next/image has nothing to add.
+  if (!isVisualizationImage(source)) {
+    // An image in a note sizes itself to the column unless the reader set
+    // a width in the editor; the width rides in the url.
+    const width = source ? imageWidth(source) : null;
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={source}
+        alt={alt ?? ""}
+        className="note-image"
+        // A note is picked up by a hold anywhere on it: the browser's own
+        // drag of the picture would take the hold.
+        draggable={false}
+        loading="lazy"
+        style={width === null ? undefined : { width }}
+      />
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={() => openVisualization({ src: source, caption: alt ?? "" })}
+      data-track="visualization-open"
+      data-tip={t("reader.openVisualizationTitle")}
+      className="block w-full cursor-zoom-in rounded-xl bg-card"
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={source} alt={alt ?? ""} className="my-0 w-full rounded-xl" />
+    </button>
+  );
+}
+
+function Link({ node, href, children: linkChildren, ...props }: Override<"a">) {
+  const { onAnnotationReference } = useContext(MarkdownData);
+  const t = useT();
+  const router = useRouter();
+  // One link carries every style over its run, innermost last.
+  const styleTags = href?.startsWith(STYLE_HREF) ? href.slice(STYLE_HREF.length).split("+") : null;
+  if (styleTags) {
+    const color = styleTags.find((tag) => STYLE_CLASS[tag]);
+    let painted = <>{linkChildren}</>;
+    if (color) painted = <span className={STYLE_CLASS[color]}>{painted}</span>;
+    if (styleTags.includes("u")) painted = <u>{painted}</u>;
+    return painted;
+  }
+  const blockId = href?.startsWith("#dissect-block-") ? href.slice("#dissect-block-".length) : null;
+  if (blockId) {
+    return (
+      <button
+        type="button"
+        onClick={() => window.dispatchEvent(new CustomEvent("dissect:flash-block", { detail: { blockId } }))}
+        data-tip={t("panels.jumpToBlock")}
+        className="mx-0.5 inline-flex size-[18px] items-center justify-center rounded-full bg-clay-100 align-text-bottom text-[11px] font-semibold text-clay-800 no-underline hover:bg-clay-200"
+      >
+        ¶
+      </button>
+    );
+  }
+  // An annotation reference (lib/annotation-reference.ts): the row opens
+  // the annotation beside the note, or in the reader.
+  const reference = parseAnnotationReference(href);
+  if (reference && href) {
+    const label = hastText(node);
+    return (
+      <AnnotationReferenceCard
+        href={href}
+        onOpen={() => {
+          if (onAnnotationReference) {
+            onAnnotationReference({ ...reference, label });
+            return;
+          }
+          window.getSelection()?.removeAllRanges();
+          router.push(href);
+          // Already on that document: the push changes nothing, so the
+          // mark flashes and the annotation opens from here.
+          if (reference.sourceId) {
+            window.dispatchEvent(
+              new CustomEvent("dissect:flash-source", { detail: { sourceId: reference.sourceId } }),
+            );
+            window.dispatchEvent(
+              new CustomEvent("dissect:open-annotation", { detail: { sourceId: reference.sourceId } }),
+            );
+          }
+        }}
+      >
+        {linkChildren}
+      </AnnotationReferenceCard>
+    );
+  }
+  // An outside link (a web source the assistant cites) opens in a new tab;
+  // the reader's page stays. A link on a line of its own is a link card
+  // (rehypeLinkCards).
+  const external = /^https?:\/\//.test(href ?? "");
+  if (external && href && node?.properties[LINK_CARD] !== undefined) {
+    return <LinkCard href={href}>{linkChildren}</LinkCard>;
+  }
+  return (
+    <a href={href} {...props} draggable={false} {...(external ? { target: "_blank", rel: "noopener noreferrer" } : {})}>
+      {linkChildren}
+    </a>
+  );
+}
+
+const components: Components = { blockquote: QuoteBlock, li: ListItem, input: TaskInput, img: Image, a: Link };
+
 /** breaks: single newlines render as line breaks (notes). onToggleTask: a
     checklist item's box is a control; a click reports the item's line (from
     0) and its new state, and the caller saves the note (note-card.tsx).
@@ -345,8 +546,6 @@ export function Markdown({
   notebookId?: string;
   onAnnotationReference?: (ref: ParsedAnnotationReference & { label: string }) => void;
 }) {
-  const t = useT();
-  const router = useRouter();
   // Lists line up first: hardBreaks reads the lines as they will be nested.
   // Both keep every line, so a line counted here is the same line in children.
   const text = breaks ? hardBreaks(alignListIndents(children)) : alignListIndents(children);
@@ -355,188 +554,17 @@ export function Markdown({
     () => (needle ? [rehypeLinkCards, () => rehypeSearchHits(needle)] : [rehypeLinkCards]),
     [needle],
   );
+  const data = useMemo<MarkdownData>(
+    () => ({ text, sources, notebookId, onToggleTask, onAnnotationReference }),
+    [text, sources, notebookId, onToggleTask, onAnnotationReference],
+  );
   return (
     <div className="prose prose-sm max-w-none prose-p:my-1.5 prose-headings:my-2 prose-ul:my-1.5 prose-ol:my-1.5">
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm, remarkDashLists]}
-        rehypePlugins={rehypePlugins}
-        components={{
-          blockquote: ({ node, children: quoteChildren, ...props }) => {
-            const source =
-              sources && sources.length > 0 && notebookId ? sourceOfQuote(hastText(node), sources) : null;
-            if (!source) return <blockquote {...props}>{quoteChildren}</blockquote>;
-            const href = `/n/${notebookId}?doc=${source.documentId}&src=${source.id}`;
-            const jump = (e: { currentTarget: Element }) => {
-              if (source.orphaned) return;
-              // A click that ends a selection of the quote's own words belongs
-              // to the selection. A selection left elsewhere on the page does
-              // not hold the jump.
-              const selection = window.getSelection();
-              if (
-                selection &&
-                !selection.isCollapsed &&
-                selection.toString().trim() !== "" &&
-                e.currentTarget.contains(selection.anchorNode)
-              )
-                return;
-              selection?.removeAllRanges();
-              // The reader opens on the source's document (another document
-              // remounts the reader, which flashes ?src on mount) and, when it
-              // is already open on it, the event flashes the mark at once.
-              router.push(href);
-              window.dispatchEvent(new CustomEvent("dissect:flash-source", { detail: { sourceId: source.id } }));
-            };
-            return (
-              <blockquote
-                {...props}
-                className={source.orphaned ? "note-quote-orphaned" : "note-quote-linked"}
-                onClick={jump}
-                data-tip={source.orphaned ? t("outline.quoteUnresolved") : t("outline.quoteJump")}
-                data-track="note-quote-jump"
-              >
-                {quoteChildren}
-                <span className="note-quote-source">
-                  <AnchorGlyph />
-                  <span className="truncate">
-                    {source.documentTitle}
-                    {source.orphaned ? ` · ${t("outline.unresolvedLabel")}` : ""}
-                  </span>
-                </span>
-              </blockquote>
-            );
-          },
-          li: ({ node, children: itemChildren, ...props }) => {
-            const offset = node?.position?.start.offset;
-            const line = offset === undefined ? -1 : text.slice(0, offset).split("\n").length - 1;
-            return (
-              <li {...props}>
-                <TaskLine.Provider value={line}>{itemChildren}</TaskLine.Provider>
-              </li>
-            );
-          },
-          input: ({ type, checked }) => {
-            if (type !== "checkbox") return null;
-            return <TaskBox checked={Boolean(checked)} onToggle={onToggleTask} />;
-          },
-          // A visualization's image opens the viewer (SPEC.md §20): the
-          // picture large, in the app, with its caption — the alt text, which
-          // the annotation's markdown sets to the caption.
-          img: ({ src, alt }) => {
-            const source = typeof src === "string" ? src : undefined;
-            // A stored SVG, served immutable: next/image has nothing to add.
-            if (!isVisualizationImage(source)) {
-              // An image in a note sizes itself to the column unless the
-              // reader set a width in the editor; the width rides in the url.
-              const width = source ? imageWidth(source) : null;
-              return (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={source}
-                  alt={alt ?? ""}
-                  className="note-image"
-                  // A note is picked up by a hold anywhere on it: the
-                  // browser's own drag of the picture would take the hold.
-                  draggable={false}
-                  loading="lazy"
-                  style={width === null ? undefined : { width }}
-                />
-              );
-            }
-            return (
-              <button
-                type="button"
-                onClick={() => openVisualization({ src: source, caption: alt ?? "" })}
-                data-track="visualization-open"
-                data-tip={t("reader.openVisualizationTitle")}
-                className="block w-full cursor-zoom-in rounded-xl bg-card"
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={source} alt={alt ?? ""} className="my-0 w-full rounded-xl" />
-              </button>
-            );
-          },
-          a: ({ node, href, children: linkChildren, ...props }) => {
-            // One link carries every style over its run, innermost last.
-            const styleTags = href?.startsWith(STYLE_HREF) ? href.slice(STYLE_HREF.length).split("+") : null;
-            if (styleTags) {
-              const color = styleTags.find((tag) => STYLE_CLASS[tag]);
-              let painted = <>{linkChildren}</>;
-              if (color) painted = <span className={STYLE_CLASS[color]}>{painted}</span>;
-              if (styleTags.includes("u")) painted = <u>{painted}</u>;
-              return painted;
-            }
-            const blockId = href?.startsWith("#dissect-block-")
-              ? href.slice("#dissect-block-".length)
-              : null;
-            if (blockId) {
-              return (
-                <button
-                  type="button"
-                  onClick={() =>
-                    window.dispatchEvent(
-                      new CustomEvent("dissect:flash-block", { detail: { blockId } }),
-                    )
-                  }
-                  data-tip={t("panels.jumpToBlock")}
-                  className="mx-0.5 inline-flex size-[18px] items-center justify-center rounded-full bg-clay-100 align-text-bottom text-[11px] font-semibold text-clay-800 no-underline hover:bg-clay-200"
-                >
-                  ¶
-                </button>
-              );
-            }
-            // An annotation reference (lib/annotation-reference.ts): the
-            // row opens the annotation beside the note, or in the reader.
-            const reference = parseAnnotationReference(href);
-            if (reference && href) {
-              const label = hastText(node);
-              return (
-                <AnnotationReferenceCard
-                  href={href}
-                  onOpen={() => {
-                    if (onAnnotationReference) {
-                      onAnnotationReference({ ...reference, label });
-                      return;
-                    }
-                    window.getSelection()?.removeAllRanges();
-                    router.push(href);
-                    // Already on that document: the push changes nothing,
-                    // so the mark flashes and the annotation opens from here.
-                    if (reference.sourceId) {
-                      window.dispatchEvent(
-                        new CustomEvent("dissect:flash-source", { detail: { sourceId: reference.sourceId } }),
-                      );
-                      window.dispatchEvent(
-                        new CustomEvent("dissect:open-annotation", { detail: { sourceId: reference.sourceId } }),
-                      );
-                    }
-                  }}
-                >
-                  {linkChildren}
-                </AnnotationReferenceCard>
-              );
-            }
-            // An outside link (a web source the assistant cites) opens in a
-            // new tab; the reader's page stays. A link on a line of its own
-            // is a link card (rehypeLinkCards).
-            const external = /^https?:\/\//.test(href ?? "");
-            if (external && href && node?.properties[LINK_CARD] !== undefined) {
-              return <LinkCard href={href}>{linkChildren}</LinkCard>;
-            }
-            return (
-              <a
-                href={href}
-                {...props}
-                draggable={false}
-                {...(external ? { target: "_blank", rel: "noopener noreferrer" } : {})}
-              >
-                {linkChildren}
-              </a>
-            );
-          },
-        }}
-      >
-        {linkifyStyleTags(linkifyBlockTags(text))}
-      </ReactMarkdown>
+      <MarkdownData.Provider value={data}>
+        <ReactMarkdown remarkPlugins={[remarkGfm, remarkDashLists]} rehypePlugins={rehypePlugins} components={components}>
+          {linkifyStyleTags(linkifyBlockTags(text))}
+        </ReactMarkdown>
+      </MarkdownData.Provider>
     </div>
   );
 }
