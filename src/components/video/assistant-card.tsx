@@ -6,6 +6,7 @@ import { api } from "@/lib/api";
 import { useImeGuard } from "@/lib/ime";
 import { ThinkingChips, useThinking } from "@/components/assistant/thinking-chips";
 import { useWeb, WebChip } from "@/components/assistant/web-chip";
+import { QueuedList, queuedKey, type QueuedText } from "@/components/assistant/queued-list";
 import { SparkleIcon, StopIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { ReaderInteractions } from "@/components/reader/reader-interactions";
@@ -59,6 +60,8 @@ export function MediaAssistant({
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
+  // Messages sent while an answer runs (SPEC.md §7): they go out in order.
+  const [queue, setQueue] = useState<QueuedText[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   // The running send() or skill, so Stop can abort it — the reply never
@@ -136,11 +139,19 @@ export function MediaAssistant({
     }
   }
 
-  async function send() {
-    const command = input.trim();
-    if (!command || busy) return;
+  async function send(queued?: QueuedText) {
+    const command = queued ? queued.content : input.trim();
+    if (!command) return;
+    // While an answer runs the message queues (SPEC.md §7).
+    if (busy && !queued) {
+      setInput("");
+      setQueue((list) => [...list, { key: queuedKey(), content: command }]);
+      return;
+    }
+    if (busy) return;
     const history = messages.slice(-12);
-    setInput("");
+    if (queued) setQueue((list) => list.filter((q) => q.key !== queued.key));
+    else setInput("");
     push({ role: "user", content: command });
     setBusy(true);
     const controller = new AbortController();
@@ -186,6 +197,17 @@ export function MediaAssistant({
       inputRef.current?.focus();
     }
   }
+
+  // The queue drains one message per finished answer, in order — after a
+  // Stop too: a queued message was sent to go out next (SPEC.md §7).
+  const queueHead = !busy ? (queue[0] ?? null) : null;
+  useEffect(() => {
+    if (!queueHead) return;
+    // Sent from a task of its own, so the effect settles before the send.
+    const id = setTimeout(() => void send(queueHead), 0);
+    return () => clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [queueHead]);
 
   const chip =
     "rounded-full border border-line px-3 py-1.5 text-[11.5px] font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40";
@@ -280,6 +302,7 @@ export function MediaAssistant({
             ),
           )}
           {busy && <ThinkingIndicator className="text-xs" />}
+          <QueuedList items={queue} onRemove={(key) => setQueue((list) => list.filter((q) => q.key !== key))} />
         </div>
       )}
 
@@ -299,24 +322,26 @@ export function MediaAssistant({
           onKeyDown={(e) => {
             if (ime.isImeEnter(e)) e.preventDefault();
           }}
-          placeholder={t("video.assistantPlaceholder")}
+          placeholder={t(busy ? "assistant.queuePlaceholder" : "video.assistantPlaceholder")}
           aria-label={t("video.assistant")}
           className="min-w-0 flex-1 rounded-full bg-sand-100 px-4 py-2 text-[13px] outline-none placeholder:text-sand-500"
         />
+        {/* While an answer runs the button is Stop, or Queue once a message is
+            composed (SPEC.md §7). */}
         <button
           type="submit"
-          data-track="video-assistant-send"
+          data-track={busy && input.trim() ? "assistant-queue" : "video-assistant-send"}
           onClick={(e) => {
-            if (!busy) return;
+            if (!busy || input.trim()) return;
             e.preventDefault();
             stopSend();
           }}
           disabled={!busy && input.trim() === ""}
-          data-tip={busy ? t("video.stopAssistant") : undefined}
-          aria-label={busy ? t("video.stopAssistant") : undefined}
+          data-tip={busy ? t(input.trim() ? "assistant.queueTitle" : "video.stopAssistant") : undefined}
+          aria-label={busy && !input.trim() ? t("video.stopAssistant") : undefined}
           className="rounded-full bg-clay px-4 py-2 text-xs font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
         >
-          {busy ? <StopIcon size={12} /> : t("video.assistantSend")}
+          {busy ? (input.trim() ? t("assistant.queue") : <StopIcon size={12} />) : t("video.assistantSend")}
         </button>
       </form>
     </div>

@@ -63,6 +63,7 @@ import { setSideChatOpen } from "@/lib/assistant/side-chat-open";
 import type { Person } from "@/lib/person";
 import { ThinkingChips, useThinking } from "@/components/assistant/thinking-chips";
 import { useWeb, WebChip } from "@/components/assistant/web-chip";
+import { QueuedList, queuedKey, type QueuedText } from "@/components/assistant/queued-list";
 import { useLang, useT } from "@/components/lang-provider";
 import { clipWords } from "@/lib/markdown-preview";
 import { AnnotationGrip } from "@/components/outline/annotation-grip";
@@ -391,8 +392,9 @@ type ToolChat = {
   chatOpen: boolean; // the box is open: Continue was pressed, or turns exist
   input: string;
   busy: boolean; // a turn is in flight
+  queue: QueuedText[]; // messages sent while a turn runs; they go out in order (SPEC.md §7)
 };
-const NO_CHAT: ToolChat = { conversation: [], chatOpen: false, input: "", busy: false };
+const NO_CHAT: ToolChat = { conversation: [], chatOpen: false, input: "", busy: false, queue: [] };
 
 // The card EXPLAIN and ANALYZE stream into (SPEC.md §4, §6): one card, the
 // kind sets its title and glyph.
@@ -461,6 +463,9 @@ type AssistantChat = {
   sideChats?: ReaderSideChat[];
   openKey?: string | null;
   quote?: string | null;
+  // Messages sent while an answer runs (SPEC.md §7): each goes out, in
+  // order, into the thread that was open when it was queued.
+  queue?: (QueuedText & { openKey: string | null })[];
 };
 type ReaderSideChat = {
   key: string;
@@ -4262,6 +4267,28 @@ export function ReaderInteractions({
 
   // The side chat on screen in the card, and the note the open thread saves
   // on: what a comment is written under.
+  // The queues drain one message per finished answer, in order — after a
+  // Stop too: a queued message was sent to go out next (SPEC.md §7).
+  const chatQueueHead = assistantChat && !assistantChat.busy ? (assistantChat.queue?.[0] ?? null) : null;
+  useEffect(() => {
+    if (chatQueueHead) void sendChatMessage(chatQueueHead);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chatQueueHead]);
+  const explainQueueHead = bubble && !bubble.busy && !bubble.streaming ? (bubble.queue[0] ?? null) : null;
+  useEffect(() => {
+    if (explainQueueHead) void sendToolMessage("explain", explainQueueHead);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [explainQueueHead]);
+  const simplifyQueueHead = simplifyCard && !simplifyCard.busy && !simplifyCard.streaming ? (simplifyCard.queue[0] ?? null) : null;
+  useEffect(() => {
+    if (simplifyQueueHead) void sendToolMessage("simplify", simplifyQueueHead);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [simplifyQueueHead]);
+  const removeQueuedChat = (key: string) =>
+    setAssistantChat((c) => (c ? { ...c, queue: (c.queue ?? []).filter((q) => q.key !== key) } : c));
+  const removeQueuedTool = (kind: "explain" | "simplify", key: string) =>
+    setToolChat(kind, (c) => ({ queue: c.queue.filter((q) => q.key !== key) }));
+
   const chatOpenSide = assistantChat?.openKey
     ? ((assistantChat.sideChats ?? []).find((s) => s.key === assistantChat.openKey) ?? null)
     : null;
@@ -4402,26 +4429,44 @@ export function ReaderInteractions({
     }
   }
 
-  async function sendChatMessage() {
+  async function sendChatMessage(queued?: QueuedText & { openKey: string | null }) {
     const chat = assistantChat;
-    const typed = chat?.input.trim();
-    if (!chat || !typed || chat.busy) return;
+    const typed = queued ? queued.content : chat?.input.trim();
+    if (!chat || !typed) return;
+    // While an answer runs the message queues (SPEC.md §7); a queued message
+    // sends once the answer lands, into the thread it was queued for.
+    if (chat.busy && !queued) {
+      const content = chat.quote ? quoteMessage(chat.quote, typed) : typed;
+      if (chat.quote) clearAnswerSelection();
+      setAssistantChat((c) =>
+        c
+          ? {
+              ...c,
+              input: "",
+              quote: null,
+              queue: [...(c.queue ?? []), { key: queuedKey(), content, openKey: c.openKey ?? null }],
+            }
+          : c,
+      );
+      return;
+    }
+    if (chat.busy) return;
     // The quote the reader took from an answer rides in the message.
-    const text = chat.quote ? quoteMessage(chat.quote, typed) : typed;
-    const openKey = chat.openKey ?? null;
+    const text = queued ? queued.content : chat.quote ? quoteMessage(chat.quote, typed) : typed;
+    const openKey = queued ? queued.openKey : (chat.openKey ?? null);
     const open = openKey ? (chat.sideChats ?? []).find((s) => s.key === openKey) ?? null : null;
     if (openKey && !open) return;
     const history = open ? open.messages : chat.messages;
     // A side chat needs the conversation it branched from; without a saved
     // note there is nothing to branch from.
     if (open && !chat.noteId) return;
-    if (chat.quote) clearAnswerSelection();
+    if (chat.quote && !queued) clearAnswerSelection();
+    const queue = queued ? (chat.queue ?? []).filter((q) => q.key !== queued.key) : chat.queue;
     const pushUser = (c: AssistantChat): AssistantChat =>
       open
         ? {
             ...c,
-            input: "",
-            quote: null,
+            ...(queued ? { queue } : { input: "", quote: null }),
             busy: true,
             sideChats: (c.sideChats ?? []).map((s) =>
               s.key === open.key ? { ...s, messages: [...s.messages, { role: "user", content: text }] } : s,
@@ -4429,8 +4474,7 @@ export function ReaderInteractions({
           }
         : {
             ...c,
-            input: "",
-            quote: null,
+            ...(queued ? { queue } : { input: "", quote: null }),
             busy: true,
             messages: [...c.messages, { role: "user", content: text }],
           };
@@ -4526,18 +4570,24 @@ export function ReaderInteractions({
     toolChatAbortRef.current[kind] = null;
     setToolChat(kind, () => ({ busy: false }));
   }
-  async function sendToolMessage(kind: "explain" | "simplify") {
+  async function sendToolMessage(kind: "explain" | "simplify", queued?: QueuedText) {
     if (!ultra) {
       showToast(t("reader.continueNeedsUltra"), plansAction);
       return;
     }
     const card = kind === "explain" ? bubble : simplifyCard;
-    const text = card?.input.trim();
-    if (!card || !text || card.busy || card.streaming || !card.noteId) return;
+    const text = queued ? queued.content : card?.input.trim();
+    if (!card || !text || !card.noteId) return;
+    // While a turn runs the message queues (SPEC.md §7).
+    if ((card.busy || card.streaming) && !queued) {
+      setToolChat(kind, (c) => ({ input: "", queue: [...c.queue, { key: queuedKey(), content: text }] }));
+      return;
+    }
+    if (card.busy || card.streaming) return;
     const noteId = card.noteId;
     const history = card.conversation;
     setToolChat(kind, (c) => ({
-      input: "",
+      ...(queued ? { queue: c.queue.filter((q) => q.key !== queued.key) } : { input: "" }),
       busy: true,
       chatOpen: true,
       conversation: [...c.conversation, { role: "user", content: text }],
@@ -5479,6 +5529,11 @@ function blockFormatKind(
   // A tool conversation's turns, under the output inside the card's scroll
   // body (SPEC.md §21): the reader's messages as chat bubbles, the assistant's
   // as markdown, the same shapes as the assistant card.
+  // The kind of a tool card, for its queue: the explain bubble, else Simplify.
+  const kindOfCard = (card: ToolChat): "explain" | "simplify" => (card === bubble ? "explain" : "simplify");
+  // The queued messages of the thread on screen: the side chat's, or the
+  // conversation's own.
+  const chatQueueShown = (chat: AssistantChat) => (chat.queue ?? []).filter((q) => q.openKey === (chat.openKey ?? null));
   const toolChatTurns = (card: ToolChat) =>
     card.conversation.length > 0 || card.busy ? (
       <div className="mt-3 flex flex-col gap-2 border-t border-line pt-3">
@@ -5497,6 +5552,7 @@ function blockFormatKind(
           ),
         )}
         {card.busy && <ThinkingIndicator className="py-0.5 text-[12px]" />}
+        <QueuedList items={card.queue} onRemove={(key) => removeQueuedTool(kindOfCard(card), key)} />
       </div>
     ) : null;
   // The card's foot: Continue, which opens the box, or the box itself once
@@ -5568,24 +5624,26 @@ function blockFormatKind(
               void sendToolMessage(kind);
             }
           }}
-          placeholder={t("reader.continuePlaceholder")}
+          placeholder={t(card.busy ? "assistant.queuePlaceholder" : "reader.continuePlaceholder")}
           aria-label={t("reader.messageAssistant")}
           className="field-sizing-content max-h-40 min-h-8 flex-1 resize-none rounded-xl bg-sand-100 px-3 py-1.5 text-[12.5px] outline-none placeholder:text-sand-500"
         />
+        {/* While a turn runs the button is Stop, or Queue once a message is
+            composed (SPEC.md §7). */}
         <button
           type="submit"
-          data-track={`${tool}-continue-send`}
+          data-track={card.busy && card.input.trim() ? "assistant-queue" : `${tool}-continue-send`}
           onClick={(e) => {
-            if (!card.busy) return;
+            if (!card.busy || card.input.trim()) return;
             e.preventDefault();
             stopToolChat(kind);
           }}
           disabled={!card.busy && !card.input.trim()}
-          data-tip={card.busy ? t("reader.stopAssistant") : t("reader.sendTitle")}
-          aria-label={card.busy ? t("reader.stopAssistant") : undefined}
+          data-tip={card.busy ? t(card.input.trim() ? "assistant.queueTitle" : "reader.stopAssistant") : t("reader.sendTitle")}
+          aria-label={card.busy && !card.input.trim() ? t("reader.stopAssistant") : undefined}
           className="rounded-full bg-clay px-3 py-1.5 text-[11px] font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
         >
-          {card.busy ? <StopIcon size={11} /> : t("reader.send")}
+          {card.busy ? (card.input.trim() ? t("assistant.queue") : <StopIcon size={11} />) : t("reader.send")}
         </button>
       </form>
     );
@@ -5652,24 +5710,26 @@ function blockFormatKind(
             void sendChatMessage();
           }
         }}
-        placeholder={t("reader.replyPlaceholder")}
+        placeholder={t(chat.busy ? "assistant.queuePlaceholder" : "reader.replyPlaceholder")}
         aria-label={t("reader.messageAssistant")}
         className="field-sizing-content max-h-40 min-h-8 flex-1 resize-none rounded-xl bg-sand-100 px-3 py-1.5 text-[12.5px] outline-none placeholder:text-sand-500"
       />
+      {/* While an answer runs the button is Stop, or Queue once a message is
+          composed (SPEC.md §7). */}
       <button
         type="submit"
-        data-track="assistant-card-send"
+        data-track={chat.busy && chat.input.trim() ? "assistant-queue" : "assistant-card-send"}
         onClick={(e) => {
-          if (!chat.busy) return;
+          if (!chat.busy || chat.input.trim()) return;
           e.preventDefault();
           stopAssistantChat();
         }}
         disabled={!chat.busy && !chat.input.trim()}
-        data-tip={chat.busy ? t("reader.stopAssistant") : t("reader.sendTitle")}
-        aria-label={chat.busy ? t("reader.stopAssistant") : undefined}
+        data-tip={chat.busy ? t(chat.input.trim() ? "assistant.queueTitle" : "reader.stopAssistant") : t("reader.sendTitle")}
+        aria-label={chat.busy && !chat.input.trim() ? t("reader.stopAssistant") : undefined}
         className="rounded-full bg-clay px-3 py-1.5 text-[11px] font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
       >
-        {chat.busy ? <StopIcon size={11} /> : t("reader.send")}
+        {chat.busy ? (chat.input.trim() ? t("assistant.queue") : <StopIcon size={11} />) : t("reader.send")}
       </button>
     </form>
     )}
@@ -7114,6 +7174,7 @@ function blockFormatKind(
               ),
             )}
             {assistantChat.busy && <ThinkingIndicator className="py-0.5 text-[12px]" />}
+            <QueuedList items={chatQueueShown(assistantChat)} onRemove={removeQueuedChat} />
           </div>
           {assistantChatFoot(assistantChat, "flex items-end gap-1.5 px-3 pb-3", "px-3 pb-1.5")}
         </div>
@@ -7260,6 +7321,7 @@ function blockFormatKind(
           icon={<SparkleIcon size={12} />}
           messages={chatOpenSide ? chatOpenSide.messages : assistantChat.messages}
           busy={assistantChat.busy}
+          after={<QueuedList items={chatQueueShown(assistantChat)} onRemove={removeQueuedChat} />}
           foot={assistantChatFoot(assistantChat, "flex items-end gap-1.5", "pb-1.5")}
           onClose={closeConversationView}
         />
@@ -7281,6 +7343,7 @@ function blockFormatKind(
           output={bubble.text}
           messages={bubble.conversation}
           busy={bubble.busy}
+          after={<QueuedList items={bubble.queue} onRemove={(key) => removeQueuedTool("explain", key)} />}
           foot={
             bubble.declined === null ? toolChatFoot("explain", bubble, bubble.kind, true) : null
           }
@@ -7294,6 +7357,7 @@ function blockFormatKind(
           output={stripSimplifyMarkers(simplifyCard.text)}
           messages={simplifyCard.conversation}
           busy={simplifyCard.busy}
+          after={<QueuedList items={simplifyCard.queue} onRemove={(key) => removeQueuedTool("simplify", key)} />}
           foot={toolChatFoot("simplify", simplifyCard, "simplify", true)}
           onClose={closeConversationView}
         />

@@ -20,6 +20,7 @@ export function ConversationView({
   output,
   messages,
   busy = false,
+  after,
   foot,
   onClose,
 }: {
@@ -28,6 +29,7 @@ export function ConversationView({
   output?: string | null; // a tool's output, read as the conversation's first message
   messages: ChatTurn[];
   busy?: boolean;
+  after?: React.ReactNode; // under the turns: the queue (SPEC.md §7)
   foot?: React.ReactNode; // the box; a stored conversation read from a panel has none
   onClose: () => void;
 }) {
@@ -101,6 +103,7 @@ export function ConversationView({
             ),
           )}
           {busy && <ThinkingIndicator className="text-[12.5px]" />}
+          {after}
         </div>
       </div>
       {foot && (
