@@ -353,10 +353,11 @@ export type GraphEdgeLink = {
 };
 
 /** One undirected pair of documents. Edge width and clay depth scale with
-    the total; a pair connected only by recommended links draws dashed. */
+    the total; a pair connected only by recommended links draws dashed.
+    a === b: the links inside one document, drawn as a loop on its node. */
 export type GraphEdge = {
   a: string; // document id
-  b: string; // document id
+  b: string; // document id; equal to a for a loop
   accepted: number;
   recommended: number;
   links: GraphEdgeLink[]; // accepted first, oldest first
