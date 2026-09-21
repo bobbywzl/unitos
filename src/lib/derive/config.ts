@@ -12,8 +12,7 @@ import type { AssistantAction } from "@/lib/types";
 // Both run through the gateway (lib/gateway.ts): without it, a GLM id
 // resolves to Kimi K3 (lib/models.ts). Kimi K3, Moonshot AI's flagship,
 // keeps what GLM 5.3 cannot do: it reads images (VISION_MODEL: a circled
-// figure, a picture in the assistant, a video frame) and runs Moonshot's
-// web-search tool (WEB_SEARCH_MODEL). The handwritten passes and Visualize
+// figure, a picture in the assistant, a video frame). The handwritten passes and Visualize
 // run on Claude Opus 5 (HANDWRITTEN_MODEL and VISUALIZE_MODEL below). The
 // clients live in lib/kimi.ts (the OpenAI-compatible client: Kimi, and
 // under the gateway GLM) and lib/claude.ts, not here: client components
@@ -27,9 +26,11 @@ export const CLAUDE_OPUS_5 = "claude-opus-5";
 // a figure, a page image, a picture attached to the assistant, a video
 // frame — goes to Kimi K3 instead, whatever the feature's model.
 export const VISION_MODEL = KIMI_K3;
-// The web-search tool is Moonshot's (lib/kimi.ts), so the assistant with
-// Web on runs on Kimi K3.
-export const WEB_SEARCH_MODEL = KIMI_K3;
+// The assistant with Web on runs on GLM 5.3, the same model as with Web
+// off. The search follows the model that answers (lib/kimi.ts): Z.ai's Web
+// Search API under GLM, Moonshot's web-search formula under Kimi K3 — which
+// is what a GLM id resolves to without the gateway.
+export const WEB_SEARCH_MODEL = GLM_5_3;
 // The voice command (SPEC.md §6) runs on Claude Sonnet 5 (VOICE_MODEL below).
 export const CLAUDE_SONNET_5 = "claude-sonnet-5";
 // Gemini's flash model reads video (SPEC.md §11): transcription and clip

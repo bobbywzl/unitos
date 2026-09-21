@@ -7,10 +7,10 @@ fallbacks in `config.yaml`. The admin console's Gateway page reads all of it.
 
 What goes through it: GLM 5.3 and GLM 5.3 Flash (the reader's tools, the
 assistant, Stitch, the readings), Kimi (Extract, the parse passes, calls that
-carry an image, the assistant with Web on), Claude (the handwritten passes and
+carry an image), Claude (the handwritten passes and
 Visualize), Gemini (video), Groq and OpenAI Whisper (transcription), OpenAI
 TTS (voice), DeepL (translation), Jev (TypeSafe's decision model, through
-OpenRouter; `lib/jev.ts`), Moonshot's web search, and the model lists
+OpenRouter; `lib/jev.ts`), Z.ai's and Moonshot's web search, and the model lists
 the bimonthly model update reads. `src/lib/gateway.ts` names the route each
 client takes. GLM has no direct client: without the gateway, Kimi K3 takes
 its calls.

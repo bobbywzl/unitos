@@ -36,7 +36,7 @@ import { corpusSystem, documentSystem } from "@/lib/digest/render";
 import { checkOutput } from "@/lib/derive/check";
 import { currentLang, serverT } from "@/lib/i18n/server";
 import { gatewayHeaders } from "@/lib/gateway";
-import { kimi, kimiConfigured, kimiOptions, WEB_SEARCH_MAX_USES, WEB_SEARCH_TOOL, WEB_SEARCH_USD, webSearchTool } from "@/lib/kimi";
+import { kimi, kimiConfigured, kimiOptions, WEB_SEARCH_MAX_USES, WEB_SEARCH_TOOL, webSearchTool, webSearchUsd } from "@/lib/kimi";
 import { resolveModelId } from "@/lib/models";
 import { addTokens, computeCostUsd, recordUsage, sdkTokens, type TokenCounts } from "@/lib/usage";
 import type { TFunc } from "@/lib/i18n/dictionaries";
@@ -262,10 +262,11 @@ async function handle(req: Request, t: TFunc) {
   const model = await kimi(chatModelId);
 
   if (data.task === "ask") {
-    // Web access (SPEC.md §7): the model calls Moonshot's web-search tool
-    // (lib/kimi.ts), reads the result, and answers with the pages it used as
-    // links; the answer streams as before.
+    // Web access (SPEC.md §7): the model calls the web-search tool of its
+    // provider (lib/kimi.ts), reads the result, and answers with the pages
+    // it used as links; the answer streams as before.
     const web = data.web === true;
+    const searchUsd = webSearchUsd(usageMeta.model);
     const turns = messages.length - 2;
     let searches = 0;
     const result = streamText({
@@ -277,7 +278,7 @@ async function handle(req: Request, t: TFunc) {
       messages,
       ...(web
         ? {
-            tools: { [WEB_SEARCH_TOOL]: webSearchTool },
+            tools: { [WEB_SEARCH_TOOL]: webSearchTool(usageMeta.model) },
             stopWhen: isStepCount(WEB_SEARCH_MAX_USES + 1),
           }
         : {}),
@@ -290,7 +291,7 @@ async function handle(req: Request, t: TFunc) {
             `cacheWrite=${usage.inputTokenDetails.cacheWriteTokens ?? 0} output=${usage.outputTokens ?? 0}`,
         );
         const tokens = sdkTokens(usage);
-        recordUsage(usageMeta, tokens, computeCostUsd(usageMeta.model, tokens) + searches * WEB_SEARCH_USD);
+        recordUsage(usageMeta, tokens, computeCostUsd(usageMeta.model, tokens) + searches * searchUsd);
       },
       // Stop (SPEC.md §6): the steps that finished were billed, so they are
       // recorded. A step cut off mid-answer reports no usage at all — the
@@ -301,7 +302,7 @@ async function handle(req: Request, t: TFunc) {
           (sum, step) => addTokens(sum, sdkTokens(step.usage)),
           {},
         );
-        recordUsage(usageMeta, tokens, computeCostUsd(usageMeta.model, tokens) + searches * WEB_SEARCH_USD);
+        recordUsage(usageMeta, tokens, computeCostUsd(usageMeta.model, tokens) + searches * searchUsd);
       },
     });
     // A model failure must reach the reader: the stream ends with
