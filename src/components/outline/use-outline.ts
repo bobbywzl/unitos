@@ -11,6 +11,7 @@ import type { QuoteDrag } from "@/lib/quote-drag";
 import type { NotebookView, NoteView, SectionView } from "@/lib/types";
 import { useT } from "@/components/lang-provider";
 import { useCollapsedView, type CollapsedView } from "@/components/use-collapsed-view";
+import { flushNoteDrafts, replaceNoteDraft } from "@/components/outline/use-note-draft";
 
 // The floating card: one note taken out of the tray, over the article
 // (floating-note-editor.tsx). It opens in its draggable mode; the pencil
@@ -471,6 +472,9 @@ export function useOutline(notebook: NotebookView, canEdit = true) {
       if (notes.some((n) => n.status !== "ACCEPTED")) return null;
       const ids = sourceIds.filter((id) => id !== targetId);
       if (ids.length === 0) return null;
+      // A note open in its editor — the target or a source — saves its draft
+      // first, so the merge reads what is on screen (use-note-draft.ts).
+      await flushNoteDrafts([targetId, ...ids]);
       // Optimistic: the notes fold into the target instantly. Join text puts
       // the notes in the order they stand in — the note on top first
       // (lib/notes/join.ts); an annotation's text lands with the answer. The
@@ -506,7 +510,11 @@ export function useOutline(notebook: NotebookView, canEdit = true) {
         refresh();
         const undoId = typeof merged?.undoId === "string" ? merged.undoId : null;
         if (undoId) setLastMerge({ undoId, targetId, count: ids.length + 1 });
-        return { content: merged?.content ?? joined, undoId };
+        const content = merged?.content ?? joined;
+        // The target open in its editor: the merged text takes the draft's
+        // place, saved and ready to keep editing.
+        if (mode === "join") replaceNoteDraft(targetId, content);
+        return { content, undoId };
       } finally {
         if (mode === "ai") {
           setMergingIds((prev) => {

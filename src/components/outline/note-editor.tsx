@@ -405,7 +405,9 @@ export function NoteEditor({
 
   return (
     <div className={`flex min-h-0 flex-col gap-1.5 ${className}`}>
-      <div className="flex shrink-0 flex-wrap items-center gap-0.5">
+      {/* The bar keeps its press: a hold on a tool never drags the note
+          (lib/hold-drag.ts). */}
+      <div data-no-drag className="flex shrink-0 flex-wrap items-center gap-0.5">
         <button
           type="button"
           data-track="note-undo"

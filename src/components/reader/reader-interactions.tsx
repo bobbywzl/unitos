@@ -1165,6 +1165,9 @@ export function ReaderInteractions({
     text: string,
     fallback: string,
     picture?: string,
+    // The turns the card's conversation holds (SPEC.md §21): a drop brings
+    // the conversation's log into the note under the row.
+    turns = 0,
   ): AnnotationReference | null =>
     noteId
       ? {
@@ -1173,6 +1176,7 @@ export function ReaderInteractions({
           sourceId,
           label: referenceLabel(text, fallback),
           ...(picture ? { picture } : {}),
+          ...(turns > 0 ? { turns } : {}),
         }
       : null;
   const annotationGrip = (reference: AnnotationReference | null) =>
@@ -5866,6 +5870,7 @@ function blockFormatKind(
           t(bubble.kind === "analyze" ? "reader.analysis" : bubble.kind === "visualize" ? "reader.visualization" : "reader.explanation"),
           // A visualization brings its picture into the note.
           bubble.kind === "visualize" ? bubble.text : undefined,
+          bubble.conversation.length,
         )
       : null;
   const simplifyReference =
@@ -5875,6 +5880,8 @@ function blockFormatKind(
           simplifyCard.noteId ? sourceIdOfNote(simplifyCard.noteId) : null,
           simplifyCard.text,
           t("reader.simplified"),
+          undefined,
+          simplifyCard.conversation.length,
         )
       : null;
   const assistantReference = assistantChat
@@ -5883,6 +5890,8 @@ function blockFormatKind(
         assistantChat.noteId ? sourceIdOfNote(assistantChat.noteId) : null,
         assistantChat.messages.map((m) => m.content).join(" "),
         t("reader.assistant"),
+        undefined,
+        assistantChat.messages.length,
       )
     : null;
   return (

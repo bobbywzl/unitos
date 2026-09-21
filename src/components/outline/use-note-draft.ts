@@ -20,6 +20,31 @@ import type { SaveState } from "@/components/outline/save-state";
 // reverted draft and writes it back over the auto-saved state. The tray card
 // and the floating card share this hook; the draft moves between them as
 // `initial`.
+//
+// A merge reads the notes as they are stored, and an open editor may hold
+// words the auto-save has not sent yet. So every open editor registers
+// itself here, and the merge (use-outline.ts) flushes the drafts of the
+// notes it joins before it runs, then puts the merged text into the target's
+// editor, saved and ready to keep editing (SPEC.md §6).
+type DraftHandle = {
+  /** Save the draft now, when it differs from what was saved last. */
+  flush: () => Promise<void>;
+  /** Put `content` into the editor as its saved draft. */
+  replace: (content: string) => void;
+};
+const openDrafts = new Map<string, DraftHandle>();
+
+/** Save the open drafts of these notes, so a merge reads what is on screen. */
+export async function flushNoteDrafts(noteIds: string[]): Promise<void> {
+  await Promise.all(noteIds.map((id) => openDrafts.get(id)?.flush()));
+}
+
+/** Put `content` into the note's open editor, as saved: the merged text takes
+    the draft's place. Nothing happens when the note has no open editor. */
+export function replaceNoteDraft(noteId: string, content: string) {
+  openDrafts.get(noteId)?.replace(content);
+}
+
 export function useNoteDraft({
   noteId,
   original,
@@ -89,6 +114,39 @@ export function useNoteDraft({
       clearDirty(noteId);
     };
   }, [draft, active, canEdit, noteId]);
+
+  useEffect(() => {
+    if (!active || !canEdit) return;
+    const handle: DraftHandle = {
+      async flush() {
+        const trimmed = draftRef.current.trim();
+        if (!trimmed || trimmed === lastSavedRef.current) return;
+        const before = lastSavedRef.current;
+        lastSavedRef.current = trimmed;
+        try {
+          await api(`/api/notes/${noteId}`, "PATCH", { content: trimmed });
+          confirmNoteDraft(noteId, trimmed);
+          setConfirmed(trimmed);
+        } catch (err) {
+          if (lastSavedRef.current === trimmed) lastSavedRef.current = before;
+          setFailed(trimmed);
+          throw err;
+        }
+      },
+      replace(content) {
+        draftRef.current = content;
+        lastSavedRef.current = content.trim();
+        setDraft(content);
+        confirmNoteDraft(noteId, content.trim());
+        setConfirmed(content.trim());
+        setFailed(null);
+      },
+    };
+    openDrafts.set(noteId, handle);
+    return () => {
+      if (openDrafts.get(noteId) === handle) openDrafts.delete(noteId);
+    };
+  }, [active, canEdit, noteId]);
 
   useEffect(() => {
     if (!active || !canEdit) return;

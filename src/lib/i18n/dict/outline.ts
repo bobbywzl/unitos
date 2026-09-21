@@ -103,6 +103,9 @@ const en = {
   // notes full page (annotation-side.tsx).
   annotationReference: "Annotation",
   annotationReferenceTitle: "Open this annotation",
+  // The log lines an annotation reference lands (lib/annotation-reference.ts): who said each
+  referenceYou: "You",
+  referenceAssistant: "Assistant",
   annotationJump: "Jump to this annotation in the reader",
   annotationLoadFailed: "Could not load the annotation",
   pin: "Pin",
@@ -273,6 +276,8 @@ const zh: Record<keyof typeof en, string> = {
   dropAnnotation: "松开即把这条批注的批注链接放进笔记",
   annotationReference: "批注",
   annotationReferenceTitle: "打开这条批注",
+  referenceYou: "你",
+  referenceAssistant: "助手",
   annotationJump: "跳到阅读器中的这条批注",
   annotationLoadFailed: "无法加载这条批注",
   pin: "置顶",
