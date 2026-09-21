@@ -11,6 +11,7 @@ import {
   type GatewaySpend,
   type GatewayTagSpend,
 } from "@/lib/gateway-admin";
+import { FIXED_COSTS, MONTHS_PER_YEAR, fixedCostsPerMonth } from "@/lib/fixed-costs";
 import { providerOf } from "@/lib/usage";
 import type { TFunc } from "@/lib/i18n/dictionaries";
 import { serverT } from "@/lib/i18n/server";
@@ -180,6 +181,12 @@ export default async function AdminUsagePage() {
   const emailOf = new Map(users.map((u) => [u.id, u.email]));
   const calls = totals._count;
 
+  // The spending estimate: the AI cost of the last 30 days as one month —
+  // under the gateway, the gateway's spend plus what it does not price;
+  // else the app's own count — plus the fixed costs (lib/fixed-costs.ts).
+  const aiPerMonth = gateway && spend?.ok ? spend.data.totalUsd + outsideUsd : (cost30._sum.costUsd ?? 0);
+  const spendingPerMonth = aiPerMonth + fixedCostsPerMonth();
+
   // Fill the trailing 30 calendar days so quiet days render as gaps.
   const costByDay = new Map(byDayRaw.map((d) => [d.day.toISOString().slice(0, 10), d.cost]));
   const days = Array.from({ length: 30 }, (_, i) => {
@@ -204,6 +211,12 @@ export default async function AdminUsagePage() {
         <h1 className="text-[28px]">{t("admin.usage")}</h1>
         <p className="text-sm text-sand-600">{gateway ? t("admin.usageGatewayDesc") : t("admin.usageDesc")}</p>
       </header>
+
+      <div className="mb-4 grid grid-cols-2 gap-3">
+        <Tile label={t("admin.usageSpending") + " " + t("admin.usageColPerMonth")} value={fmtUsd(spendingPerMonth)} />
+        <Tile label={t("admin.usageSpending") + " " + t("admin.usageColPerYear")} value={fmtUsd(spendingPerMonth * MONTHS_PER_YEAR)} />
+      </div>
+      <SpendingTable t={t} aiPerMonth={aiPerMonth} />
 
       {gateway && spend && !spend.ok && <p className="mb-4 text-xs text-red-600">{spend.error}</p>}
       {gateway && spend?.ok ? (
@@ -352,6 +365,45 @@ export default async function AdminUsagePage() {
         </div>
       )}
     </main>
+  );
+}
+
+// The spending estimate table: the AI cost as one month, one row per fixed
+// cost, and the total, each per month and per year.
+function SpendingTable({ t, aiPerMonth }: { t: TFunc; aiPerMonth: number }) {
+  const rows = [
+    { label: t("admin.usageSpendingAi"), usdPerMonth: aiPerMonth },
+    ...FIXED_COSTS,
+  ];
+  const total = aiPerMonth + fixedCostsPerMonth();
+  return (
+    <div className="mb-4 overflow-x-auto rounded-2xl bg-card p-4 shadow-soft">
+      <p className="mb-2 text-[11px] font-bold tracking-[0.08em] text-sand-600 uppercase">{t("admin.usageSpending")}</p>
+      <p className="mb-2 text-xs text-sand-500">{t("admin.usageSpendingHint")}</p>
+      <table className="w-full text-xs">
+        <thead>
+          <tr className="border-b border-line text-left text-[10px] tracking-wider text-sand-500 uppercase">
+            <th className="py-2 font-semibold">{t("admin.usageColItem")}</th>
+            <th className="px-3 py-2 text-right font-semibold">{t("admin.usageColPerMonth")}</th>
+            <th className="py-2 text-right font-semibold">{t("admin.usageColPerYear")}</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-line">
+          {rows.map((row) => (
+            <tr key={row.label}>
+              <td className="py-2 text-sand-800">{row.label}</td>
+              <td className="px-3 py-2 text-right tabular-nums">{fmtUsd(row.usdPerMonth)}</td>
+              <td className="py-2 text-right tabular-nums">{fmtUsd(row.usdPerMonth * MONTHS_PER_YEAR)}</td>
+            </tr>
+          ))}
+          <tr>
+            <td className="py-2 font-semibold text-sand-800">{t("admin.usageSpendingTotal")}</td>
+            <td className="px-3 py-2 text-right font-semibold tabular-nums">{fmtUsd(total)}</td>
+            <td className="py-2 text-right font-semibold tabular-nums">{fmtUsd(total * MONTHS_PER_YEAR)}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
   );
 }
 
