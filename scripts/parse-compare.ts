@@ -6,13 +6,13 @@
 // model kept and the other dropped, where the heading levels and layout
 // roles disagree, whether every figure with media survived, and how long
 // the passes took. No database is needed and nothing is stored. Usage:
-//   npx tsx scripts/parse-compare.ts <url> [<url> …] [--a claude-opus-5:high] [--b kimi-k3:high]
+//   npx tsx scripts/parse-compare.ts <url> [<url> …] [--a claude-opus-5-5:high] [--b kimi-k3:high]
 // Keys: ANTHROPIC_API_KEY for a claude- id, MOONSHOT_API_KEY for any other.
 // The report prints and lands under .eval/parse-compare/<stamp>.md.
 import "./eval/env";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { CLAUDE_OPUS_5, KIMI_K3 } from "@/lib/derive/config";
+import { CLAUDE_OPUS_5_5, KIMI_K3 } from "@/lib/derive/config";
 import { hasMedia } from "@/lib/parse/figure-audit";
 import { fetchPage } from "@/lib/parse/fetch-page";
 import { refineUrlBlocks } from "@/lib/parse/ingest";
@@ -27,7 +27,7 @@ function choiceOf(spec: string): ParseModel {
 
 function args(argv: string[]): { urls: string[]; a: ParseModel; b: ParseModel } {
   const urls: string[] = [];
-  let a = `${CLAUDE_OPUS_5}:high`;
+  let a = `${CLAUDE_OPUS_5_5}:high`;
   let b = `${KIMI_K3}:high`;
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === "--a") a = argv[++i];

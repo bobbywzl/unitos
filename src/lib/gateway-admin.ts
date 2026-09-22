@@ -165,7 +165,7 @@ export type GatewayRouter = {
 };
 
 // The router's fallbacks come as a list of one-key objects:
-// [{"moonshot/kimi-k3": ["anthropic/claude-opus-5"]}].
+// [{"moonshot/kimi-k3": ["anthropic/claude-opus-5-5"]}].
 function readFallbacks(value: unknown): GatewayFallback[] {
   if (!Array.isArray(value)) return [];
   const out: GatewayFallback[] = [];

@@ -1,4 +1,4 @@
-import { CLAUDE_FABLE_5_1, CLAUDE_OPUS_5, CLAUDE_SONNET_5, GEMINI_FLASH, GLM_5_3, GLM_5_3_FLASH, KIMI_K3 } from "@/lib/derive/config";
+import { CLAUDE_FABLE_5_1, CLAUDE_OPUS_5_5, CLAUDE_SONNET_5, GEMINI_FLASH, GLM_5_3, GLM_5_3_FLASH, KIMI_K3 } from "@/lib/derive/config";
 import { db } from "@/lib/db";
 import { gatewayConfigured } from "@/lib/gateway";
 
@@ -16,7 +16,7 @@ export const MODEL_ROLES: Record<ModelRole, { provider: string; defaultId: strin
   glmFlash: { provider: "Z.ai", defaultId: GLM_5_3_FLASH },
   kimi: { provider: "Moonshot AI", defaultId: KIMI_K3 },
   claude: { provider: "Anthropic", defaultId: CLAUDE_FABLE_5_1 },
-  opus: { provider: "Anthropic", defaultId: CLAUDE_OPUS_5 },
+  opus: { provider: "Anthropic", defaultId: CLAUDE_OPUS_5_5 },
   sonnet: { provider: "Anthropic", defaultId: CLAUDE_SONNET_5 },
   gemini: { provider: "Google", defaultId: GEMINI_FLASH },
 };

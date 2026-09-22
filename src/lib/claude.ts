@@ -45,7 +45,7 @@ export function claudeBaseUrl(): string {
 let provider: AnthropicProvider | null = null;
 
 /** The model to call. The provider is built once per process, on first use.
-    A role's default id (CLAUDE_OPUS_5, lib/models.ts) resolves to the
+    A role's default id (CLAUDE_OPUS_5_5, lib/models.ts) resolves to the
     role's current id
     — the newest version the bimonthly model update found (lib/models.ts);
     the returned model's modelId is the id called. */

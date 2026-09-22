@@ -23,7 +23,7 @@ export type FigureImage = { bytes: Uint8Array; mediaType: string };
 /** The figure's visual, and whether it is the whole PDF page it sits on. */
 export type FigureVisual = { image: FigureImage; page: boolean };
 
-// An SVG chart's source goes whole to Claude Opus 5 (SVG_CHART_MODEL):
+// An SVG chart's source goes whole to Claude Opus 5.5 (SVG_CHART_MODEL):
 // 200,000 characters is about 60,000 tokens, well inside its window.
 const SVG_SOURCE_MAX = 200_000;
 const IMAGE_MAX_BYTES = 4_500_000; // the API caps an image at 5 MB

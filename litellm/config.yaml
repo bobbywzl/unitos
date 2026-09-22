@@ -70,7 +70,7 @@ model_list:
       model: "anthropic/*"
       api_key: os.environ/ANTHROPIC_API_KEY
     model_info:
-      health_check_model: anthropic/claude-opus-5
+      health_check_model: anthropic/claude-opus-5-5
 
   # Gemini — video reads take the /gemini pass-through below (the file store
   # is on it too). This route is for a chat call that names gemini/<id>.
@@ -102,14 +102,14 @@ model_list:
 router_settings:
   # A call that fails (an outage, a 5xx after the retries) runs again on the
   # next model: a GLM call on Kimi K3, which takes the same effort levels
-  # and reads what GLM reads; a Kimi call on Claude Opus 5 through the
+  # and reads what GLM reads; a Kimi call on Claude Opus 5.5 through the
   # gateway's own translation. Each step costs more per token, so this only
   # ever runs on a failure; the gateway page's spend by model shows when it
   # did.
   fallbacks:
     - "zai/glm-5.3": ["moonshot/kimi-k3"]
     - "zai/glm-5.3-flash": ["moonshot/kimi-k3"]
-    - "moonshot/kimi-k3": ["anthropic/claude-opus-5"]
+    - "moonshot/kimi-k3": ["anthropic/claude-opus-5-5"]
   num_retries: 2
   retry_after: 2
   # A deployment that fails allowed_fails times in a minute sits out for

@@ -13,7 +13,7 @@ import type { AssistantAction } from "@/lib/types";
 // resolves to Kimi K3 (lib/models.ts). Kimi K3, Moonshot AI's flagship,
 // keeps what GLM 5.3 cannot do: it reads images (VISION_MODEL: a circled
 // figure, a picture in the assistant, a video frame). The handwritten passes and Visualize
-// run on Claude Opus 5 (HANDWRITTEN_MODEL and VISUALIZE_MODEL below). The
+// run on Claude Opus 5.5 (HANDWRITTEN_MODEL and VISUALIZE_MODEL below). The
 // clients live in lib/kimi.ts (the OpenAI-compatible client: Kimi, and
 // under the gateway GLM) and lib/claude.ts, not here: client components
 // import this file.
@@ -21,7 +21,7 @@ export const KIMI_K3 = "kimi-k3";
 export const GLM_5_3 = "glm-5.3";
 export const GLM_5_3_FLASH = "glm-5.3-flash";
 export const CLAUDE_FABLE_5_1 = "claude-fable-5-1";
-export const CLAUDE_OPUS_5 = "claude-opus-5";
+export const CLAUDE_OPUS_5_5 = "claude-opus-5-5";
 // GLM 5.3 takes text alone. A call that carries an image — Circle & ask on
 // a figure, a page image, a picture attached to the assistant, a video
 // frame — goes to Kimi K3 instead, whatever the feature's model.
@@ -61,11 +61,11 @@ export type ClaudeEffort = "low" | "medium" | "high" | "xhigh" | "max";
 
 // An SVG chart (SPEC.md §2): a figure whose media is inline SVG. Wherever
 // a model reads one — Analyze on it, the assistant acting on it — the call
-// goes to Claude Opus 5 with the whole source (lib/derive/svg-chart.ts),
+// goes to Claude Opus 5.5 with the whole source (lib/derive/svg-chart.ts),
 // whatever the feature's model: reading a drawing from its code is where
-// Opus 5 leads, and GLM 5.3 reads it as XML with no picture. High effort,
+// Opus 5.5 leads, and GLM 5.3 reads it as XML with no picture. High effort,
 // not max: a chart of thousands of elements at max outlives the request.
-export const SVG_CHART_MODEL = CLAUDE_OPUS_5;
+export const SVG_CHART_MODEL = CLAUDE_OPUS_5_5;
 export const SVG_CHART_EFFORT: ClaudeEffort = "high";
 
 // Model per derivation type (SPEC.md §2). One place to change. GLM 5.3 for
@@ -87,7 +87,7 @@ export const DERIVATION_MODEL: Record<DerivationType, string> = {
   COMPARE: GLM_5_3,
   ANALYZE: GLM_5_3, // an image attached goes to VISION_MODEL, an SVG chart to SVG_CHART_MODEL (api/derive)
   VOICE: CLAUDE_SONNET_5, // the voice command (SPEC.md §6): VOICE_MODEL below, not a chat call
-  VISUALIZE: CLAUDE_OPUS_5, // the strongest model at drawing: the picture has to be faithful or refused (SPEC.md §20)
+  VISUALIZE: CLAUDE_OPUS_5_5, // the strongest model at drawing: the picture has to be faithful or refused (SPEC.md §20)
 };
 
 export const DERIVATION_EFFORT: Record<DerivationType, KimiEffort> = {
@@ -110,7 +110,7 @@ export const DERIVATION_EFFORT: Record<DerivationType, KimiEffort> = {
 // The voice command (SPEC.md §6): a spoken command over the open document and
 // the section's notes becomes pending notes with the document's quotes as
 // sources. Claude Sonnet 5: it follows a multi-part spoken instruction and
-// copies quotes exactly at a fifth of Opus 5's price ($2 / $10 per million
+// copies quotes exactly at a fifth of Opus 5.5's price ($2 / $10 per million
 // tokens against $5 / $25), and its context holds a whole document with the
 // notes; the document prefix is cached, so a second command on the same
 // document reads it at a tenth of the price. Deep Thinking runs at "high",
@@ -118,12 +118,12 @@ export const DERIVATION_EFFORT: Record<DerivationType, KimiEffort> = {
 export const VOICE_MODEL = CLAUDE_SONNET_5;
 export const VOICE_EFFORT: Record<"fast" | "deep", ClaudeEffort> = { fast: "low", deep: "high" };
 
-// VISUALIZE (SPEC.md §20, Unitos Ultra) runs on Claude Opus 5 at its highest
+// VISUALIZE (SPEC.md §20, Unitos Ultra) runs on Claude Opus 5.5 at its highest
 // reasoning effort: the model first judges whether a picture can carry the
-// passage's core idea with certainty, and draws only then. Opus 5 leads the
+// passage's core idea with certainty, and draws only then. Opus 5.5 leads the
 // board for vector graphics written as code, which is what a visualization
 // is, and costs half of Claude Fable 5.1 for the same drawing.
-export const VISUALIZE_MODEL = CLAUDE_OPUS_5;
+export const VISUALIZE_MODEL = CLAUDE_OPUS_5_5;
 export const VISUALIZE_EFFORT: ClaudeEffort = "max";
 
 // The check (SPEC.md §20): a second call on the same model and effort, after
@@ -260,10 +260,10 @@ export const VISION_CHECK_TILES = 8;
 export const UPLOAD_MODEL = PARSE_MODEL;
 
 // Handwritten documents (SPEC.md §16): Import PDF's judgment and conversion
-// read page images, and run on Claude Opus 5 at high effort. Not
+// read page images, and run on Claude Opus 5.5 at high effort. Not
 // DerivationTypes: classification runs inside Import PDF, conversion as a
 // background job. The client is lib/claude.ts.
-export const HANDWRITTEN_MODEL = CLAUDE_OPUS_5;
+export const HANDWRITTEN_MODEL = CLAUDE_OPUS_5_5;
 export const HANDWRITTEN_EFFORT: ClaudeEffort = "high";
 export const CLASSIFY_MODEL = HANDWRITTEN_MODEL;
 export const CONVERT_MODEL = HANDWRITTEN_MODEL;

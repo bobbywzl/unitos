@@ -932,7 +932,7 @@ async function handle(req: Request, t: TFunc) {
       : pageImages.map((bytes) => ({ bytes, mediaType: "image/png" }));
   // A call with an image goes to the model that reads images (SPEC.md §2):
   // the feature's model, GLM 5.3, takes text alone. An SVG chart goes to
-  // Claude Opus 5, which reads the source whole (lib/derive/svg-chart.ts).
+  // Claude Opus 5.5, which reads the source whole (lib/derive/svg-chart.ts).
   const svgChart = ctx.figure?.kind === "svg" ? await svgChartCall() : null;
   const chatModelId = svgChart
     ? svgChart.modelId

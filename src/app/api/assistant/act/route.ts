@@ -371,7 +371,7 @@ async function handle(req: Request, t: TFunc) {
   ];
 
   // A video frame goes to the model that reads images (SPEC.md §2); an SVG
-  // chart to Claude Opus 5, which reads the source whole (lib/derive/svg-chart.ts);
+  // chart to Claude Opus 5.5, which reads the source whole (lib/derive/svg-chart.ts);
   // a turn with the web on to WEB_SEARCH_MODEL, with its provider's search.
   const chatModelId = web ? WEB_SEARCH_MODEL : attachedImage ? VISION_MODEL : DERIVATION_MODEL.SYNTHESIS;
   const chatModel = await resolveModelId(chatModelId);
