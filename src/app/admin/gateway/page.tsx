@@ -1,5 +1,7 @@
 import { redirect } from "next/navigation";
 import { isAdmin } from "@/lib/admin-auth";
+import { db } from "@/lib/db";
+import { FEATURE_DEFAULTS, FEATURE_ORDER, type Feature } from "@/lib/feature-models";
 import { gatewayAdminKey, gatewayBaseUrl, gatewayKey } from "@/lib/gateway";
 import {
   appGatewayModels,
@@ -14,8 +16,10 @@ import {
   type GatewayRouter,
 } from "@/lib/gateway-admin";
 import { serverT } from "@/lib/i18n/server";
+import { MODEL_ROLES, ROLE_ORDER } from "@/lib/models";
 import { AdminNav } from "@/components/admin/admin-nav";
 import { fmtUsd, Tile } from "@/components/admin/charts";
+import { FeatureModels } from "@/components/admin/feature-models";
 import { GatewayHealth } from "@/components/admin/gateway-health";
 import { GatewayKey } from "@/components/admin/gateway-key";
 
@@ -70,6 +74,65 @@ export default async function AdminGatewayPage() {
     t("admin.gatewaySetup5"),
   ];
 
+  // The model per feature (lib/feature-models.ts): the row the admin set, or
+  // the default. The label is the function's name on the usage page. Shown
+  // with or without the gateway: the choice reaches the direct clients too.
+  const featureRows = await db.featureModel.findMany();
+  const featureLabels: Record<Feature, string> = {
+    explain: t("admin.featExplain"),
+    simplify: t("admin.featSimplify"),
+    salience: t("admin.featSalience"),
+    extract: t("admin.featExtract"),
+    distill: t("admin.featDistill"),
+    summarize: t("admin.featSummarize"),
+    compare: t("admin.featCompare"),
+    analyze: t("admin.featAnalyze"),
+    visualize: t("admin.featVisualize"),
+    voice: t("admin.featVoice"),
+    find: t("admin.featFind"),
+    ask: t("admin.featAsk"),
+    formalize: t("admin.featFormalize"),
+    assistant: t("admin.featAssistant"),
+    act: t("admin.featAct"),
+    web: t("admin.featWeb"),
+    vision: t("admin.featVision"),
+    "svg-chart": t("admin.featSvgChart"),
+    stitch: t("admin.featStitch"),
+    "stitch-select": t("admin.featStitchSelect"),
+    merge: t("admin.featMerge"),
+    gist: t("admin.featGist"),
+    log: t("admin.featLog"),
+    glossary: t("admin.featGlossary"),
+    contents: t("admin.featContents"),
+    skeleton: t("admin.featSkeleton"),
+    connect: t("admin.featConnect"),
+    parse: t("admin.featParse"),
+    classify: t("admin.featClassify"),
+    convert: t("admin.featConvert"),
+  };
+  const features = FEATURE_ORDER.map((feature) => {
+    const row = featureRows.find((r) => r.feature === feature);
+    return {
+      feature,
+      label: featureLabels[feature],
+      modelId: row?.modelId ?? FEATURE_DEFAULTS[feature],
+      defaultId: FEATURE_DEFAULTS[feature],
+    };
+  });
+  // The models a feature can pick: every role's default id but Gemini's,
+  // which no chat call takes. A role's default id follows the role.
+  const featureOptions = ROLE_ORDER.filter((role) => role !== "gemini").map((role) => ({
+    id: MODEL_ROLES[role].defaultId,
+    name: MODEL_ROLES[role].name,
+    provider: MODEL_ROLES[role].provider,
+  }));
+  const featureModelsCard = (
+    <Card title={t("admin.featureModels")}>
+      <p className="py-1 text-xs text-sand-600">{t("admin.featureModelsDesc")}</p>
+      <FeatureModels features={features} options={featureOptions} />
+    </Card>
+  );
+
   if (!base) {
     return (
       <main className="mx-auto max-w-4xl px-6 py-8">
@@ -87,6 +150,7 @@ export default async function AdminGatewayPage() {
           </ol>
           <p className="border-t border-line py-2 text-xs text-sand-600">{t("admin.envHint")}</p>
         </Card>
+        <div className="mt-4">{featureModelsCard}</div>
       </main>
     );
   }
@@ -178,6 +242,8 @@ export default async function AdminGatewayPage() {
             />
           </Card>
         )}
+
+        {featureModelsCard}
 
         {adminKey && (
           <Card title={t("admin.gatewayModels")}>

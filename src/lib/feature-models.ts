@@ -25,7 +25,7 @@ import { probeChatModel } from "@/lib/model-update";
 
 // The model per feature (SPEC.md §2). Each feature has a default, the
 // constant in lib/derive/config.ts, and may have a FeatureModel row: the id
-// the admin set on the admin page's Models section. A call site asks
+// the admin set in the gateway page's Model per function section. A call site asks
 // featureCall for its feature's model and never names a constant, so the
 // admin's choice reaches every call. A role's default id in a row still
 // follows the role (lib/models.ts): choosing claude-opus-5-5 means the opus
