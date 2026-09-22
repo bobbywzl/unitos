@@ -3,7 +3,6 @@ import { isAdmin } from "@/lib/admin-auth";
 import { db } from "@/lib/db";
 import { ensureAllDigests } from "@/lib/digest/ensure";
 import { serverT } from "@/lib/i18n/server";
-import { AdminNav } from "@/components/admin/admin-nav";
 import { DigestStore } from "@/components/admin/digest-store";
 
 export const dynamic = "force-dynamic";
@@ -22,7 +21,6 @@ export default async function AdminDigestPage() {
 
   return (
     <main className="mx-auto max-w-4xl px-6 py-8">
-      <AdminNav active="digest" />
       <header className="mb-6">
         <h1 className="text-[28px]">{t("admin.digest")}</h1>
         <p className="text-sm text-sand-600">{t("admin.digestDesc")}</p>

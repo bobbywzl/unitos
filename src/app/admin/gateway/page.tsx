@@ -17,7 +17,6 @@ import {
 } from "@/lib/gateway-admin";
 import { serverT } from "@/lib/i18n/server";
 import { MODEL_ROLES, ROLE_ORDER } from "@/lib/models";
-import { AdminNav } from "@/components/admin/admin-nav";
 import { fmtUsd, Tile } from "@/components/admin/charts";
 import { FeatureModels } from "@/components/admin/feature-models";
 import { GatewayHealth } from "@/components/admin/gateway-health";
@@ -42,9 +41,10 @@ async function fetched<T>(run: () => Promise<T>): Promise<Fetched<T>> {
   }
 }
 
-function Card({ title, children }: { title: string; children: React.ReactNode }) {
+// id: the section's anchor, the admin menu's jump to it.
+function Card({ id, title, children }: { id?: string; title: string; children: React.ReactNode }) {
   return (
-    <section className="rounded-2xl bg-card px-4 py-3 shadow-soft">
+    <section id={id} className="rounded-2xl bg-card px-4 py-3 shadow-soft">
       <p className="mb-2 text-[11px] font-bold tracking-[0.08em] text-sand-600 uppercase">{title}</p>
       {children}
     </section>
@@ -127,7 +127,7 @@ export default async function AdminGatewayPage() {
     provider: MODEL_ROLES[role].provider,
   }));
   const featureModelsCard = (
-    <Card title={t("admin.featureModels")}>
+    <Card id="feature-models" title={t("admin.featureModels")}>
       <p className="py-1 text-xs text-sand-600">{t("admin.featureModelsDesc")}</p>
       <FeatureModels features={features} options={featureOptions} />
     </Card>
@@ -136,7 +136,6 @@ export default async function AdminGatewayPage() {
   if (!base) {
     return (
       <main className="mx-auto max-w-4xl px-6 py-8">
-        <AdminNav active="gateway" />
         <header className="mb-6">
           <h1 className="text-[28px]">{t("admin.gateway")}</h1>
           <p className="text-sm text-sand-600">{t("admin.gatewayDesc")}</p>
@@ -173,7 +172,6 @@ export default async function AdminGatewayPage() {
 
   return (
     <main className="mx-auto max-w-4xl px-6 py-8">
-      <AdminNav active="gateway" />
       <header className="mb-6">
         <h1 className="text-[28px]">{t("admin.gateway")}</h1>
         <p className="text-sm text-sand-600">{t("admin.gatewayDesc")}</p>
@@ -206,7 +204,7 @@ export default async function AdminGatewayPage() {
         )}
 
         {adminKey && (
-          <Card title={t("admin.gatewayAppKey")}>
+          <Card id="app-key" title={t("admin.gatewayAppKey")}>
             {!appKey && <p className="py-1 text-sm text-sand-700">{t("admin.gatewayNoAppKey")}</p>}
             {keyInfo && !keyInfo.ok && <Failed error={keyInfo.error} />}
             {keyInfo?.ok && (
@@ -246,7 +244,7 @@ export default async function AdminGatewayPage() {
         {featureModelsCard}
 
         {adminKey && (
-          <Card title={t("admin.gatewayModels")}>
+          <Card id="models" title={t("admin.gatewayModels")}>
             {models && !models.ok && <Failed error={models.error} />}
             {models?.ok && (
               <div className="overflow-x-auto">

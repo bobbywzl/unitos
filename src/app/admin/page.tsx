@@ -5,7 +5,6 @@ import { gatewayAdminKey, gatewayConfigured, providerKey } from "@/lib/gateway";
 import { db } from "@/lib/db";
 import { serverT } from "@/lib/i18n/server";
 import { recipientAccounts } from "@/lib/notifications";
-import { AdminNav } from "@/components/admin/admin-nav";
 import { FeedbackInbox } from "@/components/admin/feedback-inbox";
 import { ModelCheck } from "@/components/admin/model-check";
 import { MODEL_ROLES, ROLE_ORDER } from "@/lib/models";
@@ -87,8 +86,7 @@ export default async function AdminPage() {
 
   return (
     <main className="mx-auto max-w-3xl px-6 py-8">
-      <AdminNav active="feedback" />
-      <section className="mb-8">
+      <section id="services" className="mb-8">
         <h2 className="mb-2 text-[11px] font-bold tracking-[0.08em] text-sand-600 uppercase">
           {t("admin.services")}
         </h2>
@@ -115,7 +113,7 @@ export default async function AdminPage() {
           <p className="border-t border-line py-2 text-xs text-sand-600">{t("admin.envHint")}</p>
         </div>
       </section>
-      <section className="mb-8">
+      <section id="models" className="mb-8">
         <h2 className="mb-2 text-[11px] font-bold tracking-[0.08em] text-sand-600 uppercase">
           {t("admin.models")}
         </h2>
@@ -141,6 +139,7 @@ export default async function AdminPage() {
           <ModelCheck />
         </div>
       </section>
+      <div id="inbox">
       <FeedbackInbox
         items={feedback.map((f) => ({
           id: f.id,
@@ -161,6 +160,7 @@ export default async function AdminPage() {
           })),
         }))}
       />
+      </div>
     </main>
   );
 }

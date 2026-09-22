@@ -15,7 +15,6 @@ import { FIXED_COSTS, MONTHS_PER_YEAR, fixedCostsPerMonth } from "@/lib/fixed-co
 import { providerOf } from "@/lib/usage";
 import type { TFunc } from "@/lib/i18n/dictionaries";
 import { serverT } from "@/lib/i18n/server";
-import { AdminNav } from "@/components/admin/admin-nav";
 import { BarList, DailyChart, fmtTok, fmtUsd, Tile } from "@/components/admin/charts";
 
 export const dynamic = "force-dynamic";
@@ -206,13 +205,12 @@ export default async function AdminUsagePage() {
 
   return (
     <main className="mx-auto max-w-4xl px-6 py-8">
-      <AdminNav active="usage" />
       <header className="mb-6">
         <h1 className="text-[28px]">{t("admin.usage")}</h1>
         <p className="text-sm text-sand-600">{gateway ? t("admin.usageGatewayDesc") : t("admin.usageDesc")}</p>
       </header>
 
-      <div className="mb-4 grid grid-cols-2 gap-3">
+      <div id="spending" className="mb-4 grid grid-cols-2 gap-3">
         <Tile label={t("admin.usageSpending") + " " + t("admin.usageColPerMonth")} value={fmtUsd(spendingPerMonth)} />
         <Tile label={t("admin.usageSpending") + " " + t("admin.usageColPerYear")} value={fmtUsd(spendingPerMonth * MONTHS_PER_YEAR)} />
       </div>
@@ -220,7 +218,7 @@ export default async function AdminUsagePage() {
 
       {gateway && spend && !spend.ok && <p className="mb-4 text-xs text-red-600">{spend.error}</p>}
       {gateway && spend?.ok ? (
-        <div className="space-y-4">
+        <div id="gateway" className="space-y-4">
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <Tile label={t("admin.gatewaySpend30")} value={fmtUsd(spend.data.totalUsd)} />
             <Tile label={t("admin.usageAppCount")} value={fmtUsd(appGatewayUsd)} />
@@ -295,7 +293,7 @@ export default async function AdminUsagePage() {
       ) : calls === 0 ? (
         <p className="text-sm text-sand-600">{t("admin.usageEmpty")}</p>
       ) : (
-        <div className="space-y-4">
+        <div id="app" className="space-y-4">
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
             <Tile label={t("admin.usageCostAll")} value={fmtUsd(totals._sum.costUsd ?? 0)} />
             <Tile label={t("admin.usageCost30")} value={fmtUsd(cost30._sum.costUsd ?? 0)} />

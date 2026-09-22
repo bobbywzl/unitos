@@ -6,7 +6,6 @@ import { db } from "@/lib/db";
 import { serverT } from "@/lib/i18n/server";
 import { personColor, personOf, personSymbol, type Person } from "@/lib/person";
 import { PersonBadge } from "@/components/collab/person-badge";
-import { AdminNav } from "@/components/admin/admin-nav";
 import { AccountReset } from "@/components/admin/account-reset";
 import { BlockButton, BlockList } from "@/components/admin/block-control";
 import { blockedEmails } from "@/lib/block";
@@ -113,7 +112,6 @@ export default async function AdminAccountsPage() {
 
   return (
     <main className="mx-auto max-w-3xl px-6 py-8">
-      <AdminNav active="accounts" />
       <header className="mb-6">
         <h1 className="text-[28px]">{t("admin.accounts")}</h1>
         <p className="text-sm text-sand-600">{t("admin.accountsDesc")}</p>

@@ -6,7 +6,6 @@ import { CLICK_GROUPS, clickGroupOf, type ClickGroup } from "@/lib/clicks";
 import { db } from "@/lib/db";
 import { serverT } from "@/lib/i18n/server";
 import type { TFunc, TKey } from "@/lib/i18n/dictionaries";
-import { AdminNav } from "@/components/admin/admin-nav";
 
 export const dynamic = "force-dynamic";
 
@@ -337,7 +336,6 @@ export default async function AdminClicksPage() {
   return (
     <main className="click-charts mx-auto max-w-4xl px-6 py-8">
       <style>{seriesCss}</style>
-      <AdminNav active="clicks" />
       <header className="mb-6">
         <h1 className="text-[28px]">{t("admin.clicks")}</h1>
         <p className="text-sm text-sand-600">{t("admin.clicksDesc")}</p>
@@ -358,9 +356,11 @@ export default async function AdminClicksPage() {
             <Tile label={t("admin.clicksAccounts")} value={fmt(accounts)} />
           </div>
 
-          <DailyChart t={t} title={t("admin.clicksDaily")} days={days} />
+          <div id="daily">
+            <DailyChart t={t} title={t("admin.clicksDaily")} days={days} />
+          </div>
 
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div id="groups" className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {CLICK_GROUPS.map((group) => (
               <BarList
                 key={group}

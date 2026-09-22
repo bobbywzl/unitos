@@ -216,6 +216,9 @@ const en = {
   featureSaving: "Checking…",
   featureSaved: "Saved",
   featureSaveFailed: "Not saved",
+  // The admin menu (components/admin/admin-sidebar.tsx)
+  menu: "Menu",
+  clicksGroups: "By group (90 d)",
   featExplain: "Explain",
   featSimplify: "Simplify",
   featSalience: "Salient passages",
@@ -623,6 +626,8 @@ const zh: Record<keyof typeof en, string> = {
   featureSaving: "检查中…",
   featureSaved: "已保存",
   featureSaveFailed: "未保存",
+  menu: "菜单",
+  clicksGroups: "按分组（90 天）",
   featExplain: "解释",
   featSimplify: "简化",
   featSalience: "要点",

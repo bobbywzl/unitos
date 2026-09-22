@@ -20,7 +20,6 @@ import { db } from "@/lib/db";
 import { currentLang, serverT } from "@/lib/i18n/server";
 import { betaOn } from "@/lib/tiers";
 import type { TKey } from "@/lib/i18n/dictionaries";
-import { AdminNav } from "@/components/admin/admin-nav";
 import { BillingSwitch } from "@/components/admin/billing-switch";
 import { TierChip } from "@/components/tier-mark";
 
@@ -82,13 +81,12 @@ export default async function AdminBillingPage() {
 
   return (
     <main className="mx-auto max-w-3xl px-6 py-8">
-      <AdminNav active="billing" />
       <header className="mb-6">
         <h1 className="text-[28px]">{t("admin.billing")}</h1>
         <p className="text-sm text-sand-600">{t("admin.billingDesc")}</p>
       </header>
 
-      <section className="mb-8">
+      <section id="switch" className="mb-8">
         <h2 className={heading}>{t("admin.billingSwitch")}</h2>
         <div className="space-y-3 rounded-2xl bg-card px-4 py-3 shadow-soft">
           <BillingSwitch on={on} ready={ready} reason={reason} />
@@ -101,7 +99,7 @@ export default async function AdminBillingPage() {
         </div>
       </section>
 
-      <section className="mb-8">
+      <section id="services" className="mb-8">
         <h2 className={heading}>{t("admin.services")}</h2>
         <div className="rounded-2xl bg-card px-4 py-2 shadow-soft">
           {services.map((svc) => (
@@ -127,7 +125,7 @@ export default async function AdminBillingPage() {
         </div>
       </section>
 
-      <section className="mb-8">
+      <section id="prices" className="mb-8">
         <h2 className={heading}>{t("admin.billingPrices")}</h2>
         <div className="rounded-2xl bg-card px-4 py-2 shadow-soft">
           {all.map((p) => (
@@ -147,7 +145,7 @@ export default async function AdminBillingPage() {
         </div>
       </section>
 
-      <section className="mb-8">
+      <section id="receipts" className="mb-8">
         <h2 className={heading}>{t("admin.billingReceipts")}</h2>
         {purchases.length === 0 ? (
           <p className="text-sm text-sand-600">{t("admin.billingReceiptsEmpty")}</p>

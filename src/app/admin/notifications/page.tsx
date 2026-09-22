@@ -3,7 +3,6 @@ import { isAdmin } from "@/lib/admin-auth";
 import { db } from "@/lib/db";
 import { serverT } from "@/lib/i18n/server";
 import { recipientAccounts } from "@/lib/notifications";
-import { AdminNav } from "@/components/admin/admin-nav";
 import { AdminNotifications, type SentNotification } from "@/components/admin/notifications";
 
 export const dynamic = "force-dynamic";
@@ -39,7 +38,6 @@ export default async function AdminNotificationsPage() {
 
   return (
     <main className="mx-auto max-w-3xl px-6 py-8">
-      <AdminNav active="notifications" />
       <header className="mb-6">
         <h1 className="text-[28px]">{t("admin.notifications")}</h1>
         <p className="text-sm text-sand-600">{t("admin.notificationsDesc")}</p>

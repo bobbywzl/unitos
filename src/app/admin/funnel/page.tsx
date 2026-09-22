@@ -5,7 +5,6 @@ import { db } from "@/lib/db";
 import { FUNNEL_STEPS, funnelStepIndex, isFunnelStep, type FunnelStep } from "@/lib/funnel";
 import { serverT } from "@/lib/i18n/server";
 import type { TFunc, TKey } from "@/lib/i18n/dictionaries";
-import { AdminNav } from "@/components/admin/admin-nav";
 import { Tile } from "@/components/admin/charts";
 
 export const dynamic = "force-dynamic";
@@ -372,7 +371,6 @@ export default async function AdminFunnelPage({
   return (
     <main className="funnel-charts mx-auto max-w-4xl px-6 py-8">
       <style>{seriesCss}</style>
-      <AdminNav active="funnel" />
       <header className="mb-6">
         <h1 className="text-[28px]">{t("admin.funnel")}</h1>
         <p className="text-sm text-sand-600">{t("admin.funnelDesc")}</p>
@@ -405,10 +403,10 @@ export default async function AdminFunnelPage({
             <Tile label={t("admin.funnelReturning")} value={fmt(returning)} />
           </div>
 
-          <div className="grid gap-4 lg:grid-cols-2">
+          <div id="waterfall" className="grid gap-4 lg:grid-cols-2">
             <Waterfall t={t} title={t("admin.funnelWaterfall")} rows={stepRows} total={total} />
 
-            <div className="overflow-x-auto rounded-2xl bg-card p-4 shadow-soft">
+            <div id="stopped" className="overflow-x-auto rounded-2xl bg-card p-4 shadow-soft">
               <Heading>{t("admin.funnelStopped")}</Heading>
               <p className="mb-2 text-xs text-sand-600">{t("admin.funnelStoppedDesc")}</p>
               <table className="w-full text-xs">
@@ -437,7 +435,9 @@ export default async function AdminFunnelPage({
             </div>
           </div>
 
-          <DailyChart t={t} title={t("admin.funnelDaily")} days={days} />
+          <div id="daily">
+            <DailyChart t={t} title={t("admin.funnelDaily")} days={days} />
+          </div>
 
           <div className="overflow-x-auto rounded-2xl bg-card p-4 shadow-soft">
             <Heading>{t("admin.funnelWaterfall")}</Heading>
