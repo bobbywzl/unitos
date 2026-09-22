@@ -4,10 +4,11 @@ import { HANDWRITTEN_EFFORT, type ClaudeEffort } from "@/lib/derive/config";
 import { gatewayConfigured, gatewayUrl, keyFor, providerConfigured } from "@/lib/gateway";
 import { resolveModelId } from "@/lib/models";
 
-// The Claude client (SPEC.md §2): the handwritten passes — Import PDF's
-// judgment and conversion — and Visualize go through here, and a parse pass
-// whose model id is a claude- id (lib/parse/model.ts). Every other model
-// call goes through lib/kimi.ts. The key is ANTHROPIC_API_KEY.
+// The Claude client (SPEC.md §2): the parse passes, the handwritten passes
+// — Import PDF's judgment and conversion — Visualize, the voice command,
+// and any feature whose model id is a claude- id (lib/model-call.ts) go
+// through here. Every other model call goes through lib/kimi.ts. The key
+// is ANTHROPIC_API_KEY.
 // ANTHROPIC_BASE_URL points a local run at a stand-in server (scripts/qa).
 // Under the gateway (lib/gateway.ts) the calls go to its Anthropic
 // pass-through — the request reaches Anthropic as written, the effort

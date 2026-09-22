@@ -7,8 +7,9 @@ import type { AssistantAction } from "@/lib/types";
 // tools, the assistant, Stitch's answer, and the merge of notes; GLM 5.3
 // Flash, its small sibling, behind every reading but the parse — the
 // readings copy claims into structure, and Flash reads a million tokens for
-// a tenth of the price. The parse passes run on Kimi K3 (PARSE_MODEL
-// below): what the parse gets wrong, every later tool inherits.
+// a tenth of the price. The parse passes run on Claude Opus 5.5 at max
+// effort (PARSE_MODEL below): what the parse gets wrong, every later tool
+// inherits.
 // Both run through the gateway (lib/gateway.ts): without it, a GLM id
 // resolves to Kimi K3 (lib/models.ts). Kimi K3, Moonshot AI's flagship,
 // keeps what GLM 5.3 cannot do: it reads images (VISION_MODEL: a circled
@@ -232,20 +233,20 @@ export const GIST_MODEL = GLM_5_3_FLASH;
 export const GIST_EFFORT: KimiEffort = "low";
 
 // The parse passes — the URL core, structure, and layout passes (SPEC.md §2)
-// — run on Kimi K3 at max effort, Moonshot's flagship, which reads the
-// page's own HTML more faithfully than GLM 5.3 Flash did. The passes answer
-// with ops by block index, and what the parse gets wrong every later tool
-// inherits — a heading read as a paragraph, a figure row split, a caption
-// dropped — so the parse gets a strong model at its most thorough, not the
-// cheapest. The figure rules stay the code's (lib/parse/structure.ts,
-// layout.ts: a figure with media is never dropped), whatever the model.
-// "max" is the slowest effort: the layout pass reads the page's whole HTML
-// against the request's time budget (modelPassDeadline), and a pass that
-// outruns it is skipped and the mechanical parse stands. A claude- id here
-// runs through lib/claude.ts instead; any other id through lib/kimi.ts
-// (lib/parse/model.ts), with the same prompts, so the model is one constant.
-export const PARSE_MODEL = KIMI_K3;
-export const PARSE_EFFORT: KimiEffort = "max";
+// — run on Claude Opus 5.5 at max effort, the strongest reader of a page's
+// own HTML. The passes answer with ops by block index, and what the parse
+// gets wrong every later tool inherits — a heading read as a paragraph, a
+// figure row split, a caption dropped — so the parse gets the strongest
+// model at its most thorough, not the cheapest. The figure rules stay the
+// code's (lib/parse/structure.ts, layout.ts: a figure with media is never
+// dropped), whatever the model. "max" is the slowest effort: the layout
+// pass reads the page's whole HTML against the request's time budget
+// (modelPassDeadline), and a pass that outruns it is skipped and the
+// mechanical parse stands. A claude- id here runs through lib/claude.ts;
+// any other id through lib/kimi.ts (lib/model-call.ts), with the same
+// prompts, so the model is one constant.
+export const PARSE_MODEL = CLAUDE_OPUS_5_5;
+export const PARSE_EFFORT: ClaudeEffort = "max";
 
 // The vision check (SPEC.md §2, lib/parse/vision-check.ts): the last pass
 // of a URL import reads pictures of the page and of the reader's rendering
