@@ -339,13 +339,33 @@ export default async function NotebookPage(props: {
 
     // Annotations anchored in this document: highlights, comments, EXPLAIN,
     // SIMPLIFY, ANALYZE — all notes in the hidden Annotations section with a
-    // source here.
+    // source here — and the sidebar assistant's conversations (SPEC.md §7):
+    // anchored nowhere, so they list on every document of the project, with
+    // no anchor to jump to, and the comments on their answers under them. A
+    // side chat stays out, as everywhere but its chat box.
     const annotations: AnnotationItem[] = notebook!.sections
       .filter((s) => s.hidden)
       .flatMap((s) => s.notes)
       .map((n): AnnotationItem | null => {
         const source = n.sources.find((src) => src.documentId === document.id);
-        if (!source) return null;
+        if (!source) {
+          const sidebar = n.sources.length === 0 && n.derivationType === "SYNTHESIS" && n.sideChatOfId === null;
+          if (!sidebar || (!n.content.trim() && n.replies.length === 0)) return null;
+          return {
+            id: n.id,
+            kind: "assistant",
+            content: n.content,
+            gist: n.gist,
+            color: n.color,
+            sourceId: null,
+            quotedText: null,
+            orphaned: false,
+            figureLabel: null,
+            createdById: n.createdById,
+            replies: toReplyViews(n.replies),
+            conversation: conversationTurns(n),
+          };
+        }
         return {
           id: n.id,
           kind: annotationKind(n),

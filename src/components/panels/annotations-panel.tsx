@@ -638,6 +638,10 @@ export function AnnotationsPanel({
           <GroupLabel icon={<SparkleIcon size={12} />}>{t("panels.assistant")}</GroupLabel>
           {conversations.map((a) => (
             <AnnotationCard key={a.id} documentId={documentId} annotation={a} view={view} menu={menuFor(a)} summary={markdownPreview(a.content)}>
+              {/* The sidebar assistant's conversation is anchored nowhere: the badge says so, and there is no anchor to jump to. */}
+              {a.sourceId === null && (
+                <p className="mb-1 text-[11px] font-semibold text-sand-500">{t("assistant.historyOriginSidebar")}</p>
+              )}
               {/* The whole conversation, nothing to scroll inside the card. */}
               <div className="text-[13px]">
                 <Markdown>{a.content}</Markdown>

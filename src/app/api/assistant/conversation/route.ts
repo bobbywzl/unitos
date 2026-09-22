@@ -19,8 +19,10 @@ export const maxDuration = 30;
 // (SPEC.md §21): one note per reader per project, in the hidden Annotations
 // section, no sources — it is not anchored to a passage, so it renders in
 // the digest under "Annotations not anchored in an attached document"
-// (lib/digest/render.ts) and nowhere else in the reader (a hidden section
-// stays out of the outline, the notes tray, and the notes full page). The
+// (lib/digest/render.ts) and in the Assistant group of every document's
+// Annotations tab, with the comments on its answers under it (a hidden
+// section stays out of the outline, the notes tray, and the notes full
+// page). The
 // note's content is the same "**Reader:** … **Assistant:** …" transcript a
 // tool or selection-popover conversation writes (lib/conversation.ts); a
 // reader's turn carries its attachments as trailing lines

@@ -4435,6 +4435,8 @@ export function ReaderInteractions({
       setChatComments((list) => [...list, json]);
       setChatCommentQuote(null);
       clearAnswerSelection();
+      // The Annotations tab lists the comment under the conversation.
+      router.refresh();
     } catch (err) {
       showError(err instanceof Error ? err.message : t("assistant.commentFailed"));
     } finally {

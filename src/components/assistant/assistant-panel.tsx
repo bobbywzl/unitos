@@ -507,6 +507,8 @@ export function AssistantPanel({
       setComments((list) => [...list, json]);
       setCommentQuote(null);
       clearSelection();
+      // The Annotations tab lists the comment under the conversation.
+      router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : t("assistant.commentFailed"));
     } finally {
