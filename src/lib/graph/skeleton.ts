@@ -7,15 +7,13 @@ import { buildContents, contentsEntries, headingContents, type ContentsEntry } f
 import {
   SKELETON_EFFORT,
   SKELETON_MAX_OUTPUT_TOKENS,
-  SKELETON_MODEL,
   SKELETON_STALE_FRACTION,
   SKELETON_STALE_MS,
   SKELETON_WINDOW_CHARS,
 } from "@/lib/derive/config";
 import { documentPrefix } from "@/lib/derive/context";
 import { callForJson } from "@/lib/derive/json-call";
-import { kimi, kimiConfigured, kimiOptions } from "@/lib/kimi";
-import { resolveModelId } from "@/lib/models";
+import { featureCall, featureConfigured } from "@/lib/feature-models";
 import { skeletonPrompt } from "@/lib/prompts/skeleton";
 import type { UsageMeta } from "@/lib/usage";
 
@@ -192,7 +190,7 @@ export async function buildSkeleton(
   userId: string | null,
   signal?: AbortSignal,
 ): Promise<Skeleton | null> {
-  if (!kimiConfigured()) return null;
+  if (!(await featureConfigured("skeleton"))) return null;
   const document = await db.document.findUnique({
     where: { id: documentId },
     select: {
@@ -227,8 +225,9 @@ export async function buildSkeleton(
   }
   if (current.length > 0) windows.push(current);
 
-  const model = await kimi(SKELETON_MODEL);
-  const usage = { userId, feature: "skeleton", model: await resolveModelId(SKELETON_MODEL) } satisfies UsageMeta;
+  const skeletonCall = await featureCall("skeleton", SKELETON_EFFORT);
+  const model = skeletonCall.model;
+  const usage = { userId, feature: "skeleton", model: skeletonCall.modelId } satisfies UsageMeta;
   const results = await Promise.all(
     windows.map(async (blocks, i) => {
       const windowParts = blocks.filter((b) => partAt.has(b.id)).map((b) => partAt.get(b.id)!);
@@ -248,7 +247,7 @@ export async function buildSkeleton(
         model,
         messages,
         maxOutputTokens: SKELETON_MAX_OUTPUT_TOKENS,
-        providerOptions: kimiOptions(SKELETON_EFFORT),
+        providerOptions: skeletonCall.providerOptions,
         schema: windowSchema,
         label: windows.length > 1 ? `SKELETON ${i + 1}/${windows.length}` : "SKELETON",
         usage,
@@ -310,7 +309,7 @@ export async function ensureSkeleton(
     leaves it alone otherwise. One build at a time per document: a build
     started under SKELETON_STALE_MS ago is running, and this one yields. */
 export async function refreshSkeleton(documentId: string, userId: string | null): Promise<void> {
-  if (!kimiConfigured()) return;
+  if (!(await featureConfigured("skeleton"))) return;
   const document = await db.document.findUnique({
     where: { id: documentId },
     select: {

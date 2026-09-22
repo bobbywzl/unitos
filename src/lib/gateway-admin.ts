@@ -1,6 +1,8 @@
 import { z } from "zod";
+import { db } from "@/lib/db";
 import { gatewayAdminKey, gatewayBaseUrl, gatewayKey } from "@/lib/gateway";
-import { currentModelId, MODEL_ROLES, ROLE_ORDER, type ModelRole } from "@/lib/models";
+import { isClaudeId } from "@/lib/model-call";
+import { currentModelId, isGlmModel, MODEL_ROLES, resolveModelId, ROLE_ORDER, type ModelRole } from "@/lib/models";
 import { outboundFetch } from "@/lib/outbound-fetch";
 import { providerOf } from "@/lib/usage";
 
@@ -506,6 +508,12 @@ export async function appGatewayModels(): Promise<string[]> {
   for (const role of ROLE_ORDER) {
     if (!CALLED_ROLES.includes(role)) continue;
     names.add(`${GATEWAY_PREFIX[MODEL_ROLES[role].provider]}/${await currentModelId(role)}`);
+  }
+  // The ids the admin set per feature (lib/feature-models.ts), under their
+  // provider's prefix; a role's default id is already listed by its role.
+  for (const row of await db.featureModel.findMany({ select: { modelId: true } })) {
+    const id = await resolveModelId(row.modelId);
+    names.add(`${isClaudeId(id) ? "anthropic" : isGlmModel(id) ? "zai" : "moonshot"}/${id}`);
   }
   names.add("gemini/gemini-flash-latest");
   names.add("groq/whisper-large-v3-turbo");

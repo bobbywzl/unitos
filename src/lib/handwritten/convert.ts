@@ -3,14 +3,13 @@ import type { ModelMessage } from "ai";
 import { z } from "zod";
 import { bumpDocument } from "@/lib/collab";
 import { db } from "@/lib/db";
-import { CONVERT_MODEL } from "@/lib/derive/config";
+import { HANDWRITTEN_EFFORT } from "@/lib/derive/config";
+import { featureCall, featureConfigured } from "@/lib/feature-models";
 import { callForJson } from "@/lib/derive/json-call";
 import { PAGE_IMAGE_WIDTH, renderPdfPage } from "@/lib/handwritten/pages";
 import { texError } from "@/lib/katex";
-import { claude, claudeConfigured, claudeOptions } from "@/lib/claude";
 import { convertPrompt } from "@/lib/prompts/convert";
 import { fixTexPrompt } from "@/lib/prompts/fix-tex";
-import { resolveModelId } from "@/lib/models";
 import { refreshSkeleton } from "@/lib/graph/skeleton";
 
 // The conversion job (SPEC.md §16): guards, page rendering, the model batches,
@@ -133,14 +132,15 @@ async function repairEquations(
       }),
     },
   ];
+  const convertCall = await featureCall("convert", HANDWRITTEN_EFFORT);
   const result = await callForJson({
-    model: await claude(CONVERT_MODEL),
+    model: convertCall.model,
     messages,
     maxOutputTokens: 32768,
-    providerOptions: claudeOptions(),
+    providerOptions: convertCall.providerOptions,
     schema: fixTexOutputSchema,
     label: "CONVERT_FIX_TEX",
-    usage: { userId, feature: "convert", model: await resolveModelId(CONVERT_MODEL) },
+    usage: { userId, feature: "convert", model: convertCall.modelId },
   });
   if (!result.ok) {
     console.warn(`[convert] TeX repair failed, keeping raw TeX: ${result.error}`);
@@ -182,7 +182,7 @@ export async function runConversion(
   if (!document.fileData) {
     return { ok: false, status: 400, error: "This document has no stored PDF" };
   }
-  if (!claudeConfigured()) {
+  if (!(await featureConfigured("convert"))) {
     return { ok: false, status: 503, error: "Set ANTHROPIC_API_KEY. Conversion needs it." };
   }
   const pages = document.blocks.map((b) => b.page).filter((p): p is number => p !== null);
@@ -249,14 +249,15 @@ export async function runConversion(
             ],
           },
         ];
+        const convertCall = await featureCall("convert", HANDWRITTEN_EFFORT);
         const result = await callForJson({
-          model: await claude(CONVERT_MODEL),
+          model: convertCall.model,
           messages,
           maxOutputTokens: 65536, // dense pages transcribe long
-          providerOptions: claudeOptions(),
+          providerOptions: convertCall.providerOptions,
           schema: convertOutputSchema,
           label: "CONVERT",
-          usage: { userId, feature: "convert", model: await resolveModelId(CONVERT_MODEL) },
+          usage: { userId, feature: "convert", model: convertCall.modelId },
         });
         if (!result.ok) {
           throw new Error(

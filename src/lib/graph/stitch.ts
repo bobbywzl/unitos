@@ -6,8 +6,6 @@ import { db } from "@/lib/db";
 import {
   STITCH_EFFORT,
   STITCH_MAX_OUTPUT_TOKENS,
-  STITCH_MODEL,
-  STITCH_SELECT_MODEL,
   STITCH_ROUTE_EFFORT,
   STITCH_SELECT_EFFORT,
   STITCH_SELECT_MAX_OUTPUT_TOKENS,
@@ -18,7 +16,7 @@ import {
 import { loadProfile, renderBlockLines } from "@/lib/derive/context";
 import { callForJson } from "@/lib/derive/json-call";
 import type { Lang } from "@/lib/i18n/config";
-import { kimi, kimiOptions } from "@/lib/kimi";
+import { featureCall } from "@/lib/feature-models";
 import { attachDocument } from "@/lib/parse/attach";
 import { parseMarkdown } from "@/lib/parse/markdown";
 import { PARSER_VERSION, type ParsedBlock } from "@/lib/parse/types";
@@ -29,7 +27,6 @@ import { rank } from "@/lib/graph/rank";
 import { stitchPrompt, stitchRoutePrompt, stitchSelectPrompt } from "@/lib/prompts/stitch";
 import type { StitchDocument, StitchResult } from "@/lib/types";
 import { transcriptIsStale } from "@/lib/video/types";
-import { resolveModelId } from "@/lib/models";
 
 // Stitch (SPEC.md §22): one command over the project's documents, from the
 // graph — the documents the reader selected in the graph, or every attached
@@ -681,11 +678,16 @@ export async function stitch(input: {
     .slice(-MAX_HISTORY)
     .filter((turn) => turn.content.trim())
     .map((turn) => ({ role: turn.role, content: turn.content }));
-  const model = await kimi(STITCH_MODEL);
-  const usage = { userId: input.userId, feature: "stitch" as const, model: await resolveModelId(STITCH_MODEL) };
-  // The route and select passes read the skeletons: GLM 5.3 Flash.
-  const readModel = await kimi(STITCH_SELECT_MODEL);
-  const readUsage = { ...usage, model: await resolveModelId(STITCH_SELECT_MODEL) };
+  // The stitch feature's model answers (lib/feature-models.ts); the
+  // stitch-select feature's model reads the skeletons in the route and
+  // select passes, each at its own effort.
+  const answer = await featureCall("stitch", STITCH_EFFORT);
+  const model = answer.model;
+  const usage = { userId: input.userId, feature: "stitch" as const, model: answer.modelId };
+  const readRoute = await featureCall("stitch-select", STITCH_ROUTE_EFFORT);
+  const readSelect = await featureCall("stitch-select", STITCH_SELECT_EFFORT);
+  const readModel = readRoute.model;
+  const readUsage = { ...usage, model: readRoute.modelId };
 
   // ── The reading passes: the blocks the command needs, from the skeletons ──
   let context = wholeSystem(rendered);
@@ -718,7 +720,7 @@ export async function stitch(input: {
             },
           ],
           maxOutputTokens: STITCH_SELECT_MAX_OUTPUT_TOKENS,
-          providerOptions: kimiOptions(STITCH_ROUTE_EFFORT),
+          providerOptions: readRoute.providerOptions,
           schema: routeSchema,
           label: "STITCH_ROUTE",
           usage: readUsage,
@@ -760,7 +762,7 @@ export async function stitch(input: {
           },
         ],
         maxOutputTokens: STITCH_SELECT_MAX_OUTPUT_TOKENS,
-        providerOptions: kimiOptions(STITCH_SELECT_EFFORT),
+        providerOptions: readSelect.providerOptions,
         schema: selectSchema,
         label: "STITCH_SELECT",
         usage: readUsage,
@@ -807,7 +809,7 @@ export async function stitch(input: {
       },
     ],
     maxOutputTokens: STITCH_MAX_OUTPUT_TOKENS,
-    providerOptions: kimiOptions(STITCH_EFFORT),
+    providerOptions: answer.providerOptions,
     schema: outputSchema,
     label: "STITCH",
     usage,

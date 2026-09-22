@@ -2,15 +2,14 @@ import type { ModelMessage } from "ai";
 import { z } from "zod";
 import { bumpDocument } from "@/lib/collab";
 import { db } from "@/lib/db";
-import { GLM_5_3_FLASH } from "@/lib/derive/config";
+import { DEFAULT_EFFORT } from "@/lib/derive/config";
+import { featureCall, featureConfigured } from "@/lib/feature-models";
 import { documentPrefix } from "@/lib/derive/context";
 import { callForJson } from "@/lib/derive/json-call";
 import { isLang, type Lang } from "@/lib/i18n/config";
 import { currentLang } from "@/lib/i18n/server";
-import { kimi, kimiConfigured, kimiOptions } from "@/lib/kimi";
 import { languageName } from "@/lib/prompts/types";
 import type { UsageMeta } from "@/lib/usage";
-import { resolveModelId } from "@/lib/models";
 
 // On-ingest glossary extraction: terms, acronyms, symbols (SPEC.md §8 Phase 7).
 // Stored as Document.glossary: [{term, definition, blockIds[], lang, definitions}].
@@ -20,7 +19,9 @@ import { resolveModelId } from "@/lib/models";
 // definitions[lang] mirrors definition. An entry saved before lang was stored
 // has no lang: its language is unknown, so only definitions can serve it.
 // The term is never translated: it stays as the document writes it.
-const GLOSSARY_MODEL = GLM_5_3_FLASH; // a reading of the document's terms
+// The glossary feature's model (lib/feature-models.ts; GLM 5.3 Flash by
+// default: a reading of the document's terms) at the reader's effort.
+const GLOSSARY_EFFORT = DEFAULT_EFFORT;
 const TERM_MAX = 80;
 const DEFINITION_MAX = 500;
 
@@ -138,7 +139,7 @@ export async function buildGlossary(
   userId: string | null = null,
   lang?: Lang,
 ): Promise<number> {
-  if (!kimiConfigured()) return 0;
+  if (!(await featureConfigured("glossary"))) return 0;
   const definitionLang = lang ?? (await currentLang());
   const document = await db.document.findUnique({
     where: { id: documentId },
@@ -153,14 +154,15 @@ export async function buildGlossary(
     },
     { role: "user", content: glossaryPrompt(definitionLang) },
   ];
+  const glossaryCall = await featureCall("glossary", GLOSSARY_EFFORT);
   const result = await callForJson({
-    model: await kimi(GLOSSARY_MODEL),
+    model: glossaryCall.model,
     messages,
     maxOutputTokens: 8192,
-    providerOptions: kimiOptions(),
+    providerOptions: glossaryCall.providerOptions,
     schema: glossarySchema,
     label: "GLOSSARY",
-    usage: { userId, feature: "glossary", model: await resolveModelId(GLOSSARY_MODEL) } satisfies UsageMeta,
+    usage: { userId, feature: "glossary", model: glossaryCall.modelId } satisfies UsageMeta,
   });
   if (!result.ok) throw new Error(result.error);
 
@@ -188,7 +190,7 @@ export async function glossaryInLanguage(
   userId: string | null,
   lang: Lang,
 ): Promise<number> {
-  if (!kimiConfigured()) return 0;
+  if (!(await featureConfigured("glossary"))) return 0;
   const document = await db.document.findUnique({
     where: { id: documentId },
     select: { title: true, glossary: true },
@@ -202,14 +204,15 @@ export async function glossaryInLanguage(
   const messages: ModelMessage[] = [
     { role: "user", content: glossaryLanguagePrompt(document.title, wanted, lang) },
   ];
+  const glossaryCall = await featureCall("glossary", GLOSSARY_EFFORT);
   const result = await callForJson({
-    model: await kimi(GLOSSARY_MODEL),
-    providerOptions: kimiOptions(),
+    model: glossaryCall.model,
+    providerOptions: glossaryCall.providerOptions,
     messages,
     maxOutputTokens: 8192,
     schema: glossaryLanguageSchema,
     label: "GLOSSARY_LANGUAGE",
-    usage: { userId, feature: "glossary", model: await resolveModelId(GLOSSARY_MODEL) } satisfies UsageMeta,
+    usage: { userId, feature: "glossary", model: glossaryCall.modelId } satisfies UsageMeta,
   });
   if (!result.ok) throw new Error(result.error);
 

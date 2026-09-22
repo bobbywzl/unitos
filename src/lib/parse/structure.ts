@@ -101,7 +101,7 @@ export async function selectCoreBlocks(
   // (scripts/parse-compare.ts).
   choice: ParseModel = DEFAULT_PARSE_MODEL,
 ): Promise<ParsedBlock[]> {
-  if (!parseConfigured(choice) || blocks.length < 5) return blocks;
+  if (!(await parseConfigured(choice)) || blocks.length < 5) return blocks;
   const listed = blocks.slice(0, MAX_LISTED_BLOCKS);
 
   const messages: ModelMessage[] = [{ role: "user", content: corePrompt(title, listed) }];
@@ -175,7 +175,7 @@ export async function structureBlocks(
   signal?: AbortSignal,
   choice: ParseModel = DEFAULT_PARSE_MODEL,
 ): Promise<ParsedBlock[]> {
-  if (!parseConfigured(choice) || blocks.length < 5) return blocks;
+  if (!(await parseConfigured(choice)) || blocks.length < 5) return blocks;
   const listed = blocks.slice(0, MAX_LISTED_BLOCKS);
 
   const messages: ModelMessage[] = [{ role: "user", content: structurePrompt(title, listed) }];

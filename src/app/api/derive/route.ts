@@ -4,19 +4,16 @@ import { z } from "zod";
 import { passageSources, resolvePassage, segmentsSchema } from "@/lib/anchors/passage";
 import { bumpNotebook, notebookAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
-import { claude, claudeConfigured, claudeOptions } from "@/lib/claude";
 import {
   DERIVATION_EFFORT,
-  DERIVATION_MODEL,
-  VISION_MODEL,
   MAX_OUTPUT_TOKENS,
   STREAM_ERROR_TOKEN,
   STREAM_NOTE_TOKEN,
   VISUALIZE_CHECK,
   VISUALIZE_CHECK_MAX_SVG,
   VISUALIZE_EFFORT,
-  VISUALIZE_MODEL,
 } from "@/lib/derive/config";
+import { derivationFeature, featureCall, featureConfigured, featureModelId } from "@/lib/feature-models";
 import {
   annotationsSection,
   corpusSection,
@@ -53,7 +50,7 @@ import type { TFunc } from "@/lib/i18n/dictionaries";
 import { currentLang, serverT } from "@/lib/i18n/server";
 import { checkOutput, flagOutput, quotesAsText } from "@/lib/derive/check";
 import { gatewayHeaders } from "@/lib/gateway";
-import { kimi, kimiConfigured, kimiOptions } from "@/lib/kimi";
+import { kimiConfigured } from "@/lib/kimi";
 import { resolveModelId } from "@/lib/models";
 import { promptTemplates } from "@/lib/prompts";
 import { corpusDistillPrompt } from "@/lib/prompts/distill";
@@ -275,14 +272,14 @@ async function handle(req: Request, t: TFunc) {
     if (!ultraActive(user)) {
       return NextResponse.json({ error: t("api.visualizeNeedsUltra") }, { status: 403 });
     }
-    if (!claudeConfigured()) {
+    if (!(await featureConfigured("visualize"))) {
       return NextResponse.json({ error: t("api.visualizeNeedsKey") }, { status: 503 });
     }
   }
   const usageMeta = {
     userId: user.id,
     feature: data.type.toLowerCase(),
-    model: await resolveModelId(DERIVATION_MODEL[data.type]),
+    model: await resolveModelId(await featureModelId(derivationFeature(data.type))),
   };
 
   const template = promptTemplates[data.type];
@@ -413,11 +410,12 @@ async function handle(req: Request, t: TFunc) {
         corpusHeartbeat = setInterval(() => send(" "), 5_000);
         const fail = (message: string) => send(`${STREAM_ERROR_TOKEN}${message}`);
         try {
+          const distillCall = await featureCall("distill", DERIVATION_EFFORT.DISTILL);
           const result = await callForJson({
-            model: await kimi(DERIVATION_MODEL.DISTILL),
+            model: distillCall.model,
             messages: corpusMessages,
             maxOutputTokens: MAX_OUTPUT_TOKENS.DISTILL,
-            providerOptions: kimiOptions(DERIVATION_EFFORT.DISTILL),
+            providerOptions: distillCall.providerOptions,
             schema: distillOutputSchema,
             label: "DISTILL:corpus",
             usage: usageMeta,
@@ -587,11 +585,12 @@ async function handle(req: Request, t: TFunc) {
     return heartbeatResponse(
       req,
       async () => {
+        const compareCall = await featureCall("compare", DERIVATION_EFFORT.COMPARE);
         const result = await callForJson({
-          model: await kimi(DERIVATION_MODEL.COMPARE),
+          model: compareCall.model,
           messages: compareMessages,
           maxOutputTokens: MAX_OUTPUT_TOKENS.COMPARE,
-          providerOptions: kimiOptions(DERIVATION_EFFORT.COMPARE),
+          providerOptions: compareCall.providerOptions,
           schema: compareOutputSchema,
           label: "COMPARE",
           usage: usageMeta,
@@ -930,16 +929,18 @@ async function handle(req: Request, t: TFunc) {
     : frameImage
       ? [{ bytes: frameImage, mediaType: "image/jpeg" }]
       : pageImages.map((bytes) => ({ bytes, mediaType: "image/png" }));
-  // A call with an image goes to the model that reads images (SPEC.md §2):
-  // the feature's model, GLM 5.3, takes text alone. An SVG chart goes to
-  // Claude Opus 5.5, which reads the source whole (lib/derive/svg-chart.ts).
+  // The feature's model (lib/feature-models.ts) at the feature's effort. A
+  // call with an image goes to the vision feature's model (SPEC.md §2): the
+  // default, GLM 5.3, takes text alone. An SVG chart goes to the svg-chart
+  // feature's model, which reads the source whole (lib/derive/svg-chart.ts).
   const svgChart = ctx.figure?.kind === "svg" ? await svgChartCall() : null;
-  const chatModelId = svgChart
-    ? svgChart.modelId
-    : attachedImages.length > 0
-      ? VISION_MODEL
-      : DERIVATION_MODEL[data.type];
-  usageMeta.model = svgChart ? svgChart.modelId : await resolveModelId(chatModelId);
+  const chat =
+    svgChart ??
+    (await featureCall(
+      attachedImages.length > 0 ? "vision" : derivationFeature(data.type),
+      DERIVATION_EFFORT[data.type],
+    ));
+  usageMeta.model = chat.modelId;
   const messages: ModelMessage[] = [
     {
       role: "system",
@@ -982,13 +983,14 @@ async function handle(req: Request, t: TFunc) {
     return heartbeatResponse(
       req,
       async () => {
-        const visualModel = await claude(VISUALIZE_MODEL);
-        const visualUsage = { ...usageMeta, model: await resolveModelId(VISUALIZE_MODEL) };
+        const visualCall = await featureCall("visualize", VISUALIZE_EFFORT);
+        const visualModel = visualCall.model;
+        const visualUsage = { ...usageMeta, model: visualCall.modelId };
         const result = await callForJson({
           model: visualModel,
           messages,
           maxOutputTokens: MAX_OUTPUT_TOKENS.VISUALIZE,
-          providerOptions: claudeOptions(VISUALIZE_EFFORT),
+          providerOptions: visualCall.providerOptions,
           schema: visualizeOutputSchema,
           label: "VISUALIZE",
           usage: visualUsage,
@@ -1034,7 +1036,7 @@ async function handle(req: Request, t: TFunc) {
               },
             ],
             maxOutputTokens: MAX_OUTPUT_TOKENS.VISUALIZE,
-            providerOptions: claudeOptions(VISUALIZE_EFFORT),
+            providerOptions: visualCall.providerOptions,
             schema: visualizeCheckSchema,
             label: "VISUALIZE:check",
             usage: visualUsage,
@@ -1083,10 +1085,9 @@ async function handle(req: Request, t: TFunc) {
     );
   }
 
-  const model = svgChart?.model ?? (await kimi(chatModelId));
+  const model = chat.model;
   const maxOutputTokens = MAX_OUTPUT_TOKENS[data.type];
-  const effort = DERIVATION_EFFORT[data.type];
-  const providerOptions = svgChart?.providerOptions ?? kimiOptions(effort);
+  const providerOptions = chat.providerOptions;
 
   // 3 + 4. Stream or collect, then route by destination.
   // EXPLAIN, SIMPLIFY, ANALYZE, SUMMARIZE, and ASK stream text. SALIENCE and
@@ -1321,7 +1322,7 @@ async function handle(req: Request, t: TFunc) {
       model,
       messages,
       maxOutputTokens,
-      providerOptions: kimiOptions(effort),
+      providerOptions,
       schema: findOutputSchema,
       label: "FIND",
       usage: usageMeta,
@@ -1354,7 +1355,7 @@ async function handle(req: Request, t: TFunc) {
       model,
       messages,
       maxOutputTokens,
-      providerOptions: kimiOptions(effort),
+      providerOptions,
       schema: salienceOutputSchema,
       label: "SALIENCE",
       usage: usageMeta,
@@ -1405,7 +1406,7 @@ async function handle(req: Request, t: TFunc) {
               model,
               messages,
               maxOutputTokens,
-              providerOptions: kimiOptions(effort),
+              providerOptions,
               schema: formalizeArticleSchema,
               label: "FORMALIZE:article",
               usage: usageMeta,
@@ -1452,7 +1453,7 @@ async function handle(req: Request, t: TFunc) {
             model,
             messages,
             maxOutputTokens,
-            providerOptions: kimiOptions(effort),
+            providerOptions,
             schema: formalizeNotesSchema,
             label: "FORMALIZE:notes",
             usage: usageMeta,
@@ -1579,7 +1580,7 @@ async function handle(req: Request, t: TFunc) {
             model,
             messages,
             maxOutputTokens,
-            providerOptions: kimiOptions(effort),
+            providerOptions,
             schema: distillOutputSchema,
             label: "DISTILL",
             usage: usageMeta,

@@ -1,13 +1,12 @@
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { quotesOf } from "@/lib/notes/quote-sources";
-import { MERGE_EFFORT, MERGE_MODEL } from "@/lib/derive/config";
+import { MERGE_EFFORT } from "@/lib/derive/config";
+import { featureCall, featureConfigured } from "@/lib/feature-models";
 import { callForJson } from "@/lib/derive/json-call";
 import type { Lang } from "@/lib/i18n/config";
-import { kimi, kimiConfigured, kimiOptions } from "@/lib/kimi";
 import { mergePrompt } from "@/lib/prompts/merge";
 import type { UsageMeta } from "@/lib/usage";
-import { resolveModelId } from "@/lib/models";
 
 // Merge with AI (SPEC.md §6): the notes rewritten as one note — every point
 // kept, repetition written once, the reader's own words left alone. The plain
@@ -24,19 +23,20 @@ export async function mergeNoteText(
   userId: string | null,
   lang: Lang,
 ): Promise<string | null> {
-  if (!kimiConfigured()) return null;
+  if (!(await featureConfigured("merge"))) return null;
   const listed = notes
     .map((n) => ({ id: n.id, text: n.content.trim().slice(0, MERGE_CHARS) }))
     .filter((n) => n.text !== "");
   if (listed.length < 2) return null;
+  const mergeCall = await featureCall("merge", MERGE_EFFORT);
   const result = await callForJson({
-    model: await kimi(MERGE_MODEL),
+    model: mergeCall.model,
     messages: [{ role: "user", content: mergePrompt({ lang, notes: listed }) }],
     maxOutputTokens: MERGE_MAX_OUTPUT_TOKENS,
-    providerOptions: kimiOptions(MERGE_EFFORT),
+    providerOptions: mergeCall.providerOptions,
     schema: mergeSchema,
     label: "MERGE",
-    usage: { userId, feature: "merge", model: await resolveModelId(MERGE_MODEL) } satisfies UsageMeta,
+    usage: { userId, feature: "merge", model: mergeCall.modelId } satisfies UsageMeta,
   });
   if (!result.ok) {
     console.error(`[merge] ${result.error}`);

@@ -507,7 +507,7 @@ export async function layoutBlocks(input: {
   choice?: ParseModel;
 }): Promise<{ blocks: ParsedBlock[]; font?: PageFont }> {
   const { blocks, title, pageHtml, url, signal, choice = DEFAULT_PARSE_MODEL } = input;
-  if (!parseConfigured(choice) || !pageHtml || blocks.length < 3) return { blocks };
+  if (!(await parseConfigured(choice)) || !pageHtml || blocks.length < 3) return { blocks };
   const digest = pageDigest(pageHtml, url);
   if (!digest) return { blocks };
   const listed = blocks.slice(0, MAX_LISTED_BLOCKS);

@@ -11,14 +11,15 @@ import { gatewayConfigured } from "@/lib/gateway";
 
 export type ModelRole = "glm" | "glmFlash" | "kimi" | "claude" | "opus" | "sonnet" | "gemini";
 
-export const MODEL_ROLES: Record<ModelRole, { provider: string; defaultId: string }> = {
-  glm: { provider: "Z.ai", defaultId: GLM_5_3 },
-  glmFlash: { provider: "Z.ai", defaultId: GLM_5_3_FLASH },
-  kimi: { provider: "Moonshot AI", defaultId: KIMI_K3 },
-  claude: { provider: "Anthropic", defaultId: CLAUDE_FABLE_5_1 },
-  opus: { provider: "Anthropic", defaultId: CLAUDE_OPUS_5_5 },
-  sonnet: { provider: "Anthropic", defaultId: CLAUDE_SONNET_5 },
-  gemini: { provider: "Google", defaultId: GEMINI_FLASH },
+// name: the model's name as the docs and the admin page say it.
+export const MODEL_ROLES: Record<ModelRole, { provider: string; defaultId: string; name: string }> = {
+  glm: { provider: "Z.ai", defaultId: GLM_5_3, name: "GLM 5.3" },
+  glmFlash: { provider: "Z.ai", defaultId: GLM_5_3_FLASH, name: "GLM 5.3 Flash" },
+  kimi: { provider: "Moonshot AI", defaultId: KIMI_K3, name: "Kimi K3" },
+  claude: { provider: "Anthropic", defaultId: CLAUDE_FABLE_5_1, name: "Claude Fable 5.1" },
+  opus: { provider: "Anthropic", defaultId: CLAUDE_OPUS_5_5, name: "Claude Opus 5.5" },
+  sonnet: { provider: "Anthropic", defaultId: CLAUDE_SONNET_5, name: "Claude Sonnet 5" },
+  gemini: { provider: "Google", defaultId: GEMINI_FLASH, name: "Gemini Flash" },
 };
 
 export const ROLE_ORDER: ModelRole[] = ["glm", "glmFlash", "kimi", "claude", "opus", "sonnet", "gemini"];

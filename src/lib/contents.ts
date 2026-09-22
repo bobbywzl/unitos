@@ -2,11 +2,10 @@ import type { ModelMessage } from "ai";
 import { z } from "zod";
 import { bumpDocument } from "@/lib/collab";
 import { db } from "@/lib/db";
-import { CONTENTS_EFFORT, CONTENTS_MAX_OUTPUT_TOKENS, CONTENTS_MODEL } from "@/lib/derive/config";
+import { CONTENTS_EFFORT, CONTENTS_MAX_OUTPUT_TOKENS } from "@/lib/derive/config";
+import { featureCall, featureConfigured } from "@/lib/feature-models";
 import { documentPrefix } from "@/lib/derive/context";
 import { callForJson } from "@/lib/derive/json-call";
-import { kimi, kimiConfigured, kimiOptions } from "@/lib/kimi";
-import { resolveModelId } from "@/lib/models";
 import { contentsPrompt } from "@/lib/prompts/contents";
 import type { UsageMeta } from "@/lib/usage";
 
@@ -113,7 +112,7 @@ export function headingContents(
     the document. Returns the entries; [] when the document is too short to
     have parts. Throws with the reason on a failed model call. */
 export async function buildContents(documentId: string, userId: string | null): Promise<ContentsEntry[]> {
-  if (!kimiConfigured()) return [];
+  if (!(await featureConfigured("contents"))) return [];
   const document = await db.document.findUnique({
     where: { id: documentId },
     include: {
@@ -131,14 +130,15 @@ export async function buildContents(documentId: string, userId: string | null): 
     { role: "system", content: documentPrefix(document.title, document.blocks, document.references) },
     { role: "user", content: contentsPrompt({ blockCount: readable.length, maxParts: MAX_PARTS }) },
   ];
+  const contentsCall = await featureCall("contents", CONTENTS_EFFORT);
   const result = await callForJson({
-    model: await kimi(CONTENTS_MODEL),
+    model: contentsCall.model,
     messages,
     maxOutputTokens: CONTENTS_MAX_OUTPUT_TOKENS,
-    providerOptions: kimiOptions(CONTENTS_EFFORT),
+    providerOptions: contentsCall.providerOptions,
     schema: contentsSchema,
     label: "CONTENTS",
-    usage: { userId, feature: "contents", model: await resolveModelId(CONTENTS_MODEL) } satisfies UsageMeta,
+    usage: { userId, feature: "contents", model: contentsCall.modelId } satisfies UsageMeta,
   });
   if (!result.ok) throw new Error(result.error);
 

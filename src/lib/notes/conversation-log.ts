@@ -1,9 +1,9 @@
 import { z } from "zod";
 import { type ConversationLog, loggedTurns, parseStoredLog } from "@/lib/conversation";
 import { db } from "@/lib/db";
-import { GIST_EFFORT, GIST_MODEL } from "@/lib/derive/config";
+import { GIST_EFFORT } from "@/lib/derive/config";
+import { featureCall, featureConfigured } from "@/lib/feature-models";
 import { callForJson } from "@/lib/derive/json-call";
-import { kimi, kimiConfigured, kimiOptions } from "@/lib/kimi";
 import { markdownPreview } from "@/lib/markdown-preview";
 import {
   conversationLogPrompt,
@@ -12,7 +12,6 @@ import {
   LOG_VERSION,
 } from "@/lib/prompts/conversation-log";
 import type { UsageMeta } from "@/lib/usage";
-import { resolveModelId } from "@/lib/models";
 
 // The condensed log of a conversation (SPEC.md §21): one line per message,
 // written by AI the first time the reader hovers the conversation's mark and
@@ -93,17 +92,18 @@ export async function ensureConversationLog(
   if (turns.length === 0) return null;
   const stored = parseStoredLog(note.log);
   if (stored && stored.turns === turns.length && stored.v === LOG_VERSION) return stored;
-  if (!kimiConfigured()) return stored;
+  if (!(await featureConfigured("log"))) return stored;
 
   const listed = turns.map((m) => ({ role: m.role, content: markdownPreview(m.content) || m.content }));
+  const logCall = await featureCall("log", GIST_EFFORT);
   const result = await callForJson({
-    model: await kimi(GIST_MODEL),
+    model: logCall.model,
     messages: [{ role: "user", content: conversationLogPrompt({ turns: listed }) }],
     maxOutputTokens: 16384,
-    providerOptions: kimiOptions(GIST_EFFORT),
+    providerOptions: logCall.providerOptions,
     schema: logSchema,
     label: "LOG",
-    usage: { userId, feature: "log", model: await resolveModelId(GIST_MODEL) } satisfies UsageMeta,
+    usage: { userId, feature: "log", model: logCall.modelId } satisfies UsageMeta,
   });
   if (!result.ok) {
     console.error(`[log] ${result.error}`);

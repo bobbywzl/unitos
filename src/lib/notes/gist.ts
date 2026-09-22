@@ -1,13 +1,12 @@
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { GIST_EFFORT, GIST_MODEL } from "@/lib/derive/config";
+import { GIST_EFFORT } from "@/lib/derive/config";
+import { featureCall, featureConfigured } from "@/lib/feature-models";
 import { callForJson } from "@/lib/derive/json-call";
-import { kimi, kimiConfigured, kimiOptions } from "@/lib/kimi";
 import { clipWords, markdownPreview } from "@/lib/markdown-preview";
 import { GIST_MAX_CHARS, gistPrompt } from "@/lib/prompts/gist";
 import { stripSimplifyMarkers } from "@/lib/sentences";
 import type { UsageMeta } from "@/lib/usage";
-import { resolveModelId } from "@/lib/models";
 
 // The gist of a note: the phrase its collapsed row shows (SPEC.md §6). Written
 // by AI for every note in the batch that has none, one model call per 25
@@ -28,7 +27,7 @@ export async function writeGists(
   userId: string | null,
 ): Promise<Record<string, string>> {
   const gists: Record<string, string> = {};
-  if (!kimiConfigured()) return gists;
+  if (!(await featureConfigured("gist"))) return gists;
   const notes = await db.note.findMany({
     where: { id: { in: noteIds }, gist: null },
     select: { id: true, content: true, derivationType: true, updatedAt: true },
@@ -44,14 +43,15 @@ export async function writeGists(
       }))
       .filter((n) => n.text !== "");
     if (batch.length === 0) continue;
+    const gistCall = await featureCall("gist", GIST_EFFORT);
     const result = await callForJson({
-      model: await kimi(GIST_MODEL),
+      model: gistCall.model,
       messages: [{ role: "user", content: gistPrompt({ notes: batch }) }],
       maxOutputTokens: 16384,
-      providerOptions: kimiOptions(GIST_EFFORT),
+      providerOptions: gistCall.providerOptions,
       schema: gistSchema,
       label: "GIST",
-      usage: { userId, feature: "gist", model: await resolveModelId(GIST_MODEL) } satisfies UsageMeta,
+      usage: { userId, feature: "gist", model: gistCall.modelId } satisfies UsageMeta,
     });
     if (!result.ok) {
       console.error(`[gist] ${result.error}`);

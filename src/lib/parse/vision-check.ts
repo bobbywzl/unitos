@@ -2,12 +2,13 @@ import type { ModelMessage } from "ai";
 import type { Page } from "playwright-core";
 import { z } from "zod";
 import { browserConfigured, launchBrowser, sessionLengthOf, withTimeout } from "@/lib/browser";
-import { VISION_CHECK_EFFORT, VISION_CHECK_MODEL, VISION_CHECK_TILES } from "@/lib/derive/config";
+import { VISION_CHECK_EFFORT, VISION_CHECK_TILES } from "@/lib/derive/config";
+import { featureModelId } from "@/lib/feature-models";
 import { callForJson } from "@/lib/derive/json-call";
 import { serverT } from "@/lib/i18n/server";
 import { hasMedia, isFigureCaption } from "@/lib/parse/figure-audit";
 import { applyLayoutOps, type LayoutOp } from "@/lib/parse/layout";
-import { parseCall, parseConfigured } from "@/lib/parse/model";
+import { parseCall, parseConfigured, type ParseModel } from "@/lib/parse/model";
 import type { ParsedBlock } from "@/lib/parse/types";
 import type { UsageMeta } from "@/lib/usage";
 
@@ -428,10 +429,15 @@ export function applyVisionOps(blocks: ParsedBlock[], ops: VisionOp[]): { blocks
 
 /** Whether the check has what it needs: a browser, the vision model's key,
     and a figure to look at. */
-export function visionCheckPossible(blocks: ParsedBlock[]): boolean {
+export async function visionCheckPossible(blocks: ParsedBlock[]): Promise<boolean> {
   if (process.env.VISION_CHECK === "off") return false;
-  const choice = { id: VISION_CHECK_MODEL, effort: VISION_CHECK_EFFORT };
-  return browserConfigured() && parseConfigured(choice) && blocks.some((b) => hasMedia(b));
+  return browserConfigured() && blocks.some((b) => hasMedia(b)) && (await parseConfigured(await checkModel()));
+}
+
+// The model that reads images: the vision feature's (lib/feature-models.ts),
+// VISION_CHECK_MODEL by default, at the check's effort.
+async function checkModel(): Promise<ParseModel> {
+  return { id: await featureModelId("vision"), effort: VISION_CHECK_EFFORT };
 }
 
 /** Check the blocks against the page as pictures and fix what the pictures
@@ -474,8 +480,7 @@ export async function visionCheck(input: {
         ],
       },
     ];
-    const choice = { id: VISION_CHECK_MODEL, effort: VISION_CHECK_EFFORT };
-    const { model, providerOptions, modelId } = await parseCall(choice);
+    const { model, providerOptions, modelId } = await parseCall(await checkModel());
     const result = await callForJson({
       model,
       messages,

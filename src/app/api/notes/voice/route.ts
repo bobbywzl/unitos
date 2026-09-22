@@ -3,15 +3,14 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { matchInTextLoose } from "@/lib/anchors/match";
 import { thinkingSchema } from "@/lib/assistant/thinking";
-import { claude, claudeConfigured, claudeOptions } from "@/lib/claude";
 import { bumpNotebook, sectionAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
-import { MAX_OUTPUT_TOKENS, VOICE_EFFORT, VOICE_MODEL } from "@/lib/derive/config";
+import { MAX_OUTPUT_TOKENS, VOICE_EFFORT } from "@/lib/derive/config";
+import { featureCall, featureConfigured } from "@/lib/feature-models";
 import { documentPrefix, loadProfile, sectionSkeleton } from "@/lib/derive/context";
 import { callForJson, modelErrorMessage } from "@/lib/derive/json-call";
 import { currentLang, serverT } from "@/lib/i18n/server";
 import type { TFunc } from "@/lib/i18n/dictionaries";
-import { resolveModelId } from "@/lib/models";
 import { ndjsonHeartbeat, ndjsonWriter } from "@/lib/ndjson";
 import { voicePrompt } from "@/lib/prompts/voice";
 import { geminiConfigured } from "@/lib/video/gemini";
@@ -70,7 +69,7 @@ export async function POST(req: Request) {
   if (!whisperConfigured() && !geminiConfigured()) {
     return NextResponse.json({ error: t("api.voiceNoteNeedsKey") }, { status: 503 });
   }
-  if (!claudeConfigured()) {
+  if (!(await featureConfigured("voice"))) {
     return NextResponse.json({ error: t("api.voiceCommandNeedsKey") }, { status: 503 });
   }
 
@@ -149,14 +148,15 @@ export async function POST(req: Request) {
             : []),
           { role: "user", content: userPrompt },
         ];
+        const voiceCall = await featureCall("voice", VOICE_EFFORT[thinking ?? "deep"]);
         const result = await callForJson({
-          model: await claude(VOICE_MODEL),
+          model: voiceCall.model,
           messages,
           maxOutputTokens: MAX_OUTPUT_TOKENS.VOICE,
-          providerOptions: claudeOptions(VOICE_EFFORT[thinking ?? "deep"]),
+          providerOptions: voiceCall.providerOptions,
           schema: planSchema,
           label: "VOICE",
-          usage: { userId: access.user.id, feature: "voice", model: await resolveModelId(VOICE_MODEL) },
+          usage: { userId: access.user.id, feature: "voice", model: voiceCall.modelId },
           abortSignal: req.signal,
         });
         if (!result.ok) throw new Error(t("api.voiceCommandPlanFailed", { reason: result.error }));

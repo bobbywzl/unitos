@@ -3,14 +3,13 @@ import { z } from "zod";
 import { matchInText } from "@/lib/anchors/match";
 import { bumpNotebook } from "@/lib/collab";
 import { db } from "@/lib/db";
-import { CONNECT_EFFORT, CONNECT_MODEL } from "@/lib/derive/config";
+import { CONNECT_EFFORT } from "@/lib/derive/config";
+import { featureCall, featureConfigured } from "@/lib/feature-models";
 import { loadProfile, renderBlockLines } from "@/lib/derive/context";
 import { callForJson } from "@/lib/derive/json-call";
 import type { Lang } from "@/lib/i18n/config";
 import { currentLang } from "@/lib/i18n/server";
-import { kimi, kimiConfigured, kimiOptions } from "@/lib/kimi";
 import { connectPrompt, connectVerifyPrompt } from "@/lib/prompts/connect";
-import { resolveModelId } from "@/lib/models";
 
 // Recommended links (SPEC.md §13): the connections between a project's
 // documents, stored as DocLink rows with recommended: true. The reader asks
@@ -110,7 +109,7 @@ export async function buildConnections(
   // The on-demand scan passes the request signal, so Stop aborts the model call.
   signal?: AbortSignal,
 ): Promise<number> {
-  if (!kimiConfigured()) return 0;
+  if (!(await featureConfigured("connect"))) return 0;
   const reasonLang = lang ?? (await currentLang());
 
   const [document, attachments] = await Promise.all([
@@ -192,14 +191,15 @@ export async function buildConnections(
       }),
     },
   ];
+  const connectCall = await featureCall("connect", CONNECT_EFFORT);
   const result = await callForJson({
-    model: await kimi(CONNECT_MODEL),
+    model: connectCall.model,
     messages,
     maxOutputTokens: 24576,
-    providerOptions: kimiOptions(CONNECT_EFFORT),
+    providerOptions: connectCall.providerOptions,
     schema: outputSchema,
     label: "CONNECT",
-    usage: { userId, feature: "connect", model: await resolveModelId(CONNECT_MODEL) },
+    usage: { userId, feature: "connect", model: connectCall.modelId },
     abortSignal: signal,
   });
   if (!result.ok) {
@@ -249,8 +249,9 @@ export async function buildConnections(
     if (signal?.aborted) break;
     const other = otherById.get(otherId);
     if (!other) continue;
+    const connectCall = await featureCall("connect", CONNECT_EFFORT);
     const verify = await callForJson({
-      model: await kimi(CONNECT_MODEL),
+      model: connectCall.model,
       messages: [
         {
           role: "user",
@@ -271,10 +272,10 @@ export async function buildConnections(
         },
       ],
       maxOutputTokens: 16384,
-      providerOptions: kimiOptions(CONNECT_EFFORT),
+      providerOptions: connectCall.providerOptions,
       schema: verifySchema,
       label: "CONNECT:check",
-      usage: { userId, feature: "connect", model: await resolveModelId(CONNECT_MODEL) },
+      usage: { userId, feature: "connect", model: connectCall.modelId },
       abortSignal: signal,
     });
     if (!verify.ok) {

@@ -138,7 +138,7 @@ export async function refineUrlBlocks(
   // rendering of the blocks, pictured in a browser and compared by the
   // vision model. Where it cannot run, the blocks stand and the report says why.
   let check: VisionCheckReport | null = null;
-  if (pageHtml && visionCheckPossible(blocks)) {
+  if (pageHtml && (await visionCheckPossible(blocks))) {
     onProgress?.("check");
     const checked = await visionCheck({
       url,

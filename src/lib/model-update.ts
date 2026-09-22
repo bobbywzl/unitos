@@ -1,8 +1,9 @@
 import { generateText } from "ai";
-import { claude, claudeApiKey, claudeBaseUrl, claudeConfigured, claudeOptions } from "@/lib/claude";
+import { claudeApiKey, claudeBaseUrl, claudeConfigured } from "@/lib/claude";
 import { db } from "@/lib/db";
 import { gatewayConfigured, gatewayHeaders } from "@/lib/gateway";
-import { kimi, kimiApiKey, kimiConfigured, kimiOptions, moonshotApiUrl } from "@/lib/kimi";
+import { kimiApiKey, kimiConfigured, moonshotApiUrl } from "@/lib/kimi";
+import { modelCall } from "@/lib/model-call";
 import {
   currentModelId,
   forgetModelChoices,
@@ -200,6 +201,24 @@ const CONFIGURED: Record<ModelRole, () => boolean> = {
 
 const PROBE_PROMPT = "Reply with the word OK.";
 
+/** One short call on a chat model id — a claude- id through lib/claude.ts,
+    any other through lib/kimi.ts — that throws when the id does not answer.
+    The admin's choice of a feature's model runs it before the row is
+    written (lib/feature-models.ts). */
+export async function probeChatModel(id: string): Promise<void> {
+  const usage = { userId: null, feature: "model-update", model: id };
+  // A candidate is not a role's default, so the client calls it as written.
+  const { model, providerOptions } = await modelCall(id, "low");
+  const result = await generateText({
+    model,
+    maxOutputTokens: 16384, // a reasoning model counts its reasoning here
+    providerOptions,
+    headers: gatewayHeaders(usage),
+    prompt: PROBE_PROMPT,
+  });
+  recordUsage(usage, sdkTokens(result.usage));
+}
+
 async function probe(role: ModelRole, id: string): Promise<void> {
   const usage = { userId: null, feature: "model-update", model: id };
   if (role === "gemini") {
@@ -221,16 +240,7 @@ async function probe(role: ModelRole, id: string): Promise<void> {
     if (!res.ok) throw new Error(`probe failed (${res.status})`);
     return;
   }
-  // The candidate is not a role's default, so the client calls it as written.
-  const onClaude = role === "claude" || role === "opus";
-  const result = await generateText({
-    model: onClaude ? await claude(id) : await kimi(id),
-    maxOutputTokens: 16384, // a reasoning model counts its reasoning here
-    providerOptions: onClaude ? claudeOptions("low") : kimiOptions("low"),
-    headers: gatewayHeaders(usage),
-    prompt: PROBE_PROMPT,
-  });
-  recordUsage(usage, sdkTokens(result.usage));
+  await probeChatModel(id);
 }
 
 // ── The run ────────────────────────────────────────────────────────────────

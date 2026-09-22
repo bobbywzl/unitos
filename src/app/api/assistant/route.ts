@@ -14,9 +14,6 @@ import { thinkingEffort, thinkingSchema } from "@/lib/assistant/thinking";
 import { notebookAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
 import {
-  DERIVATION_MODEL,
-  VISION_MODEL,
-  WEB_SEARCH_MODEL,
   MAX_OUTPUT_TOKENS,
   STREAM_ERROR_TOKEN,
   STREAM_PLAN_TOKEN,
@@ -36,8 +33,8 @@ import { corpusSystem, documentSystem } from "@/lib/digest/render";
 import { checkOutput } from "@/lib/derive/check";
 import { currentLang, serverT } from "@/lib/i18n/server";
 import { gatewayHeaders } from "@/lib/gateway";
-import { kimi, kimiConfigured, kimiOptions, WEB_SEARCH_MAX_USES, WEB_SEARCH_TOOL, webSearchTool, webSearchUsd } from "@/lib/kimi";
-import { resolveModelId } from "@/lib/models";
+import { kimiConfigured, WEB_SEARCH_MAX_USES, WEB_SEARCH_TOOL, webSearchTool, webSearchUsd } from "@/lib/kimi";
+import { featureCall } from "@/lib/feature-models";
 import { addTokens, computeCostUsd, recordUsage, sdkTokens, type TokenCounts } from "@/lib/usage";
 import type { TFunc } from "@/lib/i18n/dictionaries";
 import { synthesisAskPrompt, synthesisHistoryTurn, synthesisTaskPrompt } from "@/lib/prompts/synthesis";
@@ -257,9 +254,9 @@ async function handle(req: Request, t: TFunc) {
       Array.isArray(m.content) &&
       m.content.some((part) => part.type === "file" && part.mediaType.startsWith("image/")),
   );
-  const chatModelId = data.web === true ? WEB_SEARCH_MODEL : pictured ? VISION_MODEL : DERIVATION_MODEL.SYNTHESIS;
-  usageMeta.model = await resolveModelId(chatModelId);
-  const model = await kimi(chatModelId);
+  const chat = await featureCall(data.web === true ? "web" : pictured ? "vision" : "assistant", effort);
+  usageMeta.model = chat.modelId;
+  const model = chat.model;
 
   if (data.task === "ask") {
     // Web access (SPEC.md §7): the model calls the web-search tool of its
@@ -272,7 +269,7 @@ async function handle(req: Request, t: TFunc) {
     const result = streamText({
       model,
       maxOutputTokens,
-      providerOptions: kimiOptions(effort),
+      providerOptions: chat.providerOptions,
       headers: gatewayHeaders(usageMeta),
       allowSystemInMessages: true,
       messages,
@@ -420,7 +417,7 @@ async function handle(req: Request, t: TFunc) {
     model,
     messages,
     maxOutputTokens,
-    providerOptions: kimiOptions(effort),
+    providerOptions: chat.providerOptions,
     schema: issuesSchema,
     label: `assistant:${data.task}`,
     usage: usageMeta,

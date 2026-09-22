@@ -1,12 +1,11 @@
 import type { ModelMessage } from "ai";
 import { z } from "zod";
-import { CLASSIFY_MODEL } from "@/lib/derive/config";
+import { HANDWRITTEN_EFFORT } from "@/lib/derive/config";
+import { featureCall, featureConfigured } from "@/lib/feature-models";
 import { callForJson } from "@/lib/derive/json-call";
 import { CLASSIFY_IMAGE_WIDTH, renderPdfPage } from "@/lib/handwritten/pages";
-import { claude, claudeConfigured, claudeOptions } from "@/lib/claude";
 import type { ParsedBlock } from "@/lib/parse/types";
 import { classifyPrompt } from "@/lib/prompts/classify";
-import { resolveModelId } from "@/lib/models";
 
 // Import PDF classification (SPEC.md §16): article or handwritten. A PDF whose
 // text layer yielded article-scale text that reads like language is an article
@@ -57,7 +56,7 @@ export async function classifyPdf(
 
   const fallback: PdfKind =
     junk || perPage < FALLBACK_HANDWRITTEN_CHARS_PER_PAGE ? "handwritten" : "article";
-  if (!claudeConfigured()) return fallback;
+  if (!(await featureConfigured("classify"))) return fallback;
 
   // Sample pages: first, middle, last.
   const samples = [...new Set([1, Math.max(1, Math.ceil(pageCount / 2)), pageCount])].slice(
@@ -83,14 +82,15 @@ export async function classifyPdf(
       ],
     },
   ];
+  const classifyCall = await featureCall("classify", HANDWRITTEN_EFFORT);
   const result = await callForJson({
-    model: await claude(CLASSIFY_MODEL),
+    model: classifyCall.model,
     messages,
     maxOutputTokens: 16384,
-    providerOptions: claudeOptions(),
+    providerOptions: classifyCall.providerOptions,
     schema: classifyOutputSchema,
     label: "CLASSIFY",
-    usage: { userId, feature: "classify", model: await resolveModelId(CLASSIFY_MODEL) },
+    usage: { userId, feature: "classify", model: classifyCall.modelId },
   });
   return result.ok ? result.data.kind : fallback;
 }

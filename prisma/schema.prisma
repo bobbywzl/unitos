@@ -859,6 +859,15 @@ model ModelChoice {
   note            String   @default("") // the last run's outcome for this role, for the admin page
 }
 
+// The model per feature (SPEC.md §2, lib/feature-models.ts): the id the
+// admin set for one feature on the admin page. One row per feature that
+// leaves its default; no row = the constant in lib/derive/config.ts.
+model FeatureModel {
+  feature   String   @id // "explain" | "assistant" | "parse" | … (lib/feature-models.ts)
+  modelId   String // the id the feature calls
+  updatedAt DateTime @updatedAt
+}
+
 model ReaderProfile {
   id          String @id @default(cuid())
   userId      String @unique // constant in v1

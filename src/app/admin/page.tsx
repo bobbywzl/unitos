@@ -6,8 +6,10 @@ import { db } from "@/lib/db";
 import { serverT } from "@/lib/i18n/server";
 import { recipientAccounts } from "@/lib/notifications";
 import { AdminNav } from "@/components/admin/admin-nav";
+import { FeatureModels } from "@/components/admin/feature-models";
 import { FeedbackInbox } from "@/components/admin/feedback-inbox";
 import { ModelCheck } from "@/components/admin/model-check";
+import { FEATURE_DEFAULTS, FEATURE_ORDER, type Feature } from "@/lib/feature-models";
 import { MODEL_ROLES, ROLE_ORDER } from "@/lib/models";
 
 export const dynamic = "force-dynamic";
@@ -19,7 +21,7 @@ export default async function AdminPage() {
   if (!(await isAdmin())) redirect("/admin/login");
   const t = await serverT();
 
-  const [feedback, accounts, modelRows] = await Promise.all([
+  const [feedback, accounts, modelRows, featureRows] = await Promise.all([
     db.feedback.findMany({
       orderBy: { createdAt: "desc" },
       take: 300,
@@ -37,6 +39,7 @@ export default async function AdminPage() {
     }),
     recipientAccounts(),
     db.modelChoice.findMany(),
+    db.featureModel.findMany(),
   ]);
   // The model per role (lib/models.ts): the constant, the id called now,
   // and what the last model update found.
@@ -54,6 +57,56 @@ export default async function AdminPage() {
       note: row?.note ?? "",
     };
   });
+  // The model per feature (lib/feature-models.ts): the row the admin set, or
+  // the default. The label is the function's name on the usage page.
+  const featureLabels: Record<Feature, string> = {
+    explain: t("admin.featExplain"),
+    simplify: t("admin.featSimplify"),
+    salience: t("admin.featSalience"),
+    extract: t("admin.featExtract"),
+    distill: t("admin.featDistill"),
+    summarize: t("admin.featSummarize"),
+    compare: t("admin.featCompare"),
+    analyze: t("admin.featAnalyze"),
+    visualize: t("admin.featVisualize"),
+    voice: t("admin.featVoice"),
+    find: t("admin.featFind"),
+    ask: t("admin.featAsk"),
+    formalize: t("admin.featFormalize"),
+    assistant: t("admin.featAssistant"),
+    act: t("admin.featAct"),
+    web: t("admin.featWeb"),
+    vision: t("admin.featVision"),
+    "svg-chart": t("admin.featSvgChart"),
+    stitch: t("admin.featStitch"),
+    "stitch-select": t("admin.featStitchSelect"),
+    merge: t("admin.featMerge"),
+    gist: t("admin.featGist"),
+    log: t("admin.featLog"),
+    glossary: t("admin.featGlossary"),
+    contents: t("admin.featContents"),
+    skeleton: t("admin.featSkeleton"),
+    connect: t("admin.featConnect"),
+    parse: t("admin.featParse"),
+    classify: t("admin.featClassify"),
+    convert: t("admin.featConvert"),
+  };
+  const features = FEATURE_ORDER.map((feature) => {
+    const row = featureRows.find((r) => r.feature === feature);
+    return {
+      feature,
+      label: featureLabels[feature],
+      modelId: row?.modelId ?? FEATURE_DEFAULTS[feature],
+      defaultId: FEATURE_DEFAULTS[feature],
+    };
+  });
+  // The models a feature can pick: every role's default id but Gemini's,
+  // which no chat call takes. A role's default id follows the role.
+  const featureOptions = ROLE_ORDER.filter((role) => role !== "gemini").map((role) => ({
+    id: MODEL_ROLES[role].defaultId,
+    name: MODEL_ROLES[role].name,
+    provider: MODEL_ROLES[role].provider,
+  }));
   // The account that sent each feedback, by name. The admin's view of accounts
   // is names and emails (lib/notifications.ts) — enough to reply.
   const nameOf = new Map(accounts.map((a) => [a.id, a.name || t("admin.localReader")]));
@@ -139,6 +192,15 @@ export default async function AdminPage() {
             </div>
           ))}
           <ModelCheck />
+        </div>
+      </section>
+      <section className="mb-8">
+        <h2 className="mb-2 text-[11px] font-bold tracking-[0.08em] text-sand-600 uppercase">
+          {t("admin.featureModels")}
+        </h2>
+        <div className="rounded-2xl bg-card px-4 py-2 shadow-soft">
+          <p className="py-2 text-xs text-sand-600">{t("admin.featureModelsDesc")}</p>
+          <FeatureModels features={features} options={featureOptions} />
         </div>
       </section>
       <FeedbackInbox

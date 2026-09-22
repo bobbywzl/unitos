@@ -16,7 +16,7 @@ import {
 } from "@/lib/conversation";
 import { stripSimplifyMarkers } from "@/lib/sentences";
 import { db } from "@/lib/db";
-import { DERIVATION_MODEL, VISION_MODEL, MAX_OUTPUT_TOKENS, WEB_SEARCH_MODEL } from "@/lib/derive/config";
+import { MAX_OUTPUT_TOKENS } from "@/lib/derive/config";
 import { svgChartCall } from "@/lib/derive/svg-chart";
 import {
   annotationsSection,
@@ -28,7 +28,7 @@ import {
 import { figureContent, figureVisual, type FigureImage } from "@/lib/derive/figure";
 import { callForJson, modelErrorMessage } from "@/lib/derive/json-call";
 import { currentLang, serverT } from "@/lib/i18n/server";
-import { kimi, kimiConfigured, kimiOptions, WEB_SEARCH_MAX_USES, WEB_SEARCH_TOOL, webSearchTool, webSearchUsd } from "@/lib/kimi";
+import { WEB_SEARCH_MAX_USES, WEB_SEARCH_TOOL, webSearchTool, webSearchUsd } from "@/lib/kimi";
 import type { TFunc } from "@/lib/i18n/dictionaries";
 import { actionsSchema, enrichActions } from "@/lib/assistant/plan";
 import { actPrompt, textSelectionBlock } from "@/lib/prompts/act";
@@ -36,7 +36,7 @@ import { parseBody } from "@/lib/validate";
 import { ultraActive } from "@/lib/tiers";
 import { formatTimeRange, regionSchema } from "@/lib/video/types";
 import type { AssistantPlan } from "@/lib/types";
-import { resolveModelId } from "@/lib/models";
+import { featureCall, featureConfigured } from "@/lib/feature-models";
 
 export const maxDuration = 120;
 
@@ -147,7 +147,7 @@ export async function POST(req: Request) {
 }
 
 async function handle(req: Request, t: TFunc) {
-  if (!kimiConfigured()) {
+  if (!(await featureConfigured("act"))) {
     return NextResponse.json({ error: t("api.assistantNeedsKey") }, { status: 503 });
   }
   const { data, error } = await parseBody(req, requestSchema);
@@ -373,24 +373,24 @@ async function handle(req: Request, t: TFunc) {
   // A video frame goes to the model that reads images (SPEC.md §2); an SVG
   // chart to Claude Opus 5.5, which reads the source whole (lib/derive/svg-chart.ts);
   // a turn with the web on to WEB_SEARCH_MODEL, with its provider's search.
-  const chatModelId = web ? WEB_SEARCH_MODEL : attachedImage ? VISION_MODEL : DERIVATION_MODEL.SYNTHESIS;
-  const chatModel = await resolveModelId(chatModelId);
+  const chatCall = await featureCall(web ? "web" : attachedImage ? "vision" : "act", thinkingEffort(data.thinking));
+  const chat = svgChart ?? chatCall;
   const result = await callForJson({
-    model: svgChart?.model ?? (await kimi(chatModelId)),
+    model: chat.model,
     messages,
     maxOutputTokens: MAX_OUTPUT_TOKENS.SYNTHESIS,
-    providerOptions: svgChart?.providerOptions ?? kimiOptions(thinkingEffort(data.thinking)),
+    providerOptions: chat.providerOptions,
     schema: planSchema,
     label: "assistant:act",
-    usage: { userId: user.id, feature: "act", model: svgChart ? svgChart.modelId : chatModel },
+    usage: { userId: user.id, feature: "act", model: chat.modelId },
     // Stop aborts here too (SPEC.md §6): the client disconnecting stops the
     // model call, not just the response the client would have read.
     abortSignal: req.signal,
     ...(web
       ? {
-          tools: { [WEB_SEARCH_TOOL]: webSearchTool(chatModel) },
+          tools: { [WEB_SEARCH_TOOL]: webSearchTool(chatCall.modelId) },
           stopWhen: isStepCount(WEB_SEARCH_MAX_USES + 1),
-          toolCallUsd: webSearchUsd(chatModel),
+          toolCallUsd: webSearchUsd(chatCall.modelId),
         }
       : {}),
   });
