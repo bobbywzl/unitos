@@ -664,6 +664,11 @@ model VideoAsset {
   size                Int? // kind UPLOAD only
   chunkSize           Int? // kind UPLOAD only
   duration            Float? // seconds; written by the client after metadata loads
+  // The part of the recording that is imported (SPEC.md §15): the range the
+  // reader picked in the upload box, seconds. Null = the whole recording. The
+  // file stays whole; the transcript keeps the lines inside the range alone.
+  clipStart           Float?
+  clipEnd             Float?
   width               Int?
   height              Int?
   transcriptStatus    TranscriptStatus @default(NONE)

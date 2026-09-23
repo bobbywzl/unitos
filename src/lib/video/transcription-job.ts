@@ -9,6 +9,7 @@ import { tidyTranscript } from "@/lib/video/tidy";
 import { deepgramConfigured } from "@/lib/video/deepgram";
 import { geminiConfigured } from "@/lib/video/gemini";
 import { GEMINI_FILE_TTL_MS, geminiFileFresh, type GeminiFile } from "@/lib/video/gemini-files";
+import { clipSegments } from "@/lib/video/segments";
 import {
   geminiMediaPart,
   GEMINI_FILE_MAX_BYTES,
@@ -282,9 +283,16 @@ async function storeTranscript(
   // Cleanup before anything stores: fillers, stutters, and false starts out,
   // punctuation and casing fixed — the transcript reads like an article.
   // Cleanup emptying every line means it misfired; the raw lines stand.
-  // Normalize before grouping: the ranges have to be in order and pulled
-  // apart before lines are cut out of them (lib/video/segments.ts).
-  const grouped = groupSegments(normalizeSegments(segments));
+  // Only the imported part of the recording (SPEC.md §15): the range the
+  // reader picked in the upload box, when they picked one. Normalize before
+  // grouping: the ranges have to be in order and pulled apart before lines
+  // are cut out of them (lib/video/segments.ts).
+  const clip = await db.videoAsset.findUnique({
+    where: { id: assetId },
+    select: { clipStart: true, clipEnd: true },
+  });
+  const kept = clipSegments(segments, clip?.clipStart ?? null, clip?.clipEnd ?? null);
+  const grouped = groupSegments(normalizeSegments(kept));
   const tidied = await tidyTranscript(grouped, userId);
   const lines = tidied.lines.length > 0 ? tidied.lines : grouped;
   console.log(`[transcribe] ${origin}, cleaned by ${tidied.provider}: ${lines.length} lines`);

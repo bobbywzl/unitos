@@ -5,6 +5,22 @@
 // (Deepgram does); unset when it did not, and the speakers pass runs after.
 export type TranscriptSegment = { start: number; end: number; text: string; speaker?: string };
 
+/** The segments inside the imported part of the recording (SPEC.md §15):
+    a segment that overlaps the range is kept and cut to it; the rest are
+    dropped. Null bounds mean no bound on that side. */
+export function clipSegments(
+  segments: TranscriptSegment[],
+  clipStart: number | null,
+  clipEnd: number | null,
+): TranscriptSegment[] {
+  if (clipStart === null && clipEnd === null) return segments;
+  const from = clipStart ?? 0;
+  const to = clipEnd ?? Number.POSITIVE_INFINITY;
+  return segments
+    .filter((s) => s.end > from && s.start < to)
+    .map((s) => ({ ...s, start: Math.max(s.start, from), end: Math.min(s.end, to) }));
+}
+
 // Every rung's segments land here before anything else reads them: trimmed,
 // in start order, and with the ranges pulled apart. A segment that runs past
 // the next segment's start ends where that one begins instead — YouTube's

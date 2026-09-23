@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { isImeKey } from "@/lib/ime";
 import { useT } from "@/components/lang-provider";
 import { CheckIcon } from "@/components/icons";
+import { MediaRange, type MediaClip } from "@/components/reader/media-range";
 import type { TFunc, TKey } from "@/lib/i18n/dictionaries";
 import { readNdjson } from "@/lib/ndjson";
 import { type FinishPlan, warmImages } from "@/lib/finish";
@@ -58,7 +59,9 @@ export type UploadRequest =
 // What the box opens when it is done: the first added document.
 export type OpenTarget = { kind: "document"; id: string };
 
-type Phase = "ready" | "adding" | "done";
+// range: a video or audio file is uploaded and the reader picks the part to
+// import (components/reader/media-range.tsx) before the add completes.
+type Phase = "ready" | "adding" | "range" | "done";
 type Added = { id: string; title: string };
 type IngestEvent =
   | { stage: string; detail?: string }
@@ -177,6 +180,22 @@ export function UploadAssistant({
   const [openTarget, setOpenTarget] = useState<OpenTarget | null>(null);
   const [failures, setFailures] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
+  // The range step (SPEC.md §15): a media file's bytes are up, and the add
+  // waits for the part to import. The resolver ends the wait.
+  const [rangePick, setRangePick] = useState<{ file: File; resolve: (clip: MediaClip | null) => void } | null>(null);
+  function pickRange(file: File): Promise<MediaClip | null> {
+    return new Promise((resolve) => {
+      setRangePick({
+        file,
+        resolve: (clip) => {
+          setRangePick(null);
+          setPhase("adding");
+          resolve(clip);
+        },
+      });
+      setPhase("range");
+    });
+  }
   const subject =
     request.kind === "files"
       ? files.map((f) => f.name).join(" · ")
@@ -273,7 +292,13 @@ export function UploadAssistant({
     return result;
   }
 
-  async function uploadChunked(file: File, kind: "pdf" | "video"): Promise<Response> {
+  // clip: the part of a recording to import, asked for once the bytes are
+  // up and before the add completes (the range step); null = the whole.
+  async function uploadChunked(
+    file: File,
+    kind: "pdf" | "video",
+    clip?: () => Promise<MediaClip | null>,
+  ): Promise<Response> {
     const uploadId = crypto.randomUUID();
     const totalLabel = megabytes(file.size);
     for (let sent = 0; sent < file.size; sent += CHUNK_BYTES) {
@@ -299,6 +324,7 @@ export function UploadAssistant({
           : s,
       );
     }
+    const part = clip ? await clip() : null;
     return fetch("/api/uploads/complete", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -307,6 +333,7 @@ export function UploadAssistant({
         filename: file.name,
         notebookId,
         kind,
+        ...(part ? { clipStart: part.start, clipEnd: part.end } : {}),
       }),
     });
   }
@@ -325,7 +352,7 @@ export function UploadAssistant({
     setSteps(initialIngestSteps(media ? "video" : "pdf"));
     const result = await ingestAndFinish(
       media
-        ? await uploadChunked(file, "video")
+        ? await uploadChunked(file, "video", () => pickRange(file))
         : file.size > SINGLE_REQUEST_BYTES
           ? await uploadChunked(file, "pdf")
           : await (() => {
@@ -540,7 +567,7 @@ export function UploadAssistant({
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape" || isImeKey(e)) return;
       e.stopPropagation();
-      if (phase === "adding") onHide();
+      if (phase === "adding" || phase === "range") onHide();
       else onClose(null);
     };
     window.addEventListener("keydown", onKey, true);
@@ -564,7 +591,7 @@ export function UploadAssistant({
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-ink/30 p-4"
-      onClick={() => (phase === "adding" ? onHide() : onClose(null))}
+      onClick={() => (phase === "adding" || phase === "range" ? onHide() : onClose(null))}
       role="dialog"
       aria-modal
       aria-label={t("panes.uploadAssistant")}
@@ -577,15 +604,15 @@ export function UploadAssistant({
           <span className="font-display text-[17px]">{t("panes.uploadAssistant")}</span>
           <button
             onClick={() => {
-              if (phase === "adding") {
+              if (phase === "adding" || phase === "range") {
                 onHide();
                 return;
               }
               onClose(null);
             }}
-            data-track={phase === "adding" ? "upload-hide" : "upload-close"}
-            aria-label={t(phase === "adding" ? "panes.uploadHide" : "common.close")}
-            data-tip={t(phase === "adding" ? "panes.uploadHide" : "common.close")}
+            data-track={phase === "adding" || phase === "range" ? "upload-hide" : "upload-close"}
+            aria-label={t(phase === "adding" || phase === "range" ? "panes.uploadHide" : "common.close")}
+            data-tip={t(phase === "adding" || phase === "range" ? "panes.uploadHide" : "common.close")}
             className="ml-auto flex size-8 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-700"
           >
             ✕
@@ -638,6 +665,8 @@ export function UploadAssistant({
             )}
           </div>
         )}
+
+        {phase === "range" && rangePick && <MediaRange file={rangePick.file} onDone={rangePick.resolve} />}
 
         {phase === "done" && (
           <div className="flex flex-col gap-2.5">

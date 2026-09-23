@@ -37,6 +37,12 @@ const bodySchema = z.object({
   // upload assistant's import pick; video ignores them.
   pages: z.boolean().default(false),
   convert: z.boolean().default(true),
+  // The part of a recording to import (SPEC.md §15), seconds: the range the
+  // reader picked in the upload box. Absent = the whole recording. Video only.
+  clipStart: z.number().min(0).optional(),
+  clipEnd: z.number().min(0).optional(),
+}).refine((d) => d.clipStart === undefined || d.clipEnd === undefined || d.clipEnd > d.clipStart, {
+  message: "clipEnd must be after clipStart",
 });
 
 type Body = z.infer<typeof bodySchema>;
@@ -253,7 +259,14 @@ async function completeVideo(data: Body, userId: string | null, t: TFunc) {
         data: { documentId: doc.id, order: 0, type: "VIDEO", text: title },
       });
       await tx.videoAsset.create({
-        data: { documentId: doc.id, mimeType: mimeType!, size, chunkSize: UPLOAD_CHUNK_BYTES },
+        data: {
+          documentId: doc.id,
+          mimeType: mimeType!,
+          size,
+          chunkSize: UPLOAD_CHUNK_BYTES,
+          clipStart: data.clipStart ?? null,
+          clipEnd: data.clipEnd ?? null,
+        },
       });
       return doc;
     });

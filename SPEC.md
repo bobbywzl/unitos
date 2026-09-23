@@ -709,6 +709,8 @@ Every add ends with a finishing step before the document opens, so it opens comp
 
 Import PDF still judges every PDF (§16), and an image always imports as a handwritten page — both decided automatically, server-side, on the parsed content alone; nothing in the box steers them.
 
+**The range step.** A video or audio file has one step the box waits on: once its bytes are up and before the add completes, the box plays the file from the browser's own copy (`components/reader/media-range.tsx`) and shows two handles over its length; the reader moves them to keep part of the recording, hearing the preview seek to the handle, and presses Import {start}–{end}, or Import the whole recording. The part goes to `POST /api/uploads/complete` as `clipStart` and `clipEnd` (seconds) and is stored on `VideoAsset.clipStart`/`clipEnd`; null is the whole. The file is stored whole and plays whole. The transcription keeps the lines inside the part alone (`clipSegments`, `lib/video/segments.ts`, applied before the lines are cut, so Transcribe again and a pasted transcript keep to it too), so the assistant, Find, Ask, Formalize, and every derivation read that part and nothing else. A media link, a YouTube link, and a Drive pick have no step: the box has no copy to play. A re-upload that dedupes keeps the existing document's part.
+
 ---
 
 ## 16. Handwritten documents
