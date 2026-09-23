@@ -73,7 +73,6 @@ const en = {
   taskFailed: "Task failed. {reason}",
   planFailed: "The assistant could not form a plan. {reason}",
   // The heading of the passages the assistant's answer about a selection ends with (SPEC.md §7)
-  assistantMatches: "Passages",
   warnSourceQuoteNotFound: "Note source dropped: the quote was not found. ({description})",
   warnBlockNotFoundOrNotText: "Skipped: block not found or not text. ({description})",
   warnQuoteNotFound: "Skipped: the quote was not found in its block. ({description})",
@@ -350,7 +349,6 @@ const zh: Record<keyof typeof en, string> = {
   attachmentTranscribeFailed: "无法转写此文件：{reason}",
   taskFailed: "任务失败。{reason}",
   planFailed: "助手无法生成计划。{reason}",
-  assistantMatches: "匹配片段",
   warnSourceQuoteNotFound: "笔记出处已丢弃：未找到该引文。（{description}）",
   warnBlockNotFoundOrNotText: "已跳过：未找到块或不是文本块。（{description}）",
   warnQuoteNotFound: "已跳过：块中未找到该引文。（{description}）",

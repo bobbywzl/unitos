@@ -1,7 +1,6 @@
 import { isStepCount, type ModelMessage } from "ai";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { matchInText } from "@/lib/anchors/match";
 import { thinkingEffort, thinkingSchema } from "@/lib/assistant/thinking";
 import { passageSources, resolvePassage, segmentsSchema } from "@/lib/anchors/passage";
 import { bumpNotebook, notebookAccess } from "@/lib/collab";
@@ -112,9 +111,9 @@ const requestSchema = z.object({
 });
 
 // The matches (SPEC.md §7): the passages across the document that deal
-// with the selection's topic, the work the old Match-it tool did. Each is a
-// verbatim quote of one block; the server resolves every quote against the
-// real block text before it reaches the reader.
+// with the selection's topic, found before the reply is written so the reply
+// answers from them and cites them. They are the model's working: the reply
+// carries no list of them.
 const matchSchema = z.object({
   blockId: z.string().min(1),
   quote: z.string().min(1).max(600),
@@ -126,10 +125,6 @@ const planSchema = z.object({
   actions: actionsSchema,
   matches: z.array(matchSchema).max(12).optional(),
 });
-
-// The most matches a reply lists, and the longest a listed quote gets.
-const MATCHES_MAX = 8;
-const MATCH_QUOTE_MAX = 220;
 
 // Any unexpected throw still answers with the reason, never a bare 500 —
 // the client toast shows this message.
@@ -400,7 +395,6 @@ async function handle(req: Request, t: TFunc) {
 
   // Validate and enrich every action against the real document
   // (lib/assistant/plan.ts): the sidebar assistant's plan takes the same path.
-  const blockById = new Map(document.blocks.map((b) => [b.id, b]));
   const { actions, warnings } = enrichActions(result.data.actions, {
     documentId: data.documentId,
     blocks: document.blocks,
@@ -409,60 +403,6 @@ async function handle(req: Request, t: TFunc) {
     t,
   });
 
-  // The matches (SPEC.md §7): every quote resolves in its named block — exact,
-  // then the whitespace-tolerant match (SPEC.md §5) — else in any block; a
-  // quote that resolves nowhere drops, and so does one overlapping the
-  // selection or a match already kept. The list joins the reply as its
-  // Passages section: one row per match, the quote, the why, and the block's
-  // tag, which renders as the ¶ chip that jumps to the block. The reply is
-  // what the client shows and what the conversation note stores, so the
-  // passages ride with the answer everywhere it goes.
-  const selectionSpans = passage.map((s) => ({
-    blockId: s.blockId,
-    start: s.startOffset,
-    end: s.endOffset,
-  }));
-  const kept: { blockId: string; start: number; end: number; quote: string; why: string }[] = [];
-  for (const match of result.data.matches ?? []) {
-    const selector = { quotedText: match.quote.trim(), prefix: "", suffix: "" };
-    if (!selector.quotedText) continue;
-    let block = blockById.get(match.blockId);
-    let hit = block ? matchInText(block.text, selector) : null;
-    if (!hit) {
-      block = undefined;
-      for (const candidate of document.blocks) {
-        const found = matchInText(candidate.text, selector);
-        if (found) {
-          block = candidate;
-          hit = found;
-          break;
-        }
-      }
-    }
-    if (!block || !hit) continue;
-    const overlaps = (s: { blockId: string; start: number; end: number }) =>
-      s.blockId === block!.id && hit!.start < s.end && hit!.end > s.start;
-    if (selectionSpans.some(overlaps) || kept.some(overlaps)) continue;
-    kept.push({
-      blockId: block.id,
-      start: hit.start,
-      end: hit.end,
-      quote: block.text.slice(hit.start, hit.end),
-      why: match.why.trim(),
-    });
-    if (kept.length >= MATCHES_MAX) break;
-  }
-  const matchLines =
-    kept.length > 0
-      ? [
-          "",
-          `**${t("api.assistantMatches")}**`,
-          ...kept.map((m) => {
-            const quote = m.quote.length > MATCH_QUOTE_MAX ? `${m.quote.slice(0, MATCH_QUOTE_MAX - 1)}…` : m.quote;
-            return `- “${quote.replace(/\s+/g, " ")}” — ${m.why} [block ${m.blockId}]`;
-          }),
-        ]
-      : [];
 
   // An anchored conversation persists like the tools' output: one note in the
   // hidden Annotations section, anchored to the selection, updated per turn.
@@ -473,7 +413,7 @@ async function handle(req: Request, t: TFunc) {
     (actions.length > 0
       ? `Applied ${actions.length} action${actions.length === 1 ? "" : "s"}.`
       : "No actions proposed.");
-  const replyText = [answer, ...matchLines].join("\n");
+  const replyText = answer;
   const turns: ChatTurn[] = [
     ...priorTurns,
     { role: "user", content: data.command },
@@ -553,7 +493,7 @@ async function handle(req: Request, t: TFunc) {
   }
 
   const plan: AssistantPlan = {
-    reply: result.data.reply === null && kept.length === 0 ? null : replyText,
+    reply: result.data.reply === null ? null : replyText,
     actions,
     warnings,
     conversationNoteId,
