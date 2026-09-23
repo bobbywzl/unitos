@@ -31,15 +31,22 @@ import {
 // The tray is for triage first: pending notes hoist to the top as one queue,
 // accepted notes sit under their section label (design 1a), collapsed to one
 // line each, and move by a hold anywhere on the card — as on the notes full
-// page. A search shows the notes it found whole, with the words it found lit
-// up. Renaming sections and composing at length live on the notes full page.
+// page. The tray holds the open document's notes alone (SPEC.md §6): the
+// notes written in it and the notes that quote it; the notes full page has
+// the whole project, and a line under the queue says how many pending notes
+// wait there. A search shows the notes it found whole, with the words it
+// found lit up. Renaming sections and composing at length live on the notes
+// full page.
 export function NotesTray({
   tree,
   pending,
+  pendingElsewhere = 0,
   actions,
 }: {
   tree: SectionView[];
   pending: NoteView[];
+  /** Pending notes of other documents and of the project: on the notes full page. */
+  pendingElsewhere?: number;
   actions: OutlineActions;
 }) {
   const t = useT();
@@ -135,6 +142,17 @@ export function NotesTray({
             <NoteCard key={note.id} note={note} actions={actions} variant="tray" search={query} />
           ))}
         </div>
+      )}
+
+      {pendingElsewhere > 0 && !needle && (
+        <Link
+          href={`/n/${actions.notebookId}/notes`}
+          data-track="notes-pending-elsewhere"
+          data-tip={t("outline.pendingElsewhereTitle")}
+          className="text-[12px] text-sand-600 hover:text-clay-800"
+        >
+          {t("outline.pendingElsewhere", { n: pendingElsewhere })}
+        </Link>
       )}
 
       {/* One drag across the tray (SPEC.md §6): a hold anywhere on a note

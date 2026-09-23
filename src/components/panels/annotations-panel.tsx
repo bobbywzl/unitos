@@ -32,6 +32,8 @@ import { markdownPreview } from "@/lib/markdown-preview";
 import { useGist } from "@/lib/gist-client";
 import { NoteId } from "@/components/outline/note-id";
 import { AnnotationGrip } from "@/components/outline/annotation-grip";
+import { referenceContent } from "@/lib/annotation-reference";
+import { ANNOTATION_KIND_KEY } from "@/lib/annotations/kind";
 import { AnnotationMenu } from "@/components/panels/annotation-menu";
 import { useCardDropOpen } from "@/components/outline/use-card-drop";
 import { useCollapsedView, type CollapsedViewModel } from "@/components/use-collapsed-view";
@@ -159,11 +161,13 @@ function AnnotationCard({
                 annotationId: annotation.id,
                 documentId,
                 sourceId,
-                label: gist,
-                // A visualization brings its picture into the note.
-                ...(annotation.kind === "visualize" ? { picture: annotation.content } : {}),
-                // A conversation brings its log under the row.
-                ...(annotation.conversation.length > 0 ? { turns: annotation.conversation.length } : {}),
+                kind: annotation.kind,
+                label: t(ANNOTATION_KIND_KEY[annotation.kind]),
+                words: gist,
+                // The quote lands above the row; the text, the picture, or
+                // the conversation's log under it (lib/annotation-reference.ts).
+                ...(annotation.quotedText ? { quote: annotation.quotedText } : {}),
+                ...referenceContent(annotation.kind, annotation.content, annotation.quotedText, annotation.conversation.length),
               }}
             />
           </div>

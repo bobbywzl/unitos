@@ -52,7 +52,7 @@ const en = {
   revertTitle: "Put the paragraph back to the text before this edit",
   restoreTitle: "Put the removed paragraph back",
   dragAnnotationTitle:
-    "Drag this annotation onto a note: the note gets a reference that opens the annotation",
+    "Drag this annotation onto a note: the note gets its quote, a row that opens it, and its text",
   deleteAnnotationTitle: "Delete this annotation and its mark in the reader",
   // The three-dots menu on every annotation (annotation-menu.tsx)
   annotationMenu: "Annotation actions",
@@ -143,7 +143,7 @@ const zh: Record<keyof typeof en, string> = {
   restoreFailed: "恢复失败",
   revertTitle: "把段落还原为此次编辑之前的文本",
   restoreTitle: "恢复被移除的段落",
-  dragAnnotationTitle: "把这条批注拖到笔记上：笔记里会放一条打开它的批注链接",
+  dragAnnotationTitle: "把这条批注拖到笔记上：笔记里会放上它的引文、一条打开它的批注链接和它的内容",
   deleteAnnotationTitle: "删除此批注及其在阅读器中的标记",
   annotationMenu: "批注操作",
   annotationMenuTitle: "把此批注放进笔记、跳转到它，或删除它",

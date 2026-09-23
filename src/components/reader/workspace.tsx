@@ -153,7 +153,13 @@ export function Workspace({
 }) {
   const t = useT();
   const canEdit = collab.canEdit;
-  const { tree, pending, actions, lastRejected, undoReject } = useOutline(notebook, canEdit);
+  // The tray's notes are the open document's (SPEC.md §6); the notes full
+  // page has the whole project.
+  const { tree, pending, pendingElsewhere, actions, lastRejected, undoReject } = useOutline(
+    notebook,
+    canEdit,
+    activeDocumentId,
+  );
   // Live sync: poll the corpus's rev, refresh when another account changes it,
   // and learn who else is here (SPEC.md gained this with sharing).
   const presence = useNotebookSync({
@@ -762,7 +768,9 @@ export function Workspace({
 
             {/* Keyed by tab: switching remounts the panel, and it rises in. */}
             <div key={tab} className="panel-in min-h-0 flex-1 overflow-y-auto">
-              {tab === "notes" && <NotesTray tree={tree} pending={pending} actions={actions} />}
+              {tab === "notes" && (
+                <NotesTray tree={tree} pending={pending} pendingElsewhere={pendingElsewhere} actions={actions} />
+              )}
               {tab === "assistant" && assistant}
               {tab === "distill" && distillPanel}
               {tab === "annotations" && annotationsPanel}

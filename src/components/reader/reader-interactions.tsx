@@ -24,6 +24,7 @@ import {
   type SimplifiedSentence,
 } from "@/lib/sentences";
 import type {
+  AnnotationItem,
   AssistantAction,
   AssistantPlan,
   Distillation,
@@ -115,7 +116,8 @@ import { openVisualization } from "@/components/reader/visualization-viewer";
 import { setQuoteDragImage, writeQuoteDrag, type QuoteDrag } from "@/lib/quote-drag";
 import { startCardDrag } from "@/lib/card-drag";
 import { pointsAtText, skipsDrag, watchHold } from "@/lib/hold-drag";
-import { ANNOTATION_PARAM, referenceLabel, type AnnotationReference } from "@/lib/annotation-reference";
+import { ANNOTATION_PARAM, referenceContent, referenceWords, type AnnotationReference } from "@/lib/annotation-reference";
+import { ANNOTATION_KIND_KEY } from "@/lib/annotations/kind";
 
 // One block's span of a selection (SPEC.md §5).
 type Segment = Omit<SourceInput, "documentId">;
@@ -989,9 +991,6 @@ export function ReaderInteractions({
   const [voice, setVoice] = useState<"idle" | "loading" | "playing">("idle");
   const voiceAudioRef = useRef<HTMLAudioElement | null>(null);
   const voiceRunRef = useRef(0);
-  // The article menu floats open at the top of the page; it hides once the
-  // reader scrolls and returns when the reader is back at the top.
-  const [atTop, setAtTop] = useState(true);
   // Optimistic highlight marks: painted the instant a color dot is clicked,
   // cleared when the server's anchors arrive with the refresh.
   const [localAnchors, setLocalAnchors] = useState<
@@ -1170,26 +1169,32 @@ export function ReaderInteractions({
     Object.values(anchorHighlights)
       .flat()
       .find((h) => h.noteId === noteId)?.sourceId ?? null;
-  const annotationReference = (
-    noteId: string | null | undefined,
-    sourceId: string | null,
-    text: string,
-    fallback: string,
-    picture?: string,
-    // The turns the card's conversation holds (SPEC.md §21): a drop brings
-    // the conversation's log into the note under the row.
-    turns = 0,
-  ): AnnotationReference | null =>
-    noteId
-      ? {
-          annotationId: noteId,
-          documentId,
-          sourceId,
-          label: referenceLabel(text, fallback),
-          ...(picture ? { picture } : {}),
-          ...(turns > 0 ? { turns } : {}),
-        }
-      : null;
+  // The reference a card drags: the annotation, its kind, the words it is
+  // anchored to (the quote the note gets), its content (the text, the
+  // picture, or the turns of its conversation — a drop brings the
+  // conversation's log into the note, SPEC.md §21), and its first words for
+  // the ghost.
+  const annotationReference = (input: {
+    noteId: string | null | undefined;
+    sourceId: string | null;
+    kind: AnnotationItem["kind"];
+    quote: string | null;
+    content: string;
+    turns?: number;
+  }): AnnotationReference | null => {
+    if (!input.noteId) return null;
+    const name = t(ANNOTATION_KIND_KEY[input.kind]);
+    return {
+      annotationId: input.noteId,
+      documentId,
+      sourceId: input.sourceId,
+      kind: input.kind,
+      label: name,
+      words: referenceWords(input.content, name),
+      ...(input.quote ? { quote: input.quote } : {}),
+      ...referenceContent(input.kind, input.content, input.quote, input.turns ?? 0),
+    };
+  };
   const annotationGrip = (reference: AnnotationReference | null) =>
     dropOpen && reference ? <AnnotationGrip reference={reference} className="-ml-1" /> : null;
   // A hold on the card's blank space, off its controls and off the header
@@ -1208,7 +1213,7 @@ export function ReaderInteractions({
         document.body.style.userSelect = "none";
         startCardDrag(
           { clientX: at.x, clientY: at.y },
-          { kind: "annotation", ids: [reference.annotationId], label: reference.label, reference },
+          { kind: "annotation", ids: [reference.annotationId], label: reference.words, reference },
           () => {
             document.body.style.userSelect = "";
           },
@@ -2862,15 +2867,6 @@ export function ReaderInteractions({
   // The contents list (SPEC.md §26), opened from the Contents button at the
   // top left of the article.
   const [contentsOpen, setContentsOpen] = useState(false);
-  // The article menu tracks the scroll position: visible only at the top.
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-    const onScroll = () => setAtTop(container.scrollTop < 24);
-    onScroll();
-    container.addEventListener("scroll", onScroll, { passive: true });
-    return () => container.removeEventListener("scroll", onScroll);
-  }, []);
 
   // The lead tool (SPEC.md §6): when the popover opens on a selection, Jev
   // predicts which tool the reader reaches for, from the selection and the
@@ -5812,29 +5808,24 @@ function blockFormatKind(
 
   // The article menu: the Contents button (SPEC.md §26) and the list it
   // opens — the article's parts, each a jump to its block. In Normal view it
-  // floats open at the top of the page, hides once the reader scrolls, and
-  // returns at the top — the strip spans the pane so the list can size to
-  // it, and only the controls take pointer events. In a split view it sits
-  // in the pane header, always in reach, and its list drops below the
-  // header (SPEC.md §6). A transcript has the video pane's own tools
-  // instead (SPEC.md §11).
+  // floats at the top left of the pane and stays there as the article
+  // scrolls: a sticky block with no height, like the controls at the top
+  // right, so the text runs under it, and only the controls take pointer
+  // events. In a split view it sits in the pane header, always in reach,
+  // and its list drops below the header (SPEC.md §6). A transcript has the
+  // video pane's own tools instead (SPEC.md §11).
   const articleMenu = (
       <div
-      data-track-surface="article-menu"
-        inert={!split && !atTop}
+        data-track-surface="article-menu"
         className={
-          split
-            ? "relative flex shrink-0 items-center"
-            : `pointer-events-none absolute inset-x-4 top-4 z-30 transition duration-200 print:hidden ${
-                atTop ? "opacity-100" : "-translate-y-2 opacity-0"
-              }`
+          split ? "relative flex shrink-0 items-center" : "pointer-events-none sticky top-4 z-30 h-0 print:hidden"
         }
       >
         <div
           className={
             split
               ? "flex w-max items-start gap-1.5 [&>nav]:absolute [&>nav]:top-full [&>nav]:left-0 [&>nav]:mt-2 [&>nav]:w-[min(400px,70vw)]"
-              : "flex flex-col items-start gap-1.5"
+              : "absolute top-0 left-4 flex w-[min(400px,calc(100%-32px))] flex-col items-start gap-1.5"
           }
         >
           <ContentsMenu documentId={documentId} open={contentsOpen} onOpenChange={setContentsOpen} />
@@ -5870,45 +5861,45 @@ function blockFormatKind(
   // The annotation each card over the article holds, as a reference
   // (lib/annotation-reference.ts): what its grip and a hold on it drag.
   const annotationCardReference = annotationCard
-    ? annotationReference(
-        annotationCard.noteId,
-        annotationCard.sourceId,
-        annotationCard.saved,
-        t(annotationCard.kind === "highlight" ? "reader.highlight" : "reader.comment"),
-      )
+    ? annotationReference({
+        noteId: annotationCard.noteId,
+        sourceId: annotationCard.sourceId,
+        kind: annotationCard.kind,
+        quote: annotationCard.quotedText,
+        content: annotationCard.saved,
+      })
     : null;
   const bubbleReference =
     bubble && !bubble.streaming
-      ? annotationReference(
-          bubble.noteId,
-          bubble.noteId ? sourceIdOfNote(bubble.noteId) : null,
-          bubble.text,
-          t(bubble.kind === "analyze" ? "reader.analysis" : bubble.kind === "visualize" ? "reader.visualization" : "reader.explanation"),
-          // A visualization brings its picture into the note.
-          bubble.kind === "visualize" ? bubble.text : undefined,
-          bubble.conversation.length,
-        )
+      ? annotationReference({
+          noteId: bubble.noteId,
+          sourceId: bubble.noteId ? sourceIdOfNote(bubble.noteId) : null,
+          kind: bubble.kind,
+          quote: bubble.anchor ? passageText(bubble.anchor) : null,
+          content: bubble.text,
+          turns: bubble.conversation.length,
+        })
       : null;
   const simplifyReference =
     simplifyCard && !simplifyCard.streaming
-      ? annotationReference(
-          simplifyCard.noteId,
-          simplifyCard.noteId ? sourceIdOfNote(simplifyCard.noteId) : null,
-          simplifyCard.text,
-          t("reader.simplified"),
-          undefined,
-          simplifyCard.conversation.length,
-        )
+      ? annotationReference({
+          noteId: simplifyCard.noteId,
+          sourceId: simplifyCard.noteId ? sourceIdOfNote(simplifyCard.noteId) : null,
+          kind: "simplify",
+          quote: passageText(simplifyCard.anchor),
+          content: simplifyCard.text,
+          turns: simplifyCard.conversation.length,
+        })
       : null;
   const assistantReference = assistantChat
-    ? annotationReference(
-        assistantChat.noteId,
-        assistantChat.noteId ? sourceIdOfNote(assistantChat.noteId) : null,
-        assistantChat.messages.map((m) => m.content).join(" "),
-        t("reader.assistant"),
-        undefined,
-        assistantChat.messages.length,
-      )
+    ? annotationReference({
+        noteId: assistantChat.noteId,
+        sourceId: assistantChat.noteId ? sourceIdOfNote(assistantChat.noteId) : null,
+        kind: "assistant",
+        quote: assistantChat.anchor ? passageText(assistantChat.anchor) : null,
+        content: assistantChat.messages.map((m) => m.content).join(" "),
+        turns: assistantChat.messages.length,
+      })
     : null;
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">

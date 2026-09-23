@@ -27,6 +27,11 @@ export default async function NotesPage(props: { params: Promise<{ notebookId: s
     where: { id: notebookId },
     include: {
       collaborators: true,
+      // Attach order: the columns of the By document view (SPEC.md §6).
+      documents: {
+        orderBy: { document: { createdAt: "asc" } },
+        include: { document: { select: { id: true, title: true } } },
+      },
       sections: {
         orderBy: { order: "asc" },
         include: {
@@ -62,6 +67,7 @@ export default async function NotesPage(props: { params: Promise<{ notebookId: s
       order: n.order,
       createdById: n.createdById,
       updatedAt: n.updatedAt.toISOString(),
+      documentId: n.documentId,
       sources: n.sources.map((src) => ({
         id: src.id,
         documentId: src.documentId,
@@ -91,7 +97,12 @@ export default async function NotesPage(props: { params: Promise<{ notebookId: s
   const top = byParent.get(null) ?? [];
   for (const s of top) s.children = byParent.get(s.id) ?? [];
 
-  const view: NotebookView = { id: notebook.id, title: notebook.title, sections: top };
+  const view: NotebookView = {
+    id: notebook.id,
+    title: notebook.title,
+    sections: top,
+    documents: notebook.documents.map((nd) => ({ id: nd.document.id, title: nd.document.title })),
+  };
 
   const authorIds = new Set<string>([notebook.userId]);
   for (const section of notebook.sections) {

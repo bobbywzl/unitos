@@ -10,6 +10,7 @@ import {
   type ParsedAnnotationReference,
   type ReferencedAnnotation,
 } from "@/lib/annotation-reference";
+import { ANNOTATION_KIND_KEY } from "@/lib/annotations/kind";
 import { stripSimplifyMarkers } from "@/lib/sentences";
 
 // The annotation beside the note (SPEC.md §6): on the notes full page a click
@@ -92,16 +93,6 @@ export function AnnotationSideHost() {
   );
 }
 
-const KIND_KEY = {
-  explain: "reader.explanation",
-  simplify: "reader.simplified",
-  analyze: "reader.analysis",
-  visualize: "reader.visualization",
-  assistant: "reader.assistant",
-  highlight: "reader.highlight",
-  comment: "reader.comment",
-} as const;
-
 /** The annotation itself: its kind, the words it is anchored to, its text,
     and the jump to it in the reader. */
 export function AnnotationSidePanel({ side, onClose }: { side: AnnotationSideRef; onClose: () => void }) {
@@ -140,7 +131,6 @@ export function AnnotationSidePanel({ side, onClose }: { side: AnnotationSideRef
       annotationId: annotation.id,
       documentId: annotation.documentId ?? documentId,
       sourceId: annotation.sourceId,
-      label: side.label,
     });
     router.push(href);
   }
@@ -161,7 +151,7 @@ export function AnnotationSidePanel({ side, onClose }: { side: AnnotationSideRef
     >
       <div className="mb-2 flex shrink-0 items-center gap-2">
         <span className="text-[11px] font-bold tracking-[0.08em] text-sand-600 uppercase">
-          {annotation ? t(KIND_KEY[annotation.kind]) : t("outline.annotationReference")}
+          {annotation ? t(ANNOTATION_KIND_KEY[annotation.kind]) : t("outline.annotationReference")}
         </span>
         <span className="ml-auto flex items-center gap-1">
           {annotation && annotation.sourceId && !annotation.orphaned && (

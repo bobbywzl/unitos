@@ -9,10 +9,10 @@ import { useT } from "@/components/lang-provider";
 // tab, and the reader's own cards over the article — the explanation, the
 // simplification, the analysis, the visualization, the assistant's card, a
 // comment, a highlight. Dropped on a note, an annotation reference lands in
-// the note (lib/annotation-reference.ts): a row that opens the annotation.
-// The annotation stays where it is, still painted in the article. The
-// reader's cards also lift on a hold anywhere on the card; the grip is the
-// same drag with a handle to see.
+// the note (lib/annotation-reference.ts): the quote, a row that opens the
+// annotation, and the annotation's text. The annotation stays where it is,
+// still painted in the article. The reader's cards also lift on a hold
+// anywhere on the card; the grip is the same drag with a handle to see.
 
 // A short hold and a move starts the drag; a shorter press is an ordinary
 // press and the card keeps it.
@@ -42,7 +42,7 @@ export function AnnotationGrip({
       window.getSelection()?.removeAllRanges();
       startCardDrag(
         { clientX: ev.clientX, clientY: ev.clientY },
-        { kind: "annotation", ids: [reference.annotationId], label: reference.label, reference },
+        { kind: "annotation", ids: [reference.annotationId], label: reference.words, reference },
         () => {},
       );
     };

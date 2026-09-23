@@ -185,6 +185,9 @@ export function NoteCard({
       if (drag.kind === "annotation") {
         if (!drag.reference) return;
         await addToNote(await referenceMarkdownForDrop(actions.notebookId, drag.reference, t));
+        // The quote it landed points back to the reader: the annotation's
+        // anchors become sources of the note.
+        if (drag.reference.quote) await actions.attachAnnotationSources(note.id, drag.reference.annotationId);
         return;
       }
       await actions.mergeNotes(note.id, drag.ids, "join");

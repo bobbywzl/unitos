@@ -299,6 +299,9 @@ export function FloatingNoteEditor({
           if (note) await actions.attachSource(note.id, quote);
         } else if (reference) {
           await addToNote(await referenceMarkdownForDrop(actions.notebookId, reference, t));
+          // The quote it landed points back to the reader: the annotation's
+          // anchors become sources of the note.
+          if (note && reference.quote) await actions.attachAnnotationSources(note.id, reference.annotationId);
         }
       } catch (err) {
         setMergeError(err instanceof Error ? err.message : t("common.requestFailed"));

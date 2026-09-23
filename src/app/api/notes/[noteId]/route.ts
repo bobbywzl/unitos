@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { sourceInputSchema } from "@/lib/anchors/input";
@@ -22,6 +23,10 @@ const patchSchema = z.object({
       segments: z.array(sourceInputSchema.omit({ documentId: true })).min(1).max(MAX_SEGMENTS).optional(),
     })
     .optional(),
+  // An annotation dropped into the note (lib/annotation-reference.ts): copies
+  // of the annotation's anchors become sources of the note, so the quote the
+  // drop landed points back to the reader. The annotation keeps its own.
+  copySourcesFrom: z.string().min(1).optional(),
   color: z.enum(["clay", "sage", "gold", "plum"]).optional(), // highlight hue
   order: z.number().int().min(0).optional(),
   sectionId: z.string().min(1).optional(),
@@ -54,6 +59,42 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ noteId: strin
     await db.source.createMany({
       data: passageSources(source.documentId, passage).map((row) => ({ ...row, noteId })),
     });
+  }
+
+  if (data.copySourcesFrom) {
+    const [annotation, own] = await Promise.all([
+      db.note.findUnique({
+        where: { id: data.copySourcesFrom },
+        include: { sources: true, section: { select: { hidden: true, notebookId: true } } },
+      }),
+      db.section.findUnique({ where: { id: note.sectionId }, select: { notebookId: true } }),
+    ]);
+    if (!annotation || !annotation.section.hidden || annotation.section.notebookId !== own?.notebookId) {
+      return NextResponse.json({ error: t("api.noteNotFound") }, { status: 404 });
+    }
+    // An anchor the note already holds is not copied twice.
+    const held = await db.source.findMany({
+      where: { noteId },
+      select: { blockId: true, startOffset: true, endOffset: true },
+    });
+    const keys = new Set(held.map((s) => `${s.blockId}:${s.startOffset}:${s.endOffset}`));
+    const rows = annotation.sources
+      .filter((s) => !keys.has(`${s.blockId}:${s.startOffset}:${s.endOffset}`))
+      .map((s) => ({
+        noteId,
+        documentId: s.documentId,
+        blockId: s.blockId,
+        startOffset: s.startOffset,
+        endOffset: s.endOffset,
+        quotedText: s.quotedText,
+        prefix: s.prefix,
+        suffix: s.suffix,
+        orphaned: s.orphaned,
+        startTime: s.startTime,
+        endTime: s.endTime,
+        ...(s.region === null ? {} : { region: s.region as Prisma.InputJsonValue }),
+      }));
+    if (rows.length > 0) await db.source.createMany({ data: rows });
   }
 
   if (data.sectionId && data.sectionId !== note.sectionId) {

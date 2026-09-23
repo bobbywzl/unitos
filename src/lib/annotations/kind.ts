@@ -1,3 +1,4 @@
+import type { TKey } from "@/lib/i18n/dictionaries";
 import type { AnnotationItem } from "@/lib/types";
 
 /** What an annotation is, read from its note: the tool that wrote it, else
@@ -21,3 +22,16 @@ export function annotationKind(note: {
       return note.color ? "highlight" : "comment";
   }
 }
+
+/** The name of each kind of annotation: the card's title in the reader, the
+    annotation beside a note on the notes full page, and the row an
+    annotation lands as in a note (lib/annotation-reference.ts). */
+export const ANNOTATION_KIND_KEY: Record<AnnotationItem["kind"], TKey> = {
+  explain: "reader.explanation",
+  simplify: "reader.simplified",
+  analyze: "reader.analysis",
+  visualize: "reader.visualization",
+  assistant: "reader.assistant",
+  highlight: "reader.highlight",
+  comment: "reader.comment",
+};

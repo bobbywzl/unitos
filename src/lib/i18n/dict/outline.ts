@@ -97,7 +97,7 @@ const en = {
   mergedNotes: "{n} notes merged into one",
   undoMergeTitle: "Put the merged notes back as they were",
   dropNote: "Drop to merge this note in",
-  dropAnnotation: "Drop to put a reference to this annotation in the note",
+  dropAnnotation: "Drop to put this annotation in the note: its quote, then its text",
   // An annotation reference in a note (lib/annotation-reference.ts): the
   // row's second line, its tooltip, and the annotation beside the note on the
   // notes full page (annotation-side.tsx).
@@ -135,6 +135,18 @@ const en = {
   compareCount: "Compare · {n} notes",
   layoutColumns: "Side by side",
   layoutRows: "Stacked",
+  // The notes tray holds the open document's notes (SPEC.md §6): the line
+  // under the queue counts the pending notes the notes full page holds.
+  pendingElsewhere: "{n} pending in other documents · Notes full page",
+  pendingElsewhereTitle: "Pending notes of other documents and of the project wait on the notes full page",
+  // By document (SPEC.md §6): the project's notes as a grid over the page,
+  // one column per document, one row per section.
+  byDocument: "By document",
+  byDocumentTitle: "Compare notes across documents: one column per document, one row per section",
+  byDocumentHint: "One column per document, one row per section. A note sits under the document it was written in or quotes.",
+  byDocumentCount: "{n} documents",
+  byDocumentEmpty: "No notes yet.",
+  projectColumn: "Project",
   addToCompare: "Add note…",
   removeFromCompare: "Remove from compare",
   notesLabel: "Notes",
@@ -273,7 +285,7 @@ const zh: Record<keyof typeof en, string> = {
   mergedNotes: "已把 {n} 条笔记合并为一条",
   undoMergeTitle: "把合并的笔记恢复原样",
   dropNote: "松开即把这条笔记合并进来",
-  dropAnnotation: "松开即把这条批注的批注链接放进笔记",
+  dropAnnotation: "松开即把这条批注放进笔记：先是引文，再是批注内容",
   annotationReference: "批注",
   annotationReferenceTitle: "打开这条批注",
   referenceYou: "你",
@@ -305,6 +317,14 @@ const zh: Record<keyof typeof en, string> = {
   compareCount: "对比 · {n} 条笔记",
   layoutColumns: "并排",
   layoutRows: "上下",
+  pendingElsewhere: "其他文档还有 {n} 条待定 · 整页笔记",
+  pendingElsewhereTitle: "其他文档和项目的待定笔记在整页笔记里",
+  byDocument: "按文档",
+  byDocumentTitle: "跨文档对比笔记：每个文档一列，每个章节一行",
+  byDocumentHint: "每个文档一列，每个章节一行。笔记放在它所写于或引用的文档下。",
+  byDocumentCount: "{n} 个文档",
+  byDocumentEmpty: "还没有笔记。",
+  projectColumn: "项目",
   addToCompare: "添加笔记…",
   removeFromCompare: "移出对比",
   notesLabel: "笔记",
