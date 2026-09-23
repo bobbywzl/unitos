@@ -40,7 +40,16 @@ import { ThinkingChips, useThinking } from "@/components/assistant/thinking-chip
 import { useWeb, WebChip } from "@/components/assistant/web-chip";
 import { useCollab } from "@/components/collab/collab-context";
 import { useT } from "@/components/lang-provider";
-import { DriveIcon, PaperclipIcon, StopIcon } from "@/components/icons";
+import Link from "next/link";
+import {
+  ChevronLeftIcon,
+  DriveIcon,
+  HistoryIcon,
+  PaperclipIcon,
+  PlusIcon,
+  StopIcon,
+  TrashIcon,
+} from "@/components/icons";
 import type { TFunc, TKey } from "@/lib/i18n/dictionaries";
 import { Markdown } from "@/components/markdown";
 import { RatingButtons } from "@/components/rating-buttons";
@@ -84,6 +93,37 @@ type Thread = {
   // The side chat on screen, by key; null = the conversation itself.
   openKey: string | null;
 };
+// One conversation of the conversations list (SPEC.md §7): its title (the
+// note's gist, else the first message's words), when it last changed, and
+// how many messages it holds.
+type ConversationEntry = { id: string; title: string; updatedAt: string; turns: number };
+
+// A turn as the conversation route stores it (lib/assistant/attachments.ts),
+// and the conversation it answers: the turns, and the side chats with theirs.
+type StoredTurn = {
+  role: "user" | "assistant";
+  content: string;
+  images?: { id: string; name: string }[];
+  files?: { name: string }[];
+};
+type StoredConversation = {
+  conversationNoteId?: string | null;
+  turns?: StoredTurn[];
+  sideChats?: { id: string; quote: string; turns: StoredTurn[] }[];
+};
+const toTurns = (stored: StoredTurn[]): Turn[] =>
+  stored.map((turn) => ({
+    role: turn.role,
+    content: turn.content,
+    images: turn.images?.map((img) => ({ id: img.id, name: img.name, url: imageUrl(img.id) })),
+    files: turn.files,
+  }));
+const toSideChats = (stored: NonNullable<StoredConversation["sideChats"]>): SideChat[] =>
+  stored.map((s) => ({ key: s.id, noteId: s.id, quote: s.quote, turns: toTurns(s.turns) }));
+
+function formatWhen(iso: string): string {
+  return new Date(iso).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+}
 
 // One message as it is sent: the text and the attachments read for it.
 type OutgoingMessage = {
@@ -247,6 +287,11 @@ export function AssistantPanel({
   const [sideChats, setSideChatsState] = useState<SideChat[]>(() => cached?.sideChats ?? []);
   const [openKey, setOpenKeyState] = useState<string | null>(() => cached?.openKey ?? null);
   const [hydrated, setHydrated] = useState(() => cached !== undefined);
+  // The conversations list (SPEC.md §7): this reader's conversations of the
+  // project, read when the list opens; null until then.
+  const [listOpen, setListOpen] = useState(false);
+  const [conversations, setConversations] = useState<ConversationEntry[] | null>(null);
+  const [listError, setListError] = useState<string | null>(null);
   // The thread as the running send() reads it: state is stale inside its own
   // closure, and a queued message sends from there.
   const turnsRef = useRef<Turn[]>(turns);
@@ -313,32 +358,10 @@ export function AssistantPanel({
     void (async () => {
       try {
         const res = await fetch(`/api/assistant/conversation?notebookId=${encodeURIComponent(notebookId)}`);
-        type StoredTurn = {
-          role: "user" | "assistant";
-          content: string;
-          images?: { id: string; name: string }[];
-          files?: { name: string }[];
-        };
-        const json = (await res.json().catch(() => null)) as {
-          conversationNoteId?: string | null;
-          turns?: StoredTurn[];
-          sideChats?: { id: string; quote: string; turns: StoredTurn[] }[];
-        } | null;
+        const json = (await res.json().catch(() => null)) as StoredConversation | null;
         if (cancelled || !res.ok || !json) return;
-        const toTurns = (stored: StoredTurn[]): Turn[] =>
-          stored.map((turn) => ({
-            role: turn.role,
-            content: turn.content,
-            images: turn.images?.map((img) => ({ id: img.id, name: img.name, url: imageUrl(img.id) })),
-            files: turn.files,
-          }));
         const loaded = toTurns(json.turns ?? []);
-        const loadedSideChats: SideChat[] = (json.sideChats ?? []).map((s) => ({
-          key: s.id,
-          noteId: s.id,
-          quote: s.quote,
-          turns: toTurns(s.turns),
-        }));
+        const loadedSideChats = toSideChats(json.sideChats ?? []);
         turnsRef.current = loaded;
         sideChatsRef.current = loadedSideChats;
         noteIdRef.current = json.conversationNoteId ?? null;
@@ -404,26 +427,19 @@ export function AssistantPanel({
     setError(null);
   }
 
-  // New conversation: back to the first layout, the turns gone — on the
-  // server too, not only on screen (SPEC.md §21).
-  function newConversation() {
+  // The thread takes a conversation's place: the one from the list, or none
+  // (New conversation). What was on screen stays saved, in the list.
+  function showConversation(next: { noteId: string | null; turns: Turn[]; sideChats: SideChat[] }) {
     stopRun();
     reset();
-    if (conversationNoteId) {
-      void fetch("/api/assistant/conversation", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ notebookId, conversationNoteId }),
-      }).catch(() => {});
-    }
-    turnsRef.current = [];
-    sideChatsRef.current = [];
+    turnsRef.current = next.turns;
+    sideChatsRef.current = next.sideChats;
     openKeyRef.current = null;
-    noteIdRef.current = null;
-    setTurnsState([]);
-    setSideChatsState([]);
+    noteIdRef.current = next.noteId;
+    setTurnsState(next.turns);
+    setSideChatsState(next.sideChats);
     setOpenKeyState(null);
-    setConversationNoteId(null);
+    setConversationNoteId(next.noteId);
     setQuote(null);
     setCommentQuote(null);
     setComments([]);
@@ -432,6 +448,82 @@ export function AssistantPanel({
     setAttachments([]);
     setQueue(() => []);
     setQuestion("");
+    setListOpen(false);
+  }
+
+  // New conversation (SPEC.md §7): back to the first layout, an empty thread.
+  // The conversation on screen is not deleted: it stays in the list.
+  function newConversation() {
+    showConversation({ noteId: null, turns: [], sideChats: [] });
+  }
+
+  // The conversations list: read every time it opens, so it is current.
+  async function loadConversations() {
+    setListError(null);
+    try {
+      const res = await fetch(`/api/assistant/conversation?notebookId=${encodeURIComponent(notebookId)}&list=1`);
+      const json = (await res.json().catch(() => null)) as { conversations?: ConversationEntry[]; error?: string } | null;
+      if (!res.ok || !json) throw new Error(json?.error ?? t("assistant.requestFailedStatus", { status: res.status }));
+      setConversations(json.conversations ?? []);
+    } catch (err) {
+      setListError(err instanceof Error ? err.message : t("common.requestFailed"));
+    }
+  }
+  function openList() {
+    setListOpen(true);
+    void loadConversations();
+  }
+
+  // Open a conversation from the list: its turns and side chats take the
+  // thread's place.
+  async function openConversation(id: string) {
+    if (id === conversationNoteId) {
+      setListOpen(false);
+      return;
+    }
+    setListError(null);
+    try {
+      const res = await fetch(
+        `/api/assistant/conversation?notebookId=${encodeURIComponent(notebookId)}&conversationNoteId=${encodeURIComponent(id)}`,
+      );
+      const json = (await res.json().catch(() => null)) as (StoredConversation & { error?: string }) | null;
+      if (!res.ok || !json?.conversationNoteId) {
+        throw new Error(json?.error ?? t("assistant.requestFailedStatus", { status: res.status }));
+      }
+      showConversation({
+        noteId: json.conversationNoteId,
+        turns: toTurns(json.turns ?? []),
+        sideChats: toSideChats(json.sideChats ?? []),
+      });
+    } catch (err) {
+      setListError(err instanceof Error ? err.message : t("common.requestFailed"));
+    }
+  }
+
+  // Delete a conversation from the list: the note is gone, its side chats
+  // and comments with it. The open one deleted leaves an empty thread.
+  async function deleteConversation(id: string) {
+    if (!confirm(t("assistant.conversationDeleteConfirm"))) return;
+    setListError(null);
+    try {
+      const res = await fetch("/api/assistant/conversation", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ notebookId, conversationNoteId: id }),
+      });
+      if (!res.ok) {
+        const json = (await res.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(json?.error ?? t("assistant.requestFailedStatus", { status: res.status }));
+      }
+    } catch (err) {
+      setListError(err instanceof Error ? err.message : t("common.requestFailed"));
+      return;
+    }
+    setConversations((list) => (list ? list.filter((c) => c.id !== id) : list));
+    if (id === conversationNoteId) {
+      showConversation({ noteId: null, turns: [], sideChats: [] });
+      setListOpen(true);
+    }
   }
 
   // The comments under the open thread, reloaded when the thread changes.
@@ -962,7 +1054,7 @@ export function AssistantPanel({
   const recommendedShown = recDepth ? (recTexts[recDepth] ?? summaries[recDepth] ?? "") : "";
   const recommendedRow = RECOMMENDED.find((r) => r.depth === recDepth);
   const recommendedLabel = recommendedRow ? t(recommendedRow.labelKey) : "";
-  const scopeRow = SCOPES.find((s) => s.id === scope);
+  const scopeChoice = SCOPES.find((s) => s.id === scope);
   // A side chat is open on top of a conversation: both are a conversation on
   // screen, so the first layout never returns while one is open.
   const inConversation = turns.length > 0 || openSideChat !== null;
@@ -988,8 +1080,39 @@ export function AssistantPanel({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [over, setOver] = useState(false);
 
-  const scopeChips = (
-    <div className="flex flex-wrap gap-1">
+  // The panel's head (SPEC.md §7): Conversations opens the list of this
+  // reader's conversations of the project; New conversation starts an empty
+  // one and keeps the one on screen in the list.
+  const head = (
+    <div className="flex items-center gap-1.5">
+      <button
+        onClick={openList}
+        data-track="assistant-conversations"
+        data-tip={t("assistant.conversationsTitle")}
+        className="flex items-center gap-1.5 rounded-full bg-card px-3 py-1 text-xs font-semibold text-sand-600 shadow-soft hover:text-clay-800"
+      >
+        <HistoryIcon size={13} />
+        {t("assistant.conversations")}
+      </button>
+      {inConversation && (
+        <button
+          onClick={newConversation}
+          data-track="assistant-new-conversation"
+          data-tip={t("assistant.newConversationTitle")}
+          className="ml-auto flex items-center gap-1 rounded-full bg-card px-3 py-1 text-xs font-semibold text-sand-600 shadow-soft hover:text-clay-800"
+        >
+          <PlusIcon size={13} />
+          {t("assistant.newConversation")}
+        </button>
+      )}
+    </div>
+  );
+
+  // What the next message runs with, right above the composer (SPEC.md §7):
+  // the scope — This page or Project — on one row; how the assistant
+  // answers — Fast Thinking or Deep Thinking, and Web — on the row under it.
+  const scopeRow = (
+    <div className="flex flex-wrap items-center gap-1">
       {SCOPES.map((s) => (
         <button
           key={s.id}
@@ -1008,18 +1131,12 @@ export function AssistantPanel({
           {t(s.labelKey)}
         </button>
       ))}
+    </div>
+  );
+  const answerRow = (
+    <div className="flex flex-wrap items-center gap-1">
       <ThinkingChips />
       <WebChip className="ml-auto" />
-      {inConversation && (
-        <button
-          onClick={newConversation}
-          data-track="assistant-new-conversation"
-          data-tip={t("assistant.newConversationTitle")}
-          className="rounded-full bg-card px-3 py-1 text-xs font-semibold text-sand-600 shadow-soft hover:text-clay-800"
-        >
-          {t("assistant.newConversation")}
-        </button>
-      )}
     </div>
   );
 
@@ -1194,10 +1311,99 @@ export function AssistantPanel({
     );
   }
 
+  // The conversations list (SPEC.md §7), in the thread's place: every
+  // conversation of this reader in the project, newest first — its title,
+  // when, how many messages; the open one marked. A click opens one; the
+  // bin deletes one; Back returns to the thread. History, under the list,
+  // is the page with every conversation of the project, whoever had it.
+  if (listOpen) {
+    return (
+      <div className="flex h-full flex-col gap-3">
+        <div className="flex items-center gap-1.5">
+          <button
+            onClick={() => setListOpen(false)}
+            data-track="assistant-conversations-back"
+            data-tip={t("assistant.conversationsBackTitle")}
+            className="flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold text-sand-600 hover:bg-clay-100 hover:text-clay-800"
+          >
+            <ChevronLeftIcon size={14} />
+            {t("assistant.conversationsBack")}
+          </button>
+          <button
+            onClick={newConversation}
+            data-track="assistant-new-conversation"
+            data-tip={t("assistant.newConversationTitle")}
+            className="ml-auto flex items-center gap-1 rounded-full bg-card px-3 py-1 text-xs font-semibold text-sand-600 shadow-soft hover:text-clay-800"
+          >
+            <PlusIcon size={13} />
+            {t("assistant.newConversation")}
+          </button>
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          {listError && <p className="mb-2 text-sm text-red-600">{listError}</p>}
+          {conversations === null && !listError && (
+            <ThinkingIndicator className="text-xs" label={t("assistant.conversationsLoading")} />
+          )}
+          {conversations && conversations.length === 0 && (
+            <p className="text-[13px] text-sand-600">{t("assistant.conversationsEmpty")}</p>
+          )}
+          {conversations && conversations.length > 0 && (
+            <ul className="flex flex-col gap-1.5">
+              {conversations.map((c) => {
+                const current = c.id === conversationNoteId;
+                return (
+                  <li
+                    key={c.id}
+                    className={`group/conversation flex items-start gap-2 rounded-2xl px-3.5 py-2.5 shadow-soft ${
+                      current ? "bg-clay-100" : "bg-card hover:bg-clay-100/60"
+                    }`}
+                  >
+                    <button
+                      onClick={() => void openConversation(c.id)}
+                      data-track="assistant-conversation-open"
+                      data-tip={t("assistant.conversationOpenTitle")}
+                      className="min-w-0 flex-1 text-left"
+                    >
+                      <span className="block truncate text-[13px] font-semibold text-sand-800">
+                        {c.title || t("assistant.newConversation")}
+                      </span>
+                      <span className="mt-0.5 block text-[11px] text-sand-500">
+                        {formatWhen(c.updatedAt)} · {t("assistant.historyTurns", { n: String(c.turns) })}
+                        {current ? ` · ${t("assistant.conversationCurrent")}` : ""}
+                      </span>
+                    </button>
+                    <button
+                      onClick={() => void deleteConversation(c.id)}
+                      data-track="assistant-conversation-delete"
+                      aria-label={t("assistant.conversationDelete")}
+                      data-tip={t("assistant.conversationDelete")}
+                      className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full text-sand-400 opacity-0 transition-opacity group-hover/conversation:opacity-100 hover:bg-clay-200 hover:text-clay-800 focus-visible:opacity-100"
+                    >
+                      <TrashIcon size={12} />
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+        <Link
+          href={`/n/${notebookId}/assistant`}
+          data-track="assistant-history"
+          data-tip={t("assistant.historyTitle")}
+          className="flex shrink-0 items-center gap-1.5 text-[12px] text-sand-600 hover:text-clay-800"
+        >
+          <HistoryIcon size={13} />
+          {t("assistant.history")}
+        </Link>
+      </div>
+    );
+  }
+
   if (inConversation) {
     return (
       <div className="flex h-full flex-col gap-3">
-        {scopeChips}
+        {head}
         <div
           ref={threadRef}
           onScroll={(e) => {
@@ -1364,7 +1570,11 @@ export function AssistantPanel({
             onSubmit={(text) => void postComment(text)}
           />
         ) : (
-          composer
+          <>
+            {scopeRow}
+            {answerRow}
+            {composer}
+          </>
         )}
         <AnswerTint rects={tintRects} />
         {selection && (
@@ -1382,6 +1592,7 @@ export function AssistantPanel({
 
   return (
     <div className="space-y-3">
+      {head}
       {documentId && (
         <div className="space-y-2">
           <span className="text-[11px] font-bold tracking-[0.08em] text-sand-600 uppercase">
@@ -1439,8 +1650,9 @@ export function AssistantPanel({
         </div>
       )}
 
-      {scopeChips}
-      <p className="text-xs text-sand-500">{scopeRow ? t(scopeRow.hintKey) : null}</p>
+      {scopeRow}
+      <p className="text-xs text-sand-500">{scopeChoice ? t(scopeChoice.hintKey) : null}</p>
+      {answerRow}
 
       {composer}
 

@@ -19,7 +19,6 @@ import {
   DistillIcon,
   EditsIcon,
   GraphIcon,
-  HistoryIcon,
   NotesIcon,
   OfflineIcon,
   QuestionIcon,
@@ -742,25 +741,12 @@ export function Workspace({
               {tab === "annotations" && annotationCount > 0 && (
                 <span className="text-[13px] text-sand-600">{annotationCount}</span>
               )}
-              {/* Assistant history (SPEC.md §7): every conversation of the
-                  project on its own page, from the assistant page's top right. */}
-              {tab === "assistant" && (
-                <Link
-                  href={`/n/${notebook.id}/assistant`}
-                  data-track="assistant-history"
-                  data-tip={t("assistant.historyTitle")}
-                  className="ml-auto flex items-center gap-1.5 rounded-full bg-card px-3 py-1 text-xs font-semibold text-sand-600 shadow-soft hover:text-clay-800"
-                >
-                  <HistoryIcon size={13} />
-                  {t("assistant.history")}
-                </Link>
-              )}
               <button
                 onClick={() => setMobileTray(false)}
                 data-track="close"
                 aria-label={t("common.close")}
                 data-tip={t("common.close")}
-                className={`${tab === "assistant" ? "" : "ml-auto "}rounded-full px-2 text-sand-500 hover:text-clay-800 md:hidden`}
+                className="ml-auto rounded-full px-2 text-sand-500 hover:text-clay-800 md:hidden"
               >
                 ✕
               </button>
