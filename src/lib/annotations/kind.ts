@@ -35,3 +35,31 @@ export const ANNOTATION_KIND_KEY: Record<AnnotationItem["kind"], TKey> = {
   highlight: "reader.highlight",
   comment: "reader.comment",
 };
+
+/** The kind color's CSS variable (globals.css): one color per kind of
+    annotation, the same everywhere. A highlight carries its own hue. */
+export const ANNOTATION_KIND_VAR: Record<Exclude<AnnotationItem["kind"], "highlight">, string> = {
+  comment: "var(--kind-comment)",
+  explain: "var(--kind-explain)",
+  simplify: "var(--kind-simplify)",
+  analyze: "var(--kind-analyze)",
+  visualize: "var(--kind-visualize)",
+  assistant: "var(--kind-assistant)",
+};
+
+/** A link's color, beside the kinds: the chain in slate. */
+export const LINK_KIND_VAR = "var(--kind-link)";
+
+const HUE_VAR: Record<string, string> = {
+  clay: "var(--clay-400)",
+  sage: "var(--sage-500)",
+  gold: "#d9a54a",
+  plum: "#a78bfa",
+};
+
+/** The color an annotation carries (SPEC.md §6): its kind's, or, for a
+    highlight, its hue's. As a CSS color value, for a style. */
+export function annotationKindColor(kind: AnnotationItem["kind"], color: string | null): string {
+  if (kind === "highlight") return HUE_VAR[color ?? "clay"] ?? HUE_VAR.clay;
+  return ANNOTATION_KIND_VAR[kind];
+}

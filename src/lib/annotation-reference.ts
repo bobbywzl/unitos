@@ -73,10 +73,13 @@ export function referenceLabel(name: string): string {
 /** The reader's address for the annotation: the document, its anchor, and the annotation. */
 export function annotationReferenceHref(
   notebookId: string,
-  ref: Pick<AnnotationReference, "annotationId" | "documentId" | "sourceId">,
+  ref: Pick<AnnotationReference, "annotationId" | "documentId" | "sourceId"> & { kind?: AnnotationItem["kind"] },
 ): string {
   const src = ref.sourceId ? `&src=${encodeURIComponent(ref.sourceId)}` : "";
-  return `/n/${notebookId}?doc=${encodeURIComponent(ref.documentId)}${src}&${ANNOTATION_PARAM}=${encodeURIComponent(ref.annotationId)}`;
+  // The kind rides along, so the row draws in the annotation's kind color
+  // without a fetch (components/markdown.tsx).
+  const kind = ref.kind ? `&kind=${ref.kind}` : "";
+  return `/n/${notebookId}?doc=${encodeURIComponent(ref.documentId)}${src}&${ANNOTATION_PARAM}=${encodeURIComponent(ref.annotationId)}${kind}`;
 }
 
 /** The reference as note markdown, in this order: the quote the annotation
@@ -109,7 +112,11 @@ export type ParsedAnnotationReference = {
   documentId: string;
   sourceId: string | null;
   annotationId: string;
+  /** The annotation's kind, when the row carries it (a reference written since the kind colors). */
+  kind: AnnotationItem["kind"] | null;
 };
+
+const KINDS = new Set<string>(["explain", "simplify", "analyze", "visualize", "highlight", "comment", "assistant"]);
 
 /** The reference a note link carries, or null for any other link. */
 export function parseAnnotationReference(href: string | undefined): ParsedAnnotationReference | null {
@@ -120,7 +127,14 @@ export function parseAnnotationReference(href: string | undefined): ParsedAnnota
   const annotationId = params.get(ANNOTATION_PARAM);
   const documentId = params.get("doc");
   if (!annotationId || !documentId) return null;
-  return { notebookId: m[1], documentId, sourceId: params.get("src"), annotationId };
+  const kind = params.get("kind");
+  return {
+    notebookId: m[1],
+    documentId,
+    sourceId: params.get("src"),
+    annotationId,
+    kind: kind && KINDS.has(kind) ? (kind as AnnotationItem["kind"]) : null,
+  };
 }
 
 /** The annotation a reference points to, as GET /api/annotations/[noteId]

@@ -118,7 +118,7 @@ import { setQuoteDragImage, writeQuoteDrag, type QuoteDrag } from "@/lib/quote-d
 import { startCardDrag } from "@/lib/card-drag";
 import { pointsAtText, skipsDrag, watchHold } from "@/lib/hold-drag";
 import { ANNOTATION_PARAM, referenceContent, referenceWords, type AnnotationReference } from "@/lib/annotation-reference";
-import { ANNOTATION_KIND_KEY } from "@/lib/annotations/kind";
+import { ANNOTATION_KIND_KEY, annotationKindColor } from "@/lib/annotations/kind";
 
 // One block's span of a selection (SPEC.md §5).
 type Segment = Omit<SourceInput, "documentId">;
@@ -6211,11 +6211,19 @@ function blockFormatKind(
         <div
           data-selection-popover
           onPointerDown={holdAnnotation(annotationCardReference)}
-          className={`pop-in absolute ${TOOL_LAYER} w-[300px] rounded-2xl bg-card p-3 shadow-float`}
-          style={{ top: annotationCard.top, left: annotationCard.left }}
+          className={`pop-in absolute ${TOOL_LAYER} w-[300px] rounded-2xl border bg-card p-3 shadow-float`}
+          // The card's border and label carry the annotation's kind color (SPEC.md §6).
+          style={{
+            top: annotationCard.top,
+            left: annotationCard.left,
+            borderColor: annotationKindColor(annotationCard.kind, annotationCard.color),
+          }}
         >
           <div className="mb-2 flex items-center justify-between">
-            <span className="flex items-center gap-1.5 text-[11px] font-bold tracking-[0.08em] text-sand-600 uppercase">
+            <span
+              className="flex items-center gap-1.5 text-[11px] font-bold tracking-[0.08em] uppercase"
+              style={{ color: annotationKindColor(annotationCard.kind, annotationCard.color) }}
+            >
               {annotationGrip(annotationCardReference)}
               {annotationCard.kind === "highlight" ? t("reader.highlight") : t("reader.comment")}
             </span>
@@ -6773,8 +6781,14 @@ function blockFormatKind(
           data-selection-popover
           data-side-card="explain"
           onPointerDown={holdAnnotation(bubbleReference)}
-          className={`bubble-in absolute ${TOOL_LAYER} flex flex-col rounded-[20px] border border-line bg-card/90 p-4 shadow-float backdrop-blur-md`}
-          style={{ left: bubble.left, top: bubble.top, width: bubble.width, maxHeight: cardMaxHeight }}
+          className={`bubble-in absolute ${TOOL_LAYER} flex flex-col rounded-[20px] border bg-card/90 p-4 shadow-float backdrop-blur-md`}
+          style={{
+            left: bubble.left,
+            top: bubble.top,
+            width: bubble.width,
+            maxHeight: cardMaxHeight,
+            borderColor: annotationKindColor(bubble.kind, null),
+          }}
         >
           <div
             onPointerDown={dragCard(
@@ -6786,7 +6800,10 @@ function blockFormatKind(
             data-tip={t("reader.dragToMove")}
             className="mb-2 flex cursor-move items-center justify-between gap-2"
           >
-            <span className="flex min-w-0 items-center gap-1.5 text-[11px] font-bold tracking-[0.08em] text-clay-800 uppercase">
+            <span
+              className="flex min-w-0 items-center gap-1.5 text-[11px] font-bold tracking-[0.08em] uppercase"
+              style={{ color: annotationKindColor(bubble.kind, null) }}
+            >
               {annotationGrip(bubbleReference)}
               <ToolSymbol tool={bubble.kind} plus={toolPlus(bubble)} size={12} />
               {toolPlus(bubble)
@@ -6910,12 +6927,13 @@ function blockFormatKind(
           data-selection-popover
           data-side-card="simplify"
           onPointerDown={holdAnnotation(simplifyReference)}
-          className={`bubble-in absolute ${TOOL_LAYER} flex flex-col rounded-[20px] border border-line bg-card/80 p-4 shadow-float backdrop-blur-md`}
+          className={`bubble-in absolute ${TOOL_LAYER} flex flex-col rounded-[20px] border bg-card/80 p-4 shadow-float backdrop-blur-md`}
           style={{
             top: simplifyCard.top,
             left: simplifyCard.left,
             width: simplifyCard.width,
             maxHeight: cardMaxHeight,
+            borderColor: annotationKindColor("simplify", null),
           }}
         >
           <div
@@ -6928,7 +6946,10 @@ function blockFormatKind(
             data-tip={t("reader.dragToMove")}
             className="mb-2 flex cursor-move items-center justify-between gap-2"
           >
-            <span className="flex min-w-0 items-center gap-1.5 text-[11px] font-bold tracking-[0.08em] text-sage-800 uppercase">
+            <span
+              className="flex min-w-0 items-center gap-1.5 text-[11px] font-bold tracking-[0.08em] uppercase"
+              style={{ color: annotationKindColor("simplify", null) }}
+            >
               {annotationGrip(simplifyReference)}
               <ToolSymbol tool="simplify" plus={toolPlus(simplifyCard)} size={12} />
               {toolPlus(simplifyCard)
@@ -7045,8 +7066,14 @@ function blockFormatKind(
         <div
           data-log-card="log"
           data-selection-popover
-          className={`bubble-in absolute ${TOOL_LAYER} flex flex-col rounded-[20px] border border-line bg-card/90 p-4 shadow-float backdrop-blur-md`}
-          style={{ left: logCard.left, top: logCard.top, width: logCard.width, maxHeight: cardMaxHeight }}
+          className={`bubble-in absolute ${TOOL_LAYER} flex flex-col rounded-[20px] border bg-card/90 p-4 shadow-float backdrop-blur-md`}
+          style={{
+            left: logCard.left,
+            top: logCard.top,
+            width: logCard.width,
+            maxHeight: cardMaxHeight,
+            borderColor: annotationKindColor(logCard.tool, null),
+          }}
         >
           <div className="mb-2 flex items-center justify-between">
             <span className="flex items-center gap-1.5 text-[11px] font-bold tracking-[0.08em] text-clay-800 uppercase">
@@ -7090,12 +7117,13 @@ function blockFormatKind(
           data-selection-popover
           data-side-card="comment"
           onPointerDown={holdAnnotation(commentReference)}
-          className={`bubble-in absolute ${TOOL_LAYER} flex flex-col rounded-[20px] border border-line bg-card/90 p-4 shadow-float backdrop-blur-md`}
+          className={`bubble-in absolute ${TOOL_LAYER} flex flex-col rounded-[20px] border bg-card/90 p-4 shadow-float backdrop-blur-md`}
           style={{
             left: commentCard.left,
             top: commentCard.top,
             width: commentCard.width,
             maxHeight: cardMaxHeight,
+            borderColor: annotationKindColor("comment", null),
           }}
         >
           <div
@@ -7108,7 +7136,10 @@ function blockFormatKind(
             data-tip={t("reader.dragToMove")}
             className="mb-2 flex cursor-move items-center justify-between"
           >
-            <span className="flex items-center gap-1.5 text-[11px] font-bold tracking-[0.08em] text-clay-800 uppercase">
+            <span
+              className="flex items-center gap-1.5 text-[11px] font-bold tracking-[0.08em] uppercase"
+              style={{ color: annotationKindColor("comment", null) }}
+            >
               {annotationGrip(commentReference)}
               <CommentIcon size={12} />
               {t("reader.comment")}
@@ -7272,7 +7303,7 @@ function blockFormatKind(
           data-selection-popover
           data-side-card="assistant"
           onPointerDown={holdAnnotation(assistantReference)}
-          className={`bubble-in absolute ${TOOL_LAYER} flex resize flex-col overflow-hidden rounded-[20px] border border-line bg-card/95 shadow-float backdrop-blur-md`}
+          className={`bubble-in absolute ${TOOL_LAYER} flex resize flex-col overflow-hidden rounded-[20px] border bg-card/95 shadow-float backdrop-blur-md`}
           style={{
             left: assistantChat.left,
             top: assistantChat.top,
@@ -7280,6 +7311,7 @@ function blockFormatKind(
             minWidth: 260,
             maxWidth: 680,
             maxHeight: cardMaxHeight,
+            borderColor: annotationKindColor("assistant", null),
           }}
         >
           <div
@@ -7292,7 +7324,10 @@ function blockFormatKind(
             data-tip={t("reader.dragToMove")}
             className="flex cursor-move items-center justify-between px-4 pt-3 pb-1"
           >
-            <span className="flex items-center gap-1.5 text-[11px] font-bold tracking-[0.08em] text-clay-800 uppercase">
+            <span
+              className="flex items-center gap-1.5 text-[11px] font-bold tracking-[0.08em] uppercase"
+              style={{ color: annotationKindColor("assistant", null) }}
+            >
               {annotationGrip(assistantReference)}
               <SparkleIcon size={12} />
               {t("reader.assistant")}

@@ -10,7 +10,7 @@ import {
   type ParsedAnnotationReference,
   type ReferencedAnnotation,
 } from "@/lib/annotation-reference";
-import { ANNOTATION_KIND_KEY } from "@/lib/annotations/kind";
+import { ANNOTATION_KIND_KEY, annotationKindColor } from "@/lib/annotations/kind";
 import { stripSimplifyMarkers } from "@/lib/sentences";
 
 // The annotation beside the note (SPEC.md §6): on the notes full page a click
@@ -131,6 +131,7 @@ export function AnnotationSidePanel({ side, onClose }: { side: AnnotationSideRef
       annotationId: annotation.id,
       documentId: annotation.documentId ?? documentId,
       sourceId: annotation.sourceId,
+      kind: annotation.kind,
     });
     router.push(href);
   }
@@ -147,7 +148,9 @@ export function AnnotationSidePanel({ side, onClose }: { side: AnnotationSideRef
   return (
     <aside
       data-annotation-side=""
-      className="content-in flex max-h-[calc(100vh-48px)] flex-col overflow-hidden rounded-2xl bg-card p-4 shadow-soft"
+      className="content-in flex max-h-[calc(100vh-48px)] flex-col overflow-hidden rounded-2xl border bg-card p-4 shadow-soft"
+      // The border is the annotation's kind color (SPEC.md §6), as everywhere.
+      style={{ borderColor: annotation ? annotationKindColor(annotation.kind, annotation.color) : "var(--line)" }}
     >
       <div className="mb-2 flex shrink-0 items-center gap-2">
         <span className="text-[11px] font-bold tracking-[0.08em] text-sand-600 uppercase">
