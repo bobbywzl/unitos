@@ -84,6 +84,8 @@ export default async function NotebookPage(props: {
     where: { id: notebookId },
     include: {
       collaborators: true,
+      // The project's folders (SPEC.md §6); the tree is drawn client-side.
+      folders: { select: { id: true, title: true, parentId: true } },
       documents: {
         // Attach order. Without it the rows come back in scan order, and the
         // first row picks the document a bare project URL opens.
@@ -153,6 +155,7 @@ export default async function NotebookPage(props: {
     handwritten: nd.document.handwritten,
     figureRenderAt: nd.document.figureRenderAt?.toISOString() ?? null,
     figureRenderError: nd.document.figureRenderError,
+    folderId: nd.folderId,
   }));
   const activeId = doc && attached.some((d) => d.id === doc) ? doc : (attached[0]?.id ?? null);
   // The reader view is a per-visit choice carried in the URL; a fresh open is Normal.
@@ -1237,6 +1240,7 @@ export default async function NotebookPage(props: {
     <Workspace
       notebook={view}
       documents={attached}
+      folders={notebook.folders}
       readerView={readerView}
       activeDocumentId={paneOne?.document.id ?? null}
       drive={driveConfig(user)}

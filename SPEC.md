@@ -155,7 +155,21 @@ model NotebookDocument {
   summaries     Json?    // SUMMARIZE output: {layman?, intermediate?, professional?}
   distillations Json?    // DISTILL output: [{id, question, createdAt, quotes}], newest first
   extractions   Json?    // EXTRACT output: [{id, createdAt, origin, spans}], oldest first — the index gives the label
+  folderId      String?  // the folder the document sits in within this project (§6); null = the project itself
+  folder        DocumentFolder? @relation(fields: [folderId], references: [id], onDelete: SetNull)
   @@id([notebookId, documentId])
+}
+
+model DocumentFolder {
+  id         String   @id @default(cuid())
+  notebookId String
+  notebook   Notebook @relation(fields: [notebookId], references: [id], onDelete: Cascade)
+  title      String
+  parentId   String?  // the folder this one sits in; null = the project itself
+  parent     DocumentFolder?  @relation("FolderNesting", fields: [parentId], references: [id], onDelete: Cascade)
+  children   DocumentFolder[] @relation("FolderNesting")
+  documents  NotebookDocument[]
+  createdAt  DateTime @default(now())
 }
 
 model Block {
@@ -304,6 +318,7 @@ DOM ranges are never the source of truth. Convert selection → block-relative o
 **Other UX rules:**
 - A note's jump button scrolls the reader to the note's first anchor and flashes the highlight. If the document isn't open, open it. A collapsed row keeps its source count; no chips render under a note.
 - No pill, tab, select, or collapsed row cuts its text with an ellipsis. A label is written to fit (the Add-document tabs: PDF, image, or Markdown; Video or audio; Google Drive; URL; Library); a document title in the top bar's document pill, the document list, or a pane's document select is cut at a word boundary, the full title one hover away (`clipWords`, `lib/markdown-preview.ts`); a collapsed note or annotation shows its gist.
+- **Folders.** A folder is a named group of a project's documents, and a folder can hold folders (`DocumentFolder`; `NotebookDocument.folderId`, null = the project itself). The document list under the header's pill draws the project's folders first, by title, then the documents outside every folder, then New folder. On a wide screen (md and up) hovering a folder's row opens the folder's own list beside it — its folders, then its documents, then New folder — one open list per level, so the tree reads as a menu; a press opens it too. On a narrow screen a press opens the folder's list under its row, and the open document's folders open on their own so the reader sees where they are. A folder's row shows how many documents it holds, its own folders counted in, and the folders on the open document's path are drawn bold. A folder's ⋯ holds New folder inside, Rename folder, Move to folder, and Delete folder; a document's ⋯ holds Move to folder, which lists the project itself and every folder; a folder never moves into itself. Delete folder moves what the folder holds up one level: nothing leaves the project. A folder is the reader's own grouping; no AI feature reads it. Routes: `POST /api/notebooks/[id]/folders {title, parentId?}`, `PATCH` and `DELETE /api/notebooks/[id]/folders/[folderId]`, `PATCH /api/notebooks/[id]/documents/[documentId] {folderId}`; the tree is `components/reader/document-folders.tsx`.
 - The text under the open selection popover keeps a selection tint (a mark of kind `selection`, the same color as the browser's selection): the browser's own selection goes the moment the assistant's command box or the comment box takes focus, and while the assistant runs, but the tint stays until the popover closes. Every block of the passage (§5) keeps it, so the tint is the selection whole from the moment the pointer lifts, never the first block alone. The native selection over that mark paints nothing, so the two never stack. Reading mode only — edit mode's blocks are the browser's editable regions.
 - A deleted note's marks answer at once, wherever the delete came from — a tool card's Delete, the on-mark card, the Annotations tab, the notes tray (`dissect:note-removed`): the mark fades (`.mark-out`), takes no clicks, and unpaints before the refresh; a failed delete puts it back (`dissect:note-restored`). A stored AI annotation's mark — Explain, Simplify, Analyze, Visualize, the assistant — is its underline and its symbol alone, no fill, while its card is closed (`.tool-mark`): the clay fill belongs to the live selection under the toolbar and to an open card's anchor, so a stored rewrite never reads as a selection; hovering fills it, and opening its card fills it. Marks that open something deepen on hover. An Explain, Simplify, or Assistant run keeps its mark after its card closes, until the server's copy lands.
 - SIMPLIFY opens a translucent bubble to the right of the article, level with the selection, sliding in with a smooth animation. The selection stays tinted while the bubble is open. The document text never changes. The output persists as a note in the hidden Annotations section (like EXPLAIN), so it is still there when the reader leaves and comes back — listed under Simplified in the Annotations tab. Sentence mirroring: the prompt numbers the original sentences and the model appends a source marker ([[1]] or [[2,3]], at least one number) after each rewritten sentence. Every sentence in the bubble is lightly tinted; pressing one turns it solid and tints exactly its source sentences in the article. Both sides split sentences with the same function (src/lib/sentences.ts), so marker indices map back to exact offsets — never model-quoted text.

@@ -158,6 +158,7 @@ model Notebook {
   distillations Json?
   sections      Section[]
   documents     NotebookDocument[]
+  folders       DocumentFolder[]
   digest        NotebookDigest?
   collaborators NotebookCollaborator[]
   presence      NotebookPresence[]
@@ -573,9 +574,36 @@ model NotebookDocument {
   distillations Json? // DISTILL output: [{id, question, createdAt, quotes}], newest first, per notebook per document (SPEC.md §4)
   extractions   Json? // EXTRACT output: [{id, createdAt, origin, spans}], oldest first — the index gives the label (SPEC.md §4)
   formalized    Json? // FORMALIZE output: {article: {title, markdown, createdAt, createdById}}; Regenerate overwrites
+  // The folder the document sits in within this project (SPEC.md §6); null
+  // = the project itself, outside every folder. Deleting the folder moves
+  // the document up one level (the route does it before the delete); the
+  // database's own fallback clears it.
+  folderId      String?
+  folder        DocumentFolder? @relation(fields: [folderId], references: [id], onDelete: SetNull)
 
   @@id([notebookId, documentId])
   @@index([documentId])
+  @@index([folderId])
+}
+
+// A folder (SPEC.md §6): a named group of a project's documents. A folder
+// can hold folders (parentId; null = the project itself). The document list
+// draws a folder as a row whose own list opens beside it. Deleting a folder
+// moves what it holds up one level; the cascade here only covers the
+// project's own delete.
+model DocumentFolder {
+  id         String             @id @default(cuid())
+  notebookId String
+  notebook   Notebook           @relation(fields: [notebookId], references: [id], onDelete: Cascade)
+  title      String
+  parentId   String?
+  parent     DocumentFolder?    @relation("FolderNesting", fields: [parentId], references: [id], onDelete: Cascade)
+  children   DocumentFolder[]   @relation("FolderNesting")
+  documents  NotebookDocument[]
+  createdAt  DateTime           @default(now())
+
+  @@index([notebookId])
+  @@index([parentId])
 }
 
 model Block {
