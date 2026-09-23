@@ -71,6 +71,7 @@ import { clipWords } from "@/lib/markdown-preview";
 import { AnnotationGrip } from "@/components/outline/annotation-grip";
 import { useCardDropOpen } from "@/components/outline/use-card-drop";
 import {
+  CollapseIcon,
   CommentIcon,
   ExpandIcon,
   MaximizeIcon,
@@ -125,6 +126,17 @@ type Segment = Omit<SourceInput, "documentId">;
 // selection crossed blocks (lib/anchors/passage.ts) — the first segment is
 // the anchor itself. Every tool works on the whole passage; the routes take
 // `segments` beside `anchor` and give the note one source per block.
+/** True when the browser's selection lies in a collapsed block (SPEC.md §28,
+    core-block.tsx): its words are a core, not the document's text, so no
+    tool opens on them. */
+function selectionInCollapsedBlock(): boolean {
+  const selection = window.getSelection();
+  if (!selection || selection.rangeCount === 0) return false;
+  const node = selection.getRangeAt(0).commonAncestorContainer;
+  const el = node instanceof Element ? node : node.parentElement;
+  return Boolean(el?.closest("[data-collapsed]"));
+}
+
 type Anchor = Segment & { segments?: Segment[] };
 
 /** The passage's segments: one per block, the anchor alone when the
@@ -1876,6 +1888,13 @@ export function ReaderInteractions({
       // that is text editing, not a new selection.
       if (document.activeElement?.closest("[data-selection-popover]")) return;
       requestAnimationFrame(() => {
+        // A collapsed block (SPEC.md §28) shows its core, not its text: a
+        // selection in it opens no tools.
+        if (selectionInCollapsedBlock()) {
+          setPopover(null);
+          setSubmenu(null);
+          return;
+        }
         const captured = captureSelection();
         // The VIDEO block (the player's own block) refuses annotation: a
         // selection over it shows the refusal instead of tools. Transcript
@@ -1939,6 +1958,7 @@ export function ReaderInteractions({
       if (!coarse || !canEditRef.current) return;
       if (selectionTimer) clearTimeout(selectionTimer);
       selectionTimer = setTimeout(() => {
+        if (selectionInCollapsedBlock()) return;
         const captured = captureSelection();
         if (!captured) return;
         if (captured && pendingLinkRef.current) {
@@ -2867,6 +2887,97 @@ export function ReaderInteractions({
   // The contents list (SPEC.md §26), opened from the Contents button at the
   // top left of the article.
   const [contentsOpen, setContentsOpen] = useState(false);
+  // Collapse (SPEC.md §28): the article's blocks shown as their cores. The
+  // choice is remembered per document in this browser; the cores come from
+  // the document on open (GET), or are written on the press (POST). The
+  // blocks read whole are forgotten when Collapse is pressed off.
+  const [collapseOn, setCollapseOn] = useState(false);
+  const [cores, setCores] = useState<Record<string, string> | null>(null);
+  const [collapseBusy, setCollapseBusy] = useState(false);
+  const [expandedBlocks, setExpandedBlocks] = useState<ReadonlySet<string>>(() => new Set());
+  const collapseStoreKey = `unitos-collapse-${documentId}`;
+  useEffect(() => {
+    if (embedded || transcript) return;
+    let on = false;
+    try {
+      on = localStorage.getItem(collapseStoreKey) === "on";
+    } catch {
+      on = false;
+    }
+    if (!on) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch(`/api/documents/${documentId}/collapse`);
+        const body = (await res.json().catch(() => null)) as { cores?: Record<string, string> } | null;
+        if (cancelled || !res.ok || !body?.cores || Object.keys(body.cores).length === 0) return;
+        setCores(body.cores);
+        setCollapseOn(true);
+      } catch {
+        // The article shows whole; the button collapses it again.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // Once per document: the memory is read on open.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [documentId]);
+  function rememberCollapse(on: boolean) {
+    try {
+      if (on) localStorage.setItem(collapseStoreKey, "on");
+      else localStorage.removeItem(collapseStoreKey);
+    } catch {
+      // A blocked store only loses the memory of the choice.
+    }
+  }
+  async function toggleCollapse() {
+    if (collapseBusy) return;
+    if (collapseOn) {
+      setCollapseOn(false);
+      setExpandedBlocks(new Set());
+      rememberCollapse(false);
+      return;
+    }
+    if (cores) {
+      setCollapseOn(true);
+      rememberCollapse(true);
+      return;
+    }
+    setCollapseBusy(true);
+    try {
+      // An editor writes the cores the document lacks; a viewer reads what is stored.
+      const res = await fetch(`/api/documents/${documentId}/collapse`, { method: canEdit ? "POST" : "GET" });
+      const body = (await res.json().catch(() => null)) as
+        | { cores?: Record<string, string>; complete?: boolean; error?: string }
+        | null;
+      if (!res.ok || !body?.cores) {
+        throw new Error(body?.error ?? t("common.requestFailedStatus", { status: res.status }));
+      }
+      if (Object.keys(body.cores).length === 0) {
+        showToast(t("reader.collapseViewer"));
+        return;
+      }
+      setCores(body.cores);
+      setCollapseOn(true);
+      rememberCollapse(true);
+      // Some blocks got no core — no model, or a failed call: they read
+      // whole, and the toast says why.
+      if (body.error) showToast(t("reader.collapseFailed", { reason: body.error }));
+    } catch (err) {
+      showToast(t("reader.collapseFailed", { reason: err instanceof Error ? err.message : t("common.requestFailed") }));
+    } finally {
+      setCollapseBusy(false);
+    }
+  }
+  function toggleBlockWhole(blockId: string) {
+    setExpandedBlocks((prev) => {
+      const next = new Set(prev);
+      if (next.has(blockId)) next.delete(blockId);
+      else next.add(blockId);
+      return next;
+    });
+  }
 
   // The lead tool (SPEC.md §6): when the popover opens on a selection, Jev
   // predicts which tool the reader reaches for, from the selection and the
@@ -5858,6 +5969,24 @@ function blockFormatKind(
         </>
   );
 
+  // Collapse (SPEC.md §28): the button at the top right, beside Extract.
+  // Pressed, every block shows its core and the button reads Collapsed;
+  // pressed again, the article shows whole.
+  const collapseButton = (
+    <button
+      onClick={() => void toggleCollapse()}
+      data-track={collapseOn ? "collapse-off" : "collapse"}
+      aria-pressed={collapseOn}
+      disabled={collapseBusy}
+      data-tip={t(collapseOn ? "reader.collapseOffTitle" : "reader.collapseTitle")}
+      className={`flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-semibold shadow-soft disabled:opacity-60 ${
+        collapseOn ? "bg-ink text-paper" : "bg-sand-100 text-sand-600 hover:text-clay-800"
+      }`}
+    >
+      {collapseBusy ? <SpinnerIcon size={13} className="motion-safe:animate-spin" /> : <CollapseIcon size={13} />}
+      {t(collapseBusy ? "reader.collapsing" : collapseOn ? "reader.collapsed" : "reader.collapse")}
+    </button>
+  );
   // The annotation each card over the article holds, as a reference
   // (lib/annotation-reference.ts): what its grip and a hold on it drag.
   const annotationCardReference = annotationCard
@@ -5924,6 +6053,7 @@ function blockFormatKind(
           {!transcript && articleMenu}
           {!transcript && (
             <div className="relative ml-auto flex shrink-0 items-center gap-2">
+              {collapseButton}
               {distillButton}
               {/* The article's errors: under the buttons, over the text. */}
               <div className="absolute top-full right-0 mt-2">
@@ -6014,6 +6144,7 @@ function blockFormatKind(
             {t("common.done")}
           </button>
         )}
+        {!split && !transcript && !embedded && collapseButton}
         {!split && !transcript && !embedded && distillButton}
       </div>
       {!split && !transcript && !embedded && <ArticleErrors documentId={documentId} />}
@@ -6070,6 +6201,7 @@ function blockFormatKind(
           />
         }
         translations={translations}
+        collapse={collapseOn && cores ? { cores, expanded: expandedBlocks, toggle: toggleBlockWhole } : null}
       />
 
       <Bibliography references={references} />

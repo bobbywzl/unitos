@@ -18,6 +18,7 @@ import {
 import { FigurePlace, type FigureRenderInfo } from "@/components/reader/figure-capture";
 import { Reveal, inactiveReveal, useReveal, type RevealKind } from "@/components/reader/reveal";
 import { TranslationLine } from "@/components/reader/translation-bar";
+import { CoreBlock, CoreFold } from "@/components/reader/core-block";
 import { useLang } from "@/components/lang-provider";
 import { CircleGlow } from "@/components/reader/circle-glow";
 import type { TKey } from "@/lib/i18n/dictionaries";
@@ -540,6 +541,7 @@ export function Reader({
   flushRef,
   banner,
   translations,
+  collapse,
   transcript,
   embedded,
 }: {
@@ -553,6 +555,9 @@ export function Reader({
   transcript?: TranscriptVariant;
   /** Translation text per block id, shown under each block in reading mode. */
   translations?: Record<string, string> | null;
+  /** Collapse (SPEC.md §28): every collapsible block's core, the blocks the
+      reader opened whole, and the toggle; null while the article shows whole. */
+  collapse?: { cores: Record<string, string>; expanded: ReadonlySet<string>; toggle: (blockId: string) => void } | null;
   highlightsByBlock: Record<string, Highlight[]>;
   mode: "read" | "edit";
   font: string | null;
@@ -595,6 +600,30 @@ export function Reader({
     mode === "read" && translations?.[block.id] ? (
       <TranslationLine text={translations[block.id]} lang={uiLang} />
     ) : null;
+  // Collapse (SPEC.md §28): a block with a core shows the core in its place
+  // until the reader opens it; a block read whole shows as it is, with the
+  // chip that folds it again under it. Reading mode only, like translations.
+  const blockNode = (block: BlockData) => {
+    const core = mode === "read" && collapse ? collapse.cores[block.id] : undefined;
+    const view = <BlockView block={block} highlights={highlightsByBlock[block.id]} documentId={documentId} />;
+    if (core === undefined || !collapse) return view;
+    if (!collapse.expanded.has(block.id)) {
+      return (
+        <CoreBlock
+          block={block}
+          core={core}
+          annotated={(highlightsByBlock[block.id] ?? []).some((h) => h.kind === "anchor" && !h.leaving)}
+          onToggle={() => collapse.toggle(block.id)}
+        />
+      );
+    }
+    return (
+      <>
+        {view}
+        <CoreFold onToggle={() => collapse.toggle(block.id)} />
+      </>
+    );
+  };
   // Optimistic overrides: applied the instant a bar button is clicked, cleared
   // when the server round-trip lands (the blocks prop identity changes then).
   const [localKinds, setLocalKinds] = useState<Record<string, Kind>>({});
@@ -934,7 +963,7 @@ export function Reader({
       node = (
         <div className="group/block relative">
           {documentId && <BlockBookmark documentId={documentId} blockId={block.id} text={block.text} />}
-          <BlockView block={block} highlights={highlightsByBlock[block.id]} documentId={documentId} />
+          {blockNode(block)}
           {translationOf(block)}
         </div>
       );
@@ -944,7 +973,7 @@ export function Reader({
       node = (
         <div className={`group/block relative ${wrapClear(block.id).trim()}`}>
           {documentId && <BlockBookmark documentId={documentId} blockId={block.id} text={block.text} />}
-          <BlockView block={block} highlights={highlightsByBlock[block.id]} documentId={documentId} />
+          {blockNode(block)}
           {translationOf(block)}
         </div>
       );

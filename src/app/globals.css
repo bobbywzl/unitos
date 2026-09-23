@@ -3186,3 +3186,48 @@ li[data-checked] > .note-box::before {
   }
 }
 
+
+/* Collapse (SPEC.md §28): a block shown as its core (core-block.tsx). A sage
+   rule at the left says the text is the core, not the block; the chip at the
+   end reads the block whole, and a clay dot says the block has annotations. */
+.reader-core {
+  padding-left: 12px;
+  border-left: 2px solid var(--sage-500, #5f8f6a);
+}
+.reader-core:hover {
+  border-left-color: var(--sage-700, #3f6b4a);
+}
+.reader-core-kind {
+  margin-right: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--sand-600);
+}
+.core-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  margin-left: 6px;
+  border-radius: 999px;
+  vertical-align: -0.22em;
+  background: var(--sage-100, #e6efe6);
+  color: var(--sage-700, #3f6b4a);
+  box-shadow: 0 0 0 1.5px var(--paper);
+}
+.core-chip-annotated {
+  width: 9px;
+  height: 9px;
+  margin-left: 8px;
+  background: var(--clay-400);
+}
+/* The fold chip under a block read whole: at the block's right, close under it. */
+.reader-core-fold {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: -6px;
+  margin-bottom: 14px;
+}

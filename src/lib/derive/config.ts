@@ -221,6 +221,17 @@ export const CONTENTS_MODEL = GLM_5_3;
 export const CONTENTS_EFFORT: KimiEffort = "low";
 export const CONTENTS_MAX_OUTPUT_TOKENS = 16384; // a list of titles and block ids, with the short reasoning before it
 
+// Collapse (SPEC.md §28): every block of the article to its core — what the
+// block really says, in plain words, at a tenth to a third of its length,
+// in the light of the whole document. One call per window of
+// COLLAPSE_WINDOW_CHARS of block text, the windows at once, each under the
+// cached prefix of the whole document. A judgement of what each block
+// serves, then plain writing, so GLM 5.3 at the default effort.
+export const COLLAPSE_MODEL = GLM_5_3;
+export const COLLAPSE_EFFORT: KimiEffort = DEFAULT_EFFORT;
+export const COLLAPSE_MAX_OUTPUT_TOKENS = 32768; // a core per block of the window, with the reasoning before them
+export const COLLAPSE_WINDOW_CHARS = 30_000;
+
 // The merge of notes (SPEC.md §6): the reader drops a note on another and
 // picks Merge with AI, and the model writes the one note that replaces both.
 // It rewrites the reader's own words, so it reasons at the reader's effort.

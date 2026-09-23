@@ -188,6 +188,9 @@ const en = {
   contentsNeedsKey: "MOONSHOT_API_KEY is not set. The contents need it.",
   chaptersNeedKey: "TYPESAFE_API_KEY is not set. The chapters need it.",
   contentsFailed: "The contents could not be built",
+  // Collapse (SPEC.md §28)
+  collapseNeedsKey: "No model is configured for Collapse.",
+  collapseFailed: "The article could not be collapsed",
   videoNoReparse: "Video documents do not re-parse",
   reparseRunning: "A re-parse of this document is already running",
   shapeSwitchNeedsPdf: "This document has no stored PDF to switch from",
@@ -452,6 +455,8 @@ const zh: Record<keyof typeof en, string> = {
   contentsNeedsKey: "未设置 MOONSHOT_API_KEY。目录需要它。",
   chaptersNeedKey: "未设置 TYPESAFE_API_KEY。章节需要它。",
   contentsFailed: "目录无法生成",
+  collapseNeedsKey: "未配置折叠所用的模型。",
+  collapseFailed: "文章无法折叠",
   videoNoReparse: "视频文档不能重新解析",
   reparseRunning: "此文档正在重新解析",
   shapeSwitchNeedsPdf: "此文档没有存储的 PDF，无法切换",

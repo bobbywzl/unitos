@@ -92,6 +92,18 @@ export function ContentsIcon(props: IconProps) {
   );
 }
 
+// Collapse (SPEC.md §28): two chevrons closing on a line — the article
+// folded to its cores.
+export function CollapseIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M8 4l4 4 4-4" />
+      <path d="M4 12h16" />
+      <path d="M8 20l4-4 4 4" />
+    </Icon>
+  );
+}
+
 export function SparkleIcon(props: IconProps) {
   return (
     <Icon {...props}>

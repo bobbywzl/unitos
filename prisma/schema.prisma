@@ -508,6 +508,12 @@ model Document {
   // build started; a start older than 10 minutes is a dead run.
   skeleton          Json?
   skeletonStartedAt DateTime?
+  // Collapse (SPEC.md §28): every block's core — what the block really
+  // says, in plain words, at a tenth to a third of its length, written in
+  // the light of the whole document — {v, cores: [{blockId, hash, text}]},
+  // each core with the hash of the block text it was written from. Built
+  // when the reader presses Collapse, for the blocks with no current core.
+  collapse          Json?
   references    Json? // the article's reference list, extracted at ingest: [{id, label, text, url}]
   video         VideoAsset? // set = video document; the reader renders the video pane (SPEC.md §11)
   images        ImageAsset[] // images the parse captured (chart animations)
