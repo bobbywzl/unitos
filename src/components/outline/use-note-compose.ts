@@ -96,7 +96,9 @@ export function useNoteCompose({
         "Content-Type": "application/json",
         ...(account ? { [ACCOUNT_HEADER]: account } : {}),
       },
-      body: JSON.stringify({ sectionId, content: trimmed, top: true }),
+      // The note is written in the open document (SPEC.md §6): the tray's
+      // composer names it; the notes full page's names none.
+      body: JSON.stringify({ sectionId, content: trimmed, top: true, documentId: actions.documentId ?? undefined }),
     })
       .then(async (res) => {
         endWrite(res.ok);

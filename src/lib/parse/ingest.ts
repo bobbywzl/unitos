@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { Prisma, type Document } from "@prisma/client";
+import { carryContents } from "@/lib/contents";
 import { db } from "@/lib/db";
 import { classifyPdf } from "@/lib/handwritten/classify";
 import { storePageSizes } from "@/lib/handwritten/page-images";
@@ -681,6 +682,13 @@ export async function reparseDocument(
         ? await parseSlides(bytes, document.title, { storeImage: slideImageStore(userId), picture: pictures.size > 0 })
         : await parseSheetsBytes(bytes, document.title, userId);
     onProgress?.("save", await saveDetail(parsed.blocks));
+    // The stored contents carry onto the new blocks by their text
+    // (lib/contents.ts): the old blocks are read before they go.
+    const oldBlocks = await db.block.findMany({
+      where: { documentId },
+      orderBy: { order: "asc" },
+      select: { id: true, text: true },
+    });
     await db.$transaction(async (tx) => {
       await tx.block.deleteMany({ where: { documentId } });
       await tx.imageAsset.deleteMany({ where: { documentId } });
@@ -695,12 +703,18 @@ export async function reparseDocument(
         })),
       });
       await claimCapturedImages(tx, documentId, parsed.blocks);
+      const newBlocks = await tx.block.findMany({
+        where: { documentId },
+        orderBy: { order: "asc" },
+        select: { id: true, text: true },
+      });
+      const carried = carryContents(document.contents, oldBlocks, newBlocks);
       await tx.document.update({
         where: { id: documentId },
         data: {
           parserVersion: PARSER_VERSION,
           columnWidth: document.format === "slides" ? SLIDES_COLUMN_WIDTH : SHEETS_COLUMN_WIDTH,
-          contents: Prisma.DbNull,
+          contents: carried.length > 0 ? carried : Prisma.DbNull,
           skeleton: Prisma.DbNull,
           skeletonStartedAt: null,
         },
@@ -782,6 +796,13 @@ export async function reparseDocument(
   // bar reports a caption left without its figure.
   onProgress?.("save", await saveDetail(blocks, scriptedFigures, render, mediaCheck, check));
   const rows = resolveContentsLinks(blocks);
+  // The stored contents carry onto the new blocks by their text
+  // (lib/contents.ts): the old blocks are read before they go.
+  const oldBlocks = await db.block.findMany({
+    where: { documentId },
+    orderBy: { order: "asc" },
+    select: { id: true, text: true },
+  });
   await db.$transaction(async (tx) => {
     await tx.block.deleteMany({ where: { documentId } });
     await tx.imageAsset.deleteMany({ where: { documentId } });
@@ -800,6 +821,17 @@ export async function reparseDocument(
       })),
     });
     await claimCapturedImages(tx, documentId, rows);
+    const newBlocks = await tx.block.findMany({
+      where: { documentId },
+      orderBy: { order: "asc" },
+      select: { id: true, text: true },
+    });
+    // The blocks are new, so the contents' and the skeleton's block ids are
+    // stale: the contents carry onto the new blocks by their text (SPEC.md
+    // §26) — cleared only when too few parts carry, so the next open of
+    // Contents builds them again — and the skeleton builds again after the
+    // response (§22).
+    const carried = carryContents(document.contents, oldBlocks, newBlocks);
     await tx.document.update({
       where: { id: documentId },
       data: {
@@ -811,10 +843,7 @@ export async function reparseDocument(
         conversionStatus: "NONE",
         conversionError: null,
         conversionStartedAt: null,
-        // The blocks are new, so the contents' and the skeleton's block ids
-        // are stale: the next open of Contents builds them again (SPEC.md
-        // §26), and the skeleton builds again after the response (§22).
-        contents: Prisma.DbNull,
+        contents: carried.length > 0 ? carried : Prisma.DbNull,
         skeleton: Prisma.DbNull,
         skeletonStartedAt: null,
       },

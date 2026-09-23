@@ -43,6 +43,10 @@ const createSchema = z
     // A note written in a section's composer lands at the top of the section
     // (SPEC.md §6); everything else lands at the end.
     top: z.boolean().optional(),
+    // The document the note is written in (SPEC.md §6): the open document,
+    // sent by the tray's composer. A note with a source, a video range, or
+    // an annotation takes that document; the notes full page sends none.
+    documentId: z.string().min(1).optional(),
   })
   .refine((d) => !(d.source && d.video), { message: "Provide source or video, not both" })
   .refine((d) => Boolean(d.content) !== Boolean(d.fromAnnotationId), {
@@ -151,6 +155,19 @@ export async function POST(req: Request) {
   }
   if (!content.trim()) return NextResponse.json({ error: t("api.validationFailed") }, { status: 400 });
 
+  // The document the note belongs to (SPEC.md §6): the passage's, the video's,
+  // the annotation's first anchor's, else the one the composer named — when
+  // it is attached to this project; a document that is not is nobody's.
+  let documentId: string | null =
+    sources[0]?.documentId ?? videoSource?.documentId ?? copiedSources[0]?.documentId ?? data.documentId ?? null;
+  if (documentId) {
+    const attached = await db.notebookDocument.findUnique({
+      where: { notebookId_documentId: { notebookId: section.notebookId, documentId } },
+      select: { documentId: true },
+    });
+    if (!attached) documentId = null;
+  }
+
   const count = await db.note.count({ where: { sectionId: data.sectionId } });
   const note = await db.note.create({
     data: {
@@ -160,6 +177,7 @@ export async function POST(req: Request) {
       status: data.pending || alwaysPending ? "PENDING" : "ACCEPTED",
       ...(derivationType ? { derivationType } : {}),
       createdById: access.user.id,
+      documentId,
       // Top: before every sibling; the normalize below makes the orders 0..n again.
       order: data.top ? -1 : count,
       ...(sources.length > 0 ? { sources: { create: sources } } : {}),

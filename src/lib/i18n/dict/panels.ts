@@ -4,6 +4,14 @@
 const en = {
   // Annotations tab
   annotationsEmpty: "No annotations yet. Select text in the reader to highlight, comment, or link.",
+  // The annotations full page (SPEC.md §6): every annotation of the project, grouped by document.
+  annotationsFullPage: "Annotations full page",
+  annotationsFullPageTitle: "Every annotation of the project, grouped by document",
+  annotationsPageTitle: "Annotations",
+  annotationsPageEmpty: "No annotations in this project yet. Select text in the reader to highlight, comment, or ask a tool.",
+  projectGroup: "Project",
+  projectGroupHint: "The sidebar assistant's conversations, anchored in no document",
+  openDocumentTitle: "Open this document in the reader",
   highlights: "Highlights",
   comments: "Comments",
   explanations: "Explanations",
@@ -52,7 +60,7 @@ const en = {
   revertTitle: "Put the paragraph back to the text before this edit",
   restoreTitle: "Put the removed paragraph back",
   dragAnnotationTitle:
-    "Drag this annotation onto a note: the note gets a reference that opens the annotation",
+    "Drag this annotation onto a note: the note gets its quote, a row that opens it, and its text",
   deleteAnnotationTitle: "Delete this annotation and its mark in the reader",
   // The three-dots menu on every annotation (annotation-menu.tsx)
   annotationMenu: "Annotation actions",
@@ -100,6 +108,13 @@ const en = {
 
 const zh: Record<keyof typeof en, string> = {
   annotationsEmpty: "还没有批注。在阅读器中选中文字即可高亮、评论或链接。",
+  annotationsFullPage: "整页批注",
+  annotationsFullPageTitle: "项目里的每条批注，按文档分组",
+  annotationsPageTitle: "批注",
+  annotationsPageEmpty: "此项目还没有批注。在阅读器中选中文字即可高亮、评论或使用工具。",
+  projectGroup: "项目",
+  projectGroupHint: "助手侧栏的对话，不锚定在任何文档",
+  openDocumentTitle: "在阅读器中打开这篇文档",
   highlights: "高亮",
   comments: "评论",
   explanations: "解释",
@@ -143,7 +158,7 @@ const zh: Record<keyof typeof en, string> = {
   restoreFailed: "恢复失败",
   revertTitle: "把段落还原为此次编辑之前的文本",
   restoreTitle: "恢复被移除的段落",
-  dragAnnotationTitle: "把这条批注拖到笔记上：笔记里会放一条打开它的批注链接",
+  dragAnnotationTitle: "把这条批注拖到笔记上：笔记里会放上它的引文、一条打开它的批注链接和它的内容",
   deleteAnnotationTitle: "删除此批注及其在阅读器中的标记",
   annotationMenu: "批注操作",
   annotationMenuTitle: "把此批注放进笔记、跳转到它，或删除它",

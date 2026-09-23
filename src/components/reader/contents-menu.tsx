@@ -18,10 +18,12 @@ import { Presence } from "@/components/presence";
 // {generate: true}) and stores the parts. Until then the list shows the
 // article's own headings, when it has any. Stored parts show at once, under
 // the disclaimer. A click on a part scrolls the reader to its block and
-// flashes it (dissect:flash-block). The button and the list hide with the
-// article menu once the reader scrolls (reader-interactions.tsx atTop). The
+// flashes it (dissect:flash-block). The button stays at the top left of the
+// pane as the article scrolls (reader-interactions.tsx articleMenu). The
 // parts are kept per document for the browser tab, so a reopen shows them
-// at once.
+// at once, and read again on every open: a re-parse gives the blocks new
+// ids and carries the parts onto them (lib/contents.ts), so the kept list
+// is replaced by the stored one as soon as it answers.
 
 // generated: the parts are the stored, AI-written contents. false: the
 // article's headings stand in, and nothing is stored.
@@ -53,10 +55,11 @@ export function ContentsMenu({
   const readError = readFailure?.id === documentId ? readFailure.message : null;
   const reading = open && !state && !readError;
 
-  // The stored parts, or the headings, load when the list opens, once per
-  // document per tab. No model call: that is Generate contents.
+  // The stored parts, or the headings, load when the list opens: the kept
+  // answer shows at once, and the read replaces it when it lands. No model
+  // call: that is Generate contents.
   useEffect(() => {
-    if (!open || state || readError) return;
+    if (!open || readError) return;
     let live = true;
     api<Answer>(`/api/documents/${documentId}/contents`, "POST", {})
       .then((answer) => {
@@ -66,13 +69,13 @@ export function ContentsMenu({
         setFetched({ id: documentId, data: next });
       })
       .catch((err: unknown) => {
-        if (!live) return;
+        if (!live || loaded.has(documentId)) return;
         setReadFailure({ id: documentId, message: err instanceof Error ? err.message : t("common.requestFailed") });
       });
     return () => {
       live = false;
     };
-  }, [open, documentId, state, readError, t]);
+  }, [open, documentId, readError, t]);
 
   // A click outside the list and the button (both carry data-contents)
   // closes the list.

@@ -251,6 +251,8 @@ async function writeNotes(
         derivationType: "VOICE",
         createdById: userId,
         order: count,
+        // Spoken in the open document: the note is that document's (SPEC.md §6).
+        ...(document ? { documentId: document.id } : {}),
         ...(sources.length > 0 ? { sources: { create: sources } } : {}),
       },
     });

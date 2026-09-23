@@ -104,6 +104,7 @@ export default async function AdminGatewayPage() {
     log: t("admin.featLog"),
     glossary: t("admin.featGlossary"),
     contents: t("admin.featContents"),
+    collapse: t("admin.featCollapse"),
     skeleton: t("admin.featSkeleton"),
     connect: t("admin.featConnect"),
     parse: t("admin.featParse"),

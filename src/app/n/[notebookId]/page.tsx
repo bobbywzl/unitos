@@ -905,6 +905,7 @@ export default async function NotebookPage(props: {
       order: n.order,
       createdById: n.createdById,
       updatedAt: n.updatedAt.toISOString(),
+      documentId: n.documentId,
       sources: n.sources.map((src) => ({
         id: src.id,
         documentId: src.documentId,
@@ -925,7 +926,12 @@ export default async function NotebookPage(props: {
   }
   const top = byParent.get(null) ?? [];
   for (const s of top) s.children = byParent.get(s.id) ?? [];
-  const view: NotebookView = { id: notebook.id, title: notebook.title, sections: top };
+  const view: NotebookView = {
+    id: notebook.id,
+    title: notebook.title,
+    sections: top,
+    documents: attached.map((d) => ({ id: d.id, title: d.title })),
+  };
 
   const sectionChoices = top.flatMap((s) => [
     { id: s.id, label: s.title },

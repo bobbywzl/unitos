@@ -24,6 +24,7 @@ import {
   type SimplifiedSentence,
 } from "@/lib/sentences";
 import type {
+  AnnotationItem,
   AssistantAction,
   AssistantPlan,
   Distillation,
@@ -70,6 +71,7 @@ import { clipWords } from "@/lib/markdown-preview";
 import { AnnotationGrip } from "@/components/outline/annotation-grip";
 import { useCardDropOpen } from "@/components/outline/use-card-drop";
 import {
+  CollapseIcon,
   CommentIcon,
   ExpandIcon,
   MaximizeIcon,
@@ -115,7 +117,8 @@ import { openVisualization } from "@/components/reader/visualization-viewer";
 import { setQuoteDragImage, writeQuoteDrag, type QuoteDrag } from "@/lib/quote-drag";
 import { startCardDrag } from "@/lib/card-drag";
 import { pointsAtText, skipsDrag, watchHold } from "@/lib/hold-drag";
-import { ANNOTATION_PARAM, referenceLabel, type AnnotationReference } from "@/lib/annotation-reference";
+import { ANNOTATION_PARAM, referenceContent, referenceWords, type AnnotationReference } from "@/lib/annotation-reference";
+import { ANNOTATION_KIND_KEY, annotationKindColor } from "@/lib/annotations/kind";
 
 // One block's span of a selection (SPEC.md §5).
 type Segment = Omit<SourceInput, "documentId">;
@@ -123,6 +126,17 @@ type Segment = Omit<SourceInput, "documentId">;
 // selection crossed blocks (lib/anchors/passage.ts) — the first segment is
 // the anchor itself. Every tool works on the whole passage; the routes take
 // `segments` beside `anchor` and give the note one source per block.
+/** True when the browser's selection lies in a collapsed block (SPEC.md §28,
+    core-block.tsx): its words are a core, not the document's text, so no
+    tool opens on them. */
+function selectionInCollapsedBlock(): boolean {
+  const selection = window.getSelection();
+  if (!selection || selection.rangeCount === 0) return false;
+  const node = selection.getRangeAt(0).commonAncestorContainer;
+  const el = node instanceof Element ? node : node.parentElement;
+  return Boolean(el?.closest("[data-collapsed]"));
+}
+
 type Anchor = Segment & { segments?: Segment[] };
 
 /** The passage's segments: one per block, the anchor alone when the
@@ -989,9 +1003,6 @@ export function ReaderInteractions({
   const [voice, setVoice] = useState<"idle" | "loading" | "playing">("idle");
   const voiceAudioRef = useRef<HTMLAudioElement | null>(null);
   const voiceRunRef = useRef(0);
-  // The article menu floats open at the top of the page; it hides once the
-  // reader scrolls and returns when the reader is back at the top.
-  const [atTop, setAtTop] = useState(true);
   // Optimistic highlight marks: painted the instant a color dot is clicked,
   // cleared when the server's anchors arrive with the refresh.
   const [localAnchors, setLocalAnchors] = useState<
@@ -1170,26 +1181,32 @@ export function ReaderInteractions({
     Object.values(anchorHighlights)
       .flat()
       .find((h) => h.noteId === noteId)?.sourceId ?? null;
-  const annotationReference = (
-    noteId: string | null | undefined,
-    sourceId: string | null,
-    text: string,
-    fallback: string,
-    picture?: string,
-    // The turns the card's conversation holds (SPEC.md §21): a drop brings
-    // the conversation's log into the note under the row.
-    turns = 0,
-  ): AnnotationReference | null =>
-    noteId
-      ? {
-          annotationId: noteId,
-          documentId,
-          sourceId,
-          label: referenceLabel(text, fallback),
-          ...(picture ? { picture } : {}),
-          ...(turns > 0 ? { turns } : {}),
-        }
-      : null;
+  // The reference a card drags: the annotation, its kind, the words it is
+  // anchored to (the quote the note gets), its content (the text, the
+  // picture, or the turns of its conversation — a drop brings the
+  // conversation's log into the note, SPEC.md §21), and its first words for
+  // the ghost.
+  const annotationReference = (input: {
+    noteId: string | null | undefined;
+    sourceId: string | null;
+    kind: AnnotationItem["kind"];
+    quote: string | null;
+    content: string;
+    turns?: number;
+  }): AnnotationReference | null => {
+    if (!input.noteId) return null;
+    const name = t(ANNOTATION_KIND_KEY[input.kind]);
+    return {
+      annotationId: input.noteId,
+      documentId,
+      sourceId: input.sourceId,
+      kind: input.kind,
+      label: name,
+      words: referenceWords(input.content, name),
+      ...(input.quote ? { quote: input.quote } : {}),
+      ...referenceContent(input.kind, input.content, input.quote, input.turns ?? 0),
+    };
+  };
   const annotationGrip = (reference: AnnotationReference | null) =>
     dropOpen && reference ? <AnnotationGrip reference={reference} className="-ml-1" /> : null;
   // A hold on the card's blank space, off its controls and off the header
@@ -1208,7 +1225,7 @@ export function ReaderInteractions({
         document.body.style.userSelect = "none";
         startCardDrag(
           { clientX: at.x, clientY: at.y },
-          { kind: "annotation", ids: [reference.annotationId], label: reference.label, reference },
+          { kind: "annotation", ids: [reference.annotationId], label: reference.words, reference },
           () => {
             document.body.style.userSelect = "";
           },
@@ -1871,6 +1888,13 @@ export function ReaderInteractions({
       // that is text editing, not a new selection.
       if (document.activeElement?.closest("[data-selection-popover]")) return;
       requestAnimationFrame(() => {
+        // A collapsed block (SPEC.md §28) shows its core, not its text: a
+        // selection in it opens no tools.
+        if (selectionInCollapsedBlock()) {
+          setPopover(null);
+          setSubmenu(null);
+          return;
+        }
         const captured = captureSelection();
         // The VIDEO block (the player's own block) refuses annotation: a
         // selection over it shows the refusal instead of tools. Transcript
@@ -1934,6 +1958,7 @@ export function ReaderInteractions({
       if (!coarse || !canEditRef.current) return;
       if (selectionTimer) clearTimeout(selectionTimer);
       selectionTimer = setTimeout(() => {
+        if (selectionInCollapsedBlock()) return;
         const captured = captureSelection();
         if (!captured) return;
         if (captured && pendingLinkRef.current) {
@@ -2862,15 +2887,97 @@ export function ReaderInteractions({
   // The contents list (SPEC.md §26), opened from the Contents button at the
   // top left of the article.
   const [contentsOpen, setContentsOpen] = useState(false);
-  // The article menu tracks the scroll position: visible only at the top.
+  // Collapse (SPEC.md §28): the article's blocks shown as their cores. The
+  // choice is remembered per document in this browser; the cores come from
+  // the document on open (GET), or are written on the press (POST). The
+  // blocks read whole are forgotten when Collapse is pressed off.
+  const [collapseOn, setCollapseOn] = useState(false);
+  const [cores, setCores] = useState<Record<string, string> | null>(null);
+  const [collapseBusy, setCollapseBusy] = useState(false);
+  const [expandedBlocks, setExpandedBlocks] = useState<ReadonlySet<string>>(() => new Set());
+  const collapseStoreKey = `unitos-collapse-${documentId}`;
   useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-    const onScroll = () => setAtTop(container.scrollTop < 24);
-    onScroll();
-    container.addEventListener("scroll", onScroll, { passive: true });
-    return () => container.removeEventListener("scroll", onScroll);
-  }, []);
+    if (embedded || transcript) return;
+    let on = false;
+    try {
+      on = localStorage.getItem(collapseStoreKey) === "on";
+    } catch {
+      on = false;
+    }
+    if (!on) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch(`/api/documents/${documentId}/collapse`);
+        const body = (await res.json().catch(() => null)) as { cores?: Record<string, string> } | null;
+        if (cancelled || !res.ok || !body?.cores || Object.keys(body.cores).length === 0) return;
+        setCores(body.cores);
+        setCollapseOn(true);
+      } catch {
+        // The article shows whole; the button collapses it again.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // Once per document: the memory is read on open.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [documentId]);
+  function rememberCollapse(on: boolean) {
+    try {
+      if (on) localStorage.setItem(collapseStoreKey, "on");
+      else localStorage.removeItem(collapseStoreKey);
+    } catch {
+      // A blocked store only loses the memory of the choice.
+    }
+  }
+  async function toggleCollapse() {
+    if (collapseBusy) return;
+    if (collapseOn) {
+      setCollapseOn(false);
+      setExpandedBlocks(new Set());
+      rememberCollapse(false);
+      return;
+    }
+    if (cores) {
+      setCollapseOn(true);
+      rememberCollapse(true);
+      return;
+    }
+    setCollapseBusy(true);
+    try {
+      // An editor writes the cores the document lacks; a viewer reads what is stored.
+      const res = await fetch(`/api/documents/${documentId}/collapse`, { method: canEdit ? "POST" : "GET" });
+      const body = (await res.json().catch(() => null)) as
+        | { cores?: Record<string, string>; complete?: boolean; error?: string }
+        | null;
+      if (!res.ok || !body?.cores) {
+        throw new Error(body?.error ?? t("common.requestFailedStatus", { status: res.status }));
+      }
+      if (Object.keys(body.cores).length === 0) {
+        showToast(t("reader.collapseViewer"));
+        return;
+      }
+      setCores(body.cores);
+      setCollapseOn(true);
+      rememberCollapse(true);
+      // Some blocks got no core — no model, or a failed call: they read
+      // whole, and the toast says why.
+      if (body.error) showToast(t("reader.collapseFailed", { reason: body.error }));
+    } catch (err) {
+      showToast(t("reader.collapseFailed", { reason: err instanceof Error ? err.message : t("common.requestFailed") }));
+    } finally {
+      setCollapseBusy(false);
+    }
+  }
+  function toggleBlockWhole(blockId: string) {
+    setExpandedBlocks((prev) => {
+      const next = new Set(prev);
+      if (next.has(blockId)) next.delete(blockId);
+      else next.add(blockId);
+      return next;
+    });
+  }
 
   // The lead tool (SPEC.md §6): when the popover opens on a selection, Jev
   // predicts which tool the reader reaches for, from the selection and the
@@ -5812,29 +5919,24 @@ function blockFormatKind(
 
   // The article menu: the Contents button (SPEC.md §26) and the list it
   // opens — the article's parts, each a jump to its block. In Normal view it
-  // floats open at the top of the page, hides once the reader scrolls, and
-  // returns at the top — the strip spans the pane so the list can size to
-  // it, and only the controls take pointer events. In a split view it sits
-  // in the pane header, always in reach, and its list drops below the
-  // header (SPEC.md §6). A transcript has the video pane's own tools
-  // instead (SPEC.md §11).
+  // floats at the top left of the pane and stays there as the article
+  // scrolls: a sticky block with no height, like the controls at the top
+  // right, so the text runs under it, and only the controls take pointer
+  // events. In a split view it sits in the pane header, always in reach,
+  // and its list drops below the header (SPEC.md §6). A transcript has the
+  // video pane's own tools instead (SPEC.md §11).
   const articleMenu = (
       <div
-      data-track-surface="article-menu"
-        inert={!split && !atTop}
+        data-track-surface="article-menu"
         className={
-          split
-            ? "relative flex shrink-0 items-center"
-            : `pointer-events-none absolute inset-x-4 top-4 z-30 transition duration-200 print:hidden ${
-                atTop ? "opacity-100" : "-translate-y-2 opacity-0"
-              }`
+          split ? "relative flex shrink-0 items-center" : "pointer-events-none sticky top-4 z-30 h-0 print:hidden"
         }
       >
         <div
           className={
             split
               ? "flex w-max items-start gap-1.5 [&>nav]:absolute [&>nav]:top-full [&>nav]:left-0 [&>nav]:mt-2 [&>nav]:w-[min(400px,70vw)]"
-              : "flex flex-col items-start gap-1.5"
+              : "absolute top-0 left-4 flex w-[min(400px,calc(100%-32px))] flex-col items-start gap-1.5"
           }
         >
           <ContentsMenu documentId={documentId} open={contentsOpen} onOpenChange={setContentsOpen} />
@@ -5867,49 +5969,79 @@ function blockFormatKind(
         </>
   );
 
+  // Collapse (SPEC.md §28): the button at the top right, beside Extract.
+  // Pressed, every block shows its core and the button reads Collapsed;
+  // pressed again, the article shows whole.
+  const collapseButton = (
+    <button
+      onClick={() => void toggleCollapse()}
+      data-track={collapseOn ? "collapse-off" : "collapse"}
+      aria-pressed={collapseOn}
+      disabled={collapseBusy}
+      data-tip={t(collapseOn ? "reader.collapseOffTitle" : "reader.collapseTitle")}
+      className={`flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-semibold shadow-soft disabled:opacity-60 ${
+        collapseOn ? "bg-ink text-paper" : "bg-sand-100 text-sand-600 hover:text-clay-800"
+      }`}
+    >
+      {collapseBusy ? <SpinnerIcon size={13} className="motion-safe:animate-spin" /> : <CollapseIcon size={13} />}
+      {t(collapseBusy ? "reader.collapsing" : collapseOn ? "reader.collapsed" : "reader.collapse")}
+    </button>
+  );
   // The annotation each card over the article holds, as a reference
   // (lib/annotation-reference.ts): what its grip and a hold on it drag.
   const annotationCardReference = annotationCard
-    ? annotationReference(
-        annotationCard.noteId,
-        annotationCard.sourceId,
-        annotationCard.saved,
-        t(annotationCard.kind === "highlight" ? "reader.highlight" : "reader.comment"),
-      )
+    ? annotationReference({
+        noteId: annotationCard.noteId,
+        sourceId: annotationCard.sourceId,
+        kind: annotationCard.kind,
+        quote: annotationCard.quotedText,
+        content: annotationCard.saved,
+      })
     : null;
   const bubbleReference =
     bubble && !bubble.streaming
-      ? annotationReference(
-          bubble.noteId,
-          bubble.noteId ? sourceIdOfNote(bubble.noteId) : null,
-          bubble.text,
-          t(bubble.kind === "analyze" ? "reader.analysis" : bubble.kind === "visualize" ? "reader.visualization" : "reader.explanation"),
-          // A visualization brings its picture into the note.
-          bubble.kind === "visualize" ? bubble.text : undefined,
-          bubble.conversation.length,
-        )
+      ? annotationReference({
+          noteId: bubble.noteId,
+          sourceId: bubble.noteId ? sourceIdOfNote(bubble.noteId) : null,
+          kind: bubble.kind,
+          quote: bubble.anchor ? passageText(bubble.anchor) : null,
+          content: bubble.text,
+          turns: bubble.conversation.length,
+        })
       : null;
   const simplifyReference =
     simplifyCard && !simplifyCard.streaming
-      ? annotationReference(
-          simplifyCard.noteId,
-          simplifyCard.noteId ? sourceIdOfNote(simplifyCard.noteId) : null,
-          simplifyCard.text,
-          t("reader.simplified"),
-          undefined,
-          simplifyCard.conversation.length,
-        )
+      ? annotationReference({
+          noteId: simplifyCard.noteId,
+          sourceId: simplifyCard.noteId ? sourceIdOfNote(simplifyCard.noteId) : null,
+          kind: "simplify",
+          quote: passageText(simplifyCard.anchor),
+          content: simplifyCard.text,
+          turns: simplifyCard.conversation.length,
+        })
       : null;
   const assistantReference = assistantChat
-    ? annotationReference(
-        assistantChat.noteId,
-        assistantChat.noteId ? sourceIdOfNote(assistantChat.noteId) : null,
-        assistantChat.messages.map((m) => m.content).join(" "),
-        t("reader.assistant"),
-        undefined,
-        assistantChat.messages.length,
-      )
+    ? annotationReference({
+        noteId: assistantChat.noteId,
+        sourceId: assistantChat.noteId ? sourceIdOfNote(assistantChat.noteId) : null,
+        kind: "assistant",
+        quote: assistantChat.anchor ? passageText(assistantChat.anchor) : null,
+        content: assistantChat.messages.map((m) => m.content).join(" "),
+        turns: assistantChat.messages.length,
+      })
     : null;
+  // The stored comment's own card, opened from its mark: its grip and a hold
+  // drag the comment like the tool cards' drag theirs.
+  const commentReference =
+    commentCard && !commentCard.busy
+      ? annotationReference({
+          noteId: commentCard.noteId,
+          sourceId: commentCard.noteId ? sourceIdOfNote(commentCard.noteId) : null,
+          kind: "comment",
+          quote: commentCard.anchor ? passageText(commentCard.anchor) : null,
+          content: commentCard.saved,
+        })
+      : null;
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       {/* A split view: the pane header — the pane's document, the article
@@ -5921,6 +6053,7 @@ function blockFormatKind(
           {!transcript && articleMenu}
           {!transcript && (
             <div className="relative ml-auto flex shrink-0 items-center gap-2">
+              {collapseButton}
               {distillButton}
               {/* The article's errors: under the buttons, over the text. */}
               <div className="absolute top-full right-0 mt-2">
@@ -6011,6 +6144,7 @@ function blockFormatKind(
             {t("common.done")}
           </button>
         )}
+        {!split && !transcript && !embedded && collapseButton}
         {!split && !transcript && !embedded && distillButton}
       </div>
       {!split && !transcript && !embedded && <ArticleErrors documentId={documentId} />}
@@ -6067,6 +6201,7 @@ function blockFormatKind(
           />
         }
         translations={translations}
+        collapse={collapseOn && cores ? { cores, expanded: expandedBlocks, toggle: toggleBlockWhole } : null}
       />
 
       <Bibliography references={references} />
@@ -6076,11 +6211,19 @@ function blockFormatKind(
         <div
           data-selection-popover
           onPointerDown={holdAnnotation(annotationCardReference)}
-          className={`pop-in absolute ${TOOL_LAYER} w-[300px] rounded-2xl bg-card p-3 shadow-float`}
-          style={{ top: annotationCard.top, left: annotationCard.left }}
+          className={`pop-in absolute ${TOOL_LAYER} w-[300px] rounded-2xl border bg-card p-3 shadow-float`}
+          // The card's border and label carry the annotation's kind color (SPEC.md §6).
+          style={{
+            top: annotationCard.top,
+            left: annotationCard.left,
+            borderColor: annotationKindColor(annotationCard.kind, annotationCard.color),
+          }}
         >
           <div className="mb-2 flex items-center justify-between">
-            <span className="flex items-center gap-1.5 text-[11px] font-bold tracking-[0.08em] text-sand-600 uppercase">
+            <span
+              className="flex items-center gap-1.5 text-[11px] font-bold tracking-[0.08em] uppercase"
+              style={{ color: annotationKindColor(annotationCard.kind, annotationCard.color) }}
+            >
               {annotationGrip(annotationCardReference)}
               {annotationCard.kind === "highlight" ? t("reader.highlight") : t("reader.comment")}
             </span>
@@ -6638,8 +6781,14 @@ function blockFormatKind(
           data-selection-popover
           data-side-card="explain"
           onPointerDown={holdAnnotation(bubbleReference)}
-          className={`bubble-in absolute ${TOOL_LAYER} flex flex-col rounded-[20px] border border-line bg-card/90 p-4 shadow-float backdrop-blur-md`}
-          style={{ left: bubble.left, top: bubble.top, width: bubble.width, maxHeight: cardMaxHeight }}
+          className={`bubble-in absolute ${TOOL_LAYER} flex flex-col rounded-[20px] border bg-card/90 p-4 shadow-float backdrop-blur-md`}
+          style={{
+            left: bubble.left,
+            top: bubble.top,
+            width: bubble.width,
+            maxHeight: cardMaxHeight,
+            borderColor: annotationKindColor(bubble.kind, null),
+          }}
         >
           <div
             onPointerDown={dragCard(
@@ -6651,7 +6800,10 @@ function blockFormatKind(
             data-tip={t("reader.dragToMove")}
             className="mb-2 flex cursor-move items-center justify-between gap-2"
           >
-            <span className="flex min-w-0 items-center gap-1.5 text-[11px] font-bold tracking-[0.08em] text-clay-800 uppercase">
+            <span
+              className="flex min-w-0 items-center gap-1.5 text-[11px] font-bold tracking-[0.08em] uppercase"
+              style={{ color: annotationKindColor(bubble.kind, null) }}
+            >
               {annotationGrip(bubbleReference)}
               <ToolSymbol tool={bubble.kind} plus={toolPlus(bubble)} size={12} />
               {toolPlus(bubble)
@@ -6775,12 +6927,13 @@ function blockFormatKind(
           data-selection-popover
           data-side-card="simplify"
           onPointerDown={holdAnnotation(simplifyReference)}
-          className={`bubble-in absolute ${TOOL_LAYER} flex flex-col rounded-[20px] border border-line bg-card/80 p-4 shadow-float backdrop-blur-md`}
+          className={`bubble-in absolute ${TOOL_LAYER} flex flex-col rounded-[20px] border bg-card/80 p-4 shadow-float backdrop-blur-md`}
           style={{
             top: simplifyCard.top,
             left: simplifyCard.left,
             width: simplifyCard.width,
             maxHeight: cardMaxHeight,
+            borderColor: annotationKindColor("simplify", null),
           }}
         >
           <div
@@ -6793,7 +6946,10 @@ function blockFormatKind(
             data-tip={t("reader.dragToMove")}
             className="mb-2 flex cursor-move items-center justify-between gap-2"
           >
-            <span className="flex min-w-0 items-center gap-1.5 text-[11px] font-bold tracking-[0.08em] text-sage-800 uppercase">
+            <span
+              className="flex min-w-0 items-center gap-1.5 text-[11px] font-bold tracking-[0.08em] uppercase"
+              style={{ color: annotationKindColor("simplify", null) }}
+            >
               {annotationGrip(simplifyReference)}
               <ToolSymbol tool="simplify" plus={toolPlus(simplifyCard)} size={12} />
               {toolPlus(simplifyCard)
@@ -6910,8 +7066,14 @@ function blockFormatKind(
         <div
           data-log-card="log"
           data-selection-popover
-          className={`bubble-in absolute ${TOOL_LAYER} flex flex-col rounded-[20px] border border-line bg-card/90 p-4 shadow-float backdrop-blur-md`}
-          style={{ left: logCard.left, top: logCard.top, width: logCard.width, maxHeight: cardMaxHeight }}
+          className={`bubble-in absolute ${TOOL_LAYER} flex flex-col rounded-[20px] border bg-card/90 p-4 shadow-float backdrop-blur-md`}
+          style={{
+            left: logCard.left,
+            top: logCard.top,
+            width: logCard.width,
+            maxHeight: cardMaxHeight,
+            borderColor: annotationKindColor(logCard.tool, null),
+          }}
         >
           <div className="mb-2 flex items-center justify-between">
             <span className="flex items-center gap-1.5 text-[11px] font-bold tracking-[0.08em] text-clay-800 uppercase">
@@ -6954,12 +7116,14 @@ function blockFormatKind(
         <div
           data-selection-popover
           data-side-card="comment"
-          className={`bubble-in absolute ${TOOL_LAYER} flex flex-col rounded-[20px] border border-line bg-card/90 p-4 shadow-float backdrop-blur-md`}
+          onPointerDown={holdAnnotation(commentReference)}
+          className={`bubble-in absolute ${TOOL_LAYER} flex flex-col rounded-[20px] border bg-card/90 p-4 shadow-float backdrop-blur-md`}
           style={{
             left: commentCard.left,
             top: commentCard.top,
             width: commentCard.width,
             maxHeight: cardMaxHeight,
+            borderColor: annotationKindColor("comment", null),
           }}
         >
           <div
@@ -6972,7 +7136,11 @@ function blockFormatKind(
             data-tip={t("reader.dragToMove")}
             className="mb-2 flex cursor-move items-center justify-between"
           >
-            <span className="flex items-center gap-1.5 text-[11px] font-bold tracking-[0.08em] text-clay-800 uppercase">
+            <span
+              className="flex items-center gap-1.5 text-[11px] font-bold tracking-[0.08em] uppercase"
+              style={{ color: annotationKindColor("comment", null) }}
+            >
+              {annotationGrip(commentReference)}
               <CommentIcon size={12} />
               {t("reader.comment")}
             </span>
@@ -7135,7 +7303,7 @@ function blockFormatKind(
           data-selection-popover
           data-side-card="assistant"
           onPointerDown={holdAnnotation(assistantReference)}
-          className={`bubble-in absolute ${TOOL_LAYER} flex resize flex-col overflow-hidden rounded-[20px] border border-line bg-card/95 shadow-float backdrop-blur-md`}
+          className={`bubble-in absolute ${TOOL_LAYER} flex resize flex-col overflow-hidden rounded-[20px] border bg-card/95 shadow-float backdrop-blur-md`}
           style={{
             left: assistantChat.left,
             top: assistantChat.top,
@@ -7143,6 +7311,7 @@ function blockFormatKind(
             minWidth: 260,
             maxWidth: 680,
             maxHeight: cardMaxHeight,
+            borderColor: annotationKindColor("assistant", null),
           }}
         >
           <div
@@ -7155,7 +7324,10 @@ function blockFormatKind(
             data-tip={t("reader.dragToMove")}
             className="flex cursor-move items-center justify-between px-4 pt-3 pb-1"
           >
-            <span className="flex items-center gap-1.5 text-[11px] font-bold tracking-[0.08em] text-clay-800 uppercase">
+            <span
+              className="flex items-center gap-1.5 text-[11px] font-bold tracking-[0.08em] uppercase"
+              style={{ color: annotationKindColor("assistant", null) }}
+            >
               {annotationGrip(assistantReference)}
               <SparkleIcon size={12} />
               {t("reader.assistant")}

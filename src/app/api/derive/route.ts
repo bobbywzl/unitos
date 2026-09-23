@@ -1499,6 +1499,7 @@ async function handle(req: Request, t: TFunc) {
                 status: "PENDING",
                 derivationType: "FORMALIZE",
                 createdById: user.id,
+                documentId,
                 order: order++,
                 sources: {
                   create: {

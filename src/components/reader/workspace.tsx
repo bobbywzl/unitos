@@ -19,7 +19,6 @@ import {
   DistillIcon,
   EditsIcon,
   GraphIcon,
-  HistoryIcon,
   NotesIcon,
   OfflineIcon,
   QuestionIcon,
@@ -157,7 +156,13 @@ export function Workspace({
 }) {
   const t = useT();
   const canEdit = collab.canEdit;
-  const { tree, pending, actions, lastRejected, undoReject } = useOutline(notebook, canEdit);
+  // The tray's notes are the open document's (SPEC.md §6); the notes full
+  // page has the whole project.
+  const { tree, pending, pendingElsewhere, actions, lastRejected, undoReject } = useOutline(
+    notebook,
+    canEdit,
+    activeDocumentId,
+  );
   // Live sync: poll the corpus's rev, refresh when another account changes it,
   // and learn who else is here (SPEC.md gained this with sharing).
   const presence = useNotebookSync({
@@ -741,25 +746,12 @@ export function Workspace({
               {tab === "annotations" && annotationCount > 0 && (
                 <span className="text-[13px] text-sand-600">{annotationCount}</span>
               )}
-              {/* Assistant history (SPEC.md §7): every conversation of the
-                  project on its own page, from the assistant page's top right. */}
-              {tab === "assistant" && (
-                <Link
-                  href={`/n/${notebook.id}/assistant`}
-                  data-track="assistant-history"
-                  data-tip={t("assistant.historyTitle")}
-                  className="ml-auto flex items-center gap-1.5 rounded-full bg-card px-3 py-1 text-xs font-semibold text-sand-600 shadow-soft hover:text-clay-800"
-                >
-                  <HistoryIcon size={13} />
-                  {t("assistant.history")}
-                </Link>
-              )}
               <button
                 onClick={() => setMobileTray(false)}
                 data-track="close"
                 aria-label={t("common.close")}
                 data-tip={t("common.close")}
-                className={`${tab === "assistant" ? "" : "ml-auto "}rounded-full px-2 text-sand-500 hover:text-clay-800 md:hidden`}
+                className="ml-auto rounded-full px-2 text-sand-500 hover:text-clay-800 md:hidden"
               >
                 ✕
               </button>
@@ -767,7 +759,9 @@ export function Workspace({
 
             {/* Keyed by tab: switching remounts the panel, and it rises in. */}
             <div key={tab} className="panel-in min-h-0 flex-1 overflow-y-auto">
-              {tab === "notes" && <NotesTray tree={tree} pending={pending} actions={actions} />}
+              {tab === "notes" && (
+                <NotesTray tree={tree} pending={pending} pendingElsewhere={pendingElsewhere} actions={actions} />
+              )}
               {tab === "assistant" && assistant}
               {tab === "distill" && distillPanel}
               {tab === "annotations" && annotationsPanel}

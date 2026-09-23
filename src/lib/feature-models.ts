@@ -2,6 +2,7 @@ import type { DerivationType } from "@prisma/client";
 import { db } from "@/lib/db";
 import {
   CLASSIFY_MODEL,
+  COLLAPSE_MODEL,
   CONNECT_MODEL,
   CONTENTS_MODEL,
   CONVERT_MODEL,
@@ -53,6 +54,7 @@ export type Feature =
   | "svg-chart"
   | "glossary"
   | "contents"
+  | "collapse"
   | "skeleton"
   | "stitch"
   | "stitch-select"
@@ -86,6 +88,7 @@ export const FEATURE_DEFAULTS: Record<Feature, string> = {
   "svg-chart": SVG_CHART_MODEL,
   glossary: GLM_5_3_FLASH,
   contents: CONTENTS_MODEL,
+  collapse: COLLAPSE_MODEL,
   skeleton: SKELETON_MODEL,
   stitch: STITCH_MODEL,
   "stitch-select": STITCH_SELECT_MODEL,
@@ -126,6 +129,7 @@ export const FEATURE_ORDER: Feature[] = [
   "log",
   "glossary",
   "contents",
+  "collapse",
   "skeleton",
   "connect",
   "parse",

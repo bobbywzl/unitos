@@ -11,6 +11,7 @@ import { SortableBoard, SortableGroup, SortableItem } from "@/components/sortabl
 import { AddSection } from "@/components/outline/add-section";
 import { dropIndex, parseListId, SECTIONS_LIST } from "@/components/outline/board-lists";
 import { CompareView } from "@/components/outline/compare-view";
+import { DocumentColumns } from "@/components/outline/document-columns";
 import { MergeUndoBar } from "@/components/outline/merge-undo";
 import { NoteCard } from "@/components/outline/note-card";
 import { SectionBoard } from "@/components/outline/section-board";
@@ -29,7 +30,10 @@ import {
 // which hoists the whole pending queue to the top. A search shows the notes
 // it found whole, with the words it found lit up, in the same sections.
 // Selecting two or more notes offers Compare: the compare view opens over the
-// page with one pane per note (compare-view.tsx).
+// page with one pane per note (compare-view.tsx). By document opens the
+// project's notes as a grid over the page, one column per document and one
+// row per section (document-columns.tsx): the page is the whole project,
+// where the tray in the reader holds the open document's notes alone.
 export function Outline({ notebook }: { notebook: NotebookView }) {
   const t = useT();
   const { canEdit } = useCollab();
@@ -41,6 +45,8 @@ export function Outline({ notebook }: { notebook: NotebookView }) {
   const [compare, setCompare] = useState<string[] | null>(null);
   // The section whose board fills the screen (section-board.tsx); null = none.
   const [board, setBoard] = useState<string | null>(null);
+  // The By document grid over the page (document-columns.tsx).
+  const [byDocument, setByDocument] = useState(false);
   // Every note by id: the drag asks per item on every pointer move whether the
   // two can merge.
   const notesById = useMemo(() => new Map(flattenNotes(tree).map((n) => [n.id, n])), [tree]);
@@ -95,6 +101,16 @@ export function Outline({ notebook }: { notebook: NotebookView }) {
           className="w-72 rounded-full bg-card px-4 py-2 text-[13px] shadow-soft outline-none placeholder:text-sand-500"
         />
         <CollapsedViewToggle view={actions.notesView} onChange={actions.setNotesView} track="notes-view" />
+        {notebook.documents.length > 0 && (
+          <button
+            onClick={() => setByDocument(true)}
+            data-track="by-document"
+            data-tip={t("outline.byDocumentTitle")}
+            className="rounded-full bg-card px-3.5 py-1.5 text-xs font-semibold text-sand-600 shadow-soft hover:text-clay-800"
+          >
+            {t("outline.byDocument")}
+          </button>
+        )}
       </div>
 
       <div className="flex flex-col gap-[30px] pt-[22px]">
@@ -172,6 +188,22 @@ export function Outline({ notebook }: { notebook: NotebookView }) {
             actions={actions}
             onChange={setBoard}
             onClose={() => setBoard(null)}
+          />
+        )}
+      </Presence>
+
+      <Presence show={byDocument} exit="fade">
+        {byDocument && (
+          <DocumentColumns
+            tree={tree}
+            documents={notebook.documents}
+            actions={actions}
+            search={query}
+            onCompare={(ids) => {
+              setCompare(ids);
+              actions.clearSelection();
+            }}
+            onClose={() => setByDocument(false)}
           />
         )}
       </Presence>

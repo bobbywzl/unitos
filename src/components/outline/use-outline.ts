@@ -43,6 +43,9 @@ export const NOTE_ABSORBED_EVENT = "dissect:note-absorbed";
 
 export type OutlineActions = {
   notebookId: string;
+  /** The open document (SPEC.md §6): the tray's notes are its, and a note
+      written in the tray is its. Null on the notes full page. */
+  documentId: string | null;
   addSection: (parentId: string | null, title: string) => Promise<void>;
   renameSection: (id: string, title: string) => Promise<void>;
   deleteSection: (id: string) => Promise<void>;
@@ -52,6 +55,10 @@ export type OutlineActions = {
   /** A quote dropped into the note (lib/quote-drag.ts): its anchor becomes
       a source of the note, so the quote points back to the reader. */
   attachSource: (id: string, drag: QuoteDrag) => Promise<void>;
+  /** An annotation dropped into the note (lib/annotation-reference.ts):
+      copies of its anchors become sources of the note, so the quote it
+      landed points back to the reader. */
+  attachAnnotationSources: (id: string, annotationId: string) => Promise<void>;
   deleteNote: (id: string) => Promise<void>;
   reorderNote: (sectionId: string, id: string, toIndex: number) => void;
   moveNoteToSection: (id: string, sectionId: string, toIndex?: number) => Promise<void>;
@@ -139,6 +146,22 @@ export function noteMatches(note: NoteView, query: string): boolean {
   return note.content.toLowerCase().includes(needle) || note.id.toLowerCase() === needle;
 }
 
+/** True when the note is the document's (SPEC.md §6): written in it, or
+    quoting it — a source of the note is in it. */
+export function noteInDocument(note: NoteView, documentId: string): boolean {
+  return note.documentId === documentId || note.sources.some((s) => s.documentId === documentId);
+}
+
+/** The sections with the document's notes alone (noteInDocument): every
+    section stays, so a note can be added to it. */
+export function scopeSections(sections: SectionView[], documentId: string): SectionView[] {
+  return sections.map((s) => ({
+    ...s,
+    notes: s.notes.filter((n) => noteInDocument(n, documentId)),
+    children: scopeSections(s.children, documentId),
+  }));
+}
+
 /** Notes that match the query (noteMatches), with sections that end up empty dropped. */
 export function filterSections(sections: SectionView[], query: string): SectionView[] {
   if (!query.trim()) return sections;
@@ -154,7 +177,11 @@ export function filterSections(sections: SectionView[], query: string): SectionV
 // The notes model shared by the tray (design 1a) and the notes full page (design 2b):
 // one optimistic tree, one pending queue, one set of keyboard bindings (SPEC.md §6).
 // canEdit false (a viewer on a shared corpus): keys still navigate, never write.
-export function useOutline(notebook: NotebookView, canEdit = true) {
+// documentId: the open document — the tree and the pending queue returned
+// are its notes alone (scopeSections), and a note added lands in it; null,
+// the notes full page, returns the whole project. Every write reads the
+// whole tree, so a merge or a selection never loses a note the scope hides.
+export function useOutline(notebook: NotebookView, canEdit = true, documentId: string | null = null) {
   const t = useT();
   const router = useRouter();
   const [tree, setTree] = useState(notebook.sections);
@@ -265,8 +292,16 @@ export function useOutline(notebook: NotebookView, canEdit = true) {
 
   const notesView = useCollapsedView(`${NOTES_VIEW_STORE}:${notebook.id}`);
 
-  // Pending queue in outline order (SPEC.md §6 keyboard flow).
-  const pending = useMemo(() => flattenNotes(tree).filter((n) => n.status === "PENDING"), [tree]);
+  // The tree on screen: the open document's notes, or the whole project.
+  const scopedTree = useMemo(() => (documentId ? scopeSections(tree, documentId) : tree), [tree, documentId]);
+  // Pending queue in outline order (SPEC.md §6 keyboard flow): the notes on
+  // screen. pendingElsewhere: pending notes the scope hides — other
+  // documents' and the project's — which the notes full page shows.
+  const pending = useMemo(() => flattenNotes(scopedTree).filter((n) => n.status === "PENDING"), [scopedTree]);
+  const pendingElsewhere = useMemo(
+    () => flattenNotes(tree).filter((n) => n.status === "PENDING").length - pending.length,
+    [tree, pending.length],
+  );
   const focused = pending.length > 0 ? pending[Math.min(focusIndex, pending.length - 1)] : null;
 
   const acceptNote = useCallback(
@@ -373,6 +408,7 @@ export function useOutline(notebook: NotebookView, canEdit = true) {
 
   const actions: OutlineActions = {
     notebookId: notebook.id,
+    documentId,
     async addSection(parentId, title) {
       await api("/api/sections", "POST", { notebookId: notebook.id, title, parentId });
       refresh();
@@ -401,8 +437,9 @@ export function useOutline(notebook: NotebookView, canEdit = true) {
       void api(`/api/sections/${id}`, "PATCH", { order: toIndex }).then(refresh);
     },
     async addNote(sectionId, content) {
-      // A note from the composer lands at the top of its section (SPEC.md §6).
-      await api("/api/notes", "POST", { sectionId, content, top: true });
+      // A note from the composer lands at the top of its section, and in
+      // the open document (SPEC.md §6).
+      await api("/api/notes", "POST", { sectionId, content, top: true, documentId: documentId ?? undefined });
       refresh();
     },
     async saveNote(id, content) {
@@ -413,6 +450,10 @@ export function useOutline(notebook: NotebookView, canEdit = true) {
       await api(`/api/notes/${id}`, "PATCH", {
         addSource: { source: drag.source, ...(drag.segments ? { segments: drag.segments } : {}) },
       });
+      refresh();
+    },
+    async attachAnnotationSources(id, annotationId) {
+      await api(`/api/notes/${id}`, "PATCH", { copySourcesFrom: annotationId });
       refresh();
     },
     async deleteNote(id) {
@@ -585,5 +626,5 @@ export function useOutline(notebook: NotebookView, canEdit = true) {
     },
   };
 
-  return { tree, pending, focused, actions, lastRejected, undoReject };
+  return { tree: scopedTree, pending, pendingElsewhere, focused, actions, lastRejected, undoReject };
 }

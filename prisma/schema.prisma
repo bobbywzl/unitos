@@ -289,6 +289,15 @@ model Note {
   // Account that wrote the note (or ran the derivation that produced it).
   // Soft reference like Notebook.userId; null = before attribution existed.
   createdById    String?
+  // The document the note was written in (SPEC.md §6): the open document
+  // when the note was typed in the tray, spoken in it, or made from a
+  // passage. The notes tray lists the open document's notes — those written
+  // in it and those that quote it — and the notes full page's By document
+  // view puts each note under its document. Null = the note belongs to the
+  // project as a whole: written on the notes full page, or before the field
+  // existed and citing nothing.
+  documentId     String?
+  document       Document?       @relation(fields: [documentId], references: [id], onDelete: SetNull)
   sources        Source[]
   replies        Reply[]
   edits          NoteEdit[]
@@ -297,6 +306,7 @@ model Note {
 
   @@index([sectionId])
   @@index([sideChatOfId])
+  @@index([documentId])
 }
 
 // One edit of a note's text, for the note's own history (SPEC.md §12): who
@@ -482,6 +492,7 @@ model Document {
   blocks        Block[]
   notebooks     NotebookDocument[]
   sources       Source[]
+  notes         Note[] // the notes written in this document (Note.documentId)
   edits         BlockEdit[]
   linksFrom     DocLink[]          @relation("DocLinkFrom")
   linksTo       DocLink[]          @relation("DocLinkTo")
@@ -498,6 +509,12 @@ model Document {
   // build started; a start older than 10 minutes is a dead run.
   skeleton          Json?
   skeletonStartedAt DateTime?
+  // Collapse (SPEC.md §28): every block's core — what the block really
+  // says, in plain words, at a tenth to a third of its length, written in
+  // the light of the whole document — {v, cores: [{blockId, hash, text}]},
+  // each core with the hash of the block text it was written from. Built
+  // when the reader presses Collapse, for the blocks with no current core.
+  collapse          Json?
   references    Json? // the article's reference list, extracted at ingest: [{id, label, text, url}]
   video         VideoAsset? // set = video document; the reader renders the video pane (SPEC.md §11)
   images        ImageAsset[] // images the parse captured (chart animations)

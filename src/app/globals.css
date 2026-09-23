@@ -62,6 +62,18 @@
   /* Weblinks: outbound hyperlinks are blue, like the web. */
   --weblink: #1d4ed8;
 
+  /* Kind colors (SPEC.md §6, lib/annotations/kind.ts): one color per kind of
+     annotation, the same everywhere — the mark in the text, the card over
+     the article, the Annotations tab, the annotations full page, the
+     annotation beside a note. A highlight carries its own hue instead. */
+  --kind-comment: #3f6fbf;
+  --kind-explain: #c8433b;
+  --kind-simplify: #2f8f5b;
+  --kind-analyze: #1f8a8a;
+  --kind-visualize: #c2408f;
+  --kind-assistant: #7a4fc9;
+  --kind-link: #5b6b7a;
+
   --background: var(--paper);
   --foreground: var(--ink);
   color-scheme: light;
@@ -113,6 +125,14 @@
   --elev-lg: 0 12px 32px rgb(0 0 0 / 0.6);
 
   --weblink: #8ab4f8;
+
+  --kind-comment: #8fb3ee;
+  --kind-explain: #ef8079;
+  --kind-simplify: #6fcf97;
+  --kind-analyze: #5ec8c8;
+  --kind-visualize: #f08ac8;
+  --kind-assistant: #b99cf5;
+  --kind-link: #9fb0c0;
 
   color-scheme: dark;
 }
@@ -3186,3 +3206,143 @@ li[data-checked] > .note-box::before {
   }
 }
 
+
+/* Collapse (SPEC.md §28): a block shown as its core (core-block.tsx). A sage
+   rule at the left says the text is the core, not the block; the chip at the
+   end reads the block whole, and a clay dot says the block has annotations. */
+.reader-core {
+  padding-left: 12px;
+  border-left: 2px solid var(--sage-500, #5f8f6a);
+}
+.reader-core:hover {
+  border-left-color: var(--sage-700, #3f6b4a);
+}
+.reader-core-kind {
+  margin-right: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--sand-600);
+}
+.core-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  margin-left: 6px;
+  border-radius: 999px;
+  vertical-align: -0.22em;
+  background: var(--sage-100, #e6efe6);
+  color: var(--sage-700, #3f6b4a);
+  box-shadow: 0 0 0 1.5px var(--paper);
+}
+.core-chip-annotated {
+  width: 9px;
+  height: 9px;
+  margin-left: 8px;
+  background: var(--clay-400);
+}
+/* The fold chip under a block read whole: at the block's right, close under it. */
+.reader-core-fold {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: -6px;
+  margin-bottom: 14px;
+}
+
+/* Kind colors on the marks (SPEC.md §6, block-view.tsx): a comment's mark
+   fills in the comment color; a tool's mark underlines in its tool's color,
+   fills in it on hover and while its card is open; the chip at the end of a
+   mark takes the same color. Unlayered, so the rules win over the chip's
+   utility classes. */
+.comment-mark {
+  --mark-bg: color-mix(in srgb, var(--kind-comment) 22%, transparent);
+  background-color: var(--mark-bg);
+  border-bottom: 2px solid color-mix(in srgb, var(--kind-comment) 70%, transparent);
+}
+.tool-mark-comment {
+  --mark-bg: color-mix(in srgb, var(--kind-comment) 22%, transparent);
+  border-bottom-color: color-mix(in srgb, var(--kind-comment) 70%, transparent);
+}
+.mark-chip-comment {
+  background: color-mix(in srgb, var(--kind-comment) 16%, var(--card));
+  color: var(--kind-comment);
+}
+.mark-chip-comment:hover {
+  background: color-mix(in srgb, var(--kind-comment) 30%, var(--card));
+  color: var(--kind-comment);
+}
+.tool-mark-explain {
+  --mark-bg: color-mix(in srgb, var(--kind-explain) 22%, transparent);
+  border-bottom-color: color-mix(in srgb, var(--kind-explain) 70%, transparent);
+}
+.mark-chip-explain {
+  background: color-mix(in srgb, var(--kind-explain) 16%, var(--card));
+  color: var(--kind-explain);
+}
+.mark-chip-explain:hover {
+  background: color-mix(in srgb, var(--kind-explain) 30%, var(--card));
+  color: var(--kind-explain);
+}
+.tool-mark-simplify {
+  --mark-bg: color-mix(in srgb, var(--kind-simplify) 22%, transparent);
+  border-bottom-color: color-mix(in srgb, var(--kind-simplify) 70%, transparent);
+}
+.mark-chip-simplify {
+  background: color-mix(in srgb, var(--kind-simplify) 16%, var(--card));
+  color: var(--kind-simplify);
+}
+.mark-chip-simplify:hover {
+  background: color-mix(in srgb, var(--kind-simplify) 30%, var(--card));
+  color: var(--kind-simplify);
+}
+.tool-mark-analyze {
+  --mark-bg: color-mix(in srgb, var(--kind-analyze) 22%, transparent);
+  border-bottom-color: color-mix(in srgb, var(--kind-analyze) 70%, transparent);
+}
+.mark-chip-analyze {
+  background: color-mix(in srgb, var(--kind-analyze) 16%, var(--card));
+  color: var(--kind-analyze);
+}
+.mark-chip-analyze:hover {
+  background: color-mix(in srgb, var(--kind-analyze) 30%, var(--card));
+  color: var(--kind-analyze);
+}
+.tool-mark-visualize {
+  --mark-bg: color-mix(in srgb, var(--kind-visualize) 22%, transparent);
+  border-bottom-color: color-mix(in srgb, var(--kind-visualize) 70%, transparent);
+}
+.mark-chip-visualize {
+  background: color-mix(in srgb, var(--kind-visualize) 16%, var(--card));
+  color: var(--kind-visualize);
+}
+.mark-chip-visualize:hover {
+  background: color-mix(in srgb, var(--kind-visualize) 30%, var(--card));
+  color: var(--kind-visualize);
+}
+.tool-mark-assistant {
+  --mark-bg: color-mix(in srgb, var(--kind-assistant) 22%, transparent);
+  border-bottom-color: color-mix(in srgb, var(--kind-assistant) 70%, transparent);
+}
+.mark-chip-assistant {
+  background: color-mix(in srgb, var(--kind-assistant) 16%, var(--card));
+  color: var(--kind-assistant);
+}
+.mark-chip-assistant:hover {
+  background: color-mix(in srgb, var(--kind-assistant) 30%, var(--card));
+  color: var(--kind-assistant);
+}
+/* The annotation reference row (markdown.tsx) in its annotation's kind color. */
+.prose .note-annotation-ref {
+  border-color: color-mix(in srgb, var(--kind, var(--sage-500)) 45%, transparent);
+  background: color-mix(in srgb, var(--kind, var(--sage-500)) 8%, transparent);
+}
+.prose .note-annotation-ref:hover {
+  border-color: var(--kind, var(--sage-500));
+  background: color-mix(in srgb, var(--kind, var(--sage-500)) 14%, transparent);
+}
+.prose .note-annotation-ref .note-link-card-icon {
+  color: var(--kind, var(--sage-700, #3f6b4a));
+}

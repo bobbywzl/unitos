@@ -110,8 +110,14 @@ function anchorClass(anchor: Highlight): string {
   if (anchor.color === "sage") return "hl-sage";
   if (anchor.color === "gold") return "hl-gold";
   if (anchor.color === "plum") return "hl-plum";
-  // A stored AI annotation whose card is closed: underline and symbol, no fill.
-  if (anchor.annotation && anchor.tool && !anchor.open) return "tool-mark";
+  // A stored AI annotation carries its tool's kind color (SPEC.md §6,
+  // globals.css .tool-mark-*): its card closed, the underline and the
+  // symbol alone, no fill; open, the fill in the same color.
+  if (anchor.annotation && anchor.tool) {
+    return `${anchor.open ? "anchor-mark" : "tool-mark"} tool-mark-${anchor.tool}`;
+  }
+  // A comment's mark fills in the comment color.
+  if (anchor.annotation && anchor.comment && !anchor.color) return "comment-mark";
   return "anchor-mark";
 }
 
@@ -512,7 +518,7 @@ function markedText(blockId: string, text: string, highlights: Highlight[], t: T
                 }),
               );
             }}
-            className={`${MARK_CHIP}${toolEnding.plus ? " mark-chip-plus" : ""}`}
+            className={`${MARK_CHIP} mark-chip-${toolEnding.tool}${toolEnding.plus ? " mark-chip-plus" : ""}`}
           >
             <ToolSymbol tool={toolEnding.tool} plus={toolEnding.plus} size={10} />
           </button>,
@@ -535,7 +541,7 @@ function markedText(blockId: string, text: string, highlights: Highlight[], t: T
                 }),
               );
             }}
-            className={`comment-dot ${MARK_CHIP}`}
+            className={`comment-dot ${MARK_CHIP} mark-chip-comment`}
           >
             <CommentIcon size={10} />
           </button>,

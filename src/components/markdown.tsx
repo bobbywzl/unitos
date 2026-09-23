@@ -11,6 +11,9 @@ import { useT } from "@/components/lang-provider";
 import { isVisualizationImage, openVisualization } from "@/components/reader/visualization-viewer";
 import { imageWidth } from "@/lib/note-markup";
 import { parseAnnotationReference, type ParsedAnnotationReference } from "@/lib/annotation-reference";
+import { annotationKindColor } from "@/lib/annotations/kind";
+import type { AnnotationItem } from "@/lib/types";
+import { AnnotationKindIcon } from "@/components/annotation-kind-icon";
 import { linkHost } from "@/lib/note-links";
 import { sourceOfQuote } from "@/lib/notes/quote-sources";
 import { splitHits } from "@/lib/search-hits";
@@ -265,10 +268,13 @@ function LinkCard({ href, children }: { href: string; children: React.ReactNode 
 // reader.
 function AnnotationReferenceCard({
   href,
+  kind,
   children,
   onOpen,
 }: {
   href: string;
+  /** The annotation's kind: the row's symbol and color (lib/annotations/kind.ts). */
+  kind: AnnotationItem["kind"] | null;
   children: React.ReactNode;
   onOpen: () => void;
 }) {
@@ -280,13 +286,14 @@ function AnnotationReferenceCard({
       data-track="note-annotation-open"
       data-tip={t("outline.annotationReferenceTitle")}
       className="note-link-card note-annotation-ref"
+      style={kind ? ({ "--kind": annotationKindColor(kind, null) } as React.CSSProperties) : undefined}
       onClick={(e) => {
         e.preventDefault();
         onOpen();
       }}
     >
       <span className="note-link-card-icon">
-        <CommentIcon size={14} />
+        {kind && kind !== "highlight" ? <AnnotationKindIcon kind={kind} size={14} /> : <CommentIcon size={14} />}
       </span>
       <span className="note-link-card-text">
         <span className="note-link-card-title">{children}</span>
@@ -481,6 +488,7 @@ function Link({ node, href, children: linkChildren, ...props }: Override<"a">) {
     return (
       <AnnotationReferenceCard
         href={href}
+        kind={reference.kind}
         onOpen={() => {
           if (onAnnotationReference) {
             onAnnotationReference({ ...reference, label });

@@ -147,3 +147,46 @@ export async function buildContents(documentId: string, userId: string | null): 
   await bumpDocument(documentId);
   return entries;
 }
+
+/** A block's text as the carry compares it: one space between words, no case. */
+function carryKey(text: string): string {
+  return text.replace(/\s+/g, " ").trim().toLowerCase();
+}
+
+/** The stored contents carried onto a re-parse's new blocks (SPEC.md §26):
+    the blocks are new, so the parts' block ids are stale, but the parts
+    themselves are the reader's, written once and asked for. Each part finds
+    the new block whose text is its old block's — the whole text, else its
+    first 60 characters — in reading order past the part before it; a part
+    whose text is gone drops, and a level 2 part left without a level 1 part
+    before it is level 1. When fewer than half of the parts carry, the
+    document changed too much for the list to stand: nothing carries, and
+    the next Generate contents writes them anew. */
+export function carryContents(
+  contents: unknown,
+  oldBlocks: { id: string; text: string }[],
+  newBlocks: { id: string; text: string }[],
+): ContentsEntry[] {
+  const stored = contentsEntries(contents);
+  if (stored.length === 0) return [];
+  const oldText = new Map(oldBlocks.map((b) => [b.id, carryKey(b.text)]));
+  const keys = newBlocks.map((b) => carryKey(b.text));
+  const out: ContentsEntry[] = [];
+  let from = 0;
+  let hasTop = false;
+  for (const part of stored) {
+    const text = oldText.get(part.blockId);
+    if (!text) continue;
+    let index = keys.findIndex((key, i) => i >= from && key === text);
+    if (index === -1) {
+      const head = text.slice(0, 60);
+      index = keys.findIndex((key, i) => i >= from && key.startsWith(head));
+    }
+    if (index === -1) continue;
+    const level: 1 | 2 = part.level === 2 && hasTop ? 2 : 1;
+    if (level === 1) hasTop = true;
+    out.push({ title: part.title, blockId: newBlocks[index].id, level });
+    from = index + 1;
+  }
+  return out.length * 2 >= stored.length ? out : [];
+}

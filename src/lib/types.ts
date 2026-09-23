@@ -32,6 +32,9 @@ export type NoteView = {
   // When the note last changed on the server (ISO). A local draft older than
   // this lost to an edit made elsewhere and is not replayed (lib/note-drafts.ts).
   updatedAt: string;
+  // The document the note was written in (SPEC.md §6); null = the project
+  // as a whole. The tray lists the open document's notes: this, or a source.
+  documentId: string | null;
   sources: SourceChip[];
   replies: ReplyView[];
 };
@@ -49,6 +52,9 @@ export type NotebookView = {
   id: string;
   title: string;
   sections: SectionView[];
+  // The project's documents, in attach order: the columns of the notes full
+  // page's By document view (SPEC.md §6).
+  documents: { id: string; title: string }[];
 };
 
 // ── SUMMARIZE: document-level summary, one per depth ───────────────────────
