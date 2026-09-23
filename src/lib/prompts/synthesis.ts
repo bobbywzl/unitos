@@ -86,7 +86,7 @@ export function synthesisAskPrompt(params: {
     "3. A question the material answers only in part: answer the part it answers, then say in one sentence what it does not answer. Never fill the gap with what is generally known unless the reader asked for that, and then say which sentences come from outside the material.",
     "4. A question about counts, spread, or absence (how many, where, does it ever): the material is complete except where a cut is declared, so answer with the count and cite each instance.",
     "5. Fit the answer to the reader context above: explain what the reader is least likely to know, skip what they know, connect to their purpose when the connection is real.",
-    "Use markdown. Keep it under 250 words unless the question needs more.",
+    "Use markdown. As few words as the answer needs: under 120 unless the question needs more.",
     GROUNDING_RULE,
     SPECIFICITY_RULE,
     ...(files.length > 0 || imageCount > 0

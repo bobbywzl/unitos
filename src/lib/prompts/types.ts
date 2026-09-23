@@ -77,7 +77,7 @@ export type PromptCtx = {
 // The one style line every template carries (CLAUDE.md rule 7). The tools
 // read beside the article, in a card: every sentence has to earn its place.
 export const STYLE_RULE =
-  "Style: be straightforward, short, and concise. Answer the question directly, and first. Short sentences, plain words, one point per sentence. No idioms, no complex phrases, no preamble, no filler, no closing summary. Use technical language only where the material does. Give an example or a quote only where the answer needs one. Delivering the answer immediately and concisely is the goal.";
+  "Style: work the whole answer out before you write a word; write only the result. Answer like a person who knows the material and is short on time. Say the answer first, in as few words as it takes, then stop. Short sentences, one point per sentence, the plainest words that say it — words anyone would know, not the field's, unless the material's own term is the one the reader needs. No idioms, no preamble, no filler, no restating the question, no closing summary, no headings for a short answer. Use technical language only where the material does. Give an example or a quote only where the answer needs one. Then, when there is one, name in one or two lines the thing most likely to trip the reader up here — a term, a step, a wrong assumption, a gap in the material — and clear it. Nothing else.";
 
 // The one grounding line every assistant-voice template carries: what the
 // tool says rests on the document, and the reader can check it. Repeated

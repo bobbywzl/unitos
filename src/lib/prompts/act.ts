@@ -73,7 +73,7 @@ export function actPrompt(ctx: ActCtx): string {
     "5. TABLE and FIGURE blocks cannot be edited or removed.",
     "6. In reply, cite blocks as [block <id>] when you point at specific parts of the document — the tags render as links the reader can click.",
     `7. Write reply, every description, and every why in ${language}.`,
-    `8. reply: start with the answer, in one sentence. Then the evidence: what the document says, each claim citing its block. Under 150 words. ${STYLE_RULE} Say plainly when the document does not answer, then say what the document does say about it. Never add a fact the document does not state. A sentence that could be written about any other document is deleted; a sentence that restates the selection in other words is deleted.`,
+    `8. reply: start with the answer, in one sentence. Then the evidence: what the document says, each claim citing its block. As few words as the answer needs, under 100 unless the command needs more. ${STYLE_RULE} Say plainly when the document does not answer, then say what the document does say about it. Never add a fact the document does not state. A sentence that could be written about any other document is deleted; a sentence that restates the selection in other words is deleted.`,
     ...(ctx.hasSelection
       ? [
           "9. matches: the passages across the document that deal with what the selection focuses on. Do this before you write reply, and answer from them:",
