@@ -5901,6 +5901,18 @@ function blockFormatKind(
         turns: assistantChat.messages.length,
       })
     : null;
+  // The stored comment's own card, opened from its mark: its grip and a hold
+  // drag the comment like the tool cards' drag theirs.
+  const commentReference =
+    commentCard && !commentCard.busy
+      ? annotationReference({
+          noteId: commentCard.noteId,
+          sourceId: commentCard.noteId ? sourceIdOfNote(commentCard.noteId) : null,
+          kind: "comment",
+          quote: commentCard.anchor ? passageText(commentCard.anchor) : null,
+          content: commentCard.saved,
+        })
+      : null;
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       {/* A split view: the pane header — the pane's document, the article
@@ -6945,6 +6957,7 @@ function blockFormatKind(
         <div
           data-selection-popover
           data-side-card="comment"
+          onPointerDown={holdAnnotation(commentReference)}
           className={`bubble-in absolute ${TOOL_LAYER} flex flex-col rounded-[20px] border border-line bg-card/90 p-4 shadow-float backdrop-blur-md`}
           style={{
             left: commentCard.left,
@@ -6964,6 +6977,7 @@ function blockFormatKind(
             className="mb-2 flex cursor-move items-center justify-between"
           >
             <span className="flex items-center gap-1.5 text-[11px] font-bold tracking-[0.08em] text-clay-800 uppercase">
+              {annotationGrip(commentReference)}
               <CommentIcon size={12} />
               {t("reader.comment")}
             </span>
