@@ -53,7 +53,9 @@ export function TranslationBar({
   const [status, setStatus] = useState<Status>("idle");
   const [error, setError] = useState<string | null>(null);
   const cache = useRef<Record<string, string> | null>(null);
-  const offer = available && detected !== ui;
+  // An unknown language (an empty document, or too few letters to tell) is
+  // no reason to offer a translation.
+  const offer = available && detected !== null && detected !== ui;
 
   // A document translated before shows its translation again on open, from
   // the cache — no DeepL call.
@@ -86,7 +88,7 @@ export function TranslationBar({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [documentId, ui, offer]);
 
-  if (!offer) return null;
+  if (!offer || detected === null) return null;
 
   async function translate() {
     if (status === "loading") return;
@@ -137,9 +139,7 @@ export function TranslationBar({
       className="mb-5 flex flex-wrap items-center gap-2 rounded-2xl bg-card px-3.5 py-2 text-[12.5px] text-sand-700 shadow-soft print:hidden"
     >
       <span>
-        {detected
-          ? t("panes.documentIsIn", { language: langNameIn(detected, ui) })
-          : t("panes.documentOtherLanguage")}
+        {t("panes.documentIsIn", { language: langNameIn(detected, ui) })}
       </span>
       {status === "loading" ? (
         <span className="flex items-center gap-1.5 text-sand-600">

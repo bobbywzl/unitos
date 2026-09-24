@@ -381,7 +381,6 @@ const en = {
   linkEndWholeDocument: "This end is the whole document",
   // Translation (SPEC.md §19)
   documentIsIn: "This document is in {language}.",
-  documentOtherLanguage: "This document is in another language.",
   translateTo: "Translate to {language}",
   translateTitle: "DeepL translates every paragraph and transcription line into {language}; each translation reads under its original",
   translating: "Translating…",
@@ -771,7 +770,6 @@ const zh: Record<keyof typeof en, string> = {
   linkOpenEnd: "在阅读器中打开",
   linkEndWholeDocument: "此端是整篇文档",
   documentIsIn: "此文档是{language}。",
-  documentOtherLanguage: "此文档是其他语言。",
   translateTo: "翻译成{language}",
   translateTitle: "DeepL 把每个段落和逐字稿的每一行翻译成{language}；译文显示在原文之下",
   translating: "正在翻译……",
