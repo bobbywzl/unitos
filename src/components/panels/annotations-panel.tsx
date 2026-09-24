@@ -12,6 +12,7 @@ import { ReplyThread } from "@/components/collab/reply-thread";
 import { CollapsedViewToggle } from "@/components/collapsed-view-toggle";
 import { LinkIcon, MaximizeIcon, SparkleIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
+import { NEW_GLOW_CLASS, NewPill, useNewFeature } from "@/components/new-feature";
 import type { TKey } from "@/lib/i18n/dictionaries";
 import { TOOL_KINDS, type ToolKind } from "@/lib/conversation";
 import { ToolSymbol } from "@/components/reader/block-view";
@@ -158,6 +159,8 @@ export function AnnotationsPanel({
   const t = useT();
   const { canEdit } = useCollab();
   const view = useCollapsedView(`${ANNOTATIONS_VIEW_STORE}:${notebookId}`);
+  // The New glow (SPEC.md §18) on the four arrows until they are pressed.
+  const fullPageNew = useNewFeature("annotationsFullPage");
   const [busyId, setBusyId] = useState<string | null>(null);
   const [errorText, setErrorText] = useState<string | null>(null);
   // The annotation read as a full conversation over the page (SPEC.md §21).
@@ -284,10 +287,13 @@ export function AnnotationsPanel({
   const fullPageLink = (
     <Link
       href={`/n/${notebookId}/annotations`}
+      onClick={fullPageNew.seen}
       data-track="annotations-full-page"
       aria-label={t("panels.annotationsFullPage")}
       data-tip={t("panels.annotationsFullPageTitle")}
-      className="flex size-8 shrink-0 items-center justify-center rounded-full bg-card text-sand-700 shadow-soft hover:bg-clay-100 hover:text-clay-800"
+      className={`flex size-8 shrink-0 items-center justify-center rounded-full bg-card text-sand-700 shadow-soft hover:bg-clay-100 hover:text-clay-800${
+        fullPageNew.isNew ? ` ${NEW_GLOW_CLASS}` : ""
+      }`}
     >
       <MaximizeIcon size={15} />
     </Link>
@@ -301,6 +307,7 @@ export function AnnotationsPanel({
         {annotations.length > 0 && (
           <CollapsedViewToggle view={view.view} onChange={view.setView} track="annotations-view" />
         )}
+        {fullPageNew.isNew && <NewPill />}
         {fullPageLink}
       </div>
       {empty && <p className="text-[13px] text-sand-600">{t("panels.annotationsEmpty")}</p>}

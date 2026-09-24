@@ -3346,3 +3346,45 @@ li[data-checked] > .note-box::before {
 .prose .note-annotation-ref .note-link-card-icon {
   color: var(--kind, var(--sage-700, #3f6b4a));
 }
+
+/* The New glow (SPEC.md §18, components/new-feature.tsx): a control a
+   release added pulses in sage until it is pressed; the pill names it. The
+   onboarding nudge's glow is clay (.nudge-glow): the two never show on one
+   control at once. */
+@keyframes new-glow {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 2px color-mix(in srgb, var(--sage-500) 60%, transparent),
+      0 0 14px 3px color-mix(in srgb, var(--sage-500) 40%, transparent);
+  }
+  50% {
+    box-shadow:
+      0 0 0 4px color-mix(in srgb, var(--sage-500) 35%, transparent),
+      0 0 26px 8px color-mix(in srgb, var(--sage-500) 55%, transparent);
+  }
+}
+.new-glow {
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--sage-500) 60%, transparent),
+    0 0 14px 3px color-mix(in srgb, var(--sage-500) 40%, transparent);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .new-glow {
+    animation: new-glow 1.8s ease-in-out infinite;
+  }
+}
+.new-pill {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 4px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--sage-500);
+  color: var(--sage-fg);
+  font-size: 9.5px;
+  font-weight: 700;
+  line-height: 15px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}

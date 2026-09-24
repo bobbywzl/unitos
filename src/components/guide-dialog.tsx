@@ -91,6 +91,15 @@ export function GuideDialog({ open, onClose }: { open: boolean; onClose: () => v
           </p>
         </section>
 
+        {/* Collapse (SPEC.md §28): every block to its core, and Contents beside it. */}
+        <section className="flex flex-col gap-1.5 rounded-2xl bg-clay-100/70 p-4">
+          <span className={h}>{t("works.guideCollapseHeader")}</span>
+          <p className="text-[13px] leading-relaxed text-sand-800">{t("works.guideCollapseBody")}</p>
+          <p className="text-[13px] leading-relaxed text-sand-800">
+            {t("works.guideCollapseWholeBody")}
+          </p>
+        </section>
+
         {/* Circle & ask (the signature move), emphasized. */}
         <section className="flex flex-col gap-1.5 rounded-2xl bg-clay-100/70 p-4">
           <span className={h}>{t("works.guideCircleHeader")}</span>

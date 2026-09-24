@@ -6,6 +6,7 @@ import type { NotebookView } from "@/lib/types";
 import { useCollab } from "@/components/collab/collab-context";
 import { useT } from "@/components/lang-provider";
 import { CollapsedViewToggle } from "@/components/collapsed-view-toggle";
+import { NEW_GLOW_CLASS, NewPill, useNewFeature } from "@/components/new-feature";
 import { Presence } from "@/components/presence";
 import { SortableBoard, SortableGroup, SortableItem } from "@/components/sortable";
 import { AddSection } from "@/components/outline/add-section";
@@ -47,6 +48,8 @@ export function Outline({ notebook }: { notebook: NotebookView }) {
   const [board, setBoard] = useState<string | null>(null);
   // The By document grid over the page (document-columns.tsx).
   const [byDocument, setByDocument] = useState(false);
+  // The New glow (SPEC.md §18) on By document until it is pressed.
+  const byDocumentNew = useNewFeature("byDocument");
   // Every note by id: the drag asks per item on every pointer move whether the
   // two can merge.
   const notesById = useMemo(() => new Map(flattenNotes(tree).map((n) => [n.id, n])), [tree]);
@@ -103,12 +106,18 @@ export function Outline({ notebook }: { notebook: NotebookView }) {
         <CollapsedViewToggle view={actions.notesView} onChange={actions.setNotesView} track="notes-view" />
         {notebook.documents.length > 0 && (
           <button
-            onClick={() => setByDocument(true)}
+            onClick={() => {
+              byDocumentNew.seen();
+              setByDocument(true);
+            }}
             data-track="by-document"
             data-tip={t("outline.byDocumentTitle")}
-            className="rounded-full bg-card px-3.5 py-1.5 text-xs font-semibold text-sand-600 shadow-soft hover:text-clay-800"
+            className={`flex items-center rounded-full bg-card px-3.5 py-1.5 text-xs font-semibold text-sand-600 shadow-soft hover:text-clay-800${
+              byDocumentNew.isNew ? ` ${NEW_GLOW_CLASS}` : ""
+            }`}
           >
             {t("outline.byDocument")}
+            {byDocumentNew.isNew && <NewPill />}
           </button>
         )}
       </div>

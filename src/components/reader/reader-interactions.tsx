@@ -119,6 +119,7 @@ import { startCardDrag } from "@/lib/card-drag";
 import { pointsAtText, skipsDrag, watchHold } from "@/lib/hold-drag";
 import { ANNOTATION_PARAM, referenceContent, referenceWords, type AnnotationReference } from "@/lib/annotation-reference";
 import { ANNOTATION_KIND_KEY, annotationKindColor } from "@/lib/annotations/kind";
+import { NEW_GLOW_CLASS, NewPill, useNewFeature } from "@/components/new-feature";
 
 // One block's span of a selection (SPEC.md §5).
 type Segment = Omit<SourceInput, "documentId">;
@@ -2894,6 +2895,8 @@ export function ReaderInteractions({
   const [collapseOn, setCollapseOn] = useState(false);
   const [cores, setCores] = useState<Record<string, string> | null>(null);
   const [collapseBusy, setCollapseBusy] = useState(false);
+  // The New glow (SPEC.md §18) on the Collapse button until it is pressed.
+  const collapseNew = useNewFeature("collapse");
   const [expandedBlocks, setExpandedBlocks] = useState<ReadonlySet<string>>(() => new Set());
   const collapseStoreKey = `unitos-collapse-${documentId}`;
   useEffect(() => {
@@ -5974,17 +5977,21 @@ function blockFormatKind(
   // pressed again, the article shows whole.
   const collapseButton = (
     <button
-      onClick={() => void toggleCollapse()}
+      onClick={() => {
+        collapseNew.seen();
+        void toggleCollapse();
+      }}
       data-track={collapseOn ? "collapse-off" : "collapse"}
       aria-pressed={collapseOn}
       disabled={collapseBusy}
       data-tip={t(collapseOn ? "reader.collapseOffTitle" : "reader.collapseTitle")}
       className={`flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-semibold shadow-soft disabled:opacity-60 ${
         collapseOn ? "bg-ink text-paper" : "bg-sand-100 text-sand-600 hover:text-clay-800"
-      }`}
+      }${collapseNew.isNew ? ` ${NEW_GLOW_CLASS}` : ""}`}
     >
       {collapseBusy ? <SpinnerIcon size={13} className="motion-safe:animate-spin" /> : <CollapseIcon size={13} />}
       {t(collapseBusy ? "reader.collapsing" : collapseOn ? "reader.collapsed" : "reader.collapse")}
+      {collapseNew.isNew && <NewPill />}
     </button>
   );
   // The annotation each card over the article holds, as a reference

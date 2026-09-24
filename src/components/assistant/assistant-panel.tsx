@@ -37,6 +37,7 @@ import {
   type AnswerComment,
 } from "@/components/assistant/answer-tools";
 import { ThinkingChips, useThinking } from "@/components/assistant/thinking-chips";
+import { NEW_GLOW_CLASS, NewPill, useNewFeature } from "@/components/new-feature";
 import { useWeb, WebChip } from "@/components/assistant/web-chip";
 import { useCollab } from "@/components/collab/collab-context";
 import { useT } from "@/components/lang-provider";
@@ -1079,6 +1080,8 @@ export function AssistantPanel({
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [over, setOver] = useState(false);
+  // The New glow (SPEC.md §18) on Conversations until it is pressed.
+  const conversationsNew = useNewFeature("conversations");
 
   // The panel's head (SPEC.md §7): Conversations opens the list of this
   // reader's conversations of the project; New conversation starts an empty
@@ -1086,13 +1089,19 @@ export function AssistantPanel({
   const head = (
     <div className="flex items-center gap-1.5">
       <button
-        onClick={openList}
+        onClick={() => {
+          conversationsNew.seen();
+          openList();
+        }}
         data-track="assistant-conversations"
         data-tip={t("assistant.conversationsTitle")}
-        className="flex items-center gap-1.5 rounded-full bg-card px-3 py-1 text-xs font-semibold text-sand-600 shadow-soft hover:text-clay-800"
+        className={`flex items-center gap-1.5 rounded-full bg-card px-3 py-1 text-xs font-semibold text-sand-600 shadow-soft hover:text-clay-800${
+          conversationsNew.isNew ? ` ${NEW_GLOW_CLASS}` : ""
+        }`}
       >
         <HistoryIcon size={13} />
         {t("assistant.conversations")}
+        {conversationsNew.isNew && <NewPill />}
       </button>
       {inConversation && (
         <button

@@ -846,6 +846,11 @@ model Notification {
   // the feedback's message above the reply.
   feedbackId String?
   feedback   Feedback?               @relation(fields: [feedbackId], references: [id], onDelete: SetNull)
+  // A release notification (SPEC.md §18, lib/releases.ts): the release's id
+  // and the language it was written in, "<release>:<lang>". The dashboard
+  // writes one row per release per language the first time an account
+  // opens it after the deploy. Null = sent by the admin.
+  releaseKey String?                 @unique
   recipients NotificationRecipient[]
   createdAt  DateTime                @default(now())
 

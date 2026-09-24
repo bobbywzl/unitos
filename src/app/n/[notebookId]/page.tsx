@@ -1302,8 +1302,11 @@ export default async function NotebookPage(props: {
         corpusDistillations.length
       }
       reader={
+        // Keyed: the element crosses to the client as a lazy chunk, and
+        // React's dev key check would otherwise warn on the reader's row.
         paneOne ? (
           <ReaderPanes
+            key="panes"
             notebookId={notebook.id}
             view={readerView}
             paneOneId={paneOne.document.id}
@@ -1313,7 +1316,7 @@ export default async function NotebookPage(props: {
             paneTwo={paneTwo ? paneNode(paneTwo, `two:${paneTwo.document.id}`, "two") : null}
           />
         ) : (
-          <div className="content-in flex h-full flex-col items-center justify-center gap-5">
+          <div key="empty" className="content-in flex h-full flex-col items-center justify-center gap-5">
             <Logo size={140} className="text-sand-400" />
             <p className="max-w-sm text-center text-sm text-sand-600">
               {(await serverT())("panes.noDocumentOpen")}

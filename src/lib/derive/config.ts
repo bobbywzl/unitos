@@ -226,8 +226,11 @@ export const CONTENTS_MAX_OUTPUT_TOKENS = 16384; // a list of titles and block i
 // in the light of the whole document. One call per window of
 // COLLAPSE_WINDOW_CHARS of block text, the windows at once, each under the
 // cached prefix of the whole document. A judgement of what each block
-// serves, then plain writing, so GLM 5.3 at the default effort.
-export const COLLAPSE_MODEL = GLM_5_3;
+// serves in the whole document, then plain writing, read by every reader in
+// place of the article: Claude Opus 5.5, the best writer of the roster, at
+// the default effort — a document collapses once, so the cost is one call
+// per document, not per reader.
+export const COLLAPSE_MODEL = CLAUDE_OPUS_5_5;
 export const COLLAPSE_EFFORT: KimiEffort = DEFAULT_EFFORT;
 export const COLLAPSE_MAX_OUTPUT_TOKENS = 32768; // a core per block of the window, with the reasoning before them
 export const COLLAPSE_WINDOW_CHARS = 30_000;

@@ -64,7 +64,8 @@
 //   frozen(冻结的行列) 冻结 ·
 //   funnel(注册漏斗) 漏斗 · step(漏斗的一步) 步骤 · visitor(一个浏览器) 访客 ·
 //   collapse(整篇文章按块折叠为核心) 折叠 · core(块的核心) 核心 ·
-//   annotations full page 整页批注 · kind color(每类批注的颜色) 类别色
+//   annotations full page 整页批注 · kind color(每类批注的颜色) 类别色 ·
+//   release(一次上线的新功能) 版本更新 · New glow(新功能光晕) 新功能光晕
 // highlight 高亮 仅指高亮功能；表示选取文字一律用 选中。
 
 const en = {
@@ -155,6 +156,8 @@ const en = {
   // Notifications (SPEC.md §18): the kind chip, on the admin pages and the
   // dashboard. "Feedback" marks a reply to feedback the account sent.
   notificationUpdate: "Update",
+  // The New pill on a control a release added (components/new-feature.tsx).
+  newFeature: "New",
   notificationAccount: "Account change",
   notificationFeedback: "Feedback",
 };
@@ -237,6 +240,7 @@ const zh: Record<keyof typeof en, string> = {
   resolvedCountMany: "{n} 条已解决",
   // Notifications (SPEC.md §18): the kind chip, on the admin page and the dashboard.
   notificationUpdate: "更新",
+  newFeature: "新功能",
   notificationAccount: "账户变更",
   notificationFeedback: "反馈",
 };
