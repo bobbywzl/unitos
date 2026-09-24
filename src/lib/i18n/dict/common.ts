@@ -64,7 +64,8 @@
 //   frozen(冻结的行列) 冻结 ·
 //   funnel(注册漏斗) 漏斗 · step(漏斗的一步) 步骤 · visitor(一个浏览器) 访客 ·
 //   collapse(整篇文章按块折叠为核心) 折叠 · core(块的核心) 核心 ·
-//   annotations full page 整页批注 · kind color(每类批注的颜色) 类别色
+//   annotations full page 整页批注 · kind color(每类批注的颜色) 类别色 ·
+//   folder(项目里的文档分组) 文件夹
 // highlight 高亮 仅指高亮功能；表示选取文字一律用 选中。
 
 const en = {

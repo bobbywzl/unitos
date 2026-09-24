@@ -28,6 +28,11 @@ import {
   type LibraryDocument,
 } from "@/components/reader/add-document-dialog";
 import {
+  DocumentTree,
+  FolderPicker,
+  type DocumentFolderView,
+} from "@/components/reader/document-folders";
+import {
   IngestProgress,
   advanceIngestSteps,
   completeIngestSteps,
@@ -59,6 +64,9 @@ export type AttachedDocument = {
   // not deliver (SPEC.md §15).
   figureRenderAt: string | null;
   figureRenderError: string | null;
+  // The folder the document sits in within this project (SPEC.md §6); null
+  // = the project itself.
+  folderId: string | null;
 };
 type IngestPhase = { fileLabel: string; steps: IngestStep[] };
 // Wire format from /api/documents: a stage event per line, then one terminal line.
@@ -177,12 +185,15 @@ const VIDEO_ACCEPT =
 const UPLOAD_FILE_ACCEPT = `application/pdf,.pdf,${IMAGE_ACCEPT},${MARKDOWN_ACCEPT},${SLIDES_ACCEPT},${SHEETS_ACCEPT},${VIDEO_ACCEPT}`;
 
 // Documents in the header: one pill showing the open document, expanding a
-// vertical document list on hover or click. Everything that adds one opens
-// from the dashed + as the add-document dialog.
+// vertical document list on hover or click. The list draws the project's
+// folders as rows, each opening its own list (document-folders.tsx).
+// Everything that adds one opens from the dashed + as the add-document
+// dialog.
 export function DocumentBar({
   notebookId,
   title,
   documents,
+  folders,
   activeId,
   drive,
   figureGaps,
@@ -193,6 +204,8 @@ export function DocumentBar({
   // add-document dialog (SPEC.md §15).
   title: string;
   documents: AttachedDocument[];
+  // The project's folders (SPEC.md §6).
+  folders: DocumentFolderView[];
   activeId: string | null;
   drive: DriveConfig | null;
   // The open document's captions left without their figure, by label
@@ -210,10 +223,15 @@ export function DocumentBar({
   // The document list: opens on hover or click, closes on leave (after a
   // grace period), outside click, Escape, or opening a document.
   const listRef = useRef<HTMLDivElement>(null);
+  // The list's own element: a folder's fly-out opens from its edge.
+  const [listEl, setListEl] = useState<HTMLDivElement | null>(null);
   const listCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [listOpen, setListOpen] = useState(false);
-  // Per-document actions, expanded inline under the document's row.
+  // Per-document actions, expanded inline under the document's row; Move to
+  // folder opens its picker under them.
   const [pillMenu, setPillMenu] = useState<string | null>(null);
+  const [moveChoice, setMoveChoice] = useState<string | null>(null);
+  const [moveError, setMoveError] = useState<string | null>(null);
   const [library, setLibrary] = useState<LibraryDocument[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   // Every error the bar shows also lands in the error log, on the open
@@ -241,6 +259,7 @@ export function DocumentBar({
     }
     setListOpen(false);
     setPillMenu(null);
+    setMoveChoice(null);
   }
   function scheduleCloseList() {
     if (listCloseTimer.current) clearTimeout(listCloseTimer.current);
@@ -253,7 +272,10 @@ export function DocumentBar({
   useEffect(() => {
     if (!listOpen) return;
     const onPointerDown = (e: PointerEvent) => {
-      if (!listRef.current?.contains(e.target as Node)) closeList();
+      const target = e.target instanceof Element ? e.target : null;
+      // A folder's fly-out list renders in a portal (document-folders.tsx):
+      // a press in one is a press in the list.
+      if (!listRef.current?.contains(target) && !target?.closest("[data-document-flyout]")) closeList();
     };
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape" && !isImeKey(e)) closeList();
@@ -837,6 +859,19 @@ export function DocumentBar({
     }
   }
 
+  // Move to folder (SPEC.md §6): the document's row moves under the folder;
+  // null = the project itself. The row's picker shows a failure.
+  async function moveDocument(documentId: string, folderId: string | null) {
+    setMoveError(null);
+    try {
+      await api(`/api/notebooks/${notebookId}/documents/${documentId}`, "PATCH", { folderId });
+      closeList();
+      router.refresh();
+    } catch (err) {
+      setMoveError(err instanceof Error ? err.message : t("common.requestFailed"));
+    }
+  }
+
   async function removeFromLibrary(documentId: string) {
     if (!confirm(t("panes.confirmDeleteFromLibrary"))) return;
     setError(null);
@@ -851,6 +886,179 @@ export function DocumentBar({
   const attachedIds = new Set(documents.map((d) => d.id));
   const rowAction =
     "px-4 py-1.5 text-left text-[12.5px] text-sand-600 hover:bg-clay-100 hover:text-clay-800";
+
+  // One document's row and its actions. The tree (document-folders.tsx)
+  // places it under its folder.
+  const renderDocumentRow = (d: AttachedDocument) => (
+    <div className="flex flex-col">
+      <div className="flex items-center">
+        <button
+          onClick={() => {
+            closeList();
+            open(d.id);
+          }}
+          data-track="document-open"
+          data-active-row={d.id === activeId || undefined}
+          className={`min-w-0 flex-1 overflow-hidden px-4 py-2 text-left text-[13px] whitespace-nowrap ${
+            d.id === activeId
+              ? "font-semibold text-ink"
+              : "text-sand-700 hover:bg-clay-100 hover:text-clay-800"
+          }`}
+          data-tip={isStale(d) ? t("panes.reparseStaleTitle") : d.title}
+        >
+          {clipWords(d.title, 44)}
+          {isStale(d) && (
+            <span className="ml-1.5 text-[11px] font-normal text-sand-500">
+              {t("panes.reparseStale")}
+            </span>
+          )}
+        </button>
+        <button
+          onClick={() => {
+            setMoveChoice(null);
+            setPillMenu(pillMenu === d.id ? null : d.id);
+          }}
+          data-track="document-actions"
+          aria-label={t("panes.documentActionsFor", { title: d.title })}
+          aria-expanded={pillMenu === d.id}
+          data-tip={t("panes.documentActions")}
+          className="mr-2 flex size-6 shrink-0 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-800"
+        >
+          <svg
+            width="13"
+            height="13"
+            viewBox="0 0 24 24"
+            fill="currentColor"
+            aria-hidden
+          >
+            <circle cx="12" cy="5" r="2" />
+            <circle cx="12" cy="12" r="2" />
+            <circle cx="12" cy="19" r="2" />
+          </svg>
+        </button>
+      </div>
+      <Collapse open={pillMenu === d.id}>
+      {pillMenu === d.id && (
+        <div className="mx-2 mb-1.5 flex flex-col rounded-xl bg-sand-100 py-1">
+          {/* Re-parse, on every document: a video or audio
+              document transcribes again, a handwritten one
+              re-makes its pages and converts again, a text one
+              parses its file or URL again. A document with no
+              source (pasted text, a generated document) has
+              nothing to parse again; the row says so. */}
+          {canEdit && (
+            <button
+              onClick={() => {
+                // A PDF asks which shape first: the row opens
+                // the two choices instead of running.
+                if (d.pdf && !d.hasVideo) {
+                  setReparseChoice(reparseChoice === d.id ? null : d.id);
+                  return;
+                }
+                closeList();
+                void (d.hasVideo ? transcribeAgain(d) : reparse(d));
+              }}
+              data-track="document-reparse"
+              disabled={phase !== null || transcribing !== null || !canReparse(d)}
+              aria-expanded={d.pdf && !d.hasVideo ? reparseChoice === d.id : undefined}
+              className={`${rowAction} disabled:opacity-40`}
+              data-tip={
+                d.hasVideo
+                  ? t("panes.reparseVideoTitle")
+                  : canReparse(d)
+                    ? t("panes.reparseDocumentTitle")
+                    : t("panes.reparseNoSource")
+              }
+            >
+              {t("panes.reparseDocument")}
+            </button>
+          )}
+          {canEdit && d.pdf && !d.hasVideo && reparseChoice === d.id && (
+            <div className="flex flex-col border-y border-line bg-sand-50/60 py-1">
+              <p className="px-4 pb-0.5 text-[11px] text-sand-500">{t("panes.reparseChoose")}</p>
+              {(["handwritten", "article"] as const).map((as) => {
+                const current = as === "handwritten" ? d.handwritten : !d.handwritten;
+                return (
+                  <button
+                    key={as}
+                    onClick={() => {
+                      setReparseChoice(null);
+                      closeList();
+                      void reparse(d, as);
+                    }}
+                    data-track={`document-reparse-${as}`}
+                    disabled={phase !== null || transcribing !== null}
+                    className={`${rowAction} flex items-center gap-2 pl-6 disabled:opacity-40`}
+                    data-tip={t(
+                      as === "handwritten" ? "panes.reparseAsHandwrittenTitle" : "panes.reparseAsArticleTitle",
+                    )}
+                  >
+                    <span>{t(as === "handwritten" ? "panes.reparseAsHandwritten" : "panes.reparseAsArticle")}</span>
+                    {current && (
+                      <span className="rounded-full border border-line px-1.5 text-[10px] text-sand-500">
+                        {t("panes.reparseCurrentShape")}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          {canEdit && folders.length > 0 && (
+            <button
+              onClick={() => {
+                setMoveError(null);
+                setMoveChoice(moveChoice === d.id ? null : d.id);
+              }}
+              data-track="document-move"
+              aria-expanded={moveChoice === d.id}
+              className={rowAction}
+              data-tip={t("panes.moveToFolderTitle")}
+            >
+              {t("panes.moveToFolder")}
+            </button>
+          )}
+          {canEdit && moveChoice === d.id && (
+            <>
+              <FolderPicker
+                folders={folders}
+                current={d.folderId}
+                onPick={(folderId) => void moveDocument(d.id, folderId)}
+              />
+              {moveError && <p className="px-4 py-1 text-[11.5px] text-red-600">{moveError}</p>}
+            </>
+          )}
+          <button
+            onClick={() => {
+              closeList();
+              window.print();
+            }}
+            data-track="document-print"
+            disabled={d.id !== activeId}
+            className={`${rowAction} disabled:opacity-40`}
+            data-tip={
+              d.id === activeId
+                ? t("panes.printDocumentTitle")
+                : t("panes.printDocumentOpenFirst")
+            }
+          >
+            {t("panes.printDocument")}
+          </button>
+          {canEdit && (
+            <button
+              onClick={() => void deleteDocument(d.id)}
+              data-track="document-delete"
+              className="px-4 py-1.5 text-left text-[12.5px] text-red-600 hover:bg-red-50 dark:hover:bg-red-950"
+              data-tip={t("panes.deleteDocumentTitle")}
+            >
+              {t("panes.deleteDocument")}
+            </button>
+          )}
+        </div>
+      )}
+      </Collapse>
+    </div>
+  );
 
   return (
     <div className="flex min-w-0 items-center gap-2">
@@ -883,150 +1091,19 @@ export function DocumentBar({
 
           <Presence show={listOpen} exit="menu">
           {listOpen && (
-            <div className="menu-in absolute top-full left-0 z-30 mt-2 flex max-h-[min(60vh,480px)] w-80 max-w-[calc(100vw-96px)] flex-col overflow-y-auto overscroll-contain rounded-2xl bg-card py-1.5 shadow-float">
-              {documents.map((d) => (
-                <div key={d.id} className="flex flex-col">
-                  <div className="flex items-center">
-                    <button
-                      onClick={() => {
-                        closeList();
-                        open(d.id);
-                      }}
-                      data-track="document-open"
-                      data-active-row={d.id === activeId || undefined}
-                      className={`min-w-0 flex-1 overflow-hidden px-4 py-2 text-left text-[13px] whitespace-nowrap ${
-                        d.id === activeId
-                          ? "font-semibold text-ink"
-                          : "text-sand-700 hover:bg-clay-100 hover:text-clay-800"
-                      }`}
-                      data-tip={isStale(d) ? t("panes.reparseStaleTitle") : d.title}
-                    >
-                      {clipWords(d.title, 44)}
-                      {isStale(d) && (
-                        <span className="ml-1.5 text-[11px] font-normal text-sand-500">
-                          {t("panes.reparseStale")}
-                        </span>
-                      )}
-                    </button>
-                    <button
-                      onClick={() => setPillMenu(pillMenu === d.id ? null : d.id)}
-                      data-track="document-actions"
-                      aria-label={t("panes.documentActionsFor", { title: d.title })}
-                      aria-expanded={pillMenu === d.id}
-                      data-tip={t("panes.documentActions")}
-                      className="mr-2 flex size-6 shrink-0 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-800"
-                    >
-                      <svg
-                        width="13"
-                        height="13"
-                        viewBox="0 0 24 24"
-                        fill="currentColor"
-                        aria-hidden
-                      >
-                        <circle cx="12" cy="5" r="2" />
-                        <circle cx="12" cy="12" r="2" />
-                        <circle cx="12" cy="19" r="2" />
-                      </svg>
-                    </button>
-                  </div>
-                  <Collapse open={pillMenu === d.id}>
-                  {pillMenu === d.id && (
-                    <div className="mx-2 mb-1.5 flex flex-col rounded-xl bg-sand-100 py-1">
-                      {/* Re-parse, on every document: a video or audio
-                          document transcribes again, a handwritten one
-                          re-makes its pages and converts again, a text one
-                          parses its file or URL again. A document with no
-                          source (pasted text, a generated document) has
-                          nothing to parse again; the row says so. */}
-                      {canEdit && (
-                        <button
-                          onClick={() => {
-                            // A PDF asks which shape first: the row opens
-                            // the two choices instead of running.
-                            if (d.pdf && !d.hasVideo) {
-                              setReparseChoice(reparseChoice === d.id ? null : d.id);
-                              return;
-                            }
-                            closeList();
-                            void (d.hasVideo ? transcribeAgain(d) : reparse(d));
-                          }}
-                          data-track="document-reparse"
-                          disabled={phase !== null || transcribing !== null || !canReparse(d)}
-                          aria-expanded={d.pdf && !d.hasVideo ? reparseChoice === d.id : undefined}
-                          className={`${rowAction} disabled:opacity-40`}
-                          data-tip={
-                            d.hasVideo
-                              ? t("panes.reparseVideoTitle")
-                              : canReparse(d)
-                                ? t("panes.reparseDocumentTitle")
-                                : t("panes.reparseNoSource")
-                          }
-                        >
-                          {t("panes.reparseDocument")}
-                        </button>
-                      )}
-                      {canEdit && d.pdf && !d.hasVideo && reparseChoice === d.id && (
-                        <div className="flex flex-col border-y border-line bg-sand-50/60 py-1">
-                          <p className="px-4 pb-0.5 text-[11px] text-sand-500">{t("panes.reparseChoose")}</p>
-                          {(["handwritten", "article"] as const).map((as) => {
-                            const current = as === "handwritten" ? d.handwritten : !d.handwritten;
-                            return (
-                              <button
-                                key={as}
-                                onClick={() => {
-                                  setReparseChoice(null);
-                                  closeList();
-                                  void reparse(d, as);
-                                }}
-                                data-track={`document-reparse-${as}`}
-                                disabled={phase !== null || transcribing !== null}
-                                className={`${rowAction} flex items-center gap-2 pl-6 disabled:opacity-40`}
-                                data-tip={t(
-                                  as === "handwritten" ? "panes.reparseAsHandwrittenTitle" : "panes.reparseAsArticleTitle",
-                                )}
-                              >
-                                <span>{t(as === "handwritten" ? "panes.reparseAsHandwritten" : "panes.reparseAsArticle")}</span>
-                                {current && (
-                                  <span className="rounded-full border border-line px-1.5 text-[10px] text-sand-500">
-                                    {t("panes.reparseCurrentShape")}
-                                  </span>
-                                )}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      )}
-                      <button
-                        onClick={() => {
-                          closeList();
-                          window.print();
-                        }}
-                        data-track="document-print"
-                        disabled={d.id !== activeId}
-                        className={`${rowAction} disabled:opacity-40`}
-                        data-tip={
-                          d.id === activeId
-                            ? t("panes.printDocumentTitle")
-                            : t("panes.printDocumentOpenFirst")
-                        }
-                      >
-                        {t("panes.printDocument")}
-                      </button>
-                      {canEdit && (
-                        <button
-                          onClick={() => void deleteDocument(d.id)}
-                          data-track="document-delete"
-                          className="px-4 py-1.5 text-left text-[12.5px] text-red-600 hover:bg-red-50 dark:hover:bg-red-950"
-                          data-tip={t("panes.deleteDocumentTitle")}
-                        >
-                          {t("panes.deleteDocument")}
-                        </button>
-                      )}
-                    </div>
-                  )}
-                  </Collapse>
-                </div>
-              ))}
+            <div
+              ref={setListEl}
+              className="menu-in absolute top-full left-0 z-30 mt-2 flex max-h-[min(60vh,480px)] w-80 max-w-[calc(100vw-96px)] flex-col overflow-y-auto overscroll-contain rounded-2xl bg-card py-1.5 shadow-float"
+            >
+              <DocumentTree
+                notebookId={notebookId}
+                folders={folders}
+                documents={documents}
+                activeId={activeId}
+                canEdit={canEdit}
+                panelEl={listEl}
+                renderDocument={renderDocumentRow}
+              />
             </div>
           )}
           </Presence>

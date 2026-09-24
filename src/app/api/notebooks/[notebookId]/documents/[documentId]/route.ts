@@ -8,19 +8,23 @@ import { parseBody } from "@/lib/validate";
 
 // Delete one stored distillation (DISTILL, the reader's Extract) — or several
 // selected at once — or one extraction (EXTRACT, the reader's Match-it) from
-// the attachment. Exactly one of the three.
+// the attachment, or move the document to a folder (SPEC.md §6; null = the
+// project itself). Exactly one of the four.
 const patchSchema = z
   .object({
     removeDistillationId: z.string().min(1).optional(),
     removeDistillationIds: z.array(z.string().min(1)).min(1).max(50).optional(),
     removeExtractionId: z.string().min(1).optional(),
+    folderId: z.string().min(1).nullable().optional(),
   })
   .refine(
     (d) =>
-      [d.removeDistillationId, d.removeDistillationIds, d.removeExtractionId].filter(Boolean).length === 1,
+      [d.removeDistillationId, d.removeDistillationIds, d.removeExtractionId].filter(Boolean).length +
+        (d.folderId !== undefined ? 1 : 0) ===
+      1,
     {
       message:
-        "Provide exactly one of removeDistillationId, removeDistillationIds, removeExtractionId",
+        "Provide exactly one of removeDistillationId, removeDistillationIds, removeExtractionId, folderId",
     },
   );
 
@@ -39,6 +43,21 @@ export async function PATCH(
   });
   if (!attachment) {
     return NextResponse.json({ error: t("api.documentNotAttached") }, { status: 404 });
+  }
+  if (data.folderId !== undefined) {
+    if (data.folderId) {
+      const folder = await db.documentFolder.findFirst({
+        where: { id: data.folderId, notebookId },
+        select: { id: true },
+      });
+      if (!folder) return NextResponse.json({ error: t("api.folderNotFound") }, { status: 404 });
+    }
+    await db.notebookDocument.update({
+      where: { notebookId_documentId: { notebookId, documentId } },
+      data: { folderId: data.folderId },
+    });
+    await bumpNotebook(notebookId);
+    return NextResponse.json({ ok: true });
   }
   await db.notebookDocument.update({
     where: { notebookId_documentId: { notebookId, documentId } },

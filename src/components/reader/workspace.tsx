@@ -55,6 +55,7 @@ import { NotesTray } from "@/components/outline/notes-tray";
 import { Presence } from "@/components/presence";
 import { flattenNotes, useOutline } from "@/components/outline/use-outline";
 import { DocumentBar, type AttachedDocument } from "@/components/reader/document-bar";
+import type { DocumentFolderView } from "@/components/reader/document-folders";
 import type { ReaderViewKind } from "@/components/reader/reader-panes";
 import type { DriveConfig } from "@/lib/drive/config";
 import type { TKey } from "@/lib/i18n/dictionaries";
@@ -100,6 +101,7 @@ function clampTrayWidth(width: number): number {
 export function Workspace({
   notebook,
   documents,
+  folders,
   readerView,
   activeDocumentId,
   drive,
@@ -120,6 +122,8 @@ export function Workspace({
 }: {
   notebook: NotebookView;
   documents: AttachedDocument[];
+  // The project's folders (SPEC.md §6): the document list draws them.
+  folders: DocumentFolderView[];
   // The reader view (reader-panes.tsx): a split view puts the reader and the
   // tray in the strip below.
   readerView: ReaderViewKind;
@@ -595,6 +599,7 @@ export function Workspace({
             notebookId={notebook.id}
             title={notebook.title}
             documents={documents}
+            folders={folders}
             activeId={activeDocumentId}
             drive={drive}
             figureGaps={figureGaps}
