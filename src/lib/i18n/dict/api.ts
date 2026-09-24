@@ -30,6 +30,9 @@ const en = {
   feedbackNotFound: "Feedback not found",
   documentNotAttached: "Document is not attached",
   documentNotAttachedToCorpus: "Document is not attached to this project",
+  folderNotFound: "Folder not found",
+  parentFolderNotFound: "Parent folder not found",
+  folderIntoItself: "A folder cannot move into itself",
   validationFailed: "Validation failed",
   bodyNotJson: "Body is not valid JSON",
 
@@ -316,6 +319,9 @@ const zh: Record<keyof typeof en, string> = {
   feedbackNotFound: "未找到反馈",
   documentNotAttached: "文档未加入项目",
   documentNotAttachedToCorpus: "文档未加入此项目",
+  folderNotFound: "未找到文件夹",
+  parentFolderNotFound: "未找到父文件夹",
+  folderIntoItself: "文件夹不能移入自身",
   validationFailed: "校验失败",
   bodyNotJson: "请求体不是有效的 JSON",
 
