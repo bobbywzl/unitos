@@ -168,6 +168,7 @@ export async function POST(req: Request) {
               prefix: source.prefix,
               suffix: source.suffix,
               orphaned: source.orphaned,
+              layer: source.layer,
               startTime: source.startTime,
               endTime: source.endTime,
               ...(source.region === null ? {} : { region: source.region as Prisma.InputJsonValue }),

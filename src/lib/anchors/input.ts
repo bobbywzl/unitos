@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { layerSchema } from "@/lib/anchors/layer";
 
 // Anchor payload captured in the reader (SPEC.md §5): position + quote selectors.
 export const sourceInputSchema = z.object({
@@ -9,6 +10,8 @@ export const sourceInputSchema = z.object({
   quotedText: z.string().min(1).max(10_000),
   prefix: z.string().max(64),
   suffix: z.string().max(64),
+  // "core": the words are a block's core in the collapsed view (SPEC.md §28).
+  layer: layerSchema,
 });
 
 export type SourceInput = z.infer<typeof sourceInputSchema>;

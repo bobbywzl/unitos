@@ -85,7 +85,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ blockId: stri
   // moves highlights while you type: shift, grow, shrink, or orphan visibly.
   const segments = diffSegments(block.text, newText);
   const [sources, links] = await Promise.all([
-    db.source.findMany({ where: { blockId, orphaned: false } }),
+    db.source.findMany({ where: { blockId, orphaned: false, layer: null } }),
     db.docLink.findMany({
       where: { OR: [{ fromBlockId: blockId }, { toBlockId: blockId }] },
     }),

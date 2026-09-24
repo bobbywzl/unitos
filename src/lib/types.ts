@@ -216,6 +216,10 @@ export type AnnotationItem = {
   // Set when the anchor sits on a figure, table, or equation block: the label
   // ("A1", "A2", …) shown at the block in the reader and on this card.
   figureLabel: string | null;
+  // "core": the annotation was made on a block's core in the collapsed view
+  // (SPEC.md §28), and lists with the collapsed view's annotations; null for
+  // one on the whole text, and for a sidebar conversation.
+  layer: "core" | null;
   // The conversation's turns (SPEC.md §21): the turns after a tool's output
   // (Explain+, Simplify+, Analyze+, Visualize+), or the assistant
   // conversation's own; [] for every other annotation.

@@ -116,6 +116,8 @@ import type { FigureRenderInfo } from "@/components/reader/figure-capture";
 import { Reader, type TranscriptVariant } from "@/components/reader/reader";
 import { openVisualization } from "@/components/reader/visualization-viewer";
 import { setQuoteDragImage, writeQuoteDrag, type QuoteDrag } from "@/lib/quote-drag";
+import { blockIdOfKey, coreKey, isCoreKey } from "@/lib/anchors/core-key";
+import { announceCollapseView } from "@/components/panels/layer-switch";
 import { startCardDrag } from "@/lib/card-drag";
 import { pointsAtText, skipsDrag, watchHold } from "@/lib/hold-drag";
 import { ANNOTATION_PARAM, referenceContent, referenceWords, type AnnotationReference } from "@/lib/annotation-reference";
@@ -128,17 +130,6 @@ type Segment = Omit<SourceInput, "documentId">;
 // selection crossed blocks (lib/anchors/passage.ts) — the first segment is
 // the anchor itself. Every tool works on the whole passage; the routes take
 // `segments` beside `anchor` and give the note one source per block.
-/** True when the browser's selection lies in a collapsed block (SPEC.md §28,
-    core-block.tsx): its words are a core, not the document's text, so no
-    tool opens on them. */
-function selectionInCollapsedBlock(): boolean {
-  const selection = window.getSelection();
-  if (!selection || selection.rangeCount === 0) return false;
-  const node = selection.getRangeAt(0).commonAncestorContainer;
-  const el = node instanceof Element ? node : node.parentElement;
-  return Boolean(el?.closest("[data-collapsed]"));
-}
-
 type Anchor = Segment & { segments?: Segment[] };
 
 /** The passage's segments: one per block, the anchor alone when the
@@ -639,6 +630,21 @@ function ExtractRow({
   );
 }
 
+// The anchors that paint, by block id (by core key for a core, lib/anchors/core-key.ts).
+type AnchorHighlightMap = Record<
+  string,
+  {
+    sourceId: string;
+    start: number;
+    end: number;
+    color: string | null;
+    annotation: boolean;
+    comment: boolean;
+    figureLabel: string | null;
+    noteId: string;
+  }[]
+>;
+
 // Client layer over the reader: selection capture, popover, EXPLAIN bubble,
 // SIMPLIFY bubble, SALIENCE overlay toggle, DISTILL page, the article menu,
 // jump-to-anchor.
@@ -649,7 +655,8 @@ export function ReaderInteractions({
   attachedDocuments,
   title,
   blocks,
-  anchorHighlights,
+  anchorHighlights: wholeAnchorHighlights,
+  coreHighlights,
   annotationsBySource,
   annotationBubbles,
   split = false,
@@ -686,19 +693,10 @@ export function ReaderInteractions({
   attachedDocuments: { id: string; title: string }[];
   title: string;
   blocks: BlockData[];
-  anchorHighlights: Record<
-    string,
-    {
-      sourceId: string;
-      start: number;
-      end: number;
-      color: string | null;
-      annotation: boolean;
-      comment: boolean;
-      figureLabel: string | null;
-      noteId: string;
-    }[]
-  >;
+  anchorHighlights: AnchorHighlightMap;
+  // The collapsed view's anchors (SPEC.md §28), by block id: they paint on
+  // the block's core. Merged with the rest under the "core:" key.
+  coreHighlights?: AnchorHighlightMap;
   // Highlights and comments by source id: their marks open on-page edit
   // controls — recolor, comment text, delete.
   annotationsBySource: Record<
@@ -787,6 +785,15 @@ export function ReaderInteractions({
   captionGaps: { id: string; label: string }[];
   figureRender: FigureRenderInfo;
 }) {
+  // The whole text's anchors and the collapsed view's, one map: a core's
+  // anchors under its core key, so marks, local marks, and cards find them
+  // like any block's (SPEC.md §28).
+  const anchorHighlights = useMemo<AnchorHighlightMap>(() => {
+    if (!coreHighlights || Object.keys(coreHighlights).length === 0) return wholeAnchorHighlights;
+    const merged: AnchorHighlightMap = { ...wholeAnchorHighlights };
+    for (const [blockId, list] of Object.entries(coreHighlights)) merged[coreKey(blockId)] = list;
+    return merged;
+  }, [wholeAnchorHighlights, coreHighlights]);
   const router = useRouter();
   const searchParams = useSearchParams();
   // Stable translator: mount-time closures (effects, async handlers) keep this
@@ -1353,6 +1360,8 @@ export function ReaderInteractions({
   const transcriptModeRef = useRef(false);
   transcriptModeRef.current = transcript !== undefined;
   const blocksRef = useRef(blocks);
+  // The cores the reader has (SPEC.md §28), for mount-time closures.
+  const coresRef = useRef<Record<string, string> | null>(null);
   blocksRef.current = blocks;
   const annotationBubblesRef = useRef(annotationBubbles);
   annotationBubblesRef.current = annotationBubbles;
@@ -1725,10 +1734,20 @@ export function ReaderInteractions({
     ).filter((el) => own(el) && (el === startBlock || el === endBlock || range.intersectsNode(el)));
     const segments: Segment[] = [];
     let truncated = false;
+    // A core's words (SPEC.md §28) take the core key: their anchor is in the
+    // collapsed view's layer. A passage stays in one layer — the first
+    // block's — and a block of the other layer is left out.
+    const firstCore = startBlock.hasAttribute("data-collapsed");
     for (const el of blockEls) {
-      const id = el.dataset.blockId ?? el.dataset.editBlock;
-      if (!id) continue;
-      const type = blocksRef.current.find((b) => b.id === id)?.type;
+      const blockId = el.dataset.blockId ?? el.dataset.editBlock;
+      if (!blockId) continue;
+      const core = el.hasAttribute("data-collapsed");
+      if (core !== firstCore) {
+        truncated = true;
+        continue;
+      }
+      const id = core ? coreKey(blockId) : blockId;
+      const type = core ? undefined : blocksRef.current.find((b) => b.id === id)?.type;
       if (el.hasAttribute("data-math-block") || type === "PAGE" || type === "EQUATION") {
         truncated = true;
         continue;
@@ -1882,13 +1901,6 @@ export function ReaderInteractions({
       // that is text editing, not a new selection.
       if (document.activeElement?.closest("[data-selection-popover]")) return;
       requestAnimationFrame(() => {
-        // A collapsed block (SPEC.md §28) shows its core, not its text: a
-        // selection in it opens no tools.
-        if (selectionInCollapsedBlock()) {
-          setPopover(null);
-          setSubmenu(null);
-          return;
-        }
         const captured = captureSelection();
         // The VIDEO block (the player's own block) refuses annotation: a
         // selection over it shows the refusal instead of tools. Transcript
@@ -1952,7 +1964,6 @@ export function ReaderInteractions({
       if (!coarse || !canEditRef.current) return;
       if (selectionTimer) clearTimeout(selectionTimer);
       selectionTimer = setTimeout(() => {
-        if (selectionInCollapsedBlock()) return;
         const captured = captureSelection();
         if (!captured) return;
         if (captured && pendingLinkRef.current) {
@@ -2401,6 +2412,10 @@ export function ReaderInteractions({
   // retries for a while, reading the container fresh each time.
   const flashSource = useCallback((sourceId: string) => {
     let attempts = 0;
+    // A core anchor paints only while its block shows its core (SPEC.md §28).
+    for (const [key, list] of Object.entries(anchorHighlightsRef.current)) {
+      if (isCoreKey(key) && list.some((h) => h.sourceId === sourceId)) showCoreRef.current(blockIdOfKey(key));
+    }
     const tryScroll = () => {
       const el = containerRef.current?.querySelector<HTMLElement>(`[data-source-id="${sourceId}"]`);
       if (el) {
@@ -2506,13 +2521,16 @@ export function ReaderInteractions({
     for (const [blockId, list] of Object.entries(anchorHighlightsRef.current)) {
       const hit = list.find((h) => h.sourceId === sourceId);
       if (!hit) continue;
-      const block = blocksRef.current.find((b) => b.id === blockId);
-      if (!block) return null;
+      // A core anchor's words are the core's (SPEC.md §28).
+      const text = isCoreKey(blockId)
+        ? coresRef.current?.[blockIdOfKey(blockId)]
+        : blocksRef.current.find((b) => b.id === blockId)?.text;
+      if (text === undefined) return null;
       return {
         blockId,
         startOffset: hit.start,
         endOffset: hit.end,
-        quotedText: block.text.slice(hit.start, hit.end),
+        quotedText: text.slice(hit.start, hit.end),
         prefix: "",
         suffix: "",
       };
@@ -2889,6 +2907,7 @@ export function ReaderInteractions({
   // their core in a whole one); it is cleared when Collapse is pressed.
   const [collapseOn, setCollapseOn] = useState(false);
   const [cores, setCores] = useState<Record<string, string> | null>(null);
+  coresRef.current = cores;
   const [collapseBusy, setCollapseBusy] = useState(false);
   // The New glow (SPEC.md §18) on the Collapse button until it is pressed.
   const collapseNew = useNewFeature("collapse");
@@ -2968,6 +2987,19 @@ export function ReaderInteractions({
       setCollapseBusy(false);
     }
   }
+  // The Annotations tab lists the view the article shows (SPEC.md §28).
+  useEffect(() => {
+    if (embedded || transcript) return;
+    announceCollapseView(documentId, collapseOn);
+  }, [documentId, collapseOn, embedded, transcript]);
+  // A jump to a core annotation shows that block's core when it is hidden.
+  const showCoreRef = useRef<(blockId: string) => void>(() => {});
+  useEffect(() => {
+    showCoreRef.current = (blockId: string) => {
+      if (!cores?.[blockId]) return;
+      if (collapseOn === flippedBlocks.has(blockId)) flipBlock(blockId);
+    };
+  });
   function flipBlock(blockId: string) {
     setFlippedBlocks((prev) => {
       const next = new Set(prev);
@@ -3316,14 +3348,18 @@ export function ReaderInteractions({
   // The anchor travels whole (SPEC.md §5): the block id and offsets, plus the
   // quote selectors, so the server re-finds the selection when the blocks
   // changed under the reader (a re-parse, an edit).
-  function anchorBody(anchor: Anchor) {
+  // A core's anchor (its core key, lib/anchors/core-key.ts) travels as the
+  // block id and layer "core" (SPEC.md §28).
+  function anchorBody(anchor: Segment) {
+    const core = isCoreKey(anchor.blockId);
     return {
-      blockId: anchor.blockId,
+      blockId: blockIdOfKey(anchor.blockId),
       startOffset: anchor.startOffset,
       endOffset: anchor.endOffset,
       quotedText: anchor.quotedText,
       prefix: anchor.prefix,
       suffix: anchor.suffix,
+      ...(core ? { layer: "core" as const } : {}),
     };
   }
 
@@ -5629,7 +5665,10 @@ function blockFormatKind(
   const popoverKind: ContentKind = contentKindOf(
     popover ? blocks.find((b) => b.id === popover.anchor.blockId)?.type : undefined,
   );
-  const has = (tool: Tool) => TOOLBARS[popoverKind].includes(tool);
+  // A selection in a core (SPEC.md §28) takes every tool but Link: a link
+  // joins the texts themselves.
+  const inCore = popover ? isCoreKey(popover.anchor.blockId) : false;
+  const has = (tool: Tool) => TOOLBARS[popoverKind].includes(tool) && !(inCore && tool === "link");
   // A row's look: the predicted lead tool reads as recommended, like the
   // figure toolbar's Analyze; every other row is plain.
   const leads = (tool: Tool) => leadTool === tool;

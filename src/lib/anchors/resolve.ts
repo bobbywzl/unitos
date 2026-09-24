@@ -1,6 +1,7 @@
 import type { Source } from "@prisma/client";
 import { db } from "@/lib/db";
 import { matchInText } from "@/lib/anchors/match";
+import type { Layer } from "@/lib/anchors/layer";
 
 export type ResolvedSource = {
   id: string;
@@ -96,12 +97,16 @@ export function documentBlocks(documentId: string): Promise<{ id: string; text: 
 // Rebinds and orphan flags are written back so resolution self-heals.
 // A caller that already holds the document's blocks in reading order passes
 // them; the blocks table is the largest, and one read of it per pane is enough.
+// `layer` "core" resolves the collapsed view's anchors against the cores
+// (lib/anchors/layer.ts, passed as the blocks); the default resolves the
+// anchors on the blocks' text. Neither touches the other's anchors.
 export async function resolveDocumentSources(
   documentId: string,
   loadedBlocks?: { id: string; type: string; text: string }[],
+  layer: Layer | null = null,
 ): Promise<ResolvedSource[]> {
   const [sources, blocks] = await Promise.all([
-    db.source.findMany({ where: { documentId } }),
+    db.source.findMany({ where: { documentId, layer } }),
     loadedBlocks ??
       db.block.findMany({
         where: { documentId },

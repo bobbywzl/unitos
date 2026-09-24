@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { sourceInputSchema } from "@/lib/anchors/input";
 import { MAX_SEGMENTS, passageSources, resolvePassage } from "@/lib/anchors/passage";
-import { documentBlocks } from "@/lib/anchors/resolve";
+import { layerBlocks } from "@/lib/anchors/layer";
 import { bumpNotebook, noteAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
 import { serverT } from "@/lib/i18n/server";
@@ -52,12 +52,13 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ noteId: strin
     if (source.endOffset <= source.startOffset) {
       return NextResponse.json({ error: t("api.anchorOffsetsInvalid") }, { status: 400 });
     }
-    const passage = resolvePassage(await documentBlocks(source.documentId), source, segments);
+    const layer = source.layer ?? null;
+    const passage = resolvePassage(await layerBlocks(source.documentId, layer), source, segments);
     if (passage.length === 0) {
       return NextResponse.json({ error: t("api.anchorNotResolvedInDocument") }, { status: 400 });
     }
     await db.source.createMany({
-      data: passageSources(source.documentId, passage).map((row) => ({ ...row, noteId })),
+      data: passageSources(source.documentId, passage, layer).map((row) => ({ ...row, noteId })),
     });
   }
 
@@ -90,6 +91,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ noteId: strin
         prefix: s.prefix,
         suffix: s.suffix,
         orphaned: s.orphaned,
+        layer: s.layer,
         startTime: s.startTime,
         endTime: s.endTime,
         ...(s.region === null ? {} : { region: s.region as Prisma.InputJsonValue }),

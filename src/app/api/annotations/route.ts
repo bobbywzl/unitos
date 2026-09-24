@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { passageSources, resolvePassage, segmentsSchema } from "@/lib/anchors/passage";
-import { documentBlocks } from "@/lib/anchors/resolve";
+import { layerBlocks, layerSchema } from "@/lib/anchors/layer";
 import { bumpNotebook, notebookAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
 import { annotationsSection } from "@/lib/derive/context";
@@ -19,6 +19,8 @@ const anchorSchema = z.object({
   quotedText: z.string().min(1).max(10_000),
   prefix: z.string().max(64),
   suffix: z.string().max(64),
+  // "core": the words are a block's core in the collapsed view (SPEC.md §28).
+  layer: layerSchema,
 });
 
 // A video annotation (SPEC.md §11): a time range, an optional drawn region,
@@ -102,7 +104,9 @@ export async function POST(req: Request) {
   // re-parse gives every block a new id while an open reader still sends the
   // old ones. Provenance is non-negotiable (SPEC.md §1): the stored quote is
   // the text at the stored offsets, or the anchor is rejected.
-  const passage = resolvePassage(await documentBlocks(data.documentId), data.anchor, data.segments);
+  // A core anchor resolves against the cores the reader sees (SPEC.md §28).
+  const layer = data.anchor.layer ?? null;
+  const passage = resolvePassage(await layerBlocks(data.documentId, layer), data.anchor, data.segments);
   const anchor = passage[0];
   if (!anchor) {
     return NextResponse.json({ error: t("api.anchorNotResolvedInDocument") }, { status: 400 });
@@ -130,6 +134,7 @@ export async function POST(req: Request) {
           startOffset: anchor.startOffset,
           endOffset: anchor.endOffset,
           orphaned: false,
+          layer,
         },
       },
     },
@@ -146,7 +151,7 @@ export async function POST(req: Request) {
       createdById: access.user.id,
       order,
       // One source per segment: the marks cover the whole passage.
-      sources: { create: passageSources(data.documentId, passage) },
+      sources: { create: passageSources(data.documentId, passage, layer) },
     },
     include: { sources: true },
   });

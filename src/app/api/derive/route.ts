@@ -1,6 +1,7 @@
 import { streamText, type ModelMessage } from "ai";
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { coreBlocks, layerSchema } from "@/lib/anchors/layer";
 import { passageSources, resolvePassage, segmentsSchema } from "@/lib/anchors/passage";
 import { bumpNotebook, notebookAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
@@ -127,6 +128,8 @@ const deriveSchema = z
       quotedText: z.string().max(10_000).optional(),
       prefix: z.string().max(64).optional(),
       suffix: z.string().max(64).optional(),
+      // "core": the words are a block's core in the collapsed view (SPEC.md §28).
+      layer: layerSchema,
     })
     .optional(),
   // A selection over several blocks (lib/anchors/passage.ts): one anchor per
@@ -703,11 +706,16 @@ async function handle(req: Request, t: TFunc) {
   // old ones; the quote carries the selection across. A selection over
   // several blocks resolves segment by segment (lib/anchors/passage.ts): the
   // first segment is the anchor, the passage is the anchored text.
-  const passage = data.anchor ? resolvePassage(document.blocks, data.anchor, data.segments) : [];
+  // A core anchor (SPEC.md §28) resolves against the cores, and its context
+  // is the cores around it: the tool reads the collapsed view the reader
+  // selected in. The cached prefix stays the whole document.
+  const layer = data.anchor?.layer ?? null;
+  const anchorBlocks = layer === "core" ? coreBlocks(document.collapse, document.blocks) : document.blocks;
+  const passage = data.anchor ? resolvePassage(anchorBlocks, data.anchor, data.segments) : [];
   const anchor = passage[0] ?? null;
   let anchored: ReturnType<typeof passageContext> = null;
   if (data.anchor) {
-    anchored = passageContext(document.blocks, passage);
+    anchored = passageContext(anchorBlocks, passage);
     if (!anchored || !anchored.anchoredText.trim()) {
       return NextResponse.json({ error: t("api.anchorNotResolvedInDocument") }, { status: 400 });
     }
@@ -828,7 +836,8 @@ async function handle(req: Request, t: TFunc) {
   // context only.
   let figureImage: FigureImage | null = null;
   let analyzedBlock: { id: string; type: string; text: string } | null = null;
-  if ((data.type === "EXPLAIN" || data.type === "ANALYZE") && anchor) {
+  // A core's words are text, not the figure: Explain on them explains the words.
+  if ((data.type === "ANALYZE" || (data.type === "EXPLAIN" && layer !== "core")) && anchor) {
     const anchoredBlock = await db.block.findUnique({
       where: { id: anchor.blockId },
       select: { type: true, html: true, text: true, page: true, region: true },
@@ -1075,7 +1084,7 @@ async function handle(req: Request, t: TFunc) {
             derivationType: "VISUALIZE",
             createdById: user.id,
             order: count,
-            sources: { create: passageSources(documentId, passage) },
+            sources: { create: passageSources(documentId, passage, layer) },
           },
         });
         await bumpNotebook(data.notebookId);
@@ -1207,7 +1216,7 @@ async function handle(req: Request, t: TFunc) {
                   createdById: user.id,
                   order: count,
                   // One source per segment: the marks cover the whole passage.
-                  sources: { create: passageSources(documentId, passage) },
+                  sources: { create: passageSources(documentId, passage, layer) },
                 },
               });
               await bumpNotebook(data.notebookId);

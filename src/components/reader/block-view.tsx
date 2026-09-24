@@ -214,7 +214,7 @@ export function layoutClass(tokens: Set<LayoutToken>, base: string): string {
 
 // Split block text into plain and <mark> segments. Declarative painting: highlights are part
 // of the React tree, never DOM mutation after render (anchor offsets stay stable).
-function markedText(blockId: string, text: string, highlights: Highlight[], t: TFunc) {
+export function markedText(blockId: string, text: string, highlights: Highlight[], t: TFunc) {
   const bounds = new Set<number>([0, text.length]);
   for (const h of highlights) {
     bounds.add(Math.max(0, Math.min(h.start, text.length)));

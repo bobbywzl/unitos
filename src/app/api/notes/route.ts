@@ -5,7 +5,8 @@ import { bumpNotebook, sectionAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
 import { sourceInputSchema } from "@/lib/anchors/input";
 import { MAX_SEGMENTS, passageSources, resolvePassage } from "@/lib/anchors/passage";
-import { documentBlocks, type ResolvedAnchor } from "@/lib/anchors/resolve";
+import { layerBlocks } from "@/lib/anchors/layer";
+import type { ResolvedAnchor } from "@/lib/anchors/resolve";
 import { serverT } from "@/lib/i18n/server";
 import { normalizeNoteOrders } from "@/lib/order";
 import { videoAnchorFor } from "@/lib/video/anchor";
@@ -68,16 +69,18 @@ export async function POST(req: Request) {
   // then the quote inside the block, then the quote across the document — a
   // re-parse gives every block a new id while an open reader still sends the
   // old ones.
-  let sources: (ResolvedAnchor & { documentId: string })[] = [];
+  let sources: (ResolvedAnchor & { documentId: string; layer: string | null })[] = [];
   if (data.source) {
     if (data.source.endOffset <= data.source.startOffset) {
       return NextResponse.json({ error: t("api.anchorOffsetsInvalid") }, { status: 400 });
     }
-    const passage = resolvePassage(await documentBlocks(data.source.documentId), data.source, data.segments);
+    // A core anchor (SPEC.md §28) resolves against the cores.
+    const layer = data.source.layer ?? null;
+    const passage = resolvePassage(await layerBlocks(data.source.documentId, layer), data.source, data.segments);
     if (passage.length === 0) {
       return NextResponse.json({ error: t("api.anchorNotResolvedInDocument") }, { status: 400 });
     }
-    sources = passageSources(data.source.documentId, passage);
+    sources = passageSources(data.source.documentId, passage, layer);
   }
 
   let videoSource: {
@@ -126,6 +129,7 @@ export async function POST(req: Request) {
     prefix: string;
     suffix: string;
     orphaned: boolean;
+    layer: string | null;
     startTime: number | null;
     endTime: number | null;
     region?: Prisma.InputJsonValue;
@@ -148,6 +152,7 @@ export async function POST(req: Request) {
       prefix: source.prefix,
       suffix: source.suffix,
       orphaned: source.orphaned,
+      layer: source.layer,
       startTime: source.startTime,
       endTime: source.endTime,
       ...(source.region === null ? {} : { region: source.region as Prisma.InputJsonValue }),

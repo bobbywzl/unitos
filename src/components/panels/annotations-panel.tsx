@@ -30,6 +30,7 @@ import {
   hasConversation,
 } from "@/components/panels/annotation-card";
 import { useCollapsedView } from "@/components/use-collapsed-view";
+import { inLayer, LayerSwitch, useAnnotationLayer } from "@/components/panels/layer-switch";
 import { stripSimplifyMarkers } from "@/lib/sentences";
 
 // A link's card carries the link kind color (lib/annotations/kind.ts).
@@ -138,11 +139,13 @@ function LinkAbout({
 // Annotations tab of the reader side panel. Highlights, comments, explanations,
 // analyses, visualizations, simplified rewrites, then accepted links, each group under its tool's symbol
 // — each annotation card jumps to its anchor and deletes in place. Recommended
-// links list in the graph instead.
+// links list in the graph instead. The whole text and the collapsed view keep
+// their own annotations (SPEC.md §28): the switch lists one or the other, and
+// follows the article's view.
 export function AnnotationsPanel({
   notebookId,
   documentId,
-  annotations,
+  annotations: every,
   linksOut,
   linksIn,
   sections,
@@ -166,10 +169,17 @@ export function AnnotationsPanel({
   // The annotation read as a full conversation over the page (SPEC.md §21).
   // The id, not the annotation: a refresh replaces the list.
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [layer, setLayer] = useAnnotationLayer(documentId);
+  const counts = {
+    whole: every.filter((a) => inLayer(a, "whole")).length,
+    core: every.filter((a) => inLayer(a, "core")).length,
+  };
+  const annotations = every.filter((a) => inLayer(a, layer));
   const highlights = annotations.filter((a) => a.kind === "highlight");
-  // Recommended links list in the graph (SPEC.md §13); only accepted ones here.
-  const acceptedOut = linksOut.filter((l) => !l.recommended);
-  const acceptedIn = linksIn.filter((l) => !l.recommended);
+  // Recommended links list in the graph (SPEC.md §13); only accepted ones
+  // here, with the whole text's annotations: a link joins the texts.
+  const acceptedOut = layer === "whole" ? linksOut.filter((l) => !l.recommended) : [];
+  const acceptedIn = layer === "whole" ? linksIn.filter((l) => !l.recommended) : [];
   const comments = annotations.filter((a) => a.kind === "comment");
   const explanations = annotations.filter((a) => a.kind === "explain");
   const analyses = annotations.filter((a) => a.kind === "analyze");
@@ -304,6 +314,11 @@ export function AnnotationsPanel({
       {conversationOverlay}
       {errorText && <p className="text-[13px] text-red-600">{errorText}</p>}
       <div className="flex items-center justify-end gap-1.5">
+        {(counts.core > 0 || layer === "core") && (
+          <div className="mr-auto">
+            <LayerSwitch layer={layer} onChange={setLayer} counts={counts} />
+          </div>
+        )}
         {annotations.length > 0 && (
           <CollapsedViewToggle view={view.view} onChange={view.setView} track="annotations-view" />
         )}

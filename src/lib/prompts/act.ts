@@ -38,8 +38,11 @@ export type ActCtx = {
 
 /** The selection block for a text selection: what the route puts in the
     prompt, and what the eval (scripts/eval) puts there for a case. */
-export function textSelectionBlock(blockId: string, text: string): string {
-  return `The reader has selected this text in block ${blockId}:\n"${text.slice(0, 2000)}"\nThe command applies to this selection unless it says otherwise.`;
+export function textSelectionBlock(blockId: string, text: string, core = false): string {
+  // A core is the block collapsed to what it really says (SPEC.md §28): the
+  // reader selected in the core, not in the block's own words.
+  const where = core ? `the core of block ${blockId} (the block collapsed to what it really says, in plain words)` : `block ${blockId}`;
+  return `The reader has selected this text in ${where}:\n"${text.slice(0, 2000)}"\nThe command applies to this selection unless it says otherwise.`;
 }
 
 export function actPrompt(ctx: ActCtx): string {

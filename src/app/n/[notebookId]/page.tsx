@@ -65,6 +65,7 @@ import { billingLinks } from "@/lib/billing/switch";
 import { accountTier } from "@/lib/tiers";
 import { linkScanRunsLeft } from "@/lib/connect";
 import { isTextStyle, type TextStyle } from "@/lib/text-style";
+import { coreBlocks } from "@/lib/anchors/layer";
 
 export const dynamic = "force-dynamic";
 
@@ -222,6 +223,13 @@ export default async function NotebookPage(props: {
       }[]
     > = {};
     const resolved = await resolveDocumentSources(document.id, document.blocks);
+    // The collapsed view's anchors (SPEC.md §28) heal against the cores the
+    // reader sees now, and paint on the cores alone.
+    const resolvedCore = await resolveDocumentSources(
+      document.id,
+      coreBlocks(document.collapse, document.blocks),
+      "core",
+    );
 
     // Annotated figure, table, and equation blocks carry sequential labels
     // ("A1", "A2", …) in document order. The label renders at the block and on
@@ -245,6 +253,26 @@ export default async function NotebookPage(props: {
         list.sort((x, y) => x.start - y.start || x.id.localeCompare(y.id));
         for (const r of list) figureLabelBySource.set(r.id, `A${++counter}`);
       }
+    }
+
+    const coreHighlights: typeof anchorHighlights = {};
+    for (const r of resolvedCore) {
+      resolutionById.set(r.id, { orphaned: r.orphaned });
+      if (r.orphaned || !noteById.has(r.noteId)) continue;
+      const note = noteById.get(r.noteId);
+      const list = coreHighlights[r.blockId] ?? [];
+      list.push({
+        sourceId: r.id,
+        start: r.start,
+        end: r.end,
+        color: note?.color ?? null,
+        annotation: annotationNoteIds.has(r.noteId),
+        comment:
+          annotationNoteIds.has(r.noteId) && note?.derivationType == null && note?.color == null,
+        figureLabel: null,
+        noteId: r.noteId,
+      });
+      coreHighlights[r.blockId] = list;
     }
 
     for (const r of resolved) {
@@ -365,6 +393,7 @@ export default async function NotebookPage(props: {
             quotedText: null,
             orphaned: false,
             figureLabel: null,
+            layer: null,
             createdById: n.createdById,
             replies: toReplyViews(n.replies),
             conversation: conversationTurns(n),
@@ -380,6 +409,7 @@ export default async function NotebookPage(props: {
           quotedText: source.quotedText,
           orphaned: resolutionById.get(source.id)?.orphaned ?? source.orphaned,
           figureLabel: figureLabelBySource.get(source.id) ?? null,
+          layer: source.layer === "core" ? "core" : null,
           createdById: n.createdById,
           replies: toReplyViews(n.replies),
           conversation: conversationTurns(n),
@@ -837,6 +867,7 @@ export default async function NotebookPage(props: {
       distillations,
       extractions,
       anchorHighlights,
+      coreHighlights,
       annotations,
       annotationBubbles,
       annotationsBySource,
@@ -1122,6 +1153,7 @@ export default async function NotebookPage(props: {
   const textLayer = (pane: NonNullable<typeof paneOne>) => ({
     attachedDocuments: attached,
     anchorHighlights: pane.anchorHighlights,
+    coreHighlights: pane.coreHighlights,
     annotationsBySource: pane.annotationsBySource,
     annotationBubbles: pane.annotationBubbles,
     distillations: pane.distillations,

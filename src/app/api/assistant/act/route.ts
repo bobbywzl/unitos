@@ -2,6 +2,7 @@ import { isStepCount, type ModelMessage } from "ai";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { thinkingEffort, thinkingSchema } from "@/lib/assistant/thinking";
+import { coreBlocks, layerSchema } from "@/lib/anchors/layer";
 import { passageSources, resolvePassage, segmentsSchema } from "@/lib/anchors/passage";
 import { bumpNotebook, notebookAccess } from "@/lib/collab";
 import {
@@ -58,6 +59,8 @@ const requestSchema = z.object({
       quotedText: z.string().max(10_000).optional(),
       prefix: z.string().max(64).optional(),
       suffix: z.string().max(64).optional(),
+      // "core": the words are a block's core in the collapsed view (SPEC.md §28).
+      layer: layerSchema,
     })
     .optional(),
   // A selection over several blocks (lib/anchors/passage.ts): one anchor per
@@ -199,7 +202,7 @@ async function handle(req: Request, t: TFunc) {
     kind: ToolKind;
     content: string;
     turns: ChatTurn[];
-    sources: { blockId: string; startOffset: number; endOffset: number; quotedText: string; prefix: string; suffix: string }[];
+    sources: { blockId: string; startOffset: number; endOffset: number; quotedText: string; prefix: string; suffix: string; layer: string | null }[];
   } | null = null;
   if (data.toolNoteId) {
     const note = await db.note.findUnique({
@@ -212,7 +215,7 @@ async function handle(req: Request, t: TFunc) {
         section: { select: { notebookId: true } },
         sources: {
           where: { documentId: data.documentId },
-          select: { blockId: true, startOffset: true, endOffset: true, quotedText: true, prefix: true, suffix: true },
+          select: { blockId: true, startOffset: true, endOffset: true, quotedText: true, prefix: true, suffix: true, layer: true },
         },
       },
     });
@@ -241,13 +244,19 @@ async function handle(req: Request, t: TFunc) {
   // old ones; the quote carries the selection across.
   const anchorInput = toolNote ? toolNote.sources[0] : data.anchor;
   const segmentsInput = toolNote ? toolNote.sources : data.segments;
-  const passage = anchorInput ? resolvePassage(document.blocks, anchorInput, segmentsInput) : [];
+  // A core anchor (SPEC.md §28) resolves against the cores, its context the
+  // cores around it.
+  const layer = (toolNote ? toolNote.sources[0]?.layer : data.anchor?.layer) === "core" ? ("core" as const) : null;
+  const anchorBlocks = layer === "core" ? coreBlocks(document.collapse, document.blocks) : document.blocks;
+  const passage = anchorInput ? resolvePassage(anchorBlocks, anchorInput, segmentsInput) : [];
   const anchor = passage[0] ?? null;
-  const anchored = anchor ? passageContext(document.blocks, passage) : null;
+  const anchored = anchor ? passageContext(anchorBlocks, passage) : null;
   if (anchorInput && (!anchor || !anchored)) {
     return NextResponse.json({ error: t("api.anchorNotResolvedInDocument") }, { status: 400 });
   }
-  if (anchor && anchored) {
+  if (anchor && anchored && layer === "core") {
+    selectionBlock = textSelectionBlock(anchor.blockId, anchored.anchoredText, true);
+  } else if (anchor && anchored) {
     const anchoredBlock = await db.block.findUnique({
       where: { id: anchor.blockId },
       select: { type: true, html: true, text: true, page: true, region: true },
@@ -483,7 +492,7 @@ async function handle(req: Request, t: TFunc) {
             createdById: user.id,
             order: count,
             // One source per segment: the marks cover the whole passage.
-            sources: { create: passageSources(data.documentId, passage) },
+            sources: { create: passageSources(data.documentId, passage, layer) },
           },
         });
         conversationNoteId = note.id;

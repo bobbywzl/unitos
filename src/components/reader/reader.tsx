@@ -31,6 +31,7 @@ import { FigurePlace, type FigureRenderInfo } from "@/components/reader/figure-c
 import { Reveal, inactiveReveal, useReveal, type RevealKind } from "@/components/reader/reveal";
 import { TranslationLine } from "@/components/reader/translation-bar";
 import { CoreBlock, CoreToggle } from "@/components/reader/core-block";
+import { coreKey } from "@/lib/anchors/core-key";
 import { useLang } from "@/components/lang-provider";
 import { CircleGlow } from "@/components/reader/circle-glow";
 import type { TKey } from "@/lib/i18n/dictionaries";
@@ -636,6 +637,7 @@ export function Reader({
           <CoreBlock
             block={block}
             core={core}
+            highlights={highlightsByBlock[coreKey(block.id)] ?? []}
             annotated={(highlightsByBlock[block.id] ?? []).some((h) => h.kind === "anchor" && !h.leaving)}
           />
           {toggle}

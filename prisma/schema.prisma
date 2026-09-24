@@ -403,6 +403,10 @@ model Source {
   prefix      String // 32 chars before selection
   suffix      String // 32 chars after selection
   orphaned    Boolean  @default(false)
+  // The layer the anchor points into (SPEC.md §28): null for the block's
+  // text, "core" for the block's core in the collapsed view. A core anchor's
+  // offsets and quote are the core's words; it heals against the core.
+  layer       String?
   // Video anchor (SPEC.md §11): a time range instead of a text span. When
   // startTime is set the anchor skips the text ladder and never orphans —
   // the video file never changes.

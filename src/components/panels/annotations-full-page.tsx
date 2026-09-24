@@ -23,6 +23,7 @@ import {
 import { ToolSymbol } from "@/components/reader/block-view";
 import { ConversationView } from "@/components/reader/conversation-view";
 import { useCollapsedView } from "@/components/use-collapsed-view";
+import { inLayer, LayerSwitch, type AnnotationLayer } from "@/components/panels/layer-switch";
 
 // The annotations full page (SPEC.md §6): every annotation of the project,
 // grouped by the document it is anchored in — an article, a video, an audio
@@ -59,7 +60,17 @@ export function AnnotationsFullPage({
   const [errorText, setErrorText] = useState<string | null>(null);
   // The annotation read as a full conversation over the page (SPEC.md §21).
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const all = groups.flatMap((g) => g.items);
+  // The whole text and the collapsed view keep their own annotations (SPEC.md §28).
+  const [layer, setLayer] = useState<AnnotationLayer>("whole");
+  const every = groups.flatMap((g) => g.items);
+  const counts = {
+    whole: every.filter((a) => inLayer(a, "whole")).length,
+    core: every.filter((a) => inLayer(a, "core")).length,
+  };
+  const shownGroups = groups
+    .map((g) => ({ ...g, items: g.items.filter((a) => inLayer(a, layer)) }))
+    .filter((g) => g.items.length > 0);
+  const all = shownGroups.flatMap((g) => g.items);
 
   async function deleteAnnotation(id: string) {
     setErrorText(null);
@@ -99,12 +110,13 @@ export function AnnotationsFullPage({
         <span className="text-[13px] text-sand-600">{all.length || ""}</span>
       </div>
       <div className="mt-2 flex items-center gap-2">
+        {counts.core > 0 && <LayerSwitch layer={layer} onChange={setLayer} counts={counts} />}
         {all.length > 0 && <CollapsedViewToggle view={view.view} onChange={view.setView} track="annotations-view" />}
       </div>
       {errorText && <p className="mt-3 text-[13px] text-red-600">{errorText}</p>}
 
       <div className="flex flex-col gap-[30px] pt-[22px]">
-        {groups.map((group) => (
+        {shownGroups.map((group) => (
           <section key={group.documentId ?? "project"} className="flex flex-col gap-2.5">
             <div className="flex items-baseline gap-2.5">
               <span className="self-center text-sand-500">

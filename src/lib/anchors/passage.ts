@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { layerSchema, type Layer } from "@/lib/anchors/layer";
 import { resolveAnchor, type AnchorInput, type ResolvedAnchor } from "@/lib/anchors/resolve";
 
 // A passage (SPEC.md §5): one selection over one or more blocks, in reading
@@ -18,6 +19,10 @@ export const anchorInputSchema = z.object({
   quotedText: z.string().max(10_000).optional(),
   prefix: z.string().max(64).optional(),
   suffix: z.string().max(64).optional(),
+  // "core": the words are a block's core in the collapsed view (SPEC.md §28);
+  // the anchor resolves against the cores (lib/anchors/layer.ts). Read from
+  // `anchor`; every segment of a passage is in the anchor's layer.
+  layer: layerSchema,
 });
 
 // Blocks a selection may cross, at most.
@@ -47,10 +52,11 @@ export function passageText(segments: { quotedText: string }[]): string {
   return segments.map((s) => s.quotedText).join("\n\n");
 }
 
-/** The source rows a note gets for the passage. */
-export function passageSources(documentId: string, segments: ResolvedAnchor[]) {
+/** The source rows a note gets for the passage, in the passage's layer. */
+export function passageSources(documentId: string, segments: ResolvedAnchor[], layer?: Layer | null) {
   return segments.map((s) => ({
     documentId,
+    layer: layer ?? null,
     blockId: s.blockId,
     startOffset: s.startOffset,
     endOffset: s.endOffset,
