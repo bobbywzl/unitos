@@ -67,7 +67,7 @@ export function LayerSwitch({
           onClick={() => onChange(o.value)}
           data-track={`annotations-layer:${o.value}`}
           data-tip={t(o.value === "core" ? "panels.layerCoreTitle" : "panels.layerWholeTitle")}
-          className={`rounded-full px-2.5 py-0.5 text-[11.5px] font-semibold ${
+          className={`whitespace-nowrap rounded-full px-2.5 py-0.5 text-[11.5px] font-semibold ${
             layer === o.value ? "bg-ink text-paper" : "text-sand-700 hover:text-clay-800"
           }`}
         >

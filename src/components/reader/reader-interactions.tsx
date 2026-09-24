@@ -3028,17 +3028,19 @@ export function ReaderInteractions({
     const kind = contentKindOf(blockType);
     if (kind === "figure") return;
     const key = popoverAnchorKey;
+    // A core selection has no Link (SPEC.md §28), so Link never leads there.
+    const tools = isCoreKey(popover.anchor.blockId) ? TOOLBARS[kind].filter((tool) => tool !== "link") : TOOLBARS[kind];
     const controller = new AbortController();
     fetch("/api/jev/lead-tool", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ notebookId, kind, blockType, text: text.slice(0, 600), tools: TOOLBARS[kind] }),
+      body: JSON.stringify({ notebookId, kind, blockType, text: text.slice(0, 600), tools }),
       signal: controller.signal,
     })
       .then((res) => (res.ok ? (res.json() as Promise<{ tool: Tool | null }>) : null))
       .then((data) => {
         if (controller.signal.aborted || !data?.tool) return;
-        if (TOOLBARS[kind].includes(data.tool)) setLeadAnswer({ key, tool: data.tool });
+        if (tools.includes(data.tool)) setLeadAnswer({ key, tool: data.tool });
       })
       .catch(() => {});
     return () => controller.abort();
