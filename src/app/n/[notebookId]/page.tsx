@@ -64,6 +64,7 @@ import {
 import { billingLinks } from "@/lib/billing/switch";
 import { accountTier } from "@/lib/tiers";
 import { linkScanRunsLeft } from "@/lib/connect";
+import { isTextStyle, type TextStyle } from "@/lib/text-style";
 
 export const dynamic = "force-dynamic";
 
@@ -646,30 +647,11 @@ export default async function NotebookPage(props: {
     // Inline styles (bold/italic/underline/code/text color): decoration spans
     // healed like salience.
     type StyleSpan = { start: number; end: number; style: string; quotedText: string };
-    type StyleKind =
-      | "bold"
-      | "italic"
-      | "underline"
-      | "code"
-      | "color-clay"
-      | "color-sage"
-      | "color-gold"
-      | "color-plum";
-    const STYLE_KINDS = new Set([
-      "bold",
-      "italic",
-      "underline",
-      "code",
-      "color-clay",
-      "color-sage",
-      "color-gold",
-      "color-plum",
-    ]);
-    const stylesByBlock: Record<string, { start: number; end: number; style: StyleKind }[]> = {};
+    const stylesByBlock: Record<string, { start: number; end: number; style: TextStyle }[]> = {};
     for (const b of document.blocks) {
       const spans = (Array.isArray(b.styles) ? b.styles : []) as unknown as StyleSpan[];
       for (const span of spans) {
-        if (!STYLE_KINDS.has(span.style)) continue;
+        if (!isTextStyle(span.style)) continue;
         let hit: { start: number; end: number } | null = null;
         if (b.text.slice(span.start, span.end) === span.quotedText) {
           hit = { start: span.start, end: span.end };
@@ -681,7 +663,7 @@ export default async function NotebookPage(props: {
         list.push({
           start: hit.start,
           end: hit.end,
-          style: span.style as StyleKind,
+          style: span.style,
         });
         stylesByBlock[b.id] = list;
       }

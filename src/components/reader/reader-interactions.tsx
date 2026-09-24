@@ -40,6 +40,7 @@ import {
   type ToolKind,
 } from "@/lib/conversation";
 import { TranslationBar } from "@/components/reader/translation-bar";
+import type { TextStyle, ToggleStyle } from "@/lib/text-style";
 import { findWeblinks } from "@/lib/weblinks";
 import { isImeKey, useImeGuard } from "@/lib/ime";
 import { imageFigureHtml } from "@/lib/images";
@@ -758,15 +759,7 @@ export function ReaderInteractions({
     {
       start: number;
       end: number;
-      style:
-        | "bold"
-        | "italic"
-        | "underline"
-        | "code"
-        | "color-clay"
-        | "color-sage"
-        | "color-gold"
-        | "color-plum";
+      style: TextStyle;
     }[]
   >;
   // Contents links (targetBlockId: click scrolls the reader to that block) and
@@ -5141,14 +5134,7 @@ export function ReaderInteractions({
     blockId: string,
     start: number,
     end: number,
-    style:
-      | "bold"
-      | "italic"
-      | "underline"
-      | "color-clay"
-      | "color-sage"
-      | "color-gold"
-      | "color-plum",
+    style: ToggleStyle,
   ) {
     try {
       await api(`/api/blocks/${blockId}/style`, "POST", {

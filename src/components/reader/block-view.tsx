@@ -21,6 +21,7 @@ import { endSweep } from "@/lib/mark-sweep";
 import { OFFICE_CSS } from "@/lib/office-css";
 import { googleFontsUrl, parseFontList, webFontFamilies } from "@/lib/office-fonts";
 import type { TFunc, TKey } from "@/lib/i18n/dictionaries";
+import { colorClass, customCss, isColorStyle, isHighlightStyle, type TextStyle } from "@/lib/text-style";
 
 const CHAIN_BUTTON =
   "link-chain mx-0.5 inline-flex size-[16px] items-center justify-center rounded-full bg-clay-100 align-text-top text-clay-700 hover:bg-clay-200 hover:text-clay-800";
@@ -61,15 +62,7 @@ export type Highlight = {
     | "selection"
     | "pending-link";
   // kind "style" only
-  styleKind?:
-    | "bold"
-    | "italic"
-    | "underline"
-    | "code"
-    | "color-clay"
-    | "color-sage"
-    | "color-gold"
-    | "color-plum";
+  styleKind?: TextStyle;
   definition?: string; // glossary hover text, kind "term" only
   color?: string | null; // highlight hue ("clay" | "sage" | "gold" | "plum"), kind "anchor" only
   annotation?: boolean; // anchor belongs to an annotation; click focuses its card
@@ -247,8 +240,14 @@ function markedText(blockId: string, text: string, highlights: Highlight[], t: T
     const italic = covering.some((h) => h.kind === "style" && h.styleKind === "italic");
     const underlined = covering.some((h) => h.kind === "style" && h.styleKind === "underline");
     const code = covering.some((h) => h.kind === "style" && h.styleKind === "code");
-    const colored = covering.find((h) => h.kind === "style" && h.styleKind?.startsWith("color-"));
-    const editedClass = `${edited ? " edited-text" : ""}${bold ? " font-bold" : ""}${italic ? " italic" : ""}${underlined ? " underline" : ""}${colored ? ` text-${colored.styleKind}` : ""}${code ? " code-mark" : ""}`;
+    // The later span wins where two colors or two highlights overlap (lib/text-style.ts).
+    const colored = covering.findLast((h) => h.kind === "style" && h.styleKind !== undefined && isColorStyle(h.styleKind))?.styleKind;
+    const highlighted = covering.findLast((h) => h.kind === "style" && h.styleKind !== undefined && isHighlightStyle(h.styleKind))?.styleKind;
+    const named = colored ? colorClass(colored) : null;
+    const editedClass = `${edited ? " edited-text" : ""}${bold ? " font-bold" : ""}${italic ? " italic" : ""}${underlined ? " underline" : ""}${named ? ` ${named}` : ""}${code ? " code-mark" : ""}`;
+    // A wheel color or a highlight is inline CSS on the words themselves.
+    const custom = customCss(colored, highlighted);
+    const inner = custom ? <span style={custom}>{segment}</span> : segment;
     const anchors = covering.filter((h) => h.kind === "anchor");
     const anchor =
       anchors.length > 1
@@ -291,7 +290,7 @@ function markedText(blockId: string, text: string, highlights: Highlight[], t: T
               : undefined
           }
         >
-          {segment}
+          {inner}
         </a>,
       );
       // A completed link carries a closed chain at its right side.
@@ -328,7 +327,7 @@ function markedText(blockId: string, text: string, highlights: Highlight[], t: T
           }}
           className={`citation-mark rounded-[4px]${editedClass}`}
         >
-          {segment}
+          {inner}
         </a>,
       );
     } else if (toc) {
@@ -350,7 +349,7 @@ function markedText(blockId: string, text: string, highlights: Highlight[], t: T
           }}
           className={`toc-mark rounded-[4px]${editedClass}`}
         >
-          {segment}
+          {inner}
         </a>,
       );
     } else if (weblink) {
@@ -364,7 +363,7 @@ function markedText(blockId: string, text: string, highlights: Highlight[], t: T
           data-source-id={anchor?.sourceId ?? undefined}
           className={`weblink-mark${editedClass}`}
         >
-          {segment}
+          {inner}
         </a>,
       );
     } else if (anchor || salience || simplify || extract || selection) {
@@ -458,7 +457,7 @@ function markedText(blockId: string, text: string, highlights: Highlight[], t: T
               : undefined
           }
         >
-          {segment}
+          {inner}
         </mark>,
       );
       // An extract span carries its label chip right after the span: the chip
@@ -598,14 +597,14 @@ function markedText(blockId: string, text: string, highlights: Highlight[], t: T
           }}
           className={`glossary-term cursor-pointer border-b-2 border-dotted border-clay-400 hover:border-clay-600${editedClass}`}
         >
-          {segment}
+          {inner}
         </span>,
       );
     } else {
       // Only decoration layers (edited, bold, italic) cover this segment.
       parts.push(
-        editedClass ? (
-          <span key={from} className={editedClass.trim()}>
+        editedClass || custom ? (
+          <span key={from} className={editedClass.trim() || undefined} style={custom ?? undefined}>
             {segment}
           </span>
         ) : (

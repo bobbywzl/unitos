@@ -102,6 +102,7 @@ const en = {
   deleteHighlightTitle: "Delete this highlight and its comment",
 
   // Highlight colors
+  colorInk: "black",
   colorClay: "clay",
   colorSage: "sage",
   colorGold: "gold",
@@ -358,6 +359,7 @@ const zh: Record<keyof typeof en, string> = {
   deleteHighlightTitle: "删除此高亮及其评论",
 
   // Highlight colors
+  colorInk: "黑色",
   colorClay: "陶土色",
   colorSage: "灰绿色",
   colorGold: "金黄色",

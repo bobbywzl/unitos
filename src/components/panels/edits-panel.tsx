@@ -35,6 +35,7 @@ const STYLE_KEY: Record<string, TKey> = {
   bold: "panels.styleBold",
   italic: "panels.styleItalic",
   underline: "panels.styleUnderline",
+  "color-ink": "panels.styleColorInk",
   "color-clay": "panels.styleColorClay",
   "color-sage": "panels.styleColorSage",
   "color-gold": "panels.styleColorGold",
@@ -49,6 +50,8 @@ function formatLabel(t: TFunc, kind: string | undefined): string {
 
 function styleLabel(t: TFunc, style: string | undefined): string {
   if (style === undefined) return t("panels.styleFallback");
+  if (style.startsWith("color:")) return t("panels.styleColorCustom");
+  if (style.startsWith("highlight:")) return t("panels.styleHighlight");
   const key = STYLE_KEY[style];
   return key ? t(key) : style;
 }
@@ -78,11 +81,6 @@ export function EditsPanel({
 
   return (
     <div className="flex flex-col gap-2.5">
-      <p className="text-[11px] text-sand-500">
-        {t("panels.editedColorPre")}
-        <span className="edited-text font-semibold">{t("panels.editedColorWord")}</span>
-        {t("panels.editedColorPost")}
-      </p>
       {edits.map((edit) => (
         <EditCard
           key={edit.id}

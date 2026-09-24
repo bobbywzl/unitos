@@ -5,6 +5,18 @@ import { BookmarkIcon, PlusIcon, RedoIcon, UndoIcon } from "@/components/icons";
 import { setQuoteDragImage, writeQuoteDrag } from "@/lib/quote-drag";
 import { isImeKey } from "@/lib/ime";
 import { styleShortcut } from "@/lib/markdown-style";
+import {
+  DEFAULT_HIGHLIGHT,
+  colorClass,
+  customCssText,
+  hexStyle,
+  isColorStyle,
+  isHighlightStyle,
+  sameSlot,
+  type NamedColor,
+  type TextStyle,
+  type ToggleStyle,
+} from "@/lib/text-style";
 import { NOTE_WRAP_EVENT, type NoteWrapSpacer } from "@/lib/note-wrap";
 import { NoteWrapGap } from "@/components/reader/note-wrap-gap";
 import { useT } from "@/components/lang-provider";
@@ -375,20 +387,20 @@ const FONT_STACK: Record<string, string | undefined> = {
 };
 
 type Kind = "paragraph" | "h1" | "h2" | "h3" | "list" | "numbered";
-// The text colors, one class each in globals.css (text-color-*).
-export type TextColor = "color-clay" | "color-sage" | "color-gold" | "color-plum";
-export const TEXT_COLORS: { style: TextColor; dot: string }[] = [
+// The toolbar's named text colors, one class each in globals.css
+// (text-color-*); ink, the default, comes first. The color wheel beside them
+// gives any other color (lib/text-style.ts).
+const TEXT_COLORS: { style: NamedColor; dot: string }[] = [
+  { style: "color-ink", dot: "var(--ink)" },
   { style: "color-clay", dot: "var(--clay-500)" },
   { style: "color-sage", dot: "var(--sage-600)" },
   { style: "color-gold", dot: "#d9a54a" },
   { style: "color-plum", dot: "#a78bfa" },
 ];
-// "code" spans come from the parser (monospace runs); the toolbar toggles the rest.
-type StyleKind = "bold" | "italic" | "underline" | "code" | TextColor;
-type ToggleStyleKind = "bold" | "italic" | "underline" | TextColor;
-type StyleSpan = { start: number; end: number; style: StyleKind };
+type StyleSpan = { start: number; end: number; style: TextStyle };
 
-const COLOR_NAME_KEY: Record<TextColor, TKey> = {
+const COLOR_NAME_KEY: Record<NamedColor, TKey> = {
+  "color-ink": "reader.colorInk",
   "color-clay": "reader.colorClay",
   "color-sage": "reader.colorSage",
   "color-gold": "reader.colorGold",
@@ -429,6 +441,8 @@ function stripMarkers(text: string): string {
 
 function withMarkers(text: string, kind: "list" | "numbered"): string {
   const counters: number[] = [];
+  // An empty block gets its first marker, so the list shows before anything is typed.
+  if (!text.trim()) return kind === "list" ? "- " : "1. ";
   return stripMarkers(text)
     .split("\n")
     .map((line) => {
@@ -475,10 +489,15 @@ function decoratedHtml(text: string, spans: StyleSpan[], edited: { start: number
     const italic = spans.some((s) => s.style === "italic" && s.start <= from && s.end >= to);
     const underline = spans.some((s) => s.style === "underline" && s.start <= from && s.end >= to);
     const code = spans.some((s) => s.style === "code" && s.start <= from && s.end >= to);
-    const color = spans.find((s) => s.style.startsWith("color-") && s.start <= from && s.end >= to);
+    // The later span wins where two colors or two highlights overlap.
+    const color = spans.findLast((s) => isColorStyle(s.style) && s.start <= from && s.end >= to)?.style;
+    const highlight = spans.findLast((s) => isHighlightStyle(s.style) && s.start <= from && s.end >= to)?.style;
+    const named = color ? colorClass(color) : null;
     const isEdited = edited.some((r) => r.start <= from && r.end >= to);
-    const cls = `${isEdited ? "edited-text " : ""}${bold ? "font-bold " : ""}${italic ? "italic " : ""}${underline ? "underline " : ""}${color ? `text-${color.style} ` : ""}${code ? "code-mark" : ""}`.trim();
-    html += cls ? `<span class="${cls}">${segment}</span>` : segment;
+    const cls = `${isEdited ? "edited-text " : ""}${bold ? "font-bold " : ""}${italic ? "italic " : ""}${underline ? "underline " : ""}${named ? `${named} ` : ""}${code ? "code-mark" : ""}`.trim();
+    const css = customCssText(color, highlight);
+    const attrs = `${cls ? ` class="${cls}"` : ""}${css ? ` style="${css}"` : ""}`;
+    html += attrs ? `<span${attrs}>${segment}</span>` : segment;
   }
   return html;
 }
@@ -583,7 +602,7 @@ export function Reader({
   } | null;
   onSaveText: (blockId: string, text: string) => Promise<void>;
   onFormatBlock: (blockId: string, kind: Kind, text?: string) => Promise<void>;
-  onToggleStyle: (blockId: string, start: number, end: number, style: ToggleStyleKind) => Promise<void>;
+  onToggleStyle: (blockId: string, start: number, end: number, style: ToggleStyle) => Promise<void>;
   onInsertBlock: (afterBlockId: string) => Promise<string | null>;
   /** What the bar's undo and redo can do; the steps live in reader-interactions.tsx. */
   history: { canUndo: boolean; canRedo: boolean };
@@ -686,21 +705,46 @@ export function Reader({
     };
   });
 
-  function applyStyle(style: ToggleStyleKind) {
-    if (!focusedBlockId) return;
+  // The selected words of the focused block, as offsets in its text.
+  function selectedRange(): { blockId: string; start: number; end: number } | null {
+    if (!focusedBlockId) return null;
     const el = document.querySelector<HTMLElement>(`[data-edit-block="${focusedBlockId}"]`);
     const selection = window.getSelection();
-    if (!el || !selection || selection.isCollapsed || selection.rangeCount === 0) return;
+    if (!el || !selection || selection.isCollapsed || selection.rangeCount === 0) return null;
     const range = selection.getRangeAt(0);
-    if (!el.contains(range.commonAncestorContainer)) return;
+    if (!el.contains(range.commonAncestorContainer)) return null;
     const pre = document.createRange();
     pre.selectNodeContents(el);
     pre.setEnd(range.startContainer, range.startOffset);
     const start = pre.toString().length;
     const end = start + range.toString().length;
-    if (end <= start) return;
+    if (end <= start) return null;
+    return { blockId: focusedBlockId, start, end };
+  }
+
+  function applyStyle(style: ToggleStyle) {
+    const range = selectedRange();
+    if (range) applyStyleAt(range, style);
+  }
+
+  // The color wheels open the browser's picker, which takes the selection
+  // away; the range is kept from the press and styled when the picker closes.
+  const wheelRangeRef = useRef<{ blockId: string; start: number; end: number } | null>(null);
+  const [highlightHex, setHighlightHex] = useState<string>(DEFAULT_HIGHLIGHT);
+  function applyWheel(kind: "color" | "highlight", hex: string) {
+    const range = wheelRangeRef.current;
+    const style = hexStyle(kind, hex);
+    if (kind === "highlight") setHighlightHex(hex);
+    if (!range || !style) return;
+    wheelRangeRef.current = null;
+    applyStyleAt(range, style);
+  }
+
+  function applyStyleAt(
+    { blockId, start, end }: { blockId: string; start: number; end: number },
+    style: ToggleStyle,
+  ) {
     // Instant: toggle locally (repaints this block), keep the selection, then sync.
-    const blockId = focusedBlockId;
     const block = blocks.find((b) => b.id === blockId);
     if (!block) return;
     const flush = flushFocused();
@@ -709,16 +753,14 @@ export function Reader({
       const existing = current.findIndex(
         (s) => s.style === style && s.start === start && s.end === end,
       );
-      // One color per span: a new color replaces another color on the same
-      // range — mirroring the style route.
-      const isColor = style.startsWith("color-");
+      // One color and one highlight per range: a new one replaces the old
+      // one — mirroring the style route.
       const next =
         existing >= 0
           ? current.filter((_, i) => i !== existing)
           : [
               ...current.filter(
-                (s) =>
-                  !(isColor && s.style.startsWith("color-") && s.start === start && s.end === end),
+                (s) => !(sameSlot(s.style, style) && s.start === start && s.end === end),
               ),
               { start, end, style },
             ];
@@ -731,7 +773,9 @@ export function Reader({
       .then(() => onToggleStyle(blockId, start, end, style));
   }
 
-  function applyFormat(kind: Kind) {
+  // `typed`: a typed shortcut ("- ", "1. ", "# ") — the block's text without
+  // the typed marker, and where the caret goes after the change.
+  function applyFormat(kind: Kind, typed?: { text: string; caret: number }) {
     if (!focusedBlockId) return;
     const blockId = focusedBlockId;
     const block = blocks.find((b) => b.id === blockId);
@@ -749,14 +793,27 @@ export function Reader({
         restoreSelectionRef.current = { blockId, start, end: start + range.toString().length };
       }
     }
-    const flush = flushFocused();
+    const flush = typed ? null : flushFocused();
     // List conversions rewrite line markers; leaving a list strips them.
-    const liveText = el?.textContent ?? effectiveText(block);
+    const liveText = typed?.text ?? el?.textContent ?? effectiveText(block);
     const current = effectiveKind(block);
     let nextText: string | undefined;
     if (kind === "list" || kind === "numbered") nextText = withMarkers(liveText, kind);
     else if (current === "list" || current === "numbered") nextText = stripMarkers(liveText);
-    if (nextText === liveText) nextText = undefined;
+    else if (typed) nextText = liveText;
+    // The caret moves with the markers added or taken away: to the end when
+    // it was at the end, else by the change in length.
+    const kept = restoreSelectionRef.current;
+    if (typed) {
+      restoreSelectionRef.current = { blockId, start: typed.caret, end: typed.caret };
+    } else if (nextText !== undefined && kept && kept.blockId === blockId) {
+      const caret =
+        kept.end >= liveText.length
+          ? nextText.length
+          : Math.max(0, Math.min(nextText.length, kept.end + nextText.length - liveText.length));
+      restoreSelectionRef.current = { blockId, start: caret, end: caret };
+    }
+    if (nextText === liveText && !typed) nextText = undefined;
     setLocalKinds((prev) => ({ ...prev, [blockId]: kind }));
     if (nextText !== undefined) {
       const text = nextText;
@@ -874,12 +931,84 @@ export function Reader({
       : null;
 
   // Cmd/Ctrl+B, I, U while editing: the same styling the bar's B, I and U
-  // apply, on the block the caret is in (lib/markdown-style.ts).
-  function onStyleShortcut(e: React.KeyboardEvent<HTMLElement>) {
+  // apply, on the block the caret is in (lib/markdown-style.ts). Enter in a
+  // list continues it.
+  function onEditKeyDown(e: React.KeyboardEvent<HTMLElement>) {
     const style = styleShortcut(e);
-    if (!style) return;
+    if (style) {
+      e.preventDefault();
+      applyStyle(style);
+      return;
+    }
+    if (e.key === "Enter" && !e.shiftKey && !isImeKey(e)) continueList(e);
+  }
+
+  // The caret's offset in a block's text; null when the caret is elsewhere.
+  function caretIn(el: HTMLElement): number | null {
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0 || !selection.isCollapsed) return null;
+    const range = selection.getRangeAt(0);
+    if (!el.contains(range.startContainer)) return null;
+    const pre = document.createRange();
+    pre.selectNodeContents(el);
+    pre.setEnd(range.startContainer, range.startOffset);
+    return pre.toString().length;
+  }
+
+  // Enter in a list starts the next item with its marker ("- ", or the next
+  // number); Enter on an empty item takes its marker away.
+  function continueList(e: React.KeyboardEvent<HTMLElement>) {
+    if (!focusedBlockId) return;
+    const blockId = focusedBlockId;
+    const block = blocks.find((b) => b.id === blockId);
+    const el = document.querySelector<HTMLElement>(`[data-edit-block="${blockId}"]`);
+    if (!block || !el) return;
+    const kind = effectiveKind(block);
+    if (kind !== "list" && kind !== "numbered") return;
+    const caret = caretIn(el);
+    if (caret === null) return;
+    const text = el.textContent ?? "";
+    const lineStart = text.lastIndexOf("\n", Math.max(0, caret - 1)) + 1;
+    const lineEnd = text.indexOf("\n", caret) === -1 ? text.length : text.indexOf("\n", caret);
+    const line = text.slice(lineStart, lineEnd);
+    const marker = /^(\s*)(-|(\d{1,3})[.)])[ \u00a0]/.exec(line);
+    if (!marker) return;
     e.preventDefault();
-    applyStyle(style);
+    let next: string;
+    let at: number;
+    if (line.slice(marker[0].length).trim() === "") {
+      next = text.slice(0, lineStart) + text.slice(lineEnd);
+      at = lineStart;
+      // The list's only item, empty: the block goes back to a paragraph.
+      if (!next.trim()) {
+        applyFormat("paragraph", { text: "", caret: 0 });
+        return;
+      }
+    } else {
+      const nextMarker = marker[3] ? `${Number(marker[3]) + 1}. ` : "- ";
+      const insert = `\n${marker[1]}${nextMarker}`;
+      next = text.slice(0, caret) + insert + text.slice(caret);
+      at = caret + insert.length;
+    }
+    setLocalTexts((prev) => ({ ...prev, [blockId]: next }));
+    restoreSelectionRef.current = { blockId, start: at, end: at };
+    void onSaveText(blockId, next);
+  }
+
+  // Typed shortcuts at the start of a paragraph: "- ", "* " or "+ " makes a
+  // bulleted list, "1. " a numbered list, "# ", "## ", "### " a heading.
+  function onEditInput(e: React.FormEvent<HTMLElement>) {
+    const el = (e.target as HTMLElement).closest<HTMLElement>("[data-edit-block]");
+    const blockId = el?.dataset.editBlock;
+    const block = blocks.find((b) => b.id === blockId);
+    if (!el || !block || effectiveKind(block) !== "paragraph" || block.type === "CODE" || block.type === "EQUATION") return;
+    const text = el.textContent ?? "";
+    const m = /^([-*+]|1[.)]|#{1,3})[ \u00a0]/.exec(text);
+    if (!m || caretIn(el) !== m[0].length) return;
+    const rest = text.slice(m[0].length);
+    if (m[1] === "-" || m[1] === "*" || m[1] === "+") applyFormat("list", { text: rest, caret: 2 });
+    else if (m[1].startsWith("1")) applyFormat("numbered", { text: rest, caret: 3 });
+    else applyFormat(`h${m[1].length}` as Kind, { text: rest, caret: 0 });
   }
 
   // A block that does not flow around the card, and whose place overlaps the
@@ -1100,6 +1229,39 @@ export function Reader({
               style={{ background: dot }}
             />
           ))}
+          <ColorWheel
+            disabled={!focusedBlock}
+            label={t("panes.textColorWheel")}
+            track="text-color-wheel"
+            initial="#000000"
+            onOpen={() => (wheelRangeRef.current = selectedRange())}
+            onPick={(hex) => applyWheel("color", hex)}
+          />
+          <span aria-hidden className="mx-1 h-4 w-px bg-line" />
+          <button
+            onMouseDown={keep}
+            disabled={!focusedBlock}
+            data-track="text-highlight"
+            onClick={() => {
+              const style = hexStyle("highlight", highlightHex);
+              if (style) applyStyle(style);
+            }}
+            aria-label={t("panes.highlightText")}
+            data-tip={t("panes.highlightText")}
+            className={barButton}
+          >
+            <span className="rounded-[3px] px-1" style={{ backgroundColor: `color-mix(in srgb, ${highlightHex} 55%, transparent)` }}>
+              A
+            </span>
+          </button>
+          <ColorWheel
+            disabled={!focusedBlock}
+            label={t("panes.highlightColorWheel")}
+            track="text-highlight-wheel"
+            initial={highlightHex}
+            onOpen={() => (wheelRangeRef.current = selectedRange())}
+            onPick={(hex) => applyWheel("highlight", hex)}
+          />
           <span aria-hidden className="mx-1 h-4 w-px bg-line" />
           <button onMouseDown={keep} disabled={!focusedBlock} data-track="outdent" onClick={() => applyIndent(-1)} data-tip={t("panes.outdentLine")} className={barButton}>
             ⇤
@@ -1131,7 +1293,8 @@ export function Reader({
         data-font={font ?? "default"}
         data-nudge="select"
         style={{ ...columnStyle, fontFamily }}
-        onKeyDown={mode === "edit" ? onStyleShortcut : undefined}
+        onKeyDown={mode === "edit" ? onEditKeyDown : undefined}
+        onInput={mode === "edit" ? onEditInput : undefined}
       >
         {/* The wrapped note's gap: the pair of floats sits at the article's
             content top, the one position the card can measure against exactly
@@ -1162,6 +1325,70 @@ export function Reader({
         )}
       </article>
     </div>
+  );
+}
+
+// A color wheel: the browser's color picker behind a round swatch of every
+// hue. The press keeps the selection (the picker takes focus away) and the
+// color applies once, when the picker closes — not on every move of the
+// pointer inside it.
+function ColorWheel({
+  disabled,
+  label,
+  track,
+  initial,
+  onOpen,
+  onPick,
+}: {
+  disabled: boolean;
+  label: string;
+  track: string;
+  initial: string;
+  onOpen: () => void;
+  onPick: (hex: string) => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const pickRef = useRef(onPick);
+  useEffect(() => {
+    pickRef.current = onPick;
+  });
+  useEffect(() => {
+    const input = inputRef.current;
+    if (!input) return;
+    const onChange = () => pickRef.current(input.value);
+    input.addEventListener("change", onChange);
+    return () => input.removeEventListener("change", onChange);
+  }, []);
+  return (
+    <span
+      role="button"
+      onMouseDown={(e) => {
+        if (disabled) return;
+        e.preventDefault();
+        onOpen();
+        const input = inputRef.current;
+        if (!input) return;
+        try {
+          input.showPicker();
+        } catch {
+          input.click();
+        }
+      }}
+      data-track={track}
+      aria-label={label}
+      data-tip={label}
+      className={`relative mx-0.5 size-[14px] rounded-full transition-transform hover:scale-110 ${disabled ? "pointer-events-none opacity-40" : "cursor-pointer"}`}
+      style={{ background: "conic-gradient(red, yellow, lime, cyan, blue, magenta, red)" }}
+    >
+      <input
+        ref={inputRef}
+        type="color"
+        defaultValue={initial}
+        disabled={disabled}
+        tabIndex={-1}
+        className="pointer-events-none absolute inset-0 size-full opacity-0"
+      />
+    </span>
   );
 }
 

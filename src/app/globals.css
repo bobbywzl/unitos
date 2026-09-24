@@ -434,13 +434,15 @@ mark,
   margin-top: -0.35em;
   stroke-width: 3.5;
 }
-/* Text the user changed — diffed against the document as first parsed. */
-.edited-text {
-  color: var(--clay-600);
-}
+/* Text the user changed (.edited-text, diffed against the document as first
+   parsed) reads in the default ink like every other word; the History panel
+   lists the changes. */
 /* Text color spans (the style layer's coloring options, and the same hues in
-   notes). Mixed with ink so every hue reads on both themes. After
-   .edited-text, so a chosen color wins over the edited tint. */
+   notes). Mixed with ink so every hue reads on both themes. Ink is the
+   default color: black on the light theme. */
+.text-color-ink {
+  color: var(--ink);
+}
 .text-color-clay {
   color: color-mix(in srgb, var(--clay-500) 82%, var(--ink));
 }
