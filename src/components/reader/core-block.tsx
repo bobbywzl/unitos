@@ -7,13 +7,11 @@ import type { TKey } from "@/lib/i18n/dictionaries";
 // Collapse (SPEC.md §28): a block shown as its core — what it really says,
 // in plain words — in the block's place. The core carries the block's id,
 // so a jump from the contents or a flash still finds the block, and
-// data-collapsed, so a selection in it opens no tools: no anchor can point
-// at words the document does not hold. A click anywhere on the core, or on
-// the chip at its end, reads the block whole; the fold chip under a block
-// read whole collapses it again. A figure, a table, an equation, code, a
-// slide, or a sheet names its kind before its core, so the reader knows
-// what was collapsed; a paragraph, a list, or a transcript line reads as
-// text.
+// data-collapsed, which marks its words as the core's, not the block's.
+// The button beside the block reads it whole or collapses it again. A
+// figure, a table, an equation, code, a slide, or a sheet names its kind
+// before its core, so the reader knows what was collapsed; a paragraph, a
+// list, or a transcript line reads as text.
 
 const KIND_KEY: Partial<Record<string, TKey>> = {
   FIGURE: "reader.coreFigure",
@@ -28,66 +26,41 @@ export function CoreBlock({
   block,
   core,
   annotated,
-  onToggle,
 }: {
   block: { id: string; type: string };
   core: string;
-  /** The block has annotations, which paint on its whole text alone. */
+  /** The block's whole text has annotations, which paint on the whole text alone. */
   annotated: boolean;
-  onToggle: () => void;
 }) {
   const t = useT();
   const kind = KIND_KEY[block.type];
-  // A click that ends a selection of the core's own words belongs to the
-  // selection: the reader is copying the core, not opening the block.
-  const onClick = (e: React.MouseEvent<HTMLElement>) => {
-    const selection = window.getSelection();
-    if (
-      selection &&
-      !selection.isCollapsed &&
-      selection.toString().trim() !== "" &&
-      e.currentTarget.contains(selection.anchorNode)
-    )
-      return;
-    onToggle();
-  };
   return (
-    <p
-      data-block-id={block.id}
-      data-collapsed=""
-      onClick={onClick}
-      data-track="collapse-expand"
-      data-tip={t("reader.coreExpandTitle")}
-      className="reader-block reader-core my-4 cursor-pointer"
-    >
+    <p data-block-id={block.id} data-collapsed="" className="reader-block reader-core my-4">
       {kind && <span className="reader-core-kind">{t(kind)}</span>}
       {core}
       {annotated && (
         <span className="core-chip core-chip-annotated" data-tip={t("reader.coreAnnotatedTitle")} aria-hidden />
       )}
-      <span className="core-chip" aria-hidden>
-        <ExpandIcon size={9} />
-      </span>
     </p>
   );
 }
 
-/** The chip under a block read whole in the collapsed article: folds it again. */
-export function CoreFold({ onToggle }: { onToggle: () => void }) {
+/** The button beside every block that has a core: collapses the block to its
+    core, or reads it whole, whatever the rest of the article shows. */
+export function CoreToggle({ showsCore, onToggle }: { showsCore: boolean; onToggle: () => void }) {
   const t = useT();
+  const label = t(showsCore ? "reader.coreExpandTitle" : "reader.coreFoldTitle");
   return (
-    <div className="reader-core-fold">
-      <button
-        type="button"
-        onClick={onToggle}
-        data-track="collapse-fold"
-        aria-label={t("reader.coreFoldTitle")}
-        data-tip={t("reader.coreFoldTitle")}
-        className="flex items-center gap-1 rounded-full bg-sand-100 px-2.5 py-0.5 text-[11px] font-semibold text-sand-600 shadow-soft hover:text-clay-800"
-      >
-        <CollapseIcon size={11} />
-        {t("reader.collapse")}
-      </button>
-    </div>
+    <button
+      type="button"
+      onClick={onToggle}
+      data-anchor-skip
+      data-track={showsCore ? "collapse-expand" : "collapse-fold"}
+      aria-label={label}
+      data-tip={label}
+      className="absolute top-0.5 -right-8 flex size-6 items-center justify-center rounded-full text-sage-700 opacity-40 transition-opacity group-hover/block:opacity-100 hover:bg-sage-100 hover:opacity-100 focus-visible:opacity-100 print:hidden"
+    >
+      {showsCore ? <ExpandIcon size={11} /> : <CollapseIcon size={11} />}
+    </button>
   );
 }

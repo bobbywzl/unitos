@@ -30,7 +30,7 @@ import {
 import { FigurePlace, type FigureRenderInfo } from "@/components/reader/figure-capture";
 import { Reveal, inactiveReveal, useReveal, type RevealKind } from "@/components/reader/reveal";
 import { TranslationLine } from "@/components/reader/translation-bar";
-import { CoreBlock, CoreFold } from "@/components/reader/core-block";
+import { CoreBlock, CoreToggle } from "@/components/reader/core-block";
 import { useLang } from "@/components/lang-provider";
 import { CircleGlow } from "@/components/reader/circle-glow";
 import type { TKey } from "@/lib/i18n/dictionaries";
@@ -469,15 +469,11 @@ function escapeHtml(s: string): string {
 // Decorated text as one HTML string. React sets it once and never reconciles
 // inside, so the browser owns the region while the user types — the fight
 // between React and contentEditable never starts.
-function decoratedHtml(text: string, spans: StyleSpan[], edited: { start: number; end: number }[]): string {
+function decoratedHtml(text: string, spans: StyleSpan[]): string {
   const bounds = new Set<number>([0, text.length]);
   for (const s of spans) {
     bounds.add(Math.max(0, Math.min(s.start, text.length)));
     bounds.add(Math.max(0, Math.min(s.end, text.length)));
-  }
-  for (const r of edited) {
-    bounds.add(Math.max(0, Math.min(r.start, text.length)));
-    bounds.add(Math.max(0, Math.min(r.end, text.length)));
   }
   const points = [...bounds].sort((a, b) => a - b);
   let html = "";
@@ -493,8 +489,7 @@ function decoratedHtml(text: string, spans: StyleSpan[], edited: { start: number
     const color = spans.findLast((s) => isColorStyle(s.style) && s.start <= from && s.end >= to)?.style;
     const highlight = spans.findLast((s) => isHighlightStyle(s.style) && s.start <= from && s.end >= to)?.style;
     const named = color ? colorClass(color) : null;
-    const isEdited = edited.some((r) => r.start <= from && r.end >= to);
-    const cls = `${isEdited ? "edited-text " : ""}${bold ? "font-bold " : ""}${italic ? "italic " : ""}${underline ? "underline " : ""}${named ? `${named} ` : ""}${code ? "code-mark" : ""}`.trim();
+    const cls = `${bold ? "font-bold " : ""}${italic ? "italic " : ""}${underline ? "underline " : ""}${named ? `${named} ` : ""}${code ? "code-mark" : ""}`.trim();
     const css = customCssText(color, highlight);
     const attrs = `${cls ? ` class="${cls}"` : ""}${css ? ` style="${css}"` : ""}`;
     html += attrs ? `<span${attrs}>${segment}</span>` : segment;
@@ -546,7 +541,6 @@ export function Reader({
   captionGaps,
   figureRender,
   stylesByBlock,
-  editedByBlock,
   documentId,
   pages,
   onSaveText,
@@ -574,9 +568,15 @@ export function Reader({
   transcript?: TranscriptVariant;
   /** Translation text per block id, shown under each block in reading mode. */
   translations?: Record<string, string> | null;
-  /** Collapse (SPEC.md §28): every collapsible block's core, the blocks the
-      reader opened whole, and the toggle; null while the article shows whole. */
-  collapse?: { cores: Record<string, string>; expanded: ReadonlySet<string>; toggle: (blockId: string) => void } | null;
+  /** Collapse (SPEC.md §28): every collapsible block's core, whether the
+      article is collapsed, the blocks shown the other way by their own
+      button, and that button's action; null while the document has no cores. */
+  collapse?: {
+    cores: Record<string, string>;
+    on: boolean;
+    flipped: ReadonlySet<string>;
+    flip: (blockId: string) => void;
+  } | null;
   highlightsByBlock: Record<string, Highlight[]>;
   mode: "read" | "edit";
   font: string | null;
@@ -626,20 +626,26 @@ export function Reader({
     const core = mode === "read" && collapse ? collapse.cores[block.id] : undefined;
     const view = <BlockView block={block} highlights={highlightsByBlock[block.id]} documentId={documentId} />;
     if (core === undefined || !collapse) return view;
-    if (!collapse.expanded.has(block.id)) {
+    // A block shows its core when the article is collapsed, unless its own
+    // button flipped it — and the other way round.
+    const showsCore = collapse.on !== collapse.flipped.has(block.id);
+    const toggle = <CoreToggle showsCore={showsCore} onToggle={() => collapse.flip(block.id)} />;
+    if (showsCore) {
       return (
-        <CoreBlock
-          block={block}
-          core={core}
-          annotated={(highlightsByBlock[block.id] ?? []).some((h) => h.kind === "anchor" && !h.leaving)}
-          onToggle={() => collapse.toggle(block.id)}
-        />
+        <>
+          <CoreBlock
+            block={block}
+            core={core}
+            annotated={(highlightsByBlock[block.id] ?? []).some((h) => h.kind === "anchor" && !h.leaving)}
+          />
+          {toggle}
+        </>
       );
     }
     return (
       <>
         {view}
-        <CoreFold onToggle={() => collapse.toggle(block.id)} />
+        {toggle}
       </>
     );
   };
@@ -984,6 +990,17 @@ export function Reader({
         applyFormat("paragraph", { text: "", caret: 0 });
         return;
       }
+      // The last item, empty: the list ends and a new paragraph starts under it.
+      if (lineEnd === text.length) {
+        const kept = text.slice(0, Math.max(0, lineStart - 1));
+        setLocalTexts((prev) => ({ ...prev, [blockId]: kept }));
+        void onSaveText(blockId, kept).then(() =>
+          onInsertBlock(blockId).then((id) => {
+            if (id) pendingFocusRef.current = id;
+          }),
+        );
+        return;
+      }
     } else {
       const nextMarker = marker[3] ? `${Number(marker[3]) + 1}. ` : "- ";
       const insert = `\n${marker[1]}${nextMarker}`;
@@ -1058,7 +1075,6 @@ export function Reader({
               text={effectiveText(block)}
               kind={effectiveKind(block)}
               spans={effectiveStyles(block)}
-              edited={editedByBlock[block.id] ?? []}
               restoreSelectionRef={restoreSelectionRef}
               pendingFocusRef={pendingFocusRef}
               onSave={onSaveText}
@@ -1410,7 +1426,6 @@ function EditableBlock({
   text,
   kind,
   spans,
-  edited,
   restoreSelectionRef,
   pendingFocusRef,
   onSave,
@@ -1420,7 +1435,6 @@ function EditableBlock({
   text: string;
   kind: Kind;
   spans: StyleSpan[];
-  edited: { start: number; end: number }[];
   restoreSelectionRef: React.MutableRefObject<{ blockId: string; start: number; end: number } | null>;
   pendingFocusRef: React.MutableRefObject<string | null>;
   onSave: (blockId: string, text: string) => Promise<void>;
@@ -1429,7 +1443,10 @@ function EditableBlock({
   const t = useT();
   const ref = useRef<HTMLElement | null>(null);
 
-  const html = decoratedHtml(text, spans, edited);
+  // No edited-text spans here: the saved text's edited ranges change after
+  // every save, and a changed html remounts the block, which would wipe what
+  // was typed since.
+  const html = decoratedHtml(text, spans);
   // Remount whenever content or decorations change server- or optimistic-side.
   const key = `${block.id}:${text.length}:${html.length}:${kind}`;
 

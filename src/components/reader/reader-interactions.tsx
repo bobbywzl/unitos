@@ -2883,14 +2883,16 @@ export function ReaderInteractions({
   const [contentsOpen, setContentsOpen] = useState(false);
   // Collapse (SPEC.md §28): the article's blocks shown as their cores. The
   // choice is remembered per document in this browser; the cores come from
-  // the document on open (GET), or are written on the press (POST). The
-  // blocks read whole are forgotten when Collapse is pressed off.
+  // the document on open (GET), or are written on the press (POST). Each
+  // block also has its own button beside it: `flippedBlocks` holds the blocks
+  // shown the other way from the article (whole in a collapsed article, as
+  // their core in a whole one); it is cleared when Collapse is pressed.
   const [collapseOn, setCollapseOn] = useState(false);
   const [cores, setCores] = useState<Record<string, string> | null>(null);
   const [collapseBusy, setCollapseBusy] = useState(false);
   // The New glow (SPEC.md §18) on the Collapse button until it is pressed.
   const collapseNew = useNewFeature("collapse");
-  const [expandedBlocks, setExpandedBlocks] = useState<ReadonlySet<string>>(() => new Set());
+  const [flippedBlocks, setFlippedBlocks] = useState<ReadonlySet<string>>(() => new Set());
   const collapseStoreKey = `unitos-collapse-${documentId}`;
   useEffect(() => {
     if (embedded || transcript) return;
@@ -2929,9 +2931,9 @@ export function ReaderInteractions({
   }
   async function toggleCollapse() {
     if (collapseBusy) return;
+    setFlippedBlocks(new Set());
     if (collapseOn) {
       setCollapseOn(false);
-      setExpandedBlocks(new Set());
       rememberCollapse(false);
       return;
     }
@@ -2966,8 +2968,8 @@ export function ReaderInteractions({
       setCollapseBusy(false);
     }
   }
-  function toggleBlockWhole(blockId: string) {
-    setExpandedBlocks((prev) => {
+  function flipBlock(blockId: string) {
+    setFlippedBlocks((prev) => {
       const next = new Set(prev);
       if (next.has(blockId)) next.delete(blockId);
       else next.add(blockId);
@@ -6194,7 +6196,7 @@ function blockFormatKind(
           />
         }
         translations={translations}
-        collapse={collapseOn && cores ? { cores, expanded: expandedBlocks, toggle: toggleBlockWhole } : null}
+        collapse={cores ? { cores, on: collapseOn, flipped: flippedBlocks, flip: flipBlock } : null}
       />
 
       <Bibliography references={references} />

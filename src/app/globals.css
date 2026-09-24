@@ -3210,8 +3210,8 @@ li[data-checked] > .note-box::before {
 
 
 /* Collapse (SPEC.md §28): a block shown as its core (core-block.tsx). A sage
-   rule at the left says the text is the core, not the block; the chip at the
-   end reads the block whole, and a clay dot says the block has annotations. */
+   rule at the left says the text is the core, not the block, and a clay dot
+   at the end says the block's whole text has annotations. */
 .reader-core {
   padding-left: 12px;
   border-left: 2px solid var(--sage-500, #5f8f6a);
@@ -3245,13 +3245,6 @@ li[data-checked] > .note-box::before {
   height: 9px;
   margin-left: 8px;
   background: var(--clay-400);
-}
-/* The fold chip under a block read whole: at the block's right, close under it. */
-.reader-core-fold {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: -6px;
-  margin-bottom: 14px;
 }
 
 /* Kind colors on the marks (SPEC.md §6, block-view.tsx): a comment's mark
