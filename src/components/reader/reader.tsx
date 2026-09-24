@@ -664,6 +664,29 @@ export function Reader({
   const restoreSelectionRef = useRef<{ blockId: string; start: number; end: number } | null>(null);
   // Focus a just-inserted paragraph the moment it renders.
   const pendingFocusRef = useRef<string | null>(null);
+  // Keys typed while a new paragraph is on its way (the list ended with
+  // Enter): held here and typed into the paragraph when it takes the caret.
+  const heldTypingRef = useRef<{ text: string; stop: () => void } | null>(null);
+  function holdTyping() {
+    heldTypingRef.current?.stop();
+    const held = { text: "", stop: () => window.removeEventListener("keydown", onKey, true) };
+    function onKey(e: KeyboardEvent) {
+      if (e.metaKey || e.ctrlKey || e.altKey || e.isComposing) return;
+      if (e.key.length === 1) held.text += e.key;
+      else if (e.key === "Backspace") held.text = held.text.slice(0, -1);
+      else return;
+      e.preventDefault();
+    }
+    window.addEventListener("keydown", onKey, true);
+    heldTypingRef.current = held;
+    // Never held for long: a failed insert lets typing go again.
+    setTimeout(() => {
+      if (heldTypingRef.current === held) {
+        held.stop();
+        heldTypingRef.current = null;
+      }
+    }, 5000);
+  }
   // Style syncs serialize: the route rewrites the block's whole styles array,
   // so two in-flight toggles would clobber each other's span.
   const styleSyncRef = useRef<Promise<unknown>>(Promise.resolve());
@@ -994,6 +1017,7 @@ export function Reader({
       if (lineEnd === text.length) {
         const kept = text.slice(0, Math.max(0, lineStart - 1));
         setLocalTexts((prev) => ({ ...prev, [blockId]: kept }));
+        holdTyping();
         void onSaveText(blockId, kept).then(() =>
           onInsertBlock(blockId).then((id) => {
             if (id) pendingFocusRef.current = id;
@@ -1077,6 +1101,7 @@ export function Reader({
               spans={effectiveStyles(block)}
               restoreSelectionRef={restoreSelectionRef}
               pendingFocusRef={pendingFocusRef}
+              heldTypingRef={heldTypingRef}
               onSave={onSaveText}
               onFocusBlock={setFocusedBlockId}
             />
@@ -1428,6 +1453,7 @@ function EditableBlock({
   spans,
   restoreSelectionRef,
   pendingFocusRef,
+  heldTypingRef,
   onSave,
   onFocusBlock,
 }: {
@@ -1437,6 +1463,7 @@ function EditableBlock({
   spans: StyleSpan[];
   restoreSelectionRef: React.MutableRefObject<{ blockId: string; start: number; end: number } | null>;
   pendingFocusRef: React.MutableRefObject<string | null>;
+  heldTypingRef: React.MutableRefObject<{ text: string; stop: () => void } | null>;
   onSave: (blockId: string, text: string) => Promise<void>;
   onFocusBlock: (blockId: string) => void;
 }) {
@@ -1465,7 +1492,14 @@ function EditableBlock({
       // A just-inserted paragraph starts focused, ready to type into.
       if (el && pendingFocusRef.current === block.id) {
         pendingFocusRef.current = null;
-        requestAnimationFrame(() => el.focus());
+        const held = heldTypingRef.current;
+        heldTypingRef.current = null;
+        requestAnimationFrame(() => {
+          held?.stop();
+          el.focus();
+          // What was typed while the paragraph was on its way lands in it.
+          if (held?.text) document.execCommand("insertText", false, held.text);
+        });
       }
     },
     contentEditable: "plaintext-only" as const,
