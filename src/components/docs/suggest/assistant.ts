@@ -4,7 +4,7 @@ import { closeHistory } from "@tiptap/pm/history";
 import type { Fragment, Node as PMNode } from "@tiptap/pm/model";
 import { EditorState, TextSelection, type Transaction } from "@tiptap/pm/state";
 import { isSuggestionMark, newId, readSuggestions, settle, suggest } from "@/components/docs/ext/suggest";
-import { findBlock, posInBlock } from "@/components/docs/layer/anchor";
+import { FIGURE, findBlock, findIndexed, PAGE_START, posInBlock } from "@/components/docs/layer/anchor";
 import { DOCS_EVENT, fireDocs } from "@/components/docs/typing/events";
 import { isList, isListItem } from "@/components/docs/typing/lists";
 import { markdownToHtml } from "@/components/docs/typing/markdown";
@@ -21,7 +21,9 @@ import { blockPlaces } from "@/lib/docs/suggest-ops";
 // skipped with its reason and the others land. The index reads the
 // assistant's suggestions as not made yet, so the offsets of the ops stay
 // true while the ones before them land. The lot is one transaction: one
-// repaint, one undo step.
+// repaint, one undo step. A figure object is no words: an op on one is
+// skipped as "object". A page start is no object: a change passes over it
+// and keeps it.
 
 /** The why of each op, by the id of a suggestion it made: its card shows it
     for this session. */
@@ -100,6 +102,10 @@ function land(
     return null;
   };
 
+  // A figure object is no words: an op that changes one is skipped.
+  const named = op.op === "replace_blocks" || op.op === "remove_blocks" ? op.blockIds : op.op === "insert_blocks" ? [] : [op.blockId];
+  if (named.some((blockId) => findIndexed(tr.doc, blockId)?.node.type.name === FIGURE)) return "object";
+
   switch (op.op) {
     case "replace_words":
     case "rewrite_block": {
@@ -133,7 +139,11 @@ function land(
           const r = range(state.doc, op.blockId, at, at + op.find.length);
           if (!r) return "changed";
           if (wordsIn(state.doc, r.from, r.to) !== op.find) return "object";
-          return state.tr.addMark(r.from, r.to, state.schema.marks[MARKS[op.format]].create());
+          // The words take the format; a page start among them keeps its own.
+          const edit = state.tr;
+          const mark = state.schema.marks[MARKS[op.format]].create();
+          for (const [from, to] of aroundPageStarts(state.doc, r.from, r.to)) edit.addMark(from, to, mark);
+          return edit;
         })
       );
     }
@@ -206,14 +216,36 @@ function range(doc: PMNode, blockId: string, start: number, end: number): { from
 const wordsIn = (doc: PMNode, from: number, to: number) => doc.slice(from, to).content.content.map(indexText).join("");
 
 /** The range holds an object striking would remove: a smart chip, a
-    footnote's number, an inline equation, a bookmark. */
+    footnote's number, an inline equation, a bookmark. A page start is none:
+    a change passes over it and keeps it. */
 function holdsObject(doc: PMNode, from: number, to: number): boolean {
   let found = false;
   doc.nodesBetween(from, to, (node) => {
-    found ||= node.isInline && !node.isText && node.type.name !== "hardBreak";
+    found ||= node.isInline && !node.isText && node.type.name !== "hardBreak" && node.type.name !== PAGE_START;
     return !found;
   });
   return found;
+}
+
+/** The page starts from..to holds, by position. */
+function pageStartsIn(doc: PMNode, from: number, to: number): number[] {
+  const at: number[] = [];
+  doc.nodesBetween(from, to, (node, pos) => {
+    if (node.type.name === PAGE_START && pos >= from && pos < to) at.push(pos);
+  });
+  return at;
+}
+
+/** from..to less the page starts in it: the stretches of words around them. */
+function aroundPageStarts(doc: PMNode, from: number, to: number): [number, number][] {
+  const pieces: [number, number][] = [];
+  let start = from;
+  for (const at of pageStartsIn(doc, from, to)) {
+    if (at > start) pieces.push([start, at]);
+    start = at + 1;
+  }
+  if (to > start) pieces.push([start, to]);
+  return pieces;
 }
 
 type Stretch = { start: number; end: number; text: string };
@@ -250,15 +282,21 @@ function stretches(base: string, text: string): Stretch[] {
 }
 
 /** from..to replaced by `text`, a line break for each "\n" outside code:
-    the new words take the marks where they start. */
+    the new words take the marks where they start. A page start in the
+    range stays where it stands: the words after it go, and the new words
+    take the place of the words before it. */
 function replaceText(tr: Transaction, from: number, to: number, text: string): Transaction {
-  if (!text) return tr.delete(from, to);
-  const $from = tr.doc.resolve(from);
-  const marks = (from === to ? $from.marks() : $from.marksAcross(tr.doc.resolve(to))) ?? [];
+  const [head, ...rest] = aroundPageStarts(tr.doc, from, to);
+  // The last first, so the positions before them hold.
+  for (const [a, b] of rest.reverse()) tr.delete(a, b);
+  const [start, end] = head ?? [from, from];
+  if (!text) return end > start ? tr.delete(start, end) : tr;
+  const $from = tr.doc.resolve(start);
+  const marks = (start === end ? $from.marks() : $from.marksAcross(tr.doc.resolve(end))) ?? [];
   const { schema } = tr.doc.type;
   const lines = $from.parent.type.spec.code ? [text] : text.split("\n");
   const nodes = lines.flatMap((line, i) => [...(i ? [schema.nodes.hardBreak.create()] : []), ...(line ? [schema.text(line, marks)] : [])]);
-  return tr.replaceWith(from, to, nodes);
+  return tr.replaceWith(start, end, nodes);
 }
 
 const MARKS: Record<SuggestFormat, string> = { bold: "bold", italic: "italic", underline: "underline", strikethrough: "strike" };

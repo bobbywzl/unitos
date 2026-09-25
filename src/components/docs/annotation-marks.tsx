@@ -17,7 +17,7 @@ import {
   anchorClass,
   type Highlight,
 } from "@/components/reader/block-view";
-import { findIndexed, PAGE_START, posInBlock } from "@/components/docs/layer/anchor";
+import { FIGURE, findIndexed, PAGE_START, posInBlock } from "@/components/docs/layer/anchor";
 import { PAGE_FLASH_EVENT } from "@/components/docs/layer/events";
 import { annotationKindColor } from "@/lib/annotations/kind";
 import type { TFunc } from "@/lib/i18n/dictionaries";
@@ -182,7 +182,7 @@ function aroundPageStarts(block: PMNode, blockPos: number, from: number, to: num
     equation. Their words are not the page's text, so the mark is the
     object's ring and its label chip, as the reader draws them
     (block-view.tsx HighlightLabel). */
-const WHOLE = new Set(["figure", "blockMath"]);
+const WHOLE = new Set([FIGURE, "blockMath"]);
 
 /** The color a mark on an object rings in: its tool's kind color, a
     highlight's hue, the comment color, else a note's clay (SPEC.md §6). */

@@ -89,10 +89,13 @@ export function findIndexed(doc: PMNode, blockId: string): { node: PMNode; pos: 
 /** A page start (SPEC.md §29): an inline atom where a page of the PDF
     begins. It holds no words: a passage, a mark, and a change pass over it. */
 export const PAGE_START = "pageStart";
+/** A figure object: an import's figure, its media and its caption drawn
+    whole, on a line of its own. */
+export const FIGURE = "figure";
 
-/** Images, figures, and equations hold no words to quote: a passage leaves
-    them out. */
-const LEFT_OUT = new Set(["image", "figure", "blockMath"]);
+/** Images, figure objects, and equations hold no words to quote: a passage
+    leaves them out. */
+const LEFT_OUT = new Set(["image", FIGURE, "blockMath"]);
 
 /** One segment per paragraph between two positions; whitespace takes none. */
 function segmentsBetween(doc: PMNode, from: number, to: number): { segments: PageSegment[]; truncated: boolean } {

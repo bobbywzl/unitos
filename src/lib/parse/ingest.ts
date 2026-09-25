@@ -7,6 +7,7 @@ import { richTextFromImport } from "@/lib/docs/import";
 import { sanitizeRichText, type PageSetup, type RichNode } from "@/lib/docs/schema";
 import { syncRichText } from "@/lib/docs/sync";
 import { keepNamedVersion } from "@/lib/docs/versions";
+import type { TFunc } from "@/lib/i18n/dictionaries";
 import { serverT } from "@/lib/i18n/server";
 import { classifyPdf } from "@/lib/handwritten/classify";
 import { storePageSizes } from "@/lib/handwritten/page-images";
@@ -1038,16 +1039,30 @@ export async function reparseDocument(
   let render: RenderReport | null = null;
   let mediaCheck: MediaCheck | undefined;
   let check: VisionCheckReport | null = null;
+  // What an import needs besides the blocks: the kind of original, its own
+  // title, and a PDF's page size and page labels.
+  let kind: ImportKind;
+  let originalTitle: string | null;
+  let pageSize: ParsedDocument["pageSize"];
+  let pageLabels: ParsedDocument["pageLabels"];
   if (document.fileData) {
     onProgress?.("parse");
     const bytes = new Uint8Array(document.fileData);
-    if (isPdfBytes(bytes)) blocks = (await parsePdf(bytes)).blocks;
-    else {
+    if (isPdfBytes(bytes)) {
+      const parsed = await parsePdf(bytes);
+      blocks = parsed.blocks;
+      kind = "pdf";
+      originalTitle = parsed.title;
+      pageSize = parsed.pageSize;
+      pageLabels = parsed.pageLabels;
+    } else {
       // A Markdown file: the same walk as on the add (lib/parse/markdown-document.ts).
       const parsed = await parseMarkdownDocument(new TextDecoder("utf-8").decode(bytes), document.title);
       blocks = parsed.blocks;
       references = parsed.references;
       mediaCheck = parsed.mediaCheck;
+      kind = "markdown";
+      originalTitle = parsed.title;
     }
   } else if (document.sourceUrl) {
     const url = document.sourceUrl;
@@ -1071,13 +1086,42 @@ export async function reparseDocument(
     check = refined.check;
     columnWidth = parsed.columnWidth;
     mediaCheck = parsed.mediaCheck;
+    kind = "url";
+    originalTitle = parsed.title;
   } else {
     throw new Error("Document has no stored file and no source URL");
   }
 
+  // An import re-parses as an import; handwritten pages switched to computer
+  // text become one while the switch is on. Past the size guard, a block
+  // document.
+  const converted =
+    wasImport || (document.handwritten && importPageEditorOn())
+      ? convertImport({
+          kind,
+          title: originalTitle ?? document.title,
+          titleFromOriginal: Boolean(originalTitle),
+          blocks,
+          pageSize,
+        })
+      : null;
   // The figure check rides with the save stage, as on an add: the document
   // bar reports a caption left without its figure.
-  onProgress?.("save", await saveDetail(blocks, scriptedFigures, render, mediaCheck, check));
+  onProgress?.(
+    "save",
+    await saveDetail(blocks, {
+      scriptedFigures,
+      render,
+      media: mediaCheck,
+      check,
+      blockDocument: converted === "size" ? "size" : null,
+    }),
+  );
+  if (converted && converted !== "size") {
+    await reparseImport(document, converted, { baseRev, pageLabels, references, columnWidth, render, userId, t });
+    return db.document.findUnique({ where: { id: documentId } });
+  }
+
   const rows = resolveContentsLinks(blocks);
   // The stored contents carry onto the new blocks by their text
   // (lib/contents.ts): the old blocks are read before they go.
@@ -1086,51 +1130,269 @@ export async function reparseDocument(
     orderBy: { order: "asc" },
     select: { id: true, text: true },
   });
-  await db.$transaction(async (tx) => {
-    await tx.block.deleteMany({ where: { documentId } });
-    await tx.imageAsset.deleteMany({ where: { documentId } });
-    await tx.block.createMany({
-      data: rows.map((b, i) => ({
-        documentId,
-        order: i,
-        type: b.type,
-        text: b.text,
-        html: b.html,
-        page: b.page,
-        region: b.region,
-        citations: b.citations,
-        styles: b.styles,
-        links: b.links,
-      })),
-    });
-    await claimCapturedImages(tx, documentId, rows);
-    const newBlocks = await tx.block.findMany({
-      where: { documentId },
-      orderBy: { order: "asc" },
-      select: { id: true, text: true },
-    });
-    // The blocks are new, so the contents' and the skeleton's block ids are
-    // stale: the contents carry onto the new blocks by their text (SPEC.md
-    // §26) — cleared only when too few parts carry, so the next open of
-    // Contents builds them again — and the skeleton builds again after the
-    // response (§22).
-    const carried = carryContents(document.contents, oldBlocks, newBlocks);
-    await tx.document.update({
-      where: { id: documentId },
-      data: {
-        parserVersion: PARSER_VERSION,
-        references,
-        columnWidth: columnWidth ?? null,
-        ...renderColumns(render),
-        handwritten: false,
-        conversionStatus: "NONE",
-        conversionError: null,
-        conversionStartedAt: null,
-        contents: carried.length > 0 ? carried : Prisma.DbNull,
-        skeleton: Prisma.DbNull,
-        skeletonStartedAt: null,
-      },
-    });
-  });
+  await db.$transaction(
+    async (tx) => {
+      // An import past the size guard leaves the page editor: its words stay
+      // as a version.
+      if (wasImport) await keepTextBeforeReparse(tx, documentId, baseRev, t("api.reparseVersionName"));
+      await tx.block.deleteMany({ where: { documentId } });
+      // The images a figure object's media holds stay: the versions point at them.
+      const held = capturedImageIds(await tx.figureMedia.findMany({ where: { documentId }, select: { html: true } }));
+      await tx.imageAsset.deleteMany({ where: { documentId, ...(held.length > 0 ? { id: { notIn: held } } : {}) } });
+      await tx.block.createMany({
+        data: rows.map((b, i) => ({
+          documentId,
+          order: i,
+          type: b.type,
+          text: b.text,
+          html: b.html,
+          page: b.page,
+          region: b.region,
+          citations: b.citations,
+          styles: b.styles,
+          links: b.links,
+        })),
+      });
+      await claimCapturedImages(tx, documentId, rows);
+      const newBlocks = await tx.block.findMany({
+        where: { documentId },
+        orderBy: { order: "asc" },
+        select: { id: true, text: true },
+      });
+      // The blocks are new, so the contents' and the skeleton's block ids are
+      // stale: the contents carry onto the new blocks by their text (SPEC.md
+      // §26) — cleared only when too few parts carry, so the next open of
+      // Contents builds them again — and the skeleton builds again after the
+      // response (§22).
+      const carried = carryContents(document.contents, oldBlocks, newBlocks);
+      await tx.document.update({
+        where: { id: documentId },
+        data: {
+          parserVersion: PARSER_VERSION,
+          references,
+          columnWidth: columnWidth ?? null,
+          ...renderColumns(render),
+          handwritten: false,
+          conversionStatus: "NONE",
+          conversionError: null,
+          conversionStartedAt: null,
+          contents: carried.length > 0 ? carried : Prisma.DbNull,
+          skeleton: Prisma.DbNull,
+          skeletonStartedAt: null,
+          ...(wasImport ? LEAVE_PAGE_EDITOR : {}),
+        },
+      });
+      if (wasImport) await recordReparse(tx, documentId, userId);
+    },
+    { timeout: IMPORT_TX_MS, maxWait: 15_000 },
+  );
   return db.document.findUnique({ where: { id: documentId } });
+}
+
+// ── Re-parse of an import (SPEC.md §29) ─────────────────────────────────────
+
+/** What leaving the page editor clears: the rich text (a version keeps its
+    words), the page setup, and the import revision. */
+const LEAVE_PAGE_EDITOR = {
+  richText: Prisma.DbNull,
+  pageSetup: Prisma.DbNull,
+  importRev: null,
+} satisfies Prisma.DocumentUpdateInput;
+
+/** Before a re-parse replaces an import's rich text: its words kept as a
+    version under the document's lock, and the revision still the one the
+    re-parse started from (null: the reader said yes to replacing edits). */
+async function keepTextBeforeReparse(
+  tx: Prisma.TransactionClient,
+  documentId: string,
+  baseRev: number | null,
+  name: string,
+) {
+  await keepNamedVersion(tx, documentId, name);
+  if (baseRev === null) return;
+  const row = await tx.document.findUnique({ where: { id: documentId }, select: { richTextRev: true } });
+  if (row?.richTextRev !== baseRev) throw new ImportEditedError();
+}
+
+/** A re-parse of an import is one entry in the history (SPEC.md §12), never
+    one row per paragraph. */
+async function recordReparse(tx: Prisma.TransactionClient, documentId: string, userId: string | null) {
+  await tx.blockEdit.create({ data: { documentId, blockId: null, kind: "REPARSE", userId } });
+}
+
+// The shared start and end of the two row lists match without the table
+// below; past this many cells between them, a forward match within a window.
+const MATCH_MAX_CELLS = 4_000_000;
+const MATCH_WINDOW = 64;
+
+type RowKey = { id: string; type: string; text: string };
+
+/** The ids a re-parse's rows carry over (SPEC.md §29): a new row takes the id
+    of an old row with the same type and words, in order — the longest run of
+    rows the two lists share. A figure never keeps its id: its image route's
+    answer is cached under the id. New id → old id. */
+export function carriedIds(oldRows: RowKey[], newRows: RowKey[]): Map<string, string> {
+  const ids = new Map<string, number>();
+  const keyOf = (row: RowKey) => {
+    const key = `${row.type}\u0000${row.text}`;
+    let id = ids.get(key);
+    if (id === undefined) {
+      id = ids.size;
+      ids.set(key, id);
+    }
+    return id;
+  };
+  const a = oldRows.filter((r) => r.type !== "FIGURE");
+  const b = newRows.filter((r) => r.type !== "FIGURE");
+  const ak = a.map(keyOf);
+  const bk = b.map(keyOf);
+  const out = new Map<string, string>();
+  let head = 0;
+  while (head < a.length && head < b.length && ak[head] === bk[head]) {
+    out.set(b[head].id, a[head].id);
+    head++;
+  }
+  let tail = 0;
+  while (tail < a.length - head && tail < b.length - head && ak[a.length - 1 - tail] === bk[b.length - 1 - tail]) {
+    out.set(b[b.length - 1 - tail].id, a[a.length - 1 - tail].id);
+    tail++;
+  }
+  const n = a.length - head - tail;
+  const m = b.length - head - tail;
+  if (n === 0 || m === 0) return out;
+  if (n * m > MATCH_MAX_CELLS) {
+    let from = head;
+    for (let j = head; j < head + m; j++) {
+      for (let i = from; i < Math.min(head + n, from + MATCH_WINDOW); i++) {
+        if (ak[i] === bk[j]) {
+          out.set(b[j].id, a[i].id);
+          from = i + 1;
+          break;
+        }
+      }
+    }
+    return out;
+  }
+  // The longest common subsequence of the middles, filled from the end.
+  const width = m + 1;
+  const len = new Uint16Array((n + 1) * width);
+  for (let i = n - 1; i >= 0; i--) {
+    for (let j = m - 1; j >= 0; j--) {
+      len[i * width + j] =
+        ak[head + i] === bk[head + j]
+          ? len[(i + 1) * width + j + 1] + 1
+          : Math.max(len[(i + 1) * width + j], len[i * width + j + 1]);
+    }
+  }
+  let i = 0;
+  let j = 0;
+  while (i < n && j < m) {
+    if (ak[head + i] === bk[head + j]) {
+      out.set(b[head + j].id, a[head + i].id);
+      i++;
+      j++;
+    } else if (len[(i + 1) * width + j] >= len[i * width + j + 1]) i++;
+    else j++;
+  }
+  return out;
+}
+
+/** The rich text with the carried ids: each node the map names takes its old
+    id, and a link to a heading follows its heading (as a copy relinks). */
+function withCarriedIds(doc: RichNode, ids: Map<string, string>): RichNode {
+  if (ids.size === 0) return doc;
+  const walk = (node: RichNode): RichNode => {
+    const out: RichNode = { ...node };
+    const id = node.attrs?.blockId;
+    const carried = typeof id === "string" ? ids.get(id) : undefined;
+    if (carried) out.attrs = { ...node.attrs, blockId: carried };
+    if (node.marks) {
+      out.marks = node.marks.map((mark) => {
+        const target = mark.type === "link" ? /^#heading=(.+)$/.exec(String(mark.attrs?.href ?? ""))?.[1] : undefined;
+        const to = target ? ids.get(target) : undefined;
+        return to ? { ...mark, attrs: { ...mark.attrs, href: `#heading=${to}` } } : mark;
+      });
+    }
+    if (node.content) out.content = node.content.map(walk);
+    return out;
+  };
+  return walk(doc);
+}
+
+/** An import's re-parse, written in one transaction: the text it replaces
+    kept as "Before re-parse", the new figure media (the old stay for the
+    versions), the rows synced in bulk with the carried ids (anchors on a
+    carried row stay exact; the rest move by quote), the new text kept as
+    "Imported", and one history entry. */
+async function reparseImport(
+  document: Document,
+  converted: Converted,
+  data: {
+    baseRev: number | null;
+    pageLabels?: string[];
+    references?: DocumentReference[];
+    columnWidth?: number;
+    render: RenderReport | null;
+    userId: string | null;
+    t: TFunc;
+  },
+) {
+  const documentId = document.id;
+  const wasImport = document.richText !== null;
+  // The old rows, read before they change: the ids the new rows carry over,
+  // and the contents.
+  const oldRows = await db.block.findMany({
+    where: { documentId },
+    orderBy: { order: "asc" },
+    select: { id: true, type: true, text: true },
+  });
+  const richText = withCarriedIds(converted.richText, carriedIds(oldRows, deriveBlocks(converted.richText)));
+  await db.$transaction(
+    async (tx) => {
+      if (wasImport) await keepTextBeforeReparse(tx, documentId, data.baseRev, data.t("api.reparseVersionName"));
+      await createFigureMedia(tx, documentId, converted.figures);
+      const synced = await syncRichText({
+        tx,
+        documentId,
+        userId: data.userId,
+        baseRev: data.baseRev,
+        richText,
+        bulk: true,
+      });
+      if (!synced.ok) {
+        if (synced.reason === "rev") throw new ImportEditedError();
+        throw new Error(`The re-parse could not be saved (${synced.reason})`);
+      }
+      await keepNamedVersion(tx, documentId, data.t("api.importVersionName"));
+      const newRows = await tx.block.findMany({
+        where: { documentId },
+        orderBy: { order: "asc" },
+        select: { id: true, text: true },
+      });
+      const carried = carryContents(document.contents, oldRows, newRows);
+      await tx.document.update({
+        where: { id: documentId },
+        data: {
+          parserVersion: PARSER_VERSION,
+          references: data.references,
+          columnWidth: data.columnWidth ?? null,
+          ...renderColumns(data.render),
+          handwritten: false,
+          conversionStatus: "NONE",
+          conversionError: null,
+          conversionStartedAt: null,
+          pageLabels: data.pageLabels ?? Prisma.DbNull,
+          // A page setup the reader chose stays; pages switched to computer
+          // text take the converter's.
+          ...(wasImport ? {} : { pageSetup: converted.pageSetup as unknown as Prisma.InputJsonValue }),
+          contents: carried.length > 0 ? carried : Prisma.DbNull,
+          skeleton: Prisma.DbNull,
+          skeletonStartedAt: null,
+        },
+      });
+      if (wasImport) await recordReparse(tx, documentId, data.userId);
+      await claimCapturedImages(tx, documentId, converted.figures);
+    },
+    { timeout: IMPORT_TX_MS, maxWait: 15_000 },
+  );
 }

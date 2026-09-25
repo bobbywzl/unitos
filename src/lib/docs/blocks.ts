@@ -9,13 +9,14 @@ import {
   type RichNode,
 } from "@/lib/docs/schema";
 
-// The paragraph index of a blank document (SPEC.md §29). The rich text is the
-// document; its Block rows are derived from it on every save, one per node a
-// reader can select — a paragraph, a heading, a list item's paragraph, a
-// table cell's paragraph, a code block — plus images (FIGURE) and horizontal
-// lines (SEPARATOR). A row's id is the node's blockId and its text is the
-// node's words as if every person's suggestion were accepted and every one
-// of the assistant's rejected, counted as the editor's anchors count them
+// The paragraph index of a document with rich text, a blank document or an
+// import (SPEC.md §29). The rich text is the document; its Block rows are
+// derived from it on every save, one per node a reader can select — a
+// paragraph, a heading, a list item's paragraph, a table cell's paragraph, a
+// code block — plus images and figure objects (FIGURE) and horizontal lines
+// (SEPARATOR). A row's id is the node's blockId and its text is the node's
+// words as if every person's suggestion were accepted and every one of the
+// assistant's rejected, counted as the editor's anchors count them
 // (layer/anchor.ts), so an anchor captured in the editor (data-block-id +
 // offsets, SPEC.md §5) resolves against the row. The same function runs in
 // the editor and on the server, so both sides agree.
@@ -24,6 +25,11 @@ export type DerivedBlockType = "PARAGRAPH" | "HEADING" | "LIST" | "CODE" | "FIGU
 
 export type StyleSpan = { start: number; end: number; style: string; quotedText: string };
 export type LinkSpan = { start: number; end: number; quotedText: string; href: string };
+/** An in-text citation: words of the row and their entry in Document.references. */
+export type CitationSpan = { start: number; end: number; refId: string; quotedText: string };
+/** A table cell's place, 1-based: the table's number in the document, the
+    row, and the column of the cell's first grid slot. */
+export type CellPlace = { table: number; row: number; column: number };
 
 export type DerivedBlock = {
   id: string;
@@ -32,9 +38,26 @@ export type DerivedBlock = {
   html: string | null;
   styles: StyleSpan[];
   links: LinkSpan[];
+  /** The PDF page the row starts on, from the page starts before it; a
+      figure object's own page. Null in a document without page starts. */
+  page: number | null;
+  /** A figure object's region on its page (the §11 percent-coordinate shape). */
+  region: unknown | null;
+  /** A figure object's FigureMedia row. */
+  mediaId: string | null;
+  citations: CitationSpan[];
+  /** Where a row inside a table cell sits. */
+  cell: CellPlace | null;
 };
 
-type Context = { list: "bullet" | "ordered" | "task" | null; quote: boolean; cell: boolean };
+type Context = {
+  list: "bullet" | "ordered" | "task" | null;
+  quote: boolean;
+  cell: CellPlace | null;
+  /** The places of the cells of the table the walk is in. */
+  places: Map<RichNode, { row: number; column: number }> | null;
+  table: number;
+};
 
 const HEX6 = /^#[0-9a-f]{6}$/;
 
