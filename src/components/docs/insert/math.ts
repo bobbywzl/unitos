@@ -80,18 +80,12 @@ class MathView implements NodeView {
 }
 
 const DocsInlineMath = InlineMath.extend({
-  addInputRules() {
-    return [];
-  },
   addNodeView() {
     return ({ node, editor, getPos }) => new MathView(node, editor, getPos, false);
   },
 });
 
 const DocsBlockMath = BlockMath.extend({
-  addInputRules() {
-    return [];
-  },
   addNodeView() {
     return ({ node, editor, getPos }) => new MathView(node, editor, getPos, true);
   },

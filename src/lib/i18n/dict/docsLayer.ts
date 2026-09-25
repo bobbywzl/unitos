@@ -13,6 +13,11 @@ const en = {
   showAllComments: "Show all comments",
   minimizeComments: "Minimize comments",
   hideComments: "Hide comments",
+  // The Comments group of the keyboard shortcuts.
+  comments: "Comments",
+  nextComment: "Next comment",
+  previousComment: "Previous comment",
+  backToText: "Back to the text",
 };
 
 const zh: Record<keyof typeof en, string> = {
@@ -24,6 +29,10 @@ const zh: Record<keyof typeof en, string> = {
   showAllComments: "显示所有评论",
   minimizeComments: "最小化评论",
   hideComments: "隐藏评论",
+  comments: "评论",
+  nextComment: "下一条评论",
+  previousComment: "上一条评论",
+  backToText: "返回正文",
 };
 
 export const docsLayer = { en, zh } as const;

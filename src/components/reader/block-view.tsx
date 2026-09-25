@@ -32,6 +32,9 @@ export const CHAIN_BUTTON =
 // the stored text (SPEC.md §5).
 export const MARK_CHIP =
   "mark-chip inline-flex items-center justify-center rounded-full bg-clay-100 text-clay-700 hover:bg-clay-200 hover:text-clay-800";
+// The extraction's label at the end of its quote; a click opens its card.
+export const EXTRACT_CHIP =
+  "mx-0.5 inline-flex h-4 items-center rounded-full bg-clay-100 px-1.5 align-text-top text-[9.5px] font-bold text-clay-700 hover:bg-clay-200 hover:text-clay-800";
 
 export type BlockData = {
   id: string;
@@ -487,7 +490,7 @@ export function markedText(blockId: string, text: string, highlights: Highlight[
                 }),
               );
             }}
-            className="mx-0.5 inline-flex h-4 items-center rounded-full bg-clay-100 px-1.5 align-text-top text-[9.5px] font-bold text-clay-700 hover:bg-clay-200 hover:text-clay-800"
+            className={EXTRACT_CHIP}
           >
             {extractEnding.extractLabel}
           </button>,

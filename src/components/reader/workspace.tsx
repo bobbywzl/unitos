@@ -451,6 +451,12 @@ export function Workspace({
         });
       }, 150);
     };
+    // The page editor's Show all comments opens the Annotations tab.
+    const onShowAnnotations = () => {
+      setCollapsed(false);
+      setTab("annotations");
+      revealTray();
+    };
     // The Extract tab opens the corpus extract page (SPEC.md §13).
     const onOpenCorpusDistillation = (e: Event) => {
       const { distillationId } = (e as CustomEvent<{ distillationId: string | null }>).detail;
@@ -458,10 +464,12 @@ export function Workspace({
     };
     window.addEventListener("dissect:show-note", onShowNote);
     window.addEventListener("dissect:focus-annotation", onFocusAnnotation);
+    window.addEventListener("dissect:show-annotations", onShowAnnotations);
     window.addEventListener("dissect:open-corpus-distillation", onOpenCorpusDistillation);
     return () => {
       window.removeEventListener("dissect:show-note", onShowNote);
       window.removeEventListener("dissect:focus-annotation", onFocusAnnotation);
+      window.removeEventListener("dissect:show-annotations", onShowAnnotations);
       window.removeEventListener("dissect:open-corpus-distillation", onOpenCorpusDistillation);
     };
   }, [revealTray]);

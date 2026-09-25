@@ -420,6 +420,14 @@
   top: 6px;
   height: 6px;
 }
+.docs-ruler-tab {
+  top: 2px;
+}
+/* Where the click that adds a tab stop fell: the menu opens under it. */
+.docs-ruler-add-at {
+  position: absolute;
+  bottom: 0;
+}
 
 /* While a marker or a margin moves: the guide down the page and the tip. */
 .docs-ruler-guide {

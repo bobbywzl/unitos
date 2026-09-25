@@ -8,6 +8,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { CommentIcon, LinkIcon, UnlinkIcon } from "@/components/icons";
 import {
   CHAIN_BUTTON,
+  EXTRACT_CHIP,
   MARK_CHIP,
   TOOL_KEY,
   TOOL_PLUS_KEY,
@@ -64,12 +65,7 @@ function chipWidget({ kind, highlight: h }: Chip, t: TFunc) {
       look(CHAIN_BUTTON, t("panes.linkToOtherTexts"), "start-link", "link-chip");
       symbol = <UnlinkIcon size={10} />;
     } else {
-      look(
-        "mx-0.5 inline-flex h-4 items-center rounded-full bg-clay-100 px-1.5 align-text-top text-[9.5px] font-bold text-clay-700 hover:bg-clay-200 hover:text-clay-800",
-        t("panes.extractOpenCard", { label: h.extractLabel ?? "" }),
-        "extract",
-        "extract-chip",
-      );
+      look(EXTRACT_CHIP, t("panes.extractOpenCard", { label: h.extractLabel ?? "" }), "extract", "extract-chip");
       button.textContent = h.extractLabel ?? "";
       button.dataset.extractId = h.extractId ?? "";
     }

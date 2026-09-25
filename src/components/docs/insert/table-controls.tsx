@@ -26,7 +26,17 @@ import {
   TableRowIcon,
   UnpinIcon,
 } from "@/components/docs/insert/icons";
-import { BORDER_TARGETS, cellBorder, pinnedCount, selectedCells, tableRectOf, type BorderTarget, type VAlign } from "@/components/docs/insert/table";
+import {
+  BORDER_TARGETS,
+  borderTarget,
+  cellBorder,
+  chooseBorderTarget,
+  pinnedCount,
+  selectedCells,
+  tableRectOf,
+  type BorderTarget,
+  type VAlign,
+} from "@/components/docs/insert/table";
 import { FloatingBox, keepSelection, LengthField, PanelSection, Seg, SidePanel, useEditorTick, useViewportTick } from "@/components/docs/insert/ui";
 import type { TKey } from "@/lib/i18n/dictionaries";
 
@@ -275,48 +285,63 @@ const TARGET_LABEL: Record<BorderTarget, TKey> = {
   right: "docsInsert.borderRight",
 };
 
+/** A line by its edge letter (BORDER_TARGETS): x, y, width, height. */
+type Line = [edge: string, x: number, y: number, w: number, h: number];
+
 /** The lines of a cell's square, and a border choice's drawn solid. */
-const LINES: [string, number, number, number, number][] = [
-  ["t", 2, 2, 18, 2],
-  ["b", 2, 18, 18, 18],
-  ["l", 2, 2, 2, 18],
-  ["r", 18, 2, 18, 18],
-  ["h", 2, 10, 18, 10],
-  ["v", 10, 2, 10, 18],
+const LINES: Line[] = [
+  ["t", 2, 2, 16, 0],
+  ["b", 2, 18, 16, 0],
+  ["l", 2, 2, 0, 16],
+  ["r", 18, 2, 0, 16],
+  ["h", 2, 10, 16, 0],
+  ["v", 10, 2, 0, 16],
 ];
 
 function TargetGlyph({ target }: { target: BorderTarget }) {
   return (
     <svg viewBox="0 0 20 20" width="20" height="20" aria-hidden>
-      {LINES.map(([edge, x1, y1, x2, y2]) => {
+      {LINES.map(([edge, x, y, w, h]) => {
         const on = BORDER_TARGETS[target].includes(edge);
-        return <line key={edge} x1={x1} y1={y1} x2={x2} y2={y2} strokeWidth="2" stroke={on ? "currentColor" : "#c4c7c5"} strokeDasharray={on ? undefined : "2 2"} />;
+        return <line key={edge} x1={x} y1={y} x2={x + w} y2={y + h} strokeWidth="2" stroke={on ? "currentColor" : "#c4c7c5"} strokeDasharray={on ? undefined : "2 2"} />;
       })}
     </svg>
   );
 }
 
 /** The ▾ at the top right of the caret's cell (or the selected cells): the
-    3 × 3 border choice, then the border and background buttons for it. */
+    3 × 3 border choice, then the border and background buttons for it. The
+    chosen borders are drawn blue while the same cells are selected. */
 function BorderSelector({ editor }: { editor: Editor }) {
   const t = useT();
   const [open, setOpen] = useState(false);
-  const [target, setTarget] = useState<BorderTarget>("all");
   const cells = selectedCells(editor.state);
-  if (cells.length === 0 || typeof document === "undefined") return null;
-  // The top-right cell of the selection.
-  let corner: DOMRect | null = null;
-  for (const { pos } of cells) {
+  const rects = cells.flatMap(({ pos }) => {
     const dom = editor.view.nodeDOM(pos);
-    if (!(dom instanceof HTMLElement)) continue;
-    const r = dom.getBoundingClientRect();
-    if (!corner || r.top < corner.top - 1 || (Math.abs(r.top - corner.top) <= 1 && r.right > corner.right)) corner = r;
+    return dom instanceof HTMLElement ? [dom.getBoundingClientRect()] : [];
+  });
+  if (rects.length === 0 || typeof document === "undefined") return null;
+  const target = borderTarget(editor);
+  const left = Math.min(...rects.map((r) => r.left));
+  const top = Math.min(...rects.map((r) => r.top));
+  const right = Math.max(...rects.map((r) => r.right));
+  const bottom = Math.max(...rects.map((r) => r.bottom));
+  const near = (a: number, b: number) => Math.abs(a - b) <= 1;
+  // Each cell's lines, by the edge of the selection they are.
+  const lines: Line[] = [];
+  for (const r of target === "all" ? [] : rects) {
+    lines.push([near(r.top, top) ? "t" : "h", r.left, r.top, r.width, 0], [near(r.left, left) ? "l" : "v", r.left, r.top, 0, r.height]);
+    if (near(r.bottom, bottom)) lines.push(["b", r.left, r.bottom, r.width, 0]);
+    if (near(r.right, right)) lines.push(["r", r.right, r.top, 0, r.height]);
   }
-  if (!corner) return null;
-  const side = target === "bottom" ? "borderBottom" : target === "left" ? "borderLeft" : target === "right" ? "borderRight" : "borderTop";
   const background = (cells[0].node.attrs.backgroundColor as string | null) ?? null;
   return createPortal(
     <>
+      {lines
+        .filter(([edge]) => BORDER_TARGETS[target].includes(edge))
+        .map(([edge, x, y, w, h]) => (
+          <span key={`${edge}${x}:${y}`} className="docs-border-mark" style={{ left: x - 1, top: y - 1, width: w + 2, height: h + 2 }} />
+        ))}
       <button
         type="button"
         className="docs-border-select"
@@ -328,13 +353,13 @@ function BorderSelector({ editor }: { editor: Editor }) {
         data-selection-popover
         onMouseDown={keepSelection}
         onClick={() => setOpen((o) => !o)}
-        style={{ left: corner.right - 18, top: corner.top + 2 }}
+        style={{ left: right - 18, top: top + 2 }}
       >
         <DropDownIcon size={14} />
       </button>
       {open && (
         <FloatingBox
-          anchor={{ left: corner.right - 18, top: corner.top, bottom: corner.top + 18 }}
+          anchor={{ left: right - 18, top, bottom: top + 18 }}
           className="docs-border-pop"
           onDismiss={() => setOpen(false)}
           label={t("docsInsert.selectBorders")}
@@ -349,7 +374,7 @@ function BorderSelector({ editor }: { editor: Editor }) {
                 className="docs-icon-btn"
                 aria-label={t(TARGET_LABEL[b])}
                 data-tip={t(TARGET_LABEL[b])}
-                onClick={() => setTarget(b)}
+                onClick={() => chooseBorderTarget(editor, b)}
               >
                 <TargetGlyph target={b} />
               </button>
@@ -364,7 +389,7 @@ function BorderSelector({ editor }: { editor: Editor }) {
               onPick={(hex) => editor.chain().focus().setCellsAttrs({ backgroundColor: hex }).run()}
               onNone={() => editor.chain().focus().setCellsAttrs({ backgroundColor: null }).run()}
             />
-            <BorderButtons track="table" border={cellBorder(editor.state, side)} onChange={(spec) => editor.chain().focus().setTableBorders(target, spec).run()} />
+            <BorderButtons track="table" border={cellBorder(editor.state, target)} onChange={(spec) => editor.chain().focus().setTableBorders(target, spec).run()} />
           </div>
         </FloatingBox>
       )}

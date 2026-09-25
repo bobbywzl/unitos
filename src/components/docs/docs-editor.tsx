@@ -5,7 +5,7 @@ import { EditorContent, useEditor, type Editor } from "@tiptap/react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useT } from "@/components/lang-provider";
-import { AnnotationMarks, annotationMarksKey, openMarkAt, type MarksMeta } from "@/components/docs/annotation-marks";
+import { annotationMarksKey, openMarkAt, type MarksMeta } from "@/components/docs/annotation-marks";
 import { LinkBubble, LinkDialog } from "@/components/docs/link-dialog";
 import { DOCS_EVENT, docsExtensions } from "@/components/docs/extensions";
 import { docsFontsUrl } from "@/components/docs/fonts";
@@ -208,7 +208,7 @@ export function DocsEditor({
   const [zoom, setZoom] = useState<Zoom>(100);
   const [headerHidden, setHeaderHidden] = useState(false);
 
-  const extensions = useMemo(() => [...docsExtensions(), AnnotationMarks], []);
+  const extensions = useMemo(() => docsExtensions(), []);
   const editor = useEditor(
     {
       extensions,
@@ -216,6 +216,9 @@ export function DocsEditor({
       editable: canEdit,
       immediatelyRender: false,
       shouldRerenderOnTransaction: false,
+      // Docs' own autocorrect formats typing (ext/typing.ts); a paste only links addresses.
+      enableInputRules: false,
+      enablePasteRules: ["link"],
       editorProps: {
         attributes: {
           class: "docs-prose",

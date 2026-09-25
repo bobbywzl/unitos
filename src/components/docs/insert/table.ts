@@ -33,6 +33,27 @@ function formatBorder(b: BorderSpec): string {
 export const BORDER_TARGETS = { all: "tblrhv", inner: "hv", outer: "tblr", top: "t", innerH: "h", bottom: "b", left: "l", innerV: "v", right: "r" };
 export type BorderTarget = keyof typeof BORDER_TARGETS;
 
+/** The selector's choice, kept for the cells it was made in. */
+const borderChoices = new WeakMap<Editor, { target: BorderTarget; cells: string }>();
+
+function cellsKey(state: EditorState): string {
+  const rect = tableRectOf(state);
+  return rect ? [rect.tableStart, rect.left, rect.top, rect.right, rect.bottom].join(":") : "";
+}
+
+/** The borders the border buttons change: the selector's choice while the
+    same cells are selected, else all. */
+export function borderTarget(editor: Editor): BorderTarget {
+  const choice = borderChoices.get(editor);
+  return choice && choice.cells === cellsKey(editor.state) ? choice.target : "all";
+}
+
+export function chooseBorderTarget(editor: Editor, target: BorderTarget): void {
+  borderChoices.set(editor, { target, cells: cellsKey(editor.state) });
+  // A transaction with no steps: the border buttons draw the choice.
+  editor.view.dispatch(editor.state.tr);
+}
+
 export type VAlign = "top" | "middle" | "bottom";
 
 declare module "@tiptap/core" {
@@ -674,8 +695,10 @@ function bordersTransaction(state: EditorState, rect: TableRect, target: BorderT
   return tr;
 }
 
-/** The border of one side of the caret's cell, as the border buttons show it. */
-export function cellBorder(state: EditorState, side: Side = "borderTop"): BorderSpec {
+/** The border of the caret's cell on a side of `target`, as the border
+    buttons show it. */
+export function cellBorder(state: EditorState, target: BorderTarget = "all"): BorderSpec {
+  const side: Side = target === "bottom" ? "borderBottom" : target === "left" ? "borderLeft" : target === "right" ? "borderRight" : "borderTop";
   const cell = selectedCells(state)[0];
   return parseBorder(cell?.node.attrs[side]) ?? DEFAULT_BORDER;
 }

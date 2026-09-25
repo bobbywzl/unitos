@@ -311,7 +311,6 @@ export const DOCS_EVENT = {
   link: "docs:link",
   comment: "docs:comment",
   wordCount: "docs:word-count",
-  find: "docs:find",
 } as const;
 
 /** Google Docs' shortcuts that act on the document (SPEC.md §29). */
@@ -378,6 +377,9 @@ export function docsExtensions() {
       },
       dropcursor: { color: "#0b57d0", width: 2 },
       undoRedo: { depth: 500, newGroupDelay: 1000 },
+      // Docs ends a document on any line, a list's too; only a table or
+      // another object gets an empty line after it.
+      trailingNode: { notAfter: ["paragraph", "heading", "bulletList", "orderedList", "taskList"] },
     }),
     TextStyle,
     Color,

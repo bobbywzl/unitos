@@ -15,7 +15,7 @@ type AtTrigger = "@" | ":" | "";
 
 /** The menu's state. `range` is the "@query" text; `char` "" = opened from
     the empty line's hint, nothing typed before the query. The typing area
-    reads `active`, `range`, and `query` to leave the keys to the menu. */
+    reads `active` (atMenuState) to leave the keys to the menu. */
 export type AtState = { active: boolean; char: AtTrigger; range: { from: number; to: number }; query: string };
 
 const INACTIVE: AtState = { active: false, char: "@", range: { from: 0, to: 0 }, query: "" };

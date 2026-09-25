@@ -4,6 +4,7 @@ import type { Editor } from "@tiptap/core";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useLang, useT } from "@/components/lang-provider";
+import { DropdownPanel, MenuItem } from "@/components/docs/menu";
 import {
   MIN_TEXT_PT,
   PT_PER_UNIT,
@@ -16,16 +17,18 @@ import {
   type PageFrame,
 } from "@/components/docs/page/geometry";
 import { usePageState, type PageStore } from "@/components/docs/page/store";
+import { editTabStops, parseTabStops, type TabAlign, type TabStop } from "@/components/docs/page/tabs";
 import type { PageSetup } from "@/lib/docs/schema";
 
 // The rulers (SPEC.md §29), Google Docs': a 15 px strip under the toolbar
 // whose 0 is the left margin, ticks every 1/8 in (0.25 cm), a number every
 // inch (cm) counted outward from the margin; the margin areas drag the page's
 // margins, and the three blue markers drag the paragraph's left, first-line,
-// and right indents. While a marker or a margin moves, a blue guide runs down
-// the page and a dark tip shows the value to two decimals. The vertical ruler
-// at the left does the same for the top and bottom margins of the page that
-// holds the caret. Both follow the zoom.
+// and right indents. A click in the text column adds a tab stop; a stop drags
+// along, and off the ruler to go. While a marker or a margin moves, a blue
+// guide runs down the page and a dark tip shows the value to two decimals.
+// The vertical ruler at the left does the same for the top and bottom
+// margins of the page that holds the caret. Both follow the zoom.
 
 /** The page's place on screen, client px; x is its left from the canvas's. */
 type PageRect = { left: number; top: number; width: number; height: number; scale: number; x: number };
@@ -176,36 +179,31 @@ function DragFeedback({ tip }: { tip: DragTip }) {
   );
 }
 
-/** Start a drag on a ruler control: `move` gets the pointer's client x (or
-    y), `end` the last one. */
-function startDrag(
-  e: React.PointerEvent,
-  vertical: boolean,
-  move: (client: number) => void,
-  end: (client: number | null) => void,
-) {
+/** Start a drag on a ruler control: `move` gets the pointer's client x and
+    y, `end` whether it moved and was let go (not cancelled). */
+function startDrag(e: React.PointerEvent, move: (x: number, y: number) => void, end: (moved: boolean) => void) {
   if (e.button !== 0) return;
   e.preventDefault();
   e.stopPropagation();
   const target = e.currentTarget as HTMLElement;
   target.setPointerCapture(e.pointerId);
-  let last: number | null = null;
+  let moved = false;
   const onMove = (ev: PointerEvent) => {
-    last = vertical ? ev.clientY : ev.clientX;
-    move(last);
+    moved = true;
+    move(ev.clientX, ev.clientY);
   };
-  const finish = (value: number | null) => {
+  const finish = (done: boolean) => {
     target.removeEventListener("pointermove", onMove);
     target.removeEventListener("pointerup", onUp);
     target.removeEventListener("pointercancel", onCancel);
-    end(value);
+    end(done);
   };
-  const onUp = () => finish(last);
-  const onCancel = () => finish(null);
+  const onUp = () => finish(moved);
+  const onCancel = () => finish(false);
   target.addEventListener("pointermove", onMove);
   target.addEventListener("pointerup", onUp);
   target.addEventListener("pointercancel", onCancel);
-  move(vertical ? e.clientY : e.clientX);
+  move(e.clientX, e.clientY);
 }
 
 type Side = keyof PageSetup["margins"];
@@ -224,21 +222,20 @@ function dragMargin(e: React.PointerEvent, store: PageStore, side: Side, unit: L
   let value = initial;
   startDrag(
     e,
-    vertical,
-    (client) => {
-      value = Math.max(0, Math.min(limit, snapPt(initial + (sign * (client - start)) / scale / PX_PER_PT, unit)));
+    (x, y) => {
+      value = Math.max(0, Math.min(limit, snapPt(initial + (sign * ((vertical ? y : x) - start)) / scale / PX_PER_PT, unit)));
       show(value);
     },
-    (last) => {
+    (moved) => {
       show(null);
-      if (last !== null) void store.saveSetup({ ...setup, margins: { ...setup.margins, [side]: Math.round(value * 100) / 100 } });
+      if (moved) void store.saveSetup({ ...setup, margins: { ...setup.margins, [side]: Math.round(value * 100) / 100 } });
     },
   );
 }
 
-/** The paragraph under the caret: its indents in points and its container's
-    edges in px from the text column's left, at 100%. */
-type Indents = { left: number; first: number; right: number; boxLeft: number; boxRight: number };
+/** The paragraph under the caret: its indents and tab stops in points, and
+    its container's edges in px from the text column's left, at 100%. */
+type Indents = { left: number; first: number; right: number; boxLeft: number; boxRight: number; tabs: TabStop[] };
 
 function readIndents(editor: Editor): Indents | null {
   const { $head } = editor.state.selection;
@@ -260,6 +257,7 @@ function readIndents(editor: Editor): Indents | null {
     right,
     boxLeft: (r.left - column.left) / scale - left * PX_PER_PT,
     boxRight: (r.right - column.left) / scale + right * PX_PER_PT,
+    tabs: parseTabStops(node.attrs.tabStops),
   };
 }
 
@@ -270,11 +268,7 @@ function useIndents(editor: Editor, frame: PageFrame): Indents | null {
     const read = () => {
       frameId = 0;
       const next = readIndents(editor);
-      setIndents((prev) =>
-        prev && next && Object.keys(next).every((k) => Math.abs(next[k as keyof Indents] - prev[k as keyof Indents]) < 0.01)
-          ? prev
-          : next,
-      );
+      setIndents((prev) => (JSON.stringify(prev) === JSON.stringify(next) ? prev : next));
     };
     const schedule = () => {
       if (!frameId) frameId = requestAnimationFrame(read);
@@ -320,8 +314,12 @@ export function HorizontalRuler({ editor, store, editing }: { editor: Editor; st
   const [strip, setStrip] = useState<{ left: number; bottom: number } | null>(null);
   const indents = useIndents(editor, frame);
   const [tip, setTip] = useState<DragTip>(null);
-  // While a marker moves: its place, px at the page's zoom from the page's left.
-  const [draft, setDraft] = useState<{ key: string; at: number } | null>(null);
+  // While a marker moves: its place, px at the page's zoom from the page's
+  // left; a tab stop dragged off the ruler goes.
+  const [draft, setDraft] = useState<{ key: string; at: number; off?: boolean } | null>(null);
+  // Add a tab stop: the menu at the click, and the stop's place in points.
+  const [adding, setAdding] = useState<{ at: number; pt: number } | null>(null);
+  const addRef = useRef<HTMLSpanElement>(null);
 
   useEffect(() => {
     const el = stripRef.current;
@@ -352,6 +350,11 @@ export function HorizontalRuler({ editor, store, editing }: { editor: Editor; st
 
   const toPt = (px: number) => px / s / PX_PER_PT;
   const tipY = strip ? strip.bottom - 16 : 0;
+  const showTip = (at: number, pt: number) =>
+    page && setTip({ x: page.left + at, y: tipY, text: formatRulerValue(pt, unit), vertical: false, guide: page.left + at });
+  /** A place on the ruler, snapped, in points from the text column's left. */
+  const columnPt = (clientX: number) =>
+    page ? Math.max(0, Math.min(toPt(pageWidth - marginLeft - marginRight), snapPt(toPt(clientX - page.left - marginLeft), unit))) : 0;
 
   const onMargin = (side: "left" | "right") => (e: React.PointerEvent) => {
     if (!editing || !page || !strip || pageless) return;
@@ -363,7 +366,7 @@ export function HorizontalRuler({ editor, store, editing }: { editor: Editor; st
       }
       const at = side === "left" ? pt * PX_PER_PT * s : pageWidth - pt * PX_PER_PT * s;
       setDraft({ key: `margin-${side}`, at });
-      setTip({ x: page.left + at, y: tipY, text: formatRulerValue(pt, unit), vertical: false, guide: page.left + at });
+      showTip(at, pt);
     });
   };
 
@@ -376,7 +379,6 @@ export function HorizontalRuler({ editor, store, editing }: { editor: Editor; st
     let value = 0;
     startDrag(
       e,
-      false,
       (clientX) => {
         const x = clientX - page.left;
         const right = key === "right";
@@ -385,17 +387,49 @@ export function HorizontalRuler({ editor, store, editing }: { editor: Editor; st
         value = pt;
         const at = right ? boxRight - pt * PX_PER_PT * s : boxLeft + pt * PX_PER_PT * s;
         setDraft({ key, at });
-        setTip({ x: page.left + at, y: tipY, text: formatRulerValue(pt, unit), vertical: false, guide: page.left + at });
+        showTip(at, pt);
       },
-      (last) => {
+      (moved) => {
         setDraft(null);
         setTip(null);
-        if (last === null) return;
+        if (!moved) return;
         if (key === "left") setIndents(editor, { indentLeft: value });
         else if (key === "first") setIndents(editor, { indentFirstLine: value - indents.left });
         else setIndents(editor, { indentRight: value });
       },
     );
+  };
+
+  // A tab stop moves along the ruler, and goes when dragged below it.
+  const dragTab = (stop: TabStop, key: string) => (e: React.PointerEvent) => {
+    if (!editing || !strip) return;
+    let pt = stop.pt;
+    let off = false;
+    startDrag(
+      e,
+      (clientX, clientY) => {
+        pt = columnPt(clientX);
+        off = clientY > strip.bottom + 20;
+        const at = marginLeft + pt * PX_PER_PT * s;
+        setDraft({ key, at, off });
+        if (off) setTip(null);
+        else showTip(at, pt);
+      },
+      (moved) => {
+        setDraft(null);
+        setTip(null);
+        if (!moved) return;
+        editTabStops(editor, (stops) => {
+          const rest = stops.filter((t) => t.pt !== stop.pt && (off || t.pt !== pt));
+          return off ? rest : [...rest, { pt, align: stop.align }];
+        });
+      },
+    );
+  };
+  const addTab = (align: TabAlign) => {
+    const pt = adding?.pt ?? 0;
+    setAdding(null);
+    editTabStops(editor, (stops) => [...stops.filter((t) => t.pt !== pt), { pt, align }]);
   };
 
   // The markers' places, px at the zoom from the page's left.
@@ -435,8 +469,18 @@ export function HorizontalRuler({ editor, store, editing }: { editor: Editor; st
       )}
       <div ref={stripRef} className="docs-ruler" role="presentation" aria-label={t("docsPage.ruler")}>
         {strip && page && (
-          <div className="docs-ruler-face" style={{ left: pageLeft, width: pageWidth }}>
+          <div
+            className="docs-ruler-face"
+            style={{ left: pageLeft, width: pageWidth }}
+            onClick={(e) => {
+              // A click on the text column, not on a marker, adds a tab stop.
+              if (!editing || !indents || e.target !== e.currentTarget) return;
+              const pt = columnPt(e.clientX);
+              setAdding({ at: marginLeft + pt * PX_PER_PT * s, pt });
+            }}
+          >
             <Ticks list={list} />
+            <span ref={addRef} className="docs-ruler-add-at" style={{ left: adding?.at ?? 0 }} />
             {!pageless && (
               <>
                 <span
@@ -473,7 +517,7 @@ export function HorizontalRuler({ editor, store, editing }: { editor: Editor; st
                   onPointerDown={dragIndent("left")}
                   data-edit={editing || undefined}
                 >
-                  <Triangle />
+                  <Mark d="M0 0h12L6 6z" height={6} />
                 </span>
                 <span
                   className="docs-ruler-marker docs-ruler-indent-end"
@@ -483,22 +527,47 @@ export function HorizontalRuler({ editor, store, editing }: { editor: Editor; st
                   onPointerDown={dragIndent("right")}
                   data-edit={editing || undefined}
                 >
-                  <Triangle />
+                  <Mark d="M0 0h12L6 6z" height={6} />
                 </span>
+                {indents?.tabs.map((stop) => {
+                  const key = `tab-${stop.pt}`;
+                  const moving = draft?.key === key;
+                  return (
+                    <span
+                      key={key}
+                      className="docs-ruler-marker docs-ruler-tab"
+                      // Dragged off, it hides but stays, so the drag goes on.
+                      style={{ left: moving ? draft.at : marginLeft + stop.pt * PX_PER_PT * s, visibility: moving && draft.off ? "hidden" : undefined }}
+                      onPointerDown={dragTab(stop, key)}
+                      data-edit={editing || undefined}
+                    >
+                      <Mark d={TAB_MARKS[stop.align]} height={10} />
+                    </span>
+                  );
+                })}
               </>
             )}
           </div>
         )}
       </div>
       <DragFeedback tip={tip} />
+      <DropdownPanel open={adding !== null} anchorRef={addRef} onClose={() => setAdding(null)}>
+        <MenuItem onSelect={() => addTab("left")}>{t("docsPage.addLeftTabStop")}</MenuItem>
+        <MenuItem onSelect={() => addTab("center")}>{t("docsPage.addCenterTabStop")}</MenuItem>
+        <MenuItem onSelect={() => addTab("right")}>{t("docsPage.addRightTabStop")}</MenuItem>
+      </DropdownPanel>
     </div>
   );
 }
 
-function Triangle() {
+/** The tab stops' marks, 12 px wide with the stop at 6: a left stop points
+    right, a right stop points left, a center stop is a diamond. */
+const TAB_MARKS: Record<TabAlign, string> = { left: "M6 0v10l5-5z", center: "M6 0l5 5-5 5-5-5z", right: "M6 0v10L1 5z" };
+
+function Mark({ d, height }: { d: string; height: number }) {
   return (
-    <svg width="12" height="6" viewBox="0 0 12 6" aria-hidden focusable="false">
-      <path d="M0 0h12L6 6z" fill="currentColor" />
+    <svg width="12" height={height} viewBox={`0 0 12 ${height}`} aria-hidden focusable="false">
+      <path d={d} fill="currentColor" />
     </svg>
   );
 }

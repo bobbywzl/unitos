@@ -1,16 +1,20 @@
 // The insert area's symbols (SPEC.md §29): Google's Material icons (Apache
 // 2.0) on a 24-unit grid, drawn the way components/docs/icons.tsx draws the
-// toolbar's. The five image layout symbols are drawn here in the same style.
+// toolbar's. The fill and border symbols sit in the toolbar, so they are
+// Material Symbols Outlined on its 960-unit grid, as the toolbar's are. The
+// five image layout symbols are drawn here in the Material icons' style.
 
 type Props = { size?: number; className?: string };
 
-function icon(path: string, name: string) {
+const SYMBOL_GRID = "0 -960 960 960";
+
+function icon(path: string, name: string, viewBox = "0 0 24 24") {
   function Icon({ size = 20, className }: Props) {
     return (
       <svg
         width={size}
         height={size}
-        viewBox="0 0 24 24"
+        viewBox={viewBox}
         fill="currentColor"
         aria-hidden
         focusable="false"
@@ -92,17 +96,24 @@ export const ResetIcon = icon(
   "ResetIcon",
 );
 export const BorderColorIcon = icon(
-  "M16.81 8.94l-3.75-3.75L4 14.25V18h3.75l9.06-9.06zM6 16v-.92l7.06-7.06.92.92L6.92 16H6zm13.71-9.96c.39-.39.39-1.02 0-1.41L17.37 2.29c-.2-.2-.45-.29-.71-.29s-.51.1-.7.29l-1.83 1.83 3.75 3.75 1.83-1.83zM2 20h20v4H2z",
+  "M96 0v-192h768V0H96Zm168-360h51l279-279-26-27-25-24-279 279v51Zm-72 72v-152.92L594-843q11-11 23.84-16 12.83-5 27-5 14.16 0 27.16 5t24.1 15.94L747-792q11 11 16 24t5 27.4q0 13.49-4.95 26.54-4.95 13.05-15.75 23.85L345-288H192Zm503-455-51-49 51 49ZM594-639l-26-27-25-24 51 51Z",
   "BorderColorIcon",
+  SYMBOL_GRID,
 );
-export const BorderWeightIcon = icon("M3 17h18v-2H3v2zm0 3h18v-1H3v1zm0-7h18v-3H3v3zm0-9v4h18V4H3z", "BorderWeightIcon");
+export const BorderWeightIcon = icon(
+  "M145-192v-48h671v48H145Zm0-120v-72h671v72H145Zm-1-144v-96h671v96H144Zm1-168v-144h671v144H145Z",
+  "BorderWeightIcon",
+  SYMBOL_GRID,
+);
 export const BorderDashIcon = icon(
-  "M3 16h5v-2H3v2zm6.5 0h5v-2h-5v2zm6.5 0h5v-2h-5v2zM3 20h2v-2H3v2zm4 0h2v-2H7v2zm4 0h2v-2h-2v2zm4 0h2v-2h-2v2zm4 0h2v-2h-2v2zM3 12h8v-2H3v2zm10 0h8v-2h-8v2zM3 4v4h18V4H3z",
+  "M144-192v-72h72v72h-72Zm0-144v-72h168v72H144Zm0-144v-72h300v72H144Zm0-144v-144h672v144H144Zm150 432v-72h72v72h-72Zm102-144v-72h168v72H396Zm48 144v-72h72v72h-72Zm72-288v-72h300v72H516Zm78 288v-72h72v72h-72Zm54-144v-72h168v72H648Zm96 144v-72h72v72h-72Z",
   "BorderDashIcon",
+  SYMBOL_GRID,
 );
 export const FillIcon = icon(
-  "M16.56 8.94L7.62 0 6.21 1.41l2.38 2.38-5.15 5.15c-.59.59-.59 1.54 0 2.12l5.5 5.5c.29.29.68.44 1.06.44s.77-.15 1.06-.44l5.5-5.5c.59-.58.59-1.53 0-2.12zM5.21 10L10 5.21 14.79 10H5.21zM19 11.5s-2 2.17-2 3.5c0 1.1.9 2 2 2s2-.9 2-2c0-1.33-2-3.5-2-3.5z",
+  "m216-909 51-51 338 338q20 20 19.5 47T605-529L431-355q-20 20-47 20t-47-20L163-530q-19-19-20-46t20-47l170-169-117-117Zm168 168L219-576h1-1 330L384-741Zm348 453q-35 0-59.5-24.5T648-372q0-20 10.5-42.5T692-469q8-11 18.5-24t21.5-26q10 13 20.5 25.5T772-469q16 23 30 47t14 50q0 35-24.5 59.5T732-288ZM96 0v-192h768V0H96Z",
   "FillIcon",
+  SYMBOL_GRID,
 );
 export const DropdownChipIcon = icon(
   "M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm0-5.5l-4-4h8l-4 4z",

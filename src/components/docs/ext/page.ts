@@ -9,9 +9,10 @@ import {
   type SpacerKind,
   type SpacerPlan,
 } from "@/components/docs/page/paginate";
+import { tabSizes } from "@/components/docs/page/tabs";
 
-// The page editor's page extensions (SPEC.md §29): pagination and Docs'
-// caret.
+// The page editor's page extensions (SPEC.md §29): pagination, tab stops,
+// and Docs' caret.
 //
 // Pagination: a spacer at each page's end — a widget decoration, never
 // content — pushes what follows to the next page's text top, and each
@@ -47,6 +48,8 @@ export function paginateNow(editor: Editor): void {
 }
 
 const paginationKey = new PluginKey<DecorationSet>("docsPagination");
+/** Each tab of a paragraph with its own stops, as wide as its stop needs. */
+const tabsKey = new PluginKey<DecorationSet>("docsTabs");
 
 type Spacer = SpacerPlan & { id: string };
 type SpacerSpec = { key: string; kind: SpacerKind; id: string; side: number; marks: []; ignoreSelection: true };
@@ -216,6 +219,7 @@ class Paginator {
   private run() {
     const host = hosts.get(this.editor);
     if (!host || this.view.isDestroyed || this.view.composing || this.pointerDown) return;
+    this.alignTabs();
     const config = host.config;
     if (config.enabled && this.touched !== "all" && this.touched !== null && this.unchanged()) {
       this.touched = null;
@@ -288,6 +292,14 @@ class Paginator {
     host.onPages(plan.pages);
   }
 
+  /** Tabs to their stops, before the pages read the layout. */
+  private alignTabs() {
+    const sizes = tabSizes(this.view);
+    const current = tabsKey.getState(this.view.state)?.find() ?? [];
+    const same = current.length === sizes.size && current.every((d) => Math.abs((sizes.get(d.from) ?? -1) - Number(d.spec.size)) < 0.5);
+    if (!same) this.view.dispatch(this.view.state.tr.setMeta(tabsKey, sizes).setMeta("addToHistory", false));
+  }
+
   private dispatch(plan: Plan, scroll = false) {
     const tr = this.view.state.tr.setMeta(paginationKey, plan).setMeta("addToHistory", false);
     this.view.dispatch(scroll ? tr.scrollIntoView() : tr);
@@ -305,6 +317,20 @@ class Paginator {
 
 const Pagination = Extension.create({
   name: "docsPagination",
+  addGlobalAttributes() {
+    return [
+      {
+        types: ["paragraph", "heading"],
+        attributes: {
+          tabStops: {
+            default: null,
+            parseHTML: (el) => el.getAttribute("data-tab-stops"),
+            renderHTML: (attrs) => (attrs.tabStops ? { "data-tab-stops": attrs.tabStops } : {}),
+          },
+        },
+      },
+    ];
+  },
   addProseMirrorPlugins() {
     const editor = this.editor;
     const heights = new Map<string, number>();
@@ -331,6 +357,19 @@ const Pagination = Extension.create({
             },
           };
         },
+      }),
+      new Plugin<DecorationSet>({
+        key: tabsKey,
+        state: {
+          init: () => DecorationSet.empty,
+          apply: (tr, set) => {
+            const sizes = tr.getMeta(tabsKey) as Map<number, number> | undefined;
+            if (!sizes) return tr.docChanged ? set.map(tr.mapping, tr.doc) : set;
+            const tabs = [...sizes].map(([pos, size]) => Decoration.inline(pos, pos + 1, { style: `tab-size: ${size}px` }, { size }));
+            return DecorationSet.create(tr.doc, tabs);
+          },
+        },
+        props: { decorations: (state) => tabsKey.getState(state) },
       }),
     ];
   },

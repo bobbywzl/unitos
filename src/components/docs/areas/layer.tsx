@@ -25,7 +25,7 @@ const COMMENT_COMMANDS: DocsCommand[] = [
     shortcut: "Mod+Alt+Shift+A",
     run: (editor) => {
       showComments(editor, "all");
-      document.querySelector<HTMLElement>('[data-track="annotations"]')?.click();
+      window.dispatchEvent(new Event("dissect:show-annotations"));
     },
   },
   {

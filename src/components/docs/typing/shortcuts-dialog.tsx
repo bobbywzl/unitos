@@ -80,12 +80,25 @@ const SECTIONS: { title: TKey; rows: Row[] }[] = [
     title: "docs.menuTools",
     rows: [
       { label: "docsTyping.scWordCount", pc: ["Mod+Shift+C"] },
-      { label: "docsTyping.scComment", pc: ["Mod+Alt+M"] },
       { label: "docsTyping.scFootnote", pc: ["Mod+Alt+F"] },
       { label: "docs.spellcheck", pc: ["Mod+Alt+X", "F7"] },
       { label: "docsTyping.scVoice", pc: ["Mod+Shift+S"] },
       { label: "docsTyping.scToggleCheckbox", pc: ["Mod+Alt+Enter"] },
       { label: "docsTyping.scNonPrinting", pc: ["Mod+Shift+P"] },
+    ],
+  },
+  {
+    // The letters work on a focused comment card (layer/comment-card.tsx).
+    title: "docsLayer.comments",
+    rows: [
+      { label: "docsTyping.scComment", pc: ["Mod+Alt+M"] },
+      { label: "docsLayer.showAllComments", pc: ["Mod+Alt+Shift+A"] },
+      { label: "docsLayer.hideComments", pc: ["Mod+Alt+Shift+J"] },
+      { label: "common.reply", pc: ["R"] },
+      { label: "docsLayer.nextComment", pc: ["J"] },
+      { label: "docsLayer.previousComment", pc: ["K"] },
+      { label: "common.resolve", pc: ["E"] },
+      { label: "docsLayer.backToText", pc: ["U"] },
     ],
   },
 ];
