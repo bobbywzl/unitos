@@ -684,7 +684,7 @@ export function Workspace({
           {reader}
           <div
             aria-hidden
-            className="pointer-events-none absolute inset-x-0 bottom-0 h-[72px] bg-gradient-to-b from-transparent to-paper print:hidden"
+            className="reader-fade pointer-events-none absolute inset-x-0 bottom-0 h-[72px] bg-gradient-to-b from-transparent to-paper print:hidden"
           />
         </div>
 

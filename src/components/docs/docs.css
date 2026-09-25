@@ -59,6 +59,12 @@
   --docs-placeholder: #80868b;
 }
 
+/* The reader pane's paper fade at its foot belongs to articles: a page on
+   the gray canvas runs to the pane's edge, as in Google Docs. */
+div:has([data-docs-editor]) > .reader-fade {
+  display: none;
+}
+
 /* ── The header: the title row and the toolbar stay at the top ─────────── */
 .docs-header {
   position: sticky;
