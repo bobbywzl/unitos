@@ -16,7 +16,6 @@
   --docs-text: #1f1f1f;
   --docs-muted: #5e5e5e;
   --docs-hover: rgba(68, 71, 70, 0.08);
-  --docs-press: rgba(68, 71, 70, 0.12);
   --docs-on-bg: #d3e3fd;
   --docs-on-fg: #0b57d0;
   --docs-blue: #0b57d0;
@@ -47,7 +46,6 @@
   --docs-text: #e3e3e3;
   --docs-muted: #a8a8a8;
   --docs-hover: rgba(227, 227, 227, 0.08);
-  --docs-press: rgba(227, 227, 227, 0.12);
   --docs-on-bg: #004a77;
   --docs-on-fg: #c2e7ff;
   --docs-blue: #a8c7fa;

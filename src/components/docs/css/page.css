@@ -1073,6 +1073,10 @@
   .docs-prose .docs-footnote.docs-footnote-placed {
     top: calc(var(--docs-footnote-top) - 10px * var(--docs-footnote-page));
   }
+  /* A sticky cell paints over its table's borders. */
+  .docs-prose tr[data-pinned="true"] > * {
+    position: static !important;
+  }
   .docs-prose ::selection {
     background: transparent;
   }

@@ -38,6 +38,8 @@ const controllers = new WeakMap<Editor, Paginator>();
 export function hostPagination(editor: Editor, host: Host): () => void {
   hosts.set(editor, host);
   controllers.get(editor)?.refresh();
+  // The heading arrows take the host's labels.
+  editor.view.dispatch(editor.state.tr.setMeta(foldKey, "").setMeta("addToHistory", false));
   return () => {
     if (hosts.get(editor) === host) hosts.delete(editor);
   };
@@ -387,6 +389,7 @@ const Pagination = Extension.create({
 const foldKey = new PluginKey<{ folded: string[]; set: DecorationSet }>("docsFold");
 
 function foldDecorations(editor: Editor, doc: PMNode, folded: string[]): DecorationSet {
+  const labels = hosts.get(editor)?.labels;
   const out: Decoration[] = [];
   let hiding: number | null = null;
   doc.forEach((node, pos) => {
@@ -399,15 +402,15 @@ function foldDecorations(editor: Editor, doc: PMNode, folded: string[]): Decorat
     const id = typeof node.attrs.blockId === "string" ? node.attrs.blockId : null;
     if (level === null || !id) return;
     const isFolded = folded.includes(id);
+    const label = (isFolded ? labels?.unfold : labels?.fold) ?? "";
     const arrow = (view: EditorView) => {
-      const labels = hosts.get(editor)?.labels;
       const button = document.createElement("button");
       button.type = "button";
       button.className = "docs-fold";
       button.contentEditable = "false";
       button.setAttribute("aria-expanded", String(!isFolded));
-      button.setAttribute("aria-label", (isFolded ? labels?.unfold : labels?.fold) ?? "");
-      button.dataset.tip = button.getAttribute("aria-label") ?? "";
+      button.setAttribute("aria-label", label);
+      button.dataset.tip = label;
       button.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10l5 5 5-5z" fill="currentColor"/></svg>';
       button.addEventListener("mousedown", (e) => {
         e.preventDefault();
@@ -425,7 +428,7 @@ function foldDecorations(editor: Editor, doc: PMNode, folded: string[]): Decorat
       });
       return button;
     };
-    out.push(Decoration.widget(pos + 1, arrow, { side: -1, key: `fold-${id}-${level}-${isFolded}`, ignoreSelection: true }));
+    out.push(Decoration.widget(pos + 1, arrow, { side: -1, key: `fold-${id}-${level}-${isFolded}-${label}`, ignoreSelection: true }));
     if (isFolded) hiding = level;
   });
   return DecorationSet.create(doc, out);
@@ -441,8 +444,9 @@ const FoldHeadings = Extension.create({
         state: {
           init: (_, state) => ({ folded: [], set: foldDecorations(editor, state.doc, []) }),
           apply: (tr, value) => {
+            // A heading's id folds or unfolds it; "" redraws the arrows.
             const id = tr.getMeta(foldKey) as string | undefined;
-            if (!id && !tr.docChanged) return value;
+            if (id === undefined && !tr.docChanged) return value;
             const folded = !id ? value.folded : value.folded.includes(id) ? value.folded.filter((f) => f !== id) : [...value.folded, id];
             return { folded, set: foldDecorations(editor, tr.doc, folded) };
           },

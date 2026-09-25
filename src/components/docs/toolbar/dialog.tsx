@@ -40,7 +40,8 @@ export function ToolbarDialog({
   });
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return;
+      // A menu open in the dialog closes first, by its own Escape.
+      if (e.key !== "Escape" || document.querySelector("[data-docs-menu]")) return;
       e.preventDefault();
       e.stopPropagation();
       closeRef.current();
