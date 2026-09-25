@@ -2,6 +2,7 @@ import type { DerivationType } from "@prisma/client";
 import { analyzePrompt } from "@/lib/prompts/analyze";
 import { askPrompt } from "@/lib/prompts/ask";
 import { comparePrompt } from "@/lib/prompts/compare";
+import { definePrompt } from "@/lib/prompts/define";
 import { distillPrompt } from "@/lib/prompts/distill";
 import { explainPrompt } from "@/lib/prompts/explain";
 import { findPrompt } from "@/lib/prompts/find";
@@ -28,6 +29,7 @@ export const promptTemplates: Partial<Record<DerivationType, (ctx: PromptCtx) =>
   COMPARE: comparePrompt,
   ANALYZE: analyzePrompt,
   VISUALIZE: visualizePrompt,
+  DEFINE: definePrompt,
   // VOICE's template is lib/prompts/voice.ts: the voice command runs from
   // /api/notes/voice, not from /api/derive (SPEC.md §6).
 };

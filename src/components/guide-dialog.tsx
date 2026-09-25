@@ -11,6 +11,7 @@ import type { TKey } from "@/lib/i18n/dictionaries";
 
 // The selection tools, in the toolbox's order: name key, body key.
 const TOOLS: [TKey, TKey][] = [
+  ["works.guideDefine", "works.guideDefineBody"],
   ["works.guideAssistant", "works.guideAssistantBody"],
   ["works.guideExplain", "works.guideExplainBody"],
   ["works.guideSimplify", "works.guideSimplifyBody"],
@@ -98,6 +99,12 @@ export function GuideDialog({ open, onClose }: { open: boolean; onClose: () => v
           <p className="text-[13px] leading-relaxed text-sand-800">
             {t("works.guideCollapseWholeBody")}
           </p>
+        </section>
+
+        {/* Where you left off (SPEC.md §6): the reading position and the left-off mark. */}
+        <section className="flex flex-col gap-1.5 rounded-2xl bg-clay-100/70 p-4">
+          <span className={h}>{t("works.guideLeftOffHeader")}</span>
+          <p className="text-[13px] leading-relaxed text-sand-800">{t("works.guideLeftOffBody")}</p>
         </section>
 
         {/* Circle & ask (the signature move), emphasized. */}

@@ -28,6 +28,8 @@ import {
 } from "@/lib/derive/json";
 import { actPrompt, textSelectionBlock } from "@/lib/prompts/act";
 import { askPrompt } from "@/lib/prompts/ask";
+import { definable } from "@/lib/define";
+import { definePrompt } from "@/lib/prompts/define";
 import { distillPrompt } from "@/lib/prompts/distill";
 import { findPrompt } from "@/lib/prompts/find";
 import { saliencePrompt } from "@/lib/prompts/salience";
@@ -136,6 +138,25 @@ function quoteLines(items: { blockId: string; quotedText: string; label?: string
 }
 
 const adapters: Record<EvalTool, Adapter> = {
+  async define(c, f) {
+    if (!c.selection) throw new Error("define needs a selection");
+    const ctx = promptCtx(f, c);
+    const prompt = definePrompt(ctx);
+    const r = await callTool({ messages: [system(f), { role: "user", content: prompt }], effort: DERIVATION_EFFORT.DEFINE, maxOutputTokens: MAX_OUTPUT_TOKENS.DEFINE });
+    const text = r.text.trim();
+    const sentences = splitSentences(text).length;
+    const checks: Check[] = [
+      { name: "the selection is one word or one phrase", ok: definable(ctx.anchoredText), detail: ctx.anchoredText },
+      capCheck(text, 40),
+      { name: "two sentences at most", ok: sentences <= 2, detail: `${sentences} sentences` },
+      { name: "does not open with the selection", ok: !text.toLowerCase().startsWith(ctx.anchoredText.trim().toLowerCase()) },
+      { name: "plain text", ok: !/[*#`]|^\s*[-•]\s/m.test(text) },
+      languageCheck(text, c.lang),
+      openerCheck(text),
+    ];
+    return { input: ctx.anchoredText, prompt, raw: r.text, output: text, checks, ms: r.ms, tokens: { input: r.inputTokens, output: r.outputTokens } };
+  },
+
   async simplify(c, f) {
     const ctx = promptCtx(f, c);
     const prompt = simplifyPrompt(ctx);

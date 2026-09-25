@@ -69,6 +69,7 @@ import { accountTier } from "@/lib/tiers";
 import { linkScanRunsLeft } from "@/lib/connect";
 import { isTextStyle, type TextStyle } from "@/lib/text-style";
 import { coreBlocks } from "@/lib/anchors/layer";
+import { READING_LINE_PX, type BlockPosition } from "@/lib/reading-position";
 
 export const dynamic = "force-dynamic";
 
@@ -986,6 +987,9 @@ export default async function NotebookPage(props: {
     ...new Set(storedCorpusDistillations.flatMap((d) => d.quotes.map((q) => q.documentId))),
   ];
   const attachedIdList = attached.map((d) => d.id);
+  // The open articles whose reading position the account keeps (SPEC.md §6).
+  // A video pane keeps the tab's copy alone: playback moves its pane.
+  const positionIds = [...new Set([paneOne, paneTwo].flatMap((p) => (p && !p.video ? [p.document.id] : [])))];
 
   // The rest of the page's reads depend on nothing below: they start together.
   const [
@@ -995,6 +999,7 @@ export default async function NotebookPage(props: {
     events,
     allEdits,
     generated,
+    positionRows,
   ] =
     await Promise.all([
       // Edit history for the open document, newest first.
@@ -1036,7 +1041,21 @@ export default async function NotebookPage(props: {
       // The pages Stitch wrote for the project (SPEC.md §22): the graph's
       // Generated content list.
       listGenerated(notebookId),
+      // The account's copy of each open article's reading position. A preview
+      // build reads the production database before its migration runs: with
+      // no table, nothing resumes.
+      positionIds.length > 0
+        ? db.readingPosition
+            .findMany({ where: { userId: user.id, documentId: { in: positionIds } } })
+            .catch(() => [])
+        : [],
     ]);
+  const accountPositionOf = (documentId: string): BlockPosition | null => {
+    const row = positionRows.find((r) => r.documentId === documentId);
+    return row
+      ? { blockId: row.blockId, offset: row.offset, line: READING_LINE_PX, height: row.height, at: row.at.getTime() }
+      : null;
+  };
 
   const edits: EditItem[] = editRows.map((e) => ({
         id: e.id,
@@ -1281,6 +1300,7 @@ export default async function NotebookPage(props: {
             html: b.html,
           }))}
           translationAvailable={deeplConfigured()}
+          accountPosition={accountPositionOf(pane.document.id)}
           {...textLayer(pane)}
         />
       )}

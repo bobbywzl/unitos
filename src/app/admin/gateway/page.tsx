@@ -79,6 +79,7 @@ export default async function AdminGatewayPage() {
   // with or without the gateway: the choice reaches the direct clients too.
   const featureRows = await db.featureModel.findMany();
   const featureLabels: Record<Feature, string> = {
+    define: t("admin.featDefine"),
     explain: t("admin.featExplain"),
     simplify: t("admin.featSimplify"),
     salience: t("admin.featSalience"),

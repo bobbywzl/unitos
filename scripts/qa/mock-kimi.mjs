@@ -447,6 +447,13 @@ function buildResponse(all) {
     return JSON.stringify({ ops });
   }
 
+  // Define (SPEC.md §6): one word or one phrase, its meaning in its sentence.
+  // The selection rides back in the answer, so a check can see it arrived.
+  if (all.includes("Define the selected word or phrase")) {
+    const word = all.match(/Selected word or phrase:\n([^\n]+)/)?.[1]?.trim() ?? "";
+    return `Mock definition of ${word}: its meaning in this sentence, in plain words.`;
+  }
+
   // Simplify with source markers: one plain sentence per numbered original.
   if (all.includes("source marker")) {
     const nums = [...all.matchAll(/^\[(\d+)\] /gm)].map((x) => Number(x[1]));

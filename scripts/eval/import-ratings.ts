@@ -19,8 +19,10 @@ const days = flag("days", 30);
 const limit = flag("limit", 40);
 
 // The rating's tool, as the eval names it. act and assistant read the
-// question from the input; distill and act read the selection from it.
+// question from the input; define, distill, and act read the selection from
+// it.
 const TOOL_OF: Record<string, EvalTool | null> = {
+  define: "define",
   simplify: "simplify",
   assistant: "assistant",
   act: "act",
@@ -70,14 +72,14 @@ async function main() {
     const [firstLine, ...rest] = row.input.split("\n\n");
     const blockIndex = document.blocks.findIndex((b) => firstLine && b.text.includes(firstLine.slice(0, 80)));
     const selection = blockIndex >= 0 ? { block: blockIndex + 1, text: firstLine.slice(0, 200) } : undefined;
-    const question = tool === "simplify" || tool === "summarize" ? undefined : rest.join("\n\n") || (selection ? undefined : firstLine);
+    const question = tool === "define" || tool === "simplify" || tool === "summarize" ? undefined : rest.join("\n\n") || (selection ? undefined : firstLine);
     cases.push({
       id: name,
       tool,
       fixture: name,
       lang: row.lang === "zh" ? "zh" : "en",
       profile: null,
-      selection: tool === "simplify" || tool === "act" ? selection : undefined,
+      selection: tool === "define" || tool === "simplify" || tool === "act" ? selection : undefined,
       question: question || undefined,
       expect: row.comment ? `The reader rated the earlier answer poor and said: "${row.comment}". A good answer fixes that.` : "The reader rated the earlier answer poor without saying why.",
     });

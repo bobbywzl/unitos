@@ -6,16 +6,25 @@ import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, use
 import { createPortal, flushSync } from "react-dom";
 import { api } from "@/lib/api";
 import { blockKind } from "@/lib/block-kind";
+import { definable, defineKey } from "@/lib/define";
 import { MARK_SWEPT_EVENT, type MarkSweptDetail } from "@/lib/mark-sweep";
 import {
+  ACCOUNT_SAVE_MAX_MS,
+  ACCOUNT_SAVE_SETTLE_MS,
   applyReadingPosition,
   atReadingPosition,
+  chooseReadingPosition,
+  LEFT_OFF_MIN_SHARE,
   parseReadingPosition,
   POSITION_HOLD_MS,
   readingPositionKey,
+  readingPositionScroll,
   readReadingPosition,
+  type BlockPosition,
   type ReadingPosition,
 } from "@/lib/reading-position";
+import { ACCOUNT_HEADER } from "@/lib/constants";
+import { tabAccount } from "@/lib/tab-account";
 import type { SourceInput } from "@/lib/anchors/input";
 import { anchorableOffset, anchorableText } from "@/lib/anchors/dom";
 import {
@@ -76,6 +85,7 @@ import { useCardDropOpen } from "@/components/outline/use-card-drop";
 import {
   CollapseIcon,
   CommentIcon,
+  DefineIcon,
   ExpandIcon,
   MaximizeIcon,
   TrashIcon,
@@ -235,9 +245,12 @@ const TOOL_LAYER = "z-40";
 // One toolbar per content kind (SPEC.md §6). The popover shows the tools of
 // the kind under the selection and nothing else: a tool missing from a
 // kind's list is not offered there. The first tool of a kind after the
-// assistant is its lead tool and reads as recommended.
+// assistant is its lead tool and reads as recommended. Define comes before
+// the assistant, and only on a selection of one word or one phrase
+// (offersDefine): the first row, right under the highlight colors.
 type ContentKind = "text" | "figure" | "equation";
 type Tool =
+  | "define"
   | "assistant"
   | "analyze"
   | "explain"
@@ -250,8 +263,8 @@ type Tool =
   | "readAloud";
 
 const TOOLBARS: Record<ContentKind, readonly Tool[]> = {
-  text: ["assistant", "explain", "simplify", "visualize", "comment", "link", "highlight", "addToNotes", "readAloud"],
-  figure: ["assistant", "analyze", "explain", "comment", "link", "highlight", "addToNotes"],
+  text: ["define", "assistant", "explain", "simplify", "visualize", "comment", "link", "highlight", "addToNotes", "readAloud"],
+  figure: ["define", "assistant", "analyze", "explain", "comment", "link", "highlight", "addToNotes"],
   equation: ["assistant", "explain", "visualize", "comment", "link", "highlight", "addToNotes"],
 };
 
@@ -264,6 +277,24 @@ function contentKindOf(type: string | undefined): ContentKind {
   if (type === "EQUATION") return "equation";
   return "text";
 }
+
+/** Whether the popover offers Define: text selected in one block, one word
+    or one phrase long (lib/define.ts). Never on the hold-and-circle
+    gesture, whose anchor is the whole block. */
+function offersDefine(popover: Popover): boolean {
+  return !popover.figure && segmentsOf(popover.anchor).length === 1 && definable(popover.anchor.quotedText);
+}
+
+// Define's output for one popover (SPEC.md §6): the meaning of the selected
+// word or phrase, shown under the Define row. glossary: the glossary's
+// definition of a key term, read with no model call.
+type Definition = {
+  key: string;
+  text: string;
+  streaming: boolean;
+  error: string | null;
+  glossary: boolean;
+};
 
 const KIND_LABEL: Record<Exclude<ContentKind, "text">, TKey> = {
   figure: "reader.figureTools",
@@ -756,6 +787,28 @@ type AnchorHighlightMap = Record<
   }[]
 >;
 
+// The account's copy of the reading position (SPEC.md §6,
+// PUT /api/documents/[documentId]/position). Fire and forget, like click
+// telemetry, and never in the save indicator: a lost save costs a place, not
+// work. keepalive lets it outlive the page. The tab's account rides along, so
+// a tab the browser has since signed into another account saves nothing.
+function saveAccountPosition(documentId: string, position: BlockPosition, keepalive: boolean): void {
+  const account = tabAccount();
+  fetch(`/api/documents/${documentId}/position`, {
+    method: "PUT",
+    keepalive,
+    headers: { "Content-Type": "application/json", ...(account ? { [ACCOUNT_HEADER]: account } : {}) },
+    body: JSON.stringify({
+      blockId: position.blockId,
+      offset: position.offset,
+      height: position.height,
+      at: Math.round(position.at),
+    }),
+  }).catch(() => {
+    // offline, or the network dropped: the tab's copy still holds the place
+  });
+}
+
 // Client layer over the reader: selection capture, popover, EXPLAIN bubble,
 // SIMPLIFY bubble, SALIENCE overlay toggle, DISTILL page, the article menu,
 // jump-to-anchor.
@@ -792,9 +845,14 @@ export function ReaderInteractions({
   translationAvailable,
   transcript,
   richText = null,
+  accountPosition,
 }: {
   documentId: string;
   notebookId: string;
+  /** The account's copy of the reading position in this document (SPEC.md
+      §6), as the page read it; null = none yet. The reader opens there when
+      it is newer than the tab's copy. */
+  accountPosition?: BlockPosition | null;
   /** DEEPL_API_KEY is set: the Translate offer shows when the languages differ (SPEC.md §19). */
   translationAvailable: boolean;
   // A video document's transcript (SPEC.md §11): the blocks are its lines,
@@ -941,7 +999,7 @@ export function ReaderInteractions({
   // The popover's submenus (section list, link targets) are custom lists, not
   // native selects: the popover preventDefaults mousedown to keep the text
   // selection alive, which also keeps a native select from ever opening.
-  const [submenu, setSubmenu] = useState<null | "add" | "ai" | "comment">(null);
+  const [submenu, setSubmenu] = useState<null | "add" | "ai" | "comment" | "define">(null);
   const [commentDraft, setCommentDraft] = useState("");
   // The page editor's right-click Explain, waiting for its popover (below).
   const [pendingExplain, setPendingExplain] = useState(false);
@@ -949,6 +1007,25 @@ export function ReaderInteractions({
   // popover it answers: another popover reads it as null until its own
   // answer lands. Null answers: no key, no confident answer, a fixed lead.
   const [leadAnswer, setLeadAnswer] = useState<{ key: string; tool: Tool } | null>(null);
+  // Define (SPEC.md §6): the open popover's definition, the call on its way,
+  // and every definition read this session by block and word, so pressing
+  // Define on the same word again costs no call.
+  const [definition, setDefinition] = useState<Definition | null>(null);
+  const defineAbortRef = useRef<AbortController | null>(null);
+  const definitionCacheRef = useRef(new Map<string, string>());
+  // The New glow (SPEC.md §18) on the Define row until it is pressed.
+  const defineNew = useNewFeature("define");
+  // The glossary's definitions by term (lib/glossary.ts): Define on a key
+  // term shows the glossary's definition at once, with no model call.
+  const glossaryDefinitions = useMemo(() => {
+    const byTerm = new Map<string, string>();
+    for (const block of blocks) {
+      for (const term of termsByBlock[block.id] ?? []) {
+        if (term.definition) byTerm.set(defineKey(block.text.slice(term.start, term.end)), term.definition);
+      }
+    }
+    return byTerm;
+  }, [blocks, termsByBlock]);
   // The page is only editable in edit mode; reading mode never opens editors.
   const [editMode, setEditMode] = useState(false);
   // A blank document's page editor is always the place to type: the block
@@ -972,36 +1049,63 @@ export function ReaderInteractions({
   const conversationViewRef = useRef(false);
   conversationViewRef.current = conversationView !== null;
   const conversationReturnScroll = useRef<number | null>(null);
-  // The reading position survives a full page load and a remount: a note, an
-  // annotation, or an AI tool refreshes the page, and when the refresh turns
-  // into a full load (a new deploy, a dropped response) the reader came back
-  // at the top (reader report). Saved per tab and per document as the block
-  // at the top of the pane and its offset (lib/reading-position.ts). The
-  // workspace's inline script restores it before the first paint; this
-  // re-applies it after hydration and holds it while the layout under it
-  // settles — a figure above the position loading late moves everything
-  // below it — until the reader scrolls. A ?src, ?block, or ?link jump wins:
-  // with one in the URL nothing restores.
+  // The reading position survives a full page load, a remount, a new tab,
+  // and another device (lib/reading-position.ts): a note, an annotation, or
+  // an AI tool refreshes the page, and when the refresh turns into a full
+  // load (a new deploy, a dropped response) the reader came back at the top
+  // (reader report); and a reader who comes back another day starts where
+  // they left off. Two copies, each the block at the reading line and its
+  // offset: the tab's, saved as the reader scrolls, and the account's, saved
+  // a little later. On open the newer one wins. The workspace's inline
+  // script applies it before the first paint; this re-applies it after
+  // hydration and holds it while the layout under it settles — a figure
+  // above the position loading late moves everything below it — until the
+  // reader scrolls. The left-off mark goes above the position's block. A
+  // ?src, ?block, or ?link jump wins: with one in the URL nothing restores,
+  // and the mark still shows.
   const positionStoreKey = readingPositionKey(documentId);
   const jumpOnOpen = useRef(
     Boolean(searchParams.get("src") || searchParams.get("block") || searchParams.get("link")),
   );
+  // A transcript keeps the tab's copy alone (playback moves its pane) and
+  // has no left-off mark; an embedded layer keeps no position at all.
+  const isTranscript = transcript !== undefined;
+  const keepsAccountCopy = !isTranscript && !embedded;
+  // The account's copy as it was when the document opened: a refresh that
+  // brings this tab's own later save moves neither the reader nor the mark.
+  const [accountAtOpen] = useState(() => (keepsAccountCopy ? (accountPosition ?? null) : null));
+  // When the reader last moved in this document, ms by this browser's clock:
+  // the time both copies carry, so the newer copy wins on the next open.
+  const lastMovedAt = useRef(0);
+  // The block the left-off mark sits above (reader.tsx LeftOffMark).
+  const [leftOffBlockId, setLeftOffBlockId] = useState<string | null>(null);
   // While the hold keeps the stored position, saves pause: a clamped
   // intermediate position must not overwrite the stored one.
   const positionHeld = useRef(false);
   useLayoutEffect(() => {
     const container = containerRef.current;
     // An embedded layer does not scroll: the pane around it keeps the position.
-    if (!container || jumpOnOpen.current || embedded) return;
-    let stored: ReadingPosition | null = null;
+    if (!container || embedded) return;
+    let tabCopy: ReadingPosition | null = null;
     try {
-      stored = parseReadingPosition(sessionStorage.getItem(positionStoreKey));
+      tabCopy = parseReadingPosition(sessionStorage.getItem(positionStoreKey));
     } catch {
-      stored = null; // storage unavailable: the reader starts at the top
+      tabCopy = null; // storage unavailable: the account's copy alone
     }
-    if (!stored) return;
-    const position = stored;
-    let expected = applyReadingPosition(container, position);
+    const chosen = chooseReadingPosition(tabCopy, accountAtOpen);
+    if (!chosen) return;
+    const { position, resume } = chosen;
+    lastMovedAt.current = position.at;
+    // The mark shows once the position is past the first screen: a reader
+    // still on it has no place to come back to.
+    if (!isTranscript && "blockId" in position) {
+      const top = readingPositionScroll(container, position, resume);
+      if (top !== null && top >= container.clientHeight * LEFT_OFF_MIN_SHARE) {
+        setLeftOffBlockId(position.blockId);
+      }
+    }
+    if (jumpOnOpen.current) return;
+    let expected = applyReadingPosition(container, position, resume);
     if (expected === null) return; // the block is gone (a re-parse): nothing to hold
     positionHeld.current = true;
     // The browser's own scroll anchoring would keep whichever block it picked
@@ -1032,13 +1136,13 @@ export function ReaderInteractions({
     };
     const hold = () => {
       if (!positionHeld.current) return;
-      expected = applyReadingPosition(container, position);
+      expected = applyReadingPosition(container, position, resume);
       if (expected === null) release();
     };
     const onScroll = () => {
       // The hold's own moves land on expected. Any other scroll is the
       // reader's, or a jump the reader asked for: the hold ends.
-      if (container.scrollTop === expected || atReadingPosition(container, position)) return;
+      if (container.scrollTop === expected || atReadingPosition(container, position, resume)) return;
       release();
     };
     const observer = new ResizeObserver(hold);
@@ -1049,11 +1153,39 @@ export function ReaderInteractions({
     container.addEventListener("pointerdown", release);
     const timer = setTimeout(release, POSITION_HOLD_MS);
     return cleanup;
-  }, [positionStoreKey, embedded]);
+  }, [positionStoreKey, embedded, isTranscript, accountAtOpen]);
   useEffect(() => {
     const container = containerRef.current;
     if (!container || embedded) return;
     let raf = 0;
+    // The account's copy saves once the reader stops scrolling
+    // (ACCOUNT_SAVE_SETTLE_MS), at least every ACCOUNT_SAVE_MAX_MS while
+    // they keep scrolling, and at once when the tab hides, the page goes, or
+    // the document closes. Only a move since the last save sends one.
+    let settleTimer: ReturnType<typeof setTimeout> | null = null;
+    let maxTimer: ReturnType<typeof setTimeout> | null = null;
+    let accountDirty = false;
+    // The position, read live while the pane shows the article, else the
+    // last one read: a document switch removes the pane before this
+    // effect's cleanup runs (a removed pane reads as the top of the
+    // document), and a page opened over the article scrolls the pane.
+    let lastRead: ReadingPosition | null = null;
+    const readPosition = (): ReadingPosition | null => {
+      if (container.isConnected && !distillOpenRef.current && !conversationViewRef.current) {
+        lastRead = readReadingPosition(container, lastMovedAt.current);
+      }
+      return lastRead && { ...lastRead, at: lastMovedAt.current };
+    };
+    const saveAccount = (keepalive: boolean) => {
+      if (settleTimer) clearTimeout(settleTimer);
+      if (maxTimer) clearTimeout(maxTimer);
+      settleTimer = null;
+      maxTimer = null;
+      if (!accountDirty || positionHeld.current) return;
+      accountDirty = false;
+      const position = readPosition();
+      if (position && "blockId" in position) saveAccountPosition(documentId, position, keepalive);
+    };
     const save = () => {
       raf = 0;
       // The distilled page and the extract page scroll the pane to the top while open; that
@@ -1065,24 +1197,51 @@ export function ReaderInteractions({
         positionHeld.current
       )
         return;
+      const position = readPosition();
+      if (!position) return; // not read yet: the stored position stands
       try {
-        sessionStorage.setItem(positionStoreKey, JSON.stringify(readReadingPosition(container)));
+        sessionStorage.setItem(positionStoreKey, JSON.stringify(position));
       } catch {
         // storage unavailable: nothing to remember
       }
     };
     const onScroll = () => {
       if (!raf) raf = requestAnimationFrame(save);
+      // The reader moved — not the hold's own moves, not a page opened over
+      // the article, not a layout shift in a tab out of sight.
+      if (
+        positionHeld.current ||
+        distillOpenRef.current ||
+        conversationViewRef.current ||
+        document.visibilityState !== "visible"
+      )
+        return;
+      lastMovedAt.current = Date.now();
+      if (!keepsAccountCopy) return;
+      accountDirty = true;
+      if (settleTimer) clearTimeout(settleTimer);
+      settleTimer = setTimeout(() => saveAccount(false), ACCOUNT_SAVE_SETTLE_MS);
+      maxTimer ??= setTimeout(() => saveAccount(false), ACCOUNT_SAVE_MAX_MS);
+    };
+    const onPageHide = () => {
+      save();
+      saveAccount(true);
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") saveAccount(true);
     };
     container.addEventListener("scroll", onScroll, { passive: true });
-    window.addEventListener("pagehide", save);
+    window.addEventListener("pagehide", onPageHide);
+    document.addEventListener("visibilitychange", onVisibility);
     return () => {
       container.removeEventListener("scroll", onScroll);
-      window.removeEventListener("pagehide", save);
+      window.removeEventListener("pagehide", onPageHide);
+      document.removeEventListener("visibilitychange", onVisibility);
       if (raf) cancelAnimationFrame(raf);
       save();
+      saveAccount(true);
     };
-  }, [positionStoreKey, embedded]);
+  }, [positionStoreKey, embedded, keepsAccountCopy, documentId]);
   const [distillShownId, setDistillShownId] = useState<string | null>(null);
   const [distillRun, setDistillRun] = useState<{ question: string } | null>(null);
   const [distillError, setDistillError] = useState<string | null>(null);
@@ -3293,8 +3452,10 @@ export function ReaderInteractions({
     if (place && place.shift > docsShiftRef.current) setDocsShift(place.shift);
   }, [pageMargin]);
   // The toolbox's width: a submenu with a field (the comment, the assistant)
-  // widens it; coarse pointers get wider boxes to fit the tap-sized rows.
-  const toolboxWidth = submenu === "ai" || submenu === "comment" ? (coarse ? 300 : 248) : coarse ? 220 : 176;
+  // or the definition under the Define row widens it; coarse pointers get
+  // wider boxes to fit the tap-sized rows.
+  const toolboxWidth =
+    submenu === "ai" || submenu === "comment" || submenu === "define" ? (coarse ? 300 : 248) : coarse ? 220 : 176;
   // A toolbar beside the page that has grown past its room moves the page
   // left, as a card does.
   const toolbarPage = popover?.side === "right" ? popover.page : undefined;
@@ -3523,8 +3684,13 @@ export function ReaderInteractions({
     const kind = contentKindOf(blockType);
     if (kind === "figure") return;
     const key = popoverAnchorKey;
-    // A core selection has no Link (SPEC.md §28), so Link never leads there.
-    const tools = isCoreKey(popover.anchor.blockId) ? TOOLBARS[kind].filter((tool) => tool !== "link") : TOOLBARS[kind];
+    // Only the tools the popover shows: a core selection has no Link (SPEC.md
+    // §28), and Define shows on one word or one phrase alone.
+    const core = isCoreKey(popover.anchor.blockId);
+    const define = offersDefine(popover);
+    const tools = TOOLBARS[kind].filter(
+      (tool) => !(core && tool === "link") && (tool !== "define" || define),
+    );
     const controller = new AbortController();
     fetch("/api/jev/lead-tool", {
       method: "POST",
@@ -3541,6 +3707,16 @@ export function ReaderInteractions({
     return () => controller.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [popoverAnchorKey, notebookId]);
+
+  // A definition on its way stops when its popover closes or moves to
+  // another selection: nobody is left to read it.
+  useEffect(
+    () => () => {
+      defineAbortRef.current?.abort();
+      defineAbortRef.current = null;
+    },
+    [popoverAnchorKey],
+  );
 
   // Pressing a dotted key term opens the selection toolbar on it, with Extract
   // recommended on top. Fires on mousedown, so the toolbar survives the
@@ -3876,6 +4052,85 @@ export function ReaderInteractions({
 
   function deriveBody(type: string, anchor: Anchor) {
     return JSON.stringify({ type, documentId, notebookId, anchor: anchorBody(anchor), ...segmentsBody(anchor) });
+  }
+
+  // DEFINE (SPEC.md §4, §6): the meaning of the selected word or phrase in
+  // its sentence, streamed into the toolbar under the Define row. Nothing
+  // persists. A key term's definition is the glossary's, shown at once with
+  // no call; a definition read once stays for the session. Pressing Define
+  // again folds the definition away.
+  async function define() {
+    if (!popover || !popoverAnchorKey) return;
+    if (submenu === "define") {
+      setSubmenu(null);
+      return;
+    }
+    setSubmenu("define");
+    const key = popoverAnchorKey;
+    const anchor = popover.anchor;
+    // Shown already, or on its way.
+    if (definition?.key === key && !definition.error) return;
+    const word = defineKey(anchor.quotedText);
+    const fromGlossary = glossaryDefinitions.get(word);
+    if (fromGlossary) {
+      setDefinition({ key, text: fromGlossary, streaming: false, error: null, glossary: true });
+      return;
+    }
+    const cacheKey = `${anchor.blockId}:${word}`;
+    const known = definitionCacheRef.current.get(cacheKey);
+    if (known) {
+      setDefinition({ key, text: known, streaming: false, error: null, glossary: false });
+      return;
+    }
+    defineAbortRef.current?.abort();
+    const controller = new AbortController();
+    defineAbortRef.current = controller;
+    const settle = (patch: Partial<Definition>) =>
+      setDefinition((d) => (d && d.key === key ? { ...d, ...patch } : d));
+    setDefinition({ key, text: "", streaming: true, error: null, glossary: false });
+    try {
+      await flushLiveBlock(anchor.blockId);
+      const res = await fetch("/api/derive", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
+        body: deriveBody("DEFINE", anchor),
+      });
+      if (!res.ok || !res.body) {
+        const detail = (await res.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(detail?.error ?? t("reader.deriveFailedStatus", { status: res.status }));
+      }
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let raw = "";
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        raw += decoder.decode(value, { stream: true });
+        settle({ text: splitStreamError(raw).text });
+      }
+      // A failure mid-stream arrives in-band; an empty stream is a failure too.
+      const { text, error } = splitStreamError(raw);
+      const meaning = text.trim();
+      if (meaning && !error) definitionCacheRef.current.set(cacheKey, meaning);
+      settle({ text: meaning, streaming: false, error: error ?? (meaning ? null : t("reader.emptyResponse")) });
+    } catch (err) {
+      // Stopped, not failed: what arrived stays; nothing at all clears it.
+      if (controller.signal.aborted) {
+        setDefinition((d) => (d && d.key === key ? (d.text.trim() ? { ...d, streaming: false } : null) : d));
+        return;
+      }
+      settle({ streaming: false, error: err instanceof Error ? err.message : t("reader.deriveFailed") });
+    } finally {
+      if (defineAbortRef.current === controller) defineAbortRef.current = null;
+    }
+  }
+  // Stop under the Define row: the call ends, and a panel with nothing in
+  // it folds away.
+  function stopDefine() {
+    defineAbortRef.current?.abort();
+    defineAbortRef.current = null;
+    if (!definition?.text.trim()) setSubmenu((m) => (m === "define" ? null : m));
   }
 
   // EXPLAIN and ANALYZE stream into the same card beside the article (SPEC.md
@@ -6514,7 +6769,13 @@ function blockFormatKind(
   // A selection in a core (SPEC.md §28) takes every tool but Link: a link
   // joins the texts themselves.
   const inCore = popover ? isCoreKey(popover.anchor.blockId) : false;
-  const has = (tool: Tool) => TOOLBARS[popoverKind].includes(tool) && !(inCore && tool === "link");
+  // Define shows on one word or one phrase alone (offersDefine).
+  const has = (tool: Tool) =>
+    TOOLBARS[popoverKind].includes(tool) &&
+    !(inCore && tool === "link") &&
+    (tool !== "define" || (popover !== null && offersDefine(popover)));
+  // The definition under the Define row: the open popover's own.
+  const shownDefinition = definition && definition.key === popoverAnchorKey ? definition : null;
   // A row's look: the predicted lead tool reads as recommended, like the
   // figure toolbar's Analyze; every other row is plain.
   const leads = (tool: Tool) => leadTool === tool;
@@ -6959,8 +7220,12 @@ function blockFormatKind(
         void imageDrop.handlers.onDrop(e);
       }}
       // The inline restore script finds this pane's stored reading position by
-      // its document (lib/reading-position.ts). An embedded layer has none.
+      // its document (lib/reading-position.ts), and the account's copy here.
+      // An embedded layer has none.
       data-document-id={embedded ? undefined : documentId}
+      data-account-position={
+        keepsAccountCopy && accountPosition ? JSON.stringify(accountPosition) : undefined
+      }
       // A blank document: the cards take the page editor's look, and the page
       // moves left by --docs-shift (SPEC.md §29).
       data-page-editor={richText ? "" : undefined}
@@ -7106,6 +7371,8 @@ function blockFormatKind(
         }
         translations={translations}
         collapse={cores ? { cores, on: collapseOn, flipped: flippedBlocks, flip: flipBlock } : null}
+        leftOffBlockId={leftOffBlockId}
+        accountPositionAtOpen={accountAtOpen !== null}
       />
 
       <Bibliography references={references} />
@@ -7334,6 +7601,71 @@ function blockFormatKind(
               <LinkIcon size={11} />
               {t("reader.closeLink")}
             </button>
+          )}
+
+          {/* Define (SPEC.md §6): the first row when the selection is one
+              word or one phrase, right under the highlight colors — on a
+              coarse pointer, where the colors are the toolbox's first row,
+              the row after them. The definition opens under the row. */}
+          {has("define") && (
+            <div className={`flex flex-col gap-0.5${coarse ? " -order-2" : ""}`}>
+              <button
+                onClick={() => {
+                  defineNew.seen();
+                  void define();
+                }}
+                data-track="define"
+                aria-expanded={submenu === "define"}
+                data-tip={t("reader.defineTitle")}
+                className={`flex w-full items-center justify-between gap-2 rounded-full ${toolRow} text-left ${
+                  submenu === "define" ? "bg-clay-100 text-clay-800" : rowLook("define")
+                }${defineNew.isNew ? ` ${NEW_GLOW_CLASS}` : ""}`}
+              >
+                <span className="flex items-center gap-1.5">
+                  <DefineIcon size={coarse ? 14 : 12} />
+                  {t("reader.define")}
+                  {defineNew.isNew && <NewPill />}
+                </span>
+                {leadBadge("define")}
+              </button>
+              <Collapse open={submenu === "define" && shownDefinition !== null}>
+                {shownDefinition && (
+                  <div data-definition className="flex flex-col gap-1 px-2.5 pt-0.5 pb-1.5">
+                    <span className="text-[12px] font-semibold break-words text-sand-900">
+                      {popover.anchor.quotedText.trim()}
+                    </span>
+                    {shownDefinition.text && (
+                      <p className="text-[12.5px] leading-snug break-words whitespace-pre-line text-sand-800">
+                        {shownDefinition.text}
+                      </p>
+                    )}
+                    {shownDefinition.streaming && !shownDefinition.text && (
+                      <ThinkingIndicator
+                        label={t("reader.defining")}
+                        className="py-0.5 text-[11.5px]"
+                        onStop={stopDefine}
+                      />
+                    )}
+                    {shownDefinition.error && (
+                      <p className="text-[11.5px] leading-snug text-red-600">{shownDefinition.error}</p>
+                    )}
+                    {!shownDefinition.streaming &&
+                      !shownDefinition.error &&
+                      !shownDefinition.glossary &&
+                      shownDefinition.text && (
+                        <RatingButtons
+                          tool="define"
+                          input={popover.anchor.quotedText}
+                          output={shownDefinition.text}
+                          notebookId={notebookId}
+                          documentId={documentId}
+                          className="self-end"
+                        />
+                      )}
+                  </div>
+                )}
+              </Collapse>
+            </div>
           )}
 
           <button

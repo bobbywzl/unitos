@@ -24,6 +24,7 @@
 //   floating card 浮动卡片 · wrap text(文本环绕笔记) 环绕文本 ·
 //   attach(加入项目) 加入 · detach 移出 · figure 插图 · passage 片段 ·
 //   key term 关键术语 · Edits(页签) 编辑记录 · notes tray 笔记栏 ·
+//   define(选中一个词或短语的工具) 定义 · definition 定义 ·
 //   command 指令 · voice command(笔记栏里说出的指令) 语音指令 · key takeaways 主要收获 ·
 //   selection 选中内容 · bullet-point notes 分条笔记 · gaps(检查) 疏漏 ·
 //   anchor unresolved 无法定位 · app tab 页签 · browser tab 标签页 ·
@@ -69,7 +70,8 @@
 //   release(一次上线的新功能) 版本更新 · New glow(新功能光晕) 新功能光晕 ·
 //   version(空白文档某一时刻的文本) 版本 · version history 版本历史记录 ·
 //   suggestion(建议模式下的一处修改) 建议 · Suggesting(模式) 建议模式 ·
-//   spelling suggestion(右键菜单给拼错的英文单词的替换词) 拼写建议
+//   spelling suggestion(右键菜单给拼错的英文单词的替换词) 拼写建议 ·
+//   reading position 阅读位置 · left-off mark(上次读到的块上方的小书签) 阅读标记
 // highlight 高亮 仅指高亮功能；表示选取文字一律用 选中。
 
 const en = {

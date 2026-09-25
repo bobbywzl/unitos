@@ -5,6 +5,17 @@
 export type Rubric = { tool: string; what: string; criteria: { key: string; ask: string }[] };
 
 export const RUBRICS: Record<string, Rubric> = {
+  define: {
+    tool: "Define",
+    what: "The meaning the selected word or phrase has in its sentence, in words the reader already has: read at a glance, without leaving the text.",
+    criteria: [
+      { key: "in_context", ask: "Does it give the meaning the word has in this sentence of this document — the document's own definition when the document gives one — and not a generic dictionary sense?" },
+      { key: "plain", ask: "Is it in plain words the reader already knows, with no word harder than the one defined, and never the word itself?" },
+      { key: "brief", ask: "Is it one sentence, with a second only when the everyday meaning differs from the meaning here, and nothing else: no preamble, no restating the selection, no explanation of the passage?" },
+      { key: "correct", ask: "Is it correct: an acronym spelled out right, a symbol read as the document uses it, nothing invented?" },
+      { key: "fit", ask: "Is it pitched at the reader context: the precise sense for a reader who knows the field, everyday words for a novice?" },
+    ],
+  },
   simplify: {
     tool: "Simplify",
     what: "A rewrite of the selected passage a reader with no training in the field understands on first read and could explain to someone else.",
