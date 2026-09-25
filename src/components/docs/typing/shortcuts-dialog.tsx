@@ -8,9 +8,14 @@ import { ToolbarDialog } from "@/components/docs/toolbar/dialog";
 import type { TKey } from "@/lib/i18n/dictionaries";
 
 // Ctrl+/: the keyboard shortcuts the page editor answers (SPEC.md §29,
-// typing), grouped the way Google Docs groups them, with a search field.
+// typing), grouped the way Google Docs groups them, with a search field. A
+// chord is written "Mod+Alt+N H": hold Ctrl+Alt, press N, then H.
 
-type Row = { label: TKey; pc: string[]; mac?: string[] };
+/** `what` fills the label's {what}: "Move to next or previous heading". */
+type Row = { label: TKey; what?: TKey; pc: string[]; mac?: string[] };
+
+/** N or P, then the key (typing/navigate.ts). */
+const nav = (what: TKey, key: string): Row => ({ label: "docsTyping.scMoveTo", what, pc: [`Mod+Alt+N ${key}`, `Mod+Alt+P ${key}`] });
 
 const SECTIONS: { title: TKey; rows: Row[] }[] = [
   {
@@ -32,6 +37,8 @@ const SECTIONS: { title: TKey; rows: Row[] }[] = [
       { label: "docsTyping.scPageBreak", pc: ["Mod+Enter"] },
       { label: "docsTyping.scHideTitle", pc: ["Mod+Shift+F"] },
       { label: "docsVersions.seeHistory", pc: ["Mod+Alt+Shift+H"] },
+      { label: "docsPage.zoomIn", pc: ["Mod+=", "Mod+Alt+="] },
+      { label: "docsPage.zoomOut", pc: ["Mod+-", "Mod+Alt+-"] },
     ],
   },
   {
@@ -75,6 +82,7 @@ const SECTIONS: { title: TKey; rows: Row[] }[] = [
       { label: "docsTyping.scLineBreak", pc: ["Shift+Enter"] },
       { label: "docsTyping.scDeleteWord", pc: ["Ctrl+Backspace"], mac: ["Alt+Backspace"] },
       { label: "docsTyping.scSelectAll", pc: ["Mod+A"] },
+      { label: "docsTyping.scSelectNone", pc: ["Mod+Alt+U A"] },
     ],
   },
   {
@@ -83,6 +91,10 @@ const SECTIONS: { title: TKey; rows: Row[] }[] = [
       { label: "docsTyping.scWordCount", pc: ["Mod+Shift+C"] },
       { label: "docsTyping.scFootnote", pc: ["Mod+Alt+F"] },
       { label: "docs.spellcheck", pc: ["Mod+Alt+X", "F7"] },
+      { label: "docsTyping.scMoveTo", what: "docsTyping.navMisspelling", pc: ["Mod+'", "Mod+;"] },
+      { label: "docsTyping.dictionary", pc: ["Mod+Shift+Y"] },
+      { label: "docsPage.header", pc: ["Mod+Alt+O H"] },
+      { label: "docsPage.footer", pc: ["Mod+Alt+O F"] },
       { label: "docsTyping.scVoice", pc: ["Mod+Shift+S"] },
       { label: "docsTyping.scToggleCheckbox", pc: ["Mod+Alt+Enter"] },
       { label: "docsTyping.scNonPrinting", pc: ["Mod+Shift+P"] },
@@ -93,13 +105,29 @@ const SECTIONS: { title: TKey; rows: Row[] }[] = [
     title: "docsLayer.comments",
     rows: [
       { label: "docsTyping.scComment", pc: ["Mod+Alt+M"] },
-      { label: "docsLayer.showAllComments", pc: ["Mod+Alt+Shift+A"] },
+      { label: "docsLayer.showAllComments", pc: ["Mod+Alt+Shift+A", "Mod+Alt+Shift+W E"] },
+      { label: "docsLayer.minimizeComments", pc: ["Mod+Alt+Shift+W M"] },
       { label: "docsLayer.hideComments", pc: ["Mod+Alt+Shift+J"] },
+      nav("docsTyping.navComment", "C"),
       { label: "common.reply", pc: ["R"] },
       { label: "docsLayer.nextComment", pc: ["J"] },
       { label: "docsLayer.previousComment", pc: ["K"] },
       { label: "common.resolve", pc: ["E"] },
       { label: "docsLayer.backToText", pc: ["U"] },
+    ],
+  },
+  {
+    title: "docsTyping.scNavigation",
+    rows: [
+      nav("docsTyping.navHeading", "H"),
+      nav("docsTyping.navHeadingLevel", "[1-6]"),
+      nav("docsTyping.navImage", "G"),
+      nav("docsTyping.navList", "O"),
+      nav("docsTyping.navListItem", "I"),
+      nav("docsTyping.navLink", "L"),
+      nav("docsTyping.navBookmark", "B"),
+      nav("docsTyping.navFootnote", "F"),
+      nav("docsTyping.navTable", "T"),
     ],
   },
 ];
@@ -109,9 +137,11 @@ export function ShortcutsDialog({ onClose }: { onClose: () => void }) {
   const [query, setQuery] = useState("");
   const mac = isMac();
   const q = query.trim().toLowerCase();
+  // The heading level's row reads "heading [1-6]".
+  const text = (r: Row) => (r.what ? t(r.label, { what: t(r.what, { n: "[1-6]" }) }) : t(r.label));
   const sections = SECTIONS.map((s) => ({
     title: s.title,
-    rows: s.rows.filter((r) => !q || t(r.label).toLowerCase().includes(q)),
+    rows: s.rows.filter((r) => !q || text(r).toLowerCase().includes(q)),
   })).filter((s) => s.rows.length > 0);
   return (
     <ToolbarDialog title={t("docsTyping.keyboardShortcuts")} onClose={onClose} className="docs-shortcuts">
@@ -132,8 +162,8 @@ export function ShortcutsDialog({ onClose }: { onClose: () => void }) {
             <table>
               <tbody>
                 {s.rows.map((r) => (
-                  <tr key={r.label}>
-                    <td>{t(r.label)}</td>
+                  <tr key={r.what ?? r.label}>
+                    <td>{text(r)}</td>
                     <td>
                       {(mac && r.mac ? r.mac : r.pc).map((combo, i) => (
                         <span key={combo}>

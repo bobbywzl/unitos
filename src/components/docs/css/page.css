@@ -347,9 +347,10 @@
   display: none;
 }
 
-/* The selection while the page has no focus: Google Docs' gray, #8f8f8f at
-   34%. The Unitos layer's own tint wins where it paints. */
-.docs-blurred-selection:not(.selection-mark) {
+/* The selection while the page has no focus, or a menu is open over it:
+   Google Docs' gray, #8f8f8f at 34%. */
+.docs-blurred-selection,
+:root:has([data-docs-menu]) .docs-prose ::selection {
   background: rgba(143, 143, 143, 0.34);
 }
 

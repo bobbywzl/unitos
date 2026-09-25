@@ -74,29 +74,12 @@ export function SuggestLayer({ editor, canEdit, editing, suggesting }: DocsAreaP
   }, [editor, holdMargin]);
 
   // Review suggested edits: its command, and Google's chord (hold Ctrl+Alt,
-  // press O then U).
+  // press O then U), which the chord reader runs (typing/navigate.ts).
   useEffect(() => {
     const dom = editor.view.dom;
-    const shell = dom.closest("[data-docs-editor]");
     const open = () => setReviewing(true);
-    let chordAt = 0;
-    const onKey = (e: KeyboardEvent) => {
-      const focused = document.activeElement;
-      if (!shell || (focused && focused !== document.body && !shell.contains(focused))) return;
-      if (!(e.ctrlKey || e.metaKey) || !e.altKey || e.shiftKey) return;
-      if (e.code === "KeyO") chordAt = Date.now();
-      else if (e.code === "KeyU" && Date.now() - chordAt < 2500) {
-        chordAt = 0;
-        e.preventDefault();
-        open();
-      }
-    };
     dom.addEventListener(REVIEW_EVENT, open);
-    window.addEventListener("keydown", onKey, true);
-    return () => {
-      dom.removeEventListener(REVIEW_EVENT, open);
-      window.removeEventListener("keydown", onKey, true);
-    };
+    return () => dom.removeEventListener(REVIEW_EVENT, open);
   }, [editor]);
 
   // Each author's color, and a tint on the suggestion whose card is open.

@@ -13,6 +13,7 @@ import { TYPING_EVENT, fireTyping } from "@/components/docs/typing/events";
 import { findState, searchFrom, setFind, stepResult } from "@/components/docs/typing/find";
 import { FindBar, FindReplaceDialog, type FindMode } from "@/components/docs/typing/find-ui";
 import { setCase, toggleSmallCaps, type TextCase } from "@/components/docs/typing/format";
+import { listenNavigation, lookUpWord } from "@/components/docs/typing/navigate";
 import { copyMarkdown, pasteMarkdown } from "@/components/docs/typing/paste";
 import { typingPrefs } from "@/components/docs/typing/prefs";
 import { PreferencesDialog } from "@/components/docs/typing/preferences-dialog";
@@ -114,6 +115,14 @@ registerDocsCommands([
     shortcut: "Mod+/",
     run: () => fireTyping(TYPING_EVENT.shortcuts),
   },
+  {
+    id: "typing:dictionary",
+    label: "docsTyping.dictionary",
+    menu: "tools",
+    keywords: ["define", "definition", "look up", "meaning", "词典", "释义"],
+    shortcut: "Mod+Shift+Y",
+    run: lookUpWord,
+  },
   text("strikethrough", "docsTyping.scStrike", ["strike-through"], (editor) => editor.chain().focus().toggleStrike().run(), isMac() ? "Mod+Shift+X" : "Alt+Shift+5"),
   text("superscript", "docsTyping.scSuperscript", ["super script", "super-script", "exponent", "apply superscript"], (editor) => editor.chain().focus().toggleSuperscript().run(), "Mod+."),
   text("subscript", "docsTyping.scSubscript", ["sub script", "sub-script", "apply subscript"], (editor) => editor.chain().focus().toggleSubscript().run(), "Mod+,"),
@@ -161,6 +170,9 @@ export function TypingLayer({ editor }: DocsAreaProps) {
   const [prefsOpen, setPrefsOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [voiceOpen, setVoiceOpen] = useState(false);
+
+  // Google Docs' navigation keys: the chords, the misspellings, Dictionary.
+  useEffect(() => listenNavigation(editor, () => docsActive(editor)), [editor]);
 
   useEffect(() => {
     const view = editor.view;

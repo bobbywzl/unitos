@@ -26,15 +26,21 @@ function isCell(node: PMNode | null | undefined): boolean {
 
 // ── Undo grouping ───────────────────────────────────────────────────────
 // Typing groups into one undo step; a structural command (Enter, Tab, a
-// list change) and a switch between typing and deleting start a new one.
+// list change), a switch between typing and deleting, and a selection
+// change (an arrow key, a click) start a new one.
 
 const lastKind = new WeakMap<EditorView, "insert" | "delete" | "structure">();
+/** Where the last edit left the selection. */
+const lastSelection = new WeakMap<EditorView, Selection>();
 
-/** Mark what kind of edit `tr` is; it opens a new undo step when the kind changes. */
+/** Mark what kind of edit `tr` is; it opens a new undo step when the kind
+    changes or the selection moved since the last edit. */
 export function groupEdit(view: EditorView, tr: Transaction, kind: "insert" | "delete" | "structure"): Transaction {
   const last = lastKind.get(view);
-  if (kind === "structure" || (last && last !== kind)) closeHistory(tr);
+  const moved = !lastSelection.get(view)?.eq(view.state.selection);
+  if (kind === "structure" || (last && last !== kind) || moved) closeHistory(tr);
   lastKind.set(view, kind);
+  lastSelection.set(view, tr.selection);
   return tr;
 }
 
@@ -180,10 +186,8 @@ export function lineBreak(editor: Editor): boolean {
   if (atMenuState(state).active) return false;
   const { $from } = state.selection;
   const tr = state.tr;
-  groupEdit(view, tr, "insert");
   if ($from.parent.type.spec.code) {
-    tr.insertText("\n");
-    dispatch(view, tr);
+    dispatch(view, groupEdit(view, tr.insertText("\n"), "insert"));
     return true;
   }
   const hardBreak = state.schema.nodes.hardBreak;
@@ -191,7 +195,7 @@ export function lineBreak(editor: Editor): boolean {
   const marks = state.storedMarks ?? $from.marks();
   tr.replaceSelectionWith(hardBreak.create(), false);
   if (marks.length) tr.ensureMarks(marks);
-  dispatch(view, tr);
+  dispatch(view, groupEdit(view, tr, "insert"));
   runAutocorrect(view, "\v");
   return true;
 }
@@ -317,8 +321,14 @@ function backspaceAtStart(editor: Editor, $from: ResolvedPos, word: boolean): bo
   const block = $from.parent;
   const blockPos = $from.before();
   const item = listItemAt($from);
-  // 1. The bullet goes; the text stays where it was.
-  if (item && !word) return removeBullet(view, $from, item);
+  // 1. The bullet goes; the text stays where it was. Suggesting mode cannot
+  // hold a list's split: there a later line joins the one above, as a
+  // suggested removed break, and a list's first line stays.
+  const suggesting = isSuggesting(editor);
+  if (item && !word) {
+    if (!suggesting) return removeBullet(view, $from, item);
+    if ($from.index(item.depth - 1) === 0) return true;
+  }
   // 2–3. A centered line goes left; a right-aligned one to the center.
   const align = block.attrs.textAlign;
   if (align === "center") return setBlockAttrs(view, blockPos, block, { textAlign: null });
@@ -356,7 +366,7 @@ function backspaceAtStart(editor: Editor, $from: ResolvedPos, word: boolean): bo
       const above = index >= 2 ? container.child(index - 2) : null;
       if (above?.isTextblock && !above.type.spec.code) {
         const joined = state.tr.delete(prevPos, blockPos);
-        tr = joinInto(joined, prevPos - above.nodeSize, prevPos, isSuggesting(editor)) ? joined : tr;
+        tr = joinInto(joined, prevPos - above.nodeSize, prevPos, suggesting) ? joined : tr;
       }
     } else if (prev.isTextblock) {
       // 8. Join, the Docs way.
@@ -396,12 +406,11 @@ function removeBullet(view: EditorView, $from: ResolvedPos, item: ItemAt): boole
   return true;
 }
 
-/** Ctrl+Shift+7/8/9 and the list buttons. A line that heads no list item (a
-    paragraph, or an item's later paragraph, as Backspace leaves a line) goes
-    into a list of the kind where it stands, one indent step less, so its
-    text keeps its place; the lists of the kind before and after it join
-    it. List lines toggle as in Tiptap. Below the list nodes in priority, so
-    these commands replace theirs. */
+/** Ctrl+Shift+7/8/9 and the list buttons: a line that heads no list item goes
+    into a list of the kind where it stands, one indent step less (its text
+    keeps its place), and joins the lists of the kind around it; a list line
+    toggles as in Tiptap. Below the list nodes in priority, so these
+    commands replace theirs. */
 export const ListToggles = Extension.create({
   name: "docsListToggles",
   priority: 99,

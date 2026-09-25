@@ -8,6 +8,7 @@ const EDGE = 12; // a card to the pane's edge
 const CARD_WIDTH = 282; // Google Docs' comment card
 const CARD_MIN = 260;
 const TOOLBAR_GAP = 8; // Google Docs' floating buttons sit 8 px out
+const TOOLBAR_EDGE = 6; // the toolbar to the pane's edge
 
 export type PageGeometry = {
   cw: number;
@@ -72,7 +73,14 @@ export function belowSlot(geo: PageGeometry, shift: number): { left: number; wid
     text; null when neither fits, and it goes under the words. */
 export function toolbarLeft(geo: PageGeometry, shift: number, width: number): number | null {
   const beside = geo.pageRight - shift + TOOLBAR_GAP;
-  if (beside + width <= geo.cw - 6) return beside;
-  const over = geo.cw - width - 6;
+  if (beside + width <= geo.cw - TOOLBAR_EDGE) return beside;
+  const over = geo.cw - width - TOOLBAR_EDGE;
   return over >= geo.textRight - shift + TOOLBAR_GAP ? over : null;
+}
+
+/** The least shift, `shift` or more, that gives the toolbar a place clear of
+    the text; null when even the page at the canvas's left edge leaves none. */
+export function toolbarShift(geo: PageGeometry, shift: number, width: number): number | null {
+  const need = Math.max(shift, Math.ceil(geo.textRight + TOOLBAR_GAP + width + TOOLBAR_EDGE - geo.cw));
+  return need <= Math.max(shift, Math.floor(geo.pageLeft - geo.minLeft)) ? need : null;
 }

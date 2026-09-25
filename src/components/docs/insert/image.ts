@@ -1,4 +1,5 @@
 import { Extension, type Editor } from "@tiptap/core";
+import { closeHistory } from "@tiptap/pm/history";
 import type { Node as PMNode } from "@tiptap/pm/model";
 import { NodeSelection, Plugin, TextSelection, type EditorState } from "@tiptap/pm/state";
 import type { EditorView, NodeView } from "@tiptap/pm/view";
@@ -566,11 +567,19 @@ export function insertImageFrom(editor: Editor, source: ImageSource): void {
   else insertImage(editor, { src: source.url });
 }
 
-/** Set attributes of the image at `pos`; the image stays selected. */
+/** The settings the last image change set. */
+const lastImageChange = new WeakMap<EditorView, string>();
+
+/** Set attributes of the image at `pos`; the image stays selected. Each
+    change is its own undo step; a slider's drag, one setting changed on
+    and on, is one. */
 export function setImageAttrs(view: EditorView, pos: number, attrs: Record<string, unknown>): boolean {
   const node = view.state.doc.nodeAt(pos);
   if (node?.type.name !== "image") return false;
   const tr = view.state.tr.setNodeMarkup(pos, undefined, { ...node.attrs, ...attrs });
+  const keys = Object.keys(attrs).join();
+  if (lastImageChange.get(view) !== keys) closeHistory(tr);
+  lastImageChange.set(view, keys);
   view.dispatch(tr.setSelection(NodeSelection.create(tr.doc, pos)));
   return true;
 }

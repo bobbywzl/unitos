@@ -298,7 +298,9 @@ export function DocsEditor({
   );
 
   // A press on a mark or a chip opens what it opens in the reader; a drag
-  // over a mark is a selection like any other.
+  // over a mark is a selection like any other. A click inside the selection
+  // is a plain click (a drag ends at its edge): the page, taking the focus,
+  // put its old selection back. The mark opens and the caret goes there.
   const onPageClick = (e: React.MouseEvent) => {
     if (!editor) return;
     const target = e.target as Element;
@@ -306,7 +308,11 @@ export function DocsEditor({
       openMarkAt(target);
       return;
     }
-    if (editor.state.selection.empty) openMarkAt(target);
+    const { from, to, empty } = editor.state.selection;
+    const at = editor.view.posAtCoords({ left: e.clientX, top: e.clientY })?.pos ?? -1;
+    if ((empty || (e.detail === 1 && at > from && at < to)) && openMarkAt(target) && !empty) {
+      editor.commands.setTextSelection(at);
+    }
   };
 
   const area: DocsAreaProps | null = editor

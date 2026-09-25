@@ -46,9 +46,12 @@
 [data-page-editor] [data-annotation-card]:hover {
   background: var(--docs-card-hover);
 }
+/* The card in use: focused, dragged, or a comment's card, which opens in use
+   from its words or its chip. */
 [data-page-editor] [data-side-card]:focus-within,
 [data-page-editor] [data-annotation-card]:focus-within,
-[data-page-editor] [data-side-card][data-dragging] {
+[data-page-editor] [data-side-card][data-dragging],
+[data-page-editor] .docs-comment[data-side-card="comment"] {
   background: var(--docs-card-active);
   box-shadow: var(--docs-card-shadow);
 }
@@ -65,14 +68,25 @@
   }
 }
 
-/* A chip's ring takes the page's color. */
+/* A chip takes no room in the line: it sits right of the text column (in a
+   table, at the cell's right edge), level with the line its mark ends on,
+   where Google Docs keeps its comment icons, so a new mark never moves the
+   words. Its ring takes the page's color. */
 .docs-prose .mark-chip {
+  position: absolute;
+  left: calc(100% + 8px);
+  margin: 2px 0 0;
   box-shadow: 0 0 0 1.5px var(--docs-page);
+}
+.docs-prose :is(td, th) .mark-chip {
+  right: 2px;
+  left: auto;
 }
 
 /* A comment's card (layer/comment-card.tsx): Google Docs' 32 px badge, the
-   name over the time, Resolve and More options faded in on hover or while
-   in use, then the comment in 14 px text. */
+   name over the time, Resolve and More options, then the comment in 14 px
+   text. The buttons fade in under the pointer or while the card is in use;
+   a comment's card is always in use. */
 .docs-comment {
   display: flex;
   flex-direction: column;
@@ -118,7 +132,8 @@
   }
 }
 .docs-comment:hover .docs-comment-buttons,
-.docs-comment:focus-within .docs-comment-buttons {
+.docs-comment:focus-within .docs-comment-buttons,
+.docs-comment[data-side-card="comment"] .docs-comment-buttons {
   opacity: 1;
 }
 .docs-comment-button {

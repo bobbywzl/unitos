@@ -17,6 +17,7 @@ import { STYLE_LABEL } from "@/components/docs/toolbar/styles-menu";
 import { blockStyle, updateStyleToMatch } from "@/components/docs/toolbar/styles";
 import { copyMarkdown, insertImageFiles, pasteMarkdown } from "@/components/docs/typing/paste";
 import { typingPrefs } from "@/components/docs/typing/prefs";
+import { misspellingAt, replaceWord, type Misspelling } from "@/components/docs/typing/spelling";
 import { emitInsert, onInsert, toast, type InsertContext } from "@/components/docs/insert/context";
 import { selectAllMatching } from "@/components/docs/insert/format-match";
 import {
@@ -56,7 +57,7 @@ import type { TKey } from "@/lib/i18n/dictionaries";
 
 type Entry = { label: string; icon?: ReactNode; shortcut?: string; disabled?: boolean; run?: () => void; submenu?: Entry[] } | "sep";
 
-type Place = { x: number; y: number; byKeys: boolean };
+type Place = { x: number; y: number; byKeys: boolean; spelling?: Misspelling };
 
 /** Paste, or paste without formatting, from the clipboard (Edit > Paste
     too). When the browser keeps the clipboard, a dialog names the keys. */
@@ -123,6 +124,7 @@ export function ContextMenuHost({ editor, ctx }: { editor: Editor; ctx: InsertCo
       e.preventDefault();
       const view = editor.view;
       const atom = (e.target as Element | null)?.closest<HTMLElement>("figure.docs-img, [data-toc]");
+      let spelling: Promise<Misspelling | null> | null = null;
       if (atom) {
         const pos = view.posAtDOM(atom, 0);
         const nodePos = view.state.doc.resolve(pos).nodeAfter ? pos : Math.max(0, pos - 1);
@@ -137,9 +139,16 @@ export function ContextMenuHost({ editor, ctx }: { editor: Editor; ctx: InsertCo
         const inside =
           hit && !sel.empty && (sel instanceof CellSelection ? cellSelectionHas(editor, hit.pos) : hit.pos >= sel.from && hit.pos <= sel.to);
         if (hit && !inside) view.dispatch(view.state.tr.setSelection(TextSelection.near(view.state.doc.resolve(hit.pos))));
+        // A misspelled English word's spelling suggestions head the menu.
+        spelling = hit && misspellingAt(editor, hit.pos);
       }
       view.focus();
-      setPlace({ x: e.clientX, y: e.clientY, byKeys: false });
+      const before = view.state;
+      void Promise.resolve(spelling).then((found) => {
+        // A press or typing while the dictionary loads keeps the menu shut.
+        if (view.state.doc !== before.doc || !view.state.selection.eq(before.selection)) return;
+        setPlace({ x: e.clientX, y: e.clientY, byKeys: false, spelling: found ?? undefined });
+      });
     };
     // A right-click is not the end of a selection for the reader's toolbar.
     const onUp = (e: MouseEvent) => {
@@ -181,7 +190,7 @@ export function ContextMenuHost({ editor, ctx }: { editor: Editor; ctx: InsertCo
 function ContextMenu({ editor, ctx, place, onClose }: { editor: Editor; ctx: InsertContext; place: Place; onClose: () => void }) {
   const t = useT();
   const anchorRef = useRef<HTMLSpanElement>(null);
-  const [entries] = useState(() => buildEntries(editor, ctx, t));
+  const [entries] = useState(() => buildEntries(editor, ctx, t, place.spelling));
   const items = (list: Entry[]): ReactNode =>
     list.map((entry, i) => {
       if (entry === "sep") {
@@ -220,7 +229,7 @@ function ContextMenu({ editor, ctx, place, onClose }: { editor: Editor; ctx: Ins
   );
 }
 
-function buildEntries(editor: Editor, ctx: InsertContext, t: ReturnType<typeof useT>): Entry[] {
+function buildEntries(editor: Editor, ctx: InsertContext, t: ReturnType<typeof useT>, spelling?: Misspelling): Entry[] {
   const { state } = editor;
   const sel = state.selection;
   const editing = ctx.editing;
@@ -240,6 +249,7 @@ function buildEntries(editor: Editor, ctx: InsertContext, t: ReturnType<typeof u
   // With Enable Markdown on (Tools > Preferences), the Markdown copy and paste.
   const markdown = typingPrefs().markdown;
   const out: Entry[] = [
+    ...(spelling ? [...spelling.suggestions.map((word): Entry => ({ label: word, run: () => replaceWord(editor, spelling, word) })), "sep" as const] : []),
     item("docsInsert.cut", <CutIcon />, () => execClipboard(editor, "cut"), { shortcut: keys("Mod+X"), disabled: !hasSelection || !editing }),
     item("docsInsert.copy", <CopyIcon />, () => execClipboard(editor, "copy"), { shortcut: keys("Mod+C"), disabled: !hasSelection }),
     ...(markdown ? [item("docsTyping.copyAsMarkdown", <CopyIcon />, () => void copyMarkdown(editor), { disabled: !hasSelection })] : []),

@@ -120,6 +120,12 @@ export function FindBar({
       data-edit-control
       data-docs-typing
       onMouseUp={(e) => e.stopPropagation()}
+      onKeyDown={(e) => {
+        if (e.key !== "Escape") return;
+        e.preventDefault();
+        e.stopPropagation();
+        onClose();
+      }}
     >
       <div className="docs-outlined">
         <input
@@ -135,10 +141,6 @@ export function FindBar({
             if (e.key === "Enter") {
               e.preventDefault();
               stepResult(view, e.shiftKey ? -1 : 1);
-            } else if (e.key === "Escape") {
-              e.preventDefault();
-              e.stopPropagation();
-              onClose();
             }
           }}
           spellCheck={false}

@@ -33,6 +33,7 @@ const COMMENT_COMMANDS: DocsCommand[] = [
     label: "docsLayer.minimizeComments",
     menu: "view",
     keywords: ["comments", "评论"],
+    shortcut: "Mod+Alt+Shift+W M",
     run: (editor) => showComments(editor, "minimized"),
   },
   {

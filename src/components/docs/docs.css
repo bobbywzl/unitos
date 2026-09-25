@@ -27,8 +27,12 @@
   /* Google Docs' selection: #4e8ff8 at half strength over the white page. */
   --docs-selection: #a7c7fc;
   --docs-link: #1155cc;
-  --docs-placeholder: #9aa0a6;
+  --docs-placeholder: #70757a;
   --docs-ui-font: "Google Sans", Roboto, "Segoe UI", Arial, sans-serif;
+}
+/* The "@" menu's "Search menu" is a shade lighter than the empty line's hint. */
+.docs-at-placeholder {
+  --docs-placeholder: #80868b;
 }
 
 .docs-shell {
@@ -187,29 +191,49 @@ div:has([data-docs-editor]) > .reader-fade {
 .docs-prose li > p {
   margin: 0;
 }
+/* A bullet or a number never makes its line taller than the text's. */
 .docs-prose li::marker {
   color: var(--docs-ink);
+  line-height: 0;
 }
-/* A checklist: the box, then the line; a ticked line is struck through. */
+/* A checklist: the box on the line's baseline, then the line; a ticked line
+   is struck through. */
 .docs-prose ul[data-type="taskList"] {
   list-style: none;
   padding-left: 18pt;
 }
 .docs-prose ul[data-type="taskList"] li {
   display: flex;
-  align-items: flex-start;
+  align-items: baseline;
   gap: 8px;
 }
 .docs-prose ul[data-type="taskList"] li > label {
   flex: none;
-  margin-top: 0.2em;
+  line-height: 0;
   user-select: none;
 }
+/* Google Docs' box: an outline in the text's color; ticked, a check inside. */
 .docs-prose ul[data-type="taskList"] li > label input {
+  appearance: none;
+  position: relative;
   width: 14px;
   height: 14px;
-  accent-color: var(--docs-blue);
+  margin: 0;
+  border: 1.5px solid currentColor;
+  border-radius: 2px;
+  vertical-align: -2px;
   cursor: pointer;
+}
+.docs-prose ul[data-type="taskList"] li > label input:checked::after {
+  content: "";
+  position: absolute;
+  top: 0.5px;
+  left: 3.5px;
+  width: 4px;
+  height: 8px;
+  border: solid currentColor;
+  border-width: 0 1.5px 1.5px 0;
+  transform: rotate(45deg);
 }
 .docs-prose ul[data-type="taskList"] li > div {
   flex: 1;
@@ -277,12 +301,6 @@ div:has([data-docs-editor]) > .reader-fade {
 }
 .docs-prose img.ProseMirror-selectednode {
   outline: 2px solid var(--docs-blue);
-}
-
-/* The Unitos marks keep their colors under the page's own text color. */
-.docs-prose .selection-mark::selection,
-.docs-prose .selection-mark ::selection {
-  background: transparent;
 }
 
 /* ── Fields and buttons ────────────────────────────────────────────────── */

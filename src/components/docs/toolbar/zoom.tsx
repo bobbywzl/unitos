@@ -64,11 +64,15 @@ export function ZoomBox({
       data-tb-item
       data-tip={open ? undefined : t("docs.zoom")}
       onMouseDown={(e) => {
+        // A press in the list (a portal) reaches here through React: the list's own.
+        if (!boxRef.current?.contains(e.target as Node)) return;
         if (e.target !== inputRef.current) {
           e.preventDefault();
           if (open) setOpen(false);
           else inputRef.current?.focus();
         }
+        // The list opens even when the field kept the focus.
+        if (!open) setOpen(true);
       }}
     >
       <input

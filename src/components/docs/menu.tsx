@@ -213,6 +213,9 @@ export function DropdownPanel({
       const panel = panelRef.current;
       if (!panel) return;
       if (e.key === "Escape") {
+        // A combobox's field (Zoom, the size box) closes its own list and
+        // gives the page the focus back.
+        if (!readKeys && e.target instanceof HTMLInputElement && anchorRef.current?.contains(e.target)) return;
         e.preventDefault();
         e.stopPropagation();
         const anchor = anchorRef.current;

@@ -140,6 +140,7 @@ import {
   pageGeometry,
   slotAt,
   toolbarLeft,
+  toolbarShift,
   type PageGeometry,
 } from "@/components/docs/layer/margin";
 
@@ -177,7 +178,7 @@ type Popover = {
   figure?: boolean; // opened by the hold-and-circle gesture on a figure, equation, or table: the anchor is the whole block
   term?: boolean; // opened by clicking a key term; Extract leads, recommended
   nearTop?: boolean; // the bubbles above the toolbox drop below it; unset: the article's top decides
-  page?: { geo: PageGeometry; shift: number }; // the page editor's page as the toolbar opened (SPEC.md §29)
+  page?: { geo: PageGeometry }; // the page editor's page as the toolbar opened (SPEC.md §29)
   // Placement, by proximity to open tool blocks: right of the text first, then
   // left, then directly below the highlighted text. Bases are container coords.
   side: "right" | "left" | "below";
@@ -1923,7 +1924,7 @@ export function ReaderInteractions({
       rightBase: articleRight + 10,
       cw,
       ...(headerBottom !== undefined ? { nearTop: pageBelow || lineTop - headerBottom < 96 } : {}),
-      ...(pageGeo ? { page: { geo: pageGeo, shift } } : {}),
+      ...(pageGeo ? { page: { geo: pageGeo } } : {}),
     };
   }, []);
   // Read by the drag-start handler below, a mount-time effect with no deps.
@@ -3151,6 +3152,16 @@ export function ReaderInteractions({
     const place = page && marginPlace(page);
     if (place && place.shift > docsShiftRef.current) setDocsShift(place.shift);
   }, [pageMargin]);
+  // The toolbox's width: a submenu with a field (the comment, the assistant)
+  // widens it; coarse pointers get wider boxes to fit the tap-sized rows.
+  const toolboxWidth = submenu === "ai" || submenu === "comment" ? (coarse ? 300 : 248) : coarse ? 220 : 176;
+  // A toolbar beside the page that has grown past its room moves the page
+  // left, as a card does.
+  const toolbarPage = popover?.side === "right" ? popover.page : undefined;
+  useEffect(() => {
+    const need = toolbarPage ? toolbarShift(toolbarPage.geo, docsShiftRef.current, toolboxWidth) : null;
+    if (need !== null && need > docsShiftRef.current) setDocsShift(need);
+  }, [toolbarPage, toolboxWidth]);
   // The page moves back once no card and no toolbar is open, and not under a
   // held press: the words would slide under the drag it starts.
   const marginCardOpen =
@@ -6009,16 +6020,17 @@ function blockFormatKind(
 
   // The toolbox's own box (top/left/width), in pane coordinates. The bubbles
   // anchored to it (highlight colors, Add to notes) are w-full, so the stack
-  // shares one left edge and one width. Coarse pointers get wider boxes to
-  // fit the tap-sized rows.
+  // shares one left edge and one width.
   const popoverBox = popover
     ? (() => {
-        const w =
-          submenu === "ai" || submenu === "comment" ? (coarse ? 300 : 248) : coarse ? 220 : 176;
-        // The page editor: a box widened by a submenu keeps inside the pane.
+        const w = toolboxWidth;
+        // The page editor: a box widened by a submenu takes the room the page
+        // moves left to give; with none, it keeps the toolbar's width.
         if (popover.side === "right" && popover.page) {
-          const left = toolbarLeft(popover.page.geo, popover.page.shift, w) ?? Math.max(6, popover.cw - w - 6);
-          return { top: popover.yTop, left, width: w };
+          const shift = toolbarShift(popover.page.geo, docsShift, w);
+          const width = shift === null ? 176 : w;
+          const left = toolbarLeft(popover.page.geo, shift ?? docsShift, width) ?? Math.max(6, popover.cw - width - 6);
+          return { top: popover.yTop, left, width };
         }
         if (popover.side === "right") {
           return { top: popover.yTop, left: Math.min(popover.rightBase, popover.cw - w - 6), width: w };

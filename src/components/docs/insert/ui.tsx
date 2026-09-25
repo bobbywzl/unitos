@@ -154,6 +154,15 @@ export function FloatingBox({
       data-edit-control
       data-selection-popover
       onMouseDown={keepSelection}
+      onKeyDown={(e) => {
+        // Tab stays in the box: past the last control it comes back to the first.
+        if (e.key !== "Tab" || role !== "dialog") return;
+        const controls = [...(ref.current?.querySelectorAll<HTMLElement>("input, button:not(:disabled)") ?? [])];
+        const from = e.shiftKey ? controls[0] : controls.at(-1);
+        if (!from || document.activeElement !== from) return;
+        e.preventDefault();
+        (e.shiftKey ? controls.at(-1) : controls[0])?.focus();
+      }}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
       style={pos ? { left: pos.left, top: pos.top } : { left: -9999, top: 0, visibility: "hidden" }}

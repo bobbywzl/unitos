@@ -343,8 +343,9 @@ export function PageCanvas({
     };
   }, [pageless, white, setup.color]);
 
-  // Insert > Header / Footer and the chords (hold Ctrl+Alt, press O then H
-  // or F) edit the header or footer of the page that holds the caret.
+  // Insert > Header / Footer and their chords (hold Ctrl+Alt, press O then H
+  // or F; typing/navigate.ts reads them) edit the header or footer of the
+  // page that holds the caret.
   useEffect(() => {
     const caretPage = () => {
       const el = pageRef.current;
@@ -359,37 +360,23 @@ export function PageCanvas({
       store.set({ editing: { area, page: Math.min(caretPage(), store.get().pages - 1) } });
     };
     const onEdit = (e: Event) => editAtCaret((e as CustomEvent<EditHeaderDetail>).detail.area);
-    let chordAt = 0;
     const onKey = (e: KeyboardEvent) => {
       const shell = canvasRef.current?.closest(".docs-shell");
       const active = document.activeElement;
       if (!shell || !(active === document.body || (active && shell.contains(active)))) return;
-      if (!e.ctrlKey && !e.metaKey) return;
-      // Zoom: the page's own, not the browser's.
+      // AltGr, which Windows reports as Ctrl+Alt, types characters (a German
+      // keyboard's \ is on the − key).
+      if ((!e.ctrlKey && !e.metaKey) || e.shiftKey || e.getModifierState("AltGraph")) return;
+      // Zoom: the page's own, not the browser's; Ctrl+Alt+= and Ctrl+Alt+−
+      // too, as in Google Docs.
       let zoom: number | "fit" | null = null;
-      if (!e.altKey && !e.shiftKey) {
-        if (e.code === "Equal" || e.code === "NumpadAdd" || e.key === "=" || e.key === "+") zoom = stepZoom(store.get().scale, 1);
-        else if (e.code === "Minus" || e.code === "NumpadSubtract" || e.key === "-") zoom = stepZoom(store.get().scale, -1);
-        else if (e.code === "Digit0" || e.code === "Numpad0") zoom = 100;
-      } else if (e.altKey && e.code === "BracketLeft") zoom = "fit";
-      if (zoom !== null) {
-        e.preventDefault();
-        store.zoomTo(zoom);
-        return;
-      }
-      if (!e.altKey) return;
-      if (e.code === "KeyO") {
-        chordAt = Date.now();
-        e.preventDefault();
-        e.stopPropagation();
-        return;
-      }
-      if (chordAt && Date.now() - chordAt < 2500 && (e.code === "KeyH" || e.code === "KeyF")) {
-        chordAt = 0;
-        e.preventDefault();
-        e.stopPropagation();
-        editAtCaret(e.code === "KeyH" ? "header" : "footer");
-      }
+      if (e.code === "Equal" || e.code === "NumpadAdd" || e.key === "=" || e.key === "+") zoom = stepZoom(store.get().scale, 1);
+      else if (e.code === "Minus" || e.code === "NumpadSubtract" || e.key === "-") zoom = stepZoom(store.get().scale, -1);
+      else if (!e.altKey && (e.code === "Digit0" || e.code === "Numpad0")) zoom = 100;
+      else if (e.altKey && e.code === "BracketLeft") zoom = "fit";
+      if (zoom === null) return;
+      e.preventDefault();
+      store.zoomTo(zoom);
     };
     window.addEventListener(PAGE_EVENT.editHeader, onEdit);
     window.addEventListener("keydown", onKey, true);

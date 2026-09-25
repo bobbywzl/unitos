@@ -56,6 +56,8 @@ export function FontSizeBox({ editor, size }: { editor: Editor; size: number | n
         data-tip={open ? undefined : t("docs.fontSize")}
         data-tb-item
         onMouseDown={(e) => {
+          // The list opens even when the field kept the focus.
+          setOpen(true);
           if (e.target === inputRef.current) return;
           e.preventDefault();
           inputRef.current?.focus();

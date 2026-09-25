@@ -875,13 +875,8 @@ textarea.docs-field:focus {
 }
 
 /* ── Footnotes, bookmarks, equations ──────────────────────────────────── */
+/* The number is a plain superscript in the text's color (the page's sup). */
 .docs-prose .docs-footnote-ref {
-  display: inline-block;
-  min-width: 0.5em;
-  color: var(--docs-link);
-  font-size: 0.7em;
-  line-height: 1;
-  vertical-align: super;
   cursor: pointer;
 }
 .docs-prose .docs-footnote-ref::after {
@@ -1496,6 +1491,11 @@ body.docs-img-dragging * {
   border-radius: 4px;
   text-align: left;
   cursor: pointer;
+}
+.docs-link-row:focus-visible {
+  outline: 2px solid var(--docs-blue);
+  outline-offset: -2px;
+  border-radius: 4px;
 }
 .docs-link-row svg {
   flex: none;

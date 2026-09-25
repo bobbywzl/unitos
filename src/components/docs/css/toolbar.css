@@ -902,7 +902,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.4);
+  background: rgba(0, 0, 0, 0.6);
 }
 .docs-tb-backdrop-clear {
   background: transparent;
@@ -983,6 +983,11 @@
   outline: 2px solid var(--docs-blue);
   outline-offset: 2px;
   border-radius: 9999px;
+}
+/* A dialog's buttons are Docs' dialog buttons: 4 px corners. */
+.docs-tb-dialog .docs-tb-button,
+.docs-tb-dialog .docs-tb-button:focus-visible {
+  border-radius: 4px;
 }
 .docs-tb-field {
   height: 36px;
