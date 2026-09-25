@@ -54,7 +54,7 @@ export function UnitosLayer({ editor, documentId, canEdit, editing }: DocsAreaPr
   useEffect(() => {
     if (wasViewing.current === viewing) return;
     wasViewing.current = viewing;
-    showComments(editor, viewing ? "hidden" : "minimized");
+    showComments(editor, viewing ? "hidden" : "all");
   }, [editor, viewing]);
 
   // The words changed: the reader closes its toolbar over the old words.

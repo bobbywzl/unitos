@@ -314,7 +314,7 @@ export function CardColumn({
 }) {
   return (
     <>
-      <div className="docs-column" data-docs-column data-split={split || undefined}>
+      <div className="docs-column" data-docs-column data-split={split || undefined} onWheel={scrollPane}>
         <div ref={ref} className="docs-column-in">
           {comments.map((c) => (
             <CommentLine key={c.sourceId} comment={c} />
@@ -324,6 +324,17 @@ export function CardColumn({
       <div aria-hidden className="docs-column-end" data-docs-column-end />
     </>
   );
+}
+
+/** The column stands outside the pane's scroll: a wheel over a card scrolls
+    the pane, as over the page, once the card's own scroll box has none left
+    that way. */
+function scrollPane(e: React.WheelEvent<HTMLElement>) {
+  for (let el = e.target as Element | null; el && el !== e.currentTarget; el = el.parentElement) {
+    const room = e.deltaY > 0 ? el.scrollHeight - el.clientHeight - el.scrollTop : el.scrollTop;
+    if (room > 1 && /auto|scroll/.test(getComputedStyle(el).overflowY)) return;
+  }
+  e.currentTarget.closest("[data-reader-root]")?.scrollBy(0, e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY);
 }
 
 /** A comment's card at rest: one line, the author and the comment's first

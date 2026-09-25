@@ -297,9 +297,35 @@ function flashPlugin() {
   });
 }
 
+// A chip takes no room in the line (css/layer.css): the chips that end on one
+// line stand side by side after the text column, in the text's order.
+function chipRowsPlugin() {
+  return new Plugin({
+    view(view) {
+      let frame = 0;
+      const lay = () => {
+        frame = 0;
+        let row = { parent: null as Element | null, top: NaN, n: 0 };
+        for (const chip of view.dom.querySelectorAll<HTMLElement>("button[data-docs-open]")) {
+          const same = chip.offsetParent === row.parent && Math.abs(chip.offsetTop - row.top) < 4;
+          row = same ? { ...row, n: row.n + 1 } : { parent: chip.offsetParent, top: chip.offsetTop, n: 0 };
+          const at = `${row.n * 20}px`;
+          if (chip.style.getPropertyValue("--docs-chip-at") !== at) chip.style.setProperty("--docs-chip-at", at);
+        }
+      };
+      const update = () => {
+        if (!frame) frame = requestAnimationFrame(lay);
+      };
+      update();
+      return { update, destroy: () => cancelAnimationFrame(frame) };
+    },
+  });
+}
+
 /** A paragraph a change took out and put back as it was (Ctrl+Shift+↑ and ↓
     move one so) loses its marks in the mapping: they go where it went. */
 function keepMoved(tr: Transaction, before: DecorationSet, after: DecorationSet): DecorationSet {
+  if (before === DecorationSet.empty) return after;
   const start = tr.before.content.findDiffStart(tr.doc.content);
   const end = tr.before.content.findDiffEnd(tr.doc.content);
   if (start === null || !end) return after;
@@ -357,6 +383,7 @@ export const AnnotationMarks = Extension.create({
         },
       }),
       flashPlugin(),
+      chipRowsPlugin(),
     ];
   },
 });

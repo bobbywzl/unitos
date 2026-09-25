@@ -67,12 +67,10 @@
    and the notes tray beside it, under the title row and the toolbar, so a
    card never covers the text for want of room. Its inside moves with the
    pane's scroll on the pane's scroll timeline, off the main thread;
-   --docs-scroll is the pane's scroll range. The end stretches the pane to
-   the lowest card. */
-[data-page-editor] {
-  scroll-timeline: --docs-pane y;
-}
-/* The pane's fade-in (globals.css .content-in) filling for good would keep
+   --docs-scroll is the pane's scroll range. Without scroll timelines the
+   suggestion layer moves it. The end stretches the pane to the lowest
+   card.
+   The pane's fade-in (globals.css .content-in) filling for good would keep
    the pane in a stacking context of its own, under the notes tray, and the
    column with it: the fade lets go once it ran. */
 .content-in:has(> div > [data-page-editor]) {
@@ -88,8 +86,15 @@
   position: absolute;
   left: 0;
   width: 100%;
-  animation: docs-column-scroll linear both;
-  animation-timeline: --docs-pane;
+}
+@supports (animation-timeline: scroll()) {
+  [data-page-editor] {
+    scroll-timeline: --docs-pane y;
+  }
+  .docs-column-in {
+    animation: docs-column-scroll linear both;
+    animation-timeline: --docs-pane;
+  }
 }
 @keyframes docs-column-scroll {
   from {
@@ -110,29 +115,30 @@
   pointer-events: none;
   visibility: hidden;
 }
+/* The canvas goes on down to the column's end. */
+[data-page-editor] {
+  background: var(--docs-canvas);
+}
 @media print {
   .docs-column,
   .docs-column-end {
     display: none;
+  }
+  [data-page-editor] {
+    background: transparent;
   }
 }
 
 /* A chip takes no room in the line: it sits right of the text column (in a
    table, at the cell's right edge), level with the line its mark ends on,
    where Google Docs keeps its comment icons, so a new mark never moves the
-   words. The chips at one mark's end stand side by side. Its ring takes the
-   page's color. */
+   words. The chips on one line stand side by side (--docs-chip-at,
+   annotation-marks.tsx). Its ring takes the page's color. */
 .docs-prose button[data-docs-open] {
   position: absolute;
   left: calc(100% + 8px + var(--docs-chip-at, 0px));
   margin: 2px 0 0;
   box-shadow: 0 0 0 1.5px var(--docs-page);
-}
-.docs-prose button[data-docs-open] + button[data-docs-open] {
-  --docs-chip-at: 20px;
-}
-.docs-prose button[data-docs-open] + button[data-docs-open] + button[data-docs-open] {
-  --docs-chip-at: 40px;
 }
 .docs-prose :is(td, th) button[data-docs-open] {
   right: calc(2px + var(--docs-chip-at, 0px));

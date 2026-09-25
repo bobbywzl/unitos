@@ -44,14 +44,20 @@ export function editTabStops(editor: Editor, change: (stops: TabStop[]) => TabSt
     column's left edge. */
 export function tabSizes(view: EditorView): Map<number, number> {
   const sizes = new Map<number, number>();
-  const column = view.dom.getBoundingClientRect();
-  const scale = view.dom.offsetWidth > 0 ? column.width / view.dom.offsetWidth : 1;
-  const x = (clientX: number) => (clientX - column.left) / scale;
+  // The layout is read only for a paragraph with stops and tabs: each pass
+  // runs this, on every key.
+  let column: DOMRect | null = null;
+  const x = (clientX: number) => {
+    column ??= view.dom.getBoundingClientRect();
+    const scale = view.dom.offsetWidth > 0 ? column.width / view.dom.offsetWidth : 1;
+    return (clientX - column.left) / scale;
+  };
   view.state.doc.descendants((node, pos) => {
     if (!node.isTextblock) return true;
     const stops = parseTabStops(node.attrs.tabStops);
+    if (stops.length === 0 || !node.textContent.includes("\t")) return false;
     const el = view.nodeDOM(pos);
-    if (stops.length === 0 || !node.textContent.includes("\t") || !(el instanceof HTMLElement)) return false;
+    if (!(el instanceof HTMLElement)) return false;
     // CSS measures tab stops from the paragraph's content box.
     const cs = getComputedStyle(el);
     const origin = x(el.getBoundingClientRect().left) + (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.borderLeftWidth) || 0);

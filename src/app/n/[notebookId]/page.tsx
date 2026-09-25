@@ -479,6 +479,7 @@ export default async function NotebookPage(props: {
         color: string | null;
         content: string;
         quotedText: string | null;
+        createdById: string | null;
       }
     > = {};
     for (const a of annotations) {
@@ -489,6 +490,7 @@ export default async function NotebookPage(props: {
           color: a.color,
           content: a.content,
           quotedText: a.quotedText,
+          createdById: a.createdById,
         };
       }
     }

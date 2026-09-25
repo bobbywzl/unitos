@@ -22,7 +22,6 @@ import {
   modification,
   revertSuggestion,
   revertSuggestions,
-  selectSuggestion,
   suggestChanges,
   suggestChangesKey,
   transformToSuggestionTransaction,
@@ -41,8 +40,10 @@ export const isSuggestionMark = (mark: PMMark) => SUGGESTION_MARK_TYPES.has(mark
 const isWordMark = (mark: PMMark) => mark.type.name === "insertion" || mark.type.name === "deletion";
 const isModification = (mark: PMMark) => mark.type.name === "modification";
 
+/** The suggestion the marks carry; a deletion first, as it can lie over
+    another person's added words. */
 const idIn = (marks: readonly PMMark[] | undefined) => {
-  const mark = marks?.find(isSuggestionMark);
+  const mark = marks?.find((m) => m.type.name === "deletion") ?? marks?.find(isSuggestionMark);
   return mark ? String(mark.attrs.id) : null;
 };
 
@@ -372,8 +373,9 @@ function touched(tr: Transaction): [number, number][] {
 /** The library gives new words the id of a suggestion they touch, and gives
     a touching suggestion the new words' id: across two authors that credits
     one person's words to the other. Words that had a suggestion keep its
-    id; words new to one take this author's, the one beside them when this
-    author's (Backspace pressed again in another person's added words). */
+    id; words new to one take this author's: the one right beside the
+    change, as the text stood before it (Backspace pressed again), else a
+    new one. */
 function keepAuthors(tr: Transaction, before: PMNode, author: string, id: string): void {
   const back = tr.mapping.invert();
   const fixes: { from: number; to: number; old: PMMark; mark: PMMark; block: boolean }[] = [];
@@ -389,13 +391,13 @@ function keepAuthors(tr: Transaction, before: PMNode, author: string, id: string
     else fixes.push({ from, to, old: mark, mark: mark.type.create({ ...mark.attrs, id: want }), block });
   };
   for (const [from, to] of touched(tr)) {
+    const beside = [before.resolve(back.map(from, -1)).nodeBefore, before.resolve(back.map(to, 1)).nodeAfter].flatMap((n) => n?.marks ?? []);
     tr.doc.nodesBetween(from, to, (node, pos) => {
       const marks = node.marks.filter(isWordMark);
       if (!node.isText) {
         for (const mark of marks) check(pos, pos + 1, mark, true);
         return true;
       }
-      const beside = [tr.doc.resolve(pos).nodeBefore, tr.doc.resolve(pos + node.nodeSize).nodeAfter].flatMap((n) => n?.marks ?? []);
       for (let at = Math.max(pos, from); at < Math.min(pos + node.nodeSize, to); at++) {
         for (const mark of marks) check(at, at + 1, mark, false, beside);
       }
@@ -477,11 +479,12 @@ function acceptMapping(doc: PMNode): Mapping {
   return mapping;
 }
 
+/** A step that moves blocks (a list toggled, a line nested). */
+const movesBlocks = (step: Step) => step instanceof ReplaceAroundStep && !isFormatStep(step);
+
 /** The selection stands in what the transaction adds: a command put it
     there (a table's first cell, a footnote, a new row, a list line). */
-const inAdded = (tr: Transaction) =>
-  tr.mapping.invert().mapResult(tr.selection.head).deletedAcross ||
-  tr.steps.some((step) => step instanceof ReplaceAroundStep && !isFormatStep(step));
+const inAdded = (tr: Transaction) => tr.mapping.invert().mapResult(tr.selection.head).deletedAcross || tr.steps.some(movesBlocks);
 
 /** `tr` again on `state`, whose doc has the same positions, with `steps`. */
 function redo(tr: Transaction, state: EditorState, steps: readonly Step[]): Transaction {
@@ -498,7 +501,7 @@ function redo(tr: Transaction, state: EditorState, steps: readonly Step[]): Tran
     change on words throws. Such a step goes to it as that replace with the
     words as they stand: they keep their format change. */
 function asReplace(step: Step, doc: PMNode): Step {
-  const moves = step instanceof ReplaceAroundStep && !isFormatStep(step);
+  const moves = movesBlocks(step);
   if (!moves && !isMarkStep(step)) return step;
   const { from, to } = step as ReplaceAroundStep | AddMarkStep | RemoveMarkStep;
   const applied = step.apply(doc).doc;
@@ -512,6 +515,28 @@ function asReplace(step: Step, doc: PMNode): Step {
   const [start, end] = moves ? [range.start, range.end] : [from, to];
   const back = map.invert();
   return (words && replaceStep(doc, back.map(start), back.map(end), applied.slice(start, end))) || step;
+}
+
+/** A transaction that moves blocks in more than one step (a line lifted
+    out of a list, then wrapped in a list of another kind; a list toggled,
+    then joined to its neighbor) as one replace of the blocks it changes,
+    with the words as they stand: the library reads each step against the
+    text before it, and a step on blocks an earlier step moved loses its
+    place. */
+function asOneReplace(tr: Transaction): Step | null {
+  const { before, doc } = tr;
+  const start = before.content.findDiffStart(doc.content);
+  const end = before.content.findDiffEnd(doc.content);
+  if (start === null || !end) return null;
+  // Where the same content repeats, the ends found can overlap the start.
+  const over = Math.max(0, start - Math.min(end.a, end.b));
+  const [$fromA, $toA, $fromB, $toB] = [before.resolve(start), before.resolve(end.a + over), doc.resolve(start), doc.resolve(end.b + over)];
+  const a = $fromA.blockRange($toA);
+  const b = $fromB.blockRange($toB);
+  if (!a || !b) return null;
+  // Whole blocks, in the parent both sides share.
+  const depth = Math.min(a.depth, b.depth) + 1;
+  return replaceStep(before, $fromA.before(depth), $toA.after(depth), doc.slice($fromB.before(depth), $toB.after(depth)));
 }
 
 type Aside = { from: number; to: number; mark: PMMark };
@@ -540,7 +565,8 @@ function othersAdded(tr: Transaction, author: string): Aside[] {
     sees those marks, and they come back on their words (a block's on it). */
 function track(tr: Transaction, state: EditorState, aside: Aside[], id: () => string): Transaction {
   const run = (edit: Transaction, base: EditorState) => {
-    const steps = edit.steps.map((step, i) => asReplace(step, edit.docs[i]));
+    const one = edit.steps.length > 1 && edit.steps.some(movesBlocks) ? asOneReplace(edit) : null;
+    const steps = one ? [one] : edit.steps.map((step, i) => asReplace(step, edit.docs[i]));
     return transformToSuggestionTransaction(steps.some((step, i) => step !== edit.steps[i]) ? redo(edit, base, steps) : edit, base, id);
   };
   if (aside.length === 0) return run(tr, state);
@@ -674,9 +700,21 @@ export function settleSuggestions(editor: Editor, accept: boolean, id?: string):
   editor.view.dispatch(tr.setMeta(suggestChangesKey, { skip: true }));
 }
 
-/** Select a suggestion's words and give the page the focus: its card opens. */
+/** Select a suggestion's words and give the page the focus: its card opens.
+    (The library's own select reads one suggestion mark a node, and misses
+    a deletion over another person's added words.) */
 export function focusSuggestion(editor: Editor, id: string): void {
-  if (selectSuggestion(id)(editor.state, (tr) => editor.view.dispatch(tr))) editor.view.focus();
+  const { doc } = editor.state;
+  let [from, to] = [-1, -1];
+  doc.descendants((node, pos) => {
+    if (!node.marks.some((m) => isSuggestionMark(m) && m.attrs.id === id)) return true;
+    if (from < 0) from = pos;
+    to = pos + node.nodeSize;
+    return false;
+  });
+  if (from < 0) return;
+  editor.view.dispatch(editor.state.tr.setSelection(TextSelection.create(doc, from, to)).scrollIntoView());
+  editor.view.focus();
 }
 
 /** Blocks a suggestion puts back with the same words draw once: the removed

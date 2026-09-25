@@ -1,5 +1,6 @@
 "use client";
 
+import { redoDepth, undoDepth } from "@tiptap/pm/history";
 import { useEditorState, type Editor } from "@tiptap/react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { flushSync } from "react-dom";
@@ -159,8 +160,9 @@ function readToolbar(e: Editor) {
   };
   const cell = selectedCells(state)[0];
   return {
-    canUndo: e.can().undo(),
-    canRedo: e.can().redo(),
+    // The history's depth: e.can() builds every command, on every transaction.
+    canUndo: undoDepth(state) > 0,
+    canRedo: redoDepth(state) > 0,
     bold: e.isActive("bold"),
     italic: e.isActive("italic"),
     underline: e.isActive("underline"),

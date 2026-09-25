@@ -138,7 +138,8 @@ export function DropBtn({
         label={label}
         highlightFirst={fromKeys}
       >
-        {children(close)}
+        {/* Built only while open: the font menu reads the whole document. */}
+        {open && children(close)}
       </DropdownPanel>
     </>
   );

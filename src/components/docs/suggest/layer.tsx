@@ -7,7 +7,7 @@ import { useCollab } from "@/components/collab/collab-context";
 import type { DocsAreaProps } from "@/components/docs/areas/types";
 import { registerDocsCommands } from "@/components/docs/commands";
 import { readSuggestions, setSuggesting, settleSuggestions, suggestionAt } from "@/components/docs/ext/suggest";
-import { belowSlot, pageGeometry, slotAt } from "@/components/docs/layer/margin";
+import { belowSlot, pageGeometry, paneReach, slotAt } from "@/components/docs/layer/margin";
 import { SuggestionCard } from "@/components/docs/suggest/card";
 import { ReviewPanel } from "@/components/docs/suggest/review";
 import { suggestionAuthor } from "@/lib/docs/schema";
@@ -65,11 +65,10 @@ function fitColumn(pane: HTMLElement, column: HTMLElement): void {
   if (!box) return;
   const r = pane.getBoundingClientRect();
   const top = Math.max(r.top, pane.querySelector(".docs-header")?.getBoundingClientRect().bottom ?? r.top);
-  const right = box.hasAttribute("data-split") ? r.right : document.documentElement.clientWidth;
   Object.assign(box.style, {
     left: `${r.left}px`,
     top: `${top}px`,
-    width: `${Math.max(0, right - r.left)}px`,
+    width: `${paneReach(pane)}px`,
     height: `${Math.max(0, r.bottom - top)}px`,
   });
   column.style.top = `${r.top - top}px`;
@@ -115,8 +114,9 @@ function placeCards(editor: Editor, pane: HTMLElement, column: HTMLElement): boo
     if (shown) cards.push({ el, at, open, top: editor.view.coordsAtPos(at).top - paneTop + (slot ? 0 : 34) });
   }
   // What the cards flow around, in the column's width: the toolbar with its
-  // bubbles, and the tools' cards.
-  const fixed: { top: number; bottom: number; toolbar: boolean }[] = [];
+  // bubbles, and the tools' cards. The toolbar's own box is level with its
+  // words, the selection.
+  const fixed: { top: number; bottom: number; words?: number }[] = [];
   const inColumn = (r: DOMRect) => r.width > 0 && r.left < paneRect.left + left + width && r.right > paneRect.left + left;
   for (const el of slot ? column.querySelectorAll<HTMLElement>(FIXED) : []) {
     if (el.matches(COLUMN_CARD) || el.closest(".presence-exit")) continue;
@@ -126,7 +126,7 @@ function placeCards(editor: Editor, pane: HTMLElement, column: HTMLElement): boo
     fixed.push({
       top: Math.min(...rects.map((r) => r.top)) - paneTop,
       bottom: Math.max(...rects.map((r) => r.bottom)) - paneTop,
-      toolbar,
+      words: toolbar ? rects[0].top - paneTop : undefined,
     });
   }
   cards.sort((a, b) => a.top - b.top || a.at - b.at);
@@ -148,9 +148,10 @@ function placeCards(editor: Editor, pane: HTMLElement, column: HTMLElement): boo
       tops[i] = clear(i > start ? Math.max(tops[i], tops[i - 1] + heights[i - 1] + CARD_GAP) : tops[i], heights[i], true);
     }
   };
-  // The cards flow around the toolbar, else the open card, else the first.
-  const toolbar = fixed.find((f) => f.toolbar);
-  const anchor = toolbar ? cards.findIndex((c) => c.top >= toolbar.top) : Math.max(0, cards.findIndex((c) => c.open));
+  // The cards flow around the toolbar, else the open card, else the first:
+  // the cards whose words come before its words go above it.
+  const words = fixed.find((f) => f.words !== undefined)?.words;
+  const anchor = words !== undefined ? cards.findIndex((c) => c.top >= words) : Math.max(0, cards.findIndex((c) => c.open));
   const a = anchor < 0 ? cards.length : anchor;
   if (slot) {
     pushDown(a);
