@@ -1547,8 +1547,9 @@ export function AssistantPanel({
                       </ul>
                     )}
                     {/* The rating (SPEC.md §25): the question it answered and
-                        the answer, once the answer is whole. */}
-                    {!(busy && i === activeTurns.length - 1) && (
+                        the answer, once the answer is whole; the
+                        suggestions' row rates a turn that asked for them. */}
+                    {!turn.suggest && !(busy && i === activeTurns.length - 1) && (
                       <RatingButtons
                         tool="assistant"
                         input={activeTurns[i - 1]?.content ?? ""}

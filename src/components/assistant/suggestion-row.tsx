@@ -109,6 +109,16 @@ export function SuggestionRow({
       {t(bar ? "common.accept" : "docsSuggest.acceptAll")}
     </button>
   );
+  const rating = !run.running && (
+    <RatingButtons
+      tool="suggest"
+      input={run.rating.input}
+      output={run.rating.output}
+      notebookId={run.rating.notebookId}
+      documentId={run.rating.documentId}
+      className="mx-1"
+    />
+  );
   return (
     <div className={`flex flex-col gap-1.5 text-[12px] text-sand-600 ${bar ? "" : "mt-2"}`}>
       {withSummary && run.summary && <p className="text-[13px] text-sand-800">{run.summary}</p>}
@@ -126,16 +136,7 @@ export function SuggestionRow({
           </span>
         )}
         {(count > 0 || !run.running) && <span className="mr-1 font-semibold text-sand-700">{counted}</span>}
-        {!run.running && (
-          <RatingButtons
-            tool="suggest"
-            input={run.rating.input}
-            output={run.rating.output}
-            notebookId={run.rating.notebookId}
-            documentId={run.rating.documentId}
-            className="mr-1"
-          />
-        )}
+        {bar && rating}
         {act && count > 0 &&
           (bar ? (
             <>
@@ -157,6 +158,7 @@ export function SuggestionRow({
               {reject}
             </>
           ))}
+        {!bar && rating}
         {bar && (
           <button
             type="button"

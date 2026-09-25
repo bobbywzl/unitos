@@ -5207,8 +5207,11 @@ export function ReaderInteractions({
         throw new Error(json?.error ?? t("assistant.suggestFailedStatus", { status: res.status }));
       }
       for await (const event of readNdjson<SuggestEvent>(res)) {
-        if ("ops" in event) await landOps(request.key, event.ops, event.warnings);
-        else if ("done" in event) {
+        if ("ops" in event) {
+          // The windows' summaries until the run's own: a stopped run keeps them.
+          if (event.ops.length > 0) run.summary = [run.summary, event.summary].filter(Boolean).join(" ");
+          await landOps(request.key, event.ops, event.warnings);
+        } else if ("done" in event) {
           run.summary = event.summary;
           run.notes.push(...event.warnings);
         } else if ("error" in event) run.notes.push(event.error);
