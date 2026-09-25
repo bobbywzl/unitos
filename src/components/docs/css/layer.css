@@ -133,6 +133,38 @@
   left: auto;
 }
 
+/* A mark on a figure or an equation (annotation-marks.tsx): the object rings
+   in its mark's kind color, and its label chip (A1) stands right of the text
+   column, level with the object's top, as the reader draws it. */
+.docs-prose .docs-object-mark {
+  border-radius: 8px;
+  box-shadow: 0 0 0 2px var(--docs-object-ring);
+}
+.docs-prose button.docs-object-label {
+  position: absolute;
+  left: calc(100% + 8px + var(--docs-chip-at, 0px));
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 8px 0 0;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--card);
+  box-shadow: var(--elev-sm);
+  color: var(--sand-700);
+  font: 600 10.5px/1.2 var(--docs-ui-font);
+  white-space: nowrap;
+}
+.docs-prose button.docs-object-label:hover {
+  color: var(--clay-800);
+}
+.docs-object-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+}
+
 /* A comment's card (layer/comment-card.tsx): Google Docs' 32 px badge, the
    name over the time, Resolve and More options, then the comment in 14 px
    text. */

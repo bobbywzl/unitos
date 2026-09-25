@@ -1,6 +1,6 @@
 import "@/lib/pdf-runtime";
 import { getDocumentProxy } from "unpdf";
-import type { LinkSpan, ParsedBlock, StyleSpan } from "@/lib/parse/types";
+import type { LinkSpan, ParsedBlock, ParsedDocument, StyleSpan } from "@/lib/parse/types";
 import type { Region } from "@/lib/video/types";
 
 // pdf.js calls Math.sumPrecise while it rebuilds font programs. Node 22 has no
@@ -22,7 +22,10 @@ if (typeof mathWithSum.sumPrecise !== "function") {
 // become LIST (bullet glyphs are often vector art and never reach the text
 // layer), wide-gap runs become TABLE with header rows, repeated page furniture
 // drops, letter-spaced caps collapse, and Contents entries link to their
-// section headings.
+// section headings. And the pages: every block keeps the page it starts on, a
+// block joined across a page break keeps where each later page begins, and
+// the parse keeps the first page's size and the PDF's page labels — an
+// import's page starts and page setup come from them.
 
 type Flags = { bold: boolean; italic: boolean; mono: boolean; href: string | null };
 // math: the glyph comes from a math font (Computer Modern math and symbol
@@ -2643,9 +2646,7 @@ function attachFigureRegions(
 
 // ── Main ────────────────────────────────────────────────────────────────────
 
-export async function parsePdf(
-  data: Uint8Array,
-): Promise<{ title: string | null; blocks: ParsedBlock[] }> {
+export async function parsePdf(data: Uint8Array): Promise<PdfParse> {
   // pdf.js transfers (detaches) the buffer it receives — parse a copy so callers keep theirs.
   const pdf = await getDocumentProxy(new Uint8Array(data));
 
@@ -2963,21 +2964,44 @@ export async function parsePdf(
       skipBold: s.type === "HEADING",
       skipMono: s.type === "CODE",
     });
-    const block: ParsedBlock = { type: s.type, text: s.text };
+    // Every block keeps the page its first words are on (1-based), and a
+    // block joined across page breaks where each later page begins. FIGURE
+    // blocks keep their region for the figure image route.
+    const block: ParsedBlock = { type: s.type, text: s.text, page: firstPageOf(s) + 1 };
     if (s.html) block.html = s.html;
-    // FIGURE blocks keep their page (1-based) and region for the figure image route.
-    if (s.type === "FIGURE") {
-      block.page = s.page + 1;
-      if (s.region) block.region = s.region;
+    if (s.breaks && s.breaks.length > 0) {
+      block.pageStarts = s.breaks.map((b) => ({ offset: b.offset, page: b.page + 1 }));
     }
+    if (s.type === "FIGURE" && s.region) block.region = s.region;
     const allLinks = [...(s.links ?? []), ...links];
     if (styles.length > 0) block.styles = styles;
     if (allLinks.length > 0) block.links = allLinks;
     return block;
   });
 
-  return {
+  const parsed: PdfParse = {
     title,
     blocks: blocks.filter((b) => b.text.trim().length > 0 || (b.type === "FIGURE" && b.region)),
   };
+  if (pageWidths.length > 0) parsed.pageSize = { width: points(pageWidths[0]), height: points(pageHeights[0]) };
+  const labels = pageLabelsOf(await pdf.getPageLabels().catch(() => null), pdf.numPages);
+  if (labels) parsed.pageLabels = labels;
+  return parsed;
+}
+
+type PdfParse = Pick<ParsedDocument, "title" | "blocks" | "pageSize" | "pageLabels">;
+
+// A size in points, to a hundredth: A4 is 595.28 × 841.89.
+function points(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
+// The PDF's page labels (pdf.js getPageLabels: one per page, "" where the
+// PDF names a page with no number), kept only when they name the pages
+// otherwise than 1..n — as pdf.js's own viewer does. A page left unnamed
+// reads as its number.
+function pageLabelsOf(labels: string[] | null, pageCount: number): string[] | undefined {
+  if (!labels || labels.length !== pageCount) return undefined;
+  const named = labels.map((label, i) => label.trim() || String(i + 1));
+  return named.every((label, i) => label === String(i + 1)) ? undefined : named;
 }

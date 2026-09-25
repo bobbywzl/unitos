@@ -1,9 +1,9 @@
 "use client";
 
 import type { Editor } from "@tiptap/core";
-import type { Node as PMNode } from "@tiptap/pm/model";
+import type { Node as PMNode, Schema } from "@tiptap/pm/model";
 import type { Transaction } from "@tiptap/pm/state";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { OWN_SAVE_EVENT, REFRESH_EVENT } from "@/components/collab/use-sync";
 import { mergeRichText } from "@/lib/docs/merge";
 import { newBlockId, type RichNode } from "@/lib/docs/schema";
@@ -43,6 +43,55 @@ export function saveOnLeave(e: BeforeUnloadEvent, url: string, method: "PUT" | "
 }
 
 type Response409 = { reason?: string; rev?: number; richText?: RichNode | null; ids?: string[] };
+
+/** The node and mark types of a stored copy that this build's schema does
+    not know: a newer build wrote them. The editor would open such a copy
+    empty, and a save from it would replace the text with nothing. */
+export function unknownTypes(json: RichNode, schema: Schema): string[] {
+  const unknown = new Set<string>();
+  const walk = (node: RichNode) => {
+    if (!schema.nodes[node.type]) unknown.add(node.type);
+    for (const mark of node.marks ?? []) if (!schema.marks[mark.type]) unknown.add(mark.type);
+    for (const child of node.content ?? []) walk(child);
+  };
+  walk(json);
+  return [...unknown];
+}
+
+// A stored copy holds a type this build does not know: the page reloads
+// once, to the newer build, and notes it for this tab. A second reload would
+// loop, so the page then shows why instead; so does a browser without
+// session storage. A copy that opens clears the note.
+const reloadKey = (documentId: string) => `unitos-docs-reload:${documentId}`;
+
+function reloadSpent(documentId: string): boolean {
+  try {
+    return sessionStorage.getItem(reloadKey(documentId)) !== null;
+  } catch {
+    return true;
+  }
+}
+
+function reloadOnce(documentId: string): void {
+  try {
+    sessionStorage.setItem(reloadKey(documentId), String(Date.now()));
+  } catch {
+    return;
+  }
+  window.location.reload();
+}
+
+function clearReload(documentId: string): void {
+  try {
+    sessionStorage.removeItem(reloadKey(documentId));
+  } catch {
+    // Nothing was noted.
+  }
+}
+
+/** Why the editor cannot show the stored copy: the page is reloading to a
+    newer build, or it reloaded once already and did not get one. */
+export type Outdated = "reloading" | "stale";
 
 /** A node's partner in the other copy: its type and the first blockId in it,
     as the merge pairs them (lib/docs/merge.ts). */
@@ -144,6 +193,18 @@ export function useDocsSave({
   enabled: boolean;
 }) {
   const [state, setState] = useState<SaveState>("saved");
+  // A stored copy that holds a type this build does not know (a newer build
+  // wrote it): the page, or a conflict's answer. The editor never shows it
+  // and never saves over it; the page reloads once instead.
+  const storedUnknown = useMemo(() => (editor ? unknownTypes(richText, editor.schema).length > 0 : false), [editor, richText]);
+  const [conflictUnknown, setConflictUnknown] = useState(false);
+  const newer = storedUnknown || conflictUnknown;
+  const outdated = useMemo<Outdated | null>(() => (newer ? (reloadSpent(documentId) ? "stale" : "reloading") : null), [newer, documentId]);
+  useEffect(() => {
+    if (outdated === "reloading") reloadOnce(documentId);
+    else if (outdated === null && editor) clearReload(documentId);
+  }, [outdated, editor, documentId]);
+  const live = enabled && !newer;
   const revRef = useRef(rev);
   // The copy the stored revision holds: the base a merge compares against.
   const baseRef = useRef<RichNode>(richText);
@@ -171,7 +232,7 @@ export function useDocsSave({
   };
 
   const save = useCallback(async (): Promise<void> => {
-    if (!editor || !enabled) return;
+    if (!editor || !live) return;
     // One save at a time: every caller waits out the save that runs, and
     // the first to wake starts the next before any other can.
     while (inFlightRef.current) await inFlightRef.current;
@@ -212,6 +273,10 @@ export function useDocsSave({
             });
             tr.setMeta("addToHistory", false);
             editor.view.dispatch(tr);
+          } else if (body.reason === "rev" && body.richText && unknownTypes(body.richText, editor.schema).length > 0) {
+            // A newer build saved it: this one cannot lay the typing over it.
+            setConflictUnknown(true);
+            return;
           } else if (body.reason === "rev" && body.richText && typeof body.rev === "number" && !editor.isDestroyed) {
             // The stored copies come back with their keys reordered and their
             // default attributes left out: compare them in the editor's form.
@@ -263,14 +328,14 @@ export function useDocsSave({
       clearTimer();
       timerRef.current = setTimeout(() => void saveRef.current(), wait);
     }
-  }, [editor, enabled, url]);
+  }, [editor, live, url]);
   useEffect(() => {
     saveRef.current = save;
   }, [save]);
 
   // Every change marks the document unsaved and schedules a save.
   useEffect(() => {
-    if (!editor || !enabled) return;
+    if (!editor || !live) return;
     const onUpdate = ({ transaction }: { transaction: { docChanged: boolean } }) => {
       if (!transaction.docChanged || loadingRef.current) return;
       dirtyRef.current = true;
@@ -293,13 +358,13 @@ export function useDocsSave({
       editor.off("transaction", onUpdate);
       window.removeEventListener("online", onOnline);
     };
-  }, [editor, enabled, save]);
+  }, [editor, live, save]);
 
   // A newer stored copy arrived with the page (someone else's save, or a
   // server-side edit such as the assistant's): take it when nothing is
   // waiting to be saved here; otherwise the next save merges.
   useEffect(() => {
-    if (!editor || editor.isDestroyed || rev <= revRef.current) return;
+    if (!editor || editor.isDestroyed || rev <= revRef.current || storedUnknown) return;
     if (dirtyRef.current || inFlightRef.current || editor.view.composing) return;
     loadingRef.current = true;
     try {
@@ -309,17 +374,17 @@ export function useDocsSave({
     }
     baseRef.current = richText;
     revRef.current = rev;
-  }, [editor, rev, richText]);
+  }, [editor, rev, richText, storedUnknown]);
 
   // Leaving with unsaved changes: one last save, and the browser's warning.
   useEffect(() => {
-    if (!editor || !enabled) return;
+    if (!editor || !live) return;
     const onLeave = (e: BeforeUnloadEvent) => {
       if (dirtyRef.current) saveOnLeave(e, url, "PUT", { richText: editor.getJSON(), rev: revRef.current });
     };
     window.addEventListener("beforeunload", onLeave);
     return () => window.removeEventListener("beforeunload", onLeave);
-  }, [editor, enabled, url]);
+  }, [editor, live, url]);
 
   // The editor goes away (another document opens): one last save of what
   // waits, and no try after it.
@@ -344,5 +409,5 @@ export function useDocsSave({
     }
   }, [save]);
 
-  return { state, flush, matches };
+  return { state, flush, matches, outdated };
 }

@@ -2,6 +2,12 @@ import { createHash } from "node:crypto";
 import { Prisma, type Document } from "@prisma/client";
 import { carryContents } from "@/lib/contents";
 import { db } from "@/lib/db";
+import { deriveBlocks, ensureBlockIds, hasBlockIds } from "@/lib/docs/blocks";
+import { richTextFromImport } from "@/lib/docs/import";
+import { sanitizeRichText, type PageSetup, type RichNode } from "@/lib/docs/schema";
+import { syncRichText } from "@/lib/docs/sync";
+import { keepNamedVersion } from "@/lib/docs/versions";
+import { serverT } from "@/lib/i18n/server";
 import { classifyPdf } from "@/lib/handwritten/classify";
 import { storePageSizes } from "@/lib/handwritten/page-images";
 import { pageBlockText, pdfPageCount } from "@/lib/handwritten/pages";
@@ -168,15 +174,20 @@ export async function refineUrlBlocks(
 // that ran did not deliver (the reasons a caption stands alone;
 // lib/parse/render-page.ts), and the media check (SPEC.md §15): how many
 // images, videos, and charts the page's content holds and the names of
-// those no block carries.
+// those no block carries. blockDocument "size": the size guard kept the
+// document out of the page editor (SPEC.md §29), and the done line says so.
 async function saveDetail(
   blocks: ParsedBlock[],
-  scriptedFigures = false,
-  render: RenderReport | null = null,
-  media: MediaCheck | undefined = undefined,
-  check: VisionCheckReport | null = null,
-  title: string | null = null,
+  opts: {
+    scriptedFigures?: boolean;
+    render?: RenderReport | null;
+    media?: MediaCheck;
+    check?: VisionCheckReport | null;
+    title?: string | null;
+    blockDocument?: BlockDocumentReason | null;
+  } = {},
 ): Promise<string> {
+  const { scriptedFigures = false, render = null, media, check = null, title = null, blockDocument = null } = opts;
   const audit = await auditFiguresWithJev(blocks, title);
   return JSON.stringify({
     figures: audit.figures,
@@ -185,7 +196,176 @@ async function saveDetail(
     renderError: render?.error ?? null,
     ...(media ? { media: media.onPage, mediaLost: media.lost } : {}),
     ...(check ? { visionCheck: check } : {}),
+    ...(blockDocument ? { blockDocument } : {}),
   });
+}
+
+// ── Imports (SPEC.md §29) ───────────────────────────────────────────────────
+// A PDF judged an article, a web page, and a Markdown or text file become an
+// import: rich text that opens in the page editor. The converter
+// (lib/docs/import.ts) turns the parse's blocks into the rich text; the Block
+// rows are derived from it in the same transaction (lib/docs/sync.ts, bulk),
+// so the first save changes only the paragraph typed in.
+
+/** The switch: IMPORT_PAGE_EDITOR=on makes new imports rich text; unset, a
+    new import is a block document, as before. Read at import only: a
+    document made while it was on keeps its rich text, and re-parses as rich
+    text. */
+export function importPageEditorOn(): boolean {
+  return process.env.IMPORT_PAGE_EDITOR === "on";
+}
+
+// The size guard: past either, an import stays a block document and the
+// done line says so. Every save sends the whole rich text and every row, so
+// a document past these is slow to open, type in, and save.
+export const IMPORT_MAX_ROWS = 1_500;
+export const IMPORT_MAX_JSON_CHARS = 1_500_000;
+
+/** Why an import stays a block document: the size guard. */
+type BlockDocumentReason = "size";
+
+/** The save stage detail of an add with no figure check (a PDF): only the
+    size guard's line, when it kept a block document. */
+function blockDocumentDetail(reason: BlockDocumentReason | null): string | undefined {
+  return reason ? JSON.stringify({ blockDocument: reason }) : undefined;
+}
+
+// An import's writes: the rich text, its figures, and the rows in one
+// transaction. A 1,500-row import writes in well under this.
+const IMPORT_TX_MS = 60_000;
+
+type ImportKind = "pdf" | "url" | "markdown";
+type ImportFigure = ReturnType<typeof richTextFromImport>["figures"][number];
+
+/** A parse as an import: the rich text, the figure media, the page setup. */
+type Converted = { richText: RichNode; figures: ImportFigure[]; pageSetup: PageSetup };
+
+/** The parse's blocks as an import, or "size" when the size guard keeps
+    them a block document. titleFromOriginal: the title came from the
+    original (the PDF's title, the page's, the front matter's), so the
+    rich text opens with it in the Title style. */
+function convertImport(input: {
+  kind: ImportKind;
+  title: string;
+  titleFromOriginal: boolean;
+  blocks: ParsedBlock[];
+  pageSize?: { width: number; height: number };
+}): Converted | "size" {
+  // Contents entries point at their headings' orders; the converter links
+  // them to the headings' block ids.
+  const out = richTextFromImport({ ...input, blocks: resolveContentsLinks(input.blocks) });
+  if (out.size.rows > IMPORT_MAX_ROWS || out.size.json > IMPORT_MAX_JSON_CHARS) return "size";
+  // Past the node limit the sanitizer refuses the document: the guard holds.
+  const clean = sanitizeRichText(out.richText);
+  if (!clean) return "size";
+  return {
+    richText: hasBlockIds(clean) ? clean : ensureBlockIds(clean),
+    figures: out.figures,
+    pageSetup: out.pageSetup,
+  };
+}
+
+/** The figure media of an import, written before its rows: the save's
+    figure check drops a figure object whose media is not the document's. */
+async function createFigureMedia(tx: Prisma.TransactionClient, documentId: string, figures: ImportFigure[]) {
+  if (figures.length === 0) return;
+  await tx.figureMedia.createMany({
+    data: figures.map((f) => ({
+      id: f.mediaId,
+      documentId,
+      html: f.html,
+      caption: f.caption,
+      page: f.page,
+      region: f.region === null ? Prisma.DbNull : (f.region as unknown as Prisma.InputJsonValue),
+    })),
+  });
+}
+
+/** An import: the document with its rich text and page setup, its figure
+    media, its Block rows derived from the rich text (no history rows), and
+    the rich text kept as the version "Imported", in one transaction. */
+async function createImportedDocument(data: {
+  title: string;
+  sourceUrl?: string;
+  fileHash?: string;
+  fileData?: Uint8Array<ArrayBuffer>;
+  converted: Converted;
+  pageLabels?: string[];
+  references?: DocumentReference[];
+  font?: ParsedDocument["font"];
+  columnWidth?: number;
+  render?: RenderReport | null;
+  userId: string | null;
+}): Promise<Document> {
+  const t = await serverT();
+  const { converted } = data;
+  return db.$transaction(
+    async (tx) => {
+      const document = await tx.document.create({
+        data: {
+          title: data.title,
+          sourceUrl: data.sourceUrl,
+          fileHash: data.fileHash,
+          fileData: data.fileData,
+          parserVersion: PARSER_VERSION,
+          references: data.references,
+          font: data.font,
+          columnWidth: data.columnWidth,
+          ...renderColumns(data.render ?? null),
+          richText: converted.richText as unknown as Prisma.InputJsonValue,
+          pageSetup: converted.pageSetup as unknown as Prisma.InputJsonValue,
+          pageLabels: data.pageLabels,
+        },
+      });
+      await createFigureMedia(tx, document.id, converted.figures);
+      // The rows, and importRev at the revision this write makes.
+      const synced = await syncRichText({
+        tx,
+        documentId: document.id,
+        userId: data.userId,
+        baseRev: null,
+        richText: converted.richText,
+        bulk: true,
+      });
+      if (!synced.ok) throw new Error(`The import could not be saved (${synced.reason})`);
+      await keepNamedVersion(tx, document.id, t("api.importVersionName"));
+      await claimCapturedImages(tx, document.id, converted.figures);
+      return document;
+    },
+    { timeout: IMPORT_TX_MS, maxWait: 15_000 },
+  );
+}
+
+// ── Dedupe (SPEC.md §13, §14) ───────────────────────────────────────────────
+// An add of a file or an address already in the library attaches that
+// document as it is — only while it is unedited: an import edited since it
+// was imported is its readers' own, so the add imports anew beside it.
+
+const UNEDITED: Prisma.DocumentWhereInput = {
+  OR: [{ importRev: null }, { richTextRev: { lte: db.document.fields.importRev } }],
+};
+
+/** The oldest unedited document with these bytes. */
+function dedupeByHash(fileHash: string) {
+  return db.document.findFirst({ where: { fileHash, ...UNEDITED }, orderBy: { createdAt: "asc" } });
+}
+
+/** Edited since it was imported: the rich text moved past the revision the
+    import, or its last re-parse, stored. Rich text without an import
+    revision (a blank document's) is the reader's own words. */
+export function importEdited(document: { richText: unknown; richTextRev: number; importRev: number | null }): boolean {
+  if (document.richText === null) return false;
+  return document.importRev === null || document.richTextRev > document.importRev;
+}
+
+/** A re-parse would replace an import's edits, and the reader has not said
+    yes (replaceEdits): the re-parse route answers 409 "edited", and a
+    silent run stops. */
+export class ImportEditedError extends Error {
+  constructor() {
+    super("The import was edited after it was imported");
+    this.name = "ImportEditedError";
+  }
 }
 
 // The render's state as the document stores it: when a browser render last
@@ -356,7 +536,7 @@ export async function ingestPdf(
   userId: string | null = null,
 ) {
   const fileHash = createHash("sha256").update(bytes).digest("hex");
-  const existing = await db.document.findUnique({ where: { fileHash } });
+  const existing = await dedupeByHash(fileHash);
   if (existing) return { document: existing, deduped: true };
 
   onProgress?.("parse");
@@ -380,14 +560,36 @@ export async function ingestPdf(
   }
   const title = parsed.title ?? filename.replace(/\.pdf$/i, "");
   const blocks = parsed.blocks;
-  onProgress?.("save");
-  const document = await createDocumentWithBlocks({
-    title,
-    sourceUrl: opts.sourceUrl,
-    fileHash,
-    fileData: bytes,
-    blocks,
-  });
+  // An article is an import while the switch is on: pages at the PDF's
+  // size, its page numbers at the lines where its pages begin.
+  const converted = importPageEditorOn()
+    ? convertImport({
+        kind: "pdf",
+        title,
+        titleFromOriginal: Boolean(parsed.title),
+        blocks,
+        pageSize: parsed.pageSize,
+      })
+    : null;
+  onProgress?.("save", blockDocumentDetail(converted === "size" ? "size" : null));
+  const document =
+    converted && converted !== "size"
+      ? await createImportedDocument({
+          title,
+          sourceUrl: opts.sourceUrl,
+          fileHash,
+          fileData: bytes,
+          converted,
+          pageLabels: parsed.pageLabels,
+          userId,
+        })
+      : await createDocumentWithBlocks({
+          title,
+          sourceUrl: opts.sourceUrl,
+          fileHash,
+          fileData: bytes,
+          blocks,
+        });
   return { document, deduped: false };
 }
 
@@ -405,24 +607,47 @@ export async function ingestMarkdown(
   filename: string,
   onProgress?: OnIngestProgress,
   opts: IngestOptions = {},
+  userId: string | null = null,
 ) {
   const fileHash = createHash("sha256").update(bytes).digest("hex");
-  const existing = await db.document.findUnique({ where: { fileHash } });
+  const existing = await dedupeByHash(fileHash);
   if (existing) return { document: existing, deduped: true };
 
   onProgress?.("parse");
   const parsed = await parseMarkdownDocument(new TextDecoder("utf-8").decode(bytes), filename);
   const title = parsed.title ?? filename;
   const blocks = parsed.blocks;
-  onProgress?.("save", await saveDetail(blocks, false, null, parsed.mediaCheck, null, title));
-  const document = await createDocumentWithBlocks({
-    title,
-    sourceUrl: opts.sourceUrl,
-    fileHash,
-    fileData: bytes,
-    blocks,
-    references: parsed.references,
-  });
+  // A text file is an import while the switch is on: pageless.
+  const converted = importPageEditorOn()
+    ? convertImport({ kind: "markdown", title, titleFromOriginal: Boolean(parsed.title), blocks })
+    : null;
+  onProgress?.(
+    "save",
+    await saveDetail(blocks, {
+      media: parsed.mediaCheck,
+      title,
+      blockDocument: converted === "size" ? "size" : null,
+    }),
+  );
+  const document =
+    converted && converted !== "size"
+      ? await createImportedDocument({
+          title,
+          sourceUrl: opts.sourceUrl,
+          fileHash,
+          fileData: bytes,
+          converted,
+          references: parsed.references,
+          userId,
+        })
+      : await createDocumentWithBlocks({
+          title,
+          sourceUrl: opts.sourceUrl,
+          fileHash,
+          fileData: bytes,
+          blocks,
+          references: parsed.references,
+        });
   return { document, deduped: false };
 }
 
@@ -465,7 +690,7 @@ export async function ingestSlides(
   userId: string | null = null,
 ) {
   const fileHash = createHash("sha256").update(bytes).digest("hex");
-  const existing = await db.document.findUnique({ where: { fileHash } });
+  const existing = await dedupeByHash(fileHash);
   if (existing) return { document: existing, deduped: true };
 
   onProgress?.("parse");
@@ -515,7 +740,7 @@ export async function ingestSheets(
   userId: string | null = null,
 ) {
   const fileHash = createHash("sha256").update(bytes).digest("hex");
-  const existing = await db.document.findUnique({ where: { fileHash } });
+  const existing = await dedupeByHash(fileHash);
   if (existing) return { document: existing, deduped: true };
 
   onProgress?.("parse");
@@ -543,28 +768,35 @@ function filenameOfUrl(url: string): string {
   }
 }
 
-// URL path. Dedupe by exact sourceUrl. A stale stored parse upgrades in place:
-// adding the URL again must never hand back blocks from an older parser.
-// With split, one long page saves as multiple documents: `document` is the
-// first part, `extra` the rest. Re-adding the same URL with split dedupes to
-// the existing first part; without split it saves a fresh whole document.
+// URL path. Dedupe by exact sourceUrl, an unedited document only. A stale
+// stored parse upgrades in place: adding the URL again must never hand back
+// blocks from an older parser — and never replaces an import's edits: an
+// import edited while the upgrade ran is left as it is, and the add imports
+// anew. With split, one long page saves as multiple documents: `document` is
+// the first part, `extra` the rest. Re-adding the same URL with split dedupes
+// to the existing first part; without split it saves a fresh whole document.
 export async function ingestUrl(
   url: string,
   onProgress?: OnIngestProgress,
   opts: IngestOptions = {},
   userId: string | null = null,
 ): Promise<{ document: Document; extra?: Document[]; deduped: boolean }> {
-  const existing = await db.document.findFirst({ where: { sourceUrl: url } });
+  const existing = await db.document.findFirst({
+    where: { sourceUrl: url, ...UNEDITED },
+    orderBy: { createdAt: "asc" },
+  });
+  if (existing && existing.parserVersion >= PARSER_VERSION) return { document: existing, deduped: true };
   if (existing) {
-    if (existing.parserVersion < PARSER_VERSION) {
-      const document = await reparseDocument(existing.id, onProgress, undefined, opts.deadline, userId);
+    try {
+      const document = await reparseDocument(existing.id, onProgress, { deadline: opts.deadline, userId });
       if (document) return { document, deduped: false };
+    } catch (err) {
+      if (!(err instanceof ImportEditedError)) throw err;
     }
-    return { document: existing, deduped: true };
   }
   if (opts.split) {
     const part = await db.document.findFirst({
-      where: { sourceUrl: { startsWith: `${url}${SPLIT_URL_MARKER}` } },
+      where: { sourceUrl: { startsWith: `${url}${SPLIT_URL_MARKER}` }, ...UNEDITED },
       orderBy: { createdAt: "asc" },
     });
     if (part) return { document: part, deduped: true };
@@ -603,61 +835,100 @@ export async function ingestUrl(
   const font = parsed.font ?? laidFont;
   const columnWidth = parsed.columnWidth;
   const title = parsed.title ?? url;
+  const detail = (blockDocument: BlockDocumentReason | null) =>
+    saveDetail(blocks, {
+      scriptedFigures: unrenderedScripts(fetched),
+      render,
+      media: parsed.mediaCheck,
+      check,
+      title,
+      blockDocument,
+    });
 
   if (opts.split) {
     const chars = blocks.reduce((n, b) => n + b.text.length, 0);
     const parts = splitBlocks(title, blocks, splitPartCount(chars));
     if (parts.length > 1) {
-      onProgress?.("save", await saveDetail(blocks, unrenderedScripts(fetched), render, parsed.mediaCheck, check, title));
+      // Each part is an import of its own, pageless; the part's title names
+      // it, so no Title opens its text.
+      const converted = parts.map((part) =>
+        importPageEditorOn()
+          ? convertImport({ kind: "url", title: part.title, titleFromOriginal: false, blocks: part.blocks })
+          : null,
+      );
+      onProgress?.("save", await detail(converted.includes("size") ? "size" : null));
       const documents = [];
       for (let i = 0; i < parts.length; i++) {
+        const data = {
+          title: parts[i].title,
+          sourceUrl: `${url}${SPLIT_URL_MARKER}${i + 1}`,
+          references: referencesForPart(parts[i].blocks, references),
+          font,
+          columnWidth,
+          render,
+        };
+        const part = converted[i];
         documents.push(
-          await createDocumentWithBlocks({
-            title: parts[i].title,
-            sourceUrl: `${url}${SPLIT_URL_MARKER}${i + 1}`,
-            blocks: parts[i].blocks,
-            references: referencesForPart(parts[i].blocks, references),
-            font,
-            columnWidth,
-            render,
-          }),
+          part && part !== "size"
+            ? await createImportedDocument({ ...data, converted: part, userId })
+            : await createDocumentWithBlocks({ ...data, blocks: parts[i].blocks }),
         );
       }
       return { document: documents[0], extra: documents.slice(1), deduped: false };
     }
   }
 
-  onProgress?.("save", await saveDetail(blocks, unrenderedScripts(fetched), render, parsed.mediaCheck, check, title));
-  const document = await createDocumentWithBlocks({
-    title,
-    sourceUrl: url,
-    blocks,
-    references,
-    font,
-    columnWidth,
-    render,
-  });
+  // A web page is an import while the switch is on: pageless, no page numbers.
+  const converted = importPageEditorOn()
+    ? convertImport({ kind: "url", title, titleFromOriginal: Boolean(parsed.title), blocks })
+    : null;
+  onProgress?.("save", await detail(converted === "size" ? "size" : null));
+  const data = { title, sourceUrl: url, references, font, columnWidth, render };
+  const document =
+    converted && converted !== "size"
+      ? await createImportedDocument({ ...data, converted, userId })
+      : await createDocumentWithBlocks({ ...data, blocks });
   return { document, deduped: false };
 }
+
+export type ReparseOptions = {
+  // Flips a PDF between the two shapes (SPEC.md §16).
+  as?: "article" | "handwritten";
+  // The model passes' time budget (modelPassDeadline); absent: no budget.
+  deadline?: number;
+  // The account the captured images, an import's rows, and its history
+  // entry are recorded under.
+  userId?: string | null;
+  // The reader said yes to replacing an import's edits: the document menu
+  // asks first (SPEC.md §29).
+  replaceEdits?: boolean;
+};
 
 // Re-parse from stored bytes or source URL. Block ids change; anchors re-resolve by quote (SPEC.md §5).
 // A re-parse never changes Document.font: the reader may have picked one.
 // It does set Document.columnWidth: the page's width is the page's fact.
-// The images the last parse captured go; the new parse's take their place.
+// The images the last parse captured go; the new parse's take their place —
+// except those a figure object's media holds, which the versions point at.
 // Video documents never re-parse: their blocks are the player and the transcript (SPEC.md §11).
 // `as` flips a PDF between the two shapes (SPEC.md §16) — the escape hatch when
 // Import PDF judged it wrong: "article" parses the stored bytes to text blocks;
 // "handwritten" rebuilds the PAGE blocks (the caller starts conversion).
 // Without `as`, a document keeps its shape.
+// An import (SPEC.md §29) re-parses into rich text: a new row keeps the id of
+// an old row with the same type and words, in order, so the anchors on it
+// stay exact and the rest move by quote; the text it replaces stays as the
+// version "Before re-parse", the new text as "Imported"; one history entry,
+// no row history. An import edited since it was imported re-parses only with
+// the reader's yes (replaceEdits), else ImportEditedError — the silent runs
+// stop there. A switch to handwritten pages keeps the version and leaves the
+// page editor; handwritten pages switched to computer text become an import
+// while the switch is on.
 export async function reparseDocument(
   documentId: string,
   onProgress?: OnIngestProgress,
-  as?: "article" | "handwritten",
-  // The model passes' time budget (modelPassDeadline); absent: no budget.
-  deadline?: number,
-  // The account the captured images are recorded under.
-  userId: string | null = null,
+  opts: ReparseOptions = {},
 ) {
+  const { as, deadline, userId = null, replaceEdits = false } = opts;
   const document = await db.document.findUnique({
     where: { id: documentId },
     include: { video: { select: { id: true } } },
@@ -669,6 +940,14 @@ export async function reparseDocument(
   if (document.sourceUrl?.includes(SPLIT_URL_MARKER)) {
     throw new Error("Split documents do not re-parse");
   }
+  // An import's edits go only with the reader's yes (SPEC.md §29).
+  if (importEdited(document) && !replaceEdits) throw new ImportEditedError();
+  const wasImport = document.richText !== null;
+  // The revision the re-parse replaces: a save after it is an edit the
+  // reader never saw, and stops the write. With the reader's yes, the
+  // version "Before re-parse" keeps whatever stands at the write.
+  const baseRev = replaceEdits ? null : document.richTextRev;
+  const t = await serverT();
 
   // A slides or sheets document (SPEC.md §27) parses its stored file with
   // its own parser; the slides' stored pictures carry over by slide number.
@@ -731,6 +1010,8 @@ export async function reparseDocument(
     onProgress?.("save");
     const pageCount = await pdfPageCount(new Uint8Array(document.fileData));
     await db.$transaction(async (tx) => {
+      // An import leaves the page editor: its words stay as a version.
+      if (wasImport) await keepTextBeforeReparse(tx, documentId, baseRev, t("api.reparseVersionName"));
       await tx.block.deleteMany({ where: { documentId } });
       await tx.block.createMany({ data: pageBlockRows(documentId, pageCount) });
       await tx.document.update({
@@ -741,8 +1022,10 @@ export async function reparseDocument(
           conversionStatus: "NONE",
           conversionError: null,
           conversionStartedAt: null,
+          ...(wasImport ? LEAVE_PAGE_EDITOR : {}),
         },
       });
+      if (wasImport) await recordReparse(tx, documentId, userId);
     });
     await storePageSizesQuietly(documentId, new Uint8Array(document.fileData));
     return db.document.findUnique({ where: { id: documentId } });

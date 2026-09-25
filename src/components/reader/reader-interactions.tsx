@@ -142,6 +142,7 @@ import {
 import { ANNOTATION_KIND_KEY, annotationKindColor } from "@/lib/annotations/kind";
 import { NEW_GLOW_CLASS, NewPill, useNewFeature } from "@/components/new-feature";
 import type { PageSetup, RichNode } from "@/lib/docs/schema";
+import type { Imported } from "@/components/docs/docs-editor";
 import { pageEditorIn, pageSelectionOfRange, wordAtCaret } from "@/components/docs/layer/anchor";
 import { CardColumn, CommentCard } from "@/components/docs/layer/comment-card";
 import { setCommentResolved } from "@/lib/annotations/resolve";
@@ -955,10 +956,11 @@ export function ReaderInteractions({
   // (figure-capture.tsx): the reader marks each figure's place.
   captionGaps: { id: string; label: string }[];
   figureRender: FigureRenderInfo;
-  /** A blank document (SPEC.md §29): its rich text, revision, and page setup.
-      The page editor takes the article's place; there is no reading mode and
-      no block edit mode, and every tool of this layer works on its text. */
-  richText?: { doc: RichNode; rev: number; pageSetup: PageSetup } | null;
+  /** A blank document or an import (SPEC.md §29): its rich text, revision,
+      and page setup, and an import's page data. The page editor takes the
+      article's place; there is no reading mode and no block edit mode, and
+      every tool of this layer works on its text. */
+  richText?: { doc: RichNode; rev: number; pageSetup: PageSetup; imported?: Imported | null } | null;
 }) {
   // The whole text's anchors and the collapsed view's, one map: a core's
   // anchors under its core key, so marks, local marks, and cards find them
@@ -7228,9 +7230,11 @@ function blockFormatKind(
       data-account-position={
         keepsAccountCopy && accountPosition ? JSON.stringify(accountPosition) : undefined
       }
-      // A blank document: the cards take the page editor's look, and the page
-      // moves left by --docs-shift (SPEC.md §29).
+      // A blank document or an import: the cards take the page editor's look,
+      // and the page moves left by --docs-shift (SPEC.md §29). An import
+      // keeps the notes tray open (lib/reading-position.ts).
       data-page-editor={richText ? "" : undefined}
+      data-import={richText?.imported ? "" : undefined}
       data-docs-shift={richText && docsShift > 0 ? "" : undefined}
       style={richText ? ({ "--docs-shift": `${docsShift}px` } as React.CSSProperties) : undefined}
       // While the extract page is open it scrolls itself; the article

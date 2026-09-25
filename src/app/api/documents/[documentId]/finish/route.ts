@@ -11,7 +11,11 @@ const paramsSchema = z.object({ documentId: z.string().min(1) });
 // document opens complete.
 // images: every visual the reader requests on open — PDF figure and page
 // renders, and the images inside figure and table html — so the client loads
-// each one into the browser's cache first and the page paints complete.
+// each one into the browser's cache first and the page paints complete. An
+// import's figure objects (SPEC.md §29) draw from their FigureMedia rows: a
+// PDF figure's crop by its media id, a web figure's images from its html —
+// the same URLs the page editor requests. An image in an import's text is a
+// FIGURE row with html, as in a blank document.
 // Nothing else is left: the glossary is built when the reader opens it and
 // links when the reader asks for them (SPEC.md §13).
 
@@ -24,6 +28,16 @@ function unescapeAttr(value: string): string {
     .replace(/&#39;/g, "'")
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">");
+}
+
+// Inline data is already in the page; a relative path never survives the
+// parse (sanitize resolves every src), so only http(s) and the app's own
+// routes are worth a request.
+function addImageSources(html: string, images: Set<string>) {
+  for (const match of html.matchAll(IMG_SRC_RX)) {
+    const src = unescapeAttr(match[1]);
+    if (/^(?:https?:\/\/|\/api\/)/i.test(src)) images.add(src);
+  }
 }
 
 export async function GET(_req: Request, ctx: { params: Promise<{ documentId: string }> }) {
@@ -41,15 +55,29 @@ export async function GET(_req: Request, ctx: { params: Promise<{ documentId: st
     select: {
       blocks: {
         orderBy: { order: "asc" },
-        select: { id: true, type: true, page: true, html: true },
+        select: { id: true, type: true, page: true, html: true, mediaId: true },
       },
     },
   });
   if (!document) return NextResponse.json({ error: t("api.documentNotFound") }, { status: 404 });
 
+  const mediaIds = document.blocks.flatMap((b) => (b.type === "FIGURE" && b.mediaId ? [b.mediaId] : []));
+  const media =
+    mediaIds.length > 0
+      ? await db.figureMedia.findMany({
+          where: { documentId, id: { in: mediaIds } },
+          select: { id: true, html: true, page: true },
+        })
+      : [];
+  const mediaById = new Map(media.map((m) => [m.id, m]));
+
   const images = new Set<string>();
   for (const block of document.blocks) {
-    if (block.type === "PAGE" && block.page !== null) {
+    if (block.type === "FIGURE" && block.mediaId) {
+      const figure = mediaById.get(block.mediaId);
+      if (figure?.html) addImageSources(figure.html, images);
+      else if (figure && figure.page !== null) images.add(`/api/documents/${documentId}/figure/${figure.id}`);
+    } else if (block.type === "PAGE" && block.page !== null) {
       images.add(`/api/documents/${documentId}/page/${block.id}`);
     } else if (block.type === "FIGURE" && !block.html && block.page !== null) {
       images.add(`/api/documents/${documentId}/figure/${block.id}`);
@@ -57,18 +85,9 @@ export async function GET(_req: Request, ctx: { params: Promise<{ documentId: st
       // A slide's stored picture (SPEC.md §27), when the add promised one,
       // and the pictures its replica carries.
       if (block.html.includes('data-picture="1"')) images.add(`/api/documents/${documentId}/page/${block.id}`);
-      for (const match of block.html.matchAll(IMG_SRC_RX)) {
-        const src = unescapeAttr(match[1]);
-        if (/^(?:https?:\/\/|\/api\/)/i.test(src)) images.add(src);
-      }
+      addImageSources(block.html, images);
     } else if ((block.type === "FIGURE" || block.type === "TABLE") && block.html) {
-      for (const match of block.html.matchAll(IMG_SRC_RX)) {
-        const src = unescapeAttr(match[1]);
-        // Inline data is already in the page; a relative path never survives
-        // the parse (sanitize resolves every src), so only http(s) and the
-        // app's own routes are worth a request.
-        if (/^(?:https?:\/\/|\/api\/)/i.test(src)) images.add(src);
-      }
+      addImageSources(block.html, images);
     }
   }
   const plan: FinishPlan = { images: [...images] };

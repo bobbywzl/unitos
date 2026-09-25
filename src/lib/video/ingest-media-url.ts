@@ -81,7 +81,7 @@ export async function ingestMediaUrl(
     // Dedupe by fileHash: re-adding the same file attaches the existing
     // video document.
     const fileHash = hash.digest("hex");
-    const dupe = await db.document.findUnique({ where: { fileHash } });
+    const dupe = await db.document.findFirst({ where: { fileHash }, orderBy: { createdAt: "asc" } });
     if (dupe) {
       await db.uploadChunk.deleteMany({ where: { uploadId } });
       return { document: dupe, deduped: true };

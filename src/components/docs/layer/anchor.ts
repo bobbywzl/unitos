@@ -70,17 +70,29 @@ export function posInBlock(block: PMNode, blockPos: number, offset: number, end 
 
 /** The paragraph with this blockId and the position before it. */
 export function findBlock(doc: PMNode, blockId: string): { node: PMNode; pos: number } | null {
+  const found = findIndexed(doc, blockId);
+  return found?.node.isTextblock ? found : null;
+}
+
+/** The node with this blockId — a paragraph, or an object on its own line:
+    a figure, an image, an equation, a line — and the position before it. */
+export function findIndexed(doc: PMNode, blockId: string): { node: PMNode; pos: number } | null {
   let found: { node: PMNode; pos: number } | null = null;
   doc.descendants((node, pos) => {
     if (found) return false;
-    if (node.isTextblock && node.attrs.blockId === blockId) found = { node, pos };
-    return !node.isTextblock;
+    if (node.attrs.blockId === blockId && (node.isTextblock || node.isAtom)) found = { node, pos };
+    return !node.isTextblock && !node.isAtom;
   });
   return found;
 }
 
-/** Images and equations hold no words to quote: a passage leaves them out. */
-const LEFT_OUT = new Set(["image", "blockMath"]);
+/** A page start (SPEC.md §29): an inline atom where a page of the PDF
+    begins. It holds no words: a passage, a mark, and a change pass over it. */
+export const PAGE_START = "pageStart";
+
+/** Images, figures, and equations hold no words to quote: a passage leaves
+    them out. */
+const LEFT_OUT = new Set(["image", "figure", "blockMath"]);
 
 /** One segment per paragraph between two positions; whitespace takes none. */
 function segmentsBetween(doc: PMNode, from: number, to: number): { segments: PageSegment[]; truncated: boolean } {

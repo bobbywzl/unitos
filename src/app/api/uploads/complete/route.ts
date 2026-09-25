@@ -234,7 +234,7 @@ async function completeVideo(data: Body, userId: string | null, t: TFunc) {
   const fileHash = hash.digest("hex");
 
   // Dedupe by fileHash: a re-upload attaches the existing video document.
-  const existing = await db.document.findUnique({ where: { fileHash } });
+  const existing = await db.document.findFirst({ where: { fileHash }, orderBy: { createdAt: "asc" } });
   if (existing) {
     await db.uploadChunk.deleteMany({ where: { uploadId: data.uploadId } });
     await attachDocument(data.notebookId, existing.id);

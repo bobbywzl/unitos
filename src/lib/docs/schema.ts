@@ -1,9 +1,11 @@
 import { z } from "zod";
+import { regionSchema } from "@/lib/video/types";
 
-// A blank document's rich text (SPEC.md §29): Tiptap (ProseMirror) JSON. This
-// file is the one shared description of it — the node and mark names, the
-// request schema, and the sanitizer every save runs through. No database and
-// no DOM here: the editor, the routes, and the sync all import it.
+// A document's rich text (SPEC.md §29): Tiptap (ProseMirror) JSON, of a blank
+// document or an import. This file is the one shared description of it — the
+// node and mark names, the request schema, and the sanitizer every save runs
+// through. No database and no DOM here: the editor, the routes, and the sync
+// all import it.
 
 export type RichMark = { type: string; attrs?: Record<string, unknown> };
 export type RichNode = {
@@ -53,6 +55,9 @@ export const RICH_NODE_TYPES = [
   "inlineMath",
   "blockMath",
   "tableOfContents",
+  // An import's: a figure object (its media in FigureMedia) and a page start.
+  "figure",
+  "pageStart",
 ] as const;
 
 /** The smart chips: each draws its `label`, which is its words in the
@@ -74,6 +79,8 @@ export const RICH_MARK_TYPES = [
   "insertion",
   "deletion",
   "modification",
+  // An import's in-text citation: refId names its entry in Document.references.
+  "citation",
 ] as const;
 
 /** A suggestion's marks: formatting tools leave them alone. */
@@ -94,8 +101,20 @@ export function suggestionTime(id: unknown): number {
 }
 
 /** The nodes that hold a paragraph index row each (a Block): every node
-    whose words a reader can select, plus the figure and the separator. */
-export const INDEXED_NODE_TYPES = new Set(["paragraph", "heading", "codeBlock", "image", "horizontalRule", "blockMath"]);
+    whose words a reader can select, plus the image, the figure object, and
+    the separator. */
+export const INDEXED_NODE_TYPES = new Set([
+  "paragraph",
+  "heading",
+  "codeBlock",
+  "image",
+  "horizontalRule",
+  "blockMath",
+  "figure",
+]);
+
+/** The most characters a figure object's caption keeps. */
+export const MAX_CAPTION_CHARS = 4_000;
 
 const NODE_TYPES = new Set<string>(RICH_NODE_TYPES);
 const MARK_TYPES = new Set<string>(RICH_MARK_TYPES);
@@ -159,6 +178,36 @@ function safeColor(value: unknown): string | null {
 
 const CELL_BORDER = /^\d{1,2}(\.\d{1,2})? (solid|dotted|dashed) #[0-9a-fA-F]{6}$/;
 const DASHES = new Set(["solid", "dotted", "dashed"]);
+/** The highest page number a page start or a figure may name. */
+const MAX_PAGE = 100_000;
+
+/** At most `max` characters, never cutting a character in two. */
+function clip(value: string, max: number): string {
+  if (value.length <= max) return value;
+  const code = value.charCodeAt(max - 1);
+  return value.slice(0, code >= 0xd800 && code <= 0xdbff ? max - 1 : max);
+}
+
+/** A figure's region: a JSON string of the §11 percent-coordinate shape
+    (lib/video/types.ts), kept as it was sent when it is one. */
+function safeRegion(value: unknown): string | null {
+  if (typeof value !== "string" || value.length > 20_000) return null;
+  try {
+    return regionSchema.safeParse(JSON.parse(value)).success ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+const ATOM_TYPES: ReadonlySet<string> = new Set(["figure", "pageStart"]);
+
+/** The only attributes an import's node or mark keeps: a figure object's
+    media is its FigureMedia row, never markup in the rich text. */
+const ONLY_ATTRS: Record<string, ReadonlySet<string>> = {
+  figure: new Set(["blockId", "mediaId", "caption", "page", "region", "pageStart"]),
+  pageStart: new Set(["page"]),
+  citation: new Set(["refId"]),
+};
 
 /** A dropdown chip's options, a JSON list of {label, color}: kept only as
     short labels with hex colors. */
@@ -211,7 +260,18 @@ function cleanAttr(name: string, value: unknown): unknown {
     case "textAlign":
       return typeof value === "string" && ALIGN.has(value) ? value : null;
     case "blockId":
+    case "mediaId":
+    case "refId":
       return typeof value === "string" && BLOCK_ID.test(value) ? value : null;
+    case "caption":
+      return typeof value === "string" ? clip(value, MAX_CAPTION_CHARS) : null;
+    case "region":
+      return safeRegion(value);
+    // A PDF page: a figure's, a page start's, and the page a code block, an
+    // equation, or a figure begins.
+    case "page":
+    case "pageStart":
+      return typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= MAX_PAGE ? value : null;
     case "style":
     case "class":
       // Never stored: a style or a class comes from the named attributes.
@@ -228,11 +288,12 @@ function cleanAttr(name: string, value: unknown): unknown {
 
 const ATTR_NAME = /^[A-Za-z][\w-]{0,40}$/;
 
-function cleanAttrs(attrs: Record<string, unknown> | undefined): Record<string, unknown> | undefined {
+function cleanAttrs(attrs: Record<string, unknown> | undefined, type: string): Record<string, unknown> | undefined {
   if (!attrs) return undefined;
+  const only = ONLY_ATTRS[type];
   const out: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(attrs)) {
-    if (!ATTR_NAME.test(key)) continue;
+    if (!ATTR_NAME.test(key) || (only && !only.has(key))) continue;
     out[key] = cleanAttr(key, value);
   }
   return out;
@@ -248,8 +309,9 @@ const isMarkJson = (value: unknown): value is RichMark =>
 function cleanMark(mark: RichMark): RichMark | null {
   if (!MARK_TYPES.has(mark.type)) return null;
   if (SUGGESTION_MARK_TYPES.has(mark.type)) return cleanSuggestion(mark);
-  const attrs = cleanAttrs(mark.attrs);
+  const attrs = cleanAttrs(mark.attrs, mark.type);
   if (mark.type === "link" && !attrs?.href) return null;
+  if (mark.type === "citation" && !attrs?.refId) return null;
   return attrs && Object.keys(attrs).length > 0 ? { type: mark.type, attrs } : { type: mark.type };
 }
 
@@ -271,8 +333,11 @@ function cleanSuggestion({ type, attrs = {} }: RichMark): RichMark | null {
 }
 
 /** The rich text as it may be stored: unknown node and mark types dropped,
-    every attribute checked (cleanAttr), a link without a safe href and an
-    image without a safe src dropped. Null when the input is not a document
+    every attribute checked (cleanAttr), a link without a safe href, an image
+    without a safe src, a figure object without a mediaId, a page start
+    without a page, and a citation without a refId dropped. Whether a figure
+    object's media is the document's own is the save's check
+    (lib/docs/sync.ts), not this one. Null when the input is not a document
     or is too large. */
 export function sanitizeRichText(input: RichNode): RichNode | null {
   if (input.type !== "doc") return null;
@@ -281,8 +346,10 @@ export function sanitizeRichText(input: RichNode): RichNode | null {
     count += 1;
     if (count > MAX_NODES) return null;
     if (!NODE_TYPES.has(node.type)) return null;
-    const attrs = cleanAttrs(node.attrs);
+    const attrs = cleanAttrs(node.attrs, node.type);
     if (node.type === "image" && !attrs?.src) return null;
+    if (node.type === "figure" && !attrs?.mediaId) return null;
+    if (node.type === "pageStart" && !attrs?.page) return null;
     const out: RichNode = { type: node.type };
     if (attrs && Object.keys(attrs).length > 0) out.attrs = attrs;
     // A block carries only a suggestion's marks.
@@ -296,7 +363,8 @@ export function sanitizeRichText(input: RichNode): RichNode | null {
       if (marks.length > 0) out.marks = marks;
       return out;
     }
-    if (node.content) {
+    // A figure object and a page start hold nothing.
+    if (node.content && !ATOM_TYPES.has(node.type)) {
       const content = node.content.map(walk).filter((c): c is RichNode => c !== null);
       if (count > MAX_NODES) return null;
       if (content.length > 0) out.content = content;
@@ -308,6 +376,66 @@ export function sanitizeRichText(input: RichNode): RichNode | null {
   if (!doc || count > MAX_NODES) return null;
   if (!doc.content || doc.content.length === 0) doc.content = [{ type: "paragraph" }];
   return doc;
+}
+
+/** JSON with sorted keys: a value read back from a jsonb column has its
+    keys in another order than the one it was written in. */
+export function stableJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
+  if (value && typeof value === "object") {
+    const o = value as Record<string, unknown>;
+    const keys = Object.keys(o).filter((k) => o[k] !== undefined).sort();
+    return `{${keys.map((k) => `${JSON.stringify(k)}:${stableJson(o[k])}`).join(",")}}`;
+  }
+  return JSON.stringify(value ?? null);
+}
+
+/** A figure object's media as the document holds it (FigureMedia, without
+    its html). */
+export type FigureMediaFields = { caption: string; page: number | null; region: unknown };
+
+/** The rich text with every figure object checked against the document's
+    own media (SPEC.md §29): a figure whose mediaId is not the document's is
+    dropped — a crafted save, a paste from another document — and each one
+    kept takes its caption, page, and region from its media, so no save
+    changes a figure's words. A container left empty keeps one empty
+    paragraph. */
+export function withDocumentFigures(doc: RichNode, media: ReadonlyMap<string, FigureMediaFields>): RichNode {
+  const fix = (node: RichNode): RichNode | null => {
+    if (node.type === "figure") {
+      const found = media.get(String(node.attrs?.mediaId));
+      if (!found) return null;
+      const region = node.attrs?.region;
+      let same = found.region == null && region == null;
+      if (typeof region === "string" && found.region != null) {
+        try {
+          same = stableJson(JSON.parse(region)) === stableJson(found.region);
+        } catch {
+          same = false;
+        }
+      }
+      const page = cleanAttr("page", found.page);
+      return {
+        ...node,
+        attrs: {
+          ...node.attrs,
+          caption: clip(found.caption, MAX_CAPTION_CHARS),
+          page,
+          region: same ? (region ?? null) : safeRegion(found.region == null ? null : JSON.stringify(found.region)),
+        },
+      };
+    }
+    if (!node.content) return node;
+    const content = node.content.map(fix).filter((c): c is RichNode => c !== null);
+    if (content.length === node.content.length && content.every((c, i) => c === node.content![i])) return node;
+    return { ...node, content: content.length > 0 ? content : [{ type: "paragraph", attrs: { blockId: newBlockId() } }] };
+  };
+  return fix(doc) ?? doc;
+}
+
+/** Whether the rich text holds a figure object. */
+export function hasFigures(node: RichNode): boolean {
+  return node.type === "figure" || (node.content ?? []).some(hasFigures);
 }
 
 /** A fresh block id for a node of the rich text: the paragraph index row

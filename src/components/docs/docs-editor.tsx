@@ -4,17 +4,18 @@ import "./docs.css";
 import type { JSONContent } from "@tiptap/core";
 import { EditorContent, useEditor, type Editor } from "@tiptap/react";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useT } from "@/components/lang-provider";
 import { REFRESH_EVENT } from "@/components/collab/use-sync";
 import { annotationMarksKey, openMarkAt, type MarksMeta } from "@/components/docs/annotation-marks";
 import { LinkBubble, LinkDialog } from "@/components/docs/link-dialog";
-import { docsExtensions } from "@/components/docs/extensions";
+import { docsExtensions, type FigureMediaView } from "@/components/docs/extensions";
 import { docsFontsUrl } from "@/components/docs/fonts";
 import { DocsFrame, UNTITLED } from "@/components/docs/frame";
 import { CloudDoneIcon, CloudOffIcon, CloudSyncIcon, DocIcon } from "@/components/docs/icons";
+import { toast } from "@/components/docs/insert/context";
 import { DocsToolbar } from "@/components/docs/toolbar";
-import type { DocsMode } from "@/components/docs/toolbar/mode";
+import { ModeLock, type DocsMode } from "@/components/docs/toolbar/mode";
 import type { Zoom } from "@/components/docs/toolbar/zoom";
 import { useDocsSave, type SaveState } from "@/components/docs/use-docs-save";
 import { WordCountDialog } from "@/components/docs/word-count";
@@ -35,13 +36,100 @@ import type { PageSetup, RichNode } from "@/lib/docs/schema";
 
 // The page editor (SPEC.md §29): a blank document is written here the way a
 // Google Doc is written — a title row, the toolbar, and white pages on a gray
-// canvas, one continuous rich text with no blocks to click into. The Unitos
+// canvas, one continuous rich text with no blocks to click into. An import
+// opens here too, in Viewing, with its import line after the title. The Unitos
 // layer sits on top: the reader's selection toolbar and cards (the reader
 // interactions around this component), the marks of notes and annotations
 // (annotation-marks.tsx), and the paragraph index every AI tool reads, kept
 // in step by each save (use-docs-save.ts).
 
 const FONTS_LINK_ID = "unitos-docs-fonts";
+
+/** An import (SPEC.md §29): a document made from a PDF, a web page, or a
+    Markdown or text file, as the page sends it. origin: the address, or ""
+    for an uploaded file; pages: a PDF's page count; edited: changed since
+    the import (richTextRev > importRev); shared: attached to a project
+    another account owns, so Editing and Suggesting are off; figures: the
+    media of its figure objects, by id; pageLabels: the PDF's own names for
+    its pages. */
+export type Imported = {
+  kind: "pdf" | "url" | "markdown";
+  origin: string;
+  pages: number | null;
+  edited: boolean;
+  shared: boolean;
+  figures: Record<string, FigureMediaView>;
+  pageLabels: string[] | null;
+};
+
+// An import opens in Viewing; the mode the reader picks is kept per
+// document in this browser.
+const modeKey = (documentId: string) => `unitos-docs-mode:${documentId}`;
+
+function storedMode(documentId: string): DocsMode {
+  try {
+    const mode = localStorage.getItem(modeKey(documentId));
+    return mode === "editing" || mode === "suggesting" ? mode : "viewing";
+  } catch {
+    return "viewing";
+  }
+}
+
+function storeMode(documentId: string, mode: DocsMode): void {
+  try {
+    localStorage.setItem(modeKey(documentId), mode);
+  } catch {
+    // Kept for this visit only.
+  }
+}
+
+/** The site of an address, without "www.". */
+function siteOf(address: string): string {
+  try {
+    return new URL(address).hostname.replace(/^www\./, "");
+  } catch {
+    return address;
+  }
+}
+
+/** Where an import came from, after its title: "Imported from" the site, a
+    link to the page; a PDF and its page count; or a text file. Muted, the
+    accent on hover. */
+function ImportLine({ imported }: { imported: Imported }) {
+  const t = useT();
+  const parts: ReactNode[] = [];
+  if (imported.origin) {
+    parts.push(
+      <a
+        key="site"
+        href={imported.origin}
+        target="_blank"
+        rel="noopener noreferrer"
+        data-tip={imported.origin}
+        data-track="docs:import-origin"
+        className="rounded-sm underline-offset-2 hover:text-clay-700 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-clay"
+      >
+        {t("docsPage.importedFrom", { site: siteOf(imported.origin) })}
+      </a>,
+    );
+  }
+  if (imported.kind === "pdf") {
+    const n = imported.pages;
+    parts.push(<span key="pdf">{n ? t("docsPage.importPdf", { n, s: n === 1 ? "" : "s" }) : "PDF"}</span>);
+  } else if (imported.kind === "markdown" && !imported.origin) {
+    parts.push(<span key="file">{t("docsPage.importTextFile")}</span>);
+  }
+  return (
+    <span className="flex shrink-0 items-center gap-1.5 pl-1 text-[12.5px] whitespace-nowrap text-sand-600">
+      {parts.map((part, i) => (
+        <Fragment key={i}>
+          {i > 0 && <span aria-hidden>·</span>}
+          {part}
+        </Fragment>
+      ))}
+    </span>
+  );
+}
 
 function useDocsFonts() {
   useEffect(() => {
@@ -213,6 +301,7 @@ export function DocsEditor({
   highlightsByBlock,
   flushRef,
   aiControls,
+  imported = null,
 }: {
   documentId: string;
   notebookId: string;
@@ -228,21 +317,38 @@ export function DocsEditor({
   flushRef: React.MutableRefObject<(() => Promise<void>) | null>;
   /** The Unitos tools that sit at the toolbar's right end (Extract). */
   aiControls?: ReactNode;
+  /** An import; null for a blank document. */
+  imported?: Imported | null;
 }) {
   const t = useT();
   useDocsFonts();
-  const [mode, setMode] = useState<DocsMode>("editing");
+  // An import attached to a project another account owns: an edit would
+  // change their import too, so Editing and Suggesting are off.
+  const isImport = imported !== null;
+  const locked = imported?.shared === true;
+  const writable = canEdit && !locked;
+  // A blank document opens in Editing; an import in Viewing, or in the mode
+  // the reader last chose for it here.
+  const [openedIn] = useState<DocsMode>(() => (!imported ? "editing" : writable ? storedMode(documentId) : "viewing"));
+  const [mode, setModeState] = useState<DocsMode>(openedIn);
   const [zoom, setZoom] = useState<Zoom>(100);
   const [headerHidden, setHeaderHidden] = useState(false);
   // The header or footer being edited: the toolbar formats its text.
   const [hfEditor, setHfEditor] = useState<Editor | null>(null);
 
-  const extensions = useMemo(() => docsExtensions(), []);
+  // The figures and page labels of an import reach its figure objects and
+  // page starts through the extensions.
+  const extensions = useMemo(
+    () => docsExtensions(imported ? { documentId, figures: imported.figures, pageLabels: imported.pageLabels } : undefined),
+    // Once per document: the editor is built once per document.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [documentId],
+  );
   const editor = useEditor(
     {
       extensions,
       content: richText as JSONContent,
-      editable: canEdit,
+      editable: writable && openedIn !== "viewing",
       immediatelyRender: false,
       shouldRerenderOnTransaction: false,
       // Docs' own autocorrect formats typing (ext/typing.ts); a paste only links addresses.
@@ -261,12 +367,28 @@ export function DocsEditor({
   );
 
   // A document opens with the caret at the page's start, as in Google Docs,
-  // unless something else already has the focus.
+  // unless something else already has the focus. In Viewing the page takes
+  // no focus: the pending queue's keys reach the notes tray.
   useEffect(() => {
-    if (editor && canEdit && document.activeElement === document.body) {
+    if (editor && writable && openedIn !== "viewing" && document.activeElement === document.body) {
       editor.commands.focus("start", { scrollIntoView: false });
     }
-  }, [editor, canEdit]);
+  }, [editor, writable, openedIn]);
+
+  // The mode: an import keeps the reader's choice. On a locked import only
+  // Viewing is left, and a key or a command that asks for another mode says
+  // why.
+  const setMode = useCallback(
+    (next: DocsMode) => {
+      if (locked && next !== "viewing") {
+        if (editor && !editor.isDestroyed) toast(t("docs.importShared"), editor);
+        return;
+      }
+      setModeState(next);
+      if (isImport) storeMode(documentId, next);
+    },
+    [locked, editor, t, isImport, documentId],
+  );
 
   // The QA scripts drive the editor directly in development.
   useEffect(() => {
@@ -274,12 +396,12 @@ export function DocsEditor({
     (window as unknown as { __docsEditor?: Editor }).__docsEditor = editor;
   }, [editor]);
 
-  const { state: saveState, flush, matches } = useDocsSave({
+  const { state: saveState, flush, matches, outdated } = useDocsSave({
     documentId,
     editor,
     rev,
     richText,
-    enabled: canEdit,
+    enabled: writable,
   });
   // The header's and footer's saves show in the same status.
   const shownSaveState = useSaveState(editor, documentId, pageSetup, saveState);
@@ -336,8 +458,8 @@ export function DocsEditor({
 
   useEffect(() => {
     if (!editor || editor.isDestroyed) return;
-    editor.setEditable(canEdit && mode !== "viewing");
-  }, [editor, canEdit, mode]);
+    editor.setEditable(writable && mode !== "viewing");
+  }, [editor, writable, mode]);
 
   // The header shows while the reader is in the document: a press or the
   // focus in this pane's page editor or card column, or in one of the
@@ -392,19 +514,23 @@ export function DocsEditor({
     [editor],
   );
 
-  const editing = canEdit && mode !== "viewing";
+  // The areas take a locked import as a page they may not edit: no
+  // suggestions to settle, no version to restore.
+  const editing = writable && mode !== "viewing";
   const area = useMemo<DocsAreaProps | null>(
-    () => (editor ? { editor, documentId, notebookId, canEdit, editing, pageSetup, documents } : null),
-    [editor, documentId, notebookId, canEdit, editing, pageSetup, documents],
+    () => (editor ? { editor, documentId, notebookId, canEdit: writable, editing, pageSetup, documents } : null),
+    [editor, documentId, notebookId, writable, editing, pageSetup, documents],
   );
 
   // Every save changes the save state, which redraws the title row alone:
   // the toolbar and the pages are built again only when their own inputs
   // change (on a long document one rebuild costs more than a frame).
+  // The toolbar keeps the reader's own role: on a locked import it still
+  // offers Add comment, and the mode menu says why the other modes are off.
   const chrome = useMemo(
     () =>
       area && (
-        <>
+        <ModeLock.Provider value={locked ? "docs.importShared" : null}>
           <DocsToolbar
             editor={area.editor}
             header={hfEditor}
@@ -420,9 +546,9 @@ export function DocsEditor({
             onInsertImage={insertImage}
           />
           <PageRuler {...area} />
-        </>
+        </ModeLock.Provider>
       ),
-    [area, hfEditor, mode, canEdit, zoom, pageSetup.pageless, aiControls, headerHidden, insertImage],
+    [area, hfEditor, mode, setMode, locked, canEdit, zoom, pageSetup.pageless, aiControls, headerHidden, insertImage],
   );
   const pages = useMemo(
     () =>
@@ -433,7 +559,7 @@ export function DocsEditor({
           </PageCanvas>
           <InsertLayer {...area} />
           <TypingLayer {...area} />
-          <UnitosLayer {...area} />
+          <UnitosLayer {...area} imported={isImport} />
           <SuggestLayer {...area} suggesting={mode === "suggesting"} />
           <VersionHistory key={documentId} {...area} />
           <LinkDialog editor={area.editor} />
@@ -441,14 +567,30 @@ export function DocsEditor({
           <WordCountDialog editor={area.editor} />
         </>
       ),
-    [area, zoom, onPageClick, mode, documentId, editing],
+    [area, zoom, onPageClick, mode, documentId, editing, isImport],
   );
 
-  // Until the editor stands, the frame the reader drew while this code loaded.
-  if (!editor) return <DocsFrame title={title} pageSetup={pageSetup} />;
+  // Until the editor stands, the frame the reader drew while this code
+  // loaded. A stored copy this build cannot show keeps the frame: the page
+  // reloads to the newer build, or says why once it did.
+  if (!editor || outdated) {
+    return (
+      <>
+        <DocsFrame title={title} pageSetup={pageSetup} />
+        {outdated === "stale" && (
+          <p
+            role="alert"
+            className="absolute top-[150px] left-1/2 z-10 w-[min(440px,calc(100%-32px))] -translate-x-1/2 rounded-2xl bg-card px-4 py-3 text-[13px] leading-relaxed text-sand-700 shadow-float"
+          >
+            {t("docs.newerContent")}
+          </p>
+        )}
+      </>
+    );
+  }
 
   return (
-    <div className="docs-shell" data-docs-editor data-docs-mode={mode}>
+    <div className="docs-shell" data-docs-editor data-docs-mode={mode} data-import={imported?.kind}>
       <div className="docs-header" data-edit-control data-away={away || undefined}>
         {!headerHidden && (
           <div className="docs-title-row">
@@ -456,14 +598,15 @@ export function DocsEditor({
             <TitleField
               documentId={documentId}
               title={title}
-              canEdit={canEdit}
+              canEdit={writable}
               firstLine={saveState === "saved" ? firstLineOf(editor) : ""}
               onDone={() => {
                 if (!editor.isDestroyed) editor.commands.focus();
                 else (document.activeElement as HTMLElement | null)?.blur();
               }}
             />
-            {canEdit && <SaveStatus state={shownSaveState} />}
+            {imported && <ImportLine imported={imported} />}
+            {writable && <SaveStatus state={shownSaveState} />}
             <VersionHistoryButton editor={editor} />
           </div>
         )}

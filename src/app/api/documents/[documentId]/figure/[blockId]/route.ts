@@ -14,15 +14,31 @@ export const maxDuration = 60;
 const REGION_PAGE_WIDTH = 2000;
 const PAGE_WIDTH = 1200;
 
+// blockId: a FigureMedia id (a figure object of an import, SPEC.md §29) or
+// a FIGURE block's id (a block document). The folder keeps its name.
 const paramsSchema = z.object({
   documentId: z.string().min(1),
   blockId: z.string().min(1),
 });
 
+// A stored region: the JSON shape, or the JSON string a figure object's
+// attribute carries.
+function regionOf(value: unknown) {
+  if (typeof value !== "string") return parseRegion(value);
+  try {
+    return parseRegion(JSON.parse(value));
+  } catch {
+    return null;
+  }
+}
+
 // A PDF figure's visual: its page rendered to PNG from the document's stored
 // bytes, cropped to the figure's region when the parse found one (SPEC.md
-// §16). FIGURE blocks parsed before pages were stored have page null — 404,
-// the reader falls back to the caption.
+// §16). The figure is an import's FigureMedia row or a block document's
+// FIGURE block. A web figure's images load from its own html, never from
+// here, so a FigureMedia row without a page is 404 like a FIGURE block
+// parsed before pages were stored (page null): the reader falls back to
+// the caption.
 export async function GET(
   _req: Request,
   ctx: { params: Promise<{ documentId: string; blockId: string }> },
@@ -32,13 +48,25 @@ export async function GET(
   if (!parsed.success) {
     return NextResponse.json({ error: t("api.blockNotFound") }, { status: 404 });
   }
-  const { documentId, blockId } = parsed.data;
+  const { documentId, blockId: id } = parsed.data;
 
-  const block = await db.block.findUnique({
-    where: { id: blockId },
-    select: { documentId: true, type: true, page: true, region: true },
-  });
-  if (!block || block.documentId !== documentId || block.type !== "FIGURE" || block.page === null) {
+  const [media, block] = await Promise.all([
+    db.figureMedia.findUnique({
+      where: { id },
+      select: { documentId: true, page: true, region: true },
+    }),
+    db.block.findUnique({
+      where: { id },
+      select: { documentId: true, type: true, page: true, region: true },
+    }),
+  ]);
+  const figure =
+    media && media.documentId === documentId
+      ? media
+      : block && block.documentId === documentId && block.type === "FIGURE"
+        ? block
+        : null;
+  if (!figure || figure.page === null) {
     return NextResponse.json({ error: t("api.blockNotFound") }, { status: 404 });
   }
   const access = await documentAccess(documentId, "viewer");
@@ -52,10 +80,10 @@ export async function GET(
     return NextResponse.json({ error: t("api.documentNotFound") }, { status: 404 });
   }
 
-  const region = parseRegion(block.region);
+  const region = regionOf(figure.region);
   const page = await renderPdfPage(
     new Uint8Array(document.fileData),
-    block.page,
+    figure.page,
     region ? REGION_PAGE_WIDTH : PAGE_WIDTH,
   );
   const png = region ? ((await cropPageRegion(page, region, { pad: 0.15, scaleUp: false })) ?? page) : page;
@@ -65,7 +93,8 @@ export async function GET(
   return new Response(body, {
     headers: {
       "Content-Type": "image/png",
-      // A block id's render never changes: re-parse recreates blocks under new ids.
+      // An id's render never changes: a FigureMedia row is never rewritten
+      // (a re-parse makes new ones), and re-parse gives FIGURE blocks new ids.
       "Cache-Control": "private, max-age=31536000, immutable",
     },
   });

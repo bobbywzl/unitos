@@ -17,8 +17,9 @@ import {
   anchorClass,
   type Highlight,
 } from "@/components/reader/block-view";
-import { findBlock, posInBlock } from "@/components/docs/layer/anchor";
+import { findIndexed, PAGE_START, posInBlock } from "@/components/docs/layer/anchor";
 import { PAGE_FLASH_EVENT } from "@/components/docs/layer/events";
+import { annotationKindColor } from "@/lib/annotations/kind";
 import type { TFunc } from "@/lib/i18n/dictionaries";
 import { MARK_SWEPT_EVENT, type MarkSweptDetail } from "@/lib/mark-sweep";
 
@@ -162,9 +163,122 @@ function chipsOf(h: Highlight): Chip[] {
   return chips;
 }
 
+/** from..to in a paragraph less its page starts: a mark paints the words on
+    both sides of one, never the page start, which keeps its own look. */
+function aroundPageStarts(block: PMNode, blockPos: number, from: number, to: number): [number, number][] {
+  const pieces: [number, number][] = [];
+  let start = from;
+  block.forEach((child, offset) => {
+    const at = blockPos + 1 + offset;
+    if (child.type.name !== PAGE_START || at < from || at >= to) return;
+    if (at > start) pieces.push([start, at]);
+    start = at + child.nodeSize;
+  });
+  if (to > start) pieces.push([start, to]);
+  return pieces;
+}
+
+/** The objects on a line of their own a mark takes whole: a figure and an
+    equation. Their words are not the page's text, so the mark is the
+    object's ring and its label chip, as the reader draws them
+    (block-view.tsx HighlightLabel). */
+const WHOLE = new Set(["figure", "blockMath"]);
+
+/** The color a mark on an object rings in: its tool's kind color, a
+    highlight's hue, the comment color, else a note's clay (SPEC.md §6). */
+function ringColor(h: Highlight): string {
+  if (h.annotation && h.tool) return annotationKindColor(h.tool, null);
+  if (h.color) return annotationKindColor("highlight", h.color);
+  if (h.annotation && h.comment) return annotationKindColor("comment", null);
+  return "var(--clay-400)";
+}
+
+/** The label chip of an object's marks: the annotations' labels ("A1 · A2")
+    behind the tool's symbol, or a highlight's dot. A press opens the
+    annotation, or the note. It carries no data-source-id: a jump finds the
+    object itself. */
+function labelWidget(anchors: Highlight[], t: TFunc) {
+  return () => {
+    const focusable = anchors.find((h) => h.annotation && h.sourceId);
+    const note = anchors.find((h) => !h.annotation && h.noteId);
+    const toolAnchor = anchors.find((h) => h.tool);
+    const labels = anchors.map((h) => h.figureLabel).filter((l): l is string => Boolean(l));
+    const text = labels.length > 0 ? labels.join(" · ") : t("panes.highlighted");
+    const button = document.createElement("button");
+    button.type = "button";
+    button.contentEditable = "false";
+    button.className = "docs-object-label";
+    button.setAttribute("data-anchor-skip", "");
+    button.setAttribute("data-track", "figure-label");
+    const tip = focusable ? t("panes.figureAnnotatedTitle", { text }) : t("panes.figureHighlightedTitle", { text });
+    button.setAttribute("aria-label", tip);
+    button.setAttribute("data-tip", tip);
+    if (focusable?.sourceId) {
+      button.dataset.docsOpen = "annotation";
+      button.dataset.hoverSource = focusable.sourceId;
+    } else if (note?.noteId) {
+      button.dataset.docsOpen = "note";
+      button.dataset.noteId = note.noteId;
+    }
+    const root = createRoot(button);
+    root.render(
+      <>
+        {toolAnchor?.tool ? (
+          <ToolSymbol tool={toolAnchor.tool} plus={toolAnchor.plus} size={11} />
+        ) : (
+          <span aria-hidden className="docs-object-dot" style={{ background: ringColor(anchors[0]) }} />
+        )}
+        {text}
+      </>,
+    );
+    (button as HTMLButtonElement & { __root?: Root }).__root = root;
+    return button;
+  };
+}
+
+/** A mark on a figure or an equation: the object rings in the kind color
+    (a node decoration, with data-source-id for jumps and flashes), and its
+    label chip stands before it, right of the text column, level with its
+    top. */
+function objectMarks(node: PMNode, pos: number, highlights: Highlight[], t: TFunc): Decoration[] {
+  const anchors = highlights.filter((h) => h.kind === "anchor" && !h.leaving);
+  if (anchors.length === 0) return [];
+  // The card open on it, else an annotation, names the ring's color.
+  const lead = anchors.find((h) => h.open) ?? anchors.find((h) => h.annotation && h.sourceId) ?? anchors[0];
+  const sourceId = lead.sourceId ?? anchors.find((h) => h.sourceId)?.sourceId;
+  const attrs: Record<string, string> = {
+    class: "docs-object-mark",
+    style: `--docs-object-ring: ${ringColor(lead)}`,
+    "data-unitos-mark": "",
+  };
+  if (sourceId) attrs["data-source-id"] = sourceId;
+  const key = anchors
+    .map((h) => [h.sourceId, h.noteId, h.annotation ? 1 : 0, h.figureLabel, h.tool, h.plus ? 1 : 0, h.color].join(":"))
+    .join(",");
+  return [
+    Decoration.node(pos, pos + node.nodeSize, attrs),
+    Decoration.widget(pos, labelWidget(anchors, t), {
+      // After a page's spacer at the same place: the chip stands on the object's page.
+      side: 1,
+      ignoreSelection: true,
+      stopEvent: () => true,
+      key: `object-label:${key}`,
+      destroy: (dom) => {
+        const root = (dom as HTMLElement & { __root?: Root }).__root;
+        if (root) queueMicrotask(() => root.unmount());
+      },
+    }),
+  ];
+}
+
 function build(doc: PMNode, highlights: Record<string, Highlight[]>, t: TFunc): DecorationSet {
   const decorations: Decoration[] = [];
   doc.descendants((node, pos) => {
+    if (WHOLE.has(node.type.name)) {
+      const id = node.attrs.blockId as string | null;
+      if (id && highlights[id]) decorations.push(...objectMarks(node, pos, highlights[id], t));
+      return false;
+    }
     if (!node.isTextblock) return true;
     const id = node.attrs.blockId as string | null;
     const painted = (id ? (highlights[id] ?? []) : []).filter((h) => h.end > h.start && PAINTED.has(h.kind));
@@ -177,9 +291,10 @@ function build(doc: PMNode, highlights: Record<string, Highlight[]>, t: TFunc): 
       const from = posInBlock(node, pos, start);
       const to = posInBlock(node, pos, end, true);
       if (to <= from) continue;
-      decorations.push(
-        Decoration.inline(from, to, segmentAttrs(covering, id, t), { inclusiveStart: false, inclusiveEnd: false }),
-      );
+      const attrs = segmentAttrs(covering, id, t);
+      for (const [a, b] of aroundPageStarts(node, pos, from, to)) {
+        decorations.push(Decoration.inline(a, b, attrs, { inclusiveStart: false, inclusiveEnd: false }));
+      }
     }
     // The chips at each mark's end.
     let side = 1;
@@ -215,10 +330,11 @@ let flashCount = 0;
 
 function flashDecorations(view: EditorView, target: HTMLElement, id: string): Decoration[] {
   const spec = { flash: id };
-  // A paragraph: the whole node flashes.
+  const { doc } = view.state;
+  // A paragraph, a figure, or an equation: the whole node flashes.
   const blockId = target.dataset.blockId;
   if (blockId && !target.dataset.sourceId && !target.dataset.linkId) {
-    const block = findBlock(view.state.doc, blockId);
+    const block = findIndexed(doc, blockId);
     if (!block) return [];
     return [Decoration.node(block.pos, block.pos + block.node.nodeSize, { class: "anchor-flash" }, spec)];
   }
@@ -230,17 +346,26 @@ function flashDecorations(view: EditorView, target: HTMLElement, id: string): De
     : linkId
       ? [...view.dom.querySelectorAll<HTMLElement>(`[data-link-id="${CSS.escape(linkId)}"]`)]
       : [target];
+  const out: Decoration[] = [];
   let from = Infinity;
   let to = -Infinity;
   for (const piece of pieces) {
     try {
-      from = Math.min(from, view.posAtDOM(piece, 0));
+      const start = view.posAtDOM(piece, 0);
+      // An object a mark takes whole (a figure's ring): the node flashes.
+      const node = doc.nodeAt(start);
+      if (node && !node.isInline && view.nodeDOM(start) === piece) {
+        out.push(Decoration.node(start, start + node.nodeSize, { class: "anchor-flash" }, spec));
+        continue;
+      }
+      from = Math.min(from, start);
       to = Math.max(to, view.posAtDOM(piece, piece.childNodes.length));
     } catch {
       // Not in the text (a widget): nothing to flash there.
     }
   }
-  return to > from ? [Decoration.inline(from, to, { class: "anchor-flash" }, spec)] : [];
+  if (to > from) out.push(Decoration.inline(from, to, { class: "anchor-flash" }, spec));
+  return out;
 }
 
 function flashPlugin() {
@@ -397,8 +522,10 @@ export function openMarkAt(target: EventTarget | null): boolean {
   const el = target instanceof Element ? target.closest<HTMLElement>("[data-docs-open]") : null;
   if (!el) return false;
   const kind = el.dataset.docsOpen;
-  if (kind === "annotation" && el.dataset.sourceId) {
-    window.dispatchEvent(new CustomEvent("dissect:open-annotation", { detail: { sourceId: el.dataset.sourceId } }));
+  // An object's label chip names its annotation by data-hover-source alone.
+  const sourceId = el.dataset.sourceId ?? el.dataset.hoverSource;
+  if (kind === "annotation" && sourceId) {
+    window.dispatchEvent(new CustomEvent("dissect:open-annotation", { detail: { sourceId } }));
     return true;
   }
   if (kind === "note" && el.dataset.noteId) {
