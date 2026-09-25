@@ -3,8 +3,8 @@
 // buttons and its comment cards — beside the page's right edge, level with
 // the words — and how far the page moves left to make room for a card, as
 // Google Docs moves the page when comments are open. Geometry is in the
-// reader pane's coordinates (reader-interactions.tsx); the page moves by
-// the pane's --docs-shift (css/layer.css).
+// reader pane's coordinates (reader-interactions.tsx), which carries the
+// shift as --docs-shift.
 
 /** Between the page's right edge (or the text column's) and a card. */
 const MARGIN_GAP = 16;
@@ -13,23 +13,28 @@ const EDGE = 12;
 /** The page never moves closer than this to the pane's left edge: the
     canvas's own padding (docs.css .docs-canvas). */
 const MIN_LEFT = 24;
-/** A card in the margin; Google's comment card is 282 px wide. */
-const CARD_WIDTH = 300;
+/** A card in the margin: Google Docs' comment card is 282 px wide. */
+export const MARGIN_CARD_WIDTH = 282;
 /** The narrowest card the margin takes before cards dock under their words. */
 const CARD_MIN = 260;
+/** Google Docs' floating buttons: a 40 px pill centered 28 px right of the
+    page's edge, so its left side is 8 px out. */
+const TOOLBAR_GAP = 8;
 
 export type PageGeometry = {
   /** The pane's width. */
   cw: number;
-  /** The page's edges and the text column's right edge, as they sit with
-      the page unshifted. */
+  /** The page's edges and the text column's, as they sit with the page
+      unshifted. */
   pageLeft: number;
   pageRight: number;
+  textLeft: number;
   textRight: number;
 };
 
-/** The page's geometry in a pane that shows the page editor, with the shift
-    it has now taken back out; null when the pane shows an article. */
+/** The page's geometry in a pane that shows the page editor, with `shift` —
+    the shift the page has now — taken back out; null when the pane shows an
+    article. */
 export function pageGeometry(container: HTMLElement | null, shift: number): PageGeometry | null {
   const page = container?.querySelector<HTMLElement>("[data-docs-page]");
   const text = container?.querySelector<HTMLElement>("[data-docs-body]");
@@ -41,35 +46,44 @@ export function pageGeometry(container: HTMLElement | null, shift: number): Page
     cw: container.clientWidth,
     pageLeft: p.left - crect.left + shift,
     pageRight: p.right - crect.left + shift,
+    textLeft: t.left - crect.left + shift,
     textRight: t.right - crect.left + shift,
   };
 }
 
-export type MarginPlace = { shift: number; left: number; width: number };
-
-/** A card's place in the margin and the shift it needs: beside the page when
-    the page can move left far enough; else over the page's right margin,
-    clear of the text column, with the page at its left edge. Null when
-    neither fits: the card docks under its words. */
-export function marginPlace(geo: PageGeometry): MarginPlace | null {
-  const maxShift = Math.max(0, Math.floor(geo.pageLeft - MIN_LEFT));
-  for (const width of [CARD_WIDTH, CARD_MIN]) {
-    const need = Math.ceil(geo.pageRight + MARGIN_GAP + width + EDGE - geo.cw);
-    if (need > maxShift) continue;
-    const shift = Math.max(0, need);
-    const left = geo.pageRight - shift + MARGIN_GAP;
-    return { shift, left, width: Math.min(CARD_WIDTH, geo.cw - EDGE - left) };
+/** A card's place with the page moved by `shift`: beside the page, else over
+    the page's right margin clear of the text column; null when neither
+    fits. */
+export function slotAt(geo: PageGeometry, shift: number): { left: number; width: number } | null {
+  for (const left of [geo.pageRight - shift + MARGIN_GAP, geo.textRight - shift + MARGIN_GAP]) {
+    const width = Math.min(MARGIN_CARD_WIDTH, geo.cw - EDGE - left);
+    if (width >= CARD_MIN) return { left, width };
   }
-  const left = geo.textRight - maxShift + MARGIN_GAP;
-  const width = Math.min(CARD_WIDTH, geo.cw - EDGE - left);
-  return width >= CARD_MIN ? { shift: maxShift, left, width } : null;
+  return null;
 }
 
-/** A card's place with the page moved by `shift` already: the same column. */
-export function marginSlot(geo: PageGeometry, shift: number): { left: number; width: number } {
-  const beside = geo.pageRight - shift + MARGIN_GAP;
-  const left = beside + CARD_MIN + EDGE <= geo.cw ? beside : geo.textRight - shift + MARGIN_GAP;
-  return { left, width: Math.max(CARD_MIN, Math.min(CARD_WIDTH, geo.cw - EDGE - left)) };
+export type MarginPlace = { shift: number; left: number; width: number };
+
+/** A card's place in the margin and the least shift that gives it: beside
+    the page at full width, else beside it at the least width, else over the
+    page's margin with the page at its left edge. Null when the pane is too
+    narrow for all three: the card docks under its words. */
+export function marginPlace(geo: PageGeometry): MarginPlace | null {
+  const most = Math.max(0, Math.floor(geo.pageLeft - MIN_LEFT));
+  for (const width of [MARGIN_CARD_WIDTH, CARD_MIN]) {
+    const need = Math.max(0, Math.ceil(geo.pageRight + MARGIN_GAP + width + EDGE - geo.cw));
+    const slot = need <= most ? slotAt(geo, need) : null;
+    if (slot) return { shift: need, ...slot };
+  }
+  const slot = slotAt(geo, most);
+  return slot ? { shift: most, ...slot } : null;
+}
+
+/** A card under its words when the margin has no room: the text column's
+    width, inside the pane. */
+export function belowSlot(geo: PageGeometry, shift: number): { left: number; width: number } {
+  const left = Math.max(8, geo.textLeft - shift);
+  return { left, width: Math.max(260, Math.min(geo.textRight - geo.textLeft, geo.cw - 8 - left)) };
 }
 
 /** Where the selection toolbar sits, `width` wide, with the page moved by
@@ -77,8 +91,8 @@ export function marginSlot(geo: PageGeometry, shift: number): { left: number; wi
     the page's right margin — never over the text column. Null when neither
     fits: the toolbar goes under the words. */
 export function toolbarLeft(geo: PageGeometry, shift: number, width: number): number | null {
-  const beside = geo.pageRight - shift + 10;
+  const beside = geo.pageRight - shift + TOOLBAR_GAP;
   if (beside + width <= geo.cw - 6) return beside;
   const over = geo.cw - width - 6;
-  return over >= geo.textRight - shift + 8 ? over : null;
+  return over >= geo.textRight - shift + TOOLBAR_GAP ? over : null;
 }

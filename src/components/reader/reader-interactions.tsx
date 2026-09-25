@@ -126,7 +126,14 @@ import { NEW_GLOW_CLASS, NewPill, useNewFeature } from "@/components/new-feature
 import type { PageSetup, RichNode } from "@/lib/docs/schema";
 import { pageEditorIn, pageSegmentsOfRange, wordAtCaret } from "@/components/docs/layer/anchor";
 import { flashInPage } from "@/components/docs/layer/flash";
-import { marginPlace, marginSlot, pageGeometry, toolbarLeft, type PageGeometry } from "@/components/docs/layer/margin";
+import {
+  belowSlot,
+  marginPlace,
+  pageGeometry,
+  slotAt,
+  toolbarLeft,
+  type PageGeometry,
+} from "@/components/docs/layer/margin";
 
 // One block's span of a selection (SPEC.md §5).
 type Segment = Omit<SourceInput, "documentId">;
@@ -571,6 +578,8 @@ type AnnotationCard = {
   saved: string; // comment as loaded; Save enables on change
   top: number;
   left: number;
+  // The page editor's margin sets its width (SPEC.md §29); else 300.
+  width?: number;
   busy: boolean;
 };
 
@@ -1409,6 +1418,7 @@ export function ReaderInteractions({
   const [docsShift, setDocsShift] = useState(0);
   const docsShiftRef = useRef(0);
   docsShiftRef.current = docsShift;
+  const marginCardOpenRef = useRef(false);
   const [assistantChat, setAssistantChat] = useState<AssistantChat | null>(null);
   // Highlighting an answer in the chat card (SPEC.md §7): Start side chat,
   // Ask about this, Comment.
@@ -1467,6 +1477,27 @@ export function ReaderInteractions({
     preferredTop: number,
   ) {
     const { rects, articleLeft, articleRight, cw } = measureSideCards(containerRef.current, kind);
+    // The page editor (SPEC.md §29): one column in the page's right margin,
+    // like Google Docs' comment cards — each card level with its words, below
+    // a card already there — and the page moves left to make room. A log
+    // card shows only while the pointer rests: it takes the margin as it is
+    // and never moves the page. With no room, cards dock under their words.
+    const shift = docsShiftRef.current;
+    const page = richTextRef.current ? pageGeometry(containerRef.current, shift) : null;
+    if (page) {
+      const kept = kind === "log" ? slotAt(page, shift) : null;
+      const place = splitRef.current ? null : kind === "log" ? (kept ? { shift, ...kept } : null) : marginPlace(page);
+      if (!place) return { ...belowSlot(page, shift), top: Math.max(8, preferredTop) + 34, side: "right" as const };
+      const pageMid = (page.pageLeft + page.pageRight) / 2 - shift;
+      let top = Math.max(8, preferredTop);
+      for (let step = 0; step < 12; step++) {
+        const taken = blocksOnSide(rects, pageMid, "right", top, CARD_ESTIMATE);
+        if (taken.length === 0) break;
+        top = Math.max(...taken.map((r) => r.bottom)) + CARD_GAP;
+      }
+      if (place.shift !== shift) setDocsShift(place.shift);
+      return { left: place.left, width: place.width, top, side: "right" as const };
+    }
     // Narrow reader: no room beside the article — dock below the highlight.
     if (narrowRef.current) {
       return {
@@ -2066,7 +2097,19 @@ export function ReaderInteractions({
     const onComment = (e: Event) => {
       const detail = (e as CustomEvent<{ documentId: string }>).detail;
       if (detail?.documentId !== documentId) return;
-      const captured = captureSelection();
+      // Both panes of a split view can show the document: the pane whose
+      // page has the focus takes the command.
+      const editor = pageEditorIn(containerRef.current);
+      const panes = document.querySelectorAll(`[data-reader-root][data-document-id="${documentId}"]`).length;
+      if (!editor || (panes > 1 && !editor.view.hasFocus())) return;
+      let captured = captureSelection();
+      // A caret in a word and no selection: the comment takes the word, as
+      // in Google Docs.
+      const word = captured ? null : wordAtCaret(editor);
+      if (word) {
+        editor.commands.setTextSelection(word);
+        captured = captureSelection();
+      }
       if (!captured) {
         showToast(t("docs.selectToComment"));
         return;
@@ -2804,6 +2847,12 @@ export function ReaderInteractions({
         const width = 300;
         // A pure highlight stores its quote as content; its comment starts empty.
         const comment = summary.content === (summary.quotedText ?? "") ? "" : summary.content;
+        // The page editor (SPEC.md §29): the card docks in the page's right
+        // margin level with its words, like a Google Docs comment card.
+        const page =
+          richTextRef.current && !splitRef.current ? pageGeometry(container, docsShiftRef.current) : null;
+        const place = page ? marginPlace(page) : null;
+        if (place && place.shift !== docsShiftRef.current) setDocsShift(place.shift);
         setAnnotationCard({
           sourceId,
           noteId: summary.noteId,
@@ -2814,16 +2863,21 @@ export function ReaderInteractions({
           saved: comment,
           // Clamped so the action row never lands under the mobile bottom bar.
           top: Math.min(
-            markRect.bottom - containerRect.top + container.scrollTop + 8,
+            place
+              ? markRect.top - containerRect.top + container.scrollTop
+              : markRect.bottom - containerRect.top + container.scrollTop + 8,
             container.scrollTop + container.clientHeight - 240,
           ),
-          left: Math.max(
-            12,
-            Math.min(
-              markRect.left - containerRect.left + container.scrollLeft,
-              container.clientWidth - width - 12,
-            ),
-          ),
+          left: place
+            ? place.left
+            : Math.max(
+                12,
+                Math.min(
+                  markRect.left - containerRect.left + container.scrollLeft,
+                  container.clientWidth - width - 12,
+                ),
+              ),
+          ...(place ? { width: place.width } : {}),
           busy: false,
         });
         return;
@@ -2923,7 +2977,12 @@ export function ReaderInteractions({
     const container = containerRef.current;
     if (!container) return null;
     const measured = measureSideCards(container);
-    const isNarrow = splitRef.current || measured.cw - measured.articleRight < NARROW_GUTTER;
+    // The page editor (SPEC.md §29) is narrow when its margin has no room
+    // for a card even with the page moved left.
+    const page = richTextRef.current ? pageGeometry(container, docsShiftRef.current) : null;
+    const isNarrow =
+      splitRef.current ||
+      (page ? marginPlace(page) === null : measured.cw - measured.articleRight < NARROW_GUTTER);
     if (isNarrow !== narrowRef.current) {
       narrowRef.current = isNarrow;
       if (isNarrow) {
@@ -2954,10 +3013,19 @@ export function ReaderInteractions({
       const measured = applyNarrow();
       if (!measured) return;
       const { articleLeft, articleRight, cw } = measured;
+      // The page editor: the margin's column at the new width, and the shift
+      // it needs; with no room, under the words and the page back in place.
+      const page = richTextRef.current ? pageGeometry(container, docsShiftRef.current) : null;
+      const place = page && !narrowRef.current ? marginPlace(page) : null;
+      if (page) setDocsShift(place && marginCardOpenRef.current ? place.shift : 0);
       const redock = (side: "right" | "left") =>
-        narrowRef.current
-          ? dockBelowCard(articleLeft, articleRight, cw)
-          : dockSideCard(side, articleLeft, articleRight, cw);
+        page
+          ? place
+            ? { left: place.left, width: place.width }
+            : belowSlot(page, 0)
+          : narrowRef.current
+            ? dockBelowCard(articleLeft, articleRight, cw)
+            : dockSideCard(side, articleLeft, articleRight, cw);
       setBubble((b) => (b ? { ...b, ...redock(b.side) } : b));
       setSimplifyCard((c) => (c ? { ...c, ...redock(c.side) } : c));
       setAssistantChat((c) => (c ? { ...c, ...redock(c.side) } : c));
@@ -2976,6 +3044,36 @@ export function ReaderInteractions({
   useEffect(() => {
     applyNarrow();
   }, [split, applyNarrow]);
+  // The page editor's cards follow its page (SPEC.md §29): once the page has
+  // taken its shift — at once, or at the end of its move — every card in the
+  // margin docks against where the page is now.
+  const blankDocument = Boolean(richText);
+  useLayoutEffect(() => {
+    const container = containerRef.current;
+    if (!blankDocument || !container) return;
+    const redock = () => {
+      if (narrowRef.current || splitRef.current) return;
+      const page = pageGeometry(container, 0);
+      const slot = page ? slotAt(page, 0) : null;
+      if (!slot) return;
+      const move = <T extends { left: number; width: number }>(c: T | null): T | null =>
+        c && (c.left !== slot.left || c.width !== slot.width) ? { ...c, ...slot } : c;
+      setBubble(move);
+      setSimplifyCard(move);
+      setAssistantChat(move);
+      setCommentCard(move);
+      setLinkCard(move);
+      setAnnotationCard((c) =>
+        c && c.width !== undefined && (c.left !== slot.left || c.width !== slot.width) ? { ...c, ...slot } : c,
+      );
+    };
+    redock();
+    const onMoved = (e: TransitionEvent) => {
+      if (e.target instanceof Element && e.target.matches("[data-docs-page], .docs-canvas")) redock();
+    };
+    container.addEventListener("transitionend", onMoved);
+    return () => container.removeEventListener("transitionend", onMoved);
+  }, [docsShift, blankDocument]);
 
   // The on-mark card closes on a click anywhere else. A click on another mark
   // stays: the open handler replaces the card.
@@ -3397,7 +3495,13 @@ export function ReaderInteractions({
 
   // Edit mode: unsaved typing must reach the server before an anchor referencing
   // the live text is stored — the anchor's offsets describe what is on screen.
+  // A blank document's page editor saves all of its typing first (SPEC.md
+  // §29), so the paragraph index holds the words the reader selected.
   async function flushLiveBlock(blockId: string) {
+    if (richTextRef.current) {
+      await flushEditRef.current?.();
+      return;
+    }
     if (!editModeRef.current) return;
     const el = document.querySelector<HTMLElement>(`[data-edit-block="${blockId}"]`);
     const stored = blocksRef.current.find((b) => b.id === blockId);
@@ -5764,6 +5868,16 @@ function blockFormatKind(
   // Near the top of the article, or of the page editor's pane under its
   // toolbar, the bubbles above the toolbox drop below it.
   const popoverNearTop = popover ? (popover.nearTop ?? popover.yTop < 54) : false;
+  // The page editor's page moves back once no card sits in its margin.
+  const marginCardOpen =
+    bubble !== null ||
+    simplifyCard !== null ||
+    assistantChat !== null ||
+    commentCard !== null ||
+    linkCard !== null ||
+    annotationCard !== null;
+  marginCardOpenRef.current = marginCardOpen;
+  if (!marginCardOpen && docsShift !== 0) setDocsShift(0);
   // One row of the toolbox. Coarse pointers get 44px-tall rows.
   const toolRow = coarse ? "px-3.5 py-2.5 text-[14px]" : "px-2.5 py-[5px] text-[12px]";
   // The open popover's content kind and its toolbar (SPEC.md §6).
@@ -6217,6 +6331,12 @@ function blockFormatKind(
       // The inline restore script finds this pane's stored reading position by
       // its document (lib/reading-position.ts). An embedded layer has none.
       data-document-id={embedded ? undefined : documentId}
+      // A blank document (SPEC.md §29): the cards take the page editor's
+      // look, and the page moves left by --docs-shift while cards sit in its
+      // margin (components/docs/layer/margin.ts).
+      data-page-editor={richText ? "" : undefined}
+      data-docs-shift={richText && docsShift > 0 ? "" : undefined}
+      style={richText ? ({ "--docs-shift": `${docsShift}px` } as React.CSSProperties) : undefined}
       // While the extract page is open it scrolls itself; the article
       // underneath must not scroll away, so the pane clips instead. An
       // embedded layer scrolls with the pane around it.
@@ -6365,12 +6485,14 @@ function blockFormatKind(
       {annotationCard && (
         <div
           data-selection-popover
+          data-annotation-card
           onPointerDown={holdAnnotation(annotationCardReference)}
           className={`pop-in absolute ${TOOL_LAYER} w-[300px] rounded-2xl border bg-card p-3 shadow-float`}
           // The card's border and label carry the annotation's kind color (SPEC.md §6).
           style={{
             top: annotationCard.top,
             left: annotationCard.left,
+            width: annotationCard.width,
             borderColor: annotationKindColor(annotationCard.kind, annotationCard.color),
           }}
         >
