@@ -26,6 +26,7 @@ import {
   splitActionsFence,
 } from "@/lib/assistant/plan";
 import { callForJson, modelErrorMessage } from "@/lib/derive/json-call";
+import { importShared } from "@/lib/docs/server";
 import { takesSuggestions } from "@/lib/docs/suggest-ops";
 import { streamTextTo } from "@/lib/derive/text-stream";
 import { ensureDigest } from "@/lib/digest/ensure";
@@ -174,7 +175,9 @@ async function handle(req: Request, t: TFunc) {
             }),
             db.document.findUnique({ where: { id: data.documentId! }, select: { richText: true, format: true } }),
           ]);
-          return { sections, attachedDocs: attached.map((nd) => nd.document), richText: open ? takesSuggestions(open) : false };
+          // An import another account's project holds takes no edits.
+          const richText = open ? takesSuggestions(open) && !(await importShared(data.documentId!)) : false;
+          return { sections, attachedDocs: attached.map((nd) => nd.document), richText };
         })()
       : null;
   const messages: ModelMessage[] = [{ role: "system", content: system }];

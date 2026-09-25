@@ -476,7 +476,9 @@ model Document {
   figureRenderError String?
   parserVersion Int                @default(0) // parse pipeline version; stale URL documents re-parse automatically
   sourceUrl     String?
-  fileHash      String?            @unique // dedupe re-uploads
+  // Dedupe re-uploads. Not unique: an edited import is never handed to
+  // another add, so the same file can be imported again beside it.
+  fileHash      String?
   fileData      Bytes? // original PDF bytes, kept for forced re-parse (SPEC.md §8 Phase 3)
   // The stored file's format when it is neither a PDF nor a Markdown file
   // (SPEC.md §27): "slides" (a .pptx) or "sheets" (a .xlsx, .csv, or .tsv).
@@ -549,7 +551,37 @@ model Document {
   richTextSavedAt DateTime?
   richTextSavedBy String?
   versions      DocumentVersion[]
+  // An import (SPEC.md §29): a PDF, a web page, or a text file whose rich
+  // text was made from its parse. importRev is the richTextRev the import,
+  // or its last re-parse, stored: richTextRev past it means edited since.
+  // Null for every document that is not an import.
+  importRev     Int?
+  // A PDF's own names for its pages ("xii", "1043"), in page order, when it
+  // names them otherwise than 1..n; a page start draws pageLabels[page - 1].
+  pageLabels    Json?
+  figureMedia   FigureMedia[]
   createdAt     DateTime           @default(now())
+
+  @@index([fileHash])
+}
+
+// The media of an import's figure objects (SPEC.md §29): one row per figure
+// the parse found, kept once per document and never in the rich text — a
+// chart's html runs to hundreds of kilobytes. The figure object in the rich
+// text holds this row's id (its mediaId), the FIGURE row copies the html.
+// A re-parse adds new rows; the old ones stay for the versions that hold
+// them.
+model FigureMedia {
+  id         String   @id // made by the converter (newBlockId), the figure object's mediaId
+  documentId String
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  html       String? // a web figure's html; null for a PDF figure, drawn as the crop of its page and region
+  caption    String
+  page       Int? // 1-based PDF page of a PDF figure
+  region     Json? // a PDF figure's region on its page (the §11 percent-coordinate shape); null = the whole page
+  createdAt  DateTime @default(now())
+
+  @@index([documentId])
 }
 
 // A version of a blank document (SPEC.md §29): its rich text as a sitting of
@@ -709,10 +741,18 @@ model Block {
   links        Json? // link spans: [{start, end, quotedText, targetOrder?, href?}] — Contents entries and PDF hyperlinks
   // 1-based PDF page. FIGURE blocks: for the figure image route. PAGE blocks:
   // the page the block renders. Converted text blocks: the page it came from.
+  // Rows of a PDF import: the page the row starts on.
   page         Int?
   // FIGURE blocks from a PDF: the figure's region on its page, the percent-
   // coordinate shape of SPEC.md §11. Null = the whole page.
   region       Json?
+  // A FIGURE row of an import's figure object: the FigureMedia row whose
+  // html the row copies (SPEC.md §29).
+  mediaId      String?
+  // A table cell's paragraph in a document with rich text: its place,
+  // {table, row, column}, 1-based — the table's number in the document, the
+  // row, and the column of the cell's first grid slot (SPEC.md §29).
+  cell         Json?
   // Semantic search vector (text-embedding-3-small, 1024 dims). Null = not
   // embedded yet; the search route backfills lazily, a text edit clears it.
   embedding    Unsupported("vector(1024)")?

@@ -20,6 +20,7 @@ import { MAX_OUTPUT_TOKENS, SUGGEST_MAX_NEW_CHARS } from "@/lib/derive/config";
 import { runSuggest, suggestDocument } from "@/lib/derive/suggest";
 import { svgChartCall } from "@/lib/derive/svg-chart";
 import type { SuggestResult } from "@/lib/docs/assistant-suggestions";
+import { importShared } from "@/lib/docs/server";
 import { scopeOf, takesSuggestions, windowsOf, wordsScope, type SuggestScope } from "@/lib/docs/suggest-ops";
 import { keepVersionBeforeSuggestions } from "@/lib/docs/versions";
 import {
@@ -265,8 +266,11 @@ async function handle(req: Request, t: TFunc) {
     return NextResponse.json({ error: t("api.anchorNotResolvedInDocument") }, { status: 400 });
   }
   // The assistant's suggestions (SPEC.md §29) change a document with rich
-  // text; a chip changes the selected words.
-  const richText = takesSuggestions(document);
+  // text; a chip changes the selected words. An import another account's
+  // project holds takes no edits.
+  const shared = takesSuggestions(document) && (await importShared(document.id));
+  const richText = takesSuggestions(document) && !shared;
+  if (chip && shared) return NextResponse.json({ error: t("api.importShared") }, { status: 403 });
   if (chip && !richText) return NextResponse.json({ error: t("api.suggestNeedsRichText") }, { status: 400 });
   if (chip && passage.length === 0) return NextResponse.json({ error: t("api.anchorMissing") }, { status: 400 });
   if (anchor && anchored && layer === "core") {

@@ -39,12 +39,12 @@ type SuggestOp = z.infer<typeof suggestOpSchema>;
 /** A row of the paragraph index. */
 export type IndexRow = { id: string; type: string; text: string };
 
-/** Why the server skips an op; the page's own checks add "changed" and "object". */
-export type ServerSkip = Exclude<SkipReason, "changed" | "object">;
+/** Why the server skips an op; the page's own checks add "changed", and
+    "object" for what only the page sees. */
+export type ServerSkip = Exclude<SkipReason, "changed">;
 
 /** The assistant suggests edits in a document with rich text and no format
-    (slides and sheets have one): a blank document today, an import once
-    imports hold rich text. */
+    (slides and sheets have one): a blank document or an import. */
 export const takesSuggestions = (document: { richText: unknown; format: string | null }): boolean =>
   Boolean(document.richText) && !document.format;
 
@@ -155,9 +155,10 @@ export function windowsOf(rows: IndexRow[], places: Map<string, BlockPlace>, sco
 // Japanese characters are words of their own: a selection never widens over them.
 const WORD = /(?![\p{sc=Han}\p{sc=Hiragana}\p{sc=Katakana}])[\p{L}\p{N}\p{M}_'’-]/u;
 
-/** The selected words as a scope: each block's span widened to whole words. */
+/** The selected words as a scope: each block's span widened to whole words.
+    A figure's caption is no words to change: a figure takes no span. */
 export function wordsScope(rows: IndexRow[], segments: { blockId: string; startOffset: number; endOffset: number }[]): SuggestScope {
-  const texts = new Map(rows.map((r) => [r.id, r.text]));
+  const texts = new Map(rows.flatMap((r) => (r.type === "FIGURE" ? [] : [[r.id, r.text] as const])));
   return {
     kind: "words",
     segments: segments.flatMap((s) => {
@@ -281,6 +282,9 @@ export function resolveOps(
   const order = new Map(rows.map((r, k) => [r.id, k]));
   const spans = new Map(scope.kind === "words" ? scope.segments.map((s) => [s.blockId, s]) : []);
   const inScope = new Set(scope.kind === "words" ? spans.keys() : scope.blockIds);
+  // A figure is no words: an op that changes one, or its caption, is
+  // skipped. New blocks may follow one.
+  const figure = (blockId: string) => rows[order.get(blockId) ?? -1]?.type === "FIGURE";
 
   const resolve = (op: SuggestOp, i: number): Resolved | ServerSkip | null => {
     if (op.op === "insert_blocks") {
@@ -299,6 +303,7 @@ export function resolveOps(
       return { op: { i, op: op.op, afterBlockId: op.afterBlockId, markdown: md, why: op.why }, claim: { kind: "gap", after }, chars: md.length };
     }
     if (op.op === "replace_blocks" || op.op === "remove_blocks") {
+      if (op.blockIds.some(figure)) return "object";
       const ks: number[] = [];
       for (const blockId of op.blockIds) {
         const k = order.get(blockId);
@@ -323,6 +328,7 @@ export function resolveOps(
       if (!md) return "notText";
       return { op: { i, op: op.op, blockIds, base, markdown: md, why: op.why }, claim, chars: md.length };
     }
+    if (figure(op.blockId)) return "object";
     const k = order.get(op.blockId);
     if (k === undefined || !inScope.has(op.blockId)) return "outside";
     const row = rows[k];

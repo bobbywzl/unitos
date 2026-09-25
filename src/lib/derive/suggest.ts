@@ -37,6 +37,7 @@ const SKIPPED: Record<ServerSkip, TKey> = {
   ambiguous: "api.suggestSkipAmbiguous",
   overlap: "api.suggestSkipOverlap",
   notText: "api.suggestSkipNotText",
+  object: "api.suggestSkipFigure",
   limit: "api.suggestSkipLimit",
 };
 

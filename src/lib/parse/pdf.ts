@@ -49,9 +49,15 @@ type UriRegion = { href: string; x1: number; y1: number; x2: number; y2: number 
 // A box in PDF points: y1 the bottom edge, y2 the top edge (y grows upward).
 type Box = { x1: number; y1: number; x2: number; y2: number };
 
+// A page start inside a joined segment: where a later page's words begin in
+// the text. page is 0-based, like Segment.page.
+type PageBreak = { offset: number; page: number };
+
 // Internal block: ParsedBlock plus what the cross-page passes need.
 type Segment = ParsedBlock & {
-  page: number;
+  page: number; // 0-based; the cross-page merge compares it, whatever joins
+  firstPage?: number; // 0-based page of the first words, when a join put an earlier page's words first
+  breaks?: PageBreak[]; // each later page's start after joins across page breaks, in order
   rawSize?: number; // heading candidate size, for level ranking
   runs?: Run[]; // style runs over text; spans emit after all merges
   listItem?: boolean; // lone indented item; may join a LIST across the page break

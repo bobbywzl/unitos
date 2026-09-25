@@ -12,6 +12,10 @@ const en = {
   statusSaving: "Your latest changes are being saved.",
   statusOffline: "Your changes stay here and save once the connection is back.",
   statusFailed: "Your latest changes are not saved yet. Unitos tries again with your next change.",
+  // The import line: where an import came from
+  importedFrom: "Imported from {site}",
+  importPdf: "PDF · {n} page{s}",
+  importTextFile: "Text file",
   // Commands (Search the menus)
   pageSetup: "Page setup",
   showRuler: "Show ruler",
@@ -46,6 +50,7 @@ const en = {
   copyName: "Name",
   copyOf: "Copy of {title}",
   copySuggestions: "Copy comments and suggestions",
+  copyImportOff: "Make a copy is off for an import for now: its figures can't be copied yet.",
   // Page setup
   pagesTab: "Pages",
   pagelessTab: "Pageless",
@@ -116,6 +121,9 @@ const zh: Record<keyof typeof en, string> = {
   statusSaving: "正在保存你最新的更改。",
   statusOffline: "你的更改会先留在这里，连接恢复后再保存。",
   statusFailed: "你最新的更改尚未保存。Unitos 会在你下次更改时再次尝试。",
+  importedFrom: "导入自 {site}",
+  importPdf: "PDF · {n} 页",
+  importTextFile: "文本文件",
   pageSetup: "页面设置",
   showRuler: "显示标尺",
   showOutline: "显示标签页和大纲",
@@ -148,6 +156,7 @@ const zh: Record<keyof typeof en, string> = {
   copyName: "名称",
   copyOf: "{title} 的副本",
   copySuggestions: "复制评论和建议",
+  copyImportOff: "导入暂时不能创建副本：其插图还无法复制。",
   pagesTab: "分页",
   pagelessTab: "无分页",
   orientation: "方向",

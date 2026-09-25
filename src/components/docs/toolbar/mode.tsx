@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, type ReactNode } from "react";
+import { createContext, useContext, useRef, useState, type ReactNode } from "react";
 import { useT } from "@/components/lang-provider";
 import { CheckIcon, EditIcon, SuggestIcon, ViewIcon } from "@/components/docs/icons";
 import { keys } from "@/components/docs/keys";
@@ -11,6 +11,11 @@ import type { TKey } from "@/lib/i18n/dictionaries";
 // Google Docs' menu of modes. toolbar.tsx binds the modes' keys.
 
 export type DocsMode = "editing" | "suggesting" | "viewing";
+
+/** Why Editing and Suggesting are off for the open document, or null: an
+    import another account's project holds too (SPEC.md §29). The menu
+    shows the two modes off and says why. */
+export const ModeLock = createContext<TKey | null>(null);
 
 type ModeItem = {
   mode: DocsMode;
@@ -50,6 +55,7 @@ const MODES: ModeItem[] = [
 
 export function ModeSwitcher({ mode, onMode }: { mode: DocsMode; onMode: (mode: DocsMode) => void }) {
   const t = useT();
+  const lock = useContext(ModeLock);
   const [open, setOpen] = useState(false);
   const [fromKeys, setFromKeys] = useState(false);
   const ref = useRef<HTMLButtonElement>(null);
@@ -102,6 +108,7 @@ export function ModeSwitcher({ mode, onMode }: { mode: DocsMode; onMode: (mode: 
           <MenuItem
             key={m.mode}
             checked={m.mode === mode}
+            disabled={lock !== null && m.mode !== "viewing"}
             label={t(m.label)}
             tip={keys(m.combo)}
             onSelect={() => {
@@ -118,6 +125,11 @@ export function ModeSwitcher({ mode, onMode }: { mode: DocsMode; onMode: (mode: 
             {m.mode === mode && <CheckIcon size={24} className="docs-mode-current" />}
           </MenuItem>
         ))}
+        {lock && (
+          <p role="presentation" className="max-w-[268px] px-4 pt-1.5 pb-1 pl-9 text-[12px] leading-[1.45] text-sand-600">
+            {t(lock)}
+          </p>
+        )}
       </DropdownPanel>
     </>
   );
