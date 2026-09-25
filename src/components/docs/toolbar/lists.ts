@@ -28,6 +28,7 @@ const b = (chars: string): Glyph[] => [...chars].map((bullet) => ({ bullet }));
 const P = (counter: Counter): Glyph => ({ counter, before: "", after: "." });
 const R = (counter: Counter): Glyph => ({ counter, before: "", after: ")" });
 const RR = (counter: Counter): Glyph => ({ counter, before: "(", after: ")" });
+const DR = (counter: Counter): Glyph => ({ counter, before: "", after: ".)" });
 const DEC = "decimal";
 const LA = "lower-alpha";
 const UA = "upper-alpha";
@@ -69,6 +70,27 @@ export const NUMBER_PRESETS: ListPreset[] = [
     levels: [P("decimal-leading-zero"), P(LA), P(LR), P(DEC), P(LA), P(LR), P(DEC), P(LA), P(LR)],
   },
 ];
+
+/** The presets a typed prefix gives (typing/lists.ts) that the palettes do
+    not show. */
+const TYPED_PRESETS: ListPreset[] = [
+  { style: "BULLET_DASH", kind: "bulletList", levels: b("---------") },
+  { style: "BULLET_PLUS", kind: "bulletList", levels: b("+++++++++") },
+  { style: "NUMBERED_DECIMAL_ALPHA_ROMAN_TWO_PARENS", kind: "orderedList", levels: [RR(DEC), RR(LA), RR(LR), R(DEC), R(LA), R(LR), P(DEC), P(LA), P(LR)] },
+  { style: "NUMBERED_DECIMAL_ALPHA_ROMAN_PERIOD_PARENS", kind: "orderedList", levels: [DR(DEC), DR(LA), DR(LR), RR(DEC), RR(LA), RR(LR), P(DEC), P(LA), P(LR)] },
+  { style: "NUMBERED_ALPHA_ROMAN_DECIMAL", kind: "orderedList", levels: [P(LA), P(LR), P(DEC), P(LA), P(LR), P(DEC), P(LA), P(LR), P(DEC)] },
+  { style: "NUMBERED_ALPHA_ROMAN_DECIMAL_PARENS", kind: "orderedList", levels: [R(LA), R(LR), R(DEC), RR(LA), RR(LR), RR(DEC), P(LA), P(LR), P(DEC)] },
+  { style: "NUMBERED_ALPHA_ROMAN_DECIMAL_TWO_PARENS", kind: "orderedList", levels: [RR(LA), RR(LR), RR(DEC), R(LA), R(LR), R(DEC), P(LA), P(LR), P(DEC)] },
+  { style: "NUMBERED_UPPERALPHA_ALPHA_ROMAN_PARENS", kind: "orderedList", levels: [R(UA), R(LA), R(LR), RR(DEC), RR(LA), RR(LR), P(DEC), P(LA), P(LR)] },
+  { style: "NUMBERED_UPPERALPHA_ALPHA_ROMAN_TWO_PARENS", kind: "orderedList", levels: [RR(UA), RR(LA), RR(LR), R(DEC), R(LA), R(LR), P(DEC), P(LA), P(LR)] },
+];
+
+/** A bulleted or numbered list's preset by its listStyle; the default for
+    none or an unknown one. */
+export function listPreset(ordered: boolean, style: unknown): ListPreset {
+  const presets = ordered ? NUMBER_PRESETS : BULLET_PRESETS;
+  return [...presets, ...TYPED_PRESETS].find((p) => p.kind === presets[0].kind && p.style === (style ?? null)) ?? presets[0];
+}
 
 /** The checklist palette (2 × 1). */
 export const CHECKLIST_PRESETS: { style: string | null; label: "docs.checklistStrike" | "docs.checklistNoStrike" }[] = [

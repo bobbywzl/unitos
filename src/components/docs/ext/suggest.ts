@@ -27,7 +27,7 @@ type Kind = keyof typeof SPECS;
 const TAGS: Record<Kind, string> = { insertion: "ins", deletion: "del", modification: "span" };
 const KINDS = new Set<string>(Object.keys(SPECS));
 /** What the library puts at a paragraph's edge to hold a suggested break. */
-export const ZWSP = "​";
+export const ZWSP = "\u200B";
 
 export const isSuggestionMark = (mark: PMMark) => KINDS.has(mark.type.name);
 /** Words added or removed: an insertion or a deletion mark. */
@@ -141,6 +141,8 @@ function changedMark(mod: PMMark): string | null {
     keeps the mark they had before, unless they are a suggestion's own. The
     library would record it as the words deleted and added again. */
 function suggestMark(tr: Transaction, step: AddMarkStep | RemoveMarkStep, id: string): void {
+  // A suggestion's own marks are no formatting (Clear formatting, Paint format).
+  if (isSuggestionMark(step.mark)) return;
   const { insertion: added, deletion: removed, modification: changed } = tr.doc.type.schema.marks;
   const adding = step instanceof AddMarkStep;
   const type = step.mark.type;

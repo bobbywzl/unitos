@@ -38,7 +38,7 @@ import {
 import type { DocStyle } from "@/components/docs/extensions";
 import { firstFamily } from "@/components/docs/fonts";
 import { DEFAULT_HF_MARGIN_PT, PX_PER_PT } from "@/components/docs/page/geometry";
-import { BULLET_PRESETS, NUMBER_PRESETS, type ListPreset } from "@/components/docs/toolbar/lists";
+import { listPreset } from "@/components/docs/toolbar/lists";
 import { readStyles, sizeInPt, styleFont, type NamedStyle } from "@/components/docs/toolbar/styles";
 import { db } from "@/lib/db";
 import { hex6, inlineText } from "@/lib/docs/blocks";
@@ -264,8 +264,7 @@ function bulletLevels(glyph: string): ILevelsOptions[] {
 
 /** A list's nine levels in its preset's glyphs; a numbered list starts at its start. */
 function listLevels(list: RichNode): ILevelsOptions[] {
-  const presets: ListPreset[] = list.type === "orderedList" ? NUMBER_PRESETS : BULLET_PRESETS;
-  const preset = presets.find((p) => p.style === (list.attrs?.listStyle ?? null)) ?? presets[0];
+  const preset = listPreset(list.type === "orderedList", list.attrs?.listStyle);
   return preset.levels.map((glyph, level) => ({
     level,
     ...("bullet" in glyph

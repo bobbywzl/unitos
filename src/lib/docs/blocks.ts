@@ -62,7 +62,7 @@ function runStyles(marks: RichMark[] | undefined): string[] {
     break (Shift+Enter) as "\n". The zero-width space a suggestion keeps at a
     suggested paragraph break (components/docs/ext/suggest.ts) is no word. */
 export function inlineText(node: RichNode): string {
-  if (node.type === "text") return (node.text ?? "").replaceAll("​", "");
+  if (node.type === "text") return (node.text ?? "").replaceAll("\u200B", "");
   if (node.type === "hardBreak") return "\n";
   // A smart chip's words are its label; other atoms add none.
   if (CHIP_NODE_TYPES.has(node.type)) return typeof node.attrs?.label === "string" ? node.attrs.label : "";

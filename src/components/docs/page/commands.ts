@@ -73,7 +73,7 @@ registerDocsCommands([
     id: "page:print-layout",
     label: "docsPage.showPrintLayout",
     menu: "view",
-    keywords: ["print layout", "compact", "pages"],
+    keywords: ["print layout", "page breaks", "pages", "pagination"],
     run: (editor) => {
       const s = store(editor);
       if (s) s.set({ printLayout: !s.get().printLayout });
@@ -124,7 +124,7 @@ registerDocsCommands([
     id: "page:header",
     label: "docsPage.header",
     menu: "insert",
-    keywords: ["header", "page elements"],
+    keywords: ["header", "headers & footers", "add a header", "page elements"],
     shortcut: "Mod+Alt+O H",
     run: editHeader("header"),
     enabled: paged,
@@ -133,7 +133,7 @@ registerDocsCommands([
     id: "page:footer",
     label: "docsPage.footer",
     menu: "insert",
-    keywords: ["footer", "page elements"],
+    keywords: ["footer", "headers & footers", "add a footer", "page elements"],
     shortcut: "Mod+Alt+O F",
     run: editHeader("footer"),
     enabled: paged,

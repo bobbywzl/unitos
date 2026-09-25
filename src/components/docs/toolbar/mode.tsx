@@ -24,9 +24,11 @@ registerDocsCommands([
     id: "mode:suggesting",
     label: "docsSuggest.suggestingMode",
     menu: "view",
-    keywords: ["suggest", "track changes", "建议"],
+    keywords: ["switch to suggesting", "suggest edits", "track changes", "建议"],
     shortcut: "Mod+Alt+Shift+X",
     run: (editor) => editor.view.dom.dispatchEvent(new CustomEvent<DocsMode>(MODE_EVENT, { bubbles: true, detail: "suggesting" })),
+    // Only an editor has the mode switcher.
+    enabled: (editor) => Boolean(editor.view.dom.closest("[data-docs-editor]")?.querySelector(".docs-mode-pill")),
   },
 ]);
 

@@ -40,7 +40,7 @@
 .docs-prose [data-suggestion-block] {
   display: contents;
 }
-.docs-prose [data-suggestion-block] > :is(img, hr, table, [data-page-break]) {
+.docs-prose [data-suggestion-block] > :not(p, h1, h2, h3, h4, h5, h6, ul, ol, li) {
   outline: 2px solid var(--docs-suggest-ink);
   outline-offset: 2px;
 }

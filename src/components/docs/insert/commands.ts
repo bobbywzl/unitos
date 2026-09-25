@@ -29,7 +29,7 @@ const insert = (id: string, label: TKey, keywords: string[], run: Run, shortcut?
 const picker = (kind: PickerKind): Run => (editor) => emitInsert(editor, { type: "picker", kind });
 
 const block = (kind: BuildingBlock, label: TKey, keywords: string[]) =>
-  insert(`block-${kind}`, label, ["building block", "template", ...keywords], (editor) => {
+  insert(`block-${kind}`, label, ["building blocks", "template", ...keywords], (editor) => {
     const ctx = insertContext(editor);
     if (ctx) editor.chain().focus().insertContent(buildingBlock(kind, ctx.t, ctx.lang)).run();
   });
@@ -74,17 +74,17 @@ registerDocsCommands([
   insert("footnote", "docsInsert.itemFootnote", ["footnote", "note", "脚注"], (editor) => insertFootnote(editor), "Mod+Alt+F"),
   insert("table-of-contents", "docsInsert.itemTableOfContents", ["table of contents", "toc", "目录"], picker("toc")),
   insert("bookmark", "docsInsert.itemBookmark", ["bookmark", "anchor", "add a bookmark", "add an anchor", "书签"], (editor) => insertBookmark(editor)),
-  insert("smart-chips", "docsInsert.sectionSmartChips", ["smart chip", "chip", "person", "file", "@", "mention"], (editor) => openAtMenuHere(editor.view)),
+  insert("smart-chips", "docsInsert.sectionSmartChips", ["smart chip", "chip", "person", "people", "file", "@", "mention"], (editor) => openAtMenuHere(editor.view)),
   insert("date", "docsInsert.itemDate", ["date", "calendar", "smart chip", "日期"], picker("date")),
   insert("dropdown", "docsInsert.itemDropdown", ["dropdown", "status", "smart chip", "下拉"], picker("dropdown")),
-  insert("code-block", "docsInsert.itemCodeBlock", ["code", "snippet", "building block", "代码"], picker("code")),
+  insert("code-block", "docsInsert.itemCodeBlock", ["code", "snippet", "building blocks", "代码"], picker("code")),
   block("meetingNotes", "docsInsert.itemMeetingNotes", ["meeting", "notes", "agenda"]),
   block("emailDraft", "docsInsert.itemEmailDraft", ["email", "mail", "draft"]),
   block("productRoadmap", "docsInsert.itemProductRoadmap", ["roadmap", "table"]),
   block("reviewTracker", "docsInsert.itemReviewTracker", ["review", "tracker", "table"]),
   block("taskTracker", "docsInsert.itemTaskTracker", ["task", "tracker", "table"]),
   image("alt-text", "docsInsert.altText", ["alt text", "image description", "accessibility"], (editor) => emitInsert(editor, { type: "image-options", section: "alt" }), "Mod+Alt+Y"),
-  image("image-options", "docsInsert.imageOptions", ["image", "size", "rotation", "wrap", "recolor", "transparency"], (editor) =>
+  image("image-options", "docsInsert.imageOptions", ["image", "size", "rotation", "rotate", "wrap", "recolor", "transparency"], (editor) =>
     emitInsert(editor, { type: "image-options" }),
   ),
   image("crop-image", "docsInsert.cropImage", ["crop", "image"], (editor, pos) => imageViewAt(editor.view, pos)?.startCrop()),

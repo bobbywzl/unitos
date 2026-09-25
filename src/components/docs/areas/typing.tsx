@@ -22,9 +22,11 @@ import type { TKey } from "@/lib/i18n/dictionaries";
 
 // The typing area (SPEC.md §29): find and find and replace, Tools >
 // Preferences, the keyboard shortcuts, voice typing, and the spelling
-// switch. Their keys answer when the page editor has the focus, or when
-// nothing else does — never in the notes tray or any other text box. The
-// word count (word-count.tsx) mounts beside this layer.
+// switch; in Search the menus also Format > Text, View > Show non-printing
+// characters, and Edit's clipboard items. Their keys answer when the page
+// editor has the focus, or when nothing else does — never in the notes
+// tray or any other text box. The word count (word-count.tsx) mounts
+// beside this layer.
 
 type Run = (editor: Editor) => void;
 const editable = (editor: Editor) => editor.isEditable;

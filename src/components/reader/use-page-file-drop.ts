@@ -21,6 +21,13 @@ function hasFiles(e: DragEvent): boolean {
   return e.dataTransfer?.types.includes("Files") ?? false;
 }
 
+// The page editor is not a place to add documents (SPEC.md §29): an image
+// dropped on the page's text goes into the text only (the text takes the
+// drop and cancels it), and the rest of the page editor refuses files.
+function onPageEditor(e: DragEvent): boolean {
+  return e.target instanceof Element && e.target.closest("[data-docs-editor]") !== null;
+}
+
 // Chrome's dragleave for a drag that left the window carries (0, 0);
 // Firefox's carries the point outside the viewport.
 function leftWindow(e: DragEvent): boolean {
@@ -59,9 +66,17 @@ export function usePageFileDrop({
     };
     const onDragOver = (e: DragEvent) => {
       if (!hasFiles(e)) return;
+      if (e.defaultPrevented) {
+        hide();
+        return;
+      }
       e.preventDefault();
-      if (e.dataTransfer) e.dataTransfer.dropEffect = enabled ? "copy" : "none";
-      if (!enabled) return;
+      const refuse = !enabled || onPageEditor(e);
+      if (e.dataTransfer) e.dataTransfer.dropEffect = refuse ? "none" : "copy";
+      if (refuse) {
+        hide();
+        return;
+      }
       setOver(true);
       if (timer) clearTimeout(timer);
       timer = setTimeout(hide, IDLE_MS);
@@ -71,9 +86,9 @@ export function usePageFileDrop({
     };
     const onDropEvent = (e: DragEvent) => {
       hide();
-      if (!hasFiles(e)) return;
+      if (!hasFiles(e) || e.defaultPrevented) return;
       e.preventDefault();
-      if (!enabled) return;
+      if (!enabled || onPageEditor(e)) return;
       const files = [...(e.dataTransfer?.files ?? [])];
       if (files.length > 0) onDropRef.current(files);
     };

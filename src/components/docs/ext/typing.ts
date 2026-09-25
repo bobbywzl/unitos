@@ -27,7 +27,7 @@ import {
   tab,
 } from "@/components/docs/typing/keys";
 import { markStylePlugin, TYPING_RESTORE_META, validMarkStyle } from "@/components/docs/typing/mark-style";
-import { armPlainPaste, imageFiles, insertImageFiles, notePaste, plainTextSlice } from "@/components/docs/typing/paste";
+import { armPlainPaste, imageFiles, insertImageFiles, notePaste, pastedHtml, plainTextSlice } from "@/components/docs/typing/paste";
 import { repeatLastAction, repeatPlugin } from "@/components/docs/typing/repeat";
 import { tracePlugin } from "@/components/docs/typing/trace";
 import { replaceWithChip, urlChipPlugin } from "@/components/docs/typing/url-chip";
@@ -38,33 +38,6 @@ import { replaceWithChip, urlChipPlugin } from "@/components/docs/typing/url-chi
 // (docs-editor.tsx): Docs' own autocorrect formats what is typed.
 
 const typingKey = new PluginKey("docsTyping");
-
-const PT_PER_UNIT: Record<string, number> = { pt: 1, px: 0.75, in: 72, cm: 72 / 2.54, mm: 72 / 25.4 };
-
-function toPoints(value: string): number | null {
-  const m = /^(-?[\d.]+)(pt|px|in|cm|mm)$/.exec(value.trim());
-  if (!m) return null;
-  const n = parseFloat(m[1]) * PT_PER_UNIT[m[2]];
-  return Number.isFinite(n) ? Math.round(n * 100) / 100 : null;
-}
-
-/** Pasted HTML keeps its paragraphs' indents and spacing: the CSS becomes
-    the data attributes the page editor's paragraphs read. */
-function keepParagraphFormat(html: string): string {
-  if (typeof DOMParser === "undefined" || !/margin|text-indent|padding/i.test(html)) return html;
-  const doc = new DOMParser().parseFromString(html, "text/html");
-  doc.body.querySelectorAll<HTMLElement>("p, h1, h2, h3, h4, h5, h6").forEach((el) => {
-    const set = (attr: string, value: string) => {
-      const pt = value ? toPoints(value) : null;
-      if (pt && !el.hasAttribute(attr)) el.setAttribute(attr, String(pt));
-    };
-    set("data-indent-left", el.style.marginLeft);
-    set("data-indent-first-line", el.style.textIndent);
-    set("data-space-before", el.style.marginTop || el.style.paddingTop);
-    set("data-space-after", el.style.marginBottom || el.style.paddingBottom);
-  });
-  return doc.body.innerHTML;
-}
 
 const DocsTyping = Extension.create({
   name: "docsTyping",
@@ -205,7 +178,7 @@ const DocsTyping = Extension.create({
           if ([...text].length === 1) runAutocorrect(view, text);
           return true;
         },
-        transformPastedHTML: keepParagraphFormat,
+        transformPastedHTML: (html) => pastedHtml(editor, html),
         clipboardTextParser(text, $context, _plain, view) {
           return plainTextSlice(view.state.schema, text, $context, view.state.storedMarks ?? $context.marks());
         },

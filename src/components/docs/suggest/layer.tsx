@@ -28,7 +28,7 @@ registerDocsCommands([
     menu: "tools",
     keywords: ["suggestions", "track changes", "建议"],
     shortcut: "Mod+Alt+O U",
-    run: (editor) => editor.view.dom.dispatchEvent(new Event(REVIEW_EVENT, { bubbles: true })),
+    run: (editor) => editor.view.dom.dispatchEvent(new Event(REVIEW_EVENT)),
   },
   {
     id: "suggest:accept-all",
