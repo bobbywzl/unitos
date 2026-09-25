@@ -86,12 +86,15 @@ function blockName(node: PMNode, attrName: unknown, newValue: unknown, t: TFunc)
   return t(BLOCK_ATTRS[String(attrName)] ?? "docsSuggest.otherFormat");
 }
 
-/** A list changed where its words stand: [the list before, the list after]. */
+/** Blocks changed where their words stand: [the list before, the list
+    after]; the same list is a change of level. */
 function listName([before, after]: [string, string], t: TFunc): string {
   if (after && after !== before) return t(LISTS[after]);
-  return before && !after ? off(t(LISTS[before]), t) : t("docsSuggest.indent");
+  if (before && !after) return off(t(LISTS[before]), t);
+  return t(before ? "docsSuggest.indent" : "docsSuggest.otherFormat");
 }
 
+/** A side's words, quoted: an object by name, a line break as ↵. */
 function words(pieces: (string | PMNode)[], t: TFunc): string {
   const text = pieces
     .map((p) => (typeof p === "string" ? p : OBJECTS[p.type.name] ? t(OBJECTS[p.type.name]) : p.type.name === "hardBreak" ? "↵" : p.textContent))

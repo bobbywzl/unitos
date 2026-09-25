@@ -82,6 +82,8 @@ type Draft = Suggestion & {
   lists: Record<Side, string[]>;
 };
 
+const bySide = <T>(make: () => T): Record<Side, T> => ({ added: make(), removed: make() });
+
 /** The list a text block stands in: its type's name, or "". */
 function listOf(doc: PMNode, pos: number): string {
   const $pos = doc.resolve(pos);
@@ -102,7 +104,7 @@ function outerBlock(doc: PMNode, pos: number): [number, number] {
 /** Both sides are whole blocks with the same words: see `Suggestion.same`. */
 function sameWords(d: Draft): Suggestion["same"] {
   const { added, removed } = d.texts;
-  if (d.inline || !added.length || !removed.length) return null;
+  if (d.inline || !added.join("") || !removed.join("")) return null;
   const inOrder = added.join("") === removed.join("");
   if (!inOrder && [...added].sort().join("\n") !== [...removed].sort().join("\n")) return null;
   const [a, r] = [d.blocks.added, d.blocks.removed];
@@ -122,8 +124,8 @@ export function readSuggestions(doc: PMNode): Suggestion[] {
   const draft = (id: string, pos: number): Draft => {
     let d = drafts.get(id);
     if (!d) {
-      const two = <T>(make: () => T): Record<Side, T> => ({ added: make(), removed: make() });
-      d = { id, from: pos, added: [], removed: [], formats: [], blocks: two(() => []), same: null, last: two(() => -1), inline: false, texts: two(() => []), lists: two(() => []) };
+      const sides = { blocks: bySide(() => []), last: bySide(() => -1), texts: bySide(() => []), lists: bySide(() => []) };
+      d = { id, from: pos, added: [], removed: [], formats: [], same: null, inline: false, ...sides };
       drafts.set(id, d);
     }
     return d;
@@ -393,6 +395,23 @@ function keepAuthors(tr: Transaction, before: PMNode, author: string, id: string
   }
 }
 
+/** A change of letter case (Capitalization) comes one step a letter; it is
+    suggested as the stretch it changes in each paragraph replaced. */
+function caseChange(tr: Transaction, state: EditorState): Transaction {
+  const stretches = new Map<number, [number, number]>();
+  for (const step of tr.steps) {
+    if (!(step instanceof ReplaceStep) || step.slice.size !== step.to - step.from) return tr;
+    const text = step.slice.content.textBetween(0, step.slice.size);
+    if (!text || text.toLowerCase() !== state.doc.textBetween(step.from, step.to).toLowerCase()) return tr;
+    const paragraph = state.doc.resolve(step.from).start();
+    const [from, to] = stretches.get(paragraph) ?? [step.from, step.to];
+    stretches.set(paragraph, [Math.min(from, step.from), Math.max(to, step.to)]);
+  }
+  const out = state.tr;
+  for (const [from, to] of stretches.values()) out.replace(from, to, tr.doc.slice(from, to));
+  return carry(out.setSelection(tr.selection.map(out.doc, new Mapping())), tr);
+}
+
 /** A block's id is no formatting: its change is no suggestion (Enter at a
     paragraph's start gives the new paragraph above a fresh one). */
 function dropIdChanges(tr: Transaction): Transaction {
@@ -451,12 +470,13 @@ const inAdded = (tr: Transaction) =>
   tr.mapping.invert().mapResult(tr.selection.head).deletedAcross ||
   tr.steps.some((step) => step instanceof ReplaceAroundStep && !isFormatStep(step));
 
-function suggest(tr: Transaction, state: EditorState, author: string): Transaction {
+function suggest(edit: Transaction, state: EditorState, author: string): Transaction {
   const id = newId(author);
-  if (tr.steps.every(isFormatStep)) return dropIdChanges(suggestFormat(tr, state, id));
+  if (edit.steps.every(isFormatStep)) return dropIdChanges(suggestFormat(edit, state, id));
+  const each = edit.getMeta(EACH) === true;
+  const tr = edit.steps.length > 1 && !each ? caseChange(edit, state) : edit;
   const back = takeBackBreak(tr, state);
   if (back) return back;
-  const each = tr.getMeta(EACH) === true;
   const tracked = transformToSuggestionTransaction(tr, state, () => (each ? newId(author) : id));
   keepAuthors(tracked, state.doc, author, id);
   dropIdChanges(tracked);
@@ -467,7 +487,8 @@ function suggest(tr: Transaction, state: EditorState, author: string): Transacti
     // The same place in the tracked copy: both read alike once accepted.
     const mapping = acceptMapping(tr.doc);
     mapping.appendMapping(acceptMapping(tracked.doc).invert());
-    tracked.setSelection(tr.selection.map(tracked.doc, mapping));
+    const at = (pos: number) => tracked.doc.resolve(Math.min(Math.max(0, mapping.map(pos)), tracked.doc.content.size));
+    tracked.setSelection(TextSelection.between(at(tr.selection.anchor), at(tr.selection.head)));
   } else if (one && !step.slice.size && step.from === caret) {
     // Delete strikes what follows the caret, and the caret goes past it.
     tracked.setSelection(Selection.near(tracked.doc.resolve(tracked.mapping.map(step.to))));
@@ -586,8 +607,9 @@ const Suggesting = Extension.create({
       if (type.markSet) type.markSet = [...type.markSet, ...marks];
     }
   },
-  // The library's plugin: a pilcrow where a paragraph break is suggested,
-  // and arrow keys that step over its zero-width spaces.
+  // The library's plugin (a pilcrow where a paragraph break is suggested,
+  // arrow keys that step over its zero-width spaces), and the blocks a
+  // suggestion puts back with the same words, drawn once.
   addProseMirrorPlugins() {
     return [
       suggestChanges(),
