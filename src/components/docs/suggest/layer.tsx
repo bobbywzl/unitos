@@ -63,15 +63,15 @@ export function SuggestLayer({ editor, canEdit, editing, suggesting }: DocsAreaP
 
   // While the document holds suggestions the page keeps the margin their
   // cards open in, as Google Docs keeps it for its discussions.
-  const pane = editor.view.dom.closest<HTMLElement>("[data-reader-root]");
   const holdMargin = ids.length > 0 && !viewing;
   useEffect(() => {
+    const pane = editor.view.dom.closest("[data-reader-root]");
     const hold = (on: boolean) => {
       pane?.dispatchEvent(new CustomEvent<boolean>("docs:margin", { detail: on }));
     };
     hold(holdMargin);
     return () => hold(false);
-  }, [pane, holdMargin]);
+  }, [editor, holdMargin]);
 
   // Review suggested edits: its command, and Google's chord (hold Ctrl+Alt,
   // press O then U).
@@ -107,7 +107,8 @@ export function SuggestLayer({ editor, canEdit, editing, suggesting }: DocsAreaP
       ),
     [ids, people],
   );
-  const card = active && pane && !viewing ? active : null;
+  const card = active && !viewing ? active : null;
+  const pane = card ? editor.view.dom.closest<HTMLElement>("[data-reader-root]") : null;
   const header = editor.view.dom.closest("[data-docs-editor]")?.querySelector<HTMLElement>(".docs-header");
   return (
     <>

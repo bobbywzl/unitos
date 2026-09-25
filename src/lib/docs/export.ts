@@ -35,14 +35,13 @@ import {
   type IRunOptions,
   type ParagraphChild,
 } from "docx";
-import type { Node as PMNode } from "@tiptap/pm/model";
 import type { DocStyle } from "@/components/docs/extensions";
 import { firstFamily } from "@/components/docs/fonts";
 import { DEFAULT_HF_MARGIN_PT, PX_PER_PT } from "@/components/docs/page/geometry";
 import { BULLET_PRESETS, NUMBER_PRESETS, type ListPreset } from "@/components/docs/toolbar/lists";
 import { readStyles, sizeInPt, styleFont, type NamedStyle } from "@/components/docs/toolbar/styles";
 import { db } from "@/lib/db";
-import { inlineText } from "@/lib/docs/blocks";
+import { hex6, inlineText } from "@/lib/docs/blocks";
 import type { PageSetup, RichMark, RichNode } from "@/lib/docs/schema";
 import { MAX_IMAGE_BYTES, sniffImage } from "@/lib/images";
 import { outboundFetch } from "@/lib/outbound-fetch";
@@ -112,10 +111,7 @@ const WORD_TYPES: Record<string, Picture["type"]> = {
 
 /** A stored color (#rrggbb, or rgb() from a paste) as Word writes it: rrggbb. */
 function wordColor(value: unknown): string | undefined {
-  if (typeof value !== "string") return undefined;
-  const v = value.trim().toLowerCase();
-  const rgb = /^rgba?\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})/.exec(v);
-  return /^#([0-9a-f]{6})$/.exec(v)?.[1] ?? rgb?.slice(1).map((n) => Math.min(255, Number(n)).toString(16).padStart(2, "0")).join("");
+  return hex6(value)?.slice(1);
 }
 
 /** A Word bookmark name: a letter first, word characters, at most 40. */
@@ -537,7 +533,7 @@ function styleParagraph(styles: Record<DocStyle, NamedStyle>, style: DocStyle, o
 
 /** The .docx of a blank document. `origin` makes the app's own links whole. */
 export async function richTextDocx(title: string, doc: RichNode, setup: PageSetup, origin: string): Promise<Buffer> {
-  const styles = readStyles({ attrs: doc.attrs ?? {} } as unknown as PMNode);
+  const styles = readStyles({ attrs: doc.attrs ?? {} });
   const shown = (hf: RichNode | null | undefined) => (setup.pageless ? null : hf);
   const parts = [doc, shown(setup.header), shown(setup.footer), shown(setup.firstHeader), shown(setup.firstFooter)];
   const images = parts.flatMap(imageNodes);

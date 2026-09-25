@@ -1,4 +1,5 @@
 import type { Fragment, Mark, Node as PMNode } from "@tiptap/pm/model";
+import { CHIP_NODE_TYPES } from "@/lib/docs/schema";
 
 // Paste from Markdown and Copy as Markdown (SPEC.md §29, typing), the two
 // commands Google Docs offers while Enable Markdown is on: Markdown on the
@@ -160,17 +161,19 @@ export function markdownToHtml(md: string): string {
 // ── Out: a selection as Markdown ────────────────────────────────────────
 
 function wrap(text: string, marks: readonly Mark[]): string {
-  if (!text.trim()) return text;
-  let out = text;
+  // Spaces stay outside the delimiters: "** bold**" is not bold in Markdown.
+  const [, lead, core, trail] = /^(\s*)([\s\S]*?)(\s*)$/.exec(text) ?? ["", "", text, ""];
+  if (!core) return text;
+  let out = core;
   const has = (name: string) => marks.some((m) => m.type.name === name);
-  if (has("code")) return `\`${out}\``;
+  if (has("code")) return `${lead}\`${out}\`${trail}`;
   if (has("bold") && has("italic")) out = `***${out}***`;
   else if (has("bold")) out = `**${out}**`;
   else if (has("italic")) out = `*${out}*`;
   if (has("strike")) out = `~~${out}~~`;
   const link = marks.find((m) => m.type.name === "link");
   if (link) out = `[${out}](${String(link.attrs.href)})`;
-  return out;
+  return `${lead}${out}${trail}`;
 }
 
 function inlineMd(node: PMNode): string {
@@ -178,6 +181,8 @@ function inlineMd(node: PMNode): string {
   node.forEach((child) => {
     if (child.isText) out += wrap(child.text ?? "", child.marks);
     else if (child.type.name === "hardBreak") out += "  \n";
+    else if (child.type.name === "inlineMath") out += `$${String(child.attrs.latex ?? "")}$`;
+    else if (CHIP_NODE_TYPES.has(child.type.name)) out += String(child.attrs.label ?? "");
   });
   return out;
 }
@@ -192,6 +197,8 @@ function blockMd(node: PMNode, indent = ""): string {
       return "```" + (node.attrs.language ?? "") + "\n" + node.textContent + "\n```";
     case "horizontalRule":
       return "---";
+    case "blockMath":
+      return `$$\n${String(node.attrs.latex ?? "")}\n$$`;
     case "blockquote": {
       const inner: string[] = [];
       node.forEach((c) => inner.push(blockMd(c)));

@@ -2,7 +2,7 @@
 
 import { useEditorState, type Editor } from "@tiptap/react";
 import type { Node as PMNode } from "@tiptap/pm/model";
-import { useEffect, useLayoutEffect, useState } from "react";
+import { useLayoutEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useCollab } from "@/components/collab/collab-context";
 import { PersonBadge } from "@/components/collab/person-badge";
@@ -131,37 +131,18 @@ function readChange(doc: PMNode, id: string, t: TFunc): Change | null {
 
 const quote = (words: string) => `“${words.length > 120 ? `${words.slice(0, 120)}…` : words}”`;
 
-type Place = { left: number; top: number; width: number };
-
-/** Beside the page where it stands, level with the suggestion's first
-    line; with no room there, under its words. */
-function placeIn(editor: Editor, pane: HTMLElement, from: number): Place | null {
+/** Put the card beside the page where it stands, level with the
+    suggestion's first line; with no room there, under its words. */
+function place(card: HTMLElement, editor: Editor, pane: HTMLElement, from: number): void {
   const geo = pageGeometry(pane, 0);
-  if (!geo) return null;
+  card.style.visibility = geo ? "" : "hidden";
+  if (!geo) return;
   const top = editor.view.coordsAtPos(from).top - pane.getBoundingClientRect().top + pane.scrollTop;
   const slot = slotAt(geo, 0);
-  return slot ? { ...slot, top } : { ...belowSlot(geo, 0), top: top + 34 };
-}
-
-function usePlace(editor: Editor, pane: HTMLElement, from: number): Place | null {
-  const [place, setPlace] = useState<Place | null>(null);
-  const [moves, setMoves] = useState(0);
-  // The pane resizing and the page moving (--docs-shift) move the card.
-  useEffect(() => {
-    const moved = () => setMoves((n) => n + 1);
-    const observer = new ResizeObserver(moved);
-    observer.observe(pane);
-    pane.addEventListener("transitionend", moved);
-    return () => {
-      observer.disconnect();
-      pane.removeEventListener("transitionend", moved);
-    };
-  }, [pane]);
-  useLayoutEffect(() => {
-    const next = placeIn(editor, pane, from);
-    setPlace((p) => (JSON.stringify(p) === JSON.stringify(next) ? p : next));
-  }, [editor, pane, from, moves]);
-  return place;
+  const at = slot ? { ...slot, top } : { ...belowSlot(geo, 0), top: top + 34 };
+  card.style.left = `${at.left}px`;
+  card.style.top = `${at.top}px`;
+  card.style.width = `${at.width}px`;
 }
 
 export function SuggestionCard({
@@ -180,8 +161,23 @@ export function SuggestionCard({
   const lang = useLang();
   const { people } = useCollab();
   const change = useEditorState({ editor, selector: ({ editor: e }) => readChange(e.state.doc, id, t) });
-  const place = usePlace(editor, pane, change?.from ?? 0);
-  if (!change || !place) return null;
+  const cardRef = useRef<HTMLDivElement>(null);
+  const from = change?.from ?? -1;
+  // The pane resizing and the page moving (--docs-shift) move the card.
+  useLayoutEffect(() => {
+    const card = cardRef.current;
+    if (!card || from < 0) return;
+    const move = () => place(card, editor, pane, from);
+    move();
+    const observer = new ResizeObserver(move);
+    observer.observe(pane);
+    pane.addEventListener("transitionend", move);
+    return () => {
+      observer.disconnect();
+      pane.removeEventListener("transitionend", move);
+    };
+  }, [editor, pane, from]);
+  if (!change) return null;
   const author = suggestionAuthor(id);
   const person = people[author];
   const at = suggestionTime(id);
@@ -189,6 +185,7 @@ export function SuggestionCard({
   const { added, removed, formats } = change;
   return createPortal(
     <div
+      ref={cardRef}
       data-selection-popover
       data-side-card="suggestion"
       role="group"
@@ -196,7 +193,7 @@ export function SuggestionCard({
       // The caret stays in the suggestion, so the card stays.
       onMouseDown={(e) => e.preventDefault()}
       className="docs-comment docs-suggest-card bubble-in absolute z-40"
-      style={{ ...place, borderColor: person?.color ?? personColor(author) }}
+      style={{ borderColor: person?.color ?? personColor(author) }}
     >
       <div className="docs-comment-head">
         {person && <PersonBadge person={person} size={32} />}

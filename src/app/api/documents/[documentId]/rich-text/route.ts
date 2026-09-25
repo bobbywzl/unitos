@@ -6,7 +6,6 @@ import { db } from "@/lib/db";
 import { hasBlockIds } from "@/lib/docs/blocks";
 import { MAX_RICH_TEXT_CHARS, pageSetupSchema, richDocSchema, sanitizeRichText } from "@/lib/docs/schema";
 import { syncRichText } from "@/lib/docs/sync";
-import { keepVersion } from "@/lib/docs/versions";
 import { refreshSkeleton } from "@/lib/graph/skeleton";
 import { serverT } from "@/lib/i18n/server";
 import { parseBody } from "@/lib/validate";
@@ -53,7 +52,6 @@ export async function PUT(req: Request, ctx: { params: Promise<{ documentId: str
   if (!richText || !hasBlockIds(richText)) {
     return NextResponse.json({ error: t("api.richTextInvalid") }, { status: 400 });
   }
-  await keepVersion(documentId, access.user.id);
   const result = await syncRichText({ documentId, richText, userId: access.user.id, baseRev: data.rev });
   if (!result.ok) {
     if (result.reason === "rev") {

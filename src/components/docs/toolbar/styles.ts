@@ -97,14 +97,14 @@ function parseChanges(value: unknown): StyleChanges {
 }
 
 /** Each style's changes in the document. */
-export function readChanges(doc: PMNode): Record<DocStyle, StyleChanges> {
+export function readChanges(doc: { attrs: Readonly<Record<string, unknown>> }): Record<DocStyle, StyleChanges> {
   const out = {} as Record<DocStyle, StyleChanges>;
   for (const style of STYLE_ORDER) out[style] = parseChanges(doc.attrs[STYLE_ATTR[style]]);
   return out;
 }
 
 /** The document's named styles: the defaults with its changes. */
-export function readStyles(doc: PMNode): Record<DocStyle, NamedStyle> {
+export function readStyles(doc: { attrs: Readonly<Record<string, unknown>> }): Record<DocStyle, NamedStyle> {
   const changes = readChanges(doc);
   const out = {} as Record<DocStyle, NamedStyle>;
   for (const style of STYLE_ORDER) out[style] = { ...DEFAULT_STYLES[style], ...changes[style] };

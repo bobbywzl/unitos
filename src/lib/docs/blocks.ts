@@ -28,7 +28,7 @@ type Context = { list: "bullet" | "ordered" | "task" | null; quote: boolean; cel
 const HEX6 = /^#[0-9a-f]{6}$/;
 
 /** A color attribute as #rrggbb, or null when it is not one. */
-function hex6(value: unknown): string | null {
+export function hex6(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const v = value.trim().toLowerCase();
   if (HEX6.test(v)) return v;

@@ -5,6 +5,7 @@ import { resolveAnchor } from "@/lib/anchors/resolve";
 import { db } from "@/lib/db";
 import { deriveBlocks, ensureBlockIds, type DerivedBlock } from "@/lib/docs/blocks";
 import { sanitizeRichText, type RichNode } from "@/lib/docs/schema";
+import { keepVersion } from "@/lib/docs/versions";
 
 // One save of a blank document (SPEC.md §29): the rich text is stored and its
 // paragraph index — the document's Block rows — is brought in line with it in
@@ -313,8 +314,11 @@ export async function syncRichText({
   return db.$transaction(
     async (tx) => {
       // One save at a time per document: the row lock orders them.
-      const [locked] = await tx.$queryRaw<{ richTextRev: number }[]>`
-        SELECT "richTextRev" FROM "Document" WHERE "id" = ${documentId} FOR UPDATE`;
+      const [locked] = await tx.$queryRaw<
+        { richTextRev: number; richTextSavedAt: Date | null; richTextSavedBy: string | null; createdAt: Date }[]
+      >`
+        SELECT "richTextRev", "richTextSavedAt", "richTextSavedBy", "createdAt" FROM "Document"
+        WHERE "id" = ${documentId} FOR UPDATE`;
       if (!locked) throw new Error("document not found");
       let richText = given ?? null;
       if (edit) {
@@ -591,9 +595,21 @@ export async function syncRichText({
         }
       }
 
+      // A save 10 minutes after the last one starts a sitting: the stored
+      // text is kept as a version first (SPEC.md §29, version history).
+      await keepVersion(tx, documentId, {
+        rev: locked.richTextRev,
+        savedAt: locked.richTextSavedAt ?? locked.createdAt,
+        savedBy: locked.richTextSavedBy,
+      });
       const saved = await tx.document.update({
         where: { id: documentId },
-        data: { richText: richText as unknown as Prisma.InputJsonValue, richTextRev: { increment: 1 } },
+        data: {
+          richText: richText as unknown as Prisma.InputJsonValue,
+          richTextRev: { increment: 1 },
+          richTextSavedAt: new Date(),
+          richTextSavedBy: userId,
+        },
         select: { richTextRev: true },
       });
       return { ok: true as const, rev: saved.richTextRev, removedEdits };
