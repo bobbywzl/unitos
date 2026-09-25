@@ -602,10 +602,11 @@ export function UploadAssistant({
   // The final figure check (SPEC.md §15): the save step's counts of a single
   // add. A batch's last page would stand for the whole batch, so none shows.
   const saveDetail = steps?.find((s) => s.key === "save")?.detail;
-  const verification =
-    phase === "done" && itemCount === 1 && saveDetail ? ingestCounts(saveDetail) : null;
+  const singleDetail = phase === "done" && itemCount === 1 && saveDetail ? saveDetail : null;
+  const verification = singleDetail && hasFigureCheck(singleDetail) ? ingestCounts(singleDetail) : null;
   const lostFigures =
     (verification?.captionsWithoutFigure ?? 0) > 0 || (verification?.mediaLost.length ?? 0) > 0;
+  const blockDocument = keptBlockDocument(singleDetail);
 
   const amberNote =
     "rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-950 dark:text-amber-200";
@@ -718,7 +719,8 @@ export function UploadAssistant({
                 ].join(" · ")}
               </p>
             )}
-            {(failures.length > 0 || lostFigures) && (
+            {blockDocument && <p className="text-xs text-sand-600">{t("panes.uploadBlockDocument")}</p>}
+            {(failures.length > 0 || lostFigures || blockDocument) && (
               <>
                 {failures.length > 0 && (
                   <ul className="flex flex-col gap-1 text-xs text-red-500">
