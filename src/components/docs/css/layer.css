@@ -93,18 +93,8 @@
 .content-in:has(> div > [data-page-editor]) {
   animation-fill-mode: backwards;
 }
-/* Over a floating note (z-index 30, earlier in the page), under the header. */
-.docs-column {
-  position: fixed;
-  z-index: 30;
-  overflow: hidden;
-  pointer-events: none;
-}
-.docs-column-in {
-  position: absolute;
-  left: 0;
-  width: 100%;
-}
+/* The column's boxes are in frame.css: the reader draws the column before
+   the editor's code loads. */
 @supports (animation-timeline: scroll()) {
   [data-page-editor] {
     scroll-timeline: --docs-pane y;
@@ -124,14 +114,6 @@
 }
 .docs-column-in [data-selection-popover] {
   pointer-events: auto;
-}
-.docs-column-end {
-  position: absolute;
-  left: 0;
-  width: 1px;
-  height: 1px;
-  pointer-events: none;
-  visibility: hidden;
 }
 /* The canvas goes on down to the column's end (frame.css colors the pane). */
 @media print {

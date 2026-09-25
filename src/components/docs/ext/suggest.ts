@@ -1,6 +1,6 @@
 import { Extension, Mark, type AnyExtension, type Editor } from "@tiptap/core";
 import type { Fragment, Mark as PMMark, MarkSpec, Node as PMNode } from "@tiptap/pm/model";
-import { EditorState, Plugin, Selection, TextSelection, type Transaction } from "@tiptap/pm/state";
+import { AllSelection, EditorState, Plugin, Selection, TextSelection, type Transaction } from "@tiptap/pm/state";
 import {
   AddMarkStep,
   AddNodeMarkStep,
@@ -829,6 +829,21 @@ function sameWordsDecorations(doc: PMNode): DecorationSet {
   return DecorationSet.create(doc, decorations);
 }
 
+/** Select all in Suggesting mode, from the first letter the page shows: a
+    removed copy hidden at the top would make a list command read every line
+    as plain. Null when none is hidden there. */
+function shownAll(doc: PMNode): Selection | null {
+  const hidden = readSuggestions(doc).flatMap((s) => (s.same ? s.blocks.removed : []));
+  const first = (pos: number): Selection | null => {
+    const sel = Selection.findFrom(doc.resolve(pos), 1, true);
+    const range = sel && hidden.find(([from, to]) => from < sel.from && sel.from < to);
+    return range ? first(range[1]) : sel;
+  };
+  const start = first(0);
+  const end = Selection.atEnd(doc);
+  return start && start.from !== Selection.atStart(doc).from && start.from < end.to ? TextSelection.between(start.$from, end.$to) : null;
+}
+
 const Suggesting = Extension.create({
   name: "docsSuggesting",
   // Every node that holds blocks takes the suggestion marks on them (a new
@@ -861,6 +876,8 @@ const Suggesting = Extension.create({
   },
   dispatchTransaction({ transaction: tr, next }) {
     const author = suggesters.get(this.editor);
+    const shown = author && tr.selection instanceof AllSelection ? shownAll(tr.doc) : null;
+    if (shown) tr.setSelection(shown);
     const passes =
       !author ||
       !tr.docChanged ||

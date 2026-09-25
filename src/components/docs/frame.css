@@ -137,6 +137,30 @@
   background: var(--docs-page);
 }
 
+/* The card column (layer/comment-card.tsx CardColumn; css/layer.css): the
+   reader draws it with the frame, fixed and empty until the editor places
+   it. Over a floating note (z-index 30, earlier in the page), under the
+   header. The end stretches the pane to the lowest card. */
+.docs-column {
+  position: fixed;
+  z-index: 30;
+  overflow: hidden;
+  pointer-events: none;
+}
+.docs-column-in {
+  position: absolute;
+  left: 0;
+  width: 100%;
+}
+.docs-column-end {
+  position: absolute;
+  left: 0;
+  width: 1px;
+  height: 1px;
+  pointer-events: none;
+  visibility: hidden;
+}
+
 /* The pane around the page takes the canvas's color, down to the card
    column's end, and Google Docs' scrollbars: a 16 px track, an 8 px thumb
    with round ends, darker under the pointer. */
