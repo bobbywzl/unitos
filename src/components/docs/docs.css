@@ -15,7 +15,6 @@
 
 :root {
   --docs-ink: #000000;
-  --docs-toolbar: var(--docs-field-bg);
   --docs-muted: var(--sand-600);
   --docs-hover: var(--clay-100);
   --docs-on-bg: var(--clay-100);
