@@ -147,8 +147,9 @@ function bookmark(ctx: Ctx, name: string, children: ParagraphChild[]): Bookmark 
   return Object.assign(new Bookmark({ id: name, children }), { start: new BookmarkStart(name, id), end: new BookmarkEnd(id) });
 }
 
-/** The words a suggestion adds or removes: its insertion or deletion mark. */
-const changeOf = (node: RichNode) => node.marks?.find((m) => m.type === "insertion" || m.type === "deletion");
+/** The words a suggestion adds or removes: its insertion or deletion mark;
+    the deletion where another person's added words are struck. */
+const changeOf = (node: RichNode) => node.marks?.find((m) => m.type === "deletion") ?? node.marks?.find((m) => m.type === "insertion");
 
 /** A suggestion as Word's revision: its author's name (else Unitos) and the
     time its id holds, to the second. */

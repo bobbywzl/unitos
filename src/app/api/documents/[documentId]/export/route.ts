@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { documentAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
-import { richTextDocx } from "@/lib/docs/export";
+import { docxComments, richTextDocx } from "@/lib/docs/export";
 import { readPageSetup, type RichNode } from "@/lib/docs/schema";
 import { serverT } from "@/lib/i18n/server";
 
@@ -29,6 +29,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ documentId: str
     document.richText as unknown as RichNode,
     readPageSetup(document.pageSetup),
     url.origin,
+    await docxComments(documentId, access.user),
   );
   return new NextResponse(new Uint8Array(file), {
     headers: { "Content-Type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document" },
