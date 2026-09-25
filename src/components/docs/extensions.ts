@@ -10,7 +10,6 @@ import { TaskItem, TaskList } from "@tiptap/extension-list";
 import { TableKit } from "@tiptap/extension-table";
 import Image from "@tiptap/extension-image";
 import { CharacterCount, Placeholder } from "@tiptap/extensions";
-import Typography from "@tiptap/extension-typography";
 import { DocsFontFamily } from "@/components/docs/fonts";
 import { insertExtensions } from "@/components/docs/ext/insert";
 import { layerExtensions } from "@/components/docs/ext/layer";
@@ -302,8 +301,7 @@ const DocsKeymap = Extension.create({
       "Mod-\\": () => this.editor.chain().focus().unsetAllMarks().run(),
       "Mod-.": () => this.editor.commands.toggleSuperscript(),
       "Mod-,": () => this.editor.commands.toggleSubscript(),
-      "Alt-Shift-5": () => this.editor.commands.toggleStrike(),
-      "Mod-Shift-x": () => this.editor.commands.toggleStrike(),
+      // Strikethrough: Alt+Shift+5, ⌘+Shift+X on a Mac (ext/typing.ts).
       "Mod-Shift-.": size(1),
       "Mod-Shift->": size(1),
       "Mod-Shift-,": size(-1),
@@ -324,7 +322,10 @@ export function docsExtensions({ placeholder }: { placeholder: string }) {
       hardBreak: { HTMLAttributes: { "data-hard-break": "" } },
       link: {
         openOnClick: false,
-        autolink: true,
+        // Docs detects a link when a space, Enter, or Tab ends it, with its
+        // own pattern (ext/typing.ts); off, a link also stops growing when
+        // text is typed at its end.
+        autolink: false,
         linkOnPaste: true,
         defaultProtocol: "https",
         HTMLAttributes: { rel: "noopener noreferrer nofollow", target: "_blank" },
@@ -346,7 +347,8 @@ export function docsExtensions({ placeholder }: { placeholder: string }) {
     Image.configure({ inline: false, allowBase64: false }),
     Placeholder.configure({ placeholder, showOnlyCurrent: true, includeChildren: true }),
     CharacterCount,
-    Typography,
+    // No Typography: Google Docs' substitutions and smart quotes are the
+    // typing area's autocorrect (ext/typing.ts).
     BlockIds,
     ParagraphFormat,
     PageBreak,

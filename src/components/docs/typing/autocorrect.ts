@@ -10,7 +10,7 @@ import {
   LINE_BREAK,
   OBJECT_CHAR,
 } from "@/components/docs/typing/chars";
-import { listLabel, presetForPrefix, type ListPreset } from "@/components/docs/typing/lists";
+import { listForPrefix, listLabel } from "@/components/docs/typing/lists";
 import { substitutionMap, typingPrefs, type TypingPrefs } from "@/components/docs/typing/prefs";
 import { spellingFix } from "@/components/docs/typing/spelling";
 
@@ -417,7 +417,8 @@ function previousBlockText(doc: PMNode, pos: number): string {
 function nextLabel(list: PMNode): string | null {
   if (list.type.name !== "orderedList") return null;
   const start = typeof list.attrs.start === "number" ? list.attrs.start : 1;
-  return listLabel((list.attrs.listPreset as ListPreset | null) ?? null, 0, start + list.childCount);
+  const style = typeof list.attrs.listStyle === "string" ? list.attrs.listStyle : null;
+  return listLabel(style, 0, start + list.childCount);
 }
 
 const detectList: Rule = ({ state, prefs, block, start, text, trigger, at, virtual }) => {
@@ -450,10 +451,10 @@ const detectList: Rule = ({ state, prefs, block, start, text, trigger, at, virtu
     listType = earlier.node.type;
     attrs = { ...earlier.node.attrs, start: (Number(earlier.node.attrs.start) || 1) + earlier.node.childCount };
   } else {
-    const preset = presetForPrefix(prefix);
-    if (!preset) return null;
-    listType = schema.nodes[preset.type];
-    attrs = preset.preset ? { listPreset: preset.preset } : {};
+    const found = listForPrefix(prefix);
+    if (!found) return null;
+    listType = schema.nodes[found.type];
+    attrs = found.style ? { listStyle: found.style } : {};
     earlier = null;
   }
   if (!listType) return null;

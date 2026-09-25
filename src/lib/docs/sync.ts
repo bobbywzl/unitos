@@ -1,4 +1,5 @@
 import { Prisma } from "@prisma/client";
+import { matchInText } from "@/lib/anchors/match";
 import { diffSegments, remapAnchor } from "@/lib/anchors/remap";
 import { resolveAnchor } from "@/lib/anchors/resolve";
 import { db } from "@/lib/db";
@@ -62,33 +63,221 @@ type Placed = {
   orphaned: boolean;
 };
 
-/** Where an anchor's words are after the save: remapped inside its own
-    paragraph when that paragraph's words changed, else found again by its
-    quote anywhere in the document; orphaned when neither works. */
-function relocate(
-  anchor: { blockId: string; startOffset: number; endOffset: number; quote: string; prefix: string; suffix: string },
-  oldById: Map<string, OldBlock>,
-  newById: Map<string, DerivedBlock>,
-  newBlocks: { id: string; text: string }[],
-): Placed {
-  const before = oldById.get(anchor.blockId);
-  const after = newById.get(anchor.blockId);
-  if (before && after && before.text !== after.text) {
-    const r = remapAnchor(diffSegments(before.text, after.text), after.text, {
-      startOffset: anchor.startOffset,
-      endOffset: anchor.endOffset,
-      quotedText: anchor.quote,
+// ── Where the anchors go ─────────────────────────────────────────────────
+// A save carries every change since the last one: most often one stretch of
+// typing, an Enter, a Backspace, a paste, or a delete. The paragraphs around
+// an anchor that changed or left form a run between two paragraphs that did
+// not change; the run's words before and after the save, paragraphs joined
+// by a separator, share a start and an end and differ in one stretch. A mark
+// outside that stretch moves exactly — into the new paragraph after an
+// Enter, into the joined one after a Backspace. A mark the stretch touches
+// grows with typing inside it and shrinks with a delete; typing right before
+// or after it stays outside, as in Google Docs. A mark inside a longer
+// stretch (two edits in one save, a replace-all) is found by its words
+// there, else the word diff of its paragraph decides, as the block edit
+// route's does (lib/anchors/remap.ts). A mark an Enter cut in two keeps its
+// larger part, and covers its quote again once the quote's words stand
+// together again. Last, the quote is looked for across the document; the
+// mark orphans only when its words are gone (SPEC.md §5).
+
+/** Joins a run's paragraphs: no paragraph's words hold it. */
+const SEP = "\u0000";
+
+type Span = { blockId: string; start: number; end: number };
+
+type Run = {
+  oldText: string;
+  newText: string;
+  /** Each old paragraph's start in oldText. */
+  oldStart: Map<string, number>;
+  /** The run's new paragraphs and their starts in newText. */
+  newBlocks: { id: string; start: number; text: string }[];
+  /** The length of the shared start and of the shared end. */
+  head: number;
+  tail: number;
+};
+
+type Moves = {
+  old: OldBlock[];
+  oldIndex: Map<string, number>;
+  derived: DerivedBlock[];
+  newIndex: Map<string, number>;
+  newById: Map<string, DerivedBlock>;
+  /** Paragraphs with the same id and the same words before and after. */
+  stable: Set<string>;
+  runs: Map<string, Run | null>;
+};
+
+function movesOf(old: OldBlock[], derived: DerivedBlock[]): Moves {
+  const newById = new Map(derived.map((d) => [d.id, d]));
+  return {
+    old,
+    oldIndex: new Map(old.map((b, i) => [b.id, i])),
+    derived,
+    newIndex: new Map(derived.map((d, i) => [d.id, i])),
+    newById,
+    stable: new Set(old.filter((b) => newById.get(b.id)?.text === b.text).map((b) => b.id)),
+    runs: new Map(),
+  };
+}
+
+/** The run around an old paragraph; null when the paragraphs around it moved
+    out of order and no run lines up. */
+function runAround(m: Moves, blockId: string): Run | null {
+  const i = m.oldIndex.get(blockId);
+  if (i === undefined) return null;
+  let a = i;
+  while (a > 0 && !m.stable.has(m.old[a - 1].id)) a--;
+  let b = i;
+  while (b + 1 < m.old.length && !m.stable.has(m.old[b + 1].id)) b++;
+  const key = m.old[a].id;
+  const cached = m.runs.get(key);
+  if (cached !== undefined) return cached;
+  const from = a > 0 ? (m.newIndex.get(m.old[a - 1].id) ?? -2) + 1 : 0;
+  const to = b + 1 < m.old.length ? (m.newIndex.get(m.old[b + 1].id) ?? -1) : m.derived.length;
+  let run: Run | null = null;
+  if (from >= 0 && to >= from) {
+    const oldStart = new Map<string, number>();
+    let oldText = "";
+    m.old.slice(a, b + 1).forEach((block, k) => {
+      if (k > 0) oldText += SEP;
+      oldStart.set(block.id, oldText.length);
+      oldText += block.text;
     });
-    if (!r.orphaned) return { blockId: anchor.blockId, ...r };
+    const newBlocks: Run["newBlocks"] = [];
+    let newText = "";
+    m.derived.slice(from, to).forEach((block, k) => {
+      if (k > 0) newText += SEP;
+      newBlocks.push({ id: block.id, start: newText.length, text: block.text });
+      newText += block.text;
+    });
+    const most = Math.min(oldText.length, newText.length);
+    let head = 0;
+    while (head < most && oldText[head] === newText[head]) head++;
+    let tail = 0;
+    while (tail < most - head && oldText[oldText.length - 1 - tail] === newText[newText.length - 1 - tail]) tail++;
+    run = { oldText, newText, oldStart, newBlocks, head, tail };
   }
-  const found = resolveAnchor(newBlocks, {
-    blockId: anchor.blockId,
+  m.runs.set(key, run);
+  return run;
+}
+
+/** The new paragraph a range of the run's new words lands in: the paragraph
+    holding most of it, trimmed of spaces; null when only spaces are left. */
+function spanIn(run: Run, from: number, to: number): Span | null {
+  let best: Span | null = null;
+  for (const block of run.newBlocks) {
+    let start = Math.max(from, block.start) - block.start;
+    let end = Math.min(to, block.start + block.text.length) - block.start;
+    while (start < end && /\s/.test(block.text[start])) start++;
+    while (end > start && /\s/.test(block.text[end - 1])) end--;
+    if (end > start && (!best || end - start > best.end - best.start)) best = { blockId: block.id, start, end };
+  }
+  return best;
+}
+
+/** An anchor through its run: its new place, "inside" when it lies in the
+    changed stretch whole, or null when its words are gone. */
+function mapInRun(run: Run, anchor: { blockId: string; startOffset: number; endOffset: number }): Span | "inside" | null {
+  const base = run.oldStart.get(anchor.blockId);
+  if (base === undefined) return null;
+  const start = base + anchor.startOffset;
+  const end = base + anchor.endOffset;
+  const oldEnd = run.oldText.length - run.tail;
+  const newEnd = run.newText.length - run.tail;
+  const delta = run.newText.length - run.oldText.length;
+  // Before the change (typing right after the mark stays outside it).
+  if (end <= run.head) return spanIn(run, start, end);
+  // After the change (typing right before the mark stays outside it).
+  if (start >= oldEnd) return spanIn(run, start + delta, end + delta);
+  // Words added inside the mark: it grows. An Enter inside it cuts it in
+  // two, and it keeps the larger part.
+  if (run.head === oldEnd) return spanIn(run, start, end + delta);
+  if (start >= run.head && end <= oldEnd) return "inside";
+  // The change takes one end of the mark: the rest stays, with what was
+  // typed over that end.
+  return spanIn(run, start < run.head ? start : run.head, end > oldEnd ? end + delta : newEnd);
+}
+
+type Anchor = {
+  blockId: string;
+  startOffset: number;
+  endOffset: number;
+  /** The words the anchor covers now. */
+  quote: string;
+  /** The words as quoted; a mark cut short covers them again when they stand
+      together again. */
+  original: string;
+  prefix: string;
+  suffix: string;
+};
+
+/** The words inside the changed stretch, found again in the run's paragraphs. */
+function findInRun(run: Run, anchor: Anchor): Span | null {
+  for (const block of run.newBlocks) {
+    const hit = matchInText(block.text, { quotedText: anchor.quote, prefix: anchor.prefix, suffix: anchor.suffix });
+    if (hit) return { blockId: block.id, start: hit.start, end: hit.end };
+  }
+  return null;
+}
+
+/** The word diff of the anchor's own paragraph, when it is still there. */
+function remapInBlock(m: Moves, anchor: Anchor): Span | null {
+  const i = m.oldIndex.get(anchor.blockId);
+  const before = i === undefined ? undefined : m.old[i];
+  const after = m.newById.get(anchor.blockId);
+  if (!before || !after || before.text === after.text) return null;
+  const r = remapAnchor(diffSegments(before.text, after.text), after.text, {
     startOffset: anchor.startOffset,
     endOffset: anchor.endOffset,
     quotedText: anchor.quote,
-    prefix: anchor.prefix,
-    suffix: anchor.suffix,
   });
+  return r.orphaned ? null : { blockId: anchor.blockId, start: r.startOffset, end: r.endOffset };
+}
+
+/** A mark cut short covers its quote again once the quote's words stand
+    together around it (an Enter inside it, taken back). */
+function regrow(text: string, span: Span, original: string): Span {
+  const covered = text.slice(span.start, span.end);
+  const at = covered && covered !== original ? original.indexOf(covered) : -1;
+  if (at < 0) return span;
+  const start = span.start - at;
+  return start >= 0 && text.slice(start, start + original.length) === original
+    ? { ...span, start, end: start + original.length }
+    : span;
+}
+
+const CONTEXT = 32;
+
+/** Where an anchor's words are after the save. */
+function relocate(anchor: Anchor, m: Moves): Placed {
+  const run = runAround(m, anchor.blockId);
+  const mapped = run ? mapInRun(run, anchor) : "inside";
+  let span = mapped === "inside" ? ((run && findInRun(run, anchor)) ?? remapInBlock(m, anchor)) : mapped;
+  if (span) {
+    const text = m.newById.get(span.blockId)?.text ?? "";
+    span = regrow(text, span, anchor.original);
+    return {
+      blockId: span.blockId,
+      startOffset: span.start,
+      endOffset: span.end,
+      quotedText: text.slice(span.start, span.end),
+      prefix: text.slice(Math.max(0, span.start - CONTEXT), span.start),
+      suffix: text.slice(span.end, span.end + CONTEXT),
+      orphaned: false,
+    };
+  }
+  const found = resolveAnchor(
+    m.derived.map((d) => ({ id: d.id, text: d.text })),
+    {
+      blockId: anchor.blockId,
+      startOffset: anchor.startOffset,
+      endOffset: anchor.endOffset,
+      quotedText: anchor.quote,
+      prefix: anchor.prefix,
+      suffix: anchor.suffix,
+    },
+  );
   if (found) return { ...found, orphaned: false };
   return {
     blockId: anchor.blockId,
@@ -187,7 +376,7 @@ export async function syncRichText({
 
       // Anchors on paragraphs whose words changed or left.
       const affected = [...textChanged.map((k) => k.d.id), ...removed.map((b) => b.id)];
-      const newBlocks = derived.map((d) => ({ id: d.id, text: d.text }));
+      const moves = movesOf(old, derived);
       if (affected.length > 0) {
         const [sources, links] = await Promise.all([
           tx.source.findMany({
@@ -198,12 +387,17 @@ export async function syncRichText({
           }),
         ]);
         for (const src of sources) {
-          const quote = src.anchoredText ?? src.quotedText;
           const placed = relocate(
-            { blockId: src.blockId, startOffset: src.startOffset, endOffset: src.endOffset, quote, prefix: src.prefix, suffix: src.suffix },
-            oldById,
-            newById,
-            newBlocks,
+            {
+              blockId: src.blockId,
+              startOffset: src.startOffset,
+              endOffset: src.endOffset,
+              quote: src.anchoredText ?? src.quotedText,
+              original: src.quotedText,
+              prefix: src.prefix,
+              suffix: src.suffix,
+            },
+            moves,
           );
           await tx.source.update({
             where: { id: src.id },
@@ -225,10 +419,16 @@ export async function syncRichText({
         for (const link of links) {
           if (touched.has(link.fromBlockId) && link.fromDocumentId === documentId && !link.fromOrphaned) {
             const placed = relocate(
-              { blockId: link.fromBlockId, startOffset: link.startOffset, endOffset: link.endOffset, quote: link.quotedText, prefix: link.prefix, suffix: link.suffix },
-              oldById,
-              newById,
-              newBlocks,
+              {
+                blockId: link.fromBlockId,
+                startOffset: link.startOffset,
+                endOffset: link.endOffset,
+                quote: link.quotedText,
+                original: link.quotedText,
+                prefix: link.prefix,
+                suffix: link.suffix,
+              },
+              moves,
             );
             await tx.docLink.update({
               where: { id: link.id },
@@ -259,12 +459,11 @@ export async function syncRichText({
                 startOffset: link.toStartOffset,
                 endOffset: link.toEndOffset,
                 quote: link.toQuotedText,
+                original: link.toQuotedText,
                 prefix: link.toPrefix ?? "",
                 suffix: link.toSuffix ?? "",
               },
-              oldById,
-              newById,
-              newBlocks,
+              moves,
             );
             await tx.docLink.update({
               where: { id: link.id },

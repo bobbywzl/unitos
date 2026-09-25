@@ -1,3 +1,4 @@
+import type { Prisma } from "@prisma/client";
 import { after, NextResponse } from "next/server";
 import { z } from "zod";
 import { bumpDocument, documentAccess } from "@/lib/collab";
@@ -80,7 +81,17 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ documentId: s
   if (error) return error;
   const document = await db.document.findUnique({ where: { id: documentId }, select: { richText: true } });
   if (!document?.richText) return NextResponse.json({ error: t("api.notBlankDocument") }, { status: 400 });
-  await db.document.update({ where: { id: documentId }, data: { pageSetup: data.pageSetup } });
+  // The header and the footer are rich text: each goes through the
+  // sanitizer a save runs, so no setup can carry markup into the page.
+  const pageSetup = { ...data.pageSetup };
+  for (const key of ["header", "footer", "firstHeader", "firstFooter"] as const) {
+    const value = pageSetup[key];
+    if (value) pageSetup[key] = sanitizeRichText(value);
+  }
+  await db.document.update({
+    where: { id: documentId },
+    data: { pageSetup: pageSetup as unknown as Prisma.InputJsonValue },
+  });
   await bumpDocument(documentId);
-  return NextResponse.json({ pageSetup: data.pageSetup });
+  return NextResponse.json({ pageSetup });
 }

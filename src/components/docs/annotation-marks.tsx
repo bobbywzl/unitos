@@ -102,73 +102,119 @@ function chipWidget(chip: Chip, t: TFunc) {
   };
 }
 
+/** The kinds the layer paints; the document's own formatting, terms, and web
+    links are the editor's to draw. */
+const PAINTED = new Set<Highlight["kind"]>(["anchor", "selection", "pending-link", "salience", "simplify", "extract", "link"]);
+
+/** One stretch of words under the same highlights, as block-view.tsx
+    markedText draws it: a link over everything, else the smallest anchor
+    names the mark (stacked anchors underline double), and the selection tint
+    rides on top. */
+function segmentAttrs(covering: Highlight[], blockId: string, t: TFunc): Record<string, string> {
+  const link = covering.find((h) => h.kind === "link");
+  const anchors = covering.filter((h) => h.kind === "anchor");
+  const anchor =
+    anchors.length > 1 ? anchors.reduce((n, h) => (h.end - h.start < n.end - n.start ? h : n)) : anchors[0];
+  const salience = covering.find((h) => h.kind === "salience");
+  const simplify = covering.find((h) => h.kind === "simplify");
+  const extract = covering.find((h) => h.kind === "extract");
+  const selection = covering.find((h) => h.kind === "selection" || h.kind === "pending-link");
+  const selectionClass = selection
+    ? selection.kind === "pending-link"
+      ? " link-pending-mark"
+      : " selection-mark"
+    : "";
+  const attrs: Record<string, string> = {};
+  // A mark made in this session sweeps in once (globals.css mark-sweep); the
+  // plugin's view reports the end, and the next repaint drops the class.
+  const sweep = (h: Highlight | undefined) => {
+    if (!h?.fresh || h.leaving) return "";
+    attrs["data-sweep"] = `${blockId}:${h.start}:${h.end}`;
+    if (h.freshDelay) attrs.style = `animation-delay: ${h.freshDelay}ms`;
+    return " mark-sweep";
+  };
+  if (anchor?.sourceId) attrs["data-source-id"] = anchor.sourceId;
+  if (link) {
+    // The linked words stay text to edit; the chain at their end goes to the
+    // other end.
+    if (link.linkId) attrs["data-link-id"] = link.linkId;
+    const tip = [link.linkTitle ? t("panes.linkedTo", { title: link.linkTitle }) : null, link.linkReason]
+      .filter((s): s is string => Boolean(s))
+      .join("\n");
+    if (tip) attrs["data-tip"] = tip;
+    attrs.class = `link-mark rounded-[4px]${sweep(link)}${selectionClass}`;
+    return attrs;
+  }
+  const leaving = Boolean(anchor?.leaving);
+  const focusable = Boolean(anchor?.annotation && anchor.sourceId && !leaving);
+  const noteMark = !anchor?.annotation && anchor?.noteId && !leaving ? anchor.noteId : null;
+  const extractMark = extract && !focusable && !noteMark ? extract : null;
+  if (focusable) {
+    attrs["data-docs-open"] = "annotation";
+    attrs["data-tip"] = t("panes.viewAnnotation");
+  } else if (noteMark) {
+    attrs["data-docs-open"] = "note";
+    attrs["data-note-id"] = noteMark;
+    attrs["data-tip"] = t("panes.viewNote");
+  } else if (extractMark) {
+    attrs["data-docs-open"] = "extract";
+    attrs["data-extract-id"] = extractMark.extractId ?? "";
+    attrs["data-tip"] = t("panes.extractOpenCard", { label: extractMark.extractLabel ?? "" });
+  }
+  const markClass = simplify
+    ? "simplify-mark"
+    : anchor
+      ? anchorClass(anchor)
+      : extract
+        ? extract.extractOrigin
+          ? "extract-origin-mark"
+          : "extract-mark"
+        : salience
+          ? "salience-mark"
+          : "";
+  attrs.class = `${markClass}${selectionClass}${anchors.length > 1 ? " hl-stacked" : ""}${sweep(simplify ?? anchor ?? extract ?? salience)}${leaving ? " mark-out" : ""} rounded-[4px]${focusable || noteMark || extractMark ? " annotation-mark" : ""}`;
+  return attrs;
+}
+
+/** The chips a highlight carries at its end, in the reader's order. */
+function chipsOf(h: Highlight): Chip[] {
+  const chips: Chip[] = [];
+  const live = h.kind === "anchor" && h.sourceId && !h.leaving;
+  if (live && h.tool) chips.push({ kind: "tool", highlight: h });
+  if (live && h.comment) chips.push({ kind: "comment", highlight: h });
+  if (live && h.color) chips.push({ kind: "link-start", highlight: h });
+  if (h.kind === "extract" && h.extractLabel) chips.push({ kind: "extract", highlight: h });
+  if (h.kind === "link" && h.href) chips.push({ kind: "link-end", highlight: h });
+  return chips;
+}
+
 function build(doc: PMNode, highlights: Record<string, Highlight[]>, t: TFunc): DecorationSet {
   const decorations: Decoration[] = [];
   doc.descendants((node, pos) => {
     if (!node.isTextblock) return true;
     const id = node.attrs.blockId as string | null;
-    const list = id ? highlights[id] : undefined;
-    if (!id || !list || list.length === 0) return false;
-    for (const h of list) {
-      if (h.end <= h.start) continue;
-      const from = posInBlock(node, pos, h.start);
-      const to = posInBlock(node, pos, h.end);
+    const painted = (id ? (highlights[id] ?? []) : []).filter((h) => h.end > h.start && PAINTED.has(h.kind));
+    if (!id || painted.length === 0) return false;
+    const points = [...new Set(painted.flatMap((h) => [h.start, h.end]))].sort((a, b) => a - b);
+    for (let i = 0; i < points.length - 1; i++) {
+      const [start, end] = [points[i], points[i + 1]];
+      const covering = painted.filter((h) => h.start <= start && h.end >= end);
+      if (covering.length === 0) continue;
+      const from = posInBlock(node, pos, start);
+      const to = posInBlock(node, pos, end);
       if (to <= from) continue;
-      let cls = "";
-      const attrs: Record<string, string> = {};
-      if (h.kind === "anchor") {
-        cls = `${anchorClass(h)} rounded-[4px]${h.leaving ? " mark-out" : ""}`;
-        if (h.sourceId) attrs["data-source-id"] = h.sourceId;
-        if (h.annotation && h.sourceId && !h.leaving) {
-          attrs["data-docs-open"] = "annotation";
-          attrs["data-tip"] = t("panes.viewAnnotation");
-          cls += " annotation-mark";
-        } else if (!h.annotation && h.noteId && !h.leaving) {
-          attrs["data-docs-open"] = "note";
-          attrs["data-note-id"] = h.noteId;
-          attrs["data-tip"] = t("panes.viewNote");
-          cls += " annotation-mark";
-        }
-      } else if (h.kind === "selection") cls = "selection-mark";
-      else if (h.kind === "pending-link") cls = "link-pending-mark";
-      else if (h.kind === "salience") cls = "salience-mark";
-      else if (h.kind === "simplify") cls = "simplify-mark";
-      else if (h.kind === "extract") {
-        cls = `${h.extractOrigin ? "extract-origin-mark" : "extract-mark"} annotation-mark`;
-        attrs["data-docs-open"] = "extract";
-        if (h.extractId) attrs["data-extract-id"] = h.extractId;
-        attrs["data-tip"] = t("panes.extractOpenCard", { label: h.extractLabel ?? "" });
-      } else if (h.kind === "link") {
-        cls = "link-mark rounded-[4px]";
-        if (h.linkId) attrs["data-link-id"] = h.linkId;
-        const tip = [h.linkTitle ? t("panes.linkedTo", { title: h.linkTitle }) : null, h.linkReason]
-          .filter((s): s is string => Boolean(s))
-          .join("\n");
-        if (tip) attrs["data-tip"] = tip;
-      } else {
-        // The document's own formatting, terms, and web links are the
-        // editor's to draw.
-        continue;
-      }
-      // A mark made in this session sweeps in once (globals.css mark-sweep);
-      // the plugin's view reports the end, and the next repaint drops it.
-      if (h.fresh && !h.leaving && (h.kind === "anchor" || h.kind === "simplify" || h.kind === "link")) {
-        cls += " mark-sweep";
-        attrs["data-sweep"] = `${id}:${h.start}:${h.end}`;
-        if (h.freshDelay) attrs.style = `animation-delay: ${h.freshDelay}ms`;
-      }
-      decorations.push(Decoration.inline(from, to, { class: cls, ...attrs }, { inclusiveStart: false, inclusiveEnd: false }));
-      // The chips at the mark's end.
-      const chips: Chip[] = [];
-      if (h.kind === "anchor" && h.tool && h.sourceId && !h.leaving) chips.push({ kind: "tool", highlight: h });
-      if (h.kind === "anchor" && h.comment && h.sourceId && !h.leaving) chips.push({ kind: "comment", highlight: h });
-      if (h.kind === "anchor" && h.color && h.sourceId && !h.leaving) chips.push({ kind: "link-start", highlight: h });
-      if (h.kind === "extract" && h.extractLabel) chips.push({ kind: "extract", highlight: h });
-      if (h.kind === "link" && h.href) chips.push({ kind: "link-end", highlight: h });
-      chips.forEach((chip, i) => {
+      decorations.push(
+        Decoration.inline(from, to, segmentAttrs(covering, id, t), { inclusiveStart: false, inclusiveEnd: false }),
+      );
+    }
+    // The chips at each mark's end.
+    let side = 1;
+    for (const h of painted) {
+      const at = posInBlock(node, pos, h.end);
+      for (const chip of chipsOf(h)) {
         decorations.push(
-          Decoration.widget(to, chipWidget(chip, t), {
-            side: 1 + i,
+          Decoration.widget(at, chipWidget(chip, t), {
+            side: side++,
             ignoreSelection: true,
             stopEvent: () => true,
             key: `${chip.kind}:${h.sourceId ?? h.extractId ?? h.linkId ?? ""}:${h.start}:${h.end}:${h.plus ? 1 : 0}`,
@@ -178,7 +224,7 @@ function build(doc: PMNode, highlights: Record<string, Highlight[]>, t: TFunc): 
             },
           }),
         );
-      });
+      }
     }
     return false;
   });

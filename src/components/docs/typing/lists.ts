@@ -1,66 +1,52 @@
 // Google Docs' list presets (SPEC.md §29, typing): the 17 prefixes that start
-// a list when a space follows them, and the glyphs each preset draws level
-// by level. A list keeps its preset in the `listPreset` attribute
-// (data-list-preset); none means the default: ● ○ ■ for bullets, 1. a. i.
-// for numbers. typing.css draws the glyphs.
+// a list when a space follows them, and the glyphs each numbered preset
+// draws level by level. A list keeps its preset in the `listStyle`
+// attribute (data-list-style), named as the Google Docs API names presets;
+// null is the default: ● ○ ■ for bullets, 1. a. i. for numbers. The
+// toolbar area draws the presets its palettes offer; typing.css draws the
+// ones only a typed prefix reaches.
 
-export type ListPreset =
-  | "dash"
-  | "plus"
-  | "decimal-latinlower-romanlower-parentheses"
-  | "decimal-latinlower-romanlower-two-parentheses"
-  | "decimal-latinlower-romanlower-period-parentheses"
-  | "decimalzero-latinlower-romanlower"
-  | "latinlower-romanlower-decimal-period"
-  | "latinlower-romanlower-decimal-parentheses"
-  | "latinlower-romanlower-decimal-two-parentheses"
-  | "latinupper-latinlower-romanlower"
-  | "latinupper-latinlower-romanlower-parentheses"
-  | "latinupper-latinlower-romanlower-two-parentheses"
-  | "romanupper-latinupper-decimal";
-
-export const LIST_PRESETS: readonly ListPreset[] = [
-  "dash",
-  "plus",
-  "decimal-latinlower-romanlower-parentheses",
-  "decimal-latinlower-romanlower-two-parentheses",
-  "decimal-latinlower-romanlower-period-parentheses",
-  "decimalzero-latinlower-romanlower",
-  "latinlower-romanlower-decimal-period",
-  "latinlower-romanlower-decimal-parentheses",
-  "latinlower-romanlower-decimal-two-parentheses",
-  "latinupper-latinlower-romanlower",
-  "latinupper-latinlower-romanlower-parentheses",
-  "latinupper-latinlower-romanlower-two-parentheses",
-  "romanupper-latinupper-decimal",
-];
+export type ListStyle =
+  | "BULLET_DASH"
+  | "BULLET_PLUS"
+  | "NUMBERED_DECIMAL_ALPHA_ROMAN_PARENS"
+  | "NUMBERED_DECIMAL_ALPHA_ROMAN_TWO_PARENS"
+  | "NUMBERED_DECIMAL_ALPHA_ROMAN_PERIOD_PARENS"
+  | "NUMBERED_ZERODECIMAL_ALPHA_ROMAN"
+  | "NUMBERED_ALPHA_ROMAN_DECIMAL"
+  | "NUMBERED_ALPHA_ROMAN_DECIMAL_PARENS"
+  | "NUMBERED_ALPHA_ROMAN_DECIMAL_TWO_PARENS"
+  | "NUMBERED_UPPERALPHA_ALPHA_ROMAN"
+  | "NUMBERED_UPPERALPHA_ALPHA_ROMAN_PARENS"
+  | "NUMBERED_UPPERALPHA_ALPHA_ROMAN_TWO_PARENS"
+  | "NUMBERED_UPPERROMAN_UPPERALPHA_DECIMAL";
 
 type ListKind = "bulletList" | "orderedList" | "taskList";
 
-const PREFIXES: { re: RegExp; type: ListKind; preset: ListPreset | null }[] = [
-  { re: /^\*$/, type: "bulletList", preset: null },
-  { re: /^•$/, type: "bulletList", preset: null },
-  { re: /^-$/, type: "bulletList", preset: "dash" },
-  { re: /^\+$/, type: "bulletList", preset: "plus" },
-  { re: /^\[\]$/, type: "taskList", preset: null },
-  { re: /^1\.$/, type: "orderedList", preset: null },
-  { re: /^1\)$/, type: "orderedList", preset: "decimal-latinlower-romanlower-parentheses" },
-  { re: /^\(1\)$/, type: "orderedList", preset: "decimal-latinlower-romanlower-two-parentheses" },
-  { re: /^1\.\)$/, type: "orderedList", preset: "decimal-latinlower-romanlower-period-parentheses" },
-  { re: /^01\.$/, type: "orderedList", preset: "decimalzero-latinlower-romanlower" },
-  { re: /^a\.$/, type: "orderedList", preset: "latinlower-romanlower-decimal-period" },
-  { re: /^a\)$/, type: "orderedList", preset: "latinlower-romanlower-decimal-parentheses" },
-  { re: /^\(a\)$/, type: "orderedList", preset: "latinlower-romanlower-decimal-two-parentheses" },
-  { re: /^A\.$/, type: "orderedList", preset: "latinupper-latinlower-romanlower" },
-  { re: /^A\)$/, type: "orderedList", preset: "latinupper-latinlower-romanlower-parentheses" },
-  { re: /^\(A\)$/, type: "orderedList", preset: "latinupper-latinlower-romanlower-two-parentheses" },
-  { re: /^I\.$/, type: "orderedList", preset: "romanupper-latinupper-decimal" },
+const PREFIXES: { re: RegExp; type: ListKind; style: ListStyle | null }[] = [
+  { re: /^\*$/, type: "bulletList", style: null },
+  { re: /^•$/, type: "bulletList", style: null },
+  { re: /^-$/, type: "bulletList", style: "BULLET_DASH" },
+  { re: /^\+$/, type: "bulletList", style: "BULLET_PLUS" },
+  { re: /^\[\]$/, type: "taskList", style: null },
+  { re: /^1\.$/, type: "orderedList", style: null },
+  { re: /^1\)$/, type: "orderedList", style: "NUMBERED_DECIMAL_ALPHA_ROMAN_PARENS" },
+  { re: /^\(1\)$/, type: "orderedList", style: "NUMBERED_DECIMAL_ALPHA_ROMAN_TWO_PARENS" },
+  { re: /^1\.\)$/, type: "orderedList", style: "NUMBERED_DECIMAL_ALPHA_ROMAN_PERIOD_PARENS" },
+  { re: /^01\.$/, type: "orderedList", style: "NUMBERED_ZERODECIMAL_ALPHA_ROMAN" },
+  { re: /^a\.$/, type: "orderedList", style: "NUMBERED_ALPHA_ROMAN_DECIMAL" },
+  { re: /^a\)$/, type: "orderedList", style: "NUMBERED_ALPHA_ROMAN_DECIMAL_PARENS" },
+  { re: /^\(a\)$/, type: "orderedList", style: "NUMBERED_ALPHA_ROMAN_DECIMAL_TWO_PARENS" },
+  { re: /^A\.$/, type: "orderedList", style: "NUMBERED_UPPERALPHA_ALPHA_ROMAN" },
+  { re: /^A\)$/, type: "orderedList", style: "NUMBERED_UPPERALPHA_ALPHA_ROMAN_PARENS" },
+  { re: /^\(A\)$/, type: "orderedList", style: "NUMBERED_UPPERALPHA_ALPHA_ROMAN_TWO_PARENS" },
+  { re: /^I\.$/, type: "orderedList", style: "NUMBERED_UPPERROMAN_UPPERALPHA_DECIMAL" },
 ];
 
 /** The list a typed prefix starts, or null. */
-export function presetForPrefix(prefix: string): { type: ListKind; preset: ListPreset | null } | null {
+export function listForPrefix(prefix: string): { type: ListKind; style: ListStyle | null } | null {
   const hit = PREFIXES.find((p) => p.re.test(prefix));
-  return hit ? { type: hit.type, preset: hit.preset } : null;
+  return hit ? { type: hit.type, style: hit.style } : null;
 }
 
 type Counter = "decimal" | "decimal-leading-zero" | "lower-alpha" | "upper-alpha" | "lower-roman" | "upper-roman";
@@ -83,18 +69,18 @@ const UR = "upper-roman";
 export const DEFAULT_NUMBER_GLYPHS: Glyph[] = [P(DEC), P(LA), P(LR), P(DEC), P(LA), P(LR), P(DEC), P(LA), P(LR)];
 
 /** Each numbered preset's glyphs, levels 1 to 9. */
-export const PRESET_GLYPHS: Partial<Record<ListPreset, Glyph[]>> = {
-  "decimal-latinlower-romanlower-parentheses": [R(DEC), R(LA), R(LR), RR(DEC), RR(LA), RR(LR), P(DEC), P(LA), P(LR)],
-  "decimal-latinlower-romanlower-two-parentheses": [RR(DEC), RR(LA), RR(LR), R(DEC), R(LA), R(LR), P(DEC), P(LA), P(LR)],
-  "decimal-latinlower-romanlower-period-parentheses": [PR(DEC), PR(LA), PR(LR), RR(DEC), RR(LA), RR(LR), P(DEC), P(LA), P(LR)],
-  "decimalzero-latinlower-romanlower": [P("decimal-leading-zero"), P(LA), P(LR), P(DEC), P(LA), P(LR), P(DEC), P(LA), P(LR)],
-  "latinlower-romanlower-decimal-period": [P(LA), P(LR), P(DEC), P(LA), P(LR), P(DEC), P(LA), P(LR), P(DEC)],
-  "latinlower-romanlower-decimal-parentheses": [R(LA), R(LR), R(DEC), RR(LA), RR(LR), RR(DEC), P(LA), P(LR), P(DEC)],
-  "latinlower-romanlower-decimal-two-parentheses": [RR(LA), RR(LR), RR(DEC), R(LA), R(LR), R(DEC), P(LA), P(LR), P(DEC)],
-  "latinupper-latinlower-romanlower": [P(UA), P(LA), P(LR), P(DEC), P(LA), P(LR), P(DEC), P(LA), P(LR)],
-  "latinupper-latinlower-romanlower-parentheses": [R(UA), R(LA), R(LR), RR(DEC), RR(LA), RR(LR), P(DEC), P(LA), P(LR)],
-  "latinupper-latinlower-romanlower-two-parentheses": [RR(UA), RR(LA), RR(LR), R(DEC), R(LA), R(LR), P(DEC), P(LA), P(LR)],
-  "romanupper-latinupper-decimal": [P(UR), P(UA), P(DEC), R(LA), RR(DEC), RR(LA), RR(LR), RR(LA), RR(LR)],
+export const STYLE_GLYPHS: Partial<Record<ListStyle, Glyph[]>> = {
+  NUMBERED_DECIMAL_ALPHA_ROMAN_PARENS: [R(DEC), R(LA), R(LR), RR(DEC), RR(LA), RR(LR), P(DEC), P(LA), P(LR)],
+  NUMBERED_DECIMAL_ALPHA_ROMAN_TWO_PARENS: [RR(DEC), RR(LA), RR(LR), R(DEC), R(LA), R(LR), P(DEC), P(LA), P(LR)],
+  NUMBERED_DECIMAL_ALPHA_ROMAN_PERIOD_PARENS: [PR(DEC), PR(LA), PR(LR), RR(DEC), RR(LA), RR(LR), P(DEC), P(LA), P(LR)],
+  NUMBERED_ZERODECIMAL_ALPHA_ROMAN: [P("decimal-leading-zero"), P(LA), P(LR), P(DEC), P(LA), P(LR), P(DEC), P(LA), P(LR)],
+  NUMBERED_ALPHA_ROMAN_DECIMAL: [P(LA), P(LR), P(DEC), P(LA), P(LR), P(DEC), P(LA), P(LR), P(DEC)],
+  NUMBERED_ALPHA_ROMAN_DECIMAL_PARENS: [R(LA), R(LR), R(DEC), RR(LA), RR(LR), RR(DEC), P(LA), P(LR), P(DEC)],
+  NUMBERED_ALPHA_ROMAN_DECIMAL_TWO_PARENS: [RR(LA), RR(LR), RR(DEC), R(LA), R(LR), R(DEC), P(LA), P(LR), P(DEC)],
+  NUMBERED_UPPERALPHA_ALPHA_ROMAN: [P(UA), P(LA), P(LR), P(DEC), P(LA), P(LR), P(DEC), P(LA), P(LR)],
+  NUMBERED_UPPERALPHA_ALPHA_ROMAN_PARENS: [R(UA), R(LA), R(LR), RR(DEC), RR(LA), RR(LR), P(DEC), P(LA), P(LR)],
+  NUMBERED_UPPERALPHA_ALPHA_ROMAN_TWO_PARENS: [RR(UA), RR(LA), RR(LR), R(DEC), R(LA), R(LR), P(DEC), P(LA), P(LR)],
+  NUMBERED_UPPERROMAN_UPPERALPHA_DECIMAL: [P(UR), P(UA), P(DEC), R(LA), RR(DEC), RR(LA), RR(LR), RR(LA), RR(LR)],
 };
 
 function roman(n: number): string {
@@ -153,8 +139,8 @@ function counterText(counter: Counter, n: number): string {
 }
 
 /** The label item `n` of a numbered list draws at `level` (0-based). */
-export function listLabel(preset: ListPreset | null, level: number, n: number): string {
-  const glyphs = (preset && PRESET_GLYPHS[preset]) || DEFAULT_NUMBER_GLYPHS;
+export function listLabel(style: string | null, level: number, n: number): string {
+  const glyphs = (style && STYLE_GLYPHS[style as ListStyle]) || DEFAULT_NUMBER_GLYPHS;
   const glyph = glyphs[Math.max(0, Math.min(8, level))];
   return `${glyph.before}${counterText(glyph.counter, n)}${glyph.after}`;
 }

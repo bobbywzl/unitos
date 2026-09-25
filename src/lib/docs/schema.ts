@@ -37,7 +37,30 @@ export const RICH_NODE_TYPES = [
   "tableCell",
   "tableHeader",
   "pageBreak",
+  // A header's or a footer's fields (PageSetup.header): the page's number
+  // and the page count.
+  "pageNumber",
+  "pageCount",
+  // What the "@" menu and the insert area put in the text (components/docs/
+  // insert): the smart chips, a bookmark, a footnote's number and the
+  // footnotes at the end, an equation in a line or on its own, and a table
+  // of contents.
+  "dateChip",
+  "personChip",
+  "fileChip",
+  "dropdownChip",
+  "bookmark",
+  "footnoteReference",
+  "footnotes",
+  "footnote",
+  "inlineMath",
+  "blockMath",
+  "tableOfContents",
 ] as const;
+
+/** The smart chips: each draws its `label`, and the label is the chip's words
+    in its paragraph's index row (lib/docs/blocks.ts inlineText). */
+export const CHIP_NODE_TYPES = new Set(["dateChip", "personChip", "fileChip", "dropdownChip"]);
 
 export const RICH_MARK_TYPES = [
   "bold",
@@ -53,7 +76,7 @@ export const RICH_MARK_TYPES = [
 
 /** The nodes that hold a paragraph index row each (a Block): every node
     whose words a reader can select, plus the figure and the separator. */
-export const INDEXED_NODE_TYPES = new Set(["paragraph", "heading", "codeBlock", "image", "horizontalRule"]);
+export const INDEXED_NODE_TYPES = new Set(["paragraph", "heading", "codeBlock", "image", "horizontalRule", "blockMath"]);
 
 const NODE_TYPES = new Set<string>(RICH_NODE_TYPES);
 const MARK_TYPES = new Set<string>(RICH_MARK_TYPES);
@@ -114,6 +137,28 @@ function safeColor(value: unknown): string | null {
   return typeof value === "string" && (HEX.test(value) || RGB.test(value)) ? value : null;
 }
 
+const CELL_BORDER = /^\d{1,2}(\.\d{1,2})? (solid|dotted|dashed) #[0-9a-fA-F]{6}$/;
+const DASHES = new Set(["solid", "dotted", "dashed"]);
+
+/** A dropdown chip's options, a JSON list of {label, color}: kept only as
+    short labels with hex colors. */
+function safeDropdownOptions(value: unknown): string | null {
+  if (typeof value !== "string" || value.length > 4000) return null;
+  try {
+    const list: unknown = JSON.parse(value);
+    if (!Array.isArray(list) || list.length === 0 || list.length > 50) return null;
+    const clean = list.map((o: unknown) => {
+      const option = o as { label?: unknown; color?: unknown };
+      if (typeof option.label !== "string" || option.label.length > 200) throw new Error("label");
+      if (typeof option.color !== "string" || !/^#[0-9a-fA-F]{6}$/.test(option.color)) throw new Error("color");
+      return { label: option.label, color: option.color };
+    });
+    return JSON.stringify(clean);
+  } catch {
+    return null;
+  }
+}
+
 /** One attribute value, kept only when it is a plain value: null, a boolean,
     a finite number, a short string, or a short list of numbers. The
     attributes that end up in a style, an href, or a src are checked by
@@ -127,7 +172,19 @@ function cleanAttr(name: string, value: unknown): unknown {
       return safeSrc(value);
     case "color":
     case "backgroundColor":
+    case "borderColor":
       return safeColor(value);
+    // A table cell's side ("1 solid #000000": points, dash, color) and an
+    // image's border dash (components/docs/insert).
+    case "borderTop":
+    case "borderRight":
+    case "borderBottom":
+    case "borderLeft":
+      return typeof value === "string" && CELL_BORDER.test(value) ? value : null;
+    case "borderDash":
+      return typeof value === "string" && DASHES.has(value) ? value : null;
+    case "dropdownOptions":
+      return safeDropdownOptions(value);
     case "fontFamily":
       return typeof value === "string" && FONT_FAMILY.test(value) ? value : null;
     case "fontSize":
@@ -213,13 +270,30 @@ export function emptyRichText(blockId: string): RichNode {
   return { type: "doc", content: [{ type: "paragraph", attrs: { blockId } }] };
 }
 
-/** The page setup (Document.pageSetup), in points. */
+/** The page setup (Document.pageSetup), in points. Landscape is a width
+    past the height; the paper size is the width and height. The fields
+    after `color` came later: an older stored setup has none of them. */
 export type PageSetup = {
   pageless: boolean;
   width: number;
   height: number;
   margins: { top: number; right: number; bottom: number; left: number };
   color: string;
+  /** Where the header's text starts below the page's top edge, and where
+      the footer's text ends above its bottom edge; absent = 36 (0.5 in). */
+  headerMargin?: number;
+  footerMargin?: number;
+  /** The header and the footer on every page: rich text (a doc) whose
+      pageNumber and pageCount nodes draw each page's number and the page
+      count; absent or null = none. */
+  header?: RichNode | null;
+  footer?: RichNode | null;
+  /** Different first page: the first page shows firstHeader and firstFooter. */
+  differentFirst?: boolean;
+  firstHeader?: RichNode | null;
+  firstFooter?: RichNode | null;
+  /** The first page's number; absent = 1. */
+  pageNumberStart?: number;
 };
 
 /** Letter, 1 in margins, pages, white: a new document's page (SPEC.md §29). */
@@ -242,6 +316,14 @@ export const pageSetupSchema = z.object({
     left: z.number().min(0).max(700),
   }),
   color: z.string().regex(HEX),
+  headerMargin: z.number().min(0).max(700).optional(),
+  footerMargin: z.number().min(0).max(700).optional(),
+  header: richDocSchema.nullable().optional(),
+  footer: richDocSchema.nullable().optional(),
+  differentFirst: z.boolean().optional(),
+  firstHeader: richDocSchema.nullable().optional(),
+  firstFooter: richDocSchema.nullable().optional(),
+  pageNumberStart: z.number().int().min(0).max(999).optional(),
 });
 
 /** The stored page setup, or the default when it is missing or broken. */

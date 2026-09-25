@@ -126,6 +126,7 @@ import { NEW_GLOW_CLASS, NewPill, useNewFeature } from "@/components/new-feature
 import type { PageSetup, RichNode } from "@/lib/docs/schema";
 import { pageEditorIn, pageSegmentsOfRange, wordAtCaret } from "@/components/docs/layer/anchor";
 import { flashInPage } from "@/components/docs/layer/flash";
+import { registerDocumentFlush } from "@/components/docs/layer/flush";
 import {
   belowSlot,
   marginPlace,
@@ -5296,6 +5297,12 @@ export function ReaderInteractions({
   // The article's editor hands back a way to save what is being typed, so undo
   // can settle it first.
   const flushEditRef = useRef<(() => Promise<void>) | null>(null);
+  // A blank document's typing saves before the voice command in the notes
+  // tray reads the document (SPEC.md §29, components/docs/layer/flush.ts).
+  useEffect(() => {
+    if (!blankDocument) return;
+    return registerDocumentFlush(documentId, () => flushEditRef.current?.() ?? Promise.resolve());
+  }, [blankDocument, documentId]);
 
   // Cmd+Z and Shift+Cmd+Z, Ctrl elsewhere (Ctrl+Y too). The article's history
   // answers in edit mode and after it: leaving the mode is not a reason for

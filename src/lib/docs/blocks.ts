@@ -1,4 +1,4 @@
-import { INDEXED_NODE_TYPES, newBlockId, type RichMark, type RichNode } from "@/lib/docs/schema";
+import { CHIP_NODE_TYPES, INDEXED_NODE_TYPES, newBlockId, type RichMark, type RichNode } from "@/lib/docs/schema";
 
 // The paragraph index of a blank document (SPEC.md §29). The rich text is the
 // document; its Block rows are derived from it on every save, one per node a
@@ -9,7 +9,7 @@ import { INDEXED_NODE_TYPES, newBlockId, type RichMark, type RichNode } from "@/
 // editor (data-block-id + offsets, SPEC.md §5) resolves against the row. The
 // same function runs in the editor and on the server, so both sides agree.
 
-export type DerivedBlockType = "PARAGRAPH" | "HEADING" | "LIST" | "CODE" | "FIGURE" | "SEPARATOR";
+export type DerivedBlockType = "PARAGRAPH" | "HEADING" | "LIST" | "CODE" | "FIGURE" | "SEPARATOR" | "EQUATION";
 
 export type StyleSpan = { start: number; end: number; style: string; quotedText: string };
 export type LinkSpan = { start: number; end: number; quotedText: string; href: string };
@@ -63,6 +63,9 @@ function runStyles(marks: RichMark[] | undefined): string[] {
 export function inlineText(node: RichNode): string {
   if (node.type === "text") return node.text ?? "";
   if (node.type === "hardBreak") return "\n";
+  // A smart chip draws its label; an equation, a footnote's number, and a
+  // bookmark draw outside the words (data-anchor-skip) and add none.
+  if (CHIP_NODE_TYPES.has(node.type)) return typeof node.attrs?.label === "string" ? node.attrs.label : "";
   return (node.content ?? []).map(inlineText).join("");
 }
 
@@ -153,6 +156,12 @@ export function deriveBlocks(doc: RichNode): DerivedBlock[] {
       }
       if (node.type === "horizontalRule") {
         out.push({ id, type: "SEPARATOR", text: "", html: null, styles: [], links: [] });
+        return;
+      }
+      if (node.type === "blockMath") {
+        // An equation on its own line: its TeX, as an EQUATION row holds it.
+        const latex = typeof node.attrs?.latex === "string" ? node.attrs.latex : "";
+        out.push({ id, type: "EQUATION", text: latex, html: null, styles: [], links: [] });
         return;
       }
       const { text, styles, links } = textblockRuns(node);

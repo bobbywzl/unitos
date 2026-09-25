@@ -750,8 +750,10 @@ export function Reader({
   }
 
   // Undo saves the block being typed in before it steps back, so the typing is
-  // the step it takes back.
+  // the step it takes back. A blank document's page editor sets its own
+  // flush (SPEC.md §29); this one must not overwrite it on every render.
   useEffect(() => {
+    if (richText) return;
     flushRef.current = () => flushFocused() ?? Promise.resolve();
     return () => {
       flushRef.current = null;
