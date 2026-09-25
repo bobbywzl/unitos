@@ -324,6 +324,16 @@ export function ChartIcon(props: IconProps) {
   );
 }
 
+// Define (SPEC.md §6): an open book, where a word's meaning is looked up.
+export function DefineIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M2 4h6a4 4 0 0 1 4 4v12a3 3 0 0 0-3-3H2z" />
+      <path d="M22 4h-6a4 4 0 0 0-4 4v12a3 3 0 0 1 3-3h7z" />
+    </Icon>
+  );
+}
+
 // Visualize (SPEC.md §20): a picture.
 export function VisualizeIcon(props: IconProps) {
   return (

@@ -5,6 +5,7 @@ import { coreBlocks, layerSchema } from "@/lib/anchors/layer";
 import { passageSources, resolvePassage, segmentsSchema } from "@/lib/anchors/passage";
 import { bumpNotebook, notebookAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
+import { definable } from "@/lib/define";
 import {
   DERIVATION_EFFORT,
   MAX_OUTPUT_TOKENS,
@@ -108,6 +109,7 @@ const deriveSchema = z
     "COMPARE",
     "ANALYZE",
     "VISUALIZE",
+    "DEFINE",
   ]),
   // Absent only for corpus-scope DISTILL, which reads every document, and for
   // COMPARE, which names its two documents in documentIds.
@@ -194,7 +196,7 @@ const deriveSchema = z
     message: "page is EXPLAIN only",
   });
 
-const ANCHOR_REQUIRED = new Set(["EXPLAIN", "SIMPLIFY", "ANALYZE", "VISUALIZE"]);
+const ANCHOR_REQUIRED = new Set(["EXPLAIN", "SIMPLIFY", "ANALYZE", "VISUALIZE", "DEFINE"]);
 
 // A model call that holds one connection for minutes dies at idle proxies, so
 // the response streams a heartbeat space while the model works and ends with
@@ -262,11 +264,11 @@ async function handle(req: Request, t: TFunc) {
   const { data, error } = await parseBody(req, deriveSchema);
   if (error) return error;
   // Every derivation persists something (annotation, layer, summary), so the
-  // gate is editor — except FIND and ASK, which persist nothing and stay open
-  // to viewers.
+  // gate is editor — except FIND, ASK, and DEFINE, which persist nothing and
+  // stay open to viewers.
   const access = await notebookAccess(
     data.notebookId,
-    data.type === "FIND" || data.type === "ASK" ? "viewer" : "editor",
+    data.type === "FIND" || data.type === "ASK" || data.type === "DEFINE" ? "viewer" : "editor",
   );
   if (access instanceof NextResponse) return access;
   const user = access.user;
@@ -720,6 +722,11 @@ async function handle(req: Request, t: TFunc) {
       return NextResponse.json({ error: t("api.anchorNotResolvedInDocument") }, { status: 400 });
     }
   }
+  // DEFINE takes one word or one phrase, in one block (lib/define.ts): the
+  // toolbar offers it on nothing longer.
+  if (data.type === "DEFINE" && (passage.length !== 1 || !definable(anchored?.anchoredText ?? ""))) {
+    return NextResponse.json({ error: t("api.defineNeedsWord") }, { status: 400 });
+  }
 
   const [profile, skeleton] = await Promise.all([
     loadProfile(data.notebookId),
@@ -1099,14 +1106,17 @@ async function handle(req: Request, t: TFunc) {
   const providerOptions = chat.providerOptions;
 
   // 3 + 4. Stream or collect, then route by destination.
-  // EXPLAIN, SIMPLIFY, ANALYZE, SUMMARIZE, and ASK stream text. SALIENCE and
-  // DISTILL return validated JSON.
+  // EXPLAIN, SIMPLIFY, ANALYZE, SUMMARIZE, ASK, and DEFINE stream text.
+  // SALIENCE and DISTILL return validated JSON. DEFINE's destination is the
+  // toolbar under the Define row: the stream is the whole of it, and nothing
+  // persists.
   if (
     data.type === "EXPLAIN" ||
     data.type === "SIMPLIFY" ||
     data.type === "ANALYZE" ||
     data.type === "SUMMARIZE" ||
-    data.type === "ASK"
+    data.type === "ASK" ||
+    data.type === "DEFINE"
   ) {
     const result = streamText({
       model,

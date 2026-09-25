@@ -153,6 +153,7 @@ const en = {
   stitchFailed: "Stitch failed. {reason}",
   stitchTimedOut: "Stitch ran out of time before the answer ended. Narrow the command to one topic or question, or try again.",
   analyzeNeedsFigureOrTable: "Analyze works on a figure or a table",
+  defineNeedsWord: "Define works on one word or one phrase",
   // Note text of COMPARE (SPEC.md §4)
   comparisonTitle: "Compare: {first} vs {second}",
   compareAgree: "Agree",
@@ -438,6 +439,7 @@ const zh: Record<keyof typeof en, string> = {
   stitchFailed: "缝合失败。{reason}",
   stitchTimedOut: "缝合在回答结束前超时。请把命令缩小到一个主题或问题，或重试。",
   analyzeNeedsFigureOrTable: "分析只用于插图或表格",
+  defineNeedsWord: "定义只用于一个词或一个短语",
   comparisonTitle: "对比：{first} 与 {second}",
   compareAgree: "一致",
   compareDisagree: "分歧",
