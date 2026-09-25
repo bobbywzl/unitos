@@ -244,6 +244,10 @@ export function DocumentBar({
   // folder opens its picker under them.
   const [pillMenu, setPillMenu] = useState<string | null>(null);
   const [moveChoice, setMoveChoice] = useState<string | null>(null);
+  // Re-parse on an import edited since it was imported asks first (SPEC.md
+  // §29): the row folds open to the question, with the shape a PDF's choice
+  // picked.
+  const [editedAsk, setEditedAsk] = useState<{ id: string; as?: "article" | "handwritten" } | null>(null);
   const [moveError, setMoveError] = useState<string | null>(null);
   const [library, setLibrary] = useState<LibraryDocument[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -413,11 +417,6 @@ export function DocumentBar({
   // Re-parse on a PDF asks which shape first (SPEC.md §16): the row folds
   // open to the two choices for this document.
   const [reparseChoice, setReparseChoice] = useState<string | null>(null);
-  // Re-parse on an import edited since it was imported asks first (SPEC.md
-  // §29): the row folds open to the question, with the shape a PDF's choice
-  // picked.
-  const [editedAsk, setEditedAsk] = useState<{ id: string; as?: "article" | "handwritten" } | null>(null);
-
   // The bar's passing notice, for `ms`.
   function showNotice(text: string, ms = 4000) {
     setNotice(text);

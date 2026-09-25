@@ -7411,6 +7411,9 @@ function blockFormatKind(
                 aiControls: !split && !embedded ? distillButton : null,
                 notebookId,
                 documents: attachedDocuments,
+                // An import's References section stands under its pages,
+                // under the page editor's header.
+                footer: <Bibliography references={references} />,
               }
             : null
         }
@@ -7430,7 +7433,7 @@ function blockFormatKind(
         accountPositionAtOpen={accountAtOpen !== null}
       />
 
-      <Bibliography references={references} />
+      {!richText && <Bibliography references={references} />}
 
       {richText && <CardColumn ref={setColumnHost} split={split} comments={columnComments} />}
       {inColumn(<>

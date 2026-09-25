@@ -304,6 +304,7 @@ export function DocsEditor({
   flushRef,
   aiControls,
   imported = null,
+  footer,
 }: {
   documentId: string;
   notebookId: string;
@@ -321,6 +322,8 @@ export function DocsEditor({
   aiControls?: ReactNode;
   /** An import; null for a blank document. */
   imported?: Imported | null;
+  /** Under the pages, under the header: an import's References section. */
+  footer?: ReactNode;
 }) {
   const t = useT();
   useDocsFonts();
@@ -615,6 +618,7 @@ export function DocsEditor({
         {chrome}
       </div>
       {pages}
+      {footer}
     </div>
   );
 }

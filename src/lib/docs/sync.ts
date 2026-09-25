@@ -4,30 +4,41 @@ import { diffSegments, remapAnchor } from "@/lib/anchors/remap";
 import { resolveAnchor } from "@/lib/anchors/resolve";
 import { db } from "@/lib/db";
 import { deriveBlocks, ensureBlockIds, type DerivedBlock } from "@/lib/docs/blocks";
-import { sanitizeRichText, type RichNode } from "@/lib/docs/schema";
+import { hasFigures, sanitizeRichText, stableJson, withDocumentFigures, type RichNode } from "@/lib/docs/schema";
 import { keepVersion } from "@/lib/docs/versions";
 
-// One save of a blank document (SPEC.md §29): the rich text is stored and its
-// paragraph index — the document's Block rows — is brought in line with it in
-// the same transaction. Every anchor on a paragraph whose words changed is
-// remapped the way the block edit route remaps it; an anchor whose words left
-// their paragraph (Enter split it, Backspace joined it, the paragraph was
-// removed) is found again by its quote across the document, and orphans
-// visibly only when its words are gone (SPEC.md §5). An orphan on a paragraph
-// whose words changed or came back (Ctrl+Z) tries its quote again.
+// One save of a document with rich text, a blank document or an import
+// (SPEC.md §29): the rich text is stored and its paragraph index — the
+// document's Block rows — is brought in line with it in the same
+// transaction. Every anchor on a paragraph whose words changed is remapped
+// the way the block edit route remaps it; an anchor whose words left their
+// paragraph (Enter split it, Backspace joined it, the paragraph was removed)
+// is found again by its quote across the document, and orphans visibly only
+// when its words are gone (SPEC.md §5). An orphan on a paragraph whose words
+// changed or came back (Ctrl+Z) tries its quote again. A figure object's
+// anchor stays with its figure: it never moves into a paragraph.
 
 /** Edits by one account to one paragraph within this long merge into one
     history row, so typing reads as one change, not one per save. */
 const COALESCE_MS = 10 * 60 * 1000;
+
+/** Rows per statement, under Postgres's limit on bound values. */
+const ROWS_PER_STATEMENT = 500;
 
 type OldBlock = {
   id: string;
   order: number;
   type: string;
   text: string;
+  /** Null on a figure object's row: a save never reads a figure's html. */
   html: string | null;
   styles: Prisma.JsonValue;
   links: Prisma.JsonValue;
+  page: number | null;
+  region: Prisma.JsonValue;
+  citations: Prisma.JsonValue;
+  mediaId: string | null;
+  cell: Prisma.JsonValue;
 };
 
 export type SyncOk = {
@@ -54,8 +65,45 @@ function kindOf(b: { type: string; html: string | null }): string {
   return "paragraph";
 }
 
+/** Two JSON values alike, whatever order their keys come in (jsonb reads
+    them back in its own order). Null and a missing value are alike. */
 function sameJson(a: unknown, b: unknown): boolean {
-  return JSON.stringify(a ?? []) === JSON.stringify(b ?? []);
+  return stableJson(a ?? null) === stableJson(b ?? null);
+}
+
+/** The row's layout changed: its type, or its html — a figure object's row
+    compares its media instead, since its html is the media's. */
+function formatDiffers(before: OldBlock, d: DerivedBlock): boolean {
+  if (before.type !== d.type) return true;
+  return d.mediaId === null && (before.mediaId !== null || (before.html ?? null) !== (d.html ?? null));
+}
+
+/** Anything of the row differs from what the rich text derives. A change to
+    only its page, region, citations, media, or cell rewrites the row and
+    writes no history. */
+function rowDiffers(before: OldBlock, d: DerivedBlock): boolean {
+  return (
+    before.text !== d.text ||
+    formatDiffers(before, d) ||
+    (before.mediaId ?? null) !== d.mediaId ||
+    (before.page ?? null) !== d.page ||
+    !sameJson(before.styles ?? [], d.styles) ||
+    !sameJson(before.links ?? [], d.links) ||
+    !sameJson(before.citations ?? [], d.citations) ||
+    !sameJson(before.region, d.region) ||
+    !sameJson(before.cell, d.cell)
+  );
+}
+
+/** A JSON value for a jsonb column: null stays SQL NULL. */
+function jsonb(value: unknown): Prisma.InputJsonValue | typeof Prisma.DbNull {
+  return value === null || value === undefined ? Prisma.DbNull : (value as Prisma.InputJsonValue);
+}
+
+function chunks<T>(list: T[], size = ROWS_PER_STATEMENT): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < list.length; i += size) out.push(list.slice(i, i + size));
+  return out;
 }
 
 type Placed = {
@@ -77,7 +125,8 @@ type Placed = {
 // outside it, typing inside grows it, a delete shrinks it. A mark inside a
 // longer stretch is found by its quote, else by its paragraph's word diff,
 // else by its quote across the document; it orphans only when its words are
-// gone.
+// gone. Words never land on a figure object, and a figure's anchor lands only
+// on its figure.
 
 const SEP = "\u0000";
 
@@ -88,8 +137,9 @@ type Run = {
   newText: string;
   /** Each old paragraph's start in oldText. */
   oldStart: Map<string, number>;
-  /** The run's new paragraphs and their starts in newText. */
-  newBlocks: { id: string; start: number; text: string }[];
+  /** The run's new paragraphs and their starts in newText; figure rows are
+      in the words but never a place for a mark. */
+  newBlocks: { id: string; start: number; text: string; figure: boolean }[];
   /** The shared start, and the shared end left after it. */
   head: number;
   tail: number;
@@ -107,9 +157,12 @@ type Moves = {
   /** Paragraphs with the same id and the same words before and after. */
   stable: Set<string>;
   runs: Map<string, Run | null>;
+  /** An import or a re-parse: every figure has new media, so a figure's
+      anchor may find its figure by the caption. */
+  bulk: boolean;
 };
 
-function movesOf(old: OldBlock[], derived: DerivedBlock[], newById: Map<string, DerivedBlock>): Moves {
+function movesOf(old: OldBlock[], derived: DerivedBlock[], newById: Map<string, DerivedBlock>, bulk: boolean): Moves {
   return {
     old,
     oldIndex: new Map(old.map((b, i) => [b.id, i])),
@@ -118,6 +171,7 @@ function movesOf(old: OldBlock[], derived: DerivedBlock[], newById: Map<string, 
     newById,
     stable: new Set(old.filter((b) => newById.get(b.id)?.text === b.text).map((b) => b.id)),
     runs: new Map(),
+    bulk,
   };
 }
 
@@ -155,7 +209,7 @@ function runAround(m: Moves, blockId: string): Run | null {
     let newText = "";
     m.derived.slice(from, to).forEach((block, k) => {
       if (k > 0) newText += SEP;
-      newBlocks.push({ id: block.id, start: newText.length, text: block.text });
+      newBlocks.push({ id: block.id, start: newText.length, text: block.text, figure: block.type === "FIGURE" });
       newText += block.text;
     });
     const most = Math.min(oldText.length, newText.length);
@@ -181,6 +235,7 @@ function runAround(m: Moves, blockId: string): Run | null {
 function spanIn(run: Run, from: number, to: number): Span | null {
   let best: Span | null = null;
   for (const block of run.newBlocks) {
+    if (block.figure) continue;
     let start = Math.max(from, block.start) - block.start;
     let end = Math.min(to, block.start + block.text.length) - block.start;
     while (start < end && /\s/.test(block.text[start])) start++;
@@ -231,6 +286,7 @@ function findInRun(run: Run, anchor: Anchor): Span | null {
   const quote = { quotedText: anchor.quote, prefix: anchor.prefix, suffix: anchor.suffix };
   for (const find of [matchInText, findQuoteLoose]) {
     for (const block of run.newBlocks) {
+      if (block.figure) continue;
       const hit = find(block.text, quote);
       if (hit) return { blockId: block.id, start: hit.start, end: hit.end };
     }
@@ -243,7 +299,7 @@ function remapInBlock(m: Moves, anchor: Anchor): Span | null {
   const i = m.oldIndex.get(anchor.blockId);
   const before = i === undefined ? undefined : m.old[i];
   const after = m.newById.get(anchor.blockId);
-  if (!before || !after || before.text === after.text) return null;
+  if (!before || !after || before.text === after.text || after.type === "FIGURE") return null;
   const r = remapAnchor(diffSegments(before.text, after.text), after.text, {
     startOffset: anchor.startOffset,
     endOffset: anchor.endOffset,
@@ -266,38 +322,19 @@ function regrow(text: string, span: Span, original: string): Span {
 
 const CONTEXT = 32;
 
-/** Where an anchor's words are after the save. */
-function relocate(anchor: Anchor, m: Moves): Placed {
-  const run = runAround(m, anchor.blockId);
-  const mapped = run ? mapInRun(run, anchor) : "inside";
-  let span = mapped === "inside" ? ((run && findInRun(run, anchor)) ?? remapInBlock(m, anchor)) : mapped;
-  if (span) {
-    const text = m.newById.get(span.blockId)?.text ?? "";
-    span = regrow(text, span, anchor.original);
-    return {
-      blockId: span.blockId,
-      startOffset: span.start,
-      endOffset: span.end,
-      quotedText: text.slice(span.start, span.end),
-      prefix: text.slice(Math.max(0, span.start - CONTEXT), span.start),
-      suffix: text.slice(span.end, span.end + CONTEXT),
-      orphaned: false,
-    };
-  }
-  return refind(anchor, m.derived);
+function placedAt(span: Span, text: string): Placed {
+  return {
+    blockId: span.blockId,
+    startOffset: span.start,
+    endOffset: span.end,
+    quotedText: text.slice(span.start, span.end),
+    prefix: text.slice(Math.max(0, span.start - CONTEXT), span.start),
+    suffix: text.slice(span.end, span.end + CONTEXT),
+    orphaned: false,
+  };
 }
 
-/** An anchor's words found by its quote across the document, else orphaned. */
-function refind(anchor: Anchor, blocks: DerivedBlock[]): Placed {
-  const found = resolveAnchor(blocks, {
-    blockId: anchor.blockId,
-    startOffset: anchor.startOffset,
-    endOffset: anchor.endOffset,
-    quotedText: anchor.quote,
-    prefix: anchor.prefix,
-    suffix: anchor.suffix,
-  });
-  if (found) return { ...found, orphaned: false };
+function orphanedAt(anchor: Anchor): Placed {
   return {
     blockId: anchor.blockId,
     startOffset: anchor.startOffset,
@@ -309,266 +346,376 @@ function refind(anchor: Anchor, blocks: DerivedBlock[]): Placed {
   };
 }
 
-/** Store a blank document's rich text and bring its Block rows in line.
-    Either `richText` — the editor's copy, which must start from `baseRev` —
-    or `edit`, a server-side change applied to the stored text under the
-    same lock, so an editor save and a server edit never overwrite each
-    other. */
+/** Whether the anchor sits on a figure: its row was a FIGURE row, or is one. */
+function onFigure(m: Moves, blockId: string): boolean {
+  const i = m.oldIndex.get(blockId);
+  return (i === undefined ? m.newById.get(blockId)?.type : m.old[i].type) === "FIGURE";
+}
+
+/** Where an anchor's words are after the save. */
+function relocate(anchor: Anchor, m: Moves): Placed {
+  if (onFigure(m, anchor.blockId)) return refindFigure(anchor, m);
+  const run = runAround(m, anchor.blockId);
+  const mapped = run ? mapInRun(run, anchor) : "inside";
+  let span = mapped === "inside" ? ((run && findInRun(run, anchor)) ?? remapInBlock(m, anchor)) : mapped;
+  if (span) {
+    const text = m.newById.get(span.blockId)?.text ?? "";
+    span = regrow(text, span, anchor.original);
+    return placedAt(span, text);
+  }
+  return refind(anchor, m);
+}
+
+/** An anchor's words found by its quote across the document's words — never
+    in a figure's caption — else orphaned. A figure's anchor goes to its
+    figure (refindFigure). */
+function refind(anchor: Anchor, m: Moves): Placed {
+  if (onFigure(m, anchor.blockId)) return refindFigure(anchor, m);
+  const found = resolveAnchor(
+    m.derived.filter((d) => d.type !== "FIGURE"),
+    {
+      blockId: anchor.blockId,
+      startOffset: anchor.startOffset,
+      endOffset: anchor.endOffset,
+      quotedText: anchor.quote,
+      prefix: anchor.prefix,
+      suffix: anchor.suffix,
+    },
+  );
+  return found ? { ...found, orphaned: false } : orphanedAt(anchor);
+}
+
+/** A figure's anchor (R5): on its own figure while it stands; else on the
+    figure object with the same media (it moved, or was cut and pasted);
+    else, after an import or a re-parse — every figure with new media — on
+    the figure whose caption is the quote, the one at the same place among
+    the figures with that caption. Never on a paragraph: with no figure, it
+    orphans. */
+function refindFigure(anchor: Anchor, m: Moves): Placed {
+  const figures = m.derived.filter((d) => d.type === "FIGURE");
+  const own = m.newById.get(anchor.blockId);
+  const before = m.old[m.oldIndex.get(anchor.blockId) ?? -1];
+  let target: DerivedBlock | undefined = own?.type === "FIGURE" ? own : undefined;
+  if (!target && before?.mediaId) target = figures.find((d) => d.mediaId === before.mediaId);
+  if (!target && m.bulk) {
+    const same = figures.filter((d) => d.text === anchor.quote);
+    const rank = m.old.filter((b) => b.type === "FIGURE" && b.text === anchor.quote).findIndex((b) => b.id === anchor.blockId);
+    target = same[Math.min(Math.max(rank, 0), same.length - 1)];
+  }
+  if (!target) return orphanedAt(anchor);
+  const found = resolveAnchor([target], {
+    blockId: target.id,
+    startOffset: anchor.startOffset,
+    endOffset: anchor.endOffset,
+    quotedText: anchor.quote,
+    prefix: anchor.prefix,
+    suffix: anchor.suffix,
+  });
+  return found ? { ...found, orphaned: false } : orphanedAt(anchor);
+}
+
+/** Store a document's rich text and bring its Block rows in line. Either
+    `richText` — the editor's copy, which must start from `baseRev` — or
+    `edit`, a server-side change applied to the stored text under the same
+    lock, so an editor save and a server edit never overwrite each other.
+
+    `bulk` is an import or a re-parse (SPEC.md §29): the rows are written in
+    bulk with no history row per paragraph and no version of the sitting
+    (the caller keeps its named one, lib/docs/versions.ts keepNamedVersion),
+    a new row counts as parsed (originalText null), a figure's anchor may
+    find its figure by the caption, and Document.importRev takes the new
+    revision. `tx` runs the save inside the caller's transaction. */
 export async function syncRichText({
   documentId,
   userId,
   baseRev,
   richText: given,
   edit,
+  bulk = false,
+  tx: outer,
 }: {
   documentId: string;
-  userId: string;
+  userId: string | null;
   baseRev: number | null;
   richText?: RichNode;
   edit?: (current: RichNode) => RichNode | null;
+  bulk?: boolean;
+  tx?: Prisma.TransactionClient;
 }): Promise<SyncResult> {
-  return db.$transaction(
-    async (tx) => {
-      // One save at a time per document: the row lock orders them. keptAt is
-      // the newest version's time, else the first edit's (lib/docs/versions.ts).
-      const [locked] = await tx.$queryRaw<
-        { richTextRev: number; richTextSavedAt: Date | null; richTextSavedBy: string | null; createdAt: Date; keptAt: Date | null }[]
-      >`
-        SELECT "richTextRev", "richTextSavedAt", "richTextSavedBy", "createdAt",
-          COALESCE(
-            (SELECT "savedAt" FROM "DocumentVersion" WHERE "documentId" = ${documentId} ORDER BY "rev" DESC LIMIT 1),
-            (SELECT min("createdAt") FROM "BlockEdit" WHERE "documentId" = ${documentId})
-          ) AS "keptAt"
-        FROM "Document" WHERE "id" = ${documentId} FOR UPDATE`;
-      if (!locked) throw new Error("document not found");
-      let richText = given ?? null;
-      if (edit) {
-        const current = await tx.document.findUnique({ where: { id: documentId }, select: { richText: true } });
-        const next = current?.richText ? edit(current.richText as unknown as RichNode) : null;
-        richText = next ? sanitizeRichText(ensureBlockIds(next)) : null;
-        if (!richText) return { ok: false as const, reason: "noop" as const };
-      }
+  const save = async (tx: Prisma.TransactionClient): Promise<SyncResult> => {
+    // One save at a time per document: the row lock orders them. keptAt is
+    // the newest version's time, else the first edit's (lib/docs/versions.ts).
+    const [locked] = await tx.$queryRaw<
+      { richTextRev: number; richTextSavedAt: Date | null; richTextSavedBy: string | null; createdAt: Date; keptAt: Date | null }[]
+    >`
+      SELECT "richTextRev", "richTextSavedAt", "richTextSavedBy", "createdAt",
+        COALESCE(
+          (SELECT "savedAt" FROM "DocumentVersion" WHERE "documentId" = ${documentId} ORDER BY "rev" DESC LIMIT 1),
+          (SELECT min("createdAt") FROM "BlockEdit" WHERE "documentId" = ${documentId})
+        ) AS "keptAt"
+      FROM "Document" WHERE "id" = ${documentId} FOR UPDATE`;
+    if (!locked) throw new Error("document not found");
+    let richText = given ?? null;
+    if (edit) {
+      const current = await tx.document.findUnique({ where: { id: documentId }, select: { richText: true } });
+      const next = current?.richText ? edit(current.richText as unknown as RichNode) : null;
+      richText = next ? sanitizeRichText(ensureBlockIds(next)) : null;
       if (!richText) return { ok: false as const, reason: "noop" as const };
-      const derived = deriveBlocks(richText);
-      if (baseRev !== null && locked.richTextRev !== baseRev) {
-        const current = await tx.document.findUnique({ where: { id: documentId }, select: { richText: true } });
-        return {
-          ok: false as const,
-          reason: "rev" as const,
-          rev: locked.richTextRev,
-          richText: (current?.richText ?? null) as RichNode | null,
-        };
-      }
-
-      const old = await tx.block.findMany({
+    }
+    if (!richText) return { ok: false as const, reason: "noop" as const };
+    if (baseRev !== null && locked.richTextRev !== baseRev) {
+      const current = await tx.document.findUnique({ where: { id: documentId }, select: { richText: true } });
+      return {
+        ok: false as const,
+        reason: "rev" as const,
+        rev: locked.richTextRev,
+        richText: (current?.richText ?? null) as RichNode | null,
+      };
+    }
+    // Figure objects hold only this document's media, and their words are
+    // the media's (R6): a crafted save or a paste from another document
+    // changes no caption and brings no figure.
+    if (hasFigures(richText)) {
+      const media = await tx.figureMedia.findMany({
         where: { documentId },
-        orderBy: { order: "asc" },
-        select: { id: true, order: true, type: true, text: true, html: true, styles: true, links: true },
+        select: { id: true, caption: true, page: true, region: true },
       });
-      const oldById = new Map<string, OldBlock>(old.map((b) => [b.id, b]));
-      const newById = new Map(derived.map((d) => [d.id, d]));
+      richText = withDocumentFigures(richText, new Map(media.map((f) => [f.id, f])));
+    }
+    const derived = deriveBlocks(richText);
 
-      const created = derived
-        .map((d, order) => ({ d, order }))
-        .filter(({ d }) => !oldById.has(d.id));
-      // A new paragraph's id must be new everywhere: a pasted node can carry
-      // an id from another document. The editor gives those nodes fresh ids
-      // and saves again.
-      if (created.length > 0) {
-        const taken = await tx.block.findMany({
-          where: { id: { in: created.map(({ d }) => d.id) } },
-          select: { id: true },
+    // The stored rows, a figure object's html left in the database: a save
+    // compares a figure's media, never its html.
+    const old = await tx.$queryRaw<OldBlock[]>`
+      SELECT "id", "order", "type"::text AS "type", "text",
+        CASE WHEN "mediaId" IS NULL THEN "html" END AS "html",
+        "styles", "links", "page", "region", "citations", "mediaId", "cell"
+      FROM "Block" WHERE "documentId" = ${documentId} ORDER BY "order" ASC`;
+    const oldById = new Map<string, OldBlock>(old.map((b) => [b.id, b]));
+    const newById = new Map(derived.map((d) => [d.id, d]));
+
+    const created = derived
+      .map((d, order) => ({ d, order }))
+      .filter(({ d }) => !oldById.has(d.id));
+    // A new paragraph's id must be new everywhere: a pasted node can carry
+    // an id from another document. The editor gives those nodes fresh ids
+    // and saves again.
+    if (created.length > 0) {
+      const taken = await tx.block.findMany({
+        where: { id: { in: created.map(({ d }) => d.id) } },
+        select: { id: true },
+      });
+      if (taken.length > 0) return { ok: false as const, reason: "ids" as const, ids: taken.map((b) => b.id) };
+    }
+    const removed = old.filter((b) => !newById.has(b.id));
+    const kept: { d: DerivedBlock; order: number; before: OldBlock }[] = [];
+    derived.forEach((d, order) => {
+      const before = oldById.get(d.id);
+      if (before) kept.push({ d, order, before });
+    });
+    const textChanged = kept.filter((k) => k.before.text !== k.d.text);
+    const formatChanged = kept.filter((k) => formatDiffers(k.before, k.d));
+    const contentChanged = kept.filter((k) => rowDiffers(k.before, k.d));
+    const moved = kept.filter((k) => k.before.order !== k.order);
+
+    // Anchors on paragraphs whose words changed or left, and the orphans on
+    // paragraphs whose words changed or came back.
+    const affected = [...textChanged.map((k) => k.d.id), ...removed.map((b) => b.id)];
+    const returned = [...textChanged.map((k) => k.d.id), ...created.map(({ d }) => d.id)];
+    const moves = movesOf(old, derived, newById, bulk);
+    let marksChanged = false;
+    if (affected.length > 0 || returned.length > 0) {
+      const [sources, links] = await Promise.all([
+        tx.source.findMany({
+          where: {
+            documentId,
+            layer: null,
+            startTime: null,
+            OR: [
+              { blockId: { in: affected }, orphaned: false },
+              { blockId: { in: returned }, orphaned: true },
+            ],
+          },
+        }),
+        affected.length > 0
+          ? tx.docLink.findMany({ where: { OR: [{ fromBlockId: { in: affected } }, { toBlockId: { in: affected } }] } })
+          : [],
+      ]);
+      for (const src of sources) {
+        const anchor = {
+          blockId: src.blockId,
+          startOffset: src.startOffset,
+          endOffset: src.endOffset,
+          quote: src.anchoredText ?? src.quotedText,
+          original: src.quotedText,
+          prefix: src.prefix,
+          suffix: src.suffix,
+        };
+        const placed = src.orphaned ? refind(anchor, moves) : relocate(anchor, moves);
+        if (placed.orphaned && src.orphaned) continue;
+        if (placed.orphaned !== src.orphaned) marksChanged = true;
+        await tx.source.update({
+          where: { id: src.id },
+          data: placed.orphaned
+            ? { orphaned: true }
+            : {
+                blockId: placed.blockId,
+                startOffset: placed.startOffset,
+                endOffset: placed.endOffset,
+                // The quote never changes (SPEC.md §5); the words the
+                // anchor covers now ride anchoredText.
+                anchoredText: placed.quotedText === src.quotedText ? null : placed.quotedText,
+                prefix: placed.prefix,
+                suffix: placed.suffix,
+                orphaned: false,
+              },
         });
-        if (taken.length > 0) return { ok: false as const, reason: "ids" as const, ids: taken.map((b) => b.id) };
       }
-      const removed = old.filter((b) => !newById.has(b.id));
-      const kept: { d: DerivedBlock; order: number; before: OldBlock }[] = [];
-      derived.forEach((d, order) => {
-        const before = oldById.get(d.id);
-        if (before) kept.push({ d, order, before });
-      });
-      const textChanged = kept.filter((k) => k.before.text !== k.d.text);
-      const formatChanged = kept.filter(
-        (k) => k.before.type !== k.d.type || (k.before.html ?? null) !== (k.d.html ?? null),
-      );
-      const contentChanged = kept.filter(
-        (k) =>
-          k.before.text !== k.d.text ||
-          k.before.type !== k.d.type ||
-          (k.before.html ?? null) !== (k.d.html ?? null) ||
-          !sameJson(k.before.styles, k.d.styles) ||
-          !sameJson(k.before.links, k.d.links),
-      );
-      const moved = kept.filter((k) => k.before.order !== k.order);
-
-      // Anchors on paragraphs whose words changed or left, and the orphans on
-      // paragraphs whose words changed or came back.
-      const affected = [...textChanged.map((k) => k.d.id), ...removed.map((b) => b.id)];
-      const returned = [...textChanged.map((k) => k.d.id), ...created.map(({ d }) => d.id)];
-      const moves = movesOf(old, derived, newById);
-      let marksChanged = false;
-      if (affected.length > 0 || returned.length > 0) {
-        const [sources, links] = await Promise.all([
-          tx.source.findMany({
-            where: {
-              documentId,
-              layer: null,
-              startTime: null,
-              OR: [
-                { blockId: { in: affected }, orphaned: false },
-                { blockId: { in: returned }, orphaned: true },
-              ],
+      const touched = new Set(affected);
+      for (const link of links) {
+        if (touched.has(link.fromBlockId) && link.fromDocumentId === documentId && !link.fromOrphaned) {
+          const placed = relocate(
+            {
+              blockId: link.fromBlockId,
+              startOffset: link.startOffset,
+              endOffset: link.endOffset,
+              quote: link.quotedText,
+              original: link.quotedText,
+              prefix: link.prefix,
+              suffix: link.suffix,
             },
-          }),
-          affected.length > 0
-            ? tx.docLink.findMany({ where: { OR: [{ fromBlockId: { in: affected } }, { toBlockId: { in: affected } }] } })
-            : [],
-        ]);
-        for (const src of sources) {
-          const anchor = {
-            blockId: src.blockId,
-            startOffset: src.startOffset,
-            endOffset: src.endOffset,
-            quote: src.anchoredText ?? src.quotedText,
-            original: src.quotedText,
-            prefix: src.prefix,
-            suffix: src.suffix,
-          };
-          const placed = src.orphaned ? refind(anchor, derived) : relocate(anchor, moves);
-          if (placed.orphaned && src.orphaned) continue;
-          if (placed.orphaned !== src.orphaned) marksChanged = true;
-          await tx.source.update({
-            where: { id: src.id },
+            moves,
+          );
+          if (placed.orphaned) marksChanged = true;
+          await tx.docLink.update({
+            where: { id: link.id },
             data: placed.orphaned
-              ? { orphaned: true }
+              ? { fromOrphaned: true }
               : {
-                  blockId: placed.blockId,
+                  fromBlockId: placed.blockId,
                   startOffset: placed.startOffset,
                   endOffset: placed.endOffset,
-                  // The quote never changes (SPEC.md §5); the words the
-                  // anchor covers now ride anchoredText.
-                  anchoredText: placed.quotedText === src.quotedText ? null : placed.quotedText,
+                  quotedText: placed.quotedText,
                   prefix: placed.prefix,
                   suffix: placed.suffix,
-                  orphaned: false,
                 },
           });
         }
-        const touched = new Set(affected);
-        for (const link of links) {
-          if (touched.has(link.fromBlockId) && link.fromDocumentId === documentId && !link.fromOrphaned) {
-            const placed = relocate(
-              {
-                blockId: link.fromBlockId,
-                startOffset: link.startOffset,
-                endOffset: link.endOffset,
-                quote: link.quotedText,
-                original: link.quotedText,
-                prefix: link.prefix,
-                suffix: link.suffix,
-              },
-              moves,
-            );
-            if (placed.orphaned) marksChanged = true;
-            await tx.docLink.update({
-              where: { id: link.id },
-              data: placed.orphaned
-                ? { fromOrphaned: true }
-                : {
-                    fromBlockId: placed.blockId,
-                    startOffset: placed.startOffset,
-                    endOffset: placed.endOffset,
-                    quotedText: placed.quotedText,
-                    prefix: placed.prefix,
-                    suffix: placed.suffix,
-                  },
-            });
-          }
-          if (
-            link.toBlockId &&
-            touched.has(link.toBlockId) &&
-            link.toDocumentId === documentId &&
-            !link.toOrphaned &&
-            link.toStartOffset !== null &&
-            link.toEndOffset !== null &&
-            link.toQuotedText !== null
-          ) {
-            const placed = relocate(
-              {
-                blockId: link.toBlockId,
-                startOffset: link.toStartOffset,
-                endOffset: link.toEndOffset,
-                quote: link.toQuotedText,
-                original: link.toQuotedText,
-                prefix: link.toPrefix ?? "",
-                suffix: link.toSuffix ?? "",
-              },
-              moves,
-            );
-            if (placed.orphaned) marksChanged = true;
-            await tx.docLink.update({
-              where: { id: link.id },
-              data: placed.orphaned
-                ? { toOrphaned: true }
-                : {
-                    toBlockId: placed.blockId,
-                    toStartOffset: placed.startOffset,
-                    toEndOffset: placed.endOffset,
-                    toQuotedText: placed.quotedText,
-                    toPrefix: placed.prefix,
-                    toSuffix: placed.suffix,
-                  },
-            });
-          }
+        if (
+          link.toBlockId &&
+          touched.has(link.toBlockId) &&
+          link.toDocumentId === documentId &&
+          !link.toOrphaned &&
+          link.toStartOffset !== null &&
+          link.toEndOffset !== null &&
+          link.toQuotedText !== null
+        ) {
+          const placed = relocate(
+            {
+              blockId: link.toBlockId,
+              startOffset: link.toStartOffset,
+              endOffset: link.toEndOffset,
+              quote: link.toQuotedText,
+              original: link.toQuotedText,
+              prefix: link.toPrefix ?? "",
+              suffix: link.toSuffix ?? "",
+            },
+            moves,
+          );
+          if (placed.orphaned) marksChanged = true;
+          await tx.docLink.update({
+            where: { id: link.id },
+            data: placed.orphaned
+              ? { toOrphaned: true }
+              : {
+                  toBlockId: placed.blockId,
+                  toStartOffset: placed.startOffset,
+                  toEndOffset: placed.endOffset,
+                  toQuotedText: placed.quotedText,
+                  toPrefix: placed.prefix,
+                  toSuffix: placed.suffix,
+                },
+          });
         }
       }
+    }
 
-      // The rows themselves.
-      if (removed.length > 0) {
-        await tx.block.deleteMany({ where: { id: { in: removed.map((b) => b.id) } } });
-      }
-      if (created.length > 0) {
-        await tx.block.createMany({
-          data: created.map(({ d, order }) => ({
-            id: d.id,
-            documentId,
-            order,
-            type: d.type,
-            text: d.text,
-            html: d.html,
-            styles: d.styles as unknown as Prisma.InputJsonValue,
-            links: d.links as unknown as Prisma.InputJsonValue,
-            // User-authored, like an inserted paragraph.
-            originalText: "",
-          })),
-        });
-      }
-      for (const { d } of contentChanged) {
-        await tx.block.update({
-          where: { id: d.id },
-          data: {
-            text: d.text,
-            type: d.type,
-            html: d.html,
-            styles: d.styles as unknown as Prisma.InputJsonValue,
-            links: d.links as unknown as Prisma.InputJsonValue,
-          },
-        });
-      }
-      if (moved.length > 0) {
-        const rows = Prisma.join(moved.map((k) => Prisma.sql`(${k.d.id}, ${k.order}::int)`));
-        await tx.$executeRaw`
-          UPDATE "Block" AS b SET "order" = v.o FROM (VALUES ${rows}) AS v(id, o) WHERE b."id" = v.id`;
-      }
-      if (textChanged.length > 0) {
-        // The search vector no longer matches the words; the next search re-embeds.
-        const ids = Prisma.join(textChanged.map((k) => k.d.id));
-        await tx.$executeRaw`UPDATE "Block" SET "embedding" = NULL WHERE "id" IN (${ids})`;
-      }
+    // A figure object's row copies its media's html when the row is new or
+    // its media changed; any other save leaves the html where it is.
+    const mediaIds = new Set<string>();
+    for (const { d } of created) if (d.mediaId) mediaIds.add(d.mediaId);
+    for (const { d, before } of contentChanged) if (d.mediaId && d.mediaId !== before.mediaId) mediaIds.add(d.mediaId);
+    const mediaHtml = new Map<string, string | null>();
+    if (mediaIds.size > 0) {
+      const media = await tx.figureMedia.findMany({
+        where: { documentId, id: { in: [...mediaIds] } },
+        select: { id: true, html: true },
+      });
+      for (const f of media) mediaHtml.set(f.id, f.html);
+    }
+    const htmlOf = (d: DerivedBlock) => (d.mediaId ? (mediaHtml.get(d.mediaId) ?? null) : d.html);
 
-      // The history (SPEC.md §12): one row per paragraph added, removed,
-      // retyped, or restyled — typing merges into the account's last row for
-      // the paragraph while it is fresh.
+    // The rows themselves.
+    if (removed.length > 0) {
+      await tx.block.deleteMany({ where: { id: { in: removed.map((b) => b.id) } } });
+    }
+    for (const part of chunks(created)) {
+      await tx.block.createMany({
+        data: part.map(({ d, order }) => ({
+          id: d.id,
+          documentId,
+          order,
+          type: d.type,
+          text: d.text,
+          html: htmlOf(d),
+          styles: d.styles as unknown as Prisma.InputJsonValue,
+          links: d.links as unknown as Prisma.InputJsonValue,
+          citations: d.citations as unknown as Prisma.InputJsonValue,
+          page: d.page,
+          region: jsonb(d.region),
+          mediaId: d.mediaId,
+          cell: jsonb(d.cell),
+          // An import's rows are its parse's; a row typed later is
+          // user-authored, like an inserted paragraph.
+          originalText: bulk ? null : "",
+        })),
+      });
+    }
+    for (const part of chunks(contentChanged)) {
+      const rows = part.map(({ d, before }) => {
+        // A figure object's row keeps its html while its media stays.
+        const keepHtml = d.mediaId !== null && d.mediaId === before.mediaId;
+        const json = (value: unknown) => (value === null || value === undefined ? null : JSON.stringify(value));
+        return Prisma.sql`(${d.id}, ${d.text}, ${d.type}, ${keepHtml ? null : htmlOf(d)}::text, ${keepHtml}::boolean,
+          ${json(d.styles)}::jsonb, ${json(d.links)}::jsonb, ${json(d.citations)}::jsonb, ${d.page}::int,
+          ${json(d.region)}::jsonb, ${d.mediaId}::text, ${json(d.cell)}::jsonb)`;
+      });
+      await tx.$executeRaw`
+        UPDATE "Block" AS b SET
+          "text" = v.text, "type" = v.type::"BlockType", "html" = CASE WHEN v.keep THEN b."html" ELSE v.html END,
+          "styles" = v.styles, "links" = v.links, "citations" = v.citations, "page" = v.page,
+          "region" = v.region, "mediaId" = v.media, "cell" = v.cell
+        FROM (VALUES ${Prisma.join(rows)})
+          AS v(id, text, type, html, keep, styles, links, citations, page, region, media, cell)
+        WHERE b."id" = v.id`;
+    }
+    for (const part of chunks(moved)) {
+      const rows = Prisma.join(part.map((k) => Prisma.sql`(${k.d.id}, ${k.order}::int)`));
+      await tx.$executeRaw`
+        UPDATE "Block" AS b SET "order" = v.o FROM (VALUES ${rows}) AS v(id, o) WHERE b."id" = v.id`;
+    }
+    for (const part of chunks(textChanged)) {
+      // The search vector no longer matches the words; the next search re-embeds.
+      const ids = Prisma.join(part.map((k) => k.d.id));
+      await tx.$executeRaw`UPDATE "Block" SET "embedding" = NULL WHERE "id" IN (${ids})`;
+    }
+
+    // The history (SPEC.md §12): one row per paragraph added, removed,
+    // retyped, or restyled — typing merges into the account's last row for
+    // the paragraph while it is fresh. An import and a re-parse write none:
+    // the caller writes its one entry.
+    const removedEdits: Record<string, string> = {};
+    if (!bulk) {
       const since = new Date(Date.now() - COALESCE_MS);
       const touchedIds = [...removed.map((b) => b.id), ...textChanged.map((k) => k.d.id), ...formatChanged.map((k) => k.d.id)];
       const recent =
@@ -579,14 +726,13 @@ export async function syncRichText({
             })
           : [];
       const latest = new Map<string, (typeof recent)[number]>();
-      for (const edit of recent) if (edit.blockId && !latest.has(edit.blockId)) latest.set(edit.blockId, edit);
+      for (const e of recent) if (e.blockId && !latest.has(e.blockId)) latest.set(e.blockId, e);
 
       for (const { d } of created) {
         await tx.blockEdit.create({
           data: { documentId, blockId: d.id, kind: "BLOCK_ADD", after: d.text, userId },
         });
       }
-      const removedEdits: Record<string, string> = {};
       for (const b of removed) {
         const last = latest.get(b.id);
         if (last && last.kind === "BLOCK_ADD") {
@@ -600,7 +746,8 @@ export async function syncRichText({
             blockId: b.id,
             kind: "BLOCK_REMOVE",
             before: b.text,
-            meta: { order: b.order, type: b.type, html: b.html, originalText: "" },
+            // A figure object comes back from its media (lib/docs/ops.ts nodeForBlock).
+            meta: { order: b.order, type: b.type, html: b.html, originalText: "", ...(b.mediaId ? { mediaId: b.mediaId } : {}) },
             userId,
           },
         });
@@ -636,18 +783,21 @@ export async function syncRichText({
         savedBy: locked.richTextSavedBy,
         keptAt: locked.keptAt,
       });
-      const saved = await tx.document.update({
-        where: { id: documentId },
-        data: {
-          richText: richText as unknown as Prisma.InputJsonValue,
-          richTextRev: { increment: 1 },
-          richTextSavedAt: new Date(),
-          richTextSavedBy: userId,
-        },
-        select: { richTextRev: true },
-      });
-      return { ok: true as const, rev: saved.richTextRev, removedEdits, marksChanged };
-    },
-    { timeout: 30_000, maxWait: 15_000 },
-  );
+    }
+    const rev = locked.richTextRev + 1;
+    await tx.document.update({
+      where: { id: documentId },
+      data: {
+        richText: richText as unknown as Prisma.InputJsonValue,
+        richTextRev: rev,
+        richTextSavedAt: new Date(),
+        richTextSavedBy: userId,
+        // What the import, or its re-parse, stored: a later revision is an edit.
+        ...(bulk ? { importRev: rev } : {}),
+      },
+    });
+    return { ok: true as const, rev, removedEdits, marksChanged };
+  };
+  if (outer) return save(outer);
+  return db.$transaction(save, { timeout: bulk ? 120_000 : 30_000, maxWait: 15_000 });
 }

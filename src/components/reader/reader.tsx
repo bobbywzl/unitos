@@ -623,6 +623,8 @@ export function Reader({
     notebookId: string;
     documents: { id: string; title: string }[];
     imported?: Imported | null;
+    /** Under the pages: an import's References section. */
+    footer?: React.ReactNode;
   } | null;
   /** The block the left-off mark sits above (SPEC.md §6); reading mode only. */
   leftOffBlockId?: string | null;
@@ -1259,6 +1261,7 @@ export function Reader({
           flushRef={flushRef}
           aiControls={richText.aiControls}
           imported={richText.imported ?? null}
+          footer={richText.footer}
         />
       </DocsFrameContext.Provider>
     );
