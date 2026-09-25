@@ -216,7 +216,13 @@ export function PageSetupDialog({ store, onClose }: { store: PageStore; onClose:
           </>
         )}
       </div>
-      <DropdownPanel open={colorOpen} anchorRef={colorRef} onClose={() => setColorOpen(false)} label={t("docsPage.pageColor")}>
+      <DropdownPanel
+        open={colorOpen}
+        anchorRef={colorRef}
+        onClose={() => setColorOpen(false)}
+        className="docs-setup-colors"
+        label={t("docsPage.pageColor")}
+      >
         <div className="docs-page-colors">
           {PALETTE.flat().map((hex) => (
             <button

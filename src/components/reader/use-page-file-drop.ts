@@ -24,7 +24,7 @@ function hasFiles(e: DragEvent): boolean {
 // The page editor is not a place to add documents (SPEC.md §29): an image
 // dropped on the page's text goes into the text only (the text takes the
 // drop and cancels it), and the rest of the page editor refuses files.
-function onPageEditor(e: DragEvent): boolean {
+function overPageEditor(e: DragEvent): boolean {
   return e.target instanceof Element && e.target.closest("[data-docs-editor]") !== null;
 }
 
@@ -71,7 +71,7 @@ export function usePageFileDrop({
         return;
       }
       e.preventDefault();
-      const refuse = !enabled || onPageEditor(e);
+      const refuse = !enabled || overPageEditor(e);
       if (e.dataTransfer) e.dataTransfer.dropEffect = refuse ? "none" : "copy";
       if (refuse) {
         hide();
@@ -88,7 +88,7 @@ export function usePageFileDrop({
       hide();
       if (!hasFiles(e) || e.defaultPrevented) return;
       e.preventDefault();
-      if (!enabled || onPageEditor(e)) return;
+      if (!enabled || overPageEditor(e)) return;
       const files = [...(e.dataTransfer?.files ?? [])];
       if (files.length > 0) onDropRef.current(files);
     };

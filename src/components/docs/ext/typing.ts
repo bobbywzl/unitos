@@ -21,6 +21,7 @@ import {
   enter,
   groupEdit,
   lineBreak,
+  ListToggles,
   moveParagraphs,
   moveToParagraph,
   moveWord,
@@ -221,9 +222,12 @@ const DocsTyping = Extension.create({
               if (!(sel instanceof TextSelection) || sel.empty || !sel.$from.sameParent(sel.$to)) return;
               const block = sel.$from.parent;
               if (!block.isTextblock) return;
-              const word = wordAt(blockText(block), sel.$from.parentOffset);
+              const text = blockText(block);
+              const word = wordAt(text, sel.$from.parentOffset);
               if (!word) return;
               const start = sel.$from.start();
+              // A double-click and drag selects whole words: keep a selection past this word.
+              if (text.slice(word.to, sel.to - start).trim()) return;
               if (start + word.from === sel.from && start + word.to === sel.to) return;
               view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, start + word.from, start + word.to)));
             }, 0);
@@ -261,4 +265,4 @@ const NonPrinting = InvisibleCharacters.configure({
   ],
 });
 
-export const typingExtensions: AnyExtension[] = [DocsTyping, NonPrinting];
+export const typingExtensions: AnyExtension[] = [DocsTyping, NonPrinting, ListToggles];

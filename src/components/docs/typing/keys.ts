@@ -1,9 +1,9 @@
-import type { Editor } from "@tiptap/core";
+import { Extension, type CommandProps, type Editor } from "@tiptap/core";
 import { closeHistory } from "@tiptap/pm/history";
 import { Fragment, type Node as PMNode, type NodeType, type ResolvedPos } from "@tiptap/pm/model";
 import { Selection, TextSelection, type EditorState, type Transaction } from "@tiptap/pm/state";
 import { liftListItem, sinkListItem } from "@tiptap/pm/schema-list";
-import { canSplit, liftTarget } from "@tiptap/pm/transform";
+import { canJoin, canSplit, findWrapping, liftTarget } from "@tiptap/pm/transform";
 import type { EditorView } from "@tiptap/pm/view";
 import { isSuggesting } from "@/components/docs/ext/suggest";
 import { atMenuState } from "@/components/docs/insert/at-plugin";
@@ -395,6 +395,46 @@ function removeBullet(view: EditorView, $from: ResolvedPos, item: ItemAt): boole
   endStructure(view);
   return true;
 }
+
+/** Ctrl+Shift+7/8/9 and the list buttons. A line that heads no list item (a
+    paragraph, or an item's later paragraph, as Backspace leaves a line) goes
+    into a list of the kind where it stands, one indent step less, so its
+    text keeps its place; the lists of the kind before and after it join
+    it. List lines toggle as in Tiptap. Below the list nodes in priority, so
+    these commands replace theirs. */
+export const ListToggles = Extension.create({
+  name: "docsListToggles",
+  priority: 99,
+  addCommands() {
+    const toggle =
+      (listName: "bulletList" | "orderedList" | "taskList", itemName: "listItem" | "taskItem") =>
+      () =>
+      ({ state, tr, dispatch, commands }: CommandProps): boolean => {
+        const { $from, $to } = state.selection;
+        const type = state.schema.nodes[listName];
+        const block = $from.parent;
+        const heads = isListItem($from.node(-1)) && $from.index(-1) === 0;
+        const range = block.isTextblock && !heads && $from.sameParent($to) ? $from.blockRange() : null;
+        const wrapping = range && type ? findWrapping(range, type) : null;
+        if (!range || !wrapping) return commands.toggleList(listName, itemName);
+        if (!dispatch) return true;
+        const indent = num(block.attrs.indentLeft);
+        if (indent > 0) tr.setNodeMarkup(range.start, undefined, { ...block.attrs, indentLeft: orNull(Math.max(0, indent - STEP_PT)) });
+        // The new list takes its neighbor's preset and numbering.
+        const near = [range.parent.maybeChild(range.startIndex - 1), range.parent.maybeChild(range.endIndex)].find((n) => n?.type === type);
+        tr.wrap(range, near ? [{ type, attrs: near.attrs }, ...wrapping.slice(1)] : wrapping);
+        const after = range.start + (tr.doc.nodeAt(range.start)?.nodeSize ?? 0);
+        if (tr.doc.nodeAt(after)?.type === type && canJoin(tr.doc, after)) tr.join(after);
+        if (tr.doc.resolve(range.start).nodeBefore?.type === type && canJoin(tr.doc, range.start)) tr.join(range.start);
+        return true;
+      };
+    return {
+      toggleBulletList: toggle("bulletList", "listItem"),
+      toggleOrderedList: toggle("orderedList", "listItem"),
+      toggleTaskList: toggle("taskList", "taskItem"),
+    };
+  },
+});
 
 // ── Delete ──────────────────────────────────────────────────────────────
 

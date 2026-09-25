@@ -348,12 +348,12 @@
 }
 
 /* ── The rulers: 15 px strips on the canvas color, the margin areas a shade
-   darker. The ruler row sits under the toolbar: the corner (Page setup),
-   then the strip, 16 px in from each side. */
+   darker. The ruler row sits 8 px under the toolbar: the corner (Page
+   setup), then the strip, 16 px in from each side. */
 .docs-ruler-row {
   position: relative;
   height: 16px;
-  margin: 4px -12px -6px;
+  margin: 8px -12px -6px;
   background: var(--docs-canvas);
 }
 .docs-ruler-corner {
@@ -982,6 +982,10 @@
 /* Set as default sits at the left of the buttons. */
 .docs-setup-default {
   margin-right: auto;
+}
+/* The color palette opens over its dialog. */
+.docs-menu.docs-setup-colors {
+  z-index: 71;
 }
 .docs-page-colors {
   display: grid;
