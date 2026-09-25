@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import { useCollab } from "@/components/collab/collab-context";
+import { useAuthor, useCollab } from "@/components/collab/collab-context";
 import { PersonBadge } from "@/components/collab/person-badge";
 import { ReplyThread, replyTime } from "@/components/collab/reply-thread";
 import { CheckIcon, MoreVertIcon } from "@/components/docs/icons";
@@ -15,7 +15,6 @@ import { Markdown } from "@/components/markdown";
 import { api } from "@/lib/api";
 import { isImeKey } from "@/lib/ime";
 import { markdownStyleKey } from "@/lib/markdown-style";
-import { personOf } from "@/lib/person";
 import type { ReplyView } from "@/lib/types";
 
 // A comment's card in the page editor's margin, as Google Docs draws it
@@ -62,7 +61,8 @@ export function CommentCard({
   const t = useT();
   const lang = useLang();
   const router = useRouter();
-  const { authOn, canEdit, people } = useCollab();
+  const { canEdit } = useCollab();
+  const authorOf = useAuthor();
   const cardRef = useRef<HTMLDivElement>(null);
   const moreRef = useRef<HTMLButtonElement>(null);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -117,12 +117,7 @@ export function CommentCard({
     return () => document.removeEventListener("pointerdown", onDown);
   }, [busy, unsaved, onClose]);
 
-  // Without sign-in every comment is the local reader's, named as the
-  // history names them.
-  const person = written?.by
-    ? (people[written.by] ??
-      (authOn ? undefined : personOf({ id: written.by, name: t("panes.historyYou"), symbol: "", color: "", picture: "" })))
-    : undefined;
+  const person = written?.by ? authorOf(written.by) : undefined;
   const open = replies.filter((r) => r.resolvedById === null);
   const canResolve = canEdit && open.length > 0;
 

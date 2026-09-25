@@ -4,7 +4,7 @@ import { useEditorState, type Editor } from "@tiptap/react";
 import type { Node as PMNode } from "@tiptap/pm/model";
 import { useLayoutEffect, useRef } from "react";
 import { createPortal } from "react-dom";
-import { useCollab } from "@/components/collab/collab-context";
+import { useAuthor } from "@/components/collab/collab-context";
 import { PersonBadge } from "@/components/collab/person-badge";
 import { replyTime } from "@/components/collab/reply-thread";
 import { isSuggestionMark, settleSuggestions, suggestionAuthor, suggestionTime, ZWSP } from "@/components/docs/ext/suggest";
@@ -159,7 +159,7 @@ export function SuggestionCard({
 }) {
   const t = useT();
   const lang = useLang();
-  const { people } = useCollab();
+  const authorOf = useAuthor();
   const change = useEditorState({ editor, selector: ({ editor: e }) => readChange(e.state.doc, id, t) });
   const cardRef = useRef<HTMLDivElement>(null);
   const from = change?.from ?? -1;
@@ -179,7 +179,7 @@ export function SuggestionCard({
   }, [editor, pane, from]);
   if (!change) return null;
   const author = suggestionAuthor(id);
-  const person = people[author];
+  const person = authorOf(author);
   const at = suggestionTime(id);
   const settle = (accept: boolean) => settleSuggestions(editor, accept, id);
   const { added, removed, formats } = change;
