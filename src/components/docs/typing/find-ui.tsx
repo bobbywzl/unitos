@@ -275,7 +275,7 @@ export function FindReplaceDialog({ editor, open, onClose }: { editor: Editor; o
           onClick={() => {
             const query = find.query;
             const count = replaceAll(view, replacement);
-            setMessage(t("docsTyping.replaced", { count, query }));
+            setMessage(t(count === 1 ? "docsTyping.replacedOne" : "docsTyping.replaced", { count, query }));
             findRef.current?.focus();
           }}
         >

@@ -90,6 +90,7 @@ const SECTIONS: { title: TKey; rows: Row[] }[] = [
     rows: [
       { label: "docsTyping.scWordCount", pc: ["Mod+Shift+C"] },
       { label: "docsTyping.scFootnote", pc: ["Mod+Alt+F"] },
+      { label: "docsTyping.scEnterFootnote", pc: ["Mod+Alt+E F"] },
       { label: "docs.spellcheck", pc: ["Mod+Alt+X", "F7"] },
       { label: "docsTyping.scMoveTo", what: "docsTyping.navMisspelling", pc: ["Mod+'", "Mod+;"] },
       { label: "docsTyping.dictionary", pc: ["Mod+Shift+Y"] },
@@ -109,6 +110,7 @@ const SECTIONS: { title: TKey; rows: Row[] }[] = [
       { label: "docsLayer.minimizeComments", pc: ["Mod+Alt+Shift+W M"] },
       { label: "docsLayer.hideComments", pc: ["Mod+Alt+Shift+J"] },
       nav("docsTyping.navComment", "C"),
+      { label: "docsTyping.scEnterComment", pc: ["Mod+Alt+E C"] },
       { label: "common.reply", pc: ["R"] },
       { label: "docsLayer.nextComment", pc: ["J"] },
       { label: "docsLayer.previousComment", pc: ["K"] },
@@ -129,6 +131,7 @@ const SECTIONS: { title: TKey; rows: Row[] }[] = [
       nav("docsTyping.navFootnote", "F"),
       nav("docsTyping.navTable", "T"),
       nav("docsTyping.navSuggestion", "U"),
+      nav("docsTyping.navFormatChange", "W"),
     ],
   },
 ];

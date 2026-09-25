@@ -1,5 +1,5 @@
 import { Extension, Mark, type AnyExtension, type Editor } from "@tiptap/core";
-import type { Mark as PMMark, MarkSpec, Node as PMNode } from "@tiptap/pm/model";
+import type { Fragment, Mark as PMMark, MarkSpec, Node as PMNode } from "@tiptap/pm/model";
 import { EditorState, Plugin, Selection, TextSelection, type Transaction } from "@tiptap/pm/state";
 import {
   AddMarkStep,
@@ -645,10 +645,22 @@ function asSeen(doc: PMNode, ids: Set<string>): Transform {
   return t;
 }
 
+/** Two stretches of blocks read the same, whatever their block ids (the
+    copy a suggestion adds takes new ones). */
+function sameBlocks(a: Fragment, b: Fragment): boolean {
+  if (a.childCount !== b.childCount) return false;
+  return a.content.every((x, i) => {
+    const y = b.child(i);
+    if (x.isText) return x.eq(y);
+    const attrs = "blockId" in x.attrs ? { ...y.attrs, blockId: x.attrs.blockId } : y.attrs;
+    return x.hasMarkup(y.type, attrs, y.marks) && sameBlocks(x.content, y.content);
+  });
+}
+
 /** A block edit that meets this author's own list changes (a list toggled
     again, a line of their new list nested) takes their place: the text
     before them, and the edit's result as the author sees it, make one list
-    change, or none when they are the same. */
+    change, or none when they read the same. */
 function replaceListChanges(tr: Transaction, state: EditorState, author: string, id: string): { tr: Transaction; seen: Transform } | null {
   const start = state.doc.content.findDiffStart(tr.doc.content);
   const end = state.doc.content.findDiffEnd(tr.doc.content);
@@ -660,10 +672,11 @@ function replaceListChanges(tr: Transaction, state: EditorState, author: string,
   if (own.length === 0) return null;
   const before = takeBack(state.doc, own);
   const seen = asSeen(tr.doc, new Set(own.map((s) => s.id)));
-  const out = state.tr;
-  for (const step of before.steps) out.step(step);
   const step = oneReplace(before.doc, seen.doc);
-  if (step) {
+  if (!step && !before.doc.eq(seen.doc)) return null;
+  const out = state.tr;
+  for (const s of before.steps) out.step(s);
+  if (step && !(step instanceof ReplaceStep && sameBlocks(before.doc.slice(step.from, step.to).content, step.slice.content))) {
     const base = EditorState.create({ doc: before.doc });
     const edit = base.tr.step(step);
     for (const tracked of track(edit, base, othersAdded(edit, author), () => id).steps) out.step(tracked);

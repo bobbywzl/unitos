@@ -61,6 +61,7 @@ import {
   PARAGRAPH_FLAGS,
   setLineSpacing,
   setSpace,
+  CustomSpacingDialog,
   SpacingMenu,
   toggleFlag,
   type ParagraphState,
@@ -113,7 +114,7 @@ const MENUS: [string, TKey, string[], DocsMenu?][] = [
   ["highlight-color", "docs.highlightColor", ["background color", "marker"]],
   ["image", "docs.insertImage", ["picture", "photo", "add a photo", "add a picture", "add an image", "upload from computer", "by url"], "insert"],
   ["align", "docs.align", ["align & indent", "alignment"]],
-  ["line-spacing", "docs.customSpacing", ["line spacing", "paragraph spacing", "set line spacing", "change line spacing", "custom space"]],
+  ["line-spacing", "docs.lineSpacing", ["line spacing", "paragraph spacing", "set line spacing", "change line spacing"]],
   ["checklist", "docs.checklistMenu", ["checklist styles", BULLETS, "create checklist", "insert checklist", "todo", "task", "action item", "strikethrough when checked", "don't strikethrough when checked"]],
   ["bulleted-list", "docs.bulletedListMenu", ["bullet styles", BULLETS, "apply bulleted list", "toggle bulleted list", "start bulleted list"]],
   ["numbered-list", "docs.numberedListMenu", ["numbering styles", BULLETS, "apply numbered list", "toggle numbered list", "start numbered list"]],
@@ -223,7 +224,7 @@ export function DocsToolbar({
   const s = useEditorState({ editor: target, selector: () => readToolbar(target) });
   const paint = usePaintFormat(editor);
   const [customFor, setCustomFor] = useState<"text" | "highlight" | null>(null);
-  const [dialog, setDialog] = useState<"indent" | "numbering" | null>(null);
+  const [dialog, setDialog] = useState<"indent" | "numbering" | "spacing" | null>(null);
   const off = mode === "viewing" || !canEdit;
   // A header or footer holds text formatting and alignment only
   // (page/header-footer.tsx).
@@ -284,8 +285,17 @@ export function DocsToolbar({
         modeRef.current.onMode("viewing");
       }
     };
+    // The right-click menu's Suggest edits.
+    const onModeEvent = (e: Event) => {
+      if (modeRef.current.canEdit) modeRef.current.onMode((e as CustomEvent<DocsMode>).detail);
+    };
+    const dom = editor.view.dom;
     window.addEventListener("keydown", onKey, true);
-    return () => window.removeEventListener("keydown", onKey, true);
+    dom.addEventListener(DOCS_EVENT.mode, onModeEvent);
+    return () => {
+      window.removeEventListener("keydown", onKey, true);
+      dom.removeEventListener(DOCS_EVENT.mode, onModeEvent);
+    };
   }, [editor]);
 
   const applyColor = (kind: "text" | "highlight", hex: string | null) => {
@@ -425,6 +435,7 @@ export function DocsToolbar({
     add("space-after", t(after ? "docs.removeSpaceAfter" : "docs.addSpaceAfter"), "format", () => setSpace(editor, s.para, "after", after ? 0 : 10));
     if (!pageless) for (const { flag, key, words } of PARAGRAPH_FLAGS) add(flag, t(key), "format", () => toggleFlag(editor, s.para, flag), { words });
     add("indentation-options", t("docs.indentationOptions"), "format", () => setDialog("indent"), { words: ["hanging indent", "first line indent"] });
+    add("custom-spacing", t("docs.customSpacing"), "format", () => setDialog("spacing"), { words: ["custom space"] });
     // List options: Restart numbering asks for the number; the right-click
     // menu's restarts at 1.
     const listWords = ["list options", BULLETS];
@@ -643,7 +654,7 @@ export function DocsToolbar({
               </DropBtn>
               {bodyOnly(
                 <>
-                  <SpacingMenu editor={editor} para={s.para} pageless={pageless} />
+                  <SpacingMenu editor={editor} para={s.para} pageless={pageless} onCustom={() => setDialog("spacing")} />
                   {split(A.checklist, s.lists.taskList !== undefined, "docs.checklistMenu", (close) => (
                     <ChecklistPalette editor={editor} current={s.lists.taskList} close={close} />
                   ))}
@@ -724,6 +735,7 @@ export function DocsToolbar({
       />
       {dialog === "indent" && <IndentDialog editor={editor} onClose={closeDialog} />}
       {dialog === "numbering" && <RestartNumberingDialog editor={editor} onClose={closeDialog} />}
+      {dialog === "spacing" && <CustomSpacingDialog editor={editor} para={s.para} onClose={closeDialog} />}
       {customFor && (
         <CustomColorDialog
           initial={(customFor === "text" ? s.color : s.highlight) ?? "#000000"}

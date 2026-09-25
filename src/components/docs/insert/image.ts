@@ -634,7 +634,8 @@ function moveFloating(editor: Editor, dx: number, dy: number, pixel: boolean): b
   return setImageAttrs(editor.view, hit.pos, { offsetX: Math.round(a.offsetX + dx * step), offsetY: Math.round(a.offsetY + dy * step) });
 }
 
-/** While an image is dragged, its toolbar steps aside (insert.css). */
+/** An image drag ends: the image's toolbar, hidden while it moved
+    (insert.css), shows again. */
 function endMove() {
   document.body.classList.remove("docs-img-moving");
 }
@@ -737,7 +738,7 @@ export const DocsImage = Extension.create({
           handleDOMEvents: {
             // An image drags as the page's own node (ProseMirror moves it,
             // with the drop caret): the reader's figure gesture never sees
-            // the drag, which would cancel it.
+            // the drag, which would cancel it, and the toolbar steps aside.
             dragstart: (_view, event) => {
               if (!(event.target instanceof Element && event.target.closest(".docs-img"))) return;
               event.stopPropagation();

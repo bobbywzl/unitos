@@ -672,7 +672,7 @@ export function Workspace({
         />
       )}
 
-      <div className="relative flex min-h-0 min-w-0 pb-[calc(54px+env(safe-area-inset-bottom))] md:pb-0 print:block">
+      <div className="relative flex min-h-0 min-w-0 pb-[calc(54px+env(safe-area-inset-bottom))] md:pb-0 print:block print:pb-0">
         {/* The strip: in a split view (globals.css .reader-strip) the reader
             keeps the strip's full width and the tray column follows past its
             right edge; in Normal view it is a plain row, reader then tray. */}
@@ -700,7 +700,7 @@ export function Workspace({
           ref={trayColumnRef}
           style={{ "--tray-w": `${trayWidth}px` } as React.CSSProperties}
           inert={(collapsed && !mobileTray) || undefined}
-          className={`tray-column flex min-h-0 shrink-0 md:overflow-hidden print:hidden ${
+          className={`tray-column flex min-h-0 shrink-0 md:overflow-hidden ${
             resizing || split ? "tray-column-resizing" : ""
           } ${collapsed ? "md:w-0" : "md:w-[var(--tray-w)]"}`}
         >

@@ -1,7 +1,7 @@
 "use client";
 
 import type { Editor } from "@tiptap/react";
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useState } from "react";
 import { useT } from "@/components/lang-provider";
 import type { DocsAreaProps } from "@/components/docs/areas/types";
 import { registerDocsCommands, type DocsCommand } from "@/components/docs/commands";
@@ -172,7 +172,10 @@ export function TypingLayer({ editor }: DocsAreaProps) {
   const [voiceOpen, setVoiceOpen] = useState(false);
 
   // Google Docs' navigation keys: the chords, the misspellings, Dictionary.
-  useEffect(() => listenNavigation(editor, () => docsActive(editor)), [editor]);
+  // A layout effect: the chords' listener is the window's first, so the key
+  // after a chord's first key never reaches the modes' keys (toolbar.tsx) or
+  // the zoom keys (areas/page.tsx).
+  useLayoutEffect(() => listenNavigation(editor, () => docsActive(editor)), [editor]);
 
   useEffect(() => {
     const view = editor.view;

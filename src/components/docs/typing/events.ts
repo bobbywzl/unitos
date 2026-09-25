@@ -10,6 +10,7 @@ export const DOCS_EVENT = {
   link: "docs:link",
   comment: "docs:comment",
   tool: "docs:unitos-tool",
+  mode: "docs:mode",
 } as const;
 
 /** The typing area's windows (areas/typing.tsx, word-count.tsx). */

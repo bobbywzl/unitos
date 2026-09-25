@@ -43,7 +43,8 @@
 
 /* Blocks a suggestion puts back with the same words (a list toggled, a
    paragraph moved) draw once: the removed copy hides, and a list changed in
-   place draws as a format change. */
+   place draws as a format change. A list's change of kind or level draws on
+   its bullets, numbers, and boxes, as Google Docs draws it. */
 [data-docs-mode]:not([data-docs-mode="viewing"]) .docs-prose .docs-suggest-hidden {
   display: none;
 }
@@ -51,6 +52,15 @@
   color: inherit;
   text-decoration-style: dotted;
   background: color-mix(in srgb, var(--docs-suggest-ink) var(--docs-suggest-tint, 0%), transparent);
+}
+.docs-prose [data-suggestion-block="insertion"] > :is(ul, ol).docs-suggest-restyled,
+.docs-prose [data-suggestion-block="modification"] > :is(ul, ol) {
+  text-decoration-line: none;
+  background: none;
+}
+[data-docs-mode]:not([data-docs-mode="viewing"]) .docs-prose :is([data-suggestion-block="insertion"] > .docs-suggest-restyled li, [data-suggestion-block="modification"] > :is(ul, ol) > li)::marker,
+[data-docs-mode]:not([data-docs-mode="viewing"]) .docs-prose :is([data-suggestion-block="insertion"] > .docs-suggest-restyled li, [data-suggestion-block="modification"] > :is(ul, ol) > li) > label {
+  color: var(--docs-suggest-ink);
 }
 
 /* Viewing mode reads the document without its suggestions. */

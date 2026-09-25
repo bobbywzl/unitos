@@ -353,7 +353,7 @@ function buildEntries(editor: Editor, ctx: InsertContext, t: ReturnType<typeof u
   out.push(
     item("docsInsert.comment", <AddCommentIcon />, () => fireDocs(editor, DOCS_EVENT.comment), { shortcut: keys("Mod+Alt+M") }),
     // Suggest edits: the page switches to Suggesting mode (toolbar.tsx).
-    ...(editing && !isSuggesting(editor) ? [item("docsInsert.suggestEdits", <SuggestIcon />, () => fireDocs(editor, "docs:mode", "suggesting"))] : []),
+    ...(editing && !isSuggesting(editor) ? [item("docsInsert.suggestEdits", <SuggestIcon />, () => fireDocs(editor, DOCS_EVENT.mode, "suggesting"))] : []),
     item("docsInsert.addToNotes", <NotesIcon size={18} />, tool("add-to-notes"), { disabled: !textSelected }),
     item("docsInsert.explain", <QuestionIcon size={18} />, tool("explain"), { disabled: !textSelected }),
     item("docsInsert.askAssistant", <SparkleIcon size={18} />, tool("assistant"), { disabled: !textSelected }),

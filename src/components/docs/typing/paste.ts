@@ -278,20 +278,30 @@ function imageSpot(doc: PMNode, pos: number): number {
   return insertPoint(doc, $pos.after(), line.type.schema.nodes.image) ?? $pos.after();
 }
 
-/** Upload images and insert them at `pos` (the selection when absent, which
-    the first image replaces), each on its own line (imageSpot). */
+/** Insert images at `pos` (the selection when absent, which the first image
+    replaces), each on its own line (imageSpot). Each shows at once from a
+    blob: address, uploads, and takes the stored address, as copyImages
+    does; one the server refuses goes, with the reason. */
 export async function insertImageFiles(editor: Editor, files: File[], pos?: number): Promise<void> {
   let at = pos;
-  for (const file of files) {
-    try {
-      const { url } = await uploadImage(file);
-      if (editor.isDestroyed) return;
-      insertImage(editor, { src: url }, at);
-      at = editor.state.selection.to;
-    } catch (err) {
-      uploadFailed(editor, err);
-    }
-  }
+  const shown = files.map((file) => {
+    const src = URL.createObjectURL(file);
+    insertImage(editor, { src }, at);
+    at = editor.state.selection.to;
+    return src;
+  });
+  await Promise.all(
+    files.map(async (file, i) => {
+      let url: string | null = null;
+      try {
+        url = (await uploadImage(file)).url;
+      } catch (err) {
+        uploadFailed(editor, err);
+      }
+      setImageSrc(editor, shown[i], url);
+      URL.revokeObjectURL(shown[i]);
+    }),
+  );
 }
 
 /** A new image selected in `tr` hands the caret to the empty line under it,

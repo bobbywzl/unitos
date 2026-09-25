@@ -70,120 +70,119 @@ export function SpacingMenu({
   editor,
   para,
   pageless,
+  onCustom,
 }: {
   editor: Editor;
   para: ParagraphState;
   pageless: boolean;
+  /** Custom spacing: the toolbar keeps the dialog, so it outlives the ⋮ bubble. */
+  onCustom: () => void;
 }) {
   const t = useT();
-  const [dialog, setDialog] = useState(false);
   const custom = !LINE_SPACINGS.some((s) => same(s.value, para.lineSpacing));
   const before = para.spaceBefore > 0;
   const after = para.spaceAfter > 0;
   return (
-    <>
-      <DropBtn
-        id="line-spacing"
-        label={t("docs.lineSpacing")}
-        track="line-spacing"
-        arrow={false}
-        className="docs-tb-menu-btn"
-        face={<LineSpacingIcon />}
-      >
-        {(close) => (
-          <>
-            {LINE_SPACINGS.map((s) => (
-              <MenuItem
-                key={s.value}
-                checked={same(s.value, para.lineSpacing)}
-                onSelect={() => {
-                  close();
-                  setLineSpacing(editor, para, s.value);
-                }}
-                track={`docs:line-spacing:${s.value}`}
-              >
-                {t(s.key)}
-              </MenuItem>
-            ))}
-            {custom && (
-              <MenuItem checked onSelect={close}>
-                {t("docs.spacingCustomValue", { n: customLabel(para.lineSpacing) })}
-              </MenuItem>
+    <DropBtn
+      id="line-spacing"
+      label={t("docs.lineSpacing")}
+      track="line-spacing"
+      arrow={false}
+      className="docs-tb-menu-btn"
+      face={<LineSpacingIcon />}
+    >
+      {(close) => (
+        <>
+          {LINE_SPACINGS.map((s) => (
+            <MenuItem
+              key={s.value}
+              checked={same(s.value, para.lineSpacing)}
+              onSelect={() => {
+                close();
+                setLineSpacing(editor, para, s.value);
+              }}
+              track={`docs:line-spacing:${s.value}`}
+            >
+              {t(s.key)}
+            </MenuItem>
+          ))}
+          {custom && (
+            <MenuItem checked onSelect={close}>
+              {t("docs.spacingCustomValue", { n: customLabel(para.lineSpacing) })}
+            </MenuItem>
+          )}
+          <MenuSeparator />
+          <MenuItem
+            onSelect={() => {
+              close();
+              setSpace(editor, para, "before", before ? 0 : 10);
+            }}
+            track="docs:space-before"
+          >
+            {t(
+              para.inList
+                ? before
+                  ? "docs.removeSpaceBeforeItem"
+                  : "docs.addSpaceBeforeItem"
+                : before
+                  ? "docs.removeSpaceBefore"
+                  : "docs.addSpaceBefore",
             )}
-            <MenuSeparator />
-            <MenuItem
-              onSelect={() => {
-                close();
-                setSpace(editor, para, "before", before ? 0 : 10);
-              }}
-              track="docs:space-before"
-            >
-              {t(
-                para.inList
-                  ? before
-                    ? "docs.removeSpaceBeforeItem"
-                    : "docs.addSpaceBeforeItem"
-                  : before
-                    ? "docs.removeSpaceBefore"
-                    : "docs.addSpaceBefore",
-              )}
-            </MenuItem>
-            <MenuItem
-              onSelect={() => {
-                close();
-                setSpace(editor, para, "after", after ? 0 : 10);
-              }}
-              track="docs:space-after"
-            >
-              {t(
-                para.inList
-                  ? after
-                    ? "docs.removeSpaceAfterItem"
-                    : "docs.addSpaceAfterItem"
-                  : after
-                    ? "docs.removeSpaceAfter"
-                    : "docs.addSpaceAfter",
-              )}
-            </MenuItem>
-            <MenuSeparator />
-            <MenuItem
-              onSelect={() => {
-                close();
-                setDialog(true);
-              }}
-              track="docs:custom-spacing"
-            >
-              {t("docs.customSpacing")}
-            </MenuItem>
-            {!pageless && (
-              <>
-                <MenuSeparator />
-                {PARAGRAPH_FLAGS.map((f) => (
-                  <MenuItem
-                    key={f.flag}
-                    role="menuitemcheckbox"
-                    checked={para.flags[f.flag]}
-                    onSelect={() => {
-                      close();
-                      toggleFlag(editor, para, f.flag);
-                    }}
-                    track={`docs:${f.flag}`}
-                  >
-                    {t(f.key)}
-                  </MenuItem>
-                ))}
-              </>
+          </MenuItem>
+          <MenuItem
+            onSelect={() => {
+              close();
+              setSpace(editor, para, "after", after ? 0 : 10);
+            }}
+            track="docs:space-after"
+          >
+            {t(
+              para.inList
+                ? after
+                  ? "docs.removeSpaceAfterItem"
+                  : "docs.addSpaceAfterItem"
+                : after
+                  ? "docs.removeSpaceAfter"
+                  : "docs.addSpaceAfter",
             )}
-          </>
-        )}
-      </DropBtn>
-      {dialog && <CustomSpacingDialog editor={editor} para={para} onClose={() => setDialog(false)} />}
-    </>
+          </MenuItem>
+          <MenuSeparator />
+          <MenuItem
+            onSelect={() => {
+              close();
+              onCustom();
+            }}
+            track="docs:custom-spacing"
+          >
+            {t("docs.customSpacing")}
+          </MenuItem>
+          {!pageless && (
+            <>
+              <MenuSeparator />
+              {PARAGRAPH_FLAGS.map((f) => (
+                <MenuItem
+                  key={f.flag}
+                  role="menuitemcheckbox"
+                  checked={para.flags[f.flag]}
+                  onSelect={() => {
+                    close();
+                    toggleFlag(editor, para, f.flag);
+                  }}
+                  track={`docs:${f.flag}`}
+                >
+                  {t(f.key)}
+                </MenuItem>
+              ))}
+            </>
+          )}
+        </>
+      )}
+    </DropBtn>
   );
 }
 
 /** Custom spacing: the line spacing and the space before and after, in points. */
-function CustomSpacingDialog({ editor, para, onClose }: { editor: Editor; para: ParagraphState; onClose: () => void }) {
+export function CustomSpacingDialog({ editor, para, onClose }: { editor: Editor; para: ParagraphState; onClose: () => void }) {
   const t = useT();
   const [line, setLine] = useState(customLabel(para.lineSpacing));
   const [before, setBefore] = useState(String(para.spaceBefore));
