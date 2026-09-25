@@ -29,14 +29,14 @@ export type ParagraphState = {
   styleFlags: Record<ParagraphFlag, boolean>;
 };
 
-const STANDARD = [
+export const LINE_SPACINGS = [
   { value: 1, key: "docs.spacingSingle" },
   { value: 1.15, key: "docs.spacing115" },
   { value: 1.5, key: "docs.spacing15" },
   { value: 2, key: "docs.spacingDouble" },
 ] as const;
 
-const FLAGS: { flag: ParagraphFlag; key: "docs.keepWithNext" | "docs.keepLinesTogether" | "docs.preventSingleLines" | "docs.pageBreakBefore" }[] = [
+export const PARAGRAPH_FLAGS: { flag: ParagraphFlag; key: "docs.keepWithNext" | "docs.keepLinesTogether" | "docs.preventSingleLines" | "docs.pageBreakBefore" }[] = [
   { flag: "keepWithNext", key: "docs.keepWithNext" },
   { flag: "keepLinesTogether", key: "docs.keepLinesTogether" },
   { flag: "preventSingleLines", key: "docs.preventSingleLines" },
@@ -75,7 +75,7 @@ export function SpacingMenu({
 }) {
   const t = useT();
   const [dialog, setDialog] = useState(false);
-  const custom = !STANDARD.some((s) => same(s.value, para.lineSpacing));
+  const custom = !LINE_SPACINGS.some((s) => same(s.value, para.lineSpacing));
   const before = para.spaceBefore > 0;
   const after = para.spaceAfter > 0;
   return (
@@ -90,7 +90,7 @@ export function SpacingMenu({
       >
         {(close) => (
           <>
-            {STANDARD.map((s) => (
+            {LINE_SPACINGS.map((s) => (
               <MenuItem
                 key={s.value}
                 checked={same(s.value, para.lineSpacing)}
@@ -156,7 +156,7 @@ export function SpacingMenu({
             {!pageless && (
               <>
                 <MenuSeparator />
-                {FLAGS.map((f) => (
+                {PARAGRAPH_FLAGS.map((f) => (
                   <MenuItem
                     key={f.flag}
                     role="menuitemcheckbox"

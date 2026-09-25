@@ -1,6 +1,5 @@
 import type { Editor } from "@tiptap/core";
 import { Fragment, Slice, type Mark, type ResolvedPos, type Schema } from "@tiptap/pm/model";
-import type { Transaction } from "@tiptap/pm/state";
 import type { EditorView } from "@tiptap/pm/view";
 import { fragmentToMarkdown, markdownToHtml } from "@/components/docs/typing/markdown";
 import { uploadImage } from "@/lib/images";
@@ -34,16 +33,6 @@ export function plainTextSlice(schema: Schema, text: string, $context: ResolvedP
   return new Slice(Fragment.from(nodes), 1, 1);
 }
 
-/** Insert plain text at the selection, in the style at the caret. */
-function insertPlainText(view: EditorView, text: string): void {
-  const { state } = view;
-  const marks = state.storedMarks ?? state.selection.$from.marks();
-  const slice = plainTextSlice(state.schema, text, state.selection.$from, marks);
-  const tr: Transaction = state.tr.replaceSelection(slice).scrollIntoView();
-  tr.setMeta("paste", true);
-  view.dispatch(tr);
-}
-
 /** Ctrl+Shift+V: the browser's own paste event carries plain text (the
     editor sees Shift held). Where the browser fires none, the clipboard is
     read and its text goes in plain. */
@@ -56,7 +45,7 @@ export function armPlainPaste(view: EditorView): void {
     if (!read) return;
     read()
       .then((text) => {
-        if (text && view.editable && !view.isDestroyed) insertPlainText(view, text);
+        if (text && view.editable && !view.isDestroyed) view.pasteText(text);
       })
       .catch(() => {
         // No permission to read the clipboard: nothing to paste.

@@ -13,6 +13,16 @@ import type { TextWidth } from "@/components/docs/page/geometry";
 
 export type HeaderArea = "header" | "footer";
 
+/** The commands reach the page's parts through these window events. */
+export const PAGE_EVENT = {
+  /** Enter the header or the footer of the page that holds the caret. */
+  editHeader: "docs:page-edit-header",
+  /** Put the page count at the caret of the header or footer being edited. */
+  pageCount: "docs:page-count",
+} as const;
+
+export type EditHeaderDetail = { area: HeaderArea };
+
 type PageState = {
   documentId: string;
   setup: PageSetup;

@@ -1,5 +1,5 @@
 import { Extension, Node, mergeAttributes, type Editor } from "@tiptap/core";
-import { Plugin, PluginKey, type Transaction } from "@tiptap/pm/state";
+import { Plugin, PluginKey, TextSelection, type Transaction } from "@tiptap/pm/state";
 import { Fragment, Slice, type Node as PMNode } from "@tiptap/pm/model";
 import StarterKit from "@tiptap/starter-kit";
 import { BackgroundColor, Color, FontSize, TextStyle } from "@tiptap/extension-text-style";
@@ -246,20 +246,31 @@ const PageBreak = Node.create({
     return {
       setPageBreak:
         () =>
-        ({ chain }) =>
-          chain().insertContent([{ type: "pageBreak" }, { type: "paragraph" }]).run(),
+        ({ state, tr, dispatch }) => {
+          const type = state.schema.nodes.pageBreak;
+          if (!type || !state.selection.$from.parent.isTextblock) return false;
+          if (!dispatch) return true;
+          tr.deleteSelection();
+          const $at = tr.selection.$from;
+          if ($at.parentOffset === 0 && $at.parent.content.size > 0) {
+            // At a line's start the whole line moves to the new page.
+            tr.insert($at.before(), type.create());
+            return true;
+          }
+          // Anywhere else the line splits at the caret, and its second half,
+          // empty or not, starts the new page with the caret in it.
+          const at = $at.pos;
+          tr.split(at);
+          tr.insert(at + 1, type.create());
+          tr.setSelection(TextSelection.create(tr.doc, at + 3));
+          return true;
+        },
     };
   },
 });
 
-/** The size of the selection in points — a run's own size, else its named
-    style's — or null when the selection mixes sizes. */
-export function currentFontSize(editor: Editor): number | null {
-  return selectionSize(editor.state, readStyles(editor.state.doc));
-}
-
 /** One point up or down from `size`, clamped to 1–400 (Google Docs' + and −). */
-export function stepFontSize(size: number, direction: 1 | -1): number {
+function stepFontSize(size: number, direction: 1 | -1): number {
   return Math.max(1, Math.min(400, size + direction));
 }
 
@@ -274,7 +285,7 @@ export function stepSelectionFontSize(editor: Editor, direction: 1 | -1): boolea
   const tr = state.tr;
   if (state.selection.empty) {
     const existing = (state.storedMarks ?? state.selection.$from.marks()).find((m) => m.type === type);
-    const size = currentFontSize(editor) ?? DEFAULT_FONT_SIZE;
+    const size = selectionSize(state, styles) ?? DEFAULT_FONT_SIZE;
     tr.addStoredMark(type.create({ ...existing?.attrs, fontSize: `${stepFontSize(size, direction)}pt` }));
   } else {
     for (const range of state.selection.ranges) {
@@ -367,7 +378,7 @@ export function docsExtensions({ placeholder }: { placeholder: string }) {
         HTMLAttributes: { rel: "noopener noreferrer nofollow", target: "_blank" },
       },
       dropcursor: { color: "#0b57d0", width: 2 },
-      undoRedo: { depth: 500, newGroupDelay: 500 },
+      undoRedo: { depth: 500, newGroupDelay: 1000 },
     }),
     TextStyle,
     Color,

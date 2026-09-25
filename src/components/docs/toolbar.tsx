@@ -43,13 +43,21 @@ import { CustomColorDialog } from "@/components/docs/toolbar/custom-color";
 import { FontSelect } from "@/components/docs/toolbar/font-menu";
 import { FontSizeBox, formatSize, parseSize } from "@/components/docs/toolbar/font-size";
 import { ImageMenu, type ImageSource } from "@/components/docs/toolbar/image-menu";
-import { ChecklistPalette, PresetGrid, type ListState } from "@/components/docs/toolbar/list-menus";
+import { ChecklistPalette, PresetGrid } from "@/components/docs/toolbar/list-menus";
 import { BULLET_PRESETS, currentListStyle, NUMBER_PRESETS } from "@/components/docs/toolbar/lists";
 import { ModeSwitcher, type DocsMode } from "@/components/docs/toolbar/mode";
 import { ToolbarRow, type ToolbarGroup } from "@/components/docs/toolbar/overflow";
 import { usePaintFormat } from "@/components/docs/toolbar/paint-format";
 import { SEARCH_MENUS_EVENT, SearchMenus, type SearchAction } from "@/components/docs/toolbar/search-menus";
-import { setLineSpacing, setSpace, SpacingMenu, toggleFlag, type ParagraphState } from "@/components/docs/toolbar/spacing";
+import {
+  LINE_SPACINGS,
+  PARAGRAPH_FLAGS,
+  setLineSpacing,
+  setSpace,
+  SpacingMenu,
+  toggleFlag,
+  type ParagraphState,
+} from "@/components/docs/toolbar/spacing";
 import { STYLE_KEYS, STYLE_LABEL, StylesSelect, menuStyles } from "@/components/docs/toolbar/styles-menu";
 import {
   blockStyle,
@@ -68,14 +76,10 @@ import { ZoomBox, ZOOMS, type Zoom } from "@/components/docs/toolbar/zoom";
 import { TYPING_EVENT } from "@/components/docs/typing/events";
 import type { TKey } from "@/lib/i18n/dictionaries";
 
-// The page editor's toolbar (SPEC.md §29): Google Docs' toolbar, left to
-// right — Search the menus, Undo, Redo, Print, Spelling and grammar check,
-// Paint format, Zoom | Styles | Font | the size | Bold, Italic, Underline,
-// Text color, Highlight color | Insert link, Add comment, Insert image |
-// Align, Line & paragraph spacing, the three lists, Decrease indent,
-// Increase indent, Clear formatting — and at the right end the Unitos
-// tools, the mode switcher, and Hide the menus. In Viewing mode, and for a
-// reader who may not edit, the left side is Print, Add comment, and Zoom.
+// The page editor's toolbar (SPEC.md §29): Google Docs' controls in Google's
+// order, then the Unitos tools, the mode switcher, and Hide the menus. In
+// Viewing mode, and for a reader who may not edit, the left side is Print,
+// Add comment, and Zoom.
 
 export type { DocsMode, Zoom };
 export { ZOOMS };
@@ -95,20 +99,6 @@ const ALIGNS: { align: Align; key: TKey; combo: string; Icon: typeof AlignLeftIc
   { align: "right", key: "docs.alignRight", combo: "Mod+Shift+R", Icon: AlignRightIcon },
   { align: "justify", key: "docs.alignJustify", combo: "Mod+Shift+J", Icon: AlignJustifyIcon },
 ];
-
-const SPACINGS: [number, TKey][] = [
-  [1, "docs.spacingSingle"],
-  [1.15, "docs.spacing115"],
-  [1.5, "docs.spacing15"],
-  [2, "docs.spacingDouble"],
-];
-
-const FLAG_KEYS: Record<ParagraphFlag, TKey> = {
-  keepWithNext: "docs.keepWithNext",
-  keepLinesTogether: "docs.keepLinesTogether",
-  preventSingleLines: "docs.preventSingleLines",
-  pageBreakBefore: "docs.pageBreakBefore",
-};
 
 /** The toolbar menus Search the menus opens, by their DropBtn id. */
 const MENUS: [string, TKey, string[]][] = [
@@ -159,16 +149,6 @@ function readToolbar(e: Editor) {
     },
     styleFlags,
   };
-  const lists: ListState = {
-    bullet: e.isActive("bulletList"),
-    ordered: e.isActive("orderedList"),
-    task: e.isActive("taskList"),
-    styles: {
-      bulletList: currentListStyle(state, "bulletList"),
-      orderedList: currentListStyle(state, "orderedList"),
-      taskList: currentListStyle(state, "taskList"),
-    },
-  };
   return {
     canUndo: e.can().undo(),
     canRedo: e.can().redo(),
@@ -185,7 +165,12 @@ function readToolbar(e: Editor) {
     styleColor: named.color,
     align: (["left", "center", "right", "justify"].includes(align) ? align : named.align) as Align,
     para,
-    lists,
+    // Each kind's preset around the selection: undefined outside such a list.
+    lists: {
+      bulletList: currentListStyle(state, "bulletList"),
+      orderedList: currentListStyle(state, "orderedList"),
+      taskList: currentListStyle(state, "taskList"),
+    },
   };
 }
 
@@ -364,12 +349,12 @@ export function DocsToolbar({
       fire("dissect:toast", { text: t("docs.usingDefaultStyles") });
     });
     add("reset-styles", t("docs.resetStyles"), "format", () => replaceAllChanges(editor, {}));
-    for (const [value, key] of SPACINGS) add(`spacing-${value}`, `${t("docs.lineSpacing")}: ${t(key)}`, "format", () => setLineSpacing(editor, s.para, value));
+    for (const { value, key } of LINE_SPACINGS) add(`spacing-${value}`, `${t("docs.lineSpacing")}: ${t(key)}`, "format", () => setLineSpacing(editor, s.para, value));
     const before = s.para.spaceBefore > 0;
     const after = s.para.spaceAfter > 0;
     add("space-before", t(before ? "docs.removeSpaceBefore" : "docs.addSpaceBefore"), "format", () => setSpace(editor, s.para, "before", before ? 0 : 10));
     add("space-after", t(after ? "docs.removeSpaceAfter" : "docs.addSpaceAfter"), "format", () => setSpace(editor, s.para, "after", after ? 0 : 10));
-    if (!pageless) for (const flag of Object.keys(FLAG_KEYS) as ParagraphFlag[]) add(flag, t(FLAG_KEYS[flag]), "format", () => toggleFlag(editor, s.para, flag));
+    if (!pageless) for (const { flag, key } of PARAGRAPH_FLAGS) add(flag, t(key), "format", () => toggleFlag(editor, s.para, flag));
     if (canEdit) {
       add("mode-editing", t("docs.editingMode"), "view", () => onMode("editing"), true, "Mod+Alt+Shift+Z");
       add("mode-viewing", t("docs.viewingMode"), "view", () => onMode("viewing"), true, "Mod+Alt+Shift+C");
@@ -565,23 +550,23 @@ export function DocsToolbar({
                 )}
               </DropBtn>
               <SpacingMenu editor={editor} para={s.para} pageless={pageless} />
-              {split(A.checklist, s.lists.task, "docs.checklistMenu", (close) => (
-                <ChecklistPalette editor={editor} current={s.lists.styles.taskList} close={close} />
+              {split(A.checklist, s.lists.taskList !== undefined, "docs.checklistMenu", (close) => (
+                <ChecklistPalette editor={editor} current={s.lists.taskList} close={close} />
               ))}
-              {split(A.bulleted, s.lists.bullet, "docs.bulletedListMenu", (close) => (
+              {split(A.bulleted, s.lists.bulletList !== undefined, "docs.bulletedListMenu", (close) => (
                 <>
-                  <PresetGrid editor={editor} presets={BULLET_PRESETS} current={s.lists.styles.bulletList} close={close} />
+                  <PresetGrid editor={editor} presets={BULLET_PRESETS} current={s.lists.bulletList} close={close} />
                   <MenuSeparator />
                   <MenuItem
                     submenuClassName="docs-menu-lists"
-                    submenu={<ChecklistPalette editor={editor} current={s.lists.styles.taskList} close={close} />}
+                    submenu={<ChecklistPalette editor={editor} current={s.lists.taskList} close={close} />}
                   >
                     {t("docs.checklistMenu")}
                   </MenuItem>
                 </>
               ))}
-              {split(A.numbered, s.lists.ordered, "docs.numberedListMenu", (close) => (
-                <PresetGrid editor={editor} presets={NUMBER_PRESETS} current={s.lists.styles.orderedList} close={close} />
+              {split(A.numbered, s.lists.orderedList !== undefined, "docs.numberedListMenu", (close) => (
+                <PresetGrid editor={editor} presets={NUMBER_PRESETS} current={s.lists.orderedList} close={close} />
               ))}
             </>
           ),

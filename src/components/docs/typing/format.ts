@@ -3,8 +3,7 @@ import { applyFormatting, captureFormatting, type Formatting } from "@/component
 
 // The text shortcuts Google Docs binds beyond Bold, Italic, and Underline
 // (SPEC.md §29, typing): small caps, copy and paste formatting (the
-// toolbar's Paint format code), open the link under the caret, tick a
-// checklist line.
+// toolbar's Paint format code), tick a checklist line.
 
 /** Small caps on or off (a textStyle attribute). */
 export function toggleSmallCaps(editor: Editor): boolean {
@@ -15,13 +14,6 @@ export function toggleSmallCaps(editor: Editor): boolean {
     .setMark("textStyle", { fontVariant: on ? null : "small-caps" })
     .removeEmptyTextStyle()
     .run();
-  return true;
-}
-
-/** Alt+Enter: the link under the caret opens in a new tab. */
-export function openLinkAtCaret(editor: Editor): boolean {
-  const href = editor.getAttributes("link").href as string | undefined;
-  if (href) window.open(href, "_blank", "noopener,noreferrer");
   return true;
 }
 

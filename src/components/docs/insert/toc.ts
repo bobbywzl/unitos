@@ -17,7 +17,7 @@ const PX_PER_PT = 96 / 72;
 type TocEntry = { level: number; text: string; blockId: string | null; pos: number };
 
 /** The headings the table lists, in order: levels 1–3 unless it says others. */
-function tocEntries(doc: PMNode, levels: number[] = DEFAULT_LEVELS): TocEntry[] {
+export function tocEntries(doc: PMNode, levels: number[] = DEFAULT_LEVELS): TocEntry[] {
   const out: TocEntry[] = [];
   doc.descendants((node, pos) => {
     const name = node.type.name;

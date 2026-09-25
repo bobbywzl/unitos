@@ -1,20 +1,17 @@
 import { Extension, type Editor } from "@tiptap/core";
 import type { Mark, Node as PMNode, ResolvedPos } from "@tiptap/pm/model";
-import { Plugin, PluginKey, Selection, SelectionRange, TextSelection } from "@tiptap/pm/state";
+import { Plugin, Selection, SelectionRange, TextSelection } from "@tiptap/pm/state";
 import type { Mappable } from "@tiptap/pm/transform";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
 import { blockStyle } from "@/components/docs/toolbar/styles";
 
-// Format options (SPEC.md §29), from the right-click menu: Select all
-// matching text selects every run of the document formatted like the
-// selection, as one selection of many ranges that the next formatting
-// command changes at once. (Update '<style>' to match is the named styles'
-// own, toolbar/styles.ts.)
+// Format options ▸ Select all matching text (SPEC.md §29): every run
+// formatted like the selection, as one selection of many ranges that the
+// next formatting command changes at once.
 
-/** A selection of several ranges. The page draws them (it cannot show
-    more than one range itself); every command that walks the selection's
-    ranges — bold, a color, a size — changes them all. */
-export class MultiRangeSelection extends Selection {
+/** A selection of several ranges, drawn by MultiRangeDraw; every command
+    that walks the selection's ranges changes them all. */
+class MultiRangeSelection extends Selection {
   constructor(ranges: readonly SelectionRange[]) {
     super(ranges[0].$from, ranges[ranges.length - 1].$to, [...ranges]);
   }
@@ -97,15 +94,12 @@ export function selectAllMatching(editor: Editor): boolean {
   return true;
 }
 
-const multiKey = new PluginKey("docsMultiRange");
-
 /** Draws a selection of several ranges. */
 export const MultiRangeDraw = Extension.create({
   name: "docsMultiRange",
   addProseMirrorPlugins() {
     return [
       new Plugin({
-        key: multiKey,
         props: {
           decorations(state) {
             const sel = state.selection;

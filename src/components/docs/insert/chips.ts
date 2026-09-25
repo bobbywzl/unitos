@@ -1,13 +1,11 @@
-import { Node, type Editor } from "@tiptap/core";
+import { Node } from "@tiptap/core";
 import type { DOMOutputSpec, Node as PMNode } from "@tiptap/pm/model";
 import { optionColor, optionTextColor } from "@/components/docs/insert/dropdowns";
 
-// The smart chips (SPEC.md §29): a date, a person, a file (a document of the
-// project), and a dropdown, each an inline atom in the text. A chip draws its
-// `label` and nothing else counts as its words: the label is what the
-// paragraph index holds for it (lib/docs/blocks.ts inlineText), what the
-// clipboard's text gets, and what find sees. The rest of a chip's attributes
-// say what it points to.
+// The smart chips (SPEC.md §29): a date, a person, a project document, and
+// a dropdown, each an inline atom that draws its `label`. The label is the
+// chip's words: in the paragraph index (lib/docs/blocks.ts), the clipboard,
+// and find.
 
 const SVG = "http://www.w3.org/2000/svg";
 const HEX6 = /^#[0-9a-fA-F]{6}$/;
@@ -34,9 +32,10 @@ const chipBase = {
   atom: true,
   selectable: true,
   draggable: false,
+  renderText: ({ node }: { node: PMNode }) => String(node.attrs.label ?? ""),
 } as const;
 
-export const DateChip = Node.create({
+const DateChip = Node.create({
   name: "dateChip",
   ...chipBase,
   addAttributes() {
@@ -64,12 +63,9 @@ export const DateChip = Node.create({
       String(node.attrs.label ?? ""),
     ];
   },
-  renderText({ node }) {
-    return String(node.attrs.label ?? "");
-  },
 });
 
-export const PersonChip = Node.create({
+const PersonChip = Node.create({
   name: "personChip",
   ...chipBase,
   addAttributes() {
@@ -100,12 +96,9 @@ export const PersonChip = Node.create({
       ["span", { class: "docs-chip-text" }, String(node.attrs.label ?? "")],
     ];
   },
-  renderText({ node }) {
-    return String(node.attrs.label ?? "");
-  },
 });
 
-export const FileChip = Node.create({
+const FileChip = Node.create({
   name: "fileChip",
   ...chipBase,
   addAttributes() {
@@ -132,12 +125,9 @@ export const FileChip = Node.create({
       ["span", { class: "docs-chip-text" }, String(node.attrs.label ?? "")],
     ];
   },
-  renderText({ node }) {
-    return String(node.attrs.label ?? "");
-  },
 });
 
-export const DropdownChip = Node.create({
+const DropdownChip = Node.create({
   name: "dropdownChip",
   ...chipBase,
   addAttributes() {
@@ -170,18 +160,9 @@ export const DropdownChip = Node.create({
       svgIcon(CARET_PATH, "docs-chip-caret"),
     ];
   },
-  renderText({ node }) {
-    return String(node.attrs.label ?? "");
-  },
 });
 
 export const CHIP_EXTENSIONS = [DateChip, PersonChip, FileChip, DropdownChip];
-
-/** The chip at a document position, if a chip starts there. */
-export function chipAt(editor: Editor, pos: number): PMNode | null {
-  const node = editor.state.doc.nodeAt(pos);
-  return node && ["dateChip", "personChip", "fileChip", "dropdownChip"].includes(node.type.name) ? node : null;
-}
 
 /** Every dropdown chip of the document that belongs to one dropdown. */
 export function dropdownChips(doc: PMNode, dropdownId: string): { node: PMNode; pos: number }[] {

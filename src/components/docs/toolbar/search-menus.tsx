@@ -7,13 +7,9 @@ import { SearchIcon } from "@/components/docs/icons";
 import { keys, withKeys } from "@/components/docs/keys";
 import { keepFocus } from "@/components/docs/menu";
 
-// Search the menus (SPEC.md §29): the toolbar's first control and the way
-// to everything Google Docs keeps in its menu bar, which the page editor
-// does not have. It finds every command the areas register
-// (components/docs/commands.ts) and every toolbar action by its name and
-// its other words; values work too ("font size 14", "Lora", "zoom 150").
-// Up and Down move the highlight, Enter runs it, Escape goes back to the
-// page. Alt+/ (Option+/ on a Mac) opens it.
+// Search the menus (SPEC.md §29): the way to everything Google Docs keeps
+// in its menu bar. It finds every registered command (commands.ts) and
+// every toolbar action by name, and values too ("font size 14", "zoom 150").
 
 export type SearchAction = {
   id: string;

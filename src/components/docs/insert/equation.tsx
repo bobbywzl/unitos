@@ -9,15 +9,12 @@ import { DropBtn } from "@/components/docs/toolbar/controls";
 import { onInsert } from "@/components/docs/insert/context";
 import { caretAfter } from "@/components/docs/insert/actions";
 import { DeleteIcon } from "@/components/docs/insert/icons";
-import { FloatingBox, focusSoon, useEditorTick, useViewportTick, type Anchor } from "@/components/docs/insert/ui";
+import { FloatingBox, focusSoon, useDocPos, useEditorTick, useViewportTick, type Anchor } from "@/components/docs/insert/ui";
 import type { TKey } from "@/lib/i18n/dictionaries";
 
-// The equation box (SPEC.md §29): Google Docs' equation toolbar — New
-// equation, then the Greek letters, Miscellaneous operations, Relations,
-// Math operations, and Arrows menus — over the field where the equation's
-// TeX is typed (\alpha, x^2, x_i work as in Google Docs). The equation
-// redraws as it is typed; Enter or Escape goes back to the text, and an
-// equation left empty goes.
+// The equation box (SPEC.md §29): Google Docs' equation toolbar (New
+// equation and the five symbol menus) over the field where the TeX is
+// typed. Enter or Escape goes back to the text; an empty equation goes.
 
 type Symbol = { tex: string; show?: string };
 
@@ -86,22 +83,10 @@ function renderTex(tex: string): string {
 }
 
 export function EquationHost({ editor }: { editor: Editor }) {
-  const [pos, setPos] = useState<number | null>(null);
+  const [pos, setPos] = useDocPos(editor);
   useEditorTick(editor);
   useViewportTick(pos !== null);
-  useEffect(() => onInsert(editor, (e) => e.type === "equation" && setPos(e.pos)), [editor]);
-
-  // The box follows its equation through edits; it goes with the equation.
-  useEffect(() => {
-    if (pos === null) return;
-    const onTr = ({ transaction }: { transaction: { docChanged: boolean; mapping: { map: (p: number) => number } } }) => {
-      if (transaction.docChanged) setPos((p) => (p === null ? p : transaction.mapping.map(p)));
-    };
-    editor.on("transaction", onTr);
-    return () => {
-      editor.off("transaction", onTr);
-    };
-  }, [editor, pos]);
+  useEffect(() => onInsert(editor, (e) => e.type === "equation" && setPos(e.pos)), [editor, setPos]);
 
   if (pos === null) return null;
   const node = editor.state.doc.nodeAt(pos);

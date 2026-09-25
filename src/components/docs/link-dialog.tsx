@@ -1,19 +1,26 @@
 "use client";
 
-import type { Editor } from "@tiptap/react";
-import { useEffect, useRef, useState } from "react";
+import { getMarkRange, type Editor } from "@tiptap/core";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useT } from "@/components/lang-provider";
 import { DOCS_EVENT } from "@/components/docs/extensions";
-import { CloseIcon, EditIcon, LinkIcon } from "@/components/docs/icons";
+import { CloseIcon, DocIcon, EditIcon, LinkIcon } from "@/components/docs/icons";
+import { insertFileChip, projectDocHref } from "@/components/docs/insert/actions";
+import { insertContext, toast } from "@/components/docs/insert/context";
+import { ArrowBackIcon, BookmarkIcon, ChevronRightIcon, CopyIcon, LinkOffIcon, TitleIcon } from "@/components/docs/insert/icons";
+import { openLinkHref, placeOf, placePos, projectDocOf } from "@/components/docs/insert/links";
+import { tocEntries } from "@/components/docs/insert/toc";
 
 // Links in the page editor (SPEC.md §29), as Google Docs does them: Insert
-// link (Ctrl+K) opens a small box under the selection with the text and the
-// link; a caret inside a link shows the link bubble under it — the address,
-// Copy link, Edit link, Remove link.
+// link (Ctrl+K) opens a box under the selection: the link field (and the
+// Text field when no words are selected), the project's documents and this
+// document's headings that match, and Headings and bookmarks. A caret in a
+// link shows its bubble: the title, the site, Copy, Edit, Remove, and for
+// the address of a project document, Replace URL with a chip or its title.
 
 /** A typed address as a link: "example.com" gains https://, an email mailto:. */
-export function normalizeHref(raw: string): string | null {
+function normalizeHref(raw: string): string | null {
   const value = raw.trim();
   if (!value) return null;
   if (/^(https?:|mailto:|tel:)/i.test(value)) return value;
@@ -24,10 +31,38 @@ export function normalizeHref(raw: string): string | null {
 }
 
 type Box = { top: number; left: number };
+type Target = { key: string; label: string; href: string; icon: ReactNode };
 
 function boxUnder(editor: Editor, pos: number): Box {
   const coords = editor.view.coordsAtPos(pos);
   return { top: coords.bottom + 8, left: Math.max(8, Math.min(coords.left, window.innerWidth - 380)) };
+}
+
+/** This document's headings and bookmarks, as link targets. */
+function placesOf(editor: Editor, bookmarkLabel: string): { headings: Target[]; bookmarks: Target[] } {
+  const { doc } = editor.state;
+  const headings = tocEntries(doc, [1, 2, 3, 4, 5, 6]).flatMap((e) =>
+    e.blockId ? [{ key: e.blockId, label: e.text, href: `#heading=${e.blockId}`, icon: <TitleIcon size={18} /> }] : [],
+  );
+  const bookmarks: Target[] = [];
+  doc.descendants((node, pos) => {
+    if (node.type.name !== "bookmark") return true;
+    const $pos = doc.resolve(pos);
+    const after = $pos.parent.textBetween($pos.parentOffset + node.nodeSize, $pos.parent.content.size, " ", " ").trim();
+    const id = String(node.attrs.bookmarkId ?? "");
+    bookmarks.push({ key: id, label: after.slice(0, 60) || bookmarkLabel, href: `#bookmark=${id}`, icon: <BookmarkIcon size={18} /> });
+    return false;
+  });
+  return { headings, bookmarks };
+}
+
+function TargetRows({ targets, onPick }: { targets: Target[]; onPick: (target: Target) => void }) {
+  return targets.map((target) => (
+    <button key={target.key} type="button" className="docs-link-row" onClick={() => onPick(target)}>
+      {target.icon}
+      <span>{target.label}</span>
+    </button>
+  ));
 }
 
 export function LinkDialog({ editor }: { editor: Editor }) {
@@ -35,23 +70,24 @@ export function LinkDialog({ editor }: { editor: Editor }) {
   const [box, setBox] = useState<Box | null>(null);
   const [text, setText] = useState("");
   const [href, setHref] = useState("");
-  const [hadText, setHadText] = useState(false);
+  const [showText, setShowText] = useState(true);
+  const [places, setPlaces] = useState(false);
   const hrefRef = useRef<HTMLInputElement>(null);
-  const textRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const onOpen = () => {
       if (!editor.isEditable) return;
-      if (editor.state.selection.empty && editor.isActive("link")) {
-        editor.chain().extendMarkRange("link").run();
-      }
+      if (editor.state.selection.empty && editor.isActive("link")) editor.chain().extendMarkRange("link").run();
       const { from, to } = editor.state.selection;
       const selected = editor.state.doc.textBetween(from, to, " ");
+      const current = (editor.getAttributes("link").href as string | undefined) ?? "";
       setText(selected);
-      setHadText(selected.length > 0);
-      setHref((editor.getAttributes("link").href as string | undefined) ?? "");
+      setHref(current);
+      // Selected words keep their words; a new link or an edited one shows Text.
+      setShowText(!selected || Boolean(current));
+      setPlaces(false);
       setBox(boxUnder(editor, to));
-      requestAnimationFrame(() => (selected ? hrefRef.current : textRef.current)?.focus());
+      requestAnimationFrame(() => hrefRef.current?.focus());
     };
     window.addEventListener(DOCS_EVENT.link, onOpen);
     return () => window.removeEventListener(DOCS_EVENT.link, onOpen);
@@ -61,25 +97,34 @@ export function LinkDialog({ editor }: { editor: Editor }) {
     setBox(null);
     editor.commands.focus();
   };
-  const apply = () => {
-    const link = normalizeHref(href);
-    if (!link) return;
-    const words = text.trim() ? text : href.trim();
+
+  /** Link the selection, or the typed words, or the target's own title. */
+  const put = (target: string, title: string) => {
     const { from, to } = editor.state.selection;
     const current = editor.state.doc.textBetween(from, to, " ");
-    if (!hadText || words !== current) {
-      editor
-        .chain()
-        .focus()
-        .insertContentAt({ from, to }, { type: "text", text: words, marks: [{ type: "link", attrs: { href: link } }] })
-        .run();
-    } else {
-      editor.chain().focus().extendMarkRange("link").setLink({ href: link }).run();
-    }
+    const words = text.trim() || current || title;
+    const chain = editor.chain().focus();
+    if (words === current) chain.setLink({ href: target }).run();
+    else chain.insertContentAt({ from, to }, { type: "text", text: words, marks: [{ type: "link", attrs: { href: target } }] }).run();
     setBox(null);
   };
 
   if (!box || typeof document === "undefined") return null;
+  const ctx = insertContext(editor);
+  const link = normalizeHref(href);
+  const query = (href.trim() || (showText ? "" : text)).toLowerCase();
+  const suggestions: Target[] =
+    query && !link
+      ? [
+          ...(ctx?.documents ?? [])
+            .filter((d) => d.id !== ctx?.documentId && d.title.toLowerCase().includes(query))
+            .map((d) => ({ key: d.id, label: d.title, href: projectDocHref(ctx?.notebookId ?? "", d.id), icon: <DocIcon size={18} /> })),
+          ...placesOf(editor, t("docsInsert.bookmark")).headings.filter((h) => h.label.toLowerCase().includes(query)),
+        ].slice(0, 8)
+      : [];
+  const pick = (target: Target) => put(target.href, target.label);
+  const all = places ? placesOf(editor, t("docsInsert.bookmark")) : null;
+
   return createPortal(
     <div
       className="docs-popup docs-link-dialog"
@@ -94,42 +139,71 @@ export function LinkDialog({ editor }: { editor: Editor }) {
         }
       }}
     >
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          apply();
-        }}
-      >
-        <label className="docs-field-row">
-          <span className="docs-field-icon" aria-hidden>
-            <span className="docs-field-text-glyph">T</span>
-          </span>
-          <input
-            ref={textRef}
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            placeholder={t("docs.linkText")}
-            aria-label={t("docs.linkText")}
-            className="docs-field"
-          />
-        </label>
-        <label className="docs-field-row">
-          <span className="docs-field-icon" aria-hidden>
-            <LinkIcon size={18} />
-          </span>
-          <input
-            ref={hrefRef}
-            value={href}
-            onChange={(e) => setHref(e.target.value)}
-            placeholder={t("docs.linkAddress")}
-            aria-label={t("docs.linkAddress")}
-            className="docs-field"
-          />
-          <button type="submit" className="docs-button-primary" disabled={!normalizeHref(href)}>
-            {t("docs.apply")}
+      {all ? (
+        <div className="docs-link-places">
+          <div className="docs-link-places-head">
+            <button type="button" className="docs-icon-btn" aria-label={t("docsInsert.back")} data-tip={t("docsInsert.back")} onClick={() => setPlaces(false)}>
+              <ArrowBackIcon size={20} />
+            </button>
+            <span>{t("docsInsert.headingsAndBookmarks")}</span>
+          </div>
+          {all.headings.length + all.bookmarks.length === 0 && <p className="docs-link-empty">{t("docsInsert.noPlaces")}</p>}
+          {all.headings.length > 0 && <div className="docs-link-section">{t("docsInsert.headings")}</div>}
+          <TargetRows targets={all.headings} onPick={pick} />
+          {all.bookmarks.length > 0 && <div className="docs-link-section">{t("docsInsert.bookmarks")}</div>}
+          <TargetRows targets={all.bookmarks} onPick={pick} />
+        </div>
+      ) : (
+        <>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (link) put(link, href.trim());
+            }}
+          >
+            {showText && (
+              <label className="docs-field-row">
+                <span className="docs-field-icon" aria-hidden>
+                  <span className="docs-field-text-glyph">T</span>
+                </span>
+                <input
+                  value={text}
+                  onChange={(e) => setText(e.target.value)}
+                  placeholder={t("docs.linkText")}
+                  aria-label={t("docs.linkText")}
+                  className="docs-field"
+                />
+              </label>
+            )}
+            <label className="docs-field-row">
+              <span className="docs-field-icon" aria-hidden>
+                <LinkIcon size={18} />
+              </span>
+              <input
+                ref={hrefRef}
+                value={href}
+                onChange={(e) => setHref(e.target.value)}
+                placeholder={t("docs.linkAddress")}
+                aria-label={t("docs.linkAddress")}
+                className="docs-field"
+              />
+              <button type="submit" className="docs-button-primary" disabled={!link}>
+                {t("docs.apply")}
+              </button>
+            </label>
+          </form>
+          {suggestions.length > 0 && (
+            <div className="docs-link-suggest">
+              <TargetRows targets={suggestions} onPick={pick} />
+            </div>
+          )}
+          <button type="button" className="docs-link-row docs-link-foot" onClick={() => setPlaces(true)}>
+            <TitleIcon size={18} />
+            <span>{t("docsInsert.headingsAndBookmarks")}</span>
+            <ChevronRightIcon size={18} />
           </button>
-        </label>
-      </form>
+        </>
+      )}
       <button type="button" onClick={close} aria-label={t("docs.close")} className="docs-popup-close">
         <CloseIcon size={16} />
       </button>
@@ -138,32 +212,44 @@ export function LinkDialog({ editor }: { editor: Editor }) {
   );
 }
 
+type Shown = { href: string; from: number; to: number; box: Box };
+
+/** A link's full address; the link itself when it has none. */
+function absolute(href: string): string {
+  try {
+    return new URL(href, window.location.href).toString();
+  } catch {
+    return href;
+  }
+}
+
+/** The site a web link goes to, as the bubble names it. */
+function siteOf(href: string): string {
+  try {
+    const url = new URL(href, window.location.href);
+    return url.protocol === "http:" || url.protocol === "https:" ? url.hostname : "";
+  } catch {
+    return "";
+  }
+}
+
 export function LinkBubble({ editor, canEdit }: { editor: Editor; canEdit: boolean }) {
   const t = useT();
-  const [state, setState] = useState<{ href: string; box: Box } | null>(null);
-  const [copied, setCopied] = useState(false);
+  const [shown, setShown] = useState<Shown | null>(null);
 
   useEffect(() => {
     const update = () => {
       const { selection } = editor.state;
-      if (!editor.isFocused || !selection.empty || !editor.isActive("link")) {
-        setState(null);
-        return;
-      }
       const href = editor.getAttributes("link").href as string | undefined;
-      if (!href) {
-        setState(null);
+      const range = selection.empty ? getMarkRange(selection.$from, editor.schema.marks.link) : undefined;
+      if (!editor.isFocused || !href || !range) {
+        setShown(null);
         return;
       }
       // The bubble sits under the start of the link the caret is in.
-      const $pos = selection.$from;
-      let start = $pos.pos;
-      const linkType = editor.schema.marks.link;
-      while (start > $pos.start() && linkType.isInSet(editor.state.doc.resolve(start - 1).marks())) start -= 1;
-      setState({ href, box: boxUnder(editor, start) });
-      setCopied(false);
+      setShown({ href, from: range.from, to: range.to, box: boxUnder(editor, range.from) });
     };
-    // A press on the bubble itself blurs the editor for a moment; the bubble
+    // A press on the bubble blurs the editor for a moment; the bubble
     // waits before it decides the caret has left.
     let timer: ReturnType<typeof setTimeout> | null = null;
     const onBlur = () => {
@@ -181,49 +267,90 @@ export function LinkBubble({ editor, canEdit }: { editor: Editor; canEdit: boole
     };
   }, [editor]);
 
-  if (!state || typeof document === "undefined") return null;
+  if (!shown || typeof document === "undefined") return null;
+  const { href, from, to } = shown;
+  const ctx = insertContext(editor);
+  const place = placeOf(href);
+  const docId = ctx ? projectDocOf(href, ctx.notebookId) : null;
+  const doc = docId ? ctx?.documents.find((d) => d.id === docId) : undefined;
+  let title = href;
+  let site = "";
+  if (place) {
+    const at = placePos(editor.state.doc, place);
+    title = place.kind === "bookmark" || at === null ? t("docsInsert.bookmark") : editor.state.doc.resolve(at).parent.textContent;
+  } else if (doc) {
+    title = doc.title;
+  } else {
+    site = siteOf(href);
+  }
+  // A project document's pasted address offers its chip or its title.
+  const asUrl = canEdit && doc && ctx && editor.state.doc.textBetween(from, to) === href;
+
   return createPortal(
-    <div
-      className="docs-popup docs-link-bubble"
-      style={{ top: state.box.top, left: state.box.left }}
-      data-edit-control
-      onMouseDown={(e) => e.preventDefault()}
-    >
-      <a href={state.href} target="_blank" rel="noopener noreferrer" className="docs-link-bubble-href">
-        {state.href}
-      </a>
-      <button
-        type="button"
-        className="docs-tb-btn"
-        aria-label={copied ? t("docs.linkCopied") : t("docs.copyLink")}
-        data-tip={copied ? t("docs.linkCopied") : t("docs.copyLink")}
-        onClick={() => {
-          void navigator.clipboard.writeText(state.href).then(() => setCopied(true));
-        }}
-      >
-        <LinkIcon size={18} />
-      </button>
-      {canEdit && (
-        <>
-          <button
-            type="button"
-            className="docs-tb-btn"
-            aria-label={t("docs.editLink")}
-            data-tip={t("docs.editLink")}
-            onClick={() => window.dispatchEvent(new CustomEvent(DOCS_EVENT.link))}
+    <div className="docs-popup docs-link-bubble" style={{ top: shown.box.top, left: shown.box.left }} data-edit-control onMouseDown={(e) => e.preventDefault()}>
+      <div className="docs-link-bubble-main">
+        {doc ? <DocIcon size={20} /> : place ? <BookmarkIcon size={20} /> : <LinkIcon size={20} />}
+        <span className="docs-link-bubble-text">
+          <a
+            href={absolute(href)}
+            className="docs-link-bubble-href"
+            onClick={(e) => {
+              e.preventDefault();
+              openLinkHref(editor, href, ctx);
+            }}
           >
-            <EditIcon size={18} />
+            {title}
+          </a>
+          {site && <span className="docs-link-bubble-site">{site}</span>}
+        </span>
+        <button
+          type="button"
+          className="docs-tb-btn"
+          aria-label={t("docs.copyLink")}
+          data-tip={t("docs.copyLink")}
+          onClick={() => void navigator.clipboard.writeText(absolute(href)).then(() => toast(t("docs.linkCopied")))}
+        >
+          <CopyIcon size={18} />
+        </button>
+        {canEdit && (
+          <>
+            <button
+              type="button"
+              className="docs-tb-btn"
+              aria-label={t("docs.editLink")}
+              data-tip={t("docs.editLink")}
+              onClick={() => window.dispatchEvent(new CustomEvent(DOCS_EVENT.link))}
+            >
+              <EditIcon size={18} />
+            </button>
+            <button
+              type="button"
+              className="docs-tb-btn"
+              aria-label={t("docs.removeLink")}
+              data-tip={t("docs.removeLink")}
+              onClick={() => editor.chain().focus().extendMarkRange("link").unsetLink().run()}
+            >
+              <LinkOffIcon size={18} />
+            </button>
+          </>
+        )}
+      </div>
+      {asUrl && (
+        <div className="docs-link-prompt">
+          <span>{t("docsInsert.replaceUrl")}</span>
+          <button type="button" className="docs-text-btn" onClick={() => insertFileChip(editor, doc, ctx.notebookId, { from, to })}>
+            {t("docsInsert.chip")}
           </button>
           <button
             type="button"
-            className="docs-tb-btn"
-            aria-label={t("docs.removeLink")}
-            data-tip={t("docs.removeLink")}
-            onClick={() => editor.chain().focus().extendMarkRange("link").unsetLink().run()}
+            className="docs-text-btn"
+            onClick={() =>
+              editor.chain().focus().insertContentAt({ from, to }, { type: "text", text: doc.title, marks: [{ type: "link", attrs: { href } }] }).run()
+            }
           >
-            <CloseIcon size={18} />
+            {t("docsInsert.link")}
           </button>
-        </>
+        </div>
       )}
     </div>,
     document.body,

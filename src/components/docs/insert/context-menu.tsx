@@ -14,7 +14,8 @@ import { DropdownPanel, MenuItem, MenuSeparator } from "@/components/docs/menu";
 import { DialogButton, ToolbarDialog } from "@/components/docs/toolbar/dialog";
 import { STYLE_LABEL } from "@/components/docs/toolbar/styles-menu";
 import { blockStyle, updateStyleToMatch } from "@/components/docs/toolbar/styles";
-import { insertImageFiles } from "@/components/docs/typing/paste";
+import { copyMarkdown, insertImageFiles, pasteMarkdown } from "@/components/docs/typing/paste";
+import { typingPrefs } from "@/components/docs/typing/prefs";
 import { emitInsert, onInsert, toast, type InsertContext } from "@/components/docs/insert/context";
 import { selectAllMatching } from "@/components/docs/insert/format-match";
 import {
@@ -226,9 +227,14 @@ function buildEntries(editor: Editor, ctx: InsertContext, t: ReturnType<typeof u
   const textSelected = hasSelection && !image && !toc && state.doc.textBetween(sel.from, sel.to, " ", " ").trim().length > 0;
   const paste = (plain: boolean) => () =>
     void pasteFromClipboard(editor, plain).then((ok) => ok || emitInsert(editor, { type: "clipboard-blocked" }));
+  // With Enable Markdown on (Tools > Preferences), the Markdown copy and paste.
+  const markdown = typingPrefs().markdown;
   const out: Entry[] = [
     { key: "cut", label: t("docsInsert.cut"), icon: <CutIcon />, shortcut: keys("Mod+X"), disabled: !hasSelection || !editing, run: () => execClipboard(editor, "cut") },
     { key: "copy", label: t("docsInsert.copy"), icon: <CopyIcon />, shortcut: keys("Mod+C"), disabled: !hasSelection, run: () => execClipboard(editor, "copy") },
+    ...(markdown
+      ? [{ key: "copy-markdown", label: t("docsTyping.copyAsMarkdown"), icon: <CopyIcon />, disabled: !hasSelection, run: () => void copyMarkdown(editor) }]
+      : []),
     { key: "paste", label: t("docsInsert.paste"), icon: <PasteIcon />, shortcut: keys("Mod+V"), disabled: !editing, run: paste(false) },
     {
       key: "paste-plain",
@@ -238,6 +244,9 @@ function buildEntries(editor: Editor, ctx: InsertContext, t: ReturnType<typeof u
       disabled: !editing,
       run: paste(true),
     },
+    ...(markdown
+      ? [{ key: "paste-markdown", label: t("docsTyping.pasteFromMarkdown"), icon: <PasteIcon />, disabled: !editing, run: () => void pasteMarkdown(editor) }]
+      : []),
     {
       key: "delete",
       label: t("docsInsert.delete"),
@@ -421,7 +430,7 @@ function buildEntries(editor: Editor, ctx: InsertContext, t: ReturnType<typeof u
       icon: <LinkIcon />,
       run: () =>
         void navigator.clipboard.writeText(url).then(
-          () => toast(t("docsInsert.headingLinkCopied")),
+          () => toast(t("docs.linkCopied")),
           () => emitInsert(editor, { type: "clipboard-blocked" }),
         ),
     });

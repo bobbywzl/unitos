@@ -62,7 +62,7 @@ import { ImageSourcePicker } from "@/components/docs/insert/image-source";
 import { insertImageFrom } from "@/components/docs/insert/image";
 import { TableGridPicker } from "@/components/docs/insert/table-grid";
 import { TOC_STYLES, type TocStyle } from "@/components/docs/insert/toc";
-import { anchorAt, FloatingBox, useEditorTick, useViewportTick } from "@/components/docs/insert/ui";
+import { anchorAt, FloatingBox, useDocPos, useEditorTick, useViewportTick } from "@/components/docs/insert/ui";
 import type { Person } from "@/lib/person";
 import type { TKey } from "@/lib/i18n/dictionaries";
 
@@ -185,37 +185,33 @@ type Picker = { kind: PickerKind; at: number };
 export function AtMenuHost({ editor, ctx }: { editor: Editor; ctx: InsertContext }) {
   useEditorTick(editor);
   const s = atMenuState(editor.state);
-  const [picker, setPicker] = useState<Picker | null>(null);
-  useViewportTick(s.active || picker !== null);
+  // The picker's place follows the edits made while it is open.
+  const [at, setAt] = useDocPos(editor);
+  const [kind, setKind] = useState<PickerKind>("date");
+  useViewportTick(s.active || at !== null);
 
-  // A picker's place follows the edits made while it is open.
-  useEffect(() => {
-    const onTr = ({ transaction }: { transaction: { docChanged: boolean; mapping: { map: (p: number) => number } } }) => {
-      if (transaction.docChanged) setPicker((p) => (p ? { ...p, at: transaction.mapping.map(p.at) } : p));
-    };
-    editor.on("transaction", onTr);
-    return () => {
-      editor.off("transaction", onTr);
-    };
-  }, [editor]);
+  const openPicker = useCallback(
+    (picker: Picker) => {
+      setKind(picker.kind);
+      setAt(picker.at);
+    },
+    [setAt],
+  );
 
   // A command opens a picker at the caret (Insert › Date, Dropdown, …).
   useEffect(
-    () =>
-      onInsert(editor, (event) => {
-        if (event.type === "picker") setPicker({ kind: event.kind, at: editor.state.selection.from });
-      }),
-    [editor],
+    () => onInsert(editor, (event) => event.type === "picker" && openPicker({ kind: event.kind, at: editor.state.selection.from })),
+    [editor, openPicker],
   );
 
   const closePicker = useCallback(() => {
-    setPicker(null);
+    setAt(null);
     editor.commands.focus();
-  }, [editor]);
+  }, [editor, setAt]);
 
-  if (picker) return <PickerBox editor={editor} ctx={ctx} picker={picker} onClose={closePicker} />;
+  if (at !== null) return <PickerBox editor={editor} ctx={ctx} picker={{ kind, at }} onClose={closePicker} />;
   if (!s.active) return null;
-  return <AtMenu editor={editor} ctx={ctx} state={s} onPicker={setPicker} />;
+  return <AtMenu editor={editor} ctx={ctx} state={s} onPicker={openPicker} />;
 }
 
 function AtMenu({

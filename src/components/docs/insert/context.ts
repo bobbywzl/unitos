@@ -37,7 +37,7 @@ export function insertT(editor: Editor): TFunc {
 }
 
 /** A window of the insert area, opened from a key, a command, or a menu. */
-export type InsertEvent =
+type InsertEvent =
   | { type: "picker"; kind: "date" | "dropdown" | "table" | "emoji" | "image" | "toc" | "code" }
   | { type: "image-options"; section?: "size" | "wrap" | "recolor" | "adjust" | "alt" }
   | { type: "image-replace" }

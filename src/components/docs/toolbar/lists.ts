@@ -2,16 +2,11 @@ import type { Editor } from "@tiptap/core";
 import type { Node as PMNode } from "@tiptap/pm/model";
 import type { EditorState } from "@tiptap/pm/state";
 
-// Google Docs' list presets (SPEC.md §29): the glyphs a list draws level by
-// level. A list keeps its preset in the `listStyle` attribute
-// (data-list-style), named as the Google Docs API names presets; null is
-// the default preset of its type — ● ○ ■ for a bulleted list, 1. a. i. for
-// a numbered list, a struck-through line for a ticked checklist item. The
-// preset lives on the outermost list: one list, one preset, as in Docs; a
-// nested list draws its level of it. css/toolbar.css draws every preset,
-// the palettes' and the ones only a typed prefix reaches (typing/lists.ts).
+// Google Docs' list presets (SPEC.md §29). The outermost list keeps its
+// preset in `listStyle`, named as the Google Docs API names it (null is the
+// type's default); a nested list draws its level of it (css/toolbar.css).
 
-export type ListKind = "bulletList" | "orderedList" | "taskList";
+type ListKind = "bulletList" | "orderedList" | "taskList";
 
 type Counter = "decimal" | "decimal-leading-zero" | "lower-alpha" | "upper-alpha" | "lower-roman" | "upper-roman";
 

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useT } from "@/components/lang-provider";
-import { SearchIcon } from "@/components/docs/insert/icons";
+import { SearchIcon } from "@/components/docs/icons";
 import type { EmojiEntry, EmojiGroup } from "@/components/docs/insert/emoji-data";
 import { focusSoon } from "@/components/docs/insert/ui";
 import type { TKey } from "@/lib/i18n/dictionaries";
@@ -16,7 +16,7 @@ type Data = { EMOJIS: EmojiEntry[]; EMOJI_GROUPS: EmojiGroup[]; searchEmojis: (q
 let loaded: Promise<Data> | null = null;
 
 /** The emoji list, loaded once on first use. */
-export function loadEmojis(): Promise<Data> {
+function loadEmojis(): Promise<Data> {
   if (!loaded) {
     loaded = import("@/components/docs/insert/emoji-data").catch((err: unknown) => {
       loaded = null;

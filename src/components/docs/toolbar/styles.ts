@@ -5,13 +5,9 @@ import { z } from "zod";
 import type { DocStyle } from "@/components/docs/extensions";
 import { firstFamily, fontStack } from "@/components/docs/fonts";
 
-// The document's named styles (SPEC.md §29): Normal text, Title, Subtitle,
-// and Heading 1–6, as Google Docs defines them for a new document. A
-// document keeps what it changed ("Update 'Heading 1' to match") on its
-// rich text's doc node, one attribute per style holding that style's
-// changes as JSON; the server keeps plain attributes, and a style nobody
-// changed stores nothing. The page draws the changes with CSS variables on
-// the editor's root (ext/toolbar.ts), and css/toolbar.css reads them.
+// The document's named styles (SPEC.md §29): Google Docs' defaults, and what
+// the document changed ("Update 'Heading 1' to match") stored on the doc
+// node as one JSON attribute per style; an unchanged style stores nothing.
 
 export const STYLE_ORDER: DocStyle[] = ["normal", "title", "subtitle", "h1", "h2", "h3", "h4", "h5", "h6"];
 

@@ -1,32 +1,30 @@
 import { Extension, type Editor } from "@tiptap/core";
 import { Fragment, type Node as PMNode, type Schema } from "@tiptap/pm/model";
-import { Plugin, PluginKey, TextSelection, type EditorState, type Transaction } from "@tiptap/pm/state";
+import { Plugin, TextSelection, type EditorState, type Transaction } from "@tiptap/pm/state";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
-import { CellSelection, TableMap, isInTable, selectedRect, type TableRect } from "@tiptap/pm/tables";
+import { TableMap, isInTable, selectedRect, type TableRect } from "@tiptap/pm/tables";
+import type { Dash } from "@/components/docs/insert/image";
 
-// Tables (SPEC.md §29), Google Docs' model on Tiptap's table: a cell's
-// background, each side's border ("1 solid #000000": points, dash, color;
-// 0 hides the side), its vertical alignment and padding; a row's minimum
-// height and whether it is a pinned header row; the table's alignment and
-// left indent. And the structure commands the table's right-click menu and
-// Table options run: insert several rows or columns, split a cell into a
-// grid, sort by a column, distribute, pin header rows.
+// Tables (SPEC.md §29) with Google Docs' model on Tiptap's table: a cell's
+// background, sides ("1 solid #000000": points, dash, color; 0 hides the
+// side), vertical alignment, and padding; a row's minimum height and
+// pinned header rows; the table's alignment and indent. And the commands
+// the table's menus and Table options run.
 
-export type Dash = "solid" | "dotted" | "dashed";
-export type BorderSpec = { width: number; dash: Dash; color: string };
-export const DEFAULT_BORDER: BorderSpec = { width: 1, dash: "solid", color: "#000000" };
+type BorderSpec = { width: number; dash: Dash; color: string };
+const DEFAULT_BORDER: BorderSpec = { width: 1, dash: "solid", color: "#000000" };
 const SIDES = ["borderTop", "borderRight", "borderBottom", "borderLeft"] as const;
 type Side = (typeof SIDES)[number];
 const CSS_SIDE: Record<Side, string> = { borderTop: "top", borderRight: "right", borderBottom: "bottom", borderLeft: "left" };
 const BORDER = /^(\d{1,2}(?:\.\d{1,2})?) (solid|dotted|dashed) (#[0-9a-fA-F]{6})$/;
 const HEX = /^#[0-9a-fA-F]{6}$/;
 
-export function parseBorder(value: unknown): BorderSpec | null {
+function parseBorder(value: unknown): BorderSpec | null {
   const m = typeof value === "string" ? BORDER.exec(value) : null;
   return m ? { width: Number(m[1]), dash: m[2] as Dash, color: m[3].toLowerCase() } : null;
 }
 
-export function formatBorder(b: BorderSpec): string {
+function formatBorder(b: BorderSpec): string {
   return `${Math.max(0, Math.min(99, Math.round(b.width * 100) / 100))} ${b.dash} ${b.color}`;
 }
 
@@ -165,7 +163,6 @@ export function pinnedCount(table: PMNode): number {
   return n;
 }
 
-const tableDecoKey = new PluginKey<DecorationSet>("docsTableDeco");
 const decorated = new WeakMap<PMNode, DecorationSet>();
 
 function tableDecorations(doc: PMNode): DecorationSet {
@@ -546,7 +543,6 @@ export const DocsTable = Extension.create({
   addProseMirrorPlugins() {
     return [
       new Plugin({
-        key: tableDecoKey,
         props: {
           decorations: (state) => tableDecorations(state.doc),
         },
@@ -704,14 +700,4 @@ export function distributeRows(editor: Editor): boolean {
   const tallest = rows.reduce((m, r) => Math.max(m, r.getBoundingClientRect().height / (zoom || 1)), 0);
   if (!tallest) return false;
   return editor.commands.setRowsMinHeight(Math.round((tallest * 72) / 96), true);
-}
-
-/** Where a table sits: its node, position, and the caret's row and column. */
-export function tableAt(state: EditorState): { table: PMNode; pos: number; rect: TableRect } | null {
-  const rect = tableRectOf(state);
-  return rect ? { table: rect.table, pos: rect.tableStart - 1, rect } : null;
-}
-
-export function isCellSelection(state: EditorState): boolean {
-  return state.selection instanceof CellSelection;
 }

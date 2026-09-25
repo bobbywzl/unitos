@@ -24,8 +24,8 @@ const WARM_MS = 500;
 const GAP = 8;
 const MARGIN = 8;
 const TIP_ID = "app-tip";
-// The page editor (a blank document) and its menus draw Google Docs'
-// tooltip instead: 12 px on near-black, 4 px under the control, after 300 ms
+// The page editor and its menus draw Google Docs' tooltip instead: 4 px under
+// the control, 300 ms before the first, 50 ms to move to the next
 // (css/toolbar.css .docs-tip).
 const DOCS_DELAY_MS = 300;
 const DOCS_SWAP_MS = 50;
@@ -73,8 +73,6 @@ export function TooltipLayer() {
       const current = tipRef.current?.target ?? null;
       if (!target) return hide();
       if (target === current) return;
-      // The page editor's controls follow Google Docs: 300 ms before the
-      // first tooltip, 50 ms to move it to the next control.
       const docs = isDocsTarget(target);
       if (current || performance.now() - hiddenAtRef.current < WARM_MS) {
         if (!docs) return show(target);

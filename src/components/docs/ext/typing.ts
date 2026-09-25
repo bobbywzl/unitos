@@ -13,13 +13,7 @@ import { blockText, runAutocorrect } from "@/components/docs/typing/autocorrect"
 import { wordAt } from "@/components/docs/typing/chars";
 import { findPlugin } from "@/components/docs/typing/find";
 import { TYPING_EVENT, fireTyping } from "@/components/docs/typing/events";
-import {
-  copyFormatting,
-  openLinkAtCaret,
-  pasteFormatting,
-  toggleCheckbox,
-  toggleSmallCaps,
-} from "@/components/docs/typing/format";
+import { copyFormatting, pasteFormatting, toggleCheckbox, toggleSmallCaps } from "@/components/docs/typing/format";
 import {
   backspace,
   closeEdit,
@@ -170,7 +164,6 @@ const DocsTyping = Extension.create<Record<string, never>, DocsTypingStorage>({
       "Mod-\\": () => e.commands.clearFormatting(),
       "Ctrl-Shift-ArrowUp": move(-1),
       "Ctrl-Shift-ArrowDown": move(1),
-      "Alt-Enter": () => openLinkAtCaret(e),
       "Mod-Alt-Enter": () => toggleCheckbox(e),
       // Pageless documents have no page breaks.
       "Mod-Enter": () => e.storage.docsTyping.pageless,

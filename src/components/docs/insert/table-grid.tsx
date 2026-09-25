@@ -11,7 +11,7 @@ import { useT } from "@/components/lang-provider";
 
 const MAX = 20;
 
-export function TableGridPicker({ onPick, keyboard = true }: { onPick: (rows: number, cols: number) => void; keyboard?: boolean }) {
+export function TableGridPicker({ onPick }: { onPick: (rows: number, cols: number) => void }) {
   const t = useT();
   const [hover, setHover] = useState({ rows: 1, cols: 1 });
   const hoverRef = useRef(hover);
@@ -22,7 +22,6 @@ export function TableGridPicker({ onPick, keyboard = true }: { onPick: (rows: nu
   const rows = Math.min(MAX, Math.max(5, hover.rows + 1));
 
   useEffect(() => {
-    if (!keyboard) return;
     const onKey = (e: KeyboardEvent) => {
       const step: Record<string, [number, number]> = {
         ArrowRight: [0, 1],
@@ -43,7 +42,7 @@ export function TableGridPicker({ onPick, keyboard = true }: { onPick: (rows: nu
     };
     document.addEventListener("keydown", onKey, true);
     return () => document.removeEventListener("keydown", onKey, true);
-  }, [keyboard, onPick]);
+  }, [onPick]);
 
   return (
     <div className="docs-grid-picker">

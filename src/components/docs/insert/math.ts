@@ -4,14 +4,12 @@ import type { NodeView } from "@tiptap/pm/view";
 import { BlockMath, InlineMath } from "@tiptap/extension-mathematics";
 import katex from "katex";
 import "katex/dist/katex.min.css";
-import { emitInsert, insertContext } from "@/components/docs/insert/context";
+import { emitInsert, insertT } from "@/components/docs/insert/context";
 import { KATEX_MACROS } from "@/lib/katex";
 
-// Equations (SPEC.md §29), drawn with KaTeX: in a line of words the equation
-// sits in the line (inlineMath), on a line of its own it is its own block
-// (blockMath, an EQUATION row in the paragraph index). The TeX is the node's
-// only content; a press opens the equation box (equation.tsx) where it is
-// typed, with Google Docs' symbol menus. Neither adds words to its line.
+// Equations (SPEC.md §29), drawn with KaTeX: in a line of words the
+// equation sits in the line (inlineMath); on a line of its own it is a
+// block (blockMath, an EQUATION row). A press opens the equation box.
 
 class MathView implements NodeView {
   dom: HTMLElement;
@@ -43,9 +41,8 @@ class MathView implements NodeView {
     if (latex === this.latex && this.dom.childNodes.length > 0) return;
     this.latex = latex;
     if (!latex.trim()) {
-      const t = insertContext(this.editor)?.t;
       this.dom.classList.add("is-empty");
-      this.dom.textContent = t ? t("docsInsert.newEquation") : "New equation";
+      this.dom.textContent = insertT(this.editor)("docsInsert.newEquation");
       return;
     }
     this.dom.classList.remove("is-empty");
@@ -82,7 +79,7 @@ class MathView implements NodeView {
   }
 }
 
-export const DocsInlineMath = InlineMath.extend({
+const DocsInlineMath = InlineMath.extend({
   addInputRules() {
     return [];
   },
@@ -91,7 +88,7 @@ export const DocsInlineMath = InlineMath.extend({
   },
 });
 
-export const DocsBlockMath = BlockMath.extend({
+const DocsBlockMath = BlockMath.extend({
   addInputRules() {
     return [];
   },

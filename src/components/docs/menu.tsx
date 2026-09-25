@@ -14,21 +14,16 @@ import {
 import { createPortal } from "react-dom";
 import { CheckIcon, SubmenuArrowIcon } from "@/components/docs/icons";
 
-// The page editor's menus (SPEC.md §29): the white popups Google Docs'
-// toolbar opens. A panel lives in a portal with a fixed position, so the
-// toolbar's clipping never cuts it. A press outside or Escape closes it;
-// Up and Down move the highlight (skipping separators and greyed items),
-// Home and End jump to the ends, Right opens a submenu and Left closes it,
-// Enter or Space runs the highlighted item, and a letter jumps to the next
-// item it starts. The keys are read before the page gets them, so the
-// document keeps its focus and its selection while a menu is open.
+// The page editor's menus (SPEC.md §29), in a portal so the toolbar never
+// clips them. The keys are read before the page gets them, so the document
+// keeps its focus and its selection while a menu is open.
 
 /** Keep the editor's selection: a press on a toolbar control never focuses it. */
 export const keepFocus = (e: React.MouseEvent) => e.preventDefault();
 
 /** Where a panel opens: under its control (left edges aligned, or right
     edges with "below-right"), or beside a menu item (a submenu). */
-export type Placement = "below" | "below-right" | "right";
+type Placement = "below" | "below-right" | "right";
 
 type PanelEntry = { panel: React.RefObject<HTMLDivElement | null> };
 /** The open panels, innermost last: only the innermost reads the keys. */

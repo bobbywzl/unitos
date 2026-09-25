@@ -102,18 +102,15 @@ function update(state: EditorState, transactions: readonly Transaction[]): Trans
   // Undo and redo bring the attribute back themselves.
   const history = transactions.some((tr) => isHistoryTransaction(tr));
 
-  // A style on a selection that reaches a paragraph's end styles its mark:
-  // the mark takes the style of the paragraph's last character when the
-  // selection holds it; otherwise (an empty paragraph, a selection that
-  // starts at the end) the mark takes the style changes themselves.
-  const steps = history ? [] : styleSteps(transactions);
+  // A style set on a selection that reaches a paragraph's end styles its
+  // mark: the mark takes the style of the paragraph's last character when
+  // the selection holds it; otherwise (an empty paragraph, a selection that
+  // starts at the end) the mark takes the style changes themselves. Styles
+  // autocorrect sets (Markdown) have no selection and leave the mark alone.
+  const steps = history || sel.empty ? [] : styleSteps(transactions);
   if (steps.length) {
-    let from = Math.min(...steps.map((s) => s.from));
-    let to = Math.max(...steps.map((s) => s.to));
-    if (!sel.empty) {
-      from = Math.min(from, sel.from);
-      to = Math.max(to, sel.to);
-    }
+    const from = Math.min(sel.from, ...steps.map((s) => s.from));
+    const to = Math.max(sel.to, ...steps.map((s) => s.to));
     for (const { node, pos } of blocksEndingIn(state.doc, from, to)) {
       const end = pos + 1 + node.content.size;
       let marks: readonly Mark[];

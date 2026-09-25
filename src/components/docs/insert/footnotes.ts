@@ -1,23 +1,15 @@
 import { Extension, Node, type Editor } from "@tiptap/core";
 import { Fragment, type Node as PMNode } from "@tiptap/pm/model";
-import { Plugin, PluginKey, TextSelection, type EditorState, type Transaction } from "@tiptap/pm/state";
+import { Plugin, TextSelection, type EditorState, type Transaction } from "@tiptap/pm/state";
+import { newBlockId } from "@/lib/docs/schema";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
 
-// Footnotes (SPEC.md §29), as Google Docs numbers them: a footnote's number
-// is an inline atom in the text (footnoteReference), and its words are
-// paragraphs in the footnotes block at the end of the document, one
-// footnote per number, in the order of the numbers. The numbers are drawn,
-// not stored (a decoration's data-n), so they count again after every edit;
-// deleting a number deletes its footnote. The footnotes' paragraphs are
-// indexed like any others, so a reader can select and anchor them.
+// Footnotes (SPEC.md §29), as Google Docs numbers them: the number is an
+// inline atom (footnoteReference), the words are paragraphs in the footnotes
+// block at the document's end, in the numbers' order. The numbers are
+// drawn, not stored; deleting a number deletes its footnote.
 
-export function newFootnoteId(): string {
-  const bytes = new Uint8Array(6);
-  crypto.getRandomValues(bytes);
-  return `fn${Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("")}`;
-}
-
-export const FootnoteReference = Node.create({
+const FootnoteReference = Node.create({
   name: "footnoteReference",
   group: "inline",
   inline: true,
@@ -39,7 +31,7 @@ export const FootnoteReference = Node.create({
   },
 });
 
-export const Footnotes = Node.create({
+const Footnotes = Node.create({
   name: "footnotes",
   group: "block",
   content: "footnote+",
@@ -54,7 +46,7 @@ export const Footnotes = Node.create({
   },
 });
 
-export const Footnote = Node.create({
+const Footnote = Node.create({
   name: "footnote",
   content: "paragraph+",
   isolating: true,
@@ -114,7 +106,7 @@ function footnotesOf(doc: PMNode): { byId: Map<string, PMNode>; blocks: { pos: n
     number has a footnote, no footnote lacks a number, the footnotes follow
     the numbers' order, and they sit in one block at the very end. Returns
     whether anything changed. */
-export function normalizeFootnotes(tr: Transaction): boolean {
+function normalizeFootnotes(tr: Transaction): boolean {
   const schema = tr.doc.type.schema;
   const refType = schema.nodes.footnoteReference;
   const blockType = schema.nodes.footnotes;
@@ -127,7 +119,7 @@ export function normalizeFootnotes(tr: Transaction): boolean {
   if (refs.duplicates.length > 0) {
     const current = footnotesOf(tr.doc).byId;
     for (const dup of refs.duplicates) {
-      const id = newFootnoteId();
+      const id = newBlockId();
       const original = current.get(dup.id);
       if (original) copies.set(id, noteType.create({ footnoteId: id }, original.content));
       // A new attribute moves no position: dup.pos stays good.
@@ -169,7 +161,7 @@ export function insertFootnote(editor: Editor): boolean {
   if (!$from.parent.isTextblock || $from.parent.type.spec.code) return false;
   // Not inside a footnote: Google Docs has no footnotes of footnotes.
   for (let d = $from.depth; d > 0; d--) if ($from.node(d).type.name === "footnote") return false;
-  const id = newFootnoteId();
+  const id = newBlockId();
   // The number goes where the selection ends; the words stay.
   const tr = state.tr.insert(state.selection.to, refType.create({ footnoteId: id }));
   normalizeFootnotes(tr);
@@ -188,22 +180,6 @@ export function insertFootnote(editor: Editor): boolean {
   return true;
 }
 
-/** The footnote a number points to (the position before it), or the number of a footnote. */
-export function footnoteTarget(doc: PMNode, id: string, want: "footnote" | "reference"): number | null {
-  let found: number | null = null;
-  doc.descendants((node, pos) => {
-    if (found !== null) return false;
-    const name = want === "footnote" ? "footnote" : "footnoteReference";
-    if (node.type.name === name && node.attrs.footnoteId === id) {
-      found = pos;
-      return false;
-    }
-    return true;
-  });
-  return found;
-}
-
-const footnotesKey = new PluginKey<DecorationSet>("docsFootnotes");
 const numbered = new WeakMap<PMNode, DecorationSet>();
 
 function numberDecorations(doc: PMNode): DecorationSet {
@@ -242,12 +218,11 @@ function endsWithFootnotes(state: EditorState): boolean {
 /** The footnotes' keeper: numbering, order, and the block at the end. The
     trailing paragraph the editor adds after the last block never goes after
     the footnotes. */
-export const FootnoteKeeper = Extension.create({
+const FootnoteKeeper = Extension.create({
   name: "docsFootnotes",
   addProseMirrorPlugins() {
     return [
       new Plugin({
-        key: footnotesKey,
         appendTransaction: (transactions, _old, state) => {
           if (!transactions.some((t) => t.docChanged)) return null;
           const tr = state.tr;

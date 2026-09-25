@@ -64,5 +64,7 @@ export function mergeRichText(base: RichNode, local: RichNode, remote: RichNode)
     result.splice(at, 0, { key: e.key, node: e.node });
   });
   const content = result.map((r) => r.node);
-  return { ...remote, content: content.length > 0 ? content : [{ type: "paragraph" }] };
+  // The doc node's attributes (the named styles): the editor's when it changed them.
+  const attrs = JSON.stringify(local.attrs ?? null) !== JSON.stringify(base.attrs ?? null) ? local.attrs : remote.attrs;
+  return { ...remote, attrs, content: content.length > 0 ? content : [{ type: "paragraph" }] };
 }

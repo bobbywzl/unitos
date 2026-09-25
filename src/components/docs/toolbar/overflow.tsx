@@ -5,14 +5,10 @@ import { MoreVertIcon } from "@/components/docs/icons";
 import { DropdownPanel, keepFocus } from "@/components/docs/menu";
 import { OPEN_MENU_EVENT, Sep } from "@/components/docs/toolbar/controls";
 
-// The toolbar's row (SPEC.md §29) and how it folds, as Google Docs folds
-// it. When the controls do not fit, the mode switcher's name folds away
-// first; then whole groups — the controls between two separators — move,
-// right to left, into More (⋮), which opens them in a row under it. When
-// the row widens they come back in the reverse order, the name last.
-//
-// The row is one Tab stop (role="toolbar"): Left and Right move between
-// the controls, Escape goes back to the page.
+// The toolbar's row (SPEC.md §29). When the controls do not fit, the mode
+// switcher's name folds first, then whole groups move, right to left, into
+// More (⋮). The row is one Tab stop: Left and Right move between controls,
+// Escape goes back to the page.
 
 export type ToolbarGroup = {
   key: string;

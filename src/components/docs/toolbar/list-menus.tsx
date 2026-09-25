@@ -3,19 +3,11 @@
 import type { Editor } from "@tiptap/react";
 import { useT } from "@/components/lang-provider";
 import { keepFocus } from "@/components/docs/menu";
-import { applyListPreset, CHECKLIST_PRESETS, tileRows, type ListKind, type ListPreset } from "@/components/docs/toolbar/lists";
+import { applyListPreset, CHECKLIST_PRESETS, tileRows, type ListPreset } from "@/components/docs/toolbar/lists";
 
 // The list buttons' palettes (SPEC.md §29): Google Docs' presets — a 3 × 2
 // grid for bullets and for numbers, 2 × 1 for checklists — each tile
 // drawing its glyphs level by level.
-
-export type ListState = {
-  bullet: boolean;
-  ordered: boolean;
-  task: boolean;
-  /** Each kind's preset around the selection: undefined outside such a list. */
-  styles: Record<ListKind, string | null | undefined>;
-};
 
 function Tile({ preset, on, onPick }: { preset: ListPreset; on: boolean; onPick: () => void }) {
   const rows = tileRows(preset);
@@ -25,7 +17,7 @@ function Tile({ preset, on, onPick }: { preset: ListPreset; on: boolean; onPick:
       role="menuitemradio"
       aria-checked={on}
       aria-label={rows
-        .filter((r, i) => i < 4)
+        .slice(0, 4)
         .map((r) => r.glyph)
         .join(" ")}
       data-menu-item

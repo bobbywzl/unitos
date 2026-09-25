@@ -15,7 +15,7 @@ import { DropDownIcon } from "@/components/docs/icons";
 import { DropdownPanel, MenuItem } from "@/components/docs/menu";
 import { DEFAULT_HF_MARGIN_PT, formatLength, parseLength, type PageFrame } from "@/components/docs/page/geometry";
 import { lengthUnitFor } from "@/components/docs/page/setup-dialog";
-import { usePageState, type HeaderArea, type PageStore } from "@/components/docs/page/store";
+import { PAGE_EVENT, usePageState, type HeaderArea, type PageStore } from "@/components/docs/page/store";
 import type { PageSetup, RichNode } from "@/lib/docs/schema";
 
 // Headers, footers, and page numbers (SPEC.md §29), Google Docs': the header
@@ -185,7 +185,12 @@ function HeaderEditor({
     [],
   );
   useEffect(() => {
-    if (editor && !editor.isDestroyed) editor.commands.focus("end");
+    if (!editor || editor.isDestroyed) return;
+    editor.commands.focus("end");
+    // Page count (Search the menus) goes in at the caret.
+    const insert = () => editor.chain().focus().insertContent({ type: "pageCount" }).run();
+    window.addEventListener(PAGE_EVENT.pageCount, insert);
+    return () => window.removeEventListener(PAGE_EVENT.pageCount, insert);
   }, [editor]);
   return <EditorContent editor={editor} />;
 }

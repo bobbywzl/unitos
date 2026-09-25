@@ -2,7 +2,7 @@ import type { Editor } from "@tiptap/core";
 import { registerDocsCommands } from "@/components/docs/commands";
 import { ZOOMS } from "@/components/docs/toolbar";
 import { addPageNumbers } from "@/components/docs/page/header-footer";
-import { findPageStore as store, type HeaderArea } from "@/components/docs/page/store";
+import { PAGE_EVENT, findPageStore as store, type EditHeaderDetail, type HeaderArea } from "@/components/docs/page/store";
 import type { TKey } from "@/lib/i18n/dictionaries";
 
 // The page area's commands (SPEC.md §29): what Google Docs keeps in its File,
@@ -15,13 +15,6 @@ export function stepZoom(current: number, direction: 1 | -1): number {
   if (direction === 1) return ZOOMS.find((z) => z > pct) ?? ZOOMS[ZOOMS.length - 1];
   return [...ZOOMS].reverse().find((z) => z < pct) ?? ZOOMS[0];
 }
-
-export const PAGE_EVENT = {
-  /** Enter the header or the footer of the page that holds the caret. */
-  editHeader: "docs:page-edit-header",
-} as const;
-
-export type EditHeaderDetail = { area: HeaderArea };
 
 /** The document can be edited and is in pages format. */
 const paged = (editor: Editor) => editor.isEditable && store(editor)?.get().setup.pageless === false;
@@ -141,6 +134,14 @@ registerDocsCommands([
     keywords: ["page number", "numbering", "page elements"],
     run: (editor) => store(editor)?.set({ dialog: "pageNumbers" }),
     enabled: paged,
+  },
+  {
+    id: "page:page-count",
+    label: "docsPage.pageCount",
+    menu: "insert",
+    keywords: ["page count", "total pages", "page elements"],
+    run: () => window.dispatchEvent(new Event(PAGE_EVENT.pageCount)),
+    enabled: (editor) => store(editor)?.get().editing != null,
   },
   ...NUMBER_PRESETS.map(([area, onFirst, label]) => ({
     id: `page:numbers-${area}-${onFirst ? "all" : "not-first"}`,

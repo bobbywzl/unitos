@@ -548,25 +548,9 @@ div:has([data-docs-editor]) > .reader-fade {
   justify-content: flex-end;
   margin-top: 20px;
 }
-.docs-word-counter {
-  position: sticky;
-  bottom: 16px;
-  left: 16px;
-  z-index: 20;
-  display: inline-flex;
-  margin: -48px 0 16px 16px;
-  padding: 8px 14px;
-  border-radius: 8px;
-  background: var(--docs-menu-bg);
-  box-shadow: var(--docs-menu-shadow);
-  color: var(--docs-text);
-  font: 500 14px/20px var(--docs-ui-font);
-}
-
 /* ── Print: the pages alone (css/page.css lays them out) ───────────────── */
 @media print {
-  .docs-header,
-  .docs-word-counter {
+  .docs-header {
     display: none !important;
   }
 }

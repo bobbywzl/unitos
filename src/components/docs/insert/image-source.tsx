@@ -2,8 +2,7 @@
 
 import { useRef, useState } from "react";
 import { useT } from "@/components/lang-provider";
-import { LinkIcon } from "@/components/docs/icons";
-import { UploadIcon } from "@/components/docs/insert/icons";
+import { LinkIcon, UploadIcon } from "@/components/docs/icons";
 
 // Google Docs' image sources (SPEC.md §29) as the "@" menu and Replace image
 // open them: Upload from computer, and By URL with its field.

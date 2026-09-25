@@ -188,12 +188,12 @@ function mapInRun(run: Run, anchor: { blockId: string; startOffset: number; endO
   if (end <= run.head) return spanIn(run, start, end);
   // After the change (typing right before the mark stays outside it).
   if (start >= run.oldText.length - run.longTail) return spanIn(run, start + delta, end + delta);
-  // Words added inside the mark grow it; an Enter cuts it, and it keeps the
-  // larger part.
-  if (run.head === oldEnd) return spanIn(run, start, end + delta);
+  // The whole change is inside the mark: it grows or shrinks with it; an
+  // Enter cuts it, and it keeps the larger part.
+  if (start <= run.head && end >= oldEnd) return spanIn(run, start, end + delta);
   if (start >= run.head && end <= oldEnd) return "inside";
-  // The change takes one end of the mark: the rest stays.
-  return spanIn(run, start < run.head ? start : run.head, end > oldEnd ? end + delta : newEnd);
+  // The change takes one end of the mark and words outside it: the rest stays.
+  return start < run.head ? spanIn(run, start, run.head) : spanIn(run, newEnd, end + delta);
 }
 
 type Anchor = {

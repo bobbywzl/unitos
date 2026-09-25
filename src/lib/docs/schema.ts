@@ -41,10 +41,7 @@ export const RICH_NODE_TYPES = [
   // and the page count.
   "pageNumber",
   "pageCount",
-  // What the "@" menu and the insert area put in the text (components/docs/
-  // insert): the smart chips, a bookmark, a footnote's number and the
-  // footnotes at the end, an equation in a line or on its own, and a table
-  // of contents.
+  // The insert area's nodes (components/docs/insert).
   "dateChip",
   "personChip",
   "fileChip",
@@ -58,8 +55,8 @@ export const RICH_NODE_TYPES = [
   "tableOfContents",
 ] as const;
 
-/** The smart chips: each draws its `label`, and the label is the chip's words
-    in its paragraph's index row (lib/docs/blocks.ts inlineText). */
+/** The smart chips: each draws its `label`, which is its words in the
+    paragraph index (lib/docs/blocks.ts). */
 export const CHIP_NODE_TYPES = new Set(["dateChip", "personChip", "fileChip", "dropdownChip"]);
 
 export const RICH_MARK_TYPES = [
@@ -174,8 +171,7 @@ function cleanAttr(name: string, value: unknown): unknown {
     case "backgroundColor":
     case "borderColor":
       return safeColor(value);
-    // A table cell's side ("1 solid #000000": points, dash, color) and an
-    // image's border dash (components/docs/insert).
+    // A table cell's side ("1 solid #000000") and an image's border dash.
     case "borderTop":
     case "borderRight":
     case "borderBottom":

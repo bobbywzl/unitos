@@ -4,16 +4,10 @@ import { Plugin, PluginKey } from "@tiptap/pm/state";
 import { firstFamily, loadFontInUse } from "@/components/docs/fonts";
 import { readChanges, STYLE_ATTR, STYLE_ORDER, styleVariables } from "@/components/docs/toolbar/styles";
 
-// The page editor's toolbar extensions (SPEC.md §29). extensions.ts spreads
-// this list into the editor.
-//
-// - The document's named styles live on the doc node (toolbar/styles.ts);
-//   the editor's root carries them as CSS variables, which css/toolbar.css
-//   reads.
-// - Keep with next, Keep lines together, Prevent single lines, and Add page
-//   break before are paragraph attributes (null = the named style's).
-// - Clear formatting resets the selection's text and its paragraphs.
-// - A face the document uses that the default stylesheet leaves out loads.
+// The toolbar's extensions (SPEC.md §29): the named styles on the doc node,
+// drawn as CSS variables on the editor's root; the paragraph flags of Line
+// & paragraph spacing (null = the named style's); Clear formatting; and the
+// loading of faces the document uses.
 
 declare module "@tiptap/core" {
   interface Commands<ReturnType> {

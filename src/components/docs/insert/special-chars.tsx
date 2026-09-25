@@ -5,9 +5,8 @@ import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { useLang, useT } from "@/components/lang-provider";
 import { translatorFor } from "@/lib/i18n/dictionaries";
-import { CloseIcon } from "@/components/docs/icons";
+import { CloseIcon, SearchIcon } from "@/components/docs/icons";
 import { onInsert } from "@/components/docs/insert/context";
-import { SearchIcon } from "@/components/docs/insert/icons";
 import { CHAR_CATEGORIES, charName, codepoint, groupChars, searchChars } from "@/components/docs/insert/special-chars-data";
 import { keepSelection } from "@/components/docs/insert/ui";
 

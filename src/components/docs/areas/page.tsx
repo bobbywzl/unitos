@@ -7,7 +7,7 @@ import { useLang } from "@/components/lang-provider";
 import type { DocsAreaProps } from "@/components/docs/areas/types";
 import type { Zoom } from "@/components/docs/toolbar";
 import { hostPagination, paginateNow, repaginate } from "@/components/docs/ext/page";
-import { PAGE_EVENT, stepZoom, type EditHeaderDetail } from "@/components/docs/page/commands";
+import { stepZoom } from "@/components/docs/page/commands";
 import { PAGE_PITCH_EXTRA, PAGELESS_TOP, pageFrame, pagelessWidth, scrollParent } from "@/components/docs/page/geometry";
 import {
   HeaderFooterLayer,
@@ -22,7 +22,7 @@ import { OutlineButton, OutlinePanel } from "@/components/docs/page/outline";
 import type { PaginationConfig } from "@/components/docs/page/paginate";
 import { HorizontalRuler, VerticalRuler } from "@/components/docs/page/ruler";
 import { lengthUnitFor, PageSetupDialog, readPageDefault } from "@/components/docs/page/setup-dialog";
-import { pageStore, usePageState, type HeaderArea } from "@/components/docs/page/store";
+import { PAGE_EVENT, pageStore, usePageState, type EditHeaderDetail, type HeaderArea } from "@/components/docs/page/store";
 import { DEFAULT_PAGE_SETUP } from "@/lib/docs/schema";
 
 // The page area (SPEC.md §29): the canvas, the pages, and what sits on and

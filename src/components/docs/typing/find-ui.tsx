@@ -301,6 +301,8 @@ export function FindReplaceDialog({ editor, open, onClose }: { editor: Editor; o
           onClick={() => {
             setMessage("");
             replaceResult(view, Math.max(0, find.current), replacement);
+            // The buttons turn off with the last result: the focus stays in the dialog.
+            findRef.current?.focus();
           }}
         >
           {t("docsTyping.replace")}
@@ -311,6 +313,7 @@ export function FindReplaceDialog({ editor, open, onClose }: { editor: Editor; o
             const query = find.query;
             const count = replaceAll(view, replacement);
             setMessage(t("docsTyping.replaced", { count, query }));
+            findRef.current?.focus();
           }}
         >
           {t("docsTyping.replaceAll")}

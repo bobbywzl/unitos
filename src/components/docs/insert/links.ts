@@ -32,8 +32,12 @@ export function placeOf(href: string): Place | null {
 
 /** The project document a link opens, if it is one: its id. */
 export function projectDocOf(href: string, notebookId: string): string | null {
-  const m = /^\/n\/([\w-]+)\?doc=([\w-]+)/.exec(href);
-  return m && m[1] === notebookId ? m[2] : null;
+  try {
+    const url = new URL(href, window.location.origin);
+    return url.origin === window.location.origin && url.pathname === `/n/${notebookId}` ? url.searchParams.get("doc") : null;
+  } catch {
+    return null;
+  }
 }
 
 /** Where a place is: inside its heading, or at its bookmark. */

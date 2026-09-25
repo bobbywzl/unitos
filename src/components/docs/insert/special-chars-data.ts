@@ -5,8 +5,8 @@ import type { TKey } from "@/lib/i18n/dictionaries";
 // search finds a character by its name (the names below, the group's
 // name) or by its code point ("2192", "U+2192").
 
-export type CharGroup = { id: string; name: TKey; ranges: [number, number][]; words: string };
-export type CharCategory = { id: string; label: TKey; groups: CharGroup[] };
+type CharGroup = { id: string; name: TKey; ranges: [number, number][]; words: string };
+type CharCategory = { id: string; label: TKey; groups: CharGroup[] };
 
 export const CHAR_CATEGORIES: CharCategory[] = [
   {

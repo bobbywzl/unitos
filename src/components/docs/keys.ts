@@ -1,11 +1,7 @@
-// Shortcut labels the way Google Docs prints them in tooltips and menus
-// (SPEC.md §29). A combo is written "Mod+Shift+7": Mod is Ctrl on Windows,
-// Linux, and ChromeOS and ⌘ on a Mac; "Ctrl" is the Control key on every
-// platform (Hide the menus keeps Ctrl+Shift+F on a Mac too).
-//
-// Windows: "Ctrl+Shift+7", "Ctrl+[". Mac: a single character after ⌘ takes
-// no plus ("⌘B", "⌘\"), anything longer does ("⌘+Shift+7", "⌘+[",
-// "⌘+Option+M"), and Alt is Option.
+// Shortcut labels as Google Docs prints them (SPEC.md §29). A combo is
+// written "Mod+Shift+7": Mod is Ctrl, or ⌘ on a Mac; "Ctrl" is Control on
+// every platform. On a Mac a single character after ⌘ takes no plus ("⌘B"),
+// anything longer does ("⌘+Shift+7"), and Alt is Option.
 
 export function isMac(): boolean {
   if (typeof navigator === "undefined") return false;

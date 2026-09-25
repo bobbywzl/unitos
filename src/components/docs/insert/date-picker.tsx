@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useLang, useT } from "@/components/lang-provider";
 import { ChevronLeftIcon, ChevronRightIcon, ClockIcon } from "@/components/docs/insert/icons";
-import { dayFromIso, isoOf, monthName, parseTime, sameDay, timeLabel, today, weekdayName, type Day } from "@/components/docs/insert/dates";
+import { dayFromIso, formatDay, isoOf, parseTime, sameDay, timeLabel, today, type Day } from "@/components/docs/insert/dates";
 
 // Google Docs' date picker (SPEC.md §29): the month with ‹ ›, the weekdays,
 // six weeks of days (other months' days gray, the chosen day a blue circle),
@@ -36,7 +36,7 @@ export function DatePicker({
       const d = new Date(mo.y, mo.m + n, 1);
       return { y: d.getFullYear(), m: d.getMonth() };
     });
-  const title = lang === "zh" ? `${month.y}年${monthName(month.m, lang)}` : `${monthName(month.m, lang)} ${month.y}`;
+  const title = formatDay({ y: month.y, m: month.m, d: 1 }, lang, { month: "long", year: "numeric" });
   const parsedTime = time.trim() ? parseTime(time) : null;
   const timeBad = time.trim() !== "" && parsedTime === null;
   const ok = () => onPick(isoOf(chosen), parsedTime);
@@ -61,9 +61,9 @@ export function DatePicker({
         </button>
       </div>
       <div className="docs-date-grid" role="grid">
-        {Array.from({ length: 7 }, (_, w) => (
-          <span key={`w${w}`} className="docs-date-weekday" aria-hidden>
-            {lang === "zh" ? weekdayName(w, lang).slice(1) : weekdayName(w, lang).slice(0, 1)}
+        {days.slice(0, 7).map((day) => (
+          <span key={`w${day.d}`} className="docs-date-weekday" aria-hidden>
+            {formatDay(day, lang, { weekday: "narrow" })}
           </span>
         ))}
         {days.map((day) => {
