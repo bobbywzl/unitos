@@ -9,6 +9,7 @@ import { loadProfile } from "@/lib/derive/context";
 import { modelErrorMessage } from "@/lib/derive/json-call";
 import { runSuggest, suggestDocument } from "@/lib/derive/suggest";
 import type { SuggestEvent } from "@/lib/docs/assistant-suggestions";
+import { importShared } from "@/lib/docs/server";
 import { scopeOf, takesSuggestions, windowsOf } from "@/lib/docs/suggest-ops";
 import { keepVersionBeforeSuggestions } from "@/lib/docs/versions";
 import { featureConfigured } from "@/lib/feature-models";
@@ -66,6 +67,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ documentId: st
   });
   if (!document) return NextResponse.json({ error: t("api.documentNotFound") }, { status: 404 });
   if (!takesSuggestions(document)) return NextResponse.json({ error: t("api.suggestNeedsRichText") }, { status: 400 });
+  // An import another account's project holds takes no edits (SPEC.md §29).
+  if (await importShared(documentId)) return NextResponse.json({ error: t("api.importShared") }, { status: 403 });
   if (!(await featureConfigured("suggest"))) return NextResponse.json({ error: t("api.suggestNeedsKey") }, { status: 503 });
 
   const userId = access.user.id;

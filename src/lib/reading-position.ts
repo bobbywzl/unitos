@@ -29,9 +29,10 @@ export const TRAY_STATE_STORE = "unitos-tray-state";
 // Until the reader opens or folds the tray, a blank document opens with it
 // folded in a window narrower than this: the whole toolbar beside the open
 // tray at its default width (SPEC.md §29). Normal view only: a split view
-// keeps the tray past the panes, so folding it gives the page no room.
+// keeps the tray past the panes, so folding it gives the page no room. An
+// import keeps the tray open, as the block reader shows it.
 const TRAY_FOLD_BELOW = 1860;
-const PAGE_EDITOR_PANE = "[data-reader-root][data-page-editor]";
+const PAGE_EDITOR_PANE = "[data-reader-root][data-page-editor]:not([data-import])";
 // The inline script's style rules: the tray stays folded and the entrance
 // fades stay still until React has taken over. workspace.tsx removes them.
 export const RESTORE_STYLE_ID = "unitos-restore-style";

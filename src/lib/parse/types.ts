@@ -46,11 +46,23 @@ export type LinkSpan = {
   targetFragment?: string;
 };
 
+// Where a page of a PDF begins inside a block that runs across a page break
+// (a paragraph, a list, a table the parse joined): offset is the character
+// offset in the block's text where the page's words begin, page the 1-based
+// page. In a list, a page that begins with an item begins at the item's line,
+// its marker included; in a table, at the row.
+export type PageStart = { offset: number; page: number };
+
 export type ParsedBlock = {
   type: BlockType;
   text: string;
   html?: string;
-  page?: number; // FIGURE blocks from a PDF: 1-based page, for the figure image route
+  // PDF blocks: the 1-based page the block's first words are on. FIGURE
+  // blocks: the page the figure image route renders.
+  page?: number;
+  // PDF blocks joined across a page break: each later page's start, in
+  // order. Absent when the block stays on one page.
+  pageStarts?: PageStart[];
   region?: Region; // FIGURE blocks from a PDF: the figure's region on its page (percent coordinates)
   citations?: CitationSpan[];
   styles?: StyleSpan[];
@@ -93,6 +105,13 @@ export type ParsedDocument = {
   format?: "slides" | "sheets";
   // Slides: the slide's width over its height; sets the reader's column.
   slideAspect?: number;
+  // PDF parses: the first page's size in points (1/72 inch), as pdf.js
+  // reads it at scale 1 (the crop box, turned by the page's rotation).
+  pageSize?: { width: number; height: number };
+  // PDF parses: the PDF's own page labels, one per page ("xii", "1043"),
+  // only when the PDF names its pages otherwise than 1..n. A page the PDF
+  // leaves unnamed reads as its number. Stored on Document.pageLabels.
+  pageLabels?: string[];
 };
 
 /** Document.references as stored Json → typed entries. Defensive: bad rows drop. */
