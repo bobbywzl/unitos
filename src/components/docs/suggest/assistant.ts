@@ -5,7 +5,6 @@ import type { Fragment, Node as PMNode } from "@tiptap/pm/model";
 import { EditorState, TextSelection, type Transaction } from "@tiptap/pm/state";
 import { isSuggestionMark, newId, readSuggestions, settle, suggest } from "@/components/docs/ext/suggest";
 import { findBlock, posInBlock } from "@/components/docs/layer/anchor";
-import { blockStyle } from "@/components/docs/toolbar/styles";
 import { DOCS_EVENT, fireDocs } from "@/components/docs/typing/events";
 import { isList, isListItem } from "@/components/docs/typing/lists";
 import { markdownToHtml } from "@/components/docs/typing/markdown";
@@ -13,6 +12,7 @@ import { diffSegments } from "@/lib/anchors/remap";
 import type { ResolvedOp, SkipReason, SuggestFormat, SuggestStyle } from "@/lib/docs/assistant-suggestions";
 import { inlineText, outOfIndex } from "@/lib/docs/blocks";
 import { suggestionAuthor, type RichNode } from "@/lib/docs/schema";
+import { blockPlaces } from "@/lib/docs/suggest-ops";
 
 // The assistant's suggestions in the page editor (SPEC.md §29): the ops the
 // model answered with, resolved against the paragraph index, land as
@@ -41,8 +41,12 @@ export function applyAssistantOps(editor: Editor, ops: readonly ResolvedOp[], au
   if (pending.size) settle(tr, false, pending);
   const made: string[] = [];
   const skipped: Landing["skipped"] = [];
+  // The blocks' styles as the server read them (the assistant's
+  // suggestions as not made), which no op of this landing changes.
+  let places: ReturnType<typeof blockPlaces> | null = null;
+  const styleOf = (blockId: string) => (places ??= blockPlaces(tr.doc.toJSON() as RichNode)).get(blockId)?.style;
   for (const op of ops) {
-    const reason = land(editor, tr, op, author, made);
+    const reason = land(editor, tr, op, author, made, styleOf);
     if (reason) skipped.push({ i: op.i, reason });
   }
   if (!tr.docChanged) return { ids: [], skipped };
@@ -54,7 +58,14 @@ export function applyAssistantOps(editor: Editor, ops: readonly ResolvedOp[], au
 
 /** One op on the page as it now stands: its suggestions added to `tr`, or
     why it did not land. */
-function land(editor: Editor, tr: Transaction, op: ResolvedOp, author: string, made: string[]): SkipReason | null {
+function land(
+  editor: Editor,
+  tr: Transaction,
+  op: ResolvedOp,
+  author: string,
+  made: string[],
+  styleOf: (blockId: string) => SuggestStyle | null | undefined,
+): SkipReason | null {
   // One edit on the page as it now stands, suggested under a new id.
   const commit = (build: (state: EditorState) => Transaction | SkipReason): SkipReason | null => {
     const state = EditorState.create({ doc: tr.doc });
@@ -105,7 +116,8 @@ function land(editor: Editor, tr: Transaction, op: ResolvedOp, author: string, m
           commit((state) => {
             const r = range(state.doc, op.blockId, at + s.start, at + s.end);
             if (!r) return "changed";
-            return holdsObject(state.doc, r.from, r.to) ? "object" : replaceText(state.tr, r.from, r.to, s.text);
+            const whole = !holdsObject(state.doc, r.from, r.to) && wordsIn(state.doc, r.from, r.to) === base.slice(s.start, s.end);
+            return whole ? replaceText(state.tr, r.from, r.to, s.text) : "object";
           }) ?? reason;
       }
       return reason;
@@ -119,7 +131,9 @@ function land(editor: Editor, tr: Transaction, op: ResolvedOp, author: string, m
         clear(place.from, place.to) ??
         commit((state) => {
           const r = range(state.doc, op.blockId, at, at + op.find.length);
-          return r ? state.tr.addMark(r.from, r.to, state.schema.marks[MARKS[op.format]].create()) : "changed";
+          if (!r) return "changed";
+          if (wordsIn(state.doc, r.from, r.to) !== op.find) return "object";
+          return state.tr.addMark(r.from, r.to, state.schema.marks[MARKS[op.format]].create());
         })
       );
     }
@@ -151,7 +165,7 @@ function land(editor: Editor, tr: Transaction, op: ResolvedOp, author: string, m
     }
     case "set_style": {
       const block = findBlock(tr.doc, op.blockId);
-      if (!block || styleOf(tr.doc, block) !== op.baseStyle) return "changed";
+      if (!block || styleOf(op.blockId) !== op.baseStyle) return "changed";
       return (
         clear(block.pos, block.pos + 1, true) ??
         commit((state) => {
@@ -185,6 +199,11 @@ function range(doc: PMNode, blockId: string, start: number, end: number): { from
   const from = posInBlock(block.node, block.pos, start);
   return { from, to: end > start ? posInBlock(block.node, block.pos, end, true) : from };
 }
+
+/** The words between two positions of a block, as the index reads them. An
+    offset inside a smart chip's label has no position of its own, so words
+    that cut through a label read otherwise here. */
+const wordsIn = (doc: PMNode, from: number, to: number) => doc.slice(from, to).content.content.map(indexText).join("");
 
 /** The range holds an object striking would remove: a smart chip, a
     footnote's number, an inline equation, a bookmark. */
@@ -310,16 +329,7 @@ const LISTS: Record<ListStyle, (chain: ChainedCommands) => ChainedCommands> = {
   numbered: (chain) => chain.toggleOrderedList(),
   checklist: (chain) => chain.toggleTaskList(),
 };
-const LIST_STYLE: Record<string, ListStyle> = { bulletList: "bulleted", orderedList: "numbered", taskList: "checklist" };
 const isListStyle = (style: SuggestStyle): style is ListStyle => style in LISTS;
-
-/** A block's style as the ops name it: the list of a list line, else its
-    paragraph style. */
-function styleOf(doc: PMNode, block: { node: PMNode; pos: number }): SuggestStyle {
-  const $pos = doc.resolve(block.pos);
-  const line = isListItem($pos.parent) && $pos.index() === 0;
-  return (line && LIST_STYLE[$pos.node(-1).type.name]) || blockStyle(block.node);
-}
 
 /** A block from one style to another, as the list buttons and the Styles
     menu take it: a list line leaves its list for a paragraph style. */
