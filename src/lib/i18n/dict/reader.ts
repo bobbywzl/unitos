@@ -72,6 +72,9 @@ const en = {
   commandBulleted: "Turn into a bulleted list",
   commandFix: "Fix spelling and grammar",
   commandTitle: "The assistant writes this change into the text as suggestions. Accept or reject each one.",
+  barPlaceholder: "Tell the assistant how to change the selected words…",
+  suggestSkipChanged: "Skipped: the words changed while the assistant worked. ({why})",
+  suggestSkipObject: "Skipped: the words hold a chip, a footnote number, an equation, or a bookmark. ({why})",
   // Contents (SPEC.md §26): the article's parts, each a jump to where it
   // starts. Two clicks make them: Contents opens the list, Generate
   // contents runs the model call.
@@ -343,6 +346,9 @@ const zh: Record<keyof typeof en, string> = {
   commandBulleted: "转为项目符号列表",
   commandFix: "修正拼写和语法",
   commandTitle: "助手把这处修改以建议的形式写进文中。逐条接受或拒绝。",
+  barPlaceholder: "告诉助手怎样修改选中内容…",
+  suggestSkipChanged: "已跳过：助手工作时这些文字被改动了。（{why}）",
+  suggestSkipObject: "已跳过：这些文字中有条状标签、脚注编号、公式或书签。（{why}）",
   contents: "目录",
   contentsTitle: "文章的目录：各个部分，每一项跳转到它开始的位置。",
   contentsAsk: "生成目录？AI 阅读文章，写出各个部分，每一项跳转到它开始的位置。",

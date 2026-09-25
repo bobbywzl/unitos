@@ -250,7 +250,7 @@ export const SuggestionCard = memo(function SuggestionCard({
           {line}
         </p>
       ))}
-      {why && <p className="docs-suggest-why">{why}</p>}
+      {why && <p className="docs-suggest-what">{why}</p>}
     </div>
   );
 });

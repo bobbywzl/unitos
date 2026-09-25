@@ -71,7 +71,7 @@ const COMMANDS: [SuggestCommand, TKey][] = [
   ["formal", "reader.commandFormal"],
   ["casual", "reader.commandCasual"],
   ["bulleted", "reader.commandBulleted"],
-  ["grammar", "reader.commandFix"],
+  ["fix", "reader.commandFix"],
 ];
 registerDocsCommands([
   {

@@ -4,14 +4,16 @@ import { useState, useSyncExternalStore } from "react";
 import type { ChatTurn } from "@/lib/conversation";
 import { annotationKindColor } from "@/lib/annotations/kind";
 import { useT } from "@/components/lang-provider";
-import { SparkleIcon } from "@/components/icons";
+import { ExpandIcon, SparkleIcon } from "@/components/icons";
+import { RatingButtons } from "@/components/rating-buttons";
 import { ThinkingIndicator } from "@/components/thinking";
 
 // The assistant's suggestions (SPEC.md §29): the row under a command's turn,
-// in the reader's chat card and in the assistant panel. The reader that
-// lands a command's suggestions publishes the run here by its key and the
-// row reads it, so the panel's row follows a run another tree holds and
-// keeps its count once that page closes.
+// in the reader's chat card and in the assistant panel, and the status line
+// of the reader's assistant bar. The reader that lands a command's
+// suggestions publishes the run here by its key and the row reads it, so
+// the panel's row follows a run another tree holds and keeps its count once
+// that page closes.
 
 export type SuggestRun = {
   running: boolean;
@@ -19,9 +21,11 @@ export type SuggestRun = {
   count: number;
   /** Why changes did not land, in the reader's language. */
   skipped: string[];
-  summary: string;
   /** What the reader should know about the run: a failure, a cap. */
   notes: string[];
+  summary: string;
+  /** What the rating records: the command and its words; the summary and the ops. */
+  rating: { input: string; output: string; notebookId: string; documentId: string };
   /** The page that holds the run, while it is open. */
   act?: { stop: () => void; review: () => void; settle: (accept: boolean) => void };
 };
@@ -55,7 +59,18 @@ export type SuggestRequest = {
   history: ChatTurn[];
 };
 
-export function SuggestionRow({ runKey, withSummary = false }: { runKey: string; withSummary?: boolean }) {
+export function SuggestionRow({
+  runKey,
+  withSummary = false,
+  bar,
+}: {
+  runKey: string;
+  /** The panel's row leads with the run's summary. */
+  withSummary?: boolean;
+  /** The bar's status line: the summary, Reject and Accept for the whole
+      edit, and the way into the chat card. */
+  bar?: { onChat: () => void; onSettled: () => void };
+}) {
   const t = useT();
   const run = useSyncExternalStore(subscribe, () => runs.get(runKey), () => undefined);
   const [reasonsOpen, setReasonsOpen] = useState(false);
@@ -68,8 +83,34 @@ export function SuggestionRow({ runKey, withSummary = false }: { runKey: string;
         ? t("docsSuggest.oneSuggestion")
         : t("docsSuggest.suggestionCount", { n: count });
   const button = "rounded-full bg-sand-100 px-2.5 py-0.5 font-semibold text-sand-700 hover:bg-sand-200";
+  const settle = (accept: boolean) => {
+    act?.settle(accept);
+    bar?.onSettled();
+  };
+  const reject = (
+    <button
+      type="button"
+      onClick={() => settle(false)}
+      data-track="assistant-suggestions:reject-all"
+      data-tip={t("assistant.suggestRejectAllTitle")}
+      className={button}
+    >
+      {t(bar ? "common.reject" : "docsSuggest.rejectAll")}
+    </button>
+  );
+  const accept = (
+    <button
+      type="button"
+      onClick={() => settle(true)}
+      data-track="assistant-suggestions:accept-all"
+      data-tip={t("assistant.suggestAcceptAllTitle")}
+      className={bar ? "rounded-full bg-clay px-3 py-0.5 font-semibold text-clay-fg hover:bg-clay-600" : button}
+    >
+      {t(bar ? "common.accept" : "docsSuggest.acceptAll")}
+    </button>
+  );
   return (
-    <div className="mt-2 flex flex-col gap-1.5 text-[12px] text-sand-600">
+    <div className={`flex flex-col gap-1.5 text-[12px] text-sand-600 ${bar ? "" : "mt-2"}`}>
       {withSummary && run.summary && <p className="text-[13px] text-sand-800">{run.summary}</p>}
       <div className="flex flex-wrap items-center gap-1.5">
         {run.running ? (
@@ -79,37 +120,54 @@ export function SuggestionRow({ runKey, withSummary = false }: { runKey: string;
             <SparkleIcon size={12} />
           </span>
         )}
+        {bar && !run.running && run.summary && (
+          <span className="min-w-0 flex-1 truncate text-sand-800" data-tip={run.summary}>
+            {run.summary}
+          </span>
+        )}
         {(count > 0 || !run.running) && <span className="mr-1 font-semibold text-sand-700">{counted}</span>}
-        {act && count > 0 && (
-          <>
-            <button
-              type="button"
-              onClick={act.review}
-              data-track="assistant-suggestions:review"
-              data-tip={t("assistant.suggestReviewTitle")}
-              className={button}
-            >
-              {t("assistant.suggestReview")}
-            </button>
-            <button
-              type="button"
-              onClick={() => act.settle(true)}
-              data-track="assistant-suggestions:accept-all"
-              data-tip={t("assistant.suggestAcceptAllTitle")}
-              className={button}
-            >
-              {t("docsSuggest.acceptAll")}
-            </button>
-            <button
-              type="button"
-              onClick={() => act.settle(false)}
-              data-track="assistant-suggestions:reject-all"
-              data-tip={t("assistant.suggestRejectAllTitle")}
-              className={button}
-            >
-              {t("docsSuggest.rejectAll")}
-            </button>
-          </>
+        {!run.running && (
+          <RatingButtons
+            tool="suggest"
+            input={run.rating.input}
+            output={run.rating.output}
+            notebookId={run.rating.notebookId}
+            documentId={run.rating.documentId}
+            className="mr-1"
+          />
+        )}
+        {act && count > 0 &&
+          (bar ? (
+            <>
+              {reject}
+              {accept}
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={act.review}
+                data-track="assistant-suggestions:review"
+                data-tip={t("assistant.suggestReviewTitle")}
+                className={button}
+              >
+                {t("assistant.suggestReview")}
+              </button>
+              {accept}
+              {reject}
+            </>
+          ))}
+        {bar && (
+          <button
+            type="button"
+            onClick={bar.onChat}
+            data-track="assistant-bar-chat"
+            aria-label={t("assistant.barChatTitle")}
+            data-tip={t("assistant.barChatTitle")}
+            className="rounded-full p-1 text-sand-500 hover:bg-sand-100 hover:text-clay-800"
+          >
+            <ExpandIcon size={13} />
+          </button>
         )}
       </div>
       {run.skipped.length > 0 && (

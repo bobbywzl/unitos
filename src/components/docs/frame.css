@@ -123,28 +123,35 @@
 }
 
 /* The page stack: one sheet per page behind one flow of text. A sheet is
-   paper: square corners, a hairline, and Unitos's soft shadow. */
+   paper: square corners, a hairline, and Unitos's soft shadow. The ground
+   under the text (--docs-ground, which a pinned table row paints too) is
+   the page's color, the card color for a white page in dark mode, and the
+   canvas when pageless. */
 .docs-page {
+  --docs-ground: var(--docs-sheet-color, var(--docs-page));
   position: relative;
   box-sizing: border-box;
   margin: 0 auto;
   isolation: isolate;
   cursor: text;
 }
+.dark .docs-page[data-white] {
+  --docs-ground: var(--docs-page);
+}
+.docs-page[data-pageless] {
+  --docs-ground: var(--docs-canvas);
+}
 .docs-sheet {
   position: absolute;
   left: 0;
   width: 100%;
   overflow: hidden;
-  background: var(--docs-sheet-color, var(--docs-page));
+  background: var(--docs-ground);
   outline: 1px solid var(--docs-page-border);
   box-shadow: var(--elev-sm);
 }
 .docs-page-compact .docs-sheet {
   box-shadow: none;
-}
-.dark .docs-sheet[data-white] {
-  background: var(--docs-page);
 }
 
 /* The card column (layer/comment-card.tsx CardColumn; css/layer.css): the
