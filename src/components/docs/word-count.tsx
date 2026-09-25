@@ -1,5 +1,6 @@
 "use client";
 
+import type { Node as PMNode } from "@tiptap/pm/model";
 import type { Editor } from "@tiptap/react";
 import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { useLang, useT } from "@/components/lang-provider";
@@ -10,6 +11,7 @@ import { ToolbarDialog } from "@/components/docs/toolbar/dialog";
 import { countRange, type Counts } from "@/components/docs/typing/count";
 import { TYPING_EVENT } from "@/components/docs/typing/events";
 import { serverTypingPrefs, setTypingPrefs, subscribeTypingPrefs, typingPrefs, type TypingPrefs } from "@/components/docs/typing/prefs";
+import { inlineText } from "@/lib/docs/blocks";
 import type { TKey } from "@/lib/i18n/dictionaries";
 
 // Word count (Ctrl+Shift+C), as Google Docs counts (typing/count.ts; SPEC.md
@@ -63,13 +65,30 @@ type Snapshot = {
   pages: { total: number; part: number };
 };
 
+/** The whole document's counts, as Google Docs counts them: the body; with
+    `extras`, its footnotes, headers, and footers too. */
+function countAll(editor: Editor, extras: boolean): Counts {
+  const { doc, schema } = editor.state;
+  const blocks: PMNode[] = [];
+  doc.forEach((node) => {
+    if (extras || node.type.name !== "footnotes") blocks.push(node);
+  });
+  const setup = insertContext(editor)?.pageSetup;
+  const parts = extras && setup && !setup.pageless ? [setup.header, setup.footer, ...(setup.differentFirst ? [setup.firstHeader, setup.firstFooter] : [])] : [];
+  for (const line of parts.flatMap((part) => part?.content ?? []).map(inlineText)) {
+    if (line) blocks.push(schema.nodes.paragraph.create(null, schema.text(line)));
+  }
+  const all = schema.topNodeType.create(null, blocks);
+  return countRange(all, 0, all.content.size);
+}
+
 /** The counts, recomputed after edits (300 ms) and selection moves (100 ms). */
-function useCounts(editor: Editor, active: boolean): Snapshot {
+function useCounts(editor: Editor, active: boolean, extras: boolean): Snapshot {
   const compute = (): Snapshot => {
     const { doc, selection } = editor.state;
     const { from, to, empty } = selection;
     return {
-      all: countRange(doc, 0, doc.content.size),
+      all: countAll(editor, extras),
       part: empty ? null : countRange(doc, from, to),
       pages: pageCounts(editor, from, to, empty),
     };
@@ -91,7 +110,7 @@ function useCounts(editor: Editor, active: boolean): Snapshot {
     };
     // compute reads the editor at call time.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editor, active]);
+  }, [editor, active, extras]);
   return snap;
 }
 
@@ -138,17 +157,20 @@ export function WordCountDialog({ editor }: { editor: Editor }) {
   const [open, setOpen] = useState(false);
   const [show, setShow] = useState(() => typeof window !== "undefined" && readShow());
   const [draftShow, setDraftShow] = useState(false);
+  // Include headers, footers and footnotes: off each time the dialog opens.
+  const [extras, setExtras] = useState(false);
   const [menu, setMenu] = useState(false);
   const prefs = useSyncExternalStore(subscribeTypingPrefs, typingPrefs, serverTypingPrefs);
   const pageless = insertContext(editor)?.pageSetup.pageless ?? false;
   const metric: Metric = pageless && prefs.counterMetric === "pages" ? "words" : prefs.counterMetric;
-  const snap = useCounts(editor, open || show);
+  const snap = useCounts(editor, open || show, open && extras);
   const counterRef = useRef<HTMLButtonElement>(null);
   const format = (n: number) => n.toLocaleString(lang === "zh" ? "zh-CN" : "en-US");
 
   useEffect(() => {
     const onOpen = () => {
       setDraftShow(readShow());
+      setExtras(false);
       setOpen(true);
     };
     window.addEventListener(TYPING_EVENT.wordCount, onOpen);
@@ -237,6 +259,10 @@ export function WordCountDialog({ editor }: { editor: Editor }) {
               ))}
             </tbody>
           </table>
+          <label className="docs-ty-check docs-wc-show">
+            <input type="checkbox" checked={extras} onChange={(e) => setExtras(e.target.checked)} />
+            {t("docsTyping.includeHeadersFooters")}
+          </label>
           <label className="docs-ty-check docs-wc-show">
             <input type="checkbox" checked={draftShow} onChange={(e) => setDraftShow(e.target.checked)} />
             {t("docsTyping.displayWhileTyping")}

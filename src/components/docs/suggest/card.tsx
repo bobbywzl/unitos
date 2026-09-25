@@ -178,18 +178,17 @@ export const SuggestionCard = memo(function SuggestionCard({
     return (
       <div
         data-selection-popover
-        data-side-card="suggestion"
         data-suggestion-card={id}
         role="button"
         tabIndex={-1}
         aria-label={t("docsSuggest.suggestion")}
         onMouseDown={(e) => e.preventDefault()}
         onClick={() => focusSuggestion(editor, id)}
-        className="docs-comment docs-suggest-card docs-suggest-line absolute z-30"
+        className="docs-comment docs-suggest-card docs-card-line absolute z-30"
         style={style}
       >
         {person && <PersonBadge person={person} size={20} />}
-        <span className="docs-suggest-line-text">
+        <span className="docs-card-line-text">
           {person && <b className="docs-comment-name">{person.name}</b>} {lines.map((line, i) => <span key={i}>{line} </span>)}
         </span>
       </div>
@@ -198,7 +197,6 @@ export const SuggestionCard = memo(function SuggestionCard({
   return (
     <div
       data-selection-popover
-      data-side-card="suggestion"
       data-suggestion-card={id}
       data-active
       role="group"

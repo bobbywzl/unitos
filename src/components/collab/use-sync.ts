@@ -12,6 +12,9 @@ export type SyncPresence = Person & { documentId: string | null };
 // round trips, so the cadence is the corpus's baseline load. The presence
 // window (sync/route.ts) is 25 s; a poll well inside it keeps people present.
 const POLL_MS = 8_000;
+// While another person has the same document open, their words land within
+// seconds (SPEC.md §29).
+const SHARED_POLL_MS = 2_000;
 
 // Typing must never be clobbered: a refresh waits while an input, textarea, or
 // editable block has focus, or a text selection is open. The page editor
@@ -59,6 +62,7 @@ export function useNotebookSync({
   const knownRev = useRef(rev);
   const refreshDue = useRef(false);
   const inFlight = useRef(false);
+  const shared = documentId !== null && people.some((p) => p.documentId === documentId);
 
   useEffect(() => {
     knownRev.current = Math.max(knownRev.current, rev);
@@ -92,7 +96,9 @@ export function useNotebookSync({
         const res = await fetch(`/api/notebooks/${notebookId}/sync${doc}`);
         if (!res.ok) return;
         const data = (await res.json()) as { rev: number; people: SyncPresence[] };
-        setPeople(data.people);
+        // A new list only when someone comes, goes, or opens another
+        // document: each new list renders the whole workspace.
+        setPeople((old) => (JSON.stringify(old) === JSON.stringify(data.people) ? old : data.people));
         if (data.rev > knownRev.current) refreshDue.current = true;
         if (refreshDue.current && refreshSafe()) {
           refreshDue.current = false;
@@ -107,7 +113,7 @@ export function useNotebookSync({
     }
 
     void poll();
-    const timer = setInterval(() => void poll(), POLL_MS);
+    const timer = setInterval(() => void poll(), shared ? SHARED_POLL_MS : POLL_MS);
     const onVisible = () => {
       if (!document.hidden) void poll();
     };
@@ -116,7 +122,7 @@ export function useNotebookSync({
       clearInterval(timer);
       document.removeEventListener("visibilitychange", onVisible);
     };
-  }, [notebookId, documentId, enabled, accountId, router]);
+  }, [notebookId, documentId, enabled, accountId, router, shared]);
 
   return people;
 }

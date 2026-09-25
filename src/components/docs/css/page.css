@@ -350,10 +350,13 @@
 }
 
 /* The selection while the page has no focus, or a menu is open over it:
-   Google Docs' gray, #8f8f8f at 34%. */
-.docs-blurred-selection,
-:root:has([data-docs-menu]) .docs-prose ::selection {
+   Google Docs' gray, #8f8f8f at 34%. The menu's :has() sets a token: a
+   :has() before "::selection" restyled the whole page on every Enter. */
+.docs-blurred-selection {
   background: rgba(143, 143, 143, 0.34);
+}
+body:has(> [data-docs-menu]) .docs-prose {
+  --docs-selection: rgba(143, 143, 143, 0.34);
 }
 
 /* ── The side: the vertical ruler and the outline stay put while the canvas

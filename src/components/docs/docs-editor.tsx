@@ -26,7 +26,10 @@ import { VersionHistory, VersionHistoryButton } from "@/components/docs/versions
 import type { DocsAreaProps } from "@/components/docs/areas/types";
 import type { Highlight } from "@/components/reader/block-view";
 import { api } from "@/lib/api";
+import { inlineText } from "@/lib/docs/blocks";
 import type { PageSetup, RichNode } from "@/lib/docs/schema";
+import { LANGS } from "@/lib/i18n/config";
+import { translatorFor } from "@/lib/i18n/dictionaries";
 
 // The page editor (SPEC.md §29): a blank document is written here the way a
 // Google Doc is written — a title row, the toolbar, and white pages on a gray
@@ -104,18 +107,38 @@ function SaveStatus({ state }: { state: SaveState }) {
   );
 }
 
+/** A new blank document's title, in every language. */
+const UNTITLED = new Set(LANGS.flatMap((lang) => (["docsPage.untitled", "panes.untitledDocument"] as const).map((key) => translatorFor(lang)(key))));
+
+/** The first line's words once a line follows it, else "". */
+function firstLineOf(editor: Editor): string {
+  let lines = 0;
+  let first = "";
+  editor.state.doc.descendants((node) => {
+    if (lines > 1 || !node.isTextblock) return lines < 2;
+    if (lines++ === 0) first = inlineText(node.toJSON() as RichNode).replace(/\s+/g, " ").trim();
+    return false;
+  });
+  return lines > 1 ? first.slice(0, 200) : "";
+}
+
 /** The title, Google Docs' way: a click selects it all; Enter keeps the new
     title and goes back to the text, Escape puts the old one back, leaving
-    the field keeps it. An empty title is the untitled one, drawn gray. */
+    the field keeps it. An empty title is the untitled one, drawn gray. An
+    untitled document takes its first line as its title once the line is
+    done, until the reader names it. */
 function TitleField({
   documentId,
   title,
   canEdit,
+  firstLine,
   onDone,
 }: {
   documentId: string;
   title: string;
   canEdit: boolean;
+  /** The finished first line on a save, else "". */
+  firstLine: string;
   /** Back to the document's text. */
   onDone: () => void;
 }) {
@@ -131,6 +154,7 @@ function TitleField({
     setSaved(null);
   }
   const untitledText = t("docsPage.untitled");
+  const save = (next: string) => api(`/api/documents/${documentId}`, "PATCH", { title: next }).then(() => router.refresh());
   async function commit() {
     const typed = (draft ?? shown).trim();
     setDraft(null);
@@ -141,15 +165,15 @@ function TitleField({
     const next = typed || untitledText;
     if (next === shown) return;
     setSaved(next);
-    try {
-      await api(`/api/documents/${documentId}`, "PATCH", { title: next });
-      router.refresh();
-    } catch {
-      setSaved(null);
-    }
+    await save(next).catch(() => setSaved(null));
   }
+  useEffect(() => {
+    if (canEdit && firstLine && draft === null && UNTITLED.has(shown)) void save(firstLine).then(() => setSaved(firstLine), () => {});
+    // On each save that holds the first line.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [firstLine]);
   const value = draft ?? shown;
-  const untitled = draft === null && (shown === untitledText || shown === "Untitled document");
+  const untitled = draft === null && UNTITLED.has(shown);
   return (
     <span className="docs-title-wrap" data-value={value || " "}>
       <input
@@ -347,6 +371,7 @@ export function DocsEditor({
               documentId={documentId}
               title={title}
               canEdit={canEdit}
+              firstLine={editor && saveState === "saved" ? firstLineOf(editor) : ""}
               onDone={() => {
                 if (editor && !editor.isDestroyed) editor.commands.focus();
                 else (document.activeElement as HTMLElement | null)?.blur();

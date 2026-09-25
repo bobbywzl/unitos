@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { BookmarkIcon, PlusIcon, RedoIcon, UndoIcon } from "@/components/icons";
 import { setQuoteDragImage, writeQuoteDrag } from "@/lib/quote-drag";
 import { isImeKey } from "@/lib/ime";
@@ -42,13 +42,41 @@ import type { PageSize } from "@/lib/handwritten/pages";
 import { DocumentTitle } from "@/components/reader/document-title";
 import { formatTime, type Speaker, type TranscriptLine } from "@/lib/video/types";
 import type { PageSetup, RichNode } from "@/lib/docs/schema";
+import { DocIcon } from "@/components/docs/icons";
+import { pageFrame } from "@/components/docs/page/geometry";
 
 // The page editor (SPEC.md §29) loads with a blank document only: its editor
-// library stays out of every other document's bundle.
+// library stays out of every other document's bundle. Until it has loaded,
+// its frame stands there: the title row, the toolbar, and an empty page.
 const DocsEditor = dynamic(() => import("@/components/docs/docs-editor").then((m) => m.DocsEditor), {
   ssr: false,
-  loading: () => <div className="docs-shell" style={{ minHeight: "100%" }} />,
+  loading: () => <DocsFrame />,
 });
+const DocsFrameContext = createContext<{ title: string; pageSetup: PageSetup } | null>(null);
+
+function DocsFrame() {
+  const frame = useContext(DocsFrameContext);
+  const page = frame && !frame.pageSetup.pageless ? pageFrame(frame.pageSetup) : null;
+  return (
+    <div className="docs-shell">
+      <div className="docs-header">
+        <div className="docs-title-row">
+          <DocIcon size={26} className="docs-title-icon" />
+          <span className="docs-title-input">{frame?.title}</span>
+        </div>
+        <div className="docs-toolbar" />
+        <div className="docs-ruler-row" />
+      </div>
+      <div className="docs-canvas">
+        {page && (
+          <div className="docs-page" style={{ width: page.width, height: page.height }}>
+            <div className="docs-sheet" style={{ top: 0, height: page.height }} />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 const TEXT_TYPES = new Set(["PARAGRAPH", "HEADING", "LIST", "CODE", "EQUATION"]);
 // The article's horizontal padding (px-6 on both sides), added to the
@@ -1185,19 +1213,21 @@ export function Reader({
 
   if (richText && documentId) {
     return (
-      <DocsEditor
-        documentId={documentId}
-        notebookId={richText.notebookId}
-        documents={richText.documents}
-        title={title}
-        richText={richText.doc}
-        rev={richText.rev}
-        pageSetup={richText.pageSetup}
-        canEdit={richText.canEdit}
-        highlightsByBlock={highlightsByBlock}
-        flushRef={flushRef}
-        aiControls={richText.aiControls}
-      />
+      <DocsFrameContext.Provider value={{ title, pageSetup: richText.pageSetup }}>
+        <DocsEditor
+          documentId={documentId}
+          notebookId={richText.notebookId}
+          documents={richText.documents}
+          title={title}
+          richText={richText.doc}
+          rev={richText.rev}
+          pageSetup={richText.pageSetup}
+          canEdit={richText.canEdit}
+          highlightsByBlock={highlightsByBlock}
+          flushRef={flushRef}
+          aiControls={richText.aiControls}
+        />
+      </DocsFrameContext.Provider>
     );
   }
 

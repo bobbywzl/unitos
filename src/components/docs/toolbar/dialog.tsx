@@ -73,6 +73,17 @@ export function ToolbarDialog({
         aria-label={title ?? label}
         tabIndex={-1}
         className={`docs-tb-dialog ${className}`}
+        onKeyDown={(e) => {
+          // Tab stays in the dialog: past the last control it comes back to the first.
+          if (e.key !== "Tab") return;
+          const controls = [...e.currentTarget.querySelectorAll<HTMLElement>("a[href], button, input, select, textarea, [tabindex]")].filter(
+            (el) => el.tabIndex >= 0 && !el.matches(":disabled") && el.getClientRects().length > 0,
+          );
+          const active = document.activeElement;
+          if (active !== (e.shiftKey ? controls[0] : controls.at(-1)) && active !== e.currentTarget) return;
+          e.preventDefault();
+          (e.shiftKey ? controls.at(-1) : controls[0])?.focus();
+        }}
       >
         {(title || closeButton) && (
           <div className="docs-tb-dialog-head">

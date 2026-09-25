@@ -110,10 +110,15 @@ export function VersionView({
     },
     [t],
   );
-  const load = useCallback(
-    () => read<History>(`/api/documents/${documentId}/versions`).then(setHistory, fail),
-    [documentId, read, fail],
-  );
+  // Only the latest list lands: an older one answering later (the view's
+  // first load, still out when a version is named) never covers it.
+  const loads = useRef(0);
+  const load = useCallback(() => {
+    const n = ++loads.current;
+    return read<History>(`/api/documents/${documentId}/versions`).then((h) => {
+      if (n === loads.current) setHistory(h);
+    }, fail);
+  }, [documentId, read, fail]);
   // The typing waiting to be saved is saved first, so the list holds it.
   useEffect(() => {
     void flushDocument(documentId).then(load);

@@ -77,6 +77,8 @@ export type Suggestion = {
 };
 
 type Draft = Suggestion & {
+  /** Where each of its marks stands. */
+  at: number[];
   last: Record<Side, number>;
   inline: boolean;
   texts: Record<Side, string[]>;
@@ -126,9 +128,10 @@ export function readSuggestions(doc: PMNode): Suggestion[] {
     let d = drafts.get(id);
     if (!d) {
       const sides = { blocks: bySide(() => []), last: bySide(() => -1), texts: bySide(() => []), lists: bySide(() => []) };
-      d = { id, from: pos, added: [], removed: [], formats: [], same: null, inline: false, ...sides };
+      d = { id, from: pos, at: [], added: [], removed: [], formats: [], same: null, inline: false, ...sides };
       drafts.set(id, d);
     }
+    d.at.push(pos);
     return d;
   };
   // A piece of what a side holds; `key` is its paragraph, and "¶" goes
@@ -187,10 +190,15 @@ export function readSuggestions(doc: PMNode): Suggestion[] {
     }
     return true;
   });
-  const out = [...drafts.values()].map((d): Suggestion => {
-    const same = sameWords(d);
+  const drafted = [...drafts.values()].map((d) => ({ d, same: sameWords(d) }));
+  // A suggestion stands where its words show: outside the copies hidden
+  // for blocks put back with the same words (a format change on a line
+  // whose list then changed).
+  const hidden = drafted.flatMap(({ d, same }) => (same ? d.blocks.removed : []));
+  const out = drafted.map(({ d, same }): Suggestion => {
     const { id, added, removed, formats, blocks } = d;
-    return { id, from: same ? blocks.added[0][0] : d.from, added, removed, formats, blocks, same };
+    const shown = d.at.find((pos) => !hidden.some(([from, to]) => pos >= from && pos < to)) ?? d.from;
+    return { id, from: same ? blocks.added[0][0] : shown, added, removed, formats, blocks, same };
   });
   read.set(doc, out);
   return out;
@@ -364,15 +372,17 @@ function touched(tr: Transaction): [number, number][] {
 /** The library gives new words the id of a suggestion they touch, and gives
     a touching suggestion the new words' id: across two authors that credits
     one person's words to the other. Words that had a suggestion keep its
-    id; words new to one take this author's. */
+    id; words new to one take this author's, the one beside them when this
+    author's (Backspace pressed again in another person's added words). */
 function keepAuthors(tr: Transaction, before: PMNode, author: string, id: string): void {
   const back = tr.mapping.invert();
   const fixes: { from: number; to: number; old: PMMark; mark: PMMark; block: boolean }[] = [];
-  const check = (from: number, to: number, mark: PMMark, block: boolean) => {
+  const check = (from: number, to: number, mark: PMMark, block: boolean, beside: PMMark[] = []) => {
     const origin = back.mapResult(from, 1);
     const was = origin.deletedAfter ? undefined : before.nodeAt(origin.pos)?.marks.find((m) => m.type === mark.type);
     const markAuthor = suggestionAuthor(mark.attrs.id);
-    const want = was ? (suggestionAuthor(was.attrs.id) === markAuthor ? mark.attrs.id : was.attrs.id) : markAuthor === author ? mark.attrs.id : id;
+    const own = beside.find((m) => m.type === mark.type && suggestionAuthor(m.attrs.id) === author);
+    const want = was ? (suggestionAuthor(was.attrs.id) === markAuthor ? mark.attrs.id : was.attrs.id) : markAuthor === author ? mark.attrs.id : (own?.attrs.id ?? id);
     if (want === mark.attrs.id) return;
     const last = fixes.at(-1);
     if (last && !block && last.to === from && last.old.eq(mark) && last.mark.attrs.id === want) last.to = to;
@@ -385,8 +395,9 @@ function keepAuthors(tr: Transaction, before: PMNode, author: string, id: string
         for (const mark of marks) check(pos, pos + 1, mark, true);
         return true;
       }
+      const beside = [tr.doc.resolve(pos).nodeBefore, tr.doc.resolve(pos + node.nodeSize).nodeAfter].flatMap((n) => n?.marks ?? []);
       for (let at = Math.max(pos, from); at < Math.min(pos + node.nodeSize, to); at++) {
-        for (const mark of marks) check(at, at + 1, mark, false);
+        for (const mark of marks) check(at, at + 1, mark, false, beside);
       }
       return false;
     });
@@ -512,7 +523,8 @@ function othersAdded(tr: Transaction, author: string): Aside[] {
   const out: Aside[] = [];
   tr.steps.forEach((step, i) => {
     if (!(step instanceof ReplaceStep) || step.from === step.to) return;
-    const back = tr.mapping.slice(0, i).invert();
+    // (A sliced mapping inverts whole: a new one of the steps before this.)
+    const back = new Mapping(tr.mapping.maps.slice(0, i)).invert();
     const [from, to] = [back.map(step.from, 1), back.map(step.to, -1)];
     tr.docs[0].nodesBetween(from, to, (node, pos) => {
       const mark = added.isInSet(node.marks);
@@ -639,10 +651,15 @@ export function settleSuggestions(editor: Editor, accept: boolean, id?: string):
     tr.setNodeMarkup(pos, type, attrs, node.marks.filter((m) => !isModification(m)));
     return true;
   });
+  // The library reads the character after a block it takes out, which
+  // throws past the document's end: an empty line stands there while it runs.
+  const end = tr.doc.content.size;
+  tr.insert(end, schema.nodes.paragraph.create());
   const start = tr.steps.length;
   const run = id === undefined ? (accept ? applySuggestions : revertSuggestions) : accept ? applySuggestion(id) : revertSuggestion(id);
   run(EditorState.create({ doc: tr.doc }), (library) => library.steps.forEach((step) => tr.step(step)));
   const map = tr.mapping.slice(start);
+  if (tr.doc.childCount > 1) tr.delete(map.map(end), tr.doc.content.size);
   for (const { pos, to, mark, inline } of aside) {
     if (inline) {
       const from = map.map(pos, 1);

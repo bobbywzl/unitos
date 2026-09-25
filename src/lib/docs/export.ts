@@ -1,9 +1,13 @@
+import type { User } from "@prisma/client";
 import {
   AlignmentType,
   Bookmark,
   BookmarkEnd,
   BookmarkStart,
   BorderStyle,
+  CommentRangeEnd,
+  CommentRangeStart,
+  CommentReference,
   DeletedTextRun,
   Document as DocxDocument,
   ExternalHyperlink,
@@ -42,6 +46,7 @@ import { firstFamily } from "@/components/docs/fonts";
 import { DEFAULT_HF_MARGIN_PT, PX_PER_PT } from "@/components/docs/page/geometry";
 import { listPreset } from "@/components/docs/toolbar/lists";
 import { readStyles, sizeInPt, styleFont, type NamedStyle } from "@/components/docs/toolbar/styles";
+import { authEnabled } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { hex6, inlineText } from "@/lib/docs/blocks";
 import { suggestionAuthor, suggestionTime, ZWSP, type PageSetup, type RichMark, type RichNode } from "@/lib/docs/schema";
@@ -51,11 +56,20 @@ import { outboundFetch } from "@/lib/outbound-fetch";
 // File > Download > Microsoft Word (.docx) (SPEC.md §29): one walk of the
 // stored rich text. The named styles become Word's styles, marks become run
 // properties, lists become Word numbering, a suggestion becomes a tracked
-// change, and the page setup becomes the section. What Word has no place for
-// (a chip, an equation) goes in as its words.
+// change, a comment a Word comment, and the page setup becomes the section.
+// What Word has no place for (a chip, an equation) goes in as its words.
 
 type Block = Paragraph | Table;
 type Picture = { data: Uint8Array; type: "png" | "jpg" | "gif" | "bmp"; width: number; height: number };
+/** A comment on the text: its anchors (one per paragraph of its words), its author's account, time, and words. */
+export type DocxComment = {
+  sources: { blockId: string; startOffset: number; endOffset: number }[];
+  authorId: string | null;
+  date: Date;
+  text: string;
+};
+/** Where a comment's words start or end: an offset in a paragraph's index text. */
+type Cut = { at: number; id: number; end: boolean };
 
 type Ctx = {
   doc: RichNode;
@@ -70,8 +84,10 @@ type Ctx = {
   breakBefore: boolean;
   /** The last id Word's bookmarks and tracked changes took: each takes its own. */
   ids: number;
-  /** The names of the accounts that made suggestions, by account id. */
+  /** The names of the accounts that made suggestions and comments, by account id. */
   authors: Map<string, string>;
+  /** Each paragraph's comment ends, by block id, in the order of the text. */
+  cuts: Map<string, Cut[]>;
 };
 
 const tw = (pt: number) => Math.round(pt * 20);
@@ -217,18 +233,42 @@ function hyperlink(href: string, children: ParagraphChild[], origin: string): Pa
   return new ExternalHyperlink({ link: href.startsWith("/") ? `${origin}${href}` : href, children });
 }
 
-/** A paragraph's words: runs, with the runs under one link in one hyperlink. */
-function inline(nodes: RichNode[] = [], ctx: Ctx, extra: IRunOptions = {}): ParagraphChild[] {
+/** A paragraph's words: runs, with the runs under one link in one hyperlink,
+    and each comment's ends where its words start and end. */
+function inline(nodes: RichNode[] = [], ctx: Ctx, extra: IRunOptions = {}, cuts: Cut[] = []): ParagraphChild[] {
   const groups: { href: string | null; runs: ParagraphChild[] }[] = [];
+  const put = (href: string | null, runs: ParagraphChild[]) => {
+    const last = groups.at(-1);
+    if (last && last.href === href) last.runs.push(...runs);
+    else groups.push({ href, runs });
+  };
+  // A comment's end takes no room: it joins whatever comes before it. Its
+  // start waits for words (struck words and atoms read as none).
+  let next = 0;
+  const cutsTo = (at: number, starts = true) => {
+    for (; next < cuts.length && cuts[next].at <= at && (starts || cuts[next].end); next++) {
+      const { id, end } = cuts[next];
+      put(groups.at(-1)?.href ?? null, end ? [new CommentRangeEnd(id), new TextRun({ children: [new CommentReference(id)] })] : [new CommentRangeStart(id)]);
+    }
+  };
+  let at = 0;
   for (const node of nodes) {
     const mark = node.marks?.find((m) => m.type === "link")?.attrs?.href;
     const href = typeof mark === "string" ? mark : null;
-    const run = runOf(node, ctx, href ? { style: "Hyperlink", ...extra } : extra);
-    if (!run) continue;
-    const last = groups.at(-1);
-    if (last && href && last.href === href) last.runs.push(run);
-    else groups.push({ href, runs: [run] });
+    // Words split where a comment starts or ends inside them.
+    const size = inlineText(node).length;
+    const inside = [...new Set(cuts.map((c) => c.at - at).filter((o) => o > 0 && o < size))];
+    const text = (node.text ?? "").replaceAll(ZWSP, "");
+    const parts = node.type === "text" && inside.length > 0 ? [0, ...inside].map((o, i, all) => ({ ...node, text: text.slice(o, all[i + 1] ?? size) })) : [node];
+    for (const part of parts) {
+      const length = inlineText(part).length;
+      cutsTo(at, length > 0);
+      const run = runOf(part, ctx, href ? { style: "Hyperlink", ...extra } : extra);
+      if (run) put(href, [run]);
+      at += length;
+    }
   }
+  cutsTo(Infinity);
   return groups.flatMap((g) => (g.href ? [hyperlink(g.href, g.runs, ctx.origin)] : g.runs));
 }
 
@@ -246,7 +286,7 @@ function paragraph(node: RichNode, ctx: Ctx, extra: IParagraphOptions = {}, run:
   const level = Math.min(6, Math.max(1, Number(a.level) || 1));
   const lineSpacing = num(a.lineSpacing);
   const firstLine = num(a.indentFirstLine) ?? 0;
-  let children = inline(node.content, ctx, run);
+  let children = inline(node.content, ctx, run, typeof a.blockId === "string" ? ctx.cuts.get(a.blockId) : undefined);
   if (node.type === "heading" && typeof a.blockId === "string") children = [bookmark(ctx, bookmarkName("h", a.blockId), children)];
   const stops = typeof a.tabStops === "string" ? a.tabStops.split(" ").map((stop) => stop.split(":")) : [];
   return para(ctx, {
@@ -566,9 +606,10 @@ function styleParagraph(styles: Record<DocStyle, NamedStyle>, style: DocStyle, o
   };
 }
 
-/** The names of the accounts whose suggestions the text holds, by account id. */
-async function authorNames(doc: RichNode): Promise<Map<string, string>> {
-  const ids = new Set<string>();
+/** The names of the accounts whose suggestions the text holds, and of
+    `more`, by account id. */
+async function authorNames(doc: RichNode, more: (string | null)[]): Promise<Map<string, string>> {
+  const ids = new Set(more.filter((id) => id !== null));
   const walk = (node: RichNode) => {
     const change = changeOf(node);
     if (change) ids.add(suggestionAuthor(change.attrs?.id));
@@ -579,8 +620,29 @@ async function authorNames(doc: RichNode): Promise<Map<string, string>> {
   return new Map(users.map((u) => [u.id, u.name]));
 }
 
-/** The .docx of a blank document. `origin` makes the app's own links whole. */
-export async function richTextDocx(title: string, stored: RichNode, setup: PageSetup, origin: string): Promise<Buffer> {
+/** A document's open comments in the projects `user` can open (every one
+    with sign-in off), oldest first: a resolved comment stays out of the file. */
+export async function docxComments(documentId: string, user: User): Promise<DocxComment[]> {
+  const mine = { OR: [{ userId: user.id }, { collaborators: { some: { email: user.email } } }] };
+  const here = { documentId, orphaned: false, layer: null };
+  const notes = await db.note.findMany({
+    where: {
+      derivationType: null,
+      color: null,
+      resolvedById: null,
+      status: { not: "REJECTED" },
+      section: { hidden: true, ...(authEnabled() ? { notebook: mine } : {}) },
+      sources: { some: here },
+    },
+    orderBy: { createdAt: "asc" },
+    select: { content: true, createdAt: true, createdById: true, sources: { where: here, select: { blockId: true, startOffset: true, endOffset: true } } },
+  });
+  return notes.map((n) => ({ sources: n.sources, authorId: n.createdById, date: n.createdAt, text: n.content }));
+}
+
+/** The .docx of a blank document, with its comments. `origin` makes the
+    app's own links whole. */
+export async function richTextDocx(title: string, stored: RichNode, setup: PageSetup, origin: string, comments: DocxComment[] = []): Promise<Buffer> {
   const doc = tracked(stored);
   const styles = readStyles({ attrs: doc.attrs ?? {} });
   const shown = (hf: RichNode | null | undefined) => (setup.pageless ? null : hf);
@@ -598,8 +660,31 @@ export async function richTextDocx(title: string, stored: RichNode, setup: PageS
     ],
     breakBefore: false,
     ids: 0,
-    authors: await authorNames(doc),
+    authors: await authorNames(doc, comments.map((c) => c.authorId)),
+    cuts: new Map(),
   };
+  // A comment runs from its first paragraph's anchor to its last's, in the
+  // body's order; words in a footnote or a code block take none.
+  const order = new Map<string, number>();
+  const visit = (node: RichNode) => {
+    if (node.type === "footnotes") return;
+    if ((node.type === "paragraph" || node.type === "heading") && typeof node.attrs?.blockId === "string") order.set(node.attrs.blockId, order.size);
+    node.content?.forEach(visit);
+  };
+  visit(doc);
+  const placed = comments.flatMap((c) => {
+    const sources = c.sources.filter((s) => order.has(s.blockId)).sort((a, b) => (order.get(a.blockId) ?? 0) - (order.get(b.blockId) ?? 0));
+    const [first, last] = [sources[0], sources.at(-1)];
+    if (!first || !last) return [];
+    const id = ++ctx.ids;
+    for (const [blockId, cut] of [[first.blockId, { at: first.startOffset, id, end: false }], [last.blockId, { at: last.endOffset, id, end: true }]] as const) {
+      ctx.cuts.set(blockId, [...(ctx.cuts.get(blockId) ?? []), cut]);
+    }
+    const author = ctx.authors.get(c.authorId ?? "") ?? "Unitos";
+    return [{ id, author, date: c.date, children: c.text.split("\n").map((line) => new Paragraph({ children: [new TextRun(line)] })) }];
+  });
+  // At one offset, the words that end come before the ones that start.
+  for (const cuts of ctx.cuts.values()) cuts.sort((a, b) => a.at - b.at || Number(b.end) - Number(a.end));
   const cite = (node: RichNode) => {
     if (node.type === "footnotes") return;
     const id = node.attrs?.footnoteId;
@@ -655,6 +740,7 @@ export async function richTextDocx(title: string, stored: RichNode, setup: PageS
     },
     numbering: { config: ctx.numbering },
     footnotes,
+    comments: { children: placed },
     background: setup.color.toLowerCase() === "#ffffff" ? undefined : { color: setup.color.slice(1) },
     sections: [
       {

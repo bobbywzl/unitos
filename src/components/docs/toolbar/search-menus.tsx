@@ -91,7 +91,10 @@ export function SearchMenus({
   });
 
   // The field takes the focus in the same task as the key that opened it,
-  // so nothing typed right after Alt+/ reaches the page.
+  // so nothing typed right after Alt+/ reaches the page; and again in the
+  // next frame, after a focus the page asked for before the key (the editor
+  // focuses in the next frame), which the field lets pass meanwhile.
+  const opening = useRef(false);
   const show = () => {
     const r = anchorRef.current?.getBoundingClientRect();
     if (!r) return;
@@ -103,6 +106,11 @@ export function SearchMenus({
       setOpen(true);
     });
     inputRef.current?.focus();
+    opening.current = true;
+    requestAnimationFrame(() => {
+      opening.current = false;
+      inputRef.current?.focus();
+    });
   };
   const hide = (backToPage: boolean) => {
     if (!backToPage) {
@@ -153,7 +161,7 @@ export function SearchMenus({
         setQuery(e.target.value);
         setActive(0);
       }}
-      onBlur={() => hide(false)}
+      onBlur={() => !opening.current && hide(false)}
       onKeyDown={(e) => {
         if (e.key === "ArrowDown") {
           e.preventDefault();

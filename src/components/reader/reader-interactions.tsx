@@ -2,6 +2,7 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal, flushSync } from "react-dom";
 import { api } from "@/lib/api";
 import { blockKind } from "@/lib/block-kind";
 import { MARK_SWEPT_EVENT, type MarkSweptDetail } from "@/lib/mark-sweep";
@@ -131,7 +132,7 @@ import { ANNOTATION_KIND_KEY, annotationKindColor } from "@/lib/annotations/kind
 import { NEW_GLOW_CLASS, NewPill, useNewFeature } from "@/components/new-feature";
 import type { PageSetup, RichNode } from "@/lib/docs/schema";
 import { pageEditorIn, pageSelectionOfRange, wordAtCaret } from "@/components/docs/layer/anchor";
-import { CommentCard } from "@/components/docs/layer/comment-card";
+import { CardColumn, CommentCard } from "@/components/docs/layer/comment-card";
 import { setCommentResolved } from "@/lib/annotations/resolve";
 import { COMMENTS_EVENT, flashInPage, PAGE_EDITED_EVENT, type CommentsView } from "@/components/docs/layer/events";
 import { registerDocumentFlush } from "@/components/docs/layer/flush";
@@ -742,6 +743,7 @@ export function ReaderInteractions({
       color: string | null;
       content: string;
       quotedText: string | null;
+      createdById?: string | null;
     }
   >;
   // Stored EXPLAIN, SIMPLIFY, ANALYZE, comment, and assistant conversation
@@ -1052,7 +1054,7 @@ export function ReaderInteractions({
   // Optimistic highlight marks: painted the instant a color dot is clicked,
   // cleared when the server's anchors arrive with the refresh.
   const [localAnchors, setLocalAnchors] = useState<
-    Record<string, { start: number; end: number; color: string | null }[]>
+    Record<string, { start: number; end: number; color: string | null; comment?: boolean }[]>
   >({});
   // Spans made in this session: their marks sweep in left to right the first
   // time they paint (block-view.tsx mark-sweep). Keyed `${blockId}:${start}:${end}`,
@@ -1426,8 +1428,14 @@ export function ReaderInteractions({
   const docsShiftRef = useRef(0);
   docsShiftRef.current = docsShift;
   const marginCardOpenRef = useRef(false);
-  // View > Comments in the page editor: Hide comments unpaints them.
-  const [commentsHidden, setCommentsHidden] = useState(false);
+  // View > Comments in the page editor: Hide comments unpaints them,
+  // Minimize comments keeps their icons and no cards.
+  const [commentsView, setCommentsView] = useState<CommentsView>("all");
+  const commentsHidden = commentsView === "hidden";
+  // The page editor's card column (layer/comment-card.tsx CardColumn): the
+  // cards stand in it, over the notes tray when the pane has no room.
+  const [columnHost, setColumnHost] = useState<HTMLDivElement | null>(null);
+  const inColumn = (cards: React.ReactNode) => (columnHost ? createPortal(cards, columnHost) : cards);
   const [assistantChat, setAssistantChat] = useState<AssistantChat | null>(null);
   // Highlighting an answer in the chat card (SPEC.md §7): Start side chat,
   // Ask about this, Comment.
@@ -1747,7 +1755,7 @@ export function ReaderInteractions({
     setSimplifyCard(null);
     setAssistantChat(null);
     setCommentCard(null);
-    setCommentsHidden(false);
+    setCommentsView("all");
     setLinkCard(null);
     setAnnotationCard(null);
     setEditMode(false);
@@ -2152,13 +2160,17 @@ export function ReaderInteractions({
       // Ctrl+Alt+M's keyup can come before React renders: it reads the ref
       // and leaves the Comment tool open.
       popoverRef.current = captured;
-      // The new comment takes the margin from a saved comment card.
-      setCommentCard((c) => (c && !c.busy && c.draft === c.saved ? null : c));
-      setAnnotationCard(null);
-      setPopover(captured);
-      setSubmenu("comment");
-      setCloseLink(null);
-      setCommentDraft("");
+      // The field opens and takes the focus before this key's handling ends,
+      // so no key typed after Ctrl+Alt+M reaches the page.
+      flushSync(() => {
+        // The new comment takes the margin from a saved comment card.
+        setCommentCard((c) => (c && !c.busy && c.draft === c.saved ? null : c));
+        setAnnotationCard(null);
+        setPopover(captured);
+        setSubmenu("comment");
+        setCloseLink(null);
+        setCommentDraft("");
+      });
     };
     // The page editor's right-click menu: Add to notes, Explain, and Ask the
     // assistant open the same tools on the selection as this toolbar does.
@@ -3114,6 +3126,11 @@ export function ReaderInteractions({
     if (!blankDocument || !container) return;
     const redock = () => {
       if (narrowRef.current || splitRef.current) return;
+      // A resize measures the page mid-move: at rest, the margin the cards
+      // hold is measured again.
+      const rest = marginCardOpenRef.current ? pageGeometry(container, docsShiftRef.current) : null;
+      const held = rest && marginPlace(rest);
+      if (held && held.shift !== docsShiftRef.current) setDocsShift(held.shift);
       const page = pageGeometry(container, 0);
       const slot = page ? slotAt(page, 0) : null;
       if (!slot) return;
@@ -3137,8 +3154,8 @@ export function ReaderInteractions({
       container.removeEventListener("transitionend", onMoved);
     };
   }, [docsShift, blankDocument]);
-  // The page editor's own cards (a suggestion's, docs/suggest) keep the
-  // margin too: their layer says on the pane when it wants it.
+  // The card column's comment and suggestion cards keep the margin too: the
+  // layer that places them (docs/suggest) says on the pane when it wants it.
   const [pageMargin, setPageMargin] = useState(false);
   useEffect(() => {
     const container = containerRef.current;
@@ -3147,6 +3164,22 @@ export function ReaderInteractions({
     container.addEventListener("docs:margin", onMargin);
     return () => container.removeEventListener("docs:margin", onMargin);
   }, [blankDocument]);
+  // Every painted comment has its card in the column, one line each; the
+  // open one is its CommentCard. None minimized, hidden, or in a split pane.
+  const columnComments =
+    blankDocument && !split && commentsView === "all"
+      ? [
+          ...new Set(
+            Object.values(anchorHighlights)
+              .flat()
+              .filter((h) => h.comment && h.noteId !== commentCard?.noteId && !removedNotes[h.noteId])
+              .map((h) => h.sourceId),
+          ),
+        ].flatMap((sourceId) => {
+          const a = annotationsBySource[sourceId];
+          return a ? [{ sourceId, content: a.content, authorId: a.createdById ?? null }] : [];
+        })
+      : [];
   useEffect(() => {
     const container = containerRef.current;
     const page = pageMargin && container && !splitRef.current ? pageGeometry(container, docsShiftRef.current) : null;
@@ -3232,7 +3265,7 @@ export function ReaderInteractions({
     if (!blankDocument || !container) return;
     const onView = (e: Event) => {
       const view = (e as CustomEvent<CommentsView>).detail;
-      setCommentsHidden(view === "hidden");
+      setCommentsView(view);
       if (view !== "all") setCommentCard(null);
     };
     container.addEventListener(COMMENTS_EVENT, onView);
@@ -4522,10 +4555,10 @@ export function ReaderInteractions({
     const { anchor } = popover;
     await flushLiveBlock(anchor.blockId);
     markFreshAnchor(anchor);
-    // Every segment of the passage paints at once.
+    // Every segment of the passage paints at once, a comment as a comment.
     const optimistic = segmentsOf(anchor).map((s) => ({
       blockId: s.blockId,
-      mark: { start: s.startOffset, end: s.endOffset, color: input.color ?? null },
+      mark: { start: s.startOffset, end: s.endOffset, color: input.color ?? null, comment: !input.color },
     }));
     setLocalAnchors((prev) => {
       let next = prev;
@@ -4538,7 +4571,7 @@ export function ReaderInteractions({
     window.getSelection()?.removeAllRanges();
     // A new comment shows, and every hidden comment with it.
     if (input.comment) {
-      setCommentsHidden(false);
+      setCommentsView("all");
       focusPageAfterComment();
     }
     setBusy(true);
@@ -5779,7 +5812,8 @@ function blockFormatKind(
         start: h.start,
         end: h.end,
         color: h.color,
-        annotation: false,
+        annotation: Boolean(h.comment),
+        comment: h.comment,
         kind: "anchor" as const,
       })),
     ];
@@ -6675,6 +6709,8 @@ function blockFormatKind(
 
       <Bibliography references={references} />
 
+      {richText && <CardColumn ref={setColumnHost} split={split} comments={columnComments} />}
+      {inColumn(<>
       <Presence show={annotationCard !== null} exit="pop">
       {annotationCard && (
         <div
@@ -6858,6 +6894,7 @@ function blockFormatKind(
       {popover && (
         <div
           data-selection-popover
+          data-layer-toolbar
           data-track-surface="ai-toolbar"
           onMouseDown={(e) => {
             // Keep the text selection alive under the rail — but let fields
@@ -7604,14 +7641,9 @@ function blockFormatKind(
           saved={commentCard.saved}
           busy={commentCard.busy}
           grip={annotationGrip(commentReference)}
+          // Its place is the card column's (suggest/layer.tsx).
           className={`bubble-in absolute ${TOOL_LAYER}`}
-          style={{
-            left: commentCard.left,
-            top: commentCard.top,
-            width: commentCard.width,
-            maxHeight: cardMaxHeight,
-            borderColor: annotationKindColor("comment", null),
-          }}
+          style={{ maxHeight: cardMaxHeight, borderColor: annotationKindColor("comment", null) }}
           onPointerDown={holdAnnotation(commentReference)}
           onDraft={(draft) => setCommentCard((c) => (c ? { ...c, draft } : c))}
           onSave={() => void saveCommentCard()}
@@ -7914,6 +7946,7 @@ function blockFormatKind(
         </div>
       )}
       </Presence>
+      </>)}
 
       {/* The voice outlives the toolbar: with the selection dismissed while
           reading, this floating control stops it. */}

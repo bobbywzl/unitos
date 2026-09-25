@@ -12,6 +12,7 @@ import { DropdownPanel, MenuItem } from "@/components/docs/menu";
 import { DialogButton } from "@/components/docs/toolbar/dialog";
 import { useLang, useT } from "@/components/lang-provider";
 import { Markdown } from "@/components/markdown";
+import { annotationKindColor } from "@/lib/annotations/kind";
 import { setCommentResolved } from "@/lib/annotations/resolve";
 import { isImeKey } from "@/lib/ime";
 import { markdownStyleKey } from "@/lib/markdown-style";
@@ -189,11 +190,17 @@ export function CommentCard({
       ref={cardRef}
       data-selection-popover
       data-side-card="comment"
+      data-comment-card={sourceId ?? undefined}
       tabIndex={-1}
       role="group"
       aria-label={t("reader.comment")}
       onKeyDown={onKeyDown}
       onPointerDown={onPointerDown}
+      // A press on the card keeps the caret in the page: typing goes there,
+      // never to the card's keys. Its buttons and fields take the focus.
+      onMouseDown={(e) => {
+        if (!(e.target as Element).closest("button, a, textarea, input")) e.preventDefault();
+      }}
       className={`docs-comment ${className}`}
       style={style}
     >
@@ -281,6 +288,67 @@ export function CommentCard({
           {t("docsLayer.getLink")}
         </MenuItem>
       </DropdownPanel>
+    </div>
+  );
+}
+
+export type ColumnComment = { sourceId: string; content: string; authorId: string | null };
+
+/** The page editor's card column (SPEC.md §29): a layer over the pane from
+    the toolbar's foot down, reaching over the notes tray beside the pane (in
+    a split pane, the pane alone). Its inside scrolls with the pane, so every
+    card in it — the toolbar, a tool's card, a comment's, a suggestion's —
+    stands in the pane's coordinates. Every comment has its card here, one
+    line each but the open one. The suggestion layer fits the column and
+    places the cards (suggest/layer.tsx); the end stretches the pane to the
+    lowest card. */
+export function CardColumn({
+  ref,
+  split,
+  comments,
+}: {
+  /** The column's inside, where the cards go. */
+  ref: (el: HTMLDivElement | null) => void;
+  split: boolean;
+  comments: ColumnComment[];
+}) {
+  return (
+    <>
+      <div className="docs-column" data-docs-column data-split={split || undefined}>
+        <div ref={ref} className="docs-column-in">
+          {comments.map((c) => (
+            <CommentLine key={c.sourceId} comment={c} />
+          ))}
+        </div>
+      </div>
+      <div aria-hidden className="docs-column-end" data-docs-column-end />
+    </>
+  );
+}
+
+/** A comment's card at rest: one line, the author and the comment's first
+    words. A press opens the whole card and leaves the caret in the page. */
+function CommentLine({ comment }: { comment: ColumnComment }) {
+  const t = useT();
+  const person = useAuthor()(comment.authorId ?? "");
+  return (
+    <div
+      data-selection-popover
+      data-comment-card={comment.sourceId}
+      role="button"
+      tabIndex={-1}
+      aria-label={t("panes.openComment")}
+      onMouseDown={(e) => e.preventDefault()}
+      onClick={() =>
+        window.dispatchEvent(new CustomEvent("dissect:open-annotation", { detail: { sourceId: comment.sourceId } }))
+      }
+      className="docs-comment docs-card-line absolute z-30"
+      style={{ borderColor: annotationKindColor("comment", null) }}
+    >
+      {person && <PersonBadge person={person} size={20} />}
+      <span className="docs-card-line-text">
+        {person && <b className="docs-comment-name">{person.name}</b>} {comment.content.replace(/\s+/g, " ")}
+      </span>
     </div>
   );
 }

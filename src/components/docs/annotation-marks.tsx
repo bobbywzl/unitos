@@ -2,7 +2,8 @@
 
 import { Extension } from "@tiptap/core";
 import type { Node as PMNode } from "@tiptap/pm/model";
-import { Plugin, PluginKey } from "@tiptap/pm/state";
+import { Plugin, PluginKey, type Transaction } from "@tiptap/pm/state";
+import { Mapping, StepMap } from "@tiptap/pm/transform";
 import { Decoration, DecorationSet, type EditorView } from "@tiptap/pm/view";
 import { createRoot, type Root } from "react-dom/client";
 import { CommentIcon, LinkIcon, UnlinkIcon } from "@/components/icons";
@@ -296,6 +297,32 @@ function flashPlugin() {
   });
 }
 
+/** A paragraph a change took out and put back as it was (Ctrl+Shift+↑ and ↓
+    move one so) loses its marks in the mapping: they go where it went. */
+function keepMoved(tr: Transaction, before: DecorationSet, after: DecorationSet): DecorationSet {
+  const start = tr.before.content.findDiffStart(tr.doc.content);
+  const end = tr.before.content.findDiffEnd(tr.doc.content);
+  if (start === null || !end) return after;
+  const old = new Map<string, { node: PMNode; pos: number }>();
+  tr.before.nodesBetween(start, Math.max(start, end.a), (node, pos) => {
+    if (node.isTextblock && typeof node.attrs.blockId === "string") old.set(node.attrs.blockId, { node, pos });
+    return !node.isTextblock;
+  });
+  let next = after;
+  tr.doc.nodesBetween(start, Math.max(start, end.b), (node, pos) => {
+    if (!node.isTextblock) return true;
+    const was = old.get(node.attrs.blockId as string);
+    if (!was || !node.eq(was.node)) return false;
+    const marks = before.find(was.pos + 1, was.pos + node.nodeSize - 1);
+    if (marks.length === 0) return false;
+    // What stood before its old place gives way to what stands before its new one.
+    const moved = DecorationSet.create(tr.before, marks).map(new Mapping([new StepMap([0, was.pos, pos])]), tr.doc);
+    next = next.remove(next.find(pos + 1, pos + node.nodeSize - 1)).add(tr.doc, moved.find());
+    return false;
+  });
+  return next;
+}
+
 /** The marks layer: set its highlights with a MarksMeta on annotationMarksKey. */
 export const AnnotationMarks = Extension.create({
   name: "docsAnnotationMarks",
@@ -308,7 +335,7 @@ export const AnnotationMarks = Extension.create({
           apply(tr, set) {
             const meta = tr.getMeta(annotationMarksKey) as MarksMeta | undefined;
             if (meta) return build(tr.doc, meta.highlights, meta.t);
-            return tr.docChanged ? set.map(tr.mapping, tr.doc) : set;
+            return tr.docChanged ? keepMoved(tr, set, set.map(tr.mapping, tr.doc)) : set;
           },
         },
         props: {

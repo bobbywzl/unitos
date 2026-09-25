@@ -90,7 +90,7 @@
 
 /* A suggestion's card (suggest/card.tsx): the comment card's look. The
    active card is white and lifted, with Accept and Reject in view; the
-   others are one line. */
+   others are one line (css/layer.css .docs-card-line). */
 [data-page-editor] .docs-suggest-card[data-active] {
   background: var(--docs-card-active);
   box-shadow: var(--docs-card-shadow);
@@ -100,17 +100,6 @@
 }
 .docs-suggest-what {
   overflow-wrap: anywhere;
-}
-.docs-suggest-line {
-  flex-direction: row;
-  align-items: center;
-  padding: 7px 12px;
-  cursor: pointer;
-}
-.docs-suggest-line-text {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 /* Review suggested edits (suggest/review.tsx): a box at the top right,
