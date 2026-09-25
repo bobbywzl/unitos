@@ -16,7 +16,7 @@
 - `src/lib/releases.ts`, `src/lib/i18n/dict/works.ts`, `src/components/guide-dialog.tsx` — the 2026-09-25 release (dashboard notification, New glow on the row) and the guide's entry.
 - `src/lib/i18n/dict/reader.ts`, `src/lib/i18n/dict/api.ts`, `src/lib/i18n/dict/common.ts` — the strings in English and Chinese; 定义 in the zh glossary.
 - `scripts/eval/cases.ts`, `scripts/eval/rubrics.ts`, `scripts/eval/run.ts`, `scripts/eval/import-ratings.ts` — the Define rubric, seven one-word cases (two with the Chinese interface on English text), the adapter with its mechanical checks, and ratings imported as cases.
-- `scripts/qa/mock-kimi.mjs`, `scripts/qa/ui-define.mjs` — the mock's Define answer, and the browser check (37 checks: the route, an article, a phrase, a sentence, a sentence end, a key term, a core, a transcript, slides, a sheet, a blank document in the page editor, Chinese, a touch screen).
+- `scripts/qa/mock-kimi.mjs`, `scripts/qa/ui-define.mjs` — the mock's Define answer, and the browser check (44 checks: the route, an article, a phrase, a sentence, a sentence end, a key term, a core, a transcript, slides, a sheet, a blank document in the page editor, Chinese, a touch screen).
 - `SPEC.md` (§2, §4, §6, Phase 7, §18, §25, §28), `README.md`, `CLAUDE.md` (definition in the vocabulary) — the docs, and the rule "Stop on every long run" in §6.
 - `src/components/thinking.tsx` — `StopPill`: the Stop pill inside a button whose run is on its way; a press on the button stops the run.
 - `src/components/reader/reader-interactions.tsx`, `src/lib/i18n/dict/reader.ts` — Collapse: the button reads Collapsing… with Stop while the cores are written; a press aborts the request (the route already passed `req.signal` to the model calls), and leaving the document does too.
@@ -28,7 +28,8 @@
 - `src/components/outline/use-outline.ts`, `src/components/outline/note-card.tsx`, `src/lib/notes/merge.ts`, `src/app/api/notes/merge/route.ts`, `src/lib/i18n/dict/outline.ts` — Merge with AI: Stop on the card's Merging line; the notes come back, and the route merges nothing once stopped.
 - `src/components/assistant/assistant-panel.tsx`, `src/lib/i18n/dict/assistant.ts` — the Summary card keeps Stop in its header for the whole stream.
 - `src/lib/clicks.ts` — the Stop controls in the admin clicks page's AI group.
-- `scripts/qa/mock-hang.mjs`, `scripts/qa/ui-stop.mjs` — a model that never answers, and the browser check that presses each Stop and reads that the call was closed and nothing stored.
+- `public/sw.js` — the service worker lets every call go to the network untouched while the browser is online. It used to fetch every AI call itself, and a call it fetched did not end when the page stopped it: Translate, Detect speakers, and Recommend links ran on, and a stopped Merge with AI still merged. Offline, an AI call still answers 503 with the plain message.
+- `scripts/qa/mock-hang.mjs`, `scripts/qa/ui-stop.mjs` — a model that never answers, and the browser check (23 checks, with the service worker in control of the page) that presses each Stop and reads that the call was closed and nothing stored.
 
 **Decisions:**
 - Define persists nothing: a word lookup is not an annotation, so it adds no mark, no Annotations entry, and no kind color. Viewers may call it.
@@ -42,4 +43,5 @@
 - A long run's Stop is the button that started it (it reads what runs, with a Stop pill), not a new control beside it: the reader's eye is already there.
 - Stopped runs store nothing, with two exceptions that follow the existing rules: Recommend links keeps the links it proposed before the stop and still counts the run (recorded before the scan starts), and Detect speakers lets its Gemini call finish on the server (the Gemini client takes no abort) while dropping the answer.
 - Merge with AI must check the stop before the route's fallback to Join text, or a stopped AI merge would merge anyway.
+- The service worker answers an AI call only when the browser says it is offline (`navigator.onLine`). Before, it answered the offline message whenever its own fetch failed; now a call made while the browser says online but the network is down fails with the browser's network error, as every other call does.
 - Imports (adding a document, Re-parse, Transcribe again, the handwritten conversion) keep no Stop: they save progress on the server as they go, and stopping one needs its own design.

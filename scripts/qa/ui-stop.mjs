@@ -7,6 +7,9 @@
 //
 // Usage: DATABASE_URL=... NB=<notebook> DOC=<article> ZH=<Chinese document>
 //   CHROME=<chromium> node scripts/qa/ui-stop.mjs
+// Runs against a production build (the service worker registers there only).
+// With sign-in off, Recommend links needs a User row for the local reader
+// (id user-1): the scan records its run against the account.
 // Expects scripts/qa/mock-kimi.mjs, scripts/qa/mock-hang.mjs, and the server
 // on :3311 started with MOONSHOT_API_KEY=mock
 // MOONSHOT_BASE_URL=http://localhost:3399/v1 ANTHROPIC_API_KEY=mock
@@ -41,12 +44,21 @@ async function stopRun(label, start, stop, done) {
   const during = await status();
   const sent = during.requests - before.requests;
   check(`${label}: the model call is on its way`, sent > 0, `${sent} calls`);
+  const stopped = Date.now();
   await stop();
   if (done) await done();
-  await page.waitForTimeout(2000);
-  const after = await status();
-  const closed = after.closed - before.closed;
-  check(`${label}: Stop ends the model call`, sent > 0 && closed >= sent, `${closed} of ${sent} closed`);
+  // The call closes when the server sees the page go: wait up to 8 s.
+  let closed = 0;
+  while (Date.now() - stopped < 8000) {
+    closed = (await status()).closed - before.closed;
+    if (closed >= sent) break;
+    await page.waitForTimeout(100);
+  }
+  check(
+    `${label}: Stop ends the model call`,
+    sent > 0 && closed >= sent,
+    `${closed} of ${sent} closed in ${Date.now() - stopped} ms`,
+  );
 }
 
 try {
@@ -65,6 +77,12 @@ async function run() {
   // ── Collapse ──
   await db.document.update({ where: { id: DOC }, data: { collapse: Prisma.DbNull, contents: Prisma.DbNull } });
   await page.goto(`${base}/n/${NB}?doc=${DOC}`, { waitUntil: "networkidle" });
+  // The service worker (public/sw.js) sees every call: Stop has to reach the
+  // server through it.
+  const controlled = await page
+    .waitForFunction(() => Boolean(navigator.serviceWorker?.controller), null, { timeout: 15000 })
+    .then(() => true, () => false);
+  check("the service worker controls the page", controlled);
   const collapse = page.locator('[data-track="collapse"]');
   await collapse.waitFor({ timeout: 20000 });
   await stopRun(
@@ -146,20 +164,27 @@ async function run() {
   // ── Merge with AI ──
   const section = await db.section.findFirst({ where: { notebookId: NB, hidden: false }, orderBy: { order: "asc" } });
   const texts = ["Stop check: the first note to merge.", "Stop check: the second note to merge."];
+  const ids = [];
   for (const content of texts) {
-    await fetch(`${base}/api/notes`, {
+    const res = await fetch(`${base}/api/notes`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ sectionId: section.id, content, documentId: DOC }),
     });
+    ids.push((await res.json()).id);
   }
+  const made = await db.note.findMany({ where: { id: { in: ids } }, select: { id: true, content: true } });
+  const madeContent = new Map(made.map((n) => [n.id, n.content]));
   await page.goto(`${base}/n/${NB}?doc=${DOC}`, { waitUntil: "networkidle" });
+  await page.locator('[data-track-surface="sidebar"] [data-track="notes"]').first().click();
   const tray = page.locator('aside[data-track-surface="tray"]');
   await tray.waitFor({ timeout: 20000 });
-  for (const content of texts) {
-    const card = tray.locator("[data-note-id]", { hasText: content }).first();
+  // A collapsed note shows its gist, not its words: find the cards by id.
+  for (const id of ids) {
+    const card = tray.locator(`[data-note-id="${id}"]`).first();
+    await card.scrollIntoViewIfNeeded();
     await card.hover();
-    await card.locator('[data-track="note-select"]').click();
+    await card.locator('[data-track="note-select"]').first().click();
   }
   const stopTitle = "Stop the merge. Nothing merges, and the notes stay as they were.";
   await stopRun(
@@ -167,17 +192,22 @@ async function run() {
     async () => {
       await page.locator('[data-track="notes-merge-ai"]').click();
       await page.locator(`button[data-tip="${stopTitle}"]`).waitFor({ timeout: 5000 });
+      await page.waitForTimeout(700);
       await page.screenshot({ path: `${SHOT}/stop-merge.png` });
     },
     () => page.locator(`button[data-tip="${stopTitle}"]`).click(),
   );
   await page.waitForTimeout(1500);
-  const kept = await db.note.findMany({ where: { content: { in: texts } }, select: { id: true } });
-  check("merge: nothing merges in the database", kept.length === 2, `${kept.length} of 2 notes`);
+  const kept = await db.note.findMany({ where: { id: { in: ids } }, select: { id: true, content: true } });
+  check(
+    "merge: nothing merges in the database",
+    kept.length === 2 && kept.every((n) => n.content === madeContent.get(n.id)),
+    `${kept.length} of 2 notes as they were`,
+  );
   let shown = 0;
-  for (const content of texts) shown += (await tray.getByText(content).count()) > 0 ? 1 : 0;
+  for (const id of ids) shown += (await tray.locator(`[data-note-id="${id}"]`).count()) > 0 ? 1 : 0;
   check("merge: both notes come back in the tray", shown === 2, `${shown} of 2 shown`);
-  await db.note.deleteMany({ where: { content: { in: texts } } });
+  await db.note.deleteMany({ where: { id: { in: ids } } });
 
   // ── Recommend links ──
   const runsBefore = await db.linkScanRun.count();

@@ -344,6 +344,7 @@ async function run() {
   check("page editor: the definition lands", pageMeaning.includes("Mock definition of accruals"), pageMeaning.replace(/\s+/g, " ").slice(0, 90));
   await page.screenshot({ path: `${SHOT}/define-page-editor.png` });
   await page.keyboard.press("Escape");
+  await fetch(`${base}/api/documents/${blank.id}`, { method: "DELETE" });
 
   // ── Chinese text: no Define, in either interface language; the Chinese
   // interface keeps Define on an English word ──
