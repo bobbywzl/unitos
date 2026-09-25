@@ -529,8 +529,6 @@ export function ThumbsDownIcon(props: IconProps) {
   );
 }
 
-// The Drive glyph: a triangle of three strokes, the assistant's Add from
-// Google Drive button.
 // A device with a downward arrow into it: Save for offline (SPEC.md §17).
 export function OfflineIcon(props: IconProps) {
   return (
@@ -542,6 +540,8 @@ export function OfflineIcon(props: IconProps) {
   );
 }
 
+// The Drive glyph: a triangle of three strokes, the assistant's Add from
+// Google Drive button.
 export function DriveIcon(props: IconProps) {
   return (
     <Icon {...props}>
@@ -549,6 +549,65 @@ export function DriveIcon(props: IconProps) {
       <path d="M8.5 4l6.5 11.5" />
       <path d="M15.5 4l-6 10.5h12.5" />
       <path d="M2.5 14.5h13" />
+    </Icon>
+  );
+}
+
+// The add-document dialog's three buttons (SPEC.md §15): Blank document,
+// Add from Google Drive, Library.
+
+// A page with a plus: Blank document.
+export function BlankDocumentIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9Z" />
+      <path d="M14 3v6h6" />
+      <path d="M12 12v6" />
+      <path d="M9 15h6" />
+    </Icon>
+  );
+}
+
+// The Google Drive logo in Google's colors: Add from Google Drive. The one
+// filled icon in this file; its colors stay the same in both themes.
+export function DriveLogo({ size = 17, className }: IconProps) {
+  return (
+    <svg aria-hidden width={size} height={size} viewBox="0 0 87.3 78" className={className}>
+      <path
+        fill="#0066DA"
+        d="m6.6 66.85 3.85 6.65c.8 1.4 1.95 2.5 3.3 3.3l13.75-23.8h-27.5c0 1.55.4 3.1 1.2 4.5z"
+      />
+      <path
+        fill="#00AC47"
+        d="m43.65 25-13.75-23.8c-1.35.8-2.5 1.9-3.3 3.3l-25.4 44a9.06 9.06 0 0 0-1.2 4.5h27.5z"
+      />
+      <path
+        fill="#EA4335"
+        d="m73.55 76.8c1.35-.8 2.5-1.9 3.3-3.3l1.6-2.75 7.65-13.25c.8-1.4 1.2-2.95 1.2-4.5h-27.502l5.852 11.5z"
+      />
+      <path
+        fill="#00832D"
+        d="m43.65 25 13.75-23.8c-1.35-.8-2.9-1.2-4.5-1.2h-18.5c-1.6 0-3.15.45-4.5 1.2z"
+      />
+      <path
+        fill="#2684FC"
+        d="m59.8 53h-32.3l-13.75 23.8c1.35.8 2.9 1.2 4.5 1.2h50.8c1.6 0 3.15-.45 4.5-1.2z"
+      />
+      <path
+        fill="#FFBA00"
+        d="m73.4 26.5-12.7-22c-.8-1.4-1.95-2.5-3.3-3.3l-13.75 23.8 16.15 28h27.45c0-1.55-.4-3.1-1.2-4.5z"
+      />
+    </svg>
+  );
+}
+
+// Two books standing and one leaning on them: Library.
+export function LibraryIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <rect x="3" y="3" width="8" height="18" rx="1" />
+      <path d="M7 3v18" />
+      <path d="M20.4 18.9c.2.5-.1 1.1-.6 1.3l-1.9.7c-.5.2-1.1-.1-1.3-.6L11.1 5.1c-.2-.5.1-1.1.6-1.3l1.9-.7c.5-.2 1.1.1 1.3.6Z" />
     </Icon>
   );
 }
