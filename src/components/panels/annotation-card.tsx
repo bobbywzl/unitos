@@ -308,7 +308,7 @@ export function AnnotationActions({
   const router = useRouter();
   const t = useT();
   const { canEdit } = useCollab();
-  const canJump = Boolean(annotation.sourceId) && !annotation.orphaned && documentId !== null;
+  const canJump = Boolean(annotation.sourceId) && !annotation.orphaned && !annotation.resolved && documentId !== null;
 
   function jump() {
     router.push(`/n/${notebookId}?doc=${documentId}&src=${annotation.sourceId}`);

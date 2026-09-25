@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
+import { setCommentResolved } from "@/lib/annotations/resolve";
 import { isImeKey } from "@/lib/ime";
 import { clipWords, markdownPreview } from "@/lib/markdown-preview";
 import { noteTitle } from "@/lib/note-title";
@@ -16,9 +17,10 @@ import { shortNoteId } from "@/components/outline/note-id";
 // right of the header open it, collapsed or not. It puts the annotation into
 // notes without a drag — New note makes a note of it, in a section the
 // reader picks; Add to a note joins its text into a note the reader picks —
-// and carries Jump and Delete, so a collapsed card has every action in
-// reach. Either way the annotation stays where it is, still painted in the
-// article: a note gets its own copy of the text and the anchors.
+// and carries Jump, Delete, and a resolved comment's Reopen, so a collapsed
+// card has every action in reach. Either way the annotation stays where it
+// is, still painted in the article: a note gets its own copy of the text
+// and the anchors.
 
 /** Every section as a flat list, a child under its parent's name. */
 function flatSections(sections: SectionView[]): { id: string; label: string; notes: NoteView[] }[] {
@@ -60,7 +62,8 @@ export function AnnotationMenu({
   const [error, setError] = useState<string | null>(null);
   // What the last action did, shown under the header for a moment.
   const [done, setDone] = useState<string | null>(null);
-  const canJump = Boolean(annotation.sourceId) && !annotation.orphaned && documentId !== null;
+  // A resolved comment has no mark to jump to (SPEC.md §29).
+  const canJump = Boolean(annotation.sourceId) && !annotation.orphaned && !annotation.resolved && documentId !== null;
   const flat = flatSections(sections);
 
   function close() {
@@ -121,6 +124,15 @@ export function AnnotationMenu({
     void run(async () => {
       await api("/api/notes/merge", "POST", { targetId: note.id, sourceIds: [annotation.id], mode: "join" });
       return t("panels.annotationNoteAdded", { id: shortNoteId(note.id) });
+    });
+  }
+
+  /** Reopen: the resolved comment paints again; its card moving back under
+      Comments says so. */
+  function reopen() {
+    void run(async () => {
+      await setCommentResolved(annotation.id, false);
+      return "";
     });
   }
 
@@ -188,6 +200,19 @@ export function AnnotationMenu({
 
           {mode === "menu" && (
             <>
+              {canEdit && annotation.resolved && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={working}
+                  onClick={reopen}
+                  data-track="comment-reopen"
+                  data-tip={t("panels.reopenCommentTitle")}
+                  className={item}
+                >
+                  {t("common.reopen")}
+                </button>
+              )}
               {canEdit && (
                 <button
                   type="button"

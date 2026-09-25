@@ -9,6 +9,7 @@ import {
   RemoveMarkStep,
   ReplaceAroundStep,
   ReplaceStep,
+  replaceStep,
   Transform,
   type Step,
 } from "@tiptap/pm/transform";
@@ -200,7 +201,8 @@ function suggestionMark(name: Kind) {
   return Mark.create({
     name,
     inclusive: false,
-    excludes: spec.excludes,
+    // Another person's added words can carry this author's deletion too.
+    excludes: name === "modification" ? spec.excludes : `${name} modification`,
     addAttributes() {
       return Object.fromEntries(
         Object.entries(spec.attrs ?? {}).map(([key, attr]) => [
@@ -470,6 +472,82 @@ const inAdded = (tr: Transaction) =>
   tr.mapping.invert().mapResult(tr.selection.head).deletedAcross ||
   tr.steps.some((step) => step instanceof ReplaceAroundStep && !isFormatStep(step));
 
+/** `tr` again on `state`, whose doc has the same positions, with `steps`. */
+function redo(tr: Transaction, state: EditorState, steps: readonly Step[]): Transaction {
+  const out = state.tr;
+  for (const step of steps) out.step(step);
+  if (tr.selectionSet) out.setSelection(tr.selection.map(out.doc, new Mapping()));
+  if (tr.storedMarksSet) out.setStoredMarks(tr.storedMarks);
+  return carry(out, tr);
+}
+
+/** The library reads a step that moves blocks (a list toggled, a line
+    nested), and a mark set in a longer edit, as the blocks it touches
+    replaced with every suggestion in them accepted, and accepting a format
+    change on words throws. Such a step goes to it as that replace with the
+    words as they stand: they keep their format change. */
+function asReplace(step: Step, doc: PMNode): Step {
+  const moves = step instanceof ReplaceAroundStep && !isFormatStep(step);
+  if (!moves && !isMarkStep(step)) return step;
+  const { from, to } = step as ReplaceAroundStep | AddMarkStep | RemoveMarkStep;
+  const applied = step.apply(doc).doc;
+  const map = step.getMap();
+  const range = applied?.resolve(map.map(from, -1)).blockRange(applied.resolve(map.map(to, 1)));
+  if (!applied || !range) return step;
+  let words = false;
+  applied.nodesBetween(range.start, range.end, (node) => {
+    words ||= node.isInline && node.marks.some(isModification);
+  });
+  const [start, end] = moves ? [range.start, range.end] : [from, to];
+  const back = map.invert();
+  return (words && replaceStep(doc, back.map(start), back.map(end), applied.slice(start, end))) || step;
+}
+
+type Aside = { from: number; to: number; mark: PMMark };
+
+/** Another person's added words that an edit takes out: the library deletes
+    added words outright, but they stay, struck as this author's deletion. */
+function othersAdded(tr: Transaction, author: string): Aside[] {
+  const added = tr.doc.type.schema.marks.insertion;
+  const out: Aside[] = [];
+  tr.steps.forEach((step, i) => {
+    if (!(step instanceof ReplaceStep) || step.from === step.to) return;
+    const back = tr.mapping.slice(0, i).invert();
+    const [from, to] = [back.map(step.from, 1), back.map(step.to, -1)];
+    tr.docs[0].nodesBetween(from, to, (node, pos) => {
+      const mark = added.isInSet(node.marks);
+      if (!mark || suggestionAuthor(mark.attrs.id) === author) return true;
+      out.push(node.isInline ? { from: Math.max(pos, from), to: Math.min(pos + node.nodeSize, to), mark } : { from: pos, to: pos, mark });
+      return false;
+    });
+  });
+  return out;
+}
+
+/** The library's tracked copy of `tr`, run with `aside` taken off: it never
+    sees those marks, and they come back on their words (a block's on it). */
+function track(tr: Transaction, state: EditorState, aside: Aside[], id: () => string): Transaction {
+  const run = (edit: Transaction, base: EditorState) => {
+    const steps = edit.steps.map((step, i) => asReplace(step, edit.docs[i]));
+    return transformToSuggestionTransaction(steps.some((step, i) => step !== edit.steps[i]) ? redo(edit, base, steps) : edit, base, id);
+  };
+  if (aside.length === 0) return run(tr, state);
+  const prep = state.tr;
+  for (const { from, to, mark } of aside) {
+    if (from === to) prep.removeNodeMark(from, mark);
+    else prep.removeMark(from, to, mark);
+  }
+  const base = EditorState.create({ doc: prep.doc, selection: state.selection.map(prep.doc, new Mapping()) });
+  const tracked = run(redo(tr, base, tr.steps), base);
+  const out = redo(tracked, state, [...prep.steps, ...tracked.steps]);
+  for (const { from, to, mark } of aside) {
+    const start = tracked.mapping.mapResult(from, 1);
+    if (from === to && !start.deleted) out.addNodeMark(start.pos, mark);
+    else if (start.pos < tracked.mapping.map(to, -1)) out.addMark(start.pos, tracked.mapping.map(to, -1), mark);
+  }
+  return out;
+}
+
 function suggest(edit: Transaction, state: EditorState, author: string): Transaction {
   const id = newId(author);
   if (edit.steps.every(isFormatStep)) return dropIdChanges(suggestFormat(edit, state, id));
@@ -477,7 +555,7 @@ function suggest(edit: Transaction, state: EditorState, author: string): Transac
   const tr = edit.steps.length > 1 && !each ? caseChange(edit, state) : edit;
   const back = takeBackBreak(tr, state);
   if (back) return back;
-  const tracked = transformToSuggestionTransaction(tr, state, () => (each ? newId(author) : id));
+  const tracked = track(tr, state, othersAdded(tr, author), () => (each ? newId(author) : id));
   keepAuthors(tracked, state.doc, author, id);
   dropIdChanges(tracked);
   const step = tr.steps[0];

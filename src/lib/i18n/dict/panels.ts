@@ -14,6 +14,9 @@ const en = {
   openDocumentTitle: "Open this document in the reader",
   highlights: "Highlights",
   comments: "Comments",
+  // Resolved comments (SPEC.md §29), with Reopen in the menu.
+  resolved: "Resolved",
+  reopenCommentTitle: "Reopen this comment; its mark comes back",
   explanations: "Explanations",
   analyses: "Analyses",
   visualizations: "Visualizations",
@@ -122,6 +125,8 @@ const zh: Record<keyof typeof en, string> = {
   openDocumentTitle: "在阅读器中打开这篇文档",
   highlights: "高亮",
   comments: "评论",
+  resolved: "已解决",
+  reopenCommentTitle: "重新打开此评论；它的标记会重新出现",
   explanations: "解释",
   analyses: "分析",
   visualizations: "可视化图",

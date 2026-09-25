@@ -420,6 +420,7 @@ export default async function NotebookPage(props: {
             figureLabel: null,
             layer: null,
             createdById: n.createdById,
+            resolved: false,
             replies: toReplyViews(n.replies),
             conversation: conversationTurns(n),
           };
@@ -436,6 +437,7 @@ export default async function NotebookPage(props: {
           figureLabel: figureLabelBySource.get(source.id) ?? null,
           layer: source.layer === "core" ? "core" : null,
           createdById: n.createdById,
+          resolved: n.resolvedById !== null,
           replies: toReplyViews(n.replies),
           conversation: conversationTurns(n),
         };

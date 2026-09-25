@@ -180,7 +180,8 @@ export function AnnotationsPanel({
   // here, with the whole text's annotations: a link joins the texts.
   const acceptedOut = layer === "whole" ? linksOut.filter((l) => !l.recommended) : [];
   const acceptedIn = layer === "whole" ? linksIn.filter((l) => !l.recommended) : [];
-  const comments = annotations.filter((a) => a.kind === "comment");
+  const comments = annotations.filter((a) => a.kind === "comment" && !a.resolved);
+  const resolved = annotations.filter((a) => a.resolved);
   const explanations = annotations.filter((a) => a.kind === "explain");
   const analyses = annotations.filter((a) => a.kind === "analyze");
   const visualizations = annotations.filter((a) => a.kind === "visualize");
@@ -281,10 +282,12 @@ export function AnnotationsPanel({
     </div>
   );
 
-  // The groups, one per kind, in the tab's order, each under its kind's symbol.
+  // The groups, one per kind, in the tab's order, each under its kind's
+  // symbol; the resolved comments under Resolved (SPEC.md §29).
   const kindGroups: { kind: AnnotationItem["kind"]; labelKey: TKey; items: AnnotationItem[] }[] = [
     { kind: "highlight", labelKey: "panels.highlights", items: highlights },
     { kind: "comment", labelKey: "panels.comments", items: comments },
+    { kind: "comment", labelKey: "panels.resolved", items: resolved },
     { kind: "explain", labelKey: "panels.explanations", items: explanations },
     { kind: "analyze", labelKey: "panels.analyses", items: analyses },
     { kind: "visualize", labelKey: "panels.visualizations", items: visualizations },
@@ -329,7 +332,7 @@ export function AnnotationsPanel({
       {kindGroups.map(
         (group) =>
           group.items.length > 0 && (
-            <div key={group.kind} className="flex flex-col gap-2">
+            <div key={group.labelKey} className="flex flex-col gap-2">
               <GroupLabel icon={<AnnotationKindIcon kind={group.kind} size={12} />}>{t(group.labelKey)}</GroupLabel>
               {group.items.map((a) => (
                 <AnnotationCard

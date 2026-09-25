@@ -16,8 +16,10 @@ import {
   AnnotationActions,
   AnnotationBody,
   AnnotationCard,
+  AnnotationKindIcon,
   annotationSummary,
   CONVERSATION_TITLE,
+  GroupLabel,
   hasConversation,
 } from "@/components/panels/annotation-card";
 import { ToolSymbol } from "@/components/reader/block-view";
@@ -32,7 +34,8 @@ import { inLayer, LayerSwitch, type AnnotationLayer } from "@/components/panels/
 // reading order. The cards are the Annotations tab's (annotation-card.tsx):
 // the kind named in the header with its symbol, the kind color on the
 // border, the same three-dots menu, Expand all and Collapse all shared with
-// the tab. A document's title opens it in the reader.
+// the tab. A document's title opens it in the reader. A document's resolved
+// comments list last, under Resolved (SPEC.md §29).
 
 export type AnnotationGroup = {
   /** The document the annotations are anchored in; null for the project's
@@ -81,6 +84,35 @@ export function AnnotationsFullPage({
       setErrorText(err instanceof Error ? err.message : t("common.requestFailed"));
     }
   }
+
+  const cardFor = (a: AnnotationItem, documentId: string | null) => (
+    <AnnotationCard
+      key={a.id}
+      annotation={a}
+      documentId={documentId}
+      view={view}
+      summary={annotationSummary(a)}
+      showKind
+      menu={
+        <AnnotationMenu
+          annotation={a}
+          notebookId={notebookId}
+          documentId={documentId}
+          sections={sections}
+          onDelete={deleteAnnotation}
+        />
+      }
+    >
+      <AnnotationBody annotation={a} />
+      <AnnotationActions
+        annotation={a}
+        notebookId={notebookId}
+        documentId={documentId}
+        onDelete={deleteAnnotation}
+        onExpand={setExpandedId}
+      />
+    </AnnotationCard>
+  );
 
   const expanded = all.find((a) => a.id === expandedId && hasConversation(a)) ?? null;
   const expandedTool =
@@ -139,34 +171,11 @@ export function AnnotationsFullPage({
               <span className="text-[13px] text-sand-600">{group.items.length}</span>
             </div>
             <div className="flex flex-col gap-2.5">
-              {group.items.map((a) => (
-                <AnnotationCard
-                  key={a.id}
-                  annotation={a}
-                  documentId={group.documentId}
-                  view={view}
-                  summary={annotationSummary(a)}
-                  showKind
-                  menu={
-                    <AnnotationMenu
-                      annotation={a}
-                      notebookId={notebookId}
-                      documentId={group.documentId}
-                      sections={sections}
-                      onDelete={deleteAnnotation}
-                    />
-                  }
-                >
-                  <AnnotationBody annotation={a} />
-                  <AnnotationActions
-                    annotation={a}
-                    notebookId={notebookId}
-                    documentId={group.documentId}
-                    onDelete={deleteAnnotation}
-                    onExpand={setExpandedId}
-                  />
-                </AnnotationCard>
-              ))}
+              {group.items.filter((a) => !a.resolved).map((a) => cardFor(a, group.documentId))}
+              {group.items.some((a) => a.resolved) && (
+                <GroupLabel icon={<AnnotationKindIcon kind="comment" size={12} />}>{t("panels.resolved")}</GroupLabel>
+              )}
+              {group.items.filter((a) => a.resolved).map((a) => cardFor(a, group.documentId))}
             </div>
           </section>
         ))}

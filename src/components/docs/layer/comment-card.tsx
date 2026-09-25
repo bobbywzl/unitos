@@ -12,7 +12,7 @@ import { DropdownPanel, MenuItem } from "@/components/docs/menu";
 import { DialogButton } from "@/components/docs/toolbar/dialog";
 import { useLang, useT } from "@/components/lang-provider";
 import { Markdown } from "@/components/markdown";
-import { api } from "@/lib/api";
+import { setCommentResolved } from "@/lib/annotations/resolve";
 import { isImeKey } from "@/lib/ime";
 import { markdownStyleKey } from "@/lib/markdown-style";
 import type { ReplyView } from "@/lib/types";
@@ -20,10 +20,10 @@ import type { ReplyView } from "@/lib/types";
 // A comment's card in the page editor's margin, as Google Docs draws it
 // (SPEC.md §29): the author's badge, name, and time, the comment, Resolve,
 // More options (Edit, Delete, Get link to this comment), and the replies
-// under it (SPEC.md §12). A comment is an annotation: Resolve closes its
-// open replies. On the focused card, Google's keys: R reply, J the next
-// comment, K the previous one, E resolve, U back to the text. A press
-// anywhere else closes the card.
+// under it (SPEC.md §12). A comment is an annotation: Resolve hides it, its
+// mark and its card, until Reopen in the Annotations tab. On the focused
+// card, Google's keys: R reply, J the next comment, K the previous one, E
+// resolve, U back to the text. A press anywhere else closes the card.
 
 export function CommentCard({
   noteId,
@@ -118,15 +118,15 @@ export function CommentCard({
   }, [busy, unsaved, onClose]);
 
   const person = written?.by ? authorOf(written.by) : undefined;
-  const open = replies.filter((r) => r.resolvedById === null);
-  const canResolve = canEdit && open.length > 0;
 
+  // The card goes with the mark, and the text takes the keys again; a failed
+  // request paints the mark again.
   async function resolve() {
-    if (!canResolve) return;
+    if (!canEdit) return;
+    exit();
     try {
-      await Promise.all(open.map((r) => api(`/api/replies/${r.id}`, "PATCH", { resolved: true })));
+      await setCommentResolved(noteId, true);
       router.refresh();
-      onClose();
     } catch (err) {
       toast(err instanceof Error ? err.message : t("common.requestFailed"));
     }
@@ -205,7 +205,7 @@ export function CommentCard({
         </div>
         <div className="docs-comment-buttons">
           {grip}
-          {canResolve && (
+          {canEdit && (
             <button
               type="button"
               onClick={() => void resolve()}

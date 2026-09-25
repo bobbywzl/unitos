@@ -80,7 +80,8 @@ export function useAnswerSelection(): {
   const paint = useCallback(() => {
     const range = heldRef.current ?? rangeRef.current;
     if (!range) {
-      setTintRects([]);
+      // Every keyup comes here: an empty tint keeps its array, so nothing renders.
+      setTintRects((rects) => (rects.length === 0 ? rects : []));
       return;
     }
     const box = scrollBoxOf(range);

@@ -132,6 +132,7 @@ import { NEW_GLOW_CLASS, NewPill, useNewFeature } from "@/components/new-feature
 import type { PageSetup, RichNode } from "@/lib/docs/schema";
 import { pageEditorIn, pageSelectionOfRange, wordAtCaret } from "@/components/docs/layer/anchor";
 import { CommentCard } from "@/components/docs/layer/comment-card";
+import { setCommentResolved } from "@/lib/annotations/resolve";
 import { COMMENTS_EVENT, flashInPage, PAGE_EDITED_EVENT, type CommentsView } from "@/components/docs/layer/events";
 import { registerDocumentFlush } from "@/components/docs/layer/flush";
 import {
@@ -4077,6 +4078,19 @@ export function ReaderInteractions({
     await deleteNote(card.noteId, t("reader.commentRemoved"));
   }
 
+  // Resolve (SPEC.md §29): the card and the mark go; Reopen is in the Annotations tab.
+  async function resolveCommentCard() {
+    const card = commentCard;
+    if (!card || card.busy || !card.noteId) return;
+    setCommentCard(null);
+    try {
+      await setCommentResolved(card.noteId, true);
+      router.refresh();
+    } catch (err) {
+      showError(err instanceof Error ? err.message : t("common.requestFailed"));
+    }
+  }
+
   // What the link is about: saved as the link's reason. Skip closes the card
   // and leaves the link as it is.
   async function saveLinkCard() {
@@ -7636,6 +7650,17 @@ function blockFormatKind(
               <CommentIcon size={12} />
               {t("reader.comment")}
             </span>
+            {commentCard.noteId && canEdit && (
+              <button
+                onClick={() => void resolveCommentCard()}
+                data-track="comment-card-resolve"
+                className="mr-2.5 ml-auto text-xs text-sand-500 hover:text-sage-700"
+                aria-label={t("common.resolve")}
+                data-tip={t("docsLayer.resolveTitle")}
+              >
+                ✓
+              </button>
+            )}
             <button
               onClick={closeCommentCard}
               data-track="comment-card-close"
