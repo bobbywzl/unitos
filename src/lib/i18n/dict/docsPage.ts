@@ -69,6 +69,8 @@ const en = {
   addLeftTabStop: "Add left tab-stop",
   addCenterTabStop: "Add center tab-stop",
   addRightTabStop: "Add right tab-stop",
+  collapseHeading: "Collapse heading",
+  expandHeading: "Expand heading",
   // The tabs & outlines panel
   documentTabs: "Document tabs",
   firstTab: "Tab 1",
@@ -155,6 +157,8 @@ const zh: Record<keyof typeof en, string> = {
   addLeftTabStop: "添加左对齐制表位",
   addCenterTabStop: "添加居中制表位",
   addRightTabStop: "添加右对齐制表位",
+  collapseHeading: "收起标题",
+  expandHeading: "展开标题",
   documentTabs: "文档标签页",
   firstTab: "标签页 1",
   outlineEmpty: "你添加到文档中的标题会显示在这里。",

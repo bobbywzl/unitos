@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { flushSync } from "react-dom";
+import { useLang } from "@/components/lang-provider";
 import type { DocsAreaProps } from "@/components/docs/areas/types";
 import type { Zoom } from "@/components/docs/toolbar";
 import { hostPagination, paginateNow, repaginate } from "@/components/docs/ext/page";
@@ -23,6 +24,7 @@ import { HorizontalRuler, VerticalRuler } from "@/components/docs/page/ruler";
 import { PageSetupDialog, readPageDefault } from "@/components/docs/page/setup-dialog";
 import { PAGE_EVENT, pageStore, usePageState, type EditHeaderDetail, type HeaderArea } from "@/components/docs/page/store";
 import { DEFAULT_PAGE_SETUP } from "@/lib/docs/schema";
+import { translatorFor } from "@/lib/i18n/dictionaries";
 
 // The page area (SPEC.md §29): the canvas, the pages, and what sits on and
 // around them — the ruler under the toolbar, the vertical ruler and the tabs
@@ -272,16 +274,17 @@ export function PageCanvas({
     () => ({ enabled: !pageless, pitch: frame.pitch, area }),
     [pageless, frame, area],
   );
-  useLayoutEffect(
-    () =>
-      hostPagination(editor, {
-        config,
-        onPages: (pages) => {
-          if (store.get().pages !== pages) store.set({ pages });
-        },
-      }),
-    [editor, store, config],
-  );
+  const lang = useLang();
+  useLayoutEffect(() => {
+    const t = translatorFor(lang);
+    return hostPagination(editor, {
+      config,
+      onPages: (pages) => {
+        if (store.get().pages !== pages) store.set({ pages });
+      },
+      labels: { fold: t("docsPage.collapseHeading"), unfold: t("docsPage.expandHeading") },
+    });
+  }, [editor, store, config, lang]);
 
   // Print: the pages at their size, laid out at 100%.
   useEffect(() => {

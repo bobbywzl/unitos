@@ -437,13 +437,13 @@
 }
 .docs-toc-thumb-links .docs-toc-thumb-text {
   width: 36px;
-  background: #1155cc;
+  background: var(--docs-link);
 }
 .docs-toc-thumb-leader {
   flex: 1;
 }
 .docs-toc-thumb-dotted .docs-toc-thumb-leader {
-  border-bottom: 2px dotted #9aa0a6;
+  border-bottom: 2px dotted var(--docs-placeholder);
 }
 .docs-code-langs {
   width: 240px;

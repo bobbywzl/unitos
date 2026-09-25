@@ -38,7 +38,7 @@ import {
 import { BorderButtons, ColorButton } from "@/components/docs/insert/colors";
 import { emitInsert } from "@/components/docs/insert/context";
 import { FillIcon } from "@/components/docs/insert/icons";
-import { cellBorder, selectedCells } from "@/components/docs/insert/table";
+import { borderTarget, cellBorder, selectedCells } from "@/components/docs/insert/table";
 import { isMac, keys, matchesCombo, withKeys } from "@/components/docs/keys";
 import { keepFocus, MenuItem, MenuSeparator } from "@/components/docs/menu";
 import { addCustomColor, ColorMenu } from "@/components/docs/palette";
@@ -173,7 +173,7 @@ function readToolbar(e: Editor) {
       taskList: currentListStyle(state, "taskList"),
     },
     // The caret's cell: the table's buttons show while the caret is in a table.
-    table: cell ? { background: (cell.node.attrs.backgroundColor as string | null) ?? null, border: cellBorder(state) } : null,
+    table: cell ? { background: (cell.node.attrs.backgroundColor as string | null) ?? null, border: cellBorder(state, borderTarget(e)) } : null,
   };
 }
 
@@ -576,7 +576,7 @@ export function DocsToolbar({
                     onPick={(hex) => run((c) => c.setCellsAttrs({ backgroundColor: hex }))}
                     onNone={() => run((c) => c.setCellsAttrs({ backgroundColor: null }))}
                   />
-                  <BorderButtons track="table" border={s.table.border} onChange={(spec) => run((c) => c.setTableBorders("all", spec))} />
+                  <BorderButtons track="table" border={s.table.border} onChange={(spec) => run((c) => c.setTableBorders(borderTarget(editor), spec))} />
                   <Btn label={t("docsInsert.tableOptions")} track="table-options" className="docs-tb-text-btn" onClick={() => emitInsert(editor, { type: "table-options" })}>
                     {t("docsInsert.tableOptions")}
                   </Btn>

@@ -12,7 +12,8 @@ import {
 import { tabSizes } from "@/components/docs/page/tabs";
 
 // The page editor's page extensions (SPEC.md §29): pagination, tab stops,
-// and Docs' caret.
+// the pageless headings that fold, Docs' caret, and the selection while the
+// page has no focus.
 //
 // Pagination: a spacer at each page's end — a widget decoration, never
 // content — pushes what follows to the next page's text top, and each
@@ -22,7 +23,12 @@ import { tabSizes } from "@/components/docs/page/tabs";
 // resizes spacers in place (ProseMirror ignores mutations inside a widget),
 // so the document, the selection, and undo never change.
 
-type Host = { config: PaginationConfig; onPages: (pages: number) => void };
+type Host = {
+  config: PaginationConfig;
+  onPages: (pages: number) => void;
+  /** The heading arrow's tips (pageless). */
+  labels: { fold: string; unfold: string };
+};
 
 const hosts = new WeakMap<Editor, Host>();
 const controllers = new WeakMap<Editor, Paginator>();
@@ -375,6 +381,78 @@ const Pagination = Extension.create({
   },
 });
 
+/** Pageless, as in Google Docs: a heading's arrow (shown under the pointer)
+    folds the words under it, down to the next heading of its level or
+    above. The folds are the reader's, kept for the page's life. */
+const foldKey = new PluginKey<{ folded: string[]; set: DecorationSet }>("docsFold");
+
+function foldDecorations(editor: Editor, doc: PMNode, folded: string[]): DecorationSet {
+  const out: Decoration[] = [];
+  let hiding: number | null = null;
+  doc.forEach((node, pos) => {
+    const level = node.type.name === "heading" ? Number(node.attrs.level) : null;
+    if (hiding !== null && level !== null && level <= hiding) hiding = null;
+    if (hiding !== null && node.type.name !== "footnotes") {
+      out.push(Decoration.node(pos, pos + node.nodeSize, { class: "docs-folded" }));
+      return;
+    }
+    const id = typeof node.attrs.blockId === "string" ? node.attrs.blockId : null;
+    if (level === null || !id) return;
+    const isFolded = folded.includes(id);
+    const arrow = (view: EditorView) => {
+      const labels = hosts.get(editor)?.labels;
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "docs-fold";
+      button.contentEditable = "false";
+      button.setAttribute("aria-expanded", String(!isFolded));
+      button.setAttribute("aria-label", (isFolded ? labels?.unfold : labels?.fold) ?? "");
+      button.dataset.tip = button.getAttribute("aria-label") ?? "";
+      button.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10l5 5 5-5z" fill="currentColor"/></svg>';
+      button.addEventListener("mousedown", (e) => {
+        e.preventDefault();
+        const tr = view.state.tr.setMeta(foldKey, id);
+        // The caret in the words that fold goes to the heading's end.
+        let start = -1;
+        let end = tr.doc.content.size;
+        tr.doc.forEach((n, p) => {
+          if (n.attrs.blockId === id) start = p + n.nodeSize;
+          else if (start >= 0 && end === tr.doc.content.size && n.type.name === "heading" && Number(n.attrs.level) <= level) end = p;
+        });
+        const { from } = tr.selection;
+        if (!isFolded && start >= 0 && from >= start && from < end) tr.setSelection(TextSelection.create(tr.doc, start - 1));
+        view.dispatch(tr);
+      });
+      return button;
+    };
+    out.push(Decoration.widget(pos + 1, arrow, { side: -1, key: `fold-${id}-${level}-${isFolded}`, ignoreSelection: true }));
+    if (isFolded) hiding = level;
+  });
+  return DecorationSet.create(doc, out);
+}
+
+const FoldHeadings = Extension.create({
+  name: "docsFoldHeadings",
+  addProseMirrorPlugins() {
+    const editor = this.editor;
+    return [
+      new Plugin<{ folded: string[]; set: DecorationSet }>({
+        key: foldKey,
+        state: {
+          init: (_, state) => ({ folded: [], set: foldDecorations(editor, state.doc, []) }),
+          apply: (tr, value) => {
+            const id = tr.getMeta(foldKey) as string | undefined;
+            if (!id && !tr.docChanged) return value;
+            const folded = !id ? value.folded : value.folded.includes(id) ? value.folded.filter((f) => f !== id) : [...value.folded, id];
+            return { folded, set: foldDecorations(editor, tr.doc, folded) };
+          },
+        },
+        props: { decorations: (state) => foldKey.getState(state)?.set },
+      }),
+    ];
+  },
+});
+
 /** Docs' caret: a 2 px bar as tall as the text, 500 ms on and 500 ms off,
     solid again after every move. The browser's caret cannot be widened, so
     this one is drawn over the page's text for an empty selection while the
@@ -416,11 +494,13 @@ class DocsCaretView {
     }
     let coords;
     try {
-      const afterBreak = sel.$head.nodeBefore?.type.name === "hardBreak";
+      // A line's start: after a line break, or the paragraph's start (where
+      // a heading's fold arrow sits before the caret).
+      const lineStart = sel.$head.nodeBefore?.type.name === "hardBreak" || sel.$head.parentOffset === 0;
       const before = view.coordsAtPos(sel.head, -1);
       const after = view.coordsAtPos(sel.head, 1);
-      if (!afterBreak && Math.abs(before.top - after.top) > 1) return this.native();
-      coords = afterBreak || sel.$head.parentOffset === 0 ? after : before;
+      if (!lineStart && Math.abs(before.top - after.top) > 1) return this.native();
+      coords = lineStart ? after : before;
     } catch {
       return this.native();
     }
@@ -453,12 +533,32 @@ class DocsCaretView {
 
 const caretViews = new WeakMap<EditorView, DocsCaretView>();
 
+/** The page has no focus (a dialog, the title field): the selection stays in
+    view, gray, as Google Docs keeps it. */
+const blurredKey = new PluginKey<boolean>("docsBlurred");
+
 const DocsCaret = Extension.create({
   name: "docsCaret",
   addProseMirrorPlugins() {
+    const blurred = (value: boolean) => (view: EditorView) => {
+      view.dispatch(view.state.tr.setMeta(blurredKey, value));
+      return false;
+    };
     return [
-      new Plugin({
-        props: { attributes: { class: "docs-own-caret" } },
+      new Plugin<boolean>({
+        key: blurredKey,
+        state: { init: () => false, apply: (tr, value) => (tr.getMeta(blurredKey) as boolean | undefined) ?? value },
+        props: {
+          attributes: { class: "docs-own-caret" },
+          decorations: (state) =>
+            blurredKey.getState(state) && !state.selection.empty
+              ? DecorationSet.create(
+                  state.doc,
+                  state.selection.ranges.map((r) => Decoration.inline(r.$from.pos, r.$to.pos, { class: "docs-blurred-selection" })),
+                )
+              : null,
+          handleDOMEvents: { focus: blurred(false), blur: blurred(true) },
+        },
         view: (view) => {
           const caret = new DocsCaretView(view);
           caretViews.set(view, caret);
@@ -469,4 +569,4 @@ const DocsCaret = Extension.create({
   },
 });
 
-export const pageExtensions: AnyExtension[] = [Pagination, DocsCaret];
+export const pageExtensions: AnyExtension[] = [Pagination, FoldHeadings, DocsCaret];

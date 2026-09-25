@@ -100,11 +100,13 @@
   border-radius: 14px;
 }
 .docs-status-error,
-.docs-status-offline {
+.docs-status-offline,
+.docs-setup-error {
   color: #b3261e;
 }
 .dark .docs-status-error,
-.dark .docs-status-offline {
+.dark .docs-status-offline,
+.dark .docs-setup-error {
   color: #f2b8b5;
 }
 
@@ -293,6 +295,47 @@
   50% {
     opacity: 0;
   }
+}
+
+/* Pageless: a heading's arrow, left of its first line, folds the words
+   under it; it shows under the pointer, and stays while folded. */
+.docs-fold {
+  display: none;
+}
+.docs-page[data-pageless] .docs-prose :is(h1, h2, h3, h4, h5, h6) {
+  position: relative;
+}
+.docs-page[data-pageless] .docs-fold {
+  position: absolute;
+  left: -32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 1lh;
+  border-radius: 4px;
+  color: var(--docs-icon);
+  cursor: pointer;
+  opacity: 0;
+}
+.docs-page[data-pageless] :hover > .docs-fold,
+.docs-page[data-pageless] .docs-fold[aria-expanded="false"] {
+  opacity: 1;
+}
+.docs-page[data-pageless] .docs-fold:hover {
+  background: var(--docs-hover);
+}
+.docs-fold[aria-expanded="false"] svg {
+  transform: rotate(-90deg);
+}
+.docs-page[data-pageless] .docs-folded {
+  display: none;
+}
+
+/* The selection while the page has no focus: Google Docs' gray, #8f8f8f at
+   34%. The Unitos layer's own tint wins where it paints. */
+.docs-blurred-selection:not(.selection-mark) {
+  background: rgba(143, 143, 143, 0.34);
 }
 
 /* ── The side: the vertical ruler and the outline stay put while the canvas
@@ -909,16 +952,12 @@
 .docs-setup-short {
   width: 96px;
 }
-.docs-setup-error {
-  color: #b3261e;
+.docs-setup-error,
+.docs-setup-note {
   font-size: 13px;
-}
-.dark .docs-setup-error {
-  color: #f2b8b5;
 }
 .docs-setup-note {
   color: var(--docs-muted);
-  font-size: 13px;
 }
 /* The pageless drawing: a column of text lines with no page edges. */
 .docs-setup-pageless-art {
@@ -998,7 +1037,8 @@
   .docs-side,
   .docs-hf-layer,
   .docs-ruler-feedback,
-  .docs-caret {
+  .docs-caret,
+  .docs-fold {
     display: none !important;
   }
   .docs-shell,
