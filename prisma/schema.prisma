@@ -539,7 +539,29 @@ model Document {
   // {top, right, bottom, left}, color} in points. Null = Letter, 1 in
   // margins, pages.
   pageSetup     Json?
+  // When the rich text was last saved, and by whom: a save 10 minutes or
+  // more after the last one starts a new sitting (lib/docs/versions.ts).
+  richTextSavedAt DateTime?
+  richTextSavedBy String?
+  versions      DocumentVersion[]
   createdAt     DateTime           @default(now())
+}
+
+// A version of a blank document (SPEC.md §29): its rich text as a sitting of
+// edits left it, kept when the next sitting starts, or named at once (Name
+// current version). Every version is kept; one per revision.
+model DocumentVersion {
+  id         String   @id @default(cuid())
+  documentId String
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  rev        Int // the Document.richTextRev it holds
+  richText   Json
+  userId     String? // the account that saved it last; no relation, as BlockEdit.userId
+  name       String? // Name this version; null = unnamed
+  savedAt    DateTime
+  createdAt  DateTime @default(now())
+
+  @@unique([documentId, rev])
 }
 
 // One row per user change to a document: block text edits and link add/remove.
