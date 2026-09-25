@@ -1,5 +1,4 @@
 @import "tailwindcss";
-@import "../components/docs/docs.css";
 @plugin "@tailwindcss/typography";
 
 /* Theme is class-driven: a script on load and the theme setting toggle .dark on <html>.

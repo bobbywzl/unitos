@@ -337,8 +337,16 @@ function scrollPane(e: React.WheelEvent<HTMLElement>) {
   e.currentTarget.closest("[data-reader-root]")?.scrollBy(0, e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY);
 }
 
+/** A press on a card at rest opens it and leaves the caret in the page. It
+    acts on the press, not the click: the press closes the open card, the
+    cards move, and the release lands on another one. */
+export function openLine(e: React.MouseEvent, open: () => void): void {
+  e.preventDefault();
+  if (e.button === 0) open();
+}
+
 /** A comment's card at rest: one line, the author and the comment's first
-    words. A press opens the whole card and leaves the caret in the page. */
+    words. */
 function CommentLine({ comment }: { comment: ColumnComment }) {
   const t = useT();
   const person = useAuthor()(comment.authorId ?? "");
@@ -349,9 +357,10 @@ function CommentLine({ comment }: { comment: ColumnComment }) {
       role="button"
       tabIndex={-1}
       aria-label={t("panes.openComment")}
-      onMouseDown={(e) => e.preventDefault()}
-      onClick={() =>
-        window.dispatchEvent(new CustomEvent("dissect:open-annotation", { detail: { sourceId: comment.sourceId } }))
+      onMouseDown={(e) =>
+        openLine(e, () =>
+          window.dispatchEvent(new CustomEvent("dissect:open-annotation", { detail: { sourceId: comment.sourceId } })),
+        )
       }
       className="docs-comment docs-card-line absolute z-30"
       style={{ borderColor: annotationKindColor("comment", null) }}

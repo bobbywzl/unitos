@@ -1,13 +1,15 @@
 import type { Editor } from "@tiptap/core";
-import type { Node as PMNode } from "@tiptap/pm/model";
+import { Mark, type Node as PMNode } from "@tiptap/pm/model";
 import { NodeSelection, Selection, TextSelection, type EditorState } from "@tiptap/pm/state";
 import { annotationMarksKey } from "@/components/docs/annotation-marks";
 import { docsCommands, type DocsCommand } from "@/components/docs/commands";
 import { readSuggestions } from "@/components/docs/ext/suggest";
-import { insertContext, insertT, toast } from "@/components/docs/insert/context";
+import { insertT, toast } from "@/components/docs/insert/context";
 import { isMac, matchesCombo } from "@/components/docs/keys";
 import { posInBlock, wordAtCaret } from "@/components/docs/layer/anchor";
+import { DOCS_EVENT, fireDocs } from "@/components/docs/typing/events";
 import { loadChecker, misspelledWords } from "@/components/docs/typing/spelling";
+import { SUGGESTION_MARK_TYPES } from "@/lib/docs/schema";
 import type { TKey } from "@/lib/i18n/dictionaries";
 
 // Google Docs' navigation keys (SPEC.md §29, typing): the chords, which also
@@ -55,18 +57,33 @@ function listItems(state: EditorState): Selection[] {
   return [];
 }
 
-/** The comments' starts. The marks layer draws each comment's icon at its
-    end, keyed "comment:<id>:<start>:<end>…" with the paragraph's offsets
-    (annotation-marks.tsx). */
-function comments(state: EditorState): Selection[] {
+/** The comments' words, in order. The marks layer draws each comment's icon
+    at its end, keyed "comment:<id>:<start>:<end>…" with the paragraph's
+    offsets (annotation-marks.tsx). */
+function comments(state: EditorState): { sourceId: string; from: number; to: number }[] {
   const icons = annotationMarksKey.getState(state)?.find(undefined, undefined, (spec) => String(spec.key).startsWith("comment:")) ?? [];
   return icons
     .map((icon) => {
+      const [, sourceId, start] = String(icon.spec.key).split(":");
       const $end = state.doc.resolve(icon.from);
-      const start = Number(String(icon.spec.key).split(":")[2]);
-      return TextSelection.create(state.doc, posInBlock($end.parent, $end.before(), start));
+      return { sourceId, from: posInBlock($end.parent, $end.before(), Number(start)), to: icon.from };
     })
     .sort((a, b) => a.from - b.from);
+}
+
+/** Where the formatting changes: a text whose marks, suggestions aside,
+    differ from the text before it. */
+function formatChanges(state: EditorState): Selection[] {
+  const found: Selection[] = [];
+  let before: readonly Mark[] | null = null;
+  state.doc.descendants((node, pos) => {
+    if (!node.isText) return true;
+    const marks = node.marks.filter((m) => !SUGGESTION_MARK_TYPES.has(m.type.name));
+    if (before && !Mark.sameSet(marks, before)) found.push(TextSelection.create(state.doc, pos));
+    before = marks;
+    return false;
+  });
+  return found;
 }
 
 /** N or P, then the target's key. */
@@ -85,8 +102,9 @@ const TARGETS: Record<string, Target> = {
   B: { what: "docsTyping.navBookmark", find: (s) => starts(s, named("bookmark")) },
   F: { what: "docsTyping.navFootnote", find: (s) => starts(s, named("footnoteReference")) },
   T: { what: "docsTyping.navTable", find: (s) => starts(s, named("table")) },
-  C: { what: "docsTyping.navComment", find: comments },
+  C: { what: "docsTyping.navComment", find: (s) => comments(s).map((c) => TextSelection.create(s.doc, c.from)) },
   U: { what: "docsTyping.navSuggestion", find: (s) => readSuggestions(s.doc).map((x) => Selection.near(s.doc.resolve(x.from))) },
+  W: { what: "docsTyping.navFormatChange", find: formatChanges },
 };
 
 /** The first of `found` after the selection's start, or the last before it,
@@ -95,7 +113,7 @@ function jump(editor: Editor, found: Selection[], dir: 1 | -1, what: string): vo
   const at = editor.state.selection.from;
   const target = dir === 1 ? found.find((s) => s.from > at) : found.findLast((s) => s.from < at);
   if (!target) {
-    toast(insertT(editor)(dir === 1 ? "docsTyping.noNext" : "docsTyping.noPrevious", { what }));
+    toast(insertT(editor)(dir === 1 ? "docsTyping.noNext" : "docsTyping.noPrevious", { what }), editor);
     return;
   }
   editor.view.focus();
@@ -109,7 +127,7 @@ const go = (target: Target, dir: 1 | -1): Run => (editor) =>
 async function misspelling(editor: Editor, dir: 1 | -1): Promise<void> {
   const { selection } = editor.state;
   const spell = await loadChecker();
-  if (!spell) return toast(insertT(editor)("common.requestFailed"));
+  if (!spell) return toast(insertT(editor)("common.requestFailed"), editor);
   // Typing while the dictionary loads keeps the caret where it is.
   if (!editor.state.selection.eq(selection)) return;
   const { doc } = editor.state;
@@ -120,15 +138,40 @@ async function misspelling(editor: Editor, dir: 1 | -1): Promise<void> {
 /** Tools > Dictionary (Ctrl+Shift+Y): Unitos's Explain on the selected
     words, or on the word at the caret. */
 export function lookUpWord(editor: Editor): void {
-  const context = insertContext(editor);
-  if (!context) return;
   editor.view.focus();
   const word = wordAtCaret(editor);
   if (word) editor.commands.setTextSelection(word);
-  window.dispatchEvent(new CustomEvent("docs:unitos-tool", { detail: { documentId: context.documentId, tool: "explain" } }));
+  fireDocs(editor, DOCS_EVENT.tool, { tool: "explain" });
 }
 
-const runCommand = (command: DocsCommand): Run => (editor) => {
+/** E then C: the card of the comment around the caret takes the keys. An
+    open card takes the focus now; a card that opens takes it from the text
+    as it mounts (layer/comment-card.tsx). */
+function enterComment(editor: Editor): void {
+  const { head } = editor.state.selection;
+  const [comment] = comments(editor.state)
+    .filter((c) => c.from <= head && head <= c.to)
+    .sort((a, b) => a.to - a.from - (b.to - b.from));
+  if (!comment) return;
+  const pane = editor.view.dom.closest("[data-reader-root]");
+  const card = pane?.querySelector<HTMLElement>(`[data-side-card][data-comment-card="${CSS.escape(comment.sourceId)}"]`);
+  if (card) card.focus();
+  else editor.view.dom.blur();
+  window.dispatchEvent(new CustomEvent("dissect:open-annotation", { detail: { sourceId: comment.sourceId } }));
+}
+
+/** E then F: from the footnote number at the caret to the start of its
+    footnote's words. */
+function enterFootnote(editor: Editor): void {
+  const { $head } = editor.state.selection;
+  const number = [$head.nodeBefore, $head.nodeAfter].find((node) => node?.type.name === "footnoteReference");
+  const [words] = number ? starts(editor.state, (node) => node.type.name === "footnote" && node.attrs.footnoteId === number.attrs.footnoteId) : [];
+  if (!words) return;
+  editor.view.focus();
+  editor.view.dispatch(editor.state.tr.setSelection(words).scrollIntoView());
+}
+
+const runCommand =(command: DocsCommand): Run => (editor) => {
   if (command.enabled?.(editor) ?? true) command.run(editor);
 };
 const runId = (id: string): Run => (editor) => {
@@ -147,6 +190,8 @@ function chords(): Chord[] {
     ["Mod+Alt+Shift+P T", go(TARGETS.T, -1)],
     // Select none.
     ["Mod+Alt+U A", (editor) => editor.view.dispatch(editor.state.tr.setSelection(Selection.near(editor.state.selection.$head)))],
+    ["Mod+Alt+E C", enterComment],
+    ["Mod+Alt+E F", enterFootnote],
     ["Mod+Alt+Shift+W E", runId("layer:comments-all")],
     ...docsCommands().flatMap((c): Chord[] => (c.shortcut?.includes(" ") ? [[c.shortcut, runCommand(c)]] : [])),
   ];
@@ -159,6 +204,11 @@ const KEYS: Chord[] = [
   ["Mod+Alt+Shift+H", runId("versions:see")],
 ];
 
+/** Google's first keys of the chords Unitos lacks: A then H (the outline),
+    Ctrl+Alt+Shift+E then I or O (list items), and the table's
+    Ctrl+Alt+Shift+T. They take the next key all the same. */
+const PREFIXES = ["Mod+Alt+A", "Mod+Alt+Shift+E", "Mod+Alt+Shift+T"];
+
 /** A chord holds Ctrl+Alt, or Ctrl+⌘ on a Mac, as in Google Docs. */
 const held = (combo: string) => (isMac() ? combo.replace("Alt", "Ctrl") : combo);
 
@@ -166,9 +216,11 @@ const held = (combo: string) => (isMac() ? combo.replace("Alt", "Ctrl") : combo)
     Returns the cleanup. */
 export function listenNavigation(editor: Editor, active: () => boolean): () => void {
   let armed: { first: string; at: number } | null = null;
+  // A key taken here reaches no other listener: not the modes' keys
+  // (toolbar.tsx), not the zoom keys (areas/page.tsx).
   const take = (e: KeyboardEvent, run?: Run) => {
     e.preventDefault();
-    e.stopPropagation();
+    e.stopImmediatePropagation();
     run?.(editor);
   };
   const onDown = (e: KeyboardEvent) => {
@@ -178,14 +230,15 @@ export function listenNavigation(editor: Editor, active: () => boolean): () => v
     // AltGr, which Windows reports as Ctrl+Alt, types letters such as ó and ń.
     if ((!e.ctrlKey && !e.metaKey) || e.isComposing || e.getModifierState("AltGraph") || !active()) return;
     const list = chords();
+    // A chord's first key takes the next key: its chord's second, or any other.
     if (was && Date.now() - was.at < HOLD_MS) {
       const chord = list.find(([keys]) => {
         const [first, second] = keys.split(" ");
         return first === was.first && matchesCombo(e, held(first).replace(/[^+]+$/, second));
       });
-      if (chord) return take(e, chord[1]);
+      return take(e, chord?.[1]);
     }
-    const first = list.map(([keys]) => keys.split(" ")[0]).find((combo) => matchesCombo(e, held(combo)));
+    const first = [...PREFIXES, ...list.map(([keys]) => keys.split(" ")[0])].find((combo) => matchesCombo(e, held(combo)));
     if (first) {
       armed = { first, at: Date.now() };
       return take(e);

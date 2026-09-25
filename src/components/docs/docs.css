@@ -6,16 +6,14 @@
 @import "./css/versions.css";
 @import "./css/suggest.css";
 
-/* The page editor (SPEC.md §29): Google Docs' look. Imported by globals.css.
-   Every color the shell uses is a --docs-* token, set for light and dark. */
+/* The page editor (SPEC.md §29): Google Docs' look, loaded with the editor
+   (docs-editor.tsx). Every color the shell uses is a --docs-* token, set for
+   light and dark; the frame's own (the canvas, the page, the text, the
+   icons, the UI font) are in frame.css, which loads with the reader. */
 
 :root {
-  --docs-canvas: #f8fafd;
-  --docs-page: #ffffff;
   --docs-ink: #000000;
   --docs-toolbar: #edf2fa;
-  --docs-icon: #444746;
-  --docs-text: #1f1f1f;
   --docs-muted: #5e5e5e;
   --docs-hover: rgba(68, 71, 70, 0.08);
   --docs-on-bg: #d3e3fd;
@@ -28,28 +26,20 @@
   --docs-selection: #a7c7fc;
   --docs-link: #1155cc;
   --docs-placeholder: #70757a;
-  --docs-ui-font: "Google Sans", Roboto, "Segoe UI", Arial, sans-serif;
+  /* Docs' dark gray 3 and dark gray 2: Heading 3; Heading 4–6, the Subtitle. */
+  --docs-gray-3: #434343;
+  --docs-gray-2: #666666;
+  --docs-code-block: #f1f3f4;
+  --docs-grid: #000000;
 }
 /* The "@" menu's "Search menu" is a shade lighter than the empty line's hint. */
 .docs-at-placeholder {
   --docs-placeholder: #80868b;
 }
 
-.docs-shell {
-  position: relative;
-  min-height: 100%;
-  background: var(--docs-canvas);
-  color: var(--docs-text);
-  font-family: var(--docs-ui-font);
-}
-
 .dark {
-  --docs-canvas: #1b1b1b;
-  --docs-page: #262626;
   --docs-ink: #e8e8e8;
   --docs-toolbar: #2d2f31;
-  --docs-icon: #c4c7c5;
-  --docs-text: #e3e3e3;
   --docs-muted: #a8a8a8;
   --docs-hover: rgba(227, 227, 227, 0.08);
   --docs-on-bg: #004a77;
@@ -60,6 +50,10 @@
   --docs-selection: #3b5a8c;
   --docs-link: #8ab4f8;
   --docs-placeholder: #80868b;
+  --docs-gray-3: #b0b0b0;
+  --docs-gray-2: #b0b0b0;
+  --docs-code-block: #303134;
+  --docs-grid: #8a8a8a;
 }
 
 /* The reader pane's paper fade at its foot belongs to articles: a page on
@@ -68,17 +62,9 @@ div:has([data-docs-editor]) > .reader-fade {
   display: none;
 }
 
-/* ── The header: the title row and the toolbar stay at the top ─────────── */
-.docs-header {
-  position: sticky;
-  top: 0;
-  z-index: 25;
-  background: var(--docs-canvas);
-  padding: 8px 12px 6px;
-}
-
-/* The title row, the canvas, and the pages: css/page.css. The toolbar, its
-   menus, and its palettes: css/toolbar.css. */
+/* The header, the title row, the toolbar's bar, and the canvas: frame.css.
+   The title's states, the pages, and the rulers: css/page.css. The toolbar's
+   controls, menus, and palettes: css/toolbar.css. */
 
 /* ── The document's text: Google Docs' Normal text and styles ─────────── */
 .docs-prose,
@@ -126,19 +112,12 @@ div:has([data-docs-editor]) > .reader-fade {
 }
 .docs-prose h1 { font-size: 20pt; padding-top: 20pt; padding-bottom: 6pt; }
 .docs-prose h2 { font-size: 16pt; padding-top: 18pt; padding-bottom: 6pt; }
-.docs-prose h3 { font-size: 14pt; padding-top: 16pt; padding-bottom: 4pt; color: #434343; }
-.docs-prose h4 { font-size: 12pt; padding-top: 14pt; padding-bottom: 4pt; color: #666666; }
-.docs-prose h5 { font-size: 11pt; padding-top: 12pt; padding-bottom: 4pt; color: #666666; }
-.docs-prose h6 { font-size: 11pt; padding-top: 12pt; padding-bottom: 4pt; color: #666666; font-style: italic; }
+.docs-prose h3 { font-size: 14pt; padding-top: 16pt; padding-bottom: 4pt; color: var(--docs-gray-3); }
+.docs-prose h4 { font-size: 12pt; padding-top: 14pt; padding-bottom: 4pt; color: var(--docs-gray-2); }
+.docs-prose h5 { font-size: 11pt; padding-top: 12pt; padding-bottom: 4pt; color: var(--docs-gray-2); }
+.docs-prose h6 { font-size: 11pt; padding-top: 12pt; padding-bottom: 4pt; color: var(--docs-gray-2); font-style: italic; }
 .docs-prose p[data-doc-style="title"] { font-size: 26pt; padding-bottom: 3pt; }
-.docs-prose p[data-doc-style="subtitle"] { font-size: 15pt; padding-bottom: 16pt; color: #666666; }
-.dark .docs-prose h3,
-.dark .docs-prose h4,
-.dark .docs-prose h5,
-.dark .docs-prose h6,
-.dark .docs-prose p[data-doc-style="subtitle"] {
-  color: #b0b0b0;
-}
+.docs-prose p[data-doc-style="subtitle"] { font-size: 15pt; padding-bottom: 16pt; color: var(--docs-gray-2); }
 /* The first heading of the document starts at the page's top margin. */
 .docs-prose > :first-child {
   padding-top: 0;
@@ -159,14 +138,11 @@ div:has([data-docs-editor]) > .reader-fade {
   margin: 6pt 0;
   padding: 8pt 10pt;
   border-radius: 6px;
-  background: #f1f3f4;
+  background: var(--docs-code-block);
   font-family: "Roboto Mono", "Courier New", monospace;
   font-size: 10pt;
   line-height: 1.45;
   white-space: pre-wrap;
-}
-.dark .docs-prose pre {
-  background: #303134;
 }
 .docs-prose blockquote {
   margin: 0 0 0 36pt;
@@ -260,14 +236,10 @@ div:has([data-docs-editor]) > .reader-fade {
 .docs-prose th {
   position: relative;
   min-width: 1em;
-  border: 1px solid #000000;
+  border: 1px solid var(--docs-grid);
   padding: 5pt;
   vertical-align: top;
   box-sizing: border-box;
-}
-.dark .docs-prose td,
-.dark .docs-prose th {
-  border-color: #8a8a8a;
 }
 .docs-prose th {
   font-weight: inherit;

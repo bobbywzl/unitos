@@ -6,6 +6,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { useCollab } from "@/components/collab/collab-context";
 import { PersonBadge } from "@/components/collab/person-badge";
 import { useT } from "@/components/lang-provider";
+import { docsCommands } from "@/components/docs/commands";
 import {
   BulletListIcon,
   ChecklistIcon,
@@ -18,7 +19,6 @@ import {
   PageBreakIcon,
   TableIcon,
 } from "@/components/docs/icons";
-import { DOCS_EVENT } from "@/components/docs/extensions";
 import {
   insertBookmark,
   insertCodeBlock,
@@ -63,6 +63,7 @@ import { ImageSourcePicker } from "@/components/docs/insert/image-source";
 import { insertImageFrom } from "@/components/docs/insert/image";
 import { TableGridPicker } from "@/components/docs/insert/table-grid";
 import { anchorAt, FloatingBox, useDocPos, useEditorTick, useViewportTick } from "@/components/docs/insert/ui";
+import { DOCS_EVENT, fireDocs } from "@/components/docs/typing/events";
 import type { TKey } from "@/lib/i18n/dictionaries";
 
 // The "@" menu (SPEC.md §29), Google Docs' insert menu under the typed "@":
@@ -122,6 +123,13 @@ const HEADINGS: ["title" | "subtitle" | "h1" | "h2" | "h3" | "normal", TKey, str
   ["h2", "docs.styleHeading2", "heading h2 标题"],
   ["h3", "docs.styleHeading3", "heading h3 标题"],
   ["normal", "docs.styleNormal", "normal text paragraph 正文"],
+];
+
+const PAGE_COMPONENTS: [id: string, words: string, icon: ReactNode][] = [
+  ["page:page-numbers", "page number numbering 页码", <span key="i" className="docs-at-glyph">#</span>],
+  ["page:page-count", "page count total pages 页数", <span key="i" className="docs-at-glyph">#</span>],
+  ["page:header", "header 页眉", <DocIcon key="i" />],
+  ["page:footer", "footer 页脚", <DocIcon key="i" />],
 ];
 
 const CODE_LANGUAGES: [string, string][] = [
@@ -311,6 +319,14 @@ function AtMenu({
       item("emoji", "media", "docsInsert.itemEmoji", "emoji smiley 表情", <MoodIcon />, "emoji"),
       ...HEADINGS.map(([style, label, words]) => item(style, "headings", label, words, <TitleIcon />, here(() => editor.chain().focus().setDocStyle(style).run()))),
       item("table", "tables", "docsInsert.itemTable", "table grid 表格", <TableIcon />, "table"),
+      // The page area's commands (page/commands.ts): Page count only while a
+      // header or footer is edited.
+      ...PAGE_COMPONENTS.flatMap(([id, words, icon]): Item[] => {
+        const command = docsCommands().find((c) => c.id === id);
+        if (!command) return [];
+        const off = ctx.pageSetup.pageless ? "docsInsert.pagesOnly" : command.enabled?.(editor) === false ? "docsInsert.headersOnly" : null;
+        return [{ ...item(id, "page", command.label, words, icon, here(() => command.run(editor))), disabled: off ? t(off) : undefined }];
+      }),
       {
         ...item("pagebreak", "page", "docsInsert.itemPageBreak", "page break 分页", <PageBreakIcon />, here(() => editor.chain().focus().setPageBreak().run())),
         disabled: ctx.pageSetup.pageless ? t("docsInsert.pagesOnly") : undefined,
@@ -328,7 +344,7 @@ function AtMenu({
       item("special", "more", "docsInsert.itemSpecialCharacters", "special characters symbols omega 特殊 符号", <span className="docs-at-glyph">Ω</span>, here(() =>
         emitInsert(editor, { type: "special-characters" }),
       )),
-      item("link", "more", "docsInsert.itemLink", "link url hyperlink 链接", <LinkIcon />, here(() => window.dispatchEvent(new CustomEvent(DOCS_EVENT.link)))),
+      item("link", "more", "docsInsert.itemLink", "link url hyperlink 链接", <LinkIcon />, here(() => fireDocs(editor, DOCS_EVENT.link))),
       item("code", "more", "docsInsert.itemCodeBlock", "code block snippet 代码", <CodeIcon />, "code"),
     ];
   }, [colon, emoji, q, state.query, collab.people, collab.myId, ctx, editor, t]);

@@ -9,7 +9,7 @@ import { toast } from "@/components/docs/insert/context";
 import { execClipboard, pasteFromClipboard } from "@/components/docs/insert/context-menu";
 import { isMac } from "@/components/docs/keys";
 import { AutocorrectBubble } from "@/components/docs/typing/autocorrect-bubble";
-import { TYPING_EVENT, fireTyping } from "@/components/docs/typing/events";
+import { TYPING_EVENT, fireDocs } from "@/components/docs/typing/events";
 import { findState, searchFrom, setFind, stepResult } from "@/components/docs/typing/find";
 import { FindBar, FindReplaceDialog, type FindMode } from "@/components/docs/typing/find-ui";
 import { setCase, toggleSmallCaps, type TextCase } from "@/components/docs/typing/format";
@@ -66,7 +66,7 @@ registerDocsCommands([
     menu: "edit",
     keywords: ["find", "search", "locate", "replace", "查找", "替换"],
     shortcut: isMac() ? "Mod+Shift+H" : "Mod+H",
-    run: () => fireTyping(TYPING_EVENT.findReplace),
+    run: (editor) => fireDocs(editor, TYPING_EVENT.findReplace),
   },
   {
     id: "typing:word-count",
@@ -74,14 +74,14 @@ registerDocsCommands([
     menu: "tools",
     keywords: ["count", "words", "characters", "show word count", "字数"],
     shortcut: "Mod+Shift+C",
-    run: () => fireTyping(TYPING_EVENT.wordCount),
+    run: (editor) => fireDocs(editor, TYPING_EVENT.wordCount),
   },
   {
     id: "typing:preferences",
     label: "docsTyping.preferences",
     menu: "tools",
     keywords: ["settings", "options", "configurations", "autocorrect", "substitutions", "smart quotes", "markdown", "capitalize", "emoji", "偏好", "自动更正"],
-    run: () => fireTyping(TYPING_EVENT.preferences),
+    run: (editor) => fireDocs(editor, TYPING_EVENT.preferences),
   },
   {
     id: "typing:voice",
@@ -89,7 +89,7 @@ registerDocsCommands([
     menu: "tools",
     keywords: ["voice", "dictation", "speech", "speak", "start voice typing", "语音"],
     shortcut: "Mod+Shift+S",
-    run: () => fireTyping(TYPING_EVENT.voice),
+    run: (editor) => fireDocs(editor, TYPING_EVENT.voice),
   },
   {
     id: "typing:paste-markdown",
@@ -113,7 +113,7 @@ registerDocsCommands([
     menu: "tools",
     keywords: ["keyboard", "shortcuts", "keys", "hotkeys", "快捷键"],
     shortcut: "Mod+/",
-    run: () => fireTyping(TYPING_EVENT.shortcuts),
+    run: (editor) => fireDocs(editor, TYPING_EVENT.shortcuts),
   },
   {
     id: "typing:dictionary",
@@ -188,7 +188,7 @@ export function TypingLayer({ editor }: DocsAreaProps) {
     // Spelling and grammar check: the browser's underlines on or off.
     const toggleSpelling = () => {
       view.dom.spellcheck = !view.dom.spellcheck;
-      toast(t(view.dom.spellcheck ? "docsTyping.spellingOn" : "docsTyping.spellingOff"));
+      toast(t(view.dom.spellcheck ? "docsTyping.spellingOn" : "docsTyping.spellingOff"), editor);
     };
     const onKey = (e: KeyboardEvent) => {
       if (e.defaultPrevented || e.isComposing || !docsActive(editor)) return;
@@ -212,23 +212,18 @@ export function TypingLayer({ editor }: DocsAreaProps) {
         e.stopPropagation();
       }
     };
-    const onFindReplace = () => openFind("dialog");
-    const onPrefs = () => setPrefsOpen(true);
-    const onShortcuts = () => setShortcutsOpen(true);
-    const onVoice = () => setVoiceOpen(true);
+    const events: [string, () => void][] = [
+      [TYPING_EVENT.findReplace, () => openFind("dialog")],
+      [TYPING_EVENT.preferences, () => setPrefsOpen(true)],
+      [TYPING_EVENT.shortcuts, () => setShortcutsOpen(true)],
+      [TYPING_EVENT.voice, () => setVoiceOpen(true)],
+      [TYPING_EVENT.spelling, toggleSpelling],
+    ];
     window.addEventListener("keydown", onKey);
-    window.addEventListener(TYPING_EVENT.findReplace, onFindReplace);
-    window.addEventListener(TYPING_EVENT.preferences, onPrefs);
-    window.addEventListener(TYPING_EVENT.shortcuts, onShortcuts);
-    window.addEventListener(TYPING_EVENT.voice, onVoice);
-    window.addEventListener(TYPING_EVENT.spelling, toggleSpelling);
+    for (const [name, on] of events) view.dom.addEventListener(name, on);
     return () => {
       window.removeEventListener("keydown", onKey);
-      window.removeEventListener(TYPING_EVENT.findReplace, onFindReplace);
-      window.removeEventListener(TYPING_EVENT.preferences, onPrefs);
-      window.removeEventListener(TYPING_EVENT.shortcuts, onShortcuts);
-      window.removeEventListener(TYPING_EVENT.voice, onVoice);
-      window.removeEventListener(TYPING_EVENT.spelling, toggleSpelling);
+      for (const [name, on] of events) view.dom.removeEventListener(name, on);
     };
   }, [editor, t]);
 

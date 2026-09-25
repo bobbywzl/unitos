@@ -3,7 +3,6 @@
 import { getMarkRange, type Editor } from "@tiptap/core";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useT } from "@/components/lang-provider";
-import { DOCS_EVENT } from "@/components/docs/extensions";
 import { DocIcon, EditIcon, LinkIcon } from "@/components/docs/icons";
 import { insertFileChip, projectDocHref } from "@/components/docs/insert/actions";
 import { insertContext, toast } from "@/components/docs/insert/context";
@@ -11,6 +10,7 @@ import { ArrowBackIcon, BookmarkIcon, ChevronRightIcon, CopyIcon, LinkOffIcon, T
 import { openLinkHref, placeOf, placePos, projectDocOf } from "@/components/docs/insert/links";
 import { tocEntries } from "@/components/docs/insert/toc";
 import { anchorAt, FloatingBox, focusSoon, useViewportTick, type Anchor } from "@/components/docs/insert/ui";
+import { DOCS_EVENT, fireDocs } from "@/components/docs/typing/events";
 
 // Links in the page editor (SPEC.md §29), as Google Docs does them: Insert
 // link (Ctrl+K) opens a box under the selection: the link field (and the
@@ -91,8 +91,9 @@ export function LinkDialog({ editor }: { editor: Editor }) {
       setPlaces(false);
       setRange({ from, to });
     };
-    window.addEventListener(DOCS_EVENT.link, onOpen);
-    return () => window.removeEventListener(DOCS_EVENT.link, onOpen);
+    const dom = editor.view.dom;
+    dom.addEventListener(DOCS_EVENT.link, onOpen);
+    return () => dom.removeEventListener(DOCS_EVENT.link, onOpen);
   }, [editor]);
 
   useEffect(() => {
@@ -285,8 +286,8 @@ export function LinkBubble({ editor, canEdit }: { editor: Editor; canEdit: boole
           </a>
           {site && <span className="docs-link-bar-site">{site}</span>}
         </span>
-        {button(t("docs.copyLink"), <CopyIcon size={18} />, () => void navigator.clipboard.writeText(absolute(href)).then(() => toast(t("docs.linkCopied"))))}
-        {canEdit && button(t("docs.editLink"), <EditIcon size={18} />, () => window.dispatchEvent(new CustomEvent(DOCS_EVENT.link)))}
+        {button(t("docs.copyLink"), <CopyIcon size={18} />, () => void navigator.clipboard.writeText(absolute(href)).then(() => toast(t("docs.linkCopied"), editor)))}
+        {canEdit && button(t("docs.editLink"), <EditIcon size={18} />, () => fireDocs(editor, DOCS_EVENT.link))}
         {canEdit && button(t("docs.removeLink"), <LinkOffIcon size={18} />, () => editor.chain().focus().extendMarkRange("link").unsetLink().run())}
       </div>
       {asUrl && (

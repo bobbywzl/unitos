@@ -57,9 +57,11 @@ export function ConversationView({
   }, [messages.length]);
 
   return (
+    // Over the page editor's header, which has the same z-index earlier in
+    // the pane (docs/css/layer.css).
     <div
       data-selection-popover
-      className="content-in absolute inset-0 z-30 flex flex-col bg-paper print:hidden"
+      className="content-in absolute inset-0 z-35 flex flex-col bg-paper print:hidden"
     >
       <div className="flex shrink-0 items-center gap-2 border-b border-line px-6 py-3">
         <span className="flex items-center gap-1.5 text-[11px] font-bold tracking-[0.08em] text-clay-800 uppercase">

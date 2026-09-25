@@ -136,6 +136,7 @@ import { CardColumn, CommentCard } from "@/components/docs/layer/comment-card";
 import { setCommentResolved } from "@/lib/annotations/resolve";
 import { COMMENTS_EVENT, flashInPage, PAGE_EDITED_EVENT, type CommentsView } from "@/components/docs/layer/events";
 import { registerDocumentFlush } from "@/components/docs/layer/flush";
+import { DOCS_EVENT } from "@/components/docs/typing/events";
 import {
   belowSlot,
   marginPlace,
@@ -2133,15 +2134,13 @@ export function ReaderInteractions({
   // A blank document's Add comment (the page editor's toolbar button and
   // Ctrl+Alt+M, SPEC.md §29) opens this layer's Comment tool on the
   // selection; a message from the page editor shows as this layer's toast.
+  // Both come up from this pane's own page editor.
   useEffect(() => {
-    if (!richText) return;
-    const onComment = (e: Event) => {
-      const detail = (e as CustomEvent<{ documentId: string }>).detail;
-      if (detail?.documentId !== documentId) return;
-      // In a split view of one document, the focused pane takes it.
-      const editor = pageEditorIn(containerRef.current);
-      const panes = document.querySelectorAll(`[data-reader-root][data-document-id="${documentId}"]`).length;
-      if (!editor || (panes > 1 && !editor.view.hasFocus())) return;
+    const container = containerRef.current;
+    if (!richText || !container) return;
+    const onComment = () => {
+      const editor = pageEditorIn(container);
+      if (!editor) return;
       let captured = captureSelection();
       // A caret in a word: the comment takes the word, as in Google Docs.
       const word = captured ? null : wordAtCaret(editor);
@@ -2171,8 +2170,7 @@ export function ReaderInteractions({
     // The page editor's right-click menu: Add to notes, Explain, and Ask the
     // assistant open the same tools on the selection as this toolbar does.
     const onTool = (e: Event) => {
-      const detail = (e as CustomEvent<{ documentId: string; tool: "add-to-notes" | "explain" | "assistant" }>).detail;
-      if (detail?.documentId !== documentId || !pageEditorIn(containerRef.current)) return;
+      const tool = (e as CustomEvent<{ tool: "add-to-notes" | "explain" | "assistant" }>).detail.tool;
       const captured = captureSelection();
       if (!captured) {
         showToast(t("docsLayer.selectWordsFirst"));
@@ -2181,23 +2179,24 @@ export function ReaderInteractions({
       popoverRef.current = captured;
       setPopover(captured);
       setCloseLink(null);
-      setSubmenu(detail.tool === "add-to-notes" ? "add" : detail.tool === "assistant" ? "ai" : null);
-      if (detail.tool === "explain") setPendingExplain(true);
+      setSubmenu(tool === "add-to-notes" ? "add" : tool === "assistant" ? "ai" : null);
+      if (tool === "explain") setPendingExplain(true);
     };
+    // A toast raised on no page editor shows in every pane.
     const onToast = (e: Event) => {
       const text = (e as CustomEvent<{ text: string }>).detail?.text;
-      if (text) showToast(text);
+      if (text && (e.target === window || container.contains(e.target as Node))) showToast(text);
     };
-    window.addEventListener("docs:comment-selection", onComment);
-    window.addEventListener("docs:unitos-tool", onTool);
+    container.addEventListener(DOCS_EVENT.comment, onComment);
+    container.addEventListener(DOCS_EVENT.tool, onTool);
     window.addEventListener("dissect:toast", onToast);
     return () => {
-      window.removeEventListener("docs:comment-selection", onComment);
-      window.removeEventListener("docs:unitos-tool", onTool);
+      container.removeEventListener(DOCS_EVENT.comment, onComment);
+      container.removeEventListener(DOCS_EVENT.tool, onTool);
       window.removeEventListener("dissect:toast", onToast);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [captureSelection, documentId, Boolean(richText)]);
+  }, [captureSelection, Boolean(richText)]);
 
   // Double-click a text block to edit it in place. The hint card teaches this
   // once; after the first double-click it never shows again.

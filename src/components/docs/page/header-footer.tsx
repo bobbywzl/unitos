@@ -1,7 +1,7 @@
 "use client";
 
 import { Node, mergeAttributes, type JSONContent } from "@tiptap/core";
-import { EditorContent, useEditor } from "@tiptap/react";
+import { EditorContent, useEditor, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import TextAlign from "@tiptap/extension-text-align";
 import Subscript from "@tiptap/extension-subscript";
@@ -130,11 +130,13 @@ function HeaderEditor({
   ctx,
   onChange,
   onExit,
+  onEditor,
 }: {
   doc: RichNode;
   ctx: FieldContext;
   onChange: (doc: RichNode) => void;
   onExit: () => void;
+  onEditor: (editor: Editor | null) => void;
 }) {
   const changeRef = useRef(onChange);
   const exitRef = useRef(onExit);
@@ -189,11 +191,17 @@ function HeaderEditor({
   useEffect(() => {
     if (!editor || editor.isDestroyed) return;
     editor.commands.focus("end");
-    // Page count (Search the menus) goes in at the caret.
+    onEditor(editor);
+    // Page count (Search the menus) goes in at the caret: the command's
+    // event comes up from this page's text.
+    const shell = editor.view.dom.closest("[data-docs-editor]");
     const insert = () => editor.chain().focus().insertContent({ type: "pageCount" }).run();
-    window.addEventListener(PAGE_EVENT.pageCount, insert);
-    return () => window.removeEventListener(PAGE_EVENT.pageCount, insert);
-  }, [editor]);
+    shell?.addEventListener(PAGE_EVENT.pageCount, insert);
+    return () => {
+      onEditor(null);
+      shell?.removeEventListener(PAGE_EVENT.pageCount, insert);
+    };
+  }, [editor, onEditor]);
   return <EditorContent editor={editor} />;
 }
 
@@ -212,12 +220,15 @@ export function HeaderFooterLayer({
   frame,
   pages,
   area: bodyArea,
+  onEditor,
 }: {
   store: PageStore;
   frame: PageFrame;
   pages: number;
   /** Page i's text top and bottom, px from the page's top. */
   area: (page: number) => { top: number; bottom: number };
+  /** The editor of the header or footer being edited, for the toolbar. */
+  onEditor: (editor: Editor | null) => void;
 }) {
   const t = useT();
   const setup = usePageState(store, (s) => s.setup);
@@ -279,7 +290,7 @@ export function HeaderFooterLayer({
   return (
     <div className="docs-hf-layer" data-docs-hf data-edit-control>
       <div ref={editRef} className="docs-hf-edit" style={textStyle}>
-        <HeaderEditor key={`${slot}-${page}`} doc={doc} ctx={ctx} onChange={change} onExit={exit} />
+        <HeaderEditor key={`${slot}-${page}`} doc={doc} ctx={ctx} onChange={change} onExit={exit} onEditor={onEditor} />
       </div>
       <div className="docs-hf-bar" style={{ top: barTop, height: barHeight }}>
         <span className="docs-hf-label">{label}</span>
@@ -346,37 +357,45 @@ export function PageNumbersDialog({ store, onClose }: { store: PageStore; onClos
   };
 
   return (
-    <SmallDialog title={t("docsPage.pageNumbers")} onClose={onClose} onApply={apply}>
-      <fieldset className="docs-setup-group">
-        <legend className="docs-setup-label">{t("docsPage.position")}</legend>
-        <div className="docs-setup-radios">
-          {(["header", "footer"] as const).map((a) => (
-            <label key={a} className="docs-setup-radio">
-              <input type="radio" name="docs-number-area" checked={area === a} onChange={() => setArea(a)} />
-              {t(a === "header" ? "docsPage.header" : "docsPage.footer")}
-            </label>
-          ))}
-        </div>
-        <label className="docs-setup-radio">
-          <input type="checkbox" checked={onFirst} onChange={(e) => setOnFirst(e.target.checked)} />
-          {t("docsPage.showOnFirstPage")}
-        </label>
-      </fieldset>
-      <fieldset className="docs-setup-group">
-        <legend className="docs-setup-label">{t("docsPage.numbering")}</legend>
-        <label className="docs-setup-margin">
-          <span>{t("docsPage.startAt")}</span>
-          <input
-            className="docs-field docs-setup-short"
-            type="number"
-            min={0}
-            max={999}
-            value={startAt}
-            onChange={(e) => setStartAt(e.target.value.slice(0, 3))}
-          />
-        </label>
-      </fieldset>
-    </SmallDialog>
+    <ToolbarDialog
+      title={t("docsPage.pageNumbers")}
+      onClose={onClose}
+      className="docs-small-dialog"
+      closeButton={false}
+      submit={{ label: t("docs.apply"), run: apply }}
+    >
+      <div className="docs-setup-body">
+        <fieldset className="docs-setup-group">
+          <legend className="docs-setup-label">{t("docsPage.position")}</legend>
+          <div className="docs-setup-radios">
+            {(["header", "footer"] as const).map((a) => (
+              <label key={a} className="docs-setup-radio">
+                <input type="radio" name="docs-number-area" checked={area === a} onChange={() => setArea(a)} />
+                {t(a === "header" ? "docsPage.header" : "docsPage.footer")}
+              </label>
+            ))}
+          </div>
+          <label className="docs-setup-radio">
+            <input type="checkbox" checked={onFirst} onChange={(e) => setOnFirst(e.target.checked)} />
+            {t("docsPage.showOnFirstPage")}
+          </label>
+        </fieldset>
+        <fieldset className="docs-setup-group">
+          <legend className="docs-setup-label">{t("docsPage.numbering")}</legend>
+          <label className="docs-setup-margin">
+            <span>{t("docsPage.startAt")}</span>
+            <input
+              className="docs-field docs-setup-short"
+              type="number"
+              min={0}
+              max={999}
+              value={startAt}
+              onChange={(e) => setStartAt(e.target.value.slice(0, 3))}
+            />
+          </label>
+        </fieldset>
+      </div>
+    </ToolbarDialog>
   );
 }
 
@@ -394,55 +413,37 @@ export function HeaderFormatDialog({ store, onClose }: { store: PageStore; onClo
     onClose();
   };
   return (
-    <SmallDialog title={t("docsPage.headersFooters")} onClose={onClose} onApply={apply}>
-      <fieldset className="docs-setup-group">
-        <legend className="docs-setup-label">
-          {t(unit === "in" ? "docsPage.marginsInches" : "docsPage.marginsCentimeters")}
-        </legend>
-        <div className="docs-setup-margins">
-          <label className="docs-setup-margin">
-            <span>{t("docsPage.header")}</span>
-            <input className="docs-field" inputMode="decimal" value={header} onChange={(e) => setHeader(e.target.value.slice(0, 8))} />
-          </label>
-          <label className="docs-setup-margin">
-            <span>{t("docsPage.footer")}</span>
-            <input className="docs-field" inputMode="decimal" value={footer} onChange={(e) => setFooter(e.target.value.slice(0, 8))} />
-          </label>
-        </div>
-      </fieldset>
-      <fieldset className="docs-setup-group">
-        <legend className="docs-setup-label">{t("docsPage.layout")}</legend>
-        <label className="docs-setup-radio">
-          <input type="checkbox" checked={first} onChange={(e) => setFirst(e.target.checked)} />
-          {t("docsPage.differentFirstPage")}
-        </label>
-      </fieldset>
-    </SmallDialog>
-  );
-}
-
-/** A page area dialog: Enter in a field applies it. */
-function SmallDialog({
-  title,
-  onClose,
-  onApply,
-  children,
-}: {
-  title: string;
-  onClose: () => void;
-  onApply: () => void;
-  children: ReactNode;
-}) {
-  const t = useT();
-  return (
     <ToolbarDialog
-      title={title}
+      title={t("docsPage.headersFooters")}
       onClose={onClose}
       className="docs-small-dialog"
       closeButton={false}
-      submit={{ label: t("docs.apply"), run: onApply }}
+      submit={{ label: t("docs.apply"), run: apply }}
     >
-      <div className="docs-setup-body">{children}</div>
+      <div className="docs-setup-body">
+        <fieldset className="docs-setup-group">
+          <legend className="docs-setup-label">
+            {t(unit === "in" ? "docsPage.marginsInches" : "docsPage.marginsCentimeters")}
+          </legend>
+          <div className="docs-setup-margins">
+            <label className="docs-setup-margin">
+              <span>{t("docsPage.header")}</span>
+              <input className="docs-field" inputMode="decimal" value={header} onChange={(e) => setHeader(e.target.value.slice(0, 8))} />
+            </label>
+            <label className="docs-setup-margin">
+              <span>{t("docsPage.footer")}</span>
+              <input className="docs-field" inputMode="decimal" value={footer} onChange={(e) => setFooter(e.target.value.slice(0, 8))} />
+            </label>
+          </div>
+        </fieldset>
+        <fieldset className="docs-setup-group">
+          <legend className="docs-setup-label">{t("docsPage.layout")}</legend>
+          <label className="docs-setup-radio">
+            <input type="checkbox" checked={first} onChange={(e) => setFirst(e.target.checked)} />
+            {t("docsPage.differentFirstPage")}
+          </label>
+        </fieldset>
+      </div>
     </ToolbarDialog>
   );
 }

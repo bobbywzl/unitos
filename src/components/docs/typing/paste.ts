@@ -1,5 +1,6 @@
 import type { Editor } from "@tiptap/core";
 import { Fragment, Slice, type Mark, type Node as PMNode, type ResolvedPos, type Schema } from "@tiptap/pm/model";
+import { NodeSelection, TextSelection } from "@tiptap/pm/state";
 import { insertPoint } from "@tiptap/pm/transform";
 import type { EditorView } from "@tiptap/pm/view";
 import { insertT, toast } from "@/components/docs/insert/context";
@@ -285,7 +286,7 @@ export async function insertImageFiles(editor: Editor, files: File[], pos?: numb
     try {
       const { url } = await uploadImage(file);
       if (editor.isDestroyed) return;
-      insertImage(editor, { src: url, alt: file.name }, at);
+      insertImage(editor, { src: url }, at);
       at = editor.state.selection.to;
     } catch (err) {
       uploadFailed(editor, err);
@@ -294,8 +295,10 @@ export async function insertImageFiles(editor: Editor, files: File[], pos?: numb
 }
 
 /** An image on its own line after the paragraph at `pos` (else the
-    selection, which it replaces), or in place of an empty line. */
-export function insertImage(editor: Editor, attrs: { src: string; alt?: string }, pos?: number): void {
+    selection, which it replaces), or in place of an empty line. The caret
+    goes to the empty line under it, a new one when the next line holds
+    words: the next key never replaces the image. */
+export function insertImage(editor: Editor, attrs: { src: string }, pos?: number): void {
   editor
     .chain()
     .focus()
@@ -303,6 +306,14 @@ export function insertImage(editor: Editor, attrs: { src: string; alt?: string }
       const { from } = tr.selection;
       const spot = pos ?? tr.deleteSelection().mapping.map(from);
       return commands.insertContentAt(imageSpot(tr.doc, Math.min(spot, tr.doc.content.size)), { type: "image", attrs });
+    })
+    .command(({ tr }) => {
+      if (!(tr.selection instanceof NodeSelection)) return false;
+      const after = tr.selection.to;
+      const next = tr.doc.resolve(after).nodeAfter;
+      if (!next?.isTextblock || next.content.size > 0) tr.insert(after, tr.doc.type.schema.nodes.paragraph.create());
+      tr.setSelection(TextSelection.create(tr.doc, after + 1));
+      return true;
     })
     .run();
 }

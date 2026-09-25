@@ -2,11 +2,11 @@
    Google Docs' toolbar in its Material 3 look: one rounded bar, 30 px
    controls with 4 px corners, 20 px outlined symbols, six separators, the
    menus, palettes, and dialogs its controls open, the tooltip, and the list
-   presets' glyphs. The tokens docs.css already has (--docs-icon, --docs-text,
-   --docs-blue) are not repeated here. */
+   presets' glyphs. The bar itself and its color (--docs-tb-bg) are in
+   frame.css; the shared tokens (--docs-icon, --docs-text, --docs-blue) are
+   in frame.css and docs.css. */
 
 :root {
-  --docs-tb-bg: #f0f4f9;
   --docs-tb-bg-pageless: #f8fafd;
   --docs-tb-caption: rgba(31, 31, 31, 0.7);
   --docs-tb-on: #d3e3fd;
@@ -27,7 +27,6 @@
   --docs-tb-swatch-ring: rgba(0, 0, 0, 0.35);
 }
 .dark {
-  --docs-tb-bg: #1e1f20;
   --docs-tb-bg-pageless: #1b1b1b;
   --docs-tb-caption: rgba(227, 227, 227, 0.7);
   --docs-tb-sep: #444746;
@@ -44,21 +43,7 @@
   --docs-tb-swatch-ring: rgba(255, 255, 255, 0.55);
 }
 
-/* ── The bar ──────────────────────────────────────────────────────────────
-   40 px tall, 28 px corners, 16 px from the pane's sides and 8 px above the
-   ruler (the header adds 12 px at the sides and 6 px below). */
-.docs-toolbar {
-  display: flex;
-  align-items: center;
-  min-width: 0;
-  min-height: 40px;
-  margin: 6px 4px 2px;
-  padding: 0 8px;
-  border-radius: 28px;
-  background: var(--docs-tb-bg);
-  color: var(--docs-icon);
-  font-family: var(--docs-tb-font);
-}
+/* ── The bar (its box: frame.css) ─────────────────────────────────────── */
 .docs-tb-pageless {
   --docs-tb-bg: var(--docs-tb-bg-pageless);
 }

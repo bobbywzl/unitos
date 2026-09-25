@@ -1,3 +1,4 @@
+import "./frame.css";
 import { DocIcon } from "@/components/docs/icons";
 import { pageFrame } from "@/components/docs/page/geometry";
 import type { PageSetup } from "@/lib/docs/schema";

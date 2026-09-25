@@ -3,12 +3,10 @@
    suggestion whose card is open takes a stronger tint (--docs-suggest-tint). */
 
 :root {
-  /* Google Docs' Suggesting pill: primary container. */
-  --docs-suggesting-bg: #d3e3fd;
+  /* Google Docs' Suggesting pill: on the primary container (--docs-tb-container). */
   --docs-suggesting-fg: #0842a0;
 }
 .dark {
-  --docs-suggesting-bg: #0842a0;
   --docs-suggesting-fg: #d3e3fd;
 }
 
@@ -70,16 +68,16 @@
 
 /* The mode switcher in Suggesting mode. */
 .docs-mode-pill[data-mode="suggesting"] {
-  background: var(--docs-suggesting-bg);
+  background: var(--docs-tb-container);
   color: var(--docs-suggesting-fg);
 }
 .docs-mode-pill[data-mode="suggesting"]:hover {
-  background: color-mix(in srgb, var(--docs-suggesting-fg) 8%, var(--docs-suggesting-bg));
+  background: color-mix(in srgb, var(--docs-suggesting-fg) 8%, var(--docs-tb-container));
 }
 .docs-mode-pill[data-mode="suggesting"]:active,
 .docs-mode-pill[data-mode="suggesting"]:focus-visible,
 .docs-mode-pill[data-mode="suggesting"][aria-expanded="true"] {
-  background: color-mix(in srgb, var(--docs-suggesting-fg) 10%, var(--docs-suggesting-bg));
+  background: color-mix(in srgb, var(--docs-suggesting-fg) 10%, var(--docs-tb-container));
 }
 .docs-menu-modes [data-track="docs:mode:suggesting"][aria-checked="true"] .docs-mode-label {
   color: #146c2e;
@@ -89,15 +87,8 @@
 }
 
 /* A suggestion's card (suggest/card.tsx): the comment card's look. The
-   active card is white and lifted, with Accept and Reject in view; the
-   others are one line (css/layer.css .docs-card-line). */
-[data-page-editor] .docs-suggest-card[data-active] {
-  background: var(--docs-card-active);
-  box-shadow: var(--docs-card-shadow);
-}
-.docs-suggest-card .docs-comment-buttons {
-  opacity: 1;
-}
+   active card is white and lifted (css/layer.css, the card in use), with
+   Accept and Reject in view; the others are one line (.docs-card-line). */
 .docs-suggest-what {
   overflow-wrap: anywhere;
 }

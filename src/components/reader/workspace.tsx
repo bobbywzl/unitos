@@ -59,7 +59,13 @@ import type { DocumentFolderView } from "@/components/reader/document-folders";
 import type { ReaderViewKind } from "@/components/reader/reader-panes";
 import type { DriveConfig } from "@/lib/drive/config";
 import type { TKey } from "@/lib/i18n/dictionaries";
-import { RESTORE_STYLE_ID, RESTORE_STYLE_MS, restoreScript, trayStateKey } from "@/lib/reading-position";
+import {
+  RESTORE_STYLE_ID,
+  RESTORE_STYLE_MS,
+  restoreScript,
+  trayFoldsByDefault,
+  trayStateKey,
+} from "@/lib/reading-position";
 
 type Tab = "notes" | "assistant" | "distill" | "annotations" | "edits";
 
@@ -174,7 +180,7 @@ export function Workspace({
   });
   const [collapsed, setCollapsed] = useState(false);
   // Set while the tray is folded for a floating note (below), so that fold is
-  // neither remembered as the reader's choice nor left behind.
+  // undone when the note docks or closes.
   const foldedForFloat = useRef(false);
   // Below md the tray is a bottom sheet over the reader, opened from the
   // bottom bar; mobileTray tracks it. On md+ the md: overrides put the same
@@ -187,52 +193,38 @@ export function Workspace({
   // transition; the slide is for collapse and expand.
   const [resizing, setResizing] = useState(false);
   const [tab, setTab] = useState<Tab>("notes");
-  // The tray's collapsed state and tab, per tab and per project: a full page
-  // load (a new deploy turns the next refresh into one) reopened the tray on
-  // notes over a reader that had folded it (reader report). The inline
-  // restore script (lib/reading-position.ts) keeps a folded tray folded
-  // before the first paint; this restores the state itself after hydration
-  // and saves it on every change after that.
+  // The tray per tab and per project: the reader's own open or fold and the
+  // tab, saved when the reader makes them (the rail, a jump to a note or an
+  // annotation, Show all comments), so a full page load (a new deploy turns
+  // the next refresh into one) keeps a tray the reader folded (reader
+  // report). Until then each document opens with the tray's default: folded
+  // for a blank document in a window without room for its whole toolbar
+  // beside the tray (SPEC.md §29). The folds the workspace makes by itself
+  // are never saved. The inline restore script (lib/reading-position.ts)
+  // folds the tray before the first paint; these set the state after it.
   const trayStoreKey = trayStateKey(notebook.id);
-  // The restored state, until the render carrying it lands: the save below
-  // must not write the defaults over it first. undefined = not read yet;
-  // null = nothing stored, or already landed.
-  const trayRestore = useRef<{ collapsed: boolean; tab: Tab } | null | undefined>(undefined);
-  useLayoutEffect(() => {
-    let saved: { collapsed: boolean; tab: Tab } | null = null;
-    try {
-      const raw = sessionStorage.getItem(trayStoreKey);
-      const stored = raw ? (JSON.parse(raw) as { collapsed?: unknown; tab?: unknown }) : null;
-      if (stored && typeof stored.collapsed === "boolean") {
-        const storedTab =
-          typeof stored.tab === "string" && stored.tab in TAB_TITLES && (stored.tab !== "assistant" || canEdit)
-            ? (stored.tab as Tab)
-            : "notes";
-        saved = { collapsed: stored.collapsed, tab: storedTab };
+  const rememberTray = useCallback(
+    (next: { collapsed: boolean; tab: Tab }) => {
+      try {
+        sessionStorage.setItem(trayStoreKey, JSON.stringify(next));
+      } catch {
+        // storage unavailable: nothing to remember
       }
-    } catch {
-      // storage unavailable: the tray opens on notes
-    }
-    trayRestore.current = saved;
-    if (saved) {
-      /* eslint-disable react-hooks/set-state-in-effect */
-      setCollapsed(saved.collapsed);
-      setTab(saved.tab);
-      /* eslint-enable react-hooks/set-state-in-effect */
-    }
+    },
+    [trayStoreKey],
+  );
+  useLayoutEffect(() => {
+    const saved = storedTray(trayStoreKey, canEdit);
+    if (!saved) return;
+    /* eslint-disable react-hooks/set-state-in-effect */
+    setCollapsed(saved.collapsed);
+    setTab(saved.tab);
+    /* eslint-enable react-hooks/set-state-in-effect */
   }, [trayStoreKey, canEdit]);
-  useEffect(() => {
-    const pending = trayRestore.current;
-    if (pending === undefined) return;
-    if (foldedForFloat.current) return;
-    if (pending && (pending.collapsed !== collapsed || pending.tab !== tab)) return;
-    trayRestore.current = null;
-    try {
-      sessionStorage.setItem(trayStoreKey, JSON.stringify({ collapsed, tab }));
-    } catch {
-      // storage unavailable: nothing to remember
-    }
-  }, [trayStoreKey, collapsed, tab]);
+  useLayoutEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (!storedTray(trayStoreKey, canEdit)) setCollapsed(trayFoldsByDefault(readerView !== "normal"));
+  }, [trayStoreKey, canEdit, activeDocumentId, readerView]);
   // The script's style rules leave once React owns the tray and the entrance
   // fades are past: the tray can then slide, and the fade cannot start late.
   useEffect(() => {
@@ -424,6 +416,7 @@ export function Workspace({
       const { noteId } = (e as CustomEvent<{ noteId: string }>).detail;
       setCollapsed(false);
       setTab("notes");
+      rememberTray({ collapsed: false, tab: "notes" });
       revealTray();
       setTimeout(() => {
         window.dispatchEvent(new CustomEvent("dissect:open-note", { detail: { noteId } }));
@@ -440,6 +433,7 @@ export function Workspace({
       const { sourceId } = (e as CustomEvent<{ sourceId: string }>).detail;
       setCollapsed(false);
       setTab("annotations");
+      rememberTray({ collapsed: false, tab: "annotations" });
       revealTray();
       setTimeout(() => {
         window.dispatchEvent(new CustomEvent("dissect:open-annotation", { detail: { sourceId } }));
@@ -455,6 +449,7 @@ export function Workspace({
     const onShowAnnotations = () => {
       setCollapsed(false);
       setTab("annotations");
+      rememberTray({ collapsed: false, tab: "annotations" });
       revealTray();
     };
     // The Extract tab opens the corpus extract page (SPEC.md §13).
@@ -472,7 +467,7 @@ export function Workspace({
       window.removeEventListener("dissect:show-annotations", onShowAnnotations);
       window.removeEventListener("dissect:open-corpus-distillation", onOpenCorpusDistillation);
     };
-  }, [revealTray]);
+  }, [revealTray, rememberTray]);
 
   // Post-hydration restore on purpose: localStorage is client-only, so the
   // SSR pass must render the default width. Window resizes re-clamp, so the
@@ -535,6 +530,7 @@ export function Workspace({
     }
     setTab(next);
     setCollapsed(false);
+    rememberTray({ collapsed: false, tab: next });
     setMobileTray(true);
     revealTray();
   }
@@ -704,7 +700,7 @@ export function Workspace({
           ref={trayColumnRef}
           style={{ "--tray-w": `${trayWidth}px` } as React.CSSProperties}
           inert={(collapsed && !mobileTray) || undefined}
-          className={`tray-column flex min-h-0 shrink-0 md:overflow-hidden ${
+          className={`tray-column flex min-h-0 shrink-0 md:overflow-hidden print:hidden ${
             resizing || split ? "tray-column-resizing" : ""
           } ${collapsed ? "md:w-0" : "md:w-[var(--tray-w)]"}`}
         >
@@ -829,6 +825,7 @@ export function Workspace({
           <button
             onClick={() => {
               setCollapsed(!collapsed);
+              rememberTray({ collapsed: !collapsed, tab });
               setMobileTray(false);
             }}
             data-track="collapse-tray"
@@ -967,11 +964,27 @@ export function Workspace({
           runs: the reading position and the folded tray are back before the
           first paint of a full page load. Server render only — the browser
           does not run a script React inserts. */}
-      <script dangerouslySetInnerHTML={{ __html: restoreScript(notebook.id) }} />
+      <script dangerouslySetInnerHTML={{ __html: restoreScript(notebook.id, split) }} />
     </div>
     </OpenDocumentProvider>
     </CollabProvider>
   );
+}
+
+/** The tray the reader left in this tab for the project, if any. */
+function storedTray(key: string, canEdit: boolean): { collapsed: boolean; tab: Tab } | null {
+  try {
+    const raw = sessionStorage.getItem(key);
+    const stored = raw ? (JSON.parse(raw) as { collapsed?: unknown; tab?: unknown }) : null;
+    if (!stored || typeof stored.collapsed !== "boolean") return null;
+    const tab =
+      typeof stored.tab === "string" && stored.tab in TAB_TITLES && (stored.tab !== "assistant" || canEdit)
+        ? (stored.tab as Tab)
+        : "notes";
+    return { collapsed: stored.collapsed, tab };
+  } catch {
+    return null; // storage unavailable: the tray's default
+  }
 }
 
 function countNotes(sections: NotebookView["sections"]): number {

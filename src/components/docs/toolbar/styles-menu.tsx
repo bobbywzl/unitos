@@ -11,6 +11,7 @@ import { MenuItem, MenuSeparator } from "@/components/docs/menu";
 import { DropBtn } from "@/components/docs/toolbar/controls";
 import {
   DEFAULT_STYLES,
+  deepestHeading,
   replaceAllChanges,
   saveDefaultStyles,
   savedDefaultStyles,
@@ -67,7 +68,7 @@ export function styleOptions(editor: Editor, t: TFunc): { key: TKey; words: stri
       words: ["save styles", "save all styles"],
       run: () => {
         saveDefaultStyles(editor.state.doc);
-        toast(t("docs.defaultStylesSaved"));
+        toast(t("docs.defaultStylesSaved"), editor);
       },
     },
     {
@@ -75,7 +76,7 @@ export function styleOptions(editor: Editor, t: TFunc): { key: TKey; words: stri
       words: ["load default styles"],
       run: () => {
         replaceAllChanges(editor, savedDefaultStyles());
-        toast(t("docs.usingDefaultStyles"));
+        toast(t("docs.usingDefaultStyles"), editor);
       },
     },
     { key: "docs.resetStyles", words: ["clear styles"], run: () => replaceAllChanges(editor, {}) },
@@ -103,13 +104,11 @@ export function StylesSelect({
   editor,
   style,
   styles,
-  deepest,
 }: {
   editor: Editor;
   /** The selection's style; null when it spans styles. */
   style: DocStyle | null;
   styles: Record<DocStyle, NamedStyle>;
-  deepest: number;
 }) {
   const t = useT();
   const apply = (s: DocStyle) => editor.chain().focus().setDocStyle(s).run();
@@ -124,7 +123,7 @@ export function StylesSelect({
     >
       {(close) => (
         <>
-          {menuStyles(deepest).map((s) => {
+          {menuStyles(deepestHeading(editor.state.doc)).map((s) => {
             const name = t(STYLE_LABEL[s]);
             const look = preview(styles, s);
             const combo = STYLE_KEYS[s];

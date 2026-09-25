@@ -4,7 +4,7 @@ import type { Editor } from "@tiptap/core";
 import { useSyncExternalStore } from "react";
 import type { PageSetup } from "@/lib/docs/schema";
 import type { TextWidth } from "@/components/docs/page/geometry";
-import { MAX_WAIT_MS, SAVE_DELAY_MS, type SaveState } from "@/components/docs/use-docs-save";
+import { MAX_WAIT_MS, SAVE_DELAY_MS, retryWait, saveOnLeave, type SaveState } from "@/components/docs/use-docs-save";
 
 // The page area's state (SPEC.md §29), one store per editor: the ruler
 // under the toolbar, the canvas, the dialogs, and the commands Search the
@@ -100,7 +100,7 @@ export function writePref(key: string, value: string): void {
 
 const stores = new WeakMap<Editor, PageStore>();
 
-function createStore(documentId: string, setup: PageSetup): PageStore {
+function createStore(editor: Editor, documentId: string, setup: PageSetup): PageStore {
   const width = readPref(TEXT_WIDTH_KEY);
   const outlineWidth = Number(readPref(OUTLINE_WIDTH_KEY));
   // The outline's open state is kept per document; a new document opens it
@@ -125,22 +125,26 @@ function createStore(documentId: string, setup: PageSetup): PageStore {
   let zoomSetter: (zoom: number | "fit") => void = () => {};
   let savedHook: () => void = () => {};
   let pending = 0;
-  // The save a change waits for, since when changes wait, and the failed
-  // saves in a row.
+  // The save a change waits for, since when changes wait, the failed saves
+  // in a row, and whether the editor went away.
   let timer: ReturnType<typeof setTimeout> | null = null;
   let firstChangeAt: number | null = null;
   let retries = 0;
+  let closed = false;
   const saveLater = (wait: number) => {
     if (timer) clearTimeout(timer);
     timer = setTimeout(() => void store.saveSetup(state.setup), wait);
   };
   const url = `/api/documents/${documentId}/rich-text`;
   // Leaving with a change not saved: one last save, and the browser's warning.
-  const onLeave = (e: BeforeUnloadEvent) => {
-    const body = JSON.stringify({ pageSetup: state.setup });
-    void fetch(url, { method: "PATCH", headers: { "content-type": "application/json" }, body, keepalive: true });
-    e.preventDefault();
-  };
+  const onLeave = (e: BeforeUnloadEvent) => saveOnLeave(e, url, "PATCH", { pageSetup: state.setup });
+  // The editor goes away: what waits is saved once, with no try after it and
+  // no warning on leaving.
+  editor.on("destroy", () => {
+    closed = true;
+    if (timer) void store.saveSetup(state.setup);
+    window.removeEventListener("beforeunload", onLeave);
+  });
   // Printing turns the print layout on for the length of the print.
   let printing = false;
   const store: PageStore = {
@@ -188,13 +192,13 @@ function createStore(documentId: string, setup: PageSetup): PageStore {
         }
         pending -= 1;
         if (pending > 0 || timer) return;
-        if (result === "saved") {
+        if (result === "saved" || closed) {
           retries = 0;
           window.removeEventListener("beforeunload", onLeave);
         } else {
-          // A failed save tries again, waiting longer each time, up to 10 s.
+          // A failed save tries again, waiting longer each time.
           retries = Math.min(retries + 1, 5);
-          saveLater(Math.min(10_000, 1000 * 2 ** retries));
+          saveLater(retryWait(retries));
         }
         store.set({ setupSave: result });
       });
@@ -225,7 +229,7 @@ function createStore(documentId: string, setup: PageSetup): PageStore {
 export function pageStore(editor: Editor, documentId: string, setup: PageSetup): PageStore {
   let store = stores.get(editor);
   if (!store) {
-    store = createStore(documentId, setup);
+    store = createStore(editor, documentId, setup);
     stores.set(editor, store);
   }
   return store;

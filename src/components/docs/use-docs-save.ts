@@ -1,6 +1,8 @@
 "use client";
 
 import type { Editor } from "@tiptap/core";
+import type { Node as PMNode } from "@tiptap/pm/model";
+import type { Transaction } from "@tiptap/pm/state";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { OWN_SAVE_EVENT, REFRESH_EVENT } from "@/components/collab/use-sync";
 import { mergeRichText } from "@/lib/docs/merge";
@@ -23,31 +25,99 @@ export const SAVE_DELAY_MS = 700;
 export const MAX_WAIT_MS = 3_000;
 /** The largest body a keepalive request may carry on unload. */
 const KEEPALIVE_LIMIT = 60_000;
+/** Meta of the change that puts a stored or merged copy on screen: someone
+    else's words, not this person's typing. */
+export const STORED_COPY = "docsStoredCopy";
+
+/** The wait before the next try after `n` failed saves in a row, up to 10 s. */
+export const retryWait = (n: number) => Math.min(10_000, 1000 * 2 ** n);
+
+/** Leaving the page with a change not saved: one last save, which fails
+    quietly offline, and the browser's warning. */
+export function saveOnLeave(e: BeforeUnloadEvent, url: string, method: "PUT" | "PATCH", data: object): void {
+  const body = JSON.stringify(data);
+  if (body.length <= KEEPALIVE_LIMIT) {
+    fetch(url, { method, headers: { "content-type": "application/json" }, body, keepalive: true }).catch(() => {});
+  }
+  e.preventDefault();
+}
 
 type Response409 = { reason?: string; rev?: number; richText?: RichNode | null; ids?: string[] };
 
-/** Put a stored copy on screen: one step over the stretch that differs, kept
-    out of the undo history; the caret maps through it. */
+/** A node's partner in the other copy: its type and the first blockId in it,
+    as the merge pairs them (lib/docs/merge.ts). */
+function pairKey(node: PMNode): string {
+  let id = node.attrs.blockId as string | null | undefined;
+  if (!id) {
+    node.descendants((child) => {
+      id ??= child.attrs.blockId as string | null | undefined;
+      return !id;
+    });
+  }
+  return `${node.type.name}:${id ?? ""}`;
+}
+
+/** Make the node at `pos` (-1: the document) into `next`, touching only what
+    differs, from the end backwards so the positions before stay true. A
+    paragraph takes one replace of the words that differ; elsewhere children
+    pair by pairKey in order, a pair is patched, and a child without a
+    partner is removed or added whole. */
+function patch(tr: Transaction, node: PMNode, next: PMNode, pos: number): void {
+  if (node.eq(next)) return;
+  if (pos >= 0 && !node.sameMarkup(next)) tr.setNodeMarkup(pos, undefined, next.attrs, next.marks);
+  const start = pos + 1;
+  if (node.isTextblock) {
+    const from = node.content.findDiffStart(next.content);
+    if (from === null) return;
+    let { a, b } = node.content.findDiffEnd(next.content) ?? { a: node.content.size, b: next.content.size };
+    // Repeated letters can put the end before the start.
+    const overlap = from - Math.min(a, b);
+    if (overlap > 0) [a, b] = [a + overlap, b + overlap];
+    tr.replaceWith(start + from, start + a, next.content.cut(from, b));
+    return;
+  }
+  const left = new Map<string, number>();
+  node.forEach((child) => left.set(pairKey(child), (left.get(pairKey(child)) ?? 0) + 1));
+  let [i, j, end] = [node.childCount, next.childCount, start + node.content.size];
+  while (i > 0 || j > 0) {
+    const a = i > 0 ? node.child(i - 1) : null;
+    const b = j > 0 ? next.child(j - 1) : null;
+    if (b && (!a || (pairKey(a) !== pairKey(b) && !left.get(pairKey(b))))) {
+      tr.insert(end, b);
+      j--;
+    } else if (a) {
+      if (b && pairKey(a) === pairKey(b)) {
+        patch(tr, a, b, end - a.nodeSize);
+        j--;
+      } else {
+        tr.delete(end - a.nodeSize, end);
+      }
+      left.set(pairKey(a), (left.get(pairKey(a)) ?? 1) - 1);
+      end -= a.nodeSize;
+      i--;
+    }
+  }
+}
+
+/** Put a stored copy on screen, kept out of the undo history: what is equal
+    stays untouched, so the caret and the marks outside the changed words
+    keep their place. */
 function applyStored(editor: Editor, json: RichNode): void {
   const next = editor.schema.nodeFromJSON(json);
-  const { doc, tr } = editor.state;
+  const { doc } = editor.state;
+  let tr = editor.state.tr;
+  try {
+    patch(tr, doc, next, -1);
+  } catch {
+    // Checked below.
+  }
+  // A step the schema would not take on the way: the whole text at once.
+  if (!tr.doc.content.eq(next.content)) tr = editor.state.tr.replaceWith(0, doc.content.size, next.content);
   for (const [key, value] of Object.entries(next.attrs)) {
     if (JSON.stringify(doc.attrs[key]) !== JSON.stringify(value)) tr.setDocAttribute(key, value);
   }
-  const start = doc.content.findDiffStart(next.content);
-  if (start !== null) {
-    let { a: endA, b: endB } = doc.content.findDiffEnd(next.content) ?? { a: doc.content.size, b: next.content.size };
-    // Repeated nodes can put the end before the start.
-    const overlap = start - Math.min(endA, endB);
-    if (overlap > 0) {
-      endA += overlap;
-      endB += overlap;
-    }
-    tr.replace(start, endA, next.slice(start, endB));
-  }
   if (!tr.docChanged) return;
-  tr.setMeta("addToHistory", false);
-  editor.view.dispatch(tr);
+  editor.view.dispatch(tr.setMeta(STORED_COPY, true).setMeta("addToHistory", false));
 }
 
 export function useDocsSave({
@@ -76,8 +146,13 @@ export function useDocsSave({
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const firstDirtyAtRef = useRef<number | null>(null);
   const retryRef = useRef(0);
+  // The first copy sent since the server last answered whose answer never
+  // came: the server may hold it.
+  const lostRef = useRef<RichNode | null>(null);
   // Set while a stored copy is being put on screen: that is not typing.
   const loadingRef = useRef(false);
+  // The editor went away: no more tries.
+  const closedRef = useRef(false);
   const url = `/api/documents/${documentId}/rich-text`;
 
   // The latest save, for the timers a save sets for the next one.
@@ -133,10 +208,14 @@ export function useDocsSave({
             // The stored copies come back with their keys reordered and their
             // default attributes left out: compare them in the editor's form.
             const normal = (json: RichNode) => editor.schema.nodeFromJSON(json).toJSON() as RichNode;
-            const merged = mergeRichText(normal(baseRef.current), editor.getJSON() as RichNode, normal(body.richText));
+            const stored = normal(body.richText);
+            // The stored copy is the one whose answer was lost: nobody else's words to lay in.
+            const lost = lostRef.current && JSON.stringify(normal(lostRef.current)) === JSON.stringify(stored);
+            const merged = mergeRichText(lost ? stored : normal(baseRef.current), editor.getJSON() as RichNode, stored);
             applyStored(editor, merged);
             baseRef.current = body.richText;
             revRef.current = body.rev;
+            lostRef.current = null;
           }
           dirtyRef.current = true;
           versionRef.current += 1;
@@ -154,6 +233,7 @@ export function useDocsSave({
         revRef.current = body.rev;
         baseRef.current = doc;
         retryRef.current = 0;
+        lostRef.current = null;
         if (versionRef.current === version) {
           dirtyRef.current = false;
           firstDirtyAtRef.current = null;
@@ -162,15 +242,16 @@ export function useDocsSave({
       } catch {
         setState("offline");
         retryRef.current = Math.min(retryRef.current + 1, 5);
+        lostRef.current ??= doc;
       }
     })();
     inFlightRef.current = run;
     await run;
     inFlightRef.current = null;
-    if (dirtyRef.current) {
+    if (dirtyRef.current && !closedRef.current) {
       // Typing went on, a merge needs saving, or the save failed: go again,
       // waiting longer after each failure.
-      const wait = retryRef.current > 0 ? Math.min(10_000, 1000 * 2 ** retryRef.current) : SAVE_DELAY_MS;
+      const wait = retryRef.current > 0 ? retryWait(retryRef.current) : SAVE_DELAY_MS;
       clearTimer();
       timerRef.current = setTimeout(() => void saveRef.current(), wait);
     }
@@ -226,24 +307,22 @@ export function useDocsSave({
   useEffect(() => {
     if (!editor || !enabled) return;
     const onLeave = (e: BeforeUnloadEvent) => {
-      if (!dirtyRef.current) return;
-      const body = JSON.stringify({ richText: editor.getJSON(), rev: revRef.current });
-      if (body.length <= KEEPALIVE_LIMIT) {
-        // Offline, it fails quietly: the warning still asks.
-        fetch(url, { method: "PUT", headers: { "content-type": "application/json" }, body, keepalive: true }).catch(() => {});
-      }
-      e.preventDefault();
+      if (dirtyRef.current) saveOnLeave(e, url, "PUT", { richText: editor.getJSON(), rev: revRef.current });
     };
     window.addEventListener("beforeunload", onLeave);
     return () => window.removeEventListener("beforeunload", onLeave);
   }, [editor, enabled, url]);
 
-  // Save what is waiting when the editor goes away (another document opens).
+  // The editor goes away (another document opens): one last save of what
+  // waits, and no try after it.
   useEffect(() => {
+    closedRef.current = false;
     return () => {
-      if (dirtyRef.current) void save();
+      closedRef.current = true;
+      if (timerRef.current) clearTimeout(timerRef.current);
+      if (dirtyRef.current) void saveRef.current();
     };
-  }, [save]);
+  }, []);
 
   /** The screen holds exactly the stored copy of revision `rev`: nothing
       waits to be saved and no save runs. */

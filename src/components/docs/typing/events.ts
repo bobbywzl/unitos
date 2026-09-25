@@ -1,6 +1,18 @@
-// The window events that open the typing area's windows (SPEC.md §29),
-// raised by keys, commands, and other areas; areas/typing.tsx and
-// word-count.tsx listen.
+import type { Editor } from "@tiptap/core";
+
+// The page editor's events (SPEC.md §29), raised on its text by keys,
+// commands, and other areas, so two page editors side by side never answer
+// each other. The areas listen on their editor's text; the reader's pane
+// hears the ones that bubble up to it (Add comment, the Unitos tools).
+
+/** Insert link, Add comment, and a Unitos tool on the selection ({tool}). */
+export const DOCS_EVENT = {
+  link: "docs:link",
+  comment: "docs:comment",
+  tool: "docs:unitos-tool",
+} as const;
+
+/** The typing area's windows (areas/typing.tsx, word-count.tsx). */
 export const TYPING_EVENT = {
   findReplace: "docs:find-replace",
   preferences: "docs:preferences",
@@ -10,6 +22,6 @@ export const TYPING_EVENT = {
   wordCount: "docs:word-count",
 } as const;
 
-export function fireTyping(name: (typeof TYPING_EVENT)[keyof typeof TYPING_EVENT]): void {
-  window.dispatchEvent(new CustomEvent(name));
+export function fireDocs(editor: Editor, name: string, detail?: unknown): void {
+  editor.view.dom.dispatchEvent(new CustomEvent(name, { bubbles: true, detail }));
 }

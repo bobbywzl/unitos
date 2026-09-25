@@ -105,10 +105,10 @@ const DocsToolbar = Extension.create({
         ({ state, tr, dispatch }) => {
           const { selection, schema } = state;
           const link = schema.marks.link;
-          const resetBlock = (node: PMNode, pos: number) => {
+          const resetBlock = (node: PMNode, pos: number, names = PARAGRAPH_FORMAT) => {
             const attrs: Record<string, unknown> = { ...node.attrs };
             let changed = false;
-            for (const name of PARAGRAPH_FORMAT) {
+            for (const name of names) {
               if (name in attrs && attrs[name] !== null && attrs[name] !== undefined) {
                 attrs[name] = null;
                 changed = true;
@@ -118,8 +118,12 @@ const DocsToolbar = Extension.create({
           };
           if (selection.empty) {
             const { $from } = selection;
+            // An empty paragraph loses its mark's style too (typing/mark-style.ts).
+            if ($from.parent.isTextblock && $from.parent.content.size === 0) {
+              resetBlock($from.parent, $from.before(), [...PARAGRAPH_FORMAT, "markStyle"]);
+            }
+            // After the steps: a step drops the stored marks.
             tr.setStoredMarks((state.storedMarks ?? $from.marks()).filter((m) => m.type === link));
-            if ($from.parent.isTextblock && $from.parent.content.size === 0) resetBlock($from.parent, $from.before());
           } else {
             for (const range of selection.ranges) {
               const from = range.$from.pos;

@@ -13,7 +13,7 @@ import { viewingCopy } from "@/components/docs/page/download";
 import { blockText, runAutocorrect } from "@/components/docs/typing/autocorrect";
 import { wordAt } from "@/components/docs/typing/chars";
 import { findPlugin } from "@/components/docs/typing/find";
-import { TYPING_EVENT, fireTyping } from "@/components/docs/typing/events";
+import { TYPING_EVENT, fireDocs } from "@/components/docs/typing/events";
 import { copyFormatting, pasteFormatting, toggleCheckbox, toggleSmallCaps } from "@/components/docs/typing/format";
 import {
   backspace,
@@ -121,7 +121,7 @@ const DocsTyping = Extension.create({
       "Mod-Alt-v": () => pasteFormatting(e),
       // Voice typing; Tiptap's strikethrough takes these keys otherwise.
       "Mod-Shift-s": () => {
-        fireTyping(TYPING_EVENT.voice);
+        fireDocs(e, TYPING_EVENT.voice);
         return true;
       },
       // Keys Tiptap binds and Docs does not: inline code, a quote.

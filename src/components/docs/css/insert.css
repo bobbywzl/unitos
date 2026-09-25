@@ -897,6 +897,11 @@ textarea.docs-field:focus {
   margin-bottom: 8pt;
   border-top: 1px solid #a0a0a0;
 }
+/* On pages each footnote stands at its page's foot, and the block draws no
+   box of its own: a point in a footnote (a click, a drop) reads as in it. */
+.docs-page:not([data-pageless]) .docs-prose .docs-footnotes {
+  display: contents;
+}
 .docs-prose .docs-footnote {
   position: relative;
   padding-left: 1.4em;
@@ -1259,6 +1264,10 @@ body.docs-img-dragging * {
 }
 .docs-img-toolbar .docs-tb-btn[aria-pressed="true"] {
   border-radius: 50%;
+}
+/* While the image is dragged, the words under the toolbar take the drop. */
+body.docs-img-moving .docs-img-toolbar {
+  visibility: hidden;
 }
 
 /* ── Tables: Google Docs' grid, the pills, the border choice ─────────── */

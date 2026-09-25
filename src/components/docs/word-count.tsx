@@ -168,14 +168,15 @@ export function WordCountDialog({ editor }: { editor: Editor }) {
   const format = (n: number) => n.toLocaleString(lang === "zh" ? "zh-CN" : "en-US");
 
   useEffect(() => {
+    const dom = editor.view.dom;
     const onOpen = () => {
       setDraftShow(readShow());
       setExtras(false);
       setOpen(true);
     };
-    window.addEventListener(TYPING_EVENT.wordCount, onOpen);
-    return () => window.removeEventListener(TYPING_EVENT.wordCount, onOpen);
-  }, []);
+    dom.addEventListener(TYPING_EVENT.wordCount, onOpen);
+    return () => dom.removeEventListener(TYPING_EVENT.wordCount, onOpen);
+  }, [editor]);
 
   const closeDialog = () => {
     setOpen(false);

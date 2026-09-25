@@ -202,7 +202,19 @@ export function ImageControlsHost({ editor, ctx }: { editor: Editor; ctx: Insert
           />
         </FloatingBox>
       )}
-      {panel && <ImageOptionsPanel key={`${panel}:${hit.pos}`} editor={editor} ctx={ctx} section={panel} onClose={() => setPanel(null)} />}
+      {panel && (
+        <ImageOptionsPanel
+          key={`${panel}:${hit.pos}`}
+          editor={editor}
+          ctx={ctx}
+          section={panel}
+          onClose={() => {
+            // The page takes the keys again, the image still selected.
+            setPanel(null);
+            editor.view.focus();
+          }}
+        />
+      )}
     </>
   );
 }

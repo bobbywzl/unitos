@@ -7,14 +7,15 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useT } from "@/components/lang-provider";
 import { NotesIcon, QuestionIcon, SparkleIcon } from "@/components/icons";
-import { AddCommentIcon, AddIcon, ClearFormattingIcon, EditIcon, LinkIcon, OutlineIcon } from "@/components/docs/icons";
-import { DOCS_EVENT } from "@/components/docs/extensions";
+import { AddCommentIcon, AddIcon, ClearFormattingIcon, EditIcon, LinkIcon, OutlineIcon, SuggestIcon } from "@/components/docs/icons";
+import { isSuggesting } from "@/components/docs/ext/suggest";
 import { keys, matchesCombo, isMac } from "@/components/docs/keys";
 import { DropdownPanel, MenuItem, MenuSeparator } from "@/components/docs/menu";
 import { DialogButton, ToolbarDialog } from "@/components/docs/toolbar/dialog";
 import { continueNumbering, restartNumbering } from "@/components/docs/toolbar/lists";
 import { STYLE_LABEL } from "@/components/docs/toolbar/styles-menu";
 import { blockStyle, updateStyleToMatch } from "@/components/docs/toolbar/styles";
+import { DOCS_EVENT, fireDocs } from "@/components/docs/typing/events";
 import { copyMarkdown, insertImageFiles, pasteMarkdown } from "@/components/docs/typing/paste";
 import { typingPrefs } from "@/components/docs/typing/prefs";
 import { misspellingAt, replaceWord, type Misspelling } from "@/components/docs/typing/spelling";
@@ -143,11 +144,14 @@ export function ContextMenuHost({ editor, ctx }: { editor: Editor; ctx: InsertCo
         spelling = hit && misspellingAt(editor, hit.pos);
       }
       view.focus();
+      // The menu opens at once; the spelling suggestions join it when the
+      // dictionary is ready, unless the page changed meanwhile.
+      const opened: Place = { x: e.clientX, y: e.clientY, byKeys: false };
+      setPlace(opened);
       const before = view.state;
-      void Promise.resolve(spelling).then((found) => {
-        // A press or typing while the dictionary loads keeps the menu shut.
-        if (view.state.doc !== before.doc || !view.state.selection.eq(before.selection)) return;
-        setPlace({ x: e.clientX, y: e.clientY, byKeys: false, spelling: found ?? undefined });
+      void spelling?.then((found) => {
+        if (!found || view.state.doc !== before.doc || !view.state.selection.eq(before.selection)) return;
+        setPlace((p) => (p === opened ? { ...p, spelling: found } : p));
       });
     };
     // A right-click is not the end of a selection for the reader's toolbar.
@@ -190,7 +194,19 @@ export function ContextMenuHost({ editor, ctx }: { editor: Editor; ctx: InsertCo
 function ContextMenu({ editor, ctx, place, onClose }: { editor: Editor; ctx: InsertContext; place: Place; onClose: () => void }) {
   const t = useT();
   const anchorRef = useRef<HTMLSpanElement>(null);
-  const [entries] = useState(() => buildEntries(editor, ctx, t, place.spelling));
+  const [entries] = useState(() => buildEntries(editor, ctx, t));
+  const { spelling } = place;
+  const suggestions: Entry[] = spelling
+    ? [...spelling.suggestions.map((word): Entry => ({ label: word, run: () => replaceWord(editor, spelling, word) })), "sep"]
+    : [];
+  // While the menu is open the text's keys stay in it: letting go of the
+  // keys that opened it never opens the Unitos toolbar beside it.
+  useEffect(() => {
+    const dom = editor.view.dom;
+    const stop = (e: KeyboardEvent) => e.stopPropagation();
+    dom.addEventListener("keyup", stop);
+    return () => dom.removeEventListener("keyup", stop);
+  }, [editor]);
   const items = (list: Entry[]): ReactNode =>
     list.map((entry, i) => {
       if (entry === "sep") {
@@ -223,13 +239,13 @@ function ContextMenu({ editor, ctx, place, onClose }: { editor: Editor; ctx: Ins
     <>
       {createPortal(<span ref={anchorRef} className="docs-context-anchor" style={{ left: place.x, top: place.y }} />, document.body)}
       <DropdownPanel open anchorRef={anchorRef} onClose={onClose} className="docs-context-menu" highlightFirst={place.byKeys}>
-        {items(entries)}
+        {items([...suggestions, ...entries])}
       </DropdownPanel>
     </>
   );
 }
 
-function buildEntries(editor: Editor, ctx: InsertContext, t: ReturnType<typeof useT>, spelling?: Misspelling): Entry[] {
+function buildEntries(editor: Editor, ctx: InsertContext, t: ReturnType<typeof useT>): Entry[] {
   const { state } = editor;
   const sel = state.selection;
   const editing = ctx.editing;
@@ -243,13 +259,12 @@ function buildEntries(editor: Editor, ctx: InsertContext, t: ReturnType<typeof u
   const paste = (plain: boolean) => () => void pasteFromClipboard(editor, plain);
   const copyLink = (url: string) => () =>
     void navigator.clipboard.writeText(url).then(
-      () => toast(t("docs.linkCopied")),
+      () => toast(t("docs.linkCopied"), editor),
       () => emitInsert(editor, { type: "clipboard-blocked" }),
     );
   // With Enable Markdown on (Tools > Preferences), the Markdown copy and paste.
   const markdown = typingPrefs().markdown;
   const out: Entry[] = [
-    ...(spelling ? [...spelling.suggestions.map((word): Entry => ({ label: word, run: () => replaceWord(editor, spelling, word) })), "sep" as const] : []),
     item("docsInsert.cut", <CutIcon />, () => execClipboard(editor, "cut"), { shortcut: keys("Mod+X"), disabled: !hasSelection || !editing }),
     item("docsInsert.copy", <CopyIcon />, () => execClipboard(editor, "copy"), { shortcut: keys("Mod+C"), disabled: !hasSelection }),
     ...(markdown ? [item("docsTyping.copyAsMarkdown", <CopyIcon />, () => void copyMarkdown(editor), { disabled: !hasSelection })] : []),
@@ -330,13 +345,15 @@ function buildEntries(editor: Editor, ctx: InsertContext, t: ReturnType<typeof u
 
   // The Unitos tools on the selected words; the reader layer answers.
   const tool = (name: "add-to-notes" | "explain" | "assistant") => () =>
-    window.dispatchEvent(new CustomEvent("docs:unitos-tool", { detail: { documentId: ctx.documentId, tool: name } }));
-  const openLinkBox = () => window.dispatchEvent(new CustomEvent(DOCS_EVENT.link));
+    fireDocs(editor, DOCS_EVENT.tool, { tool: name });
+  const openLinkBox = () => fireDocs(editor, DOCS_EVENT.link);
   const href = editor.isActive("link") ? (editor.getAttributes("link").href as string | undefined) : undefined;
   const parent = sel.$from.parent;
   const style = blockStyle(parent);
   out.push(
-    item("docsInsert.comment", <AddCommentIcon />, () => window.dispatchEvent(new CustomEvent(DOCS_EVENT.comment)), { shortcut: keys("Mod+Alt+M") }),
+    item("docsInsert.comment", <AddCommentIcon />, () => fireDocs(editor, DOCS_EVENT.comment), { shortcut: keys("Mod+Alt+M") }),
+    // Suggest edits: the page switches to Suggesting mode (toolbar.tsx).
+    ...(editing && !isSuggesting(editor) ? [item("docsInsert.suggestEdits", <SuggestIcon />, () => fireDocs(editor, "docs:mode", "suggesting"))] : []),
     item("docsInsert.addToNotes", <NotesIcon size={18} />, tool("add-to-notes"), { disabled: !textSelected }),
     item("docsInsert.explain", <QuestionIcon size={18} />, tool("explain"), { disabled: !textSelected }),
     item("docsInsert.askAssistant", <SparkleIcon size={18} />, tool("assistant"), { disabled: !textSelected }),

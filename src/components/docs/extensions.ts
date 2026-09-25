@@ -9,6 +9,7 @@ import Superscript from "@tiptap/extension-superscript";
 import { TaskItem, TaskList } from "@tiptap/extension-list";
 import { TableKit } from "@tiptap/extension-table";
 import Image from "@tiptap/extension-image";
+import HorizontalRule from "@tiptap/extension-horizontal-rule";
 import { DocsFontFamily } from "@/components/docs/fonts";
 import { insertExtensions } from "@/components/docs/ext/insert";
 import { layerExtensions } from "@/components/docs/ext/layer";
@@ -17,6 +18,7 @@ import { toolbarExtensions } from "@/components/docs/ext/toolbar";
 import { blockStyle, readStyles, selectionSize, sizeInPt } from "@/components/docs/toolbar/styles";
 import { suggestExtensions } from "@/components/docs/ext/suggest";
 import { typingExtensions } from "@/components/docs/ext/typing";
+import { DOCS_EVENT, TYPING_EVENT, fireDocs } from "@/components/docs/typing/events";
 import { INDEXED_NODE_TYPES, newBlockId } from "@/lib/docs/schema";
 
 // The page editor's schema and behavior (SPEC.md §29): Google Docs' model on
@@ -28,8 +30,6 @@ import { INDEXED_NODE_TYPES, newBlockId } from "@/lib/docs/schema";
 export const FONT_SIZES = [8, 9, 10, 11, 12, 14, 18, 24, 30, 36, 48, 60, 72, 96] as const;
 /** Normal text's size in points. */
 export const DEFAULT_FONT_SIZE = 11;
-/** Normal text's face. */
-export const DEFAULT_FONT = "Arial";
 /** One indent step: half an inch, in points. */
 export const INDENT_STEP_PT = 36;
 
@@ -235,7 +235,8 @@ const PageBreak = Node.create({
   name: "pageBreak",
   group: "block",
   atom: true,
-  selectable: true,
+  // Never selected by a click or an arrow: the next key would take it.
+  selectable: false,
   parseHTML() {
     return [{ tag: "div[data-page-break]" }];
   },
@@ -307,13 +308,6 @@ export function stepSelectionFontSize(editor: Editor, direction: 1 | -1): boolea
   return true;
 }
 
-/** The events the keymap raises for the page editor's own dialogs. */
-export const DOCS_EVENT = {
-  link: "docs:link",
-  comment: "docs:comment",
-  wordCount: "docs:word-count",
-} as const;
-
 /** Google Docs' shortcuts that act on the document (SPEC.md §29). */
 const DocsKeymap = Extension.create({
   name: "docsKeymap",
@@ -323,7 +317,7 @@ const DocsKeymap = Extension.create({
   addKeyboardShortcuts() {
     const style = (s: DocStyle) => () => this.editor.commands.setDocStyle(s);
     const fire = (name: string) => () => {
-      window.dispatchEvent(new CustomEvent(name));
+      fireDocs(this.editor, name);
       return true;
     };
     const size = (direction: 1 | -1) => () => stepSelectionFontSize(this.editor, direction);
@@ -339,7 +333,6 @@ const DocsKeymap = Extension.create({
       "Mod-Shift-8": () => this.editor.commands.toggleBulletList(),
       "Mod-Shift-9": () => this.editor.commands.toggleTaskList(),
       "Mod-Shift-l": () => this.editor.commands.setTextAlign("left"),
-      "Mod-Shift-e": () => this.editor.commands.setTextAlign("center"),
       "Mod-Shift-r": () => this.editor.commands.setTextAlign("right"),
       "Mod-Shift-j": () => this.editor.commands.setTextAlign("justify"),
       "Mod-]": () => this.editor.commands.indentStep(1),
@@ -355,7 +348,7 @@ const DocsKeymap = Extension.create({
       "Mod-Enter": () => this.editor.commands.setPageBreak(),
       "Mod-k": fire(DOCS_EVENT.link),
       "Mod-Alt-m": fire(DOCS_EVENT.comment),
-      "Mod-Shift-c": fire(DOCS_EVENT.wordCount),
+      "Mod-Shift-c": fire(TYPING_EVENT.wordCount),
     };
   },
 });
@@ -377,6 +370,7 @@ export function docsExtensions() {
         HTMLAttributes: { rel: "noopener noreferrer nofollow", target: "_blank" },
       },
       dropcursor: { color: "#0b57d0", width: 2 },
+      horizontalRule: false,
       undoRedo: { depth: 500, newGroupDelay: 1000 },
       // Docs ends a document on any line, a list's too; only a table or
       // another object gets an empty line after it.
@@ -394,6 +388,8 @@ export function docsExtensions() {
     TaskItem.configure({ nested: true }),
     TableKit.configure({ table: { resizable: true, cellMinWidth: 32 } }),
     Image.configure({ inline: false, allowBase64: false }),
+    // Never selected by a click or an arrow, as a page break.
+    HorizontalRule.extend({ selectable: false }),
     // No Typography: Google Docs' substitutions and smart quotes are the
     // typing area's autocorrect (ext/typing.ts).
     BlockIds,

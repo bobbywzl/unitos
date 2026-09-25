@@ -1,5 +1,6 @@
 "use client";
 
+import "./docs.css";
 import type { JSONContent } from "@tiptap/core";
 import { EditorContent, useEditor, type Editor } from "@tiptap/react";
 import { useRouter } from "next/navigation";
@@ -8,11 +9,13 @@ import { useT } from "@/components/lang-provider";
 import { REFRESH_EVENT } from "@/components/collab/use-sync";
 import { annotationMarksKey, openMarkAt, type MarksMeta } from "@/components/docs/annotation-marks";
 import { LinkBubble, LinkDialog } from "@/components/docs/link-dialog";
-import { DOCS_EVENT, docsExtensions } from "@/components/docs/extensions";
+import { docsExtensions } from "@/components/docs/extensions";
 import { docsFontsUrl } from "@/components/docs/fonts";
 import { DocsFrame, UNTITLED } from "@/components/docs/frame";
 import { CloudDoneIcon, CloudOffIcon, CloudSyncIcon, DocIcon } from "@/components/docs/icons";
-import { DocsToolbar, type DocsMode, type Zoom } from "@/components/docs/toolbar";
+import { DocsToolbar } from "@/components/docs/toolbar";
+import type { DocsMode } from "@/components/docs/toolbar/mode";
+import type { Zoom } from "@/components/docs/toolbar/zoom";
 import { useDocsSave, type SaveState } from "@/components/docs/use-docs-save";
 import { WordCountDialog } from "@/components/docs/word-count";
 import { insertImageFrom } from "@/components/docs/insert/image";
@@ -231,6 +234,8 @@ export function DocsEditor({
   const [mode, setMode] = useState<DocsMode>("editing");
   const [zoom, setZoom] = useState<Zoom>(100);
   const [headerHidden, setHeaderHidden] = useState(false);
+  // The header or footer being edited: the toolbar formats its text.
+  const [hfEditor, setHfEditor] = useState<Editor | null>(null);
 
   const extensions = useMemo(() => docsExtensions(), []);
   const editor = useEditor(
@@ -333,18 +338,30 @@ export function DocsEditor({
     editor.setEditable(canEdit && mode !== "viewing");
   }, [editor, canEdit, mode]);
 
-  // Ctrl+Shift+F hides the title row, as Google Docs' compact mode does.
+  // The header shows while the reader is in the document: a press or the
+  // focus in this pane's page editor or card column, or in one of the
+  // editor's menus and dialogs. A press or the focus anywhere else (the notes
+  // tray, the app's top bar, the Extract page) fades it away (css/layer.css).
+  const [away, setAway] = useState(false);
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.shiftKey && !e.altKey && e.key.toLowerCase() === "f") {
-        e.preventDefault();
-        setHeaderHidden((h) => !h);
-      }
+    const pane = editor?.view.dom.closest("[data-reader-root]");
+    if (!pane) return;
+    const onEnter = (e: Event) => {
+      if (!(e.target instanceof Element)) return;
+      const own = e.target.closest("[data-reader-root]");
+      setAway(
+        own
+          ? own !== pane || (e.target !== pane && !e.target.closest("[data-docs-editor], [data-docs-column]"))
+          : !e.target.closest("[data-edit-control]"),
+      );
     };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
-
+    document.addEventListener("pointerdown", onEnter, true);
+    document.addEventListener("focusin", onEnter);
+    return () => {
+      document.removeEventListener("pointerdown", onEnter, true);
+      document.removeEventListener("focusin", onEnter);
+    };
+  }, [editor]);
 
   const insertImage = useCallback(
     (source: { file: File } | { url: string }) => {
@@ -389,6 +406,7 @@ export function DocsEditor({
         <>
           <DocsToolbar
             editor={area.editor}
+            header={hfEditor}
             mode={mode}
             onMode={setMode}
             canEdit={canEdit}
@@ -403,13 +421,13 @@ export function DocsEditor({
           <PageRuler {...area} />
         </>
       ),
-    [area, mode, canEdit, zoom, pageSetup.pageless, aiControls, headerHidden, insertImage],
+    [area, hfEditor, mode, canEdit, zoom, pageSetup.pageless, aiControls, headerHidden, insertImage],
   );
   const pages = useMemo(
     () =>
       area && (
         <>
-          <PageCanvas {...area} zoom={zoom} onZoom={setZoom} onPageClick={onPageClick}>
+          <PageCanvas {...area} zoom={zoom} onZoom={setZoom} onPageClick={onPageClick} onHeaderEditor={setHfEditor}>
             <EditorContent editor={area.editor} />
           </PageCanvas>
           <InsertLayer {...area} />
@@ -430,7 +448,7 @@ export function DocsEditor({
 
   return (
     <div className="docs-shell" data-docs-editor data-docs-mode={mode}>
-      <div className="docs-header" data-edit-control>
+      <div className="docs-header" data-edit-control data-away={away || undefined}>
         {!headerHidden && (
           <div className="docs-title-row">
             <DocIcon size={26} className="docs-title-icon" />
@@ -438,34 +456,19 @@ export function DocsEditor({
               documentId={documentId}
               title={title}
               canEdit={canEdit}
-              firstLine={editor && saveState === "saved" ? firstLineOf(editor) : ""}
+              firstLine={saveState === "saved" ? firstLineOf(editor) : ""}
               onDone={() => {
-                if (editor && !editor.isDestroyed) editor.commands.focus();
+                if (!editor.isDestroyed) editor.commands.focus();
                 else (document.activeElement as HTMLElement | null)?.blur();
               }}
             />
             {canEdit && <SaveStatus state={shownSaveState} />}
-            {editor && <VersionHistoryButton editor={editor} />}
+            <VersionHistoryButton editor={editor} />
           </div>
         )}
         {chrome}
       </div>
       {pages}
-      <CommentRelay documentId={documentId} editor={editor} />
     </div>
   );
-}
-
-/** Add comment (the toolbar's button, Ctrl+Alt+M) opens the reader's Comment
-    tool on the selection: a comment in Unitos is an annotation. */
-function CommentRelay({ documentId, editor }: { documentId: string; editor: Editor | null }) {
-  useEffect(() => {
-    const onComment = () => {
-      if (!editor) return;
-      window.dispatchEvent(new CustomEvent("docs:comment-selection", { detail: { documentId } }));
-    };
-    window.addEventListener(DOCS_EVENT.comment, onComment);
-    return () => window.removeEventListener(DOCS_EVENT.comment, onComment);
-  }, [documentId, editor]);
-  return null;
 }

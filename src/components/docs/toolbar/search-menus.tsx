@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal, flushSync } from "react-dom";
 import { useT } from "@/components/lang-provider";
 import { SearchIcon } from "@/components/docs/icons";
 import { keys, withKeys } from "@/components/docs/keys";
 import { keepFocus } from "@/components/docs/menu";
+import { ToolbarEditor } from "@/components/docs/toolbar/controls";
 
 // Search the menus (SPEC.md §29): the way to everything Google Docs keeps
 // in its menu bar. It finds every registered command (commands.ts) and
@@ -24,7 +25,7 @@ export type SearchAction = {
   enabled?: boolean;
 };
 
-/** Search the menus opens on this window event (Alt+/). */
+/** Raised on the editor's text, opens Search the menus (Alt+/). */
 export const SEARCH_MENUS_EVENT = "docs:search-menus";
 
 function score(action: SearchAction, query: string): number {
@@ -126,11 +127,14 @@ export function SearchMenus({
     onDone();
   };
 
+  const editor = useContext(ToolbarEditor);
   useEffect(() => {
+    const dom = editor?.view.dom;
+    if (!dom) return;
     const onOpen = () => show();
-    window.addEventListener(SEARCH_MENUS_EVENT, onOpen);
-    return () => window.removeEventListener(SEARCH_MENUS_EVENT, onOpen);
-  }, []);
+    dom.addEventListener(SEARCH_MENUS_EVENT, onOpen);
+    return () => dom.removeEventListener(SEARCH_MENUS_EVENT, onOpen);
+  }, [editor]);
 
   const results = open && query.trim() ? [...valueActions(query), ...searchActions(all, query)] : [];
   const run = (action: SearchAction | undefined) => {

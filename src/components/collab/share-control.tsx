@@ -157,9 +157,10 @@ export function ShareControl({
         </span>
       )}
 
+      {/* Over the reading pane, the page editor's header and the Extract page too. */}
       <Presence show={open} exit="menu">
       {open && (
-        <div className="menu-in absolute top-full right-0 z-30 mt-2 w-[380px] rounded-2xl bg-card p-4 shadow-float">
+        <div className="menu-in absolute top-full right-0 z-40 mt-2 w-[380px] rounded-2xl bg-card p-4 shadow-float">
           <p className="text-xs text-sand-600">{t("panes.shareDesc")}</p>
 
           {role === "owner" && (

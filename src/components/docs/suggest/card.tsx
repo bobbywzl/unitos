@@ -8,6 +8,7 @@ import { PersonBadge } from "@/components/collab/person-badge";
 import { replyTime } from "@/components/collab/reply-thread";
 import { focusSuggestion, readSuggestions, settleSuggestions, suggestionAt, type Suggestion } from "@/components/docs/ext/suggest";
 import { CheckIcon, CloseIcon } from "@/components/docs/icons";
+import { openLine } from "@/components/docs/layer/comment-card";
 import { blockStyle } from "@/components/docs/toolbar/styles";
 import { STYLE_LABEL } from "@/components/docs/toolbar/styles-menu";
 import { useLang, useT } from "@/components/lang-provider";
@@ -182,8 +183,7 @@ export const SuggestionCard = memo(function SuggestionCard({
         role="button"
         tabIndex={-1}
         aria-label={t("docsSuggest.suggestion")}
-        onMouseDown={(e) => e.preventDefault()}
-        onClick={() => focusSuggestion(editor, id)}
+        onMouseDown={(e) => openLine(e, () => focusSuggestion(editor, id))}
         className="docs-comment docs-suggest-card docs-card-line absolute z-30"
         style={style}
       >

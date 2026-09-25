@@ -16,10 +16,26 @@
   --docs-card-shadow: 0 1px 3px rgba(0, 0, 0, 0.6), 0 4px 8px 3px rgba(0, 0, 0, 0.35);
 }
 
-/* The title row and toolbar stay above the layer's toolbar and cards, under
-   the dialogs (z-50). */
+/* The header (the title row, the toolbar, the ruler) stays above the card
+   column and under what opens over the pane: the Extract page and the
+   conversation view (z-index 35, later in the pane), the app's menus
+   (z-index 40), and the dialogs. While the reader is away from the document
+   (docs-editor.tsx sets data-away) it fades out after a pause and keeps its
+   place: the text under it shows through, and pointing at it brings it
+   back. */
 [data-page-editor] .docs-header {
-  z-index: 45;
+  z-index: 35;
+}
+.docs-header[data-away]:not(:hover) {
+  opacity: 0;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .docs-header {
+    transition: opacity 0.2s ease;
+  }
+  .docs-header[data-away]:not(:hover) {
+    transition-delay: 0.3s;
+  }
 }
 
 /* Cards: 12 px corners, flat at rest, darker on hover, white and lifted while
@@ -41,12 +57,13 @@
 [data-page-editor] :is([data-side-card], [data-log-card], [data-annotation-card], [data-comment-card], [data-suggestion-card]):hover {
   background: var(--docs-card-hover);
 }
-/* The card in use: focused, dragged, or a comment's card, which opens in use
-   from its words or its chip. */
+/* The card in use: focused, dragged, a comment's card, which opens in use
+   from its words or its chip, or the card of the suggestion the caret is in. */
 [data-page-editor] [data-side-card]:focus-within,
 [data-page-editor] [data-annotation-card]:focus-within,
 [data-page-editor] [data-side-card][data-dragging],
-[data-page-editor] .docs-comment[data-side-card="comment"] {
+[data-page-editor] .docs-comment[data-side-card="comment"],
+[data-page-editor] .docs-suggest-card[data-active] {
   background: var(--docs-card-active);
   box-shadow: var(--docs-card-shadow);
 }
@@ -76,9 +93,10 @@
 .content-in:has(> div > [data-page-editor]) {
   animation-fill-mode: backwards;
 }
+/* Over a floating note (z-index 30, earlier in the page), under the header. */
 .docs-column {
   position: fixed;
-  z-index: 35;
+  z-index: 30;
   overflow: hidden;
   pointer-events: none;
 }
@@ -115,17 +133,11 @@
   pointer-events: none;
   visibility: hidden;
 }
-/* The canvas goes on down to the column's end. */
-[data-page-editor] {
-  background: var(--docs-canvas);
-}
+/* The canvas goes on down to the column's end (frame.css colors the pane). */
 @media print {
   .docs-column,
   .docs-column-end {
     display: none;
-  }
-  [data-page-editor] {
-    background: transparent;
   }
 }
 
@@ -147,8 +159,7 @@
 
 /* A comment's card (layer/comment-card.tsx): Google Docs' 32 px badge, the
    name over the time, Resolve and More options, then the comment in 14 px
-   text. The buttons fade in under the pointer or while the card is in use;
-   a comment's card is always in use. */
+   text. */
 .docs-comment {
   display: flex;
   flex-direction: column;
@@ -198,17 +209,6 @@
 .docs-comment-buttons {
   display: flex;
   align-items: center;
-  opacity: 0;
-}
-@media (prefers-reduced-motion: no-preference) {
-  .docs-comment-buttons {
-    transition: opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-  }
-}
-.docs-comment:hover .docs-comment-buttons,
-.docs-comment:focus-within .docs-comment-buttons,
-.docs-comment[data-side-card="comment"] .docs-comment-buttons {
-  opacity: 1;
 }
 .docs-comment-button {
   display: inline-flex;

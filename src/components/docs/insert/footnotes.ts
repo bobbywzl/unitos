@@ -1,6 +1,7 @@
 import { Extension, Node, type Editor } from "@tiptap/core";
-import { Fragment, type Node as PMNode } from "@tiptap/pm/model";
-import { Plugin, TextSelection, type EditorState, type Transaction } from "@tiptap/pm/state";
+import { Fragment, Slice, type Node as PMNode } from "@tiptap/pm/model";
+import { AllSelection, Plugin, Selection, TextSelection, type EditorState, type Transaction } from "@tiptap/pm/state";
+import { isMac } from "@/components/docs/keys";
 import { newBlockId } from "@/lib/docs/schema";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
 
@@ -23,7 +24,8 @@ const FootnoteReference = Node.create({
     };
   },
   parseHTML() {
-    return [{ tag: "sup[data-footnote-ref]" }];
+    // Before the superscript mark's sup, which would drop the number.
+    return [{ tag: "sup[data-footnote-ref]", priority: 60 }];
   },
   renderHTML({ node }) {
     return [
@@ -103,11 +105,16 @@ function footnotesOf(doc: PMNode): { byId: Map<string, PMNode>; blocks: { pos: n
   return { byId, blocks };
 }
 
+/** The words of each footnote whose number left in a copy, a cut, or a drag,
+    by id, as JSON: another page editor has its own schema. */
+const copiedWords = new Map<string, unknown>();
+
 /** Bring the footnotes in line with the numbers in `tr`'s document: a
-    duplicated number gets its own footnote (a copy of the words), every
-    number has a footnote, no footnote lacks a number, the footnotes follow
-    the numbers' order, and they sit in one block at the very end. Returns
-    whether anything changed. */
+    number pasted into a footnote goes, a duplicated number gets its own
+    footnote (a copy of the words), every number has a footnote (a pasted
+    one takes the words it was copied with), no footnote lacks a number, the
+    footnotes follow the numbers' order, and they sit in one block at the
+    very end. Returns whether anything changed. */
 function normalizeFootnotes(tr: Transaction): boolean {
   const schema = tr.doc.type.schema;
   const refType = schema.nodes.footnoteReference;
@@ -115,7 +122,14 @@ function normalizeFootnotes(tr: Transaction): boolean {
   const noteType = schema.nodes.footnote;
   const paragraph = schema.nodes.paragraph;
   if (!refType || !blockType || !noteType || !paragraph) return false;
-  let changed = false;
+  const strays: number[] = [];
+  for (const { pos, node } of footnotesOf(tr.doc).blocks) {
+    node.descendants((child, offset) => {
+      if (child.type === refType) strays.push(pos + 1 + offset);
+    });
+  }
+  for (const at of strays.reverse()) tr.delete(at, at + 1);
+  let changed = strays.length > 0;
   let refs = referencesOf(tr.doc);
   const copies = new Map<string, PMNode>();
   if (refs.duplicates.length > 0) {
@@ -145,11 +159,69 @@ function normalizeFootnotes(tr: Transaction): boolean {
     tr.delete(block.pos, block.pos + block.node.nodeSize);
   }
   if (want.length > 0) {
-    const notes = want.map(
-      (id) => byId.get(id) ?? copies.get(id) ?? noteType.create({ footnoteId: id }, paragraph.create()),
-    );
+    const notes = want.map((id) => {
+      const words = copiedWords.get(id);
+      const content = words ? Fragment.fromJSON(schema, words) : paragraph.create();
+      return byId.get(id) ?? copies.get(id) ?? noteType.create({ footnoteId: id }, content);
+    });
     tr.insert(tr.doc.content.size, blockType.create(null, Fragment.fromArray(notes)));
   }
+  return true;
+}
+
+/** Footnote words pasted or dropped go in as paragraphs, never as a second
+    footnote with the same id, which normalizeFootnotes would drop. A whole
+    footnotes block, closed at the slice's end (Select all), stays for its
+    numbers. */
+function unwrapFootnotes(slice: Slice): Slice {
+  const { content, openStart, openEnd } = slice;
+  if (content.lastChild?.type.name !== "footnotes" || openEnd === 0) return slice;
+  const out: PMNode[] = [];
+  content.forEach((node) => {
+    if (node.type.name === "footnotes") node.forEach((note) => note.forEach((p) => out.push(p)));
+    else out.push(node);
+  });
+  const start = content.childCount === 1 ? Math.max(0, openStart - 2) : openStart;
+  return new Slice(Fragment.fromArray(out), start, Math.max(0, openEnd - 2));
+}
+
+/** The first or the last caret position of the part the caret is in, as
+    Google Docs parts a document: the body, or the footnote that holds it. */
+function edgeOfPart(state: EditorState, dir: -1 | 1): Selection | null {
+  const { doc, selection } = state;
+  const $head = selection.$head;
+  const notes = doc.lastChild?.type.name === "footnotes" ? doc.lastChild : null;
+  let from = 0;
+  let to = doc.content.size - (notes?.nodeSize ?? 0);
+  for (let d = $head.depth; d > 0; d--) {
+    if ($head.node(d).type.name === "footnote") {
+      from = $head.start(d);
+      to = $head.end(d);
+      break;
+    }
+  }
+  return Selection.findFrom(doc.resolve(dir > 0 ? to : from), -dir, true);
+}
+
+/** Ctrl+Home and Ctrl+End; Shift extends the selection. */
+function toEdge(editor: Editor, dir: -1 | 1, extend: boolean): boolean {
+  const { state } = editor;
+  const edge = edgeOfPart(state, dir);
+  if (!edge) return false;
+  const next = extend ? TextSelection.between(state.selection.$anchor, edge.$head) : edge;
+  editor.view.dispatch(state.tr.setSelection(next).scrollIntoView());
+  return true;
+}
+
+/** → and ↓ never leave the part at its end (↓ on its last line goes to the
+    line's end); after Select all they go to the body's end. */
+function stayInPart(editor: Editor, dir: "right" | "down"): boolean {
+  const { state, view } = editor;
+  const sel = state.selection;
+  if (sel instanceof AllSelection) return toEdge(editor, 1, false);
+  const edge = edgeOfPart(state, 1);
+  if (!sel.empty || !edge || edge.$head.parent !== sel.$head.parent || !view.endOfTextblock(dir)) return false;
+  if (sel.head !== edge.head) view.dispatch(state.tr.setSelection(edge));
   return true;
 }
 
@@ -241,13 +313,37 @@ const FootnoteKeeper = Extension.create({
         },
         props: {
           decorations: (state) => numberDecorations(state.doc),
+          transformCopied: (slice, view) => {
+            const { byId } = footnotesOf(view.state.doc);
+            slice.content.descendants((node) => {
+              const id = node.type.name === "footnoteReference" ? String(node.attrs.footnoteId) : "";
+              const note = byId.get(id);
+              if (note) copiedWords.set(id, note.content.toJSON());
+            });
+            return slice;
+          },
+          transformPasted: unwrapFootnotes,
         },
       }),
     ];
   },
   addKeyboardShortcuts() {
+    const edge = (dir: -1 | 1, extend: boolean) => () => toEdge(this.editor, dir, extend);
     return {
       "Mod-Alt-f": () => insertFootnote(this.editor),
+      "Mod-Home": edge(-1, false),
+      "Mod-End": edge(1, false),
+      "Mod-Shift-Home": edge(-1, true),
+      "Mod-Shift-End": edge(1, true),
+      ArrowRight: () => stayInPart(this.editor, "right"),
+      ArrowDown: () => stayInPart(this.editor, "down"),
+      // ⌘↑ and ⌘↓ on a Mac.
+      ...(isMac() && {
+        "Mod-ArrowUp": edge(-1, false),
+        "Mod-ArrowDown": edge(1, false),
+        "Mod-Shift-ArrowUp": edge(-1, true),
+        "Mod-Shift-ArrowDown": edge(1, true),
+      }),
     };
   },
 });

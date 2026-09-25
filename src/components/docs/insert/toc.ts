@@ -4,7 +4,7 @@ import { Plugin } from "@tiptap/pm/state";
 import type { EditorView, NodeView } from "@tiptap/pm/view";
 import { emitInsert, insertContext, insertT } from "@/components/docs/insert/context";
 import { jumpTo } from "@/components/docs/insert/links";
-import { PX_PER_PT } from "@/components/docs/page/geometry";
+import { pageAt, pageFrame } from "@/components/docs/page/geometry";
 
 // The table of contents (SPEC.md §29) in Google Docs' three styles: plain
 // text with page numbers, dotted leaders to the page numbers, and blue
@@ -154,7 +154,7 @@ class TocView implements NodeView {
         leader.className = "docs-toc-leader";
         const page = document.createElement("span");
         page.className = "docs-toc-page";
-        page.dataset.blockId = entry.blockId ?? "";
+        page.dataset.headingId = entry.blockId ?? "";
         row.append(leader, page);
       }
       return row;
@@ -163,21 +163,17 @@ class TocView implements NodeView {
     if (style !== "links") requestAnimationFrame(() => this.numberPages());
   }
 
-  /** Each entry's page: where its heading sits on the page, a page's height
-      at a time. */
+  /** Each entry's page: the page its heading stands on. */
   private numberPages() {
-    const page = this.view.dom.closest<HTMLElement>("[data-docs-page]");
+    const pages = this.view.dom.closest<HTMLElement>("[data-docs-page]");
     const setup = insertContext(this.editor)?.pageSetup;
-    if (!page || !setup) return;
-    const pageHeight = setup.height * PX_PER_PT;
-    const top = page.getBoundingClientRect().top;
-    const scale = page.getBoundingClientRect().height / Math.max(1, page.offsetHeight);
+    if (!pages || !setup) return;
+    const { pitch } = pageFrame(setup);
     for (const cell of this.list.querySelectorAll<HTMLElement>(".docs-toc-page")) {
-      const id = cell.dataset.blockId;
+      const id = cell.dataset.headingId;
       const heading = id ? this.view.dom.querySelector<HTMLElement>(`[data-block-id="${CSS.escape(id)}"]`) : null;
       if (!heading) continue;
-      const offset = (heading.getBoundingClientRect().top - top) / (scale || 1);
-      cell.textContent = setup.pageless ? "" : String(Math.floor(offset / pageHeight) + 1);
+      cell.textContent = setup.pageless ? "" : String(pageAt(pages, pitch, heading.getBoundingClientRect().top).page + 1);
     }
   }
 

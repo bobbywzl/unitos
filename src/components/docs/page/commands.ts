@@ -1,9 +1,10 @@
 import type { Editor } from "@tiptap/core";
 import { registerDocsCommands } from "@/components/docs/commands";
-import { ZOOMS } from "@/components/docs/toolbar";
 import { addPageNumbers } from "@/components/docs/page/header-footer";
 import { downloadDocument, type DownloadFormat } from "@/components/docs/page/download";
 import { PAGE_EVENT, findPageStore as store, type EditHeaderDetail, type HeaderArea } from "@/components/docs/page/store";
+import { ZOOMS } from "@/components/docs/toolbar/zoom";
+import { fireDocs } from "@/components/docs/typing/events";
 import type { TKey } from "@/lib/i18n/dictionaries";
 
 // The page area's commands (SPEC.md §29): what Google Docs keeps in its File,
@@ -21,8 +22,7 @@ export function stepZoom(current: number, direction: 1 | -1): number {
 const paged = (editor: Editor) => editor.isEditable && store(editor)?.get().setup.pageless === false;
 const pageless = (editor: Editor) => store(editor)?.get().setup.pageless === true;
 
-const editHeader = (area: HeaderArea) => () =>
-  window.dispatchEvent(new CustomEvent<EditHeaderDetail>(PAGE_EVENT.editHeader, { detail: { area } }));
+const editHeader = (area: HeaderArea) => (editor: Editor) => fireDocs(editor, PAGE_EVENT.editHeader, { area } satisfies EditHeaderDetail);
 
 const TEXT_WIDTH_LABELS = {
   narrow: "docsPage.textWidthNarrow",
@@ -150,7 +150,7 @@ registerDocsCommands([
     label: "docsPage.pageCount",
     menu: "insert",
     keywords: ["page count", "total pages", "page elements"],
-    run: () => window.dispatchEvent(new Event(PAGE_EVENT.pageCount)),
+    run: (editor) => fireDocs(editor, PAGE_EVENT.pageCount),
     enabled: (editor) => store(editor)?.get().editing != null,
   },
   ...NUMBER_PRESETS.map(([area, onFirst, label]) => ({

@@ -7,7 +7,7 @@ import { flushSync } from "react-dom";
 import { useT } from "@/components/lang-provider";
 import { docsCommands, type DocsMenu } from "@/components/docs/commands";
 import type { ParagraphFlag } from "@/components/docs/ext/toolbar";
-import { DOCS_EVENT, stepSelectionFontSize } from "@/components/docs/extensions";
+import { stepSelectionFontSize } from "@/components/docs/extensions";
 import { DOCS_FONTS, pushRecentFont, userFonts } from "@/components/docs/fonts";
 import {
   AddCommentIcon,
@@ -44,7 +44,7 @@ import { borderTarget, cellBorder, selectedCells } from "@/components/docs/inser
 import { isMac, keys, matchesCombo, withKeys } from "@/components/docs/keys";
 import { keepFocus, MenuItem, MenuSeparator } from "@/components/docs/menu";
 import { addCustomColor, ColorMenu } from "@/components/docs/palette";
-import { Btn, DropBtn, OPEN_MENU_EVENT, Sep, SplitButton } from "@/components/docs/toolbar/controls";
+import { Btn, ControlsOff, DropBtn, OPEN_MENU_EVENT, Sep, SplitButton, ToolbarEditor } from "@/components/docs/toolbar/controls";
 import { CustomColorDialog } from "@/components/docs/toolbar/custom-color";
 import { FontSelect } from "@/components/docs/toolbar/font-menu";
 import { FontSizeBox, formatSize, parseSize } from "@/components/docs/toolbar/font-size";
@@ -68,7 +68,6 @@ import {
 import { STYLE_KEYS, STYLE_LABEL, StylesSelect, menuStyles, styleOptions } from "@/components/docs/toolbar/styles-menu";
 import {
   blockStyle,
-  deepestHeading,
   readStyles,
   selectionFont,
   selectionSize,
@@ -77,16 +76,14 @@ import {
   type Align,
 } from "@/components/docs/toolbar/styles";
 import { ZoomBox, ZOOMS, type Zoom } from "@/components/docs/toolbar/zoom";
-import { TYPING_EVENT } from "@/components/docs/typing/events";
+import { DOCS_EVENT, TYPING_EVENT, fireDocs } from "@/components/docs/typing/events";
 import type { TKey } from "@/lib/i18n/dictionaries";
 
 // The page editor's toolbar (SPEC.md §29): Google Docs' controls in Google's
 // order, then the Unitos tools, the mode switcher, and Hide the menus. In
 // Viewing mode, and for a reader who may not edit, the left side is Print,
-// Add comment, and Zoom.
-
-export type { DocsMode, Zoom };
-export { ZOOMS };
+// Add comment, and Zoom. While a header or footer is edited, the controls
+// format its text, and those a header cannot hold are off.
 
 const MENU_NAMES: Record<DocsMenu, TKey> = {
   file: "docs.menuFile",
@@ -121,6 +118,9 @@ const MENUS: [string, TKey, string[], DocsMenu?][] = [
   ["bulleted-list", "docs.bulletedListMenu", ["bullet styles", BULLETS, "apply bulleted list", "toggle bulleted list", "start bulleted list"]],
   ["numbered-list", "docs.numberedListMenu", ["numbering styles", BULLETS, "apply numbered list", "toggle numbered list", "start numbered list"]],
 ];
+
+/** The menus a header's toolbar keeps (page/header-footer.tsx). */
+const HEADER_MENUS = new Set(["font", "text-color", "align"]);
 
 /** An action a button runs and Search the menus finds; `on: false` is off. */
 type Act = { id: string; key: TKey; combo?: string; Icon?: typeof UndoIcon; where?: DocsMenu; words?: string[]; run: () => void; on?: boolean };
@@ -168,7 +168,6 @@ function readToolbar(e: Editor) {
     underline: e.isActive("underline"),
     style: selectionStyle(state),
     styles,
-    deepest: deepestHeading(state.doc),
     font: selectionFont(state, styles),
     size: selectionSize(state, styles),
     color: typeof textStyle.color === "string" ? textStyle.color : null,
@@ -189,6 +188,7 @@ function readToolbar(e: Editor) {
 
 export function DocsToolbar({
   editor,
+  header,
   mode,
   onMode,
   canEdit,
@@ -201,6 +201,8 @@ export function DocsToolbar({
   pageless = false,
 }: {
   editor: Editor;
+  /** The header or footer being edited: the controls format its text. */
+  header: Editor | null;
   mode: DocsMode;
   onMode: (mode: DocsMode) => void;
   canEdit: boolean;
@@ -214,18 +216,25 @@ export function DocsToolbar({
   pageless?: boolean;
 }) {
   const t = useT();
-  const s = useEditorState({ editor, selector: ({ editor: e }) => readToolbar(e) });
+  // The editor the controls format. The selector reads it, not the
+  // snapshot's editor, which stays the last one until the new one's first
+  // change.
+  const target = header ?? editor;
+  const s = useEditorState({ editor: target, selector: () => readToolbar(target) });
   const paint = usePaintFormat(editor);
   const [customFor, setCustomFor] = useState<"text" | "highlight" | null>(null);
   const [dialog, setDialog] = useState<"indent" | "numbering" | null>(null);
   const off = mode === "viewing" || !canEdit;
+  // A header or footer holds text formatting and alignment only
+  // (page/header-footer.tsx).
+  const inHeader = header !== null;
+  const bodyOn = !off && !inHeader;
   // At once, not on the next frame as editor.commands.focus() does, so a key
   // pressed right after (Alt+/ again) keeps its own target.
   const focusPage = () => {
-    if (!editor.isDestroyed) editor.view.focus();
+    if (!target.isDestroyed) target.view.focus();
   };
-  const run = (fn: (c: ReturnType<Editor["chain"]>) => ReturnType<Editor["chain"]>) => fn(editor.chain().focus()).run();
-  const fire = (name: string) => window.dispatchEvent(new CustomEvent(name));
+  const run = (fn: (c: ReturnType<Editor["chain"]>) => ReturnType<Editor["chain"]>) => fn(target.chain().focus()).run();
   // File > Rename: the title row shows, and its field takes the focus.
   const rename = () => {
     if (headerHidden) flushSync(onToggleHeader);
@@ -236,12 +245,13 @@ export function DocsToolbar({
     focusPage();
   };
 
-  // Search the menus (Alt+/), and the modes' keys: Ctrl+Alt+Shift+Z is
-  // Editing, Ctrl+Alt+Shift+X is Suggesting, Ctrl+Alt+Shift+C and D are
-  // Viewing (Docs' help page and its code disagree on the letter; both work).
-  const modeRef = useRef({ canEdit, onMode });
+  // Search the menus (Alt+/), Hide the menus (Ctrl+Shift+F), and the modes'
+  // keys: Ctrl+Alt+Shift+Z is Editing, Ctrl+Alt+Shift+X is Suggesting,
+  // Ctrl+Alt+Shift+C and D are Viewing (Docs' help page and its code
+  // disagree on the letter; both work).
+  const modeRef = useRef({ canEdit, onMode, onToggleHeader });
   useEffect(() => {
-    modeRef.current = { canEdit, onMode };
+    modeRef.current = { canEdit, onMode, onToggleHeader };
   });
   useEffect(() => {
     const shell = editor.view.dom.closest("[data-docs-editor]");
@@ -254,7 +264,12 @@ export function DocsToolbar({
       if (search) {
         e.preventDefault();
         e.stopPropagation();
-        window.dispatchEvent(new CustomEvent(SEARCH_MENUS_EVENT));
+        fireDocs(editor, SEARCH_MENUS_EVENT);
+        return;
+      }
+      if (matchesCombo(e, "Ctrl+Shift+F")) {
+        e.preventDefault();
+        modeRef.current.onToggleHeader();
         return;
       }
       if (!modeRef.current.canEdit) return;
@@ -283,13 +298,13 @@ export function DocsToolbar({
     undo: { id: "undo", key: "docs.undo", combo: "Mod+Z", Icon: UndoIcon, where: "edit", run: () => run((c) => c.undo()), on: s.canUndo },
     redo: { id: "redo", key: "docs.redo", combo: "Mod+Y", Icon: RedoIcon, where: "edit", run: () => run((c) => c.redo()), on: s.canRedo },
     print: { id: "print", key: "docs.print", combo: "Mod+P", Icon: PrintIcon, where: "file", words: ["printer", "print preview"], run: () => window.print() },
-    spelling: { id: "spelling", key: "docs.spellcheck", combo: "Mod+Alt+X", Icon: SpellcheckIcon, where: "tools", run: () => fire(TYPING_EVENT.spelling) },
-    paint: { id: "paint-format", key: "docs.paintFormat", Icon: PaintFormatIcon, words: ["copy formatting"], run: paint.press },
+    spelling: { id: "spelling", key: "docs.spellcheck", combo: "Mod+Alt+X", Icon: SpellcheckIcon, where: "tools", run: () => fireDocs(editor, TYPING_EVENT.spelling) },
+    paint: { id: "paint-format", key: "docs.paintFormat", Icon: PaintFormatIcon, words: ["copy formatting"], run: paint.press, on: !inHeader },
     bold: { id: "bold", key: "docs.bold", combo: "Mod+B", Icon: BoldIcon, words: ["strong", "dark"], run: () => run((c) => c.toggleBold()) },
     italic: { id: "italic", key: "docs.italic", combo: "Mod+I", Icon: ItalicIcon, words: ["emphasis", "emphasized", "italicize"], run: () => run((c) => c.toggleItalic()) },
     underline: { id: "underline", key: "docs.underline", combo: "Mod+U", Icon: UnderlineIcon, run: () => run((c) => c.toggleUnderline()) },
-    link: { id: "link", key: "docs.insertLink", combo: "Mod+K", Icon: LinkIcon, where: "insert", words: ["hyperlink", "url"], run: () => fire(DOCS_EVENT.link) },
-    comment: { id: "comment", key: "docs.addComment", combo: "Mod+Alt+M", Icon: AddCommentIcon, where: "insert", run: () => fire(DOCS_EVENT.comment), on: canEdit },
+    link: { id: "link", key: "docs.insertLink", combo: "Mod+K", Icon: LinkIcon, where: "insert", words: ["hyperlink", "url"], run: () => fireDocs(editor, DOCS_EVENT.link), on: !inHeader },
+    comment: { id: "comment", key: "docs.addComment", combo: "Mod+Alt+M", Icon: AddCommentIcon, where: "insert", run: () => fireDocs(editor, DOCS_EVENT.comment), on: canEdit && !inHeader },
     outdent: {
       id: "indent-decrease",
       key: "docs.decreaseIndent",
@@ -297,16 +312,17 @@ export function DocsToolbar({
       Icon: IndentDecreaseIcon,
       words: ["decrease paragraph indent", "unindent", "outdent", "dedent"],
       run: () => run((c) => c.indentStep(-1)),
+      on: !inHeader,
     },
-    indent: { id: "indent-increase", key: "docs.increaseIndent", combo: "Mod+]", Icon: IndentIncreaseIcon, words: ["tab", "increase paragraph indent"], run: () => run((c) => c.indentStep(1)) },
-    clear: { id: "clear-formatting", key: "docs.clearFormatting", combo: "Mod+\\", Icon: ClearFormattingIcon, words: ["remove formatting"], run: () => run((c) => c.clearFormatting()) },
+    indent: { id: "indent-increase", key: "docs.increaseIndent", combo: "Mod+]", Icon: IndentIncreaseIcon, words: ["tab", "increase paragraph indent"], run: () => run((c) => c.indentStep(1)), on: !inHeader },
+    clear: { id: "clear-formatting", key: "docs.clearFormatting", combo: "Mod+\\", Icon: ClearFormattingIcon, words: ["remove formatting"], run: () => run((c) => c.clearFormatting()), on: !inHeader },
     sizeDown: {
       id: "font-size-down",
       key: "docs.decreaseFontSize",
       combo: "Mod+Shift+,",
       Icon: RemoveIcon,
       words: ["smaller", "make the font smaller", "make it smaller"],
-      run: () => stepSelectionFontSize(editor, -1),
+      run: () => stepSelectionFontSize(target, -1),
     },
     sizeUp: {
       id: "font-size-up",
@@ -314,9 +330,9 @@ export function DocsToolbar({
       combo: "Mod+Shift+.",
       Icon: AddIcon,
       words: ["bigger", "make the font bigger", "make it bigger", "larger"],
-      run: () => stepSelectionFontSize(editor, 1),
+      run: () => stepSelectionFontSize(target, 1),
     },
-    checklist: { id: "checklist", key: "docs.checklist", combo: "Mod+Shift+9", Icon: ChecklistIcon, run: () => run((c) => c.toggleTaskList()) },
+    checklist: { id: "checklist", key: "docs.checklist", combo: "Mod+Shift+9", Icon: ChecklistIcon, run: () => run((c) => c.toggleTaskList()), on: !inHeader },
     bulleted: {
       id: "bulleted-list",
       key: "docs.bulletedList",
@@ -324,6 +340,7 @@ export function DocsToolbar({
       Icon: BulletListIcon,
       words: ["circles", "create bulleted list", "insert bulleted list"],
       run: () => run((c) => c.toggleBulletList()),
+      on: !inHeader,
     },
     numbered: {
       id: "numbered-list",
@@ -332,6 +349,7 @@ export function DocsToolbar({
       Icon: NumberedListIcon,
       words: ["numbers", "123", "create numbered list", "insert numbered list"],
       run: () => run((c) => c.toggleOrderedList()),
+      on: !inHeader,
     },
   } satisfies Record<string, Act>;
   const split = (a: Act, pressed: boolean, menuKey: TKey, menu: (close: () => void) => ReactNode) => (
@@ -357,20 +375,24 @@ export function DocsToolbar({
   // Search the menus: the toolbar's actions, then the areas' commands (an
   // area's own command wins over a toolbar action of the same name).
   const actions = (): SearchAction[] => {
-    const registered: SearchAction[] = docsCommands().map((c) => ({
-      id: c.id,
-      label: t(c.label),
-      where: t(MENU_NAMES[c.menu]),
-      keywords: c.keywords,
-      shortcut: c.shortcut ? keys(c.shortcut) : undefined,
-      enabled: c.enabled ? c.enabled(editor) : true,
-      run: () => c.run(editor),
-    }));
+    const registered: SearchAction[] = docsCommands().map((c) => {
+      // Format acts on the editor the controls format.
+      const on = c.menu === "format" ? target : editor;
+      return {
+        id: c.id,
+        label: t(c.label),
+        where: t(MENU_NAMES[c.menu]),
+        keywords: c.keywords,
+        shortcut: c.shortcut ? keys(c.shortcut) : undefined,
+        enabled: c.enabled ? c.enabled(on) : true,
+        run: () => c.run(on),
+      };
+    });
     const edits = (a: Act) => a.where === "file" || a.where === "tools" || a.id === "comment";
     const own: Act[] = [
       ...Object.values(A).map((a: Act) => ({ ...a, on: a.on !== false && (edits(a) || !off) })),
       ...ALIGNS.map((a) => ({ id: `align-${a.align}`, key: a.key, combo: a.combo, Icon: a.Icon, words: a.words, run: () => run((c) => c.setTextAlign(a.align)), on: !off })),
-      ...MENUS.map(([id, key, words, where]) => ({ id: `open-${id}`, key, words, where, run: () => window.dispatchEvent(new CustomEvent(OPEN_MENU_EVENT, { detail: { id } })), on: !off })),
+      ...MENUS.map(([id, key, words, where]) => ({ id: `open-${id}`, key, words, where, run: () => fireDocs(editor, OPEN_MENU_EVENT, { id }), on: !off && (!inHeader || HEADER_MENUS.has(id)) })),
     ];
     const list: SearchAction[] = own.map((a) => ({
       id: a.id,
@@ -383,7 +405,7 @@ export function DocsToolbar({
       run: a.run,
     }));
     const add = (id: string, label: string, where: DocsMenu, runIt: () => void, o: { enabled?: boolean; shortcut?: string; words?: string[] } = {}) =>
-      list.push({ id, label, where: t(MENU_NAMES[where]), run: runIt, enabled: o.enabled ?? !off, shortcut: o.shortcut && keys(o.shortcut), keywords: o.words });
+      list.push({ id, label, where: t(MENU_NAMES[where]), run: runIt, enabled: o.enabled ?? bodyOn, shortcut: o.shortcut && keys(o.shortcut), keywords: o.words });
     add("zoom-fit", `${t("docs.zoom")}: ${t("docs.zoomFit")}`, "view", () => onZoom("fit"), { enabled: true });
     for (const z of ZOOMS) add(`zoom-${z}`, t("docs.zoomValue", { n: z }), "view", () => onZoom(z), { enabled: true });
     for (const style of menuStyles(6)) {
@@ -407,11 +429,11 @@ export function DocsToolbar({
     // menu's restarts at 1.
     const listWords = ["list options", BULLETS];
     add("restart-numbering", t("docs.restartNumbering"), "format", () => setDialog("numbering"), {
-      enabled: !off && numberedLine(editor.state) !== null,
+      enabled: bodyOn && numberedLine(editor.state) !== null,
       words: ["start over", "renumber", ...listWords],
     });
     add("continue-numbering", t("docs.continueNumbering"), "format", () => continueNumbering(editor.state, editor.view.dispatch), {
-      enabled: !off && continueNumbering(editor.state),
+      enabled: bodyOn && continueNumbering(editor.state),
       words: ["maintain numbering", "join list", "continue preceding list", "continue previous list", "combine list", ...listWords],
     });
     add("rename", t("docs.renameTitle"), "file", rename, { enabled: canEdit, words: ["title", "save as"] });
@@ -509,6 +531,7 @@ export function DocsToolbar({
     );
   };
   const AlignGlyph = ALIGNS.find((a) => a.align === s.align)?.Icon ?? AlignLeftIcon;
+  const bodyOnly = (node: ReactNode) => <ControlsOff.Provider value={inHeader}>{node}</ControlsOff.Provider>;
 
   const groups: ToolbarGroup[] = off
     ? [
@@ -545,16 +568,16 @@ export function DocsToolbar({
           key: "styles",
           sep: true,
           menus: ["styles"],
-          content: <StylesSelect editor={editor} style={s.style} styles={s.styles} deepest={s.deepest} />,
+          content: bodyOnly(<StylesSelect editor={editor} style={s.style} styles={s.styles} />),
         },
-        { key: "font", sep: true, menus: ["font"], content: <FontSelect editor={editor} font={s.font} /> },
+        { key: "font", sep: true, menus: ["font"], content: <FontSelect editor={target} font={s.font} /> },
         {
           key: "size",
           sep: true,
           content: (
             <div className="docs-size">
               {button(A.sizeDown)}
-              <FontSizeBox editor={editor} size={s.size} />
+              <FontSizeBox editor={target} size={s.size} />
               {button(A.sizeUp)}
             </div>
           ),
@@ -569,7 +592,7 @@ export function DocsToolbar({
               {button(A.italic, s.italic)}
               {button(A.underline, s.underline)}
               {colorButton("text")}
-              {colorButton("highlight")}
+              {bodyOnly(colorButton("highlight"))}
             </>
           ),
         },
@@ -581,7 +604,7 @@ export function DocsToolbar({
             <>
               {button(A.link)}
               {button(A.comment)}
-              <ImageMenu onInsert={onInsertImage} onDone={focusPage} />
+              {bodyOnly(<ImageMenu onInsert={onInsertImage} onDone={focusPage} />)}
             </>
           ),
         },
@@ -618,25 +641,29 @@ export function DocsToolbar({
                   </div>
                 )}
               </DropBtn>
-              <SpacingMenu editor={editor} para={s.para} pageless={pageless} />
-              {split(A.checklist, s.lists.taskList !== undefined, "docs.checklistMenu", (close) => (
-                <ChecklistPalette editor={editor} current={s.lists.taskList} close={close} />
-              ))}
-              {split(A.bulleted, s.lists.bulletList !== undefined, "docs.bulletedListMenu", (close) => (
+              {bodyOnly(
                 <>
-                  <PresetGrid editor={editor} presets={BULLET_PRESETS} current={s.lists.bulletList} close={close} />
-                  <MenuSeparator />
-                  <MenuItem
-                    submenuClassName="docs-menu-lists"
-                    submenu={<ChecklistPalette editor={editor} current={s.lists.taskList} close={close} />}
-                  >
-                    {t("docs.checklistMenu")}
-                  </MenuItem>
-                </>
-              ))}
-              {split(A.numbered, s.lists.orderedList !== undefined, "docs.numberedListMenu", (close) => (
-                <PresetGrid editor={editor} presets={NUMBER_PRESETS} current={s.lists.orderedList} close={close} />
-              ))}
+                  <SpacingMenu editor={editor} para={s.para} pageless={pageless} />
+                  {split(A.checklist, s.lists.taskList !== undefined, "docs.checklistMenu", (close) => (
+                    <ChecklistPalette editor={editor} current={s.lists.taskList} close={close} />
+                  ))}
+                  {split(A.bulleted, s.lists.bulletList !== undefined, "docs.bulletedListMenu", (close) => (
+                    <>
+                      <PresetGrid editor={editor} presets={BULLET_PRESETS} current={s.lists.bulletList} close={close} />
+                      <MenuSeparator />
+                      <MenuItem
+                        submenuClassName="docs-menu-lists"
+                        submenu={<ChecklistPalette editor={editor} current={s.lists.taskList} close={close} />}
+                      >
+                        {t("docs.checklistMenu")}
+                      </MenuItem>
+                    </>
+                  ))}
+                  {split(A.numbered, s.lists.orderedList !== undefined, "docs.numberedListMenu", (close) => (
+                    <PresetGrid editor={editor} presets={NUMBER_PRESETS} current={s.lists.orderedList} close={close} />
+                  ))}
+                </>,
+              )}
             </>
           ),
         },
@@ -673,7 +700,7 @@ export function DocsToolbar({
 
   const hideLabel = t(headerHidden ? "docs.showMenus" : "docs.hideMenus");
   return (
-    <>
+    <ToolbarEditor.Provider value={editor}>
       <ToolbarRow
         groups={groups}
         label={t("docs.toolbar")}
@@ -711,6 +738,6 @@ export function DocsToolbar({
           }}
         />
       )}
-    </>
+    </ToolbarEditor.Provider>
   );
 }

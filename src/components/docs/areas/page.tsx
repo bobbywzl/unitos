@@ -1,11 +1,12 @@
 "use client";
 
+import type { Editor } from "@tiptap/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { flushSync } from "react-dom";
 import { useLang } from "@/components/lang-provider";
 import type { DocsAreaProps } from "@/components/docs/areas/types";
-import type { Zoom } from "@/components/docs/toolbar";
+import type { Zoom } from "@/components/docs/toolbar/zoom";
 import { hostPagination, paginateNow, repaginate } from "@/components/docs/ext/page";
 import { stepZoom } from "@/components/docs/page/commands";
 import { PAGE_PITCH_EXTRA, PAGELESS_TOP, pageAt, pageFrame, pagelessWidth, scrollParent } from "@/components/docs/page/geometry";
@@ -84,11 +85,14 @@ export function PageCanvas({
   zoom,
   onZoom,
   onPageClick,
+  onHeaderEditor,
   children,
 }: DocsAreaProps & {
   zoom: Zoom;
   onZoom: (zoom: Zoom) => void;
   onPageClick: (e: React.MouseEvent) => void;
+  /** The editor of the header or footer being edited, for the toolbar. */
+  onHeaderEditor: (editor: Editor | null) => void;
   children: ReactNode;
 }) {
   const store = pageStore(editor, documentId, pageSetup);
@@ -118,11 +122,9 @@ export function PageCanvas({
     if (JSON.stringify(now.setup) !== JSON.stringify(pageSetup)) store.set({ setup: pageSetup });
   }, [pageSetup, store]);
 
-  // A new document takes this browser's default page (Set as default), and
-  // opens with the caret at its start.
+  // A new document takes this browser's default page (Set as default).
   useEffect(() => {
     if (!editing || !editor.isEmpty) return;
-    editor.commands.focus("start");
     const fallback = readPageDefault();
     if (!fallback || JSON.stringify(store.get().setup) !== JSON.stringify(DEFAULT_PAGE_SETUP)) return;
     void store.saveSetup({ ...DEFAULT_PAGE_SETUP, ...fallback });
@@ -379,10 +381,11 @@ export function PageCanvas({
       e.preventDefault();
       store.zoomTo(zoom);
     };
-    window.addEventListener(PAGE_EVENT.editHeader, onEdit);
+    const dom = editor.view.dom;
+    dom.addEventListener(PAGE_EVENT.editHeader, onEdit);
     window.addEventListener("keydown", onKey, true);
     return () => {
-      window.removeEventListener(PAGE_EVENT.editHeader, onEdit);
+      dom.removeEventListener(PAGE_EVENT.editHeader, onEdit);
       window.removeEventListener("keydown", onKey, true);
     };
   }, [editor, store, frame.pitch]);
@@ -531,7 +534,7 @@ export function PageCanvas({
             </div>
           )}
           {!pageless && !compact && (
-            <HeaderFooterLayer store={store} frame={frame} pages={pages} area={area} />
+            <HeaderFooterLayer store={store} frame={frame} pages={pages} area={area} onEditor={onHeaderEditor} />
           )}
           {children}
         </article>

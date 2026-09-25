@@ -13,8 +13,15 @@
 // same position and holds it while the layout under it settles.
 
 export const READING_POSITION_STORE = "unitos-reader-position";
-// The tray's collapsed state and tab, per tab and per project (workspace.tsx).
+// The reader's own open or fold of the tray, and its tab, per tab and per
+// project (workspace.tsx).
 export const TRAY_STATE_STORE = "unitos-tray-state";
+// Until the reader opens or folds the tray, a blank document opens with it
+// folded in a window narrower than this: the whole toolbar beside the open
+// tray at its default width (SPEC.md §29). Normal view only: a split view
+// keeps the tray past the panes, so folding it gives the page no room.
+const TRAY_FOLD_BELOW = 1860;
+const PAGE_EDITOR_PANE = "[data-reader-root][data-page-editor]";
 // The inline script's style rules: the tray stays folded and the entrance
 // fades stay still until React has taken over. workspace.tsx removes them.
 export const RESTORE_STYLE_ID = "unitos-restore-style";
@@ -34,6 +41,11 @@ export function readingPositionKey(documentId: string): string {
 
 export function trayStateKey(notebookId: string): string {
   return `${TRAY_STATE_STORE}:${notebookId}`;
+}
+
+/** The tray's default: folded for a blank document in a narrower window. */
+export function trayFoldsByDefault(split: boolean): boolean {
+  return !split && window.innerWidth < TRAY_FOLD_BELOW && document.querySelector(PAGE_EDITOR_PANE) !== null;
 }
 
 const BLOCK_SELECTOR = "[data-block-id], [data-edit-block]";
@@ -113,7 +125,7 @@ export function parseReadingPosition(raw: string | null): ReadingPosition | null
 // above, in plain script form: it runs before React loads. A ?src, ?block,
 // or ?link jump wins over the restore, so with one in the URL the panes stay
 // at the top. Storage errors (a private window) restore nothing.
-export function restoreScript(notebookId: string): string {
+export function restoreScript(notebookId: string, split: boolean): string {
   return `(function(){try{
 var css="";
 var q=new URLSearchParams(location.search);
@@ -133,7 +145,7 @@ else continue;
 css+=".content-in,.panel-in{animation-duration:0s!important}";
 }
 var tray=sessionStorage.getItem(${JSON.stringify(trayStateKey(notebookId))});
-if(tray&&JSON.parse(tray).collapsed===true)css+=".tray-column{width:0!important;transition:none!important}";
+if(tray?JSON.parse(tray).collapsed===true:${!split}&&innerWidth<${TRAY_FOLD_BELOW}&&document.querySelector(${JSON.stringify(PAGE_EDITOR_PANE)}))css+=".tray-column{width:0!important;transition:none!important}";
 if(css){var s=document.createElement("style");s.id=${JSON.stringify(RESTORE_STYLE_ID)};s.textContent=css;document.head.appendChild(s);}
 }catch(e){}})();`;
 }

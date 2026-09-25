@@ -1087,11 +1087,12 @@ export function DocumentBar({
             />
           </button>
 
+          {/* Over the reading pane, the page editor's header and the Extract page too. */}
           <Presence show={listOpen} exit="menu">
           {listOpen && (
             <div
               ref={setListEl}
-              className="menu-in absolute top-full left-0 z-30 mt-2 flex max-h-[min(60vh,480px)] w-80 max-w-[calc(100vw-96px)] flex-col overflow-y-auto overscroll-contain rounded-2xl bg-card py-1.5 shadow-float"
+              className="menu-in absolute top-full left-0 z-40 mt-2 flex max-h-[min(60vh,480px)] w-80 max-w-[calc(100vw-96px)] flex-col overflow-y-auto overscroll-contain rounded-2xl bg-card py-1.5 shadow-float"
             >
               <DocumentTree
                 notebookId={notebookId}

@@ -153,9 +153,10 @@ export function HistoryControl({ history }: { history: HistoryEntry[] }) {
         <HistoryIcon size={16} />
       </button>
 
+      {/* Over the reading pane, the page editor's header and the Extract page too. */}
       <Presence show={open} exit="menu">
       {open && (
-        <div className="menu-in absolute top-full right-0 z-30 mt-2 w-[420px] rounded-2xl bg-card p-4 shadow-float">
+        <div className="menu-in absolute top-full right-0 z-40 mt-2 w-[420px] rounded-2xl bg-card p-4 shadow-float">
           <div className="flex items-center gap-2">
             <span className="text-[11px] font-bold tracking-[0.08em] text-sand-600 uppercase">
               {t("panes.history")}

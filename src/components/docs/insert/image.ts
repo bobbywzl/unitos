@@ -4,7 +4,7 @@ import type { Node as PMNode } from "@tiptap/pm/model";
 import { NodeSelection, Plugin, TextSelection, type EditorState } from "@tiptap/pm/state";
 import type { EditorView, NodeView } from "@tiptap/pm/view";
 import { emitInsert, insertContext, toast } from "@/components/docs/insert/context";
-import { PX_PER_PT } from "@/components/docs/page/geometry";
+import { lengthUnitFor, PT_PER_UNIT, PX_PER_PT } from "@/components/docs/page/geometry";
 import type { ImageSource } from "@/components/docs/toolbar/image-menu";
 import { insertImage, insertImageFiles } from "@/components/docs/typing/paste";
 import { uploadImage } from "@/lib/images";
@@ -621,6 +621,33 @@ function turned(by: number) {
   return (a: ImageAttrs) => ({ rotation: (((a.rotation + by) % 360) + 360) % 360 });
 }
 
+/** The arrows move a selected Behind text or In front of text image a
+    quarter inch (a centimeter in Chinese), Shift+arrow one pixel, as in
+    Google Docs; any other image lets the caret go back to the text. */
+function moveFloating(editor: Editor, dx: number, dy: number, pixel: boolean): boolean {
+  const hit = selectedImage(editor.state);
+  const ctx = insertContext(editor);
+  if (!hit || !ctx || ctx.pageSetup.pageless) return false;
+  const a = imageAttrs(hit.node);
+  if (a.wrap !== "behind" && a.wrap !== "front") return false;
+  const unit = lengthUnitFor(ctx.lang);
+  const step = pixel ? 1 : (unit === "in" ? PT_PER_UNIT.in / 4 : PT_PER_UNIT.cm) * PX_PER_PT;
+  return setImageAttrs(editor.view, hit.pos, { offsetX: Math.round(a.offsetX + dx * step), offsetY: Math.round(a.offsetY + dy * step) });
+}
+
+const ARROWS: [string, number, number][] = [
+  ["ArrowLeft", -1, 0],
+  ["ArrowRight", 1, 0],
+  ["ArrowUp", 0, -1],
+  ["ArrowDown", 0, 1],
+];
+
+/** An image drag in progress: the image's toolbar steps aside (insert.css). */
+function setMoving(on: boolean): boolean {
+  document.body.classList.toggle("docs-img-moving", on);
+  return false;
+}
+
 export const DocsImage = Extension.create({
   name: "docsImage",
   addGlobalAttributes() {
@@ -666,7 +693,12 @@ export const DocsImage = Extension.create({
   },
   addKeyboardShortcuts() {
     const key = (fn: (a: ImageAttrs, w: number, h: number) => Record<string, unknown>) => () => nudge(this.editor, fn);
+    const arrows = ARROWS.flatMap(([name, dx, dy]) => [
+      [name, () => moveFloating(this.editor, dx, dy, false)],
+      [`Shift-${name}`, () => moveFloating(this.editor, dx, dy, true)],
+    ]);
     return {
+      ...Object.fromEntries(arrows),
       "Mod-Alt-y": () => {
         if (!selectedImage(this.editor.state)) return false;
         emitInsert(this.editor, { type: "image-options", section: "alt" });
@@ -699,6 +731,18 @@ export const DocsImage = Extension.create({
         props: {
           nodeViews: {
             image: (node, view, getPos) => new ImageView(node, view, getPos, editor),
+          },
+          handleDOMEvents: {
+            // An image drags as the page's own node (ProseMirror moves it,
+            // with the drop caret): the reader's figure gesture never sees
+            // the drag, which would cancel it.
+            dragstart: (_view, event) => {
+              if (!(event.target instanceof Element && event.target.closest(".docs-img"))) return false;
+              event.stopPropagation();
+              return setMoving(true);
+            },
+            drop: () => setMoving(false),
+            dragend: () => setMoving(false),
           },
         },
       }),

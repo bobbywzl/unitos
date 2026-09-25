@@ -1,9 +1,9 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { Fragment, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { MoreVertIcon } from "@/components/docs/icons";
 import { DropdownPanel, keepFocus } from "@/components/docs/menu";
-import { OPEN_MENU_EVENT, Sep } from "@/components/docs/toolbar/controls";
+import { OPEN_MENU_EVENT, Sep, ToolbarEditor } from "@/components/docs/toolbar/controls";
 
 // The toolbar's row (SPEC.md §29). When the controls do not fit, the right
 // end's captions fold first — the mode's name, and Extract to its symbol —
@@ -115,19 +115,22 @@ export function ToolbarRow({
 
   // Search the menus opens a menu that sits in the bubble: the bubble
   // opens first, then the menu.
+  const editor = useContext(ToolbarEditor);
   useEffect(() => {
+    const dom = editor?.view.dom;
+    if (!dom) return;
     const onOpen = (e: Event) => {
       const id = (e as CustomEvent<{ id: string; again?: boolean }>).detail?.id;
       if (!id || (e as CustomEvent<{ again?: boolean }>).detail?.again) return;
       const index = groups.findIndex((g) => g.menus?.includes(id));
       if (index >= shown && !moreOpen) {
         setMoreOpen(true);
-        window.setTimeout(() => window.dispatchEvent(new CustomEvent(OPEN_MENU_EVENT, { detail: { id, again: true } })), 60);
+        window.setTimeout(() => dom.dispatchEvent(new CustomEvent(OPEN_MENU_EVENT, { detail: { id, again: true } })), 60);
       }
     };
-    window.addEventListener(OPEN_MENU_EVENT, onOpen);
-    return () => window.removeEventListener(OPEN_MENU_EVENT, onOpen);
-  }, [groups, shown, moreOpen]);
+    dom.addEventListener(OPEN_MENU_EVENT, onOpen);
+    return () => dom.removeEventListener(OPEN_MENU_EVENT, onOpen);
+  }, [editor, groups, shown, moreOpen]);
 
   // One Tab stop: the control last used keeps tabindex 0.
   useLayoutEffect(() => {

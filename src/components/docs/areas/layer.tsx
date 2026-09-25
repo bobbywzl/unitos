@@ -1,11 +1,13 @@
 "use client";
 
+import type { Transaction } from "@tiptap/pm/state";
 import type { Editor } from "@tiptap/react";
 import { useEffect, useRef } from "react";
 import type { DocsAreaProps } from "@/components/docs/areas/types";
 import { registerDocsCommands, type DocsCommand } from "@/components/docs/commands";
 import { matchesCombo } from "@/components/docs/keys";
 import { COMMENTS_EVENT, PAGE_EDITED_EVENT, type CommentsView } from "@/components/docs/layer/events";
+import { STORED_COPY } from "@/components/docs/use-docs-save";
 
 // The Unitos layer inside the page editor (SPEC.md §29). The marks are
 // annotation-marks.tsx; the toolbar and cards are the reader's, a comment's
@@ -57,9 +59,12 @@ export function UnitosLayer({ editor, documentId, canEdit, editing }: DocsAreaPr
     showComments(editor, viewing ? "hidden" : "all");
   }, [editor, viewing]);
 
-  // The words changed: the reader closes its toolbar over the old words.
+  // This person's words changed: the reader closes its toolbar over the old
+  // words. Someone else's save leaves it open, with a comment being written.
   useEffect(() => {
-    const onUpdate = () => window.dispatchEvent(new CustomEvent(PAGE_EDITED_EVENT, { detail: { documentId } }));
+    const onUpdate = ({ transaction }: { transaction: Transaction }) => {
+      if (!transaction.getMeta(STORED_COPY)) window.dispatchEvent(new CustomEvent(PAGE_EDITED_EVENT, { detail: { documentId } }));
+    };
     editor.on("update", onUpdate);
     return () => {
       editor.off("update", onUpdate);

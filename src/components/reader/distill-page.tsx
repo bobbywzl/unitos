@@ -94,11 +94,12 @@ export function DistillPage({
     // The page scrolls itself: the pane's scroll stays where the article left
     // it, and content taller than the pane never spills past the background
     // onto the article. overscroll-contain keeps the wheel from chaining into
-    // the article scroll at the ends.
+    // the article scroll at the ends. It covers the page editor's header,
+    // which has the same z-index earlier in the pane (docs/css/layer.css).
     <div
       ref={surfaceRef}
       data-selection-popover
-      className="content-in absolute inset-0 z-30 overflow-y-auto overscroll-contain bg-paper print:hidden"
+      className="content-in absolute inset-0 z-35 overflow-y-auto overscroll-contain bg-paper print:hidden"
     >
       <SelectionNotes
         surface={surfaceRef}

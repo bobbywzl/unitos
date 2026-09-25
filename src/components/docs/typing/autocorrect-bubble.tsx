@@ -6,7 +6,7 @@ import { createPortal } from "react-dom";
 import { useT } from "@/components/lang-provider";
 import { MoreVertIcon, UndoIcon } from "@/components/docs/icons";
 import { DropdownPanel, keepFocus, MenuItem } from "@/components/docs/menu";
-import { TYPING_EVENT, fireTyping } from "@/components/docs/typing/events";
+import { TYPING_EVENT, fireDocs } from "@/components/docs/typing/events";
 import { traceAtCaret, undoCorrection } from "@/components/docs/typing/trace";
 
 // The autocorrect bubble (SPEC.md §29, typing): with the caret on a word
@@ -69,7 +69,7 @@ export function AutocorrectBubble({ editor }: { editor: Editor }) {
         <MenuItem
           onSelect={() => {
             setMenu(false);
-            fireTyping(TYPING_EVENT.preferences);
+            fireDocs(editor, TYPING_EVENT.preferences);
           }}
         >
           {t("docsTyping.autocorrectOptions")}
