@@ -12,7 +12,7 @@ import type { TKey } from "@/lib/i18n/dictionaries";
 
 // The insert area's color and border buttons — a table's borders and cell
 // background, an image's border: the toolbar's color menu with its custom
-// colors, and Google Docs' border weight and dash menus.
+// colors, and Google Docs' border width and dash menus.
 
 const WEIGHTS = [0, 0.5, 1, 1.5, 2, 3, 4, 6];
 const DASHES: [Dash, TKey][] = [
@@ -87,12 +87,13 @@ function LineRow({ style, label }: { style: CSSProperties; label: string }) {
   );
 }
 
-/** Border color, Border weight, and Border dash. */
+/** Border color, Border width (an image's Border weight), and Border dash. */
 export function BorderButtons({
   track,
   border,
   onChange,
   onNone,
+  widthLabel = "docsInsert.borderWidth",
 }: {
   track: string;
   /** The border as drawn now: color null for none. */
@@ -100,6 +101,7 @@ export function BorderButtons({
   onChange: (spec: { color?: string; width?: number; dash?: Dash }) => void;
   /** The color menu's None. */
   onNone?: () => void;
+  widthLabel?: TKey;
 }) {
   const t = useT();
   return (
@@ -112,7 +114,7 @@ export function BorderButtons({
         onPick={(color) => onChange({ color })}
         onNone={onNone}
       />
-      <DropBtn label={t("docsInsert.borderWeight")} track={`${track}-border-width`} face={<BorderWeightIcon />}>
+      <DropBtn label={t(widthLabel)} track={`${track}-border-width`} face={<BorderWeightIcon />}>
         {(close) =>
           WEIGHTS.map((w) => (
             <MenuItem

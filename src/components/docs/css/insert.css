@@ -1344,19 +1344,22 @@ body.docs-img-dragging * {
   width: 16px;
   height: 16px;
   border-radius: 2px;
-  background: #eeeeee;
-  color: #3c4043;
+  background: var(--docs-chip-bg);
+  color: var(--docs-icon);
   opacity: 0.85;
   cursor: pointer;
-}
-.dark .docs-border-select {
-  background: #3c4043;
-  color: #e8eaed;
 }
 .docs-border-select:hover,
 .docs-border-select[aria-expanded="true"] {
   opacity: 1;
   box-shadow: 0 0 0 1px var(--docs-blue);
+}
+/* The chosen borders, blue over the table's lines. */
+.docs-border-mark {
+  position: fixed;
+  z-index: 29;
+  background: var(--docs-blue);
+  pointer-events: none;
 }
 .docs-border-pop {
   padding: 8px;

@@ -303,7 +303,7 @@ function TargetGlyph({ target }: { target: BorderTarget }) {
     <svg viewBox="0 0 20 20" width="20" height="20" aria-hidden>
       {LINES.map(([edge, x, y, w, h]) => {
         const on = BORDER_TARGETS[target].includes(edge);
-        return <line key={edge} x1={x} y1={y} x2={x + w} y2={y + h} strokeWidth="2" stroke={on ? "currentColor" : "#c4c7c5"} strokeDasharray={on ? undefined : "2 2"} />;
+        return <line key={edge} x1={x} y1={y} x2={x + w} y2={y + h} strokeWidth="2" stroke={on ? "currentColor" : "var(--docs-sep)"} strokeDasharray={on ? undefined : "2 2"} />;
       })}
     </svg>
   );

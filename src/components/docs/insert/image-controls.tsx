@@ -151,6 +151,7 @@ export function ImageControlsHost({ editor, ctx }: { editor: Editor; ctx: Insert
           {button("docsInsert.cropImage", <CropIcon />, () => imageViewAt(editor.view, hit.pos)?.startCrop())}
           <BorderButtons
             track="image"
+            widthLabel="docsInsert.borderWeight"
             border={{ color: a.borderColor, width: a.borderColor ? a.borderWidth : 0, dash: a.borderDash }}
             onChange={(spec) =>
               set(
