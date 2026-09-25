@@ -22,7 +22,8 @@ export type RatingTool =
   | "ask"
   | "find"
   | "formalize"
-  | "stitch";
+  | "stitch"
+  | "suggest";
 
 export function RatingButtons({
   tool,

@@ -39,6 +39,15 @@ export type SuggestOp = z.infer<typeof suggestOpSchema>;
 /** A row of the paragraph index. */
 export type IndexRow = { id: string; type: string; text: string };
 
+/** Why the server skips an op; the page's own checks add "changed" and "object". */
+export type ServerSkip = Exclude<SkipReason, "changed" | "object">;
+
+/** The assistant suggests edits in a document with rich text and no format
+    (slides and sheets have one): a blank document today, an import once
+    imports hold rich text. */
+export const takesSuggestions = (document: { richText: unknown; format: string | null }): boolean =>
+  Boolean(document.richText) && !document.format;
+
 /** What a command may change: the selected words (each block's span widened
     to whole words), or blocks. */
 export type SuggestScope =
@@ -267,13 +276,13 @@ type Resolved = { op: ResolvedOp; claim: Claim; chars: number };
 export function resolveOps(
   ops: SuggestOp[],
   ctx: { rows: IndexRow[]; places: Map<string, BlockPlace>; scope: SuggestScope; budget: { chars: number } },
-): { ops: ResolvedOp[]; skipped: { reason: SkipReason; why: string }[] } {
+): { ops: ResolvedOp[]; skipped: { reason: ServerSkip; why: string }[] } {
   const { rows, places, scope, budget } = ctx;
   const order = new Map(rows.map((r, k) => [r.id, k]));
   const spans = new Map(scope.kind === "words" ? scope.segments.map((s) => [s.blockId, s]) : []);
   const inScope = new Set(scope.kind === "words" ? spans.keys() : scope.blockIds);
 
-  const resolve = (op: SuggestOp, i: number): Resolved | SkipReason | null => {
+  const resolve = (op: SuggestOp, i: number): Resolved | ServerSkip | null => {
     if (op.op === "insert_blocks") {
       let after = -1;
       if (op.afterBlockId === null) {
@@ -351,7 +360,7 @@ export function resolveOps(
 
   const out: ResolvedOp[] = [];
   const claims: Claim[] = [];
-  const skipped: { reason: SkipReason; why: string }[] = [];
+  const skipped: { reason: ServerSkip; why: string }[] = [];
   ops.forEach((op, i) => {
     const got = resolve(op, i);
     if (got === null) return;

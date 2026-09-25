@@ -21,6 +21,7 @@ export const RATING_TOOLS = [
   "find",
   "formalize",
   "stitch",
+  "suggest",
 ] as const;
 
 const MAX_INPUT = 4000;
