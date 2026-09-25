@@ -621,9 +621,10 @@ function asSeen(doc: PMNode, ids: Set<string>): Transform {
   const mine = (mark: PMMark | undefined): mark is PMMark => mark !== undefined && ids.has(String(mark.attrs.id));
   const removed: number[] = [];
   doc.descendants((node, pos) => {
-    if (node.isInline) return false;
     const added = node.marks.find(isInsertion);
-    if (mine(added)) t.removeNodeMark(pos, added);
+    if (mine(added) && node.isInline) t.removeMark(pos, pos + node.nodeSize, added);
+    else if (mine(added)) t.removeNodeMark(pos, added);
+    if (node.isInline) return false;
     if (!mine(node.marks.find((m) => m.type.name === "deletion")) && !(node.isTextblock && mine(struckBy(node)))) return true;
     removed.push(pos);
     return false;
